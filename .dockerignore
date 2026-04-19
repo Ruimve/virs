@@ -1,0 +1,29 @@
+# Build artifacts
+target/
+frontend/dist/
+frontend/node_modules/
+
+# Environment files
+.env.local
+.env.*.local
+
+# Version control
+.git
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Documentation (not needed in image)
+*.md
+LICENSE

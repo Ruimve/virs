@@ -1,0 +1,98 @@
+# ============================================================
+# VIRS - Docker Compose
+# One-click deployment: docker compose up -d
+# Copy .env.example to .env and modify as needed before starting
+# ============================================================
+
+services:
+  # ---- PostgreSQL Database ----
+  postgres:
+    image: postgres:16-alpine
+    container_name: virs-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-virs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-virs123}
+      POSTGRES_DB: ${POSTGRES_DB:-virs}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-virs}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - virs-net
+
+  # ---- Redis Cache ----
+  redis:
+    image: redis:7-alpine
+    container_name: virs-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - virs-net
+
+  # ---- VIRS Backend ----
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: virs-backend
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    # These override .env values because they use Docker internal hostnames
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-change-me-to-a-random-64-char-string-in-production}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-to-another-random-64-char-string-must-differ-from-secret-key}
+      JWT_EXPIRATION_HOURS: ${JWT_EXPIRATION_HOURS:-24}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-virs}:${POSTGRES_PASSWORD:-virs123}@postgres:5432/${POSTGRES_DB:-virs}
+      REDIS_URL: redis://redis:6379/0
+      HOST: 0.0.0.0
+      PORT: "8080"
+      FRONTEND_DIR: /app/frontend/dist
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      STRATEGY_EXECUTOR_WORKERS: ${STRATEGY_EXECUTOR_WORKERS:-4}
+      PENDING_ORDER_WORKER_ENABLED: ${PENDING_ORDER_WORKER_ENABLED:-true}
+      PENDING_ORDER_POLL_INTERVAL_SECS: ${PENDING_ORDER_POLL_INTERVAL_SECS:-5}
+      AUTO_RESTORE_STRATEGIES: ${AUTO_RESTORE_STRATEGIES:-true}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - virs-net
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  virs-net:
+    driver: bridge
