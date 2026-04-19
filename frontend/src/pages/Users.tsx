@@ -33,14 +33,14 @@ interface UpdateUserRequest {
 // ---- 角色配置 ----
 
 const ROLE_CONFIG: Record<string, { label: string; color: string }> = {
-  admin: { label: '管理员', color: 'bg-red-100 text-red-700' },
-  manager: { label: '经理', color: 'bg-purple-100 text-purple-700' },
-  user: { label: '用户', color: 'bg-blue-100 text-blue-700' },
-  viewer: { label: '观察者', color: 'bg-gray-100 text-gray-700' },
+  admin: { label: '管理员', color: 'bg-red-50 text-red-500' },
+  manager: { label: '经理', color: 'bg-violet-50 text-violet-600' },
+  user: { label: '用户', color: 'bg-indigo-50 text-indigo-600' },
+  viewer: { label: '观察者', color: 'bg-gray-100 text-gray-500' },
 }
 
 function getRoleBadge(role: string) {
-  return ROLE_CONFIG[role] || { label: role, color: 'bg-gray-100 text-gray-700' }
+  return ROLE_CONFIG[role] || { label: role, color: 'bg-gray-100 text-gray-500' }
 }
 
 function formatDate(dateStr: string): string {
@@ -229,11 +229,11 @@ const Users: Component = () => {
     return (
       <div class="flex items-center justify-center py-20">
         <div class="text-center">
-          <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <svg class="w-14 h-14 mx-auto text-gray-200 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
           </svg>
-          <p class="text-gray-500 text-lg font-medium">无权限访问此页面</p>
-          <p class="text-sm text-gray-400 mt-1">仅管理员可访问用户管理</p>
+          <p class="text-gray-400 text-sm font-medium">无权限访问此页面</p>
+          <p class="text-[13px] text-gray-300 mt-1">仅管理员可访问用户管理</p>
         </div>
       </div>
     )
@@ -274,12 +274,12 @@ const Users: Component = () => {
       {/* 标题栏 */}
       <div class="flex items-center justify-between">
         <div>
-          <h2 class="text-lg font-semibold text-gray-800">用户管理</h2>
-          <p class="text-sm text-gray-500 mt-1">管理系统用户和权限</p>
+          <h2 class="text-lg font-semibold text-gray-900">用户管理</h2>
+          <p class="text-sm text-gray-400 mt-1">管理系统用户和权限</p>
         </div>
         <button
           onClick={openCreateModal}
-          class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
         >
           创建用户
         </button>
@@ -288,21 +288,21 @@ const Users: Component = () => {
       {/* 加载中 */}
       <Show when={loading()}>
         <div class="flex items-center justify-center py-16">
-          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span class="ml-3 text-gray-500">加载中...</span>
+          <div class="animate-spin rounded-full h-6 w-6 border-2 border-indigo-500 border-t-transparent"></div>
+          <span class="ml-3 text-gray-400 text-sm">加载中...</span>
         </div>
       </Show>
 
       {/* 错误 */}
       <Show when={!loading() && error()}>
-        <div class="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-          <svg class="w-12 h-12 mx-auto text-red-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <div class="bg-white rounded-xl border border-red-200/60 p-8 text-center">
+          <svg class="w-10 h-10 mx-auto text-red-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
           </svg>
-          <p class="text-red-600">{error()}</p>
+          <p class="text-red-500 text-sm">{error()}</p>
           <button
             onClick={fetchUsers}
-            class="mt-3 px-4 py-1.5 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+            class="mt-3 px-4 py-1.5 text-sm text-red-500 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
           >
             重试
           </button>
@@ -311,30 +311,30 @@ const Users: Component = () => {
 
       {/* 用户表格 */}
       <Show when={!loading() && !error()}>
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
           <Show
             when={users().length > 0}
             fallback={
-              <div class="p-12 text-center">
-                <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+              <div class="p-16 text-center">
+                <svg class="w-12 h-12 mx-auto text-gray-200 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
-                <p class="text-gray-500">暂无用户</p>
-                <p class="text-sm text-gray-400 mt-1">点击"创建用户"添加第一个用户</p>
+                <p class="text-gray-400 text-sm">暂无用户</p>
+                <p class="text-[13px] text-gray-300 mt-1">点击"创建用户"添加第一个用户</p>
               </div>
             }
           >
             <div class="overflow-x-auto">
               <table class="w-full text-sm">
                 <thead>
-                  <tr class="border-b border-gray-200 bg-gray-50">
-                    <th class="text-left px-4 py-3 font-medium text-gray-600">用户名</th>
-                    <th class="text-left px-4 py-3 font-medium text-gray-600">角色</th>
-                    <th class="text-left px-4 py-3 font-medium text-gray-600">邮箱</th>
-                    <th class="text-left px-4 py-3 font-medium text-gray-600">状态</th>
-                    <th class="text-left px-4 py-3 font-medium text-gray-600">积分</th>
-                    <th class="text-left px-4 py-3 font-medium text-gray-600">创建时间</th>
-                    <th class="text-right px-4 py-3 font-medium text-gray-600">操作</th>
+                  <tr class="border-b border-gray-100">
+                    <th class="text-left px-4 py-3 text-[13px] font-medium text-gray-400">用户名</th>
+                    <th class="text-left px-4 py-3 text-[13px] font-medium text-gray-400">角色</th>
+                    <th class="text-left px-4 py-3 text-[13px] font-medium text-gray-400">邮箱</th>
+                    <th class="text-left px-4 py-3 text-[13px] font-medium text-gray-400">状态</th>
+                    <th class="text-left px-4 py-3 text-[13px] font-medium text-gray-400">积分</th>
+                    <th class="text-left px-4 py-3 text-[13px] font-medium text-gray-400">创建时间</th>
+                    <th class="text-right px-4 py-3 text-[13px] font-medium text-gray-400">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -342,50 +342,50 @@ const Users: Component = () => {
                     {(user) => {
                       const roleBadge = getRoleBadge(user.role)
                       return (
-                        <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <tr class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                           {/* 用户名 */}
                           <td class="px-4 py-3 font-medium text-gray-800">{user.username}</td>
                           {/* 角色 */}
                           <td class="px-4 py-3">
-                            <span class={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${roleBadge.color}`}>
+                            <span class={`inline-block px-2.5 py-0.5 rounded-md text-xs font-medium ${roleBadge.color}`}>
                               {roleBadge.label}
                             </span>
                           </td>
                           {/* 邮箱 */}
-                          <td class="px-4 py-3 text-gray-500">{user.email || '-'}</td>
+                          <td class="px-4 py-3 text-gray-400 text-[13px]">{user.email || '-'}</td>
                           {/* 状态 */}
                           <td class="px-4 py-3">
                             <Show
                               when={user.is_active}
                               fallback={
-                                <span class="inline-flex items-center gap-1.5 text-red-600">
-                                  <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                                <span class="inline-flex items-center gap-1.5 text-red-400 text-[13px]">
+                                  <span class="w-1.5 h-1.5 rounded-full bg-red-400"></span>
                                   禁用
                                 </span>
                               }
                             >
-                              <span class="inline-flex items-center gap-1.5 text-green-600">
-                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                              <span class="inline-flex items-center gap-1.5 text-emerald-500 text-[13px]">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                                 活跃
                               </span>
                             </Show>
                           </td>
                           {/* 积分 */}
-                          <td class="px-4 py-3 text-gray-600">{user.credits}</td>
+                          <td class="px-4 py-3 text-gray-500 text-[13px]">{user.credits}</td>
                           {/* 创建时间 */}
-                          <td class="px-4 py-3 text-gray-400">{formatDate(user.created_at)}</td>
+                          <td class="px-4 py-3 text-gray-300 text-[13px]">{formatDate(user.created_at)}</td>
                           {/* 操作 */}
                           <td class="px-4 py-3 text-right">
-                            <div class="flex items-center justify-end gap-2">
+                            <div class="flex items-center justify-end gap-1.5">
                               <button
                                 onClick={() => openEditModal(user)}
-                                class="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                                class="px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
                               >
                                 编辑
                               </button>
                               <button
                                 onClick={() => handleDelete(user.id)}
-                                class="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                                class="px-3 py-1.5 text-xs font-medium text-gray-400 bg-gray-50 rounded-lg hover:bg-gray-100 hover:text-gray-600 transition-colors"
                               >
                                 删除
                               </button>
@@ -401,8 +401,8 @@ const Users: Component = () => {
 
             {/* 分页 */}
             <Show when={totalPages() > 1}>
-              <div class="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
-                <p class="text-sm text-gray-500">
+              <div class="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+                <p class="text-[13px] text-gray-400">
                   共 {total()} 条，第 {page()}/{totalPages()} 页
                 </p>
                 <div class="flex items-center gap-1">
@@ -410,7 +410,7 @@ const Users: Component = () => {
                   <button
                     onClick={prevPage}
                     disabled={page() <= 1}
-                    class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     上一页
                   </button>
@@ -422,8 +422,8 @@ const Users: Component = () => {
                         onClick={() => goToPage(p)}
                         class={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                           p === page()
-                            ? 'bg-blue-600 text-white'
-                            : 'border border-gray-300 text-gray-600 hover:bg-gray-100'
+                            ? 'bg-indigo-600 text-white'
+                            : 'border border-gray-200 text-gray-500 hover:bg-gray-50'
                         }`}
                       >
                         {p}
@@ -435,7 +435,7 @@ const Users: Component = () => {
                   <button
                     onClick={nextPage}
                     disabled={page() >= totalPages()}
-                    class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     下一页
                   </button>
@@ -450,18 +450,18 @@ const Users: Component = () => {
       <Show when={showModal()}>
         <div class="fixed inset-0 z-50 flex items-center justify-center">
           {/* 遮罩 */}
-          <div class="absolute inset-0 bg-black/50" onClick={closeModal}></div>
+          <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeModal}></div>
 
           {/* 模态框内容 */}
-          <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 space-y-5">
+          <div class="relative bg-white rounded-2xl border border-gray-200/60 w-full max-w-md mx-4 p-6 space-y-5">
             {/* 标题 */}
             <div class="flex items-center justify-between">
-              <h3 class="text-lg font-semibold text-gray-800">
+              <h3 class="text-[15px] font-semibold text-gray-900">
                 {editingUser() ? '编辑用户' : '创建用户'}
               </h3>
               <button
                 onClick={closeModal}
-                class="text-gray-400 hover:text-gray-600 transition-colors"
+                class="text-gray-300 hover:text-gray-500 transition-colors"
               >
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -473,25 +473,25 @@ const Users: Component = () => {
             <div class="space-y-4">
               {/* 用户名 */}
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+                <label class="block text-[13px] font-medium text-gray-400 mb-1.5">用户名</label>
                 <input
                   type="text"
                   value={formUsername()}
                   onInput={(e) => setFormUsername(e.currentTarget.value)}
                   disabled={editingUser() !== null}
                   placeholder="输入用户名"
-                  class={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                    editingUser() ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white'
+                  class={`w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 placeholder:text-gray-300 ${
+                    editingUser() ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'bg-white'
                   }`}
                 />
               </div>
 
               {/* 密码 */}
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">
+                <label class="block text-[13px] font-medium text-gray-400 mb-1.5">
                   密码
                   <Show when={editingUser() !== null}>
-                    <span class="text-gray-400 font-normal ml-1">(留空则不修改)</span>
+                    <span class="text-gray-300 font-normal ml-1">(留空则不修改)</span>
                   </Show>
                 </label>
                 <input
@@ -499,31 +499,31 @@ const Users: Component = () => {
                   value={formPassword()}
                   onInput={(e) => setFormPassword(e.currentTarget.value)}
                   placeholder={editingUser() ? '留空则不修改' : '输入密码'}
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white placeholder:text-gray-300"
                 />
               </div>
 
               {/* 邮箱 */}
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">
-                  邮箱 <span class="text-gray-400 font-normal">(可选)</span>
+                <label class="block text-[13px] font-medium text-gray-400 mb-1.5">
+                  邮箱 <span class="text-gray-300 font-normal">(可选)</span>
                 </label>
                 <input
                   type="email"
                   value={formEmail()}
                   onInput={(e) => setFormEmail(e.currentTarget.value)}
                   placeholder="输入邮箱"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white placeholder:text-gray-300"
                 />
               </div>
 
               {/* 角色 */}
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">角色</label>
+                <label class="block text-[13px] font-medium text-gray-400 mb-1.5">角色</label>
                 <select
                   value={formRole()}
                   onChange={(e) => setFormRole(e.currentTarget.value)}
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
                 >
                   <option value="admin">管理员</option>
                   <option value="manager">经理</option>
@@ -534,7 +534,7 @@ const Users: Component = () => {
 
               {/* 状态 */}
               <div class="flex items-center gap-3">
-                <label class="text-sm font-medium text-gray-700">状态</label>
+                <label class="text-[13px] font-medium text-gray-400">状态</label>
                 <label class="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"
@@ -542,8 +542,8 @@ const Users: Component = () => {
                     onChange={(e) => setFormIsActive(e.currentTarget.checked)}
                     class="sr-only peer"
                   />
-                  <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
-                  <span class="ml-2 text-sm text-gray-600">
+                  <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
+                  <span class="ml-2 text-sm text-gray-500">
                     {formIsActive() ? '活跃' : '禁用'}
                   </span>
                 </label>
@@ -551,36 +551,36 @@ const Users: Component = () => {
 
               {/* 积分 */}
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">积分</label>
+                <label class="block text-[13px] font-medium text-gray-400 mb-1.5">积分</label>
                 <input
                   type="number"
                   value={formCredits()}
                   onInput={(e) => setFormCredits(Number(e.currentTarget.value) || 0)}
                   min="0"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
                 />
               </div>
             </div>
 
             {/* 错误 */}
             <Show when={formError()}>
-              <div class="text-sm rounded-lg px-3 py-2 bg-red-50 text-red-700 border border-red-200">
+              <div class="text-[13px] rounded-lg px-3 py-2 bg-red-50 text-red-500 border border-red-200/60">
                 {formError()}
               </div>
             </Show>
 
             {/* 按钮 */}
-            <div class="flex gap-3 pt-2">
+            <div class="flex gap-3 pt-1">
               <button
                 onClick={closeModal}
-                class="flex-1 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                class="flex-1 px-4 py-2 text-sm font-medium text-gray-500 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200/60"
               >
                 取消
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving()}
-                class="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                class="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving() ? '保存中...' : '保存'}
               </button>

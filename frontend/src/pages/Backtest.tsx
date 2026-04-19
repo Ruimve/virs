@@ -271,7 +271,7 @@ const Backtest: Component = () => {
     ctx.clearRect(0, 0, w, h)
 
     // 灰色网格
-    ctx.strokeStyle = '#e5e7eb'
+    ctx.strokeStyle = '#f3f4f6'
     ctx.lineWidth = 0.5
     const gridLines = 5
     for (let i = 0; i <= gridLines; i++) {
@@ -311,7 +311,7 @@ const Backtest: Component = () => {
     }
 
     // 绿色折线
-    ctx.strokeStyle = '#22c55e'
+    ctx.strokeStyle = '#6366f1'
     ctx.lineWidth = 1.5
     ctx.beginPath()
     for (let i = 0; i < data.length; i++) {
@@ -327,8 +327,8 @@ const Backtest: Component = () => {
 
     // 填充区域
     const gradient = ctx.createLinearGradient(0, padding.top, 0, h - padding.bottom)
-    gradient.addColorStop(0, 'rgba(34, 197, 94, 0.15)')
-    gradient.addColorStop(1, 'rgba(34, 197, 94, 0.01)')
+    gradient.addColorStop(0, 'rgba(99, 102, 241, 0.12)')
+    gradient.addColorStop(1, 'rgba(99, 102, 241, 0.01)')
     ctx.lineTo(padding.left + chartW, h - padding.bottom)
     ctx.lineTo(padding.left, h - padding.bottom)
     ctx.closePath()
@@ -354,19 +354,19 @@ const Backtest: Component = () => {
     <div class="space-y-6">
       {/* 页头 */}
       <div>
-        <h2 class="text-lg font-semibold text-gray-800">回测</h2>
-        <p class="text-sm text-gray-500 mt-1">对策略进行历史数据回测</p>
+        <h2 class="text-lg font-semibold text-gray-900">回测</h2>
+        <p class="text-sm text-gray-400 mt-1">对策略进行历史数据回测</p>
       </div>
 
       {/* 回测配置表单 */}
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="text-base font-semibold text-gray-700 mb-4">回测配置</h3>
+      <div class="bg-white rounded-xl border border-gray-200/60 p-6">
+        <h3 class="text-[15px] font-semibold text-gray-800 mb-5">回测配置</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* 策略类型 */}
           <div>
-            <label class="block text-sm font-medium text-gray-600 mb-1">策略类型</label>
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">策略类型</label>
             <select
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
               value={strategyType()}
               onChange={(e) => setStrategyType(e.currentTarget.value)}
             >
@@ -379,10 +379,10 @@ const Backtest: Component = () => {
 
           {/* 交易对 */}
           <div>
-            <label class="block text-sm font-medium text-gray-600 mb-1">交易对</label>
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">交易对</label>
             <input
               type="text"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 placeholder:text-gray-300"
               value={symbol()}
               onInput={(e) => setSymbol(e.currentTarget.value)}
               placeholder="BTCUSDT"
@@ -391,9 +391,9 @@ const Backtest: Component = () => {
 
           {/* 交易所 */}
           <div>
-            <label class="block text-sm font-medium text-gray-600 mb-1">交易所</label>
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">交易所</label>
             <select
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
               value={exchange()}
               onChange={(e) => setExchange(e.currentTarget.value)}
             >
@@ -405,9 +405,9 @@ const Backtest: Component = () => {
 
           {/* 时间周期 */}
           <div>
-            <label class="block text-sm font-medium text-gray-600 mb-1">时间周期</label>
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">时间周期</label>
             <select
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
               value={timeframe()}
               onChange={(e) => setTimeframe(e.currentTarget.value)}
             >
@@ -422,10 +422,10 @@ const Backtest: Component = () => {
 
           {/* 开始日期 */}
           <div>
-            <label class="block text-sm font-medium text-gray-600 mb-1">开始日期</label>
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">开始日期</label>
             <input
               type="date"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
               value={startDate()}
               onInput={(e) => setStartDate(e.currentTarget.value)}
             />
@@ -433,10 +433,10 @@ const Backtest: Component = () => {
 
           {/* 结束日期 */}
           <div>
-            <label class="block text-sm font-medium text-gray-600 mb-1">结束日期</label>
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">结束日期</label>
             <input
               type="date"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
               value={endDate()}
               onInput={(e) => setEndDate(e.currentTarget.value)}
             />
@@ -444,10 +444,10 @@ const Backtest: Component = () => {
 
           {/* 初始资金 */}
           <div>
-            <label class="block text-sm font-medium text-gray-600 mb-1">初始资金 (USDT)</label>
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">初始资金 (USDT)</label>
             <input
               type="number"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
               value={initialBalance()}
               onInput={(e) => setInitialBalance(Number(e.currentTarget.value))}
               min="0"
@@ -457,9 +457,9 @@ const Backtest: Component = () => {
 
           {/* 指标配置 */}
           <div class="md:col-span-1 lg:col-span-1">
-            <label class="block text-sm font-medium text-gray-600 mb-1">指标配置 (JSON)</label>
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">指标配置 (JSON)</label>
             <textarea
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
               rows={4}
               value={indicatorConfig()}
               onInput={(e) => setIndicatorConfig(e.currentTarget.value)}
@@ -468,9 +468,9 @@ const Backtest: Component = () => {
 
           {/* 交易配置 */}
           <div class="md:col-span-1 lg:col-span-1">
-            <label class="block text-sm font-medium text-gray-600 mb-1">交易配置 (JSON)</label>
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">交易配置 (JSON)</label>
             <textarea
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
               rows={4}
               value={tradingConfig()}
               onInput={(e) => setTradingConfig(e.currentTarget.value)}
@@ -480,15 +480,15 @@ const Backtest: Component = () => {
 
         {/* 错误信息 */}
         <Show when={runError()}>
-          <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+          <div class="mt-4 p-3 bg-red-50/80 border border-red-200/60 rounded-lg text-sm text-red-500">
             {runError()}
           </div>
         </Show>
 
         {/* 运行按钮 */}
-        <div class="mt-4">
+        <div class="mt-5">
           <button
-            class="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            class="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={running()}
             onClick={handleRun}
           >
@@ -499,19 +499,19 @@ const Backtest: Component = () => {
 
       {/* 回测结果 */}
       <Show when={result()}>
-        <div id="backtest-result" class="space-y-6">
-          <h3 class="text-base font-semibold text-gray-700">
+        <div id="backtest-result" class="space-y-5">
+          <h3 class="text-[15px] font-semibold text-gray-800">
             回测结果 - {result()!.strategy_name} / {result()!.symbol} ({result()!.exchange})
           </h3>
 
           {/* 8 个统计卡片 */}
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
             {/* 总收益率 */}
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <p class="text-xs text-gray-500 mb-1">总收益率</p>
+            <div class="bg-white rounded-xl border border-gray-200/60 p-4">
+              <p class="text-[13px] font-medium text-gray-400 mb-1">总收益率</p>
               <p
                 class={`text-xl font-bold ${
-                  result()!.total_return_pct >= 0 ? 'text-green-600' : 'text-red-600'
+                  result()!.total_return_pct >= 0 ? 'text-emerald-600' : 'text-red-500'
                 }`}
               >
                 {formatPct(result()!.total_return_pct)}
@@ -519,92 +519,92 @@ const Backtest: Component = () => {
             </div>
 
             {/* 最大回撤 */}
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <p class="text-xs text-gray-500 mb-1">最大回撤</p>
-              <p class="text-xl font-bold text-red-600">
+            <div class="bg-white rounded-xl border border-gray-200/60 p-4">
+              <p class="text-[13px] font-medium text-gray-400 mb-1">最大回撤</p>
+              <p class="text-xl font-bold text-red-500">
                 {formatPct(-Math.abs(result()!.max_drawdown_pct))}
               </p>
             </div>
 
             {/* 夏普比率 */}
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <p class="text-xs text-gray-500 mb-1">夏普比率</p>
-              <p class="text-xl font-bold text-gray-800">
+            <div class="bg-white rounded-xl border border-gray-200/60 p-4">
+              <p class="text-[13px] font-medium text-gray-400 mb-1">夏普比率</p>
+              <p class="text-xl font-bold text-gray-900">
                 {formatNumber(result()!.sharpe_ratio)}
               </p>
             </div>
 
             {/* 索提诺比率 */}
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <p class="text-xs text-gray-500 mb-1">索提诺比率</p>
-              <p class="text-xl font-bold text-gray-800">
+            <div class="bg-white rounded-xl border border-gray-200/60 p-4">
+              <p class="text-[13px] font-medium text-gray-400 mb-1">索提诺比率</p>
+              <p class="text-xl font-bold text-gray-900">
                 {formatNumber(result()!.sortino_ratio)}
               </p>
             </div>
 
             {/* 胜率 */}
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <p class="text-xs text-gray-500 mb-1">胜率</p>
-              <p class="text-xl font-bold text-gray-800">
+            <div class="bg-white rounded-xl border border-gray-200/60 p-4">
+              <p class="text-[13px] font-medium text-gray-400 mb-1">胜率</p>
+              <p class="text-xl font-bold text-gray-900">
                 {formatNumber(result()!.win_rate)}%
               </p>
             </div>
 
             {/* 盈亏比 */}
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <p class="text-xs text-gray-500 mb-1">盈亏比</p>
-              <p class="text-xl font-bold text-gray-800">
+            <div class="bg-white rounded-xl border border-gray-200/60 p-4">
+              <p class="text-[13px] font-medium text-gray-400 mb-1">盈亏比</p>
+              <p class="text-xl font-bold text-gray-900">
                 {formatNumber(result()!.profit_factor)}
               </p>
             </div>
 
             {/* 总交易次数 */}
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <p class="text-xs text-gray-500 mb-1">总交易次数</p>
-              <p class="text-xl font-bold text-gray-800">{result()!.total_trades}</p>
+            <div class="bg-white rounded-xl border border-gray-200/60 p-4">
+              <p class="text-[13px] font-medium text-gray-400 mb-1">总交易次数</p>
+              <p class="text-xl font-bold text-gray-900">{result()!.total_trades}</p>
             </div>
 
             {/* 利润因子 */}
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <p class="text-xs text-gray-500 mb-1">利润因子</p>
-              <p class="text-xl font-bold text-gray-800">
+            <div class="bg-white rounded-xl border border-gray-200/60 p-4">
+              <p class="text-[13px] font-medium text-gray-400 mb-1">利润因子</p>
+              <p class="text-xl font-bold text-gray-900">
                 {formatNumber(result()!.profit_factor)}
               </p>
             </div>
           </div>
 
           {/* 额外信息行 */}
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+          <div class="bg-white rounded-xl border border-gray-200/60 p-4">
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 text-sm">
               <div>
-                <span class="text-gray-500">盈利交易</span>
-                <p class="font-semibold text-green-600">{result()!.profit_trades}</p>
+                <span class="text-[13px] text-gray-400">盈利交易</span>
+                <p class="font-semibold text-emerald-600 mt-0.5">{result()!.profit_trades}</p>
               </div>
               <div>
-                <span class="text-gray-500">亏损交易</span>
-                <p class="font-semibold text-red-600">{result()!.loss_trades}</p>
+                <span class="text-[13px] text-gray-400">亏损交易</span>
+                <p class="font-semibold text-red-500 mt-0.5">{result()!.loss_trades}</p>
               </div>
               <div>
-                <span class="text-gray-500">平均盈利</span>
-                <p class="font-semibold text-green-600">
+                <span class="text-[13px] text-gray-400">平均盈利</span>
+                <p class="font-semibold text-emerald-600 mt-0.5">
                   {formatNumber(result()!.avg_profit)}
                 </p>
               </div>
               <div>
-                <span class="text-gray-500">平均亏损</span>
-                <p class="font-semibold text-red-600">
+                <span class="text-[13px] text-gray-400">平均亏损</span>
+                <p class="font-semibold text-red-500 mt-0.5">
                   {formatNumber(result()!.avg_loss)}
                 </p>
               </div>
               <div>
-                <span class="text-gray-500">最大连胜</span>
-                <p class="font-semibold text-gray-800">
+                <span class="text-[13px] text-gray-400">最大连胜</span>
+                <p class="font-semibold text-gray-800 mt-0.5">
                   {result()!.max_consecutive_wins}
                 </p>
               </div>
               <div>
-                <span class="text-gray-500">最大连亏</span>
-                <p class="font-semibold text-gray-800">
+                <span class="text-[13px] text-gray-400">最大连亏</span>
+                <p class="font-semibold text-gray-800 mt-0.5">
                   {result()!.max_consecutive_losses}
                 </p>
               </div>
@@ -612,8 +612,8 @@ const Backtest: Component = () => {
           </div>
 
           {/* 权益曲线图 */}
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-            <h4 class="text-sm font-semibold text-gray-700 mb-3">权益曲线</h4>
+          <div class="bg-white rounded-xl border border-gray-200/60 p-5">
+            <h4 class="text-[13px] font-semibold text-gray-500 mb-4">权益曲线</h4>
             <canvas
               id="equity-canvas"
               class="w-full"
@@ -622,60 +622,60 @@ const Backtest: Component = () => {
           </div>
 
           {/* 交易记录表格 */}
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-            <h4 class="text-sm font-semibold text-gray-700 mb-3">
+          <div class="bg-white rounded-xl border border-gray-200/60 p-5">
+            <h4 class="text-[13px] font-semibold text-gray-500 mb-4">
               交易记录 ({result()!.trades.length} 笔)
             </h4>
             <div class="overflow-x-auto">
               <table class="w-full text-sm">
                 <thead>
-                  <tr class="border-b border-gray-200">
-                    <th class="text-left py-2 px-3 text-gray-500 font-medium">入场时间</th>
-                    <th class="text-left py-2 px-3 text-gray-500 font-medium">出场时间</th>
-                    <th class="text-left py-2 px-3 text-gray-500 font-medium">方向</th>
-                    <th class="text-right py-2 px-3 text-gray-500 font-medium">入场价</th>
-                    <th class="text-right py-2 px-3 text-gray-500 font-medium">出场价</th>
-                    <th class="text-right py-2 px-3 text-gray-500 font-medium">数量</th>
-                    <th class="text-right py-2 px-3 text-gray-500 font-medium">盈亏</th>
-                    <th class="text-right py-2 px-3 text-gray-500 font-medium">盈亏%</th>
+                  <tr class="border-b border-gray-100">
+                    <th class="text-left py-2.5 px-3 text-[13px] font-medium text-gray-400">入场时间</th>
+                    <th class="text-left py-2.5 px-3 text-[13px] font-medium text-gray-400">出场时间</th>
+                    <th class="text-left py-2.5 px-3 text-[13px] font-medium text-gray-400">方向</th>
+                    <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">入场价</th>
+                    <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">出场价</th>
+                    <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">数量</th>
+                    <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">盈亏</th>
+                    <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">盈亏%</th>
                   </tr>
                 </thead>
                 <tbody>
                   <For each={result()!.trades}>
                     {(trade) => (
-                      <tr class="border-b border-gray-100 hover:bg-gray-50">
-                        <td class="py-2 px-3 text-gray-700">{formatDateTime(trade.entry_time)}</td>
-                        <td class="py-2 px-3 text-gray-700">{formatDateTime(trade.exit_time)}</td>
-                        <td class="py-2 px-3">
+                      <tr class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                        <td class="py-2.5 px-3 text-gray-600 text-[13px]">{formatDateTime(trade.entry_time)}</td>
+                        <td class="py-2.5 px-3 text-gray-600 text-[13px]">{formatDateTime(trade.exit_time)}</td>
+                        <td class="py-2.5 px-3">
                           <span
-                            class={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                            class={`inline-block px-2 py-0.5 rounded-md text-xs font-medium ${
                               trade.side === 'buy'
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-red-100 text-red-700'
+                                ? 'bg-emerald-50 text-emerald-600'
+                                : 'bg-red-50 text-red-500'
                             }`}
                           >
                             {trade.side === 'buy' ? '买入' : '卖出'}
                           </span>
                         </td>
-                        <td class="py-2 px-3 text-right text-gray-700">
+                        <td class="py-2.5 px-3 text-right text-gray-600 text-[13px]">
                           {formatNumber(trade.entry_price)}
                         </td>
-                        <td class="py-2 px-3 text-right text-gray-700">
+                        <td class="py-2.5 px-3 text-right text-gray-600 text-[13px]">
                           {formatNumber(trade.exit_price)}
                         </td>
-                        <td class="py-2 px-3 text-right text-gray-700">
+                        <td class="py-2.5 px-3 text-right text-gray-600 text-[13px]">
                           {formatNumber(trade.quantity, 4)}
                         </td>
                         <td
-                          class={`py-2 px-3 text-right font-medium ${
-                            trade.pnl >= 0 ? 'text-green-600' : 'text-red-600'
+                          class={`py-2.5 px-3 text-right font-medium text-[13px] ${
+                            trade.pnl >= 0 ? 'text-emerald-600' : 'text-red-500'
                           }`}
                         >
                           {formatNumber(trade.pnl)}
                         </td>
                         <td
-                          class={`py-2 px-3 text-right font-medium ${
-                            trade.pnl_pct >= 0 ? 'text-green-600' : 'text-red-600'
+                          class={`py-2.5 px-3 text-right font-medium text-[13px] ${
+                            trade.pnl_pct >= 0 ? 'text-emerald-600' : 'text-red-500'
                           }`}
                         >
                           {formatPct(trade.pnl_pct)}
@@ -691,25 +691,25 @@ const Backtest: Component = () => {
       </Show>
 
       {/* 历史回测列表 */}
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="text-base font-semibold text-gray-700 mb-4">历史回测</h3>
+      <div class="bg-white rounded-xl border border-gray-200/60 p-6">
+        <h3 class="text-[15px] font-semibold text-gray-800 mb-5">历史回测</h3>
 
         <Show
           when={!historyLoading()}
           fallback={
-            <div class="text-center py-8">
-              <div class="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-              <p class="text-sm text-gray-500 mt-2">加载中...</p>
+            <div class="text-center py-12">
+              <div class="inline-block w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+              <p class="text-sm text-gray-400 mt-2">加载中...</p>
             </div>
           }
         >
           <Show
             when={historyError() === ''}
             fallback={
-              <div class="text-center py-8">
-                <p class="text-sm text-red-500">{historyError()}</p>
+              <div class="text-center py-12">
+                <p class="text-sm text-red-400">{historyError()}</p>
                 <button
-                  class="mt-2 text-sm text-blue-600 hover:underline"
+                  class="mt-2 text-sm text-indigo-600 hover:text-indigo-700"
                   onClick={() => loadHistory(historyPage())}
                 >
                   重试
@@ -720,55 +720,58 @@ const Backtest: Component = () => {
             <Show
               when={historyItems().length > 0}
               fallback={
-                <div class="text-center py-8">
-                  <p class="text-gray-500">暂无历史回测记录</p>
+                <div class="text-center py-12">
+                  <svg class="w-12 h-12 mx-auto text-gray-200 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p class="text-gray-400 text-sm">暂无历史回测记录</p>
                 </div>
               }
             >
               <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                   <thead>
-                    <tr class="border-b border-gray-200">
-                      <th class="text-left py-2 px-3 text-gray-500 font-medium">策略名</th>
-                      <th class="text-left py-2 px-3 text-gray-500 font-medium">交易对</th>
-                      <th class="text-left py-2 px-3 text-gray-500 font-medium">交易所</th>
-                      <th class="text-right py-2 px-3 text-gray-500 font-medium">初始资金</th>
-                      <th class="text-right py-2 px-3 text-gray-500 font-medium">最终资金</th>
-                      <th class="text-right py-2 px-3 text-gray-500 font-medium">收益率</th>
-                      <th class="text-right py-2 px-3 text-gray-500 font-medium">夏普比率</th>
-                      <th class="text-right py-2 px-3 text-gray-500 font-medium">最大回撤</th>
-                      <th class="text-center py-2 px-3 text-gray-500 font-medium">操作</th>
+                    <tr class="border-b border-gray-100">
+                      <th class="text-left py-2.5 px-3 text-[13px] font-medium text-gray-400">策略名</th>
+                      <th class="text-left py-2.5 px-3 text-[13px] font-medium text-gray-400">交易对</th>
+                      <th class="text-left py-2.5 px-3 text-[13px] font-medium text-gray-400">交易所</th>
+                      <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">初始资金</th>
+                      <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">最终资金</th>
+                      <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">收益率</th>
+                      <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">夏普比率</th>
+                      <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">最大回撤</th>
+                      <th class="text-center py-2.5 px-3 text-[13px] font-medium text-gray-400">操作</th>
                     </tr>
                   </thead>
                   <tbody>
                     <For each={historyItems()}>
                       {(item) => (
-                        <tr class="border-b border-gray-100 hover:bg-gray-50">
-                          <td class="py-2 px-3 text-gray-700">{item.strategy_name}</td>
-                          <td class="py-2 px-3 text-gray-700">{item.symbol}</td>
-                          <td class="py-2 px-3 text-gray-700">{item.exchange}</td>
-                          <td class="py-2 px-3 text-right text-gray-700">
+                        <tr class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                          <td class="py-2.5 px-3 text-gray-700">{item.strategy_name}</td>
+                          <td class="py-2.5 px-3 text-gray-700">{item.symbol}</td>
+                          <td class="py-2.5 px-3 text-gray-700">{item.exchange}</td>
+                          <td class="py-2.5 px-3 text-right text-gray-600 text-[13px]">
                             {formatNumber(item.initial_balance)}
                           </td>
-                          <td class="py-2 px-3 text-right text-gray-700">
+                          <td class="py-2.5 px-3 text-right text-gray-600 text-[13px]">
                             {formatNumber(item.final_balance)}
                           </td>
                           <td
-                            class={`py-2 px-3 text-right font-medium ${
-                              item.total_return_pct >= 0 ? 'text-green-600' : 'text-red-600'
+                            class={`py-2.5 px-3 text-right font-medium text-[13px] ${
+                              item.total_return_pct >= 0 ? 'text-emerald-600' : 'text-red-500'
                             }`}
                           >
                             {formatPct(item.total_return_pct)}
                           </td>
-                          <td class="py-2 px-3 text-right text-gray-700">
+                          <td class="py-2.5 px-3 text-right text-gray-600 text-[13px]">
                             {formatNumber(item.sharpe_ratio)}
                           </td>
-                          <td class="py-2 px-3 text-right text-red-600">
+                          <td class="py-2.5 px-3 text-right text-red-500 text-[13px]">
                             {formatPct(-Math.abs(item.max_drawdown_pct))}
                           </td>
-                          <td class="py-2 px-3 text-center">
+                          <td class="py-2.5 px-3 text-center">
                             <button
-                              class="text-blue-600 hover:text-blue-800 text-sm hover:underline"
+                              class="text-indigo-600 hover:text-indigo-700 text-[13px] font-medium"
                               onClick={() => handleViewDetail(item.id)}
                             >
                               查看详情
@@ -783,20 +786,20 @@ const Backtest: Component = () => {
 
               {/* 分页 */}
               <Show when={historyTotalPages() > 1}>
-                <div class="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-                  <p class="text-sm text-gray-500">
+                <div class="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+                  <p class="text-[13px] text-gray-400">
                     第 {historyPage()} / {historyTotalPages()} 页
                   </p>
                   <div class="flex gap-2">
                     <button
-                      class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       disabled={historyPage() <= 1}
                       onClick={() => loadHistory(historyPage() - 1)}
                     >
                       上一页
                     </button>
                     <button
-                      class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       disabled={historyPage() >= historyTotalPages()}
                       onClick={() => loadHistory(historyPage() + 1)}
                     >

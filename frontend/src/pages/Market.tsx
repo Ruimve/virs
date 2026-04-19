@@ -64,12 +64,26 @@ function formatTime(ts: number): string {
   return `${mm}/${dd} ${hh}:${mi}`
 }
 
+// ── Tab 类型 ──────────────────────────────────────────────
+
+type MarketTab = 'ticker' | 'kline' | 'orderbook' | 'balance'
+
+const MARKET_TABS: { key: MarketTab; label: string }[] = [
+  { key: 'ticker', label: 'Ticker' },
+  { key: 'kline', label: 'K线' },
+  { key: 'orderbook', label: '订单簿' },
+  { key: 'balance', label: '余额' },
+]
+
 // ── 组件 ──────────────────────────────────────────────────
 const Market: Component = () => {
   // 工具栏状态
   const [exchange, setExchange] = createSignal('binance')
   const [symbol, setSymbol] = createSignal('BTCUSDT')
   const [interval, setInterval_] = createSignal('1h')
+
+  // Tab 状态
+  const [activeTab, setActiveTab] = createSignal<MarketTab>('ticker')
 
   // 数据状态
   const [ticker, setTicker] = createSignal<TickerData | null>(null)
@@ -85,9 +99,8 @@ const Market: Component = () => {
   const [orderbookError, setOrderbookError] = createSignal(false)
 
   const [balances, setBalances] = createSignal<BalanceItem[]>([])
-  const [balancesLoading, setBalancesLoading] = createSignal(false)
+  const [_balancesLoading, setBalancesLoading] = createSignal(false)
   const [balancesError, setBalancesError] = createSignal(false)
-  const [balancesExpanded, setBalancesExpanded] = createSignal(false)
 
   // Canvas ref
   let chartCanvas!: HTMLCanvasElement
@@ -349,18 +362,18 @@ const Market: Component = () => {
     <div class="space-y-6">
       {/* 标题 */}
       <div>
-        <h2 class="text-lg font-semibold text-gray-800">行情查看</h2>
-        <p class="text-sm text-gray-500 mt-1">实时市场行情数据</p>
+        <h2 class="text-lg font-semibold text-gray-900">行情查看</h2>
+        <p class="text-sm text-gray-400 mt-1">实时市场行情数据</p>
       </div>
 
       {/* 工具栏 */}
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <div class="bg-white rounded-xl border border-gray-200/60 p-4">
         <div class="flex flex-wrap items-end gap-4">
           {/* 交易所 */}
           <div>
-            <label class="block text-xs font-medium text-gray-500 mb-1">交易所</label>
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">交易所</label>
             <select
-              class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              class="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
               value={exchange()}
               onChange={(e) => setExchange((e.target as HTMLSelectElement).value)}
             >
@@ -372,10 +385,10 @@ const Market: Component = () => {
 
           {/* 交易对 */}
           <div>
-            <label class="block text-xs font-medium text-gray-500 mb-1">交易对</label>
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">交易对</label>
             <input
               type="text"
-              class="w-36 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              class="w-36 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 placeholder:text-gray-300"
               value={symbol()}
               onInput={(e) => setSymbol((e.target as HTMLInputElement).value)}
               placeholder="BTCUSDT"
@@ -384,9 +397,9 @@ const Market: Component = () => {
 
           {/* K线周期 */}
           <div>
-            <label class="block text-xs font-medium text-gray-500 mb-1">K线周期</label>
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">K线周期</label>
             <select
-              class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              class="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
               value={interval()}
               onChange={(e) => handleIntervalChange((e.target as HTMLSelectElement).value)}
             >
@@ -401,7 +414,7 @@ const Market: Component = () => {
 
           {/* 查询按钮 */}
           <button
-            class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
             onClick={handleQuery}
           >
             查询
@@ -409,7 +422,7 @@ const Market: Component = () => {
 
           {/* 刷新余额 */}
           <button
-            class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+            class="px-4 py-2 bg-gray-50 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-100 transition-colors border border-gray-200/60"
             onClick={handleRefreshBalances}
           >
             刷新余额
@@ -417,315 +430,321 @@ const Market: Component = () => {
         </div>
       </div>
 
-      {/* 行情信息卡片 */}
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        {/* 最新价 */}
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p class="text-xs text-gray-500 mb-1">最新价</p>
-          <Show
-            when={!tickerLoading() && !tickerError()}
-            fallback={
-              <p class="text-xl font-bold text-gray-400">
-                {tickerLoading() ? '--' : '数据不可用'}
-              </p>
-            }
-          >
-            <p class="text-xl font-bold text-gray-800">
-              {ticker() ? formatPrice(ticker()!.last_price) : '--'}
-            </p>
-          </Show>
-        </div>
+      {/* Tab 切换 */}
+      <div class="flex gap-1 bg-gray-100/80 rounded-lg p-1 w-fit">
+        <For each={MARKET_TABS}>
+          {(tab) => (
+            <button
+              class={`px-4 py-1.5 text-sm rounded-md transition-colors ${
+                activeTab() === tab.key
+                  ? 'bg-white text-gray-900 shadow-sm font-medium'
+                  : 'text-gray-400 hover:text-gray-600'
+              }`}
+              onClick={() => setActiveTab(tab.key)}
+            >
+              {tab.label}
+            </button>
+          )}
+        </For>
+      </div>
 
-        {/* 24h 涨跌 */}
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p class="text-xs text-gray-500 mb-1">24h 涨跌</p>
-          <Show
-            when={!tickerLoading() && !tickerError()}
-            fallback={
-              <p class="text-xl font-bold text-gray-400">
-                {tickerLoading() ? '--' : '数据不可用'}
-              </p>
-            }
-          >
-            <Show
-              when={ticker() && ticker()!.price_change_pct >= 0}
-              fallback={
-                <p class="text-xl font-bold text-red-500">
-                  {ticker()
-                    ? `${ticker()!.price_change_pct.toFixed(2)}% / ${formatPrice(ticker()!.price_change)}`
-                    : '--'}
+      {/* Ticker Tab */}
+      <Show when={activeTab() === 'ticker'}>
+        <div class="space-y-4">
+          {/* 行情信息卡片 */}
+          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {/* 最新价 */}
+            <div class="bg-white rounded-xl border border-gray-200/60 p-4">
+              <p class="text-[13px] font-medium text-gray-400 mb-1">最新价</p>
+              <Show
+                when={!tickerLoading() && !tickerError()}
+                fallback={
+                  <p class="text-xl font-bold text-gray-300">
+                    {tickerLoading() ? '--' : '数据不可用'}
+                  </p>
+                }
+              >
+                <p class="text-xl font-bold text-gray-900">
+                  {ticker() ? formatPrice(ticker()!.last_price) : '--'}
                 </p>
+              </Show>
+            </div>
+
+            {/* 24h 涨跌 */}
+            <div class="bg-white rounded-xl border border-gray-200/60 p-4">
+              <p class="text-[13px] font-medium text-gray-400 mb-1">24h 涨跌</p>
+              <Show
+                when={!tickerLoading() && !tickerError()}
+                fallback={
+                  <p class="text-xl font-bold text-gray-300">
+                    {tickerLoading() ? '--' : '数据不可用'}
+                  </p>
+                }
+              >
+                <Show
+                  when={ticker() && ticker()!.price_change_pct >= 0}
+                  fallback={
+                    <p class="text-xl font-bold text-red-500">
+                      {ticker()
+                        ? `${ticker()!.price_change_pct.toFixed(2)}% / ${formatPrice(ticker()!.price_change)}`
+                        : '--'}
+                    </p>
+                  }
+                >
+                  <p class="text-xl font-bold text-emerald-500">
+                    {ticker()
+                      ? `+${ticker()!.price_change_pct.toFixed(2)}% / +${formatPrice(ticker()!.price_change)}`
+                      : '--'}
+                  </p>
+                </Show>
+              </Show>
+            </div>
+
+            {/* 24h 最高 */}
+            <div class="bg-white rounded-xl border border-gray-200/60 p-4">
+              <p class="text-[13px] font-medium text-gray-400 mb-1">24h 最高</p>
+              <Show
+                when={!tickerLoading() && !tickerError()}
+                fallback={
+                  <p class="text-xl font-bold text-gray-300">
+                    {tickerLoading() ? '--' : '数据不可用'}
+                  </p>
+                }
+              >
+                <p class="text-xl font-bold text-gray-900">
+                  {ticker() ? formatPrice(ticker()!.high_24h) : '--'}
+                </p>
+              </Show>
+            </div>
+
+            {/* 24h 最低 */}
+            <div class="bg-white rounded-xl border border-gray-200/60 p-4">
+              <p class="text-[13px] font-medium text-gray-400 mb-1">24h 最低</p>
+              <Show
+                when={!tickerLoading() && !tickerError()}
+                fallback={
+                  <p class="text-xl font-bold text-gray-300">
+                    {tickerLoading() ? '--' : '数据不可用'}
+                  </p>
+                }
+              >
+                <p class="text-xl font-bold text-gray-900">
+                  {ticker() ? formatPrice(ticker()!.low_24h) : '--'}
+                </p>
+              </Show>
+            </div>
+
+            {/* 24h 成交量 */}
+            <div class="bg-white rounded-xl border border-gray-200/60 p-4">
+              <p class="text-[13px] font-medium text-gray-400 mb-1">24h 成交量</p>
+              <Show
+                when={!tickerLoading() && !tickerError()}
+                fallback={
+                  <p class="text-xl font-bold text-gray-300">
+                    {tickerLoading() ? '--' : '数据不可用'}
+                  </p>
+                }
+              >
+                <p class="text-xl font-bold text-gray-900">
+                  {ticker() ? formatVolume(ticker()!.volume_24h) : '--'}
+                </p>
+              </Show>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* K线图 Tab */}
+      <Show when={activeTab() === 'kline'}>
+        <div class="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
+          <div class="p-5">
+            <Show
+              when={klinesLoading()}
+              fallback={
+                <Show
+                  when={klinesError()}
+                  fallback={
+                    <Show
+                      when={klines().length > 0}
+                      fallback={
+                        <div class="text-center py-16">
+                          <svg class="w-12 h-12 mx-auto text-gray-200 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                          </svg>
+                          <p class="text-gray-400 text-sm">暂无K线数据</p>
+                        </div>
+                      }
+                    >
+                      <canvas
+                        ref={chartCanvas}
+                        class="w-full"
+                        style={{ height: '400px' }}
+                      />
+                    </Show>
+                  }
+                >
+                  <div class="text-center py-16">
+                    <p class="text-red-400 text-sm">加载K线数据失败</p>
+                  </div>
+                </Show>
               }
             >
-              <p class="text-xl font-bold text-green-500">
-                {ticker()
-                  ? `+${ticker()!.price_change_pct.toFixed(2)}% / +${formatPrice(ticker()!.price_change)}`
-                  : '--'}
-              </p>
-            </Show>
-          </Show>
-        </div>
-
-        {/* 24h 最高 */}
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p class="text-xs text-gray-500 mb-1">24h 最高</p>
-          <Show
-            when={!tickerLoading() && !tickerError()}
-            fallback={
-              <p class="text-xl font-bold text-gray-400">
-                {tickerLoading() ? '--' : '数据不可用'}
-              </p>
-            }
-          >
-            <p class="text-xl font-bold text-gray-800">
-              {ticker() ? formatPrice(ticker()!.high_24h) : '--'}
-            </p>
-          </Show>
-        </div>
-
-        {/* 24h 最低 */}
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p class="text-xs text-gray-500 mb-1">24h 最低</p>
-          <Show
-            when={!tickerLoading() && !tickerError()}
-            fallback={
-              <p class="text-xl font-bold text-gray-400">
-                {tickerLoading() ? '--' : '数据不可用'}
-              </p>
-            }
-          >
-            <p class="text-xl font-bold text-gray-800">
-              {ticker() ? formatPrice(ticker()!.low_24h) : '--'}
-            </p>
-          </Show>
-        </div>
-
-        {/* 24h 成交量 */}
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p class="text-xs text-gray-500 mb-1">24h 成交量</p>
-          <Show
-            when={!tickerLoading() && !tickerError()}
-            fallback={
-              <p class="text-xl font-bold text-gray-400">
-                {tickerLoading() ? '--' : '数据不可用'}
-              </p>
-            }
-          >
-            <p class="text-xl font-bold text-gray-800">
-              {ticker() ? formatVolume(ticker()!.volume_24h) : '--'}
-            </p>
-          </Show>
-        </div>
-      </div>
-
-      {/* K线图 */}
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div class="px-4 py-3 border-b border-gray-200">
-          <h3 class="text-sm font-semibold text-gray-700">K线图</h3>
-        </div>
-        <div class="p-4">
-          <Show
-            when={klinesLoading()}
-            fallback={
-              <Show
-                when={klinesError()}
-                fallback={
-                  <Show
-                    when={klines().length > 0}
-                    fallback={
-                      <div class="text-center py-12">
-                        <p class="text-gray-400">暂无K线数据</p>
-                      </div>
-                    }
-                  >
-                    <canvas
-                      ref={chartCanvas}
-                      class="w-full"
-                      style={{ height: '400px' }}
-                    />
-                  </Show>
-                }
-              >
-                <div class="text-center py-12">
-                  <p class="text-red-400">加载K线数据失败</p>
-                </div>
-              </Show>
-            }
-          >
-            <div class="text-center py-12">
-              <p class="text-gray-400">加载K线数据...</p>
-            </div>
-          </Show>
-        </div>
-      </div>
-
-      {/* 订单簿 */}
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div class="px-4 py-3 border-b border-gray-200">
-          <h3 class="text-sm font-semibold text-gray-700">订单簿</h3>
-        </div>
-        <div class="p-4">
-          <Show
-            when={orderbookLoading()}
-            fallback={
-              <Show
-                when={orderbookError()}
-                fallback={
-                  <Show
-                    when={orderbook() !== null}
-                    fallback={
-                      <div class="text-center py-12">
-                        <p class="text-gray-400">暂无订单簿数据</p>
-                      </div>
-                    }
-                  >
-                    <div class="grid grid-cols-2 gap-6">
-                      {/* 买盘 (bids) */}
-                      <div>
-                        <div class="grid grid-cols-3 text-xs font-medium text-gray-500 mb-2 px-2">
-                          <span>价格</span>
-                          <span class="text-right">数量</span>
-                          <span class="text-right">累计</span>
-                        </div>
-                        <For each={computeCumulative(orderbook()!.bids)}>
-                          {({ entry, cum }) => {
-                            const maxCum = computeCumulative(orderbook()!.bids).slice(-1)[0]?.cum || 1
-                            const pct = (cum / maxCum) * 100
-                            return (
-                              <div class="relative grid grid-cols-3 text-xs py-1 px-2">
-                                <div
-                                  class="absolute inset-0 bg-green-50 rounded"
-                                  style={{ width: `${pct}%` }}
-                                />
-                                <span class="relative text-green-600 font-mono">
-                                  {formatPrice(entry.price)}
-                                </span>
-                                <span class="relative text-right text-gray-600 font-mono">
-                                  {entry.quantity.toFixed(4)}
-                                </span>
-                                <span class="relative text-right text-gray-400 font-mono">
-                                  {cum.toFixed(4)}
-                                </span>
-                              </div>
-                            )
-                          }}
-                        </For>
-                      </div>
-
-                      {/* 卖盘 (asks) */}
-                      <div>
-                        <div class="grid grid-cols-3 text-xs font-medium text-gray-500 mb-2 px-2">
-                          <span>价格</span>
-                          <span class="text-right">数量</span>
-                          <span class="text-right">累计</span>
-                        </div>
-                        <For each={computeCumulative(orderbook()!.asks)}>
-                          {({ entry, cum }) => {
-                            const maxCum = computeCumulative(orderbook()!.asks).slice(-1)[0]?.cum || 1
-                            const pct = (cum / maxCum) * 100
-                            return (
-                              <div class="relative grid grid-cols-3 text-xs py-1 px-2">
-                                <div
-                                  class="absolute inset-y-0 right-0 bg-red-50 rounded"
-                                  style={{ width: `${pct}%` }}
-                                />
-                                <span class="relative text-red-600 font-mono">
-                                  {formatPrice(entry.price)}
-                                </span>
-                                <span class="relative text-right text-gray-600 font-mono">
-                                  {entry.quantity.toFixed(4)}
-                                </span>
-                                <span class="relative text-right text-gray-400 font-mono">
-                                  {cum.toFixed(4)}
-                                </span>
-                              </div>
-                            )
-                          }}
-                        </For>
-                      </div>
-                    </div>
-                  </Show>
-                }
-              >
-                <div class="text-center py-12">
-                  <p class="text-red-400">加载订单簿失败</p>
-                </div>
-              </Show>
-            }
-          >
-            <div class="text-center py-12">
-              <p class="text-gray-400">加载订单簿...</p>
-            </div>
-          </Show>
-        </div>
-      </div>
-
-      {/* 余额表格 (可折叠) */}
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <button
-          class="w-full px-4 py-3 border-b border-gray-200 flex items-center justify-between hover:bg-gray-50 transition-colors"
-          onClick={() => setBalancesExpanded(!balancesExpanded())}
-        >
-          <div class="flex items-center gap-2">
-            <h3 class="text-sm font-semibold text-gray-700">账户余额</h3>
-            <Show when={balancesLoading()}>
-              <span class="text-xs text-gray-400">加载中...</span>
-            </Show>
-            <Show when={balancesError()}>
-              <span class="text-xs text-red-400">加载失败</span>
+              <div class="text-center py-16">
+                <p class="text-gray-400 text-sm">加载K线数据...</p>
+              </div>
             </Show>
           </div>
-          <svg
-            class={`w-4 h-4 text-gray-400 transition-transform ${balancesExpanded() ? 'rotate-180' : ''}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+        </div>
+      </Show>
 
-        <Show when={balancesExpanded()}>
-          <div class="p-4">
+      {/* 订单簿 Tab */}
+      <Show when={activeTab() === 'orderbook'}>
+        <div class="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
+          <div class="p-5">
+            <Show
+              when={orderbookLoading()}
+              fallback={
+                <Show
+                  when={orderbookError()}
+                  fallback={
+                    <Show
+                      when={orderbook() !== null}
+                      fallback={
+                        <div class="text-center py-16">
+                          <svg class="w-12 h-12 mx-auto text-gray-200 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                          </svg>
+                          <p class="text-gray-400 text-sm">暂无订单簿数据</p>
+                        </div>
+                      }
+                    >
+                      <div class="grid grid-cols-2 gap-8">
+                        {/* 买盘 (bids) */}
+                        <div>
+                          <div class="grid grid-cols-3 text-[13px] font-medium text-gray-400 mb-2 px-2">
+                            <span>价格</span>
+                            <span class="text-right">数量</span>
+                            <span class="text-right">累计</span>
+                          </div>
+                          <For each={computeCumulative(orderbook()!.bids)}>
+                            {({ entry, cum }) => {
+                              const maxCum = computeCumulative(orderbook()!.bids).slice(-1)[0]?.cum || 1
+                              const pct = (cum / maxCum) * 100
+                              return (
+                                <div class="relative grid grid-cols-3 text-xs py-1 px-2">
+                                  <div
+                                    class="absolute inset-0 bg-emerald-50/60 rounded"
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                  <span class="relative text-emerald-600 font-mono">
+                                    {formatPrice(entry.price)}
+                                  </span>
+                                  <span class="relative text-right text-gray-600 font-mono">
+                                    {entry.quantity.toFixed(4)}
+                                  </span>
+                                  <span class="relative text-right text-gray-400 font-mono">
+                                    {cum.toFixed(4)}
+                                  </span>
+                                </div>
+                              )
+                            }}
+                          </For>
+                        </div>
+
+                        {/* 卖盘 (asks) */}
+                        <div>
+                          <div class="grid grid-cols-3 text-[13px] font-medium text-gray-400 mb-2 px-2">
+                            <span>价格</span>
+                            <span class="text-right">数量</span>
+                            <span class="text-right">累计</span>
+                          </div>
+                          <For each={computeCumulative(orderbook()!.asks)}>
+                            {({ entry, cum }) => {
+                              const maxCum = computeCumulative(orderbook()!.asks).slice(-1)[0]?.cum || 1
+                              const pct = (cum / maxCum) * 100
+                              return (
+                                <div class="relative grid grid-cols-3 text-xs py-1 px-2">
+                                  <div
+                                    class="absolute inset-y-0 right-0 bg-red-50/60 rounded"
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                  <span class="relative text-red-500 font-mono">
+                                    {formatPrice(entry.price)}
+                                  </span>
+                                  <span class="relative text-right text-gray-600 font-mono">
+                                    {entry.quantity.toFixed(4)}
+                                  </span>
+                                  <span class="relative text-right text-gray-400 font-mono">
+                                    {cum.toFixed(4)}
+                                  </span>
+                                </div>
+                              )
+                            }}
+                          </For>
+                        </div>
+                      </div>
+                    </Show>
+                  }
+                >
+                  <div class="text-center py-16">
+                    <p class="text-red-400 text-sm">加载订单簿失败</p>
+                  </div>
+                </Show>
+              }
+            >
+              <div class="text-center py-16">
+                <p class="text-gray-400 text-sm">加载订单簿...</p>
+              </div>
+            </Show>
+          </div>
+        </div>
+      </Show>
+
+      {/* 余额 Tab */}
+      <Show when={activeTab() === 'balance'}>
+        <div class="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
+          <div class="p-5">
             <Show
               when={!balancesError()}
               fallback={
-                <div class="text-center py-8">
-                  <p class="text-red-400">加载余额失败，请重试</p>
+                <div class="text-center py-16">
+                  <p class="text-red-400 text-sm">加载余额失败，请重试</p>
                 </div>
               }
             >
               <Show
                 when={balances().length > 0}
                 fallback={
-                  <div class="text-center py-8">
-                    <p class="text-gray-400">暂无余额数据</p>
+                  <div class="text-center py-16">
+                    <svg class="w-12 h-12 mx-auto text-gray-200 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                    <p class="text-gray-400 text-sm">暂无余额数据</p>
                   </div>
                 }
               >
                 <div class="overflow-x-auto">
                   <table class="w-full text-sm">
                     <thead>
-                      <tr class="border-b border-gray-200 bg-gray-50">
-                        <th class="text-left px-4 py-2 font-medium text-gray-600">币种</th>
-                        <th class="text-right px-4 py-2 font-medium text-gray-600">可用余额</th>
-                        <th class="text-right px-4 py-2 font-medium text-gray-600">冻结余额</th>
-                        <th class="text-right px-4 py-2 font-medium text-gray-600">总余额</th>
+                      <tr class="border-b border-gray-100">
+                        <th class="text-left px-4 py-2.5 text-[13px] font-medium text-gray-400">币种</th>
+                        <th class="text-right px-4 py-2.5 text-[13px] font-medium text-gray-400">可用余额</th>
+                        <th class="text-right px-4 py-2.5 text-[13px] font-medium text-gray-400">冻结余额</th>
+                        <th class="text-right px-4 py-2.5 text-[13px] font-medium text-gray-400">总余额</th>
                       </tr>
                     </thead>
                     <tbody>
                       <For each={balances()}>
                         {(b) => (
-                          <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                            <td class="px-4 py-2 font-medium text-gray-800">{b.currency}</td>
-                            <td class="px-4 py-2 text-right text-gray-600 font-mono">
+                          <tr class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                            <td class="px-4 py-2.5 font-medium text-gray-800">{b.currency}</td>
+                            <td class="px-4 py-2.5 text-right text-gray-500 font-mono text-[13px]">
                               {b.available.toFixed(8)}
                             </td>
-                            <td class="px-4 py-2 text-right text-gray-600 font-mono">
+                            <td class="px-4 py-2.5 text-right text-gray-500 font-mono text-[13px]">
                               {b.frozen.toFixed(8)}
                             </td>
-                            <td class="px-4 py-2 text-right text-gray-800 font-mono font-medium">
+                            <td class="px-4 py-2.5 text-right text-gray-800 font-mono font-medium text-[13px]">
                               {b.total.toFixed(8)}
                             </td>
                           </tr>
@@ -737,8 +756,8 @@ const Market: Component = () => {
               </Show>
             </Show>
           </div>
-        </Show>
-      </div>
+        </div>
+      </Show>
     </div>
   )
 }

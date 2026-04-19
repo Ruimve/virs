@@ -34,24 +34,24 @@ const Login: Component = () => {
   }
 
   return (
-    <div class="min-h-screen bg-gray-100 flex items-center justify-center px-4">
-      <div class="w-full max-w-md">
+    <div class="min-h-screen bg-gradient-to-b from-white to-slate-50 flex items-center justify-center px-4 animate-fade-in">
+      <div class="w-full max-w-md animate-fade-in-up">
         {/* Logo 区域 */}
-        <div class="text-center mb-8">
-          <h1 class="text-3xl font-bold text-gray-900 tracking-tight">VIRS</h1>
-          <p class="mt-2 text-sm text-gray-500">量化交易管理系统</p>
+        <div class="text-center mb-10">
+          <h1 class="text-4xl font-light text-[var(--color-text-primary)] tracking-[0.2em]">VIRS</h1>
+          <p class="mt-3 text-xs text-[var(--color-text-tertiary)] tracking-wide">量化交易管理系统</p>
         </div>
 
         {/* 登录卡片 */}
-        <div class="bg-white rounded-xl shadow-lg p-8">
-          <h2 class="text-xl font-semibold text-gray-800 mb-6">登录</h2>
+        <div class="bg-white border border-[var(--color-border)] rounded-2xl p-8 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <h2 class="text-lg font-semibold text-[var(--color-text-primary)] mb-6">登录</h2>
 
           <form onSubmit={handleSubmit} class="space-y-5">
             {/* 错误提示 */}
             <Show when={error()}>
               {(errorMsg) => (
-                <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-                  <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <div class="flex items-center gap-2 p-3 bg-red-50/80 border border-red-100 rounded-xl text-sm text-red-600">
+                  <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <span>{errorMsg()}</span>
@@ -61,7 +61,7 @@ const Login: Component = () => {
 
             {/* 用户名 */}
             <div>
-              <label for="username" class="block text-sm font-medium text-gray-700 mb-1.5">
+              <label for="username" class="block text-[13px] font-medium text-[var(--color-text-secondary)] mb-1.5">
                 用户名
               </label>
               <input
@@ -69,7 +69,7 @@ const Login: Component = () => {
                 type="text"
                 value={username()}
                 onInput={(e) => setUsername(e.currentTarget.value)}
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+                class="w-full px-4 py-3 border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/20 focus:border-[var(--color-accent)] transition-all duration-200"
                 placeholder="请输入用户名"
                 autocomplete="username"
                 disabled={loading()}
@@ -78,7 +78,7 @@ const Login: Component = () => {
 
             {/* 密码 */}
             <div>
-              <label for="password" class="block text-sm font-medium text-gray-700 mb-1.5">
+              <label for="password" class="block text-[13px] font-medium text-[var(--color-text-secondary)] mb-1.5">
                 密码
               </label>
               <input
@@ -86,7 +86,7 @@ const Login: Component = () => {
                 type="password"
                 value={password()}
                 onInput={(e) => setPassword(e.currentTarget.value)}
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+                class="w-full px-4 py-3 border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/20 focus:border-[var(--color-accent)] transition-all duration-200"
                 placeholder="请输入密码"
                 autocomplete="current-password"
                 disabled={loading()}
@@ -97,7 +97,7 @@ const Login: Component = () => {
             <button
               type="submit"
               disabled={loading()}
-              class="w-full py-2.5 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
+              class="w-full py-3 px-4 bg-[var(--color-accent)] text-white text-sm font-medium rounded-xl hover:bg-[var(--color-accent-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/30 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
             >
               <Show when={loading()} fallback="登录">
                 <span class="flex items-center justify-center gap-2">

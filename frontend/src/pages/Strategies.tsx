@@ -59,17 +59,17 @@ const EMPTY_FORM: StrategyFormData = {
 function statusBadgeClass(status: string): string {
   switch (status) {
     case 'running':
-      return 'bg-green-100 text-green-700'
+      return 'bg-emerald-50 text-emerald-600'
     case 'stopped':
-      return 'bg-gray-100 text-gray-600'
+      return 'bg-gray-50 text-gray-500'
     case 'draft':
-      return 'bg-yellow-100 text-yellow-700'
+      return 'bg-amber-50 text-amber-600'
     case 'error':
-      return 'bg-red-100 text-red-700'
+      return 'bg-rose-50 text-rose-600'
     case 'paused':
-      return 'bg-blue-100 text-blue-700'
+      return 'bg-indigo-50 text-indigo-600'
     default:
-      return 'bg-gray-100 text-gray-600'
+      return 'bg-gray-50 text-gray-500'
   }
 }
 
@@ -324,11 +324,11 @@ const Strategies: Component = () => {
       {/* 标题栏 */}
       <div class="flex items-center justify-between">
         <div>
-          <h2 class="text-lg font-semibold text-gray-800">策略列表</h2>
-          <p class="text-sm text-gray-500 mt-1">管理和监控您的量化交易策略</p>
+          <h2 class="text-xl font-semibold text-gray-900">策略列表</h2>
+          <p class="text-sm text-gray-400 mt-1">管理和监控您的量化交易策略</p>
         </div>
         <button
-          class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
           onClick={openCreateModal}
         >
           新建策略
@@ -336,7 +336,7 @@ const Strategies: Component = () => {
       </div>
 
       {/* 状态筛选 Tabs */}
-      <div class="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+      <div class="flex gap-1 bg-gray-100/80 rounded-lg p-1 w-fit">
         {([
           ['all', '全部'],
           ['running', '运行中'],
@@ -344,14 +344,17 @@ const Strategies: Component = () => {
           ['draft', '草稿'],
         ] as [StatusFilter, string][]).map(([key, label]) => (
           <button
-            class={`px-4 py-1.5 text-sm rounded-md transition-colors ${
+            class={`px-4 py-1.5 text-sm rounded-md transition-colors relative ${
               statusFilter() === key
-                ? 'bg-white text-gray-800 shadow-sm font-medium'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'bg-white text-gray-900 font-medium'
+                : 'text-gray-400 hover:text-gray-600'
             }`}
             onClick={() => setStatusFilter(key)}
           >
             {label}
+            {statusFilter() === key && (
+              <span class="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-indigo-600 rounded-full" />
+            )}
           </button>
         ))}
       </div>
@@ -360,18 +363,18 @@ const Strategies: Component = () => {
       <Show
         when={!loading()}
         fallback={
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-            <p class="text-gray-500">加载中...</p>
+          <div class="bg-white rounded-xl border border-gray-200/60 p-12 text-center">
+            <p class="text-gray-400">加载中...</p>
           </div>
         }
       >
         <Show
           when={error() === ''}
           fallback={
-            <div class="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-              <p class="text-red-600">{error()}</p>
+            <div class="bg-rose-50/50 border border-rose-200/60 rounded-xl p-6 text-center">
+              <p class="text-rose-600">{error()}</p>
               <button
-                class="mt-3 px-4 py-1.5 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+                class="mt-3 px-4 py-1.5 text-sm bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors"
                 onClick={fetchStrategies}
               >
                 重试
@@ -382,9 +385,9 @@ const Strategies: Component = () => {
           <Show
             when={strategies().length > 0}
             fallback={
-              <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+              <div class="bg-white rounded-xl border border-gray-200/60 p-12 text-center">
                 <svg
-                  class="w-16 h-16 mx-auto text-gray-300 mb-4"
+                  class="w-16 h-16 mx-auto text-gray-200 mb-4"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -396,52 +399,52 @@ const Strategies: Component = () => {
                     d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
                   />
                 </svg>
-                <p class="text-gray-500">暂无策略</p>
-                <p class="text-sm text-gray-400 mt-1">点击"新建策略"开始创建您的第一个交易策略</p>
+                <p class="text-gray-400">暂无策略</p>
+                <p class="text-sm text-gray-300 mt-1">点击"新建策略"开始创建您的第一个交易策略</p>
               </div>
             }
           >
             {/* 策略表格 */}
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
               <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                   <thead>
-                    <tr class="border-b border-gray-200 bg-gray-50">
-                      <th class="text-left px-4 py-3 font-medium text-gray-600">名称</th>
-                      <th class="text-left px-4 py-3 font-medium text-gray-600">交易对</th>
-                      <th class="text-left px-4 py-3 font-medium text-gray-600">交易所</th>
-                      <th class="text-left px-4 py-3 font-medium text-gray-600">时间框架</th>
-                      <th class="text-left px-4 py-3 font-medium text-gray-600">状态</th>
-                      <th class="text-left px-4 py-3 font-medium text-gray-600">执行模式</th>
-                      <th class="text-right px-4 py-3 font-medium text-gray-600">操作</th>
+                    <tr class="border-b border-gray-100">
+                      <th class="text-left px-5 py-3 text-[13px] font-medium text-gray-400">名称</th>
+                      <th class="text-left px-5 py-3 text-[13px] font-medium text-gray-400">交易对</th>
+                      <th class="text-left px-5 py-3 text-[13px] font-medium text-gray-400">交易所</th>
+                      <th class="text-left px-5 py-3 text-[13px] font-medium text-gray-400">时间框架</th>
+                      <th class="text-left px-5 py-3 text-[13px] font-medium text-gray-400">状态</th>
+                      <th class="text-left px-5 py-3 text-[13px] font-medium text-gray-400">执行模式</th>
+                      <th class="text-right px-5 py-3 text-[13px] font-medium text-gray-400">操作</th>
                     </tr>
                   </thead>
                   <tbody>
                     <For each={strategies()}>
                       {(s) => (
-                        <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                          <td class="px-4 py-3 font-medium text-gray-800">{s.name}</td>
-                          <td class="px-4 py-3 text-gray-600">{s.symbol}</td>
-                          <td class="px-4 py-3 text-gray-600">{s.exchange}</td>
-                          <td class="px-4 py-3 text-gray-600">{s.timeframe}</td>
-                          <td class="px-4 py-3">
+                        <tr class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                          <td class="px-5 py-3.5 font-medium text-gray-900">{s.name}</td>
+                          <td class="px-5 py-3.5 text-gray-500">{s.symbol}</td>
+                          <td class="px-5 py-3.5 text-gray-500">{s.exchange}</td>
+                          <td class="px-5 py-3.5 text-gray-500">{s.timeframe}</td>
+                          <td class="px-5 py-3.5">
                             <span
-                              class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadgeClass(s.status)}`}
+                              class={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium ${statusBadgeClass(s.status)}`}
                             >
                               {statusLabel(s.status)}
                             </span>
                           </td>
-                          <td class="px-4 py-3 text-gray-600">
+                          <td class="px-5 py-3.5 text-gray-500">
                             {s.execution_mode === 'live' ? '实盘' : '仅信号'}
                           </td>
-                          <td class="px-4 py-3 text-right">
-                            <div class="flex items-center justify-end gap-2">
+                          <td class="px-5 py-3.5 text-right">
+                            <div class="flex items-center justify-end gap-1.5">
                               {/* 启动 / 停止 */}
                               <Show
                                 when={s.status === 'running'}
                                 fallback={
                                   <button
-                                    class="px-3 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-md hover:bg-green-100 transition-colors disabled:opacity-50"
+                                    class="px-2.5 py-1 text-xs font-medium text-emerald-600 bg-emerald-50/80 rounded-md hover:bg-emerald-100 transition-colors disabled:opacity-50"
                                     disabled={actionLoading() === s.id}
                                     onClick={() => handleStart(s.id)}
                                   >
@@ -450,7 +453,7 @@ const Strategies: Component = () => {
                                 }
                               >
                                 <button
-                                  class="px-3 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 transition-colors disabled:opacity-50"
+                                  class="px-2.5 py-1 text-xs font-medium text-rose-600 bg-rose-50/80 rounded-md hover:bg-rose-100 transition-colors disabled:opacity-50"
                                   disabled={actionLoading() === s.id}
                                   onClick={() => handleStop(s.id)}
                                 >
@@ -459,14 +462,14 @@ const Strategies: Component = () => {
                               </Show>
                               {/* 编辑 */}
                               <button
-                                class="px-3 py-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
+                                class="px-2.5 py-1 text-xs font-medium text-indigo-600 bg-indigo-50/80 rounded-md hover:bg-indigo-100 transition-colors"
                                 onClick={() => openEditModal(s.id)}
                               >
                                 编辑
                               </button>
                               {/* 删除 */}
                               <button
-                                class="px-3 py-1 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50"
+                                class="px-2.5 py-1 text-xs font-medium text-gray-400 bg-gray-50/80 rounded-md hover:bg-gray-100 hover:text-gray-600 transition-colors disabled:opacity-50"
                                 disabled={actionLoading() === s.id}
                                 onClick={() => handleDelete(s.id)}
                               >
@@ -483,19 +486,19 @@ const Strategies: Component = () => {
 
               {/* 分页 */}
               <Show when={totalPages() > 1}>
-                <div class="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+                <div class="flex items-center justify-between px-5 py-3 border-t border-gray-100">
                   <button
-                    class="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="px-3 py-1.5 text-sm text-gray-500 bg-white border border-gray-200/60 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={page() <= 1}
                     onClick={() => goToPage(page() - 1)}
                   >
                     上一页
                   </button>
-                  <span class="text-sm text-gray-600">
+                  <span class="text-sm text-gray-400">
                     第 {page()} / {totalPages()} 页
                   </span>
                   <button
-                    class="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="px-3 py-1.5 text-sm text-gray-500 bg-white border border-gray-200/60 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={page() >= totalPages()}
                     onClick={() => goToPage(page() + 1)}
                   >
@@ -512,31 +515,31 @@ const Strategies: Component = () => {
       <Show when={showModal()}>
         <div class="fixed inset-0 z-50 flex items-center justify-center">
           {/* 遮罩 */}
-          <div class="absolute inset-0 bg-black/40" onClick={closeModal} />
+          <div class="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={closeModal} />
           {/* 模态框 */}
-          <div class="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4">
-            <div class="px-6 py-4 border-b border-gray-200">
-              <h3 class="text-lg font-semibold text-gray-800">
+          <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4">
+            <div class="px-6 py-5 border-b border-gray-100">
+              <h3 class="text-lg font-semibold text-gray-900">
                 {editingId() ? '编辑策略' : '新建策略'}
               </h3>
             </div>
             <form onSubmit={handleSubmit}>
-              <div class="px-6 py-4 space-y-4">
+              <div class="px-6 py-5 space-y-5">
                 {/* 错误提示 */}
                 <Show when={formError()}>
-                  <div class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+                  <div class="p-3 bg-rose-50/80 border border-rose-200/60 rounded-lg text-sm text-rose-600">
                     {formError()}
                   </div>
                 </Show>
 
                 {/* 名称 */}
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">
-                    策略名称 <span class="text-red-500">*</span>
+                  <label class="block text-sm font-medium text-gray-600 mb-1.5">
+                    策略名称 <span class="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
                     value={form().name}
                     onInput={(e) => updateForm('name', (e.target as HTMLInputElement).value)}
                     placeholder="输入策略名称"
@@ -545,12 +548,12 @@ const Strategies: Component = () => {
 
                 {/* 交易对 */}
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">
-                    交易对 <span class="text-red-500">*</span>
+                  <label class="block text-sm font-medium text-gray-600 mb-1.5">
+                    交易对 <span class="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
                     value={form().symbol}
                     onInput={(e) => updateForm('symbol', (e.target as HTMLInputElement).value)}
                     placeholder="例如 BTCUSDT"
@@ -560,9 +563,9 @@ const Strategies: Component = () => {
                 {/* 交易所 + 时间框架 */}
                 <div class="grid grid-cols-2 gap-4">
                   <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">交易所</label>
+                    <label class="block text-sm font-medium text-gray-600 mb-1.5">交易所</label>
                     <select
-                      class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
                       value={form().exchange}
                       onChange={(e) => updateForm('exchange', (e.target as HTMLSelectElement).value)}
                     >
@@ -572,9 +575,9 @@ const Strategies: Component = () => {
                     </select>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">时间框架</label>
+                    <label class="block text-sm font-medium text-gray-600 mb-1.5">时间框架</label>
                     <select
-                      class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
                       value={form().timeframe}
                       onChange={(e) => updateForm('timeframe', (e.target as HTMLSelectElement).value)}
                     >
@@ -591,9 +594,9 @@ const Strategies: Component = () => {
                 {/* 策略类型 + 市场类型 */}
                 <div class="grid grid-cols-2 gap-4">
                   <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">策略类型</label>
+                    <label class="block text-sm font-medium text-gray-600 mb-1.5">策略类型</label>
                     <select
-                      class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
                       value={form().strategy_type}
                       onChange={(e) => updateForm('strategy_type', (e.target as HTMLSelectElement).value)}
                     >
@@ -604,9 +607,9 @@ const Strategies: Component = () => {
                     </select>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">市场类型</label>
+                    <label class="block text-sm font-medium text-gray-600 mb-1.5">市场类型</label>
                     <select
-                      class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
                       value={form().market_type}
                       onChange={(e) => updateForm('market_type', (e.target as HTMLSelectElement).value)}
                     >
@@ -619,9 +622,9 @@ const Strategies: Component = () => {
 
                 {/* 执行模式 */}
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">执行模式</label>
+                  <label class="block text-sm font-medium text-gray-600 mb-1.5">执行模式</label>
                   <select
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
                     value={form().execution_mode}
                     onChange={(e) => updateForm('execution_mode', (e.target as HTMLSelectElement).value)}
                   >
@@ -632,9 +635,9 @@ const Strategies: Component = () => {
 
                 {/* 指标配置 */}
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">指标配置 (JSON)</label>
+                  <label class="block text-sm font-medium text-gray-600 mb-1.5">指标配置 (JSON)</label>
                   <textarea
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm font-mono text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
                     rows="4"
                     value={form().indicator_config}
                     onInput={(e) => updateForm('indicator_config', (e.target as HTMLTextAreaElement).value)}
@@ -644,9 +647,9 @@ const Strategies: Component = () => {
 
                 {/* 交易配置 */}
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">交易配置 (JSON)</label>
+                  <label class="block text-sm font-medium text-gray-600 mb-1.5">交易配置 (JSON)</label>
                   <textarea
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm font-mono text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
                     rows="4"
                     value={form().trading_config}
                     onInput={(e) => updateForm('trading_config', (e.target as HTMLTextAreaElement).value)}
@@ -655,17 +658,17 @@ const Strategies: Component = () => {
               </div>
 
               {/* 底部按钮 */}
-              <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+              <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
                 <button
                   type="button"
-                  class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  class="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                   onClick={closeModal}
                 >
                   取消
                 </button>
                 <button
                   type="submit"
-                  class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
                   disabled={submitting()}
                 >
                   {submitting() ? '保存中...' : '保存'}

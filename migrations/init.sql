@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS qd_users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_qd_users_username ON qd_users(username);
-CREATE INDEX idx_qd_users_email ON qd_users(email) WHERE email IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_qd_users_username ON qd_users(username);
+CREATE INDEX IF NOT EXISTS idx_qd_users_email ON qd_users(email) WHERE email IS NOT NULL;
 
 -- ============================================================
 -- Strategies
@@ -48,9 +48,9 @@ CREATE TABLE IF NOT EXISTS qd_strategies_trading (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_strategies_user ON qd_strategies_trading(user_id);
-CREATE INDEX idx_strategies_status ON qd_strategies_trading(status);
-CREATE INDEX idx_strategies_symbol ON qd_strategies_trading(symbol, exchange);
+CREATE INDEX IF NOT EXISTS idx_strategies_user ON qd_strategies_trading(user_id);
+CREATE INDEX IF NOT EXISTS idx_strategies_status ON qd_strategies_trading(status);
+CREATE INDEX IF NOT EXISTS idx_strategies_symbol ON qd_strategies_trading(symbol, exchange);
 
 -- ============================================================
 -- Positions
@@ -73,8 +73,8 @@ CREATE TABLE IF NOT EXISTS qd_strategy_positions (
     closed_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_positions_strategy ON qd_strategy_positions(strategy_id);
-CREATE INDEX idx_positions_open ON qd_strategy_positions(strategy_id) WHERE closed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_positions_strategy ON qd_strategy_positions(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_positions_open ON qd_strategy_positions(strategy_id) WHERE closed_at IS NULL;
 
 -- ============================================================
 -- Trades
@@ -94,8 +94,8 @@ CREATE TABLE IF NOT EXISTS qd_strategy_trades (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_trades_strategy ON qd_strategy_trades(strategy_id);
-CREATE INDEX idx_trades_created ON qd_strategy_trades(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_trades_strategy ON qd_strategy_trades(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_trades_created ON qd_strategy_trades(created_at DESC);
 
 -- ============================================================
 -- Pending Orders
@@ -121,8 +121,8 @@ CREATE TABLE IF NOT EXISTS pending_orders (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_pending_status ON pending_orders(status, created_at);
-CREATE INDEX idx_pending_strategy ON pending_orders(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_pending_status ON pending_orders(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_pending_strategy ON pending_orders(strategy_id);
 
 -- ============================================================
 -- Backtest Results
@@ -157,8 +157,8 @@ CREATE TABLE IF NOT EXISTS qd_backtest_results (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_backtest_user ON qd_backtest_results(user_id);
-CREATE INDEX idx_backtest_created ON qd_backtest_results(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_backtest_user ON qd_backtest_results(user_id);
+CREATE INDEX IF NOT EXISTS idx_backtest_created ON qd_backtest_results(created_at DESC);
 
 -- ============================================================
 -- Notifications
@@ -174,8 +174,8 @@ CREATE TABLE IF NOT EXISTS qd_strategy_notifications (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_notifications_strategy ON qd_strategy_notifications(strategy_id);
-CREATE INDEX idx_notifications_unread ON qd_strategy_notifications(strategy_id) WHERE NOT is_read;
+CREATE INDEX IF NOT EXISTS idx_notifications_strategy ON qd_strategy_notifications(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON qd_strategy_notifications(strategy_id) WHERE NOT is_read;
 
 -- ============================================================
 -- Security & Audit
@@ -198,8 +198,8 @@ CREATE TABLE IF NOT EXISTS qd_security_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_security_logs_user ON qd_security_logs(user_id);
-CREATE INDEX idx_security_logs_created ON qd_security_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_logs_user ON qd_security_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_security_logs_created ON qd_security_logs(created_at DESC);
 
 -- ============================================================
 -- Credits
@@ -216,7 +216,7 @@ CREATE TABLE IF NOT EXISTS qd_credits_log (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_credits_user ON qd_credits_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_credits_user ON qd_credits_log(user_id);
 
 -- ============================================================
 -- Exchange Credentials (encrypted)
@@ -235,4 +235,4 @@ CREATE TABLE IF NOT EXISTS qd_exchange_credentials (
     UNIQUE(user_id, exchange)
 );
 
-CREATE INDEX idx_credentials_user ON qd_exchange_credentials(user_id);
+CREATE INDEX IF NOT EXISTS idx_credentials_user ON qd_exchange_credentials(user_id);

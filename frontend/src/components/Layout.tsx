@@ -34,47 +34,47 @@ const pageTitles: Record<string, string> = {
 
 // SVG 图标组件
 function NavIcon(props: { name: string; class?: string }) {
-  const iconClass = props.class || 'w-5 h-5'
+  const iconClass = props.class || 'w-[18px] h-[18px]'
   switch (props.name) {
     case 'dashboard':
       return (
-        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
       )
     case 'strategies':
       return (
-        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
         </svg>
       )
     case 'market':
       return (
-        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
         </svg>
       )
     case 'backtest':
       return (
-        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       )
     case 'trades':
       return (
-        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
         </svg>
       )
     case 'credentials':
       return (
-        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
         </svg>
       )
     case 'users':
       return (
-        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
         </svg>
       )
@@ -99,40 +99,44 @@ const Layout: Component<RouteSectionProps> = (props) => {
   const filteredNavItems = () =>
     navItems.filter((item) => !item.adminOnly || isAdmin())
 
+  // Login 页面不渲染侧边栏和顶栏
+  const isLoginPage = () => location.pathname === '/login'
+
   return (
-    <div class="flex h-screen bg-gray-100">
+    <Show when={!isLoginPage()} fallback={props.children}>
+      <div class="flex h-screen bg-[var(--color-bg-secondary)]">
       {/* 移动端遮罩 */}
       <Show when={sidebarOpen()}>
         <div
-          class="fixed inset-0 z-20 bg-black/50 lg:hidden"
+          class="fixed inset-0 z-20 bg-black/20 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       </Show>
 
       {/* 侧边栏 */}
       <aside
-        class={`fixed inset-y-0 left-0 z-30 w-64 bg-gray-900 transition-transform duration-300 lg:translate-x-0 lg:static lg:z-auto ${
+        class={`fixed inset-y-0 left-0 z-30 w-60 bg-white border-r border-[var(--color-border)] transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto ${
           sidebarOpen() ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Logo */}
-        <div class="flex items-center h-16 px-6 bg-gray-800">
-          <span class="text-xl font-bold text-white tracking-wide">VIRS</span>
+        <div class="flex items-center h-16 px-6">
+          <span class="text-lg font-semibold text-[var(--color-text-primary)] tracking-[0.15em]">VIRS</span>
         </div>
 
         {/* 导航菜单 */}
-        <nav class="mt-6 px-3">
+        <nav class="mt-2 px-3">
           <For each={filteredNavItems()}>
             {(item) => (
               <A
                 href={item.path}
                 onClick={() => setSidebarOpen(false)}
-                class="flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-sm font-medium transition-colors duration-150"
-                activeClass="bg-blue-600 text-white"
-                inactiveClass="text-gray-300 hover:bg-gray-800 hover:text-white"
+                class="group relative flex items-center gap-3 px-3 py-2 mb-0.5 rounded-lg text-[13px] font-medium transition-all duration-200"
+                activeClass="bg-[var(--color-accent-light)] text-[var(--color-accent)] [&::before]:content-[''] [&::before]:absolute [&::before]:left-0 [&::before]:top-1/2 [&::before]:-translate-y-1/2 [&::before]:w-[2px] [&::before]:h-4 [&::before]:rounded-full [&::before]:bg-[var(--color-accent)]"
+                inactiveClass="text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]"
                 end={item.path === '/dashboard'}
               >
-                <NavIcon name={item.icon} />
+                <NavIcon name={item.icon} class="w-4 h-4 opacity-60 group-[.group]:opacity-100 transition-opacity" />
                 <span>{item.label}</span>
               </A>
             )}
@@ -140,12 +144,12 @@ const Layout: Component<RouteSectionProps> = (props) => {
         </nav>
 
         {/* 底部退出按钮 */}
-        <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800">
+        <div class="absolute bottom-0 left-0 right-0 p-3 border-t border-[var(--color-border-light)]">
           <button
             onClick={handleLogout}
-            class="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-800 hover:text-white transition-colors duration-150"
+            class="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-secondary)] transition-all duration-200"
           >
-            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
             <span>退出登录</span>
@@ -156,29 +160,29 @@ const Layout: Component<RouteSectionProps> = (props) => {
       {/* 主内容区 */}
       <div class="flex-1 flex flex-col overflow-hidden">
         {/* 顶栏 */}
-        <header class="flex items-center justify-between h-16 px-6 bg-white border-b border-gray-200 shadow-sm">
+        <header class="flex items-center justify-between h-16 px-6 bg-white border-b border-[var(--color-border)]">
           {/* 左侧: 汉堡菜单 + 页面标题 */}
           <div class="flex items-center gap-4">
             <button
-              class="lg:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              class="lg:hidden p-2 rounded-lg text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors duration-200"
               onClick={() => setSidebarOpen(!sidebarOpen())}
             >
-              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <h1 class="text-lg font-semibold text-gray-800">{currentPageTitle()}</h1>
+            <h1 class="text-[15px] font-semibold text-[var(--color-text-primary)]">{currentPageTitle()}</h1>
           </div>
 
           {/* 右侧: 用户名 + 退出 */}
-          <div class="flex items-center gap-4">
+          <div class="flex items-center gap-3">
             <Show when={getUser()}>
               {(currentUser) => (
-                <div class="flex items-center gap-2">
-                  <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-lg bg-[var(--color-accent)] flex items-center justify-center text-white text-xs font-medium">
                     {currentUser().username.charAt(0).toUpperCase()}
                   </div>
-                  <span class="text-sm font-medium text-gray-700 hidden sm:inline">
+                  <span class="text-[13px] font-medium text-[var(--color-text-secondary)] hidden sm:inline">
                     {currentUser().username}
                   </span>
                 </div>
@@ -186,10 +190,10 @@ const Layout: Component<RouteSectionProps> = (props) => {
             </Show>
             <button
               onClick={handleLogout}
-              class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+              class="p-2 rounded-lg text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors duration-200"
               title="退出登录"
             >
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
             </button>
@@ -197,11 +201,12 @@ const Layout: Component<RouteSectionProps> = (props) => {
         </header>
 
         {/* 页面内容 */}
-        <main class="flex-1 overflow-auto p-6">
+        <main class="flex-1 overflow-auto p-6 animate-fade-in">
           {props.children}
         </main>
       </div>
     </div>
+    </Show>
   )
 }
 
