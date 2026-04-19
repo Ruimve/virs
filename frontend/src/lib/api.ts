@@ -128,3 +128,26 @@ export function logout(): void {
 export function getUserInfo(): Promise<ApiResponse<UserInfo>> {
   return api.get<UserInfo>('/user/info')
 }
+
+// ── 插件类型 ──────────────────────────────────────────────
+export interface PluginParam {
+  name: string
+  label: string
+  param_type: 'int' | 'float'
+  default: number
+  min?: number
+  max?: number
+  step?: number
+}
+
+export interface Plugin {
+  name: string
+  description: string
+  category: string
+  params: PluginParam[]
+}
+
+// 获取插件列表
+export async function fetchPlugins(): Promise<ApiResponse<Plugin[]>> {
+  return api.get<Plugin[]>('/plugins')
+}

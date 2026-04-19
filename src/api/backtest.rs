@@ -4,12 +4,13 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::api::AppState;
 use crate::api::middleware::AuthUser;
-use crate::engine::backtest::{BacktestEngine, sma_crossover_signal, rsi_signal, macd_signal, bollinger_bands_signal};
+use crate::engine::backtest::BacktestEngine;
 use crate::exchange::Exchange;
 use crate::models::*;
 
@@ -137,41 +138,62 @@ pub async fn run_backtest(
 
     let engine = BacktestEngine::new(req.initial_balance, commission, slippage);
 
-    let indicator = req.indicator_config
-        .get("indicator")
+    let plugin_name = req
+        .indicator_config
+        .get("plugin")
         .and_then(|v| v.as_str())
-        .unwrap_or("sma_crossover");
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| {
+            let legacy = req.strategy_type.as_str();
+            match legacy {
+                "sma_crossover" | "rsi" | "macd" | "bollinger_bands" => legacy.to_string(),
+                _ => "sma_crossover".to_string(),
+            }
+        });
 
-    let result = match indicator {
-        "sma_crossover" => {
-            let fast = req.indicator_config.get("fast_period").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
-            let slow = req.indicator_config.get("slow_period").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
-            engine.run(&klines, |klines, idx| sma_crossover_signal(klines, idx, fast, slow), stop_loss, take_profit)
+    let mut params: HashMap<String, f64> = HashMap::new();
+    if let Some(obj) = req.indicator_config.as_object() {
+        for (key, value) in obj {
+            if key == "plugin" {
+                continue;
+            }
+            if let Some(num) = value.as_f64() {
+                params.insert(key.clone(), num);
+            }
         }
-        "rsi" => {
-            let period = req.indicator_config.get("period").and_then(|v| v.as_u64()).unwrap_or(14) as usize;
-            let oversold = req.indicator_config.get("oversold").and_then(|v| v.as_f64()).unwrap_or(30.0);
-            let overbought = req.indicator_config.get("overbought").and_then(|v| v.as_f64()).unwrap_or(70.0);
-            engine.run(&klines, |klines, idx| rsi_signal(klines, idx, period, oversold, overbought), stop_loss, take_profit)
+    }
+
+    if !req.indicator_config.get("plugin").is_some() {
+        match plugin_name.as_str() {
+            "sma_crossover" => {
+                if let Some(v) = params.remove("short_period") {
+                    params.insert("fast_period".into(), v);
+                }
+                if let Some(v) = params.remove("long_period") {
+                    params.insert("slow_period".into(), v);
+                }
+            }
+            "macd" => {
+                if let Some(v) = params.remove("fast_period") {
+                    params.insert("fast_period".into(), v);
+                }
+                if let Some(v) = params.remove("slow_period") {
+                    params.insert("slow_period".into(), v);
+                }
+                if let Some(v) = params.remove("signal_period") {
+                    params.insert("signal_period".into(), v);
+                }
+            }
+            _ => {}
         }
-        "macd" => {
-            let fast = req.indicator_config.get("fast_period").and_then(|v| v.as_u64()).unwrap_or(12) as usize;
-            let slow = req.indicator_config.get("slow_period").and_then(|v| v.as_u64()).unwrap_or(26) as usize;
-            let sig = req.indicator_config.get("signal_period").and_then(|v| v.as_u64()).unwrap_or(9) as usize;
-            engine.run(&klines, |klines, idx| macd_signal(klines, idx, fast, slow, sig), stop_loss, take_profit)
-        }
-        "bollinger_bands" => {
-            let period = req.indicator_config.get("period").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
-            let std_dev = req.indicator_config.get("std_dev").and_then(|v| v.as_f64()).unwrap_or(2.0);
-            engine.run(&klines, |klines, idx| bollinger_bands_signal(klines, idx, period, std_dev), stop_loss, take_profit)
-        }
-        _ => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<serde_json::Value>::err(format!("Unknown indicator: {}", indicator))),
-            ));
-        }
-    };
+    }
+
+    let plugin_registry = &state.plugin_registry;
+    let result = engine.run(&klines, |klines, idx| {
+        plugin_registry
+            .generate_signal(&plugin_name, klines, idx, &params)
+            .unwrap_or(0)
+    }, stop_loss, take_profit);
 
     let _ = sqlx::query(
         r#"INSERT INTO qd_backtest_results

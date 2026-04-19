@@ -103,13 +103,25 @@ async fn main() -> anyhow::Result<()> {
     // Create order channel
     let (order_tx, mut order_rx) = mpsc::channel::<engine::OrderCommand>(1000);
 
+    // Create plugin registry and register built-in plugins
+    let mut plugin_registry = engine::plugin::PluginRegistry::new();
+    plugin_registry.register(Box::new(engine::plugins::SmaCrossoverPlugin));
+    plugin_registry.register(Box::new(engine::plugins::RsiPlugin));
+    plugin_registry.register(Box::new(engine::plugins::MacdPlugin));
+    plugin_registry.register(Box::new(engine::plugins::BollingerBandsPlugin));
+    let plugin_registry = Arc::new(plugin_registry);
+    info!(
+        "Registered {} indicator plugins",
+        plugin_registry.list().len()
+    );
+
     // Create strategy engine
     let strategy_engine_config = StrategyEngineConfig {
         executor_workers: config.strategy.executor_workers,
         pending_order_poll_interval_secs: config.strategy.pending_order_poll_interval_secs,
         auto_restore: config.strategy.auto_restore_strategies,
     };
-    let strategy_engine = Arc::new(StrategyEngine::new(strategy_engine_config, order_tx));
+    let strategy_engine = Arc::new(StrategyEngine::new(strategy_engine_config, order_tx, plugin_registry.clone()));
 
     // Register configured exchanges
     if let Some(ref creds) = config.exchanges.binance {
@@ -350,7 +362,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Build and start HTTP server
-    let app = api::build_router(Arc::new(config.clone()), strategy_engine, db_pool);
+    let app = api::build_router(Arc::new(config.clone()), strategy_engine, db_pool, plugin_registry);
 
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;

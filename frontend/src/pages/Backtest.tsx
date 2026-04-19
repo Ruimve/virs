@@ -1,5 +1,5 @@
 import { type Component, createSignal, createEffect, Show, For, onMount } from 'solid-js'
-import { api, type PaginatedResponse } from '../lib/api'
+import { api, fetchPlugins, type PaginatedResponse, type Plugin } from '../lib/api'
 
 // ---- 类型定义 ----
 
@@ -64,13 +64,8 @@ interface BacktestSummary {
 }
 
 // ---- 默认指标配置 ----
-
-const DEFAULT_INDICATOR_CONFIGS: Record<string, Record<string, unknown>> = {
-  sma_crossover: { short_period: 10, long_period: 30 },
-  rsi: { period: 14, overbought: 70, oversold: 30 },
-  macd: { fast_period: 12, slow_period: 26, signal_period: 9 },
-  bollinger_bands: { period: 20, std_dev: 2 },
-}
+// Indicator plugins are loaded from the backend at runtime.
+// Users configure indicator parameters through the UI.
 
 const DEFAULT_TRADING_CONFIG: Record<string, unknown> = {
   fixed_amount: 100,
@@ -107,17 +102,20 @@ function formatDateTime(s: string): string {
 // ---- 组件 ----
 
 const Backtest: Component = () => {
+  // 插件列表状态
+  const [plugins, setPlugins] = createSignal<Plugin[]>([])
+  const [pluginsLoading, setPluginsLoading] = createSignal(false)
+  const [pluginsError, setPluginsError] = createSignal('')
+
   // 表单状态
-  const [strategyType, setStrategyType] = createSignal('sma_crossover')
+  const [strategyType, setStrategyType] = createSignal('custom')
   const [symbol, setSymbol] = createSignal('BTCUSDT')
   const [exchange, setExchange] = createSignal('binance')
   const [timeframe, setTimeframe] = createSignal('1h')
   const [startDate, setStartDate] = createSignal('')
   const [endDate, setEndDate] = createSignal('')
   const [initialBalance, setInitialBalance] = createSignal(10000)
-  const [indicatorConfig, setIndicatorConfig] = createSignal(
-    JSON.stringify(DEFAULT_INDICATOR_CONFIGS.sma_crossover, null, 2)
-  )
+  const [indicatorConfig, setIndicatorConfig] = createSignal('{}')
   const [tradingConfig, setTradingConfig] = createSignal(
     JSON.stringify(DEFAULT_TRADING_CONFIG, null, 2)
   )
@@ -136,14 +134,47 @@ const Backtest: Component = () => {
   const [historyLoading, setHistoryLoading] = createSignal(false)
   const [historyError, setHistoryError] = createSignal('')
 
-  // 策略类型变化时更新默认指标配置
-  createEffect(() => {
-    const st = strategyType()
-    const defaultConfig = DEFAULT_INDICATOR_CONFIGS[st]
-    if (defaultConfig) {
-      setIndicatorConfig(JSON.stringify(defaultConfig, null, 2))
+  // ── 加载插件列表 ──
+  async function loadPlugins() {
+    setPluginsLoading(true)
+    setPluginsError('')
+    try {
+      const res = await fetchPlugins()
+      if (res.success && res.data) {
+        setPlugins(res.data)
+        // 自动选中第一个插件
+        if (res.data.length > 0) {
+          const first = res.data[0]
+          setStrategyType(first.name)
+          setIndicatorConfig(JSON.stringify(buildIndicatorConfig(first), null, 2))
+        }
+      } else {
+        setPluginsError(res.error || '加载插件列表失败')
+      }
+    } catch (e) {
+      setPluginsError(e instanceof Error ? e.message : '加载插件列表失败')
+    } finally {
+      setPluginsLoading(false)
     }
-  })
+  }
+
+  // 根据插件参数构建默认指标配置
+  function buildIndicatorConfig(plugin: Plugin): Record<string, unknown> {
+    const config: Record<string, unknown> = { plugin: plugin.name }
+    for (const param of plugin.params) {
+      config[param.name] = param.default
+    }
+    return config
+  }
+
+  // 策略类型变化时更新指标配置
+  function handleStrategyTypeChange(pluginName: string) {
+    setStrategyType(pluginName)
+    const plugin = plugins().find((p) => p.name === pluginName)
+    if (plugin) {
+      setIndicatorConfig(JSON.stringify(buildIndicatorConfig(plugin), null, 2))
+    }
+  }
 
   // 加载历史列表
   async function loadHistory(page: number) {
@@ -168,6 +199,7 @@ const Backtest: Component = () => {
   }
 
   onMount(() => {
+    loadPlugins()
     loadHistory(1)
   })
 
@@ -365,16 +397,46 @@ const Backtest: Component = () => {
           {/* 策略类型 */}
           <div>
             <label class="block text-[13px] font-medium text-gray-400 mb-1.5">策略类型</label>
-            <select
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
-              value={strategyType()}
-              onChange={(e) => setStrategyType(e.currentTarget.value)}
+            <Show
+              when={!pluginsLoading()}
+              fallback={
+                <select
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
+                  disabled
+                >
+                  <option>加载中...</option>
+                </select>
+              }
             >
-              <option value="sma_crossover">SMA 均线交叉</option>
-              <option value="rsi">RSI 相对强弱</option>
-              <option value="macd">MACD</option>
-              <option value="bollinger_bands">布林带</option>
-            </select>
+              <Show
+                when={pluginsError() === ''}
+                fallback={
+                  <div>
+                    <select
+                      class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
+                      disabled
+                    >
+                      <option>加载失败</option>
+                    </select>
+                    <p class="text-xs text-red-500 mt-1">{pluginsError()}</p>
+                  </div>
+                }
+              >
+                <select
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
+                  value={strategyType()}
+                  onChange={(e) => handleStrategyTypeChange(e.currentTarget.value)}
+                >
+                  <For each={plugins()}>
+                    {(plugin) => (
+                      <option value={plugin.name}>
+                        {plugin.name} - {plugin.description.slice(0, 20)}
+                      </option>
+                    )}
+                  </For>
+                </select>
+              </Show>
+            </Show>
           </div>
 
           {/* 交易对 */}

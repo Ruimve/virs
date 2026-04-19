@@ -1,6 +1,5 @@
 import { type Component, createSignal, createEffect, Show, For } from 'solid-js'
-import { api } from '../lib/api'
-import type { PaginatedResponse } from '../lib/api'
+import { api, fetchPlugins, type PaginatedResponse, type Plugin } from '../lib/api'
 
 // ── 类型定义 ──────────────────────────────────────────────
 interface Strategy {
@@ -48,7 +47,7 @@ const EMPTY_FORM: StrategyFormData = {
   symbol: '',
   exchange: 'binance',
   timeframe: '1h',
-  strategy_type: 'sma_crossover',
+  strategy_type: 'custom',
   market_type: 'spot',
   execution_mode: 'signal_only',
   indicator_config: '{}',
@@ -94,6 +93,11 @@ const Strategies: Component = () => {
   const [totalPages, setTotalPages] = createSignal(1)
   const [statusFilter, setStatusFilter] = createSignal<StatusFilter>('all')
 
+  // 插件列表状态
+  const [plugins, setPlugins] = createSignal<Plugin[]>([])
+  const [pluginsLoading, setPluginsLoading] = createSignal(false)
+  const [pluginsError, setPluginsError] = createSignal('')
+
   // 模态框状态
   const [showModal, setShowModal] = createSignal(false)
   const [editingId, setEditingId] = createSignal<string | null>(null)
@@ -103,6 +107,42 @@ const Strategies: Component = () => {
 
   // 操作状态
   const [actionLoading, setActionLoading] = createSignal<string | null>(null)
+
+  // ── 加载插件列表 ──
+  async function loadPlugins() {
+    setPluginsLoading(true)
+    setPluginsError('')
+    try {
+      const res = await fetchPlugins()
+      if (res.success && res.data) {
+        setPlugins(res.data)
+        // 如果表单中的 strategy_type 还是 custom 且有可用插件，自动选中第一个
+        if (form().strategy_type === 'custom' && res.data.length > 0) {
+          const first = res.data[0]
+          setForm((prev) => ({
+            ...prev,
+            strategy_type: first.name,
+            indicator_config: JSON.stringify(buildIndicatorConfig(first), null, 2),
+          }))
+        }
+      } else {
+        setPluginsError(res.error || '加载插件列表失败')
+      }
+    } catch (e: any) {
+      setPluginsError(e.message || '加载插件列表失败')
+    } finally {
+      setPluginsLoading(false)
+    }
+  }
+
+  // 根据插件参数构建默认指标配置
+  function buildIndicatorConfig(plugin: Plugin): Record<string, unknown> {
+    const config: Record<string, unknown> = { plugin: plugin.name }
+    for (const param of plugin.params) {
+      config[param.name] = param.default
+    }
+    return config
+  }
 
   // ── 加载策略列表 ──
   async function fetchStrategies() {
@@ -156,6 +196,7 @@ const Strategies: Component = () => {
     setForm({ ...EMPTY_FORM })
     setFormError('')
     setShowModal(true)
+    loadPlugins()
   }
 
   // ── 打开编辑模态框 ──
@@ -595,16 +636,56 @@ const Strategies: Component = () => {
                 <div class="grid grid-cols-2 gap-4">
                   <div>
                     <label class="block text-sm font-medium text-gray-600 mb-1.5">策略类型</label>
-                    <select
-                      class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
-                      value={form().strategy_type}
-                      onChange={(e) => updateForm('strategy_type', (e.target as HTMLSelectElement).value)}
+                    <Show
+                      when={!pluginsLoading()}
+                      fallback={
+                        <select
+                          class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
+                          disabled
+                        >
+                          <option>加载中...</option>
+                        </select>
+                      }
                     >
-                      <option value="sma_crossover">SMA 交叉</option>
-                      <option value="rsi">RSI</option>
-                      <option value="macd">MACD</option>
-                      <option value="bollinger_bands">布林带</option>
-                    </select>
+                      <Show
+                        when={pluginsError() === ''}
+                        fallback={
+                          <div>
+                            <select
+                              class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
+                              disabled
+                            >
+                              <option>加载失败</option>
+                            </select>
+                            <p class="text-xs text-red-500 mt-1">{pluginsError()}</p>
+                          </div>
+                        }
+                      >
+                        <select
+                          class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
+                          value={form().strategy_type}
+                          onChange={(e) => {
+                            const pluginName = (e.target as HTMLSelectElement).value
+                            const plugin = plugins().find((p) => p.name === pluginName)
+                            if (plugin) {
+                              updateForm('strategy_type', pluginName)
+                              updateForm(
+                                'indicator_config',
+                                JSON.stringify(buildIndicatorConfig(plugin), null, 2)
+                              )
+                            }
+                          }}
+                        >
+                          <For each={plugins()}>
+                            {(plugin) => (
+                              <option value={plugin.name}>
+                                {plugin.name} - {plugin.description.slice(0, 20)}
+                              </option>
+                            )}
+                          </For>
+                        </select>
+                      </Show>
+                    </Show>
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-600 mb-1.5">市场类型</label>

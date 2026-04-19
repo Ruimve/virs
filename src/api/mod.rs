@@ -7,6 +7,7 @@ pub mod user;
 pub mod middleware;
 pub mod credentials;
 pub mod dashboard;
+pub mod plugins;
 
 use axum::{
     routing::{get, post, put, delete},
@@ -17,16 +18,19 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use crate::config::AppConfig;
 use crate::engine::StrategyEngine;
+use crate::engine::plugin::PluginRegistry;
 
 pub fn build_router(
     config: Arc<AppConfig>,
     strategy_engine: Arc<StrategyEngine>,
     db_pool: sqlx::PgPool,
+    plugin_registry: Arc<PluginRegistry>,
 ) -> Router {
     let state = Arc::new(AppState {
         config,
         strategy_engine,
         db_pool,
+        plugin_registry,
     });
 
     let frontend_dir = std::env::var("FRONTEND_DIR")
@@ -64,6 +68,7 @@ pub fn build_router(
         .route("/api/positions", get(dashboard::list_positions))
         .route("/api/trades", get(dashboard::list_trades))
         .route("/api/pending-orders", get(dashboard::list_pending_orders))
+        .route("/api/plugins", get(plugins::list_plugins))
         .with_state(state)
         .nest_service("/", ServeDir::new(&frontend_dir)
             .fallback(ServeFile::new(format!("{}/index.html", frontend_dir))))
@@ -74,4 +79,5 @@ pub struct AppState {
     pub config: Arc<AppConfig>,
     pub strategy_engine: Arc<StrategyEngine>,
     pub db_pool: sqlx::PgPool,
+    pub plugin_registry: Arc<PluginRegistry>,
 }

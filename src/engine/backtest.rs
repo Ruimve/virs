@@ -111,12 +111,32 @@ impl BacktestEngine {
             // Execute signal
             match signal {
                 1 if position.is_none() => {
-                    // Open long
                     let trade = self.open_position(&mut position, price, &mut balance, PositionSide::Long);
                     trades.push(trade);
                 }
-                -1 if position.is_some() => {
-                    // Close position
+                1 if position.is_some() && position.as_ref().unwrap().side == PositionSide::Short => {
+                    let trade = self.close_position(&mut position, price, &mut balance);
+                    let pnl = trade.pnl;
+                    if pnl >= 0.0 {
+                        profit_trades += 1;
+                        total_profit += pnl;
+                        current_consecutive_wins += 1;
+                        current_consecutive_losses = 0;
+                        max_consecutive_wins = max_consecutive_wins.max(current_consecutive_wins);
+                    } else {
+                        loss_trades += 1;
+                        total_loss += pnl.abs();
+                        current_consecutive_losses += 1;
+                        current_consecutive_wins = 0;
+                        max_consecutive_losses = max_consecutive_losses.max(current_consecutive_losses);
+                    }
+                    trades.push(trade);
+                }
+                -1 if position.is_none() => {
+                    let trade = self.open_position(&mut position, price, &mut balance, PositionSide::Short);
+                    trades.push(trade);
+                }
+                -1 if position.is_some() && position.as_ref().unwrap().side == PositionSide::Long => {
                     let trade = self.close_position(&mut position, price, &mut balance);
                     let pnl = trade.pnl;
                     if pnl >= 0.0 {
@@ -150,7 +170,7 @@ impl BacktestEngine {
             };
 
             peak_equity = peak_equity.max(equity);
-            let drawdown = (peak_equity - equity) / peak_equity;
+            let _drawdown = (peak_equity - equity) / peak_equity;
 
             let timestamp = chrono::DateTime::from_timestamp_millis(kline.open_time)
                 .unwrap_or_else(Utc::now);
@@ -401,7 +421,7 @@ pub fn bollinger_bands_signal(klines: &[Kline], idx: usize, period: usize, std_d
         return 0;
     }
 
-    let (upper, middle, lower) = compute_bollinger_bands(klines, idx, period, std_dev_mult);
+    let (upper, _middle, lower) = compute_bollinger_bands(klines, idx, period, std_dev_mult);
     let price = klines[idx].close;
 
     if price <= lower {
@@ -418,7 +438,7 @@ pub fn bollinger_bands_signal(klines: &[Kline], idx: usize, period: usize, std_d
 // ============================================================
 
 #[inline]
-fn compute_sma(klines: &[Kline], idx: usize, period: usize) -> f64 {
+pub fn compute_sma(klines: &[Kline], idx: usize, period: usize) -> f64 {
     if idx < period || period == 0 {
         return 0.0;
     }
@@ -430,7 +450,7 @@ fn compute_sma(klines: &[Kline], idx: usize, period: usize) -> f64 {
 }
 
 #[inline]
-fn compute_ema(klines: &[Kline], idx: usize, period: usize) -> f64 {
+pub fn compute_ema(klines: &[Kline], idx: usize, period: usize) -> f64 {
     if idx < period || period == 0 {
         return 0.0;
     }
@@ -443,7 +463,7 @@ fn compute_ema(klines: &[Kline], idx: usize, period: usize) -> f64 {
 }
 
 #[inline]
-fn compute_rsi(klines: &[Kline], idx: usize, period: usize) -> f64 {
+pub fn compute_rsi(klines: &[Kline], idx: usize, period: usize) -> f64 {
     if idx < period {
         return 50.0;
     }
@@ -472,12 +492,12 @@ fn compute_rsi(klines: &[Kline], idx: usize, period: usize) -> f64 {
 }
 
 #[inline]
-fn compute_macd(klines: &[Kline], idx: usize, fast_period: usize, slow_period: usize) -> f64 {
+pub fn compute_macd(klines: &[Kline], idx: usize, fast_period: usize, slow_period: usize) -> f64 {
     compute_ema(klines, idx, fast_period) - compute_ema(klines, idx, slow_period)
 }
 
 #[inline]
-fn compute_macd_signal_line(
+pub fn compute_macd_signal_line(
     klines: &[Kline],
     idx: usize,
     fast_period: usize,
@@ -502,7 +522,7 @@ fn compute_macd_signal_line(
 }
 
 #[inline]
-fn compute_bollinger_bands(
+pub fn compute_bollinger_bands(
     klines: &[Kline],
     idx: usize,
     period: usize,

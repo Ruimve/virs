@@ -1,8 +1,11 @@
 pub mod backtest;
+pub mod plugin;
+pub mod plugins;
 pub mod position;
 
 use crate::models::*;
 use crate::exchange::Exchange;
+use crate::engine::plugin::PluginRegistry;
 use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -16,6 +19,7 @@ pub struct StrategyEngine {
     exchange_instances: Arc<DashMap<String, Box<dyn Exchange>>>,
     order_tx: mpsc::Sender<OrderCommand>,
     config: StrategyEngineConfig,
+    plugins: Arc<PluginRegistry>,
 }
 
 #[derive(Debug, Clone)]
@@ -56,12 +60,14 @@ impl StrategyEngine {
     pub fn new(
         config: StrategyEngineConfig,
         order_tx: mpsc::Sender<OrderCommand>,
+        plugins: Arc<PluginRegistry>,
     ) -> Self {
         Self {
             strategies: Arc::new(DashMap::new()),
             exchange_instances: Arc::new(DashMap::new()),
             order_tx,
             config,
+            plugins,
         }
     }
 
@@ -93,6 +99,7 @@ impl StrategyEngine {
         let strategies = self.strategies.clone();
         let exchanges = self.exchange_instances.clone();
         let order_tx = self.order_tx.clone();
+        let plugins = self.plugins.clone();
 
         let (cancel_tx, mut cancel_rx) = tokio::sync::watch::channel(false);
 
@@ -132,6 +139,7 @@ impl StrategyEngine {
                                 &symbol,
                                 &timeframe,
                                 &strategy,
+                                &plugins,
                             ).await {
                                 Ok(Some(signal)) => {
                                     info!(
@@ -194,7 +202,7 @@ impl StrategyEngine {
 
     /// Stop a running strategy.
     pub fn stop_strategy(&self, strategy_id: &Uuid) -> bool {
-        if let Some(mut entry) = self.strategies.get_mut(strategy_id) {
+        if let Some(entry) = self.strategies.get_mut(strategy_id) {
             let _ = entry.cancel_token.send(true);
             info!("Stopping strategy {}", strategy_id);
             true
@@ -216,9 +224,14 @@ impl StrategyEngine {
 
 /// Run a single strategy decision cycle.
 ///
+/// The strategy's `strategy_code` field contains user-defined script code.
+/// If `strategy_mode` is "script", the code is interpreted to generate signals.
+/// If `strategy_mode` is "signal", the `indicator_config` JSON is used with
+/// a registered indicator plugin.
+///
 /// Signal mapping depends on the strategy's `allow_short` trading config flag:
-/// - `allow_short = true`: signal 1 → OpenLong, -1 → OpenShort (when flat) or CloseLong/CloseShort (when in position)
-/// - `allow_short = false` (default): signal 1 → OpenLong, -1 → CloseLong
+/// - `allow_short = true`: signal 1 -> OpenLong, -1 -> OpenShort (when flat) or CloseLong/CloseShort (when in position)
+/// - `allow_short = false` (default): signal 1 -> OpenLong, -1 -> CloseLong
 ///
 /// This enables both long-only and long/short strategies from the same indicator logic.
 async fn run_strategy_cycle(
@@ -226,6 +239,7 @@ async fn run_strategy_cycle(
     symbol: &str,
     timeframe: &str,
     strategy: &Strategy,
+    plugins: &PluginRegistry,
 ) -> anyhow::Result<Option<SignalType>> {
     let klines = exchange.get_klines(symbol, timeframe, 200, None).await?;
 
@@ -235,12 +249,6 @@ async fn run_strategy_cycle(
 
     let idx = klines.len() - 1;
 
-    let indicator_type = strategy
-        .indicator_config
-        .get("indicator")
-        .and_then(|v| v.as_str())
-        .unwrap_or("sma_crossover");
-
     // Check if short selling is allowed for this strategy
     let allow_short = strategy
         .trading_config
@@ -248,32 +256,77 @@ async fn run_strategy_cycle(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let raw_signal = match indicator_type {
-        "sma_crossover" => {
-            let fast = strategy.indicator_config.get("fast_period").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
-            let slow = strategy.indicator_config.get("slow_period").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
-            crate::engine::backtest::sma_crossover_signal(&klines, idx, fast, slow)
+    // Generate signal based on strategy mode
+    let raw_signal: i8 = match strategy.strategy_mode {
+        StrategyMode::Script => {
+            warn!(
+                "Script strategy '{}' is not yet supported. Use signal mode with indicator plugins.",
+                strategy.name
+            );
+            0
         }
-        "rsi" => {
-            let period = strategy.indicator_config.get("period").and_then(|v| v.as_u64()).unwrap_or(14) as usize;
-            let oversold = strategy.indicator_config.get("oversold").and_then(|v| v.as_f64()).unwrap_or(30.0);
-            let overbought = strategy.indicator_config.get("overbought").and_then(|v| v.as_f64()).unwrap_or(70.0);
-            crate::engine::backtest::rsi_signal(&klines, idx, period, oversold, overbought)
-        }
-        "macd" => {
-            let fast = strategy.indicator_config.get("fast_period").and_then(|v| v.as_u64()).unwrap_or(12) as usize;
-            let slow = strategy.indicator_config.get("slow_period").and_then(|v| v.as_u64()).unwrap_or(26) as usize;
-            let signal_period = strategy.indicator_config.get("signal_period").and_then(|v| v.as_u64()).unwrap_or(9) as usize;
-            crate::engine::backtest::macd_signal(&klines, idx, fast, slow, signal_period)
-        }
-        "bollinger_bands" => {
-            let period = strategy.indicator_config.get("period").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
-            let std_dev = strategy.indicator_config.get("std_dev").and_then(|v| v.as_f64()).unwrap_or(2.0);
-            crate::engine::backtest::bollinger_bands_signal(&klines, idx, period, std_dev)
-        }
-        _ => {
-            warn!("Unknown indicator type: {}", indicator_type);
-            return Ok(None);
+        StrategyMode::Signal => {
+            let plugin_name = strategy
+                .indicator_config
+                .get("plugin")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| {
+                    let legacy = strategy.strategy_type.as_str();
+                    match legacy {
+                        "sma_crossover" | "rsi" | "macd" | "bollinger_bands" => legacy.to_string(),
+                        _ => "sma_crossover".to_string(),
+                    }
+                });
+
+            let mut params: std::collections::HashMap<String, f64> =
+                std::collections::HashMap::new();
+            if let Some(obj) = strategy.indicator_config.as_object() {
+                for (key, value) in obj {
+                    if key == "plugin" {
+                        continue;
+                    }
+                    if let Some(num) = value.as_f64() {
+                        params.insert(key.clone(), num);
+                    }
+                }
+            }
+
+            if !strategy.indicator_config.get("plugin").is_some() {
+                match plugin_name.as_str() {
+                    "sma_crossover" => {
+                        if let Some(v) = params.remove("short_period") {
+                            params.insert("fast_period".into(), v);
+                        }
+                        if let Some(v) = params.remove("long_period") {
+                            params.insert("slow_period".into(), v);
+                        }
+                    }
+                    "macd" => {
+                        if let Some(v) = params.remove("fast_period") {
+                            params.insert("fast_period".into(), v);
+                        }
+                        if let Some(v) = params.remove("slow_period") {
+                            params.insert("slow_period".into(), v);
+                        }
+                        if let Some(v) = params.remove("signal_period") {
+                            params.insert("signal_period".into(), v);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            match plugins.generate_signal(&plugin_name, &klines, idx, &params) {
+                Ok(signal) => signal,
+                Err(e) => {
+                    error!(
+                        "Strategy '{}' failed to generate signal with plugin '{}': {}",
+                        strategy.name, plugin_name, e
+                    );
+                    0
+                }
+            }
         }
     };
 
