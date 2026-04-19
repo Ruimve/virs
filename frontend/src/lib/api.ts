@@ -151,3 +151,8 @@ export interface Plugin {
 export async function fetchPlugins(): Promise<ApiResponse<Plugin[]>> {
   return api.get<Plugin[]>('/plugins')
 }
+
+// 验证 Lua 脚本语法
+export async function validateScript(code: string): Promise<ApiResponse<{ valid: boolean; error?: string }>> {
+  return api.post('/strategy/validate-script', { code })
+}

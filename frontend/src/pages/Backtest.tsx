@@ -1,5 +1,5 @@
 import { type Component, createSignal, createEffect, Show, For, onMount } from 'solid-js'
-import { api, fetchPlugins, type PaginatedResponse, type Plugin } from '../lib/api'
+import { api, fetchPlugins, validateScript, type PaginatedResponse, type Plugin } from '../lib/api'
 
 // ---- 类型定义 ----
 
@@ -72,6 +72,24 @@ const DEFAULT_TRADING_CONFIG: Record<string, unknown> = {
   max_position_size: 1000,
 }
 
+const DEFAULT_LUA_SCRIPT = `-- VIRS Lua Strategy: EMA Crossover with RSI Filter
+-- Available functions: sma(period), ema(period), rsi(period)
+-- Available data: klines (table), current_idx (number), params (table)
+-- Return: 1 = buy, -1 = sell, 0 = hold
+
+function signal()
+  local fast = ema(params.fast_period or 12)
+  local slow = ema(params.slow_period or 26)
+  local rsi_val = rsi(params.rsi_period or 14)
+
+  if fast > slow and rsi_val > (params.rsi_floor or 45) then
+    return 1
+  elseif fast < slow then
+    return -1
+  end
+  return 0
+end`
+
 // ---- 工具函数 ----
 
 function formatNumber(n: number, decimals = 2): string {
@@ -108,6 +126,7 @@ const Backtest: Component = () => {
   const [pluginsError, setPluginsError] = createSignal('')
 
   // 表单状态
+  const [backtestMode, setBacktestMode] = createSignal<'plugin' | 'script'>('plugin')
   const [strategyType, setStrategyType] = createSignal('custom')
   const [symbol, setSymbol] = createSignal('BTCUSDT')
   const [exchange, setExchange] = createSignal('binance')
@@ -119,10 +138,16 @@ const Backtest: Component = () => {
   const [tradingConfig, setTradingConfig] = createSignal(
     JSON.stringify(DEFAULT_TRADING_CONFIG, null, 2)
   )
+  const [strategyCode, setStrategyCode] = createSignal(DEFAULT_LUA_SCRIPT)
+  const [scriptParams, setScriptParams] = createSignal('{"fast_period": 12, "slow_period": 26, "rsi_period": 14, "rsi_floor": 45}')
 
   // 运行状态
   const [running, setRunning] = createSignal(false)
   const [runError, setRunError] = createSignal('')
+
+  // 脚本验证状态
+  const [scriptValidating, setScriptValidating] = createSignal(false)
+  const [scriptValidationResult, setScriptValidationResult] = createSignal<{ valid: boolean; error?: string } | null>(null)
 
   // 结果状态
   const [result, setResult] = createSignal<BacktestResult | null>(null)
@@ -173,6 +198,24 @@ const Backtest: Component = () => {
     const plugin = plugins().find((p) => p.name === pluginName)
     if (plugin) {
       setIndicatorConfig(JSON.stringify(buildIndicatorConfig(plugin), null, 2))
+    }
+  }
+
+  // 验证 Lua 脚本
+  async function handleValidateScript() {
+    setScriptValidating(true)
+    setScriptValidationResult(null)
+    try {
+      const res = await validateScript(strategyCode())
+      if (res.success && res.data) {
+        setScriptValidationResult(res.data)
+      } else {
+        setScriptValidationResult({ valid: false, error: res.error || '验证请求失败' })
+      }
+    } catch (e) {
+      setScriptValidationResult({ valid: false, error: e instanceof Error ? e.message : '网络错误' })
+    } finally {
+      setScriptValidating(false)
     }
   }
 
@@ -228,8 +271,25 @@ const Backtest: Component = () => {
       return
     }
 
+    // 脚本模式: 将 strategy_code 和 params 注入 indicator_config
+    if (backtestMode() === 'script') {
+      let parsedParams: Record<string, unknown> = {}
+      try {
+        parsedParams = JSON.parse(scriptParams())
+      } catch {
+        setRunError('脚本参数 JSON 格式错误')
+        setRunning(false)
+        return
+      }
+      parsedIndicator = {
+        ...parsedParams,
+        ...parsedIndicator,
+        strategy_code: strategyCode(),
+      }
+    }
+
     const req: BacktestRequest = {
-      strategy_type: strategyType(),
+      strategy_type: backtestMode() === 'script' ? 'script' : strategyType(),
       symbol: symbol(),
       exchange: exchange(),
       timeframe: timeframe(),
@@ -394,50 +454,84 @@ const Backtest: Component = () => {
       <div class="bg-white rounded-xl border border-gray-200/60 p-6">
         <h3 class="text-[15px] font-semibold text-gray-800 mb-5">回测配置</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* 策略类型 */}
+          {/* 模式切换 */}
           <div>
-            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">策略类型</label>
-            <Show
-              when={!pluginsLoading()}
-              fallback={
-                <select
-                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
-                  disabled
-                >
-                  <option>加载中...</option>
-                </select>
-              }
-            >
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">策略模式</label>
+            <div class="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+              <button
+                type="button"
+                class={`px-4 py-1.5 text-sm rounded-md transition-colors ${
+                  backtestMode() === 'plugin'
+                    ? 'bg-indigo-600 text-white font-medium'
+                    : 'bg-gray-100 text-gray-600 hover:text-gray-800'
+                }`}
+                onClick={() => setBacktestMode('plugin')}
+              >
+                插件模式
+              </button>
+              <button
+                type="button"
+                class={`px-4 py-1.5 text-sm rounded-md transition-colors ${
+                  backtestMode() === 'script'
+                    ? 'bg-indigo-600 text-white font-medium'
+                    : 'bg-gray-100 text-gray-600 hover:text-gray-800'
+                }`}
+                onClick={() => {
+                  setBacktestMode('script')
+                  setScriptValidationResult(null)
+                }}
+              >
+                脚本模式
+              </button>
+            </div>
+          </div>
+
+          {/* 插件模式: 策略类型 */}
+          <Show when={backtestMode() === 'plugin'}>
+            <div>
+              <label class="block text-[13px] font-medium text-gray-400 mb-1.5">策略类型</label>
               <Show
-                when={pluginsError() === ''}
+                when={!pluginsLoading()}
                 fallback={
-                  <div>
-                    <select
-                      class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
-                      disabled
-                    >
-                      <option>加载失败</option>
-                    </select>
-                    <p class="text-xs text-red-500 mt-1">{pluginsError()}</p>
-                  </div>
+                  <select
+                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
+                    disabled
+                  >
+                    <option>加载中...</option>
+                  </select>
                 }
               >
-                <select
-                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
-                  value={strategyType()}
-                  onChange={(e) => handleStrategyTypeChange(e.currentTarget.value)}
+                <Show
+                  when={pluginsError() === ''}
+                  fallback={
+                    <div>
+                      <select
+                        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
+                        disabled
+                      >
+                        <option>加载失败</option>
+                      </select>
+                      <p class="text-xs text-red-500 mt-1">{pluginsError()}</p>
+                    </div>
+                  }
                 >
-                  <For each={plugins()}>
-                    {(plugin) => (
-                      <option value={plugin.name}>
-                        {plugin.name} - {plugin.description.slice(0, 20)}
-                      </option>
-                    )}
-                  </For>
-                </select>
+                  <select
+                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
+                    value={strategyType()}
+                    onChange={(e) => handleStrategyTypeChange(e.currentTarget.value)}
+                  >
+                    <For each={plugins()}>
+                      {(plugin) => (
+                        <option value={plugin.name}>
+                          {plugin.name} - {plugin.description.slice(0, 20)}
+                        </option>
+                      )}
+                    </For>
+                  </select>
+                </Show>
               </Show>
-            </Show>
-          </div>
+            </div>
+          </Show>
 
           {/* 交易对 */}
           <div>
@@ -539,6 +633,59 @@ const Backtest: Component = () => {
             />
           </div>
         </div>
+
+        {/* 脚本模式: Lua 编辑器 + 参数 */}
+        <Show when={backtestMode() === 'script'}>
+          <div class="mt-5 space-y-4">
+            {/* Lua 脚本 */}
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="block text-[13px] font-medium text-gray-400">Lua 脚本</label>
+                <button
+                  type="button"
+                  class="text-sm text-indigo-600 hover:text-indigo-700 disabled:opacity-50"
+                  disabled={scriptValidating()}
+                  onClick={handleValidateScript}
+                >
+                  {scriptValidating() ? '验证中...' : '验证脚本'}
+                </button>
+              </div>
+              <textarea
+                class="font-mono text-sm bg-gray-900 text-gray-100 rounded-lg p-4 min-h-[200px] w-full resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500/30 border border-gray-700"
+                value={strategyCode()}
+                onInput={(e) => {
+                  setStrategyCode(e.currentTarget.value)
+                  setScriptValidationResult(null)
+                }}
+                placeholder="在此编写 Lua 策略脚本..."
+              />
+              <Show when={scriptValidationResult()}>
+                <div class="mt-2">
+                  <Show
+                    when={scriptValidationResult()!.valid}
+                    fallback={
+                      <p class="text-sm text-red-500">{scriptValidationResult()!.error}</p>
+                    }
+                  >
+                    <p class="text-sm text-emerald-600">{'\u2713'} 脚本语法正确</p>
+                  </Show>
+                </div>
+              </Show>
+            </div>
+
+            {/* 脚本参数 */}
+            <div>
+              <label class="block text-[13px] font-medium text-gray-400 mb-1.5">脚本参数 (JSON)</label>
+              <textarea
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                rows={3}
+                value={scriptParams()}
+                onInput={(e) => setScriptParams(e.currentTarget.value)}
+                placeholder='{"fast_period": 12, "slow_period": 26}'
+              />
+            </div>
+          </div>
+        </Show>
 
         {/* 错误信息 */}
         <Show when={runError()}>

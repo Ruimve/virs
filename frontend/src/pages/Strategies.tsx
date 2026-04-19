@@ -1,5 +1,5 @@
 import { type Component, createSignal, createEffect, Show, For } from 'solid-js'
-import { api, fetchPlugins, type PaginatedResponse, type Plugin } from '../lib/api'
+import { api, fetchPlugins, validateScript, type PaginatedResponse, type Plugin } from '../lib/api'
 
 // ── 类型定义 ──────────────────────────────────────────────
 interface Strategy {
@@ -30,11 +30,31 @@ interface StrategyFormData {
   exchange: string
   timeframe: string
   strategy_type: string
+  strategy_mode: 'signal' | 'script'
   market_type: string
   execution_mode: string
   indicator_config: string
   trading_config: string
+  strategy_code: string
 }
+
+const DEFAULT_LUA_SCRIPT = `-- VIRS Lua Strategy: EMA Crossover with RSI Filter
+-- Available functions: sma(period), ema(period), rsi(period)
+-- Available data: klines (table), current_idx (number), params (table)
+-- Return: 1 = buy, -1 = sell, 0 = hold
+
+function signal()
+  local fast = ema(params.fast_period or 12)
+  local slow = ema(params.slow_period or 26)
+  local rsi_val = rsi(params.rsi_period or 14)
+
+  if fast > slow and rsi_val > (params.rsi_floor or 45) then
+    return 1
+  elseif fast < slow then
+    return -1
+  end
+  return 0
+end`
 
 const DEFAULT_TRADING_CONFIG = JSON.stringify(
   { fixed_amount: 100, max_position_size: 1000, balance_pct: 0.1, allow_short: false },
@@ -48,10 +68,12 @@ const EMPTY_FORM: StrategyFormData = {
   exchange: 'binance',
   timeframe: '1h',
   strategy_type: 'custom',
+  strategy_mode: 'signal',
   market_type: 'spot',
   execution_mode: 'signal_only',
   indicator_config: '{}',
   trading_config: DEFAULT_TRADING_CONFIG,
+  strategy_code: DEFAULT_LUA_SCRIPT,
 }
 
 // ── 状态 badge 样式 ──────────────────────────────────────
@@ -107,6 +129,10 @@ const Strategies: Component = () => {
 
   // 操作状态
   const [actionLoading, setActionLoading] = createSignal<string | null>(null)
+
+  // 脚本验证状态
+  const [scriptValidating, setScriptValidating] = createSignal(false)
+  const [scriptValidationResult, setScriptValidationResult] = createSignal<{ valid: boolean; error?: string } | null>(null)
 
   // ── 加载插件列表 ──
   async function loadPlugins() {
@@ -212,10 +238,12 @@ const Strategies: Component = () => {
           exchange: s.exchange,
           timeframe: s.timeframe,
           strategy_type: s.strategy_type,
+          strategy_mode: s.strategy_mode || 'signal',
           market_type: s.market_type,
           execution_mode: s.execution_mode,
           indicator_config: JSON.stringify(s.indicator_config || {}, null, 2),
           trading_config: JSON.stringify(s.trading_config || {}, null, 2),
+          strategy_code: (s.indicator_config as any)?.strategy_code || DEFAULT_LUA_SCRIPT,
         })
         setEditingId(id)
         setShowModal(true)
@@ -232,6 +260,25 @@ const Strategies: Component = () => {
     setShowModal(false)
     setEditingId(null)
     setFormError('')
+    setScriptValidationResult(null)
+  }
+
+  // ── 验证 Lua 脚本 ──
+  async function handleValidateScript() {
+    setScriptValidating(true)
+    setScriptValidationResult(null)
+    try {
+      const res = await validateScript(form().strategy_code)
+      if (res.success && res.data) {
+        setScriptValidationResult(res.data)
+      } else {
+        setScriptValidationResult({ valid: false, error: res.error || '验证请求失败' })
+      }
+    } catch (e: any) {
+      setScriptValidationResult({ valid: false, error: e.message || '网络错误' })
+    } finally {
+      setScriptValidating(false)
+    }
   }
 
   // ── 表单字段更新 ──
@@ -280,10 +327,12 @@ const Strategies: Component = () => {
         exchange: f.exchange,
         timeframe: f.timeframe,
         strategy_type: f.strategy_type,
+        strategy_mode: f.strategy_mode,
         market_type: f.market_type,
         execution_mode: f.execution_mode,
         indicator_config: indicatorConfig,
         trading_config: tradingConfig,
+        ...(f.strategy_mode === 'script' ? { strategy_code: f.strategy_code } : {}),
       }
 
       const eid = editingId()
@@ -632,74 +681,149 @@ const Strategies: Component = () => {
                   </div>
                 </div>
 
-                {/* 策略类型 + 市场类型 */}
-                <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <label class="block text-sm font-medium text-gray-600 mb-1.5">策略类型</label>
-                    <Show
-                      when={!pluginsLoading()}
-                      fallback={
-                        <select
-                          class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
-                          disabled
-                        >
-                          <option>加载中...</option>
-                        </select>
-                      }
+                {/* 策略模式切换 */}
+                <div>
+                  <label class="block text-sm font-medium text-gray-600 mb-1.5">策略模式</label>
+                  <div class="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+                    <button
+                      type="button"
+                      class={`px-4 py-1.5 text-sm rounded-md transition-colors ${
+                        form().strategy_mode === 'signal'
+                          ? 'bg-indigo-600 text-white font-medium'
+                          : 'bg-gray-100 text-gray-600 hover:text-gray-800'
+                      }`}
+                      onClick={() => {
+                        updateForm('strategy_mode', 'signal')
+                        setScriptValidationResult(null)
+                      }}
                     >
-                      <Show
-                        when={pluginsError() === ''}
-                        fallback={
-                          <div>
-                            <select
-                              class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
-                              disabled
-                            >
-                              <option>加载失败</option>
-                            </select>
-                            <p class="text-xs text-red-500 mt-1">{pluginsError()}</p>
-                          </div>
-                        }
-                      >
-                        <select
-                          class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
-                          value={form().strategy_type}
-                          onChange={(e) => {
-                            const pluginName = (e.target as HTMLSelectElement).value
-                            const plugin = plugins().find((p) => p.name === pluginName)
-                            if (plugin) {
-                              updateForm('strategy_type', pluginName)
-                              updateForm(
-                                'indicator_config',
-                                JSON.stringify(buildIndicatorConfig(plugin), null, 2)
-                              )
-                            }
-                          }}
-                        >
-                          <For each={plugins()}>
-                            {(plugin) => (
-                              <option value={plugin.name}>
-                                {plugin.name} - {plugin.description.slice(0, 20)}
-                              </option>
-                            )}
-                          </For>
-                        </select>
-                      </Show>
-                    </Show>
-                  </div>
-                  <div>
-                    <label class="block text-sm font-medium text-gray-600 mb-1.5">市场类型</label>
-                    <select
-                      class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
-                      value={form().market_type}
-                      onChange={(e) => updateForm('market_type', (e.target as HTMLSelectElement).value)}
+                      插件模式
+                    </button>
+                    <button
+                      type="button"
+                      class={`px-4 py-1.5 text-sm rounded-md transition-colors ${
+                        form().strategy_mode === 'script'
+                          ? 'bg-indigo-600 text-white font-medium'
+                          : 'bg-gray-100 text-gray-600 hover:text-gray-800'
+                      }`}
+                      onClick={() => {
+                        updateForm('strategy_mode', 'script')
+                        setScriptValidationResult(null)
+                      }}
                     >
-                      <option value="spot">现货</option>
-                      <option value="futures">合约</option>
-                      <option value="perpetual">永续</option>
-                    </select>
+                      脚本模式
+                    </button>
                   </div>
                 </div>
+
+                {/* 插件模式: 策略类型选择 */}
+                <Show when={form().strategy_mode === 'signal'}>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-600 mb-1.5">策略类型</label>
+                      <Show
+                        when={!pluginsLoading()}
+                        fallback={
+                          <select
+                            class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
+                            disabled
+                          >
+                            <option>加载中...</option>
+                          </select>
+                        }
+                      >
+                        <Show
+                          when={pluginsError() === ''}
+                          fallback={
+                            <div>
+                              <select
+                                class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
+                                disabled
+                              >
+                                <option>加载失败</option>
+                              </select>
+                              <p class="text-xs text-red-500 mt-1">{pluginsError()}</p>
+                            </div>
+                          }
+                        >
+                          <select
+                            class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
+                            value={form().strategy_type}
+                            onChange={(e) => {
+                              const pluginName = (e.target as HTMLSelectElement).value
+                              const plugin = plugins().find((p) => p.name === pluginName)
+                              if (plugin) {
+                                updateForm('strategy_type', pluginName)
+                                updateForm(
+                                  'indicator_config',
+                                  JSON.stringify(buildIndicatorConfig(plugin), null, 2)
+                                )
+                              }
+                            }}
+                          >
+                            <For each={plugins()}>
+                              {(plugin) => (
+                                <option value={plugin.name}>
+                                  {plugin.name} - {plugin.description.slice(0, 20)}
+                                </option>
+                              )}
+                            </For>
+                          </select>
+                        </Show>
+                      </Show>
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-gray-600 mb-1.5">市场类型</label>
+                      <select
+                        class="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
+                        value={form().market_type}
+                        onChange={(e) => updateForm('market_type', (e.target as HTMLSelectElement).value)}
+                      >
+                        <option value="spot">现货</option>
+                        <option value="futures">合约</option>
+                        <option value="perpetual">永续</option>
+                      </select>
+                    </div>
+                  </div>
+                </Show>
+
+                {/* 脚本模式: Lua 代码编辑器 */}
+                <Show when={form().strategy_mode === 'script'}>
+                  <div>
+                    <div class="flex items-center justify-between mb-1.5">
+                      <label class="block text-sm font-medium text-gray-600">Lua 脚本</label>
+                      <button
+                        type="button"
+                        class="text-sm text-indigo-600 hover:text-indigo-700 disabled:opacity-50"
+                        disabled={scriptValidating()}
+                        onClick={handleValidateScript}
+                      >
+                        {scriptValidating() ? '验证中...' : '验证脚本'}
+                      </button>
+                    </div>
+                    <textarea
+                      class="font-mono text-sm bg-gray-900 text-gray-100 rounded-lg p-4 min-h-[200px] w-full resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500/30 border border-gray-700"
+                      value={form().strategy_code}
+                      onInput={(e) => {
+                        updateForm('strategy_code', (e.target as HTMLTextAreaElement).value)
+                        setScriptValidationResult(null)
+                      }}
+                      placeholder="在此编写 Lua 策略脚本..."
+                    />
+                    <Show when={scriptValidationResult()}>
+                      <div class="mt-2">
+                        <Show
+                          when={scriptValidationResult()!.valid}
+                          fallback={
+                            <p class="text-sm text-red-500">{scriptValidationResult()!.error}</p>
+                          }
+                        >
+                          <p class="text-sm text-emerald-600">{'\u2713'} 脚本语法正确</p>
+                        </Show>
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
 
                 {/* 执行模式 */}
                 <div>

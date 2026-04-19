@@ -1,4 +1,5 @@
 pub mod backtest;
+pub mod lua_executor;
 pub mod plugin;
 pub mod plugins;
 pub mod position;
@@ -259,11 +260,34 @@ async fn run_strategy_cycle(
     // Generate signal based on strategy mode
     let raw_signal: i8 = match strategy.strategy_mode {
         StrategyMode::Script => {
-            warn!(
-                "Script strategy '{}' is not yet supported. Use signal mode with indicator plugins.",
-                strategy.name
-            );
-            0
+            // Script mode: execute user's Lua strategy code
+            let code = match &strategy.strategy_code {
+                Some(c) if !c.is_empty() => c,
+                _ => {
+                    warn!("Script strategy '{}' has no code", strategy.name);
+                    return Ok(None);
+                }
+            };
+
+            let executor = lua_executor::LuaExecutor::new(lua_executor::LuaExecutorConfig::default());
+
+            // Extract params from indicator_config
+            let mut params: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+            if let Some(obj) = strategy.indicator_config.as_object() {
+                for (key, value) in obj {
+                    if let Some(num) = value.as_f64() {
+                        params.insert(key.clone(), num);
+                    }
+                }
+            }
+
+            match executor.execute(code, &klines, idx, &params) {
+                Ok(signal) => signal,
+                Err(e) => {
+                    error!("Lua execution error for strategy '{}': {}", strategy.name, e);
+                    0
+                }
+            }
         }
         StrategyMode::Signal => {
             let plugin_name = strategy

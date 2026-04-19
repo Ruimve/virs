@@ -138,62 +138,100 @@ pub async fn run_backtest(
 
     let engine = BacktestEngine::new(req.initial_balance, commission, slippage);
 
-    let plugin_name = req
-        .indicator_config
-        .get("plugin")
+    // Determine signal generation method: script-based or plugin-based
+    let is_script = req.indicator_config
+        .get("strategy_code")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| {
-            let legacy = req.strategy_type.as_str();
-            match legacy {
-                "sma_crossover" | "rsi" | "macd" | "bollinger_bands" => legacy.to_string(),
-                _ => "sma_crossover".to_string(),
-            }
-        });
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
 
-    let mut params: HashMap<String, f64> = HashMap::new();
-    if let Some(obj) = req.indicator_config.as_object() {
-        for (key, value) in obj {
-            if key == "plugin" {
-                continue;
-            }
-            if let Some(num) = value.as_f64() {
-                params.insert(key.clone(), num);
+    let result = if is_script {
+        use crate::engine::lua_executor::{LuaExecutor, LuaExecutorConfig};
+        let executor = LuaExecutor::new(LuaExecutorConfig::default());
+        let code = req.indicator_config.get("strategy_code").and_then(|v| v.as_str()).unwrap_or("");
+
+        let mut script_params: HashMap<String, f64> = HashMap::new();
+        if let Some(obj) = req.indicator_config.as_object() {
+            for (key, value) in obj {
+                if key == "plugin" || key == "strategy_code" { continue; }
+                if let Some(num) = value.as_f64() {
+                    script_params.insert(key.clone(), num);
+                }
             }
         }
-    }
 
-    if !req.indicator_config.get("plugin").is_some() {
-        match plugin_name.as_str() {
-            "sma_crossover" => {
-                if let Some(v) = params.remove("short_period") {
-                    params.insert("fast_period".into(), v);
-                }
-                if let Some(v) = params.remove("long_period") {
-                    params.insert("slow_period".into(), v);
-                }
-            }
-            "macd" => {
-                if let Some(v) = params.remove("fast_period") {
-                    params.insert("fast_period".into(), v);
-                }
-                if let Some(v) = params.remove("slow_period") {
-                    params.insert("slow_period".into(), v);
-                }
-                if let Some(v) = params.remove("signal_period") {
-                    params.insert("signal_period".into(), v);
-                }
-            }
-            _ => {}
+        let mut signals: Vec<i8> = Vec::with_capacity(klines.len());
+        if let Err(e) = executor.execute_backtest(code, &klines, &script_params, |signal| {
+            signals.push(signal);
+        }) {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<serde_json::Value>::err(&format!("Lua execution error: {}", e))),
+            ));
         }
-    }
 
-    let plugin_registry = &state.plugin_registry;
-    let result = engine.run(&klines, |klines, idx| {
-        plugin_registry
-            .generate_signal(&plugin_name, klines, idx, &params)
-            .unwrap_or(0)
-    }, stop_loss, take_profit);
+        engine.run(&klines, |_, idx| {
+            signals.get(idx).copied().unwrap_or(0)
+        }, stop_loss, take_profit)
+    } else {
+        // Plugin-based mode (existing logic)
+        let plugin_name = req
+            .indicator_config
+            .get("plugin")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                let legacy = req.strategy_type.as_str();
+                match legacy {
+                    "sma_crossover" | "rsi" | "macd" | "bollinger_bands" => legacy.to_string(),
+                    _ => "sma_crossover".to_string(),
+                }
+            });
+
+        let mut params: HashMap<String, f64> = HashMap::new();
+        if let Some(obj) = req.indicator_config.as_object() {
+            for (key, value) in obj {
+                if key == "plugin" {
+                    continue;
+                }
+                if let Some(num) = value.as_f64() {
+                    params.insert(key.clone(), num);
+                }
+            }
+        }
+
+        if !req.indicator_config.get("plugin").is_some() {
+            match plugin_name.as_str() {
+                "sma_crossover" => {
+                    if let Some(v) = params.remove("short_period") {
+                        params.insert("fast_period".into(), v);
+                    }
+                    if let Some(v) = params.remove("long_period") {
+                        params.insert("slow_period".into(), v);
+                    }
+                }
+                "macd" => {
+                    if let Some(v) = params.remove("fast_period") {
+                        params.insert("fast_period".into(), v);
+                    }
+                    if let Some(v) = params.remove("slow_period") {
+                        params.insert("slow_period".into(), v);
+                    }
+                    if let Some(v) = params.remove("signal_period") {
+                        params.insert("signal_period".into(), v);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let plugin_registry = &state.plugin_registry;
+        engine.run(&klines, |klines, idx| {
+            plugin_registry
+                .generate_signal(&plugin_name, klines, idx, &params)
+                .unwrap_or(0)
+        }, stop_loss, take_profit)
+    };
 
     let _ = sqlx::query(
         r#"INSERT INTO qd_backtest_results

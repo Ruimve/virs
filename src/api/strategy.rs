@@ -514,3 +514,36 @@ pub async fn stop_strategy(
 
     Ok(Json(ApiResponse::ok_with_message(serde_json::json!({"id": id}), "Strategy stopped")))
 }
+
+/// Validate a Lua strategy script.
+pub async fn validate_script(
+    State(_state): State<Arc<AppState>>,
+    _auth: AuthUser,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
+    let code = body.get("code")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    if code.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<serde_json::Value>::err("Script code is empty")),
+        ));
+    }
+
+    let executor = crate::engine::lua_executor::LuaExecutor::new(
+        crate::engine::lua_executor::LuaExecutorConfig::default()
+    );
+
+    match executor.validate(code) {
+        Ok(()) => Ok(Json(ApiResponse::ok_with_message(
+            serde_json::json!({"valid": true}),
+            "Script syntax is valid"
+        ))),
+        Err(e) => Ok(Json(ApiResponse::ok_with_message(
+            serde_json::json!({"valid": false, "error": e}),
+            "Script validation failed"
+        ))),
+    }
+}

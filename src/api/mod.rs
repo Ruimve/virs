@@ -57,6 +57,7 @@ pub fn build_router(
         .route("/api/strategies/{id}/delete", delete(strategy::delete_strategy))
         .route("/api/strategies/{id}/start", post(strategy::start_strategy))
         .route("/api/strategies/{id}/stop", post(strategy::stop_strategy))
+        .route("/api/strategy/validate-script", post(strategy::validate_script))
         .route("/api/backtest/run", post(backtest::run_backtest))
         .route("/api/backtest/{id}", get(backtest::get_backtest_result))
         .route("/api/backtest/list", get(backtest::list_backtest_results))
