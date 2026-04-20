@@ -1,5 +1,6 @@
-import { type Component, createSignal, createEffect, Show, For, onMount } from 'solid-js'
+import { type Component, createSignal, createEffect, Show, For } from 'solid-js'
 import { api } from '../lib/api'
+import KlineChart from '../components/KlineChart'
 
 // ── 类型定义 ──────────────────────────────────────────────
 interface TickerData {
@@ -55,15 +56,6 @@ function formatVolume(v: number | undefined | null): string {
   return v.toFixed(2)
 }
 
-function formatTime(ts: number): string {
-  const d = new Date(ts)
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mi = String(d.getMinutes()).padStart(2, '0')
-  return `${mm}/${dd} ${hh}:${mi}`
-}
-
 // ── Tab 类型 ──────────────────────────────────────────────
 
 type MarketTab = 'ticker' | 'kline' | 'orderbook' | 'balance'
@@ -101,9 +93,6 @@ const Market: Component = () => {
   const [balances, setBalances] = createSignal<BalanceItem[]>([])
   const [_balancesLoading, setBalancesLoading] = createSignal(false)
   const [balancesError, setBalancesError] = createSignal(false)
-
-  // Canvas ref
-  let chartCanvas!: HTMLCanvasElement
 
   // ── 查询行情 ──
   async function fetchTicker() {
@@ -143,8 +132,6 @@ const Market: Component = () => {
       const res = await api.get<KlineItem[]>(`/market/klines?${params}`)
       if (res.success && res.data) {
         setKlines(res.data)
-        // 等待 DOM 更新后绘制
-        requestAnimationFrame(() => drawChart())
       } else {
         setKlines([])
         setKlinesError(true)
@@ -231,121 +218,6 @@ const Market: Component = () => {
     // interval 变化时自动重新加载 K 线
     interval()
     fetchKlines()
-  })
-
-  // ── Canvas K线图绘制 ──
-  function drawChart() {
-    const canvas = chartCanvas
-    if (!canvas) return
-
-    const data = klines()
-    if (!data || data.length === 0) return
-
-    const dpr = window.devicePixelRatio || 1
-    const rect = canvas.getBoundingClientRect()
-    const width = rect.width
-    const height = rect.height
-
-    canvas.width = width * dpr
-    canvas.height = height * dpr
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.scale(dpr, dpr)
-
-    // 边距
-    const padding = { top: 20, right: 70, bottom: 30, left: 10 }
-    const chartW = width - padding.left - padding.right
-    const chartH = height - padding.top - padding.bottom
-
-    // 数据范围
-    let minPrice = Infinity
-    let maxPrice = -Infinity
-    for (const k of data) {
-      if (k.low < minPrice) minPrice = k.low
-      if (k.high > maxPrice) maxPrice = k.high
-    }
-    const priceRange = maxPrice - minPrice || 1
-    const pricePadding = priceRange * 0.05
-    minPrice -= pricePadding
-    maxPrice += pricePadding
-    const totalRange = maxPrice - minPrice
-
-    // 清空
-    ctx.clearRect(0, 0, width, height)
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, width, height)
-
-    // 网格线
-    ctx.strokeStyle = '#f0f0f0'
-    ctx.lineWidth = 1
-    const gridLines = 5
-    for (let i = 0; i <= gridLines; i++) {
-      const y = padding.top + (chartH / gridLines) * i
-      ctx.beginPath()
-      ctx.moveTo(padding.left, y)
-      ctx.lineTo(width - padding.right, y)
-      ctx.stroke()
-
-      // Y轴价格标签
-      const price = maxPrice - (totalRange / gridLines) * i
-      ctx.fillStyle = '#9ca3af'
-      ctx.font = '11px monospace'
-      ctx.textAlign = 'left'
-      ctx.fillText(formatPrice(price, 2), width - padding.right + 8, y + 4)
-    }
-
-    // K线蜡烛
-    const candleCount = data.length
-    const candleWidth = Math.max(1, (chartW / candleCount) * 0.7)
-    const gap = chartW / candleCount
-
-    for (let i = 0; i < candleCount; i++) {
-      const k = data[i]
-      const x = padding.left + gap * i + gap / 2
-
-      const openY = padding.top + ((maxPrice - k.open) / totalRange) * chartH
-      const closeY = padding.top + ((maxPrice - k.close) / totalRange) * chartH
-      const highY = padding.top + ((maxPrice - k.high) / totalRange) * chartH
-      const lowY = padding.top + ((maxPrice - k.low) / totalRange) * chartH
-
-      const isUp = k.close >= k.open
-      const color = isUp ? '#22c55e' : '#ef4444'
-
-      // 影线
-      ctx.strokeStyle = color
-      ctx.lineWidth = 1
-      ctx.beginPath()
-      ctx.moveTo(x, highY)
-      ctx.lineTo(x, lowY)
-      ctx.stroke()
-
-      // 实体
-      const bodyTop = Math.min(openY, closeY)
-      const bodyHeight = Math.max(1, Math.abs(closeY - openY))
-      ctx.fillStyle = color
-      ctx.fillRect(x - candleWidth / 2, bodyTop, candleWidth, bodyHeight)
-    }
-
-    // X轴时间标签 (每隔一定数量显示)
-    ctx.fillStyle = '#9ca3af'
-    ctx.font = '10px monospace'
-    ctx.textAlign = 'center'
-    const labelInterval = Math.max(1, Math.floor(candleCount / 8))
-    for (let i = 0; i < candleCount; i += labelInterval) {
-      const x = padding.left + gap * i + gap / 2
-      const y = height - padding.bottom + 18
-      ctx.fillText(formatTime(data[i].open_time), x, y)
-    }
-  }
-
-  // ── 窗口 resize 时重绘 ──
-  onMount(() => {
-    const handleResize = () => {
-      if (klines().length > 0) drawChart()
-    }
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
   })
 
   // ── 计算订单簿累计 ──
@@ -575,10 +447,16 @@ const Market: Component = () => {
                         </div>
                       }
                     >
-                      <canvas
-                        ref={chartCanvas}
-                        class="w-full"
-                        style={{ height: '400px' }}
+                      <KlineChart
+                        data={klines().map(k => ({
+                          time: Math.floor(k.open_time / 1000),
+                          open: k.open,
+                          high: k.high,
+                          low: k.low,
+                          close: k.close,
+                          volume: k.volume,
+                        }))}
+                        height={450}
                       />
                     </Show>
                   }

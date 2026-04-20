@@ -1,5 +1,7 @@
-import { type Component, createSignal, createEffect, Show, For, onMount } from 'solid-js'
+import { type Component, createSignal, createMemo, Show, For, onMount } from 'solid-js'
 import { api, fetchPlugins, validateScript, type PaginatedResponse, type Plugin } from '../lib/api'
+import KlineChart from '../components/KlineChart'
+import EquityChart from '../components/EquityChart'
 
 // ---- 类型定义 ----
 
@@ -335,111 +337,42 @@ const Backtest: Component = () => {
     }
   }
 
-  // 绘制权益曲线
-  function drawEquityCurve(canvas: HTMLCanvasElement, data: [string, number][]) {
-    if (!data || data.length < 2) return
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    const dpr = window.devicePixelRatio || 1
-    const rect = canvas.getBoundingClientRect()
-    canvas.width = rect.width * dpr
-    canvas.height = rect.height * dpr
-    ctx.scale(dpr, dpr)
-
-    const w = rect.width
-    const h = rect.height
-    const padding = { top: 20, right: 20, bottom: 30, left: 70 }
-    const chartW = w - padding.left - padding.right
-    const chartH = h - padding.top - padding.bottom
-
-    const values = data.map((d) => d[1])
-    const minVal = Math.min(...values)
-    const maxVal = Math.max(...values)
-    const range = maxVal - minVal || 1
-
-    // 清空
-    ctx.clearRect(0, 0, w, h)
-
-    // 灰色网格
-    ctx.strokeStyle = '#f3f4f6'
-    ctx.lineWidth = 0.5
-    const gridLines = 5
-    for (let i = 0; i <= gridLines; i++) {
-      const y = padding.top + (chartH / gridLines) * i
-      ctx.beginPath()
-      ctx.moveTo(padding.left, y)
-      ctx.lineTo(w - padding.right, y)
-      ctx.stroke()
-
-      // Y 轴标签
-      const val = maxVal - (range / gridLines) * i
-      ctx.fillStyle = '#9ca3af'
-      ctx.font = '11px sans-serif'
-      ctx.textAlign = 'right'
-      ctx.fillText(formatNumber(val), padding.left - 8, y + 4)
-    }
-
-    // X 轴标签 (取几个点)
-    ctx.fillStyle = '#9ca3af'
-    ctx.font = '11px sans-serif'
-    ctx.textAlign = 'center'
-    const labelCount = Math.min(6, data.length)
-    const step = Math.floor(data.length / labelCount)
-    for (let i = 0; i < data.length; i += step) {
-      const x = padding.left + (i / (data.length - 1)) * chartW
-      const dateStr = data[i][0]
-      try {
-        const d = new Date(dateStr)
-        ctx.fillText(
-          `${d.getMonth() + 1}/${d.getDate()}`,
-          x,
-          h - padding.bottom + 18
-        )
-      } catch {
-        // ignore
-      }
-    }
-
-    // 绿色折线
-    ctx.strokeStyle = '#6366f1'
-    ctx.lineWidth = 1.5
-    ctx.beginPath()
-    for (let i = 0; i < data.length; i++) {
-      const x = padding.left + (i / (data.length - 1)) * chartW
-      const y = padding.top + chartH - ((data[i][1] - minVal) / range) * chartH
-      if (i === 0) {
-        ctx.moveTo(x, y)
-      } else {
-        ctx.lineTo(x, y)
-      }
-    }
-    ctx.stroke()
-
-    // 填充区域
-    const gradient = ctx.createLinearGradient(0, padding.top, 0, h - padding.bottom)
-    gradient.addColorStop(0, 'rgba(99, 102, 241, 0.12)')
-    gradient.addColorStop(1, 'rgba(99, 102, 241, 0.01)')
-    ctx.lineTo(padding.left + chartW, h - padding.bottom)
-    ctx.lineTo(padding.left, h - padding.bottom)
-    ctx.closePath()
-    ctx.fillStyle = gradient
-    ctx.fill()
-  }
-
-  // 结果出现后绘制图表
-  createEffect(() => {
+  // 从回测结果中提取 K 线数据（如果有）
+  const backtestKlineData = createMemo(() => {
     const r = result()
-    if (r && r.equity_curve && r.equity_curve.length > 0) {
-      // 使用 requestAnimationFrame 确保 canvas 已渲染
-      requestAnimationFrame(() => {
-        const canvas = document.getElementById('equity-canvas') as HTMLCanvasElement | null
-        if (canvas) {
-          drawEquityCurve(canvas, r.equity_curve)
-        }
+    if (!r || !r.trades || r.trades.length === 0) return []
+    // 从交易记录中生成简化的 K 线数据
+    // 每笔交易生成一个数据点
+    return r.trades.map((t) => ({
+      time: Math.floor(new Date(t.entry_time).getTime() / 1000),
+      open: t.entry_price,
+      high: Math.max(t.entry_price, t.exit_price),
+      low: Math.min(t.entry_price, t.exit_price),
+      close: t.exit_price,
+    }))
+  })
+
+  const backtestMarkers = createMemo(() => {
+    const r = result()
+    if (!r || !r.trades) return []
+    return r.trades.flatMap((t) => {
+      const markers = []
+      markers.push({
+        time: Math.floor(new Date(t.entry_time).getTime() / 1000),
+        position: (t.side === 'buy' ? 'belowBar' : 'aboveBar') as 'belowBar' | 'aboveBar',
+        color: t.side === 'buy' ? '#10b981' : '#ef4444',
+        shape: (t.side === 'buy' ? 'arrowUp' : 'arrowDown') as 'arrowUp' | 'arrowDown',
+        text: t.side === 'buy' ? 'Buy' : 'Sell',
       })
-    }
+      markers.push({
+        time: Math.floor(new Date(t.exit_time).getTime() / 1000),
+        position: (t.side === 'buy' ? 'aboveBar' : 'belowBar') as 'aboveBar' | 'belowBar',
+        color: t.side === 'buy' ? '#ef4444' : '#10b981',
+        shape: (t.side === 'buy' ? 'arrowDown' : 'arrowUp') as 'arrowDown' | 'arrowUp',
+        text: `Exit (${t.pnl >= 0 ? '+' : ''}${t.pnl_pct.toFixed(1)}%)`,
+      })
+      return markers
+    })
   })
 
   return (
@@ -820,14 +753,28 @@ const Backtest: Component = () => {
             </div>
           </div>
 
+          {/* 交易信号 K 线图 */}
+          <Show when={result()?.trades && result()!.trades.length > 0}>
+            <div class="mb-6">
+              <h4 class="text-[13px] font-semibold text-gray-500 mb-4">交易信号</h4>
+              <KlineChart
+                data={backtestKlineData()}
+                height={300}
+                markers={backtestMarkers()}
+              />
+            </div>
+          </Show>
+
           {/* 权益曲线图 */}
           <div class="bg-white rounded-xl border border-gray-200/60 p-5">
             <h4 class="text-[13px] font-semibold text-gray-500 mb-4">权益曲线</h4>
-            <canvas
-              id="equity-canvas"
-              class="w-full"
-              style={{ height: '300px' }}
-            />
+            <Show when={result()?.equity_curve && result()!.equity_curve.length > 0}>
+              <EquityChart
+                data={result()!.equity_curve}
+                height={250}
+                initialBalance={result()!.initial_balance}
+              />
+            </Show>
           </div>
 
           {/* 交易记录表格 */}

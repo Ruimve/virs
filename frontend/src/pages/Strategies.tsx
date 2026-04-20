@@ -1,5 +1,5 @@
 import { type Component, createSignal, createEffect, Show, For } from 'solid-js'
-import { api, fetchPlugins, validateScript, type PaginatedResponse, type Plugin } from '../lib/api'
+import { api, fetchPlugins, validateScript, getAiStatus, generateStrategy, type PaginatedResponse, type Plugin } from '../lib/api'
 
 // ── 类型定义 ──────────────────────────────────────────────
 interface Strategy {
@@ -134,6 +134,14 @@ const Strategies: Component = () => {
   const [scriptValidating, setScriptValidating] = createSignal(false)
   const [scriptValidationResult, setScriptValidationResult] = createSignal<{ valid: boolean; error?: string } | null>(null)
 
+  // AI 生成状态
+  const [showAiPanel, setShowAiPanel] = createSignal(false)
+  const [aiPrompt, setAiPrompt] = createSignal('')
+  const [aiProvider, setAiProvider] = createSignal('')
+  const [aiProviders, setAiProviders] = createSignal<string[]>([])
+  const [aiGenerating, setAiGenerating] = createSignal(false)
+  const [aiMessage, setAiMessage] = createSignal<{ type: 'success' | 'error'; text: string } | null>(null)
+
   // ── 加载插件列表 ──
   async function loadPlugins() {
     setPluginsLoading(true)
@@ -261,6 +269,9 @@ const Strategies: Component = () => {
     setEditingId(null)
     setFormError('')
     setScriptValidationResult(null)
+    setShowAiPanel(false)
+    setAiPrompt('')
+    setAiMessage(null)
   }
 
   // ── 验证 Lua 脚本 ──
@@ -278,6 +289,75 @@ const Strategies: Component = () => {
       setScriptValidationResult({ valid: false, error: e.message || '网络错误' })
     } finally {
       setScriptValidating(false)
+    }
+  }
+
+  // ── 打开 AI 面板 ──
+  async function openAiPanel() {
+    setAiMessage(null)
+    setAiPrompt('')
+    // 检查 AI 状态
+    try {
+      const res = await getAiStatus()
+      if (res.success && res.data) {
+        if (!res.data.configured) {
+          setAiMessage({ type: 'error', text: '请先在 .env 中配置 AI API Key' })
+        }
+        if (res.data.providers && res.data.providers.length > 0) {
+          setAiProviders(res.data.providers)
+          setAiProvider(res.data.providers[0])
+        }
+      } else {
+        setAiMessage({ type: 'error', text: res.error || '获取 AI 状态失败' })
+      }
+    } catch {
+      setAiMessage({ type: 'error', text: '网络错误，无法连接 AI 服务' })
+    }
+    setShowAiPanel(true)
+  }
+
+  // ── AI 生成策略 ──
+  async function handleAiGenerate() {
+    const prompt = aiPrompt().trim()
+    if (!prompt) {
+      setAiMessage({ type: 'error', text: '请输入策略描述' })
+      return
+    }
+
+    setAiGenerating(true)
+    setAiMessage(null)
+    try {
+      const provider = aiProvider() || undefined
+      const res = await generateStrategy(prompt, provider)
+      if (res.success && res.data) {
+        const data = res.data
+        // 自动填充表单
+        setForm((prev) => ({
+          ...prev,
+          name: data.name || prev.name,
+          strategy_code: data.code || prev.strategy_code,
+          strategy_mode: 'script' as const,
+        }))
+        // 如果有参数，构建 indicator_config
+        if (data.params && data.params.length > 0) {
+          const config: Record<string, unknown> = {}
+          for (const param of data.params) {
+            config[param.name] = param.default
+          }
+          setForm((prev) => ({
+            ...prev,
+            indicator_config: JSON.stringify(config, null, 2),
+          }))
+        }
+        setScriptValidationResult(null)
+        setAiMessage({ type: 'success', text: '\u2713 策略已生成' })
+      } else {
+        setAiMessage({ type: 'error', text: res.error || '生成失败' })
+      }
+    } catch (e: any) {
+      setAiMessage({ type: 'error', text: e.message || '网络错误' })
+    } finally {
+      setAiGenerating(false)
     }
   }
 
@@ -609,9 +689,20 @@ const Strategies: Component = () => {
           {/* 模态框 */}
           <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4">
             <div class="px-6 py-5 border-b border-gray-100">
-              <h3 class="text-lg font-semibold text-gray-900">
-                {editingId() ? '编辑策略' : '新建策略'}
-              </h3>
+              <div class="flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-gray-900">
+                  {editingId() ? '编辑策略' : '新建策略'}
+                </h3>
+                <Show when={!editingId()}>
+                  <button
+                    type="button"
+                    class="px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50/80 rounded-lg hover:bg-indigo-100 transition-colors"
+                    onClick={openAiPanel}
+                  >
+                    ✨ AI 生成
+                  </button>
+                </Show>
+              </div>
             </div>
             <form onSubmit={handleSubmit}>
               <div class="px-6 py-5 space-y-5">
@@ -619,6 +710,70 @@ const Strategies: Component = () => {
                 <Show when={formError()}>
                   <div class="p-3 bg-rose-50/80 border border-rose-200/60 rounded-lg text-sm text-rose-600">
                     {formError()}
+                  </div>
+                </Show>
+
+                {/* AI 策略生成面板 */}
+                <Show when={showAiPanel()}>
+                  <div class="bg-indigo-50/50 border border-indigo-200 rounded-xl p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                      <h4 class="text-sm font-medium text-indigo-900">AI 策略生成</h4>
+                      <button
+                        type="button"
+                        class="text-gray-400 hover:text-gray-600 transition-colors"
+                        onClick={() => setShowAiPanel(false)}
+                      >
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    <textarea
+                      class="border border-gray-200 rounded-lg px-3.5 py-2.5 text-sm w-full resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                      style={{ 'min-height': '80px' }}
+                      value={aiPrompt()}
+                      onInput={(e) => {
+                        setAiPrompt((e.target as HTMLTextAreaElement).value)
+                        setAiMessage(null)
+                      }}
+                      placeholder="描述你的策略，例如：当RSI低于30且价格在200日均线之上时买入，RSI高于70时卖出"
+                    />
+
+                    <div class="flex items-center justify-between">
+                      <Show when={aiProviders().length > 1}>
+                        <div class="flex items-center gap-2">
+                          <span class="text-xs text-gray-500">Provider:</span>
+                          <select
+                            class="border border-gray-200 rounded-lg px-3 py-1.5 text-xs"
+                            value={aiProvider()}
+                            onChange={(e) => setAiProvider((e.target as HTMLSelectElement).value)}
+                          >
+                            <For each={aiProviders()}>
+                              {(p) => (
+                                <option value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                              )}
+                            </For>
+                          </select>
+                        </div>
+                      </Show>
+                      <div class="ml-auto">
+                        <button
+                          type="button"
+                          class="bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          disabled={aiGenerating()}
+                          onClick={handleAiGenerate}
+                        >
+                          {aiGenerating() ? '生成中...' : '生成策略'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <Show when={aiMessage()}>
+                      <p class={`text-sm ${aiMessage()!.type === 'success' ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {aiMessage()!.text}
+                      </p>
+                    </Show>
                   </div>
                 </Show>
 

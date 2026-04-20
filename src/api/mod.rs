@@ -8,6 +8,7 @@ pub mod middleware;
 pub mod credentials;
 pub mod dashboard;
 pub mod plugins;
+pub mod ai;
 
 use axum::{
     routing::{get, post, put, delete},
@@ -70,6 +71,8 @@ pub fn build_router(
         .route("/api/trades", get(dashboard::list_trades))
         .route("/api/pending-orders", get(dashboard::list_pending_orders))
         .route("/api/plugins", get(plugins::list_plugins))
+        .route("/api/ai/status", get(ai::ai_status))
+        .route("/api/ai/generate", post(ai::generate_strategy))
         .with_state(state)
         .nest_service("/", ServeDir::new(&frontend_dir)
             .fallback(ServeFile::new(format!("{}/index.html", frontend_dir))))

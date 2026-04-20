@@ -156,3 +156,30 @@ export async function fetchPlugins(): Promise<ApiResponse<Plugin[]>> {
 export async function validateScript(code: string): Promise<ApiResponse<{ valid: boolean; error?: string }>> {
   return api.post('/strategy/validate-script', { code })
 }
+
+// ── AI 策略生成 ──────────────────────────────────────────────
+export interface AiGeneratedParam {
+  name: string
+  label: string
+  default: number
+  min: number | null
+  max: number | null
+  step: number | null
+}
+
+export interface AiGenerateResult {
+  code: string
+  name: string
+  description: string
+  params: AiGeneratedParam[]
+  provider: string
+  model: string
+}
+
+export async function getAiStatus(): Promise<ApiResponse<{ configured: boolean; providers: string[] }>> {
+  return api.get('/ai/status')
+}
+
+export async function generateStrategy(prompt: string, provider?: string, model?: string): Promise<ApiResponse<AiGenerateResult>> {
+  return api.post('/ai/generate', { prompt, provider, model })
+}
