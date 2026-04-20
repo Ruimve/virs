@@ -8,7 +8,6 @@ interface Credential {
   exchange: string
   label?: string
   created_at: string
-  updated_at: string
 }
 
 interface SaveCredentialRequest {
@@ -77,9 +76,9 @@ const Credentials: Component = () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await api.get<Credential[]>('/credentials/list')
+      const res = await api.get<{ items: Credential[] }>('/credentials/list')
       if (res.success && res.data) {
-        setCredentials(res.data)
+        setCredentials(res.data.items || [])
       } else {
         setError(res.error || '获取凭证列表失败')
       }

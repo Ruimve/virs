@@ -79,6 +79,21 @@ impl StrategyEngine {
         self.exchange_instances.insert(name, exchange);
     }
 
+    /// Register an exchange instance for a specific user.
+    /// Uses a user-scoped key "{exchange}:{user_id}" so different users can
+    /// have different credentials for the same exchange.
+    pub fn register_exchange_for_user(
+        &self,
+        exchange: Box<dyn Exchange>,
+        user_id: Uuid,
+    ) -> String {
+        let raw_name = exchange.name().to_string();
+        let scoped_name = format!("{}:{}", raw_name, user_id);
+        info!("Registered exchange '{}' for user {}", raw_name, user_id);
+        self.exchange_instances.insert(scoped_name.clone(), exchange);
+        scoped_name
+    }
+
     /// Get a reference to an exchange instance by name.
     pub fn get_exchange(&self, name: &str) -> Option<dashmap::mapref::one::Ref<String, Box<dyn Exchange>>> {
         self.exchange_instances.get(name)
@@ -90,9 +105,12 @@ impl StrategyEngine {
     }
 
     /// Start a strategy execution.
-    pub async fn start_strategy(&self, strategy: Strategy) -> anyhow::Result<()> {
+    /// If `exchange_key` is provided, use that specific exchange instance
+    /// (e.g., a user-scoped one like "binance:{user_id}").
+    /// Otherwise, fall back to the strategy's `exchange` field.
+    pub async fn start_strategy(&self, strategy: Strategy, exchange_key: Option<String>) -> anyhow::Result<()> {
         let strategy_id = strategy.id;
-        let exchange_name = strategy.exchange.clone();
+        let exchange_name = exchange_key.unwrap_or_else(|| strategy.exchange.clone());
         let symbol = strategy.symbol.clone();
         let timeframe = strategy.timeframe.clone();
         let interval_secs = strategy.decide_interval_secs;

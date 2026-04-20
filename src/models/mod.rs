@@ -9,6 +9,7 @@ use sqlx::FromRow;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::Type)]
 #[sqlx(type_name = "text", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum MarketType {
     Spot,
     Futures,
@@ -129,6 +130,7 @@ pub enum StrategyStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::Type)]
 #[sqlx(type_name = "text", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum StrategyMode {
     Signal,
     Script,
@@ -136,6 +138,7 @@ pub enum StrategyMode {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::Type)]
 #[sqlx(type_name = "text", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum ExecutionMode {
     SignalOnly,
     Live,
@@ -159,7 +162,7 @@ pub struct Strategy {
     pub exchange_config: serde_json::Value, // encrypted
     pub notification_config: serde_json::Value,
     pub strategy_code: Option<String>,
-    pub decide_interval_secs: i64,
+    pub decide_interval_secs: i32,
     pub status: StrategyStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -176,12 +179,16 @@ pub struct CreateStrategy {
     pub timeframe: String,
     pub strategy_mode: StrategyMode,
     pub execution_mode: ExecutionMode,
+    #[serde(default)]
     pub indicator_config: serde_json::Value,
+    #[serde(default)]
     pub trading_config: serde_json::Value,
+    #[serde(default)]
     pub exchange_config: serde_json::Value,
+    #[serde(default)]
     pub notification_config: serde_json::Value,
     pub strategy_code: Option<String>,
-    pub decide_interval_secs: Option<i64>,
+    pub decide_interval_secs: Option<i32>,
 }
 
 // ============================================================

@@ -8,7 +8,6 @@ pub struct AppConfig {
     pub database: DatabaseConfig,
     pub redis: Option<RedisConfig>,
     pub admin: AdminConfig,
-    pub exchanges: ExchangeKeysConfig,
     pub ai: AiConfig,
     pub notification: NotificationConfig,
     pub strategy: StrategyConfig,
@@ -45,31 +44,6 @@ pub struct AdminConfig {
     pub password: String,
     /// UUID of the initial admin user, set at startup after creation/lookup.
     pub id: Option<uuid::Uuid>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExchangeKeysConfig {
-    pub binance: Option<ExchangeCredentials>,
-    pub okx: Option<ExchangeCredentialsWithPassphrase>,
-    pub bitget: Option<ExchangeCredentialsWithPassphrase>,
-    pub bybit: Option<ExchangeCredentials>,
-    pub coinbase: Option<ExchangeCredentials>,
-    pub kraken: Option<ExchangeCredentials>,
-    pub kucoin: Option<ExchangeCredentialsWithPassphrase>,
-    pub gate: Option<ExchangeCredentials>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExchangeCredentials {
-    pub api_key: String,
-    pub api_secret: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExchangeCredentialsWithPassphrase {
-    pub api_key: String,
-    pub api_secret: String,
-    pub passphrase: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,17 +133,6 @@ pub fn load_config() -> Result<AppConfig, anyhow::Error> {
         id: None, // Will be set in main.rs after DB lookup/creation
     };
 
-    let exchanges = ExchangeKeysConfig {
-        binance: read_exchange_creds("BINANCE"),
-        okx: read_exchange_creds_with_pass("OKX"),
-        bitget: read_exchange_creds_with_pass("BITGET"),
-        bybit: read_exchange_creds("BYBIT"),
-        coinbase: read_exchange_creds("COINBASE"),
-        kraken: read_exchange_creds("KRAKEN"),
-        kucoin: read_exchange_creds_with_pass("KUCOIN"),
-        gate: read_exchange_creds("GATE"),
-    };
-
     let ai = AiConfig {
         openrouter_api_key: std::env::var("OPENROUTER_API_KEY").ok(),
         openai_api_key: std::env::var("OPENAI_API_KEY").ok(),
@@ -236,30 +199,10 @@ pub fn load_config() -> Result<AppConfig, anyhow::Error> {
         database,
         redis,
         admin,
-        exchanges,
         ai,
         notification,
         strategy,
         cache,
         proxy,
-    })
-}
-
-fn read_exchange_creds(prefix: &str) -> Option<ExchangeCredentials> {
-    let api_key = std::env::var(format!("{}_API_KEY", prefix)).ok()?;
-    let api_secret = std::env::var(format!("{}_API_SECRET", prefix)).ok()?;
-    Some(ExchangeCredentials { api_key, api_secret })
-}
-
-fn read_exchange_creds_with_pass(
-    prefix: &str,
-) -> Option<ExchangeCredentialsWithPassphrase> {
-    let api_key = std::env::var(format!("{}_API_KEY", prefix)).ok()?;
-    let api_secret = std::env::var(format!("{}_API_SECRET", prefix)).ok()?;
-    let passphrase = std::env::var(format!("{}_PASSPHRASE", prefix)).ok()?;
-    Some(ExchangeCredentialsWithPassphrase {
-        api_key,
-        api_secret,
-        passphrase,
     })
 }

@@ -9,7 +9,9 @@ use uuid::Uuid;
 
 use crate::api::AppState;
 use crate::api::middleware::AuthUser;
+use crate::exchange::ExchangeFactory;
 use crate::models::*;
+use crate::utils::crypto;
 
 enum StrategyUpdateParam {
     Text(String),
@@ -293,9 +295,9 @@ pub async fn update_strategy(
         params.push(StrategyUpdateParam::Text(value.to_string()));
         bind_idx += 1;
     }
-    if let Some(value) = req.get("decide_interval_secs").and_then(|v| v.as_i64()) {
+    if let Some(value) = req.get("decide_interval_secs").and_then(|v| v.as_i64()).map(|v| v as i32) {
         set_clauses.push(format!("decide_interval_secs = ${}", bind_idx));
-        params.push(StrategyUpdateParam::I64(value));
+        params.push(StrategyUpdateParam::I64(value as i64));
         bind_idx += 1;
     }
 
@@ -450,9 +452,20 @@ pub async fn start_strategy(
         )
     })?;
 
+    // Try to load user's exchange credentials from database.
+    // If found, create a user-scoped exchange instance.
+    // Otherwise, fall back to the globally registered exchange from .env.
+    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let scoped_exchange_key = load_user_exchange(
+        &state,
+        &strategy.exchange,
+        user_id,
+    )
+    .await;
+
     state
         .strategy_engine
-        .start_strategy(strategy)
+        .start_strategy(strategy, scoped_exchange_key)
         .await
         .map_err(|e| {
             (
@@ -546,4 +559,62 @@ pub async fn validate_script(
             "Script validation failed"
         ))),
     }
+}
+
+/// Try to load a user's exchange credentials from the database and register
+/// a user-scoped exchange instance. Returns the scoped key (e.g. "binance:{user_id}")
+/// on success, or None if no credentials are found (falling back to .env config).
+async fn load_user_exchange(
+    state: &Arc<AppState>,
+    exchange_name: &str,
+    user_id: Uuid,
+) -> Option<String> {
+    // Check if we already have a user-scoped exchange registered
+    let scoped_key = format!("{}:{}", exchange_name, user_id);
+    if state.strategy_engine.get_exchange(&scoped_key).is_some() {
+        return Some(scoped_key);
+    }
+
+    // Query database for user's credentials
+    let row: Option<(String, String, Option<String>)> = sqlx::query_as(
+        r#"SELECT encrypted_api_key, encrypted_api_secret, encrypted_passphrase
+           FROM qd_exchange_credentials
+           WHERE user_id = $1 AND exchange = $2 LIMIT 1"#,
+    )
+    .bind(user_id)
+    .bind(exchange_name)
+    .fetch_optional(&state.db_pool)
+    .await
+    .ok()?;
+
+    let (enc_key, enc_secret, enc_passphrase) = row?;
+
+    // Decrypt credentials
+    let encryption_key = crypto::derive_key(&state.config.server.encryption_key);
+    let api_key = crypto::decrypt(&enc_key, &encryption_key).ok()?;
+    let api_secret = crypto::decrypt(&enc_secret, &encryption_key).ok()?;
+    let passphrase = enc_passphrase
+        .and_then(|p| crypto::decrypt(&p, &encryption_key).ok());
+
+    // Create and register the exchange instance
+    let exchange = ExchangeFactory::create(
+        exchange_name,
+        &api_key,
+        &api_secret,
+        passphrase.as_deref(),
+        state.config.proxy.as_deref(),
+    )
+    .ok()?;
+
+    let key = state
+        .strategy_engine
+        .register_exchange_for_user(exchange, user_id);
+
+    tracing::info!(
+        "Loaded credentials for '{}' from database for user {}",
+        exchange_name,
+        user_id
+    );
+
+    Some(key)
 }

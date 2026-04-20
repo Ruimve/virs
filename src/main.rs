@@ -123,32 +123,10 @@ async fn main() -> anyhow::Result<()> {
     };
     let strategy_engine = Arc::new(StrategyEngine::new(strategy_engine_config, order_tx, plugin_registry.clone()));
 
-    // Register configured exchanges
-    if let Some(ref creds) = config.exchanges.binance {
-        match exchange::ExchangeFactory::create("binance", &creds.api_key, &creds.api_secret, None, config.proxy.as_deref()) {
-            Ok(ex) => strategy_engine.register_exchange(ex),
-            Err(e) => tracing::warn!("Failed to create Binance exchange: {}", e),
-        }
-    }
-    if let Some(ref creds) = config.exchanges.okx {
-        match exchange::ExchangeFactory::create("okx", &creds.api_key, &creds.api_secret, Some(&creds.passphrase), config.proxy.as_deref()) {
-            Ok(ex) => strategy_engine.register_exchange(ex),
-            Err(e) => tracing::warn!("Failed to create OKX exchange: {}", e),
-        }
-    }
-    if let Some(ref creds) = config.exchanges.bybit {
-        match exchange::ExchangeFactory::create("bybit", &creds.api_key, &creds.api_secret, None, config.proxy.as_deref()) {
-            Ok(ex) => strategy_engine.register_exchange(ex),
-            Err(e) => tracing::warn!("Failed to create Bybit exchange: {}", e),
-        }
-    }
-
-    let registered = strategy_engine.registered_exchange_names();
-    if registered.is_empty() {
-        warn!("⚠️  No exchanges configured! Market data and trading will not work.");
-    } else {
-        info!("✅ Registered exchanges: {}", registered.join(", "));
-    }
+    // Exchange credentials are now loaded from the database (qd_exchange_credentials)
+    // on demand when a strategy is started or market data is requested.
+    // No exchange instances are registered at startup.
+    info!("ℹ️  Exchange credentials loaded on-demand from database (Credentials page)");
 
     // Spawn order worker — executes real trades via exchange
     let order_worker_engine = strategy_engine.clone();

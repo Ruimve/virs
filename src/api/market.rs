@@ -8,8 +8,90 @@ use std::sync::Arc;
 
 use crate::api::AppState;
 use crate::api::middleware::OptionalAuthUser;
-use crate::exchange::Exchange;
+use crate::exchange::ExchangeFactory;
 use crate::models::*;
+use crate::utils::crypto;
+
+/// Ensure an exchange instance is available for the given exchange name.
+/// Tries the engine cache first, then loads credentials from the database.
+/// Returns the exchange name key to use (may be user-scoped).
+async fn ensure_exchange(
+    state: &Arc<AppState>,
+    exchange_name: &str,
+) -> Result<String, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
+    // Check if already registered globally
+    if state.strategy_engine.get_exchange(exchange_name).is_some() {
+        return Ok(exchange_name.to_string());
+    }
+
+    // Try to load credentials from database (any user's credentials for public data)
+    let row: Option<(String, String, Option<String>)> = sqlx::query_as(
+        r#"SELECT encrypted_api_key, encrypted_api_secret, encrypted_passphrase
+           FROM qd_exchange_credentials
+           WHERE exchange = $1 LIMIT 1"#,
+    )
+    .bind(exchange_name)
+    .fetch_optional(&state.db_pool)
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<serde_json::Value>::err(format!(
+                "Database error: {}", e
+            ))),
+        )
+    })?;
+
+    match row {
+        Some((enc_key, enc_secret, enc_passphrase)) => {
+            let encryption_key = crypto::derive_key(&state.config.server.encryption_key);
+            let api_key = crypto::decrypt(&enc_key, &encryption_key).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<serde_json::Value>::err(format!(
+                        "Failed to decrypt API key: {}", e
+                    ))),
+                )
+            })?;
+            let api_secret = crypto::decrypt(&enc_secret, &encryption_key).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<serde_json::Value>::err(format!(
+                        "Failed to decrypt API secret: {}", e
+                    ))),
+                )
+            })?;
+            let passphrase = enc_passphrase
+                .and_then(|p| crypto::decrypt(&p, &encryption_key).ok());
+
+            let exchange = ExchangeFactory::create(
+                exchange_name,
+                &api_key,
+                &api_secret,
+                passphrase.as_deref(),
+                state.config.proxy.as_deref(),
+            )
+            .map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<serde_json::Value>::err(format!(
+                        "Failed to create exchange '{}': {}", exchange_name, e
+                    ))),
+                )
+            })?;
+
+            state.strategy_engine.register_exchange(exchange);
+            Ok(exchange_name.to_string())
+        }
+        None => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<serde_json::Value>::err(format!(
+                "Exchange '{}' has no credentials configured. Please add API keys in the Credentials page.",
+                exchange_name
+            ))),
+        )),
+    }
+}
 
 #[derive(Deserialize)]
 pub struct TickerQuery {
@@ -23,21 +105,8 @@ pub async fn get_ticker(
     Query(params): Query<TickerQuery>,
 ) -> Result<Json<ApiResponse<Ticker>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
     let exchange_name = params.exchange.as_deref().unwrap_or("binance");
-
-    // Find the exchange instance
-    let exchange = state.strategy_engine.get_exchange(exchange_name);
-    let exchange = match exchange {
-        Some(ex) => ex,
-        None => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<serde_json::Value>::err(format!(
-                    "Exchange '{}' is not configured. Please configure API keys in environment variables (e.g., {}_API_KEY, {}_API_SECRET).",
-                    exchange_name, exchange_name.to_uppercase(), exchange_name.to_uppercase()
-                ))),
-            ));
-        }
-    };
+    let exchange_key = ensure_exchange(&state, exchange_name).await?;
+    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
 
     match exchange.get_ticker(&params.symbol).await {
         Ok(ticker) => Ok(Json(ApiResponse::ok(ticker))),
@@ -68,19 +137,8 @@ pub async fn get_klines(
     let exchange_name = params.exchange.as_deref().unwrap_or("binance");
     let limit = params.limit.unwrap_or(200);
 
-    let exchange = state.strategy_engine.get_exchange(exchange_name);
-    let exchange = match exchange {
-        Some(ex) => ex,
-        None => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<serde_json::Value>::err(format!(
-                    "Exchange '{}' is not configured. Please configure API keys in environment variables.",
-                    exchange_name
-                ))),
-            ));
-        }
-    };
+    let exchange_key = ensure_exchange(&state, exchange_name).await?;
+    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
 
     match exchange.get_klines(&params.symbol, &params.interval, limit, params.end_time).await {
         Ok(klines) => {
@@ -121,19 +179,8 @@ pub async fn get_order_book(
     let exchange_name = params.exchange.as_deref().unwrap_or("binance");
     let depth = params.depth.unwrap_or(20);
 
-    let exchange = state.strategy_engine.get_exchange(exchange_name);
-    let exchange = match exchange {
-        Some(ex) => ex,
-        None => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<serde_json::Value>::err(format!(
-                    "Exchange '{}' is not configured. Please configure API keys in environment variables.",
-                    exchange_name
-                ))),
-            ));
-        }
-    };
+    let exchange_key = ensure_exchange(&state, exchange_name).await?;
+    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
 
     match exchange.get_order_book(&params.symbol, depth).await {
         Ok(order_book) => {
@@ -176,20 +223,10 @@ pub async fn get_balances(
         }
     };
 
-    // Try to get balances from the first available exchange
-    let exchange_names = state.strategy_engine.registered_exchange_names();
-    if exchange_names.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<serde_json::Value>::err(
-                "No exchange is configured. Please configure at least one exchange API key in environment variables.",
-            )),
-        ));
-    }
-
-    // Use the first configured exchange
-    let exchange_name = &exchange_names[0];
-    let exchange = state.strategy_engine.get_exchange(exchange_name).unwrap();
+    // Try to get balances from the first available exchange in the database
+    let exchange_name = "binance"; // default
+    let exchange_key = ensure_exchange(&state, exchange_name).await?;
+    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
 
     match exchange.get_balances().await {
         Ok(balances) => {
@@ -221,19 +258,8 @@ pub async fn get_symbols(
 ) -> Result<Json<ApiResponse<Vec<String>>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
     let exchange_name = params.exchange.as_deref().unwrap_or("binance");
 
-    let exchange = state.strategy_engine.get_exchange(exchange_name);
-    let exchange = match exchange {
-        Some(ex) => ex,
-        None => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<serde_json::Value>::err(format!(
-                    "Exchange '{}' is not configured. Please configure API keys in environment variables.",
-                    exchange_name
-                ))),
-            ));
-        }
-    };
+    let exchange_key = ensure_exchange(&state, exchange_name).await?;
+    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
 
     match exchange.get_symbols(MarketType::Spot).await {
         Ok(symbols) => {
