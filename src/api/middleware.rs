@@ -4,7 +4,6 @@ use axum::{
     extract::FromRequestParts,
     http::{request::Parts, StatusCode, header},
 };
-use async_trait::async_trait;
 
 use crate::models::{ApiResponse, UserRole};
 use crate::utils::auth::{Claims, decode_jwt};
@@ -26,7 +25,6 @@ impl AuthUser {
     }
 }
 
-#[async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for AuthUser {
     type Rejection = (StatusCode, axum::Json<ApiResponse<serde_json::Value>>);
 
@@ -88,7 +86,6 @@ impl<S: Send + Sync> FromRequestParts<S> for AuthUser {
 #[derive(Debug, Clone)]
 pub struct OptionalAuthUser(pub Option<AuthUser>);
 
-#[async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for OptionalAuthUser {
     type Rejection = (StatusCode, axum::Json<ApiResponse<serde_json::Value>>);
 
@@ -134,7 +131,6 @@ impl<S: Send + Sync> FromRequestParts<S> for OptionalAuthUser {
 #[derive(Debug, Clone)]
 pub struct RequireAdmin(pub AuthUser);
 
-#[async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for RequireAdmin {
     type Rejection = (StatusCode, axum::Json<ApiResponse<serde_json::Value>>);
 
@@ -158,7 +154,6 @@ impl<S: Send + Sync> FromRequestParts<S> for RequireAdmin {
 #[derive(Debug, Clone)]
 pub struct RequireManager(pub AuthUser);
 
-#[async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for RequireManager {
     type Rejection = (StatusCode, axum::Json<ApiResponse<serde_json::Value>>);
 

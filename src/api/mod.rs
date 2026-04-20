@@ -11,11 +11,12 @@ pub mod plugins;
 pub mod ai;
 
 use axum::{
+    http::{header, StatusCode, Uri},
+    response::{Html, IntoResponse, Response},
     routing::{get, post, put, delete},
     Router,
 };
 use std::sync::Arc;
-use tower_http::services::{ServeDir, ServeFile};
 
 use crate::config::AppConfig;
 use crate::engine::StrategyEngine;
@@ -74,8 +75,62 @@ pub fn build_router(
         .route("/api/ai/status", get(ai::ai_status))
         .route("/api/ai/generate", post(ai::generate_strategy))
         .with_state(state)
-        .nest_service("/", ServeDir::new(&frontend_dir)
-            .fallback(ServeFile::new(format!("{}/index.html", frontend_dir))))
+        .fallback(spa_fallback)
+}
+
+async fn spa_fallback(uri: Uri) -> Response {
+    let frontend_dir = std::env::var("FRONTEND_DIR")
+        .unwrap_or_else(|_| "./frontend/dist".to_string());
+
+    let path = uri.path().trim_start_matches('/');
+
+    if path.is_empty() || path == "index.html" {
+        return serve_index_html(&frontend_dir);
+    }
+
+    let candidate = std::path::Path::new(&frontend_dir).join(path);
+
+    if candidate.is_file() && candidate.starts_with(&frontend_dir) {
+        match std::fs::read(&candidate) {
+            Ok(content) => {
+                let mime = mime_guess_from_ext(candidate.extension().and_then(|e| e.to_str()).unwrap_or(""));
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header(header::CONTENT_TYPE, mime)
+                    .body(axum::body::Body::from(content))
+                    .unwrap()
+            }
+            Err(_) => (StatusCode::NOT_FOUND, "File not found").into_response(),
+        }
+    } else {
+        serve_index_html(&frontend_dir)
+    }
+}
+
+fn serve_index_html(frontend_dir: &str) -> Response {
+    let index_path = format!("{}/index.html", frontend_dir);
+    match std::fs::read_to_string(&index_path) {
+        Ok(html) => Html(html).into_response(),
+        Err(_) => (StatusCode::NOT_FOUND, "Frontend not built").into_response(),
+    }
+}
+
+fn mime_guess_from_ext(ext: &str) -> &'static str {
+    match ext {
+        "js" => "application/javascript",
+        "css" => "text/css",
+        "html" => "text/html; charset=utf-8",
+        "json" => "application/json",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "svg" => "image/svg+xml",
+        "ico" => "image/x-icon",
+        "woff" | "woff2" => "font/woff2",
+        "ttf" => "font/ttf",
+        "map" => "application/json",
+        _ => "application/octet-stream",
+    }
 }
 
 #[derive(Clone)]
