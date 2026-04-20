@@ -1,4 +1,4 @@
-use crate::engine::backtest::compute_sma;
+use crate::engine::indicators;
 use crate::engine::plugin::*;
 use crate::models::Kline;
 use std::collections::HashMap;
@@ -48,13 +48,13 @@ impl IndicatorPlugin for SmaCrossoverPlugin {
             .get("slow_period")
             .map(|v| *v as usize)
             .unwrap_or(20);
-        if idx < slow {
+        if idx < 1 || klines.len() < 2 || idx < slow - 1 {
             return 0;
         }
-        let fast_sma = compute_sma(klines, idx, fast);
-        let prev_fast_sma = compute_sma(klines, idx - 1, fast);
-        let slow_sma = compute_sma(klines, idx, slow);
-        let prev_slow_sma = compute_sma(klines, idx - 1, slow);
+        let fast_sma = indicators::sma_at(klines, idx, fast);
+        let prev_fast_sma = indicators::sma_at(klines, idx - 1, fast);
+        let slow_sma = indicators::sma_at(klines, idx, slow);
+        let prev_slow_sma = indicators::sma_at(klines, idx - 1, slow);
         if prev_fast_sma <= prev_slow_sma && fast_sma > slow_sma {
             1
         } else if prev_fast_sma >= prev_slow_sma && fast_sma < slow_sma {

@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::engine::indicators;
 use crate::models::*;
 
 /// High-performance backtesting engine.
@@ -67,11 +68,72 @@ impl BacktestEngine {
         // Track peak equity for drawdown
         let mut peak_equity = balance;
 
+        // Pending signal from previous bar (to avoid look-ahead bias)
+        // Signal is generated at bar i close, executed at bar i+1 open
+        let mut pending_signal: Option<i8> = None;
+
         for i in 0..klines.len() {
             let kline = &klines[i];
-            let price = kline.close;
+            
+            // Execute pending signal from previous bar at current bar's open price
+            // This eliminates look-ahead bias: signal generated at bar i close,
+            // executed at bar i+1 open
+            if let Some(signal) = pending_signal.take() {
+                let exec_price = kline.open; // Execute at open of new bar
+                
+                match signal {
+                    1 if position.is_none() => {
+                        let trade = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Long);
+                        trades.push(trade);
+                    }
+                    1 if position.is_some() && position.as_ref().unwrap().side == PositionSide::Short => {
+                        let trade = self.close_position(&mut position, exec_price, &mut balance);
+                        let pnl = trade.pnl;
+                        if pnl >= 0.0 {
+                            profit_trades += 1;
+                            total_profit += pnl;
+                            current_consecutive_wins += 1;
+                            current_consecutive_losses = 0;
+                            max_consecutive_wins = max_consecutive_wins.max(current_consecutive_wins);
+                        } else {
+                            loss_trades += 1;
+                            total_loss += pnl.abs();
+                            current_consecutive_losses += 1;
+                            current_consecutive_wins = 0;
+                            max_consecutive_losses = max_consecutive_losses.max(current_consecutive_losses);
+                        }
+                        trades.push(trade);
+                    }
+                    -1 if position.is_none() => {
+                        let trade = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Short);
+                        trades.push(trade);
+                    }
+                    -1 if position.is_some() && position.as_ref().unwrap().side == PositionSide::Long => {
+                        let trade = self.close_position(&mut position, exec_price, &mut balance);
+                        let pnl = trade.pnl;
+                        if pnl >= 0.0 {
+                            profit_trades += 1;
+                            total_profit += pnl;
+                            current_consecutive_wins += 1;
+                            current_consecutive_losses = 0;
+                            max_consecutive_wins = max_consecutive_wins.max(current_consecutive_wins);
+                        } else {
+                            loss_trades += 1;
+                            total_loss += pnl.abs();
+                            current_consecutive_losses += 1;
+                            current_consecutive_wins = 0;
+                            max_consecutive_losses = max_consecutive_losses.max(current_consecutive_losses);
+                        }
+                        trades.push(trade);
+                    }
+                    _ => {}
+                }
+            }
 
             // Check stop-loss / take-profit on existing position
+            // SL/TP can be triggered intrabar, so we check at close price
+            // (conservative: assumes worst case for exit)
+            let price = kline.close;
             if let Some(ref mut pos) = position {
                 let pnl_pct = if pos.side == PositionSide::Long {
                     (price - pos.entry_price) / pos.entry_price
@@ -105,56 +167,11 @@ impl BacktestEngine {
                 }
             }
 
-            // Generate signal
+            // Generate signal at bar close
+            // Signal will be executed at next bar's open (pending_signal)
             let signal = signal_fn(klines, i);
-
-            // Execute signal
-            match signal {
-                1 if position.is_none() => {
-                    let trade = self.open_position(&mut position, price, &mut balance, PositionSide::Long);
-                    trades.push(trade);
-                }
-                1 if position.is_some() && position.as_ref().unwrap().side == PositionSide::Short => {
-                    let trade = self.close_position(&mut position, price, &mut balance);
-                    let pnl = trade.pnl;
-                    if pnl >= 0.0 {
-                        profit_trades += 1;
-                        total_profit += pnl;
-                        current_consecutive_wins += 1;
-                        current_consecutive_losses = 0;
-                        max_consecutive_wins = max_consecutive_wins.max(current_consecutive_wins);
-                    } else {
-                        loss_trades += 1;
-                        total_loss += pnl.abs();
-                        current_consecutive_losses += 1;
-                        current_consecutive_wins = 0;
-                        max_consecutive_losses = max_consecutive_losses.max(current_consecutive_losses);
-                    }
-                    trades.push(trade);
-                }
-                -1 if position.is_none() => {
-                    let trade = self.open_position(&mut position, price, &mut balance, PositionSide::Short);
-                    trades.push(trade);
-                }
-                -1 if position.is_some() && position.as_ref().unwrap().side == PositionSide::Long => {
-                    let trade = self.close_position(&mut position, price, &mut balance);
-                    let pnl = trade.pnl;
-                    if pnl >= 0.0 {
-                        profit_trades += 1;
-                        total_profit += pnl;
-                        current_consecutive_wins += 1;
-                        current_consecutive_losses = 0;
-                        max_consecutive_wins = max_consecutive_wins.max(current_consecutive_wins);
-                    } else {
-                        loss_trades += 1;
-                        total_loss += pnl.abs();
-                        current_consecutive_losses += 1;
-                        current_consecutive_wins = 0;
-                        max_consecutive_losses = max_consecutive_losses.max(current_consecutive_losses);
-                    }
-                    trades.push(trade);
-                }
-                _ => {}
+            if signal != 0 {
+                pending_signal = Some(signal);
             }
 
             // Calculate equity
@@ -349,17 +366,38 @@ struct PositionState {
 // Built-in Technical Indicator Signal Generators
 // ============================================================
 
+/// Simple Moving Average Crossover signal generator (uses PrecomputedIndicators for O(1) lookup).
+pub fn sma_crossover_signal_cached(
+    cache: &indicators::PrecomputedIndicators,
+    idx: usize,
+    fast_period: usize,
+    slow_period: usize,
+) -> i8 {
+    if idx < 1 || idx < slow_period - 1 {
+        return 0;
+    }
+    let fast_sma = cache.sma_at(idx, fast_period);
+    let prev_fast_sma = cache.sma_at(idx - 1, fast_period);
+    let slow_sma = cache.sma_at(idx, slow_period);
+    let prev_slow_sma = cache.sma_at(idx - 1, slow_period);
+
+    if prev_fast_sma <= prev_slow_sma && fast_sma > slow_sma {
+        1
+    } else if prev_fast_sma >= prev_slow_sma && fast_sma < slow_sma {
+        -1
+    } else {
+        0
+    }
+}
+
 /// Simple Moving Average Crossover signal generator.
 /// Buy when fast SMA crosses above slow SMA, sell when it crosses below.
 pub fn sma_crossover_signal(klines: &[Kline], idx: usize, fast_period: usize, slow_period: usize) -> i8 {
-    if idx < slow_period {
-        return 0;
-    }
-
-    let fast_sma = compute_sma(klines, idx, fast_period);
-    let prev_fast_sma = compute_sma(klines, idx - 1, fast_period);
-    let slow_sma = compute_sma(klines, idx, slow_period);
-    let prev_slow_sma = compute_sma(klines, idx - 1, slow_period);
+    if idx < 1 || klines.len() < 2 || idx < slow_period - 1 { return 0; }
+    let fast_sma = indicators::sma_at(klines, idx, fast_period);
+    let prev_fast_sma = indicators::sma_at(klines, idx - 1, fast_period);
+    let slow_sma = indicators::sma_at(klines, idx, slow_period);
+    let prev_slow_sma = indicators::sma_at(klines, idx - 1, slow_period);
 
     if prev_fast_sma <= prev_slow_sma && fast_sma > slow_sma {
         1 // Buy signal
@@ -370,20 +408,65 @@ pub fn sma_crossover_signal(klines: &[Kline], idx: usize, fast_period: usize, sl
     }
 }
 
-/// RSI-based signal generator.
-/// Buy when RSI crosses below oversold, sell when RSI crosses above overbought.
-pub fn rsi_signal(klines: &[Kline], idx: usize, period: usize, oversold: f64, overbought: f64) -> i8 {
-    if idx < period + 1 {
+/// RSI-based signal generator (cached version).
+pub fn rsi_signal_cached(
+    cache: &indicators::PrecomputedIndicators,
+    idx: usize,
+    period: usize,
+    oversold: f64,
+    overbought: f64,
+) -> i8 {
+    if idx < 1 || idx < period {
         return 0;
     }
-
-    let rsi = compute_rsi(klines, idx, period);
-    let prev_rsi = compute_rsi(klines, idx - 1, period);
+    let rsi = cache.rsi_at(idx, period);
+    let prev_rsi = cache.rsi_at(idx - 1, period);
 
     if prev_rsi >= oversold && rsi < oversold {
         1 // Buy signal (RSI crossed below oversold)
     } else if prev_rsi <= overbought && rsi > overbought {
         -1 // Sell signal (RSI crossed above overbought)
+    } else {
+        0
+    }
+}
+
+/// RSI-based signal generator.
+/// Buy when RSI crosses below oversold, sell when RSI crosses above overbought.
+pub fn rsi_signal(klines: &[Kline], idx: usize, period: usize, oversold: f64, overbought: f64) -> i8 {
+    if idx < 1 || idx < period { return 0; }
+    let rsi = indicators::rsi_at(klines, idx, period);
+    let prev_rsi = indicators::rsi_at(klines, idx - 1, period);
+
+    if prev_rsi >= oversold && rsi < oversold {
+        1 // Buy signal (RSI crossed below oversold)
+    } else if prev_rsi <= overbought && rsi > overbought {
+        -1 // Sell signal (RSI crossed above overbought)
+    } else {
+        0
+    }
+}
+
+/// MACD-based signal generator (cached version).
+pub fn macd_signal_cached(
+    cache: &indicators::PrecomputedIndicators,
+    idx: usize,
+    fast_period: usize,
+    slow_period: usize,
+    signal_period: usize,
+) -> i8 {
+    if idx < 1 || idx < slow_period + signal_period - 2 {
+        return 0;
+    }
+    let macd = cache.macd_line_at(idx, fast_period, slow_period, signal_period);
+    let signal = cache.macd_signal_at(idx, fast_period, slow_period, signal_period);
+    let prev_macd = cache.macd_line_at(idx - 1, fast_period, slow_period, signal_period);
+    let prev_signal = cache.macd_signal_at(idx - 1, fast_period, slow_period, signal_period);
+
+    if prev_macd <= prev_signal && macd > signal {
+        1
+    } else if prev_macd >= prev_signal && macd < signal {
+        -1
     } else {
         0
     }
@@ -397,14 +480,11 @@ pub fn macd_signal(
     slow_period: usize,
     signal_period: usize,
 ) -> i8 {
-    if idx < slow_period + signal_period {
-        return 0;
-    }
-
-    let macd = compute_macd(klines, idx, fast_period, slow_period);
-    let signal = compute_macd_signal_line(klines, idx, fast_period, slow_period, signal_period);
-    let prev_macd = compute_macd(klines, idx - 1, fast_period, slow_period);
-    let prev_signal = compute_macd_signal_line(klines, idx - 1, fast_period, slow_period, signal_period);
+    if idx < 1 || idx < slow_period + signal_period - 2 { return 0; }
+    let macd = indicators::macd_at(klines, idx, fast_period, slow_period);
+    let signal = indicators::macd_signal_at(klines, idx, fast_period, slow_period, signal_period);
+    let prev_macd = indicators::macd_at(klines, idx - 1, fast_period, slow_period);
+    let prev_signal = indicators::macd_signal_at(klines, idx - 1, fast_period, slow_period, signal_period);
 
     if prev_macd <= prev_signal && macd > signal {
         1
@@ -415,13 +495,18 @@ pub fn macd_signal(
     }
 }
 
-/// Bollinger Bands signal generator.
-pub fn bollinger_bands_signal(klines: &[Kline], idx: usize, period: usize, std_dev_mult: f64) -> i8 {
-    if idx < period {
+/// Bollinger Bands signal generator (cached version).
+pub fn bollinger_bands_signal_cached(
+    cache: &indicators::PrecomputedIndicators,
+    klines: &[Kline],
+    idx: usize,
+    period: usize,
+    std_dev_mult: f64,
+) -> i8 {
+    if idx < period - 1 {
         return 0;
     }
-
-    let (upper, _middle, lower) = compute_bollinger_bands(klines, idx, period, std_dev_mult);
+    let (upper, _middle, lower) = cache.bbands_at(idx, period, std_dev_mult);
     let price = klines[idx].close;
 
     if price <= lower {
@@ -433,109 +518,19 @@ pub fn bollinger_bands_signal(klines: &[Kline], idx: usize, period: usize, std_d
     }
 }
 
-// ============================================================
-// Technical Indicator Calculations (optimized for performance)
-// ============================================================
+/// Bollinger Bands signal generator.
+pub fn bollinger_bands_signal(klines: &[Kline], idx: usize, period: usize, std_dev_mult: f64) -> i8 {
+    if idx < period - 1 { return 0; }
+    let (upper, _middle, lower) = indicators::bbands_at(klines, idx, period, std_dev_mult);
+    let price = klines[idx].close;
 
-#[inline]
-pub fn compute_sma(klines: &[Kline], idx: usize, period: usize) -> f64 {
-    if idx < period || period == 0 {
-        return 0.0;
+    if price <= lower {
+        1 // Price at lower band - buy
+    } else if price >= upper {
+        -1 // Price at upper band - sell
+    } else {
+        0
     }
-    let sum: f64 = klines[idx - period + 1..=idx]
-        .iter()
-        .map(|k| k.close)
-        .sum();
-    sum / period as f64
-}
-
-#[inline]
-pub fn compute_ema(klines: &[Kline], idx: usize, period: usize) -> f64 {
-    if idx < period || period == 0 {
-        return 0.0;
-    }
-    let multiplier = 2.0 / (period as f64 + 1.0);
-    let mut ema = compute_sma(klines, idx - period + 1, period);
-    for i in (idx - period + 2)..=idx {
-        ema = (klines[i].close - ema) * multiplier + ema;
-    }
-    ema
-}
-
-#[inline]
-pub fn compute_rsi(klines: &[Kline], idx: usize, period: usize) -> f64 {
-    if idx < period {
-        return 50.0;
-    }
-
-    let mut gains = 0.0;
-    let mut losses = 0.0;
-
-    for i in (idx - period + 1)..=idx {
-        let change = klines[i].close - klines[i - 1].close;
-        if change > 0.0 {
-            gains += change;
-        } else {
-            losses += change.abs();
-        }
-    }
-
-    let avg_gain = gains / period as f64;
-    let avg_loss = losses / period as f64;
-
-    if avg_loss == 0.0 {
-        return 100.0;
-    }
-
-    let rs = avg_gain / avg_loss;
-    100.0 - (100.0 / (1.0 + rs))
-}
-
-#[inline]
-pub fn compute_macd(klines: &[Kline], idx: usize, fast_period: usize, slow_period: usize) -> f64 {
-    compute_ema(klines, idx, fast_period) - compute_ema(klines, idx, slow_period)
-}
-
-#[inline]
-pub fn compute_macd_signal_line(
-    klines: &[Kline],
-    idx: usize,
-    fast_period: usize,
-    slow_period: usize,
-    signal_period: usize,
-) -> f64 {
-    if idx < slow_period + signal_period {
-        return 0.0;
-    }
-    // Compute EMA of MACD values
-    let multiplier = 2.0 / (signal_period as f64 + 1.0);
-    let start = idx - signal_period + 1;
-    let mut signal = (0..signal_period)
-        .map(|i| compute_macd(klines, start + i, fast_period, slow_period))
-        .sum::<f64>()
-        / signal_period as f64;
-    for i in (start + 1)..=idx {
-        let macd_val = compute_macd(klines, i, fast_period, slow_period);
-        signal = (macd_val - signal) * multiplier + signal;
-    }
-    signal
-}
-
-#[inline]
-pub fn compute_bollinger_bands(
-    klines: &[Kline],
-    idx: usize,
-    period: usize,
-    std_dev_mult: f64,
-) -> (f64, f64, f64) {
-    let middle = compute_sma(klines, idx, period);
-    let variance: f64 = klines[idx - period + 1..=idx]
-        .iter()
-        .map(|k| (k.close - middle).powi(2))
-        .sum::<f64>()
-        / period as f64;
-    let std_dev = variance.sqrt();
-    (middle + std_dev_mult * std_dev, middle, middle - std_dev_mult * std_dev)
 }
 
 #[cfg(test)]
@@ -596,7 +591,7 @@ mod tests {
     fn test_rsi_calculation() {
         let closes: Vec<f64> = (0..30).map(|i| 100.0 + (i as f64)).collect();
         let klines = make_klines(&closes);
-        let rsi = compute_rsi(&klines, 20, 14);
+        let rsi = indicators::rsi_at(&klines, 20, 14);
         // In a continuous uptrend, RSI should be high (> 50)
         assert!(rsi > 50.0);
     }
@@ -605,7 +600,7 @@ mod tests {
     fn test_bollinger_bands() {
         let closes: Vec<f64> = (0..30).map(|i| 100.0 + (i as f64).sin() * 5.0).collect();
         let klines = make_klines(&closes);
-        let (upper, middle, lower) = compute_bollinger_bands(&klines, 25, 20, 2.0);
+        let (upper, middle, lower) = indicators::bbands_at(&klines, 25, 20, 2.0);
         assert!(upper > middle);
         assert!(middle > lower);
     }

@@ -1,4 +1,4 @@
-use crate::engine::backtest::compute_bollinger_bands;
+use crate::engine::indicators;
 use crate::engine::plugin::*;
 use crate::models::Kline;
 use std::collections::HashMap;
@@ -43,11 +43,11 @@ impl IndicatorPlugin for BollingerBandsPlugin {
         let period = params.get("period").map(|v| *v as usize).unwrap_or(20);
         let std_dev_mult = params.get("std_dev").copied().unwrap_or(2.0);
 
-        if idx < period {
+        if idx < period - 1 {
             return 0;
         }
 
-        let (upper, _middle, lower) = compute_bollinger_bands(klines, idx, period, std_dev_mult);
+        let (upper, _middle, lower) = indicators::bbands_at(klines, idx, period, std_dev_mult);
         let price = klines[idx].close;
 
         if price <= lower {

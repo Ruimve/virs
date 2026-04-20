@@ -1,4 +1,4 @@
-use crate::engine::backtest::compute_rsi;
+use crate::engine::indicators;
 use crate::engine::plugin::*;
 use crate::models::Kline;
 use std::collections::HashMap;
@@ -53,12 +53,10 @@ impl IndicatorPlugin for RsiPlugin {
         let oversold = params.get("oversold").copied().unwrap_or(30.0);
         let overbought = params.get("overbought").copied().unwrap_or(70.0);
 
-        if idx < period + 1 {
-            return 0;
-        }
+        if idx < 1 || idx < period { return 0; }
 
-        let rsi = compute_rsi(klines, idx, period);
-        let prev_rsi = compute_rsi(klines, idx - 1, period);
+        let rsi = indicators::rsi_at(klines, idx, period);
+        let prev_rsi = indicators::rsi_at(klines, idx - 1, period);
 
         if prev_rsi >= oversold && rsi < oversold {
             1 // Buy signal (RSI crossed below oversold)

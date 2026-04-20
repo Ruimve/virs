@@ -1,4 +1,4 @@
-use crate::engine::backtest::{compute_macd, compute_macd_signal_line};
+use crate::engine::indicators;
 use crate::engine::plugin::*;
 use crate::models::Kline;
 use std::collections::HashMap;
@@ -62,20 +62,20 @@ impl IndicatorPlugin for MacdPlugin {
             .map(|v| *v as usize)
             .unwrap_or(9);
 
-        if idx < slow_period + signal_period {
+        if idx < 1 || idx < slow_period + signal_period - 2 {
             return 0;
         }
 
-        let macd = compute_macd(klines, idx, fast_period, slow_period);
-        let signal = compute_macd_signal_line(
+        let macd = indicators::macd_at(klines, idx, fast_period, slow_period);
+        let signal = indicators::macd_signal_at(
             klines,
             idx,
             fast_period,
             slow_period,
             signal_period,
         );
-        let prev_macd = compute_macd(klines, idx - 1, fast_period, slow_period);
-        let prev_signal = compute_macd_signal_line(
+        let prev_macd = indicators::macd_at(klines, idx - 1, fast_period, slow_period);
+        let prev_signal = indicators::macd_signal_at(
             klines,
             idx - 1,
             fast_period,

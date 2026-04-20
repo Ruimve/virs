@@ -1,4 +1,5 @@
 pub mod backtest;
+pub mod indicators;
 pub mod lua_executor;
 pub mod plugin;
 pub mod plugins;

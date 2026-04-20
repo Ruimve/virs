@@ -3,6 +3,7 @@ use mlua::{HookTriggers, Lua, Result as LuaResult, Table, Value, VmState};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use talib_rs::ma_type::MaType;
 
 pub struct LuaExecutorConfig {
     pub instruction_limit: u64,
@@ -82,73 +83,257 @@ impl LuaExecutor {
         let sma_fn = lua.create_function(|lua, (period,): (i64,)| {
             let klines: Table = lua.globals().get("klines")?;
             let current_idx: i64 = lua.globals().get("current_idx")?;
-            let period = period as usize;
-            if current_idx < period as i64 {
-                return Ok(0.0_f64);
-            }
-            let mut sum = 0.0;
-            for i in (current_idx - period as i64 + 1)..=current_idx {
+            let n = current_idx as usize;
+            if n < 1 { return Ok(0.0_f64); }
+            let mut close = Vec::with_capacity(n);
+            for i in 1..=n {
                 let k: Table = klines.get(i)?;
-                let close: f64 = k.get("close")?;
-                sum += close;
+                close.push(k.get::<f64>("close")?);
             }
-            Ok(sum / period as f64)
+            match talib_rs::overlap::sma(&close, period as usize) {
+                Ok(result) => Ok(result.last().copied().unwrap_or(0.0)),
+                Err(_) => Ok(0.0),
+            }
         })?;
         lua.globals().set("sma", sma_fn)?;
 
         let ema_fn = lua.create_function(|lua, (period,): (i64,)| {
             let klines: Table = lua.globals().get("klines")?;
             let current_idx: i64 = lua.globals().get("current_idx")?;
-            let period = period as usize;
-            if current_idx < 1 {
-                return Ok(0.0_f64);
-            }
-            let k: Table = klines.get(1)?;
-            let first_close: f64 = k.get("close")?;
-            let mut ema = first_close;
-            let multiplier = 2.0 / (period as f64 + 1.0);
-            for i in 2..=current_idx {
+            let n = current_idx as usize;
+            if n < 1 { return Ok(0.0_f64); }
+            let mut close = Vec::with_capacity(n);
+            for i in 1..=n {
                 let k: Table = klines.get(i)?;
-                let close: f64 = k.get("close")?;
-                ema = close * multiplier + ema * (1.0 - multiplier);
+                close.push(k.get::<f64>("close")?);
             }
-            Ok(ema)
+            match talib_rs::overlap::ema(&close, period as usize) {
+                Ok(result) => Ok(result.last().copied().unwrap_or(0.0)),
+                Err(_) => Ok(0.0),
+            }
         })?;
         lua.globals().set("ema", ema_fn)?;
 
         let rsi_fn = lua.create_function(|lua, (period,): (i64,)| {
             let klines: Table = lua.globals().get("klines")?;
             let current_idx: i64 = lua.globals().get("current_idx")?;
-            let period = period as usize;
-            if current_idx < (period as i64 + 1) {
-                return Ok(50.0_f64);
+            let n = current_idx as usize;
+            if n < 2 { return Ok(50.0_f64); }
+            let mut close = Vec::with_capacity(n);
+            for i in 1..=n {
+                let k: Table = klines.get(i)?;
+                close.push(k.get::<f64>("close")?);
             }
-            let mut gain_sum = 0.0;
-            let mut loss_sum = 0.0;
-            for i in (current_idx - period as i64)..current_idx {
-                let k_prev: Table = klines.get(i)?;
-                let k_curr: Table = klines.get(i + 1)?;
-                let prev_close: f64 = k_prev.get("close")?;
-                let curr_close: f64 = k_curr.get("close")?;
-                let change = curr_close - prev_close;
-                if change > 0.0 { gain_sum += change; } else { loss_sum += change.abs(); }
+            match talib_rs::momentum::rsi(&close, period as usize) {
+                Ok(result) => Ok(result.last().copied().unwrap_or(50.0)),
+                Err(_) => Ok(50.0),
             }
-            let mut avg_gain = gain_sum / period as f64;
-            let mut avg_loss = loss_sum / period as f64;
-            let k_prev: Table = klines.get(current_idx - 1)?;
-            let k_curr: Table = klines.get(current_idx)?;
-            let prev_close: f64 = k_prev.get("close")?;
-            let curr_close: f64 = k_curr.get("close")?;
-            let change = curr_close - prev_close;
-            let gain = if change > 0.0 { change } else { 0.0 };
-            let loss = if change < 0.0 { change.abs() } else { 0.0 };
-            avg_gain = (avg_gain * (period as f64 - 1.0) + gain) / period as f64;
-            avg_loss = (avg_loss * (period as f64 - 1.0) + loss) / period as f64;
-            if avg_loss == 0.0 { return Ok(100.0); }
-            let rs = avg_gain / avg_loss;
-            Ok(100.0 - 100.0 / (1.0 + rs))
         })?;
         lua.globals().set("rsi", rsi_fn)?;
+
+        let atr_fn = lua.create_function(|lua, (period,): (i64,)| {
+            let klines: Table = lua.globals().get("klines")?;
+            let current_idx: i64 = lua.globals().get("current_idx")?;
+            let period = period as usize;
+            if current_idx < 2 { return Ok(0.0_f64); }
+
+            let n = current_idx as usize;
+            let mut high = Vec::with_capacity(n);
+            let mut low = Vec::with_capacity(n);
+            let mut close = Vec::with_capacity(n);
+            for i in 1..=n {
+                let k: Table = klines.get(i)?;
+                high.push(k.get::<f64>("high")?);
+                low.push(k.get::<f64>("low")?);
+                close.push(k.get::<f64>("close")?);
+            }
+
+            match talib_rs::volatility::atr(&high, &low, &close, period) {
+                Ok(result) => Ok(result.last().copied().unwrap_or(0.0)),
+                Err(_) => Ok(0.0),
+            }
+        })?;
+        lua.globals().set("atr", atr_fn)?;
+
+        let bbands_fn = lua.create_function(|lua, (period, std_dev): (i64, f64)| {
+            let klines: Table = lua.globals().get("klines")?;
+            let current_idx: i64 = lua.globals().get("current_idx")?;
+            let period = period as usize;
+            let n = current_idx as usize;
+            if n < period { return Ok((0.0_f64, 0.0_f64, 0.0_f64)); }
+
+            let mut close = Vec::with_capacity(n);
+            for i in 1..=n {
+                let k: Table = klines.get(i)?;
+                close.push(k.get::<f64>("close")?);
+            }
+
+            match talib_rs::overlap::bbands(&close, period, std_dev, std_dev, MaType::Sma) {
+                Ok((upper, mid, lower)) => Ok((
+                    upper.last().copied().unwrap_or(0.0),
+                    mid.last().copied().unwrap_or(0.0),
+                    lower.last().copied().unwrap_or(0.0),
+                )),
+                Err(_) => Ok((0.0, 0.0, 0.0)),
+            }
+        })?;
+        lua.globals().set("bbands", bbands_fn)?;
+
+        let macd_fn = lua.create_function(|lua, (fast, slow, signal): (i64, i64, i64)| {
+            let klines: Table = lua.globals().get("klines")?;
+            let current_idx: i64 = lua.globals().get("current_idx")?;
+            let n = current_idx as usize;
+            if n < 2 { return Ok((0.0_f64, 0.0_f64, 0.0_f64)); }
+
+            let mut close = Vec::with_capacity(n);
+            for i in 1..=n {
+                let k: Table = klines.get(i)?;
+                close.push(k.get::<f64>("close")?);
+            }
+
+            match talib_rs::momentum::macd(&close, fast as usize, slow as usize, signal as usize) {
+                Ok((macd, sig, hist)) => Ok((
+                    macd.last().copied().unwrap_or(0.0),
+                    sig.last().copied().unwrap_or(0.0),
+                    hist.last().copied().unwrap_or(0.0),
+                )),
+                Err(_) => Ok((0.0, 0.0, 0.0)),
+            }
+        })?;
+        lua.globals().set("macd", macd_fn)?;
+
+        let stoch_fn = lua.create_function(|lua, (k_period, d_period): (i64, i64)| {
+            let klines: Table = lua.globals().get("klines")?;
+            let current_idx: i64 = lua.globals().get("current_idx")?;
+            let n = current_idx as usize;
+            if n < 2 { return Ok((50.0_f64, 50.0_f64)); }
+
+            let mut high = Vec::with_capacity(n);
+            let mut low = Vec::with_capacity(n);
+            let mut close = Vec::with_capacity(n);
+            for i in 1..=n {
+                let k: Table = klines.get(i)?;
+                high.push(k.get::<f64>("high")?);
+                low.push(k.get::<f64>("low")?);
+                close.push(k.get::<f64>("close")?);
+            }
+
+            match talib_rs::momentum::stoch(&high, &low, &close, k_period as usize, d_period as usize, MaType::Sma, d_period as usize, MaType::Sma) {
+                Ok((slowk, slowd)) => Ok((
+                    slowk.last().copied().unwrap_or(50.0),
+                    slowd.last().copied().unwrap_or(50.0),
+                )),
+                Err(_) => Ok((50.0, 50.0)),
+            }
+        })?;
+        lua.globals().set("stoch", stoch_fn)?;
+
+        let highest_fn = lua.create_function(|lua, (period,): (i64,)| {
+            let klines: Table = lua.globals().get("klines")?;
+            let current_idx: i64 = lua.globals().get("current_idx")?;
+            let period = period as usize;
+            let n = current_idx as usize;
+            if n < period { return Ok(0.0_f64); }
+
+            let mut close = Vec::with_capacity(n);
+            for i in 1..=n {
+                let k: Table = klines.get(i)?;
+                close.push(k.get::<f64>("close")?);
+            }
+
+            match talib_rs::math_operator::max(&close, period) {
+                Ok(result) => Ok(result.last().copied().unwrap_or(0.0)),
+                Err(_) => Ok(0.0),
+            }
+        })?;
+        lua.globals().set("highest", highest_fn)?;
+
+        let lowest_fn = lua.create_function(|lua, (period,): (i64,)| {
+            let klines: Table = lua.globals().get("klines")?;
+            let current_idx: i64 = lua.globals().get("current_idx")?;
+            let period = period as usize;
+            let n = current_idx as usize;
+            if n < period { return Ok(0.0_f64); }
+
+            let mut close = Vec::with_capacity(n);
+            for i in 1..=n {
+                let k: Table = klines.get(i)?;
+                close.push(k.get::<f64>("close")?);
+            }
+
+            match talib_rs::math_operator::min(&close, period) {
+                Ok(result) => Ok(result.last().copied().unwrap_or(0.0)),
+                Err(_) => Ok(0.0),
+            }
+        })?;
+        lua.globals().set("lowest", lowest_fn)?;
+
+        let adx_fn = lua.create_function(|lua, (period,): (i64,)| {
+            let klines: Table = lua.globals().get("klines")?;
+            let current_idx: i64 = lua.globals().get("current_idx")?;
+            let n = current_idx as usize;
+            if n < 2 { return Ok(0.0_f64); }
+
+            let mut high = Vec::with_capacity(n);
+            let mut low = Vec::with_capacity(n);
+            let mut close = Vec::with_capacity(n);
+            for i in 1..=n {
+                let k: Table = klines.get(i)?;
+                high.push(k.get::<f64>("high")?);
+                low.push(k.get::<f64>("low")?);
+                close.push(k.get::<f64>("close")?);
+            }
+
+            match talib_rs::momentum::adx(&high, &low, &close, period as usize) {
+                Ok(result) => Ok(result.last().copied().unwrap_or(0.0)),
+                Err(_) => Ok(0.0),
+            }
+        })?;
+        lua.globals().set("adx", adx_fn)?;
+
+        let cci_fn = lua.create_function(|lua, (period,): (i64,)| {
+            let klines: Table = lua.globals().get("klines")?;
+            let current_idx: i64 = lua.globals().get("current_idx")?;
+            let n = current_idx as usize;
+            if n < 2 { return Ok(0.0_f64); }
+
+            let mut high = Vec::with_capacity(n);
+            let mut low = Vec::with_capacity(n);
+            let mut close = Vec::with_capacity(n);
+            for i in 1..=n {
+                let k: Table = klines.get(i)?;
+                high.push(k.get::<f64>("high")?);
+                low.push(k.get::<f64>("low")?);
+                close.push(k.get::<f64>("close")?);
+            }
+
+            match talib_rs::momentum::cci(&high, &low, &close, period as usize) {
+                Ok(result) => Ok(result.last().copied().unwrap_or(0.0)),
+                Err(_) => Ok(0.0),
+            }
+        })?;
+        lua.globals().set("cci", cci_fn)?;
+
+        let obv_fn = lua.create_function(|lua, (): ()| {
+            let klines: Table = lua.globals().get("klines")?;
+            let current_idx: i64 = lua.globals().get("current_idx")?;
+            let n = current_idx as usize;
+            if n < 2 { return Ok(0.0_f64); }
+
+            let mut close = Vec::with_capacity(n);
+            let mut vol = Vec::with_capacity(n);
+            for i in 1..=n {
+                let k: Table = klines.get(i)?;
+                close.push(k.get::<f64>("close")?);
+                vol.push(k.get::<f64>("volume")?);
+            }
+
+            match talib_rs::volume::obv(&close, &vol) {
+                Ok(result) => Ok(result.last().copied().unwrap_or(0.0)),
+                Err(_) => Ok(0.0),
+            }
+        })?;
+        lua.globals().set("obv", obv_fn)?;
 
         Ok(lua)
     }
