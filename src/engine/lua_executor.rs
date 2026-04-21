@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use talib_rs::ma_type::MaType;
+use talib_rs::TaResult;
 
 // ---------------------------------------------------------------------------
 // Lua state management types
@@ -396,6 +397,100 @@ impl LuaExecutor {
             }
         })?;
         lua.globals().set("obv", obv_fn)?;
+
+        // Candlestick pattern recognition
+        // Usage: pattern("engulfing") -> number (-100, 0, or 100)
+        let pattern_fn = lua.create_function(|lua, (name,): (String,)| {
+            let klines: Table = lua.globals().get("klines")?;
+            let current_idx: i64 = lua.globals().get("current_idx")?;
+            let n = current_idx as usize;
+            if n < 2 { return Ok(0_i32); }
+
+            let mut open = Vec::with_capacity(n);
+            let mut high = Vec::with_capacity(n);
+            let mut low = Vec::with_capacity(n);
+            let mut close = Vec::with_capacity(n);
+            for i in 1..=n {
+                let k: Table = klines.get(i)?;
+                open.push(k.get::<f64>("open")?);
+                high.push(k.get::<f64>("high")?);
+                low.push(k.get::<f64>("low")?);
+                close.push(k.get::<f64>("close")?);
+            }
+
+            let result: TaResult<Vec<i32>> = match name.to_lowercase().as_str() {
+                "2crows" | "two_crows" => talib_rs::pattern::cdl_2crows(&open, &high, &low, &close),
+                "3blackcrows" | "three_black_crows" => talib_rs::pattern::cdl_3blackcrows(&open, &high, &low, &close),
+                "3inside" | "three_inside" => talib_rs::pattern::cdl_3inside(&open, &high, &low, &close),
+                "3linestrike" | "three_line_strike" => talib_rs::pattern::cdl_3linestrike(&open, &high, &low, &close),
+                "3outside" | "three_outside" => talib_rs::pattern::cdl_3outside(&open, &high, &low, &close),
+                "3starsinsouth" | "three_stars_in_south" => talib_rs::pattern::cdl_3starsinsouth(&open, &high, &low, &close),
+                "3whitesoldiers" | "three_white_soldiers" => talib_rs::pattern::cdl_3whitesoldiers(&open, &high, &low, &close),
+                "abandonedbaby" => talib_rs::pattern::cdl_abandonedbaby(&open, &high, &low, &close),
+                "advanceblock" | "advance_block" => talib_rs::pattern::cdl_advanceblock(&open, &high, &low, &close),
+                "belthold" => talib_rs::pattern::cdl_belthold(&open, &high, &low, &close),
+                "breakaway" => talib_rs::pattern::cdl_breakaway(&open, &high, &low, &close),
+                "closingmarubozu" => talib_rs::pattern::cdl_closingmarubozu(&open, &high, &low, &close),
+                "concealbabyswall" => talib_rs::pattern::cdl_concealbabyswall(&open, &high, &low, &close),
+                "counterattack" => talib_rs::pattern::cdl_counterattack(&open, &high, &low, &close),
+                "darkcloudcover" | "dark_cloud_cover" => talib_rs::pattern::cdl_darkcloudcover(&open, &high, &low, &close),
+                "doji" => talib_rs::pattern::cdl_doji(&open, &high, &low, &close),
+                "dojistar" | "doji_star" => talib_rs::pattern::cdl_dojistar(&open, &high, &low, &close),
+                "dragonflydoji" | "dragonfly_doji" => talib_rs::pattern::cdl_dragonflydoji(&open, &high, &low, &close),
+                "engulfing" => talib_rs::pattern::cdl_engulfing(&open, &high, &low, &close),
+                "eveningdojistar" | "evening_doji_star" => talib_rs::pattern::cdl_eveningdojistar(&open, &high, &low, &close),
+                "eveningstar" | "evening_star" => talib_rs::pattern::cdl_eveningstar(&open, &high, &low, &close),
+                "gapsidesidewhite" => talib_rs::pattern::cdl_gapsidesidewhite(&open, &high, &low, &close),
+                "gravestonedoji" | "gravestone_doji" => talib_rs::pattern::cdl_gravestonedoji(&open, &high, &low, &close),
+                "hammer" => talib_rs::pattern::cdl_hammer(&open, &high, &low, &close),
+                "hangingman" | "hanging_man" => talib_rs::pattern::cdl_hangingman(&open, &high, &low, &close),
+                "harami" => talib_rs::pattern::cdl_harami(&open, &high, &low, &close),
+                "haramicross" | "harami_cross" => talib_rs::pattern::cdl_haramicross(&open, &high, &low, &close),
+                "highwave" | "high_wave" => talib_rs::pattern::cdl_highwave(&open, &high, &low, &close),
+                "hikkake" => talib_rs::pattern::cdl_hikkake(&open, &high, &low, &close),
+                "hikkakemod" | "hikkake_mod" => talib_rs::pattern::cdl_hikkakemod(&open, &high, &low, &close),
+                "homingpigeon" | "homing_pigeon" => talib_rs::pattern::cdl_homingpigeon(&open, &high, &low, &close),
+                "identical3crows" | "identical_three_crows" => talib_rs::pattern::cdl_identical3crows(&open, &high, &low, &close),
+                "inneck" => talib_rs::pattern::cdl_inneck(&open, &high, &low, &close),
+                "invertedhammer" | "inverted_hammer" => talib_rs::pattern::cdl_invertedhammer(&open, &high, &low, &close),
+                "kicking" => talib_rs::pattern::cdl_kicking(&open, &high, &low, &close),
+                "kickingbylength" => talib_rs::pattern::cdl_kickingbylength(&open, &high, &low, &close),
+                "ladderbottom" | "ladder_bottom" => talib_rs::pattern::cdl_ladderbottom(&open, &high, &low, &close),
+                "longleggeddoji" | "long_legged_doji" => talib_rs::pattern::cdl_longleggeddoji(&open, &high, &low, &close),
+                "longline" | "long_line" => talib_rs::pattern::cdl_longline(&open, &high, &low, &close),
+                "marubozu" => talib_rs::pattern::cdl_marubozu(&open, &high, &low, &close),
+                "matchinglow" | "matching_low" => talib_rs::pattern::cdl_matchinglow(&open, &high, &low, &close),
+                "mathold" => talib_rs::pattern::cdl_mathold(&open, &high, &low, &close),
+                "morningdojistar" | "morning_doji_star" => talib_rs::pattern::cdl_morningdojistar(&open, &high, &low, &close),
+                "morningstar" | "morning_star" => talib_rs::pattern::cdl_morningstar(&open, &high, &low, &close),
+                "onneck" => talib_rs::pattern::cdl_onneck(&open, &high, &low, &close),
+                "piercing" => talib_rs::pattern::cdl_piercing(&open, &high, &low, &close),
+                "rickshawman" | "rickshaw_man" => talib_rs::pattern::cdl_rickshawman(&open, &high, &low, &close),
+                "risefall3methods" | "rise_fall_3_methods" => talib_rs::pattern::cdl_risefall3methods(&open, &high, &low, &close),
+                "separatinglines" | "separating_lines" => talib_rs::pattern::cdl_separatinglines(&open, &high, &low, &close),
+                "shootingstar" | "shooting_star" => talib_rs::pattern::cdl_shootingstar(&open, &high, &low, &close),
+                "shortline" | "short_line" => talib_rs::pattern::cdl_shortline(&open, &high, &low, &close),
+                "spinningtop" | "spinning_top" => talib_rs::pattern::cdl_spinningtop(&open, &high, &low, &close),
+                "stalledpattern" | "stalled_pattern" => talib_rs::pattern::cdl_stalledpattern(&open, &high, &low, &close),
+                "sticksandwich" | "stick_sandwich" => talib_rs::pattern::cdl_sticksandwich(&open, &high, &low, &close),
+                "takuri" => talib_rs::pattern::cdl_takuri(&open, &high, &low, &close),
+                "tasukigap" => talib_rs::pattern::cdl_tasukigap(&open, &high, &low, &close),
+                "thrusting" => talib_rs::pattern::cdl_thrusting(&open, &high, &low, &close),
+                "tristar" | "tri_star" => talib_rs::pattern::cdl_tristar(&open, &high, &low, &close),
+                "unique3river" | "unique_3_river" => talib_rs::pattern::cdl_unique3river(&open, &high, &low, &close),
+                "upsidegap2crows" | "upside_gap_2_crows" => talib_rs::pattern::cdl_upsidegap2crows(&open, &high, &low, &close),
+                "xsidegap3methods" | "xside_gap_3_methods" => talib_rs::pattern::cdl_xsidegap3methods(&open, &high, &low, &close),
+                _ => {
+                    return Ok(0_i32); // Unknown pattern
+                }
+            };
+
+            match result {
+                Ok(values) => Ok(values.last().copied().unwrap_or(0)),
+                Err(_) => Ok(0),
+            }
+        })?;
+        lua.globals().set("pattern", pattern_fn)?;
 
         // ---- Explicit order functions ----
 

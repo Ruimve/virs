@@ -2,6 +2,7 @@ import { type Component, createSignal, createMemo, Show, For, onMount } from 'so
 import { api, fetchPlugins, validateScript, type PaginatedResponse, type Plugin } from '../lib/api'
 import KlineChart from '../components/KlineChart'
 import EquityChart from '../components/EquityChart'
+import { type OverlayLine, computeSMA, computeEMA } from '../utils/indicators'
 
 // ---- 类型定义 ----
 
@@ -381,6 +382,35 @@ const Backtest: Component = () => {
       })
       return markers
     })
+  })
+
+  // 计算回测 K 线的指标叠加
+  const backtestOverlays = createMemo(() => {
+    const data = backtestKlineData()
+    if (!data || data.length < 2) return []
+
+    const closes = data.map(k => k.close)
+    const overlays: OverlayLine[] = []
+
+    // SMA 20
+    const sma20 = computeSMA(closes, 20)
+    overlays.push({
+      name: 'SMA 20',
+      data: sma20.map((v, i) => ({ time: data[i].time, value: v })).filter(d => d.value !== null) as Array<{ time: number; value: number }>,
+      color: '#f59e0b',
+      lineWidth: 1,
+    })
+
+    // EMA 12
+    const ema12 = computeEMA(closes, 12)
+    overlays.push({
+      name: 'EMA 12',
+      data: ema12.map((v, i) => ({ time: data[i].time, value: v })).filter(d => d.value !== null) as Array<{ time: number; value: number }>,
+      color: '#6366f1',
+      lineWidth: 1,
+    })
+
+    return overlays
   })
 
   return (
@@ -886,6 +916,7 @@ const Backtest: Component = () => {
                 data={backtestKlineData()}
                 height={300}
                 markers={backtestMarkers()}
+                overlays={backtestOverlays()}
               />
             </div>
           </Show>

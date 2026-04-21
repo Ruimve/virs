@@ -1,6 +1,7 @@
-import { type Component, createSignal, createEffect, Show, For } from 'solid-js'
+import { type Component, createSignal, createEffect, createMemo, Show, For } from 'solid-js'
 import { api } from '../lib/api'
 import KlineChart from '../components/KlineChart'
+import { type OverlayLine, computeSMA, computeEMA, computeBBands } from '../utils/indicators'
 
 // ── 类型定义 ──────────────────────────────────────────────
 interface TickerData {
@@ -93,6 +94,15 @@ const Market: Component = () => {
   const [balances, setBalances] = createSignal<BalanceItem[]>([])
   const [_balancesLoading, setBalancesLoading] = createSignal(false)
   const [balancesError, setBalancesError] = createSignal(false)
+
+  // ── 指标叠加状态 ──
+  const [selectedIndicators, setSelectedIndicators] = createSignal<string[]>(['sma20'])
+
+  const toggleIndicator = (name: string) => {
+    setSelectedIndicators(prev =>
+      prev.includes(name) ? prev.filter(i => i !== name) : [...prev, name]
+    )
+  }
 
   // ── 查询行情 ──
   async function fetchTicker() {
@@ -228,6 +238,56 @@ const Market: Component = () => {
       return { entry: e, cum }
     })
   }
+
+  // ── 计算指标叠加 ──
+  const marketOverlays = createMemo(() => {
+    const data = klines()
+    if (!data || data.length < 2) return []
+
+    const closes = data.map(k => k.close)
+    const overlays: OverlayLine[] = []
+
+    for (const ind of selectedIndicators()) {
+      if (ind === 'sma20') {
+        const sma = computeSMA(closes, 20)
+        overlays.push({
+          name: 'SMA 20',
+          data: sma.map((v, i) => ({ time: Math.floor(data[i].open_time / 1000), value: v })).filter(d => d.value !== null) as Array<{ time: number; value: number }>,
+          color: '#f59e0b',
+        })
+      } else if (ind === 'ema12') {
+        const ema = computeEMA(closes, 12)
+        overlays.push({
+          name: 'EMA 12',
+          data: ema.map((v, i) => ({ time: Math.floor(data[i].open_time / 1000), value: v })).filter(d => d.value !== null) as Array<{ time: number; value: number }>,
+          color: '#6366f1',
+        })
+      } else if (ind === 'bbands') {
+        const period = 20
+        const bbands = computeBBands(closes, period, 2)
+        overlays.push({
+          name: 'BB Upper',
+          data: bbands.upper.map((v, i) => ({ time: Math.floor(data[i].open_time / 1000), value: v })).filter(d => d.value !== null) as Array<{ time: number; value: number }>,
+          color: 'rgba(239, 68, 68, 0.5)',
+          lineWidth: 1,
+        })
+        overlays.push({
+          name: 'BB Middle',
+          data: bbands.middle.map((v, i) => ({ time: Math.floor(data[i].open_time / 1000), value: v })).filter(d => d.value !== null) as Array<{ time: number; value: number }>,
+          color: 'rgba(156, 163, 175, 0.5)',
+          lineWidth: 1,
+        })
+        overlays.push({
+          name: 'BB Lower',
+          data: bbands.lower.map((v, i) => ({ time: Math.floor(data[i].open_time / 1000), value: v })).filter(d => d.value !== null) as Array<{ time: number; value: number }>,
+          color: 'rgba(16, 185, 129, 0.5)',
+          lineWidth: 1,
+        })
+      }
+    }
+
+    return overlays
+  })
 
   // ── 渲染 ──
   return (
@@ -447,6 +507,24 @@ const Market: Component = () => {
                         </div>
                       }
                     >
+                      {/* 指标叠加选择器 */}
+                      <div class="flex items-center gap-2 mb-2">
+                        <span class="text-xs text-gray-400">叠加指标:</span>
+                        <For each={['sma20', 'ema12', 'bbands']}>
+                          {(indicator) => (
+                            <button
+                              class={`px-2 py-0.5 rounded text-xs transition-colors ${
+                                selectedIndicators().includes(indicator)
+                                  ? 'bg-indigo-100 text-indigo-700'
+                                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                              }`}
+                              onClick={() => toggleIndicator(indicator)}
+                            >
+                              {indicator === 'sma20' ? 'SMA 20' : indicator === 'ema12' ? 'EMA 12' : 'BBands'}
+                            </button>
+                          )}
+                        </For>
+                      </div>
                       <KlineChart
                         data={klines().map(k => ({
                           time: Math.floor(k.open_time / 1000),
@@ -457,6 +535,7 @@ const Market: Component = () => {
                           volume: k.volume,
                         }))}
                         height={450}
+                        overlays={marketOverlays()}
                       />
                     </Show>
                   }

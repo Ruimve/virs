@@ -7,6 +7,9 @@ import {
   type Time,
   ColorType,
 } from 'lightweight-charts'
+import type { OverlayLine } from '../utils/indicators'
+
+export type { OverlayLine }
 
 interface KlineChartProps {
   data: Array<{
@@ -25,6 +28,7 @@ interface KlineChartProps {
     shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown'
     text?: string
   }>
+  overlays?: OverlayLine[]
 }
 
 const KlineChart: Component<KlineChartProps> = (props) => {
@@ -107,6 +111,26 @@ const KlineChart: Component<KlineChartProps> = (props) => {
           text: m.text,
         }))
       )
+    }
+
+    // Render overlay lines
+    if (props.overlays && props.overlays.length > 0) {
+      for (const overlay of props.overlays) {
+        const lineSeries = chart.addLineSeries({
+          color: overlay.color,
+          lineWidth: Math.min(Math.max(overlay.lineWidth || 1, 1), 4) as 1 | 2 | 3 | 4,
+          priceScaleId: overlay.priceScaleId || 'right',
+          lastValueVisible: false,
+          priceLineVisible: false,
+        })
+
+        lineSeries.setData(
+          overlay.data.map(d => ({
+            time: d.time as Time,
+            value: d.value,
+          }))
+        )
+      }
     }
 
     chart.timeScale().fitContent()
