@@ -26,6 +26,10 @@ pub struct PositionManager {
     config: PositionConfig,
     /// Cached quote currency balance (updated on each determine_amount call)
     cached_quote_balance: f64,
+    /// Highest price since entry (for trailing stop on long)
+    peak_price: f64,
+    /// Lowest price since entry (for trailing stop on short)
+    trough_price: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +44,12 @@ struct PositionConfig {
     stop_loss_pct: Option<f64>,
     /// Take profit percentage (e.g., 0.05 = 5%)
     take_profit_pct: Option<f64>,
+    /// Trailing stop percentage (e.g., 0.015 = 1.5%)
+    trailing_stop_pct: Option<f64>,
+    /// Trailing stop activation percentage (e.g., 0.03 = 3% profit to activate)
+    trailing_activation_pct: Option<f64>,
+    /// Trade direction: "long", "short", or "both"
+    trade_direction: String,
 }
 
 impl PositionManager {
@@ -68,6 +78,17 @@ impl PositionManager {
             take_profit_pct: trading_config
                 .get("take_profit_pct")
                 .and_then(|v| v.as_f64()),
+            trailing_stop_pct: trading_config
+                .get("trailing_stop_pct")
+                .and_then(|v| v.as_f64()),
+            trailing_activation_pct: trading_config
+                .get("trailing_activation_pct")
+                .and_then(|v| v.as_f64()),
+            trade_direction: trading_config
+                .get("trade_direction")
+                .and_then(|v| v.as_str())
+                .unwrap_or("long")
+                .to_string(),
         };
 
         Self {
@@ -79,6 +100,8 @@ impl PositionManager {
             entry_price: 0.0,
             config,
             cached_quote_balance: 0.0,
+            peak_price: 0.0,
+            trough_price: f64::MAX,
         }
     }
 
@@ -100,6 +123,8 @@ impl PositionManager {
                 }
                 self.current_side = Some(PositionSide::Long);
                 self.current_size = amount;
+                self.peak_price = 0.0;
+                self.trough_price = f64::MAX;
                 (Side::Buy, amount)
             }
             SignalType::CloseLong => {
@@ -134,6 +159,8 @@ impl PositionManager {
                 }
                 self.current_side = Some(PositionSide::Short);
                 self.current_size = amount;
+                self.peak_price = 0.0;
+                self.trough_price = f64::MAX;
                 (Side::Sell, amount)
             }
             SignalType::CloseShort => {
@@ -155,6 +182,108 @@ impl PositionManager {
                 (Side::Buy, amount)
             }
         }
+    }
+
+    /// Whether this strategy is allowed to open long positions.
+    pub fn can_go_long(&self) -> bool {
+        self.config.trade_direction == "long" || self.config.trade_direction == "both"
+    }
+
+    /// Whether this strategy is allowed to open short positions.
+    pub fn can_go_short(&self) -> bool {
+        self.config.trade_direction == "short" || self.config.trade_direction == "both"
+    }
+
+    pub fn set_entry_price(&mut self, price: f64) {
+        self.entry_price = price;
+    }
+
+    /// Check if current position should be closed due to risk management.
+    /// Returns Some((Side, amount)) with the close side and position size if position should be closed, None otherwise.
+    /// `current_price` is the latest market price.
+    pub fn check_risk(&mut self, current_price: f64) -> Option<(Side, f64)> {
+        if self.current_side.is_none() || self.entry_price <= 0.0 {
+            return None;
+        }
+
+        let pnl_pct = if self.current_side == Some(PositionSide::Long) {
+            (current_price - self.entry_price) / self.entry_price
+        } else {
+            (self.entry_price - current_price) / self.entry_price
+        };
+
+        // Check fixed stop-loss
+        if let Some(sl) = self.config.stop_loss_pct {
+            if pnl_pct <= -sl {
+                info!(
+                    "[Strategy {}] Stop-loss triggered: pnl_pct={:.4}% <= -{}%",
+                    self.strategy_id, pnl_pct * 100.0, sl * 100.0
+                );
+                return self.close_position();
+            }
+        }
+
+        // Check fixed take-profit
+        if let Some(tp) = self.config.take_profit_pct {
+            if pnl_pct >= tp {
+                info!(
+                    "[Strategy {}] Take-profit triggered: pnl_pct={:.4}% >= {}%",
+                    self.strategy_id, pnl_pct * 100.0, tp * 100.0
+                );
+                return self.close_position();
+            }
+        }
+
+        // Check trailing stop
+        if let (Some(ts_pct), Some(activation_pct)) = (self.config.trailing_stop_pct, self.config.trailing_activation_pct) {
+            if pnl_pct >= activation_pct {
+                let is_long = self.current_side == Some(PositionSide::Long);
+
+                if is_long {
+                    if current_price > self.peak_price {
+                        self.peak_price = current_price;
+                    }
+                    let trailing_stop_price = self.peak_price * (1.0 - ts_pct);
+                    if current_price <= trailing_stop_price {
+                        info!(
+                            "[Strategy {}] Trailing stop triggered (long): price={}, trailing_stop={:.2}",
+                            self.strategy_id, current_price, trailing_stop_price
+                        );
+                        return self.close_position();
+                    }
+                } else {
+                    if current_price < self.trough_price {
+                        self.trough_price = current_price;
+                    }
+                    let trailing_stop_price = self.trough_price * (1.0 + ts_pct);
+                    if current_price >= trailing_stop_price {
+                        info!(
+                            "[Strategy {}] Trailing stop triggered (short): price={}, trailing_stop={:.2}",
+                            self.strategy_id, current_price, trailing_stop_price
+                        );
+                        return self.close_position();
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Close current position and return the close side and size.
+    fn close_position(&mut self) -> Option<(Side, f64)> {
+        let side = self.current_side.as_ref()?.clone();
+        let size = self.current_size;
+        info!(
+            "[Strategy {}] Risk management closing {:?} position: size={}",
+            self.strategy_id, side, size
+        );
+        self.current_side = None;
+        self.current_size = 0.0;
+        self.entry_price = 0.0;
+        self.peak_price = 0.0;
+        self.trough_price = f64::MAX;
+        Some((if side == PositionSide::Long { Side::Sell } else { Side::Buy }, size))
     }
 
     /// Determine order amount based on config.

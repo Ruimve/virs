@@ -281,11 +281,24 @@ pub struct BacktestRequest {
     pub symbol: String,
     pub exchange: String,
     pub timeframe: String,
-    pub start_date: DateTime<Utc>,
-    pub end_date: DateTime<Utc>,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
     pub initial_balance: f64,
     pub indicator_config: serde_json::Value,
     pub trading_config: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BacktestTrade {
+    pub entry_time: DateTime<Utc>,
+    pub exit_time: DateTime<Utc>,
+    pub side: String,
+    pub entry_price: f64,
+    pub exit_price: f64,
+    pub quantity: f64,
+    pub pnl: f64,
+    pub pnl_pct: f64,
+    pub commission: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -313,7 +326,7 @@ pub struct BacktestResult {
     pub profit_factor: f64,
     pub max_consecutive_wins: i64,
     pub max_consecutive_losses: i64,
-    pub trades: Vec<Trade>,
+    pub trades: Vec<BacktestTrade>,
     pub equity_curve: Vec<(DateTime<Utc>, f64)>,
     pub created_at: DateTime<Utc>,
 }

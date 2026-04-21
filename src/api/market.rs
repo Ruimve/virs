@@ -15,7 +15,7 @@ use crate::utils::crypto;
 /// Ensure an exchange instance is available for the given exchange name.
 /// Tries the engine cache first, then loads credentials from the database.
 /// Returns the exchange name key to use (may be user-scoped).
-async fn ensure_exchange(
+pub async fn ensure_exchange(
     state: &Arc<AppState>,
     exchange_name: &str,
 ) -> Result<String, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {

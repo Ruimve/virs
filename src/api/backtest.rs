@@ -74,21 +74,28 @@ pub async fn run_backtest(
     _auth: AuthUser,
     Json(req): Json<BacktestRequest>,
 ) -> Result<Json<ApiResponse<BacktestResult>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let exchange = state.strategy_engine.get_exchange(&req.exchange);
-    let exchange = match exchange {
-        Some(ex) => ex,
-        None => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<serde_json::Value>::err(format!(
-                    "Exchange '{}' is not configured. Cannot run backtest without real market data. Please configure {}_API_KEY and {}_API_SECRET.",
-                    req.exchange, req.exchange.to_uppercase(), req.exchange.to_uppercase()
-                ))),
-            ));
-        }
+    let exchange_key = super::market::ensure_exchange(&state, &req.exchange).await?;
+    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
+
+    let parse_date = |s: &Option<String>| -> Option<chrono::DateTime<chrono::Utc>> {
+        s.as_ref().and_then(|d| {
+            if d.is_empty() {
+                return None;
+            }
+            chrono::DateTime::parse_from_rfc3339(&format!("{}T00:00:00Z", d.trim()))
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .ok()
+                .or_else(|| chrono::DateTime::parse_from_rfc3339(d).map(|dt| dt.with_timezone(&chrono::Utc)).ok())
+        })
     };
 
-    let duration_secs = (req.end_date.timestamp() - req.start_date.timestamp()).max(0);
+    let start_dt = parse_date(&req.start_date);
+    let end_dt = parse_date(&req.end_date);
+
+    let duration_secs = match (start_dt, end_dt) {
+        (Some(s), Some(e)) => (e.timestamp() - s.timestamp()).max(0),
+        _ => 30 * 24 * 3600,
+    };
     let interval_secs = match req.timeframe.as_str() {
         "1m" => 60, "5m" => 300, "15m" => 900,
         "1h" => 3600, "4h" => 14400, "1d" => 86400,
@@ -136,6 +143,24 @@ pub async fn run_backtest(
         .get("take_profit_pct")
         .and_then(|v| v.as_f64());
 
+    let position_pct = req.trading_config
+        .get("position_pct")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1.0);
+
+    let trailing_stop_pct = req.trading_config
+        .get("trailing_stop_pct")
+        .and_then(|v| v.as_f64());
+
+    let trailing_activation_pct = req.trading_config
+        .get("trailing_activation_pct")
+        .and_then(|v| v.as_f64());
+
+    let trade_direction = req.trading_config
+        .get("trade_direction")
+        .and_then(|v| v.as_str())
+        .unwrap_or("long");
+
     let engine = BacktestEngine::new(req.initial_balance, commission, slippage);
 
     // Determine signal generation method: script-based or plugin-based
@@ -172,7 +197,7 @@ pub async fn run_backtest(
 
         engine.run(&klines, |_, idx| {
             signals.get(idx).copied().unwrap_or(0)
-        }, stop_loss, take_profit)
+        }, stop_loss, take_profit, position_pct, trailing_stop_pct, trailing_activation_pct, trade_direction)
     } else {
         // Plugin-based mode (existing logic)
         let plugin_name = req
@@ -230,7 +255,7 @@ pub async fn run_backtest(
             plugin_registry
                 .generate_signal(&plugin_name, klines, idx, &params)
                 .unwrap_or(0)
-        }, stop_loss, take_profit)
+        }, stop_loss, take_profit, position_pct, trailing_stop_pct, trailing_activation_pct, trade_direction)
     };
 
     let _ = sqlx::query(

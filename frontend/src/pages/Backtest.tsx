@@ -10,8 +10,8 @@ interface BacktestRequest {
   symbol: string
   exchange: string
   timeframe: string
-  start_date: string
-  end_date: string
+  start_date: string | null
+  end_date: string | null
   initial_balance: number
   indicator_config: Record<string, unknown>
   trading_config: Record<string, unknown>
@@ -70,8 +70,14 @@ interface BacktestSummary {
 // Users configure indicator parameters through the UI.
 
 const DEFAULT_TRADING_CONFIG: Record<string, unknown> = {
-  fixed_amount: 100,
-  max_position_size: 1000,
+  stop_loss_pct: 0.03,
+  take_profit_pct: 0.06,
+  commission_rate: 0.001,
+  slippage: 0.0005,
+  position_pct: 1.0,
+  trailing_stop_pct: null,
+  trailing_activation_pct: null,
+  trade_direction: 'long',
 }
 
 const DEFAULT_LUA_SCRIPT = `-- VIRS Lua Strategy: EMA Crossover with RSI Filter
@@ -94,11 +100,13 @@ end`
 
 // ---- 工具函数 ----
 
-function formatNumber(n: number, decimals = 2): string {
+function formatNumber(n: number | undefined | null, decimals = 2): string {
+  if (n == null || isNaN(n)) return '-'
   return n.toFixed(decimals)
 }
 
-function formatPct(n: number): string {
+function formatPct(n: number | undefined | null): string {
+  if (n == null || isNaN(n)) return '-'
   return `${n >= 0 ? '+' : ''}${formatNumber(n)}%`
 }
 
@@ -133,8 +141,8 @@ const Backtest: Component = () => {
   const [symbol, setSymbol] = createSignal('BTCUSDT')
   const [exchange, setExchange] = createSignal('binance')
   const [timeframe, setTimeframe] = createSignal('1h')
-  const [startDate, setStartDate] = createSignal('')
-  const [endDate, setEndDate] = createSignal('')
+  const [startDate, setStartDate] = createSignal((() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().split('T')[0] })())
+  const [endDate, setEndDate] = createSignal(new Date().toISOString().split('T')[0])
   const [initialBalance, setInitialBalance] = createSignal(10000)
   const [indicatorConfig, setIndicatorConfig] = createSignal('{}')
   const [tradingConfig, setTradingConfig] = createSignal(
@@ -295,8 +303,8 @@ const Backtest: Component = () => {
       symbol: symbol(),
       exchange: exchange(),
       timeframe: timeframe(),
-      start_date: startDate(),
-      end_date: endDate(),
+      start_date: startDate() || null,
+      end_date: endDate() || null,
       initial_balance: initialBalance(),
       indicator_config: parsedIndicator,
       trading_config: parsedTrading,
@@ -369,7 +377,7 @@ const Backtest: Component = () => {
         position: (t.side === 'buy' ? 'aboveBar' : 'belowBar') as 'aboveBar' | 'belowBar',
         color: t.side === 'buy' ? '#ef4444' : '#10b981',
         shape: (t.side === 'buy' ? 'arrowDown' : 'arrowUp') as 'arrowDown' | 'arrowUp',
-        text: `Exit (${t.pnl >= 0 ? '+' : ''}${t.pnl_pct.toFixed(1)}%)`,
+        text: `Exit (${t.pnl >= 0 ? '+' : ''}${formatNumber(t.pnl_pct, 1)}%)`,
       })
       return markers
     })
@@ -556,14 +564,131 @@ const Backtest: Component = () => {
           </div>
 
           {/* 交易配置 */}
-          <div class="md:col-span-1 lg:col-span-1">
-            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">交易配置 (JSON)</label>
-            <textarea
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
-              rows={4}
-              value={tradingConfig()}
-              onInput={(e) => setTradingConfig(e.currentTarget.value)}
-            />
+          <div class="md:col-span-2 lg:col-span-2">
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">交易配置</label>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">止损 (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                  value={(() => { try { return JSON.parse(tradingConfig()).stop_loss_pct ?? '' } catch { return '' } })()}
+                  onInput={(e) => {
+                    const val = parseFloat(e.currentTarget.value)
+                    const updated = { ...JSON.parse(tradingConfig()), stop_loss_pct: isNaN(val) ? null : val }
+                    setTradingConfig(JSON.stringify(updated, null, 2))
+                  }}
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">止盈 (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                  value={(() => { try { return JSON.parse(tradingConfig()).take_profit_pct ?? '' } catch { return '' } })()}
+                  onInput={(e) => {
+                    const val = parseFloat(e.currentTarget.value)
+                    const updated = { ...JSON.parse(tradingConfig()), take_profit_pct: isNaN(val) ? null : val }
+                    setTradingConfig(JSON.stringify(updated, null, 2))
+                  }}
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">手续费 (%)</label>
+                <input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                  value={(() => { try { return JSON.parse(tradingConfig()).commission_rate ?? '' } catch { return '' } })()}
+                  onInput={(e) => {
+                    const val = parseFloat(e.currentTarget.value)
+                    const updated = { ...JSON.parse(tradingConfig()), commission_rate: isNaN(val) ? null : val }
+                    setTradingConfig(JSON.stringify(updated, null, 2))
+                  }}
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">滑点 (%)</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                  value={(() => { try { return JSON.parse(tradingConfig()).slippage ?? '' } catch { return '' } })()}
+                  onInput={(e) => {
+                    const val = parseFloat(e.currentTarget.value)
+                    const updated = { ...JSON.parse(tradingConfig()), slippage: isNaN(val) ? null : val }
+                    setTradingConfig(JSON.stringify(updated, null, 2))
+                  }}
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">仓位比例 (0-1)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.01"
+                  max="1"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                  value={(() => { try { return JSON.parse(tradingConfig()).position_pct ?? '' } catch { return '' } })()}
+                  onInput={(e) => {
+                    const val = parseFloat(e.currentTarget.value)
+                    const updated = { ...JSON.parse(tradingConfig()), position_pct: isNaN(val) ? 1.0 : Math.min(1, Math.max(0.01, val)) }
+                    setTradingConfig(JSON.stringify(updated, null, 2))
+                  }}
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">交易方向</label>
+                <select
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                  value={(() => { try { return JSON.parse(tradingConfig()).trade_direction ?? 'long' } catch { return 'long' } })()}
+                  onInput={(e) => {
+                    const updated = { ...JSON.parse(tradingConfig()), trade_direction: e.currentTarget.value }
+                    setTradingConfig(JSON.stringify(updated, null, 2))
+                  }}
+                >
+                  <option value="long">仅做多</option>
+                  <option value="short">仅做空</option>
+                  <option value="both">多空双向</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">追踪止损 (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="关闭"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                  onInput={(e) => {
+                    const val = e.currentTarget.value
+                    const updated = { ...JSON.parse(tradingConfig()), trailing_stop_pct: val === '' ? null : parseFloat(val) }
+                    setTradingConfig(JSON.stringify(updated, null, 2))
+                  }}
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">追踪激活 (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="关闭"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                  onInput={(e) => {
+                    const val = e.currentTarget.value
+                    const updated = { ...JSON.parse(tradingConfig()), trailing_activation_pct: val === '' ? null : parseFloat(val) }
+                    setTradingConfig(JSON.stringify(updated, null, 2))
+                  }}
+                />
+              </div>
+            </div>
           </div>
         </div>
 

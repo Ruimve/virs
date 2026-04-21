@@ -161,43 +161,72 @@ impl StrategyEngine {
                                 &strategy,
                                 &plugins,
                             ).await {
-                                Ok(Some(signal)) => {
-                                    info!(
-                                        "Strategy {} generated signal: {:?} for {}",
-                                        strategy.name, signal, symbol
-                                    );
-
-                                    let amount = pos_manager.determine_amount_async(&*exchange).await;
-                                    if amount <= 0.0 {
-                                        warn!(
-                                            "Strategy {} signal {:?} produced amount=0, skipping",
-                                            strategy.name, signal
+                                Ok((signal, klines)) => {
+                                    // Check risk management on existing position before processing new signal
+                                    if let Some((close_side, close_amount)) = pos_manager.check_risk(klines.last().map(|k| k.close).unwrap_or(0.0)) {
+                                        info!(
+                                            "Strategy {} risk management triggered close: {:?} for {}",
+                                            strategy.name, close_side, symbol
                                         );
+                                        let _ = order_tx.send(OrderCommand::Place {
+                                            strategy_id,
+                                            symbol: symbol.clone(),
+                                            signal_type: if close_side == Side::Sell { SignalType::CloseLong } else { SignalType::CloseShort },
+                                            side: close_side,
+                                            amount: close_amount,
+                                            price: None,
+                                            order_type: OrderType::Market,
+                                            exchange_name: exchange_name.clone(),
+                                        }).await;
                                         continue;
                                     }
 
-                                    let (side, order_amount) = pos_manager.calculate_order(&signal);
-                                    if order_amount <= 0.0 {
-                                        warn!(
-                                            "Strategy {} signal {:?} rejected by position manager",
-                                            strategy.name, signal
-                                        );
-                                        continue;
-                                    }
+                                    match signal {
+                                        Some(signal) => {
+                                            info!(
+                                                "Strategy {} generated signal: {:?} for {}",
+                                                strategy.name, signal, symbol
+                                            );
 
-                                    let _ = order_tx.send(OrderCommand::Place {
-                                        strategy_id,
-                                        symbol: symbol.clone(),
-                                        signal_type: signal.clone(),
-                                        side,
-                                        amount: order_amount,
-                                        price: None,
-                                        order_type: OrderType::Market,
-                                        exchange_name: exchange_name.clone(),
-                                    }).await;
-                                }
-                                Ok(None) => {
-                                    tracing::debug!("Strategy {} no signal", strategy.name);
+                                            let amount = pos_manager.determine_amount_async(&*exchange).await;
+                                            if amount <= 0.0 {
+                                                warn!(
+                                                    "Strategy {} signal {:?} produced amount=0, skipping",
+                                                    strategy.name, signal
+                                                );
+                                                continue;
+                                            }
+
+                                            let (side, order_amount) = pos_manager.calculate_order(&signal);
+                                            if order_amount <= 0.0 {
+                                                warn!(
+                                                    "Strategy {} signal {:?} rejected by position manager",
+                                                    strategy.name, signal
+                                                );
+                                                continue;
+                                            }
+
+                                            if matches!(signal, SignalType::OpenLong | SignalType::OpenShort) {
+                                                if let Some(k) = klines.last() {
+                                                    pos_manager.set_entry_price(k.close);
+                                                }
+                                            }
+
+                                            let _ = order_tx.send(OrderCommand::Place {
+                                                strategy_id,
+                                                symbol: symbol.clone(),
+                                                signal_type: signal.clone(),
+                                                side,
+                                                amount: order_amount,
+                                                price: None,
+                                                order_type: OrderType::Market,
+                                                exchange_name: exchange_name.clone(),
+                                            }).await;
+                                        }
+                                        None => {
+                                            tracing::debug!("Strategy {} no signal", strategy.name);
+                                        }
+                                    }
                                 }
                                 Err(e) => {
                                     error!("Strategy {} error: {}", strategy.name, e);
@@ -249,32 +278,33 @@ impl StrategyEngine {
 /// If `strategy_mode` is "signal", the `indicator_config` JSON is used with
 /// a registered indicator plugin.
 ///
-/// Signal mapping depends on the strategy's `allow_short` trading config flag:
-/// - `allow_short = true`: signal 1 -> OpenLong, -1 -> OpenShort (when flat) or CloseLong/CloseShort (when in position)
-/// - `allow_short = false` (default): signal 1 -> OpenLong, -1 -> CloseLong
+/// Signal mapping depends on the strategy's `trade_direction` trading config:
+/// - `trade_direction = "long"`: signal 1 -> OpenLong, -1 -> CloseLong
+/// - `trade_direction = "short"`: signal 1 -> CloseShort, -1 -> OpenShort
+/// - `trade_direction = "both"`: signal 1 -> OpenLong, -1 -> OpenShort (close signals handled by position manager)
 ///
-/// This enables both long-only and long/short strategies from the same indicator logic.
+/// This enables long-only, short-only, and long/short strategies from the same indicator logic.
 async fn run_strategy_cycle(
     exchange: &dyn Exchange,
     symbol: &str,
     timeframe: &str,
     strategy: &Strategy,
     plugins: &PluginRegistry,
-) -> anyhow::Result<Option<SignalType>> {
+) -> anyhow::Result<(Option<SignalType>, Vec<Kline>)> {
     let klines = exchange.get_klines(symbol, timeframe, 200, None).await?;
 
     if klines.len() < 50 {
-        return Ok(None);
+        return Ok((None, klines));
     }
 
     let idx = klines.len() - 1;
 
-    // Check if short selling is allowed for this strategy
-    let allow_short = strategy
+    // Check trade direction for this strategy
+    let trade_direction = strategy
         .trading_config
-        .get("allow_short")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .get("trade_direction")
+        .and_then(|v| v.as_str())
+        .unwrap_or("long");
 
     // Generate signal based on strategy mode
     let raw_signal: i8 = match strategy.strategy_mode {
@@ -284,7 +314,7 @@ async fn run_strategy_cycle(
                 Some(c) if !c.is_empty() => c,
                 _ => {
                     warn!("Script strategy '{}' has no code", strategy.name);
-                    return Ok(None);
+                    return Ok((None, klines));
                 }
             };
 
@@ -373,14 +403,15 @@ async fn run_strategy_cycle(
         }
     };
 
-    // Map raw signal (-1, 0, 1) to SignalType based on allow_short config
+    // Map raw signal (-1, 0, 1) to SignalType based on trade_direction config
     let signal = match raw_signal {
         0 => None,
-        1 => Some(SignalType::OpenLong),
-        -1 if allow_short => Some(SignalType::OpenShort),
-        -1 => Some(SignalType::CloseLong),
+        1 if trade_direction == "long" || trade_direction == "both" => Some(SignalType::OpenLong),
+        -1 if trade_direction == "short" || trade_direction == "both" => Some(SignalType::OpenShort),
+        -1 if trade_direction == "long" => Some(SignalType::CloseLong),
+        1 if trade_direction == "short" => Some(SignalType::CloseShort),
         _ => None,
     };
 
-    Ok(signal)
+    Ok((signal, klines))
 }

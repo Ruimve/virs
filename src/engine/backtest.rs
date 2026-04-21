@@ -13,6 +13,34 @@ pub struct BacktestEngine {
     slippage: f64,
 }
 
+fn record_trade(
+    trades: &mut Vec<BacktestTrade>,
+    bt: BacktestTrade,
+    profit_trades: &mut i64,
+    loss_trades: &mut i64,
+    total_profit: &mut f64,
+    total_loss: &mut f64,
+    current_consecutive_wins: &mut i64,
+    current_consecutive_losses: &mut i64,
+    max_consecutive_wins: &mut i64,
+    max_consecutive_losses: &mut i64,
+) {
+    if bt.pnl >= 0.0 {
+        *profit_trades += 1;
+        *total_profit += bt.pnl;
+        *current_consecutive_wins += 1;
+        *current_consecutive_losses = 0;
+        *max_consecutive_wins = (*max_consecutive_wins).max(*current_consecutive_wins);
+    } else {
+        *loss_trades += 1;
+        *total_loss += bt.pnl.abs();
+        *current_consecutive_losses += 1;
+        *current_consecutive_wins = 0;
+        *max_consecutive_losses = (*max_consecutive_losses).max(*current_consecutive_losses);
+    }
+    trades.push(bt);
+}
+
 impl BacktestEngine {
     pub fn new(initial_balance: f64, commission_rate: f64, slippage: f64) -> Self {
         Self {
@@ -31,13 +59,18 @@ impl BacktestEngine {
         mut signal_fn: F,
         stop_loss_pct: Option<f64>,
         take_profit_pct: Option<f64>,
+        position_pct: f64,
+        trailing_stop_pct: Option<f64>,
+        trailing_activation_pct: Option<f64>,
+        trade_direction: &str,
     ) -> BacktestResult
     where
         F: FnMut(&[Kline], usize) -> i8,
     {
         let mut balance = self.initial_balance;
         let mut position: Option<PositionState> = None;
-        let mut trades: Vec<Trade> = Vec::new();
+        let mut trades: Vec<BacktestTrade> = Vec::new();
+        let mut open_trade: Option<(DateTime<Utc>, f64, f64, String)> = None;
         let mut equity_curve: Vec<(DateTime<Utc>, f64)> = Vec::new();
         let mut returns: Vec<f64> = Vec::new();
 
@@ -72,68 +105,44 @@ impl BacktestEngine {
         // Signal is generated at bar i close, executed at bar i+1 open
         let mut pending_signal: Option<i8> = None;
 
+        // Trade direction filter
+        let can_go_long = trade_direction == "long" || trade_direction == "both";
+        let can_go_short = trade_direction == "short" || trade_direction == "both";
+
         for i in 0..klines.len() {
             let kline = &klines[i];
             
-            // Execute pending signal from previous bar at current bar's open price
-            // This eliminates look-ahead bias: signal generated at bar i close,
-            // executed at bar i+1 open
             if let Some(signal) = pending_signal.take() {
-                let exec_price = kline.open; // Execute at open of new bar
+                let exec_price = kline.open;
+                let timestamp = chrono::DateTime::from_timestamp_millis(kline.open_time)
+                    .unwrap_or_else(Utc::now);
                 
                 match signal {
-                    1 if position.is_none() => {
-                        let trade = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Long);
-                        trades.push(trade);
+                    1 if position.is_none() && can_go_long => {
+                        let open_fee = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Long, position_pct);
+                        open_trade = Some((timestamp, exec_price, open_fee, "long".to_string()));
                     }
                     1 if position.is_some() && position.as_ref().unwrap().side == PositionSide::Short => {
-                        let trade = self.close_position(&mut position, exec_price, &mut balance);
-                        let pnl = trade.pnl;
-                        if pnl >= 0.0 {
-                            profit_trades += 1;
-                            total_profit += pnl;
-                            current_consecutive_wins += 1;
-                            current_consecutive_losses = 0;
-                            max_consecutive_wins = max_consecutive_wins.max(current_consecutive_wins);
-                        } else {
-                            loss_trades += 1;
-                            total_loss += pnl.abs();
-                            current_consecutive_losses += 1;
-                            current_consecutive_wins = 0;
-                            max_consecutive_losses = max_consecutive_losses.max(current_consecutive_losses);
+                        if let Some(bt) = self.close_position(&mut position, exec_price, &mut balance, timestamp, &mut open_trade) {
+                            record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
                         }
-                        trades.push(trade);
                     }
-                    -1 if position.is_none() => {
-                        let trade = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Short);
-                        trades.push(trade);
+                    -1 if position.is_none() && can_go_short => {
+                        let open_fee = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Short, position_pct);
+                        open_trade = Some((timestamp, exec_price, open_fee, "short".to_string()));
                     }
                     -1 if position.is_some() && position.as_ref().unwrap().side == PositionSide::Long => {
-                        let trade = self.close_position(&mut position, exec_price, &mut balance);
-                        let pnl = trade.pnl;
-                        if pnl >= 0.0 {
-                            profit_trades += 1;
-                            total_profit += pnl;
-                            current_consecutive_wins += 1;
-                            current_consecutive_losses = 0;
-                            max_consecutive_wins = max_consecutive_wins.max(current_consecutive_wins);
-                        } else {
-                            loss_trades += 1;
-                            total_loss += pnl.abs();
-                            current_consecutive_losses += 1;
-                            current_consecutive_wins = 0;
-                            max_consecutive_losses = max_consecutive_losses.max(current_consecutive_losses);
+                        if let Some(bt) = self.close_position(&mut position, exec_price, &mut balance, timestamp, &mut open_trade) {
+                            record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
                         }
-                        trades.push(trade);
                     }
                     _ => {}
                 }
             }
 
-            // Check stop-loss / take-profit on existing position
-            // SL/TP can be triggered intrabar, so we check at close price
-            // (conservative: assumes worst case for exit)
             let price = kline.close;
+            let timestamp = chrono::DateTime::from_timestamp_millis(kline.open_time)
+                .unwrap_or_else(Utc::now);
             if let Some(ref mut pos) = position {
                 let pnl_pct = if pos.side == PositionSide::Long {
                     (price - pos.entry_price) / pos.entry_price
@@ -148,22 +157,39 @@ impl BacktestEngine {
                 };
 
                 if should_close {
-                    let trade = self.close_position(&mut position, price, &mut balance);
-                    let pnl = trade.pnl;
-                    if pnl >= 0.0 {
-                        profit_trades += 1;
-                        total_profit += pnl;
-                        current_consecutive_wins += 1;
-                        current_consecutive_losses = 0;
-                        max_consecutive_wins = max_consecutive_wins.max(current_consecutive_wins);
-                    } else {
-                        loss_trades += 1;
-                        total_loss += pnl.abs();
-                        current_consecutive_losses += 1;
-                        current_consecutive_wins = 0;
-                        max_consecutive_losses = max_consecutive_losses.max(current_consecutive_losses);
+                    if let Some(bt) = self.close_position(&mut position, price, &mut balance, timestamp, &mut open_trade) {
+                        record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
                     }
-                    trades.push(trade);
+                }
+            }
+
+            if let Some(ref mut pos) = position {
+                if price > pos.highest_price {
+                    pos.highest_price = price;
+                }
+                if price < pos.lowest_price {
+                    pos.lowest_price = price;
+                }
+
+                if let (Some(ts_pct), Some(activation_pct)) = (trailing_stop_pct, trailing_activation_pct) {
+                    let (profit_pct, should_trigger) = match pos.side {
+                        PositionSide::Long => {
+                            let pct = (pos.highest_price - pos.entry_price) / pos.entry_price;
+                            let trigger = pct >= activation_pct && price <= pos.highest_price * (1.0 - ts_pct);
+                            (pct, trigger)
+                        }
+                        PositionSide::Short => {
+                            let pct = (pos.entry_price - pos.lowest_price) / pos.entry_price;
+                            let trigger = pct >= activation_pct && price >= pos.lowest_price * (1.0 + ts_pct);
+                            (pct, trigger)
+                        }
+                    };
+
+                    if should_trigger {
+                        if let Some(bt) = self.close_position(&mut position, price, &mut balance, timestamp, &mut open_trade) {
+                            record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
+                        }
+                    }
                 }
             }
 
@@ -202,18 +228,14 @@ impl BacktestEngine {
         }
 
         // Close any open position at end
-        if let Some(_) = position {
+        if position.is_some() {
             let last_price = klines.last().map(|k| k.close).unwrap_or(0.0);
-            let trade = self.close_position(&mut position, last_price, &mut balance);
-            let pnl = trade.pnl;
-            if pnl >= 0.0 {
-                profit_trades += 1;
-                total_profit += pnl;
-            } else {
-                loss_trades += 1;
-                total_loss += pnl.abs();
+            let last_ts = klines.last()
+                .map(|k| chrono::DateTime::from_timestamp_millis(k.open_time).unwrap_or_else(Utc::now))
+                .unwrap_or_else(Utc::now);
+            if let Some(bt) = self.close_position(&mut position, last_price, &mut balance, last_ts, &mut open_trade) {
+                record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
             }
-            trades.push(trade);
         }
 
         let total_trades = trades.len() as i64;
@@ -299,9 +321,10 @@ impl BacktestEngine {
         price: f64,
         balance: &mut f64,
         side: PositionSide,
-    ) -> Trade {
+        position_pct: f64,
+    ) -> f64 {
         let effective_price = price * (1.0 + self.slippage);
-        let max_amount = *balance * 0.99; // use 99% of balance
+        let max_amount = *balance * 0.99 * position_pct;
         let size = max_amount / effective_price;
         let fee = size * effective_price * self.commission_rate;
         *balance -= size * effective_price + fee;
@@ -310,21 +333,11 @@ impl BacktestEngine {
             side,
             size,
             entry_price: effective_price,
+            highest_price: effective_price,
+            lowest_price: effective_price,
         });
 
-        Trade {
-            id: Uuid::new_v4(),
-            strategy_id: Uuid::nil(),
-            symbol: String::new(),
-            side: Side::Buy,
-            trade_type: "open_long".into(),
-            price: effective_price,
-            amount: size,
-            fee,
-            pnl: 0.0,
-            exchange_order_id: None,
-            created_at: Utc::now(),
-        }
+        fee
     }
 
     fn close_position(
@@ -332,7 +345,9 @@ impl BacktestEngine {
         position: &mut Option<PositionState>,
         price: f64,
         balance: &mut f64,
-    ) -> Trade {
+        exit_time: DateTime<Utc>,
+        open_trade: &mut Option<(DateTime<Utc>, f64, f64, String)>,
+    ) -> Option<BacktestTrade> {
         let pos = position.take().unwrap();
         let effective_price = price * (1.0 - self.slippage);
         let revenue = pos.size * effective_price;
@@ -340,19 +355,24 @@ impl BacktestEngine {
         let pnl = revenue - pos.size * pos.entry_price - fee;
         *balance += revenue - fee;
 
-        Trade {
-            id: Uuid::new_v4(),
-            strategy_id: Uuid::nil(),
-            symbol: String::new(),
-            side: if pos.side == PositionSide::Long { Side::Sell } else { Side::Buy },
-            trade_type: if pos.side == PositionSide::Long { "close_long" } else { "close_short" }.into(),
-            price: effective_price,
-            amount: pos.size,
-            fee,
+        let ot = open_trade.take()?;
+        let entry_price = ot.1;
+        let entry_time = ot.0;
+        let side = ot.3;
+        let pnl_pct = (effective_price - entry_price) / entry_price * 100.0;
+        let total_commission = ot.2 + fee;
+
+        Some(BacktestTrade {
+            entry_time,
+            exit_time,
+            side,
+            entry_price,
+            exit_price: effective_price,
+            quantity: pos.size,
             pnl,
-            exchange_order_id: None,
-            created_at: Utc::now(),
-        }
+            pnl_pct,
+            commission: total_commission,
+        })
     }
 }
 
@@ -360,6 +380,8 @@ struct PositionState {
     side: PositionSide,
     size: f64,
     entry_price: f64,
+    highest_price: f64,
+    lowest_price: f64,
 }
 
 // ============================================================
@@ -580,7 +602,7 @@ mod tests {
 
         let result = engine.run(&klines, |klines, idx| {
             sma_crossover_signal(klines, idx, 5, 20)
-        }, Some(0.05), Some(0.10));
+        }, Some(0.05), Some(0.10), 1.0, None, None, "long");
 
         assert!(result.total_trades >= 0);
         assert!(result.final_balance >= 0.0);
