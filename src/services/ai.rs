@@ -197,6 +197,155 @@ impl AiService {
         })
     }
 
+    /// Analyze backtest results and suggest parameter optimizations.
+    pub async fn optimize_strategy(
+        &self,
+        strategy_code: Option<&str>,
+        backtest_summary: &serde_json::Value,
+        provider: Option<&str>,
+        model: Option<&str>,
+    ) -> anyhow::Result<String> {
+        let provider = provider.unwrap_or_else(|| self.default_provider());
+        let (api_key, base_url, model) = self.resolve_provider(provider, model)?;
+
+        let system_prompt = r#"你是一位量化交易策略优化专家，服务于 VIRS 平台。
+分析回测结果，并给出具体的参数调整建议以改善策略表现。
+
+重点关注：
+1. 提高胜率（目标 > 55%）
+2. 改善风险调整后收益（夏普比率 > 1.0）
+3. 降低最大回撤（目标 < 15%）
+4. 改善盈亏比（目标 > 1.5）
+5. 优化交易频率
+
+对每条建议，请提供：
+- 当前值和建议值
+- 调整理由
+- 预期影响
+
+如果用户使用中文，请用中文回复；如果使用英文，请用英文回复。
+保持回复简洁、可操作。使用 markdown 格式。"#;
+
+        let code_section = match strategy_code {
+            Some(code) if !code.trim().is_empty() => {
+                format!("以下是策略代码：\n```lua\n{}\n```\n\n", code)
+            }
+            _ => String::new(),
+        };
+
+        let user_prompt = format!(
+            "{}以下是回测结果：\n```json\n{}\n```\n\n请分析并给出具体的参数优化建议。",
+            code_section,
+            serde_json::to_string_pretty(backtest_summary).unwrap_or_default()
+        );
+
+        let request_body = serde_json::json!({
+            "model": model,
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": user_prompt }
+            ],
+            "temperature": 0.5,
+            "max_tokens": 2000,
+        });
+
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", base_url))
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to call {} API: {}", provider, e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!("{} API returned {}: {}", provider, status, body));
+        }
+
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to parse {} response: {}", provider, e))?;
+
+        let content = json["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+
+        Ok(content)
+    }
+
+    /// Explain a strategy's logic in natural language.
+    pub async fn explain_strategy(
+        &self,
+        strategy_code: &str,
+        provider: Option<&str>,
+        model: Option<&str>,
+    ) -> anyhow::Result<String> {
+        let provider = provider.unwrap_or_else(|| self.default_provider());
+        let (api_key, base_url, model) = self.resolve_provider(provider, model)?;
+
+        let system_prompt = r#"你是一位量化交易策略分析师，服务于 VIRS 平台。
+用清晰、简洁的自然语言解释给定的 Lua 策略代码。
+
+你的解释应包括：
+1. **策略概述**：这是什么类型的策略？（趋势跟踪、均值回归、动量等）
+2. **入场逻辑**：何时买入/卖出？
+3. **使用的指标**：使用了哪些技术指标，为什么？
+4. **参数说明**：每个参数控制什么，其效果如何
+5. **优势**：该策略在什么市场条件下表现最佳
+6. **风险**：潜在的弱点或失败模式
+
+如果策略注释使用中文，请用中文回复；如果使用英文，请用英文回复。
+保持回复简洁。使用 markdown 格式。"#;
+
+        let user_prompt = format!(
+            "请解释以下交易策略：\n```lua\n{}\n```",
+            strategy_code
+        );
+
+        let request_body = serde_json::json!({
+            "model": model,
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": user_prompt }
+            ],
+            "temperature": 0.5,
+            "max_tokens": 1500,
+        });
+
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", base_url))
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to call {} API: {}", provider, e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!("{} API returned {}: {}", provider, status, body));
+        }
+
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to parse {} response: {}", provider, e))?;
+
+        let content = json["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+
+        Ok(content)
+    }
+
     fn default_provider(&self) -> &'static str {
         if self.config.openrouter_api_key.is_some() {
             "openrouter"

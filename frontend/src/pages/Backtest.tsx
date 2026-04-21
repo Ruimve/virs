@@ -163,6 +163,10 @@ const Backtest: Component = () => {
   // 结果状态
   const [result, setResult] = createSignal<BacktestResult | null>(null)
 
+  // AI 优化建议状态
+  const [aiLoading, setAiLoading] = createSignal(false)
+  const [aiSuggestion, setAiSuggestion] = createSignal<string | null>(null)
+
   // 历史列表状态
   const [historyItems, setHistoryItems] = createSignal<BacktestSummary[]>([])
   const [historyPage, setHistoryPage] = createSignal(1)
@@ -329,6 +333,7 @@ const Backtest: Component = () => {
   async function handleViewDetail(id: string) {
     setResult(null)
     setRunError('')
+    setAiSuggestion(null)
     try {
       const res = await api.get<BacktestResult>(`/backtest/${id}`)
       if (res.success && res.data) {
@@ -343,6 +348,40 @@ const Backtest: Component = () => {
       }
     } catch (e) {
       setRunError(e instanceof Error ? e.message : '加载回测详情失败')
+    }
+  }
+
+  // AI 优化建议
+  async function handleAiOptimize() {
+    setAiLoading(true)
+    setAiSuggestion(null)
+    try {
+      const r = result()!
+      const res = await api.post<{ suggestion: string }>('/ai/optimize', {
+        strategy_code: backtestMode() === 'script' ? strategyCode() : undefined,
+        backtest_summary: {
+          total_return_pct: r.total_return_pct,
+          sharpe_ratio: r.sharpe_ratio,
+          sortino_ratio: r.sortino_ratio,
+          win_rate: r.win_rate,
+          profit_factor: r.profit_factor,
+          max_drawdown_pct: r.max_drawdown_pct,
+          total_trades: r.total_trades,
+          profit_trades: r.profit_trades,
+          loss_trades: r.loss_trades,
+          avg_profit: r.avg_profit,
+          avg_loss: r.avg_loss,
+          max_consecutive_wins: r.max_consecutive_wins,
+          max_consecutive_losses: r.max_consecutive_losses,
+        },
+      })
+      if (res.success && res.data?.suggestion) {
+        setAiSuggestion(res.data.suggestion)
+      }
+    } catch (e) {
+      console.error('AI optimize failed:', e)
+    } finally {
+      setAiLoading(false)
     }
   }
 
@@ -906,6 +945,23 @@ const Backtest: Component = () => {
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* AI 优化建议 */}
+          <div class="mt-4">
+            <button
+              class="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg text-sm font-medium hover:from-indigo-600 hover:to-purple-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={aiLoading()}
+              onClick={handleAiOptimize}
+            >
+              {aiLoading() ? 'AI 分析中...' : 'AI 优化建议'}
+            </button>
+            <Show when={aiSuggestion()}>
+              <div
+                class="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-200/60 text-sm text-gray-700 whitespace-pre-wrap max-h-64 overflow-y-auto"
+                innerHTML={aiSuggestion()!}
+              />
+            </Show>
           </div>
 
           {/* 交易信号 K 线图 */}

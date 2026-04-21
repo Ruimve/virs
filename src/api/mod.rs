@@ -74,6 +74,8 @@ pub fn build_router(
         .route("/api/plugins", get(plugins::list_plugins))
         .route("/api/ai/status", get(ai::ai_status))
         .route("/api/ai/generate", post(ai::generate_strategy))
+        .route("/api/ai/optimize", post(ai::optimize))
+        .route("/api/ai/explain", post(ai::explain))
         .with_state(state)
         .fallback(spa_fallback)
 }

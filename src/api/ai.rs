@@ -1,4 +1,5 @@
 use axum::{extract::State, http::StatusCode, Json};
+use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::api::middleware::AuthUser;
@@ -53,6 +54,106 @@ pub async fn generate_strategy(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<serde_json::Value>::err(format!(
                     "AI generation failed: {}",
+                    e
+                ))),
+            ))
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct OptimizeRequest {
+    pub strategy_code: Option<String>,
+    pub backtest_summary: serde_json::Value,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct ExplainRequest {
+    pub strategy_code: String,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+}
+
+/// AI parameter optimization suggestions based on backtest results.
+pub async fn optimize(
+    State(state): State<Arc<AppState>>,
+    _auth: AuthUser,
+    Json(body): Json<OptimizeRequest>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)>
+{
+    let ai_service = AiService::new(state.config.ai.clone());
+
+    if !ai_service.is_configured() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<serde_json::Value>::err(
+                "AI service is not configured",
+            )),
+        ));
+    }
+
+    match ai_service
+        .optimize_strategy(
+            body.strategy_code.as_deref(),
+            &body.backtest_summary,
+            body.provider.as_deref(),
+            body.model.as_deref(),
+        )
+        .await
+    {
+        Ok(suggestion) => Ok(Json(ApiResponse::ok(serde_json::json!({
+            "suggestion": suggestion,
+        })))),
+        Err(e) => {
+            tracing::error!("AI optimization failed: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<serde_json::Value>::err(format!(
+                    "AI optimization failed: {}",
+                    e
+                ))),
+            ))
+        }
+    }
+}
+
+/// AI strategy explanation.
+pub async fn explain(
+    State(state): State<Arc<AppState>>,
+    _auth: AuthUser,
+    Json(body): Json<ExplainRequest>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)>
+{
+    let ai_service = AiService::new(state.config.ai.clone());
+
+    if !ai_service.is_configured() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<serde_json::Value>::err(
+                "AI service is not configured",
+            )),
+        ));
+    }
+
+    match ai_service
+        .explain_strategy(
+            &body.strategy_code,
+            body.provider.as_deref(),
+            body.model.as_deref(),
+        )
+        .await
+    {
+        Ok(explanation) => Ok(Json(ApiResponse::ok(serde_json::json!({
+            "explanation": explanation,
+        })))),
+        Err(e) => {
+            tracing::error!("AI explanation failed: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<serde_json::Value>::err(format!(
+                    "AI explanation failed: {}",
                     e
                 ))),
             ))
