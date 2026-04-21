@@ -154,12 +154,25 @@ impl StrategyEngine {
                 tokio::select! {
                     _ = interval.tick() => {
                         if let Some(exchange) = exchanges.get(&exchange_name) {
+                            // Extract current position info for LuaContext
+                            let position_info = pos_manager.position_info().map(|p| {
+                                (
+                                    match p.side {
+                                        PositionSide::Long => "long".to_string(),
+                                        PositionSide::Short => "short".to_string(),
+                                    },
+                                    p.entry_price,
+                                    p.size,
+                                )
+                            });
+
                             match run_strategy_cycle(
                                 &*exchange,
                                 &symbol,
                                 &timeframe,
                                 &strategy,
                                 &plugins,
+                                position_info,
                             ).await {
                                 Ok((signal, klines)) => {
                                     // Check risk management on existing position before processing new signal
@@ -290,6 +303,7 @@ async fn run_strategy_cycle(
     timeframe: &str,
     strategy: &Strategy,
     plugins: &PluginRegistry,
+    position_info: Option<(String, f64, f64)>,  // (side, entry_price, size)
 ) -> anyhow::Result<(Option<SignalType>, Vec<Kline>)> {
     let klines = exchange.get_klines(symbol, timeframe, 200, None).await?;
 
@@ -330,8 +344,50 @@ async fn run_strategy_cycle(
                 }
             }
 
-            match executor.execute(code, &klines, idx, &params) {
-                Ok(signal) => signal,
+            // Build LuaContext from position info
+            let ctx = lua_executor::LuaContext {
+                position: lua_executor::LuaPosition {
+                    side: position_info
+                        .as_ref()
+                        .map(|(side, _, _)| side.clone())
+                        .unwrap_or_else(|| "flat".to_string()),
+                    entry_price: position_info
+                        .as_ref()
+                        .map(|(_, price, _)| *price)
+                        .unwrap_or(0.0),
+                    size: position_info
+                        .as_ref()
+                        .map(|(_, _, size)| *size)
+                        .unwrap_or(0.0),
+                },
+                last_exit_bar: 0,  // TODO: track from position manager
+                bar_index: idx as i64,
+            };
+
+            match executor.execute(code, &klines, idx, &params, &ctx) {
+                Ok(result) => {
+                    // Prefer explicit orders, fall back to signal
+                    if let Some(order) = result.orders.first() {
+                        match order {
+                            lua_executor::LuaOrder::Buy { .. } => 1_i8,
+                            lua_executor::LuaOrder::Sell { .. } => -1_i8,
+                            lua_executor::LuaOrder::Close => {
+                                // Close current position — signal depends on current side
+                                if let Some((side, _, _)) = &position_info {
+                                    match side.as_str() {
+                                        "long" => -1_i8,
+                                        "short" => 1_i8,
+                                        _ => 0_i8,
+                                    }
+                                } else {
+                                    0_i8
+                                }
+                            }
+                        }
+                    } else {
+                        result.signal.unwrap_or(0)
+                    }
+                }
                 Err(e) => {
                     error!("Lua execution error for strategy '{}': {}", strategy.name, e);
                     0
