@@ -121,7 +121,12 @@ async fn main() -> anyhow::Result<()> {
         pending_order_poll_interval_secs: config.strategy.pending_order_poll_interval_secs,
         auto_restore: config.strategy.auto_restore_strategies,
     };
-    let strategy_engine = Arc::new(StrategyEngine::new(strategy_engine_config, order_tx, plugin_registry.clone()));
+    let mut strategy_engine_inner = StrategyEngine::new(strategy_engine_config, order_tx, plugin_registry.clone());
+
+    // Create WebSocket broadcaster for real-time push
+    let ws_broadcaster = Arc::new(api::ws::create_broadcaster(256));
+    strategy_engine_inner.set_ws_broadcaster(ws_broadcaster.clone());
+    let strategy_engine = Arc::new(strategy_engine_inner);
 
     // Exchange credentials are now loaded from the database (qd_exchange_credentials)
     // on demand when a strategy is started or market data is requested.
@@ -132,6 +137,7 @@ async fn main() -> anyhow::Result<()> {
     let order_worker_engine = strategy_engine.clone();
     let notification_config = config.notification.clone();
     let db_pool_for_worker = db_pool.clone();
+    let order_ws_broadcaster = ws_broadcaster.clone();
     tokio::spawn(async move {
         while let Some(cmd) = order_rx.recv().await {
             match cmd {
@@ -201,6 +207,15 @@ async fn main() -> anyhow::Result<()> {
                                         &format!("Order Executed: {}", symbol),
                                         &format!("Side: {:?}\nAmount: {}\nPrice: {:?}\nOrder ID: {}", side, order.filled, order.price, order.id),
                                     ).await;
+
+                                    // Emit WebSocket event: order filled
+                                    let _ = order_ws_broadcaster.send(api::ws::WsEvent::Order {
+                                        order_id: order.id.clone(),
+                                        strategy_id: strategy_id.to_string(),
+                                        symbol: symbol.clone(),
+                                        status: "filled".to_string(),
+                                        error: None,
+                                    });
                                 }
                                 Err(e) => {
                                     error!("❌ Order failed: strategy={}, symbol={}, error={}", strategy_id, symbol, e);
@@ -214,6 +229,15 @@ async fn main() -> anyhow::Result<()> {
                                     .bind(&symbol)
                                     .execute(&db_pool_for_worker)
                                     .await;
+
+                                    // Emit WebSocket event: order failed
+                                    let _ = order_ws_broadcaster.send(api::ws::WsEvent::Order {
+                                        order_id: String::new(),
+                                        strategy_id: strategy_id.to_string(),
+                                        symbol: symbol.clone(),
+                                        status: "failed".to_string(),
+                                        error: Some(e.to_string()),
+                                    });
                                 }
                             }
                         }
@@ -340,7 +364,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Build and start HTTP server
-    let app = api::build_router(Arc::new(config.clone()), strategy_engine, db_pool, plugin_registry);
+    let app = api::build_router(Arc::new(config.clone()), strategy_engine, db_pool, plugin_registry, ws_broadcaster);
 
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;

@@ -1,5 +1,6 @@
 import { type Component, createSignal, createEffect, Show, For, onMount } from 'solid-js'
 import { api, type PaginatedResponse } from '../lib/api'
+import { useWs, type WsEvent } from '../lib/ws'
 
 // ---- 类型定义 ----
 
@@ -201,6 +202,24 @@ const Trades: Component = () => {
 
   onMount(() => {
     loadTrades(1)
+  })
+
+  let wsReloadTimer: ReturnType<typeof setTimeout> | null = null
+
+  useWs((event: WsEvent) => {
+    const shouldReload =
+      (event.type === 'trade' && activeTab() === 'trades') ||
+      (event.type === 'order' && activeTab() === 'orders') ||
+      (event.type === 'position' && activeTab() === 'positions')
+
+    if (shouldReload) {
+      if (wsReloadTimer) clearTimeout(wsReloadTimer)
+      wsReloadTimer = setTimeout(() => {
+        if (activeTab() === 'trades') loadTrades(tradesPage())
+        else if (activeTab() === 'orders') loadOrders(ordersPage())
+        else if (activeTab() === 'positions') loadPositions()
+      }, 500)
+    }
   })
 
   return (

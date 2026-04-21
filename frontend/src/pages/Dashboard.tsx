@@ -1,5 +1,6 @@
 import { type Component, createSignal, createEffect, Show, For } from 'solid-js'
 import { api } from '../lib/api'
+import { useWs, type WsEvent, type NotificationEvent } from '../lib/ws'
 
 interface DashboardSummary {
   total_strategies: number
@@ -25,6 +26,23 @@ const Dashboard: Component = () => {
   const [trades, setTrades] = createSignal<Trade[]>([])
   const [loading, setLoading] = createSignal(true)
   const [error, setError] = createSignal('')
+
+  const [notifications, setNotifications] = createSignal<Array<{ id: number; level: string; message: string }>>([])
+  let notifId = 0
+
+  useWs((event: WsEvent) => {
+    if (event.type === 'notification') {
+      const notif = event as NotificationEvent
+      setNotifications(prev => [
+        { id: ++notifId, level: notif.data.level, message: notif.data.message },
+        ...prev.slice(0, 9), // keep last 10
+      ])
+    }
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      setNotifications(prev => prev.slice(1))
+    }, 5000)
+  })
 
   createEffect(() => {
     loadDashboard()
@@ -106,6 +124,25 @@ const Dashboard: Component = () => {
 
   return (
     <div>
+      {/* 实时通知 */}
+      <Show when={notifications().length > 0}>
+        <div class="fixed top-4 right-4 z-50 space-y-2 max-w-sm">
+          <For each={notifications()}>
+            {(notif) => (
+              <div class={`px-4 py-3 rounded-lg shadow-lg border text-sm animate-slide-in ${
+                notif.level === 'error'
+                  ? 'bg-red-50 border-red-200 text-red-700'
+                  : notif.level === 'warning'
+                  ? 'bg-amber-50 border-amber-200 text-amber-700'
+                  : 'bg-indigo-50 border-indigo-200 text-indigo-700'
+              }`}>
+                {notif.message}
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+
       {/* 统计卡片 */}
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <For each={statCards()}>

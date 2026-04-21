@@ -9,6 +9,7 @@ pub mod credentials;
 pub mod dashboard;
 pub mod plugins;
 pub mod ai;
+pub mod ws;
 
 use axum::{
     http::{header, StatusCode, Uri},
@@ -27,12 +28,14 @@ pub fn build_router(
     strategy_engine: Arc<StrategyEngine>,
     db_pool: sqlx::PgPool,
     plugin_registry: Arc<PluginRegistry>,
+    ws_broadcaster: Arc<ws::WsBroadcaster>,
 ) -> Router {
     let state = Arc::new(AppState {
         config,
         strategy_engine,
         db_pool,
         plugin_registry,
+        ws_broadcaster,
     });
 
     let frontend_dir = std::env::var("FRONTEND_DIR")
@@ -76,6 +79,7 @@ pub fn build_router(
         .route("/api/ai/generate", post(ai::generate_strategy))
         .route("/api/ai/optimize", post(ai::optimize))
         .route("/api/ai/explain", post(ai::explain))
+        .route("/ws", get(ws::ws_handler))
         .with_state(state)
         .fallback(spa_fallback)
 }
@@ -141,4 +145,5 @@ pub struct AppState {
     pub strategy_engine: Arc<StrategyEngine>,
     pub db_pool: sqlx::PgPool,
     pub plugin_registry: Arc<PluginRegistry>,
+    pub ws_broadcaster: Arc<ws::WsBroadcaster>,
 }

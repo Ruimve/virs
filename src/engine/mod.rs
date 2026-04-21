@@ -22,6 +22,7 @@ pub struct StrategyEngine {
     order_tx: mpsc::Sender<OrderCommand>,
     config: StrategyEngineConfig,
     plugins: Arc<PluginRegistry>,
+    ws_broadcaster: Option<Arc<crate::api::ws::WsBroadcaster>>,
 }
 
 #[derive(Debug, Clone)]
@@ -70,6 +71,19 @@ impl StrategyEngine {
             order_tx,
             config,
             plugins,
+            ws_broadcaster: None,
+        }
+    }
+
+    /// Set the WebSocket broadcaster for real-time event push.
+    pub fn set_ws_broadcaster(&mut self, broadcaster: Arc<crate::api::ws::WsBroadcaster>) {
+        self.ws_broadcaster = Some(broadcaster);
+    }
+
+    /// Emit a WebSocket event to all connected clients.
+    fn emit_event(&self, event: crate::api::ws::WsEvent) {
+        if let Some(ref broadcaster) = self.ws_broadcaster {
+            let _ = broadcaster.send(event);
         }
     }
 
@@ -136,7 +150,15 @@ impl StrategyEngine {
             strategy.name, symbol, exchange_name, timeframe
         );
 
+        // Emit WebSocket event: strategy started
+        self.emit_event(crate::api::ws::WsEvent::StrategyStatus {
+            strategy_id: strategy_id.to_string(),
+            name: strategy.name.clone(),
+            status: "running".to_string(),
+        });
+
         // Spawn strategy task
+        let ws_broadcaster = self.ws_broadcaster.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(
                 interval_secs as u64,
@@ -176,11 +198,22 @@ impl StrategyEngine {
                             ).await {
                                 Ok((signal, klines)) => {
                                     // Check risk management on existing position before processing new signal
-                                    if let Some((close_side, close_amount)) = pos_manager.check_risk(klines.last().map(|k| k.close).unwrap_or(0.0)) {
+                                    if let Some((close_side, close_amount, risk_reason)) = pos_manager.check_risk(klines.last().map(|k| k.close).unwrap_or(0.0)) {
+                                        let risk_price = klines.last().map(|k| k.close).unwrap_or(0.0);
                                         info!(
                                             "Strategy {} risk management triggered close: {:?} for {}",
                                             strategy.name, close_side, symbol
                                         );
+
+                                        if let Some(ref bc) = ws_broadcaster {
+                                            let _ = bc.send(crate::api::ws::WsEvent::Risk {
+                                                strategy_id: strategy_id.to_string(),
+                                                symbol: symbol.clone(),
+                                                reason: risk_reason.as_str().to_string(),
+                                                price: risk_price,
+                                            });
+                                        }
+
                                         let _ = order_tx.send(OrderCommand::Place {
                                             strategy_id,
                                             symbol: symbol.clone(),
@@ -229,12 +262,28 @@ impl StrategyEngine {
                                                 strategy_id,
                                                 symbol: symbol.clone(),
                                                 signal_type: signal.clone(),
-                                                side,
+                                                side: side.clone(),
                                                 amount: order_amount,
                                                 price: None,
                                                 order_type: OrderType::Market,
                                                 exchange_name: exchange_name.clone(),
                                             }).await;
+
+                                            if let Some(ref bc) = ws_broadcaster {
+                                                let ref_price = klines.last().map(|k| k.close).unwrap_or(0.0);
+                                                let side_str = match side {
+                                                    Side::Buy => "buy",
+                                                    Side::Sell => "sell",
+                                                };
+                                                let _ = bc.send(crate::api::ws::WsEvent::Trade {
+                                                    strategy_id: strategy_id.to_string(),
+                                                    symbol: symbol.clone(),
+                                                    side: side_str.to_string(),
+                                                    price: ref_price,
+                                                    amount: order_amount,
+                                                    pnl: 0.0,
+                                                });
+                                            }
                                         }
                                         None => {
                                             tracing::debug!("Strategy {} no signal", strategy.name);
@@ -265,8 +314,17 @@ impl StrategyEngine {
     /// Stop a running strategy.
     pub fn stop_strategy(&self, strategy_id: &Uuid) -> bool {
         if let Some(entry) = self.strategies.get_mut(strategy_id) {
+            let name = entry.strategy.name.clone();
             let _ = entry.cancel_token.send(true);
             info!("Stopping strategy {}", strategy_id);
+
+            // Emit WebSocket event: strategy stopped
+            self.emit_event(crate::api::ws::WsEvent::StrategyStatus {
+                strategy_id: strategy_id.to_string(),
+                name,
+                status: "stopped".to_string(),
+            });
+
             true
         } else {
             false

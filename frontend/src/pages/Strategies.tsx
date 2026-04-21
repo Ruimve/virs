@@ -1,5 +1,6 @@
 import { type Component, createSignal, createEffect, Show, For } from 'solid-js'
 import { api, fetchPlugins, validateScript, getAiStatus, generateStrategy, type PaginatedResponse, type Plugin } from '../lib/api'
+import { useWs, type WsEvent } from '../lib/ws'
 
 // ── 类型定义 ──────────────────────────────────────────────
 interface Strategy {
@@ -141,6 +142,16 @@ const Strategies: Component = () => {
   const [aiProviders, setAiProviders] = createSignal<string[]>([])
   const [aiGenerating, setAiGenerating] = createSignal(false)
   const [aiMessage, setAiMessage] = createSignal<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // WebSocket 实时状态更新
+  useWs((event: WsEvent) => {
+    if (event.type === 'strategy_status') {
+      const { strategy_id, status } = event.data
+      setStrategies(prev => prev.map(s =>
+        s.id === strategy_id ? { ...s, status } : s
+      ))
+    }
+  })
 
   // ── 加载插件列表 ──
   async function loadPlugins() {

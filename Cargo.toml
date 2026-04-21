@@ -10,7 +10,7 @@ license = "Apache-2.0"
 tokio = { version = "1", features = ["full"] }
 
 # Web framework
-axum = { version = "0.8.9", features = ["macros"] }
+axum = { version = "0.8.9", features = ["macros", "ws"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "fs"] }
 
@@ -27,9 +27,8 @@ redis = { version = "0.25", features = ["tokio-comp", "connection-manager"], opt
 # HTTP client
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "gzip"], default-features = false }
 
-# WebSocket (for future real-time data)
-tokio-tungstenite = { version = "0.21", features = ["rustls-tls-native-roots"], optional = true }
-futures-util = { version = "0.3", optional = true }
+# WebSocket (real-time data push via axum::extract::ws)
+futures-util = "0.3"
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }
@@ -80,10 +79,9 @@ tokio-test = "0.4"
 [features]
 default = ["redis", "notification-email"]
 redis = ["dep:redis"]
-websocket = ["dep:tokio-tungstenite", "dep:futures-util"]
 notification-email = ["dep:lettre"]
 notification-telegram = ["dep:teloxide"]
-full = ["redis", "websocket", "notification-email", "notification-telegram"]
+full = ["redis", "notification-email", "notification-telegram"]
 
 [profile.release]
 opt-level = 3

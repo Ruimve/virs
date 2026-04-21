@@ -52,6 +52,23 @@ struct PositionConfig {
     trade_direction: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum RiskReason {
+    StopLoss,
+    TakeProfit,
+    TrailingStop,
+}
+
+impl RiskReason {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RiskReason::StopLoss => "stop_loss",
+            RiskReason::TakeProfit => "take_profit",
+            RiskReason::TrailingStop => "trailing_stop",
+        }
+    }
+}
+
 impl PositionManager {
     pub fn new(
         strategy_id: uuid::Uuid,
@@ -199,9 +216,9 @@ impl PositionManager {
     }
 
     /// Check if current position should be closed due to risk management.
-    /// Returns Some((Side, amount)) with the close side and position size if position should be closed, None otherwise.
+    /// Returns Some((Side, amount, reason)) if position should be closed, None otherwise.
     /// `current_price` is the latest market price.
-    pub fn check_risk(&mut self, current_price: f64) -> Option<(Side, f64)> {
+    pub fn check_risk(&mut self, current_price: f64) -> Option<(Side, f64, RiskReason)> {
         if self.current_side.is_none() || self.entry_price <= 0.0 {
             return None;
         }
@@ -212,29 +229,26 @@ impl PositionManager {
             (self.entry_price - current_price) / self.entry_price
         };
 
-        // Check fixed stop-loss
         if let Some(sl) = self.config.stop_loss_pct {
             if pnl_pct <= -sl {
                 info!(
                     "[Strategy {}] Stop-loss triggered: pnl_pct={:.4}% <= -{}%",
                     self.strategy_id, pnl_pct * 100.0, sl * 100.0
                 );
-                return self.close_position();
+                return self.close_position_with_reason(RiskReason::StopLoss);
             }
         }
 
-        // Check fixed take-profit
         if let Some(tp) = self.config.take_profit_pct {
             if pnl_pct >= tp {
                 info!(
                     "[Strategy {}] Take-profit triggered: pnl_pct={:.4}% >= {}%",
                     self.strategy_id, pnl_pct * 100.0, tp * 100.0
                 );
-                return self.close_position();
+                return self.close_position_with_reason(RiskReason::TakeProfit);
             }
         }
 
-        // Check trailing stop
         if let (Some(ts_pct), Some(activation_pct)) = (self.config.trailing_stop_pct, self.config.trailing_activation_pct) {
             if pnl_pct >= activation_pct {
                 let is_long = self.current_side == Some(PositionSide::Long);
@@ -249,7 +263,7 @@ impl PositionManager {
                             "[Strategy {}] Trailing stop triggered (long): price={}, trailing_stop={:.2}",
                             self.strategy_id, current_price, trailing_stop_price
                         );
-                        return self.close_position();
+                        return self.close_position_with_reason(RiskReason::TrailingStop);
                     }
                 } else {
                     if current_price < self.trough_price {
@@ -261,7 +275,7 @@ impl PositionManager {
                             "[Strategy {}] Trailing stop triggered (short): price={}, trailing_stop={:.2}",
                             self.strategy_id, current_price, trailing_stop_price
                         );
-                        return self.close_position();
+                        return self.close_position_with_reason(RiskReason::TrailingStop);
                     }
                 }
             }
@@ -270,20 +284,19 @@ impl PositionManager {
         None
     }
 
-    /// Close current position and return the close side and size.
-    fn close_position(&mut self) -> Option<(Side, f64)> {
+    fn close_position_with_reason(&mut self, reason: RiskReason) -> Option<(Side, f64, RiskReason)> {
         let side = self.current_side.as_ref()?.clone();
         let size = self.current_size;
         info!(
-            "[Strategy {}] Risk management closing {:?} position: size={}",
-            self.strategy_id, side, size
+            "[Strategy {}] Risk management closing {:?} position: size={}, reason={:?}",
+            self.strategy_id, side, size, reason
         );
         self.current_side = None;
         self.current_size = 0.0;
         self.entry_price = 0.0;
         self.peak_price = 0.0;
         self.trough_price = f64::MAX;
-        Some((if side == PositionSide::Long { Side::Sell } else { Side::Buy }, size))
+        Some((if side == PositionSide::Long { Side::Sell } else { Side::Buy }, size, reason))
     }
 
     /// Determine order amount based on config.
