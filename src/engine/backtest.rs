@@ -204,12 +204,14 @@ impl BacktestEngine {
 
             // Calculate equity
             let equity = if let Some(ref pos) = position {
-                let unrealized = if pos.side == PositionSide::Long {
-                    (price - pos.entry_price) * pos.size
-                } else {
-                    (pos.entry_price - price) * pos.size
+                let unrealized = match pos.side {
+                    PositionSide::Long => (price - pos.entry_price) * pos.size,
+                    PositionSide::Short => (pos.entry_price - price) * pos.size,
                 };
-                balance + pos.size * pos.entry_price + unrealized
+                match pos.side {
+                    PositionSide::Long => balance + pos.size * pos.entry_price + unrealized,
+                    PositionSide::Short => balance + pos.size * pos.entry_price + unrealized,
+                }
             } else {
                 balance
             };
@@ -248,7 +250,13 @@ impl BacktestEngine {
         };
         let avg_profit = if profit_trades > 0 { total_profit / profit_trades as f64 } else { 0.0 };
         let avg_loss = if loss_trades > 0 { total_loss / loss_trades as f64 } else { 0.0 };
-        let profit_factor = if total_loss > 0.0 { total_profit / total_loss } else { f64::INFINITY };
+        let profit_factor = if total_loss > 0.0 {
+            total_profit / total_loss
+        } else if total_profit > 0.0 {
+            total_profit
+        } else {
+            0.0
+        };
 
         let total_return_pct = (balance - self.initial_balance) / self.initial_balance * 100.0;
 
@@ -275,13 +283,12 @@ impl BacktestEngine {
         // Sortino ratio (downside deviation only)
         let sortino_ratio = if returns.len() > 1 {
             let mean = returns.iter().sum::<f64>() / returns.len() as f64;
-            let downside: Vec<f64> = returns.iter().filter(|r| **r < 0.0).cloned().collect();
-            let downside_dev = if downside.len() > 0 {
-                let ds_mean = downside.iter().sum::<f64>() / downside.len() as f64;
-                (downside.iter().map(|r| (r - ds_mean).powi(2)).sum::<f64>() / downside.len() as f64).sqrt()
-            } else {
-                1.0
-            };
+            let downside_var: f64 = returns
+                .iter()
+                .map(|r| if *r < 0.0 { r.powi(2) } else { 0.0 })
+                .sum::<f64>()
+                / returns.len() as f64;
+            let downside_dev = downside_var.sqrt();
             if downside_dev > 0.0 { (mean / downside_dev) * (252.0_f64).sqrt() } else { 0.0 }
         } else {
             0.0
@@ -325,7 +332,10 @@ impl BacktestEngine {
         side: PositionSide,
         position_pct: f64,
     ) -> f64 {
-        let effective_price = price * (1.0 + self.slippage);
+        let effective_price = match side {
+            PositionSide::Long => price * (1.0 + self.slippage),
+            PositionSide::Short => price * (1.0 - self.slippage),
+        };
         let max_amount = *balance * 0.99 * position_pct;
         let size = max_amount / effective_price;
         let fee = size * effective_price * self.commission_rate;
@@ -351,17 +361,36 @@ impl BacktestEngine {
         open_trade: &mut Option<(DateTime<Utc>, f64, f64, String)>,
     ) -> Option<BacktestTrade> {
         let pos = position.take().unwrap();
-        let effective_price = price * (1.0 - self.slippage);
-        let revenue = pos.size * effective_price;
-        let fee = revenue * self.commission_rate;
-        let pnl = revenue - pos.size * pos.entry_price - fee;
-        *balance += revenue - fee;
+        let effective_price = match pos.side {
+            PositionSide::Long => price * (1.0 - self.slippage),
+            PositionSide::Short => price * (1.0 + self.slippage),
+        };
+        let fee = pos.size * effective_price * self.commission_rate;
+        let pnl = match pos.side {
+            PositionSide::Long => {
+                let revenue = pos.size * effective_price;
+                revenue - pos.size * pos.entry_price - fee
+            }
+            PositionSide::Short => {
+                let proceeds = pos.size * pos.entry_price;
+                let buyback_cost = pos.size * effective_price;
+                proceeds - buyback_cost - fee
+            }
+        };
+        let net_proceeds = match pos.side {
+            PositionSide::Long => pos.size * effective_price - fee,
+            PositionSide::Short => pos.size * pos.entry_price + (pos.size * pos.entry_price - pos.size * effective_price) - fee,
+        };
+        *balance += net_proceeds;
 
         let ot = open_trade.take()?;
         let entry_price = ot.1;
         let entry_time = ot.0;
         let side = ot.3;
-        let pnl_pct = (effective_price - entry_price) / entry_price * 100.0;
+        let pnl_pct = match pos.side {
+            PositionSide::Long => (effective_price - entry_price) / entry_price * 100.0,
+            PositionSide::Short => (entry_price - effective_price) / entry_price * 100.0,
+        };
         let total_commission = ot.2 + fee;
 
         Some(BacktestTrade {

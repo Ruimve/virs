@@ -550,6 +550,30 @@ impl PositionManager {
     pub fn cached_quote_balance(&self) -> f64 {
         self.cached_quote_balance
     }
+
+    pub fn restore_position(
+        &mut self,
+        side: PositionSide,
+        size: f64,
+        entry_price: f64,
+    ) {
+        if size <= 0.0 || entry_price <= 0.0 {
+            warn!(
+                "[Strategy {}] Invalid restore_position params: size={}, entry_price={}. Skipping.",
+                self.strategy_id, size, entry_price
+            );
+            return;
+        }
+        info!(
+            "[Strategy {}] Restoring position: side={:?}, size={:.6}, entry={:.2}",
+            self.strategy_id, side, size, entry_price
+        );
+        self.current_side = Some(side);
+        self.current_size = size;
+        self.entry_price = entry_price;
+        self.peak_price = entry_price;
+        self.trough_price = entry_price;
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -21,6 +21,7 @@ pub struct StrategyEngine {
     config: StrategyEngineConfig,
     plugins: Arc<PluginRegistry>,
     ws_broadcaster: Option<Arc<crate::api::ws::WsBroadcaster>>,
+    db_pool: Option<sqlx::PgPool>,
 }
 
 #[derive(Debug, Clone)]
@@ -68,6 +69,12 @@ pub enum OrderCommand {
         order_id: String,
         exchange_name: String,
     },
+    Query {
+        symbol: String,
+        order_id: String,
+        exchange_name: String,
+        callback: tokio::sync::oneshot::Sender<OrderResult>,
+    },
     Shutdown,
 }
 
@@ -84,7 +91,12 @@ impl StrategyEngine {
             config,
             plugins,
             ws_broadcaster: None,
+            db_pool: None,
         }
+    }
+
+    pub fn set_db_pool(&mut self, pool: sqlx::PgPool) {
+        self.db_pool = Some(pool);
     }
 
     pub fn set_ws_broadcaster(&mut self, broadcaster: Arc<crate::api::ws::WsBroadcaster>) {
@@ -136,6 +148,7 @@ impl StrategyEngine {
         let plugins = self.plugins.clone();
 
         let (cancel_tx, mut cancel_rx) = tokio::sync::watch::channel(false);
+        let cancel_tx_clone = cancel_tx.clone();
 
         strategies.insert(
             strategy_id,
@@ -157,6 +170,7 @@ impl StrategyEngine {
         });
 
         let ws_broadcaster = self.ws_broadcaster.clone();
+        let db_pool = self.db_pool.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(
                 interval_secs as u64,
@@ -168,6 +182,12 @@ impl StrategyEngine {
                 exchange_name.clone(),
                 &trading_config,
             );
+
+            if let Some(ref pool) = db_pool {
+                if let Err(e) = restore_position_from_db(&mut pos_manager, pool, strategy_id).await {
+                    warn!("Strategy {} failed to restore position: {}", strategy.name, e);
+                }
+            }
 
             loop {
                 tokio::select! {
@@ -317,6 +337,21 @@ impl StrategyEngine {
                                                         strategy.name, fill_price, filled_amount
                                                     );
                                                     pos_manager.apply_signal(&signal, filled_amount, fill_price);
+
+                                                    if let Some(ref bc) = ws_broadcaster {
+                                                        let side_str = match side {
+                                                            Side::Buy => "buy",
+                                                            Side::Sell => "sell",
+                                                        };
+                                                        let _ = bc.send(crate::api::ws::WsEvent::Trade {
+                                                            strategy_id: strategy_id.to_string(),
+                                                            symbol: symbol.clone(),
+                                                            side: side_str.to_string(),
+                                                            price: fill_price,
+                                                            amount: filled_amount,
+                                                            pnl: 0.0,
+                                                        });
+                                                    }
                                                 }
                                                 Ok(Ok(OrderResult::Failed { error })) => {
                                                     error!(
@@ -332,25 +367,35 @@ impl StrategyEngine {
                                                 }
                                                 Err(_) => {
                                                     error!(
-                                                        "Strategy {} order timed out (30s). Position state NOT updated.",
+                                                        "Strategy {} order timed out (30s). Querying exchange for order status...",
                                                         strategy.name
                                                     );
+                                                    let open_orders = match exchange.get_open_orders(Some(&symbol)).await {
+                                                        Ok(orders) => orders,
+                                                        Err(e) => {
+                                                            error!("Strategy {} failed to query open orders: {}", strategy.name, e);
+                                                            continue;
+                                                        }
+                                                    };
+                                                    if open_orders.is_empty() {
+                                                        info!(
+                                                            "Strategy {} no open orders found after timeout - order likely filled. Pausing strategy to prevent duplicate positions.",
+                                                            strategy.name
+                                                        );
+                                                        let _ = cancel_tx_clone.send(true);
+                                                        break;
+                                                    } else {
+                                                        for open_order in &open_orders {
+                                                            if let Err(e) = exchange.cancel_order(&symbol, &open_order.id).await {
+                                                                warn!("Strategy {} failed to cancel order {}: {}", strategy.name, open_order.id, e);
+                                                            }
+                                                        }
+                                                        info!(
+                                                            "Strategy {} cancelled {} open orders after timeout. Position state NOT updated.",
+                                                            strategy.name, open_orders.len()
+                                                        );
+                                                    }
                                                 }
-                                            }
-
-                                            if let Some(ref bc) = ws_broadcaster {
-                                                let side_str = match side {
-                                                    Side::Buy => "buy",
-                                                    Side::Sell => "sell",
-                                                };
-                                                let _ = bc.send(crate::api::ws::WsEvent::Trade {
-                                                    strategy_id: strategy_id.to_string(),
-                                                    symbol: symbol.clone(),
-                                                    side: side_str.to_string(),
-                                                    price: current_price,
-                                                    amount: base_amount,
-                                                    pnl: 0.0,
-                                                });
                                             }
                                         }
                                         None => {
@@ -595,4 +640,41 @@ pub fn map_raw_signal(
 
         _ => None,
     }
+}
+
+async fn restore_position_from_db(
+    pos_manager: &mut position::PositionManager,
+    pool: &sqlx::PgPool,
+    strategy_id: Uuid,
+) -> anyhow::Result<()> {
+    let row: Option<(String, f64, f64)> = sqlx::query_as(
+        r#"SELECT side, price, amount
+           FROM qd_strategy_trades
+           WHERE strategy_id = $1
+           ORDER BY created_at DESC
+           LIMIT 1"#,
+    )
+    .bind(strategy_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| anyhow::anyhow!("DB query failed: {}", e))?;
+
+    if let Some((side_str, price, amount)) = row {
+        let side = match side_str.to_lowercase().as_str() {
+            "buy" | "openlong" => crate::models::PositionSide::Long,
+            "sell" | "openshort" => crate::models::PositionSide::Short,
+            _ => {
+                info!(
+                    "Strategy {} last trade is a close (side={}), no position to restore",
+                    strategy_id, side_str
+                );
+                return Ok(());
+            }
+        };
+        pos_manager.restore_position(side, amount, price);
+    } else {
+        info!("Strategy {} has no trade history, starting fresh", strategy_id);
+    }
+
+    Ok(())
 }

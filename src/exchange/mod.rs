@@ -281,6 +281,7 @@ fn to_models_order(co: ccxt::Order) -> Order {
         order_type: to_models_order_type(&co.order_type),
         price: co.price,
         amount: co.amount,
+        cost: co.cost,
         filled: co.filled,
         remaining: co.remaining,
         status: to_models_order_status(&co.status),

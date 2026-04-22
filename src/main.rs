@@ -126,6 +126,7 @@ async fn main() -> anyhow::Result<()> {
     // Create WebSocket broadcaster for real-time push
     let ws_broadcaster = Arc::new(api::ws::create_broadcaster(256));
     strategy_engine_inner.set_ws_broadcaster(ws_broadcaster.clone());
+    strategy_engine_inner.set_db_pool(db_pool.clone());
     let strategy_engine = Arc::new(strategy_engine_inner);
 
     // Exchange credentials are now loaded from the database (qd_exchange_credentials)
@@ -188,7 +189,11 @@ async fn main() -> anyhow::Result<()> {
                                 Ok(order) => {
                                     info!("✅ Order executed: id={}, symbol={}, side={:?}, status={:?}", order.id, order.symbol, order.side, order.status);
 
-                                    let fill_price = order.price.unwrap_or(0.0);
+                                    let fill_price = order.cost
+                                        .filter(|c| *c > 0.0 && order.filled > 0.0)
+                                        .map(|c| c / order.filled)
+                                        .or(order.price)
+                                        .unwrap_or(0.0);
                                     let filled_amount = order.filled;
                                     let fee = order.fee;
 
@@ -224,6 +229,16 @@ async fn main() -> anyhow::Result<()> {
                                         status: "filled".to_string(),
                                         error: None,
                                     });
+
+                                    // Update pending order status to filled
+                                    let _ = sqlx::query(
+                                        "UPDATE pending_orders SET status = 'filled', exchange_order_id = $1, updated_at = NOW() WHERE strategy_id = $2 AND symbol = $3 AND status = 'dispatched'"
+                                    )
+                                    .bind(&order.id)
+                                    .bind(strategy_id)
+                                    .bind(&symbol)
+                                    .execute(&db_pool_for_worker)
+                                    .await;
 
                                     let _ = callback.send(engine::OrderResult::Filled {
                                         order_id: order.id,
@@ -290,6 +305,43 @@ async fn main() -> anyhow::Result<()> {
                         }
                         None => {
                             error!("❌ Exchange '{}' not found for cancel", exchange_name);
+                        }
+                    }
+                }
+                engine::OrderCommand::Query {
+                    symbol,
+                    order_id,
+                    exchange_name,
+                    callback,
+                } => {
+                    let exchange = order_worker_engine.get_exchange(&exchange_name);
+                    match exchange {
+                        Some(ex) => {
+                            match ex.get_order(&symbol, &order_id).await {
+                                Ok(order) => {
+                                    let fill_price = order.cost
+                                        .filter(|c| *c > 0.0 && order.filled > 0.0)
+                                        .map(|c| c / order.filled)
+                                        .or(order.price)
+                                        .unwrap_or(0.0);
+                                    let _ = callback.send(engine::OrderResult::Filled {
+                                        order_id: order.id,
+                                        fill_price,
+                                        filled_amount: order.filled,
+                                        fee: order.fee,
+                                    });
+                                }
+                                Err(e) => {
+                                    let _ = callback.send(engine::OrderResult::Failed {
+                                        error: e.to_string(),
+                                    });
+                                }
+                            }
+                        }
+                        None => {
+                            let _ = callback.send(engine::OrderResult::Failed {
+                                error: format!("Exchange '{}' not found", exchange_name),
+                            });
                         }
                     }
                 }

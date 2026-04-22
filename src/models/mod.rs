@@ -105,6 +105,7 @@ pub struct Order {
     pub order_type: OrderType,
     pub price: Option<f64>,
     pub amount: f64,
+    pub cost: Option<f64>,
     pub filled: f64,
     pub remaining: f64,
     pub status: OrderStatus,
