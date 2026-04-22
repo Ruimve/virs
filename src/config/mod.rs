@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Master application configuration, loaded from environment variables.
 #[derive(Debug, Clone, Serialize, Deserialize)]

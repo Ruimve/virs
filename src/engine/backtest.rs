@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::engine::indicators;
+use crate::engine::map_raw_signal;
 use crate::models::*;
 
 /// High-performance backtesting engine.
@@ -101,42 +102,43 @@ impl BacktestEngine {
         // Track peak equity for drawdown
         let mut peak_equity = balance;
 
-        // Pending signal from previous bar (to avoid look-ahead bias)
-        // Signal is generated at bar i close, executed at bar i+1 open
         let mut pending_signal: Option<i8> = None;
-
-        // Trade direction filter
-        let can_go_long = trade_direction == "long" || trade_direction == "both";
-        let can_go_short = trade_direction == "short" || trade_direction == "both";
 
         for i in 0..klines.len() {
             let kline = &klines[i];
             
-            if let Some(signal) = pending_signal.take() {
+            if let Some(raw) = pending_signal.take() {
                 let exec_price = kline.open;
                 let timestamp = chrono::DateTime::from_timestamp_millis(kline.open_time)
                     .unwrap_or_else(Utc::now);
-                
-                match signal {
-                    1 if position.is_none() && can_go_long => {
-                        let open_fee = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Long, position_pct);
-                        open_trade = Some((timestamp, exec_price, open_fee, "long".to_string()));
-                    }
-                    1 if position.is_some() && position.as_ref().unwrap().side == PositionSide::Short => {
-                        if let Some(bt) = self.close_position(&mut position, exec_price, &mut balance, timestamp, &mut open_trade) {
-                            record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
+
+                let pos_side_str = position.as_ref().map(|p| match p.side {
+                    PositionSide::Long => "long",
+                    PositionSide::Short => "short",
+                });
+
+                if let Some(signal) = map_raw_signal(raw, trade_direction, pos_side_str) {
+                    match signal {
+                        SignalType::OpenLong if position.is_none() => {
+                            let open_fee = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Long, position_pct);
+                            open_trade = Some((timestamp, exec_price, open_fee, "long".to_string()));
                         }
-                    }
-                    -1 if position.is_none() && can_go_short => {
-                        let open_fee = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Short, position_pct);
-                        open_trade = Some((timestamp, exec_price, open_fee, "short".to_string()));
-                    }
-                    -1 if position.is_some() && position.as_ref().unwrap().side == PositionSide::Long => {
-                        if let Some(bt) = self.close_position(&mut position, exec_price, &mut balance, timestamp, &mut open_trade) {
-                            record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
+                        SignalType::CloseLong if position.as_ref().map_or(false, |p| p.side == PositionSide::Long) => {
+                            if let Some(bt) = self.close_position(&mut position, exec_price, &mut balance, timestamp, &mut open_trade) {
+                                record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
+                            }
                         }
+                        SignalType::OpenShort if position.is_none() => {
+                            let open_fee = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Short, position_pct);
+                            open_trade = Some((timestamp, exec_price, open_fee, "short".to_string()));
+                        }
+                        SignalType::CloseShort if position.as_ref().map_or(false, |p| p.side == PositionSide::Short) => {
+                            if let Some(bt) = self.close_position(&mut position, exec_price, &mut balance, timestamp, &mut open_trade) {
+                                record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
 

@@ -38,7 +38,7 @@ pub fn build_router(
         ws_broadcaster,
     });
 
-    let frontend_dir = std::env::var("FRONTEND_DIR")
+    let _frontend_dir = std::env::var("FRONTEND_DIR")
         .unwrap_or_else(|_| "./frontend/dist".to_string());
 
     Router::new()

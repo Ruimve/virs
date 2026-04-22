@@ -161,7 +161,7 @@ pub async fn delete_credential(
 
 pub async fn test_credential(
     State(state): State<Arc<AppState>>,
-    auth: AuthUser,
+    _auth: AuthUser,
     Json(req): Json<CredentialRequest>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
     let exchange = ExchangeFactory::create(

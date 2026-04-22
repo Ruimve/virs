@@ -32,17 +32,15 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::Value;
 
-use types::*;
 use errors::ExchangeError;
 use auth::Signer;
 
 // Re-export key types for convenience
 pub use types::{
-    Ticker, Kline, OrderBook, Balance, Order, OrderFee,
+    Ticker, Kline, OrderBook, Balance, Order,
     MarketInfo, MarketType, Side, OrderType, OrderStatus,
-    PlaceOrderParams, TimeInForce, ExchangeCapabilities, ExchangeFeatures, RateLimit,
+    PlaceOrderParams, ExchangeCapabilities,
 };
-pub use errors::ExchangeError as CcxtError;
 
 /// Unified exchange trait — the core abstraction following CCXT's design.
 ///

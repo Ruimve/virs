@@ -1,54 +1,29 @@
-//! Position Manager — calculates order amounts and tracks positions.
-//!
-//! Responsible for:
-//! - Calculating order size based on strategy config and available balance
-//! - Tracking current position state (long/short/flat)
-//! - Determining close vs open signals
-//! - Applying risk management rules (max position size, stop loss, take profit)
-//! - Querying exchange balance for balance_pct mode
-
 use crate::models::*;
 use crate::exchange::Exchange;
 use tracing::{info, warn};
 
-/// Position state tracker for a single strategy.
 pub struct PositionManager {
     strategy_id: uuid::Uuid,
     symbol: String,
     exchange_name: String,
-    /// Current position side (None = flat)
     current_side: Option<PositionSide>,
-    /// Current position size
     current_size: f64,
-    /// Entry price of current position
     entry_price: f64,
-    /// Trading configuration
     config: PositionConfig,
-    /// Cached quote currency balance (updated on each determine_amount call)
     cached_quote_balance: f64,
-    /// Highest price since entry (for trailing stop on long)
     peak_price: f64,
-    /// Lowest price since entry (for trailing stop on short)
     trough_price: f64,
 }
 
 #[derive(Debug, Clone)]
 struct PositionConfig {
-    /// Fixed order amount in quote currency (e.g., 100 USDT)
     fixed_amount: f64,
-    /// Max position size in base currency
     max_position_size: f64,
-    /// Percentage of balance to use per trade (0.0 - 1.0)
     balance_pct: f64,
-    /// Stop loss percentage (e.g., 0.02 = 2%)
     stop_loss_pct: Option<f64>,
-    /// Take profit percentage (e.g., 0.05 = 5%)
     take_profit_pct: Option<f64>,
-    /// Trailing stop percentage (e.g., 0.015 = 1.5%)
     trailing_stop_pct: Option<f64>,
-    /// Trailing stop activation percentage (e.g., 0.03 = 3% profit to activate)
     trailing_activation_pct: Option<f64>,
-    /// Trade direction: "long", "short", or "both"
     trade_direction: String,
 }
 
@@ -122,9 +97,24 @@ impl PositionManager {
         }
     }
 
-    /// Calculate the order side and amount based on a signal.
-    /// Returns (Side, amount) or skips if invalid.
-    pub fn calculate_order(&mut self, signal: &SignalType) -> (Side, f64) {
+    /// Prepare an order based on a signal WITHOUT mutating position state.
+    /// Returns (Side, base_currency_amount).
+    /// `current_price` is used to convert quote amount → base amount for open orders.
+    /// For close orders, returns the tracked base-currency position size.
+    ///
+    /// Call `apply_signal` ONLY after the exchange confirms the order.
+    pub fn prepare_order(&self, signal: &SignalType, current_price: f64) -> (Side, f64) {
+        if current_price <= 0.0 {
+            warn!(
+                "[Strategy {}] Invalid current_price={}, cannot prepare order",
+                self.strategy_id, current_price
+            );
+            return match signal {
+                SignalType::OpenLong | SignalType::CloseLong => (Side::Buy, 0.0),
+                SignalType::OpenShort | SignalType::CloseShort => (Side::Sell, 0.0),
+            };
+        }
+
         match signal {
             SignalType::OpenLong => {
                 if self.current_side.is_some() {
@@ -134,15 +124,16 @@ impl PositionManager {
                     );
                     return (Side::Buy, 0.0);
                 }
-                let amount = self.determine_amount();
-                if amount <= 0.0 {
+                let quote_amount = self.determine_amount();
+                if quote_amount <= 0.0 {
                     return (Side::Buy, 0.0);
                 }
-                self.current_side = Some(PositionSide::Long);
-                self.current_size = amount;
-                self.peak_price = 0.0;
-                self.trough_price = f64::MAX;
-                (Side::Buy, amount)
+                let base_amount = quote_amount / current_price;
+                info!(
+                    "[Strategy {}] Prepare OpenLong: quote={:.2}, base={:.6} @ price={:.2}",
+                    self.strategy_id, quote_amount, base_amount, current_price
+                );
+                (Side::Buy, base_amount)
             }
             SignalType::CloseLong => {
                 if self.current_side != Some(PositionSide::Long) {
@@ -152,15 +143,11 @@ impl PositionManager {
                     );
                     return (Side::Sell, 0.0);
                 }
-                let amount = self.current_size;
                 info!(
-                    "[Strategy {}] Closing long position: size={}",
-                    self.strategy_id, amount
+                    "[Strategy {}] Prepare CloseLong: base_size={:.6}",
+                    self.strategy_id, self.current_size
                 );
-                self.current_side = None;
-                self.current_size = 0.0;
-                self.entry_price = 0.0;
-                (Side::Sell, amount)
+                (Side::Sell, self.current_size)
             }
             SignalType::OpenShort => {
                 if self.current_side.is_some() {
@@ -170,15 +157,16 @@ impl PositionManager {
                     );
                     return (Side::Sell, 0.0);
                 }
-                let amount = self.determine_amount();
-                if amount <= 0.0 {
+                let quote_amount = self.determine_amount();
+                if quote_amount <= 0.0 {
                     return (Side::Sell, 0.0);
                 }
-                self.current_side = Some(PositionSide::Short);
-                self.current_size = amount;
-                self.peak_price = 0.0;
-                self.trough_price = f64::MAX;
-                (Side::Sell, amount)
+                let base_amount = quote_amount / current_price;
+                info!(
+                    "[Strategy {}] Prepare OpenShort: quote={:.2}, base={:.6} @ price={:.2}",
+                    self.strategy_id, quote_amount, base_amount, current_price
+                );
+                (Side::Sell, base_amount)
             }
             SignalType::CloseShort => {
                 if self.current_side != Some(PositionSide::Short) {
@@ -188,37 +176,184 @@ impl PositionManager {
                     );
                     return (Side::Buy, 0.0);
                 }
-                let amount = self.current_size;
                 info!(
-                    "[Strategy {}] Closing short position: size={}",
-                    self.strategy_id, amount
+                    "[Strategy {}] Prepare CloseShort: base_size={:.6}",
+                    self.strategy_id, self.current_size
                 );
-                self.current_side = None;
-                self.current_size = 0.0;
-                self.entry_price = 0.0;
-                (Side::Buy, amount)
+                (Side::Buy, self.current_size)
             }
         }
     }
 
-    /// Whether this strategy is allowed to open long positions.
+    /// Async version of prepare_order — queries exchange for balance when using balance_pct mode.
+    pub async fn prepare_order_async(
+        &mut self,
+        signal: &SignalType,
+        exchange: &dyn Exchange,
+        current_price: f64,
+    ) -> (Side, f64) {
+        if current_price <= 0.0 {
+            warn!(
+                "[Strategy {}] Invalid current_price={}, cannot prepare order",
+                self.strategy_id, current_price
+            );
+            return match signal {
+                SignalType::OpenLong | SignalType::CloseLong => (Side::Buy, 0.0),
+                SignalType::OpenShort | SignalType::CloseShort => (Side::Sell, 0.0),
+            };
+        }
+
+        match signal {
+            SignalType::OpenLong => {
+                if self.current_side.is_some() {
+                    warn!(
+                        "[Strategy {}] OpenLong signal but already in position {:?}, skipping",
+                        self.strategy_id, self.current_side
+                    );
+                    return (Side::Buy, 0.0);
+                }
+                let quote_amount = self.determine_amount_async(exchange).await;
+                if quote_amount <= 0.0 {
+                    return (Side::Buy, 0.0);
+                }
+                let base_amount = quote_amount / current_price;
+                info!(
+                    "[Strategy {}] Prepare OpenLong: quote={:.2}, base={:.6} @ price={:.2}",
+                    self.strategy_id, quote_amount, base_amount, current_price
+                );
+                (Side::Buy, base_amount)
+            }
+            SignalType::CloseLong => {
+                if self.current_side != Some(PositionSide::Long) {
+                    warn!(
+                        "[Strategy {}] CloseLong signal but no long position, skipping",
+                        self.strategy_id
+                    );
+                    return (Side::Sell, 0.0);
+                }
+                info!(
+                    "[Strategy {}] Prepare CloseLong: base_size={:.6}",
+                    self.strategy_id, self.current_size
+                );
+                (Side::Sell, self.current_size)
+            }
+            SignalType::OpenShort => {
+                if self.current_side.is_some() {
+                    warn!(
+                        "[Strategy {}] OpenShort signal but already in position, skipping",
+                        self.strategy_id
+                    );
+                    return (Side::Sell, 0.0);
+                }
+                let quote_amount = self.determine_amount_async(exchange).await;
+                if quote_amount <= 0.0 {
+                    return (Side::Sell, 0.0);
+                }
+                let base_amount = quote_amount / current_price;
+                info!(
+                    "[Strategy {}] Prepare OpenShort: quote={:.2}, base={:.6} @ price={:.2}",
+                    self.strategy_id, quote_amount, base_amount, current_price
+                );
+                (Side::Sell, base_amount)
+            }
+            SignalType::CloseShort => {
+                if self.current_side != Some(PositionSide::Short) {
+                    warn!(
+                        "[Strategy {}] CloseShort signal but no short position, skipping",
+                        self.strategy_id
+                    );
+                    return (Side::Buy, 0.0);
+                }
+                info!(
+                    "[Strategy {}] Prepare CloseShort: base_size={:.6}",
+                    self.strategy_id, self.current_size
+                );
+                (Side::Buy, self.current_size)
+            }
+        }
+    }
+
+    /// Apply a confirmed signal to position state.
+    /// Call this ONLY after the exchange has confirmed the order.
+    /// `base_amount` is the filled amount in base currency.
+    /// `fill_price` is the actual execution price from the exchange.
+    pub fn apply_signal(&mut self, signal: &SignalType, base_amount: f64, fill_price: f64) {
+        match signal {
+            SignalType::OpenLong => {
+                self.current_side = Some(PositionSide::Long);
+                self.current_size = base_amount;
+                self.entry_price = fill_price;
+                self.peak_price = fill_price;
+                self.trough_price = f64::MAX;
+                info!(
+                    "[Strategy {}] Applied OpenLong: size={:.6}, entry={:.2}",
+                    self.strategy_id, base_amount, fill_price
+                );
+            }
+            SignalType::CloseLong => {
+                info!(
+                    "[Strategy {}] Applied CloseLong: size={:.6}, exit={:.2}",
+                    self.strategy_id, self.current_size, fill_price
+                );
+                self.current_side = None;
+                self.current_size = 0.0;
+                self.entry_price = 0.0;
+                self.peak_price = 0.0;
+                self.trough_price = f64::MAX;
+            }
+            SignalType::OpenShort => {
+                self.current_side = Some(PositionSide::Short);
+                self.current_size = base_amount;
+                self.entry_price = fill_price;
+                self.peak_price = 0.0;
+                self.trough_price = fill_price;
+                info!(
+                    "[Strategy {}] Applied OpenShort: size={:.6}, entry={:.2}",
+                    self.strategy_id, base_amount, fill_price
+                );
+            }
+            SignalType::CloseShort => {
+                info!(
+                    "[Strategy {}] Applied CloseShort: size={:.6}, exit={:.2}",
+                    self.strategy_id, self.current_size, fill_price
+                );
+                self.current_side = None;
+                self.current_size = 0.0;
+                self.entry_price = 0.0;
+                self.peak_price = 0.0;
+                self.trough_price = f64::MAX;
+            }
+        }
+    }
+
+    /// Update peak/trough price tracking for trailing stop calculation.
+    /// Should be called on every cycle with the latest market price,
+    /// BEFORE calling `check_risk`.
+    pub fn update_price_tracking(&mut self, current_price: f64) {
+        if self.current_side.is_none() || current_price <= 0.0 {
+            return;
+        }
+        if current_price > self.peak_price {
+            self.peak_price = current_price;
+        }
+        if current_price < self.trough_price {
+            self.trough_price = current_price;
+        }
+    }
+
     pub fn can_go_long(&self) -> bool {
         self.config.trade_direction == "long" || self.config.trade_direction == "both"
     }
 
-    /// Whether this strategy is allowed to open short positions.
     pub fn can_go_short(&self) -> bool {
         self.config.trade_direction == "short" || self.config.trade_direction == "both"
     }
 
-    pub fn set_entry_price(&mut self, price: f64) {
-        self.entry_price = price;
-    }
-
     /// Check if current position should be closed due to risk management.
-    /// Returns Some((Side, amount, reason)) if position should be closed, None otherwise.
-    /// `current_price` is the latest market price.
-    pub fn check_risk(&mut self, current_price: f64) -> Option<(Side, f64, RiskReason)> {
+    /// Returns Some((Side, base_amount, reason)) if position should be closed.
+    /// Does NOT mutate position state — call `apply_risk_close` after order confirmation.
+    /// `current_price` should be a real-time price (e.g., from ticker), not a stale kline close.
+    pub fn check_risk(&self, current_price: f64) -> Option<(Side, f64, RiskReason)> {
         if self.current_side.is_none() || self.entry_price <= 0.0 {
             return None;
         }
@@ -235,7 +370,12 @@ impl PositionManager {
                     "[Strategy {}] Stop-loss triggered: pnl_pct={:.4}% <= -{}%",
                     self.strategy_id, pnl_pct * 100.0, sl * 100.0
                 );
-                return self.close_position_with_reason(RiskReason::StopLoss);
+                let close_side = if self.current_side == Some(PositionSide::Long) {
+                    Side::Sell
+                } else {
+                    Side::Buy
+                };
+                return Some((close_side, self.current_size, RiskReason::StopLoss));
             }
         }
 
@@ -245,37 +385,38 @@ impl PositionManager {
                     "[Strategy {}] Take-profit triggered: pnl_pct={:.4}% >= {}%",
                     self.strategy_id, pnl_pct * 100.0, tp * 100.0
                 );
-                return self.close_position_with_reason(RiskReason::TakeProfit);
+                let close_side = if self.current_side == Some(PositionSide::Long) {
+                    Side::Sell
+                } else {
+                    Side::Buy
+                };
+                return Some((close_side, self.current_size, RiskReason::TakeProfit));
             }
         }
 
-        if let (Some(ts_pct), Some(activation_pct)) = (self.config.trailing_stop_pct, self.config.trailing_activation_pct) {
+        if let (Some(ts_pct), Some(activation_pct)) =
+            (self.config.trailing_stop_pct, self.config.trailing_activation_pct)
+        {
             if pnl_pct >= activation_pct {
                 let is_long = self.current_side == Some(PositionSide::Long);
 
                 if is_long {
-                    if current_price > self.peak_price {
-                        self.peak_price = current_price;
-                    }
                     let trailing_stop_price = self.peak_price * (1.0 - ts_pct);
                     if current_price <= trailing_stop_price {
                         info!(
                             "[Strategy {}] Trailing stop triggered (long): price={}, trailing_stop={:.2}",
                             self.strategy_id, current_price, trailing_stop_price
                         );
-                        return self.close_position_with_reason(RiskReason::TrailingStop);
+                        return Some((Side::Sell, self.current_size, RiskReason::TrailingStop));
                     }
                 } else {
-                    if current_price < self.trough_price {
-                        self.trough_price = current_price;
-                    }
                     let trailing_stop_price = self.trough_price * (1.0 + ts_pct);
                     if current_price >= trailing_stop_price {
                         info!(
                             "[Strategy {}] Trailing stop triggered (short): price={}, trailing_stop={:.2}",
                             self.strategy_id, current_price, trailing_stop_price
                         );
-                        return self.close_position_with_reason(RiskReason::TrailingStop);
+                        return Some((Side::Buy, self.current_size, RiskReason::TrailingStop));
                     }
                 }
             }
@@ -284,39 +425,33 @@ impl PositionManager {
         None
     }
 
-    fn close_position_with_reason(&mut self, reason: RiskReason) -> Option<(Side, f64, RiskReason)> {
-        let side = self.current_side.as_ref()?.clone();
-        let size = self.current_size;
-        info!(
-            "[Strategy {}] Risk management closing {:?} position: size={}, reason={:?}",
-            self.strategy_id, side, size, reason
-        );
+    /// Apply risk close to position state after the close order is confirmed.
+    pub fn apply_risk_close(&mut self) {
+        if let Some(ref side) = self.current_side {
+            info!(
+                "[Strategy {}] Risk close applied: {:?} position closed, size={:.6}",
+                self.strategy_id, side, self.current_size
+            );
+        }
         self.current_side = None;
         self.current_size = 0.0;
         self.entry_price = 0.0;
         self.peak_price = 0.0;
         self.trough_price = f64::MAX;
-        Some((if side == PositionSide::Long { Side::Sell } else { Side::Buy }, size, reason))
     }
 
-    /// Determine order amount based on config.
+    /// Determine order amount in quote currency based on config.
     /// Priority: fixed_amount > balance_pct > 0 (no trade)
-    ///
-    /// When balance_pct is configured, queries the exchange for the quote currency
-    /// balance and calculates the amount as `free_balance * balance_pct`.
     pub async fn determine_amount_async(&mut self, exchange: &dyn Exchange) -> f64 {
         if self.config.fixed_amount > 0.0 {
             return self.config.fixed_amount.min(self.config.max_position_size);
         }
 
         if self.config.balance_pct > 0.0 {
-            // Extract quote currency from symbol (e.g., "BTCUSDT" -> "USDT")
             let quote_currency = self.extract_quote_currency();
 
-            // Query exchange balance
             match exchange.get_balances().await {
                 Ok(balances) => {
-                    // Find the quote currency balance
                     let quote_balance = balances
                         .iter()
                         .find(|b| b.asset.eq_ignore_ascii_case(&quote_currency))
@@ -338,8 +473,11 @@ impl PositionManager {
 
                     info!(
                         "[Strategy {}] balance_pct: {} free * {}% = {} (capped at {})",
-                        self.strategy_id, quote_currency, self.config.balance_pct * 100.0,
-                        amount, capped
+                        self.strategy_id,
+                        quote_currency,
+                        self.config.balance_pct * 100.0,
+                        amount,
+                        capped
                     );
 
                     return capped;
@@ -357,8 +495,6 @@ impl PositionManager {
         0.0
     }
 
-    /// Synchronous fallback — uses cached balance or returns 0.
-    /// Used when async exchange query is not available.
     pub fn determine_amount(&self) -> f64 {
         if self.config.fixed_amount > 0.0 {
             return self.config.fixed_amount.min(self.config.max_position_size);
@@ -372,22 +508,17 @@ impl PositionManager {
         0.0
     }
 
-    /// Extract quote currency from symbol.
-    /// Handles formats: "BTCUSDT" -> "USDT", "BTC/USDT" -> "USDT", "BTC_USDT" -> "USDT"
     fn extract_quote_currency(&self) -> String {
         let sym = &self.symbol;
 
-        // Try slash separator first: "BTC/USDT"
         if let Some(pos) = sym.find('/') {
             return sym[pos + 1..].to_uppercase();
         }
 
-        // Try underscore: "BTC_USDT"
         if let Some(pos) = sym.find('_') {
             return sym[pos + 1..].to_uppercase();
         }
 
-        // Try common quote currencies (longest match first to avoid "BUSD" matching "USDT")
         let common_quotes = [
             "USDC", "USDT", "BUSD", "TUSD", "DAI", "USD", "EUR", "BTC", "ETH", "BNB",
         ];
@@ -399,7 +530,6 @@ impl PositionManager {
             }
         }
 
-        // Fallback: assume last 3-4 chars are quote
         if upper.len() >= 7 {
             upper[upper.len() - 4..].to_string()
         } else if upper.len() >= 4 {
@@ -409,7 +539,6 @@ impl PositionManager {
         }
     }
 
-    /// Get current position info.
     pub fn position_info(&self) -> Option<PositionInfo> {
         self.current_side.as_ref().map(|side| PositionInfo {
             side: side.clone(),
@@ -418,13 +547,11 @@ impl PositionManager {
         })
     }
 
-    /// Get the cached quote currency balance.
     pub fn cached_quote_balance(&self) -> f64 {
         self.cached_quote_balance
     }
 }
 
-/// Current position information.
 #[derive(Debug, Clone)]
 pub struct PositionInfo {
     pub side: PositionSide,

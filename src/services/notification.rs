@@ -2,8 +2,8 @@
 //!
 //! Sends alerts for strategy signals, order executions, and errors.
 
-use crate::config::{AppConfig, NotificationConfig};
-use tracing::{info, warn, error};
+use crate::config::NotificationConfig;
+use tracing::{info, error};
 
 /// Send a notification through all configured channels.
 pub async fn send_notification(

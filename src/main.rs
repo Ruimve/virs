@@ -150,6 +150,7 @@ async fn main() -> anyhow::Result<()> {
                     price,
                     order_type,
                     exchange_name,
+                    callback,
                 } => {
                     info!(
                         "🔄 Processing order: strategy={}, symbol={}, signal={:?}, side={:?}, amount={}, exchange={}",
@@ -158,6 +159,9 @@ async fn main() -> anyhow::Result<()> {
 
                     if amount <= 0.0 {
                         error!("❌ Invalid order amount {} for strategy {}. Refusing.", amount, strategy_id);
+                        let _ = callback.send(engine::OrderResult::Failed {
+                            error: format!("Invalid order amount: {}", amount),
+                        });
                         continue;
                     }
 
@@ -184,6 +188,10 @@ async fn main() -> anyhow::Result<()> {
                                 Ok(order) => {
                                     info!("✅ Order executed: id={}, symbol={}, side={:?}, status={:?}", order.id, order.symbol, order.side, order.status);
 
+                                    let fill_price = order.price.unwrap_or(0.0);
+                                    let filled_amount = order.filled;
+                                    let fee = order.fee;
+
                                     // Record trade
                                     let _ = sqlx::query(
                                         r#"INSERT INTO qd_strategy_trades
@@ -194,9 +202,9 @@ async fn main() -> anyhow::Result<()> {
                                     .bind(&symbol)
                                     .bind(format!("{:?}", side))
                                     .bind(format!("{:?}", signal_type))
-                                    .bind(order.price.unwrap_or(0.0))
-                                    .bind(order.filled)
-                                    .bind(order.fee)
+                                    .bind(fill_price)
+                                    .bind(filled_amount)
+                                    .bind(fee)
                                     .bind(&order.id)
                                     .execute(&db_pool_for_worker)
                                     .await;
@@ -205,7 +213,7 @@ async fn main() -> anyhow::Result<()> {
                                     services::notification::send_notification(
                                         &notification_config,
                                         &format!("Order Executed: {}", symbol),
-                                        &format!("Side: {:?}\nAmount: {}\nPrice: {:?}\nOrder ID: {}", side, order.filled, order.price, order.id),
+                                        &format!("Side: {:?}\nAmount: {}\nPrice: {:?}\nOrder ID: {}", side, filled_amount, fill_price, order.id),
                                     ).await;
 
                                     // Emit WebSocket event: order filled
@@ -215,6 +223,13 @@ async fn main() -> anyhow::Result<()> {
                                         symbol: symbol.clone(),
                                         status: "filled".to_string(),
                                         error: None,
+                                    });
+
+                                    let _ = callback.send(engine::OrderResult::Filled {
+                                        order_id: order.id,
+                                        fill_price,
+                                        filled_amount,
+                                        fee,
                                     });
                                 }
                                 Err(e) => {
@@ -238,11 +253,18 @@ async fn main() -> anyhow::Result<()> {
                                         status: "failed".to_string(),
                                         error: Some(e.to_string()),
                                     });
+
+                                    let _ = callback.send(engine::OrderResult::Failed {
+                                        error: e.to_string(),
+                                    });
                                 }
                             }
                         }
                         None => {
                             error!("❌ Exchange '{}' not found for strategy {}", exchange_name, strategy_id);
+                            let _ = callback.send(engine::OrderResult::Failed {
+                                error: format!("Exchange '{}' not found", exchange_name),
+                            });
                         }
                     }
                 }

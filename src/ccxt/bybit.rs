@@ -17,8 +17,8 @@ use tracing::info;
 
 use super::types::*;
 use super::errors::ExchangeError;
-use super::auth::{BybitSigner, Signer};
-use super::{Exchange, ExchangeClient, parse_f64, parse_str, parse_str_opt};
+use super::auth::BybitSigner;
+use super::{Exchange, ExchangeClient, parse_str, parse_str_opt};
 
 /// Bybit exchange implementation.
 pub struct BybitExchange {

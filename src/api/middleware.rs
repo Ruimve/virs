@@ -6,7 +6,7 @@ use axum::{
 };
 
 use crate::models::{ApiResponse, UserRole};
-use crate::utils::auth::{Claims, decode_jwt};
+use crate::utils::auth::decode_jwt;
 
 #[derive(Debug, Clone)]
 pub struct AuthUser {

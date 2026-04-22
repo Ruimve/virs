@@ -14,8 +14,6 @@ use tokio::sync::mpsc;
 use tracing::{info, warn, error};
 use uuid::Uuid;
 
-/// Strategy execution engine.
-/// Manages running strategies, generates signals, and dispatches orders.
 pub struct StrategyEngine {
     strategies: Arc<DashMap<Uuid, RunningStrategy>>,
     exchange_instances: Arc<DashMap<String, Box<dyn Exchange>>>,
@@ -39,6 +37,19 @@ struct RunningStrategy {
 }
 
 #[derive(Debug)]
+pub enum OrderResult {
+    Filled {
+        order_id: String,
+        fill_price: f64,
+        filled_amount: f64,
+        fee: f64,
+    },
+    Failed {
+        error: String,
+    },
+}
+
+#[derive(Debug)]
 pub enum OrderCommand {
     Place {
         strategy_id: Uuid,
@@ -49,6 +60,7 @@ pub enum OrderCommand {
         price: Option<f64>,
         order_type: OrderType,
         exchange_name: String,
+        callback: tokio::sync::oneshot::Sender<OrderResult>,
     },
     Cancel {
         strategy_id: Uuid,
@@ -75,28 +87,22 @@ impl StrategyEngine {
         }
     }
 
-    /// Set the WebSocket broadcaster for real-time event push.
     pub fn set_ws_broadcaster(&mut self, broadcaster: Arc<crate::api::ws::WsBroadcaster>) {
         self.ws_broadcaster = Some(broadcaster);
     }
 
-    /// Emit a WebSocket event to all connected clients.
     fn emit_event(&self, event: crate::api::ws::WsEvent) {
         if let Some(ref broadcaster) = self.ws_broadcaster {
             let _ = broadcaster.send(event);
         }
     }
 
-    /// Register an exchange instance.
     pub fn register_exchange(&self, exchange: Box<dyn Exchange>) {
         let name = exchange.name().to_string();
         info!("Registered exchange: {}", name);
         self.exchange_instances.insert(name, exchange);
     }
 
-    /// Register an exchange instance for a specific user.
-    /// Uses a user-scoped key "{exchange}:{user_id}" so different users can
-    /// have different credentials for the same exchange.
     pub fn register_exchange_for_user(
         &self,
         exchange: Box<dyn Exchange>,
@@ -109,20 +115,14 @@ impl StrategyEngine {
         scoped_name
     }
 
-    /// Get a reference to an exchange instance by name.
-    pub fn get_exchange(&self, name: &str) -> Option<dashmap::mapref::one::Ref<String, Box<dyn Exchange>>> {
+    pub fn get_exchange(&self, name: &str) -> Option<dashmap::mapref::one::Ref<'_, String, Box<dyn Exchange>>> {
         self.exchange_instances.get(name)
     }
 
-    /// Get a list of registered exchange names.
     pub fn registered_exchange_names(&self) -> Vec<String> {
         self.exchange_instances.iter().map(|r| r.key().clone()).collect()
     }
 
-    /// Start a strategy execution.
-    /// If `exchange_key` is provided, use that specific exchange instance
-    /// (e.g., a user-scoped one like "binance:{user_id}").
-    /// Otherwise, fall back to the strategy's `exchange` field.
     pub async fn start_strategy(&self, strategy: Strategy, exchange_key: Option<String>) -> anyhow::Result<()> {
         let strategy_id = strategy.id;
         let exchange_name = exchange_key.unwrap_or_else(|| strategy.exchange.clone());
@@ -150,21 +150,18 @@ impl StrategyEngine {
             strategy.name, symbol, exchange_name, timeframe
         );
 
-        // Emit WebSocket event: strategy started
         self.emit_event(crate::api::ws::WsEvent::StrategyStatus {
             strategy_id: strategy_id.to_string(),
             name: strategy.name.clone(),
             status: "running".to_string(),
         });
 
-        // Spawn strategy task
         let ws_broadcaster = self.ws_broadcaster.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(
                 interval_secs as u64,
             ));
 
-            // Initialize position manager for this strategy
             let mut pos_manager = position::PositionManager::new(
                 strategy_id,
                 symbol.clone(),
@@ -176,7 +173,88 @@ impl StrategyEngine {
                 tokio::select! {
                     _ = interval.tick() => {
                         if let Some(exchange) = exchanges.get(&exchange_name) {
-                            // Extract current position info for LuaContext
+                            let current_price = match exchange.get_ticker(&symbol).await {
+                                Ok(ticker) => ticker.last,
+                                Err(e) => {
+                                    warn!("Strategy {} failed to get ticker: {}", strategy.name, e);
+                                    continue;
+                                }
+                            };
+
+                            if current_price <= 0.0 {
+                                warn!("Strategy {} got invalid ticker price {}", strategy.name, current_price);
+                                continue;
+                            }
+
+                            pos_manager.update_price_tracking(current_price);
+
+                            if let Some((close_side, close_amount, risk_reason)) = pos_manager.check_risk(current_price) {
+                                info!(
+                                    "Strategy {} risk management triggered close: {:?} for {} @ {:.2}",
+                                    strategy.name, close_side, symbol, current_price
+                                );
+
+                                if let Some(ref bc) = ws_broadcaster {
+                                    let _ = bc.send(crate::api::ws::WsEvent::Risk {
+                                        strategy_id: strategy_id.to_string(),
+                                        symbol: symbol.clone(),
+                                        reason: risk_reason.as_str().to_string(),
+                                        price: current_price,
+                                    });
+                                }
+
+                                let signal_type = if close_side == Side::Sell {
+                                    SignalType::CloseLong
+                                } else {
+                                    SignalType::CloseShort
+                                };
+
+                                let (cb_tx, cb_rx) = tokio::sync::oneshot::channel();
+                                let _ = order_tx.send(OrderCommand::Place {
+                                    strategy_id,
+                                    symbol: symbol.clone(),
+                                    signal_type: signal_type.clone(),
+                                    side: close_side,
+                                    amount: close_amount,
+                                    price: None,
+                                    order_type: OrderType::Market,
+                                    exchange_name: exchange_name.clone(),
+                                    callback: cb_tx,
+                                }).await;
+
+                                match tokio::time::timeout(
+                                    std::time::Duration::from_secs(30),
+                                    cb_rx,
+                                ).await {
+                                    Ok(Ok(OrderResult::Filled { fill_price, filled_amount, .. })) => {
+                                        info!(
+                                            "Strategy {} risk close confirmed: fill_price={:.2}, filled={:.6}",
+                                            strategy.name, fill_price, filled_amount
+                                        );
+                                        pos_manager.apply_risk_close();
+                                    }
+                                    Ok(Ok(OrderResult::Failed { error })) => {
+                                        error!(
+                                            "Strategy {} risk close FAILED: {}. Will retry next cycle.",
+                                            strategy.name, error
+                                        );
+                                    }
+                                    Ok(Err(_)) => {
+                                        error!(
+                                            "Strategy {} risk close callback dropped. Will retry next cycle.",
+                                            strategy.name
+                                        );
+                                    }
+                                    Err(_) => {
+                                        error!(
+                                            "Strategy {} risk close timed out (30s). Will retry next cycle.",
+                                            strategy.name
+                                        );
+                                    }
+                                }
+                                continue;
+                            }
+
                             let position_info = pos_manager.position_info().map(|p| {
                                 (
                                     match p.side {
@@ -196,37 +274,7 @@ impl StrategyEngine {
                                 &plugins,
                                 position_info,
                             ).await {
-                                Ok((signal, klines)) => {
-                                    // Check risk management on existing position before processing new signal
-                                    if let Some((close_side, close_amount, risk_reason)) = pos_manager.check_risk(klines.last().map(|k| k.close).unwrap_or(0.0)) {
-                                        let risk_price = klines.last().map(|k| k.close).unwrap_or(0.0);
-                                        info!(
-                                            "Strategy {} risk management triggered close: {:?} for {}",
-                                            strategy.name, close_side, symbol
-                                        );
-
-                                        if let Some(ref bc) = ws_broadcaster {
-                                            let _ = bc.send(crate::api::ws::WsEvent::Risk {
-                                                strategy_id: strategy_id.to_string(),
-                                                symbol: symbol.clone(),
-                                                reason: risk_reason.as_str().to_string(),
-                                                price: risk_price,
-                                            });
-                                        }
-
-                                        let _ = order_tx.send(OrderCommand::Place {
-                                            strategy_id,
-                                            symbol: symbol.clone(),
-                                            signal_type: if close_side == Side::Sell { SignalType::CloseLong } else { SignalType::CloseShort },
-                                            side: close_side,
-                                            amount: close_amount,
-                                            price: None,
-                                            order_type: OrderType::Market,
-                                            exchange_name: exchange_name.clone(),
-                                        }).await;
-                                        continue;
-                                    }
-
+                                Ok((signal, _klines)) => {
                                     match signal {
                                         Some(signal) => {
                                             info!(
@@ -234,8 +282,11 @@ impl StrategyEngine {
                                                 strategy.name, signal, symbol
                                             );
 
-                                            let amount = pos_manager.determine_amount_async(&*exchange).await;
-                                            if amount <= 0.0 {
+                                            let (side, base_amount) = pos_manager
+                                                .prepare_order_async(&signal, &*exchange, current_price)
+                                                .await;
+
+                                            if base_amount <= 0.0 {
                                                 warn!(
                                                     "Strategy {} signal {:?} produced amount=0, skipping",
                                                     strategy.name, signal
@@ -243,34 +294,51 @@ impl StrategyEngine {
                                                 continue;
                                             }
 
-                                            let (side, order_amount) = pos_manager.calculate_order(&signal);
-                                            if order_amount <= 0.0 {
-                                                warn!(
-                                                    "Strategy {} signal {:?} rejected by position manager",
-                                                    strategy.name, signal
-                                                );
-                                                continue;
-                                            }
-
-                                            if matches!(signal, SignalType::OpenLong | SignalType::OpenShort) {
-                                                if let Some(k) = klines.last() {
-                                                    pos_manager.set_entry_price(k.close);
-                                                }
-                                            }
-
+                                            let (cb_tx, cb_rx) = tokio::sync::oneshot::channel();
                                             let _ = order_tx.send(OrderCommand::Place {
                                                 strategy_id,
                                                 symbol: symbol.clone(),
                                                 signal_type: signal.clone(),
                                                 side: side.clone(),
-                                                amount: order_amount,
+                                                amount: base_amount,
                                                 price: None,
                                                 order_type: OrderType::Market,
                                                 exchange_name: exchange_name.clone(),
+                                                callback: cb_tx,
                                             }).await;
 
+                                            match tokio::time::timeout(
+                                                std::time::Duration::from_secs(30),
+                                                cb_rx,
+                                            ).await {
+                                                Ok(Ok(OrderResult::Filled { fill_price, filled_amount, .. })) => {
+                                                    info!(
+                                                        "Strategy {} order confirmed: fill_price={:.2}, filled={:.6}",
+                                                        strategy.name, fill_price, filled_amount
+                                                    );
+                                                    pos_manager.apply_signal(&signal, filled_amount, fill_price);
+                                                }
+                                                Ok(Ok(OrderResult::Failed { error })) => {
+                                                    error!(
+                                                        "Strategy {} order FAILED: {}. Position state NOT updated.",
+                                                        strategy.name, error
+                                                    );
+                                                }
+                                                Ok(Err(_)) => {
+                                                    error!(
+                                                        "Strategy {} order callback dropped. Position state NOT updated.",
+                                                        strategy.name
+                                                    );
+                                                }
+                                                Err(_) => {
+                                                    error!(
+                                                        "Strategy {} order timed out (30s). Position state NOT updated.",
+                                                        strategy.name
+                                                    );
+                                                }
+                                            }
+
                                             if let Some(ref bc) = ws_broadcaster {
-                                                let ref_price = klines.last().map(|k| k.close).unwrap_or(0.0);
                                                 let side_str = match side {
                                                     Side::Buy => "buy",
                                                     Side::Sell => "sell",
@@ -279,8 +347,8 @@ impl StrategyEngine {
                                                     strategy_id: strategy_id.to_string(),
                                                     symbol: symbol.clone(),
                                                     side: side_str.to_string(),
-                                                    price: ref_price,
-                                                    amount: order_amount,
+                                                    price: current_price,
+                                                    amount: base_amount,
                                                     pnl: 0.0,
                                                 });
                                             }
@@ -311,14 +379,12 @@ impl StrategyEngine {
         Ok(())
     }
 
-    /// Stop a running strategy.
     pub fn stop_strategy(&self, strategy_id: &Uuid) -> bool {
         if let Some(entry) = self.strategies.get_mut(strategy_id) {
             let name = entry.strategy.name.clone();
             let _ = entry.cancel_token.send(true);
             info!("Stopping strategy {}", strategy_id);
 
-            // Emit WebSocket event: strategy stopped
             self.emit_event(crate::api::ws::WsEvent::StrategyStatus {
                 strategy_id: strategy_id.to_string(),
                 name,
@@ -331,37 +397,22 @@ impl StrategyEngine {
         }
     }
 
-    /// Get all running strategy IDs.
     pub fn running_strategy_ids(&self) -> Vec<Uuid> {
         self.strategies.iter().map(|r| *r.key()).collect()
     }
 
-    /// Check if a strategy is running.
     pub fn is_running(&self, strategy_id: &Uuid) -> bool {
         self.strategies.contains_key(strategy_id)
     }
 }
 
-/// Run a single strategy decision cycle.
-///
-/// The strategy's `strategy_code` field contains user-defined script code.
-/// If `strategy_mode` is "script", the code is interpreted to generate signals.
-/// If `strategy_mode` is "signal", the `indicator_config` JSON is used with
-/// a registered indicator plugin.
-///
-/// Signal mapping depends on the strategy's `trade_direction` trading config:
-/// - `trade_direction = "long"`: signal 1 -> OpenLong, -1 -> CloseLong
-/// - `trade_direction = "short"`: signal 1 -> CloseShort, -1 -> OpenShort
-/// - `trade_direction = "both"`: signal 1 -> OpenLong, -1 -> OpenShort (close signals handled by position manager)
-///
-/// This enables long-only, short-only, and long/short strategies from the same indicator logic.
 async fn run_strategy_cycle(
     exchange: &dyn Exchange,
     symbol: &str,
     timeframe: &str,
     strategy: &Strategy,
     plugins: &PluginRegistry,
-    position_info: Option<(String, f64, f64)>,  // (side, entry_price, size)
+    position_info: Option<(String, f64, f64)>,
 ) -> anyhow::Result<(Option<SignalType>, Vec<Kline>)> {
     let klines = exchange.get_klines(symbol, timeframe, 200, None).await?;
 
@@ -371,17 +422,14 @@ async fn run_strategy_cycle(
 
     let idx = klines.len() - 1;
 
-    // Check trade direction for this strategy
     let trade_direction = strategy
         .trading_config
         .get("trade_direction")
         .and_then(|v| v.as_str())
         .unwrap_or("long");
 
-    // Generate signal based on strategy mode
     let raw_signal: i8 = match strategy.strategy_mode {
         StrategyMode::Script => {
-            // Script mode: execute user's Lua strategy code
             let code = match &strategy.strategy_code {
                 Some(c) if !c.is_empty() => c,
                 _ => {
@@ -392,7 +440,6 @@ async fn run_strategy_cycle(
 
             let executor = lua_executor::LuaExecutor::new(lua_executor::LuaExecutorConfig::default());
 
-            // Extract params from indicator_config
             let mut params: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
             if let Some(obj) = strategy.indicator_config.as_object() {
                 for (key, value) in obj {
@@ -402,7 +449,6 @@ async fn run_strategy_cycle(
                 }
             }
 
-            // Build LuaContext from position info
             let ctx = lua_executor::LuaContext {
                 position: lua_executor::LuaPosition {
                     side: position_info
@@ -418,19 +464,17 @@ async fn run_strategy_cycle(
                         .map(|(_, _, size)| *size)
                         .unwrap_or(0.0),
                 },
-                last_exit_bar: 0,  // TODO: track from position manager
+                last_exit_bar: 0,
                 bar_index: idx as i64,
             };
 
             match executor.execute(code, &klines, idx, &params, &ctx) {
                 Ok(result) => {
-                    // Prefer explicit orders, fall back to signal
                     if let Some(order) = result.orders.first() {
                         match order {
                             lua_executor::LuaOrder::Buy { .. } => 1_i8,
                             lua_executor::LuaOrder::Sell { .. } => -1_i8,
                             lua_executor::LuaOrder::Close => {
-                                // Close current position — signal depends on current side
                                 if let Some((side, _, _)) = &position_info {
                                     match side.as_str() {
                                         "long" => -1_i8,
@@ -517,15 +561,38 @@ async fn run_strategy_cycle(
         }
     };
 
-    // Map raw signal (-1, 0, 1) to SignalType based on trade_direction config
-    let signal = match raw_signal {
-        0 => None,
-        1 if trade_direction == "long" || trade_direction == "both" => Some(SignalType::OpenLong),
-        -1 if trade_direction == "short" || trade_direction == "both" => Some(SignalType::OpenShort),
-        -1 if trade_direction == "long" => Some(SignalType::CloseLong),
-        1 if trade_direction == "short" => Some(SignalType::CloseShort),
-        _ => None,
-    };
+    let position_side: Option<&str> = position_info.as_ref().map(|(side, _, _)| side.as_str());
+
+    let signal = map_raw_signal(raw_signal, trade_direction, position_side);
 
     Ok((signal, klines))
+}
+
+pub fn map_raw_signal(
+    raw_signal: i8,
+    trade_direction: &str,
+    current_position_side: Option<&str>,
+) -> Option<SignalType> {
+    if raw_signal == 0 {
+        return None;
+    }
+
+    let is_flat = current_position_side.is_none() || current_position_side == Some("flat");
+    let is_long = current_position_side == Some("long");
+    let is_short = current_position_side == Some("short");
+
+    match (raw_signal, trade_direction, is_flat, is_long, is_short) {
+        (1, "long", true, _, _) => Some(SignalType::OpenLong),
+        (-1, "long", _, true, _) => Some(SignalType::CloseLong),
+
+        (-1, "short", true, _, _) => Some(SignalType::OpenShort),
+        (1, "short", _, _, true) => Some(SignalType::CloseShort),
+
+        (1, "both", true, _, _) => Some(SignalType::OpenLong),
+        (1, "both", _, _, true) => Some(SignalType::CloseShort),
+        (-1, "both", true, _, _) => Some(SignalType::OpenShort),
+        (-1, "both", _, true, _) => Some(SignalType::CloseLong),
+
+        _ => None,
+    }
 }
