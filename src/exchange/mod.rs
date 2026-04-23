@@ -98,6 +98,14 @@ pub trait Exchange: Send + Sync {
     /// Fetch funding rate for a perpetual contract.
     /// Returns error if this is a spot exchange.
     async fn get_funding_rate(&self, symbol: &str) -> anyhow::Result<FundingRate>;
+
+    /// Fetch historical funding rates for a perpetual contract.
+    async fn get_funding_history(
+        &self,
+        symbol: &str,
+        start_time: i64,
+        end_time: i64,
+    ) -> anyhow::Result<Vec<FundingHistoryEntry>>;
 }
 
 #[async_trait]
@@ -186,6 +194,15 @@ impl Exchange for Box<dyn Exchange> {
 
     async fn get_funding_rate(&self, symbol: &str) -> anyhow::Result<FundingRate> {
         (**self).get_funding_rate(symbol).await
+    }
+
+    async fn get_funding_history(
+        &self,
+        symbol: &str,
+        start_time: i64,
+        end_time: i64,
+    ) -> anyhow::Result<Vec<FundingHistoryEntry>> {
+        (**self).get_funding_history(symbol, start_time, end_time).await
     }
 }
 
@@ -502,6 +519,20 @@ impl Exchange for CcxtAdapter {
             rate: fr.rate,
             next_funding_time: fr.next_funding_time,
         })
+    }
+
+    async fn get_funding_history(
+        &self,
+        symbol: &str,
+        start_time: i64,
+        end_time: i64,
+    ) -> anyhow::Result<Vec<FundingHistoryEntry>> {
+        let entries = self.inner.fetch_funding_history(symbol, start_time, end_time).await
+            .map_err(|e| anyhow::anyhow!("ccxt fetch_funding_history error: {}", e))?;
+        Ok(entries.into_iter().map(|e| FundingHistoryEntry {
+            funding_time: e.funding_time,
+            rate: e.rate,
+        }).collect())
     }
 }
 

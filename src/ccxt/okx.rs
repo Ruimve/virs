@@ -743,6 +743,68 @@ impl Exchange for OkxExchange {
         })
     }
 
+    async fn fetch_funding_history(
+        &self,
+        symbol: &str,
+        start_time: i64,
+        end_time: i64,
+    ) -> Result<Vec<FundingHistoryEntry>, ExchangeError> {
+        let inst_id = self.to_native_symbol_with_type(symbol);
+        let mut all_entries = Vec::new();
+        // OKX uses 'after' as pagination cursor (older records), initial request uses before
+        let mut after: Option<String> = None;
+
+        loop {
+            let mut params: Vec<(&str, String)> = vec![
+                ("instId", inst_id.to_string()),
+                ("limit", "100".to_string()),
+            ];
+            if let Some(a) = &after {
+                params.push(("after", a.clone()));
+            } else {
+                // First request: use end_time as 'before' to get records before end_time
+                params.push(("before", (end_time / 1000).to_string()));
+            }
+
+            let data = self.client
+                .public_get("/api/v5/public/funding-rate-history", &params.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>())
+                .await?;
+
+            Self::check_okx_code(&data)?;
+
+            let rates = Self::extract_data_array(&data)
+                .cloned()
+                .unwrap_or_default();
+
+            if rates.is_empty() {
+                break;
+            }
+
+            for item in &rates {
+                let funding_time = parse_i64(item, "fundingTime");
+                let rate = parse_f64(item, "fundingRate").unwrap_or(0.0);
+                // Filter by start_time
+                if funding_time >= start_time {
+                    all_entries.push(FundingHistoryEntry { funding_time, rate });
+                }
+            }
+
+            // OKX pagination: use the earliest fundingTime as 'after' cursor
+            if let Some(earliest) = rates.last() {
+                let earliest_time = parse_i64(earliest, "fundingTime");
+                if earliest_time <= start_time {
+                    break;
+                }
+                after = Some(earliest_time.to_string());
+            } else {
+                break;
+            }
+        }
+
+        all_entries.sort_by_key(|e| e.funding_time);
+        Ok(all_entries)
+    }
+
     async fn ping(&self) -> Result<bool, ExchangeError> {
         let data = self.client.public_get("/api/v5/public/time", &[]).await?;
         Ok(data.get("code").and_then(|c| c.as_str()) == Some("0"))

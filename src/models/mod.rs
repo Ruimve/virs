@@ -123,6 +123,12 @@ pub struct FundingRate {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FundingHistoryEntry {
+    pub funding_time: i64,
+    pub rate: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
     pub id: String,
     pub client_order_id: Option<String>,
@@ -326,6 +332,8 @@ pub struct BacktestTrade {
     pub pnl: f64,
     pub pnl_pct: f64,
     pub commission: f64,
+    #[serde(default)]
+    pub funding_fee: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -355,7 +363,18 @@ pub struct BacktestResult {
     pub max_consecutive_losses: i64,
     pub trades: Vec<BacktestTrade>,
     pub equity_curve: Vec<(DateTime<Utc>, f64)>,
+    #[serde(default)]
+    pub funding_events: Vec<FundingEvent>,
     pub created_at: DateTime<Utc>,
+}
+
+/// A single funding rate settlement event during backtesting.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FundingEvent {
+    pub time: DateTime<Utc>,
+    pub rate: f64,
+    pub amount: f64,       // positive = received, negative = paid
+    pub side: String,      // "long" or "short"
 }
 
 // ============================================================

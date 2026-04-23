@@ -67,6 +67,7 @@ impl BacktestEngine {
         user_start_date: Option<chrono::DateTime<chrono::Utc>>,
         user_end_date: Option<chrono::DateTime<chrono::Utc>>,
         leverage: u32,
+        funding_history: &[crate::models::FundingHistoryEntry],
     ) -> BacktestResult
     where
         F: FnMut(&[Kline], usize) -> i8,
@@ -75,10 +76,16 @@ impl BacktestEngine {
         let mut long_position: Option<PositionState> = None;
         let mut short_position: Option<PositionState> = None;
         let mut trades: Vec<BacktestTrade> = Vec::new();
-        let mut open_long_trade: Option<(DateTime<Utc>, f64, f64, String)> = None;
-        let mut open_short_trade: Option<(DateTime<Utc>, f64, f64, String)> = None;
+        // open_trade: (entry_time, entry_price, open_fee, side, accumulated_funding_fee)
+        let mut open_long_trade: Option<(DateTime<Utc>, f64, f64, String, f64)> = None;
+        let mut open_short_trade: Option<(DateTime<Utc>, f64, f64, String, f64)> = None;
         let mut equity_curve: Vec<(DateTime<Utc>, f64)> = Vec::new();
         let mut returns: Vec<f64> = Vec::new();
+        let mut funding_events: Vec<crate::models::FundingEvent> = Vec::new();
+
+        // Funding rate: use historical rates from exchange, fallback to 0.01% per 8h
+        let default_funding_rate = 0.0001;
+        let mut funding_idx: usize = 0;
 
         let start_date = user_start_date.unwrap_or_else(|| {
             klines
@@ -128,7 +135,7 @@ impl BacktestEngine {
                     match signal {
                         SignalType::OpenLong if long_position.is_none() => {
                             let open_fee = self.open_position(&mut long_position, exec_price, &mut balance, PositionSide::Long, position_pct, leverage);
-                            open_long_trade = Some((timestamp, exec_price, open_fee, "long".to_string()));
+                            open_long_trade = Some((timestamp, exec_price, open_fee, "long".to_string(), 0.0));
                         }
                         SignalType::CloseLong if long_position.is_some() => {
                             if let Some(bt) = self.close_position(&mut long_position, exec_price, &mut balance, timestamp, &mut open_long_trade) {
@@ -137,7 +144,7 @@ impl BacktestEngine {
                         }
                         SignalType::OpenShort if short_position.is_none() => {
                             let open_fee = self.open_position(&mut short_position, exec_price, &mut balance, PositionSide::Short, position_pct, leverage);
-                            open_short_trade = Some((timestamp, exec_price, open_fee, "short".to_string()));
+                            open_short_trade = Some((timestamp, exec_price, open_fee, "short".to_string(), 0.0));
                         }
                         SignalType::CloseShort if short_position.is_some() => {
                             if let Some(bt) = self.close_position(&mut short_position, exec_price, &mut balance, timestamp, &mut open_short_trade) {
@@ -221,6 +228,48 @@ impl BacktestEngine {
                         }
                     }
                 }
+            }
+
+            // Funding rate settlement — match historical funding events by time
+            let bar_time_ms = kline.open_time;
+            while funding_idx < funding_history.len() && funding_history[funding_idx].funding_time <= bar_time_ms {
+                let entry = &funding_history[funding_idx];
+                let rate = entry.rate;
+                let funding_time = chrono::DateTime::from_timestamp_millis(entry.funding_time)
+                    .unwrap_or_else(Utc::now);
+
+                // Apply funding to long position (long pays when rate > 0)
+                if let Some(ref pos) = long_position {
+                    let notional = pos.size * price;
+                    let fee = notional * rate;
+                    balance -= fee;
+                    if let Some(ref mut ot) = open_long_trade {
+                        ot.4 += fee;
+                    }
+                    funding_events.push(crate::models::FundingEvent {
+                        time: funding_time,
+                        rate,
+                        amount: -fee,
+                        side: "long".to_string(),
+                    });
+                }
+                // Apply funding to short position (short receives when rate > 0)
+                if let Some(ref pos) = short_position {
+                    let notional = pos.size * price;
+                    let fee = notional * rate;
+                    balance += fee;
+                    if let Some(ref mut ot) = open_short_trade {
+                        ot.4 -= fee;
+                    }
+                    funding_events.push(crate::models::FundingEvent {
+                        time: funding_time,
+                        rate,
+                        amount: fee,
+                        side: "short".to_string(),
+                    });
+                }
+
+                funding_idx += 1;
             }
 
             // Generate signal at bar close
@@ -359,6 +408,7 @@ impl BacktestEngine {
             max_consecutive_losses,
             trades,
             equity_curve,
+            funding_events,
             created_at: Utc::now(),
         }
     }
@@ -399,7 +449,7 @@ impl BacktestEngine {
         price: f64,
         balance: &mut f64,
         exit_time: DateTime<Utc>,
-        open_trade: &mut Option<(DateTime<Utc>, f64, f64, String)>,
+        open_trade: &mut Option<(DateTime<Utc>, f64, f64, String, f64)>,
     ) -> Option<BacktestTrade> {
         let pos = position.take().unwrap();
         let effective_price = match pos.side {
@@ -408,12 +458,13 @@ impl BacktestEngine {
         };
         let close_fee = pos.size * effective_price * self.commission_rate;
         let margin = pos.size * pos.entry_price / pos.leverage as f64;
+        let funding_fee = open_trade.as_ref().map(|ot| ot.4).unwrap_or(0.0);
         let pnl = match pos.side {
             PositionSide::Long => {
-                (effective_price - pos.entry_price) * pos.size - close_fee
+                (effective_price - pos.entry_price) * pos.size - close_fee - funding_fee
             }
             PositionSide::Short => {
-                (pos.entry_price - effective_price) * pos.size - close_fee
+                (pos.entry_price - effective_price) * pos.size - close_fee - funding_fee
             }
         };
         *balance += margin + pnl;
@@ -422,6 +473,7 @@ impl BacktestEngine {
         let entry_price = ot.1;
         let entry_time = ot.0;
         let side = ot.3;
+        let accumulated_funding = ot.4;
         let pnl_pct = match pos.side {
             PositionSide::Long => (effective_price - entry_price) / entry_price * 100.0,
             PositionSide::Short => (entry_price - effective_price) / entry_price * 100.0,
@@ -438,6 +490,7 @@ impl BacktestEngine {
             pnl,
             pnl_pct,
             commission: total_commission,
+            funding_fee: accumulated_funding,
         })
     }
 }

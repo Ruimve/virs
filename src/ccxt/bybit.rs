@@ -688,6 +688,61 @@ impl Exchange for BybitExchange {
         })
     }
 
+    async fn fetch_funding_history(
+        &self,
+        symbol: &str,
+        start_time: i64,
+        end_time: i64,
+    ) -> Result<Vec<FundingHistoryEntry>, ExchangeError> {
+        let native = Self::to_native_symbol(symbol);
+        let mut all_entries = Vec::new();
+        let mut cursor: Option<String> = None;
+
+        loop {
+            let mut params: Vec<(&str, String)> = vec![
+                ("category", "linear".to_string()),
+                ("symbol", native.to_string()),
+                ("startTime", start_time.to_string()),
+                ("endTime", end_time.to_string()),
+                ("limit", "200".to_string()),
+            ];
+            if let Some(c) = &cursor {
+                params.push(("cursor", c.clone()));
+            }
+
+            let data = self.client
+                .public_get("/v5/market/funding-rate-history", &params.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>())
+                .await?;
+
+            Self::check_ret_code(&data)?;
+
+            let list = data.pointer("/result/list").and_then(|r| r.as_array())
+                .cloned()
+                .unwrap_or_default();
+
+            if list.is_empty() {
+                break;
+            }
+
+            for item in &list {
+                let funding_time = parse_i64(item, "fundingTime");
+                let rate = parse_f64(item, "fundingRate").unwrap_or(0.0);
+                all_entries.push(FundingHistoryEntry { funding_time, rate });
+            }
+
+            cursor = data.pointer("/result/nextPageCursor")
+                .and_then(|c| c.as_str())
+                .filter(|c| !c.is_empty())
+                .map(|c| c.to_string());
+
+            if cursor.is_none() {
+                break;
+            }
+        }
+
+        Ok(all_entries)
+    }
+
     async fn ping(&self) -> Result<bool, ExchangeError> {
         let data = self.client.public_get("/v5/market/time", &[]).await?;
         Ok(data.get("retCode").and_then(|c| c.as_i64()) == Some(0))

@@ -29,6 +29,14 @@ interface BacktestTrade {
   pnl: number
   pnl_pct: number
   commission: number
+  funding_fee?: number
+}
+
+interface FundingEvent {
+  time: string
+  rate: number
+  amount: number  // positive = received, negative = paid
+  side: 'long' | 'short'
 }
 
 interface BacktestResult {
@@ -53,6 +61,7 @@ interface BacktestResult {
   max_consecutive_losses: number
   trades: BacktestTrade[]
   equity_curve: [string, number][]
+  funding_events?: FundingEvent[]
   klines?: { time: number; open: number; high: number; low: number; close: number; volume: number }[]
 }
 
@@ -1015,6 +1024,7 @@ const Backtest: Component = () => {
                     <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">数量</th>
                     <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">盈亏</th>
                     <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">盈亏%</th>
+                    <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">手续费</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1057,6 +1067,9 @@ const Backtest: Component = () => {
                         >
                           {formatPct(trade.pnl_pct)}
                         </td>
+                        <td class="py-2.5 px-3 text-right text-gray-500 text-[13px]">
+                          {formatNumber(trade.commission)}
+                        </td>
                       </tr>
                     )}
                   </For>
@@ -1064,6 +1077,68 @@ const Backtest: Component = () => {
               </table>
             </div>
           </div>
+
+          {/* 资金费率事件列表（仅永续合约） */}
+          <Show when={result()?.funding_events && result()!.funding_events!.length > 0}>
+            <div class="bg-white rounded-xl border border-gray-200/60 p-6 mt-4">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-[15px] font-semibold text-gray-800">
+                  资金费率结算 ({result()!.funding_events!.length} 笔)
+                </h3>
+                <span class="text-[12px] text-gray-400">
+                  总计: {
+                    result()!.funding_events!.reduce((sum, e) => sum + e.amount, 0) >= 0
+                      ? <span class="text-emerald-500">+{formatNumber(result()!.funding_events!.reduce((sum, e) => sum + e.amount, 0))}</span>
+                      : <span class="text-red-500">{formatNumber(result()!.funding_events!.reduce((sum, e) => sum + e.amount, 0))}</span>
+                  }
+                </span>
+              </div>
+              <div class="overflow-x-auto max-h-64 overflow-y-auto">
+                <table class="w-full text-sm">
+                  <thead class="sticky top-0 bg-white">
+                    <tr class="border-b border-gray-100">
+                      <th class="text-left py-2 px-3 text-[13px] font-medium text-gray-400">结算时间</th>
+                      <th class="text-left py-2 px-3 text-[13px] font-medium text-gray-400">方向</th>
+                      <th class="text-right py-2 px-3 text-[13px] font-medium text-gray-400">费率</th>
+                      <th class="text-right py-2 px-3 text-[13px] font-medium text-gray-400">金额</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <For each={result()!.funding_events}>
+                      {(event) => (
+                        <tr class="border-b border-gray-50 hover:bg-gray-50/50">
+                          <td class="py-2 px-3 text-[13px] text-gray-600">
+                            {new Date(event.time).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td class="py-2 px-3">
+                            <span class={`inline-block px-2 py-0.5 rounded-md text-[12px] font-medium ${
+                              event.side === 'long'
+                                ? 'bg-emerald-50 text-emerald-600'
+                                : 'bg-red-50 text-red-500'
+                            }`}>
+                              {event.side === 'long' ? '多头' : '空头'}
+                            </span>
+                          </td>
+                          <td class="py-2 px-3 text-right text-[13px] text-gray-500">
+                            {(event.rate * 100).toFixed(4)}%
+                          </td>
+                          <td class={`py-2 px-3 text-right text-[13px] font-medium ${
+                            event.amount > 0
+                              ? 'text-emerald-500'
+                              : event.amount < 0
+                                ? 'text-red-500'
+                                : 'text-gray-400'
+                          }`}>
+                            {event.amount > 0 ? '+' : ''}{formatNumber(event.amount)}
+                          </td>
+                        </tr>
+                      )}
+                    </For>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </Show>
         </div>
       </Show>
 

@@ -193,6 +193,13 @@ pub struct FundingRate {
     pub info: serde_json::Value,
 }
 
+/// Historical funding rate entry for backtesting.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FundingHistoryEntry {
+    pub funding_time: i64,  // Unix timestamp in milliseconds
+    pub rate: f64,          // Funding rate (e.g. 0.0001 = 0.01%)
+}
+
 /// Position info from exchange.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Position {

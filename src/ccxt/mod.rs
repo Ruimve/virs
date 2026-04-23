@@ -39,7 +39,7 @@ use auth::Signer;
 pub use types::{
     Ticker, Kline, OrderBook, Balance, Order,
     MarketInfo, MarketType, Side, OrderType, OrderStatus,
-    PlaceOrderParams, ExchangeCapabilities,
+    PlaceOrderParams, ExchangeCapabilities, FundingHistoryEntry,
 };
 
 /// Unified exchange trait — the core abstraction following CCXT's design.
@@ -137,6 +137,15 @@ pub trait Exchange: Send + Sync {
         &self,
         symbol: &str,
     ) -> Result<types::FundingRate, ExchangeError>;
+
+    /// Fetch historical funding rates for a perpetual contract within a time range.
+    /// Returns `ExchangeError::NotSupported` for spot exchanges.
+    async fn fetch_funding_history(
+        &self,
+        symbol: &str,
+        start_time: i64,  // Unix timestamp in milliseconds
+        end_time: i64,    // Unix timestamp in milliseconds
+    ) -> Result<Vec<types::FundingHistoryEntry>, ExchangeError>;
 
     // ---- System ----
 

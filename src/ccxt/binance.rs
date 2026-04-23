@@ -21,7 +21,7 @@ use tracing::info;
 use super::types::*;
 use super::errors::ExchangeError;
 use super::auth::BinanceSigner;
-use super::{Exchange, ExchangeClient, parse_f64, parse_str, parse_str_opt, parse_u32};
+use super::{Exchange, ExchangeClient, parse_f64, parse_str, parse_str_opt, parse_u32, parse_i64};
 
 /// Binance exchange implementation.
 pub struct BinanceExchange {
@@ -708,6 +708,65 @@ impl Exchange for BinanceExchange {
             next_funding_time: funding_time,
             info: last.clone(),
         })
+    }
+
+    async fn fetch_funding_history(
+        &self,
+        symbol: &str,
+        start_time: i64,
+        end_time: i64,
+    ) -> Result<Vec<FundingHistoryEntry>, ExchangeError> {
+        if !self.is_perpetual() {
+            return Err(ExchangeError::NotSupported(
+                "Funding rate is only supported for perpetual futures".into(),
+            ));
+        }
+
+        let native = Self::to_native_symbol(symbol);
+        let mut all_entries = Vec::new();
+        let mut current_start = start_time;
+
+        // Binance returns max 1000 entries per request, paginate if needed
+        loop {
+            let data = self.client
+                .public_get("/fapi/v1/fundingRate", &[
+                    ("symbol", native.as_str()),
+                    ("startTime", &current_start.to_string()),
+                    ("endTime", &end_time.to_string()),
+                    ("limit", "1000"),
+                ])
+                .await?;
+
+            let arr = data.as_array()
+                .ok_or_else(|| ExchangeError::Internal("Invalid fundingRate history response from Binance".into()))?;
+
+            if arr.is_empty() {
+                break;
+            }
+
+            for item in arr {
+                let funding_time = item.get("fundingTime")
+                    .and_then(|t| t.as_i64())
+                    .unwrap_or(0);
+                let rate = parse_f64(item, "fundingRate").unwrap_or(0.0);
+                all_entries.push(FundingHistoryEntry { funding_time, rate });
+            }
+
+            if arr.len() < 1000 {
+                break;
+            }
+
+            // Move start time past the last entry to avoid duplicates
+            if let Some(last) = arr.last() {
+                current_start = last.get("fundingTime")
+                    .and_then(|t| t.as_i64())
+                    .unwrap_or(end_time) + 1;
+            } else {
+                break;
+            }
+        }
+
+        Ok(all_entries)
     }
 
     async fn ping(&self) -> Result<bool, ExchangeError> {

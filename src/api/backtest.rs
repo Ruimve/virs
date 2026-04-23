@@ -13,6 +13,7 @@ use crate::api::middleware::AuthUser;
 use crate::engine::backtest::BacktestEngine;
 use crate::exchange::Exchange;
 use crate::models::*;
+use tracing::{info, warn};
 
 #[derive(Deserialize)]
 pub struct BacktestListQuery {
@@ -83,6 +84,7 @@ pub async fn run_backtest(
         })
         .unwrap_or(MarketType::Spot);
 
+    let is_perpetual = market_type == MarketType::Perpetual;
     let exchange_key = super::market::ensure_exchange(&state, &req.exchange, market_type).await?;
     let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
 
@@ -192,6 +194,30 @@ pub async fn run_backtest(
         .map(|s| !s.is_empty())
         .unwrap_or(false);
 
+    // Fetch historical funding rates for perpetual contracts
+    let funding_history: Vec<crate::models::FundingHistoryEntry> = if is_perpetual {
+        if let Some(first) = klines.first() {
+            if let Some(last) = klines.last() {
+                match exchange.get_funding_history(&req.symbol, first.open_time, last.open_time).await {
+                    Ok(history) => {
+                        info!("Fetched {} historical funding rate entries for {}", history.len(), req.symbol);
+                        history
+                    }
+                    Err(e) => {
+                        warn!("Failed to fetch funding history, backtest will run without funding fees: {}", e);
+                        Vec::new()
+                    }
+                }
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+
     let result = if is_script {
         use crate::engine::lua_executor::{LuaExecutor, LuaExecutorConfig};
         let executor = LuaExecutor::new(LuaExecutorConfig::default());
@@ -219,7 +245,7 @@ pub async fn run_backtest(
 
         engine.run(&klines, |_, idx| {
             signals.get(idx).copied().unwrap_or(0)
-        }, stop_loss, take_profit, position_pct, trailing_stop_pct, trailing_activation_pct, trade_direction, start_dt, end_dt, leverage)
+        }, stop_loss, take_profit, position_pct, trailing_stop_pct, trailing_activation_pct, trade_direction, start_dt, end_dt, leverage, &funding_history)
     } else {
         // Plugin-based mode (existing logic)
         let plugin_name = req
@@ -277,7 +303,7 @@ pub async fn run_backtest(
             plugin_registry
                 .generate_signal(&plugin_name, klines, idx, &params)
                 .unwrap_or(0)
-        }, stop_loss, take_profit, position_pct, trailing_stop_pct, trailing_activation_pct, trade_direction, start_dt, end_dt, leverage)
+        }, stop_loss, take_profit, position_pct, trailing_stop_pct, trailing_activation_pct, trade_direction, start_dt, end_dt, leverage, &funding_history)
     };
 
     let _ = sqlx::query(
