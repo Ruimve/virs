@@ -164,6 +164,9 @@ const Backtest: Component = () => {
   const [strategyCode, setStrategyCode] = createSignal(DEFAULT_LUA_SCRIPT)
   const [scriptParams, setScriptParams] = createSignal('{"fast_period": 12, "slow_period": 26, "rsi_period": 14, "rsi_floor": 45}')
 
+  // 已保存的脚本策略（用于回填）
+  const [savedStrategies, setSavedStrategies] = createSignal<Array<{ id: string; name: string; strategy_code?: string; indicator_config?: Record<string, unknown> }>>([])
+
   // 运行状态
   const [running, setRunning] = createSignal(false)
   const [runError, setRunError] = createSignal('')
@@ -228,6 +231,34 @@ const Backtest: Component = () => {
     }
   }
 
+  // 加载已保存的脚本策略
+  async function loadSavedStrategies() {
+    try {
+      const res = await api.get<PaginatedResponse<any>>('/strategies?page=1&page_size=50')
+      if (res.success && res.data?.items) {
+        setSavedStrategies(res.data.items.filter((s: any) => s.strategy_mode === 'script' && s.strategy_code))
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 选择已保存策略 → 自动回填
+  function handleSelectStrategy(strategyId: string) {
+    const s = savedStrategies().find(st => st.id === strategyId)
+    if (!s) return
+    if (s.strategy_code) {
+      setStrategyCode(s.strategy_code)
+      setScriptValidationResult(null)
+    }
+    if (s.indicator_config) {
+      const { plugin, strategy_code, ...params } = s.indicator_config
+      if (Object.keys(params).length > 0) {
+        setScriptParams(JSON.stringify(params, null, 2))
+      }
+    }
+  }
+
   // 验证 Lua 脚本
   async function handleValidateScript() {
     setScriptValidating(true)
@@ -270,6 +301,7 @@ const Backtest: Component = () => {
 
   onMount(() => {
     loadPlugins()
+    loadSavedStrategies()
     loadHistory(1)
   })
 
@@ -782,6 +814,24 @@ const Backtest: Component = () => {
         {/* 脚本模式: Lua 编辑器 + 参数 */}
         <Show when={backtestMode() === 'script'}>
           <div class="mt-5 space-y-4">
+            {/* 从已保存策略加载 */}
+            <Show when={savedStrategies().length > 0}>
+              <div>
+                <label class="block text-[13px] font-medium text-gray-400 mb-1.5">从已保存策略加载</label>
+                <select
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
+                  onChange={(e) => handleSelectStrategy(e.currentTarget.value)}
+                >
+                  <option value="">-- 选择策略自动回填 --</option>
+                  <For each={savedStrategies()}>
+                    {(s) => (
+                      <option value={s.id}>{s.name}</option>
+                    )}
+                  </For>
+                </select>
+              </div>
+            </Show>
+
             {/* Lua 脚本 */}
             <div>
               <div class="flex items-center justify-between mb-1.5">

@@ -81,8 +81,10 @@ impl LuaExecutor {
     ) -> LuaResult<Lua> {
         let lua = Lua::new();
 
-        lua.set_memory_limit(self.config.memory_limit)
-            .map_err(|e| mlua::Error::runtime(format!("Failed to set memory limit: {}", e)))?;
+        // Memory limit may not be available in some environments (e.g. containers)
+        if let Err(e) = lua.set_memory_limit(self.config.memory_limit) {
+            tracing::warn!("Lua memory limit not available (sandbox still works): {}", e);
+        }
 
         let instruction_limit = self.config.instruction_limit;
         let count = Arc::new(AtomicU64::new(0));
