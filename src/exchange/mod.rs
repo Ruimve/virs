@@ -36,6 +36,15 @@ pub trait Exchange: Send + Sync {
         since: Option<i64>,
     ) -> anyhow::Result<Vec<Kline>>;
 
+    /// Fetch klines for a full time range [start_ms, end_ms] with automatic pagination.
+    async fn get_klines_range(
+        &self,
+        symbol: &str,
+        interval: &str,
+        start_ms: i64,
+        end_ms: i64,
+    ) -> anyhow::Result<Vec<Kline>>;
+
     /// Fetch the order book.
     async fn get_order_book(&self, symbol: &str, depth: u32) -> anyhow::Result<OrderBook>;
 
@@ -130,6 +139,16 @@ impl Exchange for Box<dyn Exchange> {
         since: Option<i64>,
     ) -> anyhow::Result<Vec<Kline>> {
         (**self).get_klines(symbol, interval, limit, since).await
+    }
+
+    async fn get_klines_range(
+        &self,
+        symbol: &str,
+        interval: &str,
+        start_ms: i64,
+        end_ms: i64,
+    ) -> anyhow::Result<Vec<Kline>> {
+        (**self).get_klines_range(symbol, interval, start_ms, end_ms).await
     }
 
     async fn get_order_book(&self, symbol: &str, depth: u32) -> anyhow::Result<OrderBook> {
@@ -392,6 +411,21 @@ impl Exchange for CcxtAdapter {
     ) -> anyhow::Result<Vec<Kline>> {
         let cks = self.inner.fetch_ohlcv(symbol, interval, limit, since).await
             .map_err(|e| anyhow::anyhow!("ccxt ohlcv error: {}", e))?;
+        let exchange_name = self.inner.id();
+        Ok(cks.into_iter()
+            .map(|ck| to_models_kline(ck, symbol, exchange_name, interval))
+            .collect())
+    }
+
+    async fn get_klines_range(
+        &self,
+        symbol: &str,
+        interval: &str,
+        start_ms: i64,
+        end_ms: i64,
+    ) -> anyhow::Result<Vec<Kline>> {
+        let cks = self.inner.fetch_ohlcv_range(symbol, interval, start_ms, end_ms).await
+            .map_err(|e| anyhow::anyhow!("ccxt ohlcv range error: {}", e))?;
         let exchange_name = self.inner.id();
         Ok(cks.into_iter()
             .map(|ck| to_models_kline(ck, symbol, exchange_name, interval))

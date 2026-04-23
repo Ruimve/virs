@@ -103,27 +103,12 @@ pub async fn run_backtest(
     let start_dt = parse_date(&req.start_date);
     let end_dt = parse_date(&req.end_date);
 
-    let duration_secs = match (start_dt, end_dt) {
-        (Some(s), Some(e)) => (e.timestamp() - s.timestamp()).max(0),
-        _ => 30 * 24 * 3600,
-    };
-    let interval_secs = match req.timeframe.as_str() {
-        "1m" => 60, "5m" => 300, "15m" => 900,
-        "1h" => 3600, "4h" => 14400, "1d" => 86400,
-        _ => 3600,
-    };
-    let estimated_candles = (duration_secs / interval_secs) as u32;
-    let max_candles = match req.timeframe.as_str() {
-        "1m" | "5m" | "15m" => 500,
-        "1h" | "4h" => 500,
-        "1d" | "1w" => 365,
-        _ => 500,
-    };
-    let limit = estimated_candles.min(max_candles).max(100);
+    // Compute time range for kline fetching
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let start_ms = start_dt.map(|dt| dt.timestamp_millis()).unwrap_or_else(|| now_ms - 30 * 24 * 3600 * 1000);
+    let end_ms = end_dt.map(|dt| dt.timestamp_millis()).unwrap_or(now_ms);
 
-    let since_ms = start_dt.map(|dt| dt.timestamp_millis());
-
-    let klines = match exchange.get_klines(&req.symbol, &req.timeframe, limit, since_ms).await {
+    let klines = match exchange.get_klines_range(&req.symbol, &req.timeframe, start_ms, end_ms).await {
         Ok(k) if !k.is_empty() => k,
         Ok(_) => {
             return Err((

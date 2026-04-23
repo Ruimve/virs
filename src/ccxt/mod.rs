@@ -73,6 +73,51 @@ pub trait Exchange: Send + Sync {
         since: Option<i64>,
     ) -> Result<Vec<Kline>, ExchangeError>;
 
+    /// Fetch OHLCV data for a full time range [start_ms, end_ms] with pagination.
+    /// Default implementation pages through `fetch_ohlcv` calls.
+    /// Each exchange can override this for optimal pagination.
+    async fn fetch_ohlcv_range(
+        &self,
+        symbol: &str,
+        timeframe: &str,
+        start_ms: i64,
+        end_ms: i64,
+    ) -> Result<Vec<Kline>, ExchangeError> {
+        let page_limit: u32 = 1000;
+        let mut all_klines: Vec<Kline> = Vec::new();
+        let mut cursor = start_ms;
+
+        while cursor < end_ms {
+            let batch = self.fetch_ohlcv(symbol, timeframe, page_limit, Some(cursor)).await?;
+            if batch.is_empty() {
+                break;
+            }
+
+            for k in &batch {
+                if k.timestamp > end_ms {
+                    return Ok(all_klines);
+                }
+                // Avoid duplicates
+                if let Some(last) = all_klines.last() {
+                    if k.timestamp <= last.timestamp {
+                        continue;
+                    }
+                }
+                all_klines.push(k.clone());
+            }
+
+            // Move cursor past the last timestamp
+            cursor = batch.last().unwrap().timestamp + 1;
+
+            // If we got fewer than page_limit, we've reached the end
+            if (batch.len() as u32) < page_limit {
+                break;
+            }
+        }
+
+        Ok(all_klines)
+    }
+
     /// Fetch the order book.
     /// Returns `ExchangeError::NoData` if the symbol is not found.
     async fn fetch_order_book(

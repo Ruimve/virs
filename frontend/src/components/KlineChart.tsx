@@ -149,7 +149,15 @@ const KlineChart: Component<KlineChartProps> = (props) => {
       }
     }
 
-    chart.timeScale().fitContent()
+    // Show the last 100 candles by default (user can scroll to see more)
+    if (props.data.length > 100) {
+      chart.timeScale().setVisibleLogicalRange({
+        from: props.data.length - 100,
+        to: props.data.length - 1,
+      })
+    } else {
+      chart.timeScale().fitContent()
+    }
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -196,7 +204,14 @@ const KlineChart: Component<KlineChartProps> = (props) => {
       )
     }
 
-    chart?.timeScale().fitContent()
+    if (props.data.length > 100) {
+      chart?.timeScale().setVisibleLogicalRange({
+        from: props.data.length - 100,
+        to: props.data.length - 1,
+      })
+    } else {
+      chart?.timeScale().fitContent()
+    }
   })
 
   return (
