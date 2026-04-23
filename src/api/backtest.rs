@@ -220,7 +220,7 @@ pub async fn run_backtest(
     let leverage = req.trading_config
         .get("leverage")
         .and_then(|v| v.as_u64())
-        .unwrap_or(5) as u32;
+        .unwrap_or(1) as u32;
 
     let engine = BacktestEngine::new(req.initial_balance, commission, slippage);
 

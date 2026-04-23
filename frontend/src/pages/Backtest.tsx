@@ -87,6 +87,7 @@ const DEFAULT_TRADING_CONFIG: Record<string, unknown> = {
   commission_rate: 0.001,
   slippage: 0.0005,
   position_pct: 1.0,
+  leverage: 1,
   trailing_stop_pct: null,
   trailing_activation_pct: null,
   trade_direction: 'long',
@@ -776,6 +777,22 @@ const Backtest: Component = () => {
                   <option value="short">仅做空</option>
                   <option value="both">多空双向</option>
                 </select>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">杠杆倍数</label>
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  max="125"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                  value={(() => { try { return JSON.parse(tradingConfig()).leverage ?? 1 } catch { return 1 } })()}
+                  onInput={(e) => {
+                    const val = parseInt(e.currentTarget.value) || 1
+                    const updated = { ...JSON.parse(tradingConfig()), leverage: Math.min(125, Math.max(1, val)) }
+                    setTradingConfig(JSON.stringify(updated, null, 2))
+                  }}
+                />
               </div>
               <div>
                 <label class="block text-xs text-gray-500 mb-1">追踪止损 (%)</label>

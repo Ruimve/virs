@@ -309,7 +309,6 @@ pub struct PendingOrder {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BacktestRequest {
-    pub strategy_id: Option<Uuid>,
     pub strategy_type: String,
     pub symbol: String,
     pub exchange: String,
