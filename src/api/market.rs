@@ -12,25 +12,34 @@ use crate::exchange::ExchangeFactory;
 use crate::models::*;
 use crate::utils::crypto;
 
-/// Ensure an exchange instance is available for the given exchange name.
+/// Ensure an exchange instance is available for the given exchange name and market type.
 /// Tries the engine cache first, then loads credentials from the database.
-/// Returns the exchange name key to use (may be user-scoped).
+/// Returns the exchange key to use (may be user-scoped).
 pub async fn ensure_exchange(
     state: &Arc<AppState>,
     exchange_name: &str,
+    market_type: MarketType,
 ) -> Result<String, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    // Check if already registered globally
-    if state.strategy_engine.get_exchange(exchange_name).is_some() {
-        return Ok(exchange_name.to_string());
+    let exchange_key = format!("{}:{}", exchange_name, market_type);
+
+    // Check if already registered
+    if state.strategy_engine.get_exchange(&exchange_key).is_some() {
+        return Ok(exchange_key);
     }
 
     // Try to load credentials from database (any user's credentials for public data)
+    let market_type_str = match market_type {
+        MarketType::Spot => "spot",
+        MarketType::Perpetual => "perpetual",
+    };
+
     let row: Option<(String, String, Option<String>)> = sqlx::query_as(
         r#"SELECT encrypted_api_key, encrypted_api_secret, encrypted_passphrase
            FROM qd_exchange_credentials
-           WHERE exchange = $1 LIMIT 1"#,
+           WHERE exchange = $1 AND market_type = $2 LIMIT 1"#,
     )
     .bind(exchange_name)
+    .bind(&market_type_str)
     .fetch_optional(&state.db_pool)
     .await
     .map_err(|e| {
@@ -70,6 +79,7 @@ pub async fn ensure_exchange(
                 &api_secret,
                 passphrase.as_deref(),
                 state.config.proxy.as_deref(),
+                market_type,
             )
             .map_err(|e| {
                 (
@@ -81,13 +91,13 @@ pub async fn ensure_exchange(
             })?;
 
             state.strategy_engine.register_exchange(exchange);
-            Ok(exchange_name.to_string())
+            Ok(exchange_key)
         }
         None => Err((
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<serde_json::Value>::err(format!(
-                "Exchange '{}' has no credentials configured. Please add API keys in the Credentials page.",
-                exchange_name
+                "Exchange '{}' ({}) has no credentials configured. Please add API keys in the Credentials page.",
+                exchange_name, market_type_str
             ))),
         )),
     }
@@ -97,6 +107,7 @@ pub async fn ensure_exchange(
 pub struct TickerQuery {
     symbol: String,
     exchange: Option<String>,
+    market_type: Option<MarketType>,
 }
 
 pub async fn get_ticker(
@@ -105,7 +116,8 @@ pub async fn get_ticker(
     Query(params): Query<TickerQuery>,
 ) -> Result<Json<ApiResponse<Ticker>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
     let exchange_name = params.exchange.as_deref().unwrap_or("binance");
-    let exchange_key = ensure_exchange(&state, exchange_name).await?;
+    let market_type = params.market_type.unwrap_or(MarketType::Spot);
+    let exchange_key = ensure_exchange(&state, exchange_name, market_type).await?;
     let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
 
     match exchange.get_ticker(&params.symbol).await {
@@ -126,7 +138,8 @@ pub struct KlineQuery {
     interval: String,
     exchange: Option<String>,
     limit: Option<u32>,
-    end_time: Option<i64>,
+    since: Option<i64>,
+    market_type: Option<MarketType>,
 }
 
 pub async fn get_klines(
@@ -136,11 +149,12 @@ pub async fn get_klines(
 ) -> Result<Json<ApiResponse<Vec<Kline>>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
     let exchange_name = params.exchange.as_deref().unwrap_or("binance");
     let limit = params.limit.unwrap_or(200);
+    let market_type = params.market_type.unwrap_or(MarketType::Spot);
 
-    let exchange_key = ensure_exchange(&state, exchange_name).await?;
+    let exchange_key = ensure_exchange(&state, exchange_name, market_type).await?;
     let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
 
-    match exchange.get_klines(&params.symbol, &params.interval, limit, params.end_time).await {
+    match exchange.get_klines(&params.symbol, &params.interval, limit, params.since).await {
         Ok(klines) => {
             if klines.is_empty() {
                 Err((
@@ -169,6 +183,7 @@ pub struct OrderBookQuery {
     symbol: String,
     exchange: Option<String>,
     depth: Option<u32>,
+    market_type: Option<MarketType>,
 }
 
 pub async fn get_order_book(
@@ -178,8 +193,9 @@ pub async fn get_order_book(
 ) -> Result<Json<ApiResponse<OrderBook>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
     let exchange_name = params.exchange.as_deref().unwrap_or("binance");
     let depth = params.depth.unwrap_or(20);
+    let market_type = params.market_type.unwrap_or(MarketType::Spot);
 
-    let exchange_key = ensure_exchange(&state, exchange_name).await?;
+    let exchange_key = ensure_exchange(&state, exchange_name, market_type).await?;
     let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
 
     match exchange.get_order_book(&params.symbol, depth).await {
@@ -225,7 +241,7 @@ pub async fn get_balances(
 
     // Try to get balances from the first available exchange in the database
     let exchange_name = "binance"; // default
-    let exchange_key = ensure_exchange(&state, exchange_name).await?;
+    let exchange_key = ensure_exchange(&state, exchange_name, MarketType::Spot).await?;
     let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
 
     match exchange.get_balances().await {
@@ -249,6 +265,7 @@ pub async fn get_balances(
 #[derive(Deserialize)]
 pub struct SymbolsQuery {
     exchange: Option<String>,
+    market_type: Option<MarketType>,
 }
 
 pub async fn get_symbols(
@@ -257,11 +274,12 @@ pub async fn get_symbols(
     Query(params): Query<SymbolsQuery>,
 ) -> Result<Json<ApiResponse<Vec<String>>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
     let exchange_name = params.exchange.as_deref().unwrap_or("binance");
+    let market_type = params.market_type.unwrap_or(MarketType::Spot);
 
-    let exchange_key = ensure_exchange(&state, exchange_name).await?;
+    let exchange_key = ensure_exchange(&state, exchange_name, market_type).await?;
     let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
 
-    match exchange.get_symbols(MarketType::Spot).await {
+    match exchange.get_symbols().await {
         Ok(symbols) => {
             if symbols.is_empty() {
                 Err((

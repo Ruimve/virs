@@ -52,6 +52,7 @@ interface BacktestResult {
   max_consecutive_losses: number
   trades: BacktestTrade[]
   equity_curve: [string, number][]
+  klines?: { time: number; open: number; high: number; low: number; close: number; volume: number }[]
 }
 
 interface BacktestSummary {
@@ -141,6 +142,7 @@ const Backtest: Component = () => {
   const [strategyType, setStrategyType] = createSignal('custom')
   const [symbol, setSymbol] = createSignal('BTCUSDT')
   const [exchange, setExchange] = createSignal('binance')
+  const [marketType, setMarketType] = createSignal<'perpetual' | 'spot'>('perpetual')
   const [timeframe, setTimeframe] = createSignal('1h')
   const [startDate, setStartDate] = createSignal((() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().split('T')[0] })())
   const [endDate, setEndDate] = createSignal(new Date().toISOString().split('T')[0])
@@ -302,6 +304,7 @@ const Backtest: Component = () => {
         strategy_code: strategyCode(),
       }
     }
+    parsedTrading.market_type = marketType();
 
     const req: BacktestRequest = {
       strategy_type: backtestMode() === 'script' ? 'script' : strategyType(),
@@ -385,12 +388,15 @@ const Backtest: Component = () => {
     }
   }
 
-  // 从回测结果中提取 K 线数据（如果有）
+  // Use real klines data from backtest result
   const backtestKlineData = createMemo(() => {
     const r = result()
-    if (!r || !r.trades || r.trades.length === 0) return []
-    // 从交易记录中生成简化的 K 线数据
-    // 每笔交易生成一个数据点
+    if (!r) return []
+    // Use real klines if available, otherwise fallback to trade-based synthetic data
+    if (r.klines && r.klines.length > 0) {
+      return r.klines
+    }
+    if (!r.trades || r.trades.length === 0) return []
     return r.trades.map((t) => ({
       time: Math.floor(new Date(t.entry_time).getTime() / 1000),
       open: t.entry_price,
@@ -566,6 +572,19 @@ const Backtest: Component = () => {
               <option value="binance">Binance</option>
               <option value="okx">OKX</option>
               <option value="bybit">Bybit</option>
+            </select>
+          </div>
+
+          {/* 市场类型 */}
+          <div>
+            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">市场类型</label>
+            <select
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
+              value={marketType()}
+              onChange={(e) => setMarketType(e.currentTarget.value as 'perpetual' | 'spot')}
+            >
+              <option value="perpetual">永续合约</option>
+              <option value="spot">现货</option>
             </select>
           </div>
 

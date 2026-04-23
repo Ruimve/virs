@@ -12,19 +12,20 @@
 //! - Create/Cancel/Fetch orders
 
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use tracing::info;
 
 use super::types::*;
 use super::errors::ExchangeError;
 use super::auth::BybitSigner;
-use super::{Exchange, ExchangeClient, parse_str, parse_str_opt};
+use super::{Exchange, ExchangeClient, parse_str, parse_str_opt, parse_f64, parse_i64};
 
 /// Bybit exchange implementation.
 pub struct BybitExchange {
     client: ExchangeClient,
     signer: BybitSigner,
     markets: Option<Vec<MarketInfo>>,
+    market_type: MarketType,
 }
 
 impl BybitExchange {
@@ -33,6 +34,7 @@ impl BybitExchange {
         api_key: &str,
         api_secret: &str,
         proxy_url: Option<&str>,
+        market_type: &MarketType,
     ) -> Result<Self, ExchangeError> {
         let base_url = "https://api.bybit.com";
         let client = ExchangeClient::new(base_url, 20, proxy_url)?;
@@ -42,6 +44,7 @@ impl BybitExchange {
             client,
             signer,
             markets: None,
+            market_type: market_type.clone(),
         })
     }
 
@@ -102,6 +105,19 @@ impl BybitExchange {
         }
         Ok(())
     }
+
+    /// Return the Bybit v5 API category string based on market_type.
+    fn category(&self) -> &'static str {
+        match self.market_type {
+            MarketType::Spot => "spot",
+            MarketType::Perpetual => "linear",
+        }
+    }
+
+    /// Check if this instance is configured for perpetual trading.
+    fn is_perpetual(&self) -> bool {
+        matches!(self.market_type, MarketType::Perpetual)
+    }
 }
 
 #[async_trait]
@@ -114,7 +130,7 @@ impl Exchange for BybitExchange {
         CAPS.get_or_init(|| ExchangeCapabilities {
             has: ExchangeFeatures {
                 spot: true,
-                futures: true,
+                futures: false,
                 perpetual: true,
                 fetch_ticker: true,
                 fetch_tickers: true,
@@ -152,7 +168,7 @@ impl Exchange for BybitExchange {
     async fn fetch_ticker(&self, symbol: &str) -> Result<Ticker, ExchangeError> {
         let native = Self::to_native_symbol(symbol);
         let data = self.client
-            .public_get("/v5/market/tickers", &[("category", "spot"), ("symbol", native.as_str())])
+            .public_get("/v5/market/tickers", &[("category", self.category()), ("symbol", native.as_str())])
             .await?;
 
         Self::check_ret_code(&data)?;
@@ -207,7 +223,7 @@ impl Exchange for BybitExchange {
             .unwrap_or("60");
 
         let mut params: Vec<(&str, String)> = vec![
-            ("category", "spot".into()),
+            ("category", self.category().into()),
             ("symbol", native),
             ("interval", native_tf.to_string()),
             ("limit", limit.to_string()),
@@ -257,7 +273,7 @@ impl Exchange for BybitExchange {
         let native = Self::to_native_symbol(symbol);
         let data = self.client
             .public_get("/v5/market/orderbook", &[
-                ("category", "spot"),
+                ("category", self.category()),
                 ("symbol", native.as_str()),
                 ("limit", &limit.to_string()),
             ])
@@ -337,13 +353,15 @@ impl Exchange for BybitExchange {
 
     async fn fetch_markets(&self) -> Result<Vec<MarketInfo>, ExchangeError> {
         let data = self.client
-            .public_get("/v5/market/instruments-info", &[("category", "spot")])
+            .public_get("/v5/market/instruments-info", &[("category", self.category())])
             .await?;
 
         Self::check_ret_code(&data)?;
 
         let list = data.pointer("/result/list").and_then(|l| l.as_array())
             .ok_or_else(|| ExchangeError::Internal("Invalid instruments response".into()))?;
+
+        let target_market_type = self.market_type.clone();
 
         let markets: Vec<MarketInfo> = list.iter()
             .filter_map(|inst| {
@@ -364,7 +382,7 @@ impl Exchange for BybitExchange {
                     base: base.to_string(),
                     quote: quote.to_string(),
                     active: true,
-                    market_type: MarketType::Spot,
+                    market_type: target_market_type.clone(),
                     min_amount: inst.get("lotSizeFilter").and_then(|f| f.get("minOrderQty"))
                         .and_then(|v| v.as_str()).and_then(|s| s.parse().ok()),
                     max_amount: inst.get("lotSizeFilter").and_then(|f| f.get("maxOrderQty"))
@@ -392,7 +410,7 @@ impl Exchange for BybitExchange {
     async fn create_order(&self, params: PlaceOrderParams) -> Result<Order, ExchangeError> {
         let native = Self::to_native_symbol(&params.symbol);
         let mut body = serde_json::json!({
-            "category": "spot",
+            "category": self.category(),
             "symbol": native,
             "side": Self::side_str(&params.side),
             "orderType": Self::order_type_str(&params.order_type),
@@ -405,6 +423,16 @@ impl Exchange for BybitExchange {
 
         if let Some(ref client_id) = params.client_order_id {
             body["orderLinkId"] = serde_json::json!(client_id);
+        }
+
+        // Perpetual: add positionIdx for hedge mode
+        if self.is_perpetual() {
+            let position_idx = match &params.position_side {
+                Some(PositionSide::Long) => "1",
+                Some(PositionSide::Short) => "2",
+                None => "0", // one-way mode
+            };
+            body["positionIdx"] = serde_json::json!(position_idx);
         }
 
         let data = self.client
@@ -438,7 +466,7 @@ impl Exchange for BybitExchange {
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError> {
         let native = Self::to_native_symbol(symbol);
         let body = serde_json::json!({
-            "category": "spot",
+            "category": self.category(),
             "symbol": native,
             "orderId": order_id,
         });
@@ -474,7 +502,7 @@ impl Exchange for BybitExchange {
     async fn fetch_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError> {
         let native = Self::to_native_symbol(symbol);
         let params = vec![
-            ("category".into(), "spot".into()),
+            ("category".into(), self.category().into()),
             ("symbol".into(), native),
             ("orderId".into(), order_id.to_string()),
         ];
@@ -518,7 +546,7 @@ impl Exchange for BybitExchange {
     }
 
     async fn fetch_open_orders(&self, symbol: Option<&str>) -> Result<Vec<Order>, ExchangeError> {
-        let mut params: Vec<(String, String)> = vec![("category".into(), "spot".into())];
+        let mut params: Vec<(String, String)> = vec![("category".into(), self.category().into())];
         if let Some(sym) = symbol {
             params.push(("symbol".into(), Self::to_native_symbol(sym)));
         }
@@ -559,6 +587,105 @@ impl Exchange for BybitExchange {
         }).collect();
 
         Ok(orders)
+    }
+
+    async fn set_leverage(&self, symbol: &str, leverage: u32, _margin_mode: MarginMode) -> Result<(), ExchangeError> {
+        let native = Self::to_native_symbol(symbol);
+        let body = serde_json::json!({
+            "category": self.category(),
+            "symbol": native,
+            "buyLeverage": leverage.to_string(),
+            "sellLeverage": leverage.to_string(),
+        });
+        let data = self.client.signed_post(&self.signer, "/v5/account/set-leverage", body).await?;
+        Self::check_ret_code(&data)?;
+        Ok(())
+    }
+
+    async fn fetch_positions(&self, symbol: Option<&str>) -> Result<Vec<Position>, ExchangeError> {
+        let mut params: Vec<(String, String)> = vec![
+            ("category".into(), self.category().into()),
+        ];
+        if let Some(sym) = symbol {
+            params.push(("symbol".into(), Self::to_native_symbol(sym)));
+        }
+
+        let data = self.client
+            .signed_get(&self.signer, "/v5/position/list", params)
+            .await?;
+
+        Self::check_ret_code(&data)?;
+
+        let result = data.pointer("/result/list").and_then(|r| r.as_array())
+            .ok_or_else(|| ExchangeError::Internal("No positions from Bybit".into()))?;
+
+        let positions: Vec<Position> = result.iter()
+            .filter_map(|p| {
+                let size: f64 = parse_str(p, "size").parse().ok()?;
+                if size == 0.0 {
+                    return None;
+                }
+
+                let side = match parse_str(p, "side").as_str() {
+                    "Buy" => PositionSide::Long,
+                    "Sell" => PositionSide::Short,
+                    _ => return None,
+                };
+
+                let leverage = parse_str(p, "leverage").parse().unwrap_or(1);
+                let margin_mode = match parse_str(p, "tradeMode").as_str() {
+                    "1" => MarginMode::Cross,
+                    "0" | _ => MarginMode::Isolated,
+                };
+
+                Some(Position {
+                    symbol: Self::to_unified_symbol(&parse_str(p, "symbol")),
+                    side,
+                    size,
+                    entry_price: parse_str(p, "avgPrice").parse().unwrap_or(0.0),
+                    leverage,
+                    unrealized_pnl: parse_str(p, "unrealisedPnl").parse().unwrap_or(0.0),
+                    margin_mode,
+                    liquidation_price: parse_str(p, "liqPrice").parse().ok(),
+                    info: p.clone(),
+                })
+            })
+            .collect();
+
+        Ok(positions)
+    }
+
+    async fn fetch_funding_rate(&self, symbol: &str) -> Result<FundingRate, ExchangeError> {
+        let native = Self::to_native_symbol(symbol);
+        let data = self.client
+            .public_get("/v5/market/tickers", &[
+                ("category", "linear"),
+                ("symbol", native.as_str()),
+            ])
+            .await?;
+
+        Self::check_ret_code(&data)?;
+
+        let result = data.pointer("/result/list").and_then(|r| r.as_array())
+            .ok_or_else(|| ExchangeError::Internal("No ticker from Bybit".into()))?;
+
+        let ticker = result.first()
+            .ok_or_else(|| ExchangeError::NoData("No data".into()))?;
+
+        let rate = parse_f64(ticker, "fundingRate").unwrap_or(0.0);
+        let next_time = parse_i64(ticker, "nextFundingTime");
+        let next_time = if next_time > 0 {
+            DateTime::from_timestamp_millis(next_time)
+        } else {
+            None
+        };
+
+        Ok(FundingRate {
+            symbol: symbol.to_string(),
+            rate,
+            next_funding_time: next_time,
+            info: ticker.clone(),
+        })
     }
 
     async fn ping(&self) -> Result<bool, ExchangeError> {

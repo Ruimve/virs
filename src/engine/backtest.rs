@@ -64,6 +64,9 @@ impl BacktestEngine {
         trailing_stop_pct: Option<f64>,
         trailing_activation_pct: Option<f64>,
         trade_direction: &str,
+        user_start_date: Option<chrono::DateTime<chrono::Utc>>,
+        user_end_date: Option<chrono::DateTime<chrono::Utc>>,
+        leverage: u32,
     ) -> BacktestResult
     where
         F: FnMut(&[Kline], usize) -> i8,
@@ -75,20 +78,24 @@ impl BacktestEngine {
         let mut equity_curve: Vec<(DateTime<Utc>, f64)> = Vec::new();
         let mut returns: Vec<f64> = Vec::new();
 
-        let start_date = klines
-            .first()
-            .map(|k| {
-                chrono::DateTime::from_timestamp_millis(k.open_time)
-                    .unwrap_or_else(Utc::now)
-            })
-            .unwrap_or_else(Utc::now);
-        let end_date = klines
-            .last()
-            .map(|k| {
-                chrono::DateTime::from_timestamp_millis(k.open_time)
-                    .unwrap_or_else(Utc::now)
-            })
-            .unwrap_or_else(Utc::now);
+        let start_date = user_start_date.unwrap_or_else(|| {
+            klines
+                .first()
+                .map(|k| {
+                    chrono::DateTime::from_timestamp_millis(k.open_time)
+                        .unwrap_or_else(Utc::now)
+                })
+                .unwrap_or_else(Utc::now)
+        });
+        let end_date = user_end_date.unwrap_or_else(|| {
+            klines
+                .last()
+                .map(|k| {
+                    chrono::DateTime::from_timestamp_millis(k.open_time)
+                        .unwrap_or_else(Utc::now)
+                })
+                .unwrap_or_else(Utc::now)
+        });
 
         let mut profit_trades = 0i64;
         let mut loss_trades = 0i64;
@@ -112,15 +119,13 @@ impl BacktestEngine {
                 let timestamp = chrono::DateTime::from_timestamp_millis(kline.open_time)
                     .unwrap_or_else(Utc::now);
 
-                let pos_side_str = position.as_ref().map(|p| match p.side {
-                    PositionSide::Long => "long",
-                    PositionSide::Short => "short",
-                });
+                let has_long = position.as_ref().map_or(false, |p| p.side == PositionSide::Long);
+                let has_short = position.as_ref().map_or(false, |p| p.side == PositionSide::Short);
 
-                if let Some(signal) = map_raw_signal(raw, trade_direction, pos_side_str) {
+                if let Some(signal) = map_raw_signal(raw, trade_direction, has_long, has_short) {
                     match signal {
                         SignalType::OpenLong if position.is_none() => {
-                            let open_fee = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Long, position_pct);
+                            let open_fee = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Long, position_pct, leverage);
                             open_trade = Some((timestamp, exec_price, open_fee, "long".to_string()));
                         }
                         SignalType::CloseLong if position.as_ref().map_or(false, |p| p.side == PositionSide::Long) => {
@@ -129,7 +134,7 @@ impl BacktestEngine {
                             }
                         }
                         SignalType::OpenShort if position.is_none() => {
-                            let open_fee = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Short, position_pct);
+                            let open_fee = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Short, position_pct, leverage);
                             open_trade = Some((timestamp, exec_price, open_fee, "short".to_string()));
                         }
                         SignalType::CloseShort if position.as_ref().map_or(false, |p| p.side == PositionSide::Short) => {
@@ -204,14 +209,12 @@ impl BacktestEngine {
 
             // Calculate equity
             let equity = if let Some(ref pos) = position {
+                let margin = pos.size * pos.entry_price / pos.leverage as f64;
                 let unrealized = match pos.side {
                     PositionSide::Long => (price - pos.entry_price) * pos.size,
                     PositionSide::Short => (pos.entry_price - price) * pos.size,
                 };
-                match pos.side {
-                    PositionSide::Long => balance + pos.size * pos.entry_price + unrealized,
-                    PositionSide::Short => balance + pos.size * pos.entry_price + unrealized,
-                }
+                balance + margin + unrealized
             } else {
                 balance
             };
@@ -331,15 +334,16 @@ impl BacktestEngine {
         balance: &mut f64,
         side: PositionSide,
         position_pct: f64,
+        leverage: u32,
     ) -> f64 {
         let effective_price = match side {
             PositionSide::Long => price * (1.0 + self.slippage),
             PositionSide::Short => price * (1.0 - self.slippage),
         };
-        let max_amount = *balance * 0.99 * position_pct;
-        let size = max_amount / effective_price;
+        let margin = *balance * 0.99 * position_pct;
+        let size = margin * leverage as f64 / effective_price;
         let fee = size * effective_price * self.commission_rate;
-        *balance -= size * effective_price + fee;
+        *balance -= margin + fee;
 
         *position = Some(PositionState {
             side,
@@ -347,6 +351,7 @@ impl BacktestEngine {
             entry_price: effective_price,
             highest_price: effective_price,
             lowest_price: effective_price,
+            leverage,
         });
 
         fee
@@ -365,23 +370,17 @@ impl BacktestEngine {
             PositionSide::Long => price * (1.0 - self.slippage),
             PositionSide::Short => price * (1.0 + self.slippage),
         };
-        let fee = pos.size * effective_price * self.commission_rate;
+        let close_fee = pos.size * effective_price * self.commission_rate;
+        let margin = pos.size * pos.entry_price / pos.leverage as f64;
         let pnl = match pos.side {
             PositionSide::Long => {
-                let revenue = pos.size * effective_price;
-                revenue - pos.size * pos.entry_price - fee
+                (effective_price - pos.entry_price) * pos.size - close_fee
             }
             PositionSide::Short => {
-                let proceeds = pos.size * pos.entry_price;
-                let buyback_cost = pos.size * effective_price;
-                proceeds - buyback_cost - fee
+                (pos.entry_price - effective_price) * pos.size - close_fee
             }
         };
-        let net_proceeds = match pos.side {
-            PositionSide::Long => pos.size * effective_price - fee,
-            PositionSide::Short => pos.size * pos.entry_price + (pos.size * pos.entry_price - pos.size * effective_price) - fee,
-        };
-        *balance += net_proceeds;
+        *balance += margin + pnl;
 
         let ot = open_trade.take()?;
         let entry_price = ot.1;
@@ -391,7 +390,7 @@ impl BacktestEngine {
             PositionSide::Long => (effective_price - entry_price) / entry_price * 100.0,
             PositionSide::Short => (entry_price - effective_price) / entry_price * 100.0,
         };
-        let total_commission = ot.2 + fee;
+        let total_commission = ot.2 + close_fee;
 
         Some(BacktestTrade {
             entry_time,
@@ -413,6 +412,7 @@ struct PositionState {
     entry_price: f64,
     highest_price: f64,
     lowest_price: f64,
+    leverage: u32,
 }
 
 // ============================================================
@@ -633,7 +633,7 @@ mod tests {
 
         let result = engine.run(&klines, |klines, idx| {
             sma_crossover_signal(klines, idx, 5, 20)
-        }, Some(0.05), Some(0.10), 1.0, None, None, "long");
+        }, Some(0.05), Some(0.10), 1.0, None, None, "long", None, None, 1);
 
         assert!(result.total_trades >= 0);
         assert!(result.final_balance >= 0.0);

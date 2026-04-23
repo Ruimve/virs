@@ -1,13 +1,18 @@
 pub mod backtest;
+pub mod base;
 pub mod indicators;
 pub mod lua_executor;
+pub mod perpetual;
 pub mod plugin;
 pub mod plugins;
-pub mod position;
+pub mod spot;
 
 use crate::models::*;
 use crate::exchange::Exchange;
+use crate::engine::base::MarketEngine;
 use crate::engine::plugin::PluginRegistry;
+use crate::engine::spot::SpotMarketEngine;
+use crate::engine::perpetual::PerpetualMarketEngine;
 use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -15,7 +20,8 @@ use tracing::{info, warn, error};
 use uuid::Uuid;
 
 pub struct StrategyEngine {
-    strategies: Arc<DashMap<Uuid, RunningStrategy>>,
+    spot_engine: SpotMarketEngine,
+    perpetual_engine: PerpetualMarketEngine,
     exchange_instances: Arc<DashMap<String, Box<dyn Exchange>>>,
     order_tx: mpsc::Sender<OrderCommand>,
     config: StrategyEngineConfig,
@@ -29,12 +35,6 @@ pub struct StrategyEngineConfig {
     pub executor_workers: usize,
     pub pending_order_poll_interval_secs: u64,
     pub auto_restore: bool,
-}
-
-#[derive(Debug)]
-struct RunningStrategy {
-    strategy: Strategy,
-    cancel_token: tokio::sync::watch::Sender<bool>,
 }
 
 #[derive(Debug)]
@@ -61,6 +61,7 @@ pub enum OrderCommand {
         price: Option<f64>,
         order_type: OrderType,
         exchange_name: String,
+        market_type: MarketType,
         callback: tokio::sync::oneshot::Sender<OrderResult>,
     },
     Cancel {
@@ -85,7 +86,8 @@ impl StrategyEngine {
         plugins: Arc<PluginRegistry>,
     ) -> Self {
         Self {
-            strategies: Arc::new(DashMap::new()),
+            spot_engine: SpotMarketEngine::new(order_tx.clone(), plugins.clone()),
+            perpetual_engine: PerpetualMarketEngine::new(order_tx.clone(), plugins.clone()),
             exchange_instances: Arc::new(DashMap::new()),
             order_tx,
             config,
@@ -96,23 +98,23 @@ impl StrategyEngine {
     }
 
     pub fn set_db_pool(&mut self, pool: sqlx::PgPool) {
-        self.db_pool = Some(pool);
+        self.db_pool = Some(pool.clone());
+        self.spot_engine.set_db_pool(pool.clone());
+        self.perpetual_engine.set_db_pool(pool);
     }
 
     pub fn set_ws_broadcaster(&mut self, broadcaster: Arc<crate::api::ws::WsBroadcaster>) {
-        self.ws_broadcaster = Some(broadcaster);
-    }
-
-    fn emit_event(&self, event: crate::api::ws::WsEvent) {
-        if let Some(ref broadcaster) = self.ws_broadcaster {
-            let _ = broadcaster.send(event);
-        }
+        self.ws_broadcaster = Some(broadcaster.clone());
+        self.spot_engine.set_ws_broadcaster(broadcaster.clone());
+        self.perpetual_engine.set_ws_broadcaster(broadcaster);
     }
 
     pub fn register_exchange(&self, exchange: Box<dyn Exchange>) {
         let name = exchange.name().to_string();
-        info!("Registered exchange: {}", name);
-        self.exchange_instances.insert(name, exchange);
+        let mt = exchange.market_type();
+        let key = format!("{}:{}", name, mt);
+        info!("Registered exchange: {} (key={})", name, key);
+        self.exchange_instances.insert(key, exchange);
     }
 
     pub fn register_exchange_for_user(
@@ -121,8 +123,9 @@ impl StrategyEngine {
         user_id: Uuid,
     ) -> String {
         let raw_name = exchange.name().to_string();
-        let scoped_name = format!("{}:{}", raw_name, user_id);
-        info!("Registered exchange '{}' for user {}", raw_name, user_id);
+        let mt = exchange.market_type();
+        let scoped_name = format!("{}:{}:{}", raw_name, mt, user_id);
+        info!("Registered exchange '{}' ({:?}) for user {}", raw_name, mt, user_id);
         self.exchange_instances.insert(scoped_name.clone(), exchange);
         scoped_name
     }
@@ -135,329 +138,116 @@ impl StrategyEngine {
         self.exchange_instances.iter().map(|r| r.key().clone()).collect()
     }
 
+    /// Dispatch strategy start to the appropriate market engine based on strategy.market_type.
     pub async fn start_strategy(&self, strategy: Strategy, exchange_key: Option<String>) -> anyhow::Result<()> {
-        let strategy_id = strategy.id;
-        let exchange_name = exchange_key.unwrap_or_else(|| strategy.exchange.clone());
-        let symbol = strategy.symbol.clone();
-        let timeframe = strategy.timeframe.clone();
-        let interval_secs = strategy.decide_interval_secs;
-        let trading_config = strategy.trading_config.clone();
-        let strategies = self.strategies.clone();
-        let exchanges = self.exchange_instances.clone();
-        let order_tx = self.order_tx.clone();
-        let plugins = self.plugins.clone();
-
-        let (cancel_tx, mut cancel_rx) = tokio::sync::watch::channel(false);
-        let cancel_tx_clone = cancel_tx.clone();
-
-        strategies.insert(
-            strategy_id,
-            RunningStrategy {
-                strategy: strategy.clone(),
-                cancel_token: cancel_tx,
-            },
-        );
-
-        info!(
-            "Starting strategy {} ({} on {} / {})",
-            strategy.name, symbol, exchange_name, timeframe
-        );
-
-        self.emit_event(crate::api::ws::WsEvent::StrategyStatus {
-            strategy_id: strategy_id.to_string(),
-            name: strategy.name.clone(),
-            status: "running".to_string(),
+        let exchange_name = exchange_key.unwrap_or_else(|| {
+            let mt_str = match strategy.market_type {
+                MarketType::Spot => "spot",
+                MarketType::Perpetual => "perpetual",
+            };
+            format!("{}:{}", strategy.exchange, mt_str)
         });
 
-        let ws_broadcaster = self.ws_broadcaster.clone();
-        let db_pool = self.db_pool.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(
-                interval_secs as u64,
-            ));
-
-            let mut pos_manager = position::PositionManager::new(
-                strategy_id,
-                symbol.clone(),
-                exchange_name.clone(),
-                &trading_config,
-            );
-
-            if let Some(ref pool) = db_pool {
-                if let Err(e) = restore_position_from_db(&mut pos_manager, pool, strategy_id).await {
-                    warn!("Strategy {} failed to restore position: {}", strategy.name, e);
-                }
+        match strategy.market_type {
+            MarketType::Spot => {
+                self.spot_engine.start_strategy(
+                    strategy,
+                    exchange_name,
+                    self.exchange_instances.clone(),
+                ).await
             }
-
-            loop {
-                tokio::select! {
-                    _ = interval.tick() => {
-                        if let Some(exchange) = exchanges.get(&exchange_name) {
-                            let current_price = match exchange.get_ticker(&symbol).await {
-                                Ok(ticker) => ticker.last,
-                                Err(e) => {
-                                    warn!("Strategy {} failed to get ticker: {}", strategy.name, e);
-                                    continue;
-                                }
-                            };
-
-                            if current_price <= 0.0 {
-                                warn!("Strategy {} got invalid ticker price {}", strategy.name, current_price);
-                                continue;
-                            }
-
-                            pos_manager.update_price_tracking(current_price);
-
-                            if let Some((close_side, close_amount, risk_reason)) = pos_manager.check_risk(current_price) {
-                                info!(
-                                    "Strategy {} risk management triggered close: {:?} for {} @ {:.2}",
-                                    strategy.name, close_side, symbol, current_price
-                                );
-
-                                if let Some(ref bc) = ws_broadcaster {
-                                    let _ = bc.send(crate::api::ws::WsEvent::Risk {
-                                        strategy_id: strategy_id.to_string(),
-                                        symbol: symbol.clone(),
-                                        reason: risk_reason.as_str().to_string(),
-                                        price: current_price,
-                                    });
-                                }
-
-                                let signal_type = if close_side == Side::Sell {
-                                    SignalType::CloseLong
-                                } else {
-                                    SignalType::CloseShort
-                                };
-
-                                let (cb_tx, cb_rx) = tokio::sync::oneshot::channel();
-                                let _ = order_tx.send(OrderCommand::Place {
-                                    strategy_id,
-                                    symbol: symbol.clone(),
-                                    signal_type: signal_type.clone(),
-                                    side: close_side,
-                                    amount: close_amount,
-                                    price: None,
-                                    order_type: OrderType::Market,
-                                    exchange_name: exchange_name.clone(),
-                                    callback: cb_tx,
-                                }).await;
-
-                                match tokio::time::timeout(
-                                    std::time::Duration::from_secs(30),
-                                    cb_rx,
-                                ).await {
-                                    Ok(Ok(OrderResult::Filled { fill_price, filled_amount, .. })) => {
-                                        info!(
-                                            "Strategy {} risk close confirmed: fill_price={:.2}, filled={:.6}",
-                                            strategy.name, fill_price, filled_amount
-                                        );
-                                        pos_manager.apply_risk_close();
-                                    }
-                                    Ok(Ok(OrderResult::Failed { error })) => {
-                                        error!(
-                                            "Strategy {} risk close FAILED: {}. Will retry next cycle.",
-                                            strategy.name, error
-                                        );
-                                    }
-                                    Ok(Err(_)) => {
-                                        error!(
-                                            "Strategy {} risk close callback dropped. Will retry next cycle.",
-                                            strategy.name
-                                        );
-                                    }
-                                    Err(_) => {
-                                        error!(
-                                            "Strategy {} risk close timed out (30s). Will retry next cycle.",
-                                            strategy.name
-                                        );
-                                    }
-                                }
-                                continue;
-                            }
-
-                            let position_info = pos_manager.position_info().map(|p| {
-                                (
-                                    match p.side {
-                                        PositionSide::Long => "long".to_string(),
-                                        PositionSide::Short => "short".to_string(),
-                                    },
-                                    p.entry_price,
-                                    p.size,
-                                )
-                            });
-
-                            match run_strategy_cycle(
-                                &*exchange,
-                                &symbol,
-                                &timeframe,
-                                &strategy,
-                                &plugins,
-                                position_info,
-                            ).await {
-                                Ok((signal, _klines)) => {
-                                    match signal {
-                                        Some(signal) => {
-                                            info!(
-                                                "Strategy {} generated signal: {:?} for {}",
-                                                strategy.name, signal, symbol
-                                            );
-
-                                            let (side, base_amount) = pos_manager
-                                                .prepare_order_async(&signal, &*exchange, current_price)
-                                                .await;
-
-                                            if base_amount <= 0.0 {
-                                                warn!(
-                                                    "Strategy {} signal {:?} produced amount=0, skipping",
-                                                    strategy.name, signal
-                                                );
-                                                continue;
-                                            }
-
-                                            let (cb_tx, cb_rx) = tokio::sync::oneshot::channel();
-                                            let _ = order_tx.send(OrderCommand::Place {
-                                                strategy_id,
-                                                symbol: symbol.clone(),
-                                                signal_type: signal.clone(),
-                                                side: side.clone(),
-                                                amount: base_amount,
-                                                price: None,
-                                                order_type: OrderType::Market,
-                                                exchange_name: exchange_name.clone(),
-                                                callback: cb_tx,
-                                            }).await;
-
-                                            match tokio::time::timeout(
-                                                std::time::Duration::from_secs(30),
-                                                cb_rx,
-                                            ).await {
-                                                Ok(Ok(OrderResult::Filled { fill_price, filled_amount, .. })) => {
-                                                    info!(
-                                                        "Strategy {} order confirmed: fill_price={:.2}, filled={:.6}",
-                                                        strategy.name, fill_price, filled_amount
-                                                    );
-                                                    pos_manager.apply_signal(&signal, filled_amount, fill_price);
-
-                                                    if let Some(ref bc) = ws_broadcaster {
-                                                        let side_str = match side {
-                                                            Side::Buy => "buy",
-                                                            Side::Sell => "sell",
-                                                        };
-                                                        let _ = bc.send(crate::api::ws::WsEvent::Trade {
-                                                            strategy_id: strategy_id.to_string(),
-                                                            symbol: symbol.clone(),
-                                                            side: side_str.to_string(),
-                                                            price: fill_price,
-                                                            amount: filled_amount,
-                                                            pnl: 0.0,
-                                                        });
-                                                    }
-                                                }
-                                                Ok(Ok(OrderResult::Failed { error })) => {
-                                                    error!(
-                                                        "Strategy {} order FAILED: {}. Position state NOT updated.",
-                                                        strategy.name, error
-                                                    );
-                                                }
-                                                Ok(Err(_)) => {
-                                                    error!(
-                                                        "Strategy {} order callback dropped. Position state NOT updated.",
-                                                        strategy.name
-                                                    );
-                                                }
-                                                Err(_) => {
-                                                    error!(
-                                                        "Strategy {} order timed out (30s). Querying exchange for order status...",
-                                                        strategy.name
-                                                    );
-                                                    let open_orders = match exchange.get_open_orders(Some(&symbol)).await {
-                                                        Ok(orders) => orders,
-                                                        Err(e) => {
-                                                            error!("Strategy {} failed to query open orders: {}", strategy.name, e);
-                                                            continue;
-                                                        }
-                                                    };
-                                                    if open_orders.is_empty() {
-                                                        info!(
-                                                            "Strategy {} no open orders found after timeout - order likely filled. Pausing strategy to prevent duplicate positions.",
-                                                            strategy.name
-                                                        );
-                                                        let _ = cancel_tx_clone.send(true);
-                                                        break;
-                                                    } else {
-                                                        for open_order in &open_orders {
-                                                            if let Err(e) = exchange.cancel_order(&symbol, &open_order.id).await {
-                                                                warn!("Strategy {} failed to cancel order {}: {}", strategy.name, open_order.id, e);
-                                                            }
-                                                        }
-                                                        info!(
-                                                            "Strategy {} cancelled {} open orders after timeout. Position state NOT updated.",
-                                                            strategy.name, open_orders.len()
-                                                        );
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        None => {
-                                            tracing::debug!("Strategy {} no signal", strategy.name);
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("Strategy {} error: {}", strategy.name, e);
-                                }
-                            }
-                        } else {
-                            warn!("Exchange {} not found for strategy {}", exchange_name, strategy.name);
-                        }
-                    }
-                    _ = cancel_rx.changed() => {
-                        if *cancel_rx.borrow() {
-                            info!("Strategy {} stopped", strategy.name);
-                            break;
-                        }
-                    }
-                }
+            MarketType::Perpetual => {
+                self.perpetual_engine.start_strategy(
+                    strategy,
+                    exchange_name,
+                    self.exchange_instances.clone(),
+                ).await
             }
-        });
-
-        Ok(())
-    }
-
-    pub fn stop_strategy(&self, strategy_id: &Uuid) -> bool {
-        if let Some(entry) = self.strategies.get_mut(strategy_id) {
-            let name = entry.strategy.name.clone();
-            let _ = entry.cancel_token.send(true);
-            info!("Stopping strategy {}", strategy_id);
-
-            self.emit_event(crate::api::ws::WsEvent::StrategyStatus {
-                strategy_id: strategy_id.to_string(),
-                name,
-                status: "stopped".to_string(),
-            });
-
-            true
-        } else {
-            false
         }
     }
 
+    pub fn stop_strategy(&self, strategy_id: &Uuid) -> bool {
+        if self.spot_engine.stop_strategy(strategy_id) {
+            return true;
+        }
+        if self.perpetual_engine.stop_strategy(strategy_id) {
+            return true;
+        }
+        false
+    }
+
     pub fn running_strategy_ids(&self) -> Vec<Uuid> {
-        self.strategies.iter().map(|r| *r.key()).collect()
+        let mut ids = self.spot_engine.running_strategy_ids();
+        ids.extend(self.perpetual_engine.running_strategy_ids());
+        ids
     }
 
     pub fn is_running(&self, strategy_id: &Uuid) -> bool {
-        self.strategies.contains_key(strategy_id)
+        self.spot_engine.is_running(strategy_id) || self.perpetual_engine.is_running(strategy_id)
     }
 }
 
-async fn run_strategy_cycle(
+// ============================================================
+// Shared strategy cycle logic
+// ============================================================
+
+pub struct CyclePositionInfo {
+    pub has_long: bool,
+    pub has_short: bool,
+    pub primary_side: Option<String>,
+    pub primary_entry_price: f64,
+    pub primary_size: f64,
+}
+
+impl CyclePositionInfo {
+    pub fn flat() -> Self {
+        Self {
+            has_long: false,
+            has_short: false,
+            primary_side: None,
+            primary_entry_price: 0.0,
+            primary_size: 0.0,
+        }
+    }
+
+    pub fn long_only(entry_price: f64, size: f64) -> Self {
+        Self {
+            has_long: true,
+            has_short: false,
+            primary_side: Some("long".to_string()),
+            primary_entry_price: entry_price,
+            primary_size: size,
+        }
+    }
+
+    pub fn short_only(entry_price: f64, size: f64) -> Self {
+        Self {
+            has_long: false,
+            has_short: true,
+            primary_side: Some("short".to_string()),
+            primary_entry_price: entry_price,
+            primary_size: size,
+        }
+    }
+
+    pub fn hedge(long_entry: f64, long_size: f64, short_entry: f64, short_size: f64) -> Self {
+        Self {
+            has_long: true,
+            has_short: true,
+            primary_side: Some("long".to_string()),
+            primary_entry_price: long_entry,
+            primary_size: long_size,
+        }
+    }
+}
+
+pub(crate) async fn run_strategy_cycle(
     exchange: &dyn Exchange,
     symbol: &str,
     timeframe: &str,
     strategy: &Strategy,
     plugins: &PluginRegistry,
-    position_info: Option<(String, f64, f64)>,
+    position_info: CyclePositionInfo,
 ) -> anyhow::Result<(Option<SignalType>, Vec<Kline>)> {
     let klines = exchange.get_klines(symbol, timeframe, 200, None).await?;
 
@@ -497,17 +287,11 @@ async fn run_strategy_cycle(
             let ctx = lua_executor::LuaContext {
                 position: lua_executor::LuaPosition {
                     side: position_info
-                        .as_ref()
-                        .map(|(side, _, _)| side.clone())
+                        .primary_side
+                        .clone()
                         .unwrap_or_else(|| "flat".to_string()),
-                    entry_price: position_info
-                        .as_ref()
-                        .map(|(_, price, _)| *price)
-                        .unwrap_or(0.0),
-                    size: position_info
-                        .as_ref()
-                        .map(|(_, _, size)| *size)
-                        .unwrap_or(0.0),
+                    entry_price: position_info.primary_entry_price,
+                    size: position_info.primary_size,
                 },
                 last_exit_bar: 0,
                 bar_index: idx as i64,
@@ -520,12 +304,12 @@ async fn run_strategy_cycle(
                             lua_executor::LuaOrder::Buy { .. } => 1_i8,
                             lua_executor::LuaOrder::Sell { .. } => -1_i8,
                             lua_executor::LuaOrder::Close => {
-                                if let Some((side, _, _)) = &position_info {
-                                    match side.as_str() {
-                                        "long" => -1_i8,
-                                        "short" => 1_i8,
-                                        _ => 0_i8,
-                                    }
+                                if position_info.has_long && position_info.has_short {
+                                    0_i8
+                                } else if position_info.has_long {
+                                    -1_i8
+                                } else if position_info.has_short {
+                                    1_i8
                                 } else {
                                     0_i8
                                 }
@@ -606,9 +390,7 @@ async fn run_strategy_cycle(
         }
     };
 
-    let position_side: Option<&str> = position_info.as_ref().map(|(side, _, _)| side.as_str());
-
-    let signal = map_raw_signal(raw_signal, trade_direction, position_side);
+    let signal = map_raw_signal(raw_signal, trade_direction, position_info.has_long, position_info.has_short);
 
     Ok((signal, klines))
 }
@@ -616,65 +398,29 @@ async fn run_strategy_cycle(
 pub fn map_raw_signal(
     raw_signal: i8,
     trade_direction: &str,
-    current_position_side: Option<&str>,
+    has_long: bool,
+    has_short: bool,
 ) -> Option<SignalType> {
     if raw_signal == 0 {
         return None;
     }
 
-    let is_flat = current_position_side.is_none() || current_position_side == Some("flat");
-    let is_long = current_position_side == Some("long");
-    let is_short = current_position_side == Some("short");
+    let is_flat = !has_long && !has_short;
 
-    match (raw_signal, trade_direction, is_flat, is_long, is_short) {
-        (1, "long", true, _, _) => Some(SignalType::OpenLong),
-        (-1, "long", _, true, _) => Some(SignalType::CloseLong),
+    match (raw_signal, trade_direction, has_long, has_short) {
+        (1, "long", false, _) => Some(SignalType::OpenLong),
+        (-1, "long", true, _) => Some(SignalType::CloseLong),
 
-        (-1, "short", true, _, _) => Some(SignalType::OpenShort),
-        (1, "short", _, _, true) => Some(SignalType::CloseShort),
+        (-1, "short", _, false) => Some(SignalType::OpenShort),
+        (1, "short", _, true) => Some(SignalType::CloseShort),
 
-        (1, "both", true, _, _) => Some(SignalType::OpenLong),
-        (1, "both", _, _, true) => Some(SignalType::CloseShort),
-        (-1, "both", true, _, _) => Some(SignalType::OpenShort),
-        (-1, "both", _, true, _) => Some(SignalType::CloseLong),
+        (1, "both", false, false) => Some(SignalType::OpenLong),
+        (-1, "both", false, false) => Some(SignalType::OpenShort),
+        (1, "both", true, true) => Some(SignalType::CloseShort),
+        (-1, "both", true, true) => Some(SignalType::CloseLong),
+        (1, "both", false, true) => Some(SignalType::CloseShort),
+        (-1, "both", true, false) => Some(SignalType::CloseLong),
 
         _ => None,
     }
-}
-
-async fn restore_position_from_db(
-    pos_manager: &mut position::PositionManager,
-    pool: &sqlx::PgPool,
-    strategy_id: Uuid,
-) -> anyhow::Result<()> {
-    let row: Option<(String, f64, f64)> = sqlx::query_as(
-        r#"SELECT side, price, amount
-           FROM qd_strategy_trades
-           WHERE strategy_id = $1
-           ORDER BY created_at DESC
-           LIMIT 1"#,
-    )
-    .bind(strategy_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| anyhow::anyhow!("DB query failed: {}", e))?;
-
-    if let Some((side_str, price, amount)) = row {
-        let side = match side_str.to_lowercase().as_str() {
-            "buy" | "openlong" => crate::models::PositionSide::Long,
-            "sell" | "openshort" => crate::models::PositionSide::Short,
-            _ => {
-                info!(
-                    "Strategy {} last trade is a close (side={}), no position to restore",
-                    strategy_id, side_str
-                );
-                return Ok(());
-            }
-        };
-        pos_manager.restore_position(side, amount, price);
-    } else {
-        info!("Strategy {} has no trade history, starting fresh", strategy_id);
-    }
-
-    Ok(())
 }

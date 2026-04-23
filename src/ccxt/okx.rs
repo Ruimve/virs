@@ -8,8 +8,10 @@
 //!
 //! Supported features:
 //! - Spot trading
+//! - Perpetual (SWAP) trading
 //! - Ticker, OHLCV, OrderBook, Balance
 //! - Create/Cancel/Fetch orders
+//! - Set leverage, fetch positions, fetch funding rate
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -18,13 +20,14 @@ use tracing::info;
 use super::types::*;
 use super::errors::ExchangeError;
 use super::auth::OkxSigner;
-use super::{Exchange, ExchangeClient, parse_str, parse_str_opt};
+use super::{Exchange, ExchangeClient, parse_str, parse_str_opt, parse_f64, parse_i64, parse_u32};
 
 /// OKX exchange implementation.
 pub struct OkxExchange {
     client: ExchangeClient,
     signer: OkxSigner,
     markets: Option<Vec<MarketInfo>>,
+    market_type: MarketType,
 }
 
 impl OkxExchange {
@@ -34,6 +37,7 @@ impl OkxExchange {
         api_secret: &str,
         passphrase: &str,
         proxy_url: Option<&str>,
+        market_type: &MarketType,
     ) -> Result<Self, ExchangeError> {
         let base_url = "https://www.okx.com";
         let client = ExchangeClient::new(base_url, 20, proxy_url)?;
@@ -47,6 +51,7 @@ impl OkxExchange {
             client,
             signer,
             markets: None,
+            market_type: market_type.clone(),
         })
     }
 
@@ -55,9 +60,23 @@ impl OkxExchange {
         symbol.replace('/', "-")
     }
 
+    /// Convert unified symbol to OKX format, accounting for market type.
+    /// Spot: BTC/USDT -> BTC-USDT
+    /// Perpetual: BTC/USDT -> BTC-USDT-SWAP
+    fn to_native_symbol_with_type(&self, symbol: &str) -> String {
+        let base = Self::to_native_symbol(symbol);
+        if self.is_perpetual() {
+            format!("{}-SWAP", base)
+        } else {
+            base
+        }
+    }
+
     /// Convert OKX symbol to unified format.
     fn to_unified_symbol(native: &str) -> String {
-        native.replace('-', "/")
+        // Handle SWAP suffix: BTC-USDT-SWAP -> BTC/USDT
+        let stripped = native.strip_suffix("-SWAP").unwrap_or(native);
+        stripped.replace('-', "/")
     }
 
     /// Convert unified timeframe to OKX bar format.
@@ -131,6 +150,27 @@ impl OkxExchange {
         }
         Ok(())
     }
+
+    /// Return the OKX instrument type string for the current market type.
+    fn inst_type(&self) -> &'static str {
+        match self.market_type {
+            MarketType::Spot => "SPOT",
+            MarketType::Perpetual => "SWAP",
+        }
+    }
+
+    /// Return the OKX trade mode string for the current market type.
+    fn td_mode(&self) -> &'static str {
+        match self.market_type {
+            MarketType::Spot => "cash",
+            MarketType::Perpetual => "cross",
+        }
+    }
+
+    /// Check if the current market type is perpetual.
+    fn is_perpetual(&self) -> bool {
+        self.market_type == MarketType::Perpetual
+    }
 }
 
 #[async_trait]
@@ -179,7 +219,7 @@ impl Exchange for OkxExchange {
     }
 
     async fn fetch_ticker(&self, symbol: &str) -> Result<Ticker, ExchangeError> {
-        let inst_id = Self::to_native_symbol(symbol);
+        let inst_id = self.to_native_symbol_with_type(symbol);
         let data = self.client
             .public_get("/api/v5/market/ticker", &[("instId", inst_id.as_str())])
             .await?;
@@ -224,7 +264,7 @@ impl Exchange for OkxExchange {
         limit: u32,
         since: Option<i64>,
     ) -> Result<Vec<Kline>, ExchangeError> {
-        let inst_id = Self::to_native_symbol(symbol);
+        let inst_id = self.to_native_symbol_with_type(symbol);
         let bar = Self::to_native_timeframe(timeframe);
 
         let mut params: Vec<(&str, String)> = vec![
@@ -274,7 +314,7 @@ impl Exchange for OkxExchange {
     }
 
     async fn fetch_order_book(&self, symbol: &str, limit: u32) -> Result<OrderBook, ExchangeError> {
-        let inst_id = Self::to_native_symbol(symbol);
+        let inst_id = self.to_native_symbol_with_type(symbol);
         let data = self.client
             .public_get("/api/v5/market/books", &[("instId", inst_id.as_str()), ("sz", &limit.to_string())])
             .await?;
@@ -346,13 +386,19 @@ impl Exchange for OkxExchange {
 
     async fn fetch_markets(&self) -> Result<Vec<MarketInfo>, ExchangeError> {
         let data = self.client
-            .public_get("/api/v5/public/instruments", &[("instType", "SPOT")])
+            .public_get("/api/v5/public/instruments", &[("instType", self.inst_type())])
             .await?;
 
         Self::check_okx_code(&data)?;
 
         let arr = Self::extract_data_array(&data)
             .ok_or_else(|| ExchangeError::Internal("Invalid instruments response".into()))?;
+
+        let mt = if self.is_perpetual() {
+            MarketType::Perpetual
+        } else {
+            MarketType::Spot
+        };
 
         let markets: Vec<MarketInfo> = arr.iter()
             .filter_map(|inst| {
@@ -374,7 +420,7 @@ impl Exchange for OkxExchange {
                     base: base_ccy.to_string(),
                     quote: quote_ccy.to_string(),
                     active: true,
-                    market_type: MarketType::Spot,
+                    market_type: mt.clone(),
                     min_amount: inst.get("minSz").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()),
                     max_amount: inst.get("maxSz").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()),
                     min_price: inst.get("tickSz").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()),
@@ -395,10 +441,10 @@ impl Exchange for OkxExchange {
     }
 
     async fn create_order(&self, params: PlaceOrderParams) -> Result<Order, ExchangeError> {
-        let inst_id = Self::to_native_symbol(&params.symbol);
+        let inst_id = self.to_native_symbol_with_type(&params.symbol);
         let mut body = serde_json::json!({
             "instId": inst_id,
-            "tdMode": "cash",
+            "tdMode": self.td_mode(),
             "side": Self::side_str(&params.side),
             "ordType": Self::order_type_str(&params.order_type),
             "sz": params.amount.to_string(),
@@ -410,6 +456,16 @@ impl Exchange for OkxExchange {
 
         if let Some(ref client_id) = params.client_order_id {
             body["clOrdId"] = serde_json::json!(client_id);
+        }
+
+        // Perpetual: add position side (hedge mode support)
+        if self.is_perpetual() {
+            let pos_side = match &params.position_side {
+                Some(PositionSide::Long) => "long",
+                Some(PositionSide::Short) => "short",
+                None => "net", // one-way mode
+            };
+            body["posSide"] = serde_json::json!(pos_side);
         }
 
         let data = self.client
@@ -441,7 +497,7 @@ impl Exchange for OkxExchange {
     }
 
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError> {
-        let inst_id = Self::to_native_symbol(symbol);
+        let inst_id = self.to_native_symbol_with_type(symbol);
         let body = serde_json::json!({
             "instId": inst_id,
             "ordId": order_id,
@@ -476,7 +532,7 @@ impl Exchange for OkxExchange {
     }
 
     async fn fetch_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError> {
-        let inst_id = Self::to_native_symbol(symbol);
+        let inst_id = self.to_native_symbol_with_type(symbol);
         let params = vec![
             ("instId".into(), inst_id),
             ("ordId".into(), order_id.to_string()),
@@ -519,9 +575,9 @@ impl Exchange for OkxExchange {
     }
 
     async fn fetch_open_orders(&self, symbol: Option<&str>) -> Result<Vec<Order>, ExchangeError> {
-        let mut params: Vec<(String, String)> = vec![("instType".into(), "SPOT".into())];
+        let mut params: Vec<(String, String)> = vec![("instType".into(), self.inst_type().into())];
         if let Some(sym) = symbol {
-            params.push(("instId".into(), Self::to_native_symbol(sym)));
+            params.push(("instId".into(), self.to_native_symbol_with_type(sym)));
         }
 
         let data = self.client
@@ -558,6 +614,133 @@ impl Exchange for OkxExchange {
         }).collect();
 
         Ok(orders)
+    }
+
+    async fn set_leverage(
+        &self,
+        symbol: &str,
+        leverage: u32,
+        margin_mode: MarginMode,
+    ) -> Result<(), ExchangeError> {
+        let inst_id = self.to_native_symbol_with_type(symbol);
+        let mgn_mode = match margin_mode {
+            MarginMode::Cross => "cross",
+            MarginMode::Isolated => "isolated",
+        };
+
+        let body = serde_json::json!({
+            "instId": inst_id,
+            "lever": leverage.to_string(),
+            "mgnMode": mgn_mode,
+            "posSide": "net",
+        });
+
+        let data = self.client
+            .signed_post(&self.signer, "/api/v5/account/set-leverage", body)
+            .await?;
+
+        Self::check_okx_code(&data)?;
+        Ok(())
+    }
+
+    async fn fetch_positions(
+        &self,
+        symbol: Option<&str>,
+    ) -> Result<Vec<Position>, ExchangeError> {
+        let mut params: Vec<(String, String)> = vec![("instType".to_string(), "SWAP".to_string())];
+        if let Some(sym) = symbol {
+            params.push(("instId".to_string(), self.to_native_symbol_with_type(sym)));
+        }
+
+        let data = self.client
+            .signed_get(&self.signer, "/api/v5/account/positions", params)
+            .await?;
+
+        Self::check_okx_code(&data)?;
+
+        let positions = Self::extract_data_array(&data)
+            .cloned()
+            .unwrap_or_default();
+
+        let result: Vec<Position> = positions.iter()
+            .filter_map(|p| {
+                // Only include positions with non-zero size
+                let pos_size = parse_f64(p, "pos").unwrap_or(0.0);
+                if pos_size == 0.0 {
+                    return None;
+                }
+
+                let side = match parse_str(p, "posSide").as_str() {
+                    "long" => PositionSide::Long,
+                    "short" => PositionSide::Short,
+                    _ => {
+                        // net mode: determine side from sign
+                        if pos_size > 0.0 {
+                            PositionSide::Long
+                        } else {
+                            PositionSide::Short
+                        }
+                    }
+                };
+
+                let margin_mode = match parse_str(p, "mgnMode").as_str() {
+                    "isolated" => MarginMode::Isolated,
+                    _ => MarginMode::Cross,
+                };
+
+                let inst_id = parse_str(p, "instId");
+                let unified_symbol = Self::to_unified_symbol(&inst_id);
+
+                Some(Position {
+                    symbol: unified_symbol,
+                    side,
+                    size: pos_size.abs(),
+                    entry_price: parse_f64(p, "avgPx").unwrap_or(0.0),
+                    leverage: parse_u32(p, "lever"),
+                    unrealized_pnl: parse_f64(p, "upl").unwrap_or(0.0),
+                    margin_mode,
+                    liquidation_price: parse_f64(p, "liqPx"),
+                    info: p.clone(),
+                })
+            })
+            .collect();
+
+        Ok(result)
+    }
+
+    async fn fetch_funding_rate(
+        &self,
+        symbol: &str,
+    ) -> Result<FundingRate, ExchangeError> {
+        let inst_id = self.to_native_symbol_with_type(symbol);
+        let data = self.client
+            .public_get("/api/v5/public/funding-rate", &[("instId", inst_id.as_str())])
+            .await?;
+
+        Self::check_okx_code(&data)?;
+
+        let rates = Self::extract_data_array(&data)
+            .cloned()
+            .unwrap_or_default();
+
+        let latest = rates.first().ok_or_else(|| {
+            ExchangeError::no_data(format!("No funding rate data for {} on OKX", symbol))
+        })?;
+
+        let rate = parse_f64(latest, "fundingRate").unwrap_or(0.0);
+        let next_time = parse_i64(latest, "fundingTime");
+        let next_funding_time = if next_time > 0 {
+            chrono::DateTime::from_timestamp_millis(next_time)
+        } else {
+            None
+        };
+
+        Ok(FundingRate {
+            symbol: symbol.to_string(),
+            rate,
+            next_funding_time,
+            info: latest.clone(),
+        })
     }
 
     async fn ping(&self) -> Result<bool, ExchangeError> {

@@ -12,8 +12,16 @@ use sqlx::FromRow;
 #[serde(rename_all = "lowercase")]
 pub enum MarketType {
     Spot,
-    Futures,
     Perpetual,
+}
+
+impl std::fmt::Display for MarketType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MarketType::Spot => write!(f, "spot"),
+            MarketType::Perpetual => write!(f, "perpetual"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::Type)]
@@ -94,6 +102,24 @@ pub struct Balance {
     pub free: f64,
     pub used: f64,
     pub total: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExchangePosition {
+    pub symbol: String,
+    pub side: PositionSide,
+    pub size: f64,
+    pub entry_price: f64,
+    pub leverage: u32,
+    pub unrealized_pnl: f64,
+    pub liquidation_price: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FundingRate {
+    pub symbol: String,
+    pub rate: f64,
+    pub next_funding_time: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

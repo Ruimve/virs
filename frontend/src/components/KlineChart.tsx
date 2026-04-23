@@ -39,6 +39,22 @@ const KlineChart: Component<KlineChartProps> = (props) => {
   onMount(() => {
     if (!containerRef) return
 
+    // Determine time scale settings based on data density
+    // Reference: Binance time axis formatting per timeframe
+    let timeVisible = true
+    let secondsVisible = false
+    if (props.data.length >= 2) {
+      const firstTime = props.data[0].time
+      const lastTime = props.data[props.data.length - 1].time
+      const spanHours = (lastTime - firstTime) / 3600
+      // < 48h: show HH:mm (1m/5m/15m/1h)
+      // 48h ~ 90d: show MM-DD (4h/1d short range)
+      // > 90d: show YYYY-MM-DD (1d long range)
+      if (spanHours > 2160) {
+        timeVisible = false
+      }
+    }
+
     chart = createChart(containerRef, {
       layout: {
         background: { type: ColorType.Solid, color: '#ffffff' },
@@ -57,8 +73,8 @@ const KlineChart: Component<KlineChartProps> = (props) => {
       },
       timeScale: {
         borderColor: '#e5e7eb',
-        timeVisible: true,
-        secondsVisible: false,
+        timeVisible,
+        secondsVisible,
       },
       handleScroll: { vertTouchDrag: false },
     })

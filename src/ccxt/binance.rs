@@ -1,15 +1,18 @@
 //! Binance exchange implementation.
 //!
 //! Implements the full CCXT-style Exchange trait for Binance:
-//! - REST API: https://api.binance.com
-//! - Testnet: https://testnet.binance.vision
+//! - Spot REST API: https://api.binance.com
+//! - USDT-M Futures API: https://fapi.binance.com
+//! - Testnet: https://testnet.binance.vision (spot), https://testnet.binancefuture.com (futures)
 //! - Auth: HMAC-SHA256 via query string (GET) or form body (POST)
-//! - Rate limit: 1200 req/min (weight-based)
+//! - Rate limit: 1200 req/min (spot), 2400 req/min (futures)
 //!
 //! Supported features:
 //! - Spot trading
+//! - USDT-M Perpetual futures trading
 //! - Ticker, OHLCV, OrderBook, Balance
 //! - Create/Cancel/Fetch orders
+//! - Leverage, Positions, Funding rate (perpetual)
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -26,6 +29,7 @@ pub struct BinanceExchange {
     signer: BinanceSigner,
     markets: Option<Vec<MarketInfo>>,
     testnet: bool,
+    market_type: MarketType,
 }
 
 impl BinanceExchange {
@@ -34,9 +38,13 @@ impl BinanceExchange {
         api_key: &str,
         api_secret: &str,
         proxy_url: Option<&str>,
+        market_type: &MarketType,
     ) -> Result<Self, ExchangeError> {
-        let base_url = "https://api.binance.com";
-        let client = ExchangeClient::new(base_url, 20, proxy_url)?;
+        let (base_url, max_concurrent) = match market_type {
+            MarketType::Spot => ("https://api.binance.com", 20),
+            MarketType::Perpetual => ("https://fapi.binance.com", 40),
+        };
+        let client = ExchangeClient::new(base_url, max_concurrent, proxy_url)?;
         let signer = BinanceSigner::new(api_key.to_string(), api_secret.to_string());
 
         Ok(Self {
@@ -44,6 +52,7 @@ impl BinanceExchange {
             signer,
             markets: None,
             testnet: false,
+            market_type: market_type.clone(),
         })
     }
 
@@ -110,6 +119,19 @@ impl BinanceExchange {
             OrderType::StopLimit => "STOP_LIMIT",
         }
     }
+
+    /// Return the API path prefix based on market type.
+    fn api_prefix(&self) -> &'static str {
+        match self.market_type {
+            MarketType::Spot => "/api/v3",
+            MarketType::Perpetual => "/fapi/v1",
+        }
+    }
+
+    /// Check if this instance is configured for perpetual futures.
+    fn is_perpetual(&self) -> bool {
+        self.market_type == MarketType::Perpetual
+    }
 }
 
 #[async_trait]
@@ -123,7 +145,7 @@ impl Exchange for BinanceExchange {
             has: ExchangeFeatures {
                 spot: true,
                 futures: false,
-                perpetual: false,
+                perpetual: true,
                 fetch_ticker: true,
                 fetch_tickers: false,
                 fetch_order_book: true,
@@ -161,8 +183,9 @@ impl Exchange for BinanceExchange {
 
     async fn fetch_ticker(&self, symbol: &str) -> Result<Ticker, ExchangeError> {
         let native = Self::to_native_symbol(symbol);
+        let path = format!("{}/ticker/24hr", self.api_prefix());
         let data = self.client
-            .public_get("/api/v3/ticker/24hr", &[("symbol", native.as_str())])
+            .public_get(&path, &[("symbol", native.as_str())])
             .await?;
 
         let last = parse_f64(&data, "lastPrice");
@@ -209,8 +232,9 @@ impl Exchange for BinanceExchange {
             params.push(("startTime", s.to_string()));
         }
 
+        let path = format!("{}/klines", self.api_prefix());
         let data = self.client
-            .public_get("/api/v3/klines", &params.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>())
+            .public_get(&path, &params.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>())
             .await?;
 
         let arr = data.as_array().ok_or_else(|| {
@@ -243,8 +267,9 @@ impl Exchange for BinanceExchange {
 
     async fn fetch_order_book(&self, symbol: &str, limit: u32) -> Result<OrderBook, ExchangeError> {
         let native = Self::to_native_symbol(symbol);
+        let path = format!("{}/depth", self.api_prefix());
         let data = self.client
-            .public_get("/api/v3/depth", &[("symbol", native.as_str()), ("limit", &limit.to_string())])
+            .public_get(&path, &[("symbol", native.as_str()), ("limit", &limit.to_string())])
             .await?;
 
         let bids = parse_order_book_side(&data, "bids");
@@ -266,35 +291,67 @@ impl Exchange for BinanceExchange {
     }
 
     async fn fetch_balance(&self) -> Result<Vec<Balance>, ExchangeError> {
-        let params: Vec<(String, String)> = vec![];
-        let data = self.client
-            .signed_get(&self.signer, "/api/v3/account", params)
-            .await?;
+        if self.is_perpetual() {
+            // USDT-M Futures: /fapi/v2/balance returns an array
+            let params: Vec<(String, String)> = vec![];
+            let data = self.client
+                .signed_get(&self.signer, "/fapi/v2/balance", params)
+                .await?;
 
-        let balances = data.get("balances").and_then(|b| b.as_array())
-            .ok_or_else(|| ExchangeError::Internal("Invalid balance response from Binance".into()))?;
+            let balances = data.as_array()
+                .ok_or_else(|| ExchangeError::Internal("Invalid futures balance response from Binance".into()))?;
 
-        let result: Vec<Balance> = balances.iter()
-            .filter_map(|b| {
-                let free = parse_f64(b, "free").unwrap_or(0.0);
-                let used = parse_f64(b, "locked").unwrap_or(0.0);
-                if free == 0.0 && used == 0.0 {
-                    return None; // Skip zero balances
-                }
-                Some(Balance {
-                    asset: parse_str(b, "asset"),
-                    free,
-                    used,
-                    total: free + used,
+            let result: Vec<Balance> = balances.iter()
+                .filter_map(|b| {
+                    let free = parse_f64(b, "availableBalance").unwrap_or(0.0);
+                    let total = parse_f64(b, "balance").unwrap_or(0.0);
+                    let used = total - free;
+                    if free == 0.0 && used == 0.0 {
+                        return None; // Skip zero balances
+                    }
+                    Some(Balance {
+                        asset: parse_str(b, "asset"),
+                        free,
+                        used,
+                        total,
+                    })
                 })
-            })
-            .collect();
+                .collect();
 
-        Ok(result)
+            Ok(result)
+        } else {
+            // Spot: /api/v3/account returns { "balances": [...] }
+            let params: Vec<(String, String)> = vec![];
+            let data = self.client
+                .signed_get(&self.signer, "/api/v3/account", params)
+                .await?;
+
+            let balances = data.get("balances").and_then(|b| b.as_array())
+                .ok_or_else(|| ExchangeError::Internal("Invalid balance response from Binance".into()))?;
+
+            let result: Vec<Balance> = balances.iter()
+                .filter_map(|b| {
+                    let free = parse_f64(b, "free").unwrap_or(0.0);
+                    let used = parse_f64(b, "locked").unwrap_or(0.0);
+                    if free == 0.0 && used == 0.0 {
+                        return None; // Skip zero balances
+                    }
+                    Some(Balance {
+                        asset: parse_str(b, "asset"),
+                        free,
+                        used,
+                        total: free + used,
+                    })
+                })
+                .collect();
+
+            Ok(result)
+        }
     }
 
     async fn fetch_markets(&self) -> Result<Vec<MarketInfo>, ExchangeError> {
-        let data = self.client.public_get("/api/v3/exchangeInfo", &[]).await?;
+        let path = format!("{}/exchangeInfo", self.api_prefix());
+        let data = self.client.public_get(&path, &[]).await?;
 
         let symbols = data.get("symbols").and_then(|s| s.as_array())
             .ok_or_else(|| ExchangeError::Internal("Invalid exchangeInfo response".into()))?;
@@ -306,9 +363,23 @@ impl Exchange for BinanceExchange {
                     return None;
                 }
 
+                // For perpetual, only keep PERPETUAL contracts
+                if self.is_perpetual() {
+                    let contract_type = parse_str(s, "contractType");
+                    if contract_type != "PERPETUAL" {
+                        return None;
+                    }
+                }
+
                 let base = parse_str(s, "baseAsset");
                 let quote = parse_str(s, "quoteAsset");
                 let symbol = format!("{}/{}", base, quote);
+
+                let market_type = if self.is_perpetual() {
+                    MarketType::Perpetual
+                } else {
+                    MarketType::Spot
+                };
 
                 Some(MarketInfo {
                     id: parse_str(s, "symbol"),
@@ -316,7 +387,7 @@ impl Exchange for BinanceExchange {
                     base,
                     quote,
                     active: true,
-                    market_type: MarketType::Spot,
+                    market_type,
                     min_amount: parse_f64(s, "minQty"),
                     max_amount: parse_f64(s, "maxQty"),
                     min_price: parse_f64(s, "minPrice"),
@@ -363,8 +434,21 @@ impl Exchange for BinanceExchange {
             body["newClientOrderId"] = serde_json::json!(client_id);
         }
 
+        // Perpetual: add positionSide for hedge mode
+        if self.is_perpetual() {
+            let position_side = match (&params.side, &params.position_side) {
+                (Side::Buy, Some(PositionSide::Long)) => "LONG",
+                (Side::Sell, Some(PositionSide::Short)) => "SHORT",
+                (Side::Buy, Some(PositionSide::Short)) => "SHORT",  // close short
+                (Side::Sell, Some(PositionSide::Long)) => "LONG",   // close long
+                _ => "BOTH",  // one-way mode
+            };
+            body["positionSide"] = serde_json::json!(position_side);
+        }
+
+        let path = format!("{}/order", self.api_prefix());
         let data = self.client
-            .signed_post(&self.signer, "/api/v3/order", body)
+            .signed_post(&self.signer, &path, body)
             .await?;
 
         Ok(Order {
@@ -394,8 +478,9 @@ impl Exchange for BinanceExchange {
             "orderId": order_id,
         });
 
+        let path = format!("{}/order", self.api_prefix());
         let data = self.client
-            .signed_post(&self.signer, "/api/v3/order", body)
+            .signed_post(&self.signer, &path, body)
             .await?;
 
         Ok(Order {
@@ -424,8 +509,9 @@ impl Exchange for BinanceExchange {
             ("orderId".into(), order_id.to_string()),
         ];
 
+        let path = format!("{}/order", self.api_prefix());
         let data = self.client
-            .signed_get(&self.signer, "/api/v3/order", params)
+            .signed_get(&self.signer, &path, params)
             .await?;
 
         Ok(Order {
@@ -455,8 +541,9 @@ impl Exchange for BinanceExchange {
             vec![]
         };
 
+        let path = format!("{}/openOrders", self.api_prefix());
         let data = self.client
-            .signed_get(&self.signer, "/api/v3/openOrders", params)
+            .signed_get(&self.signer, &path, params)
             .await?;
 
         let arr = data.as_array().cloned().unwrap_or_default();
@@ -484,13 +571,153 @@ impl Exchange for BinanceExchange {
         Ok(orders)
     }
 
+    async fn set_leverage(
+        &self,
+        symbol: &str,
+        leverage: u32,
+        margin_mode: MarginMode,
+    ) -> Result<(), ExchangeError> {
+        if !self.is_perpetual() {
+            return Err(ExchangeError::NotSupported(
+                "Leverage is only supported for perpetual futures".into(),
+            ));
+        }
+
+        let native = Self::to_native_symbol(symbol);
+
+        // First set margin type (CROSSED or ISOLATED)
+        let margin_type_str = match margin_mode {
+            MarginMode::Cross => "CROSSED",
+            MarginMode::Isolated => "ISOLATED",
+        };
+        let margin_body = serde_json::json!({
+            "symbol": native,
+            "marginType": margin_type_str,
+        });
+        // Ignore errors from marginType — it may return "No need to change" if already set
+        let _ = self.client
+            .signed_post(&self.signer, "/fapi/v1/marginType", margin_body)
+            .await;
+
+        // Then set leverage
+        let leverage_body = serde_json::json!({
+            "symbol": native,
+            "leverage": leverage,
+        });
+        let _data = self.client
+            .signed_post(&self.signer, "/fapi/v1/leverage", leverage_body)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn fetch_positions(
+        &self,
+        symbol: Option<&str>,
+    ) -> Result<Vec<Position>, ExchangeError> {
+        if !self.is_perpetual() {
+            return Err(ExchangeError::NotSupported(
+                "Positions are only supported for perpetual futures".into(),
+            ));
+        }
+
+        let mut params: Vec<(String, String)> = vec![];
+        if let Some(sym) = symbol {
+            params.push(("symbol".into(), Self::to_native_symbol(sym)));
+        }
+
+        let data = self.client
+            .signed_get(&self.signer, "/fapi/v2/positionRisk", params)
+            .await?;
+
+        let arr = data.as_array()
+            .ok_or_else(|| ExchangeError::Internal("Invalid positionRisk response from Binance".into()))?;
+
+        let positions: Vec<Position> = arr.iter()
+            .filter_map(|p| {
+                let pos_amt = parse_f64(p, "positionAmt").unwrap_or(0.0);
+                if pos_amt == 0.0 {
+                    return None; // Skip positions with zero amount
+                }
+
+                let side = if pos_amt > 0.0 {
+                    PositionSide::Long
+                } else {
+                    PositionSide::Short
+                };
+                let size = pos_amt.abs();
+
+                let margin_type_str = parse_str(p, "marginType");
+                let margin_mode = match margin_type_str.as_str() {
+                    "isolated" => MarginMode::Isolated,
+                    _ => MarginMode::Cross,
+                };
+
+                Some(Position {
+                    symbol: Self::to_unified_symbol(&parse_str(p, "symbol")),
+                    side,
+                    size,
+                    entry_price: parse_f64(p, "entryPrice").unwrap_or(0.0),
+                    leverage: parse_u32(p, "leverage"),
+                    unrealized_pnl: parse_f64(p, "unRealizedProfit").unwrap_or(0.0),
+                    margin_mode,
+                    liquidation_price: parse_f64(p, "liquidationPrice"),
+                    info: p.clone(),
+                })
+            })
+            .collect();
+
+        Ok(positions)
+    }
+
+    async fn fetch_funding_rate(
+        &self,
+        symbol: &str,
+    ) -> Result<FundingRate, ExchangeError> {
+        if !self.is_perpetual() {
+            return Err(ExchangeError::NotSupported(
+                "Funding rate is only supported for perpetual futures".into(),
+            ));
+        }
+
+        let native = Self::to_native_symbol(symbol);
+        let data = self.client
+            .public_get("/fapi/v1/fundingRate", &[("symbol", native.as_str())])
+            .await?;
+
+        let arr = data.as_array()
+            .ok_or_else(|| ExchangeError::Internal("Invalid fundingRate response from Binance".into()))?;
+
+        // Get the last (most recent) entry
+        let last = arr.last()
+            .ok_or_else(|| ExchangeError::no_data(format!(
+                "No funding rate data for {} on Binance", symbol
+            )))?;
+
+        let rate = parse_f64(last, "fundingRate").unwrap_or(0.0);
+        let funding_time = last.get("fundingTime")
+            .and_then(|t| t.as_i64())
+            .map(|ts| {
+                chrono::DateTime::from_timestamp_millis(ts)
+                    .unwrap_or_else(Utc::now)
+            });
+
+        Ok(FundingRate {
+            symbol: symbol.to_string(),
+            rate,
+            next_funding_time: funding_time,
+            info: last.clone(),
+        })
+    }
+
     async fn ping(&self) -> Result<bool, ExchangeError> {
-        let data = self.client.public_get("/api/v3/ping", &[]).await?;
+        let path = format!("{}/ping", self.api_prefix());
+        let data = self.client.public_get(&path, &[]).await?;
         Ok(!data.is_null())
     }
 
     async fn load_markets(&mut self) -> Result<(), ExchangeError> {
-        info!("Loading Binance markets...");
+        info!("Loading Binance markets (type={:?})...", self.market_type);
         self.markets = Some(self.fetch_markets().await?);
         info!("Loaded {} Binance markets", self.markets.as_ref().unwrap().len());
         Ok(())

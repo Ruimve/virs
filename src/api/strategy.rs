@@ -115,7 +115,6 @@ pub async fn create_strategy(
 
     let market_type_str = match req.market_type {
         MarketType::Spot => "spot",
-        MarketType::Futures => "futures",
         MarketType::Perpetual => "perpetual",
     };
     let strategy_mode_str = match req.strategy_mode {
@@ -452,14 +451,15 @@ pub async fn start_strategy(
         )
     })?;
 
-    // Try to load user's exchange credentials from database.
+    // Try to load user's exchange credentials from database based on strategy.market_type.
     // If found, create a user-scoped exchange instance.
-    // Otherwise, fall back to the globally registered exchange from .env.
+    // Otherwise, fall back to the globally registered exchange.
     let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
     let scoped_exchange_key = load_user_exchange(
         &state,
         &strategy.exchange,
         user_id,
+        strategy.market_type.clone(),
     )
     .await;
 
@@ -562,27 +562,34 @@ pub async fn validate_script(
 }
 
 /// Try to load a user's exchange credentials from the database and register
-/// a user-scoped exchange instance. Returns the scoped key (e.g. "binance:{user_id}")
-/// on success, or None if no credentials are found (falling back to .env config).
+/// a user-scoped exchange instance. Returns the scoped key on success,
+/// or None if no credentials are found (falling back to .env config).
 async fn load_user_exchange(
     state: &Arc<AppState>,
     exchange_name: &str,
     user_id: Uuid,
+    market_type: MarketType,
 ) -> Option<String> {
     // Check if we already have a user-scoped exchange registered
-    let scoped_key = format!("{}:{}", exchange_name, user_id);
+    let scoped_key = format!("{}:{}:{}", exchange_name, market_type, user_id);
     if state.strategy_engine.get_exchange(&scoped_key).is_some() {
         return Some(scoped_key);
     }
 
-    // Query database for user's credentials
+    let market_type_str = match market_type {
+        MarketType::Spot => "spot",
+        MarketType::Perpetual => "perpetual",
+    };
+
+    // Query database for user's credentials with market_type filter
     let row: Option<(String, String, Option<String>)> = sqlx::query_as(
         r#"SELECT encrypted_api_key, encrypted_api_secret, encrypted_passphrase
            FROM qd_exchange_credentials
-           WHERE user_id = $1 AND exchange = $2 LIMIT 1"#,
+           WHERE user_id = $1 AND exchange = $2 AND market_type = $3 LIMIT 1"#,
     )
     .bind(user_id)
     .bind(exchange_name)
+    .bind(&market_type_str)
     .fetch_optional(&state.db_pool)
     .await
     .ok()?;
@@ -603,6 +610,7 @@ async fn load_user_exchange(
         &api_secret,
         passphrase.as_deref(),
         state.config.proxy.as_deref(),
+        market_type,
     )
     .ok()?;
 
@@ -611,9 +619,8 @@ async fn load_user_exchange(
         .register_exchange_for_user(exchange, user_id);
 
     tracing::info!(
-        "Loaded credentials for '{}' from database for user {}",
-        exchange_name,
-        user_id
+        "Loaded credentials for '{}' ({}) from database for user {}",
+        exchange_name, market_type_str, user_id
     );
 
     Some(key)

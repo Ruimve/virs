@@ -151,15 +151,16 @@ async fn main() -> anyhow::Result<()> {
                     price,
                     order_type,
                     exchange_name,
+                    market_type,
                     callback,
                 } => {
                     info!(
-                        "🔄 Processing order: strategy={}, symbol={}, signal={:?}, side={:?}, amount={}, exchange={}",
-                        strategy_id, symbol, signal_type, side, amount, exchange_name
+                        "Processing order: strategy={}, symbol={}, signal={:?}, side={:?}, amount={}, exchange={}, market_type={:?}",
+                        strategy_id, symbol, signal_type, side, amount, exchange_name, market_type
                     );
 
                     if amount <= 0.0 {
-                        error!("❌ Invalid order amount {} for strategy {}. Refusing.", amount, strategy_id);
+                        error!("Invalid order amount {} for strategy {}. Refusing.", amount, strategy_id);
                         let _ = callback.send(engine::OrderResult::Failed {
                             error: format!("Invalid order amount: {}", amount),
                         });
@@ -185,7 +186,7 @@ async fn main() -> anyhow::Result<()> {
                     let exchange = order_worker_engine.get_exchange(&exchange_name);
                     match exchange {
                         Some(ex) => {
-                            match ex.place_order(&symbol, side.clone(), order_type.clone(), amount, price, models::MarketType::Spot).await {
+                            match ex.place_order(&symbol, side.clone(), order_type.clone(), amount, price).await {
                                 Ok(order) => {
                                     info!("✅ Order executed: id={}, symbol={}, side={:?}, status={:?}", order.id, order.symbol, order.side, order.status);
 
@@ -412,7 +413,7 @@ async fn main() -> anyhow::Result<()> {
                                 _ => models::OrderType::Market,
                             };
 
-                            match exchange.place_order(&order.symbol, side, order_type, order.amount, order.price, models::MarketType::Spot).await {
+                            match exchange.place_order(&order.symbol, side, order_type, order.amount, order.price).await {
                                 Ok(o) => {
                                     let _ = sqlx::query("UPDATE pending_orders SET status = 'filled', exchange_order_id = $1, updated_at = NOW() WHERE id = $2")
                                         .bind(&o.id)

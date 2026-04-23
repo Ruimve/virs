@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS qd_strategies_trading (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     strategy_type VARCHAR(100) NOT NULL DEFAULT 'indicator',
-    market_type TEXT NOT NULL DEFAULT 'spot' CHECK (market_type IN ('spot', 'futures', 'perpetual')),
+    market_type TEXT NOT NULL DEFAULT 'perpetual',
     symbol VARCHAR(50) NOT NULL,
     exchange VARCHAR(50) NOT NULL,
     timeframe VARCHAR(10) NOT NULL DEFAULT '1h',
@@ -226,13 +226,14 @@ CREATE TABLE IF NOT EXISTS qd_exchange_credentials (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
     exchange VARCHAR(50) NOT NULL,
+    market_type TEXT NOT NULL DEFAULT 'perpetual',
     encrypted_api_key TEXT NOT NULL,
     encrypted_api_secret TEXT NOT NULL,
     encrypted_passphrase TEXT,
     label VARCHAR(255),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(user_id, exchange)
+    UNIQUE(user_id, exchange, market_type)
 );
 
 CREATE INDEX IF NOT EXISTS idx_credentials_user ON qd_exchange_credentials(user_id);

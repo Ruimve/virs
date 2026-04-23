@@ -99,7 +99,7 @@ impl PositionManager {
 
     /// Prepare an order based on a signal WITHOUT mutating position state.
     /// Returns (Side, base_currency_amount).
-    /// `current_price` is used to convert quote amount → base amount for open orders.
+    /// `current_price` is used to convert quote amount -> base amount for open orders.
     /// For close orders, returns the tracked base-currency position size.
     ///
     /// Call `apply_signal` ONLY after the exchange confirms the order.
@@ -185,7 +185,7 @@ impl PositionManager {
         }
     }
 
-    /// Async version of prepare_order — queries exchange for balance when using balance_pct mode.
+    /// Async version of prepare_order -- queries exchange for balance when using balance_pct mode.
     pub async fn prepare_order_async(
         &mut self,
         signal: &SignalType,
@@ -351,7 +351,7 @@ impl PositionManager {
 
     /// Check if current position should be closed due to risk management.
     /// Returns Some((Side, base_amount, reason)) if position should be closed.
-    /// Does NOT mutate position state — call `apply_risk_close` after order confirmation.
+    /// Does NOT mutate position state -- call `apply_risk_close` after order confirmation.
     /// `current_price` should be a real-time price (e.g., from ticker), not a stale kline close.
     pub fn check_risk(&self, current_price: f64) -> Option<(Side, f64, RiskReason)> {
         if self.current_side.is_none() || self.entry_price <= 0.0 {

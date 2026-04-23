@@ -6,12 +6,14 @@ import { api } from '../lib/api'
 interface Credential {
   id: string
   exchange: string
+  market_type: string
   label?: string
   created_at: string
 }
 
 interface SaveCredentialRequest {
   exchange: string
+  market_type: string
   label?: string
   api_key: string
   api_secret: string
@@ -20,6 +22,7 @@ interface SaveCredentialRequest {
 
 interface TestCredentialRequest {
   exchange: string
+  market_type: string
   api_key: string
   api_secret: string
   passphrase?: string
@@ -61,6 +64,7 @@ const Credentials: Component = () => {
 
   // 表单
   const [formExchange, setFormExchange] = createSignal('binance')
+  const [formMarketType, setFormMarketType] = createSignal('perpetual')
   const [formLabel, setFormLabel] = createSignal('')
   const [formApiKey, setFormApiKey] = createSignal('')
   const [formApiSecret, setFormApiSecret] = createSignal('')
@@ -92,6 +96,7 @@ const Credentials: Component = () => {
   // 打开模态框
   function openModal() {
     setFormExchange('binance')
+    setFormMarketType('perpetual')
     setFormLabel('')
     setFormApiKey('')
     setFormApiSecret('')
@@ -122,6 +127,7 @@ const Credentials: Component = () => {
     try {
       const req: TestCredentialRequest = {
         exchange: formExchange(),
+        market_type: formMarketType(),
         api_key: apiKey,
         api_secret: apiSecret,
       }
@@ -154,6 +160,7 @@ const Credentials: Component = () => {
     try {
       const req: SaveCredentialRequest = {
         exchange: formExchange(),
+        market_type: formMarketType(),
         api_key: apiKey,
         api_secret: apiSecret,
       }
@@ -208,6 +215,7 @@ const Credentials: Component = () => {
     try {
       const req: TestCredentialRequest = {
         exchange: cred.exchange,
+        market_type: cred.market_type,
         api_key: apiKey,
         api_secret: apiSecret,
       }
@@ -299,7 +307,10 @@ const Credentials: Component = () => {
                       <div class={`w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center text-sm font-bold ${config.color}`}>
                         {config.icon}
                       </div>
-                      <h3 class={`text-[15px] font-semibold ${config.color}`}>{config.name}</h3>
+                      <div>
+                        <h3 class={`text-[15px] font-semibold ${config.color}`}>{config.name}</h3>
+                        <span class="text-[11px] text-gray-400">{cred.market_type === 'perpetual' ? '永续' : '现货'}</span>
+                      </div>
                     </div>
                     <span class="inline-flex items-center gap-1.5 text-xs text-emerald-600">
                       <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -389,6 +400,19 @@ const Credentials: Component = () => {
                   <option value="binance">Binance</option>
                   <option value="okx">OKX</option>
                   <option value="bybit">Bybit</option>
+                </select>
+              </div>
+
+              {/* 市场类型 */}
+              <div>
+                <label class="block text-[13px] font-medium text-gray-400 mb-1.5">市场类型</label>
+                <select
+                  value={formMarketType()}
+                  onChange={(e) => setFormMarketType(e.currentTarget.value)}
+                  class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
+                >
+                  <option value="perpetual">永续合约</option>
+                  <option value="spot">现货</option>
                 </select>
               </div>
 

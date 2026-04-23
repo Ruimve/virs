@@ -19,6 +19,9 @@ pub trait Exchange: Send + Sync {
     /// Return the exchange identifier (e.g., "binance", "okx").
     fn name(&self) -> &str;
 
+    /// Return the market type this exchange instance is bound to.
+    fn market_type(&self) -> MarketType;
+
     // ---- Market Data ----
 
     /// Fetch the latest ticker for a symbol.
@@ -30,7 +33,7 @@ pub trait Exchange: Send + Sync {
         symbol: &str,
         interval: &str,
         limit: u32,
-        end_time: Option<i64>,
+        since: Option<i64>,
     ) -> anyhow::Result<Vec<Kline>>;
 
     /// Fetch the order book.
@@ -41,7 +44,7 @@ pub trait Exchange: Send + Sync {
 
     // ---- Trading ----
 
-    /// Place a new order.
+    /// Place a new order using the exchange's bound market type.
     async fn place_order(
         &self,
         symbol: &str,
@@ -49,7 +52,6 @@ pub trait Exchange: Send + Sync {
         order_type: OrderType,
         amount: f64,
         price: Option<f64>,
-        market_type: MarketType,
     ) -> anyhow::Result<Order>;
 
     /// Cancel an existing order.
@@ -63,17 +65,35 @@ pub trait Exchange: Send + Sync {
 
     // ---- Market Info ----
 
-    /// Get available trading symbols.
-    async fn get_symbols(&self, market_type: MarketType) -> anyhow::Result<Vec<String>>;
+    /// Get available trading symbols for this exchange's bound market type.
+    async fn get_symbols(&self) -> anyhow::Result<Vec<String>>;
 
     /// Check if exchange is healthy / reachable.
     async fn ping(&self) -> anyhow::Result<bool>;
+
+    // ---- Perpetual Contracts ----
+
+    /// Set leverage for a perpetual contract.
+    /// Returns error if this is a spot exchange.
+    async fn set_leverage(&self, symbol: &str, leverage: u32) -> anyhow::Result<()>;
+
+    /// Fetch current positions from exchange.
+    /// Returns error if this is a spot exchange.
+    async fn get_positions(&self, symbol: Option<&str>) -> anyhow::Result<Vec<ExchangePosition>>;
+
+    /// Fetch funding rate for a perpetual contract.
+    /// Returns error if this is a spot exchange.
+    async fn get_funding_rate(&self, symbol: &str) -> anyhow::Result<FundingRate>;
 }
 
 #[async_trait]
 impl Exchange for Box<dyn Exchange> {
     fn name(&self) -> &str {
         (**self).name()
+    }
+
+    fn market_type(&self) -> MarketType {
+        (**self).market_type()
     }
 
     async fn get_ticker(&self, symbol: &str) -> anyhow::Result<Ticker> {
@@ -85,9 +105,9 @@ impl Exchange for Box<dyn Exchange> {
         symbol: &str,
         interval: &str,
         limit: u32,
-        end_time: Option<i64>,
+        since: Option<i64>,
     ) -> anyhow::Result<Vec<Kline>> {
-        (**self).get_klines(symbol, interval, limit, end_time).await
+        (**self).get_klines(symbol, interval, limit, since).await
     }
 
     async fn get_order_book(&self, symbol: &str, depth: u32) -> anyhow::Result<OrderBook> {
@@ -105,9 +125,8 @@ impl Exchange for Box<dyn Exchange> {
         order_type: OrderType,
         amount: f64,
         price: Option<f64>,
-        market_type: MarketType,
     ) -> anyhow::Result<Order> {
-        (**self).place_order(symbol, side, order_type, amount, price, market_type).await
+        (**self).place_order(symbol, side, order_type, amount, price).await
     }
 
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> anyhow::Result<Order> {
@@ -122,23 +141,38 @@ impl Exchange for Box<dyn Exchange> {
         (**self).get_open_orders(symbol).await
     }
 
-    async fn get_symbols(&self, market_type: MarketType) -> anyhow::Result<Vec<String>> {
-        (**self).get_symbols(market_type).await
+    async fn get_symbols(&self) -> anyhow::Result<Vec<String>> {
+        (**self).get_symbols().await
     }
 
     async fn ping(&self) -> anyhow::Result<bool> {
         (**self).ping().await
     }
+
+    async fn set_leverage(&self, symbol: &str, leverage: u32) -> anyhow::Result<()> {
+        (**self).set_leverage(symbol, leverage).await
+    }
+
+    async fn get_positions(&self, symbol: Option<&str>) -> anyhow::Result<Vec<ExchangePosition>> {
+        (**self).get_positions(symbol).await
+    }
+
+    async fn get_funding_rate(&self, symbol: &str) -> anyhow::Result<FundingRate> {
+        (**self).get_funding_rate(symbol).await
+    }
 }
 
 /// Adapter that wraps a ccxt Exchange into the application's Exchange trait.
+/// Each adapter is bound to a specific market type (Spot or Perpetual),
+/// ensuring that trading operations are isolated.
 pub struct CcxtAdapter {
     inner: Box<dyn CcxtExchange>,
+    market_type: MarketType,
 }
 
 impl CcxtAdapter {
-    pub fn new(exchange: Box<dyn CcxtExchange>) -> Self {
-        Self { inner: exchange }
+    pub fn new(exchange: Box<dyn CcxtExchange>, market_type: MarketType) -> Self {
+        Self { inner: exchange, market_type }
     }
 
     /// Get a reference to the underlying ccxt exchange.
@@ -151,9 +185,7 @@ impl CcxtAdapter {
 fn to_models_market_type(mt: &CcxtMarketType) -> MarketType {
     match mt {
         CcxtMarketType::Spot => MarketType::Spot,
-        CcxtMarketType::Futures => MarketType::Futures,
         CcxtMarketType::Perpetual => MarketType::Perpetual,
-        CcxtMarketType::Option => MarketType::Futures, // Not directly supported
     }
 }
 
@@ -161,7 +193,6 @@ fn to_models_market_type(mt: &CcxtMarketType) -> MarketType {
 fn to_ccxt_market_type(mt: &MarketType) -> CcxtMarketType {
     match mt {
         MarketType::Spot => CcxtMarketType::Spot,
-        MarketType::Futures => CcxtMarketType::Futures,
         MarketType::Perpetual => CcxtMarketType::Perpetual,
     }
 }
@@ -298,6 +329,10 @@ impl Exchange for CcxtAdapter {
         self.inner.id()
     }
 
+    fn market_type(&self) -> MarketType {
+        self.market_type.clone()
+    }
+
     async fn get_ticker(&self, symbol: &str) -> anyhow::Result<Ticker> {
         let ct = self.inner.fetch_ticker(symbol).await
             .map_err(|e| anyhow::anyhow!("ccxt ticker error: {}", e))?;
@@ -309,9 +344,9 @@ impl Exchange for CcxtAdapter {
         symbol: &str,
         interval: &str,
         limit: u32,
-        end_time: Option<i64>,
+        since: Option<i64>,
     ) -> anyhow::Result<Vec<Kline>> {
-        let cks = self.inner.fetch_ohlcv(symbol, interval, limit, end_time).await
+        let cks = self.inner.fetch_ohlcv(symbol, interval, limit, since).await
             .map_err(|e| anyhow::anyhow!("ccxt ohlcv error: {}", e))?;
         let exchange_name = self.inner.id();
         Ok(cks.into_iter()
@@ -338,7 +373,6 @@ impl Exchange for CcxtAdapter {
         order_type: OrderType,
         amount: f64,
         price: Option<f64>,
-        market_type: MarketType,
     ) -> anyhow::Result<Order> {
         let params = PlaceOrderParams {
             symbol: symbol.to_string(),
@@ -346,11 +380,14 @@ impl Exchange for CcxtAdapter {
             order_type: to_ccxt_order_type(&order_type),
             amount,
             price,
-            market_type: to_ccxt_market_type(&market_type),
+            market_type: to_ccxt_market_type(&self.market_type),
             client_order_id: None,
             stop_price: None,
             time_in_force: None,
             reduce_only: None,
+            leverage: None,
+            margin_mode: None,
+            position_side: None,
         };
         let co = self.inner.create_order(params).await
             .map_err(|e| anyhow::anyhow!("ccxt create_order error: {}", e))?;
@@ -375,10 +412,10 @@ impl Exchange for CcxtAdapter {
         Ok(cos.into_iter().map(to_models_order).collect())
     }
 
-    async fn get_symbols(&self, market_type: MarketType) -> anyhow::Result<Vec<String>> {
+    async fn get_symbols(&self) -> anyhow::Result<Vec<String>> {
         let markets = self.inner.fetch_markets().await
             .map_err(|e| anyhow::anyhow!("ccxt fetch_markets error: {}", e))?;
-        let ccxt_mt = to_ccxt_market_type(&market_type);
+        let ccxt_mt = to_ccxt_market_type(&self.market_type);
         Ok(markets
             .into_iter()
             .filter(|m| m.market_type == ccxt_mt && m.active)
@@ -390,23 +427,56 @@ impl Exchange for CcxtAdapter {
         self.inner.ping().await
             .map_err(|e| anyhow::anyhow!("ccxt ping error: {}", e))
     }
+
+    async fn set_leverage(&self, symbol: &str, leverage: u32) -> anyhow::Result<()> {
+        self.inner.set_leverage(symbol, leverage, ccxt::types::MarginMode::Cross).await
+            .map_err(|e| anyhow::anyhow!("ccxt set_leverage error: {}", e))
+    }
+
+    async fn get_positions(&self, symbol: Option<&str>) -> anyhow::Result<Vec<ExchangePosition>> {
+        let positions = self.inner.fetch_positions(symbol).await
+            .map_err(|e| anyhow::anyhow!("ccxt fetch_positions error: {}", e))?;
+        Ok(positions.into_iter().map(|p| ExchangePosition {
+            symbol: p.symbol,
+            side: match p.side {
+                ccxt::types::PositionSide::Long => PositionSide::Long,
+                ccxt::types::PositionSide::Short => PositionSide::Short,
+            },
+            size: p.size,
+            entry_price: p.entry_price,
+            leverage: p.leverage,
+            unrealized_pnl: p.unrealized_pnl,
+            liquidation_price: p.liquidation_price,
+        }).collect())
+    }
+
+    async fn get_funding_rate(&self, symbol: &str) -> anyhow::Result<FundingRate> {
+        let fr = self.inner.fetch_funding_rate(symbol).await
+            .map_err(|e| anyhow::anyhow!("ccxt fetch_funding_rate error: {}", e))?;
+        Ok(FundingRate {
+            symbol: fr.symbol,
+            rate: fr.rate,
+            next_funding_time: fr.next_funding_time,
+        })
+    }
 }
 
-/// Factory to create exchange instances by name.
+/// Factory to create exchange instances by name and market type.
 /// Delegates to the ccxt module's create_exchange function.
 pub struct ExchangeFactory;
 
 impl ExchangeFactory {
-    /// Create an exchange instance from the given name and credentials.
+    /// Create an exchange instance from the given name, credentials, and market type.
     pub fn create(
         name: &str,
         api_key: &str,
         api_secret: &str,
         passphrase: Option<&str>,
         proxy_url: Option<&str>,
+        market_type: MarketType,
     ) -> anyhow::Result<Box<dyn Exchange>> {
-        let ccxt_ex = ccxt::create_exchange(name, api_key, api_secret, passphrase, proxy_url)
+        let ccxt_ex = ccxt::create_exchange(name, api_key, api_secret, passphrase, proxy_url, &to_ccxt_market_type(&market_type))
             .map_err(|e| anyhow::anyhow!("Failed to create exchange '{}': {}", name, e))?;
-        Ok(Box::new(CcxtAdapter::new(ccxt_ex)))
+        Ok(Box::new(CcxtAdapter::new(ccxt_ex, market_type)))
     }
 }

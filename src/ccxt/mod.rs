@@ -113,6 +113,31 @@ pub trait Exchange: Send + Sync {
         symbol: Option<&str>,
     ) -> Result<Vec<Order>, ExchangeError>;
 
+    // ---- Perpetual Contracts (Authenticated) ----
+
+    /// Set leverage for a perpetual contract.
+    /// Returns `ExchangeError::NotSupported` for spot exchanges.
+    async fn set_leverage(
+        &self,
+        symbol: &str,
+        leverage: u32,
+        margin_mode: types::MarginMode,
+    ) -> Result<(), ExchangeError>;
+
+    /// Fetch current positions.
+    /// Returns `ExchangeError::NotSupported` for spot exchanges.
+    async fn fetch_positions(
+        &self,
+        symbol: Option<&str>,
+    ) -> Result<Vec<types::Position>, ExchangeError>;
+
+    /// Fetch funding rate for a perpetual contract.
+    /// Returns `ExchangeError::NotSupported` for spot exchanges.
+    async fn fetch_funding_rate(
+        &self,
+        symbol: &str,
+    ) -> Result<types::FundingRate, ExchangeError>;
+
     // ---- System ----
 
     /// Check if the exchange is reachable.
@@ -339,7 +364,7 @@ fn extract_error_message(json: &Value) -> String {
 // Factory
 // ============================================================
 
-/// Create an exchange instance by name.
+/// Create an exchange instance by name and market type.
 ///
 /// This is the main entry point for creating exchange connections.
 /// Returns an error if the exchange name is not supported.
@@ -349,10 +374,11 @@ pub fn create_exchange(
     api_secret: &str,
     passphrase: Option<&str>,
     proxy_url: Option<&str>,
+    market_type: &types::MarketType,
 ) -> Result<Box<dyn Exchange>, ExchangeError> {
     match id.to_lowercase().as_str() {
         "binance" => Ok(Box::new(binance::BinanceExchange::new(
-            api_key, api_secret, proxy_url,
+            api_key, api_secret, proxy_url, market_type,
         )?)),
         "okx" => {
             let pass = passphrase
@@ -360,11 +386,11 @@ pub fn create_exchange(
                     "OKX requires a passphrase".into()
                 ))?;
             Ok(Box::new(okx::OkxExchange::new(
-                api_key, api_secret, pass, proxy_url,
+                api_key, api_secret, pass, proxy_url, market_type,
             )?))
         }
         "bybit" => Ok(Box::new(bybit::BybitExchange::new(
-            api_key, api_secret, proxy_url,
+            api_key, api_secret, proxy_url, market_type,
         )?)),
         _ => Err(ExchangeError::NotSupported(format!(
             "Exchange '{}' is not supported. Supported: binance, okx, bybit",
@@ -388,14 +414,22 @@ pub fn parse_f64(v: &Value, field: &str) -> Option<f64> {
 /// Parse a string field.
 pub fn parse_str(v: &Value, field: &str) -> String {
     v.get(field)
-        .and_then(|f| f.as_str())
-        .unwrap_or("")
-        .to_string()
+        .and_then(|f| {
+            f.as_str()
+                .map(String::from)
+                .or_else(|| f.as_i64().map(|n| n.to_string()))
+                .or_else(|| f.as_f64().map(|n| n.to_string()))
+        })
+        .unwrap_or_default()
 }
 
-/// Parse a string field as Option<String>.
 pub fn parse_str_opt(v: &Value, field: &str) -> Option<String> {
-    v.get(field).and_then(|f| f.as_str()).map(String::from)
+    v.get(field).and_then(|f| {
+        f.as_str()
+            .map(String::from)
+            .or_else(|| f.as_i64().map(|n| n.to_string()))
+            .or_else(|| f.as_f64().map(|n| n.to_string()))
+    })
 }
 
 /// Parse a numeric field as i64.

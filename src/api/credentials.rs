@@ -20,6 +20,12 @@ pub struct CredentialRequest {
     pub api_secret: String,
     pub passphrase: Option<String>,
     pub label: Option<String>,
+    #[serde(default = "default_market_type")]
+    pub market_type: MarketType,
+}
+
+fn default_market_type() -> MarketType {
+    MarketType::Perpetual
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,6 +33,7 @@ pub struct CredentialResponse {
     pub id: Uuid,
     pub exchange: String,
     pub label: Option<String>,
+    pub market_type: MarketType,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -35,6 +42,7 @@ pub struct CredentialRow {
     pub id: Uuid,
     pub exchange: String,
     pub label: Option<String>,
+    pub market_type: MarketType,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -43,6 +51,7 @@ pub struct SavedCredentialRow {
     pub id: Uuid,
     pub exchange: String,
     pub label: Option<String>,
+    pub market_type: MarketType,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -53,7 +62,7 @@ pub async fn list_credentials(
     let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
 
     let rows = sqlx::query_as::<_, CredentialRow>(
-        r#"SELECT id, exchange, label, created_at FROM qd_exchange_credentials
+        r#"SELECT id, exchange, label, market_type, created_at FROM qd_exchange_credentials
            WHERE user_id = $1 ORDER BY created_at DESC"#,
     )
     .bind(user_id)
@@ -100,13 +109,18 @@ pub async fn save_credential(
         None
     };
 
+    let market_type_str = match req.market_type {
+        MarketType::Spot => "spot",
+        MarketType::Perpetual => "perpetual",
+    };
+
     let row = sqlx::query_as::<_, SavedCredentialRow>(
         r#"INSERT INTO qd_exchange_credentials
-           (user_id, exchange, encrypted_api_key, encrypted_api_secret, encrypted_passphrase, label)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (user_id, exchange) DO UPDATE SET
+           (user_id, exchange, encrypted_api_key, encrypted_api_secret, encrypted_passphrase, label, market_type)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (user_id, exchange, market_type) DO UPDATE SET
            encrypted_api_key = $3, encrypted_api_secret = $4, encrypted_passphrase = $5, label = $6, updated_at = NOW()
-           RETURNING id, exchange, label, created_at"#,
+           RETURNING id, exchange, label, market_type, created_at"#,
     )
     .bind(user_id)
     .bind(&req.exchange)
@@ -114,6 +128,7 @@ pub async fn save_credential(
     .bind(&encrypted_secret)
     .bind(&encrypted_passphrase)
     .bind(&req.label)
+    .bind(&market_type_str)
     .fetch_one(&state.db_pool)
     .await
     .map_err(|e| {
@@ -127,6 +142,7 @@ pub async fn save_credential(
         "id": row.id,
         "exchange": row.exchange,
         "label": row.label,
+        "market_type": row.market_type,
     }))))
 }
 
@@ -170,6 +186,7 @@ pub async fn test_credential(
         &req.api_secret,
         req.passphrase.as_deref(),
         state.config.proxy.as_deref(),
+        req.market_type,
     )
     .map_err(|e| {
         (

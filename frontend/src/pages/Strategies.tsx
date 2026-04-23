@@ -9,7 +9,7 @@ interface Strategy {
   name: string
   description?: string
   strategy_type: string
-  market_type: 'spot' | 'futures' | 'perpetual'
+  market_type: 'spot' | 'perpetual'
   symbol: string
   exchange: string
   timeframe: string
@@ -58,7 +58,7 @@ function signal()
 end`
 
 const DEFAULT_TRADING_CONFIG = JSON.stringify(
-  { fixed_amount: 100, max_position_size: 1000, balance_pct: 0.1, allow_short: false },
+  { fixed_amount: 100, max_position_size: 1000, balance_pct: 0.1, allow_short: false, leverage: 5 },
   null,
   2
 )
@@ -70,7 +70,7 @@ const EMPTY_FORM: StrategyFormData = {
   timeframe: '1h',
   strategy_type: 'custom',
   strategy_mode: 'signal',
-  market_type: 'spot',
+  market_type: 'perpetual' as 'spot' | 'perpetual',
   execution_mode: 'signal_only',
   indicator_config: '{}',
   trading_config: DEFAULT_TRADING_CONFIG,
@@ -945,9 +945,8 @@ const Strategies: Component = () => {
                         value={form().market_type}
                         onChange={(e) => updateForm('market_type', (e.target as HTMLSelectElement).value)}
                       >
-                        <option value="spot">现货</option>
-                        <option value="futures">合约</option>
                         <option value="perpetual">永续</option>
+                        <option value="spot">现货</option>
                       </select>
                     </div>
                   </div>

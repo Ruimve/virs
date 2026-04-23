@@ -73,8 +73,17 @@ pub async fn run_backtest(
     State(state): State<Arc<AppState>>,
     _auth: AuthUser,
     Json(req): Json<BacktestRequest>,
-) -> Result<Json<ApiResponse<BacktestResult>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let exchange_key = super::market::ensure_exchange(&state, &req.exchange).await?;
+) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
+    let market_type = req.trading_config
+        .get("market_type")
+        .and_then(|v| v.as_str())
+        .map(|s| match s {
+            "perpetual" => MarketType::Perpetual,
+            _ => MarketType::Spot,
+        })
+        .unwrap_or(MarketType::Spot);
+
+    let exchange_key = super::market::ensure_exchange(&state, &req.exchange, market_type).await?;
     let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
 
     let parse_date = |s: &Option<String>| -> Option<chrono::DateTime<chrono::Utc>> {
@@ -102,9 +111,17 @@ pub async fn run_backtest(
         _ => 3600,
     };
     let estimated_candles = (duration_secs / interval_secs) as u32;
-    let limit = estimated_candles.min(1000).max(100);
+    let max_candles = match req.timeframe.as_str() {
+        "1m" | "5m" | "15m" => 500,
+        "1h" | "4h" => 500,
+        "1d" | "1w" => 365,
+        _ => 500,
+    };
+    let limit = estimated_candles.min(max_candles).max(100);
 
-    let klines = match exchange.get_klines(&req.symbol, &req.timeframe, limit, None).await {
+    let since_ms = start_dt.map(|dt| dt.timestamp_millis());
+
+    let klines = match exchange.get_klines(&req.symbol, &req.timeframe, limit, since_ms).await {
         Ok(k) if !k.is_empty() => k,
         Ok(_) => {
             return Err((
@@ -161,6 +178,11 @@ pub async fn run_backtest(
         .and_then(|v| v.as_str())
         .unwrap_or("long");
 
+    let leverage = req.trading_config
+        .get("leverage")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1) as u32;
+
     let engine = BacktestEngine::new(req.initial_balance, commission, slippage);
 
     // Determine signal generation method: script-based or plugin-based
@@ -197,7 +219,7 @@ pub async fn run_backtest(
 
         engine.run(&klines, |_, idx| {
             signals.get(idx).copied().unwrap_or(0)
-        }, stop_loss, take_profit, position_pct, trailing_stop_pct, trailing_activation_pct, trade_direction)
+        }, stop_loss, take_profit, position_pct, trailing_stop_pct, trailing_activation_pct, trade_direction, start_dt, end_dt, leverage)
     } else {
         // Plugin-based mode (existing logic)
         let plugin_name = req
@@ -255,7 +277,7 @@ pub async fn run_backtest(
             plugin_registry
                 .generate_signal(&plugin_name, klines, idx, &params)
                 .unwrap_or(0)
-        }, stop_loss, take_profit, position_pct, trailing_stop_pct, trailing_activation_pct, trade_direction)
+        }, stop_loss, take_profit, position_pct, trailing_stop_pct, trailing_activation_pct, trade_direction, start_dt, end_dt, leverage)
     };
 
     let _ = sqlx::query(
@@ -295,7 +317,24 @@ pub async fn run_backtest(
     .execute(&state.db_pool)
     .await;
 
-    Ok(Json(ApiResponse::ok(result)))
+    // Attach klines data for chart rendering
+    let klines_data: Vec<serde_json::Value> = klines.iter().map(|k| {
+        serde_json::json!({
+            "time": k.open_time / 1000,
+            "open": k.open,
+            "high": k.high,
+            "low": k.low,
+            "close": k.close,
+            "volume": k.volume,
+        })
+    }).collect();
+
+    let mut result_json = serde_json::to_value(&result).unwrap_or_default();
+    if let Some(obj) = result_json.as_object_mut() {
+        obj.insert("klines".to_string(), serde_json::json!(klines_data));
+    }
+
+    Ok(Json(ApiResponse::ok(result_json)))
 }
 
 pub async fn get_backtest_result(

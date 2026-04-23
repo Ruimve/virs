@@ -13,9 +13,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "lowercase")]
 pub enum MarketType {
     Spot,
-    Futures,
     Perpetual,
-    Option,
 }
 
 /// Unified order side.
@@ -162,6 +160,51 @@ pub struct PlaceOrderParams {
     pub stop_price: Option<f64>,
     pub time_in_force: Option<TimeInForce>,
     pub reduce_only: Option<bool>,
+    /// Leverage multiplier for perpetual orders (e.g., 5 for 5x).
+    pub leverage: Option<u32>,
+    /// Margin mode for perpetual orders.
+    pub margin_mode: Option<MarginMode>,
+    /// Position side for hedge mode (LONG/SHORT). None for one-way mode.
+    pub position_side: Option<PositionSide>,
+}
+
+/// Margin mode for perpetual contracts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum MarginMode {
+    Cross,
+    Isolated,
+}
+
+/// Position side for hedge mode.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum PositionSide {
+    Long,
+    Short,
+}
+
+/// Funding rate info for perpetual contracts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FundingRate {
+    pub symbol: String,
+    pub rate: f64,
+    pub next_funding_time: Option<DateTime<Utc>>,
+    pub info: serde_json::Value,
+}
+
+/// Position info from exchange.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Position {
+    pub symbol: String,
+    pub side: PositionSide,
+    pub size: f64,
+    pub entry_price: f64,
+    pub leverage: u32,
+    pub unrealized_pnl: f64,
+    pub margin_mode: MarginMode,
+    pub liquidation_price: Option<f64>,
+    pub info: serde_json::Value,
 }
 
 /// Time in force for orders.
