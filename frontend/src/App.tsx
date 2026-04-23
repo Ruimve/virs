@@ -9,6 +9,7 @@ import Market from './pages/Market'
 import Backtest from './pages/Backtest'
 import Trades from './pages/Trades'
 import Credentials from './pages/Credentials'
+import AiCredentials from './pages/AiCredentials'
 import Users from './pages/Users'
 
 const App: Component = () => {
@@ -37,7 +38,8 @@ const App: Component = () => {
           <Route path="/backtest" component={Backtest} />
           <Route path="/trades" component={Trades} />
           <Route path="/credentials" component={Credentials} />
-          <Route path="/users" component={Users} />
+        <Route path="/ai-credentials" component={AiCredentials} />
+        <Route path="/users" component={Users} />
           <Route path="/" component={() => <Navigate href="/dashboard" />} />
           <Route path="*" component={() => <Navigate href="/dashboard" />} />
         </Router>

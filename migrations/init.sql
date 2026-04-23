@@ -237,3 +237,18 @@ CREATE TABLE IF NOT EXISTS qd_exchange_credentials (
 );
 
 CREATE INDEX IF NOT EXISTS idx_credentials_user ON qd_exchange_credentials(user_id);
+
+-- AI/LLM credentials (per-user, encrypted)
+CREATE TABLE IF NOT EXISTS qd_ai_credentials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
+    provider VARCHAR(50) NOT NULL,
+    encrypted_api_key TEXT NOT NULL,
+    label VARCHAR(255),
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, provider)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_credentials_user ON qd_ai_credentials(user_id);

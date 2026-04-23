@@ -3,6 +3,15 @@ use crate::engine::lua_executor::{LuaExecutor, LuaExecutorConfig};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
+/// User-level AI credential overrides.
+/// When a field is `Some`, it takes priority over the system default in AiConfig.
+#[derive(Debug, Clone, Default)]
+pub struct AiUserConfig {
+    pub openrouter_api_key: Option<String>,
+    pub openai_api_key: Option<String>,
+    pub deepseek_api_key: Option<String>,
+}
+
 const SYSTEM_PROMPT: &str = r#"You are a quantitative trading strategy developer for the VIRS platform.
 You generate Lua strategy code that follows this exact format:
 
@@ -384,6 +393,67 @@ impl AiService {
                 Ok((key.clone(), "https://api.deepseek.com/v1".to_string(), model))
             }
             _ => Err(anyhow::anyhow!("Unknown AI provider: {}", provider)),
+        }
+    }
+
+    /// Resolve provider with user-level credential overrides.
+    /// User keys take priority over system default keys.
+    pub fn resolve_provider_with_override(
+        &self,
+        provider: &str,
+        requested_model: Option<&str>,
+        user_config: &AiUserConfig,
+    ) -> anyhow::Result<(String, String, String)> {
+        match provider {
+            "openrouter" => {
+                let key = user_config
+                    .openrouter_api_key
+                    .as_ref()
+                    .or(self.config.openrouter_api_key.as_ref())
+                    .ok_or_else(|| anyhow::anyhow!("OPENROUTER_API_KEY is not configured (neither user nor system)"))?;
+                let model = requested_model.unwrap_or("google/gemini-2.0-flash-001").to_string();
+                Ok((key.clone(), "https://openrouter.ai/api/v1".to_string(), model))
+            }
+            "openai" => {
+                let key = user_config
+                    .openai_api_key
+                    .as_ref()
+                    .or(self.config.openai_api_key.as_ref())
+                    .ok_or_else(|| anyhow::anyhow!("OPENAI_API_KEY is not configured (neither user nor system)"))?;
+                let model = requested_model.unwrap_or("gpt-4o-mini").to_string();
+                Ok((key.clone(), "https://api.openai.com/v1".to_string(), model))
+            }
+            "deepseek" => {
+                let key = user_config
+                    .deepseek_api_key
+                    .as_ref()
+                    .or(self.config.deepseek_api_key.as_ref())
+                    .ok_or_else(|| anyhow::anyhow!("DEEPSEEK_API_KEY is not configured (neither user nor system)"))?;
+                let model = requested_model.unwrap_or("deepseek-chat").to_string();
+                Ok((key.clone(), "https://api.deepseek.com/v1".to_string(), model))
+            }
+            _ => Err(anyhow::anyhow!("Unknown AI provider: {}", provider)),
+        }
+    }
+
+    /// Check if AI is available considering user-level overrides.
+    pub fn is_configured_with_override(&self, user_config: &AiUserConfig) -> bool {
+        user_config.openrouter_api_key.is_some()
+            || user_config.openai_api_key.is_some()
+            || user_config.deepseek_api_key.is_some()
+            || self.is_configured()
+    }
+
+    /// Get default provider considering user-level overrides.
+    pub fn default_provider_with_override(&self, user_config: &AiUserConfig) -> &'static str {
+        if user_config.openrouter_api_key.is_some() {
+            "openrouter"
+        } else if user_config.openai_api_key.is_some() {
+            "openai"
+        } else if user_config.deepseek_api_key.is_some() {
+            "deepseek"
+        } else {
+            self.default_provider()
         }
     }
 }

@@ -9,6 +9,7 @@ pub mod credentials;
 pub mod dashboard;
 pub mod plugins;
 pub mod ai;
+pub mod ai_credentials;
 pub mod ws;
 
 use axum::{
@@ -80,6 +81,10 @@ pub fn build_router(
         .route("/api/ai/generate", post(ai::generate_strategy))
         .route("/api/ai/optimize", post(ai::optimize))
         .route("/api/ai/explain", post(ai::explain))
+        .route("/api/ai-credentials/list", get(ai_credentials::list_credentials))
+        .route("/api/ai-credentials/save", post(ai_credentials::save_credential))
+        .route("/api/ai-credentials/delete/{id}", delete(ai_credentials::delete_credential))
+        .route("/api/ai-credentials/test", post(ai_credentials::test_credential))
         .route("/ws", get(ws::ws_handler))
         .with_state(state)
         .layer(
