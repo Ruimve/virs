@@ -372,6 +372,20 @@ pub async fn delete_strategy(
 
     state.strategy_engine.stop_strategy(&id);
 
+    // Clean up user-scoped exchange instance before deleting strategy record
+    let strategy_row: Option<(String, String, uuid::Uuid)> = sqlx::query_as(
+        r#"SELECT exchange, market_type, user_id FROM qd_strategies_trading WHERE id = $1"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.db_pool)
+    .await
+    .ok()
+    .flatten();
+
+    if let Some((exchange, market_type, user_id)) = strategy_row {
+        state.strategy_engine.remove_user_exchange(&exchange, &market_type, &user_id.to_string());
+    }
+
     sqlx::query("DELETE FROM qd_strategies_trading WHERE id = $1")
         .bind(id)
         .execute(&state.db_pool)
@@ -513,6 +527,20 @@ pub async fn stop_strategy(
     }
 
     state.strategy_engine.stop_strategy(&id);
+
+    // Clean up user-scoped exchange instance
+    let strategy_row: Option<(String, String, uuid::Uuid)> = sqlx::query_as(
+        r#"SELECT exchange, market_type, user_id FROM qd_strategies_trading WHERE id = $1"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.db_pool)
+    .await
+    .ok()
+    .flatten();
+
+    if let Some((exchange, market_type, user_id)) = strategy_row {
+        state.strategy_engine.remove_user_exchange(&exchange, &market_type, &user_id.to_string());
+    }
 
     sqlx::query("UPDATE qd_strategies_trading SET status = 'stopped', updated_at = NOW() WHERE id = $1")
         .bind(id)

@@ -328,6 +328,17 @@ fn to_models_ticker(ct: ccxt::Ticker) -> Ticker {
 
 /// Convert ccxt Kline to models Kline.
 fn to_models_kline(ck: ccxt::Kline, symbol: &str, exchange: &str, interval: &str) -> Kline {
+    let interval_ms = match interval {
+        "1m" => 60_000,
+        "5m" => 300_000,
+        "15m" => 900_000,
+        "30m" => 1_800_000,
+        "1h" => 3_600_000,
+        "4h" => 14_400_000,
+        "1d" => 86_400_000,
+        "1w" => 604_800_000,
+        _ => 3_600_000, // default to 1h
+    };
     Kline {
         open_time: ck.timestamp,
         open: ck.open,
@@ -335,7 +346,7 @@ fn to_models_kline(ck: ccxt::Kline, symbol: &str, exchange: &str, interval: &str
         low: ck.low,
         close: ck.close,
         volume: ck.volume,
-        close_time: ck.timestamp + 3600, // approximate
+        close_time: ck.timestamp + interval_ms,
         quote_volume: ck.quote_volume.unwrap_or(0.0),
         trades: ck.trades.unwrap_or(0),
         symbol: symbol.to_string(),

@@ -140,6 +140,11 @@ impl StrategyEngine {
         self.exchange_instances.iter().map(|r| r.key().clone()).collect()
     }
 
+    pub fn remove_user_exchange(&self, exchange_name: &str, market_type: &str, user_id: &str) {
+        let key = format!("{}:{}:{}", exchange_name, market_type, user_id);
+        self.exchange_instances.remove(&key);
+    }
+
     /// Dispatch strategy start to the appropriate market engine based on strategy.market_type.
     pub async fn start_strategy(&self, strategy: Strategy, exchange_key: Option<String>) -> anyhow::Result<()> {
         let exchange_name = exchange_key.unwrap_or_else(|| {

@@ -17,7 +17,7 @@ export interface PaginatedResponse<T> {
 
 // 用户信息类型
 export interface UserInfo {
-  id: number
+  id: string
   username: string
   role: 'admin' | 'user'
   created_at?: string

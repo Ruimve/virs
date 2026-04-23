@@ -17,6 +17,7 @@ use axum::{
     routing::{get, post, put, delete},
     Router,
 };
+use tower_http::cors::{CorsLayer, Any};
 use std::sync::Arc;
 
 use crate::config::AppConfig;
@@ -81,6 +82,12 @@ pub fn build_router(
         .route("/api/ai/explain", post(ai::explain))
         .route("/ws", get(ws::ws_handler))
         .with_state(state)
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
         .fallback(spa_fallback)
 }
 

@@ -82,6 +82,7 @@ impl MarketEngine for SpotMarketEngine {
                 status: "stopped".to_string(),
             });
 
+            self.strategies.remove(strategy_id);
             true
         } else {
             false

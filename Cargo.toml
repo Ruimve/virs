@@ -71,7 +71,6 @@ talib-rs = "0.1"
 
 # Notification (optional)
 lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"], optional = true }
-teloxide = { version = "0.12", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -80,8 +79,7 @@ tokio-test = "0.4"
 default = ["redis", "notification-email"]
 redis = ["dep:redis"]
 notification-email = ["dep:lettre"]
-notification-telegram = ["dep:teloxide"]
-full = ["redis", "notification-email", "notification-telegram"]
+full = ["redis", "notification-email"]
 
 [profile.release]
 opt-level = 3

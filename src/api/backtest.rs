@@ -75,6 +75,58 @@ pub async fn run_backtest(
     _auth: AuthUser,
     Json(req): Json<BacktestRequest>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
+    // --- Input validation ---
+    if req.initial_balance <= 0.0 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<serde_json::Value>::err(
+                "initial_balance must be a positive number",
+            )),
+        ));
+    }
+
+    if req.symbol.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<serde_json::Value>::err(
+                "symbol must not be empty",
+            )),
+        ));
+    }
+
+    const VALID_EXCHANGES: &[&str] = &["binance", "okx", "bybit"];
+    if !VALID_EXCHANGES.contains(&req.exchange.as_str()) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<serde_json::Value>::err(format!(
+                "exchange must be one of: {}",
+                VALID_EXCHANGES.join(", "),
+            ))),
+        ));
+    }
+
+    const VALID_TIMEFRAMES: &[&str] = &["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"];
+    if !VALID_TIMEFRAMES.contains(&req.timeframe.as_str()) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<serde_json::Value>::err(format!(
+                "timeframe must be one of: {}",
+                VALID_TIMEFRAMES.join(", "),
+            ))),
+        ));
+    }
+
+    if let Some(leverage) = req.trading_config.get("leverage").and_then(|v| v.as_u64()) {
+        if leverage < 1 || leverage > 125 {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<serde_json::Value>::err(
+                    "leverage must be between 1 and 125",
+                )),
+            ));
+        }
+    }
+
     let market_type = req.trading_config
         .get("market_type")
         .and_then(|v| v.as_str())
