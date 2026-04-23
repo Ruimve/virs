@@ -72,9 +72,11 @@ impl BacktestEngine {
         F: FnMut(&[Kline], usize) -> i8,
     {
         let mut balance = self.initial_balance;
-        let mut position: Option<PositionState> = None;
+        let mut long_position: Option<PositionState> = None;
+        let mut short_position: Option<PositionState> = None;
         let mut trades: Vec<BacktestTrade> = Vec::new();
-        let mut open_trade: Option<(DateTime<Utc>, f64, f64, String)> = None;
+        let mut open_long_trade: Option<(DateTime<Utc>, f64, f64, String)> = None;
+        let mut open_short_trade: Option<(DateTime<Utc>, f64, f64, String)> = None;
         let mut equity_curve: Vec<(DateTime<Utc>, f64)> = Vec::new();
         let mut returns: Vec<f64> = Vec::new();
 
@@ -119,26 +121,26 @@ impl BacktestEngine {
                 let timestamp = chrono::DateTime::from_timestamp_millis(kline.open_time)
                     .unwrap_or_else(Utc::now);
 
-                let has_long = position.as_ref().map_or(false, |p| p.side == PositionSide::Long);
-                let has_short = position.as_ref().map_or(false, |p| p.side == PositionSide::Short);
+                let has_long = long_position.is_some();
+                let has_short = short_position.is_some();
 
                 if let Some(signal) = map_raw_signal(raw, trade_direction, has_long, has_short) {
                     match signal {
-                        SignalType::OpenLong if position.is_none() => {
-                            let open_fee = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Long, position_pct, leverage);
-                            open_trade = Some((timestamp, exec_price, open_fee, "long".to_string()));
+                        SignalType::OpenLong if long_position.is_none() => {
+                            let open_fee = self.open_position(&mut long_position, exec_price, &mut balance, PositionSide::Long, position_pct, leverage);
+                            open_long_trade = Some((timestamp, exec_price, open_fee, "long".to_string()));
                         }
-                        SignalType::CloseLong if position.as_ref().map_or(false, |p| p.side == PositionSide::Long) => {
-                            if let Some(bt) = self.close_position(&mut position, exec_price, &mut balance, timestamp, &mut open_trade) {
+                        SignalType::CloseLong if long_position.is_some() => {
+                            if let Some(bt) = self.close_position(&mut long_position, exec_price, &mut balance, timestamp, &mut open_long_trade) {
                                 record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
                             }
                         }
-                        SignalType::OpenShort if position.is_none() => {
-                            let open_fee = self.open_position(&mut position, exec_price, &mut balance, PositionSide::Short, position_pct, leverage);
-                            open_trade = Some((timestamp, exec_price, open_fee, "short".to_string()));
+                        SignalType::OpenShort if short_position.is_none() => {
+                            let open_fee = self.open_position(&mut short_position, exec_price, &mut balance, PositionSide::Short, position_pct, leverage);
+                            open_short_trade = Some((timestamp, exec_price, open_fee, "short".to_string()));
                         }
-                        SignalType::CloseShort if position.as_ref().map_or(false, |p| p.side == PositionSide::Short) => {
-                            if let Some(bt) = self.close_position(&mut position, exec_price, &mut balance, timestamp, &mut open_trade) {
+                        SignalType::CloseShort if short_position.is_some() => {
+                            if let Some(bt) = self.close_position(&mut short_position, exec_price, &mut balance, timestamp, &mut open_short_trade) {
                                 record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
                             }
                         }
@@ -150,12 +152,10 @@ impl BacktestEngine {
             let price = kline.close;
             let timestamp = chrono::DateTime::from_timestamp_millis(kline.open_time)
                 .unwrap_or_else(Utc::now);
-            if let Some(ref mut pos) = position {
-                let pnl_pct = if pos.side == PositionSide::Long {
-                    (price - pos.entry_price) / pos.entry_price
-                } else {
-                    (pos.entry_price - price) / pos.entry_price
-                };
+
+            // Check long position stop-loss / take-profit
+            if let Some(ref mut pos) = long_position {
+                let pnl_pct = (price - pos.entry_price) / pos.entry_price;
 
                 let should_close = match (stop_loss_pct, take_profit_pct) {
                     (Some(sl), _) if pnl_pct <= -sl => true,
@@ -164,36 +164,59 @@ impl BacktestEngine {
                 };
 
                 if should_close {
-                    if let Some(bt) = self.close_position(&mut position, price, &mut balance, timestamp, &mut open_trade) {
+                    if let Some(bt) = self.close_position(&mut long_position, price, &mut balance, timestamp, &mut open_long_trade) {
                         record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
                     }
                 }
             }
 
-            if let Some(ref mut pos) = position {
+            // Check short position stop-loss / take-profit
+            if let Some(ref mut pos) = short_position {
+                let pnl_pct = (pos.entry_price - price) / pos.entry_price;
+
+                let should_close = match (stop_loss_pct, take_profit_pct) {
+                    (Some(sl), _) if pnl_pct <= -sl => true,
+                    (_, Some(tp)) if pnl_pct >= tp => true,
+                    _ => false,
+                };
+
+                if should_close {
+                    if let Some(bt) = self.close_position(&mut short_position, price, &mut balance, timestamp, &mut open_short_trade) {
+                        record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
+                    }
+                }
+            }
+
+            // Check long position trailing stop
+            if let Some(ref mut pos) = long_position {
                 if price > pos.highest_price {
                     pos.highest_price = price;
                 }
+
+                if let (Some(ts_pct), Some(activation_pct)) = (trailing_stop_pct, trailing_activation_pct) {
+                    let pct = (pos.highest_price - pos.entry_price) / pos.entry_price;
+                    let trigger = pct >= activation_pct && price <= pos.highest_price * (1.0 - ts_pct);
+
+                    if trigger {
+                        if let Some(bt) = self.close_position(&mut long_position, price, &mut balance, timestamp, &mut open_long_trade) {
+                            record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
+                        }
+                    }
+                }
+            }
+
+            // Check short position trailing stop
+            if let Some(ref mut pos) = short_position {
                 if price < pos.lowest_price {
                     pos.lowest_price = price;
                 }
 
                 if let (Some(ts_pct), Some(activation_pct)) = (trailing_stop_pct, trailing_activation_pct) {
-                    let (profit_pct, should_trigger) = match pos.side {
-                        PositionSide::Long => {
-                            let pct = (pos.highest_price - pos.entry_price) / pos.entry_price;
-                            let trigger = pct >= activation_pct && price <= pos.highest_price * (1.0 - ts_pct);
-                            (pct, trigger)
-                        }
-                        PositionSide::Short => {
-                            let pct = (pos.entry_price - pos.lowest_price) / pos.entry_price;
-                            let trigger = pct >= activation_pct && price >= pos.lowest_price * (1.0 + ts_pct);
-                            (pct, trigger)
-                        }
-                    };
+                    let pct = (pos.entry_price - pos.lowest_price) / pos.entry_price;
+                    let trigger = pct >= activation_pct && price >= pos.lowest_price * (1.0 + ts_pct);
 
-                    if should_trigger {
-                        if let Some(bt) = self.close_position(&mut position, price, &mut balance, timestamp, &mut open_trade) {
+                    if trigger {
+                        if let Some(bt) = self.close_position(&mut short_position, price, &mut balance, timestamp, &mut open_short_trade) {
                             record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
                         }
                     }
@@ -208,23 +231,27 @@ impl BacktestEngine {
             }
 
             // Calculate equity
-            let equity = if let Some(ref pos) = position {
-                let margin = pos.size * pos.entry_price / pos.leverage as f64;
-                let unrealized = match pos.side {
-                    PositionSide::Long => (price - pos.entry_price) * pos.size,
-                    PositionSide::Short => (pos.entry_price - price) * pos.size,
-                };
-                balance + margin + unrealized
-            } else {
-                balance
+            let equity = {
+                let mut e = balance;
+                if let Some(ref pos) = long_position {
+                    let margin = pos.size * pos.entry_price / pos.leverage as f64;
+                    let unrealized = (price - pos.entry_price) * pos.size;
+                    e += margin + unrealized;
+                }
+                if let Some(ref pos) = short_position {
+                    let margin = pos.size * pos.entry_price / pos.leverage as f64;
+                    let unrealized = (pos.entry_price - price) * pos.size;
+                    e += margin + unrealized;
+                }
+                e
             };
 
             peak_equity = peak_equity.max(equity);
             let _drawdown = (peak_equity - equity) / peak_equity;
 
-            let timestamp = chrono::DateTime::from_timestamp_millis(kline.open_time)
+            let eq_timestamp = chrono::DateTime::from_timestamp_millis(kline.open_time)
                 .unwrap_or_else(Utc::now);
-            equity_curve.push((timestamp, equity));
+            equity_curve.push((eq_timestamp, equity));
 
             if i > 0 {
                 let prev_equity = equity_curve[i - 1].1;
@@ -234,13 +261,22 @@ impl BacktestEngine {
             }
         }
 
-        // Close any open position at end
-        if position.is_some() {
+        // Close any open positions at end
+        if long_position.is_some() {
             let last_price = klines.last().map(|k| k.close).unwrap_or(0.0);
             let last_ts = klines.last()
                 .map(|k| chrono::DateTime::from_timestamp_millis(k.open_time).unwrap_or_else(Utc::now))
                 .unwrap_or_else(Utc::now);
-            if let Some(bt) = self.close_position(&mut position, last_price, &mut balance, last_ts, &mut open_trade) {
+            if let Some(bt) = self.close_position(&mut long_position, last_price, &mut balance, last_ts, &mut open_long_trade) {
+                record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
+            }
+        }
+        if short_position.is_some() {
+            let last_price = klines.last().map(|k| k.close).unwrap_or(0.0);
+            let last_ts = klines.last()
+                .map(|k| chrono::DateTime::from_timestamp_millis(k.open_time).unwrap_or_else(Utc::now))
+                .unwrap_or_else(Utc::now);
+            if let Some(bt) = self.close_position(&mut short_position, last_price, &mut balance, last_ts, &mut open_short_trade) {
                 record_trade(&mut trades, bt, &mut profit_trades, &mut loss_trades, &mut total_profit, &mut total_loss, &mut current_consecutive_wins, &mut current_consecutive_losses, &mut max_consecutive_wins, &mut max_consecutive_losses);
             }
         }

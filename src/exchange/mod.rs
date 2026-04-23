@@ -52,6 +52,20 @@ pub trait Exchange: Send + Sync {
         order_type: OrderType,
         amount: f64,
         price: Option<f64>,
+    ) -> anyhow::Result<Order> {
+        self.place_order_with_options(symbol, side, order_type, amount, price, None, None).await
+    }
+
+    /// Place an order with optional reduce_only and position_side (for perpetual contracts).
+    async fn place_order_with_options(
+        &self,
+        symbol: &str,
+        side: Side,
+        order_type: OrderType,
+        amount: f64,
+        price: Option<f64>,
+        reduce_only: Option<bool>,
+        position_side: Option<PositionSide>,
     ) -> anyhow::Result<Order>;
 
     /// Cancel an existing order.
@@ -127,6 +141,19 @@ impl Exchange for Box<dyn Exchange> {
         price: Option<f64>,
     ) -> anyhow::Result<Order> {
         (**self).place_order(symbol, side, order_type, amount, price).await
+    }
+
+    async fn place_order_with_options(
+        &self,
+        symbol: &str,
+        side: Side,
+        order_type: OrderType,
+        amount: f64,
+        price: Option<f64>,
+        reduce_only: Option<bool>,
+        position_side: Option<PositionSide>,
+    ) -> anyhow::Result<Order> {
+        (**self).place_order_with_options(symbol, side, order_type, amount, price, reduce_only, position_side).await
     }
 
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> anyhow::Result<Order> {
@@ -374,6 +401,23 @@ impl Exchange for CcxtAdapter {
         amount: f64,
         price: Option<f64>,
     ) -> anyhow::Result<Order> {
+        self.place_order_with_options(symbol, side, order_type, amount, price, None, None).await
+    }
+
+    async fn place_order_with_options(
+        &self,
+        symbol: &str,
+        side: Side,
+        order_type: OrderType,
+        amount: f64,
+        price: Option<f64>,
+        reduce_only: Option<bool>,
+        position_side: Option<PositionSide>,
+    ) -> anyhow::Result<Order> {
+        let ccxt_position_side = position_side.map(|ps| match ps {
+            PositionSide::Long => ccxt::types::PositionSide::Long,
+            PositionSide::Short => ccxt::types::PositionSide::Short,
+        });
         let params = PlaceOrderParams {
             symbol: symbol.to_string(),
             side: to_ccxt_side(&side),
@@ -384,10 +428,10 @@ impl Exchange for CcxtAdapter {
             client_order_id: None,
             stop_price: None,
             time_in_force: None,
-            reduce_only: None,
+            reduce_only,
             leverage: None,
             margin_mode: None,
-            position_side: None,
+            position_side: ccxt_position_side,
         };
         let co = self.inner.create_order(params).await
             .map_err(|e| anyhow::anyhow!("ccxt create_order error: {}", e))?;

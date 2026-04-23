@@ -10,7 +10,6 @@ pub struct PositionManager {
     current_size: f64,
     entry_price: f64,
     config: PositionConfig,
-    cached_quote_balance: f64,
     peak_price: f64,
     trough_price: f64,
 }
@@ -91,7 +90,6 @@ impl PositionManager {
             current_size: 0.0,
             entry_price: 0.0,
             config,
-            cached_quote_balance: 0.0,
             peak_price: 0.0,
             trough_price: f64::MAX,
         }
@@ -150,23 +148,11 @@ impl PositionManager {
                 (Side::Sell, self.current_size)
             }
             SignalType::OpenShort => {
-                if self.current_side.is_some() {
-                    warn!(
-                        "[Strategy {}] OpenShort signal but already in position, skipping",
-                        self.strategy_id
-                    );
-                    return (Side::Sell, 0.0);
-                }
-                let quote_amount = self.determine_amount();
-                if quote_amount <= 0.0 {
-                    return (Side::Sell, 0.0);
-                }
-                let base_amount = quote_amount / current_price;
-                info!(
-                    "[Strategy {}] Prepare OpenShort: quote={:.2}, base={:.6} @ price={:.2}",
-                    self.strategy_id, quote_amount, base_amount, current_price
+                warn!(
+                    "[Strategy {}] OpenShort signal rejected: spot market does not support short selling",
+                    self.strategy_id
                 );
-                (Side::Sell, base_amount)
+                return (Side::Sell, 0.0);
             }
             SignalType::CloseShort => {
                 if self.current_side != Some(PositionSide::Short) {
@@ -238,23 +224,11 @@ impl PositionManager {
                 (Side::Sell, self.current_size)
             }
             SignalType::OpenShort => {
-                if self.current_side.is_some() {
-                    warn!(
-                        "[Strategy {}] OpenShort signal but already in position, skipping",
-                        self.strategy_id
-                    );
-                    return (Side::Sell, 0.0);
-                }
-                let quote_amount = self.determine_amount_async(exchange).await;
-                if quote_amount <= 0.0 {
-                    return (Side::Sell, 0.0);
-                }
-                let base_amount = quote_amount / current_price;
-                info!(
-                    "[Strategy {}] Prepare OpenShort: quote={:.2}, base={:.6} @ price={:.2}",
-                    self.strategy_id, quote_amount, base_amount, current_price
+                warn!(
+                    "[Strategy {}] OpenShort signal rejected: spot market does not support short selling",
+                    self.strategy_id
                 );
-                (Side::Sell, base_amount)
+                return (Side::Sell, 0.0);
             }
             SignalType::CloseShort => {
                 if self.current_side != Some(PositionSide::Short) {
@@ -440,7 +414,15 @@ impl PositionManager {
         self.trough_price = f64::MAX;
     }
 
-    /// Determine order amount in quote currency based on config.
+    /// Determine order amount in quote currency using fixed_amount (synchronous, for prepare_order).
+    pub fn determine_amount(&self) -> f64 {
+        if self.config.fixed_amount > 0.0 {
+            return self.config.fixed_amount.min(self.config.max_position_size);
+        }
+        0.0
+    }
+
+    /// Determine order amount in quote currency based on config (async, queries exchange balance).
     /// Priority: fixed_amount > balance_pct > 0 (no trade)
     pub async fn determine_amount_async(&mut self, exchange: &dyn Exchange) -> f64 {
         if self.config.fixed_amount > 0.0 {
@@ -457,8 +439,6 @@ impl PositionManager {
                         .find(|b| b.asset.eq_ignore_ascii_case(&quote_currency))
                         .map(|b| b.free)
                         .unwrap_or(0.0);
-
-                    self.cached_quote_balance = quote_balance;
 
                     if quote_balance <= 0.0 {
                         warn!(
@@ -490,19 +470,6 @@ impl PositionManager {
                     return 0.0;
                 }
             }
-        }
-
-        0.0
-    }
-
-    pub fn determine_amount(&self) -> f64 {
-        if self.config.fixed_amount > 0.0 {
-            return self.config.fixed_amount.min(self.config.max_position_size);
-        }
-
-        if self.config.balance_pct > 0.0 && self.cached_quote_balance > 0.0 {
-            let amount = self.cached_quote_balance * self.config.balance_pct;
-            return amount.min(self.config.max_position_size);
         }
 
         0.0
@@ -545,10 +512,6 @@ impl PositionManager {
             size: self.current_size,
             entry_price: self.entry_price,
         })
-    }
-
-    pub fn cached_quote_balance(&self) -> f64 {
-        self.cached_quote_balance
     }
 
     pub fn restore_position(

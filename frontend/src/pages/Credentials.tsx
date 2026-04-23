@@ -1,5 +1,6 @@
 import { type Component, createSignal, Show, For } from 'solid-js'
 import { api } from '../lib/api'
+import { useMarket } from '../lib/market-context'
 
 // ---- 类型定义 ----
 
@@ -52,6 +53,7 @@ function formatDate(dateStr: string): string {
 // ---- 组件 ----
 
 const Credentials: Component = () => {
+  const market = useMarket()
   const [credentials, setCredentials] = createSignal<Credential[]>([])
   const [loading, setLoading] = createSignal(true)
   const [error, setError] = createSignal<string | null>(null)
@@ -96,7 +98,7 @@ const Credentials: Component = () => {
   // 打开模态框
   function openModal() {
     setFormExchange('binance')
-    setFormMarketType('perpetual')
+    setFormMarketType(market.marketType)
     setFormLabel('')
     setFormApiKey('')
     setFormApiSecret('')

@@ -104,7 +104,6 @@ impl MarketEngine for SpotMarketEngine {
         let plugins = self.plugins.clone();
 
         let (cancel_tx, mut cancel_rx) = tokio::sync::watch::channel(false);
-        let cancel_tx_clone = cancel_tx.clone();
 
         strategies.insert(
             strategy_id,
@@ -196,6 +195,8 @@ impl MarketEngine for SpotMarketEngine {
                                     order_type: OrderType::Market,
                                     exchange_name: exchange_name.clone(),
                                     market_type: MarketType::Spot,
+                                    reduce_only: false,
+                                    position_side: None,
                                     callback: cb_tx,
                                 }).await;
 
@@ -281,6 +282,8 @@ impl MarketEngine for SpotMarketEngine {
                                                 order_type: OrderType::Market,
                                                 exchange_name: exchange_name.clone(),
                                                 market_type: MarketType::Spot,
+                                                reduce_only: false,
+                                                position_side: None,
                                                 callback: cb_tx,
                                             }).await;
 
@@ -323,35 +326,10 @@ impl MarketEngine for SpotMarketEngine {
                                                     );
                                                 }
                                                 Err(_) => {
-                                                    error!(
-                                                        "Spot strategy {} order timed out (30s). Querying exchange for order status...",
+                                                    warn!(
+                                                        "Spot strategy {} order timed out (30s). Position state NOT updated - will rely on next cycle's position check.",
                                                         strategy.name
                                                     );
-                                                    let open_orders = match exchange.get_open_orders(Some(&symbol)).await {
-                                                        Ok(orders) => orders,
-                                                        Err(e) => {
-                                                            error!("Spot strategy {} failed to query open orders: {}", strategy.name, e);
-                                                            continue;
-                                                        }
-                                                    };
-                                                    if open_orders.is_empty() {
-                                                        info!(
-                                                            "Spot strategy {} no open orders found after timeout - order likely filled. Pausing strategy to prevent duplicate positions.",
-                                                            strategy.name
-                                                        );
-                                                        let _ = cancel_tx_clone.send(true);
-                                                        break;
-                                                    } else {
-                                                        for open_order in &open_orders {
-                                                            if let Err(e) = exchange.cancel_order(&symbol, &open_order.id).await {
-                                                                warn!("Spot strategy {} failed to cancel order {}: {}", strategy.name, open_order.id, e);
-                                                            }
-                                                        }
-                                                        info!(
-                                                            "Spot strategy {} cancelled {} open orders after timeout. Position state NOT updated.",
-                                                            strategy.name, open_orders.len()
-                                                        );
-                                                    }
                                                 }
                                             }
                                         }
@@ -388,9 +366,9 @@ async fn restore_position_from_db(
     strategy_id: Uuid,
 ) -> anyhow::Result<()> {
     let row: Option<(String, f64, f64)> = sqlx::query_as(
-        r#"SELECT side, price, amount
+        r#"SELECT trade_type, price, amount
            FROM qd_strategy_trades
-           WHERE strategy_id = $1
+           WHERE strategy_id = $1 AND trade_type IN ('OpenLong', 'CloseLong')
            ORDER BY created_at DESC
            LIMIT 1"#,
     )
@@ -399,19 +377,15 @@ async fn restore_position_from_db(
     .await
     .map_err(|e| anyhow::anyhow!("DB query failed: {}", e))?;
 
-    if let Some((side_str, price, amount)) = row {
-        let side = match side_str.to_lowercase().as_str() {
-            "buy" | "openlong" => crate::models::PositionSide::Long,
-            "sell" | "openshort" => crate::models::PositionSide::Short,
-            _ => {
-                info!(
-                    "Spot strategy {} last trade is a close (side={}), no position to restore",
-                    strategy_id, side_str
-                );
-                return Ok(());
-            }
-        };
-        pos_manager.restore_position(side, amount, price);
+    if let Some((trade_type, price, amount)) = &row {
+        if trade_type == "OpenLong" {
+            pos_manager.restore_position(crate::models::PositionSide::Long, *amount, *price);
+        } else {
+            info!(
+                "Spot strategy {} last trade is CloseLong, no position to restore",
+                strategy_id
+            );
+        }
     } else {
         info!("Spot strategy {} has no trade history, starting fresh", strategy_id);
     }

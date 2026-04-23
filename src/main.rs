@@ -152,6 +152,8 @@ async fn main() -> anyhow::Result<()> {
                     order_type,
                     exchange_name,
                     market_type,
+                    reduce_only,
+                    position_side,
                     callback,
                 } => {
                     info!(
@@ -186,7 +188,7 @@ async fn main() -> anyhow::Result<()> {
                     let exchange = order_worker_engine.get_exchange(&exchange_name);
                     match exchange {
                         Some(ex) => {
-                            match ex.place_order(&symbol, side.clone(), order_type.clone(), amount, price).await {
+                            match ex.place_order_with_options(&symbol, side.clone(), order_type.clone(), amount, price, Some(reduce_only), position_side.clone()).await {
                                 Ok(order) => {
                                     info!("✅ Order executed: id={}, symbol={}, side={:?}, status={:?}", order.id, order.symbol, order.side, order.status);
 

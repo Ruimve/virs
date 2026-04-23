@@ -145,6 +145,16 @@ impl MarketEngine for PerpetualMarketEngine {
                 }
             }
 
+            // Set leverage once at strategy startup.
+            // Leverage is not changed during strategy runtime.
+            if let Some(exchange) = exchanges.get(&exchange_name) {
+                if let Err(e) = exchange.set_leverage(&symbol, pos_manager.leverage()).await {
+                    warn!("Perpetual strategy {} failed to set leverage at startup: {}", strategy.name, e);
+                }
+            } else {
+                warn!("Exchange {} not found for perpetual strategy {} at startup, cannot set leverage", exchange_name, strategy.name);
+            }
+
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -164,69 +174,84 @@ impl MarketEngine for PerpetualMarketEngine {
 
                             pos_manager.update_price_tracking(current_price);
 
-                            if let Some((close_side, close_amount, risk_reason)) = pos_manager.check_risk(current_price) {
-                                info!(
-                                    "Perpetual strategy {} risk management triggered close: {:?} for {} @ {:.2}",
-                                    strategy.name, close_side, symbol, current_price
-                                );
+                            let all_risks = pos_manager.check_all_risks(current_price);
+                            if !all_risks.is_empty() {
+                                for (close_side, close_amount, risk_reason) in all_risks {
+                                    info!(
+                                        "Perpetual strategy {} risk management triggered close: {:?} for {} @ {:.2}",
+                                        strategy.name, close_side, symbol, current_price
+                                    );
 
-                                if let Some(ref bc) = ws_broadcaster {
-                                    let _ = bc.send(crate::api::ws::WsEvent::Risk {
-                                        strategy_id: strategy_id.to_string(),
+                                    if let Some(ref bc) = ws_broadcaster {
+                                        let _ = bc.send(crate::api::ws::WsEvent::Risk {
+                                            strategy_id: strategy_id.to_string(),
+                                            symbol: symbol.clone(),
+                                            reason: risk_reason.as_str().to_string(),
+                                            price: current_price,
+                                        });
+                                    }
+
+                                    let signal_type = if close_side == Side::Sell {
+                                        SignalType::CloseLong
+                                    } else {
+                                        SignalType::CloseShort
+                                    };
+
+                                    let risk_pos_side = if close_side == Side::Sell {
+                                        Some(PositionSide::Long)   // 平多
+                                    } else {
+                                        Some(PositionSide::Short)  // 平空
+                                    };
+
+                                    let (cb_tx, cb_rx) = tokio::sync::oneshot::channel();
+                                    let _ = order_tx.send(super::OrderCommand::Place {
+                                        strategy_id,
                                         symbol: symbol.clone(),
-                                        reason: risk_reason.as_str().to_string(),
-                                        price: current_price,
-                                    });
-                                }
+                                        signal_type: signal_type.clone(),
+                                        side: close_side.clone(),
+                                        amount: close_amount,
+                                        price: None,
+                                        order_type: OrderType::Market,
+                                        exchange_name: exchange_name.clone(),
+                                        market_type: MarketType::Perpetual,
+                                        reduce_only: true,
+                                        position_side: risk_pos_side,
+                                        callback: cb_tx,
+                                    }).await;
 
-                                let signal_type = if close_side == Side::Sell {
-                                    SignalType::CloseLong
-                                } else {
-                                    SignalType::CloseShort
-                                };
-
-                                let (cb_tx, cb_rx) = tokio::sync::oneshot::channel();
-                                let _ = order_tx.send(super::OrderCommand::Place {
-                                    strategy_id,
-                                    symbol: symbol.clone(),
-                                    signal_type: signal_type.clone(),
-                                    side: close_side.clone(),
-                                    amount: close_amount,
-                                    price: None,
-                                    order_type: OrderType::Market,
-                                    exchange_name: exchange_name.clone(),
-                                    market_type: MarketType::Perpetual,
-                                    callback: cb_tx,
-                                }).await;
-
-                                match tokio::time::timeout(
-                                    std::time::Duration::from_secs(30),
-                                    cb_rx,
-                                ).await {
-                                    Ok(Ok(super::OrderResult::Filled { fill_price, filled_amount, .. })) => {
-                                        info!(
-                                            "Perpetual strategy {} risk close confirmed: fill_price={:.2}, filled={:.6}",
-                                            strategy.name, fill_price, filled_amount
-                                        );
-                                        pos_manager.apply_risk_close(close_side);
-                                    }
-                                    Ok(Ok(super::OrderResult::Failed { error })) => {
-                                        error!(
-                                            "Perpetual strategy {} risk close FAILED: {}. Will retry next cycle.",
-                                            strategy.name, error
-                                        );
-                                    }
-                                    Ok(Err(_)) => {
-                                        error!(
-                                            "Perpetual strategy {} risk close callback dropped. Will retry next cycle.",
-                                            strategy.name
-                                        );
-                                    }
-                                    Err(_) => {
-                                        error!(
-                                            "Perpetual strategy {} risk close timed out (30s). Will retry next cycle.",
-                                            strategy.name
-                                        );
+                                    match tokio::time::timeout(
+                                        std::time::Duration::from_secs(30),
+                                        cb_rx,
+                                    ).await {
+                                        Ok(Ok(super::OrderResult::Filled { fill_price, filled_amount, .. })) => {
+                                            if fill_price <= 0.0 {
+                                                error!("Perpetual strategy {} risk close got fill_price=0, skipping position update", strategy.name);
+                                                continue;
+                                            }
+                                            info!(
+                                                "Perpetual strategy {} risk close confirmed: fill_price={:.2}, filled={:.6}",
+                                                strategy.name, fill_price, filled_amount
+                                            );
+                                            pos_manager.apply_risk_close(close_side);
+                                        }
+                                        Ok(Ok(super::OrderResult::Failed { error })) => {
+                                            error!(
+                                                "Perpetual strategy {} risk close FAILED: {}. Will retry next cycle.",
+                                                strategy.name, error
+                                            );
+                                        }
+                                        Ok(Err(_)) => {
+                                            error!(
+                                                "Perpetual strategy {} risk close callback dropped. Will retry next cycle.",
+                                                strategy.name
+                                            );
+                                        }
+                                        Err(_) => {
+                                            error!(
+                                                "Perpetual strategy {} risk close timed out (30s). Will retry next cycle.",
+                                                strategy.name
+                                            );
+                                        }
                                     }
                                 }
                                 continue;
@@ -275,13 +300,13 @@ impl MarketEngine for PerpetualMarketEngine {
                                                 continue;
                                             }
 
-                                            // Set leverage before opening a new position
-                                            if matches!(signal, SignalType::OpenLong | SignalType::OpenShort) {
-                                                if let Err(e) = exchange.set_leverage(&symbol, pos_manager.leverage()).await {
-                                                    warn!("Perpetual strategy {} failed to set leverage: {}", strategy.name, e);
-                                                    continue;
-                                                }
-                                            }
+                                            let is_close = matches!(signal, SignalType::CloseLong | SignalType::CloseShort);
+                                            let pos_side = match &signal {
+                                                SignalType::OpenLong => Some(PositionSide::Long),
+                                                SignalType::OpenShort => Some(PositionSide::Short),
+                                                SignalType::CloseLong => Some(PositionSide::Long),
+                                                SignalType::CloseShort => Some(PositionSide::Short),
+                                            };
 
                                             let (cb_tx, cb_rx) = tokio::sync::oneshot::channel();
                                             let _ = order_tx.send(super::OrderCommand::Place {
@@ -294,6 +319,8 @@ impl MarketEngine for PerpetualMarketEngine {
                                                 order_type: OrderType::Market,
                                                 exchange_name: exchange_name.clone(),
                                                 market_type: MarketType::Perpetual,
+                                                reduce_only: is_close,
+                                                position_side: pos_side,
                                                 callback: cb_tx,
                                             }).await;
 
@@ -302,6 +329,10 @@ impl MarketEngine for PerpetualMarketEngine {
                                                 cb_rx,
                                             ).await {
                                                 Ok(Ok(super::OrderResult::Filled { fill_price, filled_amount, .. })) => {
+                                                    if fill_price <= 0.0 {
+                                                        error!("Perpetual strategy {} got fill_price=0, skipping position update", strategy.name);
+                                                        continue;
+                                                    }
                                                     info!(
                                                         "Perpetual strategy {} order confirmed: fill_price={:.2}, filled={:.6}",
                                                         strategy.name, fill_price, filled_amount

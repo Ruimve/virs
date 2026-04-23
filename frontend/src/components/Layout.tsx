@@ -2,6 +2,7 @@ import { type Component, createSignal, Show, For } from 'solid-js'
 import { A, useLocation } from '@solidjs/router'
 import { getUser, isAdmin, initAuth } from '../lib/auth'
 import { logout } from '../lib/api'
+import { useMarket } from '../lib/market-context'
 import type { RouteSectionProps } from '@solidjs/router'
 
 interface NavItem {
@@ -86,6 +87,7 @@ function NavIcon(props: { name: string; class?: string }) {
 const Layout: Component<RouteSectionProps> = (props) => {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
+  const market = useMarket()
 
   // 初始化认证状态
   initAuth()
@@ -174,8 +176,32 @@ const Layout: Component<RouteSectionProps> = (props) => {
             <h1 class="text-[15px] font-semibold text-[var(--color-text-primary)]">{currentPageTitle()}</h1>
           </div>
 
-          {/* 右侧: 用户名 + 退出 */}
+          {/* 右侧: 市场类型开关 + 用户名 + 退出 */}
           <div class="flex items-center gap-3">
+            {/* 全局市场类型开关 */}
+            <div class="flex items-center bg-gray-100 rounded-lg p-0.5">
+              <button
+                class={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-all duration-200 ${
+                  market.marketType() === 'perpetual'
+                    ? 'bg-white text-indigo-600 shadow-sm'
+                    : 'text-gray-400 hover:text-gray-600'
+                }`}
+                onClick={() => market.setMarketType('perpetual')}
+              >
+                永续
+              </button>
+              <button
+                class={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-all duration-200 ${
+                  market.marketType() === 'spot'
+                    ? 'bg-white text-indigo-600 shadow-sm'
+                    : 'text-gray-400 hover:text-gray-600'
+                }`}
+                onClick={() => market.setMarketType('spot')}
+              >
+                现货
+              </button>
+            </div>
+
             <Show when={getUser()}>
               {(currentUser) => (
                 <div class="flex items-center gap-2.5">

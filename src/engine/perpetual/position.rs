@@ -414,6 +414,20 @@ impl PositionManager {
         }
     }
 
+    /// Check risk for all positions (both long and short).
+    /// Returns a Vec of all triggered risks, so callers can close each one.
+    /// Does NOT mutate position state -- call `apply_risk_close` after each order confirmation.
+    pub fn check_all_risks(&self, current_price: f64) -> Vec<(Side, f64, RiskReason)> {
+        let mut risks = Vec::new();
+        if let Some(r) = self.check_single_risk(&self.long_position, PositionSide::Long, current_price) {
+            risks.push(r);
+        }
+        if let Some(r) = self.check_single_risk(&self.short_position, PositionSide::Short, current_price) {
+            risks.push(r);
+        }
+        risks
+    }
+
     /// Check risk for a single position direction.
     fn check_single_risk(
         &self,

@@ -1,6 +1,7 @@
 import { type Component, createSignal, createEffect, Show, For } from 'solid-js'
 import { api, fetchPlugins, validateScript, getAiStatus, generateStrategy, type PaginatedResponse, type Plugin } from '../lib/api'
 import { useWs, type WsEvent } from '../lib/ws'
+import { useMarket } from '../lib/market-context'
 
 // ── 类型定义 ──────────────────────────────────────────────
 interface Strategy {
@@ -108,6 +109,7 @@ function statusLabel(status: string): string {
 
 // ── 组件 ──────────────────────────────────────────────────
 const Strategies: Component = () => {
+  const market = useMarket()
   // 列表状态
   const [strategies, setStrategies] = createSignal<Strategy[]>([])
   const [loading, setLoading] = createSignal(true)
@@ -124,7 +126,7 @@ const Strategies: Component = () => {
   // 模态框状态
   const [showModal, setShowModal] = createSignal(false)
   const [editingId, setEditingId] = createSignal<string | null>(null)
-  const [form, setForm] = createSignal<StrategyFormData>({ ...EMPTY_FORM })
+  const [form, setForm] = createSignal<StrategyFormData>({ ...EMPTY_FORM, market_type: market.marketType() as 'spot' | 'perpetual' })
   const [formError, setFormError] = createSignal('')
   const [submitting, setSubmitting] = createSignal(false)
 
@@ -238,7 +240,7 @@ const Strategies: Component = () => {
   // ── 打开创建模态框 ──
   function openCreateModal() {
     setEditingId(null)
-    setForm({ ...EMPTY_FORM })
+    setForm({ ...EMPTY_FORM, market_type: market.marketType() as 'spot' | 'perpetual' })
     setFormError('')
     setShowModal(true)
     loadPlugins()

@@ -2,6 +2,7 @@ import { type Component, createSignal, createMemo, Show, For, onMount } from 'so
 import { api, fetchPlugins, validateScript, type PaginatedResponse, type Plugin } from '../lib/api'
 import KlineChart from '../components/KlineChart'
 import EquityChart from '../components/EquityChart'
+import { useMarket } from '../lib/market-context'
 import { type OverlayLine, computeSMA, computeEMA } from '../utils/indicators'
 
 // ---- 类型定义 ----
@@ -21,7 +22,7 @@ interface BacktestRequest {
 interface BacktestTrade {
   entry_time: string
   exit_time: string
-  side: 'buy' | 'sell'
+  side: 'long' | 'short'
   entry_price: number
   exit_price: number
   quantity: number
@@ -142,7 +143,7 @@ const Backtest: Component = () => {
   const [strategyType, setStrategyType] = createSignal('custom')
   const [symbol, setSymbol] = createSignal('BTCUSDT')
   const [exchange, setExchange] = createSignal('binance')
-  const [marketType, setMarketType] = createSignal<'perpetual' | 'spot'>('perpetual')
+  const market = useMarket()
   const [timeframe, setTimeframe] = createSignal('1h')
   const [startDate, setStartDate] = createSignal((() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().split('T')[0] })())
   const [endDate, setEndDate] = createSignal(new Date().toISOString().split('T')[0])
@@ -304,7 +305,7 @@ const Backtest: Component = () => {
         strategy_code: strategyCode(),
       }
     }
-    parsedTrading.market_type = marketType();
+    parsedTrading.market_type = market.marketType();
 
     const req: BacktestRequest = {
       strategy_type: backtestMode() === 'script' ? 'script' : strategyType(),
@@ -409,20 +410,22 @@ const Backtest: Component = () => {
   const backtestMarkers = createMemo(() => {
     const r = result()
     if (!r || !r.trades) return []
+    const isLong = (side: string) => side === 'long'
     return r.trades.flatMap((t) => {
+      const long = isLong(t.side)
       const markers = []
       markers.push({
         time: Math.floor(new Date(t.entry_time).getTime() / 1000),
-        position: (t.side === 'buy' ? 'belowBar' : 'aboveBar') as 'belowBar' | 'aboveBar',
-        color: t.side === 'buy' ? '#10b981' : '#ef4444',
-        shape: (t.side === 'buy' ? 'arrowUp' : 'arrowDown') as 'arrowUp' | 'arrowDown',
-        text: t.side === 'buy' ? 'Buy' : 'Sell',
+        position: (long ? 'belowBar' : 'aboveBar') as 'belowBar' | 'aboveBar',
+        color: long ? '#10b981' : '#ef4444',
+        shape: (long ? 'arrowUp' : 'arrowDown') as 'arrowUp' | 'arrowDown',
+        text: long ? 'Buy' : 'Sell',
       })
       markers.push({
         time: Math.floor(new Date(t.exit_time).getTime() / 1000),
-        position: (t.side === 'buy' ? 'aboveBar' : 'belowBar') as 'aboveBar' | 'belowBar',
-        color: t.side === 'buy' ? '#ef4444' : '#10b981',
-        shape: (t.side === 'buy' ? 'arrowDown' : 'arrowUp') as 'arrowDown' | 'arrowUp',
+        position: (long ? 'aboveBar' : 'belowBar') as 'aboveBar' | 'belowBar',
+        color: long ? '#ef4444' : '#10b981',
+        shape: (long ? 'arrowDown' : 'arrowUp') as 'arrowDown' | 'arrowUp',
         text: `Exit (${t.pnl >= 0 ? '+' : ''}${formatNumber(t.pnl_pct, 1)}%)`,
       })
       return markers
@@ -572,19 +575,6 @@ const Backtest: Component = () => {
               <option value="binance">Binance</option>
               <option value="okx">OKX</option>
               <option value="bybit">Bybit</option>
-            </select>
-          </div>
-
-          {/* 市场类型 */}
-          <div>
-            <label class="block text-[13px] font-medium text-gray-400 mb-1.5">市场类型</label>
-            <select
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white"
-              value={marketType()}
-              onChange={(e) => setMarketType(e.currentTarget.value as 'perpetual' | 'spot')}
-            >
-              <option value="perpetual">永续合约</option>
-              <option value="spot">现货</option>
             </select>
           </div>
 
@@ -1036,12 +1026,12 @@ const Backtest: Component = () => {
                         <td class="py-2.5 px-3">
                           <span
                             class={`inline-block px-2 py-0.5 rounded-md text-xs font-medium ${
-                              trade.side === 'buy'
+                              trade.side === 'long'
                                 ? 'bg-emerald-50 text-emerald-600'
                                 : 'bg-red-50 text-red-500'
                             }`}
                           >
-                            {trade.side === 'buy' ? '买入' : '卖出'}
+                            {trade.side === 'long' ? '做多' : '做空'}
                           </span>
                         </td>
                         <td class="py-2.5 px-3 text-right text-gray-600 text-[13px]">

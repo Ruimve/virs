@@ -62,6 +62,8 @@ pub enum OrderCommand {
         order_type: OrderType,
         exchange_name: String,
         market_type: MarketType,
+        reduce_only: bool,
+        position_side: Option<PositionSide>,
         callback: tokio::sync::oneshot::Sender<OrderResult>,
     },
     Cancel {
@@ -395,6 +397,17 @@ pub(crate) async fn run_strategy_cycle(
     Ok((signal, klines))
 }
 
+/// Map raw signal (+1/-1/0) to concrete SignalType based on trade direction and current position state.
+///
+/// Design decisions:
+/// - "long": only trades in long direction. Signal 1 = OpenLong, -1 = CloseLong
+/// - "short": only trades in short direction. Signal -1 = OpenShort, 1 = CloseShort
+/// - "both": trades in both directions with hedge support
+///   - When flat (no position): 1 = OpenLong, -1 = OpenShort
+///   - When long only: -1 = CloseLong, 1 = CloseShort (open hedge)
+///   - When short only: 1 = CloseShort, -1 = CloseLong (open hedge)
+///   - When hedged (both): 1 = CloseShort, -1 = CloseLong (close hedge)
+///   - When same-direction signal (e.g., long + signal 1): intentionally ignored (no pyramiding)
 pub fn map_raw_signal(
     raw_signal: i8,
     trade_direction: &str,
