@@ -106,13 +106,12 @@ async fn main() -> anyhow::Result<()> {
 
     // Create plugin registry and register built-in plugins
     let mut plugin_registry = engine::plugin::PluginRegistry::new();
-    plugin_registry.register(Box::new(engine::plugins::SmaCrossoverPlugin));
-    plugin_registry.register_alias("sma_crossover", "ema_crossover");
-    plugin_registry.register(Box::new(engine::plugins::RsiPlugin));
-    plugin_registry.register(Box::new(engine::plugins::MacdPlugin));
-    plugin_registry.register(Box::new(engine::plugins::BollingerBandsPlugin));
-    plugin_registry.register(Box::new(engine::plugins::AtrChannelPlugin));
-    plugin_registry.register(Box::new(engine::plugins::MultiSignalPlugin));
+    plugin_registry.register(Box::new(engine::plugins::DualEmaTrendPlugin));
+    plugin_registry.register(Box::new(engine::plugins::BbSqueezePlugin));
+    plugin_registry.register(Box::new(engine::plugins::RsiMeanReversionPlugin));
+    plugin_registry.register(Box::new(engine::plugins::AtrBreakoutPlugin));
+    plugin_registry.register(Box::new(engine::plugins::ScalperVwapPlugin));
+    plugin_registry.register(Box::new(engine::plugins::MomentumBreakoutPlugin));
     let plugin_registry = Arc::new(plugin_registry);
     info!(
         "Registered {} indicator plugins",

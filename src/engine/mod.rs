@@ -14,6 +14,7 @@ use crate::engine::plugin::PluginRegistry;
 use crate::engine::spot::SpotMarketEngine;
 use crate::engine::perpetual::PerpetualMarketEngine;
 use dashmap::DashMap;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{info, warn, error};
@@ -339,11 +340,7 @@ pub(crate) async fn run_strategy_cycle(
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| {
-                    let legacy = strategy.strategy_type.as_str();
-                    match legacy {
-                        "sma_crossover" | "ema_crossover" | "rsi" | "macd" | "bollinger_bands" => legacy.to_string(),
-                        _ => "ema_crossover".to_string(),
-                    }
+                    "dual_ema_trend".to_string()
                 });
 
             let mut params: std::collections::HashMap<String, f64> =
@@ -359,32 +356,35 @@ pub(crate) async fn run_strategy_cycle(
                 }
             }
 
-            if !strategy.indicator_config.get("plugin").is_some() {
-                match plugin_name.as_str() {
-                    "sma_crossover" => {
-                        if let Some(v) = params.remove("short_period") {
-                            params.insert("fast_period".into(), v);
-                        }
-                        if let Some(v) = params.remove("long_period") {
-                            params.insert("slow_period".into(), v);
-                        }
+            // Fetch auxiliary klines for plugin's required timeframes
+            let required_tfs = plugins.get_required_timeframes(&plugin_name);
+            let mut extra_klines_map: HashMap<String, Vec<Kline>> = HashMap::new();
+            for tf in &required_tfs {
+                if let Ok(tf_klines) = exchange.get_klines(symbol, tf, 200, None).await {
+                    if !tf_klines.is_empty() {
+                        extra_klines_map.insert(tf.clone(), tf_klines);
                     }
-                    "macd" => {
-                        if let Some(v) = params.remove("fast_period") {
-                            params.insert("fast_period".into(), v);
-                        }
-                        if let Some(v) = params.remove("slow_period") {
-                            params.insert("slow_period".into(), v);
-                        }
-                        if let Some(v) = params.remove("signal_period") {
-                            params.insert("signal_period".into(), v);
-                        }
-                    }
-                    _ => {}
                 }
             }
 
-            match plugins.generate_signal(&plugin_name, &klines, idx, &params) {
+            // Align auxiliary klines to current bar time
+            let current_time = klines[idx].open_time;
+            let mut aligned: HashMap<String, &[Kline]> = HashMap::new();
+            for (tf, tf_klines) in &extra_klines_map {
+                let end = tf_klines
+                    .iter()
+                    .position(|k| k.open_time > current_time)
+                    .unwrap_or(tf_klines.len());
+                aligned.insert(tf.clone(), &tf_klines[..end]);
+            }
+
+            let ctx = plugin::SignalContext {
+                klines: &klines,
+                idx,
+                extra_klines: aligned,
+            };
+
+            match plugins.generate_signal(&plugin_name, &ctx, &params) {
                 Ok(signal) => signal,
                 Err(e) => {
                     error!(

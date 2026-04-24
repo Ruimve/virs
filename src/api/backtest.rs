@@ -321,18 +321,14 @@ pub async fn run_backtest(
             signals.get(idx).copied().unwrap_or(0)
         }, stop_loss, take_profit, position_pct, trailing_stop_pct, trailing_activation_pct, trade_direction, start_dt, end_dt, leverage, &funding_history)
     } else {
-        // Plugin-based mode (existing logic)
+        // Plugin-based mode
         let plugin_name = req
             .indicator_config
             .get("plugin")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| {
-                let legacy = req.strategy_type.as_str();
-                match legacy {
-                    "sma_crossover" | "rsi" | "macd" | "bollinger_bands" => legacy.to_string(),
-                    _ => "sma_crossover".to_string(),
-                }
+                "dual_ema_trend".to_string()
             });
 
         let mut params: HashMap<String, f64> = HashMap::new();
@@ -347,35 +343,54 @@ pub async fn run_backtest(
             }
         }
 
-        if !req.indicator_config.get("plugin").is_some() {
-            match plugin_name.as_str() {
-                "sma_crossover" => {
-                    if let Some(v) = params.remove("short_period") {
-                        params.insert("fast_period".into(), v);
-                    }
-                    if let Some(v) = params.remove("long_period") {
-                        params.insert("slow_period".into(), v);
-                    }
-                }
-                "macd" => {
-                    if let Some(v) = params.remove("fast_period") {
-                        params.insert("fast_period".into(), v);
-                    }
-                    if let Some(v) = params.remove("slow_period") {
-                        params.insert("slow_period".into(), v);
-                    }
-                    if let Some(v) = params.remove("signal_period") {
-                        params.insert("signal_period".into(), v);
-                    }
+        let plugin_registry = &state.plugin_registry;
+
+        // Fetch auxiliary klines for plugin's required timeframes
+        let required_tfs = plugin_registry.get_required_timeframes(&plugin_name);
+        let mut extra_klines: HashMap<String, Vec<Kline>> = HashMap::new();
+        for tf in &required_tfs {
+            match exchange.get_klines_range(&req.symbol, tf, start_ms, end_ms).await {
+                Ok(tf_klines) if !tf_klines.is_empty() => {
+                    info!("Fetched {} auxiliary klines for timeframe '{}'", tf_klines.len(), tf);
+                    extra_klines.insert(tf.clone(), tf_klines);
                 }
                 _ => {}
             }
         }
 
-        let plugin_registry = &state.plugin_registry;
+        // Pre-compute alignment indices for each auxiliary timeframe
+        let mut tf_end_indices: HashMap<String, Vec<usize>> = HashMap::new();
+        for (tf, tf_klines) in &extra_klines {
+            let mut indices = Vec::with_capacity(klines.len());
+            let mut tf_idx = 0;
+            for kline in &klines {
+                while tf_idx < tf_klines.len() && tf_klines[tf_idx].open_time <= kline.open_time {
+                    tf_idx += 1;
+                }
+                indices.push(tf_idx);
+            }
+            tf_end_indices.insert(tf.clone(), indices);
+        }
+
+        let tf_end_indices_clone = tf_end_indices.clone();
+        let extra_klines_clone = extra_klines.clone();
+        let plugin_name_clone = plugin_name.clone();
+        let params_clone = params.clone();
+
         engine.run(&klines, |klines, idx| {
+            use crate::engine::plugin::SignalContext;
+            let mut aligned: HashMap<String, &[Kline]> = HashMap::new();
+            for (tf, indices) in &tf_end_indices_clone {
+                let end = indices[idx];
+                aligned.insert(tf.clone(), &extra_klines_clone[tf][..end]);
+            }
+            let ctx = SignalContext {
+                klines,
+                idx,
+                extra_klines: aligned,
+            };
             plugin_registry
-                .generate_signal(&plugin_name, klines, idx, &params)
+                .generate_signal(&plugin_name_clone, &ctx, &params_clone)
                 .unwrap_or(0)
         }, stop_loss, take_profit, position_pct, trailing_stop_pct, trailing_activation_pct, trade_direction, start_dt, end_dt, leverage, &funding_history)
     };

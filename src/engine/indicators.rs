@@ -269,6 +269,33 @@ pub fn lowest_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     result.get(idx).copied().unwrap_or(0.0)
 }
 
+pub fn volume_sma_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
+    if idx < period - 1 || klines.is_empty() {
+        return 0.0;
+    }
+    let start = idx + 1 - period;
+    let sum: f64 = (start..=idx).map(|i| klines[i].volume).sum();
+    sum / period as f64
+}
+
+pub fn vwap_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
+    if idx < period - 1 || klines.is_empty() {
+        return 0.0;
+    }
+    let start = idx + 1 - period;
+    let mut cum_pv = 0.0_f64;
+    let mut cum_vol = 0.0_f64;
+    for i in start..=idx {
+        let typical = (klines[i].high + klines[i].low + klines[i].close) / 3.0;
+        cum_pv += typical * klines[i].volume;
+        cum_vol += klines[i].volume;
+    }
+    if cum_vol == 0.0 {
+        return klines[idx].close;
+    }
+    cum_pv / cum_vol
+}
+
 pub struct PrecomputedIndicators {
     len: usize,
     sma_cache: HashMap<usize, Vec<f64>>,

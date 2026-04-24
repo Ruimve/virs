@@ -21,6 +21,17 @@ pub enum ParamType {
     Float,
 }
 
+/// Context provided to plugin signal() method, containing multi-timeframe kline data.
+pub struct SignalContext<'a> {
+    /// Primary timeframe klines (the one the strategy runs on)
+    pub klines: &'a [Kline],
+    /// Current bar index in primary klines
+    pub idx: usize,
+    /// Auxiliary timeframe klines (key = timeframe like "4h", value = klines slice)
+    /// These are pre-aligned: only klines with open_time <= current primary bar's open_time are included.
+    pub extra_klines: HashMap<String, &'a [Kline]>,
+}
+
 /// Information about a registered plugin (returned by API).
 #[derive(Debug, Clone, Serialize)]
 pub struct PluginInfo {
@@ -28,6 +39,7 @@ pub struct PluginInfo {
     pub description: String,
     pub category: String,
     pub params: Vec<ParamDef>,
+    pub required_timeframes: Vec<String>,
 }
 
 /// Indicator plugin trait.
@@ -38,8 +50,14 @@ pub trait IndicatorPlugin: Send + Sync {
     fn category(&self) -> &str;
     fn params(&self) -> Vec<ParamDef>;
 
+    /// Timeframes required by this plugin (e.g., ["4h", "1d"]).
+    /// The engine will automatically fetch these and provide them via SignalContext.
+    fn required_timeframes(&self) -> Vec<&str> {
+        vec![] // default: no extra timeframes needed
+    }
+
     /// Generate a signal: 1 = buy, -1 = sell, 0 = hold.
-    fn signal(&self, klines: &[Kline], idx: usize, params: &HashMap<String, f64>) -> i8;
+    fn signal(&self, ctx: &SignalContext, params: &HashMap<String, f64>) -> i8;
 }
 
 /// Plugin registry that manages all available indicator plugins.
@@ -86,6 +104,11 @@ impl PluginRegistry {
                 description: p.description().to_string(),
                 category: p.category().to_string(),
                 params: p.params(),
+                required_timeframes: p
+                    .required_timeframes()
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             })
             .collect()
     }
@@ -94,13 +117,18 @@ impl PluginRegistry {
     pub fn generate_signal(
         &self,
         plugin_name: &str,
-        klines: &[Kline],
-        idx: usize,
+        ctx: &SignalContext,
         params: &HashMap<String, f64>,
     ) -> anyhow::Result<i8> {
         let plugin = self
             .get(plugin_name)
             .ok_or_else(|| anyhow::anyhow!("Plugin '{}' not found", plugin_name))?;
-        Ok(plugin.signal(klines, idx, params))
+        Ok(plugin.signal(ctx, params))
+    }
+
+    pub fn get_required_timeframes(&self, plugin_name: &str) -> Vec<String> {
+        self.get(plugin_name)
+            .map(|p| p.required_timeframes().iter().map(|s| s.to_string()).collect())
+            .unwrap_or_default()
     }
 }

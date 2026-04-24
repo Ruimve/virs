@@ -145,6 +145,7 @@ export interface Plugin {
   description: string
   category: string
   params: PluginParam[]
+  required_timeframes?: string[]
 }
 
 // 获取插件列表

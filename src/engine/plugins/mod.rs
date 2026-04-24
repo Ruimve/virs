@@ -1,13 +1,13 @@
-mod sma_crossover;
-mod rsi;
-mod macd;
-mod bollinger_bands;
-mod atr_channel;
-mod multi_signal;
+pub mod dual_ema_trend;
+pub mod bb_squeeze;
+pub mod rsi_mean_reversion;
+pub mod atr_breakout;
+pub mod scalper_vwap;
+pub mod momentum_breakout;
 
-pub use sma_crossover::SmaCrossoverPlugin;
-pub use rsi::RsiPlugin;
-pub use macd::MacdPlugin;
-pub use bollinger_bands::BollingerBandsPlugin;
-pub use atr_channel::AtrChannelPlugin;
-pub use multi_signal::MultiSignalPlugin;
+pub use dual_ema_trend::DualEmaTrendPlugin;
+pub use bb_squeeze::BbSqueezePlugin;
+pub use rsi_mean_reversion::RsiMeanReversionPlugin;
+pub use atr_breakout::AtrBreakoutPlugin;
+pub use scalper_vwap::ScalperVwapPlugin;
+pub use momentum_breakout::MomentumBreakoutPlugin;
