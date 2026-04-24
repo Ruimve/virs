@@ -10,7 +10,7 @@ impl IndicatorPlugin for MacdPlugin {
         "macd"
     }
     fn description(&self) -> &str {
-        "MACD: Buy when MACD line crosses above signal line, sell when it crosses below."
+        "MACD with zero-line and histogram confirmation: Buy on bullish crossover with momentum confirmation."
     }
     fn category(&self) -> &str {
         "trend"
@@ -45,6 +45,24 @@ impl IndicatorPlugin for MacdPlugin {
                 max: Some(100.0),
                 step: Some(1.0),
             },
+            ParamDef {
+                name: "use_zero_line".into(),
+                label: "Zero Line Filter".into(),
+                param_type: ParamType::Int,
+                default: 1.0,
+                min: Some(0.0),
+                max: Some(1.0),
+                step: Some(1.0),
+            },
+            ParamDef {
+                name: "use_histogram".into(),
+                label: "Histogram Confirmation".into(),
+                param_type: ParamType::Int,
+                default: 1.0,
+                min: Some(0.0),
+                max: Some(1.0),
+                step: Some(1.0),
+            },
         ]
     }
 
@@ -61,6 +79,14 @@ impl IndicatorPlugin for MacdPlugin {
             .get("signal_period")
             .map(|v| *v as usize)
             .unwrap_or(9);
+        let use_zero_line = params
+            .get("use_zero_line")
+            .map(|v| *v as usize)
+            .unwrap_or(1);
+        let use_histogram = params
+            .get("use_histogram")
+            .map(|v| *v as usize)
+            .unwrap_or(1);
 
         if idx < 1 || idx < slow_period + signal_period - 2 {
             return 0;
@@ -83,12 +109,31 @@ impl IndicatorPlugin for MacdPlugin {
             signal_period,
         );
 
-        if prev_macd <= prev_signal && macd > signal {
-            1
-        } else if prev_macd >= prev_signal && macd < signal {
-            -1
-        } else {
-            0
+        let bullish_cross = prev_macd <= prev_signal && macd > signal;
+        let bearish_cross = prev_macd >= prev_signal && macd < signal;
+
+        if bullish_cross {
+            // Confirm with zero-line and/or histogram
+            let zero_ok = use_zero_line == 0 || macd > 0.0;
+            let hist_ok = use_histogram == 0
+                || indicators::macd_histogram_at(
+                    klines, idx, fast_period, slow_period, signal_period,
+                ) > 0.0;
+            if zero_ok || hist_ok {
+                return 1;
+            }
+        } else if bearish_cross {
+            // Confirm with zero-line and/or histogram
+            let zero_ok = use_zero_line == 0 || macd < 0.0;
+            let hist_ok = use_histogram == 0
+                || indicators::macd_histogram_at(
+                    klines, idx, fast_period, slow_period, signal_period,
+                ) < 0.0;
+            if zero_ok || hist_ok {
+                return -1;
+            }
         }
+
+        0
     }
 }

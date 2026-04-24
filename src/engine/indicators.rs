@@ -218,6 +218,57 @@ pub fn stoch_at(
     )
 }
 
+#[inline(always)]
+pub fn adx_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
+    if klines.is_empty() || idx < period * 2 {
+        return 0.0;
+    }
+    let result = momentum::adx(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_default();
+    result.get(idx).copied().unwrap_or(0.0)
+}
+
+#[inline(always)]
+pub fn macd_histogram_at(
+    klines: &[Kline], idx: usize, fast: usize, slow: usize, signal: usize,
+) -> f64 {
+    if klines.is_empty() || idx < slow + signal - 2 {
+        return 0.0;
+    }
+    let (macd, sig, _) = momentum::macd(&closes(klines), fast, slow, signal).unwrap_or_default();
+    let m = macd.get(idx).copied().unwrap_or(0.0);
+    let s = sig.get(idx).copied().unwrap_or(0.0);
+    m - s
+}
+
+#[inline(always)]
+pub fn bbands_width_at(
+    klines: &[Kline], idx: usize, period: usize, std_dev: f64,
+) -> f64 {
+    let (upper, middle, lower) = bbands_at(klines, idx, period, std_dev);
+    if middle == 0.0 { return 0.0; }
+    (upper - lower) / middle
+}
+
+#[allow(dead_code)]
+#[inline(always)]
+pub fn highest_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
+    if klines.is_empty() || idx < period - 1 || period == 0 {
+        return 0.0;
+    }
+    let result = math_operator::max(&highs(klines), period).unwrap_or_default();
+    result.get(idx).copied().unwrap_or(0.0)
+}
+
+#[allow(dead_code)]
+#[inline(always)]
+pub fn lowest_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
+    if klines.is_empty() || idx < period - 1 || period == 0 {
+        return 0.0;
+    }
+    let result = math_operator::min(&lows(klines), period).unwrap_or_default();
+    result.get(idx).copied().unwrap_or(0.0)
+}
+
 pub struct PrecomputedIndicators {
     len: usize,
     sma_cache: HashMap<usize, Vec<f64>>,

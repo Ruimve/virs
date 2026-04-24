@@ -45,12 +45,14 @@ pub trait IndicatorPlugin: Send + Sync {
 /// Plugin registry that manages all available indicator plugins.
 pub struct PluginRegistry {
     plugins: HashMap<String, Box<dyn IndicatorPlugin>>,
+    aliases: HashMap<String, String>,
 }
 
 impl PluginRegistry {
     pub fn new() -> Self {
         Self {
             plugins: HashMap::new(),
+            aliases: HashMap::new(),
         }
     }
 
@@ -60,8 +62,20 @@ impl PluginRegistry {
         self.plugins.insert(name, plugin);
     }
 
+    /// Register an alias that resolves to an existing plugin name.
+    pub fn register_alias(&mut self, alias: &str, target: &str) {
+        tracing::info!("Registered plugin alias: {} -> {}", alias, target);
+        self.aliases.insert(alias.to_string(), target.to_string());
+    }
+
+    /// Resolve a name through aliases to the canonical plugin name.
+    fn resolve<'a>(&'a self, name: &'a str) -> &'a str {
+        self.aliases.get(name).map(|s| s.as_str()).unwrap_or(name)
+    }
+
     pub fn get(&self, name: &str) -> Option<&dyn IndicatorPlugin> {
-        self.plugins.get(name).map(|p| p.as_ref())
+        let resolved = self.resolve(name);
+        self.plugins.get(resolved).map(|p| p.as_ref())
     }
 
     pub fn list(&self) -> Vec<PluginInfo> {

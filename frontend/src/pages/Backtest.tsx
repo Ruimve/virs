@@ -164,6 +164,7 @@ const Backtest: Component = () => {
   const [indicatorConfig, setIndicatorConfig] = createSignal('{}')
   const [strategyCode, setStrategyCode] = createSignal(DEFAULT_LUA_SCRIPT)
   const [scriptParams, setScriptParams] = createSignal('{"fast_period": 12, "slow_period": 26, "rsi_period": 14, "rsi_floor": 45}')
+  const [extraTimeframes, setExtraTimeframes] = createSignal<string[]>([])
 
   // 已保存策略
   const [savedStrategies, setSavedStrategies] = createSignal<Array<{ id: string; name: string; strategy_code?: string; indicator_config?: Record<string, unknown> }>>([])
@@ -274,7 +275,7 @@ const Backtest: Component = () => {
     if (mode() === 'script') {
       let pp: Record<string, unknown> = {}
       try { pp = JSON.parse(scriptParams()) } catch { setRunError('脚本参数 JSON 格式错误'); setRunning(false); return }
-      parsedIndicator = { ...pp, ...parsedIndicator, strategy_code: strategyCode() }
+      parsedIndicator = { ...pp, ...parsedIndicator, strategy_code: strategyCode(), extra_timeframes: extraTimeframes() }
     }
     parsedTrading.market_type = market.marketType()
     const req: BacktestRequest = {
@@ -550,6 +551,29 @@ const Backtest: Component = () => {
                   <label class="block text-[11px] font-medium text-slate-400 mb-[3px]">脚本参数 (JSON)</label>
                   <textarea class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-[13px] font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 focus:bg-white transition-all" rows={2}
                     value={scriptParams()} onInput={e => setScriptParams(e.currentTarget.value)} placeholder='{"fast_period": 12}' />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-medium text-slate-400 mb-[3px]">辅助周期 (多周期分析)</label>
+                  <div class="flex flex-wrap gap-3 mt-1">
+                    {(['4h', '1d', '1w'] as const).map(tf => (
+                      <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          class="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30"
+                          checked={extraTimeframes().includes(tf)}
+                          onChange={e => {
+                            if (e.currentTarget.checked) {
+                              setExtraTimeframes([...extraTimeframes(), tf])
+                            } else {
+                              setExtraTimeframes(extraTimeframes().filter(t => t !== tf))
+                            }
+                          }}
+                        />
+                        <span class="text-[13px] text-slate-600 font-medium">{tf}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p class="text-[10px] text-slate-400 mt-1">在 Lua 脚本中使用 tf("4h").ema(26) 访问辅助周期指标</p>
                 </div>
               </div>
             </Show>

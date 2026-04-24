@@ -341,8 +341,8 @@ pub(crate) async fn run_strategy_cycle(
                 .unwrap_or_else(|| {
                     let legacy = strategy.strategy_type.as_str();
                     match legacy {
-                        "sma_crossover" | "rsi" | "macd" | "bollinger_bands" => legacy.to_string(),
-                        _ => "sma_crossover".to_string(),
+                        "sma_crossover" | "ema_crossover" | "rsi" | "macd" | "bollinger_bands" => legacy.to_string(),
+                        _ => "ema_crossover".to_string(),
                     }
                 });
 

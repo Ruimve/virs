@@ -721,4 +721,557 @@ impl LuaExecutor {
             .map_err(|e| format!("Lua error: {}", e))?;
         Ok(())
     }
+
+    // -----------------------------------------------------------------------
+    // Multi-timeframe support
+    // -----------------------------------------------------------------------
+
+    /// Create indicator functions for an auxiliary timeframe.
+    ///
+    /// Each function closure captures only a `String` (the registry key for
+    /// the klines table and the idx), which satisfies `Send + 'static`.
+    fn create_indicator_functions_for_tf(
+        lua: &Lua,
+        klines_registry_key: String,
+        idx_registry_key: String,
+    ) -> LuaResult<Table> {
+        let result = lua.create_table()?;
+
+        // ---- sma ----
+        {
+            let key = klines_registry_key.clone();
+            let idx_key = idx_registry_key.clone();
+            let f = lua.create_function(move |lua, (period,): (i64,)| {
+                let extra: Table = lua.named_registry_value(&key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let idx: i64 = lua.named_registry_value(&idx_key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let n = idx as usize;
+                if n < 1 { return Ok(0.0_f64); }
+                let mut close = Vec::with_capacity(n);
+                for i in 1..=n {
+                    let k: Table = extra.get(i).map_err(|e| mlua::Error::external(e.to_string()))?;
+                    close.push(k.get::<f64>("close").map_err(|e| mlua::Error::external(e.to_string()))?);
+                }
+                match talib_rs::overlap::sma(&close, period as usize) {
+                    Ok(r) => Ok(r.last().copied().unwrap_or(0.0)),
+                    Err(_) => Ok(0.0),
+                }
+            })?;
+            result.set("sma", f)?;
+        }
+
+        // ---- ema ----
+        {
+            let key = klines_registry_key.clone();
+            let idx_key = idx_registry_key.clone();
+            let f = lua.create_function(move |lua, (period,): (i64,)| {
+                let extra: Table = lua.named_registry_value(&key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let idx: i64 = lua.named_registry_value(&idx_key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let n = idx as usize;
+                if n < 1 { return Ok(0.0_f64); }
+                let mut close = Vec::with_capacity(n);
+                for i in 1..=n {
+                    let k: Table = extra.get(i).map_err(|e| mlua::Error::external(e.to_string()))?;
+                    close.push(k.get::<f64>("close").map_err(|e| mlua::Error::external(e.to_string()))?);
+                }
+                match talib_rs::overlap::ema(&close, period as usize) {
+                    Ok(r) => Ok(r.last().copied().unwrap_or(0.0)),
+                    Err(_) => Ok(0.0),
+                }
+            })?;
+            result.set("ema", f)?;
+        }
+
+        // ---- rsi ----
+        {
+            let key = klines_registry_key.clone();
+            let idx_key = idx_registry_key.clone();
+            let f = lua.create_function(move |lua, (period,): (i64,)| {
+                let extra: Table = lua.named_registry_value(&key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let idx: i64 = lua.named_registry_value(&idx_key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let n = idx as usize;
+                if n < 2 { return Ok(50.0_f64); }
+                let mut close = Vec::with_capacity(n);
+                for i in 1..=n {
+                    let k: Table = extra.get(i).map_err(|e| mlua::Error::external(e.to_string()))?;
+                    close.push(k.get::<f64>("close").map_err(|e| mlua::Error::external(e.to_string()))?);
+                }
+                match talib_rs::momentum::rsi(&close, period as usize) {
+                    Ok(r) => Ok(r.last().copied().unwrap_or(50.0)),
+                    Err(_) => Ok(50.0),
+                }
+            })?;
+            result.set("rsi", f)?;
+        }
+
+        // ---- atr ----
+        {
+            let key = klines_registry_key.clone();
+            let idx_key = idx_registry_key.clone();
+            let f = lua.create_function(move |lua, (period,): (i64,)| {
+                let extra: Table = lua.named_registry_value(&key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let idx: i64 = lua.named_registry_value(&idx_key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let period = period as usize;
+                if idx < 2 { return Ok(0.0_f64); }
+                let n = idx as usize;
+                let mut high = Vec::with_capacity(n);
+                let mut low = Vec::with_capacity(n);
+                let mut close = Vec::with_capacity(n);
+                for i in 1..=n {
+                    let k: Table = extra.get(i).map_err(|e| mlua::Error::external(e.to_string()))?;
+                    high.push(k.get::<f64>("high").map_err(|e| mlua::Error::external(e.to_string()))?);
+                    low.push(k.get::<f64>("low").map_err(|e| mlua::Error::external(e.to_string()))?);
+                    close.push(k.get::<f64>("close").map_err(|e| mlua::Error::external(e.to_string()))?);
+                }
+                match talib_rs::volatility::atr(&high, &low, &close, period) {
+                    Ok(r) => Ok(r.last().copied().unwrap_or(0.0)),
+                    Err(_) => Ok(0.0),
+                }
+            })?;
+            result.set("atr", f)?;
+        }
+
+        // ---- bbands ----
+        {
+            let key = klines_registry_key.clone();
+            let idx_key = idx_registry_key.clone();
+            let f = lua.create_function(move |lua, (period, std_dev): (i64, f64)| {
+                let extra: Table = lua.named_registry_value(&key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let idx: i64 = lua.named_registry_value(&idx_key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let period = period as usize;
+                let n = idx as usize;
+                if n < period { return Ok((0.0_f64, 0.0_f64, 0.0_f64)); }
+                let mut close = Vec::with_capacity(n);
+                for i in 1..=n {
+                    let k: Table = extra.get(i).map_err(|e| mlua::Error::external(e.to_string()))?;
+                    close.push(k.get::<f64>("close").map_err(|e| mlua::Error::external(e.to_string()))?);
+                }
+                match talib_rs::overlap::bbands(&close, period, std_dev, std_dev, MaType::Sma) {
+                    Ok((upper, mid, lower)) => Ok((
+                        upper.last().copied().unwrap_or(0.0),
+                        mid.last().copied().unwrap_or(0.0),
+                        lower.last().copied().unwrap_or(0.0),
+                    )),
+                    Err(_) => Ok((0.0, 0.0, 0.0)),
+                }
+            })?;
+            result.set("bbands", f)?;
+        }
+
+        // ---- macd ----
+        {
+            let key = klines_registry_key.clone();
+            let idx_key = idx_registry_key.clone();
+            let f = lua.create_function(move |lua, (fast, slow, signal): (i64, i64, i64)| {
+                let extra: Table = lua.named_registry_value(&key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let idx: i64 = lua.named_registry_value(&idx_key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let n = idx as usize;
+                if n < 2 { return Ok((0.0_f64, 0.0_f64, 0.0_f64)); }
+                let mut close = Vec::with_capacity(n);
+                for i in 1..=n {
+                    let k: Table = extra.get(i).map_err(|e| mlua::Error::external(e.to_string()))?;
+                    close.push(k.get::<f64>("close").map_err(|e| mlua::Error::external(e.to_string()))?);
+                }
+                match talib_rs::momentum::macd(&close, fast as usize, slow as usize, signal as usize) {
+                    Ok((m, s, h)) => Ok((
+                        m.last().copied().unwrap_or(0.0),
+                        s.last().copied().unwrap_or(0.0),
+                        h.last().copied().unwrap_or(0.0),
+                    )),
+                    Err(_) => Ok((0.0, 0.0, 0.0)),
+                }
+            })?;
+            result.set("macd", f)?;
+        }
+
+        // ---- stoch ----
+        {
+            let key = klines_registry_key.clone();
+            let idx_key = idx_registry_key.clone();
+            let f = lua.create_function(move |lua, (k_period, d_period): (i64, i64)| {
+                let extra: Table = lua.named_registry_value(&key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let idx: i64 = lua.named_registry_value(&idx_key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let n = idx as usize;
+                if n < 2 { return Ok((50.0_f64, 50.0_f64)); }
+                let mut high = Vec::with_capacity(n);
+                let mut low = Vec::with_capacity(n);
+                let mut close = Vec::with_capacity(n);
+                for i in 1..=n {
+                    let k: Table = extra.get(i).map_err(|e| mlua::Error::external(e.to_string()))?;
+                    high.push(k.get::<f64>("high").map_err(|e| mlua::Error::external(e.to_string()))?);
+                    low.push(k.get::<f64>("low").map_err(|e| mlua::Error::external(e.to_string()))?);
+                    close.push(k.get::<f64>("close").map_err(|e| mlua::Error::external(e.to_string()))?);
+                }
+                match talib_rs::momentum::stoch(&high, &low, &close, k_period as usize, d_period as usize, MaType::Sma, d_period as usize, MaType::Sma) {
+                    Ok((slowk, slowd)) => Ok((
+                        slowk.last().copied().unwrap_or(50.0),
+                        slowd.last().copied().unwrap_or(50.0),
+                    )),
+                    Err(_) => Ok((50.0, 50.0)),
+                }
+            })?;
+            result.set("stoch", f)?;
+        }
+
+        // ---- highest ----
+        {
+            let key = klines_registry_key.clone();
+            let idx_key = idx_registry_key.clone();
+            let f = lua.create_function(move |lua, (period,): (i64,)| {
+                let extra: Table = lua.named_registry_value(&key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let idx: i64 = lua.named_registry_value(&idx_key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let period = period as usize;
+                let n = idx as usize;
+                if n < period { return Ok(0.0_f64); }
+                let mut close = Vec::with_capacity(n);
+                for i in 1..=n {
+                    let k: Table = extra.get(i).map_err(|e| mlua::Error::external(e.to_string()))?;
+                    close.push(k.get::<f64>("close").map_err(|e| mlua::Error::external(e.to_string()))?);
+                }
+                match talib_rs::math_operator::max(&close, period) {
+                    Ok(r) => Ok(r.last().copied().unwrap_or(0.0)),
+                    Err(_) => Ok(0.0),
+                }
+            })?;
+            result.set("highest", f)?;
+        }
+
+        // ---- lowest ----
+        {
+            let key = klines_registry_key.clone();
+            let idx_key = idx_registry_key.clone();
+            let f = lua.create_function(move |lua, (period,): (i64,)| {
+                let extra: Table = lua.named_registry_value(&key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let idx: i64 = lua.named_registry_value(&idx_key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let period = period as usize;
+                let n = idx as usize;
+                if n < period { return Ok(0.0_f64); }
+                let mut close = Vec::with_capacity(n);
+                for i in 1..=n {
+                    let k: Table = extra.get(i).map_err(|e| mlua::Error::external(e.to_string()))?;
+                    close.push(k.get::<f64>("close").map_err(|e| mlua::Error::external(e.to_string()))?);
+                }
+                match talib_rs::math_operator::min(&close, period) {
+                    Ok(r) => Ok(r.last().copied().unwrap_or(0.0)),
+                    Err(_) => Ok(0.0),
+                }
+            })?;
+            result.set("lowest", f)?;
+        }
+
+        // ---- adx ----
+        {
+            let key = klines_registry_key.clone();
+            let idx_key = idx_registry_key.clone();
+            let f = lua.create_function(move |lua, (period,): (i64,)| {
+                let extra: Table = lua.named_registry_value(&key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let idx: i64 = lua.named_registry_value(&idx_key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let n = idx as usize;
+                if n < 2 { return Ok(0.0_f64); }
+                let mut high = Vec::with_capacity(n);
+                let mut low = Vec::with_capacity(n);
+                let mut close = Vec::with_capacity(n);
+                for i in 1..=n {
+                    let k: Table = extra.get(i).map_err(|e| mlua::Error::external(e.to_string()))?;
+                    high.push(k.get::<f64>("high").map_err(|e| mlua::Error::external(e.to_string()))?);
+                    low.push(k.get::<f64>("low").map_err(|e| mlua::Error::external(e.to_string()))?);
+                    close.push(k.get::<f64>("close").map_err(|e| mlua::Error::external(e.to_string()))?);
+                }
+                match talib_rs::momentum::adx(&high, &low, &close, period as usize) {
+                    Ok(r) => Ok(r.last().copied().unwrap_or(0.0)),
+                    Err(_) => Ok(0.0),
+                }
+            })?;
+            result.set("adx", f)?;
+        }
+
+        // ---- cci ----
+        {
+            let key = klines_registry_key.clone();
+            let idx_key = idx_registry_key.clone();
+            let f = lua.create_function(move |lua, (period,): (i64,)| {
+                let extra: Table = lua.named_registry_value(&key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let idx: i64 = lua.named_registry_value(&idx_key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let n = idx as usize;
+                if n < 2 { return Ok(0.0_f64); }
+                let mut high = Vec::with_capacity(n);
+                let mut low = Vec::with_capacity(n);
+                let mut close = Vec::with_capacity(n);
+                for i in 1..=n {
+                    let k: Table = extra.get(i).map_err(|e| mlua::Error::external(e.to_string()))?;
+                    high.push(k.get::<f64>("high").map_err(|e| mlua::Error::external(e.to_string()))?);
+                    low.push(k.get::<f64>("low").map_err(|e| mlua::Error::external(e.to_string()))?);
+                    close.push(k.get::<f64>("close").map_err(|e| mlua::Error::external(e.to_string()))?);
+                }
+                match talib_rs::momentum::cci(&high, &low, &close, period as usize) {
+                    Ok(r) => Ok(r.last().copied().unwrap_or(0.0)),
+                    Err(_) => Ok(0.0),
+                }
+            })?;
+            result.set("cci", f)?;
+        }
+
+        // ---- obv ----
+        {
+            let key = klines_registry_key.clone();
+            let idx_key = idx_registry_key.clone();
+            let f = lua.create_function(move |lua, (): ()| {
+                let extra: Table = lua.named_registry_value(&key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let idx: i64 = lua.named_registry_value(&idx_key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                let n = idx as usize;
+                if n < 2 { return Ok(0.0_f64); }
+                let mut close = Vec::with_capacity(n);
+                let mut vol = Vec::with_capacity(n);
+                for i in 1..=n {
+                    let k: Table = extra.get(i).map_err(|e| mlua::Error::external(e.to_string()))?;
+                    close.push(k.get::<f64>("close").map_err(|e| mlua::Error::external(e.to_string()))?);
+                    vol.push(k.get::<f64>("volume").map_err(|e| mlua::Error::external(e.to_string()))?);
+                }
+                match talib_rs::volume::obv(&close, &vol) {
+                    Ok(r) => Ok(r.last().copied().unwrap_or(0.0)),
+                    Err(_) => Ok(0.0),
+                }
+            })?;
+            result.set("obv", f)?;
+        }
+
+        // ---- count (returns current visible bar count for this timeframe) ----
+        {
+            let idx_key = idx_registry_key.clone();
+            let f = lua.create_function(move |lua, (): ()| {
+                let idx: i64 = lua.named_registry_value(&idx_key)
+                    .map_err(|e| mlua::Error::external(e.to_string()))?;
+                Ok(idx)
+            })?;
+            result.set("count", f)?;
+        }
+
+        Ok(result)
+    }
+
+    /// Execute a Lua script across all klines with multi-timeframe support.
+    ///
+    /// The `extra_klines` map contains auxiliary timeframe data keyed by
+    /// timeframe string (e.g. `"4h"`, `"1d"`).  For each main bar the
+    /// auxiliary `current_idx` is updated so that only bars with
+    /// `open_time <= current_main_bar.open_time` are visible.
+    pub fn execute_backtest_with_multi_tf<F>(
+        &self,
+        code: &str,
+        klines: &[Kline],
+        params: &HashMap<String, f64>,
+        extra_klines: &HashMap<String, Vec<Kline>>,
+        mut on_signal: F,
+    ) -> anyhow::Result<()>
+    where
+        F: FnMut(i8),
+    {
+        if klines.is_empty() {
+            return Ok(());
+        }
+
+        tracing::info!(
+            "Multi-TF backtest: main bars={}, extra timeframes={:?}",
+            klines.len(),
+            extra_klines.keys().collect::<Vec<_>>(),
+        );
+
+        let orders = Arc::new(Mutex::new(Vec::new()));
+        let lua = self.create_sandbox(klines, 0, params, &LuaContext::default(), orders.clone())
+            .map_err(|e| anyhow::anyhow!("Failed to create Lua sandbox: {}", e))?;
+
+        // ---- Pre-fill auxiliary klines tables into registry ----
+        for (tf_name, tf_klines) in extra_klines {
+            let table = lua.create_table()
+                .map_err(|e| anyhow::anyhow!("Failed to create table for tf {}: {}", tf_name, e))?;
+            for k in tf_klines {
+                let entry = lua.create_table()
+                    .map_err(|e| anyhow::anyhow!("{}", e))?;
+                entry.set("open", k.open).map_err(|e| anyhow::anyhow!("{}", e))?;
+                entry.set("high", k.high).map_err(|e| anyhow::anyhow!("{}", e))?;
+                entry.set("low", k.low).map_err(|e| anyhow::anyhow!("{}", e))?;
+                entry.set("close", k.close).map_err(|e| anyhow::anyhow!("{}", e))?;
+                entry.set("volume", k.volume).map_err(|e| anyhow::anyhow!("{}", e))?;
+                entry.set("time", k.open_time as f64).map_err(|e| anyhow::anyhow!("{}", e))?;
+                table.set(table.raw_len() + 1, entry)
+                    .map_err(|e| anyhow::anyhow!("{}", e))?;
+            }
+            let registry_key = format!("extra_klines_{}", tf_name);
+            lua.set_named_registry_value(&registry_key, table)
+                .map_err(|e| anyhow::anyhow!("Failed to store registry value: {}", e))?;
+            // Initialize idx to 0 (no bars visible yet)
+            let idx_key = format!("extra_idx_{}", tf_name);
+            lua.set_named_registry_value(&idx_key, 0_i64)
+                .map_err(|e| anyhow::anyhow!("Failed to store registry value: {}", e))?;
+            tracing::info!("Pre-filled auxiliary timeframe '{}' with {} bars", tf_name, tf_klines.len());
+        }
+
+        // ---- Create the `tf` global function ----
+        // Collect the list of known timeframes (cloned Strings for Send).
+        let known_timeframes: Vec<String> = extra_klines.keys().cloned().collect();
+
+        let tf_fn = lua.create_function(move |lua, (tf_name,): (String,)| {
+            if !known_timeframes.contains(&tf_name) {
+                return Err(mlua::Error::external(format!(
+                    "Unknown timeframe: '{}'. Available: {:?}",
+                    tf_name, known_timeframes
+                )));
+            }
+            let klines_key = format!("extra_klines_{}", tf_name);
+            let idx_key = format!("extra_idx_{}", tf_name);
+            Self::create_indicator_functions_for_tf(lua, klines_key, idx_key)
+                .map_err(|e| mlua::Error::external(e.to_string()))
+        }).map_err(|e| anyhow::anyhow!("Failed to create tf function: {}", e))?;
+        lua.globals().set("tf", tf_fn)
+            .map_err(|e| anyhow::anyhow!("Failed to set tf function: {}", e))?;
+
+        // ---- Load and validate script ----
+        lua.load(code)
+            .exec()
+            .map_err(|e| anyhow::anyhow!("Lua syntax error: {}", e))?;
+
+        let signal_func: mlua::Function = lua
+            .globals()
+            .get("signal")
+            .map_err(|e| anyhow::anyhow!("Failed to get signal() function: {}", e))?;
+
+        let kline_table: Table = lua.globals().get("klines")
+            .map_err(|e| anyhow::anyhow!("Failed to get klines table: {}", e))?;
+
+        // Track position state for ctx injection
+        let mut ctx = LuaContext::default();
+
+        for idx in 0..klines.len() {
+            ctx.bar_index = idx as i64;
+
+            let k = &klines[idx];
+            let entry = lua.create_table()
+                .map_err(|e| anyhow::anyhow!("Failed to create table: {}", e))?;
+            entry.set("open", k.open).map_err(|e| anyhow::anyhow!("{}", e))?;
+            entry.set("high", k.high).map_err(|e| anyhow::anyhow!("{}", e))?;
+            entry.set("low", k.low).map_err(|e| anyhow::anyhow!("{}", e))?;
+            entry.set("close", k.close).map_err(|e| anyhow::anyhow!("{}", e))?;
+            entry.set("volume", k.volume).map_err(|e| anyhow::anyhow!("{}", e))?;
+            entry.set("time", k.open_time as f64).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            let row_idx = kline_table.raw_len() + 1;
+            kline_table.set(row_idx, entry).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            lua.globals().set("current_idx", row_idx as i64)
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            // ---- Update auxiliary timeframe indices ----
+            let current_time = k.open_time;
+            for (tf_name, tf_klines) in extra_klines {
+                let mut tf_idx: i64 = 0;
+                for (i, tk) in tf_klines.iter().enumerate() {
+                    if tk.open_time <= current_time {
+                        tf_idx = (i + 1) as i64; // Lua is 1-indexed
+                    } else {
+                        break;
+                    }
+                }
+                let idx_key = format!("extra_idx_{}", tf_name);
+                lua.set_named_registry_value(&idx_key, tf_idx)
+                    .map_err(|e| anyhow::anyhow!("Failed to update extra idx: {}", e))?;
+            }
+
+            // Update ctx table in Lua
+            let ctx_table: Table = lua.globals().get("ctx").map_err(|e| anyhow::anyhow!("{}", e))?;
+            let pos_table = lua.create_table().map_err(|e| anyhow::anyhow!("{}", e))?;
+            pos_table.set("side", ctx.position.side.as_str()).map_err(|e| anyhow::anyhow!("{}", e))?;
+            pos_table.set("entry_price", ctx.position.entry_price).map_err(|e| anyhow::anyhow!("{}", e))?;
+            pos_table.set("size", ctx.position.size).map_err(|e| anyhow::anyhow!("{}", e))?;
+            ctx_table.set("position", pos_table).map_err(|e| anyhow::anyhow!("{}", e))?;
+            ctx_table.set("last_exit_bar", ctx.last_exit_bar).map_err(|e| anyhow::anyhow!("{}", e))?;
+            ctx_table.set("bar_index", ctx.bar_index).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            // Clear any explicit orders from previous bar
+            orders.lock().unwrap().clear();
+
+            let signal: i8 = signal_func.call(())
+                .map_err(|e| anyhow::anyhow!("Lua runtime error at kline {}: {}", idx, e))?;
+
+            let clamped = signal.clamp(-1, 1);
+
+            // Check for explicit orders first
+            let explicit_orders: Vec<LuaOrder> = orders.lock().unwrap().clone();
+            if !explicit_orders.is_empty() {
+                // Process explicit orders — for backtest, convert to signal
+                for order in &explicit_orders {
+                    match order {
+                        LuaOrder::Buy { .. } => {
+                            if ctx.position.side == "flat" {
+                                ctx.position.side = "long".to_string();
+                                ctx.position.entry_price = k.close;
+                            }
+                            on_signal(1);
+                        }
+                        LuaOrder::Sell { .. } => {
+                            if ctx.position.side == "flat" {
+                                ctx.position.side = "short".to_string();
+                                ctx.position.entry_price = k.close;
+                            }
+                            on_signal(-1);
+                        }
+                        LuaOrder::Close => {
+                            if ctx.position.side != "flat" {
+                                ctx.position.side = "flat".to_string();
+                                ctx.position.entry_price = 0.0;
+                                ctx.position.size = 0.0;
+                                ctx.last_exit_bar = idx as i64;
+                            }
+                            on_signal(0);
+                        }
+                    }
+                }
+            } else {
+                // No explicit orders — use signal() return value
+                if clamped == 1 && ctx.position.side == "flat" {
+                    ctx.position.side = "long".to_string();
+                    ctx.position.entry_price = k.close;
+                } else if clamped == -1 && ctx.position.side == "flat" {
+                    ctx.position.side = "short".to_string();
+                    ctx.position.entry_price = k.close;
+                } else if clamped == -1 && ctx.position.side == "long" {
+                    ctx.position.side = "flat".to_string();
+                    ctx.position.entry_price = 0.0;
+                    ctx.position.size = 0.0;
+                    ctx.last_exit_bar = idx as i64;
+                } else if clamped == 1 && ctx.position.side == "short" {
+                    ctx.position.side = "flat".to_string();
+                    ctx.position.entry_price = 0.0;
+                    ctx.position.size = 0.0;
+                    ctx.last_exit_bar = idx as i64;
+                }
+
+                on_signal(clamped);
+            }
+        }
+
+        Ok(())
+    }
 }

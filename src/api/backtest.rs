@@ -263,15 +263,52 @@ pub async fn run_backtest(
         let mut script_params: HashMap<String, f64> = HashMap::new();
         if let Some(obj) = req.indicator_config.as_object() {
             for (key, value) in obj {
-                if key == "plugin" || key == "strategy_code" { continue; }
+                if key == "plugin" || key == "strategy_code" || key == "extra_timeframes" { continue; }
                 if let Some(num) = value.as_f64() {
                     script_params.insert(key.clone(), num);
                 }
             }
         }
 
+        // Parse extra_timeframes from indicator_config
+        let extra_timeframes: Vec<String> = req.indicator_config
+            .get("extra_timeframes")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Fetch auxiliary klines for each extra timeframe
+        let mut extra_klines: HashMap<String, Vec<Kline>> = HashMap::new();
+        for tf in &extra_timeframes {
+            match exchange.get_klines_range(&req.symbol, tf, start_ms, end_ms).await {
+                Ok(tf_klines) if !tf_klines.is_empty() => {
+                    info!("Fetched {} auxiliary klines for timeframe '{}'", tf_klines.len(), tf);
+                    extra_klines.insert(tf.clone(), tf_klines);
+                }
+                Ok(_) => {
+                    warn!("No auxiliary kline data for timeframe '{}', skipping", tf);
+                }
+                Err(e) => {
+                    warn!("Failed to fetch auxiliary klines for timeframe '{}': {}", tf, e);
+                }
+            }
+        }
+
         let mut signals: Vec<i8> = Vec::with_capacity(klines.len());
-        if let Err(e) = executor.execute_backtest(code, &klines, &script_params, |signal| {
+        if !extra_klines.is_empty() {
+            if let Err(e) = executor.execute_backtest_with_multi_tf(code, &klines, &script_params, &extra_klines, |signal| {
+                signals.push(signal);
+            }) {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<serde_json::Value>::err(&format!("Lua execution error (multi-TF): {}", e))),
+                ));
+            }
+        } else if let Err(e) = executor.execute_backtest(code, &klines, &script_params, |signal| {
             signals.push(signal);
         }) {
             return Err((
