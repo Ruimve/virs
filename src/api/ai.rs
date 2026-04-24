@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::api::middleware::AuthUser;
 use crate::api::AppState;
+use crate::engine::indicators;
 use crate::models::*;
 use crate::services::ai::{AiService, AiUserConfig, GenerateRequest};
 use crate::utils::crypto;
@@ -504,6 +505,299 @@ pub async fn explain(
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "explanation": content,
     }))))
+}
+
+#[derive(Deserialize)]
+pub struct RecommendRequest {
+    pub symbol: String,
+    pub exchange: String,
+    pub timeframe: String,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+}
+
+/// AI strategy recommendation based on market analysis.
+pub async fn recommend_strategy(
+    State(state): State<Arc<AppState>>,
+    auth: AuthUser,
+    Json(req): Json<RecommendRequest>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)>
+{
+    if req.symbol.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<serde_json::Value>::err("symbol must not be empty")),
+        ));
+    }
+
+    if req.timeframe.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<serde_json::Value>::err("timeframe must not be empty")),
+        ));
+    }
+
+    // --- Step 1: Get exchange instance ---
+    let exchange_key = super::market::ensure_exchange(&state, &req.exchange, MarketType::Spot).await?;
+    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
+
+    // --- Step 2: Fetch recent klines (up to 200) ---
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let start_ms = now_ms - 200 * 24 * 3600 * 1000; // enough to get 200 candles
+
+    let klines = match exchange.get_klines_range(&req.symbol, &req.timeframe, start_ms, now_ms).await {
+        Ok(k) if k.len() >= 50 => k,
+        Ok(k) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<serde_json::Value>::err(format!(
+                    "Insufficient kline data: got {} candles, need at least 50. Please verify the symbol and timeframe.",
+                    k.len()
+                ))),
+            ));
+        }
+        Err(e) => {
+            return Err((
+                StatusCode::BAD_GATEWAY,
+                Json(ApiResponse::<serde_json::Value>::err(format!(
+                    "Failed to fetch klines for {} from {}: {}",
+                    req.symbol, req.exchange, e
+                ))),
+            ));
+        }
+    };
+
+    // --- Step 3: Build kline data summary ---
+    let last_30: &[Kline] = if klines.len() >= 30 {
+        &klines[klines.len() - 30..]
+    } else {
+        &klines
+    };
+
+    // Build OHLCV table for the last 30 candles
+    let mut ohlcv_table = String::from("Time,Open,High,Low,Close,Volume\n");
+    for k in last_30.iter() {
+        let time_str = chrono::DateTime::from_timestamp_millis(k.open_time)
+            .map(|dt| dt.format("%m-%d %H:%M").to_string())
+            .unwrap_or_else(|| k.open_time.to_string());
+        ohlcv_table.push_str(&format!(
+            "{},{:.2},{:.2},{:.2},{:.2},{:.2}\n",
+            time_str, k.open, k.high, k.low, k.close, k.volume
+        ));
+    }
+
+    // Compute key indicators
+    let last_close = klines.last().map(|k| k.close).unwrap_or(0.0);
+    let first_close_30 = last_30.first().map(|k| k.close).unwrap_or(last_close);
+    let change_pct = if first_close_30 > 0.0 {
+        (last_close - first_close_30) / first_close_30 * 100.0
+    } else {
+        0.0
+    };
+
+    let high_30: f64 = last_30.iter().map(|k| k.high).fold(f64::NEG_INFINITY, f64::max);
+    let low_30: f64 = last_30.iter().map(|k| k.low).fold(f64::INFINITY, f64::min);
+    let avg_close: f64 = last_30.iter().map(|k| k.close).sum::<f64>() / last_30.len() as f64;
+
+    // RSI(14)
+    let rsi_val = indicators::rsi_at(&klines, klines.len() - 1, 14);
+
+    // ATR(14)
+    let atr_val = indicators::atr_at(&klines, klines.len() - 1, 14);
+
+    // EMA(12) and EMA(26)
+    let ema12_val = indicators::ema_at(&klines, klines.len() - 1, 12);
+    let ema26_val = indicators::ema_at(&klines, klines.len() - 1, 26);
+    let ema12_prev = indicators::ema_at(&klines, klines.len().saturating_sub(2), 12);
+    let ema26_prev = indicators::ema_at(&klines, klines.len().saturating_sub(2), 26);
+
+    let ema12_trend = if ema12_val > ema12_prev { "up" } else if ema12_val < ema12_prev { "down" } else { "flat" };
+    let ema26_trend = if ema26_val > ema26_prev { "up" } else if ema26_val < ema26_prev { "down" } else { "flat" };
+
+    // --- Step 4: Get available plugins ---
+    let plugins = state.plugin_registry.list();
+    let mut plugin_descriptions = String::new();
+    for p in &plugins {
+        plugin_descriptions.push_str(&format!(
+            "- {} ({}): {}\n  参数: {}\n",
+            p.name,
+            p.category,
+            p.description,
+            p.params.iter().map(|pd| format!("{} (默认: {}, 范围: {:?}-{:?})", pd.name, pd.default, pd.min, pd.max)).collect::<Vec<_>>().join("; ")
+        ));
+    }
+
+    // --- Step 5: Build prompt ---
+    let user_prompt = format!(
+        r#"你是一个专业的加密货币量化交易策略分析师。根据以下市场数据分析当前市场状态，并从可用策略中推荐最合适的 1-3 个策略。
+
+## 市场数据
+交易对: {symbol}
+周期: {timeframe}
+最近30根K线:
+{ohlcv_table}
+
+## 关键指标
+RSI(14): {rsi:.2}
+ATR(14): {atr:.2}
+EMA(12): {ema12:.2} (方向: {ema12_trend})
+EMA(26): {ema26:.2} (方向: {ema26_trend})
+价格区间: {low:.2} - {high:.2}
+均价: {avg:.2}
+近30根涨跌幅: {change_pct:.2}%
+
+## 可用策略
+{plugin_descriptions}
+
+## 输出要求
+输出 JSON 格式（不要 markdown 代码块）：
+{{
+  "market_analysis": {{
+    "regime": "trending_up|trending_down|ranging|volatile",
+    "volatility": "low|medium|high",
+    "summary": "一句话描述市场状态"
+  }},
+  "recommendations": [
+    {{
+      "rank": 1,
+      "plugin": "策略名",
+      "confidence": 0.0-1.0,
+      "reason": "推荐理由",
+      "params": {{ "参数名": 值 }}
+    }}
+  ]
+}}"#,
+        symbol = req.symbol,
+        timeframe = req.timeframe,
+        ohlcv_table = ohlcv_table,
+        rsi = rsi_val,
+        atr = atr_val,
+        ema12 = ema12_val,
+        ema12_trend = ema12_trend,
+        ema26 = ema26_val,
+        ema26_trend = ema26_trend,
+        low = low_30,
+        high = high_30,
+        avg = avg_close,
+        change_pct = change_pct,
+    );
+
+    // --- Step 6: Call AI API ---
+    let ai_service = AiService::new(state.config.ai.clone());
+
+    // Load user AI credentials
+    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let encryption_key = crypto::derive_key(&state.config.server.encryption_key);
+    let user_config = load_user_ai_config(&state.db_pool, &user_id, &encryption_key).await;
+
+    if !ai_service.is_configured_with_override(&user_config) {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<serde_json::Value>::err(
+                "No AI provider configured. Set OPENROUTER_API_KEY, OPENAI_API_KEY, or DEEPSEEK_API_KEY in .env, or configure user-level AI credentials.",
+            )),
+        ));
+    }
+
+    let provider = req
+        .provider
+        .as_deref()
+        .unwrap_or_else(|| ai_service.default_provider_with_override(&user_config));
+
+    let (api_key, base_url, model) = ai_service
+        .resolve_provider_with_override(provider, req.model.as_deref(), &user_config)
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<serde_json::Value>::err(format!("{}", e))),
+            )
+        })?;
+
+    let request_body = serde_json::json!({
+        "model": model,
+        "messages": [
+            { "role": "system", "content": "你是一个专业的加密货币量化交易策略分析师。你只输出 JSON，不输出 markdown 代码块或其他格式。" },
+            { "role": "user", "content": user_prompt }
+        ],
+        "temperature": 0.5,
+        "max_tokens": 2000,
+    });
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{}/chat/completions", base_url))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| {
+            tracing::error!("AI recommend strategy request failed: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<serde_json::Value>::err(format!(
+                    "Failed to call {} API: {}",
+                    provider, e
+                ))),
+            )
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body_text = response.text().await.unwrap_or_default();
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<serde_json::Value>::err(format!(
+                "{} API returned {}: {}",
+                provider, status, body_text
+            ))),
+        ));
+    }
+
+    let json: serde_json::Value = response.json().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<serde_json::Value>::err(format!(
+                "Failed to parse {} response: {}",
+                provider, e
+            ))),
+        )
+    })?;
+
+    let content = json["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+
+    // --- Step 7: Parse JSON response ---
+    // Strip markdown code blocks if present
+    let content = content.trim();
+    let content = if content.starts_with("```json") {
+        content.trim_start_matches("```json").trim_end_matches("```").trim()
+    } else if content.starts_with("```") {
+        content.trim_start_matches("```").trim_end_matches("```").trim()
+    } else {
+        content
+    };
+
+    let result: serde_json::Value = serde_json::from_str(content).map_err(|e| {
+        tracing::error!("Failed to parse AI recommendation JSON: {}", e);
+        tracing::error!("Raw content: {}", content);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<serde_json::Value>::err(format!(
+                "AI returned invalid JSON: {}. Raw response: {}",
+                e, content
+            ))),
+        )
+    })?;
+
+    tracing::info!(
+        "AI recommended strategy for {} using {} ({})",
+        req.symbol, provider, json["model"].as_str().unwrap_or(&model)
+    );
+
+    Ok(Json(ApiResponse::ok(result)))
 }
 
 /// Extract Lua code from markdown code blocks.

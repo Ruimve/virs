@@ -188,6 +188,13 @@ const Backtest: Component = () => {
   const [aiLoading, setAiLoading] = createSignal(false)
   const [aiSuggestion, setAiSuggestion] = createSignal<string | null>(null)
 
+  // AI 推荐策略
+  const [aiRecLoading, setAiRecLoading] = createSignal(false)
+  const [aiRecResult, setAiRecResult] = createSignal<{
+    market_analysis: { regime: string; volatility: string; summary: string }
+    recommendations: Array<{ rank: number; plugin: string; confidence: number; reason: string; params: Record<string, number> }>
+  } | null>(null)
+
   // 历史
   const [historyItems, setHistoryItems] = createSignal<BacktestSummary[]>([])
   const [historyPage, setHistoryPage] = createSignal(1)
@@ -302,6 +309,30 @@ const Backtest: Component = () => {
     } catch (e) { setRunError(e instanceof Error ? e.message : '加载失败') }
   }
 
+  // ── AI 推荐策略 ──
+
+  async function handleAiRecommend() {
+    setAiRecLoading(true); setAiRecResult(null)
+    try {
+      const res = await api.post<{
+        market_analysis: { regime: string; volatility: string; summary: string }
+        recommendations: Array<{ rank: number; plugin: string; confidence: number; reason: string; params: Record<string, number> }>
+      }>('/ai/recommend-strategy', {
+        symbol: symbol(), exchange: exchange(), timeframe: timeframe(),
+      })
+      if (res.success && res.data) setAiRecResult(res.data)
+    } catch (e) { console.error('AI recommend failed:', e) }
+    finally { setAiRecLoading(false) }
+  }
+
+  function applyRecommendation(rec: { plugin: string; params: Record<string, number> }) {
+    setMode('plugin')
+    setStrategyType(rec.plugin)
+    const config: Record<string, unknown> = { plugin: rec.plugin, ...rec.params }
+    setIndicatorConfig(JSON.stringify(config, null, 2))
+    setShowStrategy(true)
+  }
+
   async function handleAiOptimize() {
     setAiLoading(true); setAiSuggestion(null)
     try {
@@ -407,8 +438,14 @@ const Backtest: Component = () => {
               <input type="number" class={inp} value={initialBalance()} onInput={e => setInitialBalance(Number(e.currentTarget.value))} min="0" step="1000" />
             </div>
 
-            {/* 运行按钮 */}
-            <div class="ml-auto">
+            {/* AI 推荐 + 运行按钮 */}
+            <div class="ml-auto flex items-center gap-2">
+              <button class="px-4 py-[7px] bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-[13px] font-semibold rounded-lg hover:from-violet-600 hover:to-indigo-600 active:from-violet-700 active:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-sm shadow-violet-200/50"
+                disabled={aiRecLoading()} onClick={handleAiRecommend}>
+                {aiRecLoading() ? (
+                  <span class="flex items-center gap-2"><span class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />分析中</span>
+                ) : '✨ AI 推荐'}
+              </button>
               <button class="px-6 py-[7px] bg-indigo-600 text-white text-[13px] font-semibold rounded-lg hover:bg-indigo-700 active:bg-indigo-800 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-sm shadow-indigo-200"
                 disabled={running()} onClick={handleRun}>
                 {running() ? (
@@ -588,6 +625,66 @@ const Backtest: Component = () => {
           </div>
         </Show>
       </div>
+
+      {/* ═══ AI 推荐策略卡片 ═══ */}
+      <Show when={aiRecResult()}>
+        <div class="space-y-3">
+          {/* 市场分析 */}
+          <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-1 h-5 bg-violet-500 rounded-full" />
+              <h3 class="text-[14px] font-semibold text-slate-800">AI 市场分析</h3>
+              <span class={`px-2 py-0.5 rounded-md text-[11px] font-semibold ${
+                aiRecResult()!.market_analysis.regime.includes('trending_up') ? 'bg-emerald-50 text-emerald-600' :
+                aiRecResult()!.market_analysis.regime.includes('trending_down') ? 'bg-red-50 text-red-500' :
+                aiRecResult()!.market_analysis.regime === 'volatile' ? 'bg-amber-50 text-amber-600' :
+                'bg-slate-100 text-slate-500'
+              }`}>
+                {aiRecResult()!.market_analysis.regime === 'trending_up' ? '上升趋势' :
+                 aiRecResult()!.market_analysis.regime === 'trending_down' ? '下降趋势' :
+                 aiRecResult()!.market_analysis.regime === 'ranging' ? '横盘震荡' :
+                 aiRecResult()!.market_analysis.regime === 'volatile' ? '高波动' :
+                 aiRecResult()!.market_analysis.regime}
+              </span>
+              <span class={`px-2 py-0.5 rounded-md text-[11px] font-medium ${
+                aiRecResult()!.market_analysis.volatility === 'high' ? 'bg-amber-50 text-amber-600' :
+                aiRecResult()!.market_analysis.volatility === 'low' ? 'bg-emerald-50 text-emerald-600' :
+                'bg-slate-100 text-slate-500'
+              }`}>
+                波动率: {aiRecResult()!.market_analysis.volatility === 'high' ? '高' :
+                         aiRecResult()!.market_analysis.volatility === 'low' ? '低' : '中'}
+              </span>
+            </div>
+            <p class="text-[13px] text-slate-600 leading-relaxed">{aiRecResult()!.market_analysis.summary}</p>
+          </div>
+
+          {/* 推荐策略卡片 */}
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <For each={aiRecResult()!.recommendations}>
+              {(rec) => (
+                <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 hover:shadow-md hover:border-violet-200/60 transition-all">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                      <span class="w-6 h-6 rounded-full bg-violet-100 text-violet-600 text-[12px] font-bold flex items-center justify-center">
+                        {rec.rank}
+                      </span>
+                      <span class="text-[13px] font-semibold text-slate-800">{rec.plugin}</span>
+                    </div>
+                    <span class="text-[12px] font-semibold text-violet-600">
+                      {Math.round(rec.confidence * 100)}%
+                    </span>
+                  </div>
+                  <p class="text-[12px] text-slate-500 mb-3 leading-relaxed">{rec.reason}</p>
+                  <button class="w-full py-1.5 bg-indigo-50 text-indigo-600 text-[12px] font-semibold rounded-lg hover:bg-indigo-100 transition-colors"
+                    onClick={() => applyRecommendation(rec)}>
+                    应用此策略 →
+                  </button>
+                </div>
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
 
       {/* ═══ 回测结果 ═══ */}
       <Show when={result()}>
