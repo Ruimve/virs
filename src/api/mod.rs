@@ -11,6 +11,7 @@ pub mod plugins;
 pub mod ai;
 pub mod ai_credentials;
 pub mod ws;
+pub mod grid;
 
 use axum::{
     http::{header, StatusCode, Uri},
@@ -40,6 +41,7 @@ pub fn build_router(
         plugin_registry,
         ws_broadcaster,
         kline_engine,
+        http_client: reqwest::Client::new(),
     });
 
     let _frontend_dir = std::env::var("FRONTEND_DIR")
@@ -96,6 +98,15 @@ pub fn build_router(
         .route("/api/kline/backtest/data", get(crate::kline::api::get_backtest_data))
         .route("/ws/kline", get(crate::kline::api::kline_ws_handler))
         .route("/ws", get(ws::ws_handler))
+        .route("/api/grid/analyze", post(grid::analyze))
+        .route("/api/grid/create", post(grid::create_bot))
+        .route("/api/grid/list", get(grid::list_bots))
+        .route("/api/grid/{id}", get(grid::get_bot))
+        .route("/api/grid/{id}/start", post(grid::start_bot))
+        .route("/api/grid/{id}/stop", post(grid::stop_bot))
+        .route("/api/grid/{id}/delete", delete(grid::delete_bot))
+        .route("/api/grid/{id}/trades", get(grid::get_trades))
+        .route("/api/grid/{id}/reanalyze", post(grid::reanalyze))
         .with_state(state)
         .layer(
             CorsLayer::new()
@@ -169,4 +180,5 @@ pub struct AppState {
     pub plugin_registry: Arc<PluginRegistry>,
     pub ws_broadcaster: Arc<ws::WsBroadcaster>,
     pub kline_engine: Option<Arc<crate::kline::KlineEngine>>,
+    pub http_client: reqwest::Client,
 }

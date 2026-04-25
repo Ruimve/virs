@@ -59,7 +59,7 @@ pub async fn list_credentials(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
     let rows = sqlx::query_as::<_, CredentialRow>(
         r#"SELECT id, exchange, label, market_type, created_at FROM qd_exchange_credentials
@@ -83,7 +83,7 @@ pub async fn save_credential(
     auth: AuthUser,
     Json(req): Json<CredentialRequest>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
     let encryption_key = crypto::derive_key(&state.config.server.encryption_key);
     let encrypted_key = crypto::encrypt(&req.api_key, &encryption_key).map_err(|e| {
@@ -151,7 +151,7 @@ pub async fn delete_credential(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
     let result = sqlx::query("DELETE FROM qd_exchange_credentials WHERE id = $1 AND user_id = $2")
         .bind(id)

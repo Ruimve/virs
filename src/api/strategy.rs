@@ -42,7 +42,7 @@ pub async fn list_strategies(
     let user_id = if auth.is_admin_or_manager() {
         None
     } else {
-        Some(Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil()))
+        Some(auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?)
     };
 
     let strategies = if let Some(uid) = user_id {
@@ -111,7 +111,7 @@ pub async fn create_strategy(
     auth: AuthUser,
     Json(req): Json<CreateStrategy>,
 ) -> Result<Json<ApiResponse<Strategy>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
     let market_type_str = match req.market_type {
         MarketType::Spot => "spot",
@@ -468,7 +468,7 @@ pub async fn start_strategy(
     // Try to load user's exchange credentials from database based on strategy.market_type.
     // If found, create a user-scoped exchange instance.
     // Otherwise, fall back to the globally registered exchange.
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
     let scoped_exchange_key = load_user_exchange(
         &state,
         &strategy.exchange,

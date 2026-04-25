@@ -69,7 +69,7 @@ pub async fn ai_status(
     let ai_service = AiService::new(state.config.ai.clone());
 
     // Load user-specific AI credentials
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().unwrap_or(Uuid::nil());
     let encryption_key = crypto::derive_key(&state.config.server.encryption_key);
     let user_config = load_user_ai_config(&state.db_pool, &user_id, &encryption_key).await;
 
@@ -109,7 +109,7 @@ pub async fn generate_strategy(
     let ai_service = AiService::new(state.config.ai.clone());
 
     // Load user AI credentials
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
     let encryption_key = crypto::derive_key(&state.config.server.encryption_key);
     let user_config = load_user_ai_config(&state.db_pool, &user_id, &encryption_key).await;
 
@@ -152,7 +152,7 @@ pub async fn generate_strategy(
         "max_tokens": 2000,
     });
 
-    let client = reqwest::Client::new();
+    let client = &state.http_client;
     let response = client
         .post(format!("{}/chat/completions", base_url))
         .header("Authorization", format!("Bearer {}", api_key))
@@ -271,7 +271,7 @@ pub async fn optimize(
     let ai_service = AiService::new(state.config.ai.clone());
 
     // Load user AI credentials
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
     let encryption_key = crypto::derive_key(&state.config.server.encryption_key);
     let user_config = load_user_ai_config(&state.db_pool, &user_id, &encryption_key).await;
 
@@ -339,7 +339,7 @@ pub async fn optimize(
         "max_tokens": 2000,
     });
 
-    let client = reqwest::Client::new();
+    let client = &state.http_client;
     let response = client
         .post(format!("{}/chat/completions", base_url))
         .header("Authorization", format!("Bearer {}", api_key))
@@ -400,7 +400,7 @@ pub async fn explain(
     let ai_service = AiService::new(state.config.ai.clone());
 
     // Load user AI credentials
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
     let encryption_key = crypto::derive_key(&state.config.server.encryption_key);
     let user_config = load_user_ai_config(&state.db_pool, &user_id, &encryption_key).await;
 
@@ -456,7 +456,7 @@ pub async fn explain(
         "max_tokens": 1500,
     });
 
-    let client = reqwest::Client::new();
+    let client = &state.http_client;
     let response = client
         .post(format!("{}/chat/completions", base_url))
         .header("Authorization", format!("Bearer {}", api_key))
@@ -686,7 +686,7 @@ EMA(26): {ema26:.2} (方向: {ema26_trend})
     let ai_service = AiService::new(state.config.ai.clone());
 
     // Load user AI credentials
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
     let encryption_key = crypto::derive_key(&state.config.server.encryption_key);
     let user_config = load_user_ai_config(&state.db_pool, &user_id, &encryption_key).await;
 
@@ -723,7 +723,7 @@ EMA(26): {ema26:.2} (方向: {ema26_trend})
         "max_tokens": 2000,
     });
 
-    let client = reqwest::Client::new();
+    let client = &state.http_client;
     let response = client
         .post(format!("{}/chat/completions", base_url))
         .header("Authorization", format!("Bearer {}", api_key))

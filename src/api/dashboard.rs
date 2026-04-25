@@ -14,7 +14,7 @@ pub async fn dashboard_summary(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
     let total_strategies: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM qd_strategies_trading WHERE user_id = $1"
@@ -148,7 +148,7 @@ pub async fn list_positions(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
     let rows = sqlx::query_as::<_, PositionRow>(
         r#"SELECT id, strategy_id, symbol, side, size, entry_price,
@@ -176,7 +176,7 @@ pub async fn list_trades(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
     let rows = sqlx::query_as::<_, TradeRow>(
         r#"SELECT id, strategy_id, symbol, side, trade_type, price, amount, fee, pnl,
@@ -202,7 +202,7 @@ pub async fn list_pending_orders(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
     let rows = sqlx::query_as::<_, PendingOrderRow>(
         r#"SELECT id, strategy_id, symbol, signal_type,

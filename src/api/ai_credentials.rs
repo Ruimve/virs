@@ -41,7 +41,7 @@ pub async fn list_credentials(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
     let rows = sqlx::query_as::<_, AiCredentialRow>(
         r#"SELECT id, user_id, provider, label, is_default, created_at, updated_at
@@ -67,7 +67,7 @@ pub async fn save_credential(
     auth: AuthUser,
     Json(req): Json<SaveAiCredentialRequest>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
     // Validate provider
     let valid_providers = ["openrouter", "openai", "deepseek"];
@@ -139,7 +139,7 @@ pub async fn delete_credential(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let user_id = Uuid::parse_str(&auth.user_id).unwrap_or(Uuid::nil());
+    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
     let result = sqlx::query("DELETE FROM qd_ai_credentials WHERE id = $1 AND user_id = $2")
         .bind(id)
@@ -205,7 +205,7 @@ pub async fn test_credential(
         "max_tokens": 5,
     });
 
-    let client = reqwest::Client::new();
+    let client = &state.http_client;
 
     let response = client
         .post(format!("{}/chat/completions", base_url))

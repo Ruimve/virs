@@ -252,3 +252,68 @@ CREATE TABLE IF NOT EXISTS qd_ai_credentials (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_credentials_user ON qd_ai_credentials(user_id);
+
+-- ============================================================
+-- Grid Trading Bots
+-- ============================================================
+
+-- 网格机器人
+CREATE TABLE IF NOT EXISTS qd_grid_bots (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    symbol VARCHAR(50) NOT NULL,
+    exchange VARCHAR(50) NOT NULL DEFAULT 'binance',
+    status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'running', 'paused', 'stopped', 'error')),
+
+    -- 网格参数
+    upper_price DOUBLE PRECISION NOT NULL,
+    lower_price DOUBLE PRECISION NOT NULL,
+    grid_count INT NOT NULL,
+    grid_profit_pct DOUBLE PRECISION NOT NULL DEFAULT 0.5,
+    quantity_per_grid DOUBLE PRECISION NOT NULL,
+    leverage INT NOT NULL DEFAULT 1,
+
+    -- AI 分析结果
+    market_regime VARCHAR(20),
+    ai_analysis TEXT,
+    system_prompt TEXT,
+    user_prompt TEXT,
+
+    -- 动态调整配置
+    dynamic_adjust BOOLEAN NOT NULL DEFAULT true,
+    adjust_interval_secs INT NOT NULL DEFAULT 300,
+    last_adjusted_at TIMESTAMPTZ,
+
+    -- 统计
+    total_pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
+    total_trades INT NOT NULL DEFAULT 0,
+    grid_filled_count INT NOT NULL DEFAULT 0,
+
+    -- 时间戳
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at TIMESTAMPTZ,
+    stopped_at TIMESTAMPTZ
+);
+
+-- 网格交易记录
+CREATE TABLE IF NOT EXISTS qd_grid_trades (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    bot_id UUID NOT NULL REFERENCES qd_grid_bots(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES qd_users(id),
+    symbol VARCHAR(50) NOT NULL,
+    exchange VARCHAR(50) NOT NULL,
+    side VARCHAR(10) NOT NULL,
+    grid_level INT NOT NULL,
+    price DOUBLE PRECISION NOT NULL,
+    quantity DOUBLE PRECISION NOT NULL,
+    pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
+    pnl_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
+    order_id VARCHAR(100),
+    status VARCHAR(20) NOT NULL DEFAULT 'filled',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_grid_bots_user ON qd_grid_bots(user_id);
+CREATE INDEX IF NOT EXISTS idx_grid_trades_bot ON qd_grid_trades(bot_id);

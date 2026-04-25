@@ -4,6 +4,7 @@ use axum::{
     extract::FromRequestParts,
     http::{request::Parts, StatusCode, header},
 };
+use uuid::Uuid;
 
 use crate::models::{ApiResponse, UserRole};
 use crate::utils::auth::decode_jwt;
@@ -22,6 +23,10 @@ impl AuthUser {
 
     pub fn is_admin(&self) -> bool {
         matches!(self.role, UserRole::Admin)
+    }
+
+    pub fn uuid(&self) -> Result<Uuid, String> {
+        Uuid::parse_str(&self.user_id).map_err(|_| "Invalid user identity".to_string())
     }
 }
 

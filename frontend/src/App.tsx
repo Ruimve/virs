@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Strategies from './pages/Strategies'
 import Market from './pages/Market'
 import Backtest from './pages/Backtest'
+import GridBot from './pages/GridBot'
 import Trades from './pages/Trades'
 import Credentials from './pages/Credentials'
 import AiCredentials from './pages/AiCredentials'
@@ -36,6 +37,7 @@ const App: Component = () => {
           <Route path="/strategies" component={Strategies} />
           <Route path="/market" component={Market} />
           <Route path="/backtest" component={Backtest} />
+          <Route path="/grid" component={GridBot} />
           <Route path="/trades" component={Trades} />
           <Route path="/credentials" component={Credentials} />
         <Route path="/ai-credentials" component={AiCredentials} />
