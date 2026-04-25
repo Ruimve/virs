@@ -30,6 +30,9 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "gzip"
 # WebSocket (real-time data push via axum::extract::ws)
 futures-util = "0.3"
 
+# WebSocket client (exchange kline streams)
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 

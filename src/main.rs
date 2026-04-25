@@ -8,6 +8,7 @@ mod ccxt;
 mod config;
 mod engine;
 mod exchange;
+mod kline;
 mod models;
 mod order_worker;
 mod services;
@@ -232,8 +233,18 @@ async fn main() -> anyhow::Result<()> {
         info!("✅ Pending order retry worker started (interval: {}s)", retry_interval);
     }
 
+    // Create kline engine
+    let kline_config = kline::types::KlineEngineConfig {
+        proxy_url: config.proxy.clone(),
+        ..Default::default()
+    };
+    let kline_source = std::sync::Arc::new(kline::source::CcxtKlineSource::new(config.proxy.clone()));
+    let kline_engine = std::sync::Arc::new(kline::KlineEngine::new(kline_config, kline_source));
+    kline_engine.start().await;
+    info!("✅ Kline engine started");
+
     // Build and start HTTP server
-    let app = api::build_router(Arc::new(config.clone()), strategy_engine, db_pool, plugin_registry, ws_broadcaster);
+    let app = api::build_router(Arc::new(config.clone()), strategy_engine, db_pool, plugin_registry, ws_broadcaster, Some(kline_engine));
 
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;

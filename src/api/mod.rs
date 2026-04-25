@@ -31,6 +31,7 @@ pub fn build_router(
     db_pool: sqlx::PgPool,
     plugin_registry: Arc<PluginRegistry>,
     ws_broadcaster: Arc<ws::WsBroadcaster>,
+    kline_engine: Option<Arc<crate::kline::KlineEngine>>,
 ) -> Router {
     let state = Arc::new(AppState {
         config,
@@ -38,6 +39,7 @@ pub fn build_router(
         db_pool,
         plugin_registry,
         ws_broadcaster,
+        kline_engine,
     });
 
     let _frontend_dir = std::env::var("FRONTEND_DIR")
@@ -86,6 +88,13 @@ pub fn build_router(
         .route("/api/ai-credentials/save", post(ai_credentials::save_credential))
         .route("/api/ai-credentials/delete/{id}", delete(ai_credentials::delete_credential))
         .route("/api/ai-credentials/test", post(ai_credentials::test_credential))
+        .route("/api/kline/data", get(crate::kline::api::get_klines))
+        .route("/api/kline/subscribe", post(crate::kline::api::subscribe_kline))
+        .route("/api/kline/unsubscribe", post(crate::kline::api::unsubscribe_kline))
+        .route("/api/kline/subscriptions", get(crate::kline::api::list_subscriptions))
+        .route("/api/kline/backtest/limits", get(crate::kline::api::get_backtest_limits))
+        .route("/api/kline/backtest/data", get(crate::kline::api::get_backtest_data))
+        .route("/ws/kline", get(crate::kline::api::kline_ws_handler))
         .route("/ws", get(ws::ws_handler))
         .with_state(state)
         .layer(
@@ -159,4 +168,5 @@ pub struct AppState {
     pub db_pool: sqlx::PgPool,
     pub plugin_registry: Arc<PluginRegistry>,
     pub ws_broadcaster: Arc<ws::WsBroadcaster>,
+    pub kline_engine: Option<Arc<crate::kline::KlineEngine>>,
 }

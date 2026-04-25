@@ -2,6 +2,7 @@ import { type Component, createSignal, createEffect, createMemo, Show, For, onMo
 import { api } from '../lib/api'
 import KlineChart from '../components/KlineChart'
 import { type OverlayLine, computeSMA, computeEMA, computeBBands } from '../utils/indicators'
+import { useMarket } from '../lib/market-context'
 
 // ── 类型 ──
 
@@ -39,6 +40,7 @@ function cumEntries(entries: OrderbookEntry[]): { e: OrderbookEntry; cum: number
 // ── 组件 ──
 
 const Market: Component = () => {
+  const market = useMarket()
   const [exchange, setExchange] = createSignal('binance')
   const [symbol, setSymbol] = createSignal('BTCUSDT')
   const [interval, setInterval_] = createSignal('1h')
@@ -61,10 +63,11 @@ const Market: Component = () => {
   async function fetchAll() {
     setLoading(true); setError('')
     try {
+      const params = { exchange: exchange(), symbol: symbol(), market_type: market.marketType() }
       const [t, k, o] = await Promise.all([
-        api.get<TickerData>(`/market/ticker?${new URLSearchParams({ exchange: exchange(), symbol: symbol() })}`),
-        api.get<KlineItem[]>(`/market/klines?${new URLSearchParams({ exchange: exchange(), symbol: symbol(), interval: interval(), limit: '200' })}`),
-        api.get<OrderbookData>(`/market/orderbook?${new URLSearchParams({ exchange: exchange(), symbol: symbol(), depth: '20' })}`),
+        api.get<TickerData>(`/market/ticker?${new URLSearchParams(params as any)}`),
+        api.get<KlineItem[]>(`/market/klines?${new URLSearchParams({ ...params, interval: interval(), limit: '200' } as any)}`),
+        api.get<OrderbookData>(`/market/orderbook?${new URLSearchParams({ ...params, depth: '20' } as any)}`),
       ])
       if (t.success) setTicker(t.data ?? null)
       if (k.success) setKlines(k.data ?? [])
@@ -76,7 +79,7 @@ const Market: Component = () => {
   async function fetchBalances() {
     setBalLoading(true)
     try {
-      const res = await api.get<BalanceItem[]>(`/market/balances?${new URLSearchParams({ exchange: exchange() })}`)
+      const res = await api.get<BalanceItem[]>(`/market/balances?${new URLSearchParams({ exchange: exchange(), market_type: market.marketType() } as any)}`)
       if (res.success && res.data) setBalances(res.data.filter(b => b.available > 0 || b.frozen > 0 || b.total > 0))
     } catch { /* */ }
     finally { setBalLoading(false) }
@@ -85,6 +88,7 @@ const Market: Component = () => {
   // 自动加载
   onMount(fetchAll)
   createEffect(() => { interval(); fetchAll() })
+  createEffect(() => { market.marketType(); fetchAll() })
 
   // ── 指标 ──
 
