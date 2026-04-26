@@ -4,11 +4,15 @@ use tokio::sync::Mutex;
 use tracing;
 
 use super::cache::SymbolCache;
-use super::types::{Candle, Timeframe, KlineEvent, KlineEventType};
+use super::types::{Candle, Timeframe, KlineEvent, KlineEventType, align_open_time};
 use super::aggregator::Aggregator;
 use super::KlineSource;
+use crate::models::MarketType;
 
 pub struct GapDetector;
+
+const INITIAL_1M_LIMIT: u32 = 2000;
+const INITIAL_HIGH_TF_LIMIT: u32 = 1000;
 
 impl GapDetector {
     pub async fn detect_and_backfill(
@@ -17,6 +21,7 @@ impl GapDetector {
         cache: &Arc<Mutex<SymbolCache>>,
         source: &Arc<dyn KlineSource>,
         event_tx: &tokio::sync::broadcast::Sender<KlineEvent>,
+        market_type: MarketType,
     ) -> anyhow::Result<usize> {
         let last_closed_1m = {
             let guard = cache.lock().await;
@@ -28,7 +33,7 @@ impl GapDetector {
             Some(c) => c.open_time + 60_000,
             None => {
                 tracing::info!("[GapDetector] No 1m candles in cache for {}/{}, loading initial data", exchange, symbol);
-                return Self::initial_load(exchange, symbol, cache, source, event_tx).await;
+                return Self::initial_load(exchange, symbol, cache, source, event_tx, market_type).await;
             }
         };
 
@@ -48,7 +53,7 @@ impl GapDetector {
         );
 
         let limit = gap_minutes.min(1000);
-        let fetched = source.fetch_klines(exchange, symbol, "1m", limit, Some(gap_start)).await?;
+        let fetched = source.fetch_klines(exchange, symbol, "1m", limit, Some(gap_start), Some(market_type)).await?;
 
         if fetched.is_empty() {
             tracing::warn!("[GapDetector] No data returned for gap backfill: {}/{}", exchange, symbol);
@@ -110,43 +115,125 @@ impl GapDetector {
         cache: &Arc<Mutex<SymbolCache>>,
         source: &Arc<dyn KlineSource>,
         event_tx: &tokio::sync::broadcast::Sender<KlineEvent>,
+        market_type: MarketType,
     ) -> anyhow::Result<usize> {
-        let fetches: Vec<_> = Timeframe::all().iter().map(|&tf| {
-            let limit = tf.default_limit() as u32;
-            async move {
-                let result = source.fetch_klines(exchange, symbol, tf.as_str(), limit, None).await;
-                (tf, result)
-            }
-        }).collect();
+        tracing::info!(
+            "[GapDetector] Initial load for {}/{}: 1m={} + high_tf={}",
+            exchange, symbol, INITIAL_1M_LIMIT, INITIAL_HIGH_TF_LIMIT
+        );
 
-        let results = futures_util::future::join_all(fetches).await;
+        let (result_1m, results_high): (anyhow::Result<Vec<Candle>>, Vec<(Timeframe, anyhow::Result<Vec<Candle>>)>) = {
+            let fetch_1m = source.fetch_klines(exchange, symbol, "1m", INITIAL_1M_LIMIT, None, Some(market_type.clone()));
+            let fetch_m5 = source.fetch_klines(exchange, symbol, "5m", INITIAL_HIGH_TF_LIMIT, None, Some(market_type.clone()));
+            let fetch_m15 = source.fetch_klines(exchange, symbol, "15m", INITIAL_HIGH_TF_LIMIT, None, Some(market_type.clone()));
+            let fetch_h1 = source.fetch_klines(exchange, symbol, "1h", INITIAL_HIGH_TF_LIMIT, None, Some(market_type.clone()));
+            let fetch_h4 = source.fetch_klines(exchange, symbol, "4h", INITIAL_HIGH_TF_LIMIT, None, Some(market_type.clone()));
+            let fetch_d1 = source.fetch_klines(exchange, symbol, "1d", INITIAL_HIGH_TF_LIMIT, None, Some(market_type.clone()));
 
-        let mut fetched_data: Vec<(Timeframe, Vec<Candle>)> = Vec::new();
-        for (tf, result) in results {
-            match result {
-                Ok(candles) if !candles.is_empty() => {
-                    let count = candles.len();
-                    tracing::info!(
-                        "[GapDetector] Loaded {} {} candles for {}/{}",
-                        count, tf.as_str(), exchange, symbol
-                    );
-                    fetched_data.push((tf, candles));
-                }
-                Ok(_) => {
-                    tracing::warn!("[GapDetector] No {} candles for {}/{}", tf.as_str(), exchange, symbol);
-                }
-                Err(e) => {
-                    tracing::error!("[GapDetector] Failed to load {} candles for {}/{}: {}", tf.as_str(), exchange, symbol, e);
-                }
+            let (r_1m, r_m5, r_m15, r_h1, r_h4, r_d1) = tokio::join!(fetch_1m, fetch_m5, fetch_m15, fetch_h1, fetch_h4, fetch_d1);
+
+            let high = vec![
+                (Timeframe::M5, r_m5),
+                (Timeframe::M15, r_m15),
+                (Timeframe::H1, r_h1),
+                (Timeframe::H4, r_h4),
+                (Timeframe::D1, r_d1),
+            ];
+
+            (r_1m, high)
+        };
+
+        let candles_1m = match result_1m {
+            Ok(c) if !c.is_empty() => c,
+            Ok(_) => {
+                tracing::warn!("[GapDetector] No 1m candles for {}/{}", exchange, symbol);
+                return Ok(0);
             }
-        }
+            Err(e) => {
+                tracing::error!("[GapDetector] Failed to load 1m candles for {}/{}: {}", exchange, symbol, e);
+                return Err(e);
+            }
+        };
+
+        tracing::info!(
+            "[GapDetector] Loaded {} 1m candles for {}/{}",
+            candles_1m.len(), exchange, symbol
+        );
+
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let current_1m_open = (now_ms / 60_000) * 60_000;
+
+        let unclosed_high: Vec<(Timeframe, Candle)> = [Timeframe::M5, Timeframe::M15, Timeframe::H1, Timeframe::H4, Timeframe::D1]
+            .iter()
+            .filter_map(|&tf| {
+                let tf_ms = tf.ms();
+                let current_tf_open = align_open_time(current_1m_open, tf);
+                let relevant: Vec<Candle> = candles_1m.iter()
+                    .filter(|c| c.open_time >= current_tf_open)
+                    .cloned()
+                    .collect();
+                if relevant.is_empty() {
+                    return None;
+                }
+                let mut agg = Aggregator::aggregate_1m_to_timeframe(&relevant, tf);
+                if let Some(last) = agg.last_mut() {
+                    last.closed = false;
+                }
+                agg.last().cloned().map(|c| (tf, c))
+            })
+            .collect();
 
         let mut total = 0;
         {
             let mut guard = cache.lock().await;
-            for (tf, candles) in &fetched_data {
-                total += candles.len();
-                guard.replace_timeframe(*tf, candles.clone());
+
+            guard.replace_timeframe(Timeframe::M1, candles_1m.clone());
+            total += guard.get_klines(Timeframe::M1).len();
+
+            for (tf, result) in &results_high {
+                match result {
+                    Ok(candles) if !candles.is_empty() => {
+                        let mut final_candles = candles.clone();
+
+                        if let Some(pos) = final_candles.iter().rposition(|c| !c.closed) {
+                            final_candles.truncate(pos);
+                        }
+
+                        if let Some(unclosed) = unclosed_high.iter().find(|(t, _)| *t == *tf) {
+                            if let Some(last_rest) = final_candles.last() {
+                                if last_rest.open_time < unclosed.1.open_time {
+                                    final_candles.push(unclosed.1.clone());
+                                } else if last_rest.open_time == unclosed.1.open_time {
+                                    let len = final_candles.len();
+                                    final_candles[len - 1] = unclosed.1.clone();
+                                }
+                            } else {
+                                final_candles.push(unclosed.1.clone());
+                            }
+                        }
+
+                        tracing::info!(
+                            "[GapDetector] Loaded {} {} candles ({} from REST + unclosed) for {}/{}",
+                            final_candles.len(), tf.as_str(), candles.len(), exchange, symbol
+                        );
+                        guard.replace_timeframe(*tf, final_candles);
+                        total += guard.get_klines(*tf).len();
+                    }
+                    Ok(_) => {
+                        tracing::warn!("[GapDetector] No {} candles for {}/{}", tf.as_str(), exchange, symbol);
+                        if let Some(unclosed) = unclosed_high.iter().find(|(t, _)| *t == *tf) {
+                            guard.replace_timeframe(*tf, vec![unclosed.1.clone()]);
+                            total += 1;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("[GapDetector] Failed to load {} candles for {}/{}: {}", tf.as_str(), exchange, symbol, e);
+                        if let Some(unclosed) = unclosed_high.iter().find(|(t, _)| *t == *tf) {
+                            guard.replace_timeframe(*tf, vec![unclosed.1.clone()]);
+                            total += 1;
+                        }
+                    }
+                }
             }
         }
 
@@ -155,13 +242,10 @@ impl GapDetector {
                 exchange: exchange.to_string(),
                 symbol: symbol.to_string(),
                 timeframe: Timeframe::M1,
-                candle: {
-                    let guard = cache.lock().await;
-                    guard.last_1m().unwrap_or_else(|| Candle {
-                        open_time: 0, close_time: 0, open: 0.0, high: 0.0, low: 0.0,
-                        close: 0.0, volume: 0.0, quote_volume: 0.0, trades: 0, closed: false,
-                    })
-                },
+                candle: candles_1m.last().cloned().unwrap_or_else(|| Candle {
+                    open_time: 0, close_time: 0, open: 0.0, high: 0.0, low: 0.0,
+                    close: 0.0, volume: 0.0, quote_volume: 0.0, trades: 0, closed: false,
+                }),
                 event_type: KlineEventType::Backfilled,
             });
         }

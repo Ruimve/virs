@@ -55,6 +55,9 @@ const KlineChart: Component<KlineChartProps> = (props) => {
       }
     }
 
+    // Store initial timeVisible for later updates
+    let timeVisibleRef = timeVisible
+
     chart = createChart(containerRef, {
       layout: {
         background: { type: ColorType.Solid, color: '#ffffff' },
@@ -97,6 +100,33 @@ const KlineChart: Component<KlineChartProps> = (props) => {
     }))
 
     candleSeries.setData(chartData)
+
+    // Reset time scale to avoid stale range from previous timeframe
+    chart?.timeScale().fitContent()
+
+    // Update time format based on new data span
+    if (chart && props.data.length >= 2) {
+      const firstTime = props.data[0].time
+      const lastTime = props.data[props.data.length - 1].time
+      const spanHours = (lastTime - firstTime) / 3600
+      const newTimeVisible = spanHours <= 2160
+      if (newTimeVisible !== timeVisibleRef) {
+        timeVisibleRef = newTimeVisible
+        chart.applyOptions({
+          timeScale: { timeVisible: newTimeVisible },
+        })
+      }
+    }
+
+    // After fitContent, optionally zoom to last N candles on next frame
+    if (props.data.length > 100) {
+      requestAnimationFrame(() => {
+        chart?.timeScale().setVisibleLogicalRange({
+          from: props.data.length - 100,
+          to: props.data.length - 1,
+        })
+      })
+    }
 
     if (props.data.length > 0 && props.data[0].volume !== undefined) {
       const volumeSeries = chart.addHistogramSeries({

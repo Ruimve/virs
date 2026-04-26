@@ -3,6 +3,7 @@ import { api } from '../lib/api'
 import KlineChart from '../components/KlineChart'
 import { type OverlayLine, computeSMA, computeEMA, computeBBands } from '../utils/indicators'
 import { useMarket } from '../lib/market-context'
+import { useKlineWs, type KlineWsEvent } from '../lib/ws'
 
 // ── 类型 ──
 
@@ -58,22 +59,91 @@ const Market: Component = () => {
   const [selectedIndicators, setSelectedIndicators] = createSignal<string[]>(['sma20'])
   const toggleInd = (name: string) => setSelectedIndicators(p => p.includes(name) ? p.filter(i => i !== name) : [...p, name])
 
-  // ── 数据获取 ──
+  // 请求版本号：每次切换周期/交易所/市场类型时递增，用于丢弃过期的异步响应
+  let fetchVersion = 0
+  // 记录当前已加载数据对应的周期，WS 推送据此过滤
+  let loadedTimeframe = ''
 
-  async function fetchAll() {
-    setLoading(true); setError('')
+  async function ensureKlineSubscribed() {
+    try {
+      const res = await api.post('/kline/subscribe', {
+        exchange: exchange(),
+        symbol: symbol(),
+        market_type: market.marketType(),
+        timeframe: interval(),
+      })
+      return res.success
+    } catch {
+      return false
+    }
+  }
+
+  async function fetchKlinesFromEngine(version: number): Promise<boolean> {
+    try {
+      const params = new URLSearchParams({
+        exchange: exchange(),
+        symbol: symbol(),
+        timeframe: interval(),
+      })
+      const res = await api.get<any>(`/kline/data?${params}`)
+      // 版本号已过期，丢弃响应
+      if (version !== fetchVersion) return false
+      if (res.success && res.data) {
+        const d = res.data
+        const candles = Array.isArray(d) ? d : (d.SingleTimeframe || d.AllTimeframes || [])
+        if (Array.isArray(candles) && candles.length > 0) {
+          setKlines(candles)
+          loadedTimeframe = interval()
+          return true
+        }
+      }
+      return false
+    } catch {
+      return false
+    }
+  }
+
+  async function fetchKlinesFallback(version: number) {
     try {
       const params = { exchange: exchange(), symbol: symbol(), market_type: market.marketType() }
-      const [t, k, o] = await Promise.all([
+      const k = await api.get<KlineItem[]>(`/market/klines?${new URLSearchParams({ ...params, interval: interval(), limit: '500' } as any)}`)
+      if (version !== fetchVersion) return
+      if (k.success && k.data && k.data.length > 0) {
+        setKlines(k.data)
+        loadedTimeframe = interval()
+      }
+    } catch { /* */ }
+  }
+
+  async function fetchAll() {
+    const version = ++fetchVersion
+    setLoading(true); setError('')
+    // 立即清空旧数据，阻止 WS 推送追加到旧数据上
+    setKlines([])
+    loadedTimeframe = ''
+    try {
+      const params = { exchange: exchange(), symbol: symbol(), market_type: market.marketType() }
+      const [t, o] = await Promise.all([
         api.get<TickerData>(`/market/ticker?${new URLSearchParams(params as any)}`),
-        api.get<KlineItem[]>(`/market/klines?${new URLSearchParams({ ...params, interval: interval(), limit: '200' } as any)}`),
         api.get<OrderbookData>(`/market/orderbook?${new URLSearchParams({ ...params, depth: '20' } as any)}`),
       ])
+      if (version !== fetchVersion) return
       if (t.success) setTicker(t.data ?? null)
-      if (k.success) setKlines(k.data ?? [])
       if (o.success) setOrderbook(o.data ?? null)
-    } catch (e: any) { setError(e.message || '加载失败') }
-    finally { setLoading(false) }
+
+      const subscribed = await ensureKlineSubscribed()
+      if (version !== fetchVersion) return
+      if (subscribed) {
+        const loaded = await fetchKlinesFromEngine(version)
+        if (version !== fetchVersion) return
+        if (!loaded) {
+          await fetchKlinesFallback(version)
+        }
+      } else {
+        await fetchKlinesFallback(version)
+      }
+    } catch (e: any) { if (version === fetchVersion) setError(e.message || '加载失败') }
+    finally { if (version === fetchVersion) setLoading(false) }
   }
 
   async function fetchBalances() {
@@ -89,6 +159,35 @@ const Market: Component = () => {
   onMount(fetchAll)
   createEffect(() => { interval(); fetchAll() })
   createEffect(() => { market.marketType(); fetchAll() })
+
+  useKlineWs((event: KlineWsEvent) => {
+    const curExchange = exchange()
+    const curSymbol = symbol()
+    const curInterval = interval()
+
+    if (event.exchange !== curExchange || event.symbol !== curSymbol) return
+    if (event.timeframe !== curInterval) return
+    // 最终防线：数据尚未加载完成时，不接受 WS 推送
+    if (!loadedTimeframe) return
+
+    const candle = event.candle
+    setKlines(prev => {
+      const idx = prev.findIndex(k => k.open_time === candle.open_time)
+      if (idx !== -1) {
+        const next = [...prev]
+        next[idx] = { ...next[idx], open: candle.open, high: candle.high, low: candle.low, close: candle.close, volume: candle.volume }
+        return next
+      }
+      return [...prev, {
+        open_time: candle.open_time,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        volume: candle.volume,
+      }]
+    })
+  })
 
   // ── 指标 ──
 

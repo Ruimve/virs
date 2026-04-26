@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use crate::kline::{KlineSource, types::Candle};
 use crate::ccxt::{self, MarketType as CcxtMarketType};
+use crate::models::MarketType;
 
 pub struct CcxtKlineSource {
     proxy_url: Option<String>,
@@ -21,15 +22,19 @@ impl KlineSource for CcxtKlineSource {
         timeframe: &str,
         limit: u32,
         since: Option<i64>,
+        market_type: Option<MarketType>,
     ) -> anyhow::Result<Vec<Candle>> {
-        let market_type = CcxtMarketType::Spot;
+        let ccxt_market_type = match market_type.unwrap_or(MarketType::Spot) {
+            MarketType::Spot => CcxtMarketType::Spot,
+            MarketType::Perpetual => CcxtMarketType::Perpetual,
+        };
         let ccxt_ex = ccxt::create_exchange(
             exchange,
             "",
             "",
             None,
             self.proxy_url.as_deref(),
-            &market_type,
+            &ccxt_market_type,
         )
         .map_err(|e| anyhow::anyhow!("Failed to create exchange '{}': {}", exchange, e))?;
 

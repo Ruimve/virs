@@ -70,6 +70,25 @@ export type WsEvent =
   | RiskEvent
   | NotificationEvent
 
+export interface KlineWsEvent {
+  exchange: string
+  symbol: string
+  timeframe: string
+  candle: {
+    open_time: number
+    close_time: number
+    open: number
+    high: number
+    low: number
+    close: number
+    volume: number
+    quote_volume: number
+    trades: number
+    closed: boolean
+  }
+  event_type: 'Update' | 'Closed' | 'Backfilled'
+}
+
 const TOKEN_KEY = 'qd_token'
 const BASE_RECONNECT_MS = 1000
 const MAX_RECONNECT_MS = 30000
@@ -151,4 +170,71 @@ export function useWs(onEvent: (event: WsEvent) => void): { connected: () => boo
   })
 
   return { connected }
+}
+
+let klineWs: WebSocket | null = null
+let klineListeners: Array<(event: KlineWsEvent) => void> = []
+let klineReconnectTimer: ReturnType<typeof setTimeout> | null = null
+let klineReconnectAttempts = 0
+const [klineConnected, setKlineConnected] = createSignal(false)
+
+function getKlineWsUrl(): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/ws/kline`
+}
+
+function connectKlineWs() {
+  if (klineWs && klineWs.readyState === WebSocket.OPEN) return
+
+  try {
+    klineWs = new WebSocket(getKlineWsUrl())
+
+    klineWs.onopen = () => {
+      setKlineConnected(true)
+      klineReconnectAttempts = 0
+    }
+
+    klineWs.onmessage = (e) => {
+      try {
+        const event: KlineWsEvent = JSON.parse(e.data)
+        klineListeners.forEach(listener => listener(event))
+      } catch (err) {
+        console.error('[KlineWS] Failed to parse message:', err)
+      }
+    }
+
+    klineWs.onclose = () => {
+      setKlineConnected(false)
+      const delay = Math.min(BASE_RECONNECT_MS * Math.pow(2, klineReconnectAttempts), MAX_RECONNECT_MS)
+      klineReconnectAttempts++
+      klineReconnectTimer = setTimeout(connectKlineWs, delay)
+    }
+
+    klineWs.onerror = () => {}
+  } catch (err) {
+    console.error('[KlineWS] Failed to connect:', err)
+    const delay = Math.min(BASE_RECONNECT_MS * Math.pow(2, klineReconnectAttempts), MAX_RECONNECT_MS)
+    klineReconnectAttempts++
+    klineReconnectTimer = setTimeout(connectKlineWs, delay)
+  }
+}
+
+export function useKlineWs(onEvent: (event: KlineWsEvent) => void): { connected: () => boolean } {
+  klineListeners.push(onEvent)
+
+  if (!klineWs || klineWs.readyState === WebSocket.CLOSED) {
+    klineReconnectAttempts = 0
+    connectKlineWs()
+  }
+
+  onCleanup(() => {
+    klineListeners = klineListeners.filter(l => l !== onEvent)
+    if (klineListeners.length === 0 && klineWs) {
+      if (klineReconnectTimer) clearTimeout(klineReconnectTimer)
+      klineWs.close()
+      klineWs = null
+    }
+  })
+
+  return { connected: klineConnected }
 }
