@@ -389,7 +389,7 @@ impl AiService {
             "deepseek" => {
                 let key = self.config.deepseek_api_key.as_ref()
                     .ok_or_else(|| anyhow::anyhow!("DEEPSEEK_API_KEY is not configured"))?;
-                let model = requested_model.unwrap_or("deepseek-chat").to_string();
+                let model = requested_model.unwrap_or("deepseek-v4-flash").to_string();
                 Ok((key.clone(), "https://api.deepseek.com/v1".to_string(), model))
             }
             _ => Err(anyhow::anyhow!("Unknown AI provider: {}", provider)),
@@ -429,7 +429,7 @@ impl AiService {
                     .as_ref()
                     .or(self.config.deepseek_api_key.as_ref())
                     .ok_or_else(|| anyhow::anyhow!("DEEPSEEK_API_KEY is not configured (neither user nor system)"))?;
-                let model = requested_model.unwrap_or("deepseek-chat").to_string();
+                let model = requested_model.unwrap_or("deepseek-v4-flash").to_string();
                 Ok((key.clone(), "https://api.deepseek.com/v1".to_string(), model))
             }
             _ => Err(anyhow::anyhow!("Unknown AI provider: {}", provider)),

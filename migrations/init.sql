@@ -264,7 +264,7 @@ CREATE TABLE IF NOT EXISTS qd_grid_bots (
     name VARCHAR(100) NOT NULL,
     symbol VARCHAR(50) NOT NULL,
     exchange VARCHAR(50) NOT NULL DEFAULT 'binance',
-    status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'running', 'paused', 'stopped', 'error')),
+    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'running', 'paused', 'stopped', 'error')),
 
     -- 网格参数
     upper_price DOUBLE PRECISION NOT NULL,
@@ -317,3 +317,9 @@ CREATE TABLE IF NOT EXISTS qd_grid_trades (
 
 CREATE INDEX IF NOT EXISTS idx_grid_bots_user ON qd_grid_bots(user_id);
 CREATE INDEX IF NOT EXISTS idx_grid_trades_bot ON qd_grid_trades(bot_id);
+
+-- Fix: ensure status column is TEXT type (not VARCHAR) for sqlx compatibility
+DO $$ BEGIN
+    ALTER TABLE qd_grid_bots ALTER COLUMN status TYPE TEXT;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;

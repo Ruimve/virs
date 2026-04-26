@@ -184,7 +184,7 @@ pub async fn test_credential(
         ),
         "deepseek" => (
             "https://api.deepseek.com/v1",
-            "deepseek-chat",
+            "deepseek-v4-flash",
         ),
         _ => {
             return Err((

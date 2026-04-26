@@ -115,24 +115,97 @@ async fn load_user_ai_config(
 }
 
 fn default_grid_system_prompt() -> &'static str {
-    r#"你是一位专业的加密货币量化交易分析师，专注于合约网格交易策略。根据提供的市场数据分析当前市场状态，并生成最优的网格交易参数。
+    r#"你是一位专业的加密货币量化交易分析师，精通合约网格交易策略。你的职责是分析市场数据、判断市场状态、生成最优网格参数，并给出可执行的交易操作指令。
 
-## 分析要求
-1. 判断市场状态（trending_up/trending_down/ranging/volatile）
-2. 确定合理的网格上下界（基于支撑/阻力位、ATR、BBands）
-3. 计算最优网格数量和每格利润率
-4. 评估风险并给出建议
+## 核心参数
+- 交易对由用户提供
+- 网格层数由用户提供（默认 50）
+- 总投资额由用户提供（USDT）
+- 杠杆倍数由用户提供
+- 价格分布采用高斯分布（中间密、两端疏）
+
+## 市场状态判断规则
+
+### 震荡市场（适合网格交易）
+- BBands Width < 3%（布林带收缩，价格在通道内运行）
+- EMA20 与 EMA50 距离 < 1%（均线粘合，无明确方向）
+- 价格在布林带中轨 ±1% 附近
+- ADX < 25（趋势不明显）
+- **操作**: 正常运行网格，place_buy_limit / place_sell_limit
+
+### 趋势市场（暂停网格）
+- BBands Width > 4%（布林带扩张，趋势启动）
+- EMA20 与 EMA50 距离 > 2%（均线发散，方向明确）
+- 价格持续突破布林带上轨或下轨（连续 3 根以上）
+- ADX > 30（趋势强劲）
+- **操作**: pause_grid，等待回归震荡后再 resume_grid
+
+### 高波动市场（谨慎运行）
+- ATR 异常放大（当前 ATR > 20 日 ATR 均值的 2 倍）
+- 价格在短时间内剧烈波动（1h K 线实体 > ATR 的 1.5 倍）
+- BBands Width 突然扩张（5 根 bar 内增幅 > 50%）
+- **操作**: 可继续运行但减小仓位（quantity_per_grid × 0.5），或 pause_grid
+
+## 网格参数计算规则
+
+### 上下界确定
+- 上界：近期阻力位（近期高点、BBands 上轨、整数关口）取最低值
+- 下界：近期支撑位（近期低点、BBands 下轨、整数关口）取最高值
+- 网格区间应覆盖当前价格 ±2 个标准差（约 95% 置信区间）
+- 区间宽度 = 上界 - 下界，应 >= ATR × 10（确保足够的交易空间）
+
+### 高斯分布网格
+- 网格价格按高斯分布排列：中间密度高、两端密度低
+- 使用当前价格为均值 μ，区间宽度 / 4 为标准差 σ
+- 每个网格价格 = μ + σ × Φ⁻¹(p)，其中 p 按网格序号均匀分布
+- 这样在价格密集区域（中间）有更多网格，捕捉更多交易机会
+
+### 每格利润率
+- 基础利润率 = (网格间距 / 网格价格) × 100%
+- 考虑手续费（taker 0.05% × 2 = 0.1%），实际利润率应 > 0.3%
+- 建议每格利润率 0.3% - 2.0%，波动率越高利润率可越大
+
+### 每格数量
+- 每格数量(USDT) = 总投资额 / 有效网格数
+- 有效网格数 ≈ grid_count × 0.6（高斯分布下约 60% 的网格在 1σ 内）
+- 实际下单数量 = 每格数量 / 杠杆倍数 / 当前价格（换算为币数）
+
+## 可执行操作指令
+- `place_buy_limit` — 在指定价格挂买单
+- `place_sell_limit` — 在指定价格挂卖单
+- `cancel_order` — 取消指定订单
+- `cancel_all_orders` — 取消所有挂单
+- `pause_grid` — 暂停网格（趋势市场时）
+- `resume_grid` — 恢复网格（回归震荡时）
+- `adjust_grid` — 调整网格上下界
+- `hold` — 保持当前状态不操作
+
+## 风控规则
+1. 单次最大持仓不超过总投资的 30%
+2. 网格区间内最大亏损不超过总投资的 15%
+3. 当价格突破网格区间时，立即 cancel_all_orders 并 pause_grid
+4. 当连续 3 次交易亏损时，减小仓位至 50%
+5. 杠杆使用不超过 10 倍，高波动市场不超过 3 倍
 
 ## 输出格式（严格 JSON，不要 markdown 代码块）
 {
   "market_regime": "ranging|trending_up|trending_down|volatile",
+  "confidence": 0.0-1.0,
+  "recommended_action": "run_grid|pause_grid|reduce_position|adjust_grid",
+  "action_reason": "推荐操作的理由（50字以内）",
   "upper_price": 数字（网格上界）,
   "lower_price": 数字（网格下界）,
-  "grid_count": 数字（网格数量，建议 10-50）,
-  "grid_profit_pct": 数字（每格利润率%，建议 0.3-2.0）,
-  "quantity_per_grid": 数字（每格数量，USDT计）,
-  "leverage": 数字（杠杆倍数，建议 1-10）,
-  "analysis": "详细分析说明（200字以内）",
+  "grid_count": 数字（网格层数）,
+  "grid_profit_pct": 数字（每格利润率%）,
+  "quantity_per_grid": 数字（每格数量，USDT）,
+  "leverage": 数字（杠杆倍数）,
+  "grid_levels": [
+    { "level": 1, "price": 数字, "side": "buy", "quantity_usdt": 数字 },
+    { "level": 2, "price": 数字, "side": "buy", "quantity_usdt": 数字 },
+    ...
+    { "level": N, "price": 数字, "side": "sell", "quantity_usdt": 数字 }
+  ],
+  "analysis": "详细分析说明（300字以内）",
   "risk_warning": "风险提示（100字以内）"
 }"#
 }
@@ -183,15 +256,30 @@ struct GridIndicators {
     current_price: f64,
     rsi: f64,
     atr: f64,
+    atr_pct: f64,
     bb_width: f64,
+    bb_upper: f64,
+    bb_middle: f64,
+    bb_lower: f64,
     ema12: f64,
+    ema20: f64,
     ema26: f64,
+    ema50: f64,
     ema12_trend: &'static str,
+    ema20_trend: &'static str,
     ema26_trend: &'static str,
+    ema50_trend: &'static str,
     price_high: f64,
     price_low: f64,
     ema_4h: f64,
     volatility: f64,
+    change_1h: f64,
+    change_4h: f64,
+    change_24h: f64,
+    macd: f64,
+    macd_signal: f64,
+    macd_histogram: f64,
+    adx: f64,
     ohlcv_table: String,
 }
 
@@ -201,15 +289,33 @@ fn compute_grid_indicators(klines_1h: &[Kline], klines_4h: &[Kline]) -> GridIndi
 
     let rsi = indicators::rsi_at(klines_1h, last_idx, 14);
     let atr = indicators::atr_at(klines_1h, last_idx, 14);
+    let atr_pct = if current_price > 0.0 { atr / current_price * 100.0 } else { 0.0 };
     let bb_width = indicators::bbands_width_at(klines_1h, last_idx, 20, 2.0);
+    let (bb_upper, bb_middle, bb_lower) = indicators::bbands_at(klines_1h, last_idx, 20, 2.0);
 
     let ema12 = indicators::ema_at(klines_1h, last_idx, 12);
+    let ema20 = indicators::ema_at(klines_1h, last_idx, 20);
     let ema26 = indicators::ema_at(klines_1h, last_idx, 26);
-    let ema12_prev = indicators::ema_at(klines_1h, last_idx.saturating_sub(5), 12);
-    let ema26_prev = indicators::ema_at(klines_1h, last_idx.saturating_sub(5), 26);
+    let ema50 = if klines_1h.len() >= 50 {
+        indicators::ema_at(klines_1h, last_idx, 50)
+    } else {
+        0.0
+    };
+
+    let lookback = 5.min(last_idx);
+    let ema12_prev = indicators::ema_at(klines_1h, last_idx.saturating_sub(lookback), 12);
+    let ema20_prev = indicators::ema_at(klines_1h, last_idx.saturating_sub(lookback), 20);
+    let ema26_prev = indicators::ema_at(klines_1h, last_idx.saturating_sub(lookback), 26);
+    let ema50_prev = if klines_1h.len() >= 50 + lookback {
+        indicators::ema_at(klines_1h, last_idx.saturating_sub(lookback), 50)
+    } else {
+        ema50
+    };
 
     let ema12_trend = if ema12 > ema12_prev { "上升" } else if ema12 < ema12_prev { "下降" } else { "横盘" };
+    let ema20_trend = if ema20 > ema20_prev { "上升" } else if ema20 < ema20_prev { "下降" } else { "横盘" };
     let ema26_trend = if ema26 > ema26_prev { "上升" } else if ema26 < ema26_prev { "下降" } else { "横盘" };
+    let ema50_trend = if ema50 > ema50_prev { "上升" } else if ema50 < ema50_prev { "下降" } else { "横盘" };
 
     let price_high: f64 = klines_1h.iter().map(|k| k.high).fold(f64::NEG_INFINITY, f64::max);
     let price_low: f64 = klines_1h.iter().map(|k| k.low).fold(f64::INFINITY, f64::min);
@@ -219,6 +325,15 @@ fn compute_grid_indicators(klines_1h: &[Kline], klines_4h: &[Kline]) -> GridIndi
     } else {
         0.0
     };
+
+    // 涨跌幅计算
+    let change_1h = if last_idx >= 1 && klines_1h[last_idx - 1].close > 0.0 {
+        (current_price - klines_1h[last_idx - 1].close) / klines_1h[last_idx - 1].close * 100.0
+    } else { 0.0 };
+
+    let change_4h = if last_idx >= 4 && klines_1h[last_idx - 4].close > 0.0 {
+        (current_price - klines_1h[last_idx - 4].close) / klines_1h[last_idx - 4].close * 100.0
+    } else { 0.0 };
 
     let last_24: &[Kline] = if klines_1h.len() >= 24 {
         &klines_1h[klines_1h.len() - 24..]
@@ -232,6 +347,17 @@ fn compute_grid_indicators(klines_1h: &[Kline], klines_4h: &[Kline]) -> GridIndi
     } else {
         0.0
     };
+    let change_24h = if last_24.first().map(|k| k.close).unwrap_or(0.0) > 0.0 {
+        (current_price - last_24.first().unwrap().close) / last_24.first().unwrap().close * 100.0
+    } else { 0.0 };
+
+    // MACD
+    let macd = indicators::macd_at(klines_1h, last_idx, 12, 26);
+    let macd_signal = indicators::macd_signal_at(klines_1h, last_idx, 12, 26, 9);
+    let macd_histogram = indicators::macd_histogram_at(klines_1h, last_idx, 12, 26, 9);
+
+    // ADX
+    let adx = indicators::adx_at(klines_1h, last_idx, 14);
 
     let last_30: &[Kline] = if klines_1h.len() >= 30 {
         &klines_1h[klines_1h.len() - 30..]
@@ -254,15 +380,30 @@ fn compute_grid_indicators(klines_1h: &[Kline], klines_4h: &[Kline]) -> GridIndi
         current_price,
         rsi,
         atr,
+        atr_pct,
         bb_width,
+        bb_upper,
+        bb_middle,
+        bb_lower,
         ema12,
+        ema20,
         ema26,
+        ema50,
         ema12_trend,
+        ema20_trend,
         ema26_trend,
+        ema50_trend,
         price_high,
         price_low,
         ema_4h,
         volatility,
+        change_1h,
+        change_4h,
+        change_24h,
+        macd,
+        macd_signal,
+        macd_histogram,
+        adx,
         ohlcv_table,
     }
 }
@@ -271,14 +412,35 @@ fn build_user_prompt(template: &str, ind: &GridIndicators, symbol: &str, exchang
     template
         .replace("{symbol}", symbol)
         .replace("{exchange}", exchange)
-        .replace("{ohlcv_table}", &ind.ohlcv_table)
+        .replace("{current_time}", &chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string())
+        .replace("{current_price}", &format!("{:.2}", ind.current_price))
+        .replace("{change_1h}", &format!("{:+.2}%", ind.change_1h))
+        .replace("{change_4h}", &format!("{:+.2}%", ind.change_4h))
+        .replace("{change_24h}", &format!("{:+.2}%", ind.change_24h))
         .replace("{rsi}", &format!("{:.2}", ind.rsi))
         .replace("{atr}", &format!("{:.4}", ind.atr))
-        .replace("{bb_width}", &format!("{:.4}", ind.bb_width))
+        .replace("{atr_pct}", &format!("{:.2}%", ind.atr_pct))
+        .replace("{bb_upper}", &format!("{:.2}", ind.bb_upper))
+        .replace("{bb_middle}", &format!("{:.2}", ind.bb_middle))
+        .replace("{bb_lower}", &format!("{:.2}", ind.bb_lower))
+        .replace("{bb_width}", &format!("{:.2}%", ind.bb_width))
         .replace("{ema12}", &format!("{:.4}", ind.ema12))
         .replace("{ema12_trend}", ind.ema12_trend)
+        .replace("{ema20}", &format!("{:.4}", ind.ema20))
+        .replace("{ema20_trend}", ind.ema20_trend)
         .replace("{ema26}", &format!("{:.4}", ind.ema26))
         .replace("{ema26_trend}", ind.ema26_trend)
+        .replace("{ema50}", &format!("{:.4}", ind.ema50))
+        .replace("{ema50_trend}", ind.ema50_trend)
+        .replace("{price_high}", &format!("{:.4}", ind.price_high))
+        .replace("{price_low}", &format!("{:.4}", ind.price_low))
+        .replace("{ema_4h}", &format!("{:.4}", ind.ema_4h))
+        .replace("{volatility}", &format!("{:.2}", ind.volatility))
+        .replace("{macd}", &format!("{:.4}", ind.macd))
+        .replace("{macd_signal}", &format!("{:.4}", ind.macd_signal))
+        .replace("{macd_histogram}", &format!("{:.4}", ind.macd_histogram))
+        .replace("{adx}", &format!("{:.2}", ind.adx))
+        .replace("{ohlcv_table}", &ind.ohlcv_table)
         .replace("{price_low}", &format!("{:.4}", ind.price_low))
         .replace("{price_high}", &format!("{:.4}", ind.price_high))
         .replace("{current_price}", &format!("{:.4}", ind.current_price))
@@ -503,6 +665,8 @@ pub async fn analyze(
         "provider": ai.provider,
         "model": ai.used_model,
         "analysis": ai.result,
+        "system_prompt": &system_prompt,
+        "user_prompt": &user_prompt,
         "indicators": {
             "rsi": ind.rsi,
             "atr": ind.atr,

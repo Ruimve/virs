@@ -3,14 +3,25 @@ import { api, type PaginatedResponse } from '../lib/api'
 
 // ---- 类型定义 ----
 
+interface GridLevel {
+  level: number
+  price: number
+  side: 'buy' | 'sell'
+  quantity_usdt: number
+}
+
 interface AiAnalysisResult {
   market_regime: string
+  confidence: number
+  recommended_action: string
+  action_reason: string
   upper_price: number
   lower_price: number
   grid_count: number
   grid_profit_pct: number
   quantity_per_grid: number
   leverage: number
+  grid_levels?: GridLevel[]
   analysis: string
   risk_warning: string
 }
@@ -52,28 +63,133 @@ interface GridTrade {
 
 // ---- 默认 Prompt ----
 
-const DEFAULT_SYSTEM_PROMPT = `你是一位专业的加密货币量化交易分析师，专注于合约网格交易策略。根据提供的市场数据分析当前市场状态，并生成最优的网格交易参数。
+const DEFAULT_SYSTEM_PROMPT = `你是一位专业的加密货币量化交易分析师，精通合约网格交易策略。你的职责是分析市场数据、判断市场状态、生成最优网格参数，并给出可执行的交易操作指令。
 
-## 分析要求
-1. 判断市场状态（trending_up/trending_down/ranging/volatile）
-2. 确定合理的网格上下界（基于支撑/阻力位、ATR、BBands）
-3. 计算最优网格数量和每格利润率
-4. 评估风险并给出建议
+## 核心参数
+- 交易对由用户提供
+- 网格层数由用户提供（默认 50）
+- 总投资额由用户提供（USDT）
+- 杠杆倍数由用户提供
+- 价格分布采用高斯分布（中间密、两端疏）
+
+## 市场状态判断规则
+
+### 震荡市场（适合网格交易）
+- BBands Width < 3%（布林带收缩，价格在通道内运行）
+- EMA20 与 EMA50 距离 < 1%（均线粘合，无明确方向）
+- 价格在布林带中轨 ±1% 附近
+- ADX < 25（趋势不明显）
+- **操作**: 正常运行网格，place_buy_limit / place_sell_limit
+
+### 趋势市场（暂停网格）
+- BBands Width > 4%（布林带扩张，趋势启动）
+- EMA20 与 EMA50 距离 > 2%（均线发散，方向明确）
+- 价格持续突破布林带上轨或下轨（连续 3 根以上）
+- ADX > 30（趋势强劲）
+- **操作**: pause_grid，等待回归震荡后再 resume_grid
+
+### 高波动市场（谨慎运行）
+- ATR 异常放大（当前 ATR > 20 日 ATR 均值的 2 倍）
+- 价格在短时间内剧烈波动（1h K 线实体 > ATR 的 1.5 倍）
+- BBands Width 突然扩张（5 根 bar 内增幅 > 50%）
+- **操作**: 可继续运行但减小仓位（quantity_per_grid × 0.5），或 pause_grid
+
+## 网格参数计算规则
+
+### 上下界确定
+- 上界：近期阻力位（近期高点、BBands 上轨、整数关口）取最低值
+- 下界：近期支撑位（近期低点、BBands 下轨、整数关口）取最高值
+- 网格区间应覆盖当前价格 ±2 个标准差（约 95% 置信区间）
+- 区间宽度 = 上界 - 下界，应 >= ATR × 10（确保足够的交易空间）
+
+### 高斯分布网格
+- 网格价格按高斯分布排列：中间密度高、两端密度低
+- 使用当前价格为均值 μ，区间宽度 / 4 为标准差 σ
+- 每个网格价格 = μ + σ × Φ⁻¹(p)，其中 p 按网格序号均匀分布
+- 这样在价格密集区域（中间）有更多网格，捕捉更多交易机会
+
+### 每格利润率
+- 基础利润率 = (网格间距 / 网格价格) × 100%
+- 考虑手续费（taker 0.05% × 2 = 0.1%），实际利润率应 > 0.3%
+- 建议每格利润率 0.3% - 2.0%，波动率越高利润率可越大
+
+### 每格数量
+- 每格数量(USDT) = 总投资额 / 有效网格数
+- 有效网格数 ≈ grid_count × 0.6（高斯分布下约 60% 的网格在 1σ 内）
+- 实际下单数量 = 每格数量 / 杠杆倍数 / 当前价格（换算为币数）
+
+## 可执行操作指令
+- \`place_buy_limit\` — 在指定价格挂买单
+- \`place_sell_limit\` — 在指定价格挂卖单
+- \`cancel_order\` — 取消指定订单
+- \`cancel_all_orders\` — 取消所有挂单
+- \`pause_grid\` — 暂停网格（趋势市场时）
+- \`resume_grid\` — 恢复网格（回归震荡时）
+- \`adjust_grid\` — 调整网格上下界
+- \`hold\` — 保持当前状态不操作
+
+## 风控规则
+1. 单次最大持仓不超过总投资的 30%
+2. 网格区间内最大亏损不超过总投资的 15%
+3. 当价格突破网格区间时，立即 cancel_all_orders 并 pause_grid
+4. 当连续 3 次交易亏损时，减小仓位至 50%
+5. 杠杆使用不超过 10 倍，高波动市场不超过 3 倍
 
 ## 输出格式（严格 JSON，不要 markdown 代码块）
 {
   "market_regime": "ranging|trending_up|trending_down|volatile",
-  "upper_price": 数字,
-  "lower_price": 数字,
-  "grid_count": 数字（10-50）,
-  "grid_profit_pct": 数字（0.3-2.0）,
-  "quantity_per_grid": 数字（USDT）,
-  "leverage": 数字（1-10）,
-  "analysis": "分析说明（200字）",
-  "risk_warning": "风险提示（100字）"
+  "confidence": 0.0-1.0,
+  "recommended_action": "run_grid|pause_grid|reduce_position|adjust_grid",
+  "action_reason": "推荐操作的理由（50字以内）",
+  "upper_price": 数字（网格上界）,
+  "lower_price": 数字（网格下界）,
+  "grid_count": 数字（网格层数）,
+  "grid_profit_pct": 数字（每格利润率%）,
+  "quantity_per_grid": 数字（每格数量，USDT）,
+  "leverage": 数字（杠杆倍数）,
+  "grid_levels": [
+    { "level": 1, "price": 数字, "side": "buy", "quantity_usdt": 数字 },
+    { "level": 2, "price": 数字, "side": "buy", "quantity_usdt": 数字 },
+    ...
+    { "level": N, "price": 数字, "side": "sell", "quantity_usdt": 数字 }
+  ],
+  "analysis": "详细分析说明（300字以内）",
+  "risk_warning": "风险提示（100字以内）"
 }`
 
-const DEFAULT_USER_PROMPT = `请分析 {symbol} ({exchange}) 永续合约市场数据并生成网格交易参数。`
+const DEFAULT_USER_PROMPT = `## 当前时间：{current_time}
+## 市场数据
+- 当前价格：${'$'}{current_price}
+- 1小时涨跌：{change_1h}
+- 4小时涨跌：{change_4h}
+- 24小时涨跌：{change_24h}
+- ATR 14：${'$'}{atr}（{atr_pct}）
+- 布林带：上轨 ${'$'}{bb_upper}，中轨 ${'$'}{bb_middle}，下轨 ${'$'}{bb_lower}
+- 布林带宽度：{bb_width}
+- EMA12：{ema12}，方向：{ema12_trend}
+- EMA20：{ema20}，方向：{ema20_trend}
+- EMA26：{ema26}，方向：{ema26_trend}
+- EMA50：{ema50}，方向：{ema50_trend}
+- MACD：{macd}，Signal：{macd_signal}，Histogram：{macd_histogram}
+- ADX：{adx}
+- 4h EMA(26)：{ema_4h}
+- 24h 波动率：{volatility}%
+- RSI(14)：{rsi}
+
+## 账户状态
+- 总权益：（待接入）
+- 可用余额：（待接入）
+- 当前持仓：（待接入）
+- 未实现盈亏：（待接入）
+
+## 网格状态
+- 网格范围：（待创建后显示）
+- 网格间距：（待创建后显示）
+- 活跃订单数：（待运行后显示）
+- 已成交层数：（待运行后显示）
+- 网格已暂停：false
+
+请根据以上市场数据，判断当前市场状态，生成最优网格交易参数。`
 
 // ---- 工具函数 ----
 
@@ -122,6 +238,7 @@ const GridBotPage: Component = () => {
   // AI 分析
   const [aiLoading, setAiLoading] = createSignal(false)
   const [aiResult, setAiResult] = createSignal<AiAnalysisResult | null>(null)
+  const [finalUserPrompt, setFinalUserPrompt] = createSignal<string | null>(null)
   const [aiError, setAiError] = createSignal('')
 
   // 网格参数（可被 AI 填充，也可手动输入）
@@ -172,7 +289,7 @@ const GridBotPage: Component = () => {
       const usrPrompt = userPrompt()
         .replace('{symbol}', symbol())
         .replace('{exchange}', exchange())
-      const res = await api.post<{ analysis: AiAnalysisResult }>('/grid/analyze', {
+      const res = await api.post<{ analysis: AiAnalysisResult; user_prompt?: string; system_prompt?: string }>('/grid/analyze', {
         symbol: symbol(),
         exchange: exchange(),
         system_prompt: sysPrompt,
@@ -181,6 +298,8 @@ const GridBotPage: Component = () => {
       if (res.success && res.data) {
         const analysis: AiAnalysisResult = res.data.analysis
         setAiResult(analysis)
+        if (res.data.user_prompt) setFinalUserPrompt(res.data.user_prompt)
+        if (res.data.system_prompt) setSystemPrompt(res.data.system_prompt)
         setUpperPrice(analysis.upper_price)
         setLowerPrice(analysis.lower_price)
         setGridCount(analysis.grid_count)
@@ -458,6 +577,23 @@ const GridBotPage: Component = () => {
                 <span class={`px-2 py-0.5 rounded-md text-[11px] font-semibold ${marketRegimeColor[aiResult()!.market_regime] || 'bg-slate-100 text-slate-500'}`}>
                   {marketRegimeLabel[aiResult()!.market_regime] || aiResult()!.market_regime}
                 </span>
+                <Show when={aiResult()!.confidence}>
+                  <span class="text-[11px] text-slate-400">置信度 {Math.round((aiResult()!.confidence ?? 0) * 100)}%</span>
+                </Show>
+                <Show when={aiResult()!.recommended_action}>
+                  <span class={`px-2 py-0.5 rounded-md text-[11px] font-semibold ${
+                    aiResult()!.recommended_action === 'run_grid' ? 'bg-emerald-50 text-emerald-600' :
+                    aiResult()!.recommended_action === 'pause_grid' ? 'bg-red-50 text-red-500' :
+                    aiResult()!.recommended_action === 'reduce_position' ? 'bg-amber-50 text-amber-600' :
+                    'bg-blue-50 text-blue-600'
+                  }`}>
+                    {aiResult()!.recommended_action === 'run_grid' ? '▶ 运行网格' :
+                     aiResult()!.recommended_action === 'pause_grid' ? '⏸ 暂停网格' :
+                     aiResult()!.recommended_action === 'reduce_position' ? '⚠ 减仓' :
+                     aiResult()!.recommended_action === 'adjust_grid' ? '🔧 调整网格' :
+                     aiResult()!.recommended_action}
+                  </span>
+                </Show>
               </div>
 
               <p class="text-[13px] text-slate-600 leading-relaxed">{aiResult()!.analysis}</p>
@@ -498,6 +634,53 @@ const GridBotPage: Component = () => {
                   </svg>
                   <p class="text-[12px] text-amber-700 leading-relaxed">{aiResult()!.risk_warning}</p>
                 </div>
+              </Show>
+
+              {/* 网格层级预览 */}
+              <Show when={aiResult()!.grid_levels && aiResult()!.grid_levels!.length > 0}>
+                <details class="mt-2">
+                  <summary class="text-[12px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors select-none">
+                    📊 查看网格层级（{aiResult()!.grid_levels!.length} 层）
+                  </summary>
+                  <div class="mt-2 max-h-[200px] overflow-auto border border-slate-200 rounded-lg">
+                    <table class="w-full text-[11px]">
+                      <thead class="sticky top-0 bg-slate-50">
+                        <tr class="border-b border-slate-200">
+                          <th class="py-1.5 px-2 text-left font-semibold text-slate-500">#</th>
+                          <th class="py-1.5 px-2 text-right font-semibold text-slate-500">价格</th>
+                          <th class="py-1.5 px-2 text-center font-semibold text-slate-500">方向</th>
+                          <th class="py-1.5 px-2 text-right font-semibold text-slate-500">数量(USDT)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <For each={aiResult()!.grid_levels!}>
+                          {(gl) => (
+                            <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                              <td class="py-1 px-2 text-slate-500">{gl.level}</td>
+                              <td class="py-1 px-2 text-right font-mono text-slate-700">{gl.price.toFixed(2)}</td>
+                              <td class="py-1 px-2 text-center">
+                                <span class={`px-1.5 py-[1px] rounded text-[10px] font-semibold ${gl.side === 'buy' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
+                                  {gl.side === 'buy' ? '买入' : '卖出'}
+                                </span>
+                              </td>
+                              <td class="py-1 px-2 text-right font-mono text-slate-600">{gl.quantity_usdt.toFixed(2)}</td>
+                            </tr>
+                          )}
+                        </For>
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              </Show>
+
+              {/* 最终 User Prompt */}
+              <Show when={finalUserPrompt()}>
+                <details class="mt-2">
+                  <summary class="text-[12px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors select-none">
+                    📋 查看 AI 实际接收的 User Prompt
+                  </summary>
+                  <pre class="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-600 leading-relaxed whitespace-pre-wrap overflow-auto max-h-[300px] font-mono">{finalUserPrompt()}</pre>
+                </details>
               </Show>
             </div>
           </Show>
