@@ -341,3 +341,258 @@ pub async fn get_backtest_data(
         }),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kline::types::{KlineEvent, KlineEventType, AllTimeframesData};
+    use tokio::sync::broadcast;
+
+    /// Helper: create a sample Candle for testing
+    fn sample_candle() -> Candle {
+        Candle {
+            open_time: 1713900000000,
+            close_time: 1713903599999,
+            open: 65000.0,
+            high: 65500.0,
+            low: 64800.0,
+            close: 65200.0,
+            volume: 1234.5,
+            quote_volume: 80_000_000.0,
+            trades: 5000,
+            closed: true,
+        }
+    }
+
+    /// Helper: create a sample KlineEvent for testing
+    fn sample_event(event_type: KlineEventType) -> KlineEvent {
+        KlineEvent {
+            exchange: "binance".to_string(),
+            symbol: "BTCUSDT".to_string(),
+            timeframe: Timeframe::H1,
+            candle: sample_candle(),
+            event_type,
+        }
+    }
+
+    // ── Test 1: KlineEvent (Update) serialization ──────────────────────
+    #[test]
+    fn test_kline_event_serialization() {
+        let event = sample_event(KlineEventType::Update);
+        let json = serde_json::to_string(&event).expect("KlineEvent should serialize to JSON");
+        assert!(
+            json.contains("\"exchange\":\"binance\""),
+            "JSON should contain exchange field: {json}"
+        );
+        assert!(
+            json.contains("\"symbol\":\"BTCUSDT\""),
+            "JSON should contain symbol field: {json}"
+        );
+    }
+
+    // ── Test 2: KlineEvent (Closed) serialization ──────────────────────
+    #[test]
+    fn test_kline_event_closed_serialization() {
+        let event = sample_event(KlineEventType::Closed);
+        let json = serde_json::to_string(&event).expect("KlineEvent should serialize to JSON");
+        assert!(
+            json.contains("\"event_type\":\"Closed\""),
+            "JSON should contain event_type Closed: {json}"
+        );
+    }
+
+    // ── Test 3: KlineEvent (Backfilled) serialization ──────────────────
+    #[test]
+    fn test_kline_event_backfilled_serialization() {
+        let event = sample_event(KlineEventType::Backfilled);
+        let json = serde_json::to_string(&event).expect("KlineEvent should serialize to JSON");
+        assert!(
+            json.contains("\"event_type\":\"Backfilled\""),
+            "JSON should contain event_type Backfilled: {json}"
+        );
+    }
+
+    // ── Test 4: broadcast channel Lagged recovery ──────────────────────
+    #[tokio::test]
+    async fn test_broadcast_lagged_recovery() {
+        let (tx, mut rx) = broadcast::channel::<KlineEvent>(2);
+
+        // Send 5 messages into a channel with capacity 2 => receiver will lag
+        for i in 0..5 {
+            let mut ev = sample_event(KlineEventType::Update);
+            ev.candle.open = ev.candle.open + i as f64;
+            let _ = tx.send(ev);
+        }
+
+        // First recv should return Lagged because receiver fell behind
+        let result = rx.recv().await;
+        match &result {
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                assert!(*n > 0, "Lagged count should be positive");
+            }
+            other => panic!("Expected Lagged error, got: {other:?}"),
+        }
+
+        // After Lagged, next recv should succeed (not exit) — this mirrors the
+        // handler logic: `Err(Lagged(_)) => continue`
+        let result2 = rx.recv().await;
+        assert!(result2.is_ok(), "Should receive an event after Lagged recovery");
+    }
+
+    // ── Test 5: broadcast channel Lagged then Closed ───────────────────
+    #[tokio::test]
+    async fn test_broadcast_lagged_then_closed() {
+        let (tx, mut rx) = broadcast::channel::<KlineEvent>(2);
+
+        // Overwhelm the receiver
+        for i in 0..5 {
+            let mut ev = sample_event(KlineEventType::Update);
+            ev.candle.open = ev.candle.open + i as f64;
+            let _ = tx.send(ev);
+        }
+
+        // Drop the sender so the channel closes
+        drop(tx);
+
+        // First recv: Lagged
+        let result = rx.recv().await;
+        assert!(
+            matches!(result, Err(broadcast::error::RecvError::Lagged(_))),
+            "Expected Lagged, got: {result:?}"
+        );
+
+        // Drain any remaining events (the channel still has buffered messages)
+        // Keep receiving until we get Closed
+        loop {
+            match rx.recv().await {
+                Ok(_) => continue,
+                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(broadcast::error::RecvError::Closed) => {
+                    // This is the expected terminal state
+                    break;
+                }
+            }
+        }
+    }
+
+    // ── Test 6: broadcast channel multiple receivers ───────────────────
+    #[tokio::test]
+    async fn test_broadcast_multiple_receivers() {
+        let (tx, mut rx1) = broadcast::channel::<KlineEvent>(16);
+        let mut rx2 = tx.subscribe();
+        let mut rx3 = tx.subscribe();
+
+        let event = sample_event(KlineEventType::Update);
+        tx.send(event).expect("send should succeed");
+
+        let r1 = rx1.recv().await.expect("rx1 should receive");
+        let r2 = rx2.recv().await.expect("rx2 should receive");
+        let r3 = rx3.recv().await.expect("rx3 should receive");
+
+        assert_eq!(r1.exchange, "binance");
+        assert_eq!(r2.exchange, "binance");
+        assert_eq!(r3.exchange, "binance");
+    }
+
+    // ── Test 7: broadcast receivers lag independently ──────────────────
+    #[tokio::test]
+    async fn test_broadcast_receiver_lagged_independently() {
+        let (tx, mut rx1) = broadcast::channel::<KlineEvent>(2);
+        let mut rx2 = tx.subscribe();
+
+        // Send 5 messages into capacity-2 channel
+        for i in 0..5 {
+            let mut ev = sample_event(KlineEventType::Update);
+            ev.candle.open = ev.candle.open + i as f64;
+            let _ = tx.send(ev);
+        }
+
+        // rx1 has been consuming immediately, so it should get the latest message
+        // (it may have gotten a Lagged first since we sent 5 into capacity 2
+        //  without consuming — but we didn't consume on rx1 either!)
+        // Actually both rx1 and rx2 haven't consumed, so both should be lagged.
+        // Let's consume on rx1 first to drain it, then check rx2.
+
+        // rx1: first recv may be Lagged, then we get an event
+        let r1_first = rx1.recv().await;
+        // Both receivers lagged equally since neither consumed
+        assert!(
+            matches!(r1_first, Err(broadcast::error::RecvError::Lagged(_))),
+            "rx1 should be lagged too: {r1_first:?}"
+        );
+
+        // Now rx2 should also be lagged
+        let r2_first = rx2.recv().await;
+        assert!(
+            matches!(r2_first, Err(broadcast::error::RecvError::Lagged(_))),
+            "rx2 should be lagged: {r2_first:?}"
+        );
+
+        // After recovery, both should be able to receive
+        let r1_ok = rx1.recv().await;
+        assert!(r1_ok.is_ok(), "rx1 should receive after lagged recovery");
+
+        let r2_ok = rx2.recv().await;
+        assert!(r2_ok.is_ok(), "rx2 should receive after lagged recovery");
+    }
+
+    // ── Test 8: KlineResponse success serialization ────────────────────
+    #[test]
+    fn test_kline_response_serialization() {
+        let response = KlineResponse {
+            success: true,
+            data: Some(KlineData::SingleTimeframe(vec![sample_candle()])),
+            error: None,
+        };
+        let json = serde_json::to_string(&response).expect("KlineResponse should serialize");
+        assert!(json.contains("\"success\":true"), "JSON should contain success:true: {json}");
+        assert!(
+            json.contains("\"open_time\":1713900000000"),
+            "JSON should contain candle data: {json}"
+        );
+    }
+
+    // ── Test 9: KlineResponse error serialization ──────────────────────
+    #[test]
+    fn test_kline_response_error() {
+        let response = KlineResponse {
+            success: false,
+            data: None,
+            error: Some("not subscribed".to_string()),
+        };
+        let json = serde_json::to_string(&response).expect("KlineResponse should serialize");
+        assert!(json.contains("\"success\":false"), "JSON should contain success:false: {json}");
+        assert!(
+            json.contains("\"error\":\"not subscribed\""),
+            "JSON should contain error message: {json}"
+        );
+    }
+
+    // ── Test 10: AllTimeframesData serialization ───────────────────────
+    #[test]
+    fn test_all_timeframes_response() {
+        let data = AllTimeframesData {
+            m1: vec![sample_candle()],
+            m5: vec![],
+            m15: vec![],
+            h1: vec![],
+            h4: vec![],
+            d1: vec![],
+        };
+        let response = KlineResponse {
+            success: true,
+            data: Some(KlineData::AllTimeframes(data)),
+            error: None,
+        };
+        let json = serde_json::to_string(&response).expect("AllTimeframesData should serialize");
+        assert!(json.contains("\"success\":true"), "JSON should contain success:true: {json}");
+        assert!(
+            json.contains("\"m1\":[") || json.contains("\"m1\": ["),
+            "JSON should contain m1 array: {json}"
+        );
+        assert!(
+            json.contains("\"m5\":[]") || json.contains("\"m5\": []"),
+            "JSON should contain empty m5 array: {json}"
+        );
+    }
+}
