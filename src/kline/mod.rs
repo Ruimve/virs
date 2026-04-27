@@ -1,12 +1,7 @@
 pub mod types;
 pub mod cache;
 pub mod aggregator;
-pub mod ws;
 pub mod gap;
-pub mod source;
-pub mod api;
-pub mod spot;
-pub mod perpetual;
 
 use std::sync::Arc;
 
@@ -15,49 +10,14 @@ use dashmap::DashMap;
 use tokio::sync::{broadcast, Mutex};
 use tracing;
 
-use crate::models::MarketType;
-
 use self::aggregator::Aggregator;
 use self::cache::SymbolCache;
 use self::gap::GapDetector;
-use self::perpetual::PerpetualHandler;
-use self::spot::SpotHandler;
 use self::types::{
-    Candle, KlineEngineConfig, KlineEvent, KlineEventType, Timeframe, AllTimeframesData,
-    BacktestRangeLimit, BacktestRangeInfo, KlineWsClient, WsEvent,
-    subscription_key,
+    Candle, KlineEngineConfig, KlineEvent, KlineEventType, MarketType, Timeframe,
+    AllTimeframesData, BacktestRangeLimit, BacktestRangeInfo, KlineWsClient, KlineSource,
+    KlinePersistence, WsEvent, subscription_key,
 };
-
-#[async_trait]
-pub trait KlineSource: Send + Sync {
-    async fn fetch_klines(
-        &self,
-        exchange: &str,
-        symbol: &str,
-        timeframe: &str,
-        limit: u32,
-        since: Option<i64>,
-        market_type: Option<MarketType>,
-    ) -> anyhow::Result<Vec<Candle>>;
-}
-
-#[async_trait]
-pub trait KlinePersistence: Send + Sync {
-    async fn save_candles(
-        &self,
-        exchange: &str,
-        symbol: &str,
-        timeframe: &str,
-        candles: &[Candle],
-    ) -> anyhow::Result<()>;
-
-    async fn load_candles(
-        &self,
-        exchange: &str,
-        symbol: &str,
-        timeframe: &str,
-    ) -> anyhow::Result<Vec<Candle>>;
-}
 
 struct NoOpPersistence;
 
@@ -78,14 +38,49 @@ struct SubscriptionEntry {
     cache: Arc<Mutex<SymbolCache>>,
 }
 
+struct MarketWsHandler {
+    ws: Arc<Mutex<dyn KlineWsClient>>,
+}
+
+impl MarketWsHandler {
+    fn new(ws: Arc<Mutex<dyn KlineWsClient>>) -> Self {
+        Self { ws }
+    }
+
+    async fn start(&self, update_tx: broadcast::Sender<WsEvent>) {
+        let mut ws = self.ws.lock().await;
+        ws.start(update_tx).await;
+    }
+
+    async fn stop(&self) {
+        let mut ws = self.ws.lock().await;
+        ws.stop().await;
+    }
+
+    async fn subscribe(&self, symbol: &str) {
+        let ws = self.ws.lock().await;
+        ws.subscribe(symbol).await;
+    }
+
+    async fn unsubscribe(&self, symbol: &str) {
+        let ws = self.ws.lock().await;
+        ws.unsubscribe(symbol).await;
+    }
+
+    async fn is_running(&self) -> bool {
+        let ws = self.ws.lock().await;
+        ws.is_running()
+    }
+}
+
 pub struct KlineEngine {
     config: KlineEngineConfig,
     source: Arc<dyn KlineSource>,
     persistence: Arc<dyn KlinePersistence>,
     subscriptions: Arc<DashMap<String, SubscriptionEntry>>,
     event_tx: broadcast::Sender<KlineEvent>,
-    spot_handler: SpotHandler,
-    perpetual_handler: PerpetualHandler,
+    spot_handler: MarketWsHandler,
+    perpetual_handler: MarketWsHandler,
     started: Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -104,8 +99,8 @@ impl KlineEngine {
             persistence: Arc::new(NoOpPersistence),
             subscriptions: Arc::new(DashMap::new()),
             event_tx,
-            spot_handler: SpotHandler::new(spot_ws),
-            perpetual_handler: PerpetualHandler::new(perpetual_ws),
+            spot_handler: MarketWsHandler::new(spot_ws),
+            perpetual_handler: MarketWsHandler::new(perpetual_ws),
             started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
@@ -157,7 +152,7 @@ impl KlineEngine {
                                 &sub.cache,
                                 &source,
                                 &event_tx,
-                                sub.market_type.clone(),
+                                sub.market_type,
                             ).await {
                                 Ok(count) if count > 0 => {
                                     tracing::info!("[KlineEngine] Post-reconnect backfill: {} candles for {}/{}", count, sub.exchange, sub.symbol);
@@ -184,6 +179,11 @@ impl KlineEngine {
 
                         let candle_1m = update.candle;
                         let is_closed = candle_1m.closed;
+
+                        tracing::info!(
+                            "[KlineEngine] WS 1m candle: {} open_time={} close={:.2} volume={:.4} closed={}",
+                            symbol, candle_1m.open_time, candle_1m.close, candle_1m.volume, is_closed
+                        );
 
                         let (exchange, persist_data) = {
                             let mut guard = cache.lock().await;
@@ -289,7 +289,7 @@ impl KlineEngine {
                             &sub.cache,
                             &gap_check_source,
                             &gap_check_event_tx,
-                            sub.market_type.clone(),
+                            sub.market_type,
                         ).await {
                             Ok(count) => {
                                 tracing::info!("[KlineEngine] Backfilled {} candles for {}/{}", count, sub.exchange, sub.symbol);
@@ -339,7 +339,7 @@ impl KlineEngine {
         let entry = SubscriptionEntry {
             exchange: exchange.to_string(),
             symbol: symbol.to_string(),
-            market_type: market_type.clone(),
+            market_type,
             cache: cache.clone(),
         };
 
@@ -361,7 +361,7 @@ impl KlineEngine {
                 &cache,
                 &self.source,
                 &self.event_tx,
-                market_type.clone(),
+                market_type,
             ).await {
                 Ok(count) => {
                     tracing::info!("[KlineEngine] Initial load: {} candles for {}/{}", count, exchange, symbol);
@@ -372,11 +372,7 @@ impl KlineEngine {
             }
         }
 
-        let market_label = match market_type {
-            MarketType::Spot => "spot",
-            MarketType::Perpetual => "perpetual",
-        };
-        tracing::info!("[KlineEngine] Subscribed to {}/{} ({})", exchange, symbol, market_label);
+        tracing::info!("[KlineEngine] Subscribed to {}/{} ({})", exchange, symbol, market_type);
         Ok(())
     }
 
@@ -384,7 +380,7 @@ impl KlineEngine {
         let key = subscription_key(exchange, symbol);
 
         let (market_type, cache) = match self.subscriptions.get(&key) {
-            Some(entry) => (entry.market_type.clone(), entry.cache.clone()),
+            Some(entry) => (entry.market_type, entry.cache.clone()),
             None => return Ok(()),
         };
 
@@ -455,7 +451,7 @@ impl KlineEngine {
         self.subscriptions
             .iter()
             .map(|entry| {
-                (entry.exchange.clone(), entry.symbol.clone(), entry.market_type.clone())
+                (entry.exchange.clone(), entry.symbol.clone(), entry.market_type)
             })
             .collect()
     }
@@ -463,7 +459,7 @@ impl KlineEngine {
     pub async fn force_backfill(&self, exchange: &str, symbol: &str) -> anyhow::Result<usize> {
         let key = subscription_key(exchange, symbol);
         let (cache, market_type) = match self.subscriptions.get(&key) {
-            Some(entry) => (entry.cache.clone(), entry.market_type.clone()),
+            Some(entry) => (entry.cache.clone(), entry.market_type),
             None => return Err(anyhow::anyhow!("Not subscribed to {}/{}", exchange, symbol)),
         };
 
@@ -488,14 +484,13 @@ impl KlineEngine {
         let limit = BacktestRangeLimit::for_timeframe(timeframe);
         if days > limit.max_days {
             return Err(anyhow::anyhow!(
-                "Backtest range {} days exceeds maximum {} days for {} timeframe. Estimated 1m candles required: {} ({} MB). Use direct fetch mode for longer ranges.",
-                days, limit.max_days, timeframe, limit.estimated_1m_required,
-                limit.estimated_1m_required * 80 / 1024 / 1024
+                "Backtest range {} days exceeds maximum {} days for {} timeframe",
+                days, limit.max_days, timeframe
             ));
         }
         if days > limit.recommended_days {
             tracing::warn!(
-                "[KlineEngine] Backtest range {} days exceeds recommended {} days for {} timeframe. Performance may degrade.",
+                "[KlineEngine] Backtest range {} days exceeds recommended {} days for {} timeframe",
                 days, limit.recommended_days, timeframe
             );
         }
@@ -514,7 +509,7 @@ impl KlineEngine {
         Self::validate_backtest_range(timeframe, days)?;
 
         let market_type = self.subscriptions.get(&subscription_key(exchange, symbol))
-            .map(|e| e.market_type.clone());
+            .map(|e| e.market_type);
 
         let cache_data = self.get_klines_async(exchange, symbol, timeframe).await;
         let cache_start = cache_data.as_ref().and_then(|c| c.first().map(|f| f.open_time));
@@ -539,7 +534,7 @@ impl KlineEngine {
             "1m",
             (days as u32) * 1440 + 100,
             Some(start_ms),
-            market_type.clone(),
+            market_type,
         ).await?;
 
         if timeframe == Timeframe::M1 {

@@ -7,9 +7,8 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use super::types::{AllTimeframesData, Candle, Timeframe, BacktestRangeInfo};
+use crate::kline::types::{AllTimeframesData, Candle, Timeframe, BacktestRangeInfo, MarketType};
 use crate::api::AppState;
-use crate::models::MarketType;
 
 #[derive(Debug, Serialize)]
 pub struct BacktestLimitsResponse {

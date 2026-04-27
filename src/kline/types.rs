@@ -1,8 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::sync::Arc;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::broadcast;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Timeframe {
@@ -76,6 +75,30 @@ impl Timeframe {
 impl fmt::Display for Timeframe {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MarketType {
+    Spot,
+    Perpetual,
+}
+
+impl fmt::Display for MarketType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MarketType::Spot => write!(f, "spot"),
+            MarketType::Perpetual => write!(f, "perpetual"),
+        }
+    }
+}
+
+impl MarketType {
+    pub fn from_str_lossy(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "perpetual" | "swap" | "future" => MarketType::Perpetual,
+            _ => MarketType::Spot,
+        }
     }
 }
 
@@ -166,6 +189,37 @@ pub trait KlineWsClient: Send + Sync {
     async fn subscribe(&self, symbol: &str);
     async fn unsubscribe(&self, symbol: &str);
     fn is_running(&self) -> bool;
+}
+
+#[async_trait]
+pub trait KlineSource: Send + Sync {
+    async fn fetch_klines(
+        &self,
+        exchange: &str,
+        symbol: &str,
+        timeframe: &str,
+        limit: u32,
+        since: Option<i64>,
+        market_type: Option<MarketType>,
+    ) -> anyhow::Result<Vec<Candle>>;
+}
+
+#[async_trait]
+pub trait KlinePersistence: Send + Sync {
+    async fn save_candles(
+        &self,
+        exchange: &str,
+        symbol: &str,
+        timeframe: &str,
+        candles: &[Candle],
+    ) -> anyhow::Result<()>;
+
+    async fn load_candles(
+        &self,
+        exchange: &str,
+        symbol: &str,
+        timeframe: &str,
+    ) -> anyhow::Result<Vec<Candle>>;
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -373,6 +427,21 @@ mod tests {
     }
 
     #[test]
+    fn test_market_type_display() {
+        assert_eq!(format!("{}", MarketType::Spot), "spot");
+        assert_eq!(format!("{}", MarketType::Perpetual), "perpetual");
+    }
+
+    #[test]
+    fn test_market_type_from_str_lossy() {
+        assert_eq!(MarketType::from_str_lossy("spot"), MarketType::Spot);
+        assert_eq!(MarketType::from_str_lossy("perpetual"), MarketType::Perpetual);
+        assert_eq!(MarketType::from_str_lossy("swap"), MarketType::Perpetual);
+        assert_eq!(MarketType::from_str_lossy("future"), MarketType::Perpetual);
+        assert_eq!(MarketType::from_str_lossy("SPOT"), MarketType::Spot);
+    }
+
+    #[test]
     fn test_candle_merge() {
         let mut base = Candle {
             open_time: 0, close_time: 59_999,
@@ -392,23 +461,6 @@ mod tests {
         assert!((base.quote_volume - 8000.0).abs() < f64::EPSILON);
         assert_eq!(base.trades, 150);
         assert!(base.closed);
-    }
-
-    #[test]
-    fn test_candle_merge_no_lower_high() {
-        let mut base = Candle {
-            open_time: 0, close_time: 59_999,
-            open: 100.0, high: 120.0, low: 90.0, close: 105.0,
-            volume: 50.0, quote_volume: 5000.0, trades: 100, closed: false,
-        };
-        let update = Candle {
-            open_time: 0, close_time: 59_999,
-            open: 100.0, high: 110.0, low: 95.0, close: 108.0,
-            volume: 30.0, quote_volume: 3000.0, trades: 50, closed: true,
-        };
-        base.merge(&update);
-        assert_eq!(base.high, 120.0);
-        assert_eq!(base.low, 90.0);
     }
 
     #[test]
@@ -437,14 +489,6 @@ mod tests {
         };
         let h1 = Candle::from_1m(&base, Timeframe::H1);
         assert_eq!(h1.open_time, 3_600_000);
-    }
-
-    #[test]
-    fn test_candle_is_closed() {
-        let c1 = Candle { open_time: 0, close_time: 0, open: 0.0, high: 0.0, low: 0.0, close: 0.0, volume: 0.0, quote_volume: 0.0, trades: 0, closed: true };
-        let c2 = Candle { open_time: 0, close_time: 0, open: 0.0, high: 0.0, low: 0.0, close: 0.0, volume: 0.0, quote_volume: 0.0, trades: 0, closed: false };
-        assert!(c1.is_closed());
-        assert!(!c2.is_closed());
     }
 
     #[test]

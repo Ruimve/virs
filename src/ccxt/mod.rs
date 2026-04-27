@@ -27,6 +27,8 @@ pub mod auth;
 pub mod binance;
 pub mod okx;
 pub mod bybit;
+pub mod binance_kline_ws;
+pub mod kline_source;
 
 use async_trait::async_trait;
 use reqwest::Client;

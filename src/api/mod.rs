@@ -12,6 +12,7 @@ pub mod ai;
 pub mod ai_credentials;
 pub mod ws;
 pub mod grid;
+pub mod kline;
 
 use axum::{
     http::{header, StatusCode, Uri},
@@ -90,13 +91,13 @@ pub fn build_router(
         .route("/api/ai-credentials/save", post(ai_credentials::save_credential))
         .route("/api/ai-credentials/delete/{id}", delete(ai_credentials::delete_credential))
         .route("/api/ai-credentials/test", post(ai_credentials::test_credential))
-        .route("/api/kline/data", get(crate::kline::api::get_klines))
-        .route("/api/kline/subscribe", post(crate::kline::api::subscribe_kline))
-        .route("/api/kline/unsubscribe", post(crate::kline::api::unsubscribe_kline))
-        .route("/api/kline/subscriptions", get(crate::kline::api::list_subscriptions))
-        .route("/api/kline/backtest/limits", get(crate::kline::api::get_backtest_limits))
-        .route("/api/kline/backtest/data", get(crate::kline::api::get_backtest_data))
-        .route("/ws/kline", get(crate::kline::api::kline_ws_handler))
+        .route("/api/kline/data", get(crate::api::kline::get_klines))
+        .route("/api/kline/subscribe", post(crate::api::kline::subscribe_kline))
+        .route("/api/kline/unsubscribe", post(crate::api::kline::unsubscribe_kline))
+        .route("/api/kline/subscriptions", get(crate::api::kline::list_subscriptions))
+        .route("/api/kline/backtest/limits", get(crate::api::kline::get_backtest_limits))
+        .route("/api/kline/backtest/data", get(crate::api::kline::get_backtest_data))
+        .route("/ws/kline", get(crate::api::kline::kline_ws_handler))
         .route("/ws", get(ws::ws_handler))
         .route("/api/grid/analyze", post(grid::analyze))
         .route("/api/grid/create", post(grid::create_bot))

@@ -238,9 +238,9 @@ async fn main() -> anyhow::Result<()> {
         proxy_url: config.proxy.clone(),
         ..Default::default()
     };
-    let kline_source = std::sync::Arc::new(kline::source::CcxtKlineSource::new(config.proxy.clone()));
-    let spot_ws = std::sync::Arc::new(tokio::sync::Mutex::new(kline::ws::BinanceWs::new_spot(config.proxy.as_deref())));
-    let perpetual_ws = std::sync::Arc::new(tokio::sync::Mutex::new(kline::ws::BinanceWs::new_perpetual(config.proxy.as_deref())));
+    let kline_source = std::sync::Arc::new(ccxt::kline_source::CcxtKlineSource::new(config.proxy.clone()));
+    let spot_ws = std::sync::Arc::new(tokio::sync::Mutex::new(ccxt::binance_kline_ws::BinanceKlineWs::new_spot(config.proxy.as_deref())));
+    let perpetual_ws = std::sync::Arc::new(tokio::sync::Mutex::new(ccxt::binance_kline_ws::BinanceKlineWs::new_perpetual(config.proxy.as_deref())));
     let kline_engine = std::sync::Arc::new(kline::KlineEngine::new(kline_config, kline_source, spot_ws, perpetual_ws));
     kline_engine.start().await;
     info!("✅ Kline engine started");

@@ -4,10 +4,8 @@ use tokio::sync::Mutex;
 use tracing;
 
 use super::cache::SymbolCache;
-use super::types::{Candle, Timeframe, KlineEvent, KlineEventType, align_open_time};
+use super::types::{Candle, Timeframe, KlineEvent, KlineEventType, MarketType, KlineSource, align_open_time};
 use super::aggregator::Aggregator;
-use super::KlineSource;
-use crate::models::MarketType;
 
 pub struct GapDetector;
 
@@ -166,7 +164,7 @@ impl GapDetector {
         let unclosed_high: Vec<(Timeframe, Candle)> = [Timeframe::M5, Timeframe::M15, Timeframe::H1, Timeframe::H4, Timeframe::D1]
             .iter()
             .filter_map(|&tf| {
-                let tf_ms = tf.ms();
+                let _tf_ms = tf.ms();
                 let current_tf_open = align_open_time(current_1m_open, tf);
                 let relevant: Vec<Candle> = candles_1m.iter()
                     .filter(|c| c.open_time >= current_tf_open)

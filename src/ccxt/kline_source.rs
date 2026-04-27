@@ -1,7 +1,6 @@
 use async_trait::async_trait;
-use crate::kline::{KlineSource, types::Candle};
+use crate::kline::types::{Candle, KlineSource, MarketType};
 use crate::ccxt::{self, MarketType as CcxtMarketType};
-use crate::models::MarketType;
 
 pub struct CcxtKlineSource {
     proxy_url: Option<String>,
