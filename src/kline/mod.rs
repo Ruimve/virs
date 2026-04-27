@@ -180,7 +180,7 @@ impl KlineEngine {
                         let candle_1m = update.candle;
                         let is_closed = candle_1m.closed;
 
-                        tracing::info!(
+                        tracing::debug!(
                             "[KlineEngine] WS 1m candle: {} open_time={} close={:.2} volume={:.4} closed={}",
                             symbol, candle_1m.open_time, candle_1m.close, candle_1m.volume, is_closed
                         );
