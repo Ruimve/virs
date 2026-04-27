@@ -309,6 +309,15 @@ mod tests {
         assert_eq!(cache.candle_count(Timeframe::M1), limit);
         let klines = cache.get_klines(Timeframe::M1);
         assert_eq!(klines[0].open_time, 100 * 60_000);
+
+        // Backfill truncation assertion (merged from test_backfill_truncation)
+        let mut cache2 = SymbolCache::new();
+        let limit2 = Timeframe::M1.default_limit();
+        let candles: Vec<Candle> = (0..limit2 + 100)
+            .map(|i| make_candle(i as i64 * 60_000, true))
+            .collect();
+        cache2.backfill_timeframe(Timeframe::M1, candles);
+        assert_eq!(cache2.candle_count(Timeframe::M1), limit2);
     }
 
     #[test]
@@ -411,16 +420,6 @@ mod tests {
         assert_eq!(cache.candle_count(Timeframe::H1), 0);
     }
 
-    #[test]
-    fn test_backfill_truncation() {
-        let mut cache = SymbolCache::new();
-        let limit = Timeframe::M1.default_limit();
-        let candles: Vec<Candle> = (0..limit + 100)
-            .map(|i| make_candle(i as i64 * 60_000, true))
-            .collect();
-        cache.backfill_timeframe(Timeframe::M1, candles);
-        assert_eq!(cache.candle_count(Timeframe::M1), limit);
-    }
 
     #[test]
     fn test_timeframe_buffer_push_or_update_order_preserved() {

@@ -435,11 +435,9 @@ mod tests {
         assert_eq!(data.kline.trades, 500);
         assert!(!data.kline.closed);
         assert_eq!(data.kline.quote_volume, "6532500.00");
-    }
 
-    #[test]
-    fn test_parse_binance_kline_closed() {
-        let json = r#"{
+        // Closed kline assertion (merged from test_parse_binance_kline_closed)
+        let json_closed = r#"{
             "stream": "btcusdt@kline_1m",
             "data": {
                 "e": "kline",
@@ -461,11 +459,11 @@ mod tests {
                 }
             }
         }"#;
-
-        let msg: BinanceKlineMessage = serde_json::from_str(json).unwrap();
-        let data = msg.data.unwrap();
-        assert!(data.kline.closed);
+        let msg_closed: BinanceKlineMessage = serde_json::from_str(json_closed).unwrap();
+        let data_closed = msg_closed.data.unwrap();
+        assert!(data_closed.kline.closed);
     }
+
 
     #[test]
     fn test_parse_binance_kline_message_without_stream() {
@@ -561,11 +559,9 @@ mod tests {
         assert!((candle.quote_volume - 6532500.0).abs() < f64::EPSILON);
         assert_eq!(candle.trades, 500);
         assert!(!candle.closed);
-    }
 
-    #[test]
-    fn test_to_candle_closed() {
-        let data = BinanceKlineData {
+        // Closed candle assertion (merged from test_to_candle_closed)
+        let data_closed = BinanceKlineData {
             event_type: "kline".to_string(),
             event_time: 1713900000,
             symbol: "BTCUSDT".to_string(),
@@ -584,10 +580,10 @@ mod tests {
                 quote_volume: "6532500.00".to_string(),
             },
         };
-
-        let candle = data.to_candle();
-        assert!(candle.closed);
+        let candle_closed = data_closed.to_candle();
+        assert!(candle_closed.closed);
     }
+
 
     #[test]
     fn test_to_candle_invalid_numbers() {
@@ -649,17 +645,12 @@ mod tests {
     #[test]
     fn test_binance_ws_symbol_basic() {
         assert_eq!(binance_ws_symbol("BTCUSDT"), "btcusdt");
-    }
-
-    #[test]
-    fn test_binance_ws_symbol_with_slash() {
+        // With slash (merged from test_binance_ws_symbol_with_slash)
         assert_eq!(binance_ws_symbol("BTC/USDT"), "btcusdt");
-    }
-
-    #[test]
-    fn test_binance_ws_symbol_lowercase() {
+        // Already lowercase (merged from test_binance_ws_symbol_lowercase)
         assert_eq!(binance_ws_symbol("btcusdt"), "btcusdt");
     }
+
 
     // ========== 构造函数和状态（3个） ==========
 

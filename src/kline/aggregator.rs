@@ -189,6 +189,30 @@ mod tests {
         assert_eq!(result[0].close, 111.0);
         assert!((result[0].volume - 56.0).abs() < 0.001);
         assert!(result[0].closed);
+
+        // High/low tracking with extreme values (merged from test_aggregate_high_low_tracking)
+        let candles_hl = vec![
+            make_1m_candle(0, 100.0, 105.0, 98.0, 102.0, 10.0, true),
+            make_1m_candle(60_000, 102.0, 120.0, 101.0, 106.0, 12.0, true),
+            make_1m_candle(120_000, 106.0, 108.0, 90.0, 107.0, 8.0, true),
+            make_1m_candle(180_000, 107.0, 112.0, 106.0, 109.0, 15.0, true),
+            make_1m_candle(240_000, 109.0, 115.0, 108.0, 111.0, 11.0, true),
+        ];
+        let result_hl = Aggregator::aggregate_1m_to_timeframe(&candles_hl, Timeframe::M5);
+        assert_eq!(result_hl[0].high, 120.0);
+        assert_eq!(result_hl[0].low, 90.0);
+
+        // Volume accumulation with distinct volumes (merged from test_aggregate_volume_accumulation)
+        let candles_vol = vec![
+            make_1m_candle(0, 100.0, 105.0, 99.0, 102.0, 10.0, true),
+            make_1m_candle(60_000, 102.0, 108.0, 101.0, 106.0, 20.0, true),
+            make_1m_candle(120_000, 106.0, 110.0, 104.0, 107.0, 30.0, true),
+            make_1m_candle(180_000, 107.0, 112.0, 106.0, 109.0, 40.0, true),
+            make_1m_candle(240_000, 109.0, 115.0, 108.0, 111.0, 50.0, true),
+        ];
+        let result_vol = Aggregator::aggregate_1m_to_timeframe(&candles_vol, Timeframe::M5);
+        assert!((result_vol[0].volume - 150.0).abs() < 0.001);
+        assert_eq!(result_vol[0].trades, 500);
     }
 
     #[test]
@@ -284,33 +308,6 @@ mod tests {
         assert!(!result[0].closed);
     }
 
-    #[test]
-    fn test_aggregate_high_low_tracking() {
-        let candles = vec![
-            make_1m_candle(0, 100.0, 105.0, 98.0, 102.0, 10.0, true),
-            make_1m_candle(60_000, 102.0, 120.0, 101.0, 106.0, 12.0, true),
-            make_1m_candle(120_000, 106.0, 108.0, 90.0, 107.0, 8.0, true),
-            make_1m_candle(180_000, 107.0, 112.0, 106.0, 109.0, 15.0, true),
-            make_1m_candle(240_000, 109.0, 115.0, 108.0, 111.0, 11.0, true),
-        ];
-        let result = Aggregator::aggregate_1m_to_timeframe(&candles, Timeframe::M5);
-        assert_eq!(result[0].high, 120.0);
-        assert_eq!(result[0].low, 90.0);
-    }
-
-    #[test]
-    fn test_aggregate_volume_accumulation() {
-        let candles = vec![
-            make_1m_candle(0, 100.0, 105.0, 99.0, 102.0, 10.0, true),
-            make_1m_candle(60_000, 102.0, 108.0, 101.0, 106.0, 20.0, true),
-            make_1m_candle(120_000, 106.0, 110.0, 104.0, 107.0, 30.0, true),
-            make_1m_candle(180_000, 107.0, 112.0, 106.0, 109.0, 40.0, true),
-            make_1m_candle(240_000, 109.0, 115.0, 108.0, 111.0, 50.0, true),
-        ];
-        let result = Aggregator::aggregate_1m_to_timeframe(&candles, Timeframe::M5);
-        assert!((result[0].volume - 150.0).abs() < 0.001);
-        assert_eq!(result[0].trades, 500);
-    }
 
     #[test]
     fn test_is_last_1m_in_group() {
@@ -321,21 +318,18 @@ mod tests {
         assert!(!Aggregator::is_last_1m_in_group(&c1, Timeframe::M5));
         assert!(Aggregator::is_last_1m_in_group(&c2, Timeframe::M5));
         assert!(!Aggregator::is_last_1m_in_group(&c3, Timeframe::M5));
-    }
 
-    #[test]
-    fn test_is_last_1m_in_group_1h() {
+        // 1h assertions (merged from test_is_last_1m_in_group_1h)
         let c_mid = make_1m_candle(1_800_000, 100.0, 100.0, 100.0, 100.0, 1.0, true);
         let c_last = make_1m_candle(3_540_000, 100.0, 100.0, 100.0, 100.0, 1.0, true);
         assert!(!Aggregator::is_last_1m_in_group(&c_mid, Timeframe::H1));
         assert!(Aggregator::is_last_1m_in_group(&c_last, Timeframe::H1));
+
+        // 1d assertions (merged from test_is_last_1m_in_group_1d)
+        let c_day_last = make_1m_candle(86_340_000, 100.0, 100.0, 100.0, 100.0, 1.0, true);
+        assert!(Aggregator::is_last_1m_in_group(&c_day_last, Timeframe::D1));
     }
 
-    #[test]
-    fn test_is_last_1m_in_group_1d() {
-        let c_last = make_1m_candle(86_340_000, 100.0, 100.0, 100.0, 100.0, 1.0, true);
-        assert!(Aggregator::is_last_1m_in_group(&c_last, Timeframe::D1));
-    }
 
     #[test]
     fn test_update_higher_timeframes_first_candle() {
@@ -405,5 +399,35 @@ mod tests {
         assert!(result.len() >= 2);
         assert_eq!(result[0].open_time, 0);
         assert_eq!(result[1].open_time, 600_000);
+    }
+
+    // ============================================================
+    // P0-5: update_higher_timeframes 旧数据分支测试 (1 test)
+    // ============================================================
+
+    /// P0-5: When a 1m candle's aligned open time is older than the last
+    /// existing higher-tf candle, merge_into_timeframe returns None (stale data branch).
+    #[test]
+    fn test_update_higher_timeframes_stale_data_branch() {
+        let mut cache = SymbolCache::new();
+
+        // Place a closed 5m candle at open_time=300_000 (the second 5m group)
+        let existing_5m = make_1m_candle(300_000, 110.0, 115.0, 109.0, 112.0, 50.0, true);
+        cache.update_candle(Timeframe::M5, existing_5m);
+
+        // Now push a 1m candle whose 5m aligned time (0) is BEFORE the existing 5m (300_000).
+        // This triggers the `aligned_open < last_candle.open_time` branch.
+        let stale_1m = make_1m_candle(0, 100.0, 105.0, 99.0, 102.0, 10.0, true);
+        let updates = Aggregator::update_higher_timeframes(&stale_1m, &mut cache);
+
+        // The M5 entry in updates should be None (stale data ignored)
+        let m5_update = updates.iter().find(|(tf, _)| *tf == Timeframe::M5);
+        assert!(m5_update.is_none(), "stale 1m data should not produce a M5 update");
+
+        // The existing 5m candle should remain unchanged
+        let m5_candles = cache.get_klines(Timeframe::M5);
+        assert_eq!(m5_candles.len(), 1);
+        assert_eq!(m5_candles[0].open_time, 300_000);
+        assert_eq!(m5_candles[0].open, 110.0);
     }
 }

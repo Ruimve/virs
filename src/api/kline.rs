@@ -378,6 +378,7 @@ mod tests {
     // ── Test 1: KlineEvent (Update) serialization ──────────────────────
     #[test]
     fn test_kline_event_serialization() {
+        // Update event
         let event = sample_event(KlineEventType::Update);
         let json = serde_json::to_string(&event).expect("KlineEvent should serialize to JSON");
         assert!(
@@ -388,29 +389,24 @@ mod tests {
             json.contains("\"symbol\":\"BTCUSDT\""),
             "JSON should contain symbol field: {json}"
         );
-    }
 
-    // ── Test 2: KlineEvent (Closed) serialization ──────────────────────
-    #[test]
-    fn test_kline_event_closed_serialization() {
-        let event = sample_event(KlineEventType::Closed);
-        let json = serde_json::to_string(&event).expect("KlineEvent should serialize to JSON");
+        // Closed event (merged from test_kline_event_closed_serialization)
+        let event_closed = sample_event(KlineEventType::Closed);
+        let json_closed = serde_json::to_string(&event_closed).expect("KlineEvent should serialize to JSON");
         assert!(
-            json.contains("\"event_type\":\"Closed\""),
-            "JSON should contain event_type Closed: {json}"
+            json_closed.contains("\"event_type\":\"Closed\""),
+            "JSON should contain event_type Closed: {json_closed}"
+        );
+
+        // Backfilled event (merged from test_kline_event_backfilled_serialization)
+        let event_backfilled = sample_event(KlineEventType::Backfilled);
+        let json_backfilled = serde_json::to_string(&event_backfilled).expect("KlineEvent should serialize to JSON");
+        assert!(
+            json_backfilled.contains("\"event_type\":\"Backfilled\""),
+            "JSON should contain event_type Backfilled: {json_backfilled}"
         );
     }
 
-    // ── Test 3: KlineEvent (Backfilled) serialization ──────────────────
-    #[test]
-    fn test_kline_event_backfilled_serialization() {
-        let event = sample_event(KlineEventType::Backfilled);
-        let json = serde_json::to_string(&event).expect("KlineEvent should serialize to JSON");
-        assert!(
-            json.contains("\"event_type\":\"Backfilled\""),
-            "JSON should contain event_type Backfilled: {json}"
-        );
-    }
 
     // ── Test 4: broadcast channel Lagged recovery ──────────────────────
     #[tokio::test]
@@ -437,32 +433,9 @@ mod tests {
         // handler logic: `Err(Lagged(_)) => continue`
         let result2 = rx.recv().await;
         assert!(result2.is_ok(), "Should receive an event after Lagged recovery");
-    }
 
-    // ── Test 5: broadcast channel Lagged then Closed ───────────────────
-    #[tokio::test]
-    async fn test_broadcast_lagged_then_closed() {
-        let (tx, mut rx) = broadcast::channel::<KlineEvent>(2);
-
-        // Overwhelm the receiver
-        for i in 0..5 {
-            let mut ev = sample_event(KlineEventType::Update);
-            ev.candle.open = ev.candle.open + i as f64;
-            let _ = tx.send(ev);
-        }
-
-        // Drop the sender so the channel closes
+        // Drop sender and verify Closed is received (merged from test_broadcast_lagged_then_closed)
         drop(tx);
-
-        // First recv: Lagged
-        let result = rx.recv().await;
-        assert!(
-            matches!(result, Err(broadcast::error::RecvError::Lagged(_))),
-            "Expected Lagged, got: {result:?}"
-        );
-
-        // Drain any remaining events (the channel still has buffered messages)
-        // Keep receiving until we get Closed
         loop {
             match rx.recv().await {
                 Ok(_) => continue,
@@ -474,6 +447,7 @@ mod tests {
             }
         }
     }
+
 
     // ── Test 6: broadcast channel multiple receivers ───────────────────
     #[tokio::test]

@@ -358,6 +358,14 @@ mod tests {
         assert_eq!(Timeframe::H1.ms(), 3_600_000);
         assert_eq!(Timeframe::H4.ms(), 14_400_000);
         assert_eq!(Timeframe::D1.ms(), 86_400_000);
+
+        // minutes assertions (merged from test_timeframe_minutes)
+        assert_eq!(Timeframe::M1.minutes(), 1);
+        assert_eq!(Timeframe::M5.minutes(), 5);
+        assert_eq!(Timeframe::M15.minutes(), 15);
+        assert_eq!(Timeframe::H1.minutes(), 60);
+        assert_eq!(Timeframe::H4.minutes(), 240);
+        assert_eq!(Timeframe::D1.minutes(), 1440);
     }
 
     #[test]
@@ -368,6 +376,11 @@ mod tests {
         assert_eq!(Timeframe::H1.as_str(), "1h");
         assert_eq!(Timeframe::H4.as_str(), "4h");
         assert_eq!(Timeframe::D1.as_str(), "1d");
+
+        // Display assertions (merged from test_timeframe_display)
+        assert_eq!(format!("{}", Timeframe::M1), "1m");
+        assert_eq!(format!("{}", Timeframe::H1), "1h");
+        assert_eq!(format!("{}", Timeframe::D1), "1d");
     }
 
     #[test]
@@ -383,15 +396,6 @@ mod tests {
         assert_eq!(Timeframe::from_str_lossy(""), None);
     }
 
-    #[test]
-    fn test_timeframe_minutes() {
-        assert_eq!(Timeframe::M1.minutes(), 1);
-        assert_eq!(Timeframe::M5.minutes(), 5);
-        assert_eq!(Timeframe::M15.minutes(), 15);
-        assert_eq!(Timeframe::H1.minutes(), 60);
-        assert_eq!(Timeframe::H4.minutes(), 240);
-        assert_eq!(Timeframe::D1.minutes(), 1440);
-    }
 
     #[test]
     fn test_timeframe_default_limit() {
@@ -411,12 +415,6 @@ mod tests {
         assert!(all.contains(&Timeframe::D1));
     }
 
-    #[test]
-    fn test_timeframe_display() {
-        assert_eq!(format!("{}", Timeframe::M1), "1m");
-        assert_eq!(format!("{}", Timeframe::H1), "1h");
-        assert_eq!(format!("{}", Timeframe::D1), "1d");
-    }
 
     #[test]
     fn test_timeframe_serde() {
@@ -478,18 +476,17 @@ mod tests {
         assert_eq!(h1.low, 95.0);
         assert_eq!(h1.close, 105.0);
         assert!(!h1.closed);
-    }
 
-    #[test]
-    fn test_candle_from_1m_alignment() {
-        let base = Candle {
+        // Non-aligned open_time assertion (merged from test_candle_from_1m_alignment)
+        let base_unaligned = Candle {
             open_time: 3_630_000, close_time: 3_689_999,
             open: 100.0, high: 110.0, low: 95.0, close: 105.0,
             volume: 50.0, quote_volume: 5000.0, trades: 100, closed: true,
         };
-        let h1 = Candle::from_1m(&base, Timeframe::H1);
-        assert_eq!(h1.open_time, 3_600_000);
+        let h1_unaligned = Candle::from_1m(&base_unaligned, Timeframe::H1);
+        assert_eq!(h1_unaligned.open_time, 3_600_000);
     }
+
 
     #[test]
     fn test_align_open_time() {
