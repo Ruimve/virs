@@ -9,7 +9,7 @@ use super::aggregator::Aggregator;
 
 pub struct GapDetector;
 
-const INITIAL_1M_LIMIT: u32 = 2000;
+const INITIAL_1M_LIMIT: u32 = 1000;
 const INITIAL_HIGH_TF_LIMIT: u32 = 1000;
 
 impl GapDetector {

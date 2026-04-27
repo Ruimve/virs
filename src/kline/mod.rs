@@ -532,7 +532,7 @@ impl KlineEngine {
             exchange,
             symbol,
             "1m",
-            (days as u32) * 1440 + 100,
+            ((days as u32) * 1440 + 100).min(1000),
             Some(start_ms),
             market_type,
         ).await?;

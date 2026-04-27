@@ -49,7 +49,7 @@ fn test_timeframe_from_str_lossy() {
 
 #[test]
 fn test_timeframe_default_limit() {
-    assert_eq!(Timeframe::M1.default_limit(), 2000);
+    assert_eq!(Timeframe::M1.default_limit(), 1000);
     assert_eq!(Timeframe::M5.default_limit(), 1000);
     assert_eq!(Timeframe::M15.default_limit(), 1000);
     assert_eq!(Timeframe::H1.default_limit(), 1000);

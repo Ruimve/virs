@@ -64,7 +64,7 @@ impl Timeframe {
 
     pub fn default_limit(&self) -> usize {
         match self {
-            Timeframe::M1 => 2000,
+            Timeframe::M1 => 1000,
             Timeframe::M5 | Timeframe::M15 => 1000,
             Timeframe::H1 | Timeframe::H4 => 1000,
             Timeframe::D1 => 1000,
