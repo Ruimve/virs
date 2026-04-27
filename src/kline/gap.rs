@@ -302,3 +302,344 @@ pub struct ContinuityReport {
     pub gap_end: Option<i64>,
     pub missing_minutes: u32,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use std::sync::Mutex as StdMutex;
+    use async_trait::async_trait;
+    use super::super::KlineSource;
+
+    struct MockKlineSource {
+        data: StdMutex<HashMap<String, Vec<Candle>>>,
+        errors: StdMutex<HashMap<String, String>>,
+    }
+
+    impl MockKlineSource {
+        fn new() -> Self {
+            Self {
+                data: StdMutex::new(HashMap::new()),
+                errors: StdMutex::new(HashMap::new()),
+            }
+        }
+
+        fn add_data(&self, exchange: &str, symbol: &str, timeframe: &str, candles: Vec<Candle>) {
+            let key = format!("{}:{}:{}", exchange, symbol, timeframe);
+            self.data.lock().unwrap().insert(key, candles);
+        }
+
+        fn set_error(&self, exchange: &str, symbol: &str, timeframe: &str, error: &str) {
+            let key = format!("{}:{}:{}", exchange, symbol, timeframe);
+            self.errors.lock().unwrap().insert(key, error.to_string());
+        }
+
+        fn into_source(self) -> Arc<dyn KlineSource> {
+            Arc::new(self)
+        }
+    }
+
+    #[async_trait]
+    impl KlineSource for MockKlineSource {
+        async fn fetch_klines(
+            &self,
+            exchange: &str,
+            symbol: &str,
+            timeframe: &str,
+            _limit: u32,
+            since: Option<i64>,
+            _market_type: Option<MarketType>,
+        ) -> anyhow::Result<Vec<Candle>> {
+            let key = format!("{}:{}:{}", exchange, symbol, timeframe);
+            if let Some(err) = self.errors.lock().unwrap().get(&key) {
+                return Err(anyhow::anyhow!("{}", err));
+            }
+            let all = self.data.lock().unwrap()
+                .get(&key)
+                .cloned()
+                .unwrap_or_default();
+            match since {
+                Some(s) => Ok(all.into_iter().filter(|c| c.open_time >= s).collect()),
+                None => Ok(all),
+            }
+        }
+    }
+
+    fn make_1m_candle(open_time: i64, closed: bool) -> Candle {
+        Candle {
+            open_time,
+            close_time: open_time + 59_999,
+            open: 100.0,
+            high: 110.0,
+            low: 90.0,
+            close: 105.0,
+            volume: 50.0,
+            quote_volume: 5000.0,
+            trades: 100,
+            closed,
+        }
+    }
+
+    fn make_1m_sequence(start_time: i64, count: usize, closed: bool) -> Vec<Candle> {
+        (0..count)
+            .map(|i| make_1m_candle(start_time + i as i64 * 60_000, closed))
+            .collect()
+    }
+
+    fn make_high_tf_candle(open_time: i64, tf: Timeframe, closed: bool) -> Candle {
+        Candle {
+            open_time,
+            close_time: open_time + tf.ms() - 1,
+            open: 100.0,
+            high: 110.0,
+            low: 90.0,
+            close: 105.0,
+            volume: 500.0,
+            quote_volume: 50000.0,
+            trades: 1000,
+            closed,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_initial_load_basic() {
+        let mock = MockKlineSource::new();
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let current_1m_open = (now_ms / 60_000) * 60_000;
+        let start_1m = current_1m_open - 2000 * 60_000;
+
+        let candles_1m: Vec<Candle> = (0..2000)
+            .map(|i| make_1m_candle(start_1m + i as i64 * 60_000, true))
+            .collect();
+        mock.add_data("binance", "BTCUSDT", "1m", candles_1m.clone());
+
+        for tf_str in &["5m", "15m", "1h", "4h", "1d"] {
+            let tf = Timeframe::from_str_lossy(tf_str).unwrap();
+            let high_candles: Vec<Candle> = (0..1000)
+                .map(|i| make_high_tf_candle(current_1m_open - (i as i64 + 1) * tf.ms(), tf, true))
+                .collect();
+            mock.add_data("binance", "BTCUSDT", tf_str, high_candles);
+        }
+
+        let source = mock.into_source();
+        let cache = Arc::new(Mutex::new(SymbolCache::new()));
+        let (event_tx, _) = tokio::sync::broadcast::channel(100);
+
+        let result = GapDetector::detect_and_backfill(
+            "binance", "BTCUSDT", &cache, &source, &event_tx, MarketType::Spot,
+        ).await.unwrap();
+
+        assert!(result > 0);
+        let guard = cache.lock().await;
+        assert!(guard.candle_count(Timeframe::M1) > 0);
+    }
+
+    #[tokio::test]
+    async fn test_initial_load_no_1m_data() {
+        let source = MockKlineSource::new().into_source();
+        let cache = Arc::new(Mutex::new(SymbolCache::new()));
+        let (event_tx, _) = tokio::sync::broadcast::channel(100);
+
+        let result = GapDetector::detect_and_backfill(
+            "binance", "BTCUSDT", &cache, &source, &event_tx, MarketType::Spot,
+        ).await.unwrap();
+
+        assert_eq!(result, 0);
+    }
+
+    #[tokio::test]
+    async fn test_initial_load_1m_error() {
+        let mock = MockKlineSource::new();
+        mock.set_error("binance", "BTCUSDT", "1m", "network error");
+        let source = mock.into_source();
+
+        let cache = Arc::new(Mutex::new(SymbolCache::new()));
+        let (event_tx, _) = tokio::sync::broadcast::channel(100);
+
+        let result = GapDetector::detect_and_backfill(
+            "binance", "BTCUSDT", &cache, &source, &event_tx, MarketType::Spot,
+        ).await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_initial_load_high_tf_partial_failure() {
+        let mock = MockKlineSource::new();
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let current_1m_open = (now_ms / 60_000) * 60_000;
+        let start_1m = current_1m_open - 2000 * 60_000;
+
+        let candles_1m: Vec<Candle> = (0..2000)
+            .map(|i| make_1m_candle(start_1m + i as i64 * 60_000, true))
+            .collect();
+        mock.add_data("binance", "BTCUSDT", "1m", candles_1m);
+
+        mock.add_data("binance", "BTCUSDT", "5m", make_1m_sequence(0, 10, true));
+        mock.set_error("binance", "BTCUSDT", "15m", "timeout");
+        mock.add_data("binance", "BTCUSDT", "1h", make_1m_sequence(0, 10, true));
+        mock.set_error("binance", "BTCUSDT", "4h", "timeout");
+        mock.add_data("binance", "BTCUSDT", "1d", make_1m_sequence(0, 10, true));
+
+        let source = mock.into_source();
+        let cache = Arc::new(Mutex::new(SymbolCache::new()));
+        let (event_tx, _) = tokio::sync::broadcast::channel(100);
+
+        let result = GapDetector::detect_and_backfill(
+            "binance", "BTCUSDT", &cache, &source, &event_tx, MarketType::Spot,
+        ).await.unwrap();
+
+        assert!(result > 0);
+    }
+
+    #[tokio::test]
+    async fn test_no_gap_when_up_to_date() {
+        let source = MockKlineSource::new().into_source();
+        let cache = Arc::new(Mutex::new(SymbolCache::new()));
+
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let current_1m_open = (now_ms / 60_000) * 60_000;
+        let recent_candle = make_1m_candle(current_1m_open - 60_000, true);
+
+        {
+            let mut guard = cache.lock().await;
+            guard.update_candle(Timeframe::M1, recent_candle);
+        }
+
+        let (event_tx, _) = tokio::sync::broadcast::channel(100);
+
+        let result = GapDetector::detect_and_backfill(
+            "binance", "BTCUSDT", &cache, &source, &event_tx, MarketType::Spot,
+        ).await.unwrap();
+
+        assert_eq!(result, 0);
+    }
+
+    #[tokio::test]
+    async fn test_gap_backfill() {
+        let mock = MockKlineSource::new();
+        let cache = Arc::new(Mutex::new(SymbolCache::new()));
+
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let current_1m_open = (now_ms / 60_000) * 60_000;
+
+        let old_candle = make_1m_candle(current_1m_open - 10 * 60_000, true);
+        {
+            let mut guard = cache.lock().await;
+            guard.update_candle(Timeframe::M1, old_candle);
+        }
+
+        let gap_candles: Vec<Candle> = (1..10)
+            .map(|i| make_1m_candle(current_1m_open - (10 - i) as i64 * 60_000, true))
+            .collect();
+        mock.add_data("binance", "BTCUSDT", "1m", gap_candles);
+
+        let source = mock.into_source();
+        let (event_tx, _) = tokio::sync::broadcast::channel(100);
+
+        let result = GapDetector::detect_and_backfill(
+            "binance", "BTCUSDT", &cache, &source, &event_tx, MarketType::Spot,
+        ).await.unwrap();
+
+        assert!(result > 0);
+    }
+
+    #[tokio::test]
+    async fn test_gap_backfill_empty_response() {
+        let source = MockKlineSource::new().into_source();
+        let cache = Arc::new(Mutex::new(SymbolCache::new()));
+
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let current_1m_open = (now_ms / 60_000) * 60_000;
+
+        let old_candle = make_1m_candle(current_1m_open - 10 * 60_000, true);
+        {
+            let mut guard = cache.lock().await;
+            guard.update_candle(Timeframe::M1, old_candle);
+        }
+
+        let (event_tx, _) = tokio::sync::broadcast::channel(100);
+
+        let result = GapDetector::detect_and_backfill(
+            "binance", "BTCUSDT", &cache, &source, &event_tx, MarketType::Spot,
+        ).await.unwrap();
+
+        assert_eq!(result, 0);
+    }
+
+    #[tokio::test]
+    async fn test_check_continuity_empty_cache() {
+        let cache = Arc::new(Mutex::new(SymbolCache::new()));
+        let report = GapDetector::check_continuity("binance", "BTCUSDT", &cache).await;
+        assert!(!report.is_continuous);
+        assert_eq!(report.missing_minutes, u32::MAX);
+    }
+
+    #[tokio::test]
+    async fn test_check_continuity_up_to_date() {
+        let cache = Arc::new(Mutex::new(SymbolCache::new()));
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let current_1m_open = (now_ms / 60_000) * 60_000;
+        let recent_candle = make_1m_candle(current_1m_open - 60_000, true);
+
+        {
+            let mut guard = cache.lock().await;
+            guard.update_candle(Timeframe::M1, recent_candle);
+        }
+
+        let report = GapDetector::check_continuity("binance", "BTCUSDT", &cache).await;
+        assert!(report.is_continuous);
+        assert_eq!(report.missing_minutes, 0);
+    }
+
+    #[tokio::test]
+    async fn test_check_continuity_gap_detected() {
+        let cache = Arc::new(Mutex::new(SymbolCache::new()));
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let current_1m_open = (now_ms / 60_000) * 60_000;
+        let old_candle = make_1m_candle(current_1m_open - 60 * 60_000, true);
+
+        {
+            let mut guard = cache.lock().await;
+            guard.update_candle(Timeframe::M1, old_candle);
+        }
+
+        let report = GapDetector::check_continuity("binance", "BTCUSDT", &cache).await;
+        assert!(!report.is_continuous);
+        assert!(report.missing_minutes > 0);
+        assert!(report.gap_start.is_some());
+        assert!(report.gap_end.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_initial_load_event_broadcast() {
+        let mock = MockKlineSource::new();
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let current_1m_open = (now_ms / 60_000) * 60_000;
+        let start_1m = current_1m_open - 100 * 60_000;
+
+        let candles_1m: Vec<Candle> = (0..100)
+            .map(|i| make_1m_candle(start_1m + i as i64 * 60_000, true))
+            .collect();
+        mock.add_data("binance", "BTCUSDT", "1m", candles_1m);
+
+        for tf_str in &["5m", "15m", "1h", "4h", "1d"] {
+            mock.add_data("binance", "BTCUSDT", tf_str, vec![]);
+        }
+
+        let source = mock.into_source();
+        let cache = Arc::new(Mutex::new(SymbolCache::new()));
+        let (event_tx, mut event_rx) = tokio::sync::broadcast::channel(100);
+
+        let _ = GapDetector::detect_and_backfill(
+            "binance", "BTCUSDT", &cache, &source, &event_tx, MarketType::Spot,
+        ).await;
+
+        let event = event_rx.try_recv();
+        assert!(event.is_ok());
+        let event = event.unwrap();
+        assert_eq!(event.event_type, KlineEventType::Backfilled);
+        assert_eq!(event.exchange, "binance");
+        assert_eq!(event.symbol, "BTCUSDT");
+    }
+}

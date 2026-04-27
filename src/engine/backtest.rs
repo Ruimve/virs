@@ -722,7 +722,7 @@ mod tests {
 
         let result = engine.run(&klines, |klines, idx| {
             sma_crossover_signal(klines, idx, 5, 20)
-        }, Some(0.05), Some(0.10), 1.0, None, None, "long", None, None, 1);
+        }, Some(0.05), Some(0.10), 1.0, None, None, "long", None, None, 1, &[]);
 
         assert!(result.total_trades >= 0);
         assert!(result.final_balance >= 0.0);

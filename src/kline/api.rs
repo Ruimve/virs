@@ -234,13 +234,25 @@ async fn handle_kline_ws(socket: WebSocket, state: Arc<AppState>) {
     let mut event_rx = engine.subscribe_events();
 
     let send_task = tokio::spawn(async move {
-        while let Ok(event) = event_rx.recv().await {
-            let json = match serde_json::to_string(&event) {
-                Ok(j) => j,
-                Err(_) => continue,
-            };
-            if sender.send(axum::extract::ws::Message::Text(json.into())).await.is_err() {
-                break;
+        loop {
+            match event_rx.recv().await {
+                Ok(event) => {
+                    let json = match serde_json::to_string(&event) {
+                        Ok(j) => j,
+                        Err(_) => continue,
+                    };
+                    if sender.send(axum::extract::ws::Message::Text(json.into())).await.is_err() {
+                        break;
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    tracing::warn!("[KlineWS] Client lagged, skipped {} events", n);
+                    continue;
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                    tracing::info!("[KlineWS] Broadcast channel closed");
+                    break;
+                }
             }
         }
     });

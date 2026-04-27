@@ -1,14 +1,20 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
+use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use tokio::sync::{broadcast, mpsc, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite};
 use tracing;
 
-use super::types::{Candle, KlineEngineConfig, binance_ws_symbol};
+use super::types::{Candle, KlineWsClient, WsCandleUpdate, WsEvent};
+
+fn binance_ws_symbol(symbol: &str) -> String {
+    symbol.replace('/', "").to_lowercase()
+}
 
 #[derive(Debug, Clone, Deserialize)]
 struct BinanceKlineMessage {
@@ -81,27 +87,19 @@ impl BinanceKlineData {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct WsCandleUpdate {
-    pub ws_symbol: String,
-    pub candle: Candle,
-}
-
-#[derive(Debug, Clone)]
-pub enum WsEvent {
-    Candle(WsCandleUpdate),
-    Reconnected,
-}
-
 enum WsCommand {
     Subscribe(String),
     Unsubscribe(String),
 }
 
 pub struct BinanceWs {
-    config: KlineEngineConfig,
-    is_spot: bool,
+    ws_url: String,
+    reconnect_delay_secs: u64,
+    max_reconnect_delay_secs: u64,
+    ws_ping_interval_secs: u64,
+    ws_max_lifetime_secs: u64,
     subscriptions: Arc<Mutex<Vec<String>>>,
+    symbol_map: Arc<Mutex<HashMap<String, String>>>,
     running: Arc<AtomicBool>,
     request_id: Arc<AtomicU64>,
     shutdown_tx: Option<mpsc::Sender<()>>,
@@ -109,11 +107,15 @@ pub struct BinanceWs {
 }
 
 impl BinanceWs {
-    pub fn new(config: KlineEngineConfig, is_spot: bool) -> Self {
+    pub fn new(ws_url: String, reconnect_delay_secs: u64, max_reconnect_delay_secs: u64, ws_ping_interval_secs: u64, ws_max_lifetime_secs: u64) -> Self {
         Self {
-            config,
-            is_spot,
+            ws_url,
+            reconnect_delay_secs,
+            max_reconnect_delay_secs,
+            ws_ping_interval_secs,
+            ws_max_lifetime_secs,
             subscriptions: Arc::new(Mutex::new(Vec::new())),
+            symbol_map: Arc::new(Mutex::new(HashMap::new())),
             running: Arc::new(AtomicBool::new(false)),
             request_id: Arc::new(AtomicU64::new(1)),
             shutdown_tx: None,
@@ -121,44 +123,30 @@ impl BinanceWs {
         }
     }
 
-    pub async fn add_subscription(&self, symbol: &str) {
-        let stream_name = format!("{}@kline_1m", binance_ws_symbol(symbol));
-        let mut subs = self.subscriptions.lock().await;
-        if !subs.contains(&stream_name) {
-            subs.push(stream_name.clone());
-            drop(subs);
-            if let Some(tx) = &self.command_tx {
-                let _ = tx.send(WsCommand::Subscribe(stream_name));
-            }
-        }
+    pub fn new_spot(proxy_url: Option<&str>) -> Self {
+        let _ = proxy_url;
+        Self::new(
+            "wss://stream.binance.com/ws".to_string(),
+            1, 60, 30, 23 * 3600,
+        )
     }
 
-    pub async fn remove_subscription(&self, symbol: &str) {
-        let stream_name = format!("{}@kline_1m", binance_ws_symbol(symbol));
-        let mut subs = self.subscriptions.lock().await;
-        let existed = subs.iter().any(|s| s == &stream_name);
-        subs.retain(|s| s != &stream_name);
-        drop(subs);
-        if existed {
-            if let Some(tx) = &self.command_tx {
-                let _ = tx.send(WsCommand::Unsubscribe(stream_name));
-            }
-        }
+    pub fn new_perpetual(proxy_url: Option<&str>) -> Self {
+        let _ = proxy_url;
+        Self::new(
+            "wss://fstream.binance.com/ws".to_string(),
+            1, 60, 30, 23 * 3600,
+        )
     }
 
     pub async fn subscription_count(&self) -> usize {
         self.subscriptions.lock().await.len()
     }
+}
 
-    pub fn is_running(&self) -> bool {
-        self.running.load(Ordering::Relaxed)
-    }
-
-    pub async fn start(
-        &mut self,
-        update_tx: broadcast::Sender<WsEvent>,
-        _symbol_map: Arc<Mutex<std::collections::HashMap<String, String>>>,
-    ) {
+#[async_trait]
+impl KlineWsClient for BinanceWs {
+    async fn start(&mut self, update_tx: broadcast::Sender<WsEvent>) {
         if self.running.load(Ordering::Relaxed) {
             return;
         }
@@ -170,30 +158,29 @@ impl BinanceWs {
         let (command_tx, mut command_rx) = mpsc::unbounded_channel::<WsCommand>();
         self.command_tx = Some(command_tx);
 
-        let config = self.config.clone();
+        let ws_url = self.ws_url.clone();
         let subscriptions = self.subscriptions.clone();
+        let symbol_map = self.symbol_map.clone();
         let running = self.running.clone();
         let request_id = self.request_id.clone();
-        let is_spot = self.is_spot;
+        let reconnect_delay_secs = self.reconnect_delay_secs;
+        let max_reconnect_delay_secs = self.max_reconnect_delay_secs;
+        let ws_ping_interval_secs = self.ws_ping_interval_secs;
+        let ws_max_lifetime_secs = self.ws_max_lifetime_secs;
 
         tokio::spawn(async move {
-            let mut reconnect_delay = config.reconnect_delay_secs;
+            let mut reconnect_delay = reconnect_delay_secs;
             let mut is_first_connect = true;
 
             while running.load(Ordering::Relaxed) {
                 let connect_start = tokio::time::Instant::now();
-                let ws_url = if is_spot {
-                    &config.ws_base_url_spot
-                } else {
-                    &config.ws_base_url_perpetual
-                };
 
                 tracing::info!("[KlineWs] Connecting to {}...", ws_url);
 
-                match connect_async(ws_url).await {
+                match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
                         tracing::info!("[KlineWs] Connected successfully");
-                        reconnect_delay = config.reconnect_delay_secs;
+                        reconnect_delay = reconnect_delay_secs;
 
                         if !is_first_connect {
                             let _ = update_tx.send(WsEvent::Reconnected);
@@ -222,9 +209,9 @@ impl BinanceWs {
                             }
                         }
 
-                        let ping_interval = Duration::from_secs(config.ws_ping_interval_secs);
+                        let ping_interval = Duration::from_secs(ws_ping_interval_secs);
                         let mut ping_tick = tokio::time::interval(ping_interval);
-                        let max_lifetime = Duration::from_secs(config.ws_max_lifetime_secs);
+                        let max_lifetime = Duration::from_secs(ws_max_lifetime_secs);
 
                         loop {
                             if !running.load(Ordering::Relaxed) {
@@ -243,10 +230,14 @@ impl BinanceWs {
                                             if let Ok(bmsg) = serde_json::from_str::<BinanceKlineMessage>(&text) {
                                                 if let Some(data) = bmsg.data {
                                                     if data.event_type == "kline" {
-                                                        let ws_sym = data.ws_symbol().to_string();
+                                                        let raw_sym = data.ws_symbol().to_lowercase();
+                                                        let original_symbol = {
+                                                            let map = symbol_map.lock().await;
+                                                            map.get(&raw_sym).cloned().unwrap_or_else(|| raw_sym.clone())
+                                                        };
                                                         let candle = data.to_candle();
                                                         let _ = update_tx.send(WsEvent::Candle(WsCandleUpdate {
-                                                            ws_symbol: ws_sym.clone(),
+                                                            symbol: original_symbol,
                                                             candle,
                                                         }));
                                                     }
@@ -336,7 +327,7 @@ impl BinanceWs {
 
                 tracing::info!("[KlineWs] Reconnecting in {}s...", reconnect_delay);
                 tokio::time::sleep(Duration::from_secs(reconnect_delay)).await;
-                reconnect_delay = (reconnect_delay * 2).min(config.max_reconnect_delay_secs);
+                reconnect_delay = (reconnect_delay * 2).min(max_reconnect_delay_secs);
             }
 
             running.store(false, Ordering::Relaxed);
@@ -344,10 +335,53 @@ impl BinanceWs {
         });
     }
 
-    pub async fn stop(&mut self) {
+    async fn stop(&mut self) {
         self.running.store(false, Ordering::Relaxed);
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(()).await;
         }
+    }
+
+    async fn subscribe(&self, symbol: &str) {
+        let stream_name = format!("{}@kline_1m", binance_ws_symbol(symbol));
+        let ws_sym = binance_ws_symbol(symbol);
+
+        {
+            let mut map = self.symbol_map.lock().await;
+            map.insert(ws_sym, symbol.to_string());
+        }
+
+        let mut subs = self.subscriptions.lock().await;
+        if !subs.contains(&stream_name) {
+            subs.push(stream_name.clone());
+            drop(subs);
+            if let Some(tx) = &self.command_tx {
+                let _ = tx.send(WsCommand::Subscribe(stream_name));
+            }
+        }
+    }
+
+    async fn unsubscribe(&self, symbol: &str) {
+        let stream_name = format!("{}@kline_1m", binance_ws_symbol(symbol));
+        let ws_sym = binance_ws_symbol(symbol);
+
+        {
+            let mut map = self.symbol_map.lock().await;
+            map.remove(&ws_sym);
+        }
+
+        let mut subs = self.subscriptions.lock().await;
+        let existed = subs.iter().any(|s| s == &stream_name);
+        subs.retain(|s| s != &stream_name);
+        drop(subs);
+        if existed {
+            if let Some(tx) = &self.command_tx {
+                let _ = tx.send(WsCommand::Unsubscribe(stream_name));
+            }
+        }
+    }
+
+    fn is_running(&self) -> bool {
+        self.running.load(Ordering::Relaxed)
     }
 }

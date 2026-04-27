@@ -177,6 +177,7 @@ let klineListeners: Array<(event: KlineWsEvent) => void> = []
 let klineReconnectTimer: ReturnType<typeof setTimeout> | null = null
 let klineReconnectAttempts = 0
 const [klineConnected, setKlineConnected] = createSignal(false)
+let klineReconnectCallbacks: Array<() => void> = []
 
 function getKlineWsUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -192,6 +193,7 @@ function connectKlineWs() {
     klineWs.onopen = () => {
       setKlineConnected(true)
       klineReconnectAttempts = 0
+      klineReconnectCallbacks.forEach(cb => cb())
     }
 
     klineWs.onmessage = (e) => {
@@ -219,8 +221,15 @@ function connectKlineWs() {
   }
 }
 
-export function useKlineWs(onEvent: (event: KlineWsEvent) => void): { connected: () => boolean } {
+export function useKlineWs(
+  onEvent: (event: KlineWsEvent) => void,
+  onReconnect?: () => void,
+): { connected: () => boolean } {
   klineListeners.push(onEvent)
+
+  if (onReconnect) {
+    klineReconnectCallbacks.push(onReconnect)
+  }
 
   if (!klineWs || klineWs.readyState === WebSocket.CLOSED) {
     klineReconnectAttempts = 0
@@ -229,6 +238,9 @@ export function useKlineWs(onEvent: (event: KlineWsEvent) => void): { connected:
 
   onCleanup(() => {
     klineListeners = klineListeners.filter(l => l !== onEvent)
+    if (onReconnect) {
+      klineReconnectCallbacks = klineReconnectCallbacks.filter(cb => cb !== onReconnect)
+    }
     if (klineListeners.length === 0 && klineWs) {
       if (klineReconnectTimer) clearTimeout(klineReconnectTimer)
       klineWs.close()

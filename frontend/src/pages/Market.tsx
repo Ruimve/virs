@@ -165,9 +165,9 @@ const Market: Component = () => {
     const curSymbol = symbol()
     const curInterval = interval()
 
-    if (event.exchange !== curExchange || event.symbol !== curSymbol) return
+    if (event.exchange.toLowerCase() !== curExchange.toLowerCase()) return
+    if (event.symbol.toUpperCase() !== curSymbol.toUpperCase()) return
     if (event.timeframe !== curInterval) return
-    // 最终防线：数据尚未加载完成时，不接受 WS 推送
     if (!loadedTimeframe) return
 
     const candle = event.candle
@@ -187,6 +187,8 @@ const Market: Component = () => {
         volume: candle.volume,
       }]
     })
+  }, () => {
+    fetchAll()
   })
 
   // ── 指标 ──

@@ -5,8 +5,9 @@ pub mod ws;
 pub mod gap;
 pub mod source;
 pub mod api;
+pub mod spot;
+pub mod perpetual;
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -19,12 +20,13 @@ use crate::models::MarketType;
 use self::aggregator::Aggregator;
 use self::cache::SymbolCache;
 use self::gap::GapDetector;
+use self::perpetual::PerpetualHandler;
+use self::spot::SpotHandler;
 use self::types::{
     Candle, KlineEngineConfig, KlineEvent, KlineEventType, Timeframe, AllTimeframesData,
-    BacktestRangeLimit, BacktestRangeInfo,
-    subscription_key, binance_ws_symbol,
+    BacktestRangeLimit, BacktestRangeInfo, KlineWsClient, WsEvent,
+    subscription_key,
 };
-use self::ws::{BinanceWs, WsEvent};
 
 #[async_trait]
 pub trait KlineSource: Send + Sync {
@@ -81,31 +83,29 @@ pub struct KlineEngine {
     source: Arc<dyn KlineSource>,
     persistence: Arc<dyn KlinePersistence>,
     subscriptions: Arc<DashMap<String, SubscriptionEntry>>,
-    ws_symbol_to_key: Arc<DashMap<String, String>>,
     event_tx: broadcast::Sender<KlineEvent>,
-    ws_spot: Arc<Mutex<BinanceWs>>,
-    ws_perpetual: Arc<Mutex<BinanceWs>>,
-    ws_symbol_map: Arc<Mutex<HashMap<String, String>>>,
+    spot_handler: SpotHandler,
+    perpetual_handler: PerpetualHandler,
     started: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl KlineEngine {
-    pub fn new(config: KlineEngineConfig, source: Arc<dyn KlineSource>) -> Self {
+    pub fn new(
+        config: KlineEngineConfig,
+        source: Arc<dyn KlineSource>,
+        spot_ws: Arc<Mutex<dyn KlineWsClient>>,
+        perpetual_ws: Arc<Mutex<dyn KlineWsClient>>,
+    ) -> Self {
         let (event_tx, _) = broadcast::channel(config.event_channel_capacity);
-
-        let ws_spot = BinanceWs::new(config.clone(), true);
-        let ws_perpetual = BinanceWs::new(config.clone(), false);
 
         Self {
             config,
             source,
             persistence: Arc::new(NoOpPersistence),
             subscriptions: Arc::new(DashMap::new()),
-            ws_symbol_to_key: Arc::new(DashMap::new()),
             event_tx,
-            ws_spot: Arc::new(Mutex::new(ws_spot)),
-            ws_perpetual: Arc::new(Mutex::new(ws_perpetual)),
-            ws_symbol_map: Arc::new(Mutex::new(HashMap::new())),
+            spot_handler: SpotHandler::new(spot_ws),
+            perpetual_handler: PerpetualHandler::new(perpetual_ws),
             started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
@@ -127,11 +127,7 @@ impl KlineEngine {
         tracing::info!("[KlineEngine] Starting...");
 
         let event_tx = self.event_tx.clone();
-        let ws_spot = self.ws_spot.clone();
-        let ws_perpetual = self.ws_perpetual.clone();
-        let ws_symbol_map = self.ws_symbol_map.clone();
         let subscriptions = self.subscriptions.clone();
-        let ws_symbol_to_key = self.ws_symbol_to_key.clone();
         let source = self.source.clone();
         let persistence = self.persistence.clone();
         let started = self.started.clone();
@@ -143,14 +139,8 @@ impl KlineEngine {
 
         let (ws_update_tx, mut ws_update_rx) = broadcast::channel::<WsEvent>(8192);
 
-        {
-            let mut ws = ws_spot.lock().await;
-            ws.start(ws_update_tx.clone(), ws_symbol_map.clone()).await;
-        }
-        {
-            let mut ws = ws_perpetual.lock().await;
-            ws.start(ws_update_tx, ws_symbol_map.clone()).await;
-        }
+        self.spot_handler.start(ws_update_tx.clone()).await;
+        self.perpetual_handler.start(ws_update_tx).await;
 
         tokio::spawn(async move {
             tracing::info!("[KlineEngine] WS update processor started");
@@ -180,17 +170,10 @@ impl KlineEngine {
                         }
                     }
                     Ok(WsEvent::Candle(update)) => {
-                        let ws_sym = update.ws_symbol.to_lowercase();
-                        let symbol = {
-                            let symbol_map = ws_symbol_map.lock().await;
-                            match symbol_map.get(&ws_sym) {
-                                Some(s) => s.clone(),
-                                None => continue,
-                            }
-                        };
+                        let symbol = update.symbol;
 
-                        let sub_key = match ws_symbol_to_key.get(&symbol) {
-                            Some(k) => k.value().clone(),
+                        let sub_key = match subscriptions.iter().find(|e| e.value().symbol == symbol) {
+                            Some(entry) => subscription_key(&entry.exchange, &symbol),
                             None => continue,
                         };
 
@@ -332,14 +315,8 @@ impl KlineEngine {
 
         tracing::info!("[KlineEngine] Stopping...");
 
-        {
-            let mut ws = self.ws_spot.lock().await;
-            ws.stop().await;
-        }
-        {
-            let mut ws = self.ws_perpetual.lock().await;
-            ws.stop().await;
-        }
+        self.spot_handler.stop().await;
+        self.perpetual_handler.stop().await;
 
         tracing::info!("[KlineEngine] Stopped");
     }
@@ -367,24 +344,14 @@ impl KlineEngine {
         };
 
         self.subscriptions.insert(key.clone(), entry);
-        self.ws_symbol_to_key.insert(symbol.to_string(), key.clone());
 
-        let ws_sym = binance_ws_symbol(symbol);
-        {
-            let mut map = self.ws_symbol_map.lock().await;
-            map.insert(ws_sym.clone(), symbol.to_string());
-        }
-
-        let is_spot = market_type == MarketType::Spot;
-        let ws = if is_spot {
-            self.ws_spot.clone()
-        } else {
-            self.ws_perpetual.clone()
-        };
-
-        {
-            let ws_guard = ws.lock().await;
-            ws_guard.add_subscription(symbol).await;
+        match market_type {
+            MarketType::Spot => {
+                self.spot_handler.subscribe(symbol).await;
+            }
+            MarketType::Perpetual => {
+                self.perpetual_handler.subscribe(symbol).await;
+            }
         }
 
         if self.config.backfill_on_start {
@@ -394,7 +361,7 @@ impl KlineEngine {
                 &cache,
                 &self.source,
                 &self.event_tx,
-                market_type,
+                market_type.clone(),
             ).await {
                 Ok(count) => {
                     tracing::info!("[KlineEngine] Initial load: {} candles for {}/{}", count, exchange, symbol);
@@ -405,7 +372,11 @@ impl KlineEngine {
             }
         }
 
-        tracing::info!("[KlineEngine] Subscribed to {}/{} ({})", exchange, symbol, if is_spot { "spot" } else { "perpetual" });
+        let market_label = match market_type {
+            MarketType::Spot => "spot",
+            MarketType::Perpetual => "perpetual",
+        };
+        tracing::info!("[KlineEngine] Subscribed to {}/{} ({})", exchange, symbol, market_label);
         Ok(())
     }
 
@@ -417,22 +388,13 @@ impl KlineEngine {
             None => return Ok(()),
         };
 
-        let ws_sym = binance_ws_symbol(symbol);
-        {
-            let mut map = self.ws_symbol_map.lock().await;
-            map.remove(&ws_sym);
-        }
-
-        let is_spot = market_type == MarketType::Spot;
-        let ws = if is_spot {
-            self.ws_spot.clone()
-        } else {
-            self.ws_perpetual.clone()
-        };
-
-        {
-            let ws_guard = ws.lock().await;
-            ws_guard.remove_subscription(symbol).await;
+        match market_type {
+            MarketType::Spot => {
+                self.spot_handler.unsubscribe(symbol).await;
+            }
+            MarketType::Perpetual => {
+                self.perpetual_handler.unsubscribe(symbol).await;
+            }
         }
 
         let persist_data: Vec<(Timeframe, Vec<Candle>)> = {
@@ -452,7 +414,6 @@ impl KlineEngine {
         }
 
         self.subscriptions.remove(&key);
-        self.ws_symbol_to_key.remove(symbol);
 
         tracing::info!("[KlineEngine] Unsubscribed from {}/{}", exchange, symbol);
         Ok(())
@@ -557,72 +518,45 @@ impl KlineEngine {
 
         let cache_data = self.get_klines_async(exchange, symbol, timeframe).await;
         let cache_start = cache_data.as_ref().and_then(|c| c.first().map(|f| f.open_time));
-        let cache_end = cache_data.as_ref().and_then(|c| c.last().map(|l| l.open_time));
+        let cache_end = cache_data.as_ref().and_then(|c| c.last().map(|f| f.open_time));
 
-        match (cache_start, cache_end) {
-            (Some(cs), Some(ce)) if cs <= start_ms && ce >= end_ms => {
-                let filtered: Vec<Candle> = cache_data
-                    .unwrap()
-                    .into_iter()
-                    .filter(|c| c.open_time >= start_ms && c.open_time <= end_ms)
-                    .collect();
-                if !filtered.is_empty() {
-                    return Ok(filtered);
-                }
-            }
-            (Some(cs), Some(ce)) if cs <= end_ms && ce >= start_ms => {
-                let mut result: Vec<Candle> = Vec::new();
-
-                if cs > start_ms {
-                    let limit = Self::calculate_fetch_limit(timeframe, start_ms, cs);
-                    if let Ok(pre) = self.source.fetch_klines(exchange, symbol, timeframe.as_str(), limit, Some(start_ms), market_type.clone()).await {
-                        result.extend(pre.into_iter().filter(|c| c.open_time < cs));
+        if let (Some(cs), Some(ce)) = (cache_start, cache_end) {
+            if cs <= start_ms && ce >= end_ms {
+                if let Some(candles) = cache_data {
+                    let filtered: Vec<Candle> = candles.into_iter()
+                        .filter(|c| c.open_time >= start_ms && c.open_time <= end_ms)
+                        .collect();
+                    if !filtered.is_empty() {
+                        return Ok(filtered);
                     }
                 }
-
-                if let Some(cached) = cache_data {
-                    result.extend(cached.into_iter().filter(|c| c.open_time >= start_ms && c.open_time <= end_ms));
-                }
-
-                if ce < end_ms {
-                    let limit = Self::calculate_fetch_limit(timeframe, ce, end_ms);
-                    if let Ok(post) = self.source.fetch_klines(exchange, symbol, timeframe.as_str(), limit, Some(ce), market_type.clone()).await {
-                        result.extend(post.into_iter().filter(|c| c.open_time > ce && c.open_time <= end_ms));
-                    }
-                }
-
-                if !result.is_empty() {
-                    result.sort_by_key(|c| c.open_time);
-                    return Ok(result);
-                }
             }
-            _ => {}
         }
 
-        let limit = Self::calculate_fetch_limit(timeframe, start_ms, end_ms);
-        self.source.fetch_klines(exchange, symbol, timeframe.as_str(), limit, Some(start_ms), market_type).await
-    }
+        let all_1m = self.source.fetch_klines(
+            exchange,
+            symbol,
+            "1m",
+            (days as u32) * 1440 + 100,
+            Some(start_ms),
+            market_type.clone(),
+        ).await?;
 
-    fn calculate_fetch_limit(tf: Timeframe, start_ms: i64, end_ms: i64) -> u32 {
-        let bars = ((end_ms - start_ms) / tf.ms()) as u32;
-        bars.max(1).min(5000)
-    }
-
-    pub async fn fetch_backtest_data_multi_tf(
-        &self,
-        exchange: &str,
-        symbol: &str,
-        timeframes: &[Timeframe],
-        start_ms: i64,
-        end_ms: i64,
-    ) -> anyhow::Result<std::collections::HashMap<Timeframe, Vec<Candle>>> {
-        let mut result = std::collections::HashMap::new();
-
-        for &tf in timeframes {
-            let data = self.fetch_backtest_data(exchange, symbol, tf, start_ms, end_ms).await?;
-            result.insert(tf, data);
+        if timeframe == Timeframe::M1 {
+            return Ok(all_1m);
         }
 
-        Ok(result)
+        let mut cache = SymbolCache::new();
+        for candle in &all_1m {
+            cache.update_candle(Timeframe::M1, candle.clone());
+            if candle.closed {
+                cache.close_candle(Timeframe::M1, candle.open_time);
+            }
+        }
+
+        Ok(cache.get_klines(timeframe)
+            .into_iter()
+            .filter(|c| c.open_time >= start_ms && c.open_time <= end_ms)
+            .collect())
     }
 }
