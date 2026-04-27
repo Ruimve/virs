@@ -15,11 +15,40 @@ fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
 }
 
+/// Binance WS 推送两种格式：
+/// 1. 单流格式: {"e":"kline", "s":"BTCUSDT", "k":{...}}
+/// 2. 组合流格式: {"stream":"btcusdt@kline_1m", "data":{"e":"kline","k":{...}}}
 #[derive(Debug, Clone, Deserialize)]
 struct BinanceKlineMessage {
     #[allow(dead_code)]
     stream: Option<String>,
+    /// 组合流格式: data 字段包含完整的 kline 事件
     data: Option<BinanceKlineData>,
+    /// 单流格式: 顶层直接包含 kline 事件字段
+    #[serde(rename = "e")]
+    event_type_flat: Option<String>,
+    #[serde(rename = "s")]
+    symbol_flat: Option<String>,
+    #[serde(rename = "k")]
+    kline_flat: Option<BinanceKlineInner>,
+}
+
+impl BinanceKlineMessage {
+    /// 提取 kline 数据，兼容单流和组合流两种格式
+    fn into_kline_data(self) -> Option<BinanceKlineData> {
+        if let Some(data) = self.data {
+            Some(data)
+        } else if self.event_type_flat.as_deref() == Some("kline") {
+            self.kline_flat.map(|kline| BinanceKlineData {
+                event_type: self.event_type_flat.unwrap(),
+                event_time: 0,
+                symbol: self.symbol_flat.unwrap_or_default(),
+                kline,
+            })
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -131,7 +160,7 @@ impl BinanceKlineWs {
 
     pub fn new_perpetual(_proxy_url: Option<&str>) -> Self {
         Self::new(
-            "wss://fstream.binance.com/ws".to_string(),
+            "wss://fstream.binance.com/market/ws".to_string(),
             1, 60, 30, 23 * 3600,
         )
     }
@@ -176,7 +205,7 @@ impl KlineWsClient for BinanceKlineWs {
 
                 match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
-                        tracing::info!("[BinanceKlineWs] Connected successfully");
+                        tracing::info!("[BinanceKlineWs] Connected to {} successfully", ws_url);
                         reconnect_delay = reconnect_delay_secs;
 
                         if !is_first_connect {
@@ -191,18 +220,22 @@ impl KlineWsClient for BinanceKlineWs {
                             if !subs.is_empty() {
                                 let id = request_id.fetch_add(1, Ordering::Relaxed);
                                 let subs_vec: Vec<&String> = subs.iter().collect();
+                                tracing::info!("[BinanceKlineWs] Subscribing to {} streams: [{}]", subs_vec.len(), subs_vec.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
                                 let msg = serde_json::json!({
                                     "method": "SUBSCRIBE",
                                     "params": subs_vec,
                                     "id": id
                                 });
                                 if let Ok(text) = serde_json::to_string(&msg) {
+                                    tracing::info!("[BinanceKlineWs] Send SUBSCRIBE msg: {}", text);
                                     if write.send(tungstenite::Message::Text(text.into())).await.is_err() {
                                         tracing::error!("[BinanceKlineWs] Failed to send subscription message");
                                         continue;
                                     }
                                 }
                                 tracing::info!("[BinanceKlineWs] Subscribed to {} streams", subs.len());
+                            } else {
+                                tracing::warn!("[BinanceKlineWs] No streams to subscribe (subscriptions empty)");
                             }
                         }
 
@@ -225,7 +258,7 @@ impl KlineWsClient for BinanceKlineWs {
                                     match msg {
                                         Some(Ok(tungstenite::Message::Text(text))) => {
                                             if let Ok(bmsg) = serde_json::from_str::<BinanceKlineMessage>(&text) {
-                                                if let Some(data) = bmsg.data {
+                                                if let Some(data) = bmsg.into_kline_data() {
                                                     if data.event_type == "kline" {
                                                         let raw_sym = data.ws_symbol().to_lowercase();
                                                         let original_symbol = {
@@ -241,8 +274,15 @@ impl KlineWsClient for BinanceKlineWs {
                                                             symbol: original_symbol,
                                                             candle,
                                                         }));
+                                                    } else {
+                                                        tracing::debug!("[BinanceKlineWs] Received non-kline event: {}", data.event_type);
                                                     }
+                                                } else {
+                                                    // 订阅确认/错误响应（无 kline 数据）
+                                                    tracing::info!("[BinanceKlineWs] Received WS message (no kline data): {}", &text[..text.len().min(200)]);
                                                 }
+                                            } else {
+                                                tracing::warn!("[BinanceKlineWs] Failed to parse WS message: {}", &text[..text.len().min(200)]);
                                             }
                                         }
                                         Some(Ok(tungstenite::Message::Ping(data))) => {
@@ -462,6 +502,35 @@ mod tests {
         let msg_closed: BinanceKlineMessage = serde_json::from_str(json_closed).unwrap();
         let data_closed = msg_closed.data.unwrap();
         assert!(data_closed.kline.closed);
+
+        // 单流格式（无 stream/data 包装）
+        let json_flat = r#"{
+            "e": "kline",
+            "E": 1713900000,
+            "s": "BTCUSDT",
+            "k": {
+                "t": 1713900000000,
+                "T": 1713900059999,
+                "s": "BTCUSDT",
+                "i": "1m",
+                "o": "65000.00",
+                "h": "65100.00",
+                "l": "64900.00",
+                "c": "65050.00",
+                "v": "100.5",
+                "n": 500,
+                "x": true,
+                "q": "6532500.00"
+            }
+        }"#;
+        let msg_flat: BinanceKlineMessage = serde_json::from_str(json_flat).unwrap();
+        assert!(msg_flat.stream.is_none());
+        assert!(msg_flat.data.is_none());
+        assert_eq!(msg_flat.event_type_flat.as_deref(), Some("kline"));
+        let data_flat = msg_flat.into_kline_data().unwrap();
+        assert_eq!(data_flat.event_type, "kline");
+        assert_eq!(data_flat.kline.start_time, 1713900000000);
+        assert!(data_flat.kline.closed);
     }
 
 
@@ -664,7 +733,7 @@ mod tests {
     #[test]
     fn test_new_perpetual() {
         let ws = BinanceKlineWs::new_perpetual(None);
-        assert_eq!(ws.ws_url, "wss://fstream.binance.com/ws");
+        assert_eq!(ws.ws_url, "wss://fstream.binance.com/market/ws");
         assert!(!ws.is_running());
     }
 
