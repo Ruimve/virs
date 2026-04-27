@@ -541,15 +541,8 @@ impl KlineEngine {
             return Ok(all_1m);
         }
 
-        let mut cache = SymbolCache::new();
-        for candle in &all_1m {
-            cache.update_candle(Timeframe::M1, candle.clone());
-            if candle.closed {
-                cache.close_candle(Timeframe::M1, candle.open_time);
-            }
-        }
-
-        Ok(cache.get_klines(timeframe)
+        let aggregated = Aggregator::aggregate_1m_to_timeframe(&all_1m, timeframe);
+        Ok(aggregated
             .into_iter()
             .filter(|c| c.open_time >= start_ms && c.open_time <= end_ms)
             .collect())

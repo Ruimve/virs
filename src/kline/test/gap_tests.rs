@@ -4,96 +4,7 @@ use crate::kline::cache::SymbolCache;
 use std::collections::HashMap;
 use std::sync::Mutex as StdMutex;
 use async_trait::async_trait;
-
-struct MockKlineSource {
-    data: StdMutex<HashMap<String, Vec<Candle>>>,
-    errors: StdMutex<HashMap<String, String>>,
-}
-
-impl MockKlineSource {
-    fn new() -> Self {
-        Self {
-            data: StdMutex::new(HashMap::new()),
-            errors: StdMutex::new(HashMap::new()),
-        }
-    }
-
-    fn add_data(&self, exchange: &str, symbol: &str, timeframe: &str, candles: Vec<Candle>) {
-        let key = format!("{}:{}:{}", exchange, symbol, timeframe);
-        self.data.lock().unwrap().insert(key, candles);
-    }
-
-    fn set_error(&self, exchange: &str, symbol: &str, timeframe: &str, error: &str) {
-        let key = format!("{}:{}:{}", exchange, symbol, timeframe);
-        self.errors.lock().unwrap().insert(key, error.to_string());
-    }
-
-    fn into_source(self) -> Arc<dyn KlineSource> {
-        Arc::new(self)
-    }
-}
-
-#[async_trait]
-impl KlineSource for MockKlineSource {
-    async fn fetch_klines(
-        &self,
-        exchange: &str,
-        symbol: &str,
-        timeframe: &str,
-        _limit: u32,
-        since: Option<i64>,
-        _market_type: Option<MarketType>,
-    ) -> anyhow::Result<Vec<Candle>> {
-        let key = format!("{}:{}:{}", exchange, symbol, timeframe);
-        if let Some(err) = self.errors.lock().unwrap().get(&key) {
-            return Err(anyhow::anyhow!("{}", err));
-        }
-        let all = self.data.lock().unwrap()
-            .get(&key)
-            .cloned()
-            .unwrap_or_default();
-        match since {
-            Some(s) => Ok(all.into_iter().filter(|c| c.open_time >= s).collect()),
-            None => Ok(all),
-        }
-    }
-}
-
-fn make_1m_candle(open_time: i64, closed: bool) -> Candle {
-    Candle {
-        open_time,
-        close_time: open_time + 59_999,
-        open: 100.0,
-        high: 110.0,
-        low: 90.0,
-        close: 105.0,
-        volume: 50.0,
-        quote_volume: 5000.0,
-        trades: 100,
-        closed,
-    }
-}
-
-fn make_1m_sequence(start_time: i64, count: usize, closed: bool) -> Vec<Candle> {
-    (0..count)
-        .map(|i| make_1m_candle(start_time + i as i64 * 60_000, closed))
-        .collect()
-}
-
-fn make_high_tf_candle(open_time: i64, tf: Timeframe, closed: bool) -> Candle {
-    Candle {
-        open_time,
-        close_time: open_time + tf.ms() - 1,
-        open: 100.0,
-        high: 110.0,
-        low: 90.0,
-        close: 105.0,
-        volume: 500.0,
-        quote_volume: 50000.0,
-        trades: 1000,
-        closed,
-    }
-}
+use super::common::{MockKlineSource, make_1m_candle, make_1m_sequence, make_high_tf_candle};
 
 #[tokio::test]
 async fn test_initial_load_basic() {
@@ -479,4 +390,86 @@ async fn test_initial_load_unclosed_high_tf_replacement() {
     let last_m5 = m5_candles.last().unwrap();
     assert!(!last_m5.closed, "last 5m candle should be unclosed (aggregated from current 1m)");
     assert_eq!(last_m5.open_time, current_5m_open, "last 5m open_time should match current 5m group");
+}
+
+// ============================================================
+// 补全: initial_load unclosed 替换 — open_time 相等分支
+// ============================================================
+
+/// 当 REST 返回的高级周期最后一根 candle 的 open_time 等于
+/// 从 1m 聚合的 unclosed candle 的 open_time 时，应替换（覆盖）。
+///
+/// 场景：REST 返回当前 5m 组的 closed 版本（open_time == unclosed open_time），
+/// 代码走 `last_rest.open_time == unclosed.1.open_time` 分支，用 unclosed 覆盖 closed。
+#[tokio::test]
+async fn test_initial_load_unclosed_equal_open_time() {
+    let mock = MockKlineSource::new();
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let current_1m_open = (now_ms / 60_000) * 60_000;
+
+    // 1m 数据：5 根 closed + 1 根 unclosed（当前分钟）
+    let start_1m = current_1m_open - 5 * 60_000;
+    let mut candles_1m: Vec<Candle> = (0..5)
+        .map(|i| make_1m_candle(start_1m + i as i64 * 60_000, true))
+        .collect();
+    candles_1m.push(make_1m_candle(current_1m_open, false));
+    mock.add_data("binance", "BTCUSDT", "1m", candles_1m);
+
+    // 5m 数据：返回当前组的 closed candle（open_time == unclosed open_time）
+    let current_5m_open = align_open_time(current_1m_open, Timeframe::M5);
+    mock.add_data("binance", "BTCUSDT", "5m", vec![
+        make_high_tf_candle(current_5m_open, Timeframe::M5, true),
+    ]);
+
+    for tf_str in &["15m", "1h", "4h", "1d"] {
+        mock.add_data("binance", "BTCUSDT", tf_str, vec![]);
+    }
+
+    let source = mock.into_source();
+    let cache = Arc::new(Mutex::new(SymbolCache::new()));
+    let (event_tx, _) = tokio::sync::broadcast::channel(100);
+
+    let result = GapDetector::detect_and_backfill(
+        "binance", "BTCUSDT", &cache, &source, &event_tx, MarketType::Spot,
+    ).await.unwrap();
+
+    assert!(result > 0);
+
+    let guard = cache.lock().await;
+    let m5_candles = guard.get_klines(Timeframe::M5);
+
+    // 最后 5m candle 应该是 unclosed（从 1m 聚合替换了 REST 的 closed 版本）
+    let last_m5 = m5_candles.last().unwrap();
+    assert!(!last_m5.closed, "last 5m should be unclosed after equal-open-time replacement");
+    assert_eq!(last_m5.open_time, current_5m_open);
+}
+
+// ============================================================
+// 补全: gap backfill 路径 source 返回 Err
+// ============================================================
+
+/// 当已有 last_closed_1m 且有间隔时，source.fetch_klines 返回 Err
+/// 应通过 ? 传播错误
+#[tokio::test]
+async fn test_gap_backfill_source_error() {
+    let mock = MockKlineSource::new();
+    mock.set_error("binance", "BTCUSDT", "1m", "network timeout");
+    let source = mock.into_source();
+    let cache = Arc::new(Mutex::new(SymbolCache::new()));
+
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let current_1m_open = (now_ms / 60_000) * 60_000;
+    let old_candle = make_1m_candle(current_1m_open - 10 * 60_000, true);
+    {
+        let mut guard = cache.lock().await;
+        guard.update_candle(Timeframe::M1, old_candle);
+    }
+
+    let (event_tx, _) = tokio::sync::broadcast::channel(100);
+
+    let result = GapDetector::detect_and_backfill(
+        "binance", "BTCUSDT", &cache, &source, &event_tx, MarketType::Spot,
+    ).await;
+
+    assert!(result.is_err(), "gap backfill should propagate source error");
 }

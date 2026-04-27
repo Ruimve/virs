@@ -1,3 +1,4 @@
+mod common;
 mod mod_tests;
 mod consistency_tests;
 mod types_tests;

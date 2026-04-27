@@ -181,3 +181,20 @@ fn test_kline_engine_config_default() {
     assert_eq!(config.event_channel_capacity, 8192);
     assert_eq!(config.reconnect_delay_secs, 1);
 }
+
+#[test]
+fn test_candle_is_closed() {
+    let closed = Candle {
+        open_time: 0, close_time: 59_999,
+        open: 100.0, high: 110.0, low: 90.0, close: 105.0,
+        volume: 50.0, quote_volume: 5000.0, trades: 100, closed: true,
+    };
+    assert!(closed.is_closed());
+
+    let unclosed = Candle {
+        open_time: 0, close_time: 59_999,
+        open: 100.0, high: 110.0, low: 90.0, close: 105.0,
+        volume: 50.0, quote_volume: 5000.0, trades: 100, closed: false,
+    };
+    assert!(!unclosed.is_closed());
+}
