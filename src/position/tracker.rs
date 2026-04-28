@@ -258,7 +258,7 @@ impl PnlTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::position_engine::types::{Position, PositionSide, PositionStatus, Side};
+    use crate::position::types::{Position, PositionSide, PositionStatus, Side};
     use chrono::Utc;
     use uuid::Uuid;
 

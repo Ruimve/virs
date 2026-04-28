@@ -280,8 +280,8 @@ impl RiskChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::position_engine::config::RiskConfig;
-    use crate::position_engine::types::{Position, PositionSide, PositionStatus};
+    use crate::position::config::RiskConfig;
+    use crate::position::types::{Position, PositionSide, PositionStatus};
     use chrono::Utc;
     use uuid::Uuid;
 

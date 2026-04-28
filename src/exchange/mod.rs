@@ -5,6 +5,8 @@
 //! (`crate::ccxt` module). This keeps the ccxt module isolated while
 //! allowing the rest of the application to use a simplified interface.
 
+pub mod binance_position_adapter;
+
 use async_trait::async_trait;
 use crate::models::*;
 use crate::ccxt::{self, Exchange as CcxtExchange, PlaceOrderParams, MarketType as CcxtMarketType};
