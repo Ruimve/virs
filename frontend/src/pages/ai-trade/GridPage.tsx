@@ -158,23 +158,24 @@ const DEFAULT_SYSTEM_PROMPT = `你是一位专业的加密货币量化交易分�
 }`
 
 const DEFAULT_USER_PROMPT = `## 当前时间：{current_time}
-## 市场数据
+## 市场数据（除特别标注外均为 1h 周期）
 - 当前价格：${'$'}{current_price}
 - 1小时涨跌：{change_1h}
 - 4小时涨跌：{change_4h}
 - 24小时涨跌：{change_24h}
-- ATR 14：${'$'}{atr}（{atr_pct}）
-- 布林带：上轨 ${'$'}{bb_upper}，中轨 ${'$'}{bb_middle}，下轨 ${'$'}{bb_lower}
-- 布林带宽度：{bb_width}
-- EMA12：{ema12}，方向：{ema12_trend}
-- EMA20：{ema20}，方向：{ema20_trend}
-- EMA26：{ema26}，方向：{ema26_trend}
-- EMA50：{ema50}，方向：{ema50_trend}
-- MACD：{macd}，Signal：{macd_signal}，Histogram：{macd_histogram}
-- ADX：{adx}
-- 4h EMA(26)：{ema_4h}
+- ATR(14, 1h)：${'$'}{atr}（{atr_pct}）
+- 布林带(1h)：上轨 ${'$'}{bb_upper}，中轨 ${'$'}{bb_middle}，下轨 ${'$'}{bb_lower}
+- 布林带宽度(1h)：{bb_width}
+- EMA(12, 1h)：{ema12}，方向：{ema12_trend}
+- EMA(20, 1h)：{ema20}，方向：{ema20_trend}
+- EMA(26, 1h)：{ema26}，方向：{ema26_trend}
+- EMA(50, 1h)：{ema50}，方向：{ema50_trend}
+- MACD(1h)：{macd}，Signal：{macd_signal}，Histogram：{macd_histogram}
+- ADX(14, 1h)：{adx}
+- EMA(26, 4h)：{ema_4h}
+- 资金费率：{funding_rate}%
 - 24h 波动率：{volatility}%
-- RSI(14)：{rsi}
+- RSI(14, 1h)：{rsi}
 
 ## 账户状态
 - 总权益：（待接入）

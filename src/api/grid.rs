@@ -218,15 +218,16 @@ const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"请分析以下市场数据并生�
 ## 近期K线数据（最近30根1h）
 {ohlcv_table}
 
-## 关键指标
-- RSI(14): {rsi}
-- ATR(14): {atr}
-- BBands Width: {bb_width}
-- EMA(12): {ema12} (方向: {ema12_trend})
-- EMA(26): {ema26} (方向: {ema26_trend})
-- 价格区间: {price_low} - {price_high}
+## 关键指标（除特别标注外均为 1h 周期）
+- RSI(14, 1h): {rsi}
+- ATR(14, 1h): {atr}
+- BBands Width(1h): {bb_width}
+- EMA(12, 1h): {ema12} (方向: {ema12_trend})
+- EMA(26, 1h): {ema26} (方向: {ema26_trend})
+- 价格区间(1h): {price_low} - {price_high}
 - 当前价格: {current_price}
-- 4h EMA(26): {ema_4h}
+- EMA(26, 4h): {ema_4h}
+- 资金费率: {funding_rate}%
 - 24h 波动率: {volatility}%
 
 请生成适合当前市场状态的网格交易参数。"#;
@@ -261,10 +262,16 @@ struct GridIndicators {
     macd_signal: f64,
     macd_histogram: f64,
     adx: f64,
+    funding_rate: f64,
     ohlcv_table: String,
 }
 
-fn compute_grid_indicators(klines_1h: &[Kline], klines_4h: &[Kline]) -> GridIndicators {
+async fn compute_grid_indicators(
+    klines_1h: &[Kline],
+    klines_4h: &[Kline],
+    exchange: &dyn crate::exchange::Exchange,
+    symbol: &str,
+) -> GridIndicators {
     let last_idx = klines_1h.len() - 1;
     let current_price = klines_1h.last().map(|k| k.close).unwrap_or(0.0);
 
@@ -340,6 +347,13 @@ fn compute_grid_indicators(klines_1h: &[Kline], klines_4h: &[Kline]) -> GridIndi
     // ADX
     let adx = indicators::adx_at(klines_1h, last_idx, 14);
 
+    // Funding rate (perpetual only, best-effort)
+    let funding_rate = exchange
+        .get_funding_rate(symbol)
+        .await
+        .map(|fr| fr.rate)
+        .unwrap_or(0.0);
+
     let last_30: &[Kline] = if klines_1h.len() >= 30 {
         &klines_1h[klines_1h.len() - 30..]
     } else {
@@ -385,6 +399,7 @@ fn compute_grid_indicators(klines_1h: &[Kline], klines_4h: &[Kline]) -> GridIndi
         macd_signal,
         macd_histogram,
         adx,
+        funding_rate,
         ohlcv_table,
     }
 }
@@ -421,6 +436,7 @@ fn build_user_prompt(template: &str, ind: &GridIndicators, symbol: &str, exchang
         .replace("{macd_signal}", &format!("{:.4}", ind.macd_signal))
         .replace("{macd_histogram}", &format!("{:.4}", ind.macd_histogram))
         .replace("{adx}", &format!("{:.2}", ind.adx))
+        .replace("{funding_rate}", &format!("{:.6}", ind.funding_rate * 100.0))
         .replace("{ohlcv_table}", &ind.ohlcv_table)
         .replace("{price_low}", &format!("{:.4}", ind.price_low))
         .replace("{price_high}", &format!("{:.4}", ind.price_high))
@@ -626,7 +642,9 @@ pub async fn analyze(
     let exchange_name = body.exchange.as_deref().unwrap_or("binance");
 
     let (klines_1h, klines_4h) = fetch_klines(&state, exchange_name, &body.symbol).await?;
-    let ind = compute_grid_indicators(&klines_1h, &klines_4h);
+    let exchange_key = super::market::ensure_exchange(&state, exchange_name, MarketType::Perpetual).await?;
+    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
+    let ind = compute_grid_indicators(&klines_1h, &klines_4h, exchange.as_ref(), &body.symbol).await;
 
     let system_prompt = match body.system_prompt.as_deref() {
         Some(s) => s.to_owned(),
@@ -1214,7 +1232,9 @@ pub async fn reanalyze(
     }
 
     let (klines_1h, klines_4h) = fetch_klines(&state, &bot.exchange, &bot.symbol).await?;
-    let ind = compute_grid_indicators(&klines_1h, &klines_4h);
+    let exchange_key = super::market::ensure_exchange(&state, &bot.exchange, MarketType::Perpetual).await?;
+    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
+    let ind = compute_grid_indicators(&klines_1h, &klines_4h, exchange.as_ref(), &bot.symbol).await;
 
     let system_prompt = match body.system_prompt.as_deref() {
         Some(s) => s.to_owned(),
