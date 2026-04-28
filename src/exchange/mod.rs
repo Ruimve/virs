@@ -7,6 +7,9 @@
 
 pub mod binance_position_adapter;
 
+#[cfg(test)]
+mod test;
+
 use async_trait::async_trait;
 use crate::models::*;
 use crate::ccxt::{self, Exchange as CcxtExchange, PlaceOrderParams, MarketType as CcxtMarketType};

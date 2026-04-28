@@ -1033,11 +1033,18 @@ async fn handle_open_position(
 
     // 风控检查
     let lev = leverage.unwrap_or(1);
+
+    // 获取余额来计算 total_equity（在锁之前调用 async）
+    let total_equity = inner.exchange.get_balance().await
+        .map(|b| b.total)
+        .unwrap_or(0.0);
+
     {
         let positions_owned: Vec<Position> = inner.positions.iter().map(|r| r.value().clone()).collect();
         let positions: Vec<&Position> = positions_owned.iter().collect();
         let risk_checker = inner.risk_checker.lock().unwrap();
-        if let Err(e) = risk_checker.check_open_position(&positions, &symbol, size, lev, 0.0) {
+
+        if let Err(e) = risk_checker.check_open_position(&positions, &symbol, size, lev, total_equity) {
             let msg = format!("Risk check failed: {}", e);
             warn!(error = %e, "Risk check failed for {}", symbol);
             inner.emit_event(EngineEvent::RiskAlert {

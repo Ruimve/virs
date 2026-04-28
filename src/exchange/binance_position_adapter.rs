@@ -22,23 +22,23 @@ impl CcxtExchangeAdapter {
     }
 }
 
-// ── 类型转换辅助函数 ──
+// ── 类型转换辅助函数（pub(crate) 以便单元测试） ──
 
-fn convert_side(side: &models::Side) -> Side {
+pub(crate) fn convert_side(side: &models::Side) -> Side {
     match side {
         models::Side::Buy => Side::Buy,
         models::Side::Sell => Side::Sell,
     }
 }
 
-fn convert_to_virs_side(side: &Side) -> models::Side {
+pub(crate) fn convert_to_virs_side(side: &Side) -> models::Side {
     match side {
         Side::Buy => models::Side::Buy,
         Side::Sell => models::Side::Sell,
     }
 }
 
-fn convert_position_side(side: &Option<PositionSide>) -> Option<models::PositionSide> {
+pub(crate) fn convert_position_side(side: &Option<PositionSide>) -> Option<models::PositionSide> {
     side.as_ref().map(|s| match s {
         PositionSide::Long => models::PositionSide::Long,
         PositionSide::Short => models::PositionSide::Short,
@@ -46,7 +46,7 @@ fn convert_position_side(side: &Option<PositionSide>) -> Option<models::Position
     })
 }
 
-fn convert_order_type(ot: &OrderType) -> models::OrderType {
+pub(crate) fn convert_order_type(ot: &OrderType) -> models::OrderType {
     match ot {
         OrderType::Limit => models::OrderType::Limit,
         OrderType::Market => models::OrderType::Market,
@@ -55,7 +55,7 @@ fn convert_order_type(ot: &OrderType) -> models::OrderType {
     }
 }
 
-fn convert_order_status(status: &models::OrderStatus) -> OrderStatus {
+pub(crate) fn convert_order_status(status: &models::OrderStatus) -> OrderStatus {
     match status {
         models::OrderStatus::Pending => OrderStatus::Pending,
         models::OrderStatus::Open => OrderStatus::Open,
@@ -66,22 +66,21 @@ fn convert_order_status(status: &models::OrderStatus) -> OrderStatus {
     }
 }
 
-fn convert_virs_position_side(side: &models::PositionSide) -> PositionSide {
+pub(crate) fn convert_virs_position_side(side: &models::PositionSide) -> PositionSide {
     match side {
         models::PositionSide::Long => PositionSide::Long,
         models::PositionSide::Short => PositionSide::Short,
     }
 }
 
-fn convert_virs_market_type(mt: &models::MarketType) -> MarketType {
+pub(crate) fn convert_virs_market_type(mt: &models::MarketType) -> MarketType {
     match mt {
         models::MarketType::Spot => MarketType::Spot,
         models::MarketType::Perpetual => MarketType::Perpetual,
     }
 }
 
-/// 将 VIRS Order 转换为 PE Order
-fn convert_order(o: &models::Order) -> Order {
+pub(crate) fn convert_order(o: &models::Order) -> Order {
     Order {
         id: uuid::Uuid::parse_str(&o.id).unwrap_or_else(|_| uuid::Uuid::new_v4()),
         position_id: uuid::Uuid::nil(),
@@ -111,8 +110,7 @@ fn convert_order(o: &models::Order) -> Order {
     }
 }
 
-/// 将 VIRS ExchangePosition 转换为 PE ExchangePosition
-fn convert_exchange_position(ep: &models::ExchangePosition) -> ExchangePosition {
+pub(crate) fn convert_exchange_position(ep: &models::ExchangePosition) -> ExchangePosition {
     ExchangePosition {
         symbol: ep.symbol.clone(),
         side: convert_virs_position_side(&ep.side),
@@ -124,8 +122,29 @@ fn convert_exchange_position(ep: &models::ExchangePosition) -> ExchangePosition 
     }
 }
 
-fn to_pe_error(e: anyhow::Error) -> crate::position::error::PositionEngineError {
+pub(crate) fn to_pe_error(e: anyhow::Error) -> crate::position::error::PositionEngineError {
     crate::position::error::PositionEngineError::Exchange(e.to_string())
+}
+
+/// 将 VIRS Ticker 转换为 PE Ticker
+pub(crate) fn convert_ticker(t: &models::Ticker) -> Ticker {
+    Ticker {
+        symbol: t.symbol.clone(),
+        price: t.last,
+        bid: t.bid,
+        ask: t.ask,
+        volume_24h: t.volume_24h,
+        timestamp: t.timestamp,
+    }
+}
+
+/// 将 VIRS FundingRate 转换为 PE FundingRate
+pub(crate) fn convert_funding_rate(fr: &models::FundingRate) -> FundingRate {
+    FundingRate {
+        symbol: fr.symbol.clone(),
+        rate: fr.rate,
+        next_funding_time: fr.next_funding_time.unwrap_or_else(Utc::now),
+    }
 }
 
 // ── Exchange trait 实现 ──
@@ -144,14 +163,7 @@ impl PeExchange for CcxtExchangeAdapter {
 
     async fn get_ticker(&self, symbol: &str) -> Result<Ticker> {
         let t = self.inner.get_ticker(symbol).await.map_err(to_pe_error)?;
-        Ok(Ticker {
-            symbol: t.symbol,
-            price: t.last,
-            bid: t.bid,
-            ask: t.ask,
-            volume_24h: t.volume_24h,
-            timestamp: t.timestamp,
-        })
+        Ok(convert_ticker(&t))
     }
 
     async fn get_balance(&self) -> Result<Balance> {
@@ -172,11 +184,7 @@ impl PeExchange for CcxtExchangeAdapter {
 
     async fn get_funding_rate(&self, symbol: &str) -> Result<FundingRate> {
         let fr = self.inner.get_funding_rate(symbol).await.map_err(to_pe_error)?;
-        Ok(FundingRate {
-            symbol: fr.symbol,
-            rate: fr.rate,
-            next_funding_time: fr.next_funding_time.unwrap_or_else(Utc::now),
-        })
+        Ok(convert_funding_rate(&fr))
     }
 
     async fn get_fee_rates(&self, symbol: &str) -> Result<FeeRates> {

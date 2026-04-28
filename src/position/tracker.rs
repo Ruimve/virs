@@ -386,17 +386,22 @@ mod tests {
     fn test_drawdown() {
         let mut tracker = PnlTracker::new(10000.0);
 
-        // 先涨到 15000
-        tracker.record_trade(&make_trade(5000.0, "close"));
-        let snap = tracker.snapshot(0.0, 0);
-        assert!((snap.equity - 15000.0).abs() < 0.01);
-        assert_eq!(tracker.peak_equity(), 15000.0);
+        // 先涨到 15000: 需要通过 update_unrealized 更新 peak_equity
+        // 创建一个盈利仓位模拟价格上涨
+        let pos = make_position("BTCUSDT", PositionSide::Long, 1.0, 50000.0, 10);
+        let mut prices = HashMap::new();
+        prices.insert("BTCUSDT".to_string(), 100000.0); // 涨到 100000，unrealized = 50000
+        tracker.update_unrealized(&[&pos], &prices);
+        assert_eq!(tracker.peak_equity(), 60000.0); // 10000 + 50000
 
-        // 再亏到 12000
-        tracker.record_trade(&make_trade(-3000.0, "close"));
-        let snap = tracker.snapshot(0.0, 0);
-        // max_drawdown = (15000 - 12000) / 15000 = 0.2
-        assert!((snap.max_drawdown - 0.2).abs() < 0.001);
+        // 再跌回: 价格回到 50000
+        let pos2 = make_position("BTCUSDT", PositionSide::Long, 1.0, 50000.0, 10);
+        let mut prices2 = HashMap::new();
+        prices2.insert("BTCUSDT".to_string(), 50000.0); // unrealized = 0
+        let snap = tracker.update_unrealized(&[&pos2], &prices2);
+        // equity = 10000 + 0 = 10000
+        // max_drawdown = (60000 - 10000) / 60000 ≈ 0.8333
+        assert!((snap.max_drawdown - (50000.0 / 60000.0)).abs() < 0.001);
     }
 
     #[test]

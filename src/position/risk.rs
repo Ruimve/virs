@@ -172,7 +172,7 @@ impl RiskChecker {
     /// 费率超过阈值返回 `Some(RiskAlertInfo)`，否则返回 `None`。
     pub fn check_funding_rate(&self, symbol: &str, rate: f64) -> Option<RiskAlertInfo> {
         if rate.abs() > self.config.funding_rate_threshold {
-            let severity = if rate.abs() > self.config.funding_rate_threshold * 2.0 {
+            let severity = if rate.abs() >= self.config.funding_rate_threshold * 2.0 {
                 "critical"
             } else {
                 "warning"
@@ -379,11 +379,15 @@ mod tests {
         pos.liquidation_price = Some(45000.0);
         pos.current_price = 46000.0;
 
-        // 距离强平 (50000-45000)/50000 = 10%，超过 buffer 20%，安全
-        assert!(checker.check_liquidation(&pos).is_none());
-
-        pos.current_price = 45500.0;
-        // 距离强平 (45500-45000)/45500 ≈ 1.1%，低于 buffer 20%，预警
+        // 距离强平 |46000-45000|/46000 ≈ 2.17%，低于 buffer 20%，应预警
         assert!(checker.check_liquidation(&pos).is_some());
+
+        pos.current_price = 55000.0;
+        // 距离强平 |55000-45000|/55000 ≈ 18.18%，低于 buffer 20%，仍预警
+        assert!(checker.check_liquidation(&pos).is_some());
+
+        pos.current_price = 60000.0;
+        // 距离强平 |60000-45000|/60000 = 25%，超过 buffer 20%，安全
+        assert!(checker.check_liquidation(&pos).is_none());
     }
 }
