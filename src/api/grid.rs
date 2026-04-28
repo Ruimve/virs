@@ -231,25 +231,6 @@ const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"请分析以下市场数据并生�
 
 请生成适合当前市场状态的网格交易参数。"#;
 
-fn strip_code_fences(content: &str) -> String {
-    let content = content.trim();
-    if content.starts_with("```json") {
-        content
-            .trim_start_matches("```json")
-            .trim_end_matches("```")
-            .trim()
-            .to_string()
-    } else if content.starts_with("```") {
-        content
-            .trim_start_matches("```")
-            .trim_end_matches("```")
-            .trim()
-            .to_string()
-    } else {
-        content.to_string()
-    }
-}
-
 // ── Shared indicator computation ──
 
 struct GridIndicators {
@@ -494,8 +475,8 @@ async fn call_ai_and_parse(
             { "role": "system", "content": system_prompt },
             { "role": "user", "content": user_prompt }
         ],
+        "response_format": { "type": "json_object" },
         "temperature": 0.5,
-        "max_tokens": 2000,
     });
 
     let response = state.http_client
@@ -538,14 +519,29 @@ async fn call_ai_and_parse(
         )
     })?;
 
+    tracing::debug!("AI grid {} raw response: {}", error_context, serde_json::ser::to_string(&json).unwrap_or_default());
+
+    // json_object mode: content should be valid JSON directly
     let content = json["choices"][0]["message"]["content"]
         .as_str()
         .unwrap_or("")
         .to_string();
 
-    let used_model = json["model"].as_str().unwrap_or(&model).to_string();
+    if content.is_empty() {
+        tracing::error!(
+            "AI grid {} returned empty content. Full response: {}",
+            error_context,
+            serde_json::ser::to_string(&json).unwrap_or_default()
+        );
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<serde_json::Value>::err(
+                "AI returned empty response. The provider may not support json_object mode."
+            )),
+        ));
+    }
 
-    let content = strip_code_fences(&content);
+    let used_model = json["model"].as_str().unwrap_or(&model).to_string();
 
     let result: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
         tracing::error!("Failed to parse AI grid {} JSON: {}", error_context, e);
