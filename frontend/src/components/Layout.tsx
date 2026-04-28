@@ -6,10 +6,11 @@ import { useMarket } from '../lib/market-context'
 import type { RouteSectionProps } from '@solidjs/router'
 
 interface NavItem {
-  path: string
+  path?: string
   label: string
   icon: string
   adminOnly?: boolean
+  children?: NavItem[]
 }
 
 const navItems: NavItem[] = [
@@ -17,7 +18,13 @@ const navItems: NavItem[] = [
   { path: '/strategies', label: '策略管理', icon: 'strategies' },
   { path: '/market', label: '行情查看', icon: 'market' },
   { path: '/backtest', label: '回测', icon: 'backtest' },
-  { path: '/grid', label: '网格机器人', icon: 'grid' },
+  {
+    label: 'AI 交易', icon: 'grid',
+    children: [
+      { path: '/ai-trade/grid', label: '网格机器人', icon: 'grid' },
+      { path: '/ai-trade/auto', label: '全自动交易', icon: 'auto' },
+    ],
+  },
   { path: '/trades', label: '交易记录', icon: 'trades' },
   { path: '/credentials', label: '凭证管理', icon: 'credentials' },
   { path: '/ai-credentials', label: 'AI 凭证', icon: 'ai' },
@@ -31,6 +38,8 @@ const pageTitles: Record<string, string> = {
   '/market': '行情查看',
   '/backtest': '回测',
   '/grid': '网格机器人',
+  '/ai-trade/grid': 'AI 交易 - 网格机器人',
+  '/ai-trade/auto': 'AI 交易 - 全自动交易',
   '/trades': '交易记录',
   '/credentials': '凭证管理',
   '/ai-credentials': 'AI 凭证',
@@ -71,6 +80,12 @@ function NavIcon(props: { name: string; class?: string }) {
           <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
         </svg>
       )
+    case 'auto':
+      return (
+        <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+        </svg>
+      )
     case 'trades':
       return (
         <svg class={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -103,6 +118,7 @@ function NavIcon(props: { name: string; class?: string }) {
 const Layout: Component<RouteSectionProps> = (props) => {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
+  const [expandedMenus, setExpandedMenus] = createSignal<Set<string>>(new Set())
   const market = useMarket()
 
   // 初始化认证状态
@@ -116,6 +132,19 @@ const Layout: Component<RouteSectionProps> = (props) => {
 
   const filteredNavItems = () =>
     navItems.filter((item) => !item.adminOnly || isAdmin())
+
+  // 自动展开当前路径所在的子菜单
+  const isChildActive = (item: NavItem) =>
+    item.children?.some((c) => location.pathname === c.path) ?? false
+
+  const toggleMenu = (label: string) => {
+    setExpandedMenus((prev) => {
+      const next = new Set(prev)
+      if (next.has(label)) next.delete(label)
+      else next.add(label)
+      return next
+    })
+  }
 
   // Login 页面不渲染侧边栏和顶栏
   const isLoginPage = () => location.pathname === '/login'
@@ -146,17 +175,64 @@ const Layout: Component<RouteSectionProps> = (props) => {
         <nav class="mt-2 px-3">
           <For each={filteredNavItems()}>
             {(item) => (
-              <A
-                href={item.path}
-                onClick={() => setSidebarOpen(false)}
-                class="group relative flex items-center gap-3 px-3 py-2 mb-0.5 rounded-lg text-[13px] font-medium transition-all duration-200"
-                activeClass="bg-[var(--color-accent-light)] text-[var(--color-accent)] [&::before]:content-[''] [&::before]:absolute [&::before]:left-0 [&::before]:top-1/2 [&::before]:-translate-y-1/2 [&::before]:w-[2px] [&::before]:h-4 [&::before]:rounded-full [&::before]:bg-[var(--color-accent)]"
-                inactiveClass="text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]"
-                end={item.path === '/dashboard'}
+              <Show
+                when={!item.children}
+                fallback={
+                  /* 带子菜单的导航项 */
+                  <>
+                    <button
+                      onClick={() => toggleMenu(item.label)}
+                      class={`group relative flex items-center justify-between gap-3 w-full px-3 py-2 mb-0.5 rounded-lg text-[13px] font-medium transition-all duration-200 ${
+                        isChildActive(item)
+                          ? 'text-[var(--color-accent)]'
+                          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]'
+                      }`}
+                    >
+                      <div class="flex items-center gap-3">
+                        <NavIcon name={item.icon} class="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" />
+                        <span>{item.label}</span>
+                      </div>
+                      <svg
+                        class={`w-3.5 h-3.5 transition-transform duration-200 ${expandedMenus().has(item.label) || isChildActive(item) ? 'rotate-90' : ''}`}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                      >
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                    <Show when={expandedMenus().has(item.label) || isChildActive(item)}>
+                      <div class="ml-4 pl-3 border-l border-slate-200/60">
+                        <For each={item.children}>
+                          {(child) => (
+                            <A
+                              href={child.path!}
+                              onClick={() => setSidebarOpen(false)}
+                              class="group relative flex items-center gap-3 px-3 py-[7px] mb-0.5 rounded-lg text-[13px] font-medium transition-all duration-200"
+                              activeClass="bg-[var(--color-accent-light)] text-[var(--color-accent)] [&::before]:content-[''] [&::before]:absolute [&::before]:left-0 [&::before]:top-1/2 [&::before]:-translate-y-1/2 [&::before]:w-[2px] [&::before]:h-4 [&::before]:rounded-full [&::before]:bg-[var(--color-accent)]"
+                              inactiveClass="text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]"
+                            >
+                              <NavIcon name={child.icon} class="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" />
+                              <span>{child.label}</span>
+                            </A>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
+                  </>
+                }
               >
-                <NavIcon name={item.icon} class="w-4 h-4 opacity-60 group-[.group]:opacity-100 transition-opacity" />
-                <span>{item.label}</span>
-              </A>
+                {/* 普通导航项 */}
+                <A
+                  href={item.path!}
+                  onClick={() => setSidebarOpen(false)}
+                  class="group relative flex items-center gap-3 px-3 py-2 mb-0.5 rounded-lg text-[13px] font-medium transition-all duration-200"
+                  activeClass="bg-[var(--color-accent-light)] text-[var(--color-accent)] [&::before]:content-[''] [&::before]:absolute [&::before]:left-0 [&::before]:top-1/2 [&::before]:-translate-y-1/2 [&::before]:w-[2px] [&::before]:h-4 [&::before]:rounded-full [&::before]:bg-[var(--color-accent)]"
+                  inactiveClass="text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]"
+                  end={item.path === '/dashboard'}
+                >
+                  <NavIcon name={item.icon} class="w-4 h-4 opacity-60 group-[.group]:opacity-100 transition-opacity" />
+                  <span>{item.label}</span>
+                </A>
+              </Show>
             )}
           </For>
         </nav>
