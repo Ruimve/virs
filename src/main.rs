@@ -11,6 +11,7 @@ mod exchange;
 mod kline;
 mod models;
 mod order_worker;
+mod position_engine;
 mod services;
 mod utils;
 
