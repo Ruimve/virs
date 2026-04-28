@@ -1,12 +1,15 @@
-import { type Component, createEffect, onCleanup, onMount } from 'solid-js'
+import { type Component, createEffect, onMount } from 'solid-js'
 import {
-  createChart,
   type IChartApi,
   type ISeriesApi,
   type CandlestickData,
-  type Time,
-  ColorType,
+  CandlestickSeries,
+  HistogramSeries,
+  LineSeries,
+  createSeriesMarkers,
 } from 'lightweight-charts'
+import SolidChart from './SolidChart'
+import { toLocaleTime } from './SolidChart/locale/zh_CN';
 import type { OverlayLine } from '../utils/indicators'
 
 export type { OverlayLine }
@@ -32,57 +35,34 @@ interface KlineChartProps {
 }
 
 const KlineChart: Component<KlineChartProps> = (props) => {
-  let containerRef: HTMLDivElement | undefined
   let chart: IChartApi | undefined
   let candleSeries: ISeriesApi<'Candlestick'> | undefined
 
+  const setChart = (c: IChartApi | undefined) => {
+    console.log(c);
+    chart = c
+  }
+
   onMount(() => {
-    if (!containerRef) return
+    if (!chart) return
 
     // Determine time scale settings based on data density
-    // Reference: Binance time axis formatting per timeframe
     let timeVisible = true
-    let secondsVisible = false
+    const secondsVisible = false
     if (props.data.length >= 2) {
       const firstTime = props.data[0].time
       const lastTime = props.data[props.data.length - 1].time
       const spanHours = (lastTime - firstTime) / 3600
-      // < 48h: show HH:mm (1m/5m/15m/1h)
-      // 48h ~ 90d: show MM-DD (4h/1d short range)
-      // > 90d: show YYYY-MM-DD (1d long range)
       if (spanHours > 2160) {
         timeVisible = false
       }
     }
 
-    // Store initial timeVisible for later updates
-    let timeVisibleRef = timeVisible
-
-    chart = createChart(containerRef, {
-      layout: {
-        background: { type: ColorType.Solid, color: '#ffffff' },
-        textColor: '#6b7280',
-        fontSize: 12,
-      },
-      grid: {
-        vertLines: { color: '#f3f4f6' },
-        horzLines: { color: '#f3f4f6' },
-      },
-      crosshair: {
-        mode: 0,
-      },
-      rightPriceScale: {
-        borderColor: '#e5e7eb',
-      },
-      timeScale: {
-        borderColor: '#e5e7eb',
-        timeVisible,
-        secondsVisible,
-      },
-      handleScroll: { vertTouchDrag: false },
+    chart.applyOptions({
+      timeScale: { timeVisible, secondsVisible },
     })
 
-    candleSeries = chart.addCandlestickSeries({
+    candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#10b981',
       downColor: '#ef4444',
       borderDownColor: '#ef4444',
@@ -92,7 +72,7 @@ const KlineChart: Component<KlineChartProps> = (props) => {
     })
 
     const chartData: CandlestickData[] = props.data.map((item) => ({
-      time: item.time as Time,
+      time: toLocaleTime(item.time),
       open: item.open,
       high: item.high,
       low: item.low,
@@ -101,17 +81,13 @@ const KlineChart: Component<KlineChartProps> = (props) => {
 
     candleSeries.setData(chartData)
 
-    // Reset time scale to avoid stale range from previous timeframe
-    chart?.timeScale().fitContent()
-
-    // Update time format based on new data span
-    if (chart && props.data.length >= 2) {
+    // Update time format based on data span
+    if (props.data.length >= 2) {
       const firstTime = props.data[0].time
       const lastTime = props.data[props.data.length - 1].time
       const spanHours = (lastTime - firstTime) / 3600
       const newTimeVisible = spanHours <= 2160
-      if (newTimeVisible !== timeVisibleRef) {
-        timeVisibleRef = newTimeVisible
+      if (newTimeVisible !== timeVisible) {
         chart.applyOptions({
           timeScale: { timeVisible: newTimeVisible },
         })
@@ -129,7 +105,7 @@ const KlineChart: Component<KlineChartProps> = (props) => {
     }
 
     if (props.data.length > 0 && props.data[0].volume !== undefined) {
-      const volumeSeries = chart.addHistogramSeries({
+      const volumeSeries = chart.addSeries(HistogramSeries, {
         priceFormat: { type: 'volume' },
         priceScaleId: 'volume',
       })
@@ -140,7 +116,7 @@ const KlineChart: Component<KlineChartProps> = (props) => {
 
       volumeSeries.setData(
         props.data.map((item) => ({
-          time: item.time as Time,
+          time: toLocaleTime(item.time),
           value: item.volume || 0,
           color: item.close >= item.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
         }))
@@ -148,9 +124,9 @@ const KlineChart: Component<KlineChartProps> = (props) => {
     }
 
     if (props.markers && props.markers.length > 0) {
-      candleSeries.setMarkers(
+      createSeriesMarkers(candleSeries,
         props.markers.map((m) => ({
-          time: m.time as Time,
+          time: toLocaleTime(m.time),
           position: m.position,
           color: m.color,
           shape: m.shape,
@@ -162,7 +138,7 @@ const KlineChart: Component<KlineChartProps> = (props) => {
     // Render overlay lines
     if (props.overlays && props.overlays.length > 0) {
       for (const overlay of props.overlays) {
-        const lineSeries = chart.addLineSeries({
+        const lineSeries = chart.addSeries(LineSeries, {
           color: overlay.color,
           lineWidth: Math.min(Math.max(overlay.lineWidth || 1, 1), 4) as 1 | 2 | 3 | 4,
           priceScaleId: overlay.priceScaleId || 'right',
@@ -172,7 +148,7 @@ const KlineChart: Component<KlineChartProps> = (props) => {
 
         lineSeries.setData(
           overlay.data.map(d => ({
-            time: d.time as Time,
+            time: toLocaleTime(d.time),
             value: d.value,
           }))
         )
@@ -188,32 +164,13 @@ const KlineChart: Component<KlineChartProps> = (props) => {
     } else {
       chart.timeScale().fitContent()
     }
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect
-        if (chart && width > 0 && height > 0) {
-          chart.applyOptions({ width, height })
-        }
-      }
-    })
-    resizeObserver.observe(containerRef)
-
-    onCleanup(() => {
-      resizeObserver.disconnect()
-      if (chart) {
-        chart.remove()
-        chart = undefined
-        candleSeries = undefined
-      }
-    })
   })
 
   createEffect(() => {
     if (!candleSeries || props.data.length === 0) return
 
     const chartData: CandlestickData[] = props.data.map((item) => ({
-      time: item.time as Time,
+      time: toLocaleTime(item.time),
       open: item.open,
       high: item.high,
       low: item.low,
@@ -223,9 +180,9 @@ const KlineChart: Component<KlineChartProps> = (props) => {
     candleSeries.setData(chartData)
 
     if (props.markers && props.markers.length > 0) {
-      candleSeries.setMarkers(
+      createSeriesMarkers(candleSeries,
         props.markers.map((m) => ({
-          time: m.time as Time,
+          time: toLocaleTime(m.time),
           position: m.position,
           color: m.color,
           shape: m.shape,
@@ -233,24 +190,9 @@ const KlineChart: Component<KlineChartProps> = (props) => {
         }))
       )
     }
-
-    if (props.data.length > 100) {
-      chart?.timeScale().setVisibleLogicalRange({
-        from: props.data.length - 100,
-        to: props.data.length - 1,
-      })
-    } else {
-      chart?.timeScale().fitContent()
-    }
   })
 
-  return (
-    <div
-      ref={containerRef}
-      class="w-full rounded-lg border border-gray-200/60 overflow-hidden"
-      style={{ height: `${props.height || 400}px` }}
-    />
-  )
+  return <SolidChart onLoad={setChart} height={props.height} />
 }
 
 export default KlineChart
