@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use tokio::sync::mpsc;
-use tracing::warn;
+use tracing::{warn, info};
 
+use crate::ccxt::binance_order_ws::BinanceOrderWs;
 use crate::exchange::Exchange as VirsExchange;
 use crate::models;
 use crate::position::exchange::Exchange as PeExchange;
@@ -14,11 +15,22 @@ use crate::position::error::Result;
 /// 位于 src/exchange/ 下，引用 crate::position 和 crate::exchange
 pub struct CcxtExchangeAdapter {
     inner: Box<dyn VirsExchange>,
+    /// 可选的 WS listenKey，用于启动订单推送
+    listen_key: Option<String>,
 }
 
 impl CcxtExchangeAdapter {
     pub fn new(exchange: Box<dyn VirsExchange>) -> Self {
-        Self { inner: exchange }
+        Self {
+            inner: exchange,
+            listen_key: None,
+        }
+    }
+
+    /// 设置 listenKey 以启用 WebSocket 订单推送
+    pub fn with_listen_key(mut self, listen_key: String) -> Self {
+        self.listen_key = Some(listen_key);
+        self
     }
 }
 
@@ -264,10 +276,32 @@ impl PeExchange for CcxtExchangeAdapter {
 
     // ── WebSocket 成交回报 ──
 
-    async fn subscribe_order_updates(&self, _symbols: &[&str]) -> Result<mpsc::Receiver<WsFeedEvent>> {
+    async fn subscribe_order_updates(&self, symbols: &[&str]) -> Result<mpsc::Receiver<WsFeedEvent>> {
         let (tx, rx) = mpsc::channel(256);
-        drop(tx);
-        warn!("WebSocket order updates not available, engine will use polling mode only");
+
+        if let Some(ref listen_key) = self.listen_key {
+            // 有 listenKey，启动真正的 WS 连接
+            let is_perpetual = self.inner.market_type() == models::MarketType::Perpetual;
+            let mut ws = if is_perpetual {
+                BinanceOrderWs::new_perpetual(listen_key.clone())
+            } else {
+                BinanceOrderWs::new_spot(listen_key.clone())
+            };
+
+            info!(
+                exchange = %self.inner.name(),
+                market = ?self.inner.market_type(),
+                symbols_count = symbols.len(),
+                "Starting WebSocket order updates"
+            );
+
+            ws.start(tx).await;
+        } else {
+            // 无 listenKey，退化为轮询模式
+            drop(tx);
+            warn!("No listenKey configured, WebSocket order updates disabled, using polling mode only");
+        }
+
         Ok(rx)
     }
 }
