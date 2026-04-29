@@ -54,3 +54,4 @@ pub enum GridEvent {
     PriceUpdate { bot_id: Uuid, price: f64 },
     StatusUpdate { bot_id: Uuid, state: GridState },
 }
+

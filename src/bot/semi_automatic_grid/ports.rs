@@ -177,3 +177,4 @@ pub trait LlmProviderResolver: Send + Sync {
         user_credentials: &[(String, String)],
     ) -> anyhow::Result<(String, String, String, String)>;
 }
+

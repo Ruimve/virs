@@ -85,7 +85,7 @@ impl GridEngine {
         info!("GridEngine shutdown complete");
     }
 
-    async fn restore_running_bots(&mut self) {
+    pub(crate) async fn restore_running_bots(&mut self) {
         let running_bots = self.store.load_running_bots().await.unwrap_or_default();
 
         for bot in running_bots {
@@ -95,7 +95,7 @@ impl GridEngine {
         }
     }
 
-    async fn start_bot(&mut self, bot_id: Uuid) {
+    pub(crate) async fn start_bot(&mut self, bot_id: Uuid) {
         if self.workers.contains_key(&bot_id) {
             warn!(bot_id = %bot_id, "Bot already running");
             return;
@@ -137,7 +137,7 @@ impl GridEngine {
         info!(bot_id = %bot_id, "Grid bot started");
     }
 
-    async fn stop_bot(&mut self, bot_id: Uuid, reason: &str) {
+    pub(crate) async fn stop_bot(&mut self, bot_id: Uuid, reason: &str) {
         let _ = self.order_executor.send_command(GridOrderCommand::CancelAllOrders { symbol: None }).await;
 
         if let Some(tx) = self.shutdown_txs.remove(&bot_id) {
@@ -152,7 +152,7 @@ impl GridEngine {
         info!(bot_id = %bot_id, "Grid bot stopped: {}", reason);
     }
 
-    async fn pause_bot(&mut self, bot_id: Uuid) {
+    pub(crate) async fn pause_bot(&mut self, bot_id: Uuid) {
         if let Some(tx) = self.shutdown_txs.remove(&bot_id) {
             let _ = tx.send(()).await;
         }
@@ -164,18 +164,18 @@ impl GridEngine {
         info!(bot_id = %bot_id, "Grid bot paused");
     }
 
-    async fn resume_bot(&mut self, bot_id: Uuid) {
+    pub(crate) async fn resume_bot(&mut self, bot_id: Uuid) {
         let _ = self.store.update_bot_status(bot_id, "stopped").await;
         self.start_bot(bot_id).await;
     }
 
-    async fn delete_bot(&mut self, bot_id: Uuid) {
+    pub(crate) async fn delete_bot(&mut self, bot_id: Uuid) {
         self.stop_bot(bot_id, "deleted").await;
         let _ = self.store.delete_bot(bot_id).await;
         info!(bot_id = %bot_id, "Grid bot deleted");
     }
 
-    async fn adjust_grid(&mut self, bot_id: Uuid) {
+    pub(crate) async fn adjust_grid(&mut self, bot_id: Uuid) {
         if let Some(handle) = self.workers.remove(&bot_id) {
             handle.abort();
             info!(bot_id = %bot_id, "Grid bot worker aborted for adjustment");
@@ -187,10 +187,11 @@ impl GridEngine {
         }
     }
 
-    async fn shutdown_all(&mut self) {
+    pub(crate) async fn shutdown_all(&mut self) {
         let bot_ids: Vec<Uuid> = self.workers.keys().copied().collect();
         for id in bot_ids {
             self.stop_bot(id, "engine shutdown").await;
         }
     }
 }
+

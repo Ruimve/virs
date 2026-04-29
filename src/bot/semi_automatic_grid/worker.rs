@@ -13,7 +13,7 @@ use crate::bot::semi_automatic_grid::types::{GridEvent, GridLevel, GridState};
 
 /// 单个网格 bot 的执行 worker
 pub struct GridWorker {
-    bot: GridBotConfig,
+    pub(crate) bot: GridBotConfig,
     /// 价格提供者
     price_provider: Arc<dyn PriceProvider>,
     /// 订单执行器
@@ -27,17 +27,17 @@ pub struct GridWorker {
     /// 网格事件广播
     grid_event_tx: broadcast::Sender<GridEvent>,
     /// 网格层状态
-    levels: Vec<GridLevel>,
+    pub(crate) levels: Vec<GridLevel>,
     /// 当前价格
-    current_price: f64,
+    pub(crate) current_price: f64,
     /// 统计
-    total_pnl: f64,
-    total_trades: i32,
-    grid_filled_count: i32,
+    pub(crate) total_pnl: f64,
+    pub(crate) total_trades: i32,
+    pub(crate) grid_filled_count: i32,
     /// 是否暂停
-    paused: bool,
+    pub(crate) paused: bool,
     /// order_id -> (level_index, side) 的映射
-    order_level_map: HashMap<Uuid, (usize, String)>,
+    pub(crate) order_level_map: HashMap<Uuid, (usize, String)>,
     /// 初始挂单范围（当前价格 ±N 层）
     initial_order_range: usize,
 }
@@ -74,7 +74,7 @@ impl GridWorker {
     }
 
     /// 根据网格参数计算所有层级价格
-    fn calculate_levels(bot: &GridBotConfig) -> Vec<GridLevel> {
+    pub(crate) fn calculate_levels(bot: &GridBotConfig) -> Vec<GridLevel> {
         if bot.grid_count <= 0 || bot.upper_price <= 0.0 || bot.lower_price <= 0.0 {
             return vec![];
         }
@@ -109,7 +109,7 @@ impl GridWorker {
 
     // ── 获取实时价格 ──
 
-    async fn fetch_current_price(&self) -> f64 {
+    pub(crate) async fn fetch_current_price(&self) -> f64 {
         match self.price_provider.get_price(&self.bot.exchange, &self.bot.symbol).await {
             Some(price) if price > 0.0 => price,
             _ => self.current_price,
@@ -240,7 +240,7 @@ impl GridWorker {
         info!(bot_id = %self.bot.id, current_level = current_level_idx, "Initial orders placed");
     }
 
-    fn find_level_by_price(&self, price: f64) -> usize {
+    pub(crate) fn find_level_by_price(&self, price: f64) -> usize {
         let mut closest = 0;
         let mut min_diff = f64::MAX;
         for (i, level) in self.levels.iter().enumerate() {
@@ -280,7 +280,7 @@ impl GridWorker {
 
     // ── 外部事件处理 ──
 
-    async fn on_order_event(&mut self, event: GridOrderEvent) {
+    pub(crate) async fn on_order_event(&mut self, event: GridOrderEvent) {
         match event {
             GridOrderEvent::OrderPlaced { order } => {
                 self.on_order_placed(&order).await;
@@ -312,7 +312,7 @@ impl GridWorker {
         }
     }
 
-    async fn pause_with_cancel(&mut self, reason: &str) {
+    pub(crate) async fn pause_with_cancel(&mut self, reason: &str) {
         if !self.paused {
             self.paused = true;
             let _ = self.order_executor.send_command(GridOrderCommand::CancelAllOrders {
@@ -324,7 +324,7 @@ impl GridWorker {
 
     // ── 订单匹配 ──
 
-    async fn on_order_placed(&mut self, order: &GridOrderInfo) {
+    pub(crate) async fn on_order_placed(&mut self, order: &GridOrderInfo) {
         if let Some(&(level_idx, ref side)) = self.order_level_map.get(&order.id) {
             info!(bot_id = %self.bot.id, level = level_idx, side = %side, order_id = %order.id, "Grid order placed (via map)");
             return;
@@ -364,7 +364,7 @@ impl GridWorker {
         }
     }
 
-    async fn on_order_filled(&mut self, order: &GridOrderInfo) {
+    pub(crate) async fn on_order_filled(&mut self, order: &GridOrderInfo) {
         let side_str = order.side.as_str();
 
         let matched_idx = if let Some(&(idx, ref side)) = self.order_level_map.get(&order.id) {
@@ -443,12 +443,12 @@ impl GridWorker {
         );
     }
 
-    async fn on_order_canceled(&mut self, order_id: Uuid) {
+    pub(crate) async fn on_order_canceled(&mut self, order_id: Uuid) {
         self.clear_order_id(order_id);
         debug!(bot_id = %self.bot.id, order_id = %order_id, "Grid order canceled");
     }
 
-    fn clear_order_id(&mut self, order_id: Uuid) {
+    pub(crate) fn clear_order_id(&mut self, order_id: Uuid) {
         self.order_level_map.remove(&order_id);
         for level in &mut self.levels {
             if level.buy_order_id == Some(order_id) {
@@ -573,7 +573,7 @@ impl GridWorker {
         let _ = self.store.update_last_adjusted(self.bot.id).await;
     }
 
-    async fn execute_decision(&mut self, action: &GridAction, decision: Option<&GridDecision>) {
+    pub(crate) async fn execute_decision(&mut self, action: &GridAction, decision: Option<&GridDecision>) {
         match action {
             GridAction::PauseGrid => {
                 self.pause_with_cancel("LLM decision").await;
@@ -601,7 +601,7 @@ impl GridWorker {
         }
     }
 
-    async fn adjust_grid(&mut self, new_upper: Option<f64>, new_lower: Option<f64>) {
+    pub(crate) async fn adjust_grid(&mut self, new_upper: Option<f64>, new_lower: Option<f64>) {
         let _ = self.order_executor.send_command(GridOrderCommand::CancelAllOrders {
             symbol: Some(self.bot.symbol.clone()),
         }).await;
@@ -644,7 +644,7 @@ impl GridWorker {
         });
     }
 
-    fn simple_rule_decision(&self) -> GridAction {
+    pub(crate) fn simple_rule_decision(&self) -> GridAction {
         if self.current_price > self.bot.upper_price * 1.02 {
             return GridAction::PauseGrid;
         }
@@ -677,3 +677,4 @@ const LLM_RUNTIME_PROMPT: &str = r#"你是一位正在管理加密货币网格�
 - 暂停后不会自动恢复，需要明确的 run_grid 指令
 - adjust_grid 必须返回新的 upper_price 和 lower_price
 - 优先保守操作，避免在不确定时频繁调整"#;
+

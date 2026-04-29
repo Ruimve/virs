@@ -1,0 +1,295 @@
+//! 共享的 mock 实现和 helper 函数
+
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use tokio::sync::{broadcast, Mutex};
+use uuid::Uuid;
+
+use crate::bot::semi_automatic_grid::ai::GridAiService;
+use crate::bot::semi_automatic_grid::ports::*;
+
+// ── Mock PriceProvider ──
+
+pub struct MockPriceProvider {
+    pub price: f64,
+}
+
+impl MockPriceProvider {
+    pub fn new(price: f64) -> Self {
+        Self { price }
+    }
+}
+
+#[async_trait]
+impl PriceProvider for MockPriceProvider {
+    async fn get_price(&self, _exchange: &str, _symbol: &str) -> Option<f64> {
+        Some(self.price)
+    }
+}
+
+// ── Mock OrderExecutor ──
+
+pub struct MockOrderExecutor {
+    pub commands: Arc<Mutex<Vec<GridOrderCommand>>>,
+}
+
+impl MockOrderExecutor {
+    pub fn new() -> Self {
+        Self {
+            commands: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub async fn commands(&self) -> Vec<GridOrderCommand> {
+        self.commands.lock().await.clone()
+    }
+}
+
+#[async_trait]
+impl OrderExecutor for MockOrderExecutor {
+    async fn send_command(&self, cmd: GridOrderCommand) -> anyhow::Result<()> {
+        self.commands.lock().await.push(cmd);
+        Ok(())
+    }
+}
+
+// ── Mock Store (Worker 用) ──
+
+pub struct MockWorkerStore {
+    pub trades: Vec<GridTradeRecord>,
+    pub bot: Option<GridBotConfig>,
+    pub recorded_trades: Arc<Mutex<Vec<(Uuid, String, f64, f64)>>>,
+    pub stats_saved: Arc<Mutex<Vec<(Uuid, f64, i32, i32)>>>,
+    pub statuses_updated: Arc<Mutex<Vec<(Uuid, String)>>>,
+    pub grid_params_updated: Arc<Mutex<Vec<(Uuid, f64, f64)>>>,
+    pub quantities_updated: Arc<Mutex<Vec<(Uuid, f64)>>>,
+    pub deleted_bots: Arc<Mutex<Vec<Uuid>>>,
+}
+
+impl MockWorkerStore {
+    pub fn new() -> Self {
+        Self {
+            trades: vec![],
+            bot: None,
+            recorded_trades: Arc::new(Mutex::new(Vec::new())),
+            stats_saved: Arc::new(Mutex::new(Vec::new())),
+            statuses_updated: Arc::new(Mutex::new(Vec::new())),
+            grid_params_updated: Arc::new(Mutex::new(Vec::new())),
+            quantities_updated: Arc::new(Mutex::new(Vec::new())),
+            deleted_bots: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+}
+
+#[async_trait]
+impl GridStore for MockWorkerStore {
+    async fn load_running_bots(&self) -> anyhow::Result<Vec<GridBotConfig>> {
+        Ok(vec![])
+    }
+
+    async fn load_bot(&self, _bot_id: Uuid) -> anyhow::Result<Option<GridBotConfig>> {
+        Ok(self.bot.clone())
+    }
+
+    async fn load_trades(&self, _bot_id: Uuid) -> anyhow::Result<Vec<GridTradeRecord>> {
+        Ok(self.trades.clone())
+    }
+
+    async fn record_trade(
+        &self,
+        bot_id: Uuid,
+        _user_id: Uuid,
+        _symbol: &str,
+        _exchange: &str,
+        side: &str,
+        grid_level: i32,
+        price: f64,
+        quantity: f64,
+        pnl: f64,
+        pnl_pct: f64,
+    ) -> anyhow::Result<()> {
+        self.recorded_trades.lock().await.push((bot_id, side.to_string(), price, pnl));
+        let _ = (grid_level, quantity, pnl_pct);
+        Ok(())
+    }
+
+    async fn save_stats(&self, bot_id: Uuid, total_pnl: f64, total_trades: i32, grid_filled_count: i32) -> anyhow::Result<()> {
+        self.stats_saved.lock().await.push((bot_id, total_pnl, total_trades, grid_filled_count));
+        Ok(())
+    }
+
+    async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> anyhow::Result<()> {
+        self.statuses_updated.lock().await.push((bot_id, status.to_string()));
+        Ok(())
+    }
+
+    async fn update_last_adjusted(&self, _bot_id: Uuid) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn update_grid_params(&self, bot_id: Uuid, upper_price: f64, lower_price: f64) -> anyhow::Result<()> {
+        self.grid_params_updated.lock().await.push((bot_id, upper_price, lower_price));
+        Ok(())
+    }
+
+    async fn update_quantity_per_grid(&self, bot_id: Uuid, quantity: f64) -> anyhow::Result<()> {
+        self.quantities_updated.lock().await.push((bot_id, quantity));
+        Ok(())
+    }
+
+    async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()> {
+        self.deleted_bots.lock().await.push(bot_id);
+        Ok(())
+    }
+}
+
+// ── Mock Store (Engine 用) ──
+
+pub struct MockEngineStore {
+    pub bots: Arc<Mutex<Vec<GridBotConfig>>>,
+    pub deleted_bots: Arc<Mutex<Vec<Uuid>>>,
+    pub statuses: Arc<Mutex<Vec<(Uuid, String)>>>,
+}
+
+impl MockEngineStore {
+    pub fn new() -> Self {
+        Self {
+            bots: Arc::new(Mutex::new(Vec::new())),
+            deleted_bots: Arc::new(Mutex::new(Vec::new())),
+            statuses: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub async fn add_bot(&self, bot: GridBotConfig) {
+        self.bots.lock().await.push(bot);
+    }
+}
+
+#[async_trait]
+impl GridStore for MockEngineStore {
+    async fn load_running_bots(&self) -> anyhow::Result<Vec<GridBotConfig>> {
+        Ok(self.bots.lock().await.clone())
+    }
+
+    async fn load_bot(&self, bot_id: Uuid) -> anyhow::Result<Option<GridBotConfig>> {
+        let bots = self.bots.lock().await;
+        Ok(bots.iter().find(|b| b.id == bot_id).cloned())
+    }
+
+    async fn load_trades(&self, _bot_id: Uuid) -> anyhow::Result<Vec<GridTradeRecord>> {
+        Ok(vec![])
+    }
+
+    async fn record_trade(
+        &self, _bot_id: Uuid, _user_id: Uuid, _symbol: &str, _exchange: &str,
+        _side: &str, _grid_level: i32, _price: f64, _quantity: f64, _pnl: f64, _pnl_pct: f64,
+    ) -> anyhow::Result<()> { Ok(()) }
+
+    async fn save_stats(&self, _bot_id: Uuid, _total_pnl: f64, _total_trades: i32, _grid_filled_count: i32) -> anyhow::Result<()> { Ok(()) }
+
+    async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> anyhow::Result<()> {
+        self.statuses.lock().await.push((bot_id, status.to_string()));
+        Ok(())
+    }
+
+    async fn update_last_adjusted(&self, _bot_id: Uuid) -> anyhow::Result<()> { Ok(()) }
+
+    async fn update_grid_params(&self, _bot_id: Uuid, _upper_price: f64, _lower_price: f64) -> anyhow::Result<()> { Ok(()) }
+
+    async fn update_quantity_per_grid(&self, _bot_id: Uuid, _quantity: f64) -> anyhow::Result<()> { Ok(()) }
+
+    async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()> {
+        self.deleted_bots.lock().await.push(bot_id);
+        Ok(())
+    }
+}
+
+// ── Mock LLM Resolver ──
+
+pub struct MockLlmResolver {
+    pub available: bool,
+}
+
+impl MockLlmResolver {
+    pub fn new(available: bool) -> Self {
+        Self { available }
+    }
+}
+
+impl LlmProviderResolver for MockLlmResolver {
+    fn is_available(&self) -> bool {
+        self.available
+    }
+
+    fn resolve(&self, _user_credentials: &[(String, String)]) -> anyhow::Result<(String, String, String, String)> {
+        if self.available {
+            Ok((
+                "test-key".to_string(),
+                "https://api.test.com".to_string(),
+                "test-model".to_string(),
+                "test-provider".to_string(),
+            ))
+        } else {
+            anyhow::bail!("not available")
+        }
+    }
+}
+
+// ── Mock Credential Store ──
+
+pub struct MockCredentialStore;
+
+#[async_trait]
+impl CredentialStore for MockCredentialStore {
+    async fn load_credentials(&self, _user_id: Uuid) -> anyhow::Result<Vec<(String, String)>> {
+        Ok(vec![])
+    }
+}
+
+// ── Helper functions ──
+
+pub fn make_bot_config() -> GridBotConfig {
+    GridBotConfig {
+        id: Uuid::new_v4(),
+        user_id: Uuid::new_v4(),
+        name: "Test Bot".to_string(),
+        symbol: "BTCUSDT".to_string(),
+        exchange: "binance".to_string(),
+        grid_count: 10,
+        upper_price: 60000.0,
+        lower_price: 50000.0,
+        grid_profit_pct: 0.5,
+        quantity_per_grid: 100.0,
+        dynamic_adjust: false,
+        adjust_interval_secs: 300,
+        market_regime: None,
+        system_prompt: None,
+    }
+}
+
+pub fn make_mock_ai_service() -> Arc<GridAiService> {
+    Arc::new(GridAiService::new(
+        Box::new(MockLlmResolver::new(false)),
+        Box::new(MockCredentialStore),
+    ))
+}
+
+pub fn make_worker(bot: GridBotConfig, price: f64) -> crate::bot::semi_automatic_grid::worker::GridWorker {
+    let (event_tx, event_rx) = broadcast::channel(16);
+    let (grid_event_tx, _) = broadcast::channel(16);
+    let price_provider = Arc::new(MockPriceProvider::new(price));
+    let order_executor = Arc::new(MockOrderExecutor::new());
+    let ai_service = make_mock_ai_service();
+    let store = Arc::new(MockWorkerStore::new());
+
+    crate::bot::semi_automatic_grid::worker::GridWorker::new(
+        bot,
+        price_provider,
+        order_executor,
+        ai_service,
+        store,
+        event_rx,
+        grid_event_tx,
+    )
+}
