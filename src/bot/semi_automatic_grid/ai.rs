@@ -1,13 +1,12 @@
 //! 网格机器人 LLM 决策服务
 //!
-//! 为 GridWorker 提供运行时 LLM 决策能力，复用 AiService 的 provider 解析逻辑。
+//! 通过 trait 抽象实现业务隔离，不直接依赖外部模块。
 
 use serde::Deserialize;
-use sqlx::PgPool;
 use tracing::{debug, warn};
+use uuid::Uuid;
 
-use crate::config::AiConfig;
-use crate::services::ai::{AiService, AiUserConfig};
+use crate::bot::semi_automatic_grid::ports::{CredentialStore, LlmProviderResolver};
 
 /// LLM 决策返回的 action
 #[derive(Debug, Clone, Deserialize)]
@@ -46,78 +45,41 @@ pub struct GridDecision {
     pub lower_price: Option<f64>,
 }
 
-/// 网格 AI 服务，为 GridWorker 提供独立的 LLM 调用能力
+/// 网格 AI 服务
 pub struct GridAiService {
-    ai_service: AiService,
-    ai_config: AiConfig,
+    resolver: Box<dyn LlmProviderResolver>,
+    credential_store: Box<dyn CredentialStore>,
     http_client: reqwest::Client,
-    db: PgPool,
-    encryption_key: [u8; 32],
 }
 
 impl GridAiService {
-    pub fn new(ai_config: AiConfig, db: PgPool, encryption_key: [u8; 32]) -> Self {
-        let http_client = reqwest::Client::new();
-        let ai_service = AiService::new(ai_config.clone());
+    pub fn new(
+        resolver: Box<dyn LlmProviderResolver>,
+        credential_store: Box<dyn CredentialStore>,
+    ) -> Self {
         Self {
-            ai_service,
-            ai_config,
-            http_client,
-            db,
-            encryption_key,
+            resolver,
+            credential_store,
+            http_client: reqwest::Client::new(),
         }
     }
 
     /// 检查是否有可用的 AI provider
     pub fn is_available(&self) -> bool {
-        let config = AiUserConfig::default();
-        self.ai_service.is_configured_with_override(&config)
-    }
-
-    /// 获取默认 provider 名称
-    pub fn default_provider(&self) -> Option<&'static str> {
-        if self.ai_config.openrouter_api_key.is_some() {
-            Some("openrouter")
-        } else if self.ai_config.openai_api_key.is_some() {
-            Some("openai")
-        } else if self.ai_config.deepseek_api_key.is_some() {
-            Some("deepseek")
-        } else {
-            None
-        }
+        self.resolver.is_available()
     }
 
     /// 调用 LLM 并返回解析后的 JSON
     pub async fn call_llm(
         &self,
-        user_id: &uuid::Uuid,
+        user_id: &Uuid,
         system_prompt: &str,
         user_prompt: &str,
     ) -> anyhow::Result<serde_json::Value> {
-        // 尝试加载用户级 AI 凭证
-        let user_config = self.load_user_ai_config(user_id).await;
-        let default_config = AiUserConfig::default();
+        let user_creds = self.credential_store.load_credentials(*user_id).await?;
 
-        if !self.ai_service.is_configured_with_override(&user_config)
-            && !self.ai_service.is_configured_with_override(&default_config)
-        {
-            anyhow::bail!("No AI provider configured");
-        }
-
-        // 优先使用用户凭证，回退到系统默认
-        let effective_config = if self.ai_service.is_configured_with_override(&user_config) {
-            user_config
-        } else {
-            default_config
-        };
-
-        let provider = self
-            .ai_service
-            .default_provider_with_override(&effective_config);
-
-        let (api_key, base_url, model) = self
-            .ai_service
-            .resolve_provider_with_override(&provider, None, &effective_config)?;
+        let (api_key, base_url, model, provider) =
+            self.resolver.resolve(&user_creds)?;
 
         let request_body = serde_json::json!({
             "model": model,
@@ -169,12 +131,9 @@ impl GridAiService {
     }
 
     /// 调用 LLM 进行网格决策
-    ///
-    /// 返回 `GridDecision`，包含 action 和 reason。
-    /// 如果 LLM 不可用或解析失败，返回 None（调用方应回退到规则决策）。
     pub async fn grid_decision(
         &self,
-        user_id: &uuid::Uuid,
+        user_id: &Uuid,
         system_prompt: &str,
         user_prompt: &str,
     ) -> Option<GridDecision> {
@@ -211,44 +170,5 @@ impl GridAiService {
                 None
             }
         }
-    }
-
-    /// 从数据库加载用户级 AI 凭证
-    async fn load_user_ai_config(&self, user_id: &uuid::Uuid) -> AiUserConfig {
-        #[derive(Debug, sqlx::FromRow)]
-        struct EncryptedRow {
-            pub provider: String,
-            pub encrypted_api_key: String,
-        }
-
-        let rows = sqlx::query_as::<_, EncryptedRow>(
-            r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials WHERE user_id = $1"#,
-        )
-        .bind(user_id)
-        .fetch_all(&self.db)
-        .await;
-
-        let mut config = AiUserConfig::default();
-
-        if let Ok(rows) = rows {
-            for row in rows {
-                let decrypted = match crate::utils::crypto::decrypt(&row.encrypted_api_key, &self.encryption_key) {
-                    Ok(key) => key,
-                    Err(e) => {
-                        warn!(provider = %row.provider, "Failed to decrypt user AI key: {}", e);
-                        continue;
-                    }
-                };
-
-                match row.provider.as_str() {
-                    "openrouter" => config.openrouter_api_key = Some(decrypted),
-                    "openai" => config.openai_api_key = Some(decrypted),
-                    "deepseek" => config.deepseek_api_key = Some(decrypted),
-                    _ => {}
-                }
-            }
-        }
-
-        config
     }
 }

@@ -246,21 +246,55 @@ async fn main() -> anyhow::Result<()> {
     info!("✅ Kline engine started");
 
     // Start Grid Engine
-    // TODO: 当 Position Engine 集成后，传入 PE 的命令通道和事件通道
     let (pe_cmd_tx, _pe_cmd_rx) = tokio::sync::mpsc::channel(256);
-    let (_pe_event_tx, pe_event_rx) = tokio::sync::broadcast::channel(256);
+    let (pe_event_tx, pe_event_rx) = tokio::sync::broadcast::channel(256);
+    let (grid_event_tx, grid_event_rx) = tokio::sync::broadcast::channel(256);
+
+    // Adapter 实现
+    let grid_store = Arc::new(bot::semi_automatic_grid::adapters::PgGridStore::new(db_pool.clone()));
+    let grid_price_provider: Arc<dyn bot::semi_automatic_grid::ports::PriceProvider> =
+        Arc::new(bot::semi_automatic_grid::adapters::StrategyPriceProvider::new(strategy_engine.clone()));
+    let grid_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
+        Arc::new(bot::semi_automatic_grid::adapters::PeOrderExecutor::new(pe_cmd_tx));
+    let grid_credential_store: Box<dyn bot::semi_automatic_grid::ports::CredentialStore> =
+        Box::new(bot::semi_automatic_grid::adapters::PgCredentialStore::new(
+            db_pool.clone(),
+            utils::crypto::derive_key(&config.server.encryption_key),
+        ));
+    let grid_llm_resolver: Box<dyn bot::semi_automatic_grid::ports::LlmProviderResolver> =
+        Box::new(bot::semi_automatic_grid::adapters::DefaultLlmResolver::new(config.ai.clone()));
     let grid_ai_service = Arc::new(bot::semi_automatic_grid::ai::GridAiService::new(
-        config.ai.clone(),
-        db_pool.clone(),
-        utils::crypto::derive_key(&config.server.encryption_key),
+        grid_llm_resolver,
+        grid_credential_store,
     ));
-    let (mut grid_engine, grid_cmd_tx, grid_event_tx) = bot::semi_automatic_grid::GridEngine::new(
-        db_pool.clone(),
-        strategy_engine.clone(),
+
+    let (mut grid_engine, grid_cmd_tx, _grid_event_broadcast) = bot::semi_automatic_grid::GridEngine::new(
+        grid_store,
         grid_ai_service,
-        pe_cmd_tx,
-        pe_event_rx,
+        grid_price_provider,
+        grid_order_executor,
+        grid_event_tx.clone(),
     );
+
+    // PE 事件转换 bridge
+    let mut pe_event_rx_for_bridge = pe_event_rx;
+    let grid_event_tx_for_bridge = grid_event_tx.clone();
+    tokio::spawn(async move {
+        loop {
+            match pe_event_rx_for_bridge.recv().await {
+                Ok(event) => {
+                    if let Some(grid_event) = bot::semi_automatic_grid::adapters::convert_pe_event(event) {
+                        let _ = grid_event_tx_for_bridge.send(grid_event);
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    tracing::warn!(lagged = n, "PE event bridge lagged");
+                }
+            }
+        }
+    });
+
     let grid_cmd_tx = Some(grid_cmd_tx);
     tokio::spawn(async move {
         grid_engine.run().await;
