@@ -573,8 +573,8 @@ pub async fn validate_script(
         ));
     }
 
-    let executor = crate::engine::lua_executor::LuaExecutor::new(
-        crate::engine::lua_executor::LuaExecutorConfig::default()
+    let executor = crate::engine::strategy::lua_executor::LuaExecutor::new(
+        crate::engine::strategy::lua_executor::LuaExecutorConfig::default()
     );
 
     match executor.validate(code) {

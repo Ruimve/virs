@@ -1,5 +1,5 @@
-use crate::engine::indicators;
-use crate::engine::plugin::*;
+use crate::engine::strategy::indicators;
+use crate::engine::strategy::plugin::*;
 use std::collections::HashMap;
 
 pub struct ScalperVwapPlugin;

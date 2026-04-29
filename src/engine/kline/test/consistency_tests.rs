@@ -1,5 +1,5 @@
-use crate::kline::*;
-use crate::kline::types::WsCandleUpdate;
+use crate::engine::kline::*;
+use crate::engine::kline::types::WsCandleUpdate;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;

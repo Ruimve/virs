@@ -134,7 +134,7 @@ fn test_close_position_command() {
 fn test_engine_config_deserialization_partial() {
     // 只传 engine_id，其余用默认值
     let json = r#"{"engine_id": "partial"}"#;
-    let config: crate::position::config::EngineConfig = serde_json::from_str(json).unwrap();
+    let config: crate::engine::position::config::EngineConfig = serde_json::from_str(json).unwrap();
     assert_eq!(config.engine_id, "partial");
     assert_eq!(config.sync_interval_secs, 10); // 默认值
     assert_eq!(config.risk.max_leverage, 20);   // 默认值
@@ -144,7 +144,7 @@ fn test_engine_config_deserialization_partial() {
 fn test_risk_config_deserialization_partial() {
     // 只传 max_leverage，其余用默认值
     let json = r#"{"max_leverage": 5}"#;
-    let config: crate::position::config::RiskConfig = serde_json::from_str(json).unwrap();
+    let config: crate::engine::position::config::RiskConfig = serde_json::from_str(json).unwrap();
     assert_eq!(config.max_leverage, 5);
     assert_eq!(config.max_drawdown_pct, 0.15); // 默认值
     assert_eq!(config.max_consecutive_losses, 5); // 默认值

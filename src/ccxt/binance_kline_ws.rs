@@ -9,7 +9,7 @@ use serde::Deserialize;
 use tokio::sync::{broadcast, mpsc, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite};
 
-use crate::kline::types::{Candle, KlineWsClient, WsCandleUpdate, WsEvent};
+use crate::engine::kline::types::{Candle, KlineWsClient, WsCandleUpdate, WsEvent};
 
 fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
@@ -428,7 +428,7 @@ impl KlineWsClient for BinanceKlineWs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kline::types::Candle;
+    use crate::engine::kline::types::Candle;
 
     // ========== 消息解析（5个） ==========
 

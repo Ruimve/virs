@@ -6,9 +6,9 @@ use tracing::{warn, info};
 use crate::ccxt::binance_order_ws::BinanceOrderWs;
 use crate::exchange::Exchange as VirsExchange;
 use crate::models;
-use crate::position::exchange::Exchange as PeExchange;
-use crate::position::types::*;
-use crate::position::error::Result;
+use crate::engine::position::exchange::Exchange as PeExchange;
+use crate::engine::position::types::*;
+use crate::engine::position::error::Result;
 
 /// 适配器：将 VIRS 现有的 Exchange trait 适配为 Position Engine 的 Exchange trait
 ///
@@ -134,8 +134,8 @@ pub(crate) fn convert_exchange_position(ep: &models::ExchangePosition) -> Exchan
     }
 }
 
-pub(crate) fn to_pe_error(e: anyhow::Error) -> crate::position::error::PositionEngineError {
-    crate::position::error::PositionEngineError::Exchange(e.to_string())
+pub(crate) fn to_pe_error(e: anyhow::Error) -> crate::engine::position::error::PositionEngineError {
+    crate::engine::position::error::PositionEngineError::Exchange(e.to_string())
 }
 
 /// 将 VIRS Ticker 转换为 PE Ticker

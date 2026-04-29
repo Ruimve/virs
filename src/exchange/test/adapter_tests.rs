@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::exchange::binance_position_adapter::*;
 use crate::models;
-use crate::position::types::*;
+use crate::engine::position::types::*;
 
 // ============================================================
 // 类型转换 (6 tests)

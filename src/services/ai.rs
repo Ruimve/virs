@@ -1,5 +1,5 @@
 use crate::config::AiConfig;
-use crate::engine::lua_executor::{LuaExecutor, LuaExecutorConfig};
+use crate::engine::strategy::lua_executor::{LuaExecutor, LuaExecutorConfig};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 

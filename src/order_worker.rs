@@ -4,7 +4,7 @@ use tracing::{info, error};
 
 use crate::api::ws;
 use crate::config::NotificationConfig;
-use crate::engine::{OrderCommand, OrderResult, StrategyEngine};
+use crate::engine::strategy::{OrderCommand, OrderResult, StrategyEngine};
 use crate::services;
 
 /// Order Worker: processes order commands (Place, Cancel, Query, Shutdown)

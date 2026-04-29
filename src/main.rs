@@ -4,19 +4,18 @@ use tracing::{info, warn, error};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod api;
+mod bot;
 mod ccxt;
 mod config;
 mod engine;
 mod exchange;
-mod kline;
 mod models;
 mod order_worker;
-mod position;
 mod services;
 mod utils;
 
 use config::load_config;
-use engine::{StrategyEngine, StrategyEngineConfig};
+use engine::strategy::{StrategyEngine, StrategyEngineConfig};
 use exchange::Exchange;
 
 #[tokio::main]
@@ -104,16 +103,16 @@ async fn main() -> anyhow::Result<()> {
     config.admin.id = Some(admin_id);
 
     // Create order channel
-    let (order_tx, mut order_rx) = mpsc::channel::<engine::OrderCommand>(1000);
+    let (order_tx, mut order_rx) = mpsc::channel::<engine::strategy::OrderCommand>(1000);
 
     // Create plugin registry and register built-in plugins
-    let mut plugin_registry = engine::plugin::PluginRegistry::new();
-    plugin_registry.register(Box::new(engine::plugins::DualEmaTrendPlugin));
-    plugin_registry.register(Box::new(engine::plugins::BbSqueezePlugin));
-    plugin_registry.register(Box::new(engine::plugins::RsiMeanReversionPlugin));
-    plugin_registry.register(Box::new(engine::plugins::AtrBreakoutPlugin));
-    plugin_registry.register(Box::new(engine::plugins::ScalperVwapPlugin));
-    plugin_registry.register(Box::new(engine::plugins::MomentumBreakoutPlugin));
+    let mut plugin_registry = engine::strategy::plugin::PluginRegistry::new();
+    plugin_registry.register(Box::new(engine::strategy::plugins::DualEmaTrendPlugin));
+    plugin_registry.register(Box::new(engine::strategy::plugins::BbSqueezePlugin));
+    plugin_registry.register(Box::new(engine::strategy::plugins::RsiMeanReversionPlugin));
+    plugin_registry.register(Box::new(engine::strategy::plugins::AtrBreakoutPlugin));
+    plugin_registry.register(Box::new(engine::strategy::plugins::ScalperVwapPlugin));
+    plugin_registry.register(Box::new(engine::strategy::plugins::MomentumBreakoutPlugin));
     let plugin_registry = Arc::new(plugin_registry);
     info!(
         "Registered {} indicator plugins",
@@ -235,19 +234,41 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Create kline engine
-    let kline_config = kline::types::KlineEngineConfig {
+    let kline_config = engine::kline::types::KlineEngineConfig {
         proxy_url: config.proxy.clone(),
         ..Default::default()
     };
     let kline_source = std::sync::Arc::new(ccxt::kline_source::CcxtKlineSource::new(config.proxy.clone()));
     let spot_ws = std::sync::Arc::new(tokio::sync::Mutex::new(ccxt::binance_kline_ws::BinanceKlineWs::new_spot(config.proxy.as_deref())));
     let perpetual_ws = std::sync::Arc::new(tokio::sync::Mutex::new(ccxt::binance_kline_ws::BinanceKlineWs::new_perpetual(config.proxy.as_deref())));
-    let kline_engine = std::sync::Arc::new(kline::KlineEngine::new(kline_config, kline_source, spot_ws, perpetual_ws));
+    let kline_engine = std::sync::Arc::new(engine::kline::KlineEngine::new(kline_config, kline_source, spot_ws, perpetual_ws));
     kline_engine.start().await;
     info!("✅ Kline engine started");
 
+    // Start Grid Engine
+    // TODO: 当 Position Engine 集成后，传入 PE 的命令通道和事件通道
+    let (pe_cmd_tx, _pe_cmd_rx) = tokio::sync::mpsc::channel(256);
+    let (_pe_event_tx, pe_event_rx) = tokio::sync::broadcast::channel(256);
+    let grid_ai_service = Arc::new(bot::semi_automatic_grid::ai::GridAiService::new(
+        config.ai.clone(),
+        db_pool.clone(),
+        utils::crypto::derive_key(&config.server.encryption_key),
+    ));
+    let (mut grid_engine, grid_cmd_tx, grid_event_tx) = bot::semi_automatic_grid::GridEngine::new(
+        db_pool.clone(),
+        strategy_engine.clone(),
+        grid_ai_service,
+        pe_cmd_tx,
+        pe_event_rx,
+    );
+    let grid_cmd_tx = Some(grid_cmd_tx);
+    tokio::spawn(async move {
+        grid_engine.run().await;
+    });
+    info!("✅ Grid engine started");
+
     // Build and start HTTP server
-    let app = api::build_router(Arc::new(config.clone()), strategy_engine, db_pool, plugin_registry, ws_broadcaster, Some(kline_engine));
+    let app = api::build_router(Arc::new(config.clone()), strategy_engine, db_pool, plugin_registry, ws_broadcaster, Some(kline_engine), grid_cmd_tx);
 
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;

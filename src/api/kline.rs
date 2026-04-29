@@ -7,7 +7,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::kline::types::{AllTimeframesData, Candle, Timeframe, BacktestRangeInfo, MarketType};
+use crate::engine::kline::types::{AllTimeframesData, Candle, Timeframe, BacktestRangeInfo, MarketType};
 use crate::api::AppState;
 
 #[derive(Debug, Serialize)]
@@ -274,7 +274,7 @@ async fn handle_kline_ws(socket: WebSocket, state: Arc<AppState>) {
 pub async fn get_backtest_limits() -> Json<BacktestLimitsResponse> {
     Json(BacktestLimitsResponse {
         success: true,
-        data: crate::kline::KlineEngine::backtest_range_limits(),
+        data: crate::engine::kline::KlineEngine::backtest_range_limits(),
     })
 }
 
@@ -345,7 +345,7 @@ pub async fn get_backtest_data(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kline::types::{KlineEvent, KlineEventType, AllTimeframesData};
+    use crate::engine::kline::types::{KlineEvent, KlineEventType, AllTimeframesData};
     use tokio::sync::broadcast;
 
     /// Helper: create a sample Candle for testing

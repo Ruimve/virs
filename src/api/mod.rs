@@ -24,8 +24,8 @@ use tower_http::cors::{CorsLayer, Any};
 use std::sync::Arc;
 
 use crate::config::AppConfig;
-use crate::engine::StrategyEngine;
-use crate::engine::plugin::PluginRegistry;
+use crate::engine::strategy::StrategyEngine;
+use crate::engine::strategy::plugin::PluginRegistry;
 
 pub fn build_router(
     config: Arc<AppConfig>,
@@ -33,7 +33,8 @@ pub fn build_router(
     db_pool: sqlx::PgPool,
     plugin_registry: Arc<PluginRegistry>,
     ws_broadcaster: Arc<ws::WsBroadcaster>,
-    kline_engine: Option<Arc<crate::kline::KlineEngine>>,
+    kline_engine: Option<Arc<crate::engine::kline::KlineEngine>>,
+    grid_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::semi_automatic_grid::types::GridCommand>>,
 ) -> Router {
     let state = Arc::new(AppState {
         config,
@@ -43,6 +44,7 @@ pub fn build_router(
         ws_broadcaster,
         kline_engine,
         http_client: reqwest::Client::new(),
+        grid_cmd_tx,
     });
 
     let _frontend_dir = std::env::var("FRONTEND_DIR")
@@ -180,6 +182,7 @@ pub struct AppState {
     pub db_pool: sqlx::PgPool,
     pub plugin_registry: Arc<PluginRegistry>,
     pub ws_broadcaster: Arc<ws::WsBroadcaster>,
-    pub kline_engine: Option<Arc<crate::kline::KlineEngine>>,
+    pub kline_engine: Option<Arc<crate::engine::kline::KlineEngine>>,
     pub http_client: reqwest::Client,
+    pub grid_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::semi_automatic_grid::types::GridCommand>>,
 }

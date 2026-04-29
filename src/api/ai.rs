@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::api::middleware::AuthUser;
 use crate::api::AppState;
-use crate::engine::indicators;
+use crate::engine::strategy::indicators;
 use crate::models::*;
 use crate::services::ai::{AiService, AiUserConfig, GenerateRequest};
 use crate::utils::crypto;
@@ -213,8 +213,8 @@ pub async fn generate_strategy(
     }
 
     // Validate the generated code
-    let lua_config = crate::engine::lua_executor::LuaExecutorConfig::default();
-    let executor = crate::engine::lua_executor::LuaExecutor::new(lua_config);
+    let lua_config = crate::engine::strategy::lua_executor::LuaExecutorConfig::default();
+    let executor = crate::engine::strategy::lua_executor::LuaExecutor::new(lua_config);
     if let Err(e) = executor.validate(&code) {
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,

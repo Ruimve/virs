@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::api::AppState;
 use crate::api::middleware::AuthUser;
-use crate::engine::backtest::BacktestEngine;
+use crate::engine::strategy::backtest::BacktestEngine;
 use crate::exchange::Exchange;
 use crate::models::*;
 use tracing::{info, warn};
@@ -256,7 +256,7 @@ pub async fn run_backtest(
     };
 
     let result = if is_script {
-        use crate::engine::lua_executor::{LuaExecutor, LuaExecutorConfig};
+        use crate::engine::strategy::lua_executor::{LuaExecutor, LuaExecutorConfig};
         let executor = LuaExecutor::new(LuaExecutorConfig::default());
         let code = req.indicator_config.get("strategy_code").and_then(|v| v.as_str()).unwrap_or("");
 
@@ -378,7 +378,7 @@ pub async fn run_backtest(
         let params_clone = params.clone();
 
         engine.run(&klines, |klines, idx| {
-            use crate::engine::plugin::SignalContext;
+            use crate::engine::strategy::plugin::SignalContext;
             let mut aligned: HashMap<String, &[Kline]> = HashMap::new();
             for (tf, indices) in &tf_end_indices_clone {
                 let end = indices[idx];

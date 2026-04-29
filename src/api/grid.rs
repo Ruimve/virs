@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::api::middleware::AuthUser;
 use crate::api::AppState;
-use crate::engine::indicators;
+use crate::engine::strategy::indicators;
 use crate::models::*;
 use crate::services::ai::{AiService, AiUserConfig};
 use crate::utils::crypto;
@@ -18,8 +18,7 @@ use crate::utils::crypto;
 
 #[derive(Debug, Deserialize)]
 pub struct AnalyzeRequest {
-    pub symbol: String,
-    pub exchange: Option<String>,
+    pub bot_id: Uuid,
     pub provider: Option<String>,
     pub model: Option<String>,
     pub system_prompt: Option<String>,
@@ -31,8 +30,6 @@ pub struct CreateBotRequest {
     pub name: String,
     pub symbol: String,
     pub exchange: Option<String>,
-    pub upper_price: Option<f64>,
-    pub lower_price: Option<f64>,
     pub grid_count: Option<i32>,
     pub grid_profit_pct: Option<f64>,
     pub quantity_per_grid: Option<f64>,
@@ -41,8 +38,6 @@ pub struct CreateBotRequest {
     pub adjust_interval_secs: Option<i32>,
     pub system_prompt: Option<String>,
     pub user_prompt: Option<String>,
-    pub market_regime: Option<String>,
-    pub ai_analysis: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -631,31 +626,51 @@ pub async fn analyze(
     Json(body): Json<AnalyzeRequest>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)>
 {
-    if body.symbol.trim().is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<serde_json::Value>::err("symbol must not be empty")),
-        ));
-    }
-
     let user_id = parse_user_id(&auth)?;
-    let exchange_name = body.exchange.as_deref().unwrap_or("binance");
 
-    let (klines_1h, klines_4h) = fetch_klines(&state, exchange_name, &body.symbol).await?;
+    // 从数据库加载 bot
+    let bot = sqlx::query_as::<_, GridBot>(
+        r#"SELECT * FROM qd_grid_bots WHERE id = $1 AND user_id = $2"#,
+    )
+    .bind(body.bot_id)
+    .bind(user_id)
+    .fetch_optional(&state.db_pool)
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<serde_json::Value>::err(format!("Database error: {}", e))),
+        )
+    })?;
+
+    let bot = match bot {
+        Some(b) => b,
+        None => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<serde_json::Value>::err("Grid bot not found")),
+            ));
+        }
+    };
+
+    let symbol = &bot.symbol;
+    let exchange_name = &bot.exchange;
+
+    let (klines_1h, klines_4h) = fetch_klines(&state, exchange_name, symbol).await?;
     let exchange_key = super::market::ensure_exchange(&state, exchange_name, MarketType::Perpetual).await?;
     let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
-    let ind = compute_grid_indicators(&klines_1h, &klines_4h, exchange.as_ref(), &body.symbol).await;
+    let ind = compute_grid_indicators(&klines_1h, &klines_4h, exchange.as_ref(), symbol).await;
 
     let system_prompt = match body.system_prompt.as_deref() {
         Some(s) => s.to_owned(),
-        None => default_grid_system_prompt().to_owned(),
+        None => bot.system_prompt.as_deref().unwrap_or_else(|| default_grid_system_prompt()).to_owned(),
     };
 
     let user_prompt_template = match body.user_prompt.as_deref() {
         Some(s) => s.to_owned(),
-        None => DEFAULT_USER_PROMPT_TEMPLATE.to_owned(),
+        None => bot.user_prompt.as_deref().unwrap_or(DEFAULT_USER_PROMPT_TEMPLATE).to_owned(),
     };
-    let user_prompt = build_user_prompt(&user_prompt_template, &ind, &body.symbol, exchange_name);
+    let user_prompt = build_user_prompt(&user_prompt_template, &ind, symbol, exchange_name);
 
     let ai = call_ai_and_parse(
         &state,
@@ -670,17 +685,54 @@ pub async fn analyze(
 
     tracing::info!(
         "AI grid analysis for {} using {} ({})",
-        body.symbol, ai.provider, ai.used_model
+        symbol, ai.provider, ai.used_model
     );
 
+    // 从 LLM 返回结果中提取参数
+    let new_upper_price = ai.result["upper_price"].as_f64().unwrap_or(0.0);
+    let new_lower_price = ai.result["lower_price"].as_f64().unwrap_or(0.0);
+    let new_grid_count = ai.result["grid_count"].as_i64().unwrap_or(0) as i32;
+    let new_grid_profit_pct = ai.result["grid_profit_pct"].as_f64().unwrap_or(0.5);
+    let new_quantity_per_grid = ai.result["quantity_per_grid"].as_f64().unwrap_or(10.0);
+    let new_leverage = ai.result["leverage"].as_i64().unwrap_or(1) as i32;
+    let new_market_regime = ai.result["market_regime"].as_str().unwrap_or("ranging").to_string();
+    let new_analysis = ai.result["analysis"].as_str().unwrap_or("").to_string();
+
+    // 更新 bot 参数
+    let updated = sqlx::query_as::<_, GridBot>(
+        r#"UPDATE qd_grid_bots SET
+            upper_price = $1, lower_price = $2, grid_count = $3,
+            grid_profit_pct = $4, quantity_per_grid = $5, leverage = $6,
+            market_regime = $7, ai_analysis = $8,
+            system_prompt = $9, user_prompt = $10,
+            updated_at = NOW()
+           WHERE id = $11 RETURNING *"#,
+    )
+    .bind(new_upper_price)
+    .bind(new_lower_price)
+    .bind(new_grid_count)
+    .bind(new_grid_profit_pct)
+    .bind(new_quantity_per_grid)
+    .bind(new_leverage)
+    .bind(&new_market_regime)
+    .bind(&new_analysis)
+    .bind(&system_prompt)
+    .bind(&user_prompt)
+    .bind(body.bot_id)
+    .fetch_one(&state.db_pool)
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<serde_json::Value>::err(format!(
+                "Failed to update bot: {}", e
+            ))),
+        )
+    })?;
+
     Ok(Json(ApiResponse::ok(serde_json::json!({
-        "symbol": body.symbol,
-        "exchange": exchange_name,
-        "provider": ai.provider,
-        "model": ai.used_model,
+        "bot": updated,
         "analysis": ai.result,
-        "system_prompt": &system_prompt,
-        "user_prompt": &user_prompt,
         "indicators": {
             "rsi": ind.rsi,
             "atr": ind.atr,
@@ -717,30 +769,10 @@ pub async fn create_bot(
 
     let user_id = parse_user_id(&auth)?;
 
-    let upper_price = body.upper_price.ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<serde_json::Value>::err("upper_price is required")),
-        )
-    })?;
+    let upper_price = 0.0;
+    let lower_price = 0.0;
 
-    let lower_price = body.lower_price.ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<serde_json::Value>::err("lower_price is required")),
-        )
-    })?;
-
-    if upper_price <= lower_price {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<serde_json::Value>::err(
-                "upper_price must be greater than lower_price",
-            )),
-        ));
-    }
-
-    let grid_count = body.grid_count.unwrap_or(20);
+    let grid_count = body.grid_count.unwrap_or(0);
     let grid_profit_pct = body.grid_profit_pct.unwrap_or(0.5);
     let quantity_per_grid = body.quantity_per_grid.unwrap_or(10.0);
     let leverage = body.leverage.unwrap_or(1);
@@ -768,8 +800,8 @@ pub async fn create_bot(
     .bind(grid_profit_pct)
     .bind(quantity_per_grid)
     .bind(leverage)
-    .bind(&body.market_regime)
-    .bind(&body.ai_analysis)
+    .bind(&None::<String>)
+    .bind(&None::<String>)
     .bind(&body.system_prompt)
     .bind(&body.user_prompt)
     .bind(dynamic_adjust)
@@ -953,6 +985,16 @@ pub async fn start_bot(
         }
     };
 
+    // 检查 bot 参数是否已填充
+    if bot.upper_price <= 0.0 || bot.lower_price <= 0.0 || bot.grid_count <= 0 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<serde_json::Value>::err(
+                "Bot parameters not set. Please run analyze first.",
+            )),
+        ));
+    }
+
     match bot.status {
         StrategyStatus::Running => {
             return Err((
@@ -971,22 +1013,32 @@ pub async fn start_bot(
         _ => {}
     }
 
+    // 通过 GridEngine 启动 bot
+    if let Some(ref grid_cmd_tx) = state.grid_cmd_tx {
+        if let Err(e) = grid_cmd_tx.send(crate::bot::semi_automatic_grid::types::GridCommand::StartBot { bot_id: id }).await {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<serde_json::Value>::err(format!("Failed to start grid engine: {}", e))),
+            ));
+        }
+    } else {
+        // GridEngine 未启动，回退到直接改数据库（兼容模式）
+        let _ = sqlx::query(
+            r#"UPDATE qd_grid_bots SET status = $2, started_at = NOW(), updated_at = NOW() WHERE id = $1"#,
+        )
+        .bind(id)
+        .bind(StrategyStatus::Running)
+        .execute(&state.db_pool)
+        .await;
+    }
+
     let updated = sqlx::query_as::<_, GridBot>(
-        r#"UPDATE qd_grid_bots SET status = $2, started_at = NOW(), updated_at = NOW()
-           WHERE id = $1 RETURNING *"#,
+        "SELECT * FROM qd_grid_bots WHERE id = $1",
     )
     .bind(id)
-    .bind(StrategyStatus::Running)
     .fetch_one(&state.db_pool)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<serde_json::Value>::err(format!(
-                "Failed to start bot: {}", e
-            ))),
-        )
-    })?;
+    .unwrap_or(bot);
 
     Ok(Json(ApiResponse::ok(serde_json::json!({ "bot": updated }))))
 }
@@ -1032,22 +1084,31 @@ pub async fn stop_bot(
         ));
     }
 
+    // 通过 GridEngine 停止 bot
+    if let Some(ref grid_cmd_tx) = state.grid_cmd_tx {
+        if let Err(e) = grid_cmd_tx.send(crate::bot::semi_automatic_grid::types::GridCommand::StopBot { bot_id: id }).await {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<serde_json::Value>::err(format!("Failed to stop grid engine: {}", e))),
+            ));
+        }
+    } else {
+        let _ = sqlx::query(
+            r#"UPDATE qd_grid_bots SET status = $2, stopped_at = NOW(), updated_at = NOW() WHERE id = $1"#,
+        )
+        .bind(id)
+        .bind(StrategyStatus::Stopped)
+        .execute(&state.db_pool)
+        .await;
+    }
+
     let updated = sqlx::query_as::<_, GridBot>(
-        r#"UPDATE qd_grid_bots SET status = $2, stopped_at = NOW(), updated_at = NOW()
-           WHERE id = $1 RETURNING *"#,
+        "SELECT * FROM qd_grid_bots WHERE id = $1",
     )
     .bind(id)
-    .bind(StrategyStatus::Stopped)
     .fetch_one(&state.db_pool)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<serde_json::Value>::err(format!(
-                "Failed to stop bot: {}", e
-            ))),
-        )
-    })?;
+    .unwrap_or(bot);
 
     Ok(Json(ApiResponse::ok(serde_json::json!({ "bot": updated }))))
 }
@@ -1222,14 +1283,7 @@ pub async fn reanalyze(
         }
     };
 
-    if bot.status == StrategyStatus::Running {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<serde_json::Value>::err(
-                "Cannot reanalyze a running bot. Pause or stop it first.",
-            )),
-        ));
-    }
+    let was_running = bot.status == StrategyStatus::Running;
 
     let (klines_1h, klines_4h) = fetch_klines(&state, &bot.exchange, &bot.symbol).await?;
     let exchange_key = super::market::ensure_exchange(&state, &bot.exchange, MarketType::Perpetual).await?;
@@ -1299,6 +1353,15 @@ pub async fn reanalyze(
         "Grid bot {} reanalyzed using {} ({})",
         id, ai.provider, ai.used_model
     );
+
+    // 如果 bot 之前是 running 状态，发送 AdjustGrid 命令
+    if was_running {
+        if let Some(ref grid_cmd_tx) = state.grid_cmd_tx {
+            if let Err(e) = grid_cmd_tx.send(crate::bot::semi_automatic_grid::types::GridCommand::AdjustGrid { bot_id: id }).await {
+                tracing::warn!("Failed to send AdjustGrid command for bot {}: {}", id, e);
+            }
+        }
+    }
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "bot": updated,

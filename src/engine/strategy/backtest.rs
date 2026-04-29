@@ -2,8 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::engine::indicators;
-use crate::engine::map_raw_signal;
+use crate::engine::strategy::indicators;
+use crate::engine::strategy::map_raw_signal;
 use crate::models::*;
 
 /// High-performance backtesting engine.
