@@ -426,3 +426,176 @@ fn test_avg_pnl_ratio_only_profit() {
     let snap = tracker.snapshot(0.0, 0);
     assert!(snap.avg_pnl_ratio.is_none(), "只有盈利时 avg_pnl_ratio 应为 None");
 }
+
+// ============================================================
+// 更多边界场景
+// ============================================================
+
+#[test]
+fn test_equity_method() {
+    let mut tracker = PnlTracker::new(10000.0);
+    assert!((tracker.equity() - 10000.0).abs() < 0.01);
+
+    let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    t.pnl = 500.0;
+    tracker.record_trade(&t);
+    assert!((tracker.equity() - 10500.0).abs() < 0.01);
+
+    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    t2.pnl = -200.0;
+    tracker.record_trade(&t2);
+    assert!((tracker.equity() - 10300.0).abs() < 0.01);
+}
+
+#[test]
+fn test_unrealized_pnl_empty_positions() {
+    let mut tracker = PnlTracker::new(10000.0);
+    let prices = HashMap::new();
+    let snap = tracker.update_unrealized(&[], &prices);
+    assert!((snap.unrealized_pnl - 0.0).abs() < 0.01);
+    assert!((snap.equity - 10000.0).abs() < 0.01);
+    assert_eq!(snap.open_positions_count, 0);
+}
+
+#[test]
+fn test_unrealized_pnl_short_loss() {
+    let mut tracker = PnlTracker::new(10000.0);
+    let pos = make_position_side("BTCUSDT", PositionSide::Short, 1.0, 100.0, 10);
+    let mut prices = HashMap::new();
+    prices.insert("BTCUSDT".to_string(), 110.0);
+    let snap = tracker.update_unrealized(&[&pos], &prices);
+    assert!((snap.unrealized_pnl - (-10.0)).abs() < 0.01);
+}
+
+#[test]
+fn test_record_trade_zero_pnl() {
+    let mut tracker = PnlTracker::new(10000.0);
+    let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    t.pnl = 0.0;
+    tracker.record_trade(&t);
+    assert_eq!(tracker.total_realized_pnl(), 0.0);
+    assert_eq!(tracker.total_trades(), 1);
+    assert_eq!(tracker.profit_trades(), 1, "pnl=0 应视为盈利交易");
+}
+
+#[test]
+fn test_record_trade_zero_fee() {
+    let mut tracker = PnlTracker::new(10000.0);
+    let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Buy, 100.0, 1.0, "open");
+    t.pnl = 0.0;
+    t.fee = 0.0;
+    tracker.record_trade(&t);
+    assert!((tracker.total_cost() - 100.0).abs() < 0.001);
+}
+
+#[test]
+fn test_snapshot_no_drawdown() {
+    let tracker = PnlTracker::new(10000.0);
+    let snap = tracker.snapshot(0.0, 0);
+    assert!((snap.max_drawdown - 0.0).abs() < 0.001, "无交易无持仓时回撤应为 0");
+}
+
+#[test]
+fn test_snapshot_equity_above_peak() {
+    let mut tracker = PnlTracker::new(10000.0);
+
+    let pos = make_position_side("BTCUSDT", PositionSide::Long, 1.0, 100.0, 10);
+    let mut prices = HashMap::new();
+    prices.insert("BTCUSDT".to_string(), 200.0);
+    let snap = tracker.update_unrealized(&[&pos], &prices);
+    assert!((snap.equity - 10100.0).abs() < 0.01);
+    assert!((snap.max_drawdown - 0.0).abs() < 0.001, "权益等于峰值时回撤应为 0");
+}
+
+#[test]
+fn test_update_unrealized_then_restore_then_update() {
+    let mut tracker = PnlTracker::new(10000.0);
+
+    let pos = make_position_side("BTCUSDT", PositionSide::Long, 1.0, 100.0, 10);
+    let mut prices = HashMap::new();
+    prices.insert("BTCUSDT".to_string(), 110.0);
+    tracker.update_unrealized(&[&pos], &prices);
+    assert_eq!(tracker.peak_equity(), 10010.0);
+
+    tracker.restore_from_snapshot(20000.0, 5000.0, 20, 15, 8000.0);
+    assert_eq!(tracker.peak_equity(), 20000.0);
+
+    let pos2 = make_position_side("BTCUSDT", PositionSide::Long, 1.0, 100.0, 10);
+    let mut prices2 = HashMap::new();
+    prices2.insert("BTCUSDT".to_string(), 120.0);
+    let snap = tracker.update_unrealized(&[&pos2], &prices2);
+    assert!((snap.equity - 15020.0).abs() < 0.01, "equity = initial(10000) + realized(5000) + unrealized(20)");
+}
+
+#[test]
+fn test_peak_equity_multiple_updates() {
+    let mut tracker = PnlTracker::new(10000.0);
+
+    let pos = make_position_side("BTCUSDT", PositionSide::Long, 1.0, 100.0, 10);
+
+    let mut prices1 = HashMap::new();
+    prices1.insert("BTCUSDT".to_string(), 120.0);
+    tracker.update_unrealized(&[&pos], &prices1);
+    assert_eq!(tracker.peak_equity(), 10020.0);
+
+    let mut prices2 = HashMap::new();
+    prices2.insert("BTCUSDT".to_string(), 130.0);
+    tracker.update_unrealized(&[&pos], &prices2);
+    assert_eq!(tracker.peak_equity(), 10030.0);
+
+    let mut prices3 = HashMap::new();
+    prices3.insert("BTCUSDT".to_string(), 110.0);
+    tracker.update_unrealized(&[&pos], &prices3);
+    assert_eq!(tracker.peak_equity(), 10030.0, "价格下跌后 peak 不应降低");
+}
+
+#[test]
+fn test_snapshot_all_loss_trades() {
+    let mut tracker = PnlTracker::new(10000.0);
+    for _ in 0..5 {
+        let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+        t.pnl = -50.0;
+        tracker.record_trade(&t);
+    }
+    let snap = tracker.snapshot(0.0, 0);
+    assert_eq!(snap.win_rate, Some(0.0), "全部亏损时胜率应为 0");
+    assert_eq!(snap.pnl_ratio, Some(0.0), "全部亏损时 pnl_ratio 应为 0");
+}
+
+#[test]
+fn test_snapshot_drawdown_after_loss() {
+    let mut tracker = PnlTracker::new(10000.0);
+
+    let pos = make_position_side("BTCUSDT", PositionSide::Long, 1.0, 100.0, 10);
+    let mut prices_up = HashMap::new();
+    prices_up.insert("BTCUSDT".to_string(), 200.0);
+    tracker.update_unrealized(&[&pos], &prices_up);
+    assert_eq!(tracker.peak_equity(), 10100.0);
+
+    let mut prices_down = HashMap::new();
+    prices_down.insert("BTCUSDT".to_string(), 50.0);
+    let snap = tracker.update_unrealized(&[&pos], &prices_down);
+    let expected_dd = (10100.0 - 9950.0) / 10100.0;
+    assert!((snap.max_drawdown - expected_dd).abs() < 0.001);
+}
+
+#[test]
+fn test_record_trade_profit_and_loss_mixed() {
+    let mut tracker = PnlTracker::new(10000.0);
+
+    let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    t1.pnl = 300.0;
+    tracker.record_trade(&t1);
+
+    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    t2.pnl = -100.0;
+    tracker.record_trade(&t2);
+
+    assert_eq!(tracker.total_realized_pnl(), 200.0);
+    assert_eq!(tracker.total_trades(), 2);
+    assert_eq!(tracker.profit_trades(), 1);
+
+    let snap = tracker.snapshot(0.0, 0);
+    assert_eq!(snap.pnl_ratio, Some(3.0));
+    assert_eq!(snap.avg_pnl_ratio, Some(3.0));
+}

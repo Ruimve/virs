@@ -183,7 +183,7 @@ impl GridWorker {
 
     // ── 历史成交 ──
 
-    async fn load_existing_trades(&mut self) {
+    pub(crate) async fn load_existing_trades(&mut self) {
         let trades = self.store.load_trades(self.bot.id).await.unwrap_or_default();
 
         let trade_count = trades.len();
@@ -212,7 +212,7 @@ impl GridWorker {
 
     // ── 初始挂单 ──
 
-    async fn place_initial_orders(&mut self) {
+    pub(crate) async fn place_initial_orders(&mut self) {
         if self.current_price <= 0.0 {
             warn!(bot_id = %self.bot.id, "No current price, skipping initial orders");
             return;
@@ -255,7 +255,7 @@ impl GridWorker {
 
     // ── 价格 tick ──
 
-    async fn on_price_tick(&mut self) {
+    pub(crate) async fn on_price_tick(&mut self) {
         if self.current_price <= 0.0 {
             return;
         }
@@ -504,7 +504,7 @@ impl GridWorker {
 
     // ── 状态广播 ──
 
-    fn broadcast_state(&self) {
+    pub(crate) fn broadcast_state(&self) {
         let state = GridState {
             bot_id: self.bot.id,
             symbol: self.bot.symbol.clone(),

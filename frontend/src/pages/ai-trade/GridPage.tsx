@@ -163,6 +163,9 @@ export default function GridPage() {
   const handleDelete = async (bot: GridBot) => {
     if (!confirm(`确定删除机器人 "${bot.name}" 吗？`)) return;
     try {
+      if (bot.status === 'running') {
+        await api.post(`/grid/${bot.id}/stop`);
+      }
       await api.del(`/grid/${bot.id}/delete`);
       await loadBots();
     } catch (e: any) {

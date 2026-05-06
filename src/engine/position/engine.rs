@@ -25,16 +25,16 @@ use super::types::*;
 /// - `positions` / `orders`: DashMap 本身线程安全，无需额外锁。
 /// - `risk_checker` / `tracker`: 内部有可变状态，用 `std::sync::Mutex` 保护。
 /// - `state`: 多读少写，用 `std::sync::RwLock` 保护。
-struct EngineInner {
-    config: EngineConfig,
-    exchange: Box<dyn Exchange>,
-    persistence: Persistence,
-    positions: DashMap<(String, String, PositionSide), Position>,
-    orders: DashMap<Uuid, Order>,
-    event_tx: broadcast::Sender<EngineEvent>,
-    risk_checker: Mutex<RiskChecker>,
-    tracker: Mutex<PnlTracker>,
-    state: RwLock<EngineState>,
+pub(crate) struct EngineInner {
+    pub(crate) config: EngineConfig,
+    pub(crate) exchange: Box<dyn Exchange>,
+    pub(crate) persistence: Persistence,
+    pub(crate) positions: DashMap<(String, String, PositionSide), Position>,
+    pub(crate) orders: DashMap<Uuid, Order>,
+    pub(crate) event_tx: broadcast::Sender<EngineEvent>,
+    pub(crate) risk_checker: Mutex<RiskChecker>,
+    pub(crate) tracker: Mutex<PnlTracker>,
+    pub(crate) state: RwLock<EngineState>,
 }
 
 impl EngineInner {
@@ -342,7 +342,7 @@ impl PositionEngine {
 // command_loop - 命令分发循环
 // ============================================================================
 
-async fn command_loop(inner: Arc<EngineInner>, mut cmd_rx: mpsc::Receiver<EngineCommand>) {
+pub(crate) async fn command_loop(inner: Arc<EngineInner>, mut cmd_rx: mpsc::Receiver<EngineCommand>) {
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
             EngineCommand::OpenPosition {
@@ -426,7 +426,7 @@ async fn command_loop(inner: Arc<EngineInner>, mut cmd_rx: mpsc::Receiver<Engine
 // sync_loop - 仓位同步循环
 // ============================================================================
 
-async fn sync_loop(inner: Arc<EngineInner>) {
+pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
     let interval = tokio::time::Duration::from_secs(inner.config.sync_interval_secs);
     let mut ticker = tokio::time::interval(interval);
 
@@ -645,7 +645,7 @@ async fn sync_loop(inner: Arc<EngineInner>) {
 // ws_feed_loop - WebSocket 消费循环
 // ============================================================================
 
-async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: mpsc::Receiver<WsFeedEvent>) {
+pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: mpsc::Receiver<WsFeedEvent>) {
     while let Some(event) = ws_rx.recv().await {
         match event {
             WsFeedEvent::OrderUpdate {
@@ -700,7 +700,7 @@ async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: mpsc::Receiver<WsFeedE
 /// 处理 WebSocket 订单更新。
 ///
 /// 流程：查找本地 Order -> 更新 Order 状态 -> 写入 Trade -> 更新 Position -> 发出事件。
-async fn handle_ws_order_update(
+pub(crate) async fn handle_ws_order_update(
     inner: &Arc<EngineInner>,
     exchange_order_id: &str,
     symbol: &str,
@@ -931,7 +931,7 @@ async fn handle_ws_order_update(
 // poll_loop - 轮询兜底循环
 // ============================================================================
 
-async fn poll_loop(inner: Arc<EngineInner>) {
+pub(crate) async fn poll_loop(inner: Arc<EngineInner>) {
     let interval = tokio::time::Duration::from_secs(inner.config.poll_interval_secs);
     let mut ticker = tokio::time::interval(interval);
 
@@ -992,7 +992,7 @@ async fn poll_loop(inner: Arc<EngineInner>) {
 // ============================================================================
 
 /// 处理开仓命令。
-async fn handle_open_position(
+pub(crate) async fn handle_open_position(
     inner: &Arc<EngineInner>,
     exchange: String,
     symbol: String,
@@ -1148,7 +1148,7 @@ async fn handle_open_position(
 }
 
 /// 处理平仓命令。
-async fn handle_close_position(
+pub(crate) async fn handle_close_position(
     inner: &Arc<EngineInner>,
     position_id: Uuid,
     order_type: OrderType,
@@ -1234,7 +1234,7 @@ async fn handle_close_position(
 }
 
 /// 处理修改仓位命令（更新止损 / 止盈）。
-async fn handle_modify_position(
+pub(crate) async fn handle_modify_position(
     inner: &Arc<EngineInner>,
     position_id: Uuid,
     stop_loss: Option<f64>,
@@ -1277,14 +1277,15 @@ async fn handle_modify_position(
 }
 
 /// 处理通用下单命令。
-async fn handle_place_order(inner: &Arc<EngineInner>, params: PlaceOrderParams) {
+pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, params: PlaceOrderParams) {
     // 风控检查
     {
         let positions_owned: Vec<Position> = inner.positions.iter().map(|r| r.value().clone()).collect();
         let positions: Vec<&Position> = positions_owned.iter().collect();
         let risk_checker = inner.risk_checker.lock().unwrap();
+        let total_equity = inner.tracker.lock().unwrap().equity();
         if let Err(e) =
-            risk_checker.check_place_order(&positions, &params.symbol, params.amount, 0.0)
+            risk_checker.check_place_order(&positions, &params.symbol, params.amount, total_equity)
         {
             let msg = format!("Risk check failed: {}", e);
             warn!(error = %e, symbol = %params.symbol, "Risk check failed for place order");
@@ -1321,7 +1322,7 @@ async fn handle_place_order(inner: &Arc<EngineInner>, params: PlaceOrderParams) 
 }
 
 /// 处理取消订单命令。
-async fn handle_cancel_order(inner: &Arc<EngineInner>, order_id: Uuid) {
+pub(crate) async fn handle_cancel_order(inner: &Arc<EngineInner>, order_id: Uuid) {
     let order = inner.orders.get(&order_id).map(|r| r.value().clone());
 
     let order = match order {
@@ -1380,7 +1381,7 @@ async fn handle_cancel_order(inner: &Arc<EngineInner>, order_id: Uuid) {
 }
 
 /// 处理取消所有订单命令。
-async fn handle_cancel_all_orders(
+pub(crate) async fn handle_cancel_all_orders(
     inner: &Arc<EngineInner>,
     position_id: Option<Uuid>,
     symbol: Option<String>,
@@ -1418,7 +1419,7 @@ async fn handle_cancel_all_orders(
 }
 
 /// 处理手动同步命令。
-async fn handle_sync_positions(inner: &Arc<EngineInner>) {
+pub(crate) async fn handle_sync_positions(inner: &Arc<EngineInner>) {
     match inner.exchange.get_positions(None).await {
         Ok(exchange_positions) => {
             inner.emit_event(EngineEvent::PositionSynced {
@@ -1429,5 +1430,43 @@ async fn handle_sync_positions(inner: &Arc<EngineInner>) {
         Err(e) => {
             error!(error = %e, "Failed to sync positions");
         }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_helpers {
+    use super::*;
+    use crate::engine::position::config::RiskConfig;
+
+    pub(crate) fn make_test_inner(
+        config: EngineConfig,
+        exchange: Box<dyn Exchange>,
+    ) -> Arc<EngineInner> {
+        let db = PgPool::connect_lazy("postgres://__test__:__test__@localhost/__test__")
+            .expect("connect_lazy should not fail");
+        let event_tx = broadcast::channel(256).0;
+
+        Arc::new(EngineInner {
+            persistence: Persistence::new(db),
+            risk_checker: Mutex::new(RiskChecker::new(config.risk.clone())),
+            tracker: Mutex::new(PnlTracker::new(10000.0)),
+            state: RwLock::new(EngineState::Running),
+            config,
+            exchange,
+            event_tx,
+            positions: DashMap::new(),
+            orders: DashMap::new(),
+        })
+    }
+
+    pub(crate) fn collect_events(rx: &mut broadcast::Receiver<EngineEvent>, max: usize) -> Vec<EngineEvent> {
+        let mut events = Vec::new();
+        while events.len() < max {
+            match rx.try_recv() {
+                Ok(e) => events.push(e),
+                Err(_) => break,
+            }
+        }
+        events
     }
 }

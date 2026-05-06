@@ -1223,7 +1223,6 @@ fn test_trade_serialization_roundtrip() {
 
 #[test]
 fn test_position_side_both_serialization() {
-    // PositionSide::Both -> "Both" -> PositionSide::Both
     let both = PositionSide::Both;
     let json = serde_json::to_string(&both).unwrap();
     assert_eq!(json, "\"Both\"");
@@ -1231,9 +1230,416 @@ fn test_position_side_both_serialization() {
     let back: PositionSide = serde_json::from_str(&json).unwrap();
     assert_eq!(back, PositionSide::Both);
 
-    // 往返一致性
     assert_eq!(
         serde_json::from_str::<PositionSide>(&serde_json::to_string(&PositionSide::Both).unwrap()).unwrap(),
         PositionSide::Both
     );
+}
+
+// ============================================================
+// 更多边界场景
+// ============================================================
+
+#[test]
+fn test_engine_state_serialization() {
+    let variants = vec![
+        (EngineState::Created, "\"Created\""),
+        (EngineState::Running, "\"Running\""),
+        (EngineState::Paused, "\"Paused\""),
+        (EngineState::ShuttingDown, "\"ShuttingDown\""),
+        (EngineState::Stopped, "\"Stopped\""),
+    ];
+    for (variant, expected_json) in &variants {
+        let json = serde_json::to_string(variant).unwrap();
+        assert_eq!(json, *expected_json);
+        let back: EngineState = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, *variant);
+    }
+}
+
+#[test]
+fn test_ticker_construction() {
+    let now = Utc::now();
+    let ticker = Ticker {
+        symbol: "BTC/USDT".to_string(),
+        price: 50000.0,
+        bid: 49999.0,
+        ask: 50001.0,
+        volume_24h: 1000000.0,
+        timestamp: now,
+    };
+    assert_eq!(ticker.symbol, "BTC/USDT");
+    assert!((ticker.price - 50000.0).abs() < F64_EPS);
+    assert!((ticker.bid - 49999.0).abs() < F64_EPS);
+    assert!((ticker.ask - 50001.0).abs() < F64_EPS);
+    assert!((ticker.volume_24h - 1000000.0).abs() < F64_EPS);
+}
+
+#[test]
+fn test_balance_construction() {
+    let balance = Balance {
+        asset: "USDT".to_string(),
+        free: 8000.0,
+        used: 2000.0,
+        total: 10000.0,
+    };
+    assert_eq!(balance.asset, "USDT");
+    assert!((balance.free + balance.used - balance.total).abs() < F64_EPS);
+}
+
+#[test]
+fn test_exchange_position_construction() {
+    let ep = ExchangePosition {
+        symbol: "BTC/USDT".to_string(),
+        side: PositionSide::Long,
+        size: 1.0,
+        entry_price: 50000.0,
+        leverage: 10,
+        unrealized_pnl: 100.0,
+        liquidation_price: Some(45000.0),
+    };
+    assert_eq!(ep.symbol, "BTC/USDT");
+    assert_eq!(ep.side, PositionSide::Long);
+    assert!(ep.liquidation_price.is_some());
+}
+
+#[test]
+fn test_funding_rate_construction() {
+    let now = Utc::now();
+    let fr = FundingRate {
+        symbol: "BTC/USDT".to_string(),
+        rate: 0.0001,
+        next_funding_time: now,
+    };
+    assert_eq!(fr.symbol, "BTC/USDT");
+    assert!((fr.rate - 0.0001).abs() < F64_EPS);
+}
+
+#[test]
+fn test_fee_rates_construction() {
+    let fr = FeeRates {
+        symbol: "BTC/USDT".to_string(),
+        maker_rate: 0.0002,
+        taker_rate: 0.0005,
+    };
+    assert_eq!(fr.symbol, "BTC/USDT");
+    assert!(fr.taker_rate > fr.maker_rate);
+}
+
+#[test]
+fn test_position_short_side() {
+    let now = Utc::now();
+    let pos = Position {
+        id: Uuid::new_v4(),
+        engine_id: "engine1".to_string(),
+        strategy_id: Some("grid_001".to_string()),
+        exchange: "binance".to_string(),
+        symbol: "BTC/USDT".to_string(),
+        side: PositionSide::Short,
+        status: PositionStatus::Open,
+        size: 1.0,
+        entry_price: 50000.0,
+        current_price: 49000.0,
+        leverage: 10,
+        margin: 5000.0,
+        unrealized_pnl: 1000.0,
+        realized_pnl: 0.0,
+        stop_loss: Some(51000.0),
+        take_profit: Some(45000.0),
+        liquidation_price: Some(55000.0),
+        opened_at: now,
+        updated_at: now,
+        closed_at: None,
+        metadata: serde_json::json!({"source": "test"}),
+    };
+    assert_eq!(pos.side, PositionSide::Short);
+    assert_eq!(pos.strategy_id, Some("grid_001".to_string()));
+    assert_eq!(pos.stop_loss, Some(51000.0));
+    assert_eq!(pos.take_profit, Some(45000.0));
+    assert_eq!(pos.metadata, serde_json::json!({"source": "test"}));
+}
+
+#[test]
+fn test_position_serde_roundtrip() {
+    let now = Utc::now();
+    let pos = Position {
+        id: Uuid::new_v4(),
+        engine_id: "engine1".to_string(),
+        strategy_id: None,
+        exchange: "binance".to_string(),
+        symbol: "BTC/USDT".to_string(),
+        side: PositionSide::Long,
+        status: PositionStatus::Open,
+        size: 1.0,
+        entry_price: 50000.0,
+        current_price: 50000.0,
+        leverage: 10,
+        margin: 5000.0,
+        unrealized_pnl: 0.0,
+        realized_pnl: 0.0,
+        stop_loss: None,
+        take_profit: None,
+        liquidation_price: None,
+        opened_at: now,
+        updated_at: now,
+        closed_at: None,
+        metadata: serde_json::Value::Null,
+    };
+    let json = serde_json::to_string(&pos).unwrap();
+    let back: Position = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.id, pos.id);
+    assert_eq!(back.symbol, pos.symbol);
+    assert_eq!(back.side, pos.side);
+    assert!((back.size - pos.size).abs() < F64_EPS);
+    assert!((back.entry_price - pos.entry_price).abs() < F64_EPS);
+}
+
+#[test]
+fn test_order_serde_roundtrip() {
+    let now = Utc::now();
+    let order = Order {
+        id: Uuid::new_v4(),
+        position_id: Uuid::nil(),
+        exchange_order_id: Some("ex_123".to_string()),
+        client_order_id: None,
+        exchange: "binance".to_string(),
+        symbol: "BTC/USDT".to_string(),
+        side: Side::Buy,
+        order_type: OrderType::Limit,
+        request_price: Some(50000.0),
+        fill_price: Some(50001.0),
+        amount: 1.0,
+        filled: 1.0,
+        remaining: 0.0,
+        status: OrderStatus::Filled,
+        reduce_only: false,
+        fee: 25.0,
+        fee_currency: "USDT".to_string(),
+        slippage: Some(1.0),
+        created_at: now,
+        updated_at: now,
+    };
+    let json = serde_json::to_string(&order).unwrap();
+    let back: Order = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.id, order.id);
+    assert_eq!(back.symbol, order.symbol);
+    assert_eq!(back.side, order.side);
+    assert_eq!(back.slippage, Some(1.0));
+}
+
+#[test]
+fn test_trade_serde_roundtrip() {
+    let now = Utc::now();
+    let trade = Trade {
+        id: Uuid::new_v4(),
+        position_id: Uuid::new_v4(),
+        order_id: Uuid::new_v4(),
+        exchange: "binance".to_string(),
+        symbol: "BTC/USDT".to_string(),
+        side: Side::Sell,
+        price: 51000.0,
+        amount: 1.0,
+        fee: 25.5,
+        fee_currency: "USDT".to_string(),
+        pnl: 1000.0,
+        trade_type: "close".to_string(),
+        created_at: now,
+    };
+    let json = serde_json::to_string(&trade).unwrap();
+    let back: Trade = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.id, trade.id);
+    assert_eq!(back.symbol, trade.symbol);
+    assert!((back.pnl - 1000.0).abs() < F64_EPS);
+}
+
+#[test]
+fn test_place_order_params_construction() {
+    let params = PlaceOrderParams {
+        symbol: "BTC/USDT".to_string(),
+        side: Side::Buy,
+        order_type: OrderType::Market,
+        amount: 1.0,
+        price: None,
+        reduce_only: false,
+        position_side: Some(PositionSide::Long),
+    };
+    assert_eq!(params.symbol, "BTC/USDT");
+    assert_eq!(params.side, Side::Buy);
+    assert!(!params.reduce_only);
+    assert_eq!(params.position_side, Some(PositionSide::Long));
+}
+
+#[test]
+fn test_engine_command_variants() {
+    let cmd = EngineCommand::OpenPosition {
+        exchange: "binance".to_string(),
+        symbol: "BTC/USDT".to_string(),
+        side: PositionSide::Long,
+        size: 1.0,
+        leverage: Some(10),
+        order_type: OrderType::Market,
+        price: None,
+        stop_loss: Some(49000.0),
+        take_profit: Some(55000.0),
+        strategy_id: None,
+    };
+    if let EngineCommand::OpenPosition { symbol, side, .. } = cmd {
+        assert_eq!(symbol, "BTC/USDT");
+        assert_eq!(side, PositionSide::Long);
+    } else {
+        panic!("Expected OpenPosition");
+    }
+
+    let close_cmd = EngineCommand::ClosePosition {
+        position_id: Uuid::new_v4(),
+        order_type: OrderType::Market,
+        price: None,
+    };
+    if let EngineCommand::ClosePosition { order_type, .. } = close_cmd {
+        assert_eq!(order_type, OrderType::Market);
+    } else {
+        panic!("Expected ClosePosition");
+    }
+
+    let modify_cmd = EngineCommand::ModifyPosition {
+        position_id: Uuid::new_v4(),
+        stop_loss: Some(48000.0),
+        take_profit: None,
+    };
+    if let EngineCommand::ModifyPosition { stop_loss, take_profit, .. } = modify_cmd {
+        assert_eq!(stop_loss, Some(48000.0));
+        assert!(take_profit.is_none());
+    } else {
+        panic!("Expected ModifyPosition");
+    }
+
+    let shutdown_cmd = EngineCommand::Shutdown;
+    assert!(matches!(shutdown_cmd, EngineCommand::Shutdown));
+}
+
+#[test]
+fn test_engine_event_variants() {
+    let now = Utc::now();
+    let pos = Position {
+        id: Uuid::new_v4(),
+        engine_id: "engine1".to_string(),
+        strategy_id: None,
+        exchange: "binance".to_string(),
+        symbol: "BTC/USDT".to_string(),
+        side: PositionSide::Long,
+        status: PositionStatus::Open,
+        size: 1.0,
+        entry_price: 50000.0,
+        current_price: 50000.0,
+        leverage: 10,
+        margin: 5000.0,
+        unrealized_pnl: 0.0,
+        realized_pnl: 0.0,
+        stop_loss: None,
+        take_profit: None,
+        liquidation_price: None,
+        opened_at: now,
+        updated_at: now,
+        closed_at: None,
+        metadata: serde_json::Value::Null,
+    };
+
+    let event = EngineEvent::PositionOpened { position: pos.clone() };
+    assert!(matches!(event, EngineEvent::PositionOpened { .. }));
+
+    let risk_event = EngineEvent::RiskAlert {
+        level: "warning".to_string(),
+        message: "drawdown 10%".to_string(),
+    };
+    if let EngineEvent::RiskAlert { level, message } = risk_event {
+        assert_eq!(level, "warning");
+        assert!(!message.is_empty());
+    }
+
+    let liq_event = EngineEvent::LiquidationWarning {
+        position_id: Uuid::new_v4(),
+        symbol: "BTC/USDT".to_string(),
+        liquidation_price: 45000.0,
+        current_price: 46000.0,
+    };
+    if let EngineEvent::LiquidationWarning { symbol, liquidation_price, current_price, .. } = liq_event {
+        assert_eq!(symbol, "BTC/USDT");
+        assert!(current_price > liquidation_price);
+    }
+}
+
+#[test]
+fn test_order_with_slippage() {
+    let now = Utc::now();
+    let order = Order {
+        id: Uuid::new_v4(),
+        position_id: Uuid::nil(),
+        exchange_order_id: Some("ex_slip".to_string()),
+        client_order_id: None,
+        exchange: "binance".to_string(),
+        symbol: "BTC/USDT".to_string(),
+        side: Side::Buy,
+        order_type: OrderType::Market,
+        request_price: None,
+        fill_price: Some(50010.0),
+        amount: 1.0,
+        filled: 1.0,
+        remaining: 0.0,
+        status: OrderStatus::Filled,
+        reduce_only: false,
+        fee: 25.0,
+        fee_currency: "USDT".to_string(),
+        slippage: Some(10.0),
+        created_at: now,
+        updated_at: now,
+    };
+    assert_eq!(order.slippage, Some(10.0));
+}
+
+#[test]
+fn test_position_status_variants_distinct() {
+    let all = vec![
+        PositionStatus::Empty,
+        PositionStatus::Opening,
+        PositionStatus::Open,
+        PositionStatus::Closing,
+        PositionStatus::Closed,
+    ];
+    for i in 0..all.len() {
+        for j in (i + 1)..all.len() {
+            assert_ne!(all[i], all[j], "PositionStatus variants should be distinct");
+        }
+    }
+}
+
+#[test]
+fn test_side_variants_distinct() {
+    assert_ne!(Side::Buy, Side::Sell);
+}
+
+#[test]
+fn test_exchange_position_no_liquidation_price() {
+    let ep = ExchangePosition {
+        symbol: "ETH/USDT".to_string(),
+        side: PositionSide::Short,
+        size: 2.0,
+        entry_price: 3000.0,
+        leverage: 5,
+        unrealized_pnl: -50.0,
+        liquidation_price: None,
+    };
+    assert!(ep.liquidation_price.is_none());
+    assert_eq!(ep.side, PositionSide::Short);
+}
+
+#[test]
+fn test_invalid_side_deserialization() {
+    let result = serde_json::from_str::<Side>("\"Invalid\"");
+    assert!(result.is_err(), "无效的 Side 值应反序列化失败");
+}
+
+#[test]
+fn test_invalid_order_status_deserialization() {
+    let result = serde_json::from_str::<OrderStatus>("\"InvalidStatus\"");
+    assert!(result.is_err(), "无效的 OrderStatus 值应反序列化失败");
 }

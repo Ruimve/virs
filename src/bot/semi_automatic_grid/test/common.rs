@@ -1,5 +1,3 @@
-//! 共享的 mock 实现和 helper 函数
-
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -8,8 +6,6 @@ use uuid::Uuid;
 
 use crate::bot::semi_automatic_grid::ai::GridAiService;
 use crate::bot::semi_automatic_grid::ports::*;
-
-// ── Mock PriceProvider ──
 
 pub struct MockPriceProvider {
     pub price: f64,
@@ -24,20 +20,31 @@ impl MockPriceProvider {
 #[async_trait]
 impl PriceProvider for MockPriceProvider {
     async fn get_price(&self, _exchange: &str, _symbol: &str) -> Option<f64> {
-        Some(self.price)
+        if self.price > 0.0 {
+            Some(self.price)
+        } else {
+            None
+        }
     }
 }
 
-// ── Mock OrderExecutor ──
-
 pub struct MockOrderExecutor {
     pub commands: Arc<Mutex<Vec<GridOrderCommand>>>,
+    pub should_fail: bool,
 }
 
 impl MockOrderExecutor {
     pub fn new() -> Self {
         Self {
             commands: Arc::new(Mutex::new(Vec::new())),
+            should_fail: false,
+        }
+    }
+
+    pub fn failing() -> Self {
+        Self {
+            commands: Arc::new(Mutex::new(Vec::new())),
+            should_fail: true,
         }
     }
 
@@ -49,22 +56,25 @@ impl MockOrderExecutor {
 #[async_trait]
 impl OrderExecutor for MockOrderExecutor {
     async fn send_command(&self, cmd: GridOrderCommand) -> anyhow::Result<()> {
+        if self.should_fail {
+            anyhow::bail!("mock order executor failure");
+        }
         self.commands.lock().await.push(cmd);
         Ok(())
     }
 }
 
-// ── Mock Store (Worker 用) ──
-
 pub struct MockWorkerStore {
     pub trades: Vec<GridTradeRecord>,
     pub bot: Option<GridBotConfig>,
-    pub recorded_trades: Arc<Mutex<Vec<(Uuid, String, f64, f64)>>>,
+    pub recorded_trades: Arc<Mutex<Vec<(Uuid, String, i32, f64, f64, f64)>>>,
     pub stats_saved: Arc<Mutex<Vec<(Uuid, f64, i32, i32)>>>,
     pub statuses_updated: Arc<Mutex<Vec<(Uuid, String)>>>,
     pub grid_params_updated: Arc<Mutex<Vec<(Uuid, f64, f64)>>>,
     pub quantities_updated: Arc<Mutex<Vec<(Uuid, f64)>>>,
     pub deleted_bots: Arc<Mutex<Vec<Uuid>>>,
+    pub last_adjusted: Arc<Mutex<Vec<Uuid>>>,
+    pub should_fail_load: bool,
 }
 
 impl MockWorkerStore {
@@ -78,7 +88,26 @@ impl MockWorkerStore {
             grid_params_updated: Arc::new(Mutex::new(Vec::new())),
             quantities_updated: Arc::new(Mutex::new(Vec::new())),
             deleted_bots: Arc::new(Mutex::new(Vec::new())),
+            last_adjusted: Arc::new(Mutex::new(Vec::new())),
+            should_fail_load: false,
         }
+    }
+
+    pub fn failing() -> Self {
+        Self {
+            should_fail_load: true,
+            ..Self::new()
+        }
+    }
+
+    pub fn with_trades(mut self, trades: Vec<GridTradeRecord>) -> Self {
+        self.trades = trades;
+        self
+    }
+
+    pub fn with_bot(mut self, bot: GridBotConfig) -> Self {
+        self.bot = Some(bot);
+        self
     }
 }
 
@@ -89,10 +118,16 @@ impl GridStore for MockWorkerStore {
     }
 
     async fn load_bot(&self, _bot_id: Uuid) -> anyhow::Result<Option<GridBotConfig>> {
+        if self.should_fail_load {
+            anyhow::bail!("mock store failure");
+        }
         Ok(self.bot.clone())
     }
 
     async fn load_trades(&self, _bot_id: Uuid) -> anyhow::Result<Vec<GridTradeRecord>> {
+        if self.should_fail_load {
+            anyhow::bail!("mock store failure");
+        }
         Ok(self.trades.clone())
     }
 
@@ -107,10 +142,9 @@ impl GridStore for MockWorkerStore {
         price: f64,
         quantity: f64,
         pnl: f64,
-        pnl_pct: f64,
+        _pnl_pct: f64,
     ) -> anyhow::Result<()> {
-        self.recorded_trades.lock().await.push((bot_id, side.to_string(), price, pnl));
-        let _ = (grid_level, quantity, pnl_pct);
+        self.recorded_trades.lock().await.push((bot_id, side.to_string(), grid_level, price, quantity, pnl));
         Ok(())
     }
 
@@ -124,7 +158,8 @@ impl GridStore for MockWorkerStore {
         Ok(())
     }
 
-    async fn update_last_adjusted(&self, _bot_id: Uuid) -> anyhow::Result<()> {
+    async fn update_last_adjusted(&self, bot_id: Uuid) -> anyhow::Result<()> {
+        self.last_adjusted.lock().await.push(bot_id);
         Ok(())
     }
 
@@ -144,12 +179,11 @@ impl GridStore for MockWorkerStore {
     }
 }
 
-// ── Mock Store (Engine 用) ──
-
 pub struct MockEngineStore {
     pub bots: Arc<Mutex<Vec<GridBotConfig>>>,
     pub deleted_bots: Arc<Mutex<Vec<Uuid>>>,
     pub statuses: Arc<Mutex<Vec<(Uuid, String)>>>,
+    pub should_fail_load: bool,
 }
 
 impl MockEngineStore {
@@ -158,6 +192,14 @@ impl MockEngineStore {
             bots: Arc::new(Mutex::new(Vec::new())),
             deleted_bots: Arc::new(Mutex::new(Vec::new())),
             statuses: Arc::new(Mutex::new(Vec::new())),
+            should_fail_load: false,
+        }
+    }
+
+    pub fn failing() -> Self {
+        Self {
+            should_fail_load: true,
+            ..Self::new()
         }
     }
 
@@ -169,10 +211,16 @@ impl MockEngineStore {
 #[async_trait]
 impl GridStore for MockEngineStore {
     async fn load_running_bots(&self) -> anyhow::Result<Vec<GridBotConfig>> {
+        if self.should_fail_load {
+            anyhow::bail!("mock store failure");
+        }
         Ok(self.bots.lock().await.clone())
     }
 
     async fn load_bot(&self, bot_id: Uuid) -> anyhow::Result<Option<GridBotConfig>> {
+        if self.should_fail_load {
+            anyhow::bail!("mock store failure");
+        }
         let bots = self.bots.lock().await;
         Ok(bots.iter().find(|b| b.id == bot_id).cloned())
     }
@@ -205,8 +253,6 @@ impl GridStore for MockEngineStore {
     }
 }
 
-// ── Mock LLM Resolver ──
-
 pub struct MockLlmResolver {
     pub available: bool,
 }
@@ -236,18 +282,27 @@ impl LlmProviderResolver for MockLlmResolver {
     }
 }
 
-// ── Mock Credential Store ──
+pub struct MockCredentialStore {
+    pub credentials: Vec<(String, String)>,
+}
 
-pub struct MockCredentialStore;
+impl MockCredentialStore {
+    pub fn new() -> Self {
+        Self { credentials: vec![] }
+    }
+
+    pub fn with_creds(mut self, creds: Vec<(String, String)>) -> Self {
+        self.credentials = creds;
+        self
+    }
+}
 
 #[async_trait]
 impl CredentialStore for MockCredentialStore {
     async fn load_credentials(&self, _user_id: Uuid) -> anyhow::Result<Vec<(String, String)>> {
-        Ok(vec![])
+        Ok(self.credentials.clone())
     }
 }
-
-// ── Helper functions ──
 
 pub fn make_bot_config() -> GridBotConfig {
     GridBotConfig {
@@ -271,7 +326,7 @@ pub fn make_bot_config() -> GridBotConfig {
 pub fn make_mock_ai_service() -> Arc<GridAiService> {
     Arc::new(GridAiService::new(
         Box::new(MockLlmResolver::new(false)),
-        Box::new(MockCredentialStore),
+        Box::new(MockCredentialStore::new()),
     ))
 }
 
@@ -280,6 +335,50 @@ pub fn make_worker(bot: GridBotConfig, price: f64) -> crate::bot::semi_automatic
     let (grid_event_tx, _) = broadcast::channel(16);
     let price_provider = Arc::new(MockPriceProvider::new(price));
     let order_executor = Arc::new(MockOrderExecutor::new());
+    let ai_service = make_mock_ai_service();
+    let store = Arc::new(MockWorkerStore::new());
+
+    crate::bot::semi_automatic_grid::worker::GridWorker::new(
+        bot,
+        price_provider,
+        order_executor,
+        ai_service,
+        store,
+        event_rx,
+        grid_event_tx,
+    )
+}
+
+pub fn make_worker_with_store(
+    bot: GridBotConfig,
+    price: f64,
+    store: Arc<MockWorkerStore>,
+) -> crate::bot::semi_automatic_grid::worker::GridWorker {
+    let (event_tx, event_rx) = broadcast::channel(16);
+    let (grid_event_tx, _) = broadcast::channel(16);
+    let price_provider = Arc::new(MockPriceProvider::new(price));
+    let order_executor = Arc::new(MockOrderExecutor::new());
+    let ai_service = make_mock_ai_service();
+
+    crate::bot::semi_automatic_grid::worker::GridWorker::new(
+        bot,
+        price_provider,
+        order_executor,
+        ai_service,
+        store,
+        event_rx,
+        grid_event_tx,
+    )
+}
+
+pub fn make_worker_with_executor(
+    bot: GridBotConfig,
+    price: f64,
+    order_executor: Arc<MockOrderExecutor>,
+) -> crate::bot::semi_automatic_grid::worker::GridWorker {
+    let (event_tx, event_rx) = broadcast::channel(16);
+    let (grid_event_tx, _) = broadcast::channel(16);
+    let price_provider = Arc::new(MockPriceProvider::new(price));
     let ai_service = make_mock_ai_service();
     let store = Arc::new(MockWorkerStore::new());
 

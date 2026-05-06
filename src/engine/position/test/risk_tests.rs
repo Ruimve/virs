@@ -694,3 +694,354 @@ fn test_funding_rate_exactly_at_threshold() {
     let checker = make_checker(config);
     assert!(checker.check_funding_rate("BTCUSDT", 0.001).is_none());
 }
+
+// ============================================================
+// 更多边界场景
+// ============================================================
+
+#[test]
+fn test_leverage_zero_rejected() {
+    let config = RiskConfig {
+        max_leverage: 20,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let result = checker.check_open_position(&[], "BTCUSDT", 1000.0, 0, 10000.0);
+    assert!(
+        result.is_err(),
+        "leverage=0 会导致 margin=inf，应被拒绝"
+    );
+}
+
+#[test]
+fn test_leverage_one() {
+    let config = RiskConfig {
+        max_leverage: 20,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let result = checker.check_open_position(&[], "BTCUSDT", 1000.0, 1, 10000.0);
+    assert!(result.is_ok(), "leverage=1 应在 max_leverage=20 范围内");
+}
+
+#[test]
+fn test_check_open_position_zero_amount() {
+    let checker = default_checker();
+    let result = checker.check_open_position(&[], "BTCUSDT", 0.0, 5, 10000.0);
+    assert!(result.is_ok(), "amount=0 时 margin=0，应通过所有仓位上限检查");
+}
+
+#[test]
+fn test_check_open_position_different_symbols() {
+    let config = RiskConfig {
+        max_position_per_symbol_pct: 0.5,
+        max_total_position_pct: 2.0,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+
+    let pos_btc = make_position("BTCUSDT", 5.0, 10000.0, 10);
+    let positions: Vec<&Position> = vec![&pos_btc];
+
+    let result = checker.check_open_position(&positions, "ETHUSDT", 1000.0, 5, 10000.0);
+    assert!(
+        result.is_ok(),
+        "不同 symbol 的仓位不影响单品种上限检查"
+    );
+}
+
+#[test]
+fn test_check_place_order_zero_equity() {
+    let config = RiskConfig {
+        max_order_amount_pct: 0.3,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let result = checker.check_place_order(&[], "BTCUSDT", 1.0, 0.0);
+    assert!(
+        result.is_err(),
+        "equity=0 时 max_amount=0，任何下单都应被拒绝"
+    );
+}
+
+#[test]
+fn test_check_place_order_zero_amount() {
+    let config = RiskConfig {
+        max_order_amount_pct: 0.3,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let result = checker.check_place_order(&[], "BTCUSDT", 0.0, 10000.0);
+    assert!(
+        result.is_ok(),
+        "amount=0 <= max_amount=3000，应通过"
+    );
+}
+
+#[test]
+fn test_check_place_order_amount_at_limit() {
+    let config = RiskConfig {
+        max_order_amount_pct: 0.3,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let result = checker.check_place_order(&[], "BTCUSDT", 3000.0, 10000.0);
+    assert!(
+        result.is_ok(),
+        "amount=3000 == max_amount=3000，应通过（<= 判断）"
+    );
+}
+
+#[test]
+fn test_drawdown_exactly_at_50pct_threshold() {
+    let config = RiskConfig {
+        max_drawdown_pct: 0.2,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let action = checker.check_drawdown(10000.0, 9000.0);
+    assert_eq!(
+        action,
+        Some(DrawdownAction::Warning),
+        "回撤 10% 恰好等于 0.2*0.5=10%，应为 Warning"
+    );
+}
+
+#[test]
+fn test_drawdown_exactly_at_75pct_threshold() {
+    let config = RiskConfig {
+        max_drawdown_pct: 0.2,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let action = checker.check_drawdown(10000.0, 8501.0);
+    assert_eq!(
+        action,
+        Some(DrawdownAction::Warning),
+        "回撤 14.99% 略低于 0.2*0.75=15%，应为 Warning"
+    );
+    let action2 = checker.check_drawdown(10000.0, 8499.0);
+    assert_eq!(
+        action2,
+        Some(DrawdownAction::Pause),
+        "回撤 15.01% 略高于 0.2*0.75=15%，应为 Pause"
+    );
+}
+
+#[test]
+fn test_drawdown_exactly_at_max() {
+    let config = RiskConfig {
+        max_drawdown_pct: 0.2,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let action = checker.check_drawdown(10000.0, 8000.0);
+    assert_eq!(
+        action,
+        Some(DrawdownAction::CloseAll),
+        "回撤 20% 恰好等于 max_drawdown_pct=0.2，应为 CloseAll"
+    );
+}
+
+#[test]
+fn test_drawdown_profit_no_drawdown() {
+    let checker = default_checker();
+    let action = checker.check_drawdown(10000.0, 12000.0);
+    assert!(
+        action.is_none(),
+        "current > peak 时无回撤，应返回 None"
+    );
+}
+
+#[test]
+fn test_drawdown_peak_equals_current() {
+    let checker = default_checker();
+    let action = checker.check_drawdown(10000.0, 10000.0);
+    assert!(
+        action.is_none(),
+        "peak == current 时回撤为 0，应返回 None"
+    );
+}
+
+#[test]
+fn test_liquidation_price_equals_current() {
+    let config = RiskConfig {
+        liquidation_buffer_pct: 0.2,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let pos = make_position_with_liquidation("BTCUSDT", 1.0, 100.0, 1, Some(100.0), 100.0);
+    let result = checker.check_liquidation(&pos);
+    assert!(
+        result.is_some(),
+        "强平价等于当前价格时距离为 0%，应触发预警"
+    );
+    let distance = result.unwrap();
+    assert!(
+        distance.abs() < 1e-8,
+        "距离应为 0，实际为 {}",
+        distance
+    );
+}
+
+#[test]
+fn test_liquidation_price_above_current() {
+    let config = RiskConfig {
+        liquidation_buffer_pct: 0.2,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let pos = make_position_with_liquidation("BTCUSDT", 1.0, 100.0, 1, Some(110.0), 100.0);
+    let result = checker.check_liquidation(&pos);
+    assert!(
+        result.is_some(),
+        "强平价高于当前价格（Short 仓位场景），距离 10% < 20%，应触发预警"
+    );
+}
+
+#[test]
+fn test_liquidation_zero_liq_price() {
+    let config = RiskConfig {
+        liquidation_buffer_pct: 0.2,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let pos = make_position_with_liquidation("BTCUSDT", 1.0, 100.0, 1, Some(0.0), 100.0);
+    let result = checker.check_liquidation(&pos);
+    assert!(
+        result.is_none(),
+        "强平价为 0 时应返回 None，避免除零"
+    );
+}
+
+#[test]
+fn test_liquidation_exactly_at_buffer() {
+    let config = RiskConfig {
+        liquidation_buffer_pct: 0.2,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let pos = make_position_with_liquidation("BTCUSDT", 1.0, 100.0, 1, Some(80.0), 100.0);
+    let result = checker.check_liquidation(&pos);
+    assert!(
+        result.is_some(),
+        "距离恰好等于 buffer 20%，应触发预警（<= 判断）"
+    );
+}
+
+#[test]
+fn test_consecutive_losses_profit_then_loss() {
+    let mut checker = default_checker();
+    checker.record_trade_result(-1.0);
+    checker.record_trade_result(-1.0);
+    checker.record_trade_result(5.0);
+    assert_eq!(checker.consecutive_losses(), 0, "盈利后重置为 0");
+    checker.record_trade_result(-1.0);
+    assert_eq!(checker.consecutive_losses(), 1, "盈利后再亏损从 1 开始计数");
+}
+
+#[test]
+fn test_consecutive_losses_zero_pnl_resets() {
+    let mut checker = default_checker();
+    checker.record_trade_result(-1.0);
+    checker.record_trade_result(-1.0);
+    assert_eq!(checker.consecutive_losses(), 2);
+    checker.record_trade_result(0.0);
+    assert_eq!(
+        checker.consecutive_losses(),
+        0,
+        "pnl=0 应视为非亏损，重置计数"
+    );
+}
+
+#[test]
+fn test_funding_rate_exactly_at_2x_threshold() {
+    let config = RiskConfig {
+        funding_rate_threshold: 0.001,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let result = checker.check_funding_rate("BTCUSDT", 0.002);
+    assert!(result.is_some());
+    let alert = result.unwrap();
+    assert_eq!(
+        alert.severity,
+        "critical",
+        "费率恰好等于 2 倍阈值，应为 critical（>= 判断）"
+    );
+}
+
+#[test]
+fn test_funding_rate_between_1x_and_2x() {
+    let config = RiskConfig {
+        funding_rate_threshold: 0.001,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+    let result = checker.check_funding_rate("BTCUSDT", 0.0015);
+    assert!(result.is_some());
+    let alert = result.unwrap();
+    assert_eq!(
+        alert.severity,
+        "warning",
+        "费率 0.0015 在 1x-2x 阈值之间，应为 warning"
+    );
+}
+
+#[test]
+fn test_check_open_position_multiple_checks_combined() {
+    let config = RiskConfig {
+        max_leverage: 10,
+        max_position_per_symbol_pct: 0.5,
+        max_total_position_pct: 1.5,
+        max_consecutive_losses: 3,
+        ..RiskConfig::default()
+    };
+    let mut checker = make_checker(config);
+
+    for _ in 0..3 {
+        checker.record_trade_result(-1.0);
+    }
+
+    let result = checker.check_open_position(&[], "BTCUSDT", 100.0, 5, 10000.0);
+    assert!(
+        result.is_err(),
+        "即使杠杆和仓位都合规，连续亏损也应阻止开仓"
+    );
+}
+
+#[test]
+fn test_total_position_at_limit() {
+    let config = RiskConfig {
+        max_total_position_pct: 3.0,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+
+    let pos = make_position("BTCUSDT", 25.0, 10000.0, 10);
+    let positions: Vec<&Position> = vec![&pos];
+
+    let result = checker.check_open_position(&positions, "ETHUSDT", 50000.0, 10, 10000.0);
+    assert!(
+        result.is_ok(),
+        "已有 25000 + 新仓 5000 = 30000 <= 10000*3.0=30000，恰好等于上限，应通过"
+    );
+}
+
+#[test]
+fn test_single_symbol_no_existing_position() {
+    let config = RiskConfig {
+        max_position_per_symbol_pct: 0.5,
+        ..RiskConfig::default()
+    };
+    let checker = make_checker(config);
+
+    let pos_btc = make_position("BTCUSDT", 5.0, 10000.0, 10);
+    let positions: Vec<&Position> = vec![&pos_btc];
+
+    let result = checker.check_open_position(&positions, "ETHUSDT", 5000.0, 10, 10000.0);
+    assert!(
+        result.is_ok(),
+        "ETHUSDT 无已有仓位，新仓 margin=500 <= 10000*0.5=5000，应通过"
+    );
+}

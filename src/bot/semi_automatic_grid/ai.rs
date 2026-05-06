@@ -1,16 +1,9 @@
-//! 网格机器人 LLM 决策服务
-//!
-//! 通过 trait 抽象实现业务隔离，不直接依赖外部模块。
-
-use serde::Deserialize;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::bot::semi_automatic_grid::ports::{CredentialStore, LlmProviderResolver};
 
-/// LLM 决策返回的 action
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone)]
 pub enum GridAction {
     RunGrid,
     PauseGrid,
@@ -32,20 +25,50 @@ impl GridAction {
             Self::Hold => "hold",
         }
     }
+
+    pub fn from_str(s: &str, upper_price: Option<f64>, lower_price: Option<f64>) -> Self {
+        match s {
+            "run_grid" => GridAction::RunGrid,
+            "pause_grid" => GridAction::PauseGrid,
+            "adjust_grid" => GridAction::AdjustGrid {
+                upper_price,
+                lower_price,
+            },
+            "reduce_position" => GridAction::ReducePosition,
+            _ => GridAction::Hold,
+        }
+    }
 }
 
-/// LLM 决策的完整结果
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct GridDecision {
     pub action: GridAction,
     pub reason: String,
-    #[serde(default)]
     pub upper_price: Option<f64>,
-    #[serde(default)]
     pub lower_price: Option<f64>,
 }
 
-/// 网格 AI 服务
+impl GridDecision {
+    pub fn from_json(json: &serde_json::Value) -> Self {
+        let action_str = json["action"].as_str().unwrap_or("hold");
+        let reason = json["reason"]
+            .as_str()
+            .unwrap_or("No reason provided")
+            .to_string();
+        let upper_price = json["upper_price"].as_f64();
+        let lower_price = json["lower_price"].as_f64();
+
+        let action = GridAction::from_str(action_str, upper_price, lower_price);
+
+        GridDecision {
+            action,
+            reason,
+            upper_price,
+            lower_price,
+        }
+    }
+}
+
 pub struct GridAiService {
     resolver: Box<dyn LlmProviderResolver>,
     credential_store: Box<dyn CredentialStore>,
@@ -64,12 +87,10 @@ impl GridAiService {
         }
     }
 
-    /// 检查是否有可用的 AI provider
     pub fn is_available(&self) -> bool {
         self.resolver.is_available()
     }
 
-    /// 调用 LLM 并返回解析后的 JSON
     pub async fn call_llm(
         &self,
         user_id: &Uuid,
@@ -130,7 +151,6 @@ impl GridAiService {
         Ok(result)
     }
 
-    /// 调用 LLM 进行网格决策
     pub async fn grid_decision(
         &self,
         user_id: &Uuid,
@@ -138,33 +158,7 @@ impl GridAiService {
         user_prompt: &str,
     ) -> Option<GridDecision> {
         match self.call_llm(user_id, system_prompt, user_prompt).await {
-            Ok(json) => {
-                let action_str = json["action"].as_str().unwrap_or("hold");
-                let reason = json["reason"]
-                    .as_str()
-                    .unwrap_or("No reason provided")
-                    .to_string();
-                let upper_price = json["upper_price"].as_f64();
-                let lower_price = json["lower_price"].as_f64();
-
-                let action = match action_str {
-                    "run_grid" => GridAction::RunGrid,
-                    "pause_grid" => GridAction::PauseGrid,
-                    "adjust_grid" => GridAction::AdjustGrid {
-                        upper_price,
-                        lower_price,
-                    },
-                    "reduce_position" => GridAction::ReducePosition,
-                    _ => GridAction::Hold,
-                };
-
-                Some(GridDecision {
-                    action,
-                    reason,
-                    upper_price,
-                    lower_price,
-                })
-            }
+            Ok(json) => Some(GridDecision::from_json(&json)),
             Err(e) => {
                 warn!("LLM grid decision failed, falling back to rules: {}", e);
                 None
@@ -172,4 +166,3 @@ impl GridAiService {
         }
     }
 }
-
