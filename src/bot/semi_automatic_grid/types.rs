@@ -43,6 +43,18 @@ pub enum GridCommand {
     Shutdown,
 }
 
+/// 分析日志记录
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnalysisLog {
+    pub bot_id: Uuid,
+    pub timestamp: DateTime<Utc>,
+    pub analysis_type: String,  // "initial" | "periodic"
+    pub system_prompt: String,
+    pub user_prompt: String,
+    pub result: serde_json::Value,
+    pub error: Option<String>,
+}
+
 /// 网格引擎事件（发送给前端 WebSocket）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GridEvent {
@@ -53,5 +65,6 @@ pub enum GridEvent {
     GridTradeClosed { bot_id: Uuid, level: i32, pnl: f64 },
     PriceUpdate { bot_id: Uuid, price: f64 },
     StatusUpdate { bot_id: Uuid, state: GridState },
+    AnalysisLog { log: AnalysisLog },
 }
 

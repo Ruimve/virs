@@ -153,6 +153,7 @@ pub struct Order {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::Type)]
 #[sqlx(type_name = "text", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum StrategyStatus {
     Draft,
     Running,

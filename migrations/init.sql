@@ -323,3 +323,17 @@ DO $$ BEGIN
     ALTER TABLE qd_grid_bots ALTER COLUMN status TYPE TEXT;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
+
+-- Grid analysis logs
+CREATE TABLE IF NOT EXISTS qd_grid_analysis_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    bot_id UUID NOT NULL REFERENCES qd_grid_bots(id) ON DELETE CASCADE,
+    analysis_type TEXT NOT NULL DEFAULT 'periodic',
+    system_prompt TEXT NOT NULL DEFAULT '',
+    user_prompt TEXT NOT NULL DEFAULT '',
+    result JSONB NOT NULL DEFAULT '{}',
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_grid_analysis_logs_bot ON qd_grid_analysis_logs(bot_id);

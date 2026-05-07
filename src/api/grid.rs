@@ -985,15 +985,6 @@ pub async fn start_bot(
         }
     };
 
-    // 检查 bot 参数是否已填充
-    if bot.upper_price <= 0.0 || bot.lower_price <= 0.0 || bot.grid_count <= 0 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<serde_json::Value>::err(
-                "Bot parameters not set. Please run analyze first.",
-            )),
-        ));
-    }
 
     match bot.status {
         StrategyStatus::Running => {
@@ -1021,16 +1012,16 @@ pub async fn start_bot(
                 Json(ApiResponse::<serde_json::Value>::err(format!("Failed to start grid engine: {}", e))),
             ));
         }
-    } else {
-        // GridEngine 未启动，回退到直接改数据库（兼容模式）
-        let _ = sqlx::query(
-            r#"UPDATE qd_grid_bots SET status = $2, started_at = NOW(), updated_at = NOW() WHERE id = $1"#,
-        )
-        .bind(id)
-        .bind(StrategyStatus::Running)
-        .execute(&state.db_pool)
-        .await;
     }
+
+    // 同步更新 DB 状态，确保 API 返回时前端能看到正确状态
+    let _ = sqlx::query(
+        r#"UPDATE qd_grid_bots SET status = $2, started_at = NOW(), updated_at = NOW() WHERE id = $1"#,
+    )
+    .bind(id)
+    .bind(StrategyStatus::Running)
+    .execute(&state.db_pool)
+    .await;
 
     let updated = sqlx::query_as::<_, GridBot>(
         "SELECT * FROM qd_grid_bots WHERE id = $1",
@@ -1092,15 +1083,16 @@ pub async fn stop_bot(
                 Json(ApiResponse::<serde_json::Value>::err(format!("Failed to stop grid engine: {}", e))),
             ));
         }
-    } else {
-        let _ = sqlx::query(
-            r#"UPDATE qd_grid_bots SET status = $2, stopped_at = NOW(), updated_at = NOW() WHERE id = $1"#,
-        )
-        .bind(id)
-        .bind(StrategyStatus::Stopped)
-        .execute(&state.db_pool)
-        .await;
     }
+
+    // 同步更新 DB 状态
+    let _ = sqlx::query(
+        r#"UPDATE qd_grid_bots SET status = $2, stopped_at = NOW(), updated_at = NOW() WHERE id = $1"#,
+    )
+    .bind(id)
+    .bind(StrategyStatus::Stopped)
+    .execute(&state.db_pool)
+    .await;
 
     let updated = sqlx::query_as::<_, GridBot>(
         "SELECT * FROM qd_grid_bots WHERE id = $1",
@@ -1367,4 +1359,128 @@ pub async fn reanalyze(
         "bot": updated,
         "analysis": ai.result,
     }))))
+}
+
+// ── Paper Trading ──
+
+/// GET /api/grid/paper/status — 获取 paper 交易状态
+pub async fn paper_status(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)>
+{
+    let paper = match &state.paper_executor {
+        Some(p) => p,
+        None => {
+            return Ok(Json(ApiResponse::ok(serde_json::json!({
+                "enabled": false,
+                "pending_count": 0,
+            }))));
+        }
+    };
+
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "enabled": paper.is_enabled(),
+        "pending_count": paper.pending_count().await,
+    }))))
+}
+
+/// POST /api/grid/paper/enable — 启用 paper 交易
+pub async fn paper_enable(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)>
+{
+    match &state.paper_executor {
+        Some(paper) => {
+            paper.enable();
+            Ok(Json(ApiResponse::ok_with_message(
+                serde_json::json!({ "enabled": true }),
+                "Paper trading enabled",
+            )))
+        }
+        None => Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<serde_json::Value>::err("Paper executor not available")),
+        )),
+    }
+}
+
+/// POST /api/grid/paper/disable — 禁用 paper 交易
+pub async fn paper_disable(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)>
+{
+    match &state.paper_executor {
+        Some(paper) => {
+            paper.disable().await;
+            Ok(Json(ApiResponse::ok_with_message(
+                serde_json::json!({ "enabled": false }),
+                "Paper trading disabled",
+            )))
+        }
+        None => Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<serde_json::Value>::err("Paper executor not available")),
+        )),
+    }
+}
+
+/// GET /api/grid/{id}/analysis-logs — 获取分析日志
+pub async fn get_analysis_logs(
+    State(state): State<Arc<AppState>>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)>
+{
+    let user_id = parse_user_id(&auth)?;
+
+    // 验证 bot 属于当前用户
+    let bot = sqlx::query_as::<_, GridBot>(
+        r#"SELECT id FROM qd_grid_bots WHERE id = $1 AND user_id = $2"#,
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(&state.db_pool)
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<serde_json::Value>::err(format!("Database error: {}", e))),
+        )
+    })?;
+
+    if bot.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<serde_json::Value>::err("Grid bot not found")),
+        ));
+    }
+
+    let logs = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, serde_json::Value, Option<String>, chrono::DateTime<chrono::Utc>)>(
+        r#"SELECT id, bot_id, analysis_type, system_prompt, user_prompt, result, error, created_at
+           FROM qd_grid_analysis_logs WHERE bot_id = $1 ORDER BY created_at DESC LIMIT 50"#,
+    )
+    .bind(id)
+    .fetch_all(&state.db_pool)
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<serde_json::Value>::err(format!("Database error: {}", e))),
+        )
+    })?;
+
+    let items: Vec<serde_json::Value> = logs.into_iter().map(|r| {
+        serde_json::json!({
+            "id": r.0,
+            "bot_id": r.1,
+            "analysis_type": r.2,
+            "system_prompt": r.3,
+            "user_prompt": r.4,
+            "result": r.5,
+            "error": r.6,
+            "created_at": r.7,
+        })
+    }).collect();
+
+    Ok(Json(ApiResponse::ok(serde_json::json!({ "items": items }))))
 }

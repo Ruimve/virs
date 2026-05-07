@@ -35,6 +35,7 @@ pub fn build_router(
     ws_broadcaster: Arc<ws::WsBroadcaster>,
     kline_engine: Option<Arc<crate::engine::kline::KlineEngine>>,
     grid_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::semi_automatic_grid::types::GridCommand>>,
+    paper_executor: Option<Arc<crate::engine::paper::PaperOrderExecutor>>,
 ) -> Router {
     let state = Arc::new(AppState {
         config,
@@ -45,6 +46,7 @@ pub fn build_router(
         kline_engine,
         http_client: reqwest::Client::new(),
         grid_cmd_tx,
+        paper_executor,
     });
 
     let _frontend_dir = std::env::var("FRONTEND_DIR")
@@ -110,6 +112,10 @@ pub fn build_router(
         .route("/api/grid/{id}/delete", delete(grid::delete_bot))
         .route("/api/grid/{id}/trades", get(grid::get_trades))
         .route("/api/grid/{id}/reanalyze", post(grid::reanalyze))
+        .route("/api/grid/paper/status", get(grid::paper_status))
+        .route("/api/grid/paper/enable", post(grid::paper_enable))
+        .route("/api/grid/paper/disable", post(grid::paper_disable))
+        .route("/api/grid/{id}/analysis-logs", get(grid::get_analysis_logs))
         .with_state(state)
         .layer(
             CorsLayer::new()
@@ -185,4 +191,5 @@ pub struct AppState {
     pub kline_engine: Option<Arc<crate::engine::kline::KlineEngine>>,
     pub http_client: reqwest::Client,
     pub grid_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::semi_automatic_grid::types::GridCommand>>,
+    pub paper_executor: Option<Arc<crate::engine::paper::PaperOrderExecutor>>,
 }

@@ -8,6 +8,19 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// 分析日志条目
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AnalysisLogEntry {
+    pub id: Uuid,
+    pub bot_id: Uuid,
+    pub analysis_type: String,
+    pub system_prompt: String,
+    pub user_prompt: String,
+    pub result: serde_json::Value,
+    pub error: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
 // ── 本地 DTO（替代 crate::engine::position::types 中的类型）──
 
 /// 订单方向
@@ -88,6 +101,7 @@ pub struct GridBotConfig {
     pub lower_price: f64,
     pub grid_profit_pct: f64,
     pub quantity_per_grid: f64,
+    pub leverage: i32,
     pub dynamic_adjust: bool,
     pub adjust_interval_secs: i32,
     pub market_regime: Option<String>,
@@ -156,6 +170,31 @@ pub trait GridStore: Send + Sync {
         bot_id: Uuid,
         quantity: f64,
     ) -> anyhow::Result<()>;
+    /// 更新 AI 分析结果和网格参数
+    async fn update_ai_analysis(
+        &self,
+        bot_id: Uuid,
+        market_regime: &str,
+        upper_price: f64,
+        lower_price: f64,
+        grid_count: i32,
+        grid_profit_pct: f64,
+        quantity_per_grid: f64,
+        leverage: i32,
+        ai_analysis: &str,
+    ) -> anyhow::Result<()>;
+    /// 保存分析日志
+    async fn save_analysis_log(
+        &self,
+        bot_id: Uuid,
+        analysis_type: &str,
+        system_prompt: &str,
+        user_prompt: &str,
+        result: &serde_json::Value,
+        error: Option<&str>,
+    ) -> anyhow::Result<()>;
+    /// 加载分析日志
+    async fn load_analysis_logs(&self, bot_id: Uuid) -> anyhow::Result<Vec<AnalysisLogEntry>>;
     /// 删除 bot
     async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()>;
 }

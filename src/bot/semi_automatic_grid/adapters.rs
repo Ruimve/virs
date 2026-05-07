@@ -226,6 +226,81 @@ impl GridStore for PgGridStore {
         Ok(())
     }
 
+    async fn update_ai_analysis(
+        &self,
+        bot_id: Uuid,
+        market_regime: &str,
+        upper_price: f64,
+        lower_price: f64,
+        grid_count: i32,
+        grid_profit_pct: f64,
+        quantity_per_grid: f64,
+        leverage: i32,
+        ai_analysis: &str,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"UPDATE qd_grid_bots SET
+                market_regime = $1, upper_price = $2, lower_price = $3,
+                grid_count = $4, grid_profit_pct = $5, quantity_per_grid = $6,
+                leverage = $7, ai_analysis = $8, last_adjusted_at = NOW(),
+                updated_at = NOW()
+               WHERE id = $9"#,
+        )
+        .bind(market_regime)
+        .bind(upper_price)
+        .bind(lower_price)
+        .bind(grid_count)
+        .bind(grid_profit_pct)
+        .bind(quantity_per_grid)
+        .bind(leverage)
+        .bind(ai_analysis)
+        .bind(bot_id)
+        .execute(&self.db)
+        .await?;
+        Ok(())
+    }
+
+    async fn save_analysis_log(
+        &self,
+        bot_id: Uuid,
+        analysis_type: &str,
+        system_prompt: &str,
+        user_prompt: &str,
+        result: &serde_json::Value,
+        error: Option<&str>,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"INSERT INTO qd_grid_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, result, error)
+               VALUES ($1, $2, $3, $4, $5, $6)"#,
+        )
+        .bind(bot_id)
+        .bind(analysis_type)
+        .bind(system_prompt)
+        .bind(user_prompt)
+        .bind(result)
+        .bind(error)
+        .execute(&self.db)
+        .await?;
+        Ok(())
+    }
+
+    async fn load_analysis_logs(&self, bot_id: Uuid) -> anyhow::Result<Vec<AnalysisLogEntry>> {
+        let rows: Vec<(Uuid, Uuid, String, String, String, serde_json::Value, Option<String>, chrono::DateTime<chrono::Utc>)> =
+            sqlx::query_as(
+                r#"SELECT id, bot_id, analysis_type, system_prompt, user_prompt, result, error, created_at
+                   FROM qd_grid_analysis_logs WHERE bot_id = $1 ORDER BY created_at DESC LIMIT 50"#,
+            )
+            .bind(bot_id)
+            .fetch_all(&self.db)
+            .await?;
+
+        Ok(rows.into_iter().map(|r| AnalysisLogEntry {
+            id: r.0, bot_id: r.1, analysis_type: r.2,
+            system_prompt: r.3, user_prompt: r.4, result: r.5,
+            error: r.6, created_at: r.7,
+        }).collect())
+    }
+
     async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()> {
         sqlx::query("DELETE FROM qd_grid_bots WHERE id = $1")
             .bind(bot_id)
@@ -247,6 +322,7 @@ fn bot_to_config(bot: &crate::models::GridBot) -> GridBotConfig {
         lower_price: bot.lower_price,
         grid_profit_pct: bot.grid_profit_pct,
         quantity_per_grid: bot.quantity_per_grid,
+        leverage: bot.leverage,
         dynamic_adjust: bot.dynamic_adjust,
         adjust_interval_secs: bot.adjust_interval_secs,
         market_regime: bot.market_regime.clone(),
@@ -384,6 +460,36 @@ pub fn convert_pe_event(event: pe_types::EngineEvent) -> Option<GridOrderEvent> 
             Some(GridOrderEvent::LiquidationWarning { symbol, liquidation_price, current_price })
         }
         _ => None,
+    }
+}
+
+// ── SwitchableOrderExecutor ──
+
+/// 可切换的订单执行器
+///
+/// 根据 paper 模式开关，将命令转发到真实执行器或 Paper 执行器。
+pub struct SwitchableOrderExecutor {
+    real: Arc<dyn OrderExecutor>,
+    paper: Arc<crate::engine::paper::PaperOrderExecutor>,
+}
+
+impl SwitchableOrderExecutor {
+    pub fn new(
+        real: Arc<dyn OrderExecutor>,
+        paper: Arc<crate::engine::paper::PaperOrderExecutor>,
+    ) -> Self {
+        Self { real, paper }
+    }
+}
+
+#[async_trait]
+impl OrderExecutor for SwitchableOrderExecutor {
+    async fn send_command(&self, command: GridOrderCommand) -> anyhow::Result<()> {
+        if self.paper.is_enabled() {
+            self.paper.send_command(command).await
+        } else {
+            self.real.send_command(command).await
+        }
     }
 }
 

@@ -248,14 +248,23 @@ async fn main() -> anyhow::Result<()> {
     // Start Grid Engine
     let (pe_cmd_tx, _pe_cmd_rx) = tokio::sync::mpsc::channel(256);
     let (pe_event_tx, pe_event_rx) = tokio::sync::broadcast::channel(256);
-    let (grid_event_tx, grid_event_rx) = tokio::sync::broadcast::channel(256);
+    let (grid_event_tx, _grid_event_rx) = tokio::sync::broadcast::channel(256);
+
+    // Paper 交易执行器
+    let paper_executor = Arc::new(engine::paper::PaperOrderExecutor::new(grid_event_tx.clone()));
+    let paper_for_tick = paper_executor.clone();
 
     // Adapter 实现
     let grid_store = Arc::new(bot::semi_automatic_grid::adapters::PgGridStore::new(db_pool.clone()));
     let grid_price_provider: Arc<dyn bot::semi_automatic_grid::ports::PriceProvider> =
         Arc::new(bot::semi_automatic_grid::adapters::StrategyPriceProvider::new(strategy_engine.clone()));
-    let grid_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
+    let real_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
         Arc::new(bot::semi_automatic_grid::adapters::PeOrderExecutor::new(pe_cmd_tx));
+    let grid_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
+        Arc::new(bot::semi_automatic_grid::adapters::SwitchableOrderExecutor::new(
+            real_order_executor,
+            paper_executor.clone(),
+        ));
     let grid_credential_store: Box<dyn bot::semi_automatic_grid::ports::CredentialStore> =
         Box::new(bot::semi_automatic_grid::adapters::PgCredentialStore::new(
             db_pool.clone(),
@@ -268,10 +277,12 @@ async fn main() -> anyhow::Result<()> {
         grid_credential_store,
     ));
 
+    let grid_price_provider_for_engine = grid_price_provider.clone();
+
     let (mut grid_engine, grid_cmd_tx, _grid_event_broadcast) = bot::semi_automatic_grid::GridEngine::new(
         grid_store,
         grid_ai_service,
-        grid_price_provider,
+        grid_price_provider_for_engine,
         grid_order_executor,
         grid_event_tx.clone(),
     );
@@ -295,14 +306,31 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Paper 交易 price tick 协程
+    let price_provider_for_paper = grid_price_provider;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(3));
+        loop {
+            tick.tick().await;
+            if !paper_for_tick.is_enabled() {
+                continue;
+            }
+            // 获取所有运行中 bot 的 symbol 进行撮合
+            // Paper executor 内部按 symbol 匹配，这里用通用 symbol
+            if let Some(price) = price_provider_for_paper.get_price("binance", "BTCUSDT").await {
+                paper_for_tick.on_price_tick("BTCUSDT", price).await;
+            }
+        }
+    });
+
     let grid_cmd_tx = Some(grid_cmd_tx);
     tokio::spawn(async move {
         grid_engine.run().await;
     });
-    info!("✅ Grid engine started");
+    info!("✅ Grid engine started (paper trading available)");
 
     // Build and start HTTP server
-    let app = api::build_router(Arc::new(config.clone()), strategy_engine, db_pool, plugin_registry, ws_broadcaster, Some(kline_engine), grid_cmd_tx);
+    let app = api::build_router(Arc::new(config.clone()), strategy_engine, db_pool, plugin_registry, ws_broadcaster, Some(kline_engine), grid_cmd_tx, Some(paper_executor));
 
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;

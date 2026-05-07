@@ -43,19 +43,13 @@ interface GridTrade {
 }
 
 interface AnalysisLog {
+  id: string;
   bot_id: string;
-  bot_name: string;
-  symbol: string;
-  exchange: string;
-  market_regime: string | null;
-  ai_analysis: string | null;
-  system_prompt: string | null;
-  user_prompt: string | null;
-  upper_price: number;
-  lower_price: number;
-  grid_count: number;
-  grid_profit_pct: number;
-  quantity_per_grid: number;
+  analysis_type: string;
+  system_prompt: string;
+  user_prompt: string;
+  result: Record<string, any>;
+  error: string | null;
   created_at: string;
 }
 
@@ -86,6 +80,35 @@ export default function GridPage() {
   const [analysisLogs, setAnalysisLogs] = createSignal<AnalysisLog[]>([]);
   const [loadingAnalysis, setLoadingAnalysis] = createSignal(false);
   const [selectedAnalysis, setSelectedAnalysis] = createSignal<AnalysisLog | null>(null);
+
+  // Paper trading
+  const [paperEnabled, setPaperEnabled] = createSignal(false);
+  const [paperLoading, setPaperLoading] = createSignal(false);
+
+  const loadPaperStatus = async () => {
+    try {
+      const res = await api.get<{ enabled: boolean; pending_count: number }>('/grid/paper/status');
+      if (res.data) setPaperEnabled(res.data.enabled);
+    } catch (e) {
+      console.error('Failed to load paper status:', e);
+    }
+  };
+
+  const togglePaper = async () => {
+    setPaperLoading(true);
+    try {
+      if (paperEnabled()) {
+        await api.post('/grid/paper/disable');
+      } else {
+        await api.post('/grid/paper/enable');
+      }
+      setPaperEnabled(!paperEnabled());
+    } catch (e: any) {
+      setError(e.response?.data?.error || '操作失败');
+    } finally {
+      setPaperLoading(false);
+    }
+  };
 
   const loadBots = async () => {
     setLoading(true);
@@ -121,10 +144,7 @@ export default function GridPage() {
       const botId = createRes.data?.bot?.id;
       if (!botId) throw new Error('创建机器人失败');
 
-      // Step 2: AI Analyze (fills parameters)
-      await api.post(`/grid/${botId}/reanalyze`, {});
-
-      // Step 3: Start bot
+      // Step 2: Start bot (AI analysis will be triggered automatically)
       await api.post(`/grid/${botId}/start`);
 
       // Reset form
@@ -148,6 +168,15 @@ export default function GridPage() {
       await loadBots();
     } catch (e: any) {
       setError(e.response?.data?.error || '停止失败');
+    }
+  };
+
+  const handleStart = async (bot: GridBot) => {
+    try {
+      await api.post(`/grid/${bot.id}/start`);
+      await loadBots();
+    } catch (e: any) {
+      setError(e.response?.data?.error || '启动失败');
     }
   };
 
@@ -193,28 +222,12 @@ export default function GridPage() {
     setLoadingAnalysis(true);
     setSelectedAnalysis(null);
     try {
-      const res = await api.get<{ items: GridBot[] }>('/grid/list');
-      const allBots: GridBot[] = res.data?.items || [];
-      const logs: AnalysisLog[] = allBots
-        .filter((b: GridBot) => b.ai_analysis)
-        .map((b: GridBot) => ({
-          bot_id: b.id,
-          bot_name: b.name,
-          symbol: b.symbol,
-          exchange: b.exchange,
-          market_regime: b.market_regime,
-          ai_analysis: b.ai_analysis,
-          system_prompt: b.system_prompt,
-          user_prompt: b.user_prompt,
-          upper_price: b.upper_price,
-          lower_price: b.lower_price,
-          grid_count: b.grid_count,
-          grid_profit_pct: b.grid_profit_pct,
-          quantity_per_grid: b.quantity_per_grid,
-          created_at: b.updated_at,
-        }))
-        .sort((a: AnalysisLog, b: AnalysisLog) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      setAnalysisLogs(logs);
+      const res = await api.get<{ items: AnalysisLog[] }>('/grid/analysis-logs');
+      if (res.data?.items) {
+        setAnalysisLogs(res.data.items);
+      } else {
+        setAnalysisLogs([]);
+      }
     } catch (e) {
       console.error(e);
       setAnalysisLogs([]);
@@ -239,15 +252,33 @@ export default function GridPage() {
     return <span class="text-gray-400">0.00</span>;
   };
 
-  onMount(loadBots);
+  onMount(() => { loadBots(); loadPaperStatus(); });
 
   return (
     <div class="min-h-screen bg-gray-50 text-gray-900">
       <div class="max-w-7xl mx-auto px-6 py-8">
         {/* Header */}
-        <div class="mb-8">
-          <h1 class="text-2xl font-semibold tracking-tight text-gray-900">半自动网格机器人</h1>
-          <p class="text-sm text-gray-500 mt-1">AI 自动分析市场并生成网格参数，一键创建并启动</p>
+        <div class="mb-8 flex items-center justify-between">
+          <div>
+            <h1 class="text-2xl font-semibold tracking-tight text-gray-900">半自动网格机器人</h1>
+            <p class="text-sm text-gray-500 mt-1">AI 自动分析市场并生成网格参数，一键创建并启动</p>
+          </div>
+          <button
+            onClick={togglePaper}
+            disabled={paperLoading()}
+            class={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
+              paperEnabled()
+                ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+                : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <span class={`relative w-2 h-2 rounded-full ${paperEnabled() ? 'bg-amber-500' : 'bg-gray-300'}`} />
+            <Show when={paperLoading()} fallback={
+              <span>{paperEnabled() ? 'Paper 交易中' : 'Paper 交易'}</span>
+            }>
+              <span>切换中...</span>
+            </Show>
+          </button>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -431,7 +462,7 @@ export default function GridPage() {
                             </Show>
                             <Show when={bot.status !== 'running' && bot.status !== 'stopped'}>
                               <button
-                                onClick={() => handleReanalyze(bot)}
+                                onClick={() => handleStart(bot)}
                                 class="px-2.5 py-1 text-[11px] rounded-md bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 transition-colors"
                               >
                                 启动
@@ -568,17 +599,39 @@ export default function GridPage() {
                   }>
                     <For each={analysisLogs()}>
                       {(log) => (
-                        <button
-                          onClick={() => setSelectedAnalysis(log)}
-                          class={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-white transition-colors ${
-                            selectedAnalysis()?.bot_id === log.bot_id ? 'bg-indigo-50 border-l-2 border-l-indigo-500' : ''
+                        <div
+                          class={`p-4 rounded-lg border cursor-pointer transition-all ${
+                            selectedAnalysis()?.id === log.id
+                              ? 'border-indigo-300 bg-indigo-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
                           }`}
+                          onClick={() => setSelectedAnalysis(log)}
                         >
-                          <div class="text-xs text-gray-700 truncate">{log.bot_name}</div>
-                          <div class="text-[10px] text-gray-400 mt-0.5">
-                            {log.symbol} · {log.exchange.toUpperCase()} · {new Date(log.created_at).toLocaleString('zh-CN')}
+                          <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                              <span class={`px-2 py-0.5 text-[10px] rounded-full font-medium ${
+                                log.analysis_type === 'initial'
+                                  ? 'bg-blue-50 text-blue-600'
+                                  : 'bg-purple-50 text-purple-600'
+                              }`}>
+                                {log.analysis_type === 'initial' ? '首次分析' : '周期分析'}
+                              </span>
+                              <span class="text-xs text-gray-400">
+                                {new Date(log.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                            <Show when={log.error}>
+                              <span class="text-xs text-red-500">失败</span>
+                            </Show>
                           </div>
-                        </button>
+                          <Show when={!log.error} fallback={
+                            <p class="text-xs text-red-500">{log.error}</p>
+                          }>
+                            <p class="text-sm text-gray-700 line-clamp-2">
+                              {log.result?.analysis || log.result?.reason || '无分析内容'}
+                            </p>
+                          </Show>
+                        </div>
                       )}
                     </For>
                   </Show>
@@ -589,60 +642,34 @@ export default function GridPage() {
               <div class="flex-1 overflow-auto p-5">
                 <Show when={selectedAnalysis()}>
                   {(log) => (
-                    <div class="space-y-4">
-                      {/* Header */}
-                      <div class="flex items-center gap-2">
-                        <span class="text-sm font-medium text-gray-800">{log().bot_name}</span>
-                        <Show when={log().market_regime}>
-                          <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
-                            {log().market_regime}
-                          </span>
+                    <div class="mt-4 p-4 rounded-lg border border-gray-200 bg-white">
+                      <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-medium text-gray-900">分析详情</h3>
+                        <button onClick={() => setSelectedAnalysis(null)} class="text-gray-400 hover:text-gray-600">
+                          ✕
+                        </button>
+                      </div>
+
+                      <div class="space-y-3 text-xs">
+                        <div>
+                          <div class="font-medium text-gray-500 mb-1">System Prompt</div>
+                          <pre class="p-2 bg-gray-50 rounded text-gray-700 whitespace-pre-wrap break-words max-h-40 overflow-y-auto">{log().system_prompt}</pre>
+                        </div>
+                        <div>
+                          <div class="font-medium text-gray-500 mb-1">User Prompt</div>
+                          <pre class="p-2 bg-gray-50 rounded text-gray-700 whitespace-pre-wrap break-words max-h-40 overflow-y-auto">{log().user_prompt}</pre>
+                        </div>
+                        <div>
+                          <div class="font-medium text-gray-500 mb-1">AI Result</div>
+                          <pre class="p-2 bg-gray-50 rounded text-gray-700 whitespace-pre-wrap break-words max-h-60 overflow-y-auto">{JSON.stringify(log().result, null, 2)}</pre>
+                        </div>
+                        <Show when={log().error}>
+                          <div>
+                            <div class="font-medium text-red-500 mb-1">Error</div>
+                            <pre class="p-2 bg-red-50 rounded text-red-700">{log().error}</pre>
+                          </div>
                         </Show>
                       </div>
-
-                      {/* Params */}
-                      <div class="grid grid-cols-3 gap-3">
-                        <div class="rounded-lg bg-gray-50 border border-gray-200 p-3">
-                          <div class="text-[10px] text-gray-400">价格区间</div>
-                          <div class="text-sm text-gray-700 font-mono mt-1">
-                            {log().lower_price.toFixed(0)} — {log().upper_price.toFixed(0)}
-                          </div>
-                        </div>
-                        <div class="rounded-lg bg-gray-50 border border-gray-200 p-3">
-                          <div class="text-[10px] text-gray-400">网格数量</div>
-                          <div class="text-sm text-gray-700 font-mono mt-1">{log().grid_count}</div>
-                        </div>
-                        <div class="rounded-lg bg-gray-50 border border-gray-200 p-3">
-                          <div class="text-[10px] text-gray-400">每格利润率</div>
-                          <div class="text-sm text-gray-700 font-mono mt-1">{log().grid_profit_pct}%</div>
-                        </div>
-                      </div>
-
-                      {/* Prompts */}
-                      <Show when={log().system_prompt || log().user_prompt}>
-                        <div class="space-y-3">
-                          <Show when={log().system_prompt}>
-                            <div class="rounded-lg bg-indigo-50/50 border border-indigo-100 p-4">
-                              <div class="text-[10px] text-indigo-400 mb-2 font-medium">System Prompt</div>
-                              <div class="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap max-h-40 overflow-auto">{log().system_prompt}</div>
-                            </div>
-                          </Show>
-                          <Show when={log().user_prompt}>
-                            <div class="rounded-lg bg-violet-50/50 border border-violet-100 p-4">
-                              <div class="text-[10px] text-violet-400 mb-2 font-medium">User Prompt</div>
-                              <div class="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap max-h-40 overflow-auto">{log().user_prompt}</div>
-                            </div>
-                          </Show>
-                        </div>
-                      </Show>
-
-                      {/* AI Analysis text */}
-                      <Show when={log().ai_analysis}>
-                        <div class="rounded-lg bg-gray-50 border border-gray-200 p-4">
-                          <div class="text-[10px] text-gray-400 mb-2">AI 分析报告</div>
-                          <div class="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap">{log().ai_analysis}</div>
-                        </div>
-                      </Show>
                     </div>
                   )}
                 </Show>
