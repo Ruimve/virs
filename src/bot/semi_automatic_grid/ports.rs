@@ -110,7 +110,7 @@ pub struct GridBotConfig {
 
 // ── Trait 定义 ──
 
-/// 价格提供者（替代直接依赖 StrategyEngine）
+/// 价格提供者（通过 ExchangeRegistry 获取价格）
 #[async_trait]
 pub trait PriceProvider: Send + Sync {
     async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64>;

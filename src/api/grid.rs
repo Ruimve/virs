@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::api::middleware::AuthUser;
 use crate::api::AppState;
-use crate::engine::strategy::indicators;
+use crate::indicators;
 use crate::models::*;
 use crate::services::ai::{AiService, AiUserConfig};
 use crate::utils::crypto;
@@ -579,7 +579,7 @@ async fn fetch_klines(
     symbol: &str,
 ) -> Result<(Vec<Kline>, Vec<Kline>), (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
     let exchange_key = super::market::ensure_exchange(state, exchange_name, MarketType::Perpetual).await?;
-    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
+    let exchange = state.exchange_registry.get(&exchange_key).unwrap();
 
     let now_ms = chrono::Utc::now().timestamp_millis();
     let start_1h = now_ms - 200 * 3600 * 1000;
@@ -658,7 +658,7 @@ pub async fn analyze(
 
     let (klines_1h, klines_4h) = fetch_klines(&state, exchange_name, symbol).await?;
     let exchange_key = super::market::ensure_exchange(&state, exchange_name, MarketType::Perpetual).await?;
-    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
+    let exchange = state.exchange_registry.get(&exchange_key).unwrap();
     let ind = compute_grid_indicators(&klines_1h, &klines_4h, exchange.as_ref(), symbol).await;
 
     let system_prompt = match body.system_prompt.as_deref() {
@@ -1279,7 +1279,7 @@ pub async fn reanalyze(
 
     let (klines_1h, klines_4h) = fetch_klines(&state, &bot.exchange, &bot.symbol).await?;
     let exchange_key = super::market::ensure_exchange(&state, &bot.exchange, MarketType::Perpetual).await?;
-    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
+    let exchange = state.exchange_registry.get(&exchange_key).unwrap();
     let ind = compute_grid_indicators(&klines_1h, &klines_4h, exchange.as_ref(), &bot.symbol).await;
 
     let system_prompt = match body.system_prompt.as_deref() {

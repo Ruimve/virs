@@ -408,6 +408,7 @@ fn grid_bot_config_construction() {
         lower_price: 50000.0,
         grid_profit_pct: 0.5,
         quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: true,
         adjust_interval_secs: 300,
         market_regime: Some("trending".to_string()),
@@ -427,6 +428,7 @@ fn grid_bot_config_zero_grid_count() {
         exchange: "binance".to_string(), grid_count: 0,
         upper_price: 60000.0, lower_price: 50000.0,
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };
@@ -441,6 +443,7 @@ fn grid_bot_config_inverted_prices() {
         exchange: "binance".to_string(), grid_count: 10,
         upper_price: 40000.0, lower_price: 50000.0,
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };
@@ -455,6 +458,7 @@ fn grid_bot_config_zero_profit_pct() {
         exchange: "binance".to_string(), grid_count: 5,
         upper_price: 60000.0, lower_price: 50000.0,
         grid_profit_pct: 0.0, quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };
@@ -469,6 +473,7 @@ fn grid_bot_config_zero_quantity() {
         exchange: "binance".to_string(), grid_count: 5,
         upper_price: 60000.0, lower_price: 50000.0,
         grid_profit_pct: 0.5, quantity_per_grid: 0.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };
@@ -483,6 +488,7 @@ fn grid_bot_config_negative_profit_pct() {
         exchange: "binance".to_string(), grid_count: 5,
         upper_price: 60000.0, lower_price: 50000.0,
         grid_profit_pct: -1.0, quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };
@@ -497,6 +503,7 @@ fn grid_bot_config_negative_grid_count() {
         exchange: "binance".to_string(), grid_count: -5,
         upper_price: 60000.0, lower_price: 50000.0,
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };
@@ -511,6 +518,7 @@ fn grid_bot_config_no_optional_fields() {
         exchange: "binance".to_string(), grid_count: 5,
         upper_price: 60000.0, lower_price: 50000.0,
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };
@@ -526,6 +534,7 @@ fn grid_bot_config_zero_prices() {
         exchange: "binance".to_string(), grid_count: 5,
         upper_price: 0.0, lower_price: 0.0,
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };
@@ -666,6 +675,7 @@ fn grid_bot_config_same_upper_lower_price() {
         exchange: "binance".to_string(), grid_count: 5,
         upper_price: 50000.0, lower_price: 50000.0,
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };
@@ -680,6 +690,7 @@ fn grid_bot_config_very_large_grid_count() {
         exchange: "binance".to_string(), grid_count: 10000,
         upper_price: 60000.0, lower_price: 50000.0,
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };
@@ -694,6 +705,7 @@ fn grid_bot_config_very_small_prices() {
         exchange: "binance".to_string(), grid_count: 5,
         upper_price: 0.001, lower_price: 0.0001,
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };
@@ -709,6 +721,7 @@ fn grid_bot_config_negative_prices() {
         exchange: "binance".to_string(), grid_count: 5,
         upper_price: -60000.0, lower_price: -50000.0,
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };
@@ -724,6 +737,7 @@ fn grid_bot_config_negative_quantity() {
         exchange: "binance".to_string(), grid_count: 5,
         upper_price: 60000.0, lower_price: 50000.0,
         grid_profit_pct: 0.5, quantity_per_grid: -100.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };
@@ -738,6 +752,7 @@ fn grid_bot_config_large_profit_pct() {
         exchange: "binance".to_string(), grid_count: 5,
         upper_price: 60000.0, lower_price: 50000.0,
         grid_profit_pct: 100.0, quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
         market_regime: None, system_prompt: None,
     };

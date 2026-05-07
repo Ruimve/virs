@@ -4,7 +4,6 @@ use axum::{
     Json,
 };
 use std::sync::Arc;
-use uuid::Uuid;
 
 use crate::api::AppState;
 use crate::api::middleware::AuthUser;
@@ -16,24 +15,16 @@ pub async fn dashboard_summary(
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
     let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
-    let total_strategies: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM qd_strategies_trading WHERE user_id = $1"
+    let total_bots: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM qd_grid_bots WHERE user_id = $1"
     )
     .bind(user_id)
     .fetch_one(&state.db_pool)
     .await
     .unwrap_or(0);
 
-    let running_strategies: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM qd_strategies_trading WHERE user_id = $1 AND status = 'running'"
-    )
-    .bind(user_id)
-    .fetch_one(&state.db_pool)
-    .await
-    .unwrap_or(0);
-
-    let open_positions: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM qd_strategy_positions WHERE strategy_id IN (SELECT id FROM qd_strategies_trading WHERE user_id = $1) AND closed_at IS NULL"
+    let running_bots: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM qd_grid_bots WHERE user_id = $1 AND status = 'running'"
     )
     .bind(user_id)
     .fetch_one(&state.db_pool)
@@ -41,7 +32,7 @@ pub async fn dashboard_summary(
     .unwrap_or(0);
 
     let total_trades: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM qd_strategy_trades WHERE strategy_id IN (SELECT id FROM qd_strategies_trading WHERE user_id = $1)"
+        "SELECT COUNT(*) FROM qd_grid_trades WHERE user_id = $1 AND status = 'filled'"
     )
     .bind(user_id)
     .fetch_one(&state.db_pool)
@@ -49,99 +40,46 @@ pub async fn dashboard_summary(
     .unwrap_or(0);
 
     let total_pnl: f64 = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(pnl), 0) FROM qd_strategy_trades WHERE strategy_id IN (SELECT id FROM qd_strategies_trading WHERE user_id = $1)"
+        "SELECT COALESCE(SUM(pnl), 0) FROM qd_grid_trades WHERE user_id = $1 AND status = 'filled'"
     )
     .bind(user_id)
     .fetch_one(&state.db_pool)
     .await
     .unwrap_or(0.0);
 
-    let pending_orders: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM pending_orders WHERE strategy_id IN (SELECT id FROM qd_strategies_trading WHERE user_id = $1) AND status = 'pending'"
-    )
-    .bind(user_id)
-    .fetch_one(&state.db_pool)
-    .await
-    .unwrap_or(0);
-
-    let backtest_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM qd_backtest_results WHERE user_id = $1"
-    )
-    .bind(user_id)
-    .fetch_one(&state.db_pool)
-    .await
-    .unwrap_or(0);
-
     Ok(Json(ApiResponse::ok(serde_json::json!({
-        "strategies": {
-            "total": total_strategies,
-            "running": running_strategies,
-            "stopped": total_strategies - running_strategies,
-        },
-        "positions": {
-            "open": open_positions,
+        "bots": {
+            "total": total_bots,
+            "running": running_bots,
+            "stopped": total_bots - running_bots,
         },
         "trades": {
             "total": total_trades,
             "total_pnl": total_pnl,
         },
-        "pending_orders": pending_orders,
-        "backtests": backtest_count,
-        "exchanges": state.strategy_engine.registered_exchange_names(),
+        "exchanges": state.exchange_registry.registered_names(),
     }))))
 }
 
 #[derive(Debug, serde::Serialize, sqlx::FromRow)]
-pub struct PositionRow {
-    pub id: Uuid,
-    pub strategy_id: Uuid,
+pub struct GridBotRow {
+    pub id: uuid::Uuid,
+    pub name: String,
     pub symbol: String,
-    pub side: String,
-    pub size: f64,
-    pub entry_price: f64,
-    pub current_price: f64,
-    pub unrealized_pnl: f64,
-    pub realized_pnl: f64,
-    pub leverage: f64,
-    pub stop_loss: Option<f64>,
-    pub take_profit: Option<f64>,
-    pub opened_at: chrono::DateTime<chrono::Utc>,
-    pub closed_at: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-#[derive(Debug, serde::Serialize, sqlx::FromRow)]
-pub struct TradeRow {
-    pub id: Uuid,
-    pub strategy_id: Uuid,
-    pub symbol: String,
-    pub side: String,
-    pub trade_type: String,
-    pub price: f64,
-    pub amount: f64,
-    pub fee: f64,
-    pub pnl: f64,
-    pub exchange_order_id: Option<String>,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, serde::Serialize, sqlx::FromRow)]
-pub struct PendingOrderRow {
-    pub id: Uuid,
-    pub strategy_id: Uuid,
-    pub symbol: String,
-    pub signal_type: String,
-    pub order_type: String,
-    pub side: String,
-    pub amount: f64,
-    pub price: Option<f64>,
+    pub exchange: String,
     pub status: String,
-    pub priority: i32,
-    pub attempts: i32,
-    pub max_attempts: i32,
-    pub exchange_order_id: Option<String>,
-    pub error_message: Option<String>,
+    pub upper_price: f64,
+    pub lower_price: f64,
+    pub grid_count: i32,
+    pub grid_profit_pct: f64,
+    pub quantity_per_grid: f64,
+    pub leverage: i32,
+    pub total_pnl: f64,
+    pub total_trades: i32,
+    pub grid_filled_count: i32,
     pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub started_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub stopped_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 pub async fn list_positions(
@@ -150,14 +88,14 @@ pub async fn list_positions(
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
     let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
-    let rows = sqlx::query_as::<_, PositionRow>(
-        r#"SELECT id, strategy_id, symbol, side, size, entry_price,
-           current_price, unrealized_pnl, realized_pnl, leverage,
-           stop_loss, take_profit, opened_at, closed_at
-           FROM qd_strategy_positions
-           WHERE strategy_id IN (SELECT id FROM qd_strategies_trading WHERE user_id = $1)
-             AND closed_at IS NULL
-           ORDER BY opened_at DESC"#,
+    let rows = sqlx::query_as::<_, GridBotRow>(
+        r#"SELECT id, name, symbol, exchange, status,
+           upper_price, lower_price, grid_count, grid_profit_pct,
+           quantity_per_grid, leverage, total_pnl, total_trades,
+           grid_filled_count, created_at, started_at, stopped_at
+           FROM qd_grid_bots
+           WHERE user_id = $1
+           ORDER BY created_at DESC"#,
     )
     .bind(user_id)
     .fetch_all(&state.db_pool)
@@ -172,17 +110,33 @@ pub async fn list_positions(
     Ok(Json(ApiResponse::ok(serde_json::json!({ "items": rows }))))
 }
 
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct GridTradeRow {
+    pub id: uuid::Uuid,
+    pub bot_id: uuid::Uuid,
+    pub symbol: String,
+    pub exchange: String,
+    pub side: String,
+    pub grid_level: i32,
+    pub price: f64,
+    pub quantity: f64,
+    pub pnl: f64,
+    pub pnl_pct: f64,
+    pub status: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
 pub async fn list_trades(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
     let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
-    let rows = sqlx::query_as::<_, TradeRow>(
-        r#"SELECT id, strategy_id, symbol, side, trade_type, price, amount, fee, pnl,
-           exchange_order_id, created_at
-           FROM qd_strategy_trades
-           WHERE strategy_id IN (SELECT id FROM qd_strategies_trading WHERE user_id = $1)
+    let rows = sqlx::query_as::<_, GridTradeRow>(
+        r#"SELECT id, bot_id, symbol, exchange, side, grid_level,
+           price, quantity, pnl, pnl_pct, status, created_at
+           FROM qd_grid_trades
+           WHERE user_id = $1 AND status = 'filled'
            ORDER BY created_at DESC LIMIT 100"#,
     )
     .bind(user_id)
@@ -202,26 +156,7 @@ pub async fn list_pending_orders(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
-
-    let rows = sqlx::query_as::<_, PendingOrderRow>(
-        r#"SELECT id, strategy_id, symbol, signal_type,
-           order_type, side, amount, price,
-           status, priority, attempts, max_attempts,
-           exchange_order_id, error_message, created_at, updated_at
-           FROM pending_orders
-           WHERE strategy_id IN (SELECT id FROM qd_strategies_trading WHERE user_id = $1)
-           ORDER BY created_at DESC LIMIT 100"#,
-    )
-    .bind(user_id)
-    .fetch_all(&state.db_pool)
-    .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<serde_json::Value>::err(format!("Database error: {}", e))),
-        )
-    })?;
-
-    Ok(Json(ApiResponse::ok(serde_json::json!({ "items": rows }))))
+    let _user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
+    let _state = state;
+    Ok(Json(ApiResponse::ok(serde_json::json!({ "items": [] }))))
 }

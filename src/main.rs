@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use tracing::{info, warn, error};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -9,14 +8,13 @@ mod ccxt;
 mod config;
 mod engine;
 mod exchange;
+mod indicators;
 mod models;
-mod order_worker;
 mod services;
 mod utils;
 
 use config::load_config;
-use engine::strategy::{StrategyEngine, StrategyEngineConfig};
-use exchange::Exchange;
+use exchange::registry::ExchangeRegistry;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -102,136 +100,13 @@ async fn main() -> anyhow::Result<()> {
     };
     config.admin.id = Some(admin_id);
 
-    // Create order channel
-    let (order_tx, mut order_rx) = mpsc::channel::<engine::strategy::OrderCommand>(1000);
-
-    // Create plugin registry and register built-in plugins
-    let mut plugin_registry = engine::strategy::plugin::PluginRegistry::new();
-    plugin_registry.register(Box::new(engine::strategy::plugins::DualEmaTrendPlugin));
-    plugin_registry.register(Box::new(engine::strategy::plugins::BbSqueezePlugin));
-    plugin_registry.register(Box::new(engine::strategy::plugins::RsiMeanReversionPlugin));
-    plugin_registry.register(Box::new(engine::strategy::plugins::AtrBreakoutPlugin));
-    plugin_registry.register(Box::new(engine::strategy::plugins::ScalperVwapPlugin));
-    plugin_registry.register(Box::new(engine::strategy::plugins::MomentumBreakoutPlugin));
-    let plugin_registry = Arc::new(plugin_registry);
-    info!(
-        "Registered {} indicator plugins",
-        plugin_registry.list().len()
-    );
-
-    // Create strategy engine
-    let strategy_engine_config = StrategyEngineConfig {
-        executor_workers: config.strategy.executor_workers,
-        pending_order_poll_interval_secs: config.strategy.pending_order_poll_interval_secs,
-        auto_restore: config.strategy.auto_restore_strategies,
-    };
-    let mut strategy_engine_inner = StrategyEngine::new(strategy_engine_config, order_tx, plugin_registry.clone());
+    // Create exchange registry
+    let exchange_registry = Arc::new(ExchangeRegistry::new());
 
     // Create WebSocket broadcaster for real-time push
     let ws_broadcaster = Arc::new(api::ws::create_broadcaster(256));
-    strategy_engine_inner.set_ws_broadcaster(ws_broadcaster.clone());
-    strategy_engine_inner.set_db_pool(db_pool.clone());
-    let strategy_engine = Arc::new(strategy_engine_inner);
 
-    // Exchange credentials are now loaded from the database (qd_exchange_credentials)
-    // on demand when a strategy is started or market data is requested.
-    // No exchange instances are registered at startup.
     info!("ℹ️  Exchange credentials loaded on-demand from database (Credentials page)");
-
-    // Spawn order worker — executes real trades via exchange
-    let worker = order_worker::OrderWorker::new(
-        db_pool.clone(),
-        strategy_engine.clone(),
-        config.notification.clone(),
-        ws_broadcaster.clone(),
-    );
-    tokio::spawn(async move {
-        worker.run(order_rx).await;
-    });
-
-    // Spawn pending order retry worker
-    if config.strategy.pending_order_worker_enabled {
-        let retry_pool = db_pool.clone();
-        let retry_engine = strategy_engine.clone();
-        let retry_interval = config.strategy.pending_order_poll_interval_secs;
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(retry_interval));
-            loop {
-                interval.tick().await;
-
-                // Find failed orders that can be retried
-                #[derive(sqlx::FromRow)]
-                struct RetryOrderRow {
-                    id: uuid::Uuid,
-                    strategy_id: uuid::Uuid,
-                    symbol: String,
-                    order_type: String,
-                    side: String,
-                    amount: f64,
-                    price: Option<f64>,
-                    attempts: i32,
-                    max_attempts: i32,
-                }
-
-                let orders = sqlx::query_as::<_, RetryOrderRow>(
-                    r#"SELECT id, strategy_id, symbol, order_type, side,
-                       amount, price, attempts, max_attempts
-                       FROM pending_orders
-                       WHERE status = 'failed' AND attempts < max_attempts
-                       ORDER BY created_at ASC LIMIT 10"#
-                )
-                .fetch_all(&retry_pool)
-                .await
-                .unwrap_or_default();
-
-                for order in orders {
-                    info!("Retrying pending order {} (attempt {}/{})", order.id, order.attempts + 1, order.max_attempts);
-
-                    // Get exchange name from strategy
-                    let strategy: Option<(String,)> = sqlx::query_as(
-                        "SELECT exchange FROM qd_strategies_trading WHERE id = $1"
-                    )
-                    .bind(order.strategy_id)
-                    .fetch_optional(&retry_pool)
-                    .await
-                    .unwrap_or(None);
-
-                    if let Some((exchange_name,)) = strategy {
-                        if let Some(exchange) = retry_engine.get_exchange(&exchange_name) {
-                            let side_str = &order.side;
-                            let side = if side_str == "buy" { models::Side::Buy } else { models::Side::Sell };
-                            let order_type = match order.order_type.as_str() {
-                                "market" => models::OrderType::Market,
-                                "limit" => models::OrderType::Limit,
-                                "stop_market" => models::OrderType::StopMarket,
-                                "stop_limit" => models::OrderType::StopLimit,
-                                _ => models::OrderType::Market,
-                            };
-
-                            match exchange.place_order(&order.symbol, side, order_type, order.amount, order.price).await {
-                                Ok(o) => {
-                                    let _ = sqlx::query("UPDATE pending_orders SET status = 'filled', exchange_order_id = $1, updated_at = NOW() WHERE id = $2")
-                                        .bind(&o.id)
-                                        .bind(order.id)
-                                        .execute(&retry_pool)
-                                        .await;
-                                    info!("✅ Retry succeeded for order {}", order.id);
-                                }
-                                Err(e) => {
-                                    let _ = sqlx::query("UPDATE pending_orders SET attempts = attempts + 1, error_message = $1, status = CASE WHEN attempts + 1 >= max_attempts THEN 'failed' ELSE 'pending' END, updated_at = NOW() WHERE id = $2")
-                                        .bind(e.to_string())
-                                        .bind(order.id)
-                                        .execute(&retry_pool)
-                                        .await;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
-        info!("✅ Pending order retry worker started (interval: {}s)", retry_interval);
-    }
 
     // Create kline engine
     let kline_config = engine::kline::types::KlineEngineConfig {
@@ -257,7 +132,7 @@ async fn main() -> anyhow::Result<()> {
     // Adapter 实现
     let grid_store = Arc::new(bot::semi_automatic_grid::adapters::PgGridStore::new(db_pool.clone()));
     let grid_price_provider: Arc<dyn bot::semi_automatic_grid::ports::PriceProvider> =
-        Arc::new(bot::semi_automatic_grid::adapters::StrategyPriceProvider::new(strategy_engine.clone()));
+        Arc::new(bot::semi_automatic_grid::adapters::ExchangePriceProvider::new(exchange_registry.clone()));
     let real_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
         Arc::new(bot::semi_automatic_grid::adapters::PeOrderExecutor::new(pe_cmd_tx));
     let grid_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
@@ -315,8 +190,6 @@ async fn main() -> anyhow::Result<()> {
             if !paper_for_tick.is_enabled() {
                 continue;
             }
-            // 获取所有运行中 bot 的 symbol 进行撮合
-            // Paper executor 内部按 symbol 匹配，这里用通用 symbol
             if let Some(price) = price_provider_for_paper.get_price("binance", "BTCUSDT").await {
                 paper_for_tick.on_price_tick("BTCUSDT", price).await;
             }
@@ -330,7 +203,15 @@ async fn main() -> anyhow::Result<()> {
     info!("✅ Grid engine started (paper trading available)");
 
     // Build and start HTTP server
-    let app = api::build_router(Arc::new(config.clone()), strategy_engine, db_pool, plugin_registry, ws_broadcaster, Some(kline_engine), grid_cmd_tx, Some(paper_executor));
+    let app = api::build_router(
+        Arc::new(config.clone()),
+        exchange_registry,
+        db_pool,
+        ws_broadcaster,
+        Some(kline_engine),
+        grid_cmd_tx,
+        Some(paper_executor),
+    );
 
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;

@@ -1,55 +1,13 @@
 use crate::config::AiConfig;
-use crate::engine::strategy::lua_executor::{LuaExecutor, LuaExecutorConfig};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-/// User-level AI credential overrides.
-/// When a field is `Some`, it takes priority over the system default in AiConfig.
 #[derive(Debug, Clone, Default)]
 pub struct AiUserConfig {
     pub openrouter_api_key: Option<String>,
     pub openai_api_key: Option<String>,
     pub deepseek_api_key: Option<String>,
 }
-
-const SYSTEM_PROMPT: &str = r#"You are a quantitative trading strategy developer for the VIRS platform.
-You generate Lua strategy code that follows this exact format:
-
-The user's strategy will be executed in a sandboxed Lua environment with these available functions and data:
-
-**Available Functions:**
-- sma(period): Simple Moving Average of close prices
-- ema(period): Exponential Moving Average of close prices
-- rsi(period): Relative Strength Index (0-100)
-
-**Available Data:**
-- klines: table of candle data with fields: open, high, low, close, volume, time
-- current_idx: number (1-based index of current candle)
-- params: table of user-defined parameters
-
-**Requirements:**
-1. The script MUST define a `function signal()` that returns: 1 (buy), -1 (sell), or 0 (hold)
-2. Use `params.key_name` to read user parameters with sensible defaults via `or` operator
-3. Keep logic concise and efficient
-4. Add comments explaining the strategy logic
-5. Only output the Lua code, no explanations outside the code
-6. The code must be valid Lua 5.2 syntax
-
-**Example output:**
-```lua
--- EMA Crossover with RSI Filter
-function signal()
-  local fast = ema(params.fast_period or 12)
-  local slow = ema(params.slow_period or 26)
-  local rsi_val = rsi(params.rsi_period or 14)
-  if fast > slow and rsi_val > 45 then
-    return 1
-  elseif fast < slow then
-    return -1
-  end
-  return 0
-end
-```"#;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerateRequest {
@@ -60,10 +18,7 @@ pub struct GenerateRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerateResponse {
-    pub code: String,
-    pub name: String,
-    pub description: String,
-    pub params: Vec<ParamInfo>,
+    pub strategy: serde_json::Value,
     pub provider: String,
     pub model: String,
 }
@@ -91,14 +46,12 @@ impl AiService {
         }
     }
 
-    /// Check if any AI provider is configured.
     pub fn is_configured(&self) -> bool {
         self.config.openrouter_api_key.is_some()
             || self.config.openai_api_key.is_some()
             || self.config.deepseek_api_key.is_some()
     }
 
-    /// Get list of available providers.
     pub fn available_providers(&self) -> Vec<String> {
         let mut providers = Vec::new();
         if self.config.openrouter_api_key.is_some() {
@@ -113,7 +66,6 @@ impl AiService {
         providers
     }
 
-    /// Generate a Lua strategy from natural language prompt.
     pub async fn generate_strategy(
         &self,
         req: &GenerateRequest,
@@ -126,17 +78,18 @@ impl AiService {
         let (api_key, base_url, model) = self.resolve_provider(provider, req.model.as_deref())?;
 
         let user_prompt = format!(
-            "Generate a Lua trading strategy based on this description:\n\n{}\n\n\
-             Output ONLY the Lua code wrapped in ```lua ... ``` code blocks.",
+            "Generate a trading strategy based on this description:\n\n{}\n\n\
+             Output the strategy as a JSON object with fields: name, description, params (array of {{name, label, default, min, max}}), and rules (object with entry_conditions, exit_conditions, risk_management).",
             req.prompt
         );
 
         let request_body = serde_json::json!({
             "model": model,
             "messages": [
-                { "role": "system", "content": SYSTEM_PROMPT },
+                { "role": "system", "content": "You are a quantitative trading strategy developer. Generate strategies as structured JSON. Output ONLY valid JSON, no markdown code blocks." },
                 { "role": "user", "content": user_prompt }
             ],
+            "response_format": { "type": "json_object" },
             "temperature": 0.7,
             "max_tokens": 2000,
         });
@@ -169,44 +122,21 @@ impl AiService {
 
         let used_model = json["model"].as_str().unwrap_or(&model).to_string();
 
-        // Extract Lua code from markdown code blocks
-        let code = extract_lua_code(&content);
-
-        if code.trim().is_empty() {
-            return Err(anyhow::anyhow!("AI did not generate valid Lua code"));
-        }
-
-        // Validate the generated code
-        let executor = LuaExecutor::new(LuaExecutorConfig::default());
-        if let Err(e) = executor.validate(&code) {
-            return Err(anyhow::anyhow!(
-                "Generated Lua code has syntax errors: {}",
-                e
-            ));
-        }
-
-        // Extract strategy name and description from comments
-        let (name, description) = extract_metadata(&code);
-
-        // Extract parameters from the code
-        let params = extract_params(&code);
+        let result: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| anyhow::anyhow!("AI returned invalid JSON: {}", e))?;
 
         info!(
-            "AI generated strategy '{}' using {} ({})",
-            name, provider, used_model
+            "AI generated strategy using {} ({})",
+            provider, used_model
         );
 
         Ok(GenerateResponse {
-            code,
-            name,
-            description,
-            params,
+            strategy: result,
             provider: provider.to_string(),
             model: used_model,
         })
     }
 
-    /// Analyze backtest results and suggest parameter optimizations.
     pub async fn optimize_strategy(
         &self,
         strategy_code: Option<&str>,
@@ -237,7 +167,7 @@ impl AiService {
 
         let code_section = match strategy_code {
             Some(code) if !code.trim().is_empty() => {
-                format!("以下是策略代码：\n```lua\n{}\n```\n\n", code)
+                format!("以下是策略代码：\n```\n{}\n```\n\n", code)
             }
             _ => String::new(),
         };
@@ -287,7 +217,6 @@ impl AiService {
         Ok(content)
     }
 
-    /// Explain a strategy's logic in natural language.
     pub async fn explain_strategy(
         &self,
         strategy_code: &str,
@@ -298,7 +227,7 @@ impl AiService {
         let (api_key, base_url, model) = self.resolve_provider(provider, model)?;
 
         let system_prompt = r#"你是一位量化交易策略分析师，服务于 VIRS 平台。
-用清晰、简洁的自然语言解释给定的 Lua 策略代码。
+用清晰、简洁的自然语言解释给定的交易策略。
 
 你的解释应包括：
 1. **策略概述**：这是什么类型的策略？（趋势跟踪、均值回归、动量等）
@@ -312,7 +241,7 @@ impl AiService {
 保持回复简洁。使用 markdown 格式。"#;
 
         let user_prompt = format!(
-            "请解释以下交易策略：\n```lua\n{}\n```",
+            "请解释以下交易策略：\n```\n{}\n```",
             strategy_code
         );
 
@@ -396,8 +325,6 @@ impl AiService {
         }
     }
 
-    /// Resolve provider with user-level credential overrides.
-    /// User keys take priority over system default keys.
     pub fn resolve_provider_with_override(
         &self,
         provider: &str,
@@ -436,7 +363,6 @@ impl AiService {
         }
     }
 
-    /// Check if AI is available considering user-level overrides.
     pub fn is_configured_with_override(&self, user_config: &AiUserConfig) -> bool {
         user_config.openrouter_api_key.is_some()
             || user_config.openai_api_key.is_some()
@@ -444,7 +370,6 @@ impl AiService {
             || self.is_configured()
     }
 
-    /// Get default provider considering user-level overrides.
     pub fn default_provider_with_override(&self, user_config: &AiUserConfig) -> &'static str {
         if user_config.openrouter_api_key.is_some() {
             "openrouter"
@@ -456,107 +381,4 @@ impl AiService {
             self.default_provider()
         }
     }
-}
-
-/// Extract Lua code from markdown code blocks.
-fn extract_lua_code(content: &str) -> String {
-    if let Some(start) = content.find("```lua") {
-        let after_tag = start + 6;
-        let code_begin = content[after_tag..]
-            .find('\n')
-            .map(|i| after_tag + i + 1)
-            .unwrap_or(after_tag);
-        if let Some(end) = content[code_begin..].find("```") {
-            return content[code_begin..code_begin + end].trim().to_string();
-        }
-    }
-    if let Some(start) = content.find("```") {
-        let after = &content[start + 3..];
-        let code_start = after.find('\n').map(|i| i + 1).unwrap_or(0);
-        if let Some(end) = after[code_start..].find("```") {
-            return after[code_start..code_start + end].trim().to_string();
-        }
-    }
-    content.trim().to_string()
-}
-
-/// Extract strategy name and description from Lua comments.
-fn extract_metadata(code: &str) -> (String, String) {
-    let mut name = "AI Generated Strategy".to_string();
-    let mut description = String::new();
-
-    for line in code.lines().take(10) {
-        let trimmed = line.trim();
-        if !trimmed.starts_with("--") {
-            break;
-        }
-        let comment = trimmed.trim_start_matches('-').trim();
-        if name == "AI Generated Strategy" && !comment.is_empty() {
-            // First non-empty comment is the name
-            name = comment.to_string();
-        } else if !comment.is_empty() {
-            description = comment.to_string();
-            break;
-        }
-    }
-
-    (name, description)
-}
-
-/// Extract parameter definitions from params.xxx usage in the code.
-fn extract_params(code: &str) -> Vec<ParamInfo> {
-    let mut params = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-
-    for line in code.lines() {
-        let trimmed = line.trim();
-
-        // Match: params.fast_period or 12
-        if let Some(pos) = trimmed.find("params.") {
-            let rest = &trimmed[pos + 7..]; // skip "params."
-            let param_name: String = rest
-                .chars()
-                .take_while(|c| c.is_alphanumeric() || *c == '_')
-                .collect();
-            if !param_name.is_empty() && seen.insert(param_name.clone()) {
-                let default_val = if let Some(or_pos) = rest.find(" or ") {
-                    let after_or = &rest[or_pos + 4..];
-                    after_or
-                        .chars()
-                        .take_while(|c| c.is_ascii_digit() || *c == '.')
-                        .collect::<String>()
-                        .parse::<f64>()
-                        .unwrap_or(0.0)
-                } else {
-                    0.0
-                };
-
-                let label = capitalize_words(&param_name.replace('_', " "));
-                params.push(ParamInfo {
-                    name: param_name,
-                    label,
-                    default: default_val,
-                    min: None,
-                    max: None,
-                    step: None,
-                });
-            }
-        }
-    }
-
-    params
-}
-
-/// Capitalize the first letter of each word.
-fn capitalize_words(s: &str) -> String {
-    s.split_whitespace()
-        .map(|w| {
-            let mut chars = w.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
 }

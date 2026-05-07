@@ -1,6 +1,6 @@
 //! Notification service — Email and Telegram notifications.
 //!
-//! Sends alerts for strategy signals, order executions, and errors.
+//! Sends alerts for trading signals, order executions, and errors.
 
 use crate::config::NotificationConfig;
 use tracing::{info, error};

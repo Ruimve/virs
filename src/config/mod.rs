@@ -9,7 +9,6 @@ pub struct AppConfig {
     pub admin: AdminConfig,
     pub ai: AiConfig,
     pub notification: NotificationConfig,
-    pub strategy: StrategyConfig,
     pub cache: CacheConfig,
     pub proxy: Option<String>,
 }
@@ -71,14 +70,6 @@ pub struct EmailConfig {
     pub username: String,
     pub password: String,
     pub from: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StrategyConfig {
-    pub executor_workers: usize,
-    pub pending_order_worker_enabled: bool,
-    pub pending_order_poll_interval_secs: u64,
-    pub auto_restore_strategies: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,21 +149,6 @@ pub fn load_config() -> Result<AppConfig, anyhow::Error> {
             }),
     };
 
-    let strategy = StrategyConfig {
-        executor_workers: std::env::var("STRATEGY_EXECUTOR_WORKERS")
-            .unwrap_or_else(|_| "4".into())
-            .parse()?,
-        pending_order_worker_enabled: std::env::var("PENDING_ORDER_WORKER_ENABLED")
-            .unwrap_or_else(|_| "true".into())
-            .parse()?,
-        pending_order_poll_interval_secs: std::env::var("PENDING_ORDER_POLL_INTERVAL_SECS")
-            .unwrap_or_else(|_| "5".into())
-            .parse()?,
-        auto_restore_strategies: std::env::var("AUTO_RESTORE_STRATEGIES")
-            .unwrap_or_else(|_| "true".into())
-            .parse()?,
-    };
-
     let cache = CacheConfig {
         ttl_ticker: std::env::var("CACHE_TTL_TICKER")
             .unwrap_or_else(|_| "10".into())
@@ -200,7 +176,6 @@ pub fn load_config() -> Result<AppConfig, anyhow::Error> {
         admin,
         ai,
         notification,
-        strategy,
         cache,
         proxy,
     })

@@ -173,6 +173,37 @@ impl GridStore for MockWorkerStore {
         Ok(())
     }
 
+    async fn update_ai_analysis(
+        &self,
+        _bot_id: Uuid,
+        _market_regime: &str,
+        _upper_price: f64,
+        _lower_price: f64,
+        _grid_count: i32,
+        _grid_profit_pct: f64,
+        _quantity_per_grid: f64,
+        _leverage: i32,
+        _ai_analysis: &str,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn save_analysis_log(
+        &self,
+        _bot_id: Uuid,
+        _analysis_type: &str,
+        _system_prompt: &str,
+        _user_prompt: &str,
+        _result: &serde_json::Value,
+        _error: Option<&str>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn load_analysis_logs(&self, _bot_id: Uuid) -> anyhow::Result<Vec<AnalysisLogEntry>> {
+        Ok(vec![])
+    }
+
     async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()> {
         self.deleted_bots.lock().await.push(bot_id);
         Ok(())
@@ -247,6 +278,37 @@ impl GridStore for MockEngineStore {
 
     async fn update_quantity_per_grid(&self, _bot_id: Uuid, _quantity: f64) -> anyhow::Result<()> { Ok(()) }
 
+    async fn update_ai_analysis(
+        &self,
+        _bot_id: Uuid,
+        _market_regime: &str,
+        _upper_price: f64,
+        _lower_price: f64,
+        _grid_count: i32,
+        _grid_profit_pct: f64,
+        _quantity_per_grid: f64,
+        _leverage: i32,
+        _ai_analysis: &str,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn save_analysis_log(
+        &self,
+        _bot_id: Uuid,
+        _analysis_type: &str,
+        _system_prompt: &str,
+        _user_prompt: &str,
+        _result: &serde_json::Value,
+        _error: Option<&str>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn load_analysis_logs(&self, _bot_id: Uuid) -> anyhow::Result<Vec<AnalysisLogEntry>> {
+        Ok(vec![])
+    }
+
     async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()> {
         self.deleted_bots.lock().await.push(bot_id);
         Ok(())
@@ -316,6 +378,7 @@ pub fn make_bot_config() -> GridBotConfig {
         lower_price: 50000.0,
         grid_profit_pct: 0.5,
         quantity_per_grid: 100.0,
+        leverage: 10,
         dynamic_adjust: false,
         adjust_interval_secs: 300,
         market_regime: None,

@@ -12,9 +12,6 @@ use crate::exchange::ExchangeFactory;
 use crate::models::*;
 use crate::utils::crypto;
 
-/// Ensure an exchange instance is available for the given exchange name and market type.
-/// Tries the engine cache first, then loads credentials from the database.
-/// Returns the exchange key to use (may be user-scoped).
 pub async fn ensure_exchange(
     state: &Arc<AppState>,
     exchange_name: &str,
@@ -22,12 +19,10 @@ pub async fn ensure_exchange(
 ) -> Result<String, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
     let exchange_key = format!("{}:{}", exchange_name, market_type);
 
-    // Check if already registered
-    if state.strategy_engine.get_exchange(&exchange_key).is_some() {
+    if state.exchange_registry.get(&exchange_key).is_some() {
         return Ok(exchange_key);
     }
 
-    // Try to load credentials from database (any user's credentials for public data)
     let market_type_str = match market_type {
         MarketType::Spot => "spot",
         MarketType::Perpetual => "perpetual",
@@ -90,7 +85,7 @@ pub async fn ensure_exchange(
                 )
             })?;
 
-            state.strategy_engine.register_exchange(exchange);
+            state.exchange_registry.register(exchange);
             Ok(exchange_key)
         }
         None => Err((
@@ -118,7 +113,7 @@ pub async fn get_ticker(
     let exchange_name = params.exchange.as_deref().unwrap_or("binance");
     let market_type = params.market_type.unwrap_or(MarketType::Spot);
     let exchange_key = ensure_exchange(&state, exchange_name, market_type).await?;
-    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
+    let exchange = state.exchange_registry.get(&exchange_key).unwrap();
 
     match exchange.get_ticker(&params.symbol).await {
         Ok(ticker) => Ok(Json(ApiResponse::ok(ticker))),
@@ -152,7 +147,7 @@ pub async fn get_klines(
     let market_type = params.market_type.unwrap_or(MarketType::Spot);
 
     let exchange_key = ensure_exchange(&state, exchange_name, market_type).await?;
-    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
+    let exchange = state.exchange_registry.get(&exchange_key).unwrap();
 
     match exchange.get_klines(&params.symbol, &params.interval, limit, params.since).await {
         Ok(klines) => {
@@ -196,7 +191,7 @@ pub async fn get_order_book(
     let market_type = params.market_type.unwrap_or(MarketType::Spot);
 
     let exchange_key = ensure_exchange(&state, exchange_name, market_type).await?;
-    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
+    let exchange = state.exchange_registry.get(&exchange_key).unwrap();
 
     match exchange.get_order_book(&params.symbol, depth).await {
         Ok(order_book) => {
@@ -226,7 +221,6 @@ pub async fn get_balances(
     State(state): State<Arc<AppState>>,
     auth: OptionalAuthUser,
 ) -> Result<Json<ApiResponse<Vec<Balance>>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
-    // Balances require authentication
     let _user = match auth.0 {
         Some(u) => u,
         None => {
@@ -239,10 +233,9 @@ pub async fn get_balances(
         }
     };
 
-    // Try to get balances from the first available exchange in the database
-    let exchange_name = "binance"; // default
+    let exchange_name = "binance";
     let exchange_key = ensure_exchange(&state, exchange_name, MarketType::Spot).await?;
-    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
+    let exchange = state.exchange_registry.get(&exchange_key).unwrap();
 
     match exchange.get_balances().await {
         Ok(balances) => {
@@ -277,7 +270,7 @@ pub async fn get_symbols(
     let market_type = params.market_type.unwrap_or(MarketType::Spot);
 
     let exchange_key = ensure_exchange(&state, exchange_name, market_type).await?;
-    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
+    let exchange = state.exchange_registry.get(&exchange_key).unwrap();
 
     match exchange.get_symbols().await {
         Ok(symbols) => {

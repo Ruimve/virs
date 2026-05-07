@@ -20,15 +20,15 @@ pub struct WsAuthParams {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", content = "data")]
 pub enum WsEvent {
-    #[serde(rename = "strategy_status")]
-    StrategyStatus {
-        strategy_id: String,
+    #[serde(rename = "bot_status")]
+    BotStatus {
+        bot_id: String,
         name: String,
         status: String,
     },
     #[serde(rename = "trade")]
     Trade {
-        strategy_id: String,
+        bot_id: String,
         symbol: String,
         side: String,
         price: f64,
@@ -38,14 +38,14 @@ pub enum WsEvent {
     #[serde(rename = "order")]
     Order {
         order_id: String,
-        strategy_id: String,
+        bot_id: String,
         symbol: String,
         status: String,
         error: Option<String>,
     },
     #[serde(rename = "position")]
     Position {
-        strategy_id: String,
+        bot_id: String,
         symbol: String,
         side: String,
         size: f64,
@@ -54,7 +54,7 @@ pub enum WsEvent {
     },
     #[serde(rename = "risk")]
     Risk {
-        strategy_id: String,
+        bot_id: String,
         symbol: String,
         reason: String,
         price: f64,

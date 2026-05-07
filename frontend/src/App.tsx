@@ -4,9 +4,7 @@ import { MarketProvider } from './lib/market-context'
 import Login from './pages/Login'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
-import Strategies from './pages/Strategies'
 import Market from './pages/Market'
-import Backtest from './pages/Backtest'
 import GridPage from './pages/ai-trade/GridPage'
 import AutoPage from './pages/ai-trade/AutoPage'
 import Trades from './pages/Trades'
@@ -35,9 +33,7 @@ const App: Component = () => {
         <Router root={Layout}>
           <Route path="/login" component={Login} />
           <Route path="/dashboard" component={Dashboard} />
-          <Route path="/strategies" component={Strategies} />
           <Route path="/market" component={Market} />
-          <Route path="/backtest" component={Backtest} />
           <Route path="/grid" component={() => <Navigate href="/ai-trade/grid" />} />
           <Route path="/ai-trade/grid" component={GridPage} />
           <Route path="/ai-trade/auto" component={AutoPage} />

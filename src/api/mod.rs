@@ -1,13 +1,10 @@
 pub mod auth;
 pub mod market;
-pub mod strategy;
-pub mod backtest;
 pub mod health;
 pub mod user;
 pub mod middleware;
 pub mod credentials;
 pub mod dashboard;
-pub mod plugins;
 pub mod ai;
 pub mod ai_credentials;
 pub mod ws;
@@ -24,14 +21,12 @@ use tower_http::cors::{CorsLayer, Any};
 use std::sync::Arc;
 
 use crate::config::AppConfig;
-use crate::engine::strategy::StrategyEngine;
-use crate::engine::strategy::plugin::PluginRegistry;
+use crate::exchange::registry::ExchangeRegistry;
 
 pub fn build_router(
     config: Arc<AppConfig>,
-    strategy_engine: Arc<StrategyEngine>,
+    exchange_registry: Arc<ExchangeRegistry>,
     db_pool: sqlx::PgPool,
-    plugin_registry: Arc<PluginRegistry>,
     ws_broadcaster: Arc<ws::WsBroadcaster>,
     kline_engine: Option<Arc<crate::engine::kline::KlineEngine>>,
     grid_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::semi_automatic_grid::types::GridCommand>>,
@@ -39,9 +34,8 @@ pub fn build_router(
 ) -> Router {
     let state = Arc::new(AppState {
         config,
-        strategy_engine,
+        exchange_registry,
         db_pool,
-        plugin_registry,
         ws_broadcaster,
         kline_engine,
         http_client: reqwest::Client::new(),
@@ -66,17 +60,6 @@ pub fn build_router(
         .route("/api/market/orderbook", get(market::get_order_book))
         .route("/api/market/balances", get(market::get_balances))
         .route("/api/market/symbols", get(market::get_symbols))
-        .route("/api/strategies", get(strategy::list_strategies))
-        .route("/api/strategies/create", post(strategy::create_strategy))
-        .route("/api/strategies/{id}", get(strategy::get_strategy))
-        .route("/api/strategies/{id}/update", put(strategy::update_strategy))
-        .route("/api/strategies/{id}/delete", delete(strategy::delete_strategy))
-        .route("/api/strategies/{id}/start", post(strategy::start_strategy))
-        .route("/api/strategies/{id}/stop", post(strategy::stop_strategy))
-        .route("/api/strategy/validate-script", post(strategy::validate_script))
-        .route("/api/backtest/run", post(backtest::run_backtest))
-        .route("/api/backtest/{id}", get(backtest::get_backtest_result))
-        .route("/api/backtest/list", get(backtest::list_backtest_results))
         .route("/api/credentials/list", get(credentials::list_credentials))
         .route("/api/credentials/save", post(credentials::save_credential))
         .route("/api/credentials/delete/{id}", delete(credentials::delete_credential))
@@ -85,9 +68,7 @@ pub fn build_router(
         .route("/api/positions", get(dashboard::list_positions))
         .route("/api/trades", get(dashboard::list_trades))
         .route("/api/pending-orders", get(dashboard::list_pending_orders))
-        .route("/api/plugins", get(plugins::list_plugins))
         .route("/api/ai/status", get(ai::ai_status))
-        .route("/api/ai/generate", post(ai::generate_strategy))
         .route("/api/ai/optimize", post(ai::optimize))
         .route("/api/ai/explain", post(ai::explain))
         .route("/api/ai/recommend-strategy", post(ai::recommend_strategy))
@@ -184,9 +165,8 @@ fn mime_guess_from_ext(ext: &str) -> &'static str {
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<AppConfig>,
-    pub strategy_engine: Arc<StrategyEngine>,
+    pub exchange_registry: Arc<ExchangeRegistry>,
     pub db_pool: sqlx::PgPool,
-    pub plugin_registry: Arc<PluginRegistry>,
     pub ws_broadcaster: Arc<ws::WsBroadcaster>,
     pub kline_engine: Option<Arc<crate::engine::kline::KlineEngine>>,
     pub http_client: reqwest::Client,

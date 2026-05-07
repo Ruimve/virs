@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::api::middleware::AuthUser;
 use crate::api::AppState;
-use crate::engine::strategy::indicators;
+use crate::indicators;
 use crate::models::*;
 use crate::services::ai::{AiService, AiUserConfig, GenerateRequest};
 use crate::utils::crypto;
@@ -92,7 +92,7 @@ pub async fn ai_status(
     })))
 }
 
-/// Generate a Lua strategy from natural language.
+/// Generate a trading strategy from natural language.
 pub async fn generate_strategy(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
@@ -108,7 +108,6 @@ pub async fn generate_strategy(
 
     let ai_service = AiService::new(state.config.ai.clone());
 
-    // Load user AI credentials
     let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
     let encryption_key = crypto::derive_key(&state.config.server.encryption_key);
     let user_config = load_user_ai_config(&state.db_pool, &user_id, &encryption_key).await;
@@ -137,17 +136,18 @@ pub async fn generate_strategy(
         })?;
 
     let user_prompt = format!(
-        "Generate a Lua trading strategy based on this description:\n\n{}\n\n\
-         Output ONLY the Lua code wrapped in ```lua ... ``` code blocks.",
+        "Generate a trading strategy based on this description:\n\n{}\n\n\
+         Output the strategy as a JSON object with fields: name, description, params (array of {{name, label, default, min, max}}), and rules (object with entry_conditions, exit_conditions, risk_management).",
         body.prompt
     );
 
     let request_body = serde_json::json!({
         "model": model,
         "messages": [
-            { "role": "system", "content": "You are a quantitative trading strategy developer for the VIRS platform.\nYou generate Lua strategy code that follows this exact format:\n\nThe user's strategy will be executed in a sandboxed Lua environment with these available functions and data:\n\n**Available Functions:**\n- sma(period): Simple Moving Average of close prices\n- ema(period): Exponential Moving Average of close prices\n- rsi(period): Relative Strength Index (0-100)\n\n**Available Data:**\n- klines: table of candle data with fields: open, high, low, close, volume, time\n- current_idx: number (1-based index of current candle)\n- params: table of user-defined parameters\n\n**Requirements:**\n1. The script MUST define a `function signal()` that returns: 1 (buy), -1 (sell), or 0 (hold)\n2. Use `params.key_name` to read user parameters with sensible defaults via `or` operator\n3. Keep logic concise and efficient\n4. Add comments explaining the strategy logic\n5. Only output the Lua code, no explanations outside the code\n6. The code must be valid Lua 5.2 syntax" },
+            { "role": "system", "content": "You are a quantitative trading strategy developer. Generate strategies as structured JSON. Output ONLY valid JSON, no markdown code blocks." },
             { "role": "user", "content": user_prompt }
         ],
+        "response_format": { "type": "json_object" },
         "temperature": 0.7,
         "max_tokens": 2000,
     });
@@ -200,47 +200,24 @@ pub async fn generate_strategy(
 
     let used_model = json["model"].as_str().unwrap_or(&model).to_string();
 
-    // Extract Lua code from markdown code blocks
-    let code = extract_lua_code(&content);
-
-    if code.trim().is_empty() {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<serde_json::Value>::err(
-                "AI did not generate valid Lua code",
-            )),
-        ));
-    }
-
-    // Validate the generated code
-    let lua_config = crate::engine::strategy::lua_executor::LuaExecutorConfig::default();
-    let executor = crate::engine::strategy::lua_executor::LuaExecutor::new(lua_config);
-    if let Err(e) = executor.validate(&code) {
-        return Err((
+    let result: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+        tracing::error!("Failed to parse AI strategy JSON: {}", e);
+        (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<serde_json::Value>::err(format!(
-                "Generated Lua code has syntax errors: {}",
+                "AI returned invalid JSON: {}",
                 e
             ))),
-        ));
-    }
-
-    // Extract strategy name and description from comments
-    let (name, description) = extract_metadata(&code);
-
-    // Extract parameters from the code
-    let params = extract_params(&code);
+        )
+    })?;
 
     tracing::info!(
-        "AI generated strategy '{}' using {} ({})",
-        name, provider, used_model
+        "AI generated strategy using {} ({})",
+        provider, used_model
     );
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
-        "code": code,
-        "name": name,
-        "description": description,
-        "params": params,
+        "strategy": result,
         "provider": provider,
         "model": used_model,
     }))))
@@ -539,7 +516,7 @@ pub async fn recommend_strategy(
 
     // --- Step 1: Get exchange instance ---
     let exchange_key = super::market::ensure_exchange(&state, &req.exchange, MarketType::Spot).await?;
-    let exchange = state.strategy_engine.get_exchange(&exchange_key).unwrap();
+    let exchange = state.exchange_registry.get(&exchange_key).unwrap();
 
     // --- Step 2: Fetch recent klines (up to 200) ---
     let now_ms = chrono::Utc::now().timestamp_millis();
@@ -614,22 +591,9 @@ pub async fn recommend_strategy(
     let ema12_trend = if ema12_val > ema12_prev { "up" } else if ema12_val < ema12_prev { "down" } else { "flat" };
     let ema26_trend = if ema26_val > ema26_prev { "up" } else if ema26_val < ema26_prev { "down" } else { "flat" };
 
-    // --- Step 4: Get available plugins ---
-    let plugins = state.plugin_registry.list();
-    let mut plugin_descriptions = String::new();
-    for p in &plugins {
-        plugin_descriptions.push_str(&format!(
-            "- {} ({}): {}\n  参数: {}\n",
-            p.name,
-            p.category,
-            p.description,
-            p.params.iter().map(|pd| format!("{} (默认: {}, 范围: {:?}-{:?})", pd.name, pd.default, pd.min, pd.max)).collect::<Vec<_>>().join("; ")
-        ));
-    }
-
-    // --- Step 5: Build prompt ---
+    // --- Step 4: Build prompt ---
     let user_prompt = format!(
-        r#"你是一个专业的加密货币量化交易策略分析师。根据以下市场数据分析当前市场状态，并从可用策略中推荐最合适的 1-3 个策略。
+        r#"你是一个专业的加密货币量化交易策略分析师。根据以下市场数据分析当前市场状态，并推荐最合适的 1-3 个交易策略。
 
 ## 市场数据
 交易对: {symbol}
@@ -646,9 +610,6 @@ EMA(26): {ema26:.2} (方向: {ema26_trend})
 均价: {avg:.2}
 近30根涨跌幅: {change_pct:.2}%
 
-## 可用策略
-{plugin_descriptions}
-
 ## 输出要求
 输出 JSON 格式（不要 markdown 代码块）：
 {{
@@ -660,7 +621,7 @@ EMA(26): {ema26:.2} (方向: {ema26_trend})
   "recommendations": [
     {{
       "rank": 1,
-      "plugin": "策略名",
+      "strategy_type": "grid|dca|momentum|mean_reversion",
       "confidence": 0.0-1.0,
       "reason": "推荐理由",
       "params": {{ "参数名": 值 }}
@@ -800,100 +761,4 @@ EMA(26): {ema26:.2} (方向: {ema26_trend})
     Ok(Json(ApiResponse::ok(result)))
 }
 
-/// Extract Lua code from markdown code blocks.
-fn extract_lua_code(content: &str) -> String {
-    if let Some(start) = content.find("```lua") {
-        let after_tag = start + 6;
-        let code_begin = content[after_tag..]
-            .find('\n')
-            .map(|i| after_tag + i + 1)
-            .unwrap_or(after_tag);
-        if let Some(end) = content[code_begin..].find("```") {
-            return content[code_begin..code_begin + end].trim().to_string();
-        }
-    }
-    if let Some(start) = content.find("```") {
-        let after = &content[start + 3..];
-        let code_start = after.find('\n').map(|i| i + 1).unwrap_or(0);
-        if let Some(end) = after[code_start..].find("```") {
-            return after[code_start..code_start + end].trim().to_string();
-        }
-    }
-    content.trim().to_string()
-}
 
-/// Extract strategy name and description from Lua comments.
-fn extract_metadata(code: &str) -> (String, String) {
-    let mut name = "AI Generated Strategy".to_string();
-    let mut description = String::new();
-
-    for line in code.lines().take(10) {
-        let trimmed = line.trim();
-        if !trimmed.starts_with("--") {
-            break;
-        }
-        let comment = trimmed.trim_start_matches('-').trim();
-        if name == "AI Generated Strategy" && !comment.is_empty() {
-            name = comment.to_string();
-        } else if !comment.is_empty() {
-            description = comment.to_string();
-            break;
-        }
-    }
-
-    (name, description)
-}
-
-/// Extract parameter definitions from params.xxx usage in the code.
-fn extract_params(code: &str) -> Vec<serde_json::Value> {
-    let mut params = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-
-    for line in code.lines() {
-        let trimmed = line.trim();
-
-        if let Some(pos) = trimmed.find("params.") {
-            let rest = &trimmed[pos + 7..];
-            let param_name: String = rest
-                .chars()
-                .take_while(|c| c.is_alphanumeric() || *c == '_')
-                .collect();
-            if !param_name.is_empty() && seen.insert(param_name.clone()) {
-                let default_val = if let Some(or_pos) = rest.find(" or ") {
-                    let after_or = &rest[or_pos + 4..];
-                    after_or
-                        .chars()
-                        .take_while(|c| c.is_ascii_digit() || *c == '.')
-                        .collect::<String>()
-                        .parse::<f64>()
-                        .unwrap_or(0.0)
-                } else {
-                    0.0
-                };
-
-                let label = capitalize_words(&param_name.replace('_', " "));
-                params.push(serde_json::json!({
-                    "name": param_name,
-                    "label": label,
-                    "default": default_val,
-                }));
-            }
-        }
-    }
-
-    params
-}
-
-/// Capitalize the first letter of each word.
-fn capitalize_words(s: &str) -> String {
-    s.split_whitespace()
-        .map(|w| {
-            let mut chars = w.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}

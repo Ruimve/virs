@@ -1,9 +1,9 @@
 import { createSignal, onCleanup } from 'solid-js'
 
-export interface StrategyStatusEvent {
-  type: 'strategy_status'
+export interface GridBotEvent {
+  type: 'grid_bot'
   data: {
-    strategy_id: string
+    bot_id: string
     name: string
     status: 'running' | 'stopped' | 'error'
   }
@@ -12,11 +12,11 @@ export interface StrategyStatusEvent {
 export interface TradeEvent {
   type: 'trade'
   data: {
-    strategy_id: string
+    bot_id: string
     symbol: string
     side: string
     price: number
-    amount: number
+    quantity: number
     pnl: number
   }
 }
@@ -25,7 +25,7 @@ export interface OrderEvent {
   type: 'order'
   data: {
     order_id: string
-    strategy_id: string
+    bot_id: string
     symbol: string
     status: string
     error?: string
@@ -35,7 +35,7 @@ export interface OrderEvent {
 export interface PositionEvent {
   type: 'position'
   data: {
-    strategy_id: string
+    bot_id: string
     symbol: string
     side: string
     size: number
@@ -47,7 +47,7 @@ export interface PositionEvent {
 export interface RiskEvent {
   type: 'risk'
   data: {
-    strategy_id: string
+    bot_id: string
     symbol: string
     reason: 'stop_loss' | 'take_profit' | 'trailing_stop'
     price: number
@@ -62,8 +62,17 @@ export interface NotificationEvent {
   }
 }
 
+export interface BotStatusEvent {
+  type: 'bot_status'
+  data: {
+    bot_id: string
+    name: string
+    status: 'running' | 'stopped' | 'error'
+  }
+}
+
 export type WsEvent =
-  | StrategyStatusEvent
+  | BotStatusEvent
   | TradeEvent
   | OrderEvent
   | PositionEvent

@@ -6,6 +6,7 @@
 //! allowing the rest of the application to use a simplified interface.
 
 pub mod binance_position_adapter;
+pub mod registry;
 
 #[cfg(test)]
 mod test;

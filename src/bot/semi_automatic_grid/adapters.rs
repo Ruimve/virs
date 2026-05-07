@@ -1,6 +1,6 @@
 //! Grid Engine 的 Adapter 实现
 //!
-//! 将外部模块（StrategyEngine, Position Engine, Database, AiService 等）
+//! 将外部模块（ExchangeRegistry, Position Engine, Database, AiService 等）
 //! 适配为 semi_automatic_grid 模块定义的 trait 接口。
 
 use std::sync::Arc;
@@ -11,27 +11,25 @@ use uuid::Uuid;
 
 use crate::bot::semi_automatic_grid::ports::*;
 use crate::config::AiConfig;
-use crate::engine::strategy::StrategyEngine;
+use crate::exchange::registry::ExchangeRegistry;
 use crate::engine::position::types as pe_types;
 use crate::services::ai::{AiService, AiUserConfig};
 
-// ── PriceProvider ──
-
-pub struct StrategyPriceProvider {
-    strategy_engine: Arc<StrategyEngine>,
+pub struct ExchangePriceProvider {
+    exchange_registry: Arc<ExchangeRegistry>,
 }
 
-impl StrategyPriceProvider {
-    pub fn new(strategy_engine: Arc<StrategyEngine>) -> Self {
-        Self { strategy_engine }
+impl ExchangePriceProvider {
+    pub fn new(exchange_registry: Arc<ExchangeRegistry>) -> Self {
+        Self { exchange_registry }
     }
 }
 
 #[async_trait]
-impl PriceProvider for StrategyPriceProvider {
+impl PriceProvider for ExchangePriceProvider {
     async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64> {
         let exchange_key = format!("{}:Perpetual", exchange);
-        let ex = self.strategy_engine.get_exchange(&exchange_key)?;
+        let ex = self.exchange_registry.get(&exchange_key)?;
         match ex.get_ticker(symbol).await {
             Ok(ticker) if ticker.last > 0.0 => Some(ticker.last),
             _ => None,
