@@ -672,7 +672,20 @@ pub async fn analyze(
     };
     let user_prompt = build_user_prompt(&user_prompt_template, &ind, symbol, exchange_name);
 
-    let ai = call_ai_and_parse(
+    // 插入 pending 分析日志
+    let log_id: Uuid = sqlx::query_scalar(
+        r#"INSERT INTO qd_grid_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status)
+           VALUES ($1, $2, $3, $4, 'pending') RETURNING id"#,
+    )
+    .bind(body.bot_id)
+    .bind("analyze")
+    .bind(&system_prompt)
+    .bind(&user_prompt)
+    .fetch_one(&state.db_pool)
+    .await
+    .unwrap_or(Uuid::nil());
+
+    let ai_result = call_ai_and_parse(
         &state,
         &user_id,
         body.provider.as_deref(),
@@ -680,69 +693,97 @@ pub async fn analyze(
         &system_prompt,
         &user_prompt,
         "analyze",
-    )
-    .await?;
+    ).await;
 
-    tracing::info!(
-        "AI grid analysis for {} using {} ({})",
-        symbol, ai.provider, ai.used_model
-    );
+    match ai_result {
+        Ok(ai) => {
+            // 更新日志为 completed
+            let _ = sqlx::query(
+                r#"UPDATE qd_grid_analysis_logs SET status = 'completed', result = $1, completed_at = NOW() WHERE id = $2"#,
+            )
+            .bind(&ai.result)
+            .bind(log_id)
+            .execute(&state.db_pool)
+            .await;
 
-    // 从 LLM 返回结果中提取参数
-    let new_upper_price = ai.result["upper_price"].as_f64().unwrap_or(0.0);
-    let new_lower_price = ai.result["lower_price"].as_f64().unwrap_or(0.0);
-    let new_grid_count = ai.result["grid_count"].as_i64().unwrap_or(0) as i32;
-    let new_grid_profit_pct = ai.result["grid_profit_pct"].as_f64().unwrap_or(0.5);
-    let new_quantity_per_grid = ai.result["quantity_per_grid"].as_f64().unwrap_or(10.0);
-    let new_leverage = ai.result["leverage"].as_i64().unwrap_or(1) as i32;
-    let new_market_regime = ai.result["market_regime"].as_str().unwrap_or("ranging").to_string();
-    let new_analysis = ai.result["analysis"].as_str().unwrap_or("").to_string();
+            tracing::info!(
+                "AI grid analysis for {} using {} ({})",
+                symbol, ai.provider, ai.used_model
+            );
 
-    // 更新 bot 参数
-    let updated = sqlx::query_as::<_, GridBot>(
-        r#"UPDATE qd_grid_bots SET
-            upper_price = $1, lower_price = $2, grid_count = $3,
-            grid_profit_pct = $4, quantity_per_grid = $5, leverage = $6,
-            market_regime = $7, ai_analysis = $8,
-            system_prompt = $9, user_prompt = $10,
-            updated_at = NOW()
-           WHERE id = $11 RETURNING *"#,
-    )
-    .bind(new_upper_price)
-    .bind(new_lower_price)
-    .bind(new_grid_count)
-    .bind(new_grid_profit_pct)
-    .bind(new_quantity_per_grid)
-    .bind(new_leverage)
-    .bind(&new_market_regime)
-    .bind(&new_analysis)
-    .bind(&system_prompt)
-    .bind(&user_prompt)
-    .bind(body.bot_id)
-    .fetch_one(&state.db_pool)
-    .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<serde_json::Value>::err(format!(
-                "Failed to update bot: {}", e
-            ))),
-        )
-    })?;
+            // 从 LLM 返回结果中提取参数
+            let new_upper_price = ai.result["upper_price"].as_f64().unwrap_or(0.0);
+            let new_lower_price = ai.result["lower_price"].as_f64().unwrap_or(0.0);
+            let new_grid_count = ai.result["grid_count"].as_i64().unwrap_or(0) as i32;
+            let new_grid_profit_pct = ai.result["grid_profit_pct"].as_f64().unwrap_or(0.5);
+            let new_quantity_per_grid = ai.result["quantity_per_grid"].as_f64().unwrap_or(10.0);
+            let new_leverage = ai.result["leverage"].as_i64().unwrap_or(1) as i32;
+            let new_market_regime = ai.result["market_regime"].as_str().unwrap_or("ranging").to_string();
+            let new_analysis = ai.result["analysis"].as_str().unwrap_or("").to_string();
 
-    Ok(Json(ApiResponse::ok(serde_json::json!({
-        "bot": updated,
-        "analysis": ai.result,
-        "indicators": {
-            "rsi": ind.rsi,
-            "atr": ind.atr,
-            "bb_width": ind.bb_width,
-            "ema12": ind.ema12,
-            "ema26": ind.ema26,
-            "current_price": ind.current_price,
-            "volatility": ind.volatility,
+            // 更新 bot 参数
+            let updated = sqlx::query_as::<_, GridBot>(
+                r#"UPDATE qd_grid_bots SET
+                    upper_price = $1, lower_price = $2, grid_count = $3,
+                    grid_profit_pct = $4, quantity_per_grid = $5, leverage = $6,
+                    market_regime = $7, ai_analysis = $8,
+                    system_prompt = $9, user_prompt = $10,
+                    updated_at = NOW()
+                   WHERE id = $11 RETURNING *"#,
+            )
+            .bind(new_upper_price)
+            .bind(new_lower_price)
+            .bind(new_grid_count)
+            .bind(new_grid_profit_pct)
+            .bind(new_quantity_per_grid)
+            .bind(new_leverage)
+            .bind(&new_market_regime)
+            .bind(&new_analysis)
+            .bind(&system_prompt)
+            .bind(&user_prompt)
+            .bind(body.bot_id)
+            .fetch_one(&state.db_pool)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<serde_json::Value>::err(format!(
+                        "Failed to update bot: {}", e
+                    ))),
+                )
+            })?;
+
+            Ok(Json(ApiResponse::ok(serde_json::json!({
+                "bot": updated,
+                "analysis": ai.result,
+                "indicators": {
+                    "rsi": ind.rsi,
+                    "atr": ind.atr,
+                    "bb_width": ind.bb_width,
+                    "ema12": ind.ema12,
+                    "ema26": ind.ema26,
+                    "current_price": ind.current_price,
+                    "volatility": ind.volatility,
+                }
+            }))))
         }
-    }))))
+        Err(e) => {
+            // 更新日志为 failed
+            let error_msg = match &e {
+                (StatusCode::SERVICE_UNAVAILABLE, json) => json.0.error.clone().unwrap_or_default(),
+                (_, json) => json.0.error.clone().unwrap_or_default(),
+            };
+            let _ = sqlx::query(
+                r#"UPDATE qd_grid_analysis_logs SET status = 'failed', error = $1, completed_at = NOW() WHERE id = $2"#,
+            )
+            .bind(&error_msg)
+            .bind(log_id)
+            .execute(&state.db_pool)
+            .await;
+
+            Err(e)
+        }
+    }
 }
 
 // ── 3.2 POST /api/grid/create ──
@@ -928,6 +969,17 @@ pub async fn get_bot(
 
     let filled_set: std::collections::HashSet<i32> = filled_levels.into_iter().collect();
 
+    // 计算每个层级的成交量
+    let level_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+        r#"SELECT grid_level, SUM(quantity) FROM qd_grid_trades WHERE bot_id = $1 GROUP BY grid_level"#,
+    )
+    .bind(id)
+    .fetch_all(&state.db_pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
     let grid_spacing = if bot.grid_count > 1 {
         (bot.upper_price - bot.lower_price) / bot.grid_count as f64
     } else {
@@ -937,10 +989,12 @@ pub async fn get_bot(
     let mut grid_levels = Vec::new();
     for i in 0..=bot.grid_count {
         let price = bot.lower_price + grid_spacing * i as f64;
+        let quantity = level_quantities.get(&i).copied().unwrap_or(0.0);
         grid_levels.push(serde_json::json!({
             "level": i,
             "price": price,
             "filled": filled_set.contains(&i),
+            "quantity": quantity,
         }));
     }
 
@@ -1003,6 +1057,119 @@ pub async fn start_bot(
         }
         _ => {}
     }
+
+    // 如果参数无效，先进行 AI 分析
+    let bot = if bot.upper_price <= 0.0 || bot.lower_price <= 0.0 || bot.grid_count <= 0 {
+        tracing::info!(bot_id = %id, "Bot has no valid parameters, running initial analysis");
+
+        // 获取市场数据
+        let (klines_1h, klines_4h) = fetch_klines(&state, &bot.exchange, &bot.symbol).await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<serde_json::Value>::err(format!("Failed to fetch klines: {}", e.1 .0.error.unwrap_or_default())))))?;
+        let exchange_key = super::market::ensure_exchange(&state, &bot.exchange, MarketType::Perpetual).await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<serde_json::Value>::err(format!("Failed to init exchange: {}", e.1 .0.error.unwrap_or_default())))))?;
+        let exchange = state.exchange_registry.get(&exchange_key).unwrap();
+        let ind = compute_grid_indicators(&klines_1h, &klines_4h, exchange.as_ref(), &bot.symbol).await;
+
+        let system_prompt = bot.system_prompt.as_deref().unwrap_or_else(|| default_grid_system_prompt()).to_owned();
+        let user_prompt_template = bot.user_prompt.as_deref().unwrap_or(DEFAULT_USER_PROMPT_TEMPLATE).to_owned();
+        let user_prompt = build_user_prompt(&user_prompt_template, &ind, &bot.symbol, &bot.exchange);
+
+        // 插入 pending 分析日志
+        let log_id: Uuid = sqlx::query_scalar(
+            r#"INSERT INTO qd_grid_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status)
+               VALUES ($1, $2, $3, $4, 'pending') RETURNING id"#,
+        )
+        .bind(id)
+        .bind("initial")
+        .bind(&system_prompt)
+        .bind(&user_prompt)
+        .fetch_one(&state.db_pool)
+        .await
+        .unwrap_or(Uuid::nil());
+
+        // 调用 AI
+        let ai_result = call_ai_and_parse(
+            &state,
+            &user_id,
+            None, None,
+            &system_prompt,
+            &user_prompt,
+            "initial",
+        ).await;
+
+        match ai_result {
+            Ok(ai) => {
+                // 更新日志为 completed
+                let _ = sqlx::query(
+                    r#"UPDATE qd_grid_analysis_logs SET status = 'completed', result = $1, completed_at = NOW() WHERE id = $2"#,
+                )
+                .bind(&ai.result)
+                .bind(log_id)
+                .execute(&state.db_pool)
+                .await;
+
+                let new_upper_price = ai.result["upper_price"].as_f64().unwrap_or(0.0);
+                let new_lower_price = ai.result["lower_price"].as_f64().unwrap_or(0.0);
+                let new_grid_count = ai.result["grid_count"].as_i64().unwrap_or(0) as i32;
+                let new_grid_profit_pct = ai.result["grid_profit_pct"].as_f64().unwrap_or(0.5);
+                let new_quantity_per_grid = ai.result["quantity_per_grid"].as_f64().unwrap_or(10.0);
+                let new_leverage = ai.result["leverage"].as_i64().unwrap_or(1) as i32;
+                let new_market_regime = ai.result["market_regime"].as_str().unwrap_or("ranging").to_string();
+                let new_analysis = ai.result["analysis"].as_str().unwrap_or("").to_string();
+
+                // 更新 bot 参数
+                let updated = sqlx::query_as::<_, GridBot>(
+                    r#"UPDATE qd_grid_bots SET
+                        upper_price = $1, lower_price = $2, grid_count = $3,
+                        grid_profit_pct = $4, quantity_per_grid = $5, leverage = $6,
+                        market_regime = $7, ai_analysis = $8,
+                        system_prompt = $9, user_prompt = $10,
+                        updated_at = NOW()
+                       WHERE id = $11 RETURNING *"#,
+                )
+                .bind(new_upper_price)
+                .bind(new_lower_price)
+                .bind(new_grid_count)
+                .bind(new_grid_profit_pct)
+                .bind(new_quantity_per_grid)
+                .bind(new_leverage)
+                .bind(&new_market_regime)
+                .bind(&new_analysis)
+                .bind(&system_prompt)
+                .bind(&user_prompt)
+                .bind(id)
+                .fetch_one(&state.db_pool)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<serde_json::Value>::err(format!("Failed to update bot: {}", e))),
+                    )
+                })?;
+
+                tracing::info!(bot_id = %id, "Initial analysis completed");
+                updated
+            }
+            Err(e) => {
+                // 更新日志为 failed
+                let error_msg = match &e {
+                    (StatusCode::SERVICE_UNAVAILABLE, json) => json.0.error.clone().unwrap_or_default(),
+                    (_, json) => json.0.error.clone().unwrap_or_default(),
+                };
+                let _ = sqlx::query(
+                    r#"UPDATE qd_grid_analysis_logs SET status = 'failed', error = $1, completed_at = NOW() WHERE id = $2"#,
+                )
+                .bind(&error_msg)
+                .bind(log_id)
+                .execute(&state.db_pool)
+                .await;
+
+                return Err(e);
+            }
+        }
+    } else {
+        bot
+    };
 
     // 通过 GridEngine 启动 bot
     if let Some(ref grid_cmd_tx) = state.grid_cmd_tx {
@@ -1293,7 +1460,20 @@ pub async fn reanalyze(
     };
     let user_prompt = build_user_prompt(&user_prompt_template, &ind, &bot.symbol, &bot.exchange);
 
-    let ai = call_ai_and_parse(
+    // 插入 pending 分析日志
+    let log_id: Uuid = sqlx::query_scalar(
+        r#"INSERT INTO qd_grid_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status)
+           VALUES ($1, $2, $3, $4, 'pending') RETURNING id"#,
+    )
+    .bind(id)
+    .bind("reanalyze")
+    .bind(&system_prompt)
+    .bind(&user_prompt)
+    .fetch_one(&state.db_pool)
+    .await
+    .unwrap_or(Uuid::nil());
+
+    let ai_result = call_ai_and_parse(
         &state,
         &user_id,
         body.provider.as_deref(),
@@ -1301,64 +1481,92 @@ pub async fn reanalyze(
         &system_prompt,
         &user_prompt,
         "reanalyze",
-    )
-    .await?;
+    ).await;
 
-    let new_market_regime = ai.result["market_regime"].as_str().unwrap_or("ranging").to_string();
-    let new_upper_price = ai.result["upper_price"].as_f64().unwrap_or(bot.upper_price);
-    let new_lower_price = ai.result["lower_price"].as_f64().unwrap_or(bot.lower_price);
-    let new_grid_count = ai.result["grid_count"].as_i64().unwrap_or(bot.grid_count as i64) as i32;
-    let new_grid_profit_pct = ai.result["grid_profit_pct"].as_f64().unwrap_or(bot.grid_profit_pct);
-    let new_quantity_per_grid = ai.result["quantity_per_grid"].as_f64().unwrap_or(bot.quantity_per_grid);
-    let new_leverage = ai.result["leverage"].as_i64().unwrap_or(bot.leverage as i64) as i32;
-    let new_analysis = ai.result["analysis"].as_str().unwrap_or("").to_string();
+    match ai_result {
+        Ok(ai) => {
+            // 更新日志为 completed
+            let _ = sqlx::query(
+                r#"UPDATE qd_grid_analysis_logs SET status = 'completed', result = $1, completed_at = NOW() WHERE id = $2"#,
+            )
+            .bind(&ai.result)
+            .bind(log_id)
+            .execute(&state.db_pool)
+            .await;
 
-    let updated = sqlx::query_as::<_, GridBot>(
-        r#"UPDATE qd_grid_bots SET
-            upper_price = $1, lower_price = $2, grid_count = $3,
-            grid_profit_pct = $4, quantity_per_grid = $5, leverage = $6,
-            market_regime = $7, ai_analysis = $8, last_adjusted_at = NOW(),
-            updated_at = NOW()
-           WHERE id = $9 RETURNING *"#,
-    )
-    .bind(new_upper_price)
-    .bind(new_lower_price)
-    .bind(new_grid_count)
-    .bind(new_grid_profit_pct)
-    .bind(new_quantity_per_grid)
-    .bind(new_leverage)
-    .bind(&new_market_regime)
-    .bind(&new_analysis)
-    .bind(id)
-    .fetch_one(&state.db_pool)
-    .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<serde_json::Value>::err(format!(
-                "Failed to update bot: {}", e
-            ))),
-        )
-    })?;
+            let new_market_regime = ai.result["market_regime"].as_str().unwrap_or("ranging").to_string();
+            let new_upper_price = ai.result["upper_price"].as_f64().unwrap_or(bot.upper_price);
+            let new_lower_price = ai.result["lower_price"].as_f64().unwrap_or(bot.lower_price);
+            let new_grid_count = ai.result["grid_count"].as_i64().unwrap_or(bot.grid_count as i64) as i32;
+            let new_grid_profit_pct = ai.result["grid_profit_pct"].as_f64().unwrap_or(bot.grid_profit_pct);
+            let new_quantity_per_grid = ai.result["quantity_per_grid"].as_f64().unwrap_or(bot.quantity_per_grid);
+            let new_leverage = ai.result["leverage"].as_i64().unwrap_or(bot.leverage as i64) as i32;
+            let new_analysis = ai.result["analysis"].as_str().unwrap_or("").to_string();
 
-    tracing::info!(
-        "Grid bot {} reanalyzed using {} ({})",
-        id, ai.provider, ai.used_model
-    );
+            let updated = sqlx::query_as::<_, GridBot>(
+                r#"UPDATE qd_grid_bots SET
+                    upper_price = $1, lower_price = $2, grid_count = $3,
+                    grid_profit_pct = $4, quantity_per_grid = $5, leverage = $6,
+                    market_regime = $7, ai_analysis = $8, last_adjusted_at = NOW(),
+                    updated_at = NOW()
+                   WHERE id = $9 RETURNING *"#,
+            )
+            .bind(new_upper_price)
+            .bind(new_lower_price)
+            .bind(new_grid_count)
+            .bind(new_grid_profit_pct)
+            .bind(new_quantity_per_grid)
+            .bind(new_leverage)
+            .bind(&new_market_regime)
+            .bind(&new_analysis)
+            .bind(id)
+            .fetch_one(&state.db_pool)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<serde_json::Value>::err(format!(
+                        "Failed to update bot: {}", e
+                    ))),
+                )
+            })?;
 
-    // 如果 bot 之前是 running 状态，发送 AdjustGrid 命令
-    if was_running {
-        if let Some(ref grid_cmd_tx) = state.grid_cmd_tx {
-            if let Err(e) = grid_cmd_tx.send(crate::bot::semi_automatic_grid::types::GridCommand::AdjustGrid { bot_id: id }).await {
-                tracing::warn!("Failed to send AdjustGrid command for bot {}: {}", id, e);
+            tracing::info!(
+                "Grid bot {} reanalyzed using {} ({})",
+                id, ai.provider, ai.used_model
+            );
+
+            // 如果 bot 之前是 running 状态，发送 AdjustGrid 命令
+            if was_running {
+                if let Some(ref grid_cmd_tx) = state.grid_cmd_tx {
+                    if let Err(e) = grid_cmd_tx.send(crate::bot::semi_automatic_grid::types::GridCommand::AdjustGrid { bot_id: id }).await {
+                        tracing::warn!("Failed to send AdjustGrid command for bot {}: {}", id, e);
+                    }
+                }
             }
+
+            Ok(Json(ApiResponse::ok(serde_json::json!({
+                "bot": updated,
+                "analysis": ai.result,
+            }))))
+        }
+        Err(e) => {
+            // 更新日志为 failed
+            let error_msg = match &e {
+                (StatusCode::SERVICE_UNAVAILABLE, json) => json.0.error.clone().unwrap_or_default(),
+                (_, json) => json.0.error.clone().unwrap_or_default(),
+            };
+            let _ = sqlx::query(
+                r#"UPDATE qd_grid_analysis_logs SET status = 'failed', error = $1, completed_at = NOW() WHERE id = $2"#,
+            )
+            .bind(&error_msg)
+            .bind(log_id)
+            .execute(&state.db_pool)
+            .await;
+
+            Err(e)
         }
     }
-
-    Ok(Json(ApiResponse::ok(serde_json::json!({
-        "bot": updated,
-        "analysis": ai.result,
-    }))))
 }
 
 // ── Paper Trading ──
@@ -1424,20 +1632,30 @@ pub async fn paper_disable(
     }
 }
 
-/// GET /api/grid/{id}/analysis-logs — 获取分析日志
+/// GET /api/grid/analysis-logs?bot_id=xxx — 获取分析日志
 pub async fn get_analysis_logs(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
-    Path(id): Path<Uuid>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)>
 {
     let user_id = parse_user_id(&auth)?;
 
+    let bot_id = match params.get("bot_id").and_then(|s| s.parse::<Uuid>().ok()) {
+        Some(id) => id,
+        None => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<serde_json::Value>::err("bot_id query parameter is required")),
+            ));
+        }
+    };
+
     // 验证 bot 属于当前用户
-    let bot = sqlx::query_as::<_, GridBot>(
+    let bot_exists: Option<(Uuid,)> = sqlx::query_as(
         r#"SELECT id FROM qd_grid_bots WHERE id = $1 AND user_id = $2"#,
     )
-    .bind(id)
+    .bind(bot_id)
     .bind(user_id)
     .fetch_optional(&state.db_pool)
     .await
@@ -1448,18 +1666,18 @@ pub async fn get_analysis_logs(
         )
     })?;
 
-    if bot.is_none() {
+    if bot_exists.is_none() {
         return Err((
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<serde_json::Value>::err("Grid bot not found")),
         ));
     }
 
-    let logs = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, serde_json::Value, Option<String>, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT id, bot_id, analysis_type, system_prompt, user_prompt, result, error, created_at
+    let logs = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, String, serde_json::Value, Option<String>, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)>(
+        r#"SELECT id, bot_id, analysis_type, status, system_prompt, user_prompt, result, error, created_at, completed_at
            FROM qd_grid_analysis_logs WHERE bot_id = $1 ORDER BY created_at DESC LIMIT 50"#,
     )
-    .bind(id)
+    .bind(bot_id)
     .fetch_all(&state.db_pool)
     .await
     .map_err(|e| {
@@ -1474,11 +1692,13 @@ pub async fn get_analysis_logs(
             "id": r.0,
             "bot_id": r.1,
             "analysis_type": r.2,
-            "system_prompt": r.3,
-            "user_prompt": r.4,
-            "result": r.5,
-            "error": r.6,
-            "created_at": r.7,
+            "status": r.3,
+            "system_prompt": r.4,
+            "user_prompt": r.5,
+            "result": r.6,
+            "error": r.7,
+            "created_at": r.8,
+            "completed_at": r.9,
         })
     }).collect();
 

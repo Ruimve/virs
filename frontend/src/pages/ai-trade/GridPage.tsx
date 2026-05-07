@@ -46,11 +46,13 @@ interface AnalysisLog {
   id: string;
   bot_id: string;
   analysis_type: string;
+  status: string;
   system_prompt: string;
   user_prompt: string;
   result: Record<string, any>;
   error: string | null;
   created_at: string;
+  completed_at: string | null;
 }
 
 // ── Component ──
@@ -72,6 +74,7 @@ export default function GridPage() {
   // Trade modal
   const [showTrades, setShowTrades] = createSignal(false);
   const [trades, setTrades] = createSignal<GridTrade[]>([]);
+  const [gridLevels, setGridLevels] = createSignal<{ level: number; price: number; filled: boolean; quantity: number }[]>([]);
   const [tradeBotName, setTradeBotName] = createSignal('');
   const [loadingTrades, setLoadingTrades] = createSignal(false);
 
@@ -207,22 +210,24 @@ export default function GridPage() {
     setShowTrades(true);
     setLoadingTrades(true);
     try {
-      const res = await api.get<{ items: GridTrade[] }>(`/grid/${bot.id}/trades`);
-      setTrades(res.data?.items || []);
+      const res = await api.get<{ trades: GridTrade[]; grid_levels: { level: number; price: number; filled: boolean; quantity: number }[] }>(`/grid/${bot.id}/trades`);
+      setTrades(res.data?.trades || []);
+      setGridLevels(res.data?.grid_levels || []);
     } catch (e) {
       console.error(e);
       setTrades([]);
+      setGridLevels([]);
     } finally {
       setLoadingTrades(false);
     }
   };
 
-  const handleViewAnalysis = async () => {
+  const handleViewAnalysis = async (bot: GridBot) => {
     setShowAnalysis(true);
     setLoadingAnalysis(true);
     setSelectedAnalysis(null);
     try {
-      const res = await api.get<{ items: AnalysisLog[] }>('/grid/analysis-logs');
+      const res = await api.get<{ items: AnalysisLog[] }>(`/grid/analysis-logs?bot_id=${bot.id}`);
       if (res.data?.items) {
         setAnalysisLogs(res.data.items);
       } else {
@@ -398,12 +403,14 @@ export default function GridPage() {
           <div class="lg:col-span-8">
             <div class="flex items-center justify-between mb-4">
               <h2 class="text-sm font-medium text-gray-700">我的机器人</h2>
-              <button
-                onClick={() => handleViewAnalysis()}
-                class="text-xs text-indigo-600 hover:text-indigo-700 transition-colors"
-              >
-                查看分析日志 →
-              </button>
+              <Show when={bots().length > 0}>
+                <button
+                  onClick={() => handleViewAnalysis(bots()[0])}
+                  class="text-xs text-indigo-600 hover:text-indigo-700 transition-colors"
+                >
+                  查看分析日志 →
+                </button>
+              </Show>
             </div>
 
             <Show
@@ -533,49 +540,94 @@ export default function GridPage() {
       {/* ── Trade Modal ── */}
       <Show when={showTrades()}>
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => setShowTrades(false)}>
-          <div class="bg-white border border-gray-200 rounded-2xl w-full max-w-3xl max-h-[80vh] overflow-hidden mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div class="bg-white border border-gray-200 rounded-2xl w-full max-w-5xl max-h-[80vh] overflow-hidden mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h3 class="text-sm font-medium text-gray-800">{tradeBotName()} — 交易记录</h3>
+              <h3 class="text-sm font-medium text-gray-800">{tradeBotName()}</h3>
               <button onClick={() => setShowTrades(false)} class="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
             </div>
-            <div class="overflow-auto max-h-[60vh]">
-              <Show when={!loadingTrades()} fallback={
-                <div class="p-8 text-center text-gray-400 text-sm">加载中...</div>
-              }>
-                <Show when={trades().length > 0} fallback={
-                  <div class="p-8 text-center text-gray-400 text-sm">暂无交易记录</div>
-                }>
-                  <table class="w-full text-xs">
-                    <thead>
-                      <tr class="text-gray-500 border-b border-gray-100">
-                        <th class="text-left px-5 py-2.5 font-medium">时间</th>
-                        <th class="text-left px-3 py-2.5 font-medium">方向</th>
-                        <th class="text-right px-3 py-2.5 font-medium">层级</th>
-                        <th class="text-right px-3 py-2.5 font-medium">价格</th>
-                        <th class="text-right px-3 py-2.5 font-medium">数量</th>
-                        <th class="text-right px-5 py-2.5 font-medium">盈亏</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <For each={trades()}>
-                        {(trade) => (
-                          <tr class="border-b border-gray-50 hover:bg-gray-50">
-                            <td class="px-5 py-2.5 text-gray-500">{new Date(trade.created_at).toLocaleString('zh-CN')}</td>
-                            <td class={`px-3 py-2.5 ${trade.side === 'buy' ? 'text-emerald-600' : 'text-red-600'}`}>
-                              {trade.side === 'buy' ? '买入' : '卖出'}
-                            </td>
-                            <td class="px-3 py-2.5 text-gray-600 text-right font-mono">{trade.grid_level}</td>
-                            <td class="px-3 py-2.5 text-gray-600 text-right font-mono">{trade.price.toFixed(2)}</td>
-                            <td class="px-3 py-2.5 text-gray-600 text-right font-mono">{trade.quantity.toFixed(6)}</td>
-                            <td class="px-5 py-2.5 text-right font-mono">{formatPnl(trade.pnl)}</td>
-                          </tr>
-                        )}
-                      </For>
-                    </tbody>
-                  </table>
-                </Show>
-              </Show>
-            </div>
+            <Show when={!loadingTrades()} fallback={
+              <div class="p-8 text-center text-gray-400 text-sm">加载中...</div>
+            }>
+              <div class="flex h-[60vh]">
+                {/* 网格层级表格 */}
+                <div class="w-56 border-r border-gray-100 overflow-auto bg-gray-50">
+                  <div class="px-3 py-2 text-[10px] font-medium text-gray-500 uppercase tracking-wide border-b border-gray-100 sticky top-0 bg-gray-50">
+                    网格层级
+                  </div>
+                  <Show when={gridLevels().length > 0} fallback={
+                    <div class="p-4 text-center text-gray-400 text-xs">暂无网格数据</div>
+                  }>
+                    <table class="w-full text-xs">
+                      <thead>
+                        <tr class="text-gray-400 border-b border-gray-100">
+                          <th class="text-left px-3 py-1.5 font-medium">层级</th>
+                          <th class="text-right px-3 py-1.5 font-medium">价格</th>
+                          <th class="text-right px-3 py-1.5 font-medium">成交量</th>
+                          <th class="text-center px-2 py-1.5 font-medium">状态</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <For each={gridLevels()}>
+                          {(level) => (
+                            <tr class={`border-b border-gray-50 ${level.filled ? 'bg-emerald-50/50' : ''}`}>
+                              <td class="px-3 py-1.5 text-gray-600 font-mono">{level.level}</td>
+                              <td class="px-3 py-1.5 text-gray-600 text-right font-mono">{level.price.toFixed(2)}</td>
+                              <td class="px-3 py-1.5 text-gray-600 text-right font-mono">{level.quantity > 0 ? level.quantity.toFixed(4) : '-'}</td>
+                              <td class="px-2 py-1.5 text-center">
+                                {level.filled ? (
+                                  <span class="inline-block w-2 h-2 rounded-full bg-emerald-500" title="已成交"></span>
+                                ) : (
+                                  <span class="inline-block w-2 h-2 rounded-full bg-gray-300" title="未成交"></span>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </For>
+                      </tbody>
+                    </table>
+                  </Show>
+                </div>
+
+                {/* 交易记录表格 */}
+                <div class="flex-1 overflow-auto">
+                  <div class="px-5 py-2 text-[10px] font-medium text-gray-500 uppercase tracking-wide border-b border-gray-100 sticky top-0 bg-white">
+                    交易记录
+                  </div>
+                  <Show when={trades().length > 0} fallback={
+                    <div class="p-8 text-center text-gray-400 text-sm">暂无交易记录</div>
+                  }>
+                    <table class="w-full text-xs">
+                      <thead>
+                        <tr class="text-gray-500 border-b border-gray-100">
+                          <th class="text-left px-5 py-2.5 font-medium">时间</th>
+                          <th class="text-left px-3 py-2.5 font-medium">方向</th>
+                          <th class="text-right px-3 py-2.5 font-medium">层级</th>
+                          <th class="text-right px-3 py-2.5 font-medium">价格</th>
+                          <th class="text-right px-3 py-2.5 font-medium">数量</th>
+                          <th class="text-right px-5 py-2.5 font-medium">盈亏</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <For each={trades()}>
+                          {(trade) => (
+                            <tr class="border-b border-gray-50 hover:bg-gray-50">
+                              <td class="px-5 py-2.5 text-gray-500">{new Date(trade.created_at).toLocaleString('zh-CN')}</td>
+                              <td class={`px-3 py-2.5 ${trade.side === 'buy' ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {trade.side === 'buy' ? '买入' : '卖出'}
+                              </td>
+                              <td class="px-3 py-2.5 text-gray-600 text-right font-mono">{trade.grid_level}</td>
+                              <td class="px-3 py-2.5 text-gray-600 text-right font-mono">{trade.price.toFixed(2)}</td>
+                              <td class="px-3 py-2.5 text-gray-600 text-right font-mono">{trade.quantity.toFixed(6)}</td>
+                              <td class="px-5 py-2.5 text-right font-mono">{formatPnl(trade.pnl)}</td>
+                            </tr>
+                          )}
+                        </For>
+                      </tbody>
+                    </table>
+                  </Show>
+                </div>
+              </div>
+            </Show>
           </div>
         </div>
       </Show>
@@ -616,20 +668,30 @@ export default function GridPage() {
                               }`}>
                                 {log.analysis_type === 'initial' ? '首次分析' : '周期分析'}
                               </span>
+                              <span class={`px-2 py-0.5 text-[10px] rounded-full font-medium ${
+                                log.status === 'pending'
+                                  ? 'bg-yellow-50 text-yellow-600'
+                                  : log.status === 'completed'
+                                    ? 'bg-green-50 text-green-600'
+                                    : 'bg-red-50 text-red-600'
+                              }`}>
+                                {log.status === 'pending' ? '处理中' : log.status === 'completed' ? '已完成' : '失败'}
+                              </span>
                               <span class="text-xs text-gray-400">
                                 {new Date(log.created_at).toLocaleString()}
                               </span>
                             </div>
-                            <Show when={log.error}>
-                              <span class="text-xs text-red-500">失败</span>
-                            </Show>
                           </div>
-                          <Show when={!log.error} fallback={
-                            <p class="text-xs text-red-500">{log.error}</p>
-                          }>
+                          <Show when={log.status === 'completed'}>
                             <p class="text-sm text-gray-700 line-clamp-2">
                               {log.result?.analysis || log.result?.reason || '无分析内容'}
                             </p>
+                          </Show>
+                          <Show when={log.status === 'pending'}>
+                            <p class="text-sm text-yellow-600">等待 AI 响应...</p>
+                          </Show>
+                          <Show when={log.status === 'failed'}>
+                            <p class="text-sm text-red-500">{log.error || '分析失败'}</p>
                           </Show>
                         </div>
                       )}
