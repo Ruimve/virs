@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::api::middleware::AuthUser;
 use crate::api::AppState;
+use crate::bot::semi_automatic_grid::types::DEFAULT_USER_PROMPT_TEMPLATE;
 use crate::indicators;
 use crate::models::*;
 use crate::services::ai::{AiService, AiUserConfig};
@@ -110,122 +111,121 @@ async fn load_user_ai_config(
 }
 
 fn default_grid_system_prompt() -> &'static str {
-    r#"你是一位专业的加密货币量化交易分析师，精通合约网格交易策略。你的职责是分析市场数据、判断市场状态、生成最优网格参数，并给出可执行的交易操作指令。
+    r#"你是一位专业的加密货币量化网格交易分析师。基于实时数据、当前网格与仓位，判断市场状态并给出严谨的JSON操作指令。
 
-## 核心参数
-- 交易对由用户提供
-- 网格层数由用户提供（默认 50）
-- 总投资额由用户提供（USDT）
-- 杠杆倍数由用户提供
-- 价格分布采用高斯分布（中间密、两端疏）
+## 多周期框架
+- 主周期：1h（趋势震荡基准、网格区间计算）
+- 快周期：15m（突破确认、假突破过滤）
+- 慢周期：4h（大趋势验证，避免逆势）
+信号一致提置信度，冲突时降置信度并保守操作。
 
-## 市场状态判断规则
+## 指标公式（各周期独立计算）
+- 布林带(20,2)：中轨=SMA20，带宽=(上-下)/中轨*100%
+- 均线距离：abs(EMA20-EMA50)/EMA50*100%
+- ADX(14)、ATR(14)
+- K线实体=abs(收盘-开盘)
 
-### 震荡市场（适合网格交易）
-- BBands Width < 3%（布林带收缩，价格在通道内运行）
-- EMA20 与 EMA50 距离 < 1%（均线粘合，无明确方向）
-- 价格在布林带中轨 ±1% 附近
-- ADX < 25（趋势不明显）
-- **操作**: 正常运行网格，place_buy_limit / place_sell_limit
+## 市场状态判断
 
-### 趋势市场（暂停网格）
-- BBands Width > 4%（布林带扩张，趋势启动）
-- EMA20 与 EMA50 距离 > 2%（均线发散，方向明确）
-- 价格持续突破布林带上轨或下轨（连续 3 根以上）
-- ADX > 30（趋势强劲）
-- **操作**: pause_grid，等待回归震荡后再 resume_grid
+### ranging（震荡）
+1h全部满足：带宽<3%，均线距离<1%，价格距中轨<1%，ADX<25。
+若4h强趋势（ADX>30，均线发散）但1h震荡，标记“高不确定性震荡”，conf≤0.6，仓位×0.7。
 
-### 高波动市场（谨慎运行）
-- ATR 异常放大（当前 ATR > 20 日 ATR 均值的 2 倍）
-- 价格在短时间内剧烈波动（1h K 线实体 > ATR 的 1.5 倍）
-- BBands Width 突然扩张（5 根 bar 内增幅 > 50%）
-- **操作**: 可继续运行但减小仓位（quantity_per_grid × 0.5），或 pause_grid
+### trending_up / trending_down（趋势）
+1h满足：带宽>4%，均线距离>2%，连续3根收盘出轨，ADX>30。
+方向：EMA20>EMA50且收盘>上轨→up；反之下。
+4h同向→conf≥0.85，反向则conf≤0.5仅暂停不反手。
+趋势市场**必须暂停网格**。
 
-## 网格参数计算规则
+### volatile（高波动）
+1h任一：ATR>ATR_SMA20*2，实体>ATR*1.5，5根内带宽增幅>50%。
+15m ATR同步放大确认。杠杆≤3倍，每格数量减半，conf 0.55~0.7。
 
-### 上下界确定
-- 上界：近期阻力位（近期高点、BBands 上轨、整数关口）取最低值
-- 下界：近期支撑位（近期低点、BBands 下轨、整数关口）取最高值
-- 网格区间应覆盖当前价格 ±2 个标准差（约 95% 置信区间）
-- 区间宽度 = 上界 - 下界，应 >= ATR × 10（确保足够的交易空间）
+### transition（过渡）
+指标多周期严重冲突且无法归类，conf≤0.4，操作hold或reduce_position。
 
-### 高斯分布网格
-- 网格价格按高斯分布排列：中间密度高、两端密度低
-- 使用当前价格为均值 μ，区间宽度 / 4 为标准差 σ
-- 每个网格价格 = μ + σ × Φ⁻¹(p)，其中 p 按网格序号均匀分布
-- 这样在价格密集区域（中间）有更多网格，捕捉更多交易机会
+## 重大事件与重要节点应对
+当已知即将发生或正在发生重大事件（如FOMC、非农、CPI、监管升级、网升/硬分叉等），按以下执行：
+- 事件发生前30分钟：自动将网格模式转为“事件防御”。
+- 降低杠杆至≤3倍，每格数量降至原30%，或直接pause_grid等待事件落地。
+- 若15m出现极端波动（实体>ATR*3），立即紧急熔断（见风控）。
+- 事件结束后至少等待1小时，待带宽回落、ADX正常再重新判断恢复。
 
-### 每格利润率
-- 基础利润率 = (网格间距 / 网格价格) × 100%
-- 考虑手续费（taker 0.05% × 2 = 0.1%），实际利润率应 > 0.3%
-- 建议每格利润率 0.3% - 2.0%，波动率越高利润率可越大
+## 资金费率处理
+- 在持有多仓或空仓时，必须计入当前资金费率成本/收益。
+- 若资金费率绝对值>0.1%，且网格成交后预计持仓超过一个结算周期（通常8小时），则必须将该网格数量调降50%，并在funding_rate_warning中详细说明。
+- 计算利润率时，若扣除预估费率后实际利润<0.2%，输出警告并建议缩小持仓周期或暂停网格。
 
-### 每格数量
-- 每格数量(USDT) = 总投资额 / 有效网格数
-- 有效网格数 ≈ grid_count × 0.6（高斯分布下约 60% 的网格在 1σ 内）
-- 实际下单数量 = 每格数量 / 杠杆倍数 / 当前价格（换算为币数）
+## 网格参数计算
 
-## 可执行操作指令
-- `place_buy_limit` — 在指定价格挂买单
-- `place_sell_limit` — 在指定价格挂卖单
-- `cancel_order` — 取消指定订单
-- `cancel_all_orders` — 取消所有挂单
-- `pause_grid` — 暂停网格（趋势市场时）
-- `resume_grid` — 恢复网格（回归震荡时）
-- `adjust_grid` — 调整网格上下界
-- `hold` — 保持当前状态不操作
+### 上下界（基于1h）
+1. 初始上/下界 = 价格 ± 2σ_price（近20根收盘价标准差）。
+2. 上界 = max(初始上界, 近20最高, 布林上轨, 上方整数关口)
+   下界 = min(初始下界, 近20最低, 布林下轨, 下方整数关口)
+3. 宽度≥ATR*10，若不足等比扩展；若>ATR*30则内缩至ATR*20并保持价格居中。
+4. 价格距边界必须>宽度1%，否则扩展。
+
+### 高斯分布生成
+- μ = (上界+下界)/2，σ = 宽度/4，分位数 p_i=(i-0.5)/N，price_i=μ+σ*Φ⁻¹(p_i)。
+- 超出边界的price_i设为边界值；若连续多个价格截断至同一值，仅保留一个，后续通过额外插值补足至N。
+- 方向：高于当前价→sell，否则→buy。列表升序。
+
+### 利润率
+- 取所有相邻(buy,sell)对的利润率，min值需>0.3%，否则减N或扩宽度重算。
+- 考虑资金费率后实际利润率若<0.2%，输出警告。
+
+### 每格资金
+- 有效比例 = 生成网格中落在[μ-σ,μ+σ]的实际比例。
+- 每格USDT = 总投资/(N*有效比例)，单格币数 = 每格USDT/(杠杆*price)。
+- 总挂单（含杠杆）≤投资额×杠杆，超出则比例缩量。
+
+## 网格调整对比
+- 若新旧边界差<1%且N不变→hold，否则才adjust/pause+重建，对比仅看活跃挂单。
+
+## 操作指令
+- place_buy_limit: 在指定价格挂买单，参数包括价格、数量(币数或USDT)，并指定订单类型(限价单)。
+- place_sell_limit: 在指定价格挂卖单，参数包括价格、数量(币数或USDT)，并指定订单类型(限价单)。
+- cancel_order: 取消指定订单，参数为 order_id。
+- cancel_all_orders: 取消所有挂单。
+- pause_grid: 暂停网格策略，不再新挂单，但现有挂单如何处理？可能保留或取消？需要说明。
+- resume_grid: 恢复网格，重新按照新的或原有的网格参数挂单。
+- adjust_grid: 调整网格上下界并更新挂单，可能涉及取消部分订单和新增订单。
+- reduce_position: 减小每格数量至当前的一半，可能是针对已有持仓或挂单数量的调整。
+- hold: 不执行任何操作。
 
 ## 风控规则
-1. 单次最大持仓不超过总投资的 30%
-2. 网格区间内最大亏损不超过总投资的 15%
-3. 当价格突破网格区间时，立即 cancel_all_orders 并 pause_grid
-4. 当连续 3 次交易亏损时，减小仓位至 50%
-5. 杠杆使用不超过 10 倍，高波动市场不超过 3 倍
+1. 总已成交仓位≤总投资30%，超出减仓或暂停。
+2. 贯穿网格浮亏≤总投资15%，否则取消所有单并暂停。
+3. 价格连续2根1h收盘在界外→ cancel_all + pause。
+4. 15m反向尖破放量→保护性暂停。
+5. 连续3对完整交易（买-卖）净亏损→每格量减半，再犯则暂停。
+6. 杠杆：震荡≤10x，高波动/事件≤3x，趋势暂停时0。
+7. 紧急熔断：15m单根涨跌幅>ATR*3 → 立即取消所有挂单并暂停，待波动正常。
 
-## 输出格式（严格 JSON，不要 markdown 代码块）
+## 输出JSON（无代码块）
 {
-  "market_regime": "ranging|trending_up|trending_down|volatile",
+  "market_regime": "ranging|trending_up|trending_down|volatile|transition",
   "confidence": 0.0-1.0,
-  "recommended_action": "run_grid|pause_grid|reduce_position|adjust_grid",
-  "action_reason": "推荐操作的理由（50字以内）",
+  "recommended_action": "place_buy_limit|place_sell_limit|cancel_order|cancel_all_orders|pause_grid|resume_grid|adjust_grid|reduce_position|hold",
+  "action_reason": "含主周期+辅助信号依据(80字内)",
   "upper_price": 数字（网格上界）,
   "lower_price": 数字（网格下界）,
   "grid_count": 数字（网格层数）,
   "grid_profit_pct": 数字（每格利润率%）,
   "quantity_per_grid": 数字（每格数量，USDT）,
-  "leverage": 数字（杠杆倍数）,
-  "grid_levels": [
+  "leverage": 数字（杠杆）,
+  "funding_rate_warning": "资金费率风险说明(若有，否则填'none')",
+  "event_impact": "事件影响说明(若无事件填'none')",
+  "grid_levels":  [
     { "level": 1, "price": 数字, "side": "buy", "quantity_usdt": 数字 },
     { "level": 2, "price": 数字, "side": "buy", "quantity_usdt": 数字 },
     ...
     { "level": N, "price": 数字, "side": "sell", "quantity_usdt": 数字 }
   ],
-  "analysis": "详细分析说明（300字以内）",
-  "risk_warning": "风险提示（100字以内）"
+  "analysis": "多周期信号、区间逻辑、风险(300字内)",
+  "risk_warning": "主要风险提示(100字内)"
 }"#
 }
-
-const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"请分析以下市场数据并生成网格交易参数：
-
-## 交易对
-{symbol} ({exchange}) - 永续合约
-
-## 近期K线数据（最近30根1h）
-{ohlcv_table}
-
-## 关键指标（除特别标注外均为 1h 周期）
-- RSI(14, 1h): {rsi}
-- ATR(14, 1h): {atr}
-- BBands Width(1h): {bb_width}
-- EMA(12, 1h): {ema12} (方向: {ema12_trend})
-- EMA(26, 1h): {ema26} (方向: {ema26_trend})
-- 价格区间(1h): {price_low} - {price_high}
-- 当前价格: {current_price}
-- EMA(26, 4h): {ema_4h}
-- 资金费率: {funding_rate}%
-- 24h 波动率: {volatility}%
-
-请生成适合当前市场状态的网格交易参数。"#;
 
 // ── Shared indicator computation ──
 
@@ -258,16 +258,38 @@ struct GridIndicators {
     macd_histogram: f64,
     adx: f64,
     funding_rate: f64,
-    ohlcv_table: String,
+    funding_next_time: String,
+    h1_atr_sma20: f64,
+    h1_candle_body: f64,
+    h1_bars_outside_band: i32,
+    h1_bandwidth_5bars_ago: f64,
+    h1_high_20: f64,
+    h1_low_20: f64,
+    nearest_round_up: f64,
+    nearest_round_down: f64,
+    m15_current_price: f64,
+    m15_bb_width_pct: f64,
+    m15_atr: f64,
+    m15_atr_sma20: f64,
+    m15_adx: f64,
+    m15_bars_outside_band: i32,
+    m15_ema20: f64,
+    m15_ema50: f64,
+    h4_ema20: f64,
+    h4_ema50: f64,
+    h4_adx: f64,
+    h4_bb_width_pct: f64,
+    account_balance: f64,
 }
 
 async fn compute_grid_indicators(
     klines_1h: &[Kline],
     klines_4h: &[Kline],
+    klines_15m: &[Kline],
     exchange: &dyn crate::exchange::Exchange,
     symbol: &str,
 ) -> GridIndicators {
-    let last_idx = klines_1h.len() - 1;
+    let last_idx = klines_1h.len().saturating_sub(1);
     let current_price = klines_1h.last().map(|k| k.close).unwrap_or(0.0);
 
     let rsi = indicators::rsi_at(klines_1h, last_idx, 14);
@@ -303,19 +325,12 @@ async fn compute_grid_indicators(
     let price_high: f64 = klines_1h.iter().map(|k| k.high).fold(f64::NEG_INFINITY, f64::max);
     let price_low: f64 = klines_1h.iter().map(|k| k.low).fold(f64::INFINITY, f64::min);
 
-    let ema_4h = if !klines_4h.is_empty() {
-        indicators::ema_at(klines_4h, klines_4h.len() - 1, 26)
-    } else {
-        0.0
-    };
-
-    // 涨跌幅计算
-    let change_1h = if last_idx >= 1 && klines_1h[last_idx - 1].close > 0.0 {
-        (current_price - klines_1h[last_idx - 1].close) / klines_1h[last_idx - 1].close * 100.0
+    let change_1h = if last_idx >= 1 && klines_1h[last_idx.saturating_sub(1)].close > 0.0 {
+        (current_price - klines_1h[last_idx.saturating_sub(1)].close) / klines_1h[last_idx.saturating_sub(1)].close * 100.0
     } else { 0.0 };
 
-    let change_4h = if last_idx >= 4 && klines_1h[last_idx - 4].close > 0.0 {
-        (current_price - klines_1h[last_idx - 4].close) / klines_1h[last_idx - 4].close * 100.0
+    let change_4h = if last_idx >= 4 && klines_1h[last_idx.saturating_sub(4)].close > 0.0 {
+        (current_price - klines_1h[last_idx.saturating_sub(4)].close) / klines_1h[last_idx.saturating_sub(4)].close * 100.0
     } else { 0.0 };
 
     let last_24: &[Kline] = if klines_1h.len() >= 24 {
@@ -334,37 +349,68 @@ async fn compute_grid_indicators(
         (current_price - last_24.first().unwrap().close) / last_24.first().unwrap().close * 100.0
     } else { 0.0 };
 
-    // MACD
     let macd = indicators::macd_at(klines_1h, last_idx, 12, 26);
     let macd_signal = indicators::macd_signal_at(klines_1h, last_idx, 12, 26, 9);
     let macd_histogram = indicators::macd_histogram_at(klines_1h, last_idx, 12, 26, 9);
-
-    // ADX
     let adx = indicators::adx_at(klines_1h, last_idx, 14);
 
-    // Funding rate (perpetual only, best-effort)
-    let funding_rate = exchange
-        .get_funding_rate(symbol)
-        .await
-        .map(|fr| fr.rate)
+    let funding_result = exchange.get_funding_rate(symbol).await.ok();
+    let funding_rate = funding_result.as_ref().map(|fr| fr.rate).unwrap_or(0.0);
+    let funding_next_time = funding_result
+        .as_ref()
+        .and_then(|fr| fr.next_funding_time)
+        .map(|dt| dt.format("%Y-%m-%dT%H:%M:%S").to_string())
+        .unwrap_or_else(|| "N/A".to_string());
+
+    // ── 1h 新增指标 ──
+    let h1_atr_sma20 = if klines_1h.len() >= 20 {
+        let atr_series = indicators::atr(klines_1h, 14);
+        indicators::sma_at_from(&atr_series, last_idx, 20)
+    } else { 0.0 };
+
+    let last_kline = klines_1h.last();
+    let h1_candle_body = last_kline.map(|k| k.close - k.open).unwrap_or(0.0);
+
+    let h1_bars_outside_band = indicators::compute_bars_outside_band(klines_1h, bb_upper, bb_lower);
+
+    let h1_bandwidth_5bars_ago = if last_idx >= 5 {
+        indicators::bbands_width_at(klines_1h, last_idx.saturating_sub(5), 20, 2.0)
+    } else { 0.0 };
+
+    let h1_high_20 = indicators::highest_at(klines_1h, last_idx, 20);
+    let h1_low_20 = indicators::lowest_at(klines_1h, last_idx, 20);
+
+    let nearest_round_up = indicators::find_round_number(current_price, true);
+    let nearest_round_down = indicators::find_round_number(current_price, false);
+
+    // ── 4h 指标 ──
+    let h4_last = klines_4h.len().saturating_sub(1);
+    let h4_ema20 = if !klines_4h.is_empty() { indicators::ema_at(klines_4h, h4_last, 20) } else { 0.0 };
+    let h4_ema50 = if klines_4h.len() >= 50 { indicators::ema_at(klines_4h, h4_last, 50) } else { 0.0 };
+    let h4_adx = if !klines_4h.is_empty() { indicators::adx_at(klines_4h, h4_last, 14) } else { 0.0 };
+    let h4_bb_width_pct = if !klines_4h.is_empty() { indicators::bbands_width_at(klines_4h, h4_last, 20, 2.0) } else { 0.0 };
+    let ema_4h = h4_ema20;
+
+    // ── 15m 指标 ──
+    let m15_last = klines_15m.len().saturating_sub(1);
+    let m15_current_price = klines_15m.last().map(|k| k.close).unwrap_or(0.0);
+    let m15_bb_width_pct = if !klines_15m.is_empty() { indicators::bbands_width_at(klines_15m, m15_last, 20, 2.0) } else { 0.0 };
+    let m15_atr = if !klines_15m.is_empty() { indicators::atr_at(klines_15m, m15_last, 14) } else { 0.0 };
+    let m15_atr_sma20 = if klines_15m.len() >= 20 {
+        let atr_series = indicators::atr(klines_15m, 14);
+        indicators::sma_at_from(&atr_series, m15_last, 20)
+    } else { 0.0 };
+    let m15_adx = if !klines_15m.is_empty() { indicators::adx_at(klines_15m, m15_last, 14) } else { 0.0 };
+    let (m15_bb_upper, _, m15_bb_lower) = if !klines_15m.is_empty() {
+        indicators::bbands_at(klines_15m, m15_last, 20, 2.0)
+    } else { (0.0, 0.0, 0.0) };
+    let m15_bars_outside_band = indicators::compute_bars_outside_band(klines_15m, m15_bb_upper, m15_bb_lower);
+    let m15_ema20 = if !klines_15m.is_empty() { indicators::ema_at(klines_15m, m15_last, 20) } else { 0.0 };
+    let m15_ema50 = if klines_15m.len() >= 50 { indicators::ema_at(klines_15m, m15_last, 50) } else { 0.0 };
+
+    let account_balance = exchange.get_balances().await
+        .map(|bs| bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT")).map(|b| b.total).unwrap_or(0.0))
         .unwrap_or(0.0);
-
-    let last_30: &[Kline] = if klines_1h.len() >= 30 {
-        &klines_1h[klines_1h.len() - 30..]
-    } else {
-        klines_1h
-    };
-
-    let mut ohlcv_table = String::from("Time,Open,High,Low,Close,Volume\n");
-    for k in last_30.iter() {
-        let time_str = chrono::DateTime::from_timestamp_millis(k.open_time)
-            .map(|dt| dt.format("%m-%d %H:%M").to_string())
-            .unwrap_or_else(|| k.open_time.to_string());
-        ohlcv_table.push_str(&format!(
-            "{},{:.4},{:.4},{:.4},{:.4},{:.4}\n",
-            time_str, k.open, k.high, k.low, k.close, k.volume
-        ));
-    }
 
     GridIndicators {
         current_price,
@@ -395,49 +441,111 @@ async fn compute_grid_indicators(
         macd_histogram,
         adx,
         funding_rate,
-        ohlcv_table,
+        funding_next_time,
+        h1_atr_sma20,
+        h1_candle_body,
+        h1_bars_outside_band,
+        h1_bandwidth_5bars_ago,
+        h1_high_20,
+        h1_low_20,
+        nearest_round_up,
+        nearest_round_down,
+        m15_current_price,
+        m15_bb_width_pct,
+        m15_atr,
+        m15_atr_sma20,
+        m15_adx,
+        m15_bars_outside_band,
+        m15_ema20,
+        m15_ema50,
+        h4_ema20,
+        h4_ema50,
+        h4_adx,
+        h4_bb_width_pct,
+        account_balance,
     }
 }
 
-fn build_user_prompt(template: &str, ind: &GridIndicators, symbol: &str, exchange: &str) -> String {
+fn build_user_prompt(template: &str, ind: &GridIndicators, bot: &crate::models::GridBot) -> String {
+    let ema_distance_pct = if ind.ema50 > 0.0 {
+        (ind.ema20 - ind.ema50) / ind.ema50 * 100.0
+    } else { 0.0 };
+
+    let total_investment = ind.account_balance;
+    let grid_status = match bot.status {
+        crate::models::StrategyStatus::Running => "running",
+        crate::models::StrategyStatus::Paused => "paused",
+        _ => "empty",
+    };
+    let last_adjust_time = bot.last_adjusted_at
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+        .unwrap_or_else(|| "N/A".to_string());
+
+    let current_grid_config = if grid_status == "empty" {
+        "none".to_string()
+    } else {
+        serde_json::json!({
+            "upper_price": bot.upper_price,
+            "lower_price": bot.lower_price,
+            "grid_count": bot.grid_count,
+            "grid_profit_pct": bot.grid_profit_pct,
+            "quantity_per_grid": bot.quantity_per_grid,
+        }).to_string()
+    };
+
+    let h1_atr_sma20_str = if ind.h1_atr_sma20.is_nan() { "N/A".to_string() } else { format!("{:.4}", ind.h1_atr_sma20) };
+    let m15_atr_sma20_str = if ind.m15_atr_sma20.is_nan() { "N/A".to_string() } else { format!("{:.4}", ind.m15_atr_sma20) };
+
     template
-        .replace("{symbol}", symbol)
-        .replace("{exchange}", exchange)
-        .replace("{current_time}", &chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string())
-        .replace("{current_price}", &format!("{:.2}", ind.current_price))
-        .replace("{change_1h}", &format!("{:+.2}%", ind.change_1h))
-        .replace("{change_4h}", &format!("{:+.2}%", ind.change_4h))
-        .replace("{change_24h}", &format!("{:+.2}%", ind.change_24h))
-        .replace("{rsi}", &format!("{:.2}", ind.rsi))
-        .replace("{atr}", &format!("{:.4}", ind.atr))
-        .replace("{atr_pct}", &format!("{:.2}%", ind.atr_pct))
-        .replace("{bb_upper}", &format!("{:.2}", ind.bb_upper))
-        .replace("{bb_middle}", &format!("{:.2}", ind.bb_middle))
-        .replace("{bb_lower}", &format!("{:.2}", ind.bb_lower))
-        .replace("{bb_width}", &format!("{:.2}%", ind.bb_width))
-        .replace("{ema12}", &format!("{:.4}", ind.ema12))
-        .replace("{ema12_trend}", ind.ema12_trend)
-        .replace("{ema20}", &format!("{:.4}", ind.ema20))
-        .replace("{ema20_trend}", ind.ema20_trend)
-        .replace("{ema26}", &format!("{:.4}", ind.ema26))
-        .replace("{ema26_trend}", ind.ema26_trend)
-        .replace("{ema50}", &format!("{:.4}", ind.ema50))
-        .replace("{ema50_trend}", ind.ema50_trend)
-        .replace("{price_high}", &format!("{:.4}", ind.price_high))
-        .replace("{price_low}", &format!("{:.4}", ind.price_low))
-        .replace("{ema_4h}", &format!("{:.4}", ind.ema_4h))
-        .replace("{volatility}", &format!("{:.2}", ind.volatility))
-        .replace("{macd}", &format!("{:.4}", ind.macd))
-        .replace("{macd_signal}", &format!("{:.4}", ind.macd_signal))
-        .replace("{macd_histogram}", &format!("{:.4}", ind.macd_histogram))
-        .replace("{adx}", &format!("{:.2}", ind.adx))
-        .replace("{funding_rate}", &format!("{:.6}", ind.funding_rate * 100.0))
-        .replace("{ohlcv_table}", &ind.ohlcv_table)
-        .replace("{price_low}", &format!("{:.4}", ind.price_low))
-        .replace("{price_high}", &format!("{:.4}", ind.price_high))
-        .replace("{current_price}", &format!("{:.4}", ind.current_price))
-        .replace("{ema_4h}", &format!("{:.4}", ind.ema_4h))
-        .replace("{volatility}", &format!("{:.2}", ind.volatility))
+        .replace("{timestamp}", &chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string())
+        .replace("{symbol}", &bot.symbol)
+        .replace("{total_investment}", &format!("{:.2}", total_investment))
+        .replace("{leverage}", &bot.leverage.to_string())
+        .replace("{grid_status}", grid_status)
+        .replace("{last_adjust_time}", &last_adjust_time)
+        .replace("{consecutive_losses}", "0")
+        .replace("{current_grid_config}", &current_grid_config)
+        .replace("{position_base}", "0")
+        .replace("{position_side}", "long")
+        .replace("{entry_price}", "0")
+        .replace("{unrealized_pnl}", &format!("{:.2}", bot.total_pnl))
+        .replace("{used_margin}", &format!("{:.2}", total_investment / bot.leverage as f64))
+        .replace("{open_orders}", "[]")
+        .replace("{funding_rate}", &format!("{:.6}", ind.funding_rate))
+        .replace("{funding_next_time}", &ind.funding_next_time)
+        .replace("{event_flag}", "false")
+        .replace("{event_description}", "")
+        .replace("{h1_current_price}", &format!("{:.2}", ind.current_price))
+        .replace("{h1_bb_upper}", &format!("{:.2}", ind.bb_upper))
+        .replace("{h1_bb_middle}", &format!("{:.2}", ind.bb_middle))
+        .replace("{h1_bb_lower}", &format!("{:.2}", ind.bb_lower))
+        .replace("{h1_bb_width_pct}", &format!("{:.2}", ind.bb_width))
+        .replace("{h1_ema20}", &format!("{:.2}", ind.ema20))
+        .replace("{h1_ema50}", &format!("{:.2}", ind.ema50))
+        .replace("{h1_ema_distance_pct}", &format!("{:+.2}", ema_distance_pct))
+        .replace("{h1_adx}", &format!("{:.2}", ind.adx))
+        .replace("{h1_atr}", &format!("{:.4}", ind.atr))
+        .replace("{h1_atr_sma20}", &h1_atr_sma20_str)
+        .replace("{h1_candle_body}", &format!("{:+.4}", ind.h1_candle_body))
+        .replace("{h1_bars_outside_band}", &ind.h1_bars_outside_band.to_string())
+        .replace("{h1_bandwidth_5bars_ago}", &format!("{:.2}", ind.h1_bandwidth_5bars_ago))
+        .replace("{h1_high_20}", &format!("{:.2}", ind.h1_high_20))
+        .replace("{h1_low_20}", &format!("{:.2}", ind.h1_low_20))
+        .replace("{nearest_round_up}", &format!("{:.2}", ind.nearest_round_up))
+        .replace("{nearest_round_down}", &format!("{:.2}", ind.nearest_round_down))
+        .replace("{m15_current_price}", &format!("{:.2}", ind.m15_current_price))
+        .replace("{m15_bb_width_pct}", &format!("{:.2}", ind.m15_bb_width_pct))
+        .replace("{m15_atr}", &format!("{:.4}", ind.m15_atr))
+        .replace("{m15_atr_sma20}", &m15_atr_sma20_str)
+        .replace("{m15_adx}", &format!("{:.2}", ind.m15_adx))
+        .replace("{m15_bars_outside_band}", &ind.m15_bars_outside_band.to_string())
+        .replace("{m15_ema20}", &format!("{:.2}", ind.m15_ema20))
+        .replace("{m15_ema50}", &format!("{:.2}", ind.m15_ema50))
+        .replace("{h4_ema20}", &format!("{:.2}", ind.h4_ema20))
+        .replace("{h4_ema50}", &format!("{:.2}", ind.h4_ema50))
+        .replace("{h4_adx}", &format!("{:.2}", ind.h4_adx))
+        .replace("{h4_bb_width_pct}", &format!("{:.2}", ind.h4_bb_width_pct))
+        .replace("{trigger_reason}", "manual")
 }
 
 struct AiCallResult {
@@ -577,13 +685,14 @@ async fn fetch_klines(
     state: &Arc<AppState>,
     exchange_name: &str,
     symbol: &str,
-) -> Result<(Vec<Kline>, Vec<Kline>), (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
+) -> Result<(Vec<Kline>, Vec<Kline>, Vec<Kline>), (StatusCode, Json<ApiResponse<serde_json::Value>>)> {
     let exchange_key = super::market::ensure_exchange(state, exchange_name, MarketType::Perpetual).await?;
     let exchange = state.exchange_registry.get(&exchange_key).unwrap();
 
     let now_ms = chrono::Utc::now().timestamp_millis();
     let start_1h = now_ms - 200 * 3600 * 1000;
     let start_4h = now_ms - 50 * 4 * 3600 * 1000;
+    let start_15m = now_ms - 200 * 15 * 60 * 1000;
 
     let klines_1h = match exchange.get_klines_range(symbol, "1h", start_1h, now_ms).await {
         Ok(k) if k.len() >= 30 => k,
@@ -615,7 +724,15 @@ async fn fetch_klines(
         }
     };
 
-    Ok((klines_1h, klines_4h))
+    let klines_15m = match exchange.get_klines_range(symbol, "15m", start_15m, now_ms).await {
+        Ok(k) => k,
+        Err(e) => {
+            tracing::warn!("Failed to fetch 15m klines for {}: {}", symbol, e);
+            Vec::new()
+        }
+    };
+
+    Ok((klines_1h, klines_4h, klines_15m))
 }
 
 // ── 3.1 POST /api/grid/analyze ──
@@ -656,10 +773,10 @@ pub async fn analyze(
     let symbol = &bot.symbol;
     let exchange_name = &bot.exchange;
 
-    let (klines_1h, klines_4h) = fetch_klines(&state, exchange_name, symbol).await?;
+    let (klines_1h, klines_4h, klines_15m) = fetch_klines(&state, exchange_name, symbol).await?;
     let exchange_key = super::market::ensure_exchange(&state, exchange_name, MarketType::Perpetual).await?;
     let exchange = state.exchange_registry.get(&exchange_key).unwrap();
-    let ind = compute_grid_indicators(&klines_1h, &klines_4h, exchange.as_ref(), symbol).await;
+    let ind = compute_grid_indicators(&klines_1h, &klines_4h, &klines_15m, exchange.as_ref(), symbol).await;
 
     let system_prompt = match body.system_prompt.as_deref() {
         Some(s) => s.to_owned(),
@@ -670,7 +787,7 @@ pub async fn analyze(
         Some(s) => s.to_owned(),
         None => bot.user_prompt.as_deref().unwrap_or(DEFAULT_USER_PROMPT_TEMPLATE).to_owned(),
     };
-    let user_prompt = build_user_prompt(&user_prompt_template, &ind, symbol, exchange_name);
+    let user_prompt = build_user_prompt(&user_prompt_template, &ind, &bot);
 
     // 插入 pending 分析日志
     let log_id: Uuid = sqlx::query_scalar(
@@ -1063,16 +1180,16 @@ pub async fn start_bot(
         tracing::info!(bot_id = %id, "Bot has no valid parameters, running initial analysis");
 
         // 获取市场数据
-        let (klines_1h, klines_4h) = fetch_klines(&state, &bot.exchange, &bot.symbol).await
+        let (klines_1h, klines_4h, klines_15m) = fetch_klines(&state, &bot.exchange, &bot.symbol).await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<serde_json::Value>::err(format!("Failed to fetch klines: {}", e.1 .0.error.unwrap_or_default())))))?;
         let exchange_key = super::market::ensure_exchange(&state, &bot.exchange, MarketType::Perpetual).await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<serde_json::Value>::err(format!("Failed to init exchange: {}", e.1 .0.error.unwrap_or_default())))))?;
         let exchange = state.exchange_registry.get(&exchange_key).unwrap();
-        let ind = compute_grid_indicators(&klines_1h, &klines_4h, exchange.as_ref(), &bot.symbol).await;
+        let ind = compute_grid_indicators(&klines_1h, &klines_4h, &klines_15m, exchange.as_ref(), &bot.symbol).await;
 
         let system_prompt = bot.system_prompt.as_deref().unwrap_or_else(|| default_grid_system_prompt()).to_owned();
         let user_prompt_template = bot.user_prompt.as_deref().unwrap_or(DEFAULT_USER_PROMPT_TEMPLATE).to_owned();
-        let user_prompt = build_user_prompt(&user_prompt_template, &ind, &bot.symbol, &bot.exchange);
+        let user_prompt = build_user_prompt(&user_prompt_template, &ind, &bot);
 
         // 插入 pending 分析日志
         let log_id: Uuid = sqlx::query_scalar(
@@ -1396,6 +1513,58 @@ pub async fn get_trades(
         )
     })?;
 
+    let bot = sqlx::query_as::<_, GridBot>(
+        r#"SELECT * FROM qd_grid_bots WHERE id = $1"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.db_pool)
+    .await
+    .ok()
+    .flatten();
+
+    let grid_levels = if let Some(ref b) = bot {
+        let filled_levels: Vec<i32> = sqlx::query_scalar(
+            r#"SELECT DISTINCT grid_level FROM qd_grid_trades WHERE bot_id = $1"#,
+        )
+        .bind(id)
+        .fetch_all(&state.db_pool)
+        .await
+        .unwrap_or_default();
+
+        let filled_set: std::collections::HashSet<i32> = filled_levels.into_iter().collect();
+
+        let level_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+            r#"SELECT grid_level, SUM(quantity) FROM qd_grid_trades WHERE bot_id = $1 GROUP BY grid_level"#,
+        )
+        .bind(id)
+        .fetch_all(&state.db_pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+        let grid_spacing = if b.grid_count > 1 {
+            (b.upper_price - b.lower_price) / b.grid_count as f64
+        } else {
+            0.0
+        };
+
+        (0..=b.grid_count)
+            .map(|i| {
+                let price = b.lower_price + grid_spacing * i as f64;
+                let quantity = level_quantities.get(&i).copied().unwrap_or(0.0);
+                serde_json::json!({
+                    "level": i,
+                    "price": price,
+                    "filled": filled_set.contains(&i),
+                    "quantity": quantity,
+                })
+            })
+            .collect::<Vec<_>>()
+    } else {
+        vec![]
+    };
+
     let total_pages = (total.0 + page_size - 1) / page_size;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
@@ -1404,6 +1573,7 @@ pub async fn get_trades(
         "page": page,
         "page_size": page_size,
         "total_pages": total_pages,
+        "grid_levels": grid_levels,
     }))))
 }
 
@@ -1444,10 +1614,10 @@ pub async fn reanalyze(
 
     let was_running = bot.status == StrategyStatus::Running;
 
-    let (klines_1h, klines_4h) = fetch_klines(&state, &bot.exchange, &bot.symbol).await?;
+    let (klines_1h, klines_4h, klines_15m) = fetch_klines(&state, &bot.exchange, &bot.symbol).await?;
     let exchange_key = super::market::ensure_exchange(&state, &bot.exchange, MarketType::Perpetual).await?;
     let exchange = state.exchange_registry.get(&exchange_key).unwrap();
-    let ind = compute_grid_indicators(&klines_1h, &klines_4h, exchange.as_ref(), &bot.symbol).await;
+    let ind = compute_grid_indicators(&klines_1h, &klines_4h, &klines_15m, exchange.as_ref(), &bot.symbol).await;
 
     let system_prompt = match body.system_prompt.as_deref() {
         Some(s) => s.to_owned(),
@@ -1458,7 +1628,7 @@ pub async fn reanalyze(
         Some(s) => s.to_owned(),
         None => bot.user_prompt.as_deref().unwrap_or(DEFAULT_USER_PROMPT_TEMPLATE).to_owned(),
     };
-    let user_prompt = build_user_prompt(&user_prompt_template, &ind, &bot.symbol, &bot.exchange);
+    let user_prompt = build_user_prompt(&user_prompt_template, &ind, &bot);
 
     // 插入 pending 分析日志
     let log_id: Uuid = sqlx::query_scalar(

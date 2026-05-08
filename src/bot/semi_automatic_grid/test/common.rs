@@ -393,6 +393,65 @@ pub fn make_mock_ai_service() -> Arc<GridAiService> {
     ))
 }
 
+pub struct MockMarketDataProvider;
+
+#[async_trait]
+impl crate::bot::semi_automatic_grid::ports::MarketDataProvider for MockMarketDataProvider {
+    async fn get_market_snapshot(&self, _exchange: &str, _symbol: &str) -> crate::bot::semi_automatic_grid::ports::MarketSnapshot {
+        crate::bot::semi_automatic_grid::ports::MarketSnapshot {
+            current_price: 55000.0,
+            rsi: 50.0,
+            atr: 500.0,
+            atr_pct: 0.9,
+            bb_width: 0.04,
+            bb_upper: 56000.0,
+            bb_middle: 55000.0,
+            bb_lower: 54000.0,
+            ema12: 55200.0,
+            ema12_trend: "横盘".to_string(),
+            ema20: 55100.0,
+            ema26: 54800.0,
+            ema26_trend: "横盘".to_string(),
+            ema50: 54700.0,
+            ema_4h: 54500.0,
+            volatility: 3.5,
+            change_1h: 0.1,
+            change_4h: -0.3,
+            change_24h: 1.2,
+            funding_rate: 0.01,
+            macd: 50.0,
+            macd_signal: 45.0,
+            adx: 20.0,
+            price_high: 56000.0,
+            price_low: 54000.0,
+            h1_atr_sma20: 480.0,
+            h1_candle_body: 150.0,
+            h1_bars_outside_band: 0,
+            h1_bandwidth_5bars_ago: 0.03,
+            h1_high_20: 56200.0,
+            h1_low_20: 53800.0,
+            nearest_round_up: 56000.0,
+            nearest_round_down: 55000.0,
+            m15_current_price: 55050.0,
+            m15_bb_width_pct: 0.03,
+            m15_atr: 120.0,
+            m15_atr_sma20: 115.0,
+            m15_adx: 18.0,
+            m15_bars_outside_band: 0,
+            m15_ema20: 55020.0,
+            m15_ema50: 54900.0,
+            h4_ema20: 54500.0,
+            h4_ema50: 54200.0,
+            h4_adx: 22.0,
+            h4_bb_width_pct: 0.05,
+        }
+    }
+
+    async fn get_account_balance(&self, _exchange: &str) -> f64 {
+        10000.0
+    }
+}
+
 pub fn make_worker(bot: GridBotConfig, price: f64) -> crate::bot::semi_automatic_grid::worker::GridWorker {
     let (event_tx, event_rx) = broadcast::channel(16);
     let (grid_event_tx, _) = broadcast::channel(16);
@@ -400,6 +459,7 @@ pub fn make_worker(bot: GridBotConfig, price: f64) -> crate::bot::semi_automatic
     let order_executor = Arc::new(MockOrderExecutor::new());
     let ai_service = make_mock_ai_service();
     let store = Arc::new(MockWorkerStore::new());
+    let market_data_provider = Arc::new(MockMarketDataProvider);
 
     crate::bot::semi_automatic_grid::worker::GridWorker::new(
         bot,
@@ -407,6 +467,7 @@ pub fn make_worker(bot: GridBotConfig, price: f64) -> crate::bot::semi_automatic
         order_executor,
         ai_service,
         store,
+        market_data_provider,
         event_rx,
         grid_event_tx,
     )
@@ -422,6 +483,7 @@ pub fn make_worker_with_store(
     let price_provider = Arc::new(MockPriceProvider::new(price));
     let order_executor = Arc::new(MockOrderExecutor::new());
     let ai_service = make_mock_ai_service();
+    let market_data_provider = Arc::new(MockMarketDataProvider);
 
     crate::bot::semi_automatic_grid::worker::GridWorker::new(
         bot,
@@ -429,6 +491,7 @@ pub fn make_worker_with_store(
         order_executor,
         ai_service,
         store,
+        market_data_provider,
         event_rx,
         grid_event_tx,
     )
@@ -444,6 +507,7 @@ pub fn make_worker_with_executor(
     let price_provider = Arc::new(MockPriceProvider::new(price));
     let ai_service = make_mock_ai_service();
     let store = Arc::new(MockWorkerStore::new());
+    let market_data_provider = Arc::new(MockMarketDataProvider);
 
     crate::bot::semi_automatic_grid::worker::GridWorker::new(
         bot,
@@ -451,6 +515,7 @@ pub fn make_worker_with_executor(
         order_executor,
         ai_service,
         store,
+        market_data_provider,
         event_rx,
         grid_event_tx,
     )

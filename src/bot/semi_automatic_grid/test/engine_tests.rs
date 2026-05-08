@@ -12,8 +12,9 @@ fn make_engine() -> (GridEngine, tokio::sync::mpsc::Sender<GridCommand>, broadca
     let (event_tx, _) = broadcast::channel(16);
     let ai_service = make_mock_ai_service();
     let price_provider = Arc::new(MockPriceProvider::new(55000.0));
+    let market_data_provider = Arc::new(MockMarketDataProvider);
     let (engine, cmd_tx, grid_event_tx) = GridEngine::new(
-        store.clone(), ai_service, price_provider, order_executor, event_tx,
+        store.clone(), ai_service, price_provider, order_executor, market_data_provider, event_tx,
     );
     (engine, cmd_tx, grid_event_tx, store)
 }
@@ -83,7 +84,7 @@ async fn start_bot_load_error() {
     let ai_service = make_mock_ai_service();
     let price_provider = Arc::new(MockPriceProvider::new(55000.0));
     let (mut engine, _cmd_tx, _grid_event_tx) = GridEngine::new(
-        store, ai_service, price_provider, order_executor, event_tx,
+        store, ai_service, price_provider, order_executor, Arc::new(MockMarketDataProvider), event_tx,
     );
     let fake_id = Uuid::new_v4();
     engine.start_bot(fake_id).await;
@@ -203,7 +204,7 @@ async fn restore_running_bots() {
     let ai_service = make_mock_ai_service();
     let price_provider = Arc::new(MockPriceProvider::new(55000.0));
     let (mut engine, _cmd_tx, grid_event_tx) = GridEngine::new(
-        store.clone(), ai_service, price_provider, order_executor, event_tx,
+        store.clone(), ai_service, price_provider, order_executor, Arc::new(MockMarketDataProvider), event_tx,
     );
     let mut event_rx = grid_event_tx.subscribe();
     engine.restore_running_bots().await;
@@ -224,7 +225,7 @@ async fn restore_running_bots_empty() {
     let ai_service = make_mock_ai_service();
     let price_provider = Arc::new(MockPriceProvider::new(55000.0));
     let (mut engine, _cmd_tx, _grid_event_tx) = GridEngine::new(
-        store.clone(), ai_service, price_provider, order_executor, event_tx,
+        store.clone(), ai_service, price_provider, order_executor, Arc::new(MockMarketDataProvider), event_tx,
     );
     engine.restore_running_bots().await;
     let statuses = store.statuses.lock().await;
@@ -239,7 +240,7 @@ async fn restore_running_bots_load_error() {
     let ai_service = make_mock_ai_service();
     let price_provider = Arc::new(MockPriceProvider::new(55000.0));
     let (mut engine, _cmd_tx, _grid_event_tx) = GridEngine::new(
-        store, ai_service, price_provider, order_executor, event_tx,
+        store, ai_service, price_provider, order_executor, Arc::new(MockMarketDataProvider), event_tx,
     );
     engine.restore_running_bots().await;
 }
@@ -350,7 +351,7 @@ async fn restore_running_bots_multiple() {
     let ai_service = make_mock_ai_service();
     let price_provider = Arc::new(MockPriceProvider::new(55000.0));
     let (mut engine, _cmd_tx, grid_event_tx) = GridEngine::new(
-        store.clone(), ai_service, price_provider, order_executor, event_tx,
+        store.clone(), ai_service, price_provider, order_executor, Arc::new(MockMarketDataProvider), event_tx,
     );
     let mut event_rx = grid_event_tx.subscribe();
     engine.restore_running_bots().await;
@@ -450,7 +451,7 @@ async fn stop_bot_sends_cancel_all_orders() {
     let ai_service = make_mock_ai_service();
     let price_provider = Arc::new(MockPriceProvider::new(55000.0));
     let (mut engine, _cmd_tx, _grid_event_tx) = GridEngine::new(
-        store.clone(), ai_service, price_provider, order_executor.clone(), event_tx,
+        store.clone(), ai_service, price_provider, order_executor.clone(), Arc::new(MockMarketDataProvider), event_tx,
     );
     let bot = make_bot_config();
     store.add_bot(bot.clone()).await;

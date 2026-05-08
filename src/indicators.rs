@@ -117,6 +117,23 @@ pub fn sma_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     result.get(idx).copied().unwrap_or(0.0)
 }
 
+pub fn sma_at_from(series: &[f64], idx: usize, period: usize) -> f64 {
+    if series.is_empty() || period == 0 {
+        return 0.0;
+    }
+    let nan_count = series.iter().take(idx + 1).filter(|v| v.is_nan()).count();
+    let valid: Vec<f64> = series.iter().filter(|v| !v.is_nan()).copied().collect();
+    if valid.len() < period {
+        if valid.is_empty() { return 0.0; }
+        return valid.iter().rev().take(period.min(valid.len())).sum::<f64>() / period.min(valid.len()) as f64;
+    }
+    let mapped_idx = idx.saturating_sub(nan_count);
+    let result = overlap::sma(&valid, period).unwrap_or_default();
+    result.get(mapped_idx).copied().unwrap_or_else(|| {
+        result.last().copied().unwrap_or(0.0)
+    })
+}
+
 #[allow(dead_code)]
 #[inline(always)]
 pub fn ema_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
@@ -450,5 +467,35 @@ impl PrecomputedIndicators {
                 )
             })
             .unwrap_or((50.0, 50.0))
+    }
+}
+
+/// Count consecutive bars outside Bollinger Band.
+/// Returns positive count for bars above upper band, negative for below lower band.
+pub fn compute_bars_outside_band(klines: &[Kline], bb_upper: f64, bb_lower: f64) -> i32 {
+    let mut count: i32 = 0;
+    for k in klines.iter().rev() {
+        if k.close > bb_upper {
+            count += 1;
+        } else if k.close < bb_lower {
+            count -= 1;
+        } else {
+            break;
+        }
+    }
+    count
+}
+
+/// Find nearest round number (support/resistance level).
+/// upward = true: find next resistance above price
+/// upward = false: find next support below price
+pub fn find_round_number(price: f64, upward: bool) -> f64 {
+    if price <= 0.0 { return 0.0; }
+    let magnitude = 10_f64.powf(price.log10().floor());
+    let step = if magnitude >= 10000.0 { 1000.0 } else if magnitude >= 1000.0 { 100.0 } else if magnitude >= 100.0 { 10.0 } else if magnitude >= 10.0 { 5.0 } else { 1.0 };
+    if upward {
+        (price / step).ceil() * step
+    } else {
+        (price / step).floor() * step
     }
 }

@@ -14,6 +14,8 @@ use crate::config::AiConfig;
 use crate::exchange::registry::ExchangeRegistry;
 use crate::engine::position::types as pe_types;
 use crate::services::ai::{AiService, AiUserConfig};
+use crate::indicators;
+use crate::models::Kline;
 
 pub struct ExchangePriceProvider {
     exchange_registry: Arc<ExchangeRegistry>,
@@ -28,12 +30,204 @@ impl ExchangePriceProvider {
 #[async_trait]
 impl PriceProvider for ExchangePriceProvider {
     async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64> {
-        let exchange_key = format!("{}:Perpetual", exchange);
+        let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key)?;
         match ex.get_ticker(symbol).await {
             Ok(ticker) if ticker.last > 0.0 => Some(ticker.last),
             _ => None,
         }
+    }
+}
+
+// ── MarketDataProvider ──
+
+pub struct ExchangeMarketDataProvider {
+    exchange_registry: Arc<ExchangeRegistry>,
+}
+
+impl ExchangeMarketDataProvider {
+    pub fn new(exchange_registry: Arc<ExchangeRegistry>) -> Self {
+        Self { exchange_registry }
+    }
+}
+
+#[async_trait]
+impl MarketDataProvider for ExchangeMarketDataProvider {
+    async fn get_market_snapshot(&self, exchange: &str, symbol: &str) -> MarketSnapshot {
+        let exchange_key = format!("{}:perpetual", exchange);
+        let ex = match self.exchange_registry.get(&exchange_key) {
+            Some(e) => e,
+            None => return MarketSnapshot::default(),
+        };
+
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let start_1h = now_ms - 200 * 3600 * 1000;
+        let start_4h = now_ms - 50 * 4 * 3600 * 1000;
+        let start_15m = now_ms - 200 * 15 * 60 * 1000;
+
+        let klines_1h = match ex.get_klines_range(symbol, "1h", start_1h, now_ms).await {
+            Ok(k) if k.len() >= 30 => k,
+            _ => return MarketSnapshot::default(),
+        };
+
+        let klines_4h = match ex.get_klines_range(symbol, "4h", start_4h, now_ms).await {
+            Ok(k) => k,
+            Err(_) => vec![],
+        };
+
+        let klines_15m = match ex.get_klines_range(symbol, "15m", start_15m, now_ms).await {
+            Ok(k) => k,
+            Err(_) => vec![],
+        };
+
+        let last_idx = klines_1h.len().saturating_sub(1);
+        let current_price = klines_1h.last().map(|k| k.close).unwrap_or(0.0);
+
+        let rsi = indicators::rsi_at(&klines_1h, last_idx, 14);
+        let atr = indicators::atr_at(&klines_1h, last_idx, 14);
+        let atr_pct = if current_price > 0.0 { atr / current_price * 100.0 } else { 0.0 };
+        let bb_width = indicators::bbands_width_at(&klines_1h, last_idx, 20, 2.0);
+        let (bb_upper, bb_middle, bb_lower) = indicators::bbands_at(&klines_1h, last_idx, 20, 2.0);
+
+        let ema12 = indicators::ema_at(&klines_1h, last_idx, 12);
+        let ema20 = indicators::ema_at(&klines_1h, last_idx, 20);
+        let ema26 = indicators::ema_at(&klines_1h, last_idx, 26);
+        let ema50 = if klines_1h.len() >= 50 { indicators::ema_at(&klines_1h, last_idx, 50) } else { 0.0 };
+
+        let lookback = 5.min(last_idx);
+        let ema12_prev = indicators::ema_at(&klines_1h, last_idx.saturating_sub(lookback), 12);
+        let ema26_prev = indicators::ema_at(&klines_1h, last_idx.saturating_sub(lookback), 26);
+        let ema12_trend = if ema12 > ema12_prev { "上升" } else if ema12 < ema12_prev { "下降" } else { "横盘" };
+        let ema26_trend = if ema26 > ema26_prev { "上升" } else if ema26 < ema26_prev { "下降" } else { "横盘" };
+
+        let price_high: f64 = klines_1h.iter().map(|k| k.high).fold(f64::NEG_INFINITY, f64::max);
+        let price_low: f64 = klines_1h.iter().map(|k| k.low).fold(f64::INFINITY, f64::min);
+
+        let change_1h = if last_idx >= 1 && klines_1h[last_idx.saturating_sub(1)].close > 0.0 {
+            (current_price - klines_1h[last_idx.saturating_sub(1)].close) / klines_1h[last_idx.saturating_sub(1)].close * 100.0
+        } else { 0.0 };
+
+        let change_4h = if last_idx >= 4 && klines_1h[last_idx.saturating_sub(4)].close > 0.0 {
+            (current_price - klines_1h[last_idx.saturating_sub(4)].close) / klines_1h[last_idx.saturating_sub(4)].close * 100.0
+        } else { 0.0 };
+
+        let last_24: &[Kline] = if klines_1h.len() >= 24 {
+            &klines_1h[klines_1h.len() - 24..]
+        } else {
+            &klines_1h
+        };
+        let high_24: f64 = last_24.iter().map(|k| k.high).fold(f64::NEG_INFINITY, f64::max);
+        let low_24: f64 = last_24.iter().map(|k| k.low).fold(f64::INFINITY, f64::min);
+        let volatility = if low_24 > 0.0 { (high_24 - low_24) / low_24 * 100.0 } else { 0.0 };
+        let change_24h = if last_24.first().map(|k| k.close).unwrap_or(0.0) > 0.0 {
+            (current_price - last_24.first().unwrap().close) / last_24.first().unwrap().close * 100.0
+        } else { 0.0 };
+
+        let macd = indicators::macd_at(&klines_1h, last_idx, 12, 26);
+        let macd_signal = indicators::macd_signal_at(&klines_1h, last_idx, 12, 26, 9);
+        let adx = indicators::adx_at(&klines_1h, last_idx, 14);
+
+        let funding_rate = ex.get_funding_rate(symbol).await.map(|fr| fr.rate).unwrap_or(0.0);
+
+        let h1_atr_sma20 = if klines_1h.len() >= 20 {
+            let atr_series = indicators::atr(&klines_1h, 14);
+            indicators::sma_at_from(&atr_series, last_idx, 20)
+        } else { 0.0 };
+
+        let h1_candle_body = klines_1h.last().map(|k| k.close - k.open).unwrap_or(0.0);
+
+        let h1_bars_outside_band = indicators::compute_bars_outside_band(&klines_1h, bb_upper, bb_lower);
+
+        let h1_bandwidth_5bars_ago = if last_idx >= 5 {
+            indicators::bbands_width_at(&klines_1h, last_idx.saturating_sub(5), 20, 2.0)
+        } else { 0.0 };
+
+        let h1_high_20 = indicators::highest_at(&klines_1h, last_idx, 20);
+        let h1_low_20 = indicators::lowest_at(&klines_1h, last_idx, 20);
+
+        let nearest_round_up = indicators::find_round_number(current_price, true);
+        let nearest_round_down = indicators::find_round_number(current_price, false);
+
+        let h4_last = klines_4h.len().saturating_sub(1);
+        let h4_ema20 = if !klines_4h.is_empty() { indicators::ema_at(&klines_4h, h4_last, 20) } else { 0.0 };
+        let h4_ema50 = if klines_4h.len() >= 50 { indicators::ema_at(&klines_4h, h4_last, 50) } else { 0.0 };
+        let h4_adx = if !klines_4h.is_empty() { indicators::adx_at(&klines_4h, h4_last, 14) } else { 0.0 };
+        let h4_bb_width_pct = if !klines_4h.is_empty() { indicators::bbands_width_at(&klines_4h, h4_last, 20, 2.0) } else { 0.0 };
+
+        let m15_last = klines_15m.len().saturating_sub(1);
+        let m15_current_price = klines_15m.last().map(|k| k.close).unwrap_or(0.0);
+        let m15_bb_width_pct = if !klines_15m.is_empty() { indicators::bbands_width_at(&klines_15m, m15_last, 20, 2.0) } else { 0.0 };
+        let m15_atr = if !klines_15m.is_empty() { indicators::atr_at(&klines_15m, m15_last, 14) } else { 0.0 };
+        let m15_atr_sma20 = if klines_15m.len() >= 20 {
+            let atr_series = indicators::atr(&klines_15m, 14);
+            indicators::sma_at_from(&atr_series, m15_last, 20)
+        } else { 0.0 };
+        let m15_adx = if !klines_15m.is_empty() { indicators::adx_at(&klines_15m, m15_last, 14) } else { 0.0 };
+        let (m15_bb_upper, _, m15_bb_lower) = if !klines_15m.is_empty() {
+            indicators::bbands_at(&klines_15m, m15_last, 20, 2.0)
+        } else { (0.0, 0.0, 0.0) };
+        let m15_bars_outside_band = indicators::compute_bars_outside_band(&klines_15m, m15_bb_upper, m15_bb_lower);
+        let m15_ema20 = if !klines_15m.is_empty() { indicators::ema_at(&klines_15m, m15_last, 20) } else { 0.0 };
+        let m15_ema50 = if klines_15m.len() >= 50 { indicators::ema_at(&klines_15m, m15_last, 50) } else { 0.0 };
+
+        MarketSnapshot {
+            current_price,
+            rsi,
+            atr,
+            atr_pct,
+            bb_width,
+            bb_upper,
+            bb_middle,
+            bb_lower,
+            ema12,
+            ema12_trend: ema12_trend.to_string(),
+            ema20,
+            ema26,
+            ema26_trend: ema26_trend.to_string(),
+            ema50,
+            ema_4h: h4_ema20,
+            volatility,
+            change_1h,
+            change_4h,
+            change_24h,
+            funding_rate,
+            macd,
+            macd_signal,
+            adx,
+            price_high,
+            price_low,
+            h1_atr_sma20,
+            h1_candle_body,
+            h1_bars_outside_band,
+            h1_bandwidth_5bars_ago,
+            h1_high_20,
+            h1_low_20,
+            nearest_round_up,
+            nearest_round_down,
+            m15_current_price,
+            m15_bb_width_pct,
+            m15_atr,
+            m15_atr_sma20,
+            m15_adx,
+            m15_bars_outside_band,
+            m15_ema20,
+            m15_ema50,
+            h4_ema20,
+            h4_ema50,
+            h4_adx,
+            h4_bb_width_pct,
+        }
+    }
+
+    async fn get_account_balance(&self, exchange: &str) -> f64 {
+        let exchange_key = format!("{}:perpetual", exchange);
+        let ex = match self.exchange_registry.get(&exchange_key) {
+            Some(e) => e,
+            None => return 0.0,
+        };
+        ex.get_balances().await
+            .map(|bs| bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT")).map(|b| b.total).unwrap_or(0.0))
+            .unwrap_or(0.0)
     }
 }
 

@@ -217,3 +217,60 @@ pub trait LlmProviderResolver: Send + Sync {
     ) -> anyhow::Result<(String, String, String, String)>;
 }
 
+/// 市场数据快照（用于 LLM 决策时注入实时市场指标）
+#[derive(Debug, Clone, Default)]
+pub struct MarketSnapshot {
+    pub current_price: f64,
+    pub rsi: f64,
+    pub atr: f64,
+    pub atr_pct: f64,
+    pub bb_width: f64,
+    pub bb_upper: f64,
+    pub bb_middle: f64,
+    pub bb_lower: f64,
+    pub ema12: f64,
+    pub ema12_trend: String,
+    pub ema20: f64,
+    pub ema26: f64,
+    pub ema26_trend: String,
+    pub ema50: f64,
+    pub ema_4h: f64,
+    pub volatility: f64,
+    pub change_1h: f64,
+    pub change_4h: f64,
+    pub change_24h: f64,
+    pub funding_rate: f64,
+    pub macd: f64,
+    pub macd_signal: f64,
+    pub adx: f64,
+    pub price_high: f64,
+    pub price_low: f64,
+    pub h1_atr_sma20: f64,
+    pub h1_candle_body: f64,
+    pub h1_bars_outside_band: i32,
+    pub h1_bandwidth_5bars_ago: f64,
+    pub h1_high_20: f64,
+    pub h1_low_20: f64,
+    pub nearest_round_up: f64,
+    pub nearest_round_down: f64,
+    pub m15_current_price: f64,
+    pub m15_bb_width_pct: f64,
+    pub m15_atr: f64,
+    pub m15_atr_sma20: f64,
+    pub m15_adx: f64,
+    pub m15_bars_outside_band: i32,
+    pub m15_ema20: f64,
+    pub m15_ema50: f64,
+    pub h4_ema20: f64,
+    pub h4_ema50: f64,
+    pub h4_adx: f64,
+    pub h4_bb_width_pct: f64,
+}
+
+/// 市场数据提供者（获取 K 线并计算技术指标）
+#[async_trait]
+pub trait MarketDataProvider: Send + Sync {
+    async fn get_market_snapshot(&self, exchange: &str, symbol: &str) -> MarketSnapshot;
+    async fn get_account_balance(&self, exchange: &str) -> f64;
+}
+

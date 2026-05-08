@@ -88,6 +88,30 @@ export default function GridPage() {
   const [paperEnabled, setPaperEnabled] = createSignal(false);
   const [paperLoading, setPaperLoading] = createSignal(false);
 
+  // Grid levels in card
+  const [expandedBotId, setExpandedBotId] = createSignal<string | null>(null);
+  const [cardGridLevels, setCardGridLevels] = createSignal<{ level: number; price: number; filled: boolean; quantity: number }[]>([]);
+  const [loadingGridLevels, setLoadingGridLevels] = createSignal(false);
+
+  const toggleGridLevels = async (bot: GridBot) => {
+    if (expandedBotId() === bot.id) {
+      setExpandedBotId(null);
+      setCardGridLevels([]);
+      return;
+    }
+    setExpandedBotId(bot.id);
+    setLoadingGridLevels(true);
+    try {
+      const res = await api.get<{ grid_levels: { level: number; price: number; filled: boolean; quantity: number }[] }>(`/grid/${bot.id}/trades`);
+      setCardGridLevels(res.data?.grid_levels || []);
+    } catch (e) {
+      console.error(e);
+      setCardGridLevels([]);
+    } finally {
+      setLoadingGridLevels(false);
+    }
+  };
+
   const loadPaperStatus = async () => {
     try {
       const res = await api.get<{ enabled: boolean; pending_count: number }>('/grid/paper/status');
@@ -210,8 +234,8 @@ export default function GridPage() {
     setShowTrades(true);
     setLoadingTrades(true);
     try {
-      const res = await api.get<{ trades: GridTrade[]; grid_levels: { level: number; price: number; filled: boolean; quantity: number }[] }>(`/grid/${bot.id}/trades`);
-      setTrades(res.data?.trades || []);
+      const res = await api.get<{ items: GridTrade[]; grid_levels: { level: number; price: number; filled: boolean; quantity: number }[] }>(`/grid/${bot.id}/trades`);
+      setTrades(res.data?.items || []);
       setGridLevels(res.data?.grid_levels || []);
     } catch (e) {
       console.error(e);
@@ -527,6 +551,53 @@ export default function GridPage() {
                             <div class="text-xs font-mono mt-0.5">{formatPnl(bot.total_pnl)}</div>
                           </div>
                         </div>
+
+                        {/* Grid levels (collapsible) */}
+                        <Show when={bot.upper_price > 0 && bot.grid_count > 0}>
+                          <button
+                            onClick={() => toggleGridLevels(bot)}
+                            class="w-full mt-2 pt-2 border-t border-gray-100 text-[11px] text-gray-500 hover:text-gray-700 transition-colors flex items-center gap-1"
+                          >
+                            <span class={`transition-transform ${expandedBotId() === bot.id ? 'rotate-90' : ''}`}>▶</span>
+                            网格层级 ({bot.grid_filled_count}/{bot.grid_count} 已成交)
+                          </button>
+                          <Show when={expandedBotId() === bot.id}>
+                            <div class="mt-1 max-h-48 overflow-auto rounded border border-gray-100">
+                              <Show when={!loadingGridLevels()} fallback={
+                                <div class="p-3 text-center text-gray-400 text-xs">加载中...</div>
+                              }>
+                                <table class="w-full text-[11px]">
+                                  <thead class="sticky top-0 bg-white">
+                                    <tr class="text-gray-400 border-b border-gray-100">
+                                      <th class="text-left px-2.5 py-1.5 font-medium">层级</th>
+                                      <th class="text-right px-2.5 py-1.5 font-medium">价格</th>
+                                      <th class="text-right px-2.5 py-1.5 font-medium">成交量</th>
+                                      <th class="text-center px-2 py-1.5 font-medium">状态</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <For each={cardGridLevels()}>
+                                      {(level) => (
+                                        <tr class={`border-b border-gray-50 ${level.filled ? 'bg-emerald-50/50' : ''}`}>
+                                          <td class="px-2.5 py-1 text-gray-600 font-mono">{level.level}</td>
+                                          <td class="px-2.5 py-1 text-gray-600 text-right font-mono">{level.price.toFixed(2)}</td>
+                                          <td class="px-2.5 py-1 text-gray-600 text-right font-mono">{level.quantity > 0 ? level.quantity.toFixed(4) : '-'}</td>
+                                          <td class="px-2 py-1 text-center">
+                                            {level.filled ? (
+                                              <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                            ) : (
+                                              <span class="inline-block w-1.5 h-1.5 rounded-full bg-gray-300"></span>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </For>
+                                  </tbody>
+                                </table>
+                              </Show>
+                            </div>
+                          </Show>
+                        </Show>
                       </div>
                     );
                   }}

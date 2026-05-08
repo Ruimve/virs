@@ -22,6 +22,8 @@ pub struct GridWorker {
     ai_service: Arc<GridAiService>,
     /// 数据存储
     store: Arc<dyn GridStore>,
+    /// 市场数据提供者
+    market_data_provider: Arc<dyn MarketDataProvider>,
     /// 外部事件通道（从 adapter 转换后传入）
     event_rx: broadcast::Receiver<GridOrderEvent>,
     /// 网格事件广播
@@ -49,6 +51,7 @@ impl GridWorker {
         order_executor: Arc<dyn OrderExecutor>,
         ai_service: Arc<GridAiService>,
         store: Arc<dyn GridStore>,
+        market_data_provider: Arc<dyn MarketDataProvider>,
         event_rx: broadcast::Receiver<GridOrderEvent>,
         grid_event_tx: broadcast::Sender<GridEvent>,
     ) -> Self {
@@ -60,6 +63,7 @@ impl GridWorker {
             order_executor,
             ai_service,
             store,
+            market_data_provider,
             event_rx,
             grid_event_tx,
             levels,
@@ -526,32 +530,92 @@ impl GridWorker {
 
         let filled_count = self.levels.iter().filter(|l| l.buy_filled).count();
         let total_hold: f64 = self.levels.iter().map(|l| l.hold_quantity).sum();
-        let user_prompt = format!(
-            r#"## 当前状态
-- 交易对: {} ({})
-- 市场状态: {}
-- 当前价格: {:.2}
-- 网格区间: {:.2} - {:.2}（{} 层）
-- 已填充: {}/{} 层
-- 持仓数量: {:.6}
-- 累计盈亏: {:.2} USDT
-- 累计交易: {} 笔
-- 暂停状态: {}
 
-## 可选操作
-- run_grid: 继续运行（如果已暂停则恢复）
-- pause_grid: 暂停（撤销所有挂单）
-- adjust_grid: 调整网格参数（需返回新的 upper_price 和 lower_price）
-- reduce_position: 减半仓位（quantity_per_grid 减半）
-- hold: 保持当前状态
+        let snapshot = self.market_data_provider.get_market_snapshot(&self.bot.exchange, &self.bot.symbol).await;
 
-请返回 JSON: {{ "action": "run_grid|pause_grid|adjust_grid|reduce_position|hold", "reason": "简短理由", "upper_price": null, "lower_price": null }}"#,
-            self.bot.symbol, self.bot.exchange,
-            self.bot.market_regime.as_deref().unwrap_or("unknown"),
-            self.current_price, self.bot.lower_price, self.bot.upper_price,
-            self.bot.grid_count, filled_count, self.bot.grid_count,
-            total_hold, self.total_pnl, self.total_trades, self.paused,
-        );
+        let grid_status = if self.paused { "paused" } else if self.levels.is_empty() { "empty" } else { "running" };
+
+        let grid_levels_json: Vec<serde_json::Value> = self.levels.iter().map(|l| {
+            serde_json::json!({
+                "level": l.level,
+                "price": l.price,
+                "side": "buy",
+                "quantity_usdt": l.quantity * l.price,
+                "filled": l.buy_filled,
+            })
+        }).collect();
+
+        let current_grid_config = if grid_status == "empty" {
+            "none".to_string()
+        } else {
+            serde_json::json!({
+                "upper_price": self.bot.upper_price,
+                "lower_price": self.bot.lower_price,
+                "grid_count": self.bot.grid_count,
+                "grid_profit_pct": self.bot.grid_profit_pct,
+                "quantity_per_grid": self.bot.quantity_per_grid,
+                "grid_levels": grid_levels_json,
+            }).to_string()
+        };
+
+        let ema_distance_pct = if snapshot.ema50 > 0.0 {
+            (snapshot.ema20 - snapshot.ema50) / snapshot.ema50 * 100.0
+        } else { 0.0 };
+
+        let total_investment = self.market_data_provider.get_account_balance(&self.bot.exchange).await;
+
+        let template = super::types::DEFAULT_USER_PROMPT_TEMPLATE;
+
+        let user_prompt = template
+            .replace("{timestamp}", &chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string())
+            .replace("{symbol}", &self.bot.symbol)
+            .replace("{total_investment}", &format!("{:.2}", total_investment))
+            .replace("{leverage}", &self.bot.leverage.to_string())
+            .replace("{grid_status}", grid_status)
+            .replace("{last_adjust_time}", "N/A")
+            .replace("{consecutive_losses}", "0")
+            .replace("{current_grid_config}", &current_grid_config)
+            .replace("{position_base}", &format!("{:.6}", total_hold))
+            .replace("{position_side}", "long")
+            .replace("{entry_price}", &format!("{:.2}", self.bot.lower_price))
+            .replace("{unrealized_pnl}", &format!("{:.2}", self.total_pnl))
+            .replace("{used_margin}", &format!("{:.2}", total_investment / self.bot.leverage as f64))
+            .replace("{open_orders}", "[]")
+            .replace("{funding_rate}", &format!("{:.6}", snapshot.funding_rate))
+            .replace("{funding_next_time}", "N/A")
+            .replace("{event_flag}", "false")
+            .replace("{event_description}", "")
+            .replace("{h1_current_price}", &format!("{:.2}", snapshot.current_price))
+            .replace("{h1_bb_upper}", &format!("{:.2}", snapshot.bb_upper))
+            .replace("{h1_bb_middle}", &format!("{:.2}", snapshot.bb_middle))
+            .replace("{h1_bb_lower}", &format!("{:.2}", snapshot.bb_lower))
+            .replace("{h1_bb_width_pct}", &format!("{:.2}", snapshot.bb_width))
+            .replace("{h1_ema20}", &format!("{:.2}", snapshot.ema20))
+            .replace("{h1_ema50}", &format!("{:.2}", snapshot.ema50))
+            .replace("{h1_ema_distance_pct}", &format!("{:+.2}", ema_distance_pct))
+            .replace("{h1_adx}", &format!("{:.2}", snapshot.adx))
+            .replace("{h1_atr}", &format!("{:.4}", snapshot.atr))
+            .replace("{h1_atr_sma20}", &format!("{:.4}", snapshot.h1_atr_sma20))
+            .replace("{h1_candle_body}", &format!("{:+.4}", snapshot.h1_candle_body))
+            .replace("{h1_bars_outside_band}", &snapshot.h1_bars_outside_band.to_string())
+            .replace("{h1_bandwidth_5bars_ago}", &format!("{:.2}", snapshot.h1_bandwidth_5bars_ago))
+            .replace("{h1_high_20}", &format!("{:.2}", snapshot.h1_high_20))
+            .replace("{h1_low_20}", &format!("{:.2}", snapshot.h1_low_20))
+            .replace("{nearest_round_up}", &format!("{:.2}", snapshot.nearest_round_up))
+            .replace("{nearest_round_down}", &format!("{:.2}", snapshot.nearest_round_down))
+            .replace("{m15_current_price}", &format!("{:.2}", snapshot.m15_current_price))
+            .replace("{m15_bb_width_pct}", &format!("{:.2}", snapshot.m15_bb_width_pct))
+            .replace("{m15_atr}", &format!("{:.4}", snapshot.m15_atr))
+            .replace("{m15_atr_sma20}", &format!("{:.4}", snapshot.m15_atr_sma20))
+            .replace("{m15_adx}", &format!("{:.2}", snapshot.m15_adx))
+            .replace("{m15_bars_outside_band}", &snapshot.m15_bars_outside_band.to_string())
+            .replace("{m15_ema20}", &format!("{:.2}", snapshot.m15_ema20))
+            .replace("{m15_ema50}", &format!("{:.2}", snapshot.m15_ema50))
+            .replace("{h4_ema20}", &format!("{:.2}", snapshot.h4_ema20))
+            .replace("{h4_ema50}", &format!("{:.2}", snapshot.h4_ema50))
+            .replace("{h4_adx}", &format!("{:.2}", snapshot.h4_adx))
+            .replace("{h4_bb_width_pct}", &format!("{:.2}", snapshot.h4_bb_width_pct))
+            .replace("{trigger_reason}", "scheduled_15m");
 
         let system_prompt = self.bot.system_prompt.as_deref().unwrap_or(LLM_RUNTIME_PROMPT);
 

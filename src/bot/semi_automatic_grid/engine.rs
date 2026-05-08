@@ -19,6 +19,8 @@ pub struct GridEngine {
     price_provider: Arc<dyn PriceProvider>,
     /// 订单执行器
     order_executor: Arc<dyn OrderExecutor>,
+    /// 市场数据提供者
+    market_data_provider: Arc<dyn MarketDataProvider>,
     /// 外部事件广播（adapter 将 PE 事件转换后发送到此通道）
     event_tx: broadcast::Sender<GridOrderEvent>,
     /// 网格事件广播（发送给前端）
@@ -37,6 +39,7 @@ impl GridEngine {
         ai_service: Arc<GridAiService>,
         price_provider: Arc<dyn PriceProvider>,
         order_executor: Arc<dyn OrderExecutor>,
+        market_data_provider: Arc<dyn MarketDataProvider>,
         event_tx: broadcast::Sender<GridOrderEvent>,
     ) -> (Self, mpsc::Sender<GridCommand>, broadcast::Sender<GridEvent>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
@@ -47,6 +50,7 @@ impl GridEngine {
             ai_service,
             price_provider,
             order_executor,
+            market_data_provider,
             event_tx,
             grid_event_tx: grid_event_tx.clone(),
             cmd_rx: Some(cmd_rx),
@@ -120,11 +124,12 @@ impl GridEngine {
         let price_provider = self.price_provider.clone();
         let order_executor = self.order_executor.clone();
         let ai_service = self.ai_service.clone();
+        let market_data_provider = self.market_data_provider.clone();
 
         let handle = tokio::spawn(async move {
             let mut worker = GridWorker::new(
                 bot, price_provider, order_executor, ai_service, store,
-                event_rx, grid_event_tx,
+                market_data_provider, event_rx, grid_event_tx,
             );
             worker.run(shutdown_rx).await;
         });

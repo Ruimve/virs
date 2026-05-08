@@ -708,7 +708,7 @@ async fn fetch_current_price_invalid_falls_back() {
     let order_executor = Arc::new(MockOrderExecutor::new());
     let ai_service = make_mock_ai_service();
     let store = Arc::new(MockWorkerStore::new());
-    let mut worker = GridWorker::new(bot, price_provider, order_executor, ai_service, store, event_rx, grid_event_tx);
+    let mut worker = GridWorker::new(bot, price_provider, order_executor, ai_service, store, Arc::new(crate::bot::semi_automatic_grid::test::common::MockMarketDataProvider), event_rx, grid_event_tx);
     worker.current_price = 12345.0;
     let price = worker.fetch_current_price().await;
     assert!((price - 12345.0).abs() < f64::EPSILON);
@@ -874,7 +874,7 @@ fn broadcast_state_sends_event() {
     let order_executor = Arc::new(MockOrderExecutor::new());
     let ai_service = make_mock_ai_service();
     let store = Arc::new(MockWorkerStore::new());
-    let mut worker = GridWorker::new(bot, price_provider, order_executor, ai_service, store, event_rx, grid_event_tx);
+    let mut worker = GridWorker::new(bot, price_provider, order_executor, ai_service, store, Arc::new(crate::bot::semi_automatic_grid::test::common::MockMarketDataProvider), event_rx, grid_event_tx);
     worker.current_price = 55000.0;
     worker.broadcast_state();
     let event = grid_event_rx.try_recv().unwrap();
@@ -899,7 +899,7 @@ async fn on_order_filled_sell_triggers_grid_trade_closed_event() {
     let order_executor = Arc::new(MockOrderExecutor::new());
     let ai_service = make_mock_ai_service();
     let store = Arc::new(MockWorkerStore::new());
-    let mut worker = GridWorker::new(bot, price_provider, order_executor, ai_service, store, event_rx, grid_event_tx);
+    let mut worker = GridWorker::new(bot, price_provider, order_executor, ai_service, store, Arc::new(crate::bot::semi_automatic_grid::test::common::MockMarketDataProvider), event_rx, grid_event_tx);
 
     let buy_price = worker.levels[3].buy_price;
     let sell_price = worker.levels[3].sell_price;
@@ -936,7 +936,7 @@ async fn on_order_filled_sell_triggers_grid_filled_event() {
     let order_executor = Arc::new(MockOrderExecutor::new());
     let ai_service = make_mock_ai_service();
     let store = Arc::new(MockWorkerStore::new());
-    let mut worker = GridWorker::new(bot, price_provider, order_executor, ai_service, store, event_rx, grid_event_tx);
+    let mut worker = GridWorker::new(bot, price_provider, order_executor, ai_service, store, Arc::new(crate::bot::semi_automatic_grid::test::common::MockMarketDataProvider), event_rx, grid_event_tx);
 
     let sell_price = worker.levels[3].sell_price;
     let quantity = worker.levels[3].quantity;
@@ -975,7 +975,7 @@ async fn on_order_filled_buy_triggers_grid_filled_event() {
     let order_executor = Arc::new(MockOrderExecutor::new());
     let ai_service = make_mock_ai_service();
     let store = Arc::new(MockWorkerStore::new());
-    let mut worker = GridWorker::new(bot, price_provider, order_executor, ai_service, store, event_rx, grid_event_tx);
+    let mut worker = GridWorker::new(bot, price_provider, order_executor, ai_service, store, Arc::new(crate::bot::semi_automatic_grid::test::common::MockMarketDataProvider), event_rx, grid_event_tx);
 
     let buy_price = worker.levels[3].buy_price;
     let quantity = worker.levels[3].quantity;
@@ -1008,7 +1008,7 @@ async fn on_order_filled_buy_no_trade_closed_event() {
     let order_executor = Arc::new(MockOrderExecutor::new());
     let ai_service = make_mock_ai_service();
     let store = Arc::new(MockWorkerStore::new());
-    let mut worker = GridWorker::new(bot, price_provider, order_executor, ai_service, store, event_rx, grid_event_tx);
+    let mut worker = GridWorker::new(bot, price_provider, order_executor, ai_service, store, Arc::new(crate::bot::semi_automatic_grid::test::common::MockMarketDataProvider), event_rx, grid_event_tx);
 
     let buy_price = worker.levels[3].buy_price;
     let quantity = worker.levels[3].quantity;
@@ -1305,6 +1305,7 @@ async fn record_trade_stores_to_store() {
         order_executor,
         ai_service,
         store.clone(),
+        Arc::new(crate::bot::semi_automatic_grid::test::common::MockMarketDataProvider),
         event_rx,
         grid_event_tx,
     );
