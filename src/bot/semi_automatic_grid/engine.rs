@@ -22,7 +22,7 @@ pub struct GridEngine {
     /// 市场数据提供者
     market_data_provider: Arc<dyn MarketDataProvider>,
     /// 外部事件广播（adapter 将 PE 事件转换后发送到此通道）
-    event_tx: broadcast::Sender<GridOrderEvent>,
+    event_tx: broadcast::Sender<OrderEvent>,
     /// 网格事件广播（发送给前端）
     grid_event_tx: broadcast::Sender<GridEvent>,
     /// 网格命令接收
@@ -40,7 +40,7 @@ impl GridEngine {
         price_provider: Arc<dyn PriceProvider>,
         order_executor: Arc<dyn OrderExecutor>,
         market_data_provider: Arc<dyn MarketDataProvider>,
-        event_tx: broadcast::Sender<GridOrderEvent>,
+        event_tx: broadcast::Sender<OrderEvent>,
     ) -> (Self, mpsc::Sender<GridCommand>, broadcast::Sender<GridEvent>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
         let (grid_event_tx, _) = broadcast::channel(256);
@@ -143,7 +143,7 @@ impl GridEngine {
     }
 
     pub(crate) async fn stop_bot(&mut self, bot_id: Uuid, reason: &str) {
-        let _ = self.order_executor.send_command(GridOrderCommand::CancelAllOrders { symbol: None }).await;
+        let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders { symbol: None }).await;
 
         if let Some(tx) = self.shutdown_txs.remove(&bot_id) {
             let _ = tx.send(()).await;

@@ -245,15 +245,15 @@ impl PeOrderExecutor {
 
 #[async_trait]
 impl OrderExecutor for PeOrderExecutor {
-    async fn send_command(&self, command: GridOrderCommand) -> anyhow::Result<()> {
+    async fn send_command(&self, command: OrderCommand) -> anyhow::Result<()> {
         let pe_cmd = match command {
-            GridOrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only } => {
+            OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only } => {
                 pe_types::EngineCommand::PlaceOrder {
                     params: pe_types::PlaceOrderParams {
                         symbol,
                         side: match side {
-                            GridSide::Buy => pe_types::Side::Buy,
-                            GridSide::Sell => pe_types::Side::Sell,
+                            OrderSide::Buy => pe_types::Side::Buy,
+                            OrderSide::Sell => pe_types::Side::Sell,
                         },
                         order_type: pe_types::OrderType::Limit,
                         amount,
@@ -264,7 +264,7 @@ impl OrderExecutor for PeOrderExecutor {
                     },
                 }
             }
-            GridOrderCommand::CancelAllOrders { symbol } => {
+            OrderCommand::CancelAllOrders { symbol } => {
                 pe_types::EngineCommand::CancelAllOrders {
                     position_id: None,
                     symbol,
@@ -614,43 +614,43 @@ impl LlmProviderResolver for DefaultLlmResolver {
 
 // ── PE 事件转换 ──
 
-/// 将 Position Engine 的 EngineEvent 转换为 GridOrderEvent
-pub fn convert_pe_event(event: pe_types::EngineEvent) -> Option<GridOrderEvent> {
+/// 将 Position Engine 的 EngineEvent 转换为 OrderEvent
+pub fn convert_pe_event(event: pe_types::EngineEvent) -> Option<OrderEvent> {
     match event {
-        pe_types::EngineEvent::OrderPlaced { order } => Some(GridOrderEvent::OrderPlaced {
-            order: GridOrderInfo {
+        pe_types::EngineEvent::OrderPlaced { order } => Some(OrderEvent::OrderPlaced {
+            order: OrderInfo {
                 id: order.id,
                 side: match order.side {
-                    pe_types::Side::Buy => GridSide::Buy,
-                    pe_types::Side::Sell => GridSide::Sell,
+                    pe_types::Side::Buy => OrderSide::Buy,
+                    pe_types::Side::Sell => OrderSide::Sell,
                 },
                 fill_price: order.fill_price,
                 request_price: order.request_price,
                 filled: order.filled,
             },
         }),
-        pe_types::EngineEvent::OrderFilled { order, trade: _ } => Some(GridOrderEvent::OrderFilled {
-            order: GridOrderInfo {
+        pe_types::EngineEvent::OrderFilled { order, trade: _ } => Some(OrderEvent::OrderFilled {
+            order: OrderInfo {
                 id: order.id,
                 side: match order.side {
-                    pe_types::Side::Buy => GridSide::Buy,
-                    pe_types::Side::Sell => GridSide::Sell,
+                    pe_types::Side::Buy => OrderSide::Buy,
+                    pe_types::Side::Sell => OrderSide::Sell,
                 },
                 fill_price: order.fill_price,
                 request_price: order.request_price,
                 filled: order.filled,
             },
         }),
-        pe_types::EngineEvent::OrderCanceled { order } => Some(GridOrderEvent::OrderCanceled {
+        pe_types::EngineEvent::OrderCanceled { order } => Some(OrderEvent::OrderCanceled {
             order_id: order.id,
         }),
-        pe_types::EngineEvent::OrderFailed { order_id, reason } => Some(GridOrderEvent::OrderFailed {
+        pe_types::EngineEvent::OrderFailed { order_id, reason } => Some(OrderEvent::OrderFailed {
             order_id,
             reason,
         }),
-        pe_types::EngineEvent::RiskAlert { level, message } => Some(GridOrderEvent::RiskAlert { level, message }),
+        pe_types::EngineEvent::RiskAlert { level, message } => Some(OrderEvent::RiskAlert { level, message }),
         pe_types::EngineEvent::LiquidationWarning { symbol, liquidation_price, current_price, .. } => {
-            Some(GridOrderEvent::LiquidationWarning { symbol, liquidation_price, current_price })
+            Some(OrderEvent::LiquidationWarning { symbol, liquidation_price, current_price })
         }
         _ => None,
     }
@@ -677,7 +677,7 @@ impl SwitchableOrderExecutor {
 
 #[async_trait]
 impl OrderExecutor for SwitchableOrderExecutor {
-    async fn send_command(&self, command: GridOrderCommand) -> anyhow::Result<()> {
+    async fn send_command(&self, command: OrderCommand) -> anyhow::Result<()> {
         if self.paper.is_enabled() {
             self.paper.send_command(command).await
         } else {

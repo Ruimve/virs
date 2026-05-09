@@ -25,7 +25,7 @@ pub struct GridWorker {
     /// 市场数据提供者
     market_data_provider: Arc<dyn MarketDataProvider>,
     /// 外部事件通道（从 adapter 转换后传入）
-    event_rx: broadcast::Receiver<GridOrderEvent>,
+    event_rx: broadcast::Receiver<OrderEvent>,
     /// 网格事件广播
     grid_event_tx: broadcast::Sender<GridEvent>,
     /// 网格层状态
@@ -52,7 +52,7 @@ impl GridWorker {
         ai_service: Arc<GridAiService>,
         store: Arc<dyn GridStore>,
         market_data_provider: Arc<dyn MarketDataProvider>,
-        event_rx: broadcast::Receiver<GridOrderEvent>,
+        event_rx: broadcast::Receiver<OrderEvent>,
         grid_event_tx: broadcast::Sender<GridEvent>,
     ) -> Self {
         let levels = Self::calculate_levels(&bot);
@@ -284,28 +284,28 @@ impl GridWorker {
 
     // ── 外部事件处理 ──
 
-    pub(crate) async fn on_order_event(&mut self, event: GridOrderEvent) {
+    pub(crate) async fn on_order_event(&mut self, event: OrderEvent) {
         match event {
-            GridOrderEvent::OrderPlaced { order } => {
+            OrderEvent::OrderPlaced { order } => {
                 self.on_order_placed(&order).await;
             }
-            GridOrderEvent::OrderFilled { order } => {
+            OrderEvent::OrderFilled { order } => {
                 self.on_order_filled(&order).await;
             }
-            GridOrderEvent::OrderCanceled { order_id } => {
+            OrderEvent::OrderCanceled { order_id } => {
                 self.on_order_canceled(order_id).await;
             }
-            GridOrderEvent::OrderFailed { order_id, reason } => {
+            OrderEvent::OrderFailed { order_id, reason } => {
                 warn!(bot_id = %self.bot.id, order_id = %order_id, reason = %reason, "Order failed");
                 self.clear_order_id(order_id);
             }
-            GridOrderEvent::RiskAlert { level, message } => {
+            OrderEvent::RiskAlert { level, message } => {
                 warn!(bot_id = %self.bot.id, level = %level, message = %message, "Risk alert");
                 if level == "CloseAll" {
                     self.pause_with_cancel("CloseAll risk alert").await;
                 }
             }
-            GridOrderEvent::LiquidationWarning { symbol, liquidation_price, current_price } => {
+            OrderEvent::LiquidationWarning { symbol, liquidation_price, current_price } => {
                 warn!(
                     bot_id = %self.bot.id, %symbol,
                     liquidation_price, current_price,
@@ -319,7 +319,7 @@ impl GridWorker {
     pub(crate) async fn pause_with_cancel(&mut self, reason: &str) {
         if !self.paused {
             self.paused = true;
-            let _ = self.order_executor.send_command(GridOrderCommand::CancelAllOrders {
+            let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
                 symbol: Some(self.bot.symbol.clone()),
             }).await;
             warn!(bot_id = %self.bot.id, "Grid paused due to {}", reason);
@@ -328,7 +328,7 @@ impl GridWorker {
 
     // ── 订单匹配 ──
 
-    pub(crate) async fn on_order_placed(&mut self, order: &GridOrderInfo) {
+    pub(crate) async fn on_order_placed(&mut self, order: &OrderInfo) {
         if let Some(&(level_idx, ref side)) = self.order_level_map.get(&order.id) {
             info!(bot_id = %self.bot.id, level = level_idx, side = %side, order_id = %order.id, "Grid order placed (via map)");
             return;
@@ -338,9 +338,9 @@ impl GridWorker {
             let mut matched: Option<(usize, bool, String)> = None;
 
             for (idx, level) in self.levels.iter().enumerate() {
-                let is_buy = order.side == GridSide::Buy
+                let is_buy = order.side == OrderSide::Buy
                     && (price - level.buy_price).abs() < level.buy_price * 0.001;
-                let is_sell = order.side == GridSide::Sell
+                let is_sell = order.side == OrderSide::Sell
                     && (price - level.sell_price).abs() < level.sell_price * 0.001;
 
                 if is_buy || is_sell {
@@ -368,7 +368,7 @@ impl GridWorker {
         }
     }
 
-    pub(crate) async fn on_order_filled(&mut self, order: &GridOrderInfo) {
+    pub(crate) async fn on_order_filled(&mut self, order: &OrderInfo) {
         let side_str = order.side.as_str();
 
         let matched_idx = if let Some(&(idx, ref side)) = self.order_level_map.get(&order.id) {
@@ -387,7 +387,7 @@ impl GridWorker {
 
         let price = order.fill_price.unwrap_or(0.0);
         let level = &mut self.levels[idx];
-        let is_buy_match = order.side == GridSide::Buy;
+        let is_buy_match = order.side == OrderSide::Buy;
         let is_sell_match = !is_buy_match;
         let level_num = level.level;
 
@@ -467,9 +467,9 @@ impl GridWorker {
     // ── 下单 ──
 
     async fn place_buy_order(&self, level: &GridLevel) {
-        let cmd = GridOrderCommand::PlaceOrder {
+        let cmd = OrderCommand::PlaceOrder {
             symbol: self.bot.symbol.clone(),
-            side: GridSide::Buy,
+            side: OrderSide::Buy,
             amount: level.quantity,
             price: Some(level.buy_price),
             reduce_only: false,
@@ -480,9 +480,9 @@ impl GridWorker {
     }
 
     async fn place_sell_order(&self, level: &GridLevel) {
-        let cmd = GridOrderCommand::PlaceOrder {
+        let cmd = OrderCommand::PlaceOrder {
             symbol: self.bot.symbol.clone(),
-            side: GridSide::Sell,
+            side: OrderSide::Sell,
             amount: level.hold_quantity.min(level.quantity),
             price: Some(level.sell_price),
             reduce_only: true,
@@ -666,7 +666,7 @@ impl GridWorker {
     }
 
     pub(crate) async fn adjust_grid(&mut self, new_upper: Option<f64>, new_lower: Option<f64>) {
-        let _ = self.order_executor.send_command(GridOrderCommand::CancelAllOrders {
+        let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
             symbol: Some(self.bot.symbol.clone()),
         }).await;
 

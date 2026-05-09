@@ -3,12 +3,12 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum GridSide {
+pub enum OrderSide {
     Buy,
     Sell,
 }
 
-impl GridSide {
+impl OrderSide {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Buy => "buy",
@@ -18,19 +18,19 @@ impl GridSide {
 }
 
 #[derive(Debug, Clone)]
-pub struct GridOrderInfo {
+pub struct OrderInfo {
     pub id: Uuid,
-    pub side: GridSide,
+    pub side: OrderSide,
     pub fill_price: Option<f64>,
     pub request_price: Option<f64>,
     pub filled: f64,
 }
 
 #[derive(Debug, Clone)]
-pub enum GridOrderCommand {
+pub enum OrderCommand {
     PlaceOrder {
         symbol: String,
-        side: GridSide,
+        side: OrderSide,
         amount: f64,
         price: Option<f64>,
         reduce_only: bool,
@@ -41,9 +41,9 @@ pub enum GridOrderCommand {
 }
 
 #[derive(Debug, Clone)]
-pub enum GridOrderEvent {
-    OrderPlaced { order: GridOrderInfo },
-    OrderFilled { order: GridOrderInfo },
+pub enum OrderEvent {
+    OrderPlaced { order: OrderInfo },
+    OrderFilled { order: OrderInfo },
     OrderCanceled { order_id: Uuid },
     OrderFailed { order_id: Uuid, reason: String },
     RiskAlert { level: String, message: String },
@@ -56,5 +56,5 @@ pub enum GridOrderEvent {
 
 #[async_trait]
 pub trait OrderExecutor: Send + Sync {
-    async fn send_command(&self, command: GridOrderCommand) -> anyhow::Result<()>;
+    async fn send_command(&self, command: OrderCommand) -> anyhow::Result<()>;
 }

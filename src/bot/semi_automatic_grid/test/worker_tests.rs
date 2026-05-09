@@ -230,8 +230,8 @@ async fn on_order_placed_via_map() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
     worker.order_level_map.insert(order_id, (3, "buy".to_string()));
-    let order = GridOrderInfo {
-        id: order_id, side: GridSide::Buy,
+    let order = OrderInfo {
+        id: order_id, side: OrderSide::Buy,
         fill_price: Some(worker.levels[3].buy_price),
         request_price: None, filled: 0.0,
     };
@@ -244,8 +244,8 @@ async fn on_order_placed_via_price_buy() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
     let buy_price = worker.levels[2].buy_price;
-    let order = GridOrderInfo {
-        id: order_id, side: GridSide::Buy,
+    let order = OrderInfo {
+        id: order_id, side: OrderSide::Buy,
         fill_price: Some(buy_price), request_price: None, filled: 0.0,
     };
     worker.on_order_placed(&order).await;
@@ -261,8 +261,8 @@ async fn on_order_placed_via_price_sell() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
     let sell_price = worker.levels[3].sell_price;
-    let order = GridOrderInfo {
-        id: order_id, side: GridSide::Sell,
+    let order = OrderInfo {
+        id: order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: 0.0,
     };
     worker.on_order_placed(&order).await;
@@ -277,8 +277,8 @@ async fn on_order_placed_via_price_sell() {
 async fn on_order_placed_no_match() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
-    let order = GridOrderInfo {
-        id: order_id, side: GridSide::Buy,
+    let order = OrderInfo {
+        id: order_id, side: OrderSide::Buy,
         fill_price: Some(99999.0), request_price: None, filled: 0.0,
     };
     worker.on_order_placed(&order).await;
@@ -289,8 +289,8 @@ async fn on_order_placed_no_match() {
 async fn on_order_placed_no_prices() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
-    let order = GridOrderInfo {
-        id: order_id, side: GridSide::Buy,
+    let order = OrderInfo {
+        id: order_id, side: OrderSide::Buy,
         fill_price: None, request_price: None, filled: 0.0,
     };
     worker.on_order_placed(&order).await;
@@ -302,8 +302,8 @@ async fn on_order_placed_request_price_fallback() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
     let buy_price = worker.levels[2].buy_price;
-    let order = GridOrderInfo {
-        id: order_id, side: GridSide::Buy,
+    let order = OrderInfo {
+        id: order_id, side: OrderSide::Buy,
         fill_price: None, request_price: Some(buy_price), filled: 0.0,
     };
     worker.on_order_placed(&order).await;
@@ -320,8 +320,8 @@ async fn on_order_filled_buy() {
     let buy_price = worker.levels[3].buy_price;
     let quantity = worker.levels[3].quantity;
     worker.order_level_map.insert(order_id, (3, "buy".to_string()));
-    let order = GridOrderInfo {
-        id: order_id, side: GridSide::Buy,
+    let order = OrderInfo {
+        id: order_id, side: OrderSide::Buy,
         fill_price: Some(buy_price), request_price: None, filled: quantity,
     };
     worker.on_order_filled(&order).await;
@@ -344,8 +344,8 @@ async fn on_order_filled_sell_with_rebuy() {
     let sell_order_id = Uuid::new_v4();
     worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
     worker.levels[3].sell_order_id = Some(sell_order_id);
-    let order = GridOrderInfo {
-        id: sell_order_id, side: GridSide::Sell,
+    let order = OrderInfo {
+        id: sell_order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: quantity,
     };
     worker.on_order_filled(&order).await;
@@ -368,8 +368,8 @@ async fn on_order_filled_sell_pnl_calculation() {
     worker.levels[3].hold_quantity = quantity;
     let sell_order_id = Uuid::new_v4();
     worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
-    let order = GridOrderInfo {
-        id: sell_order_id, side: GridSide::Sell,
+    let order = OrderInfo {
+        id: sell_order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: quantity,
     };
     worker.on_order_filled(&order).await;
@@ -381,8 +381,8 @@ async fn on_order_filled_sell_pnl_calculation() {
 async fn on_order_filled_no_match() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
-    let order = GridOrderInfo {
-        id: order_id, side: GridSide::Buy,
+    let order = OrderInfo {
+        id: order_id, side: OrderSide::Buy,
         fill_price: Some(50000.0), request_price: None, filled: 0.001,
     };
     worker.on_order_filled(&order).await;
@@ -396,8 +396,8 @@ async fn on_order_filled_zero_filled() {
     let order_id = Uuid::new_v4();
     let buy_price = worker.levels[3].buy_price;
     worker.order_level_map.insert(order_id, (3, "buy".to_string()));
-    let order = GridOrderInfo {
-        id: order_id, side: GridSide::Buy,
+    let order = OrderInfo {
+        id: order_id, side: OrderSide::Buy,
         fill_price: Some(buy_price), request_price: None, filled: 0.0,
     };
     worker.on_order_filled(&order).await;
@@ -410,8 +410,8 @@ async fn on_order_filled_side_mismatch() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
     worker.order_level_map.insert(order_id, (3, "buy".to_string()));
-    let order = GridOrderInfo {
-        id: order_id, side: GridSide::Sell,
+    let order = OrderInfo {
+        id: order_id, side: OrderSide::Sell,
         fill_price: Some(worker.levels[3].sell_price), request_price: None, filled: 0.001,
     };
     worker.on_order_filled(&order).await;
@@ -469,7 +469,7 @@ async fn on_order_event_order_failed() {
     let order_id = Uuid::new_v4();
     worker.order_level_map.insert(order_id, (2, "buy".to_string()));
     worker.levels[2].buy_order_id = Some(order_id);
-    worker.on_order_event(GridOrderEvent::OrderFailed {
+    worker.on_order_event(OrderEvent::OrderFailed {
         order_id, reason: "timeout".to_string(),
     }).await;
     assert!(!worker.order_level_map.contains_key(&order_id));
@@ -480,7 +480,7 @@ async fn on_order_event_order_failed() {
 async fn on_risk_alert_closeall() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     assert!(!worker.paused);
-    worker.on_order_event(GridOrderEvent::RiskAlert {
+    worker.on_order_event(OrderEvent::RiskAlert {
         level: "CloseAll".to_string(),
         message: "Risk!".to_string(),
     }).await;
@@ -490,7 +490,7 @@ async fn on_risk_alert_closeall() {
 #[tokio::test]
 async fn on_risk_alert_other_level() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
-    worker.on_order_event(GridOrderEvent::RiskAlert {
+    worker.on_order_event(OrderEvent::RiskAlert {
         level: "Info".to_string(),
         message: "Just info".to_string(),
     }).await;
@@ -501,7 +501,7 @@ async fn on_risk_alert_other_level() {
 async fn on_liquidation_warning() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     assert!(!worker.paused);
-    worker.on_order_event(GridOrderEvent::LiquidationWarning {
+    worker.on_order_event(OrderEvent::LiquidationWarning {
         symbol: "BTCUSDT".to_string(),
         liquidation_price: 45000.0,
         current_price: 46000.0,
@@ -532,7 +532,7 @@ async fn pause_with_cancel_sends_cancel_command() {
     let commands = order_executor.commands().await;
     assert_eq!(commands.len(), 1);
     match &commands[0] {
-        GridOrderCommand::CancelAllOrders { symbol } => {
+        OrderCommand::CancelAllOrders { symbol } => {
             assert_eq!(symbol, &Some("BTCUSDT".to_string()));
         }
         _ => panic!("Expected CancelAllOrders"),
@@ -768,7 +768,7 @@ async fn place_initial_orders_sends_buy_orders() {
     worker.current_price = 55000.0;
     worker.place_initial_orders().await;
     let commands = order_executor.commands().await;
-    let buy_count = commands.iter().filter(|c| matches!(c, GridOrderCommand::PlaceOrder { side: GridSide::Buy, .. })).count();
+    let buy_count = commands.iter().filter(|c| matches!(c, OrderCommand::PlaceOrder { side: OrderSide::Buy, .. })).count();
     assert!(buy_count > 0, "Should place at least one buy order");
 }
 
@@ -791,7 +791,7 @@ async fn place_initial_orders_with_hold_sells() {
     worker.levels[3].hold_quantity = worker.levels[3].quantity;
     worker.place_initial_orders().await;
     let commands = order_executor.commands().await;
-    let sell_count = commands.iter().filter(|c| matches!(c, GridOrderCommand::PlaceOrder { side: GridSide::Sell, .. })).count();
+    let sell_count = commands.iter().filter(|c| matches!(c, OrderCommand::PlaceOrder { side: OrderSide::Sell, .. })).count();
     assert!(sell_count > 0, "Should place sell order for held level");
 }
 
@@ -826,7 +826,7 @@ async fn on_price_tick_sell_when_hold_and_price_above() {
     worker.levels[0].hold_quantity = worker.levels[0].quantity;
     worker.on_price_tick().await;
     let commands = order_executor.commands().await;
-    let sell_count = commands.iter().filter(|c| matches!(c, GridOrderCommand::PlaceOrder { side: GridSide::Sell, .. })).count();
+    let sell_count = commands.iter().filter(|c| matches!(c, OrderCommand::PlaceOrder { side: OrderSide::Sell, .. })).count();
     assert!(sell_count > 0);
 }
 
@@ -909,8 +909,8 @@ async fn on_order_filled_sell_triggers_grid_trade_closed_event() {
     let sell_order_id = Uuid::new_v4();
     worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
 
-    let order = GridOrderInfo {
-        id: sell_order_id, side: GridSide::Sell,
+    let order = OrderInfo {
+        id: sell_order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: quantity,
     };
     worker.on_order_filled(&order).await;
@@ -945,8 +945,8 @@ async fn on_order_filled_sell_triggers_grid_filled_event() {
     let sell_order_id = Uuid::new_v4();
     worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
 
-    let order = GridOrderInfo {
-        id: sell_order_id, side: GridSide::Sell,
+    let order = OrderInfo {
+        id: sell_order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: quantity,
     };
     worker.on_order_filled(&order).await;
@@ -982,8 +982,8 @@ async fn on_order_filled_buy_triggers_grid_filled_event() {
     let order_id = Uuid::new_v4();
     worker.order_level_map.insert(order_id, (3, "buy".to_string()));
 
-    let order = GridOrderInfo {
-        id: order_id, side: GridSide::Buy,
+    let order = OrderInfo {
+        id: order_id, side: OrderSide::Buy,
         fill_price: Some(buy_price), request_price: None, filled: quantity,
     };
     worker.on_order_filled(&order).await;
@@ -1015,8 +1015,8 @@ async fn on_order_filled_buy_no_trade_closed_event() {
     let order_id = Uuid::new_v4();
     worker.order_level_map.insert(order_id, (3, "buy".to_string()));
 
-    let order = GridOrderInfo {
-        id: order_id, side: GridSide::Buy,
+    let order = OrderInfo {
+        id: order_id, side: OrderSide::Buy,
         fill_price: Some(buy_price), request_price: None, filled: quantity,
     };
     worker.on_order_filled(&order).await;
@@ -1045,20 +1045,20 @@ async fn on_order_filled_sell_places_rebuy_order() {
     let sell_order_id = Uuid::new_v4();
     worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
 
-    let order = GridOrderInfo {
-        id: sell_order_id, side: GridSide::Sell,
+    let order = OrderInfo {
+        id: sell_order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: quantity,
     };
     worker.on_order_filled(&order).await;
 
     let commands = order_executor.commands().await;
     let rebuy = commands.iter().find(|c| {
-        matches!(c, GridOrderCommand::PlaceOrder { side: GridSide::Buy, .. })
+        matches!(c, OrderCommand::PlaceOrder { side: OrderSide::Buy, .. })
     });
     assert!(rebuy.is_some(), "Sell fill should trigger a rebuy order");
     match rebuy.unwrap() {
-        GridOrderCommand::PlaceOrder { side, price, amount, .. } => {
-            assert_eq!(*side, GridSide::Buy);
+        OrderCommand::PlaceOrder { side, price, amount, .. } => {
+            assert_eq!(*side, OrderSide::Buy);
             assert_eq!(*price, Some(worker.levels[3].buy_price));
             assert!((amount - quantity).abs() < f64::EPSILON);
         }
@@ -1094,7 +1094,7 @@ async fn on_price_tick_sell_order_when_hold_and_price_at_sell_price() {
 
     let commands = order_executor.commands().await;
     let sell_orders: Vec<_> = commands.iter().filter(|c| {
-        matches!(c, GridOrderCommand::PlaceOrder { side: GridSide::Sell, .. })
+        matches!(c, OrderCommand::PlaceOrder { side: OrderSide::Sell, .. })
     }).collect();
     assert!(!sell_orders.is_empty(), "Should place sell order when price at sell_price and holding");
 }
@@ -1112,7 +1112,7 @@ async fn adjust_grid_paused_does_not_place_initial_orders() {
 
     let commands = order_executor.commands().await;
     let place_orders: Vec<_> = commands.iter().filter(|c| {
-        matches!(c, GridOrderCommand::PlaceOrder { .. })
+        matches!(c, OrderCommand::PlaceOrder { .. })
     }).collect();
     assert!(place_orders.is_empty(), "Paused worker should not place initial orders after adjust");
 }
@@ -1131,7 +1131,7 @@ async fn adjust_grid_not_paused_places_initial_orders() {
     assert!(!worker.levels.is_empty());
     let commands = order_executor.commands().await;
     let place_orders: Vec<_> = commands.iter().filter(|c| {
-        matches!(c, GridOrderCommand::PlaceOrder { .. })
+        matches!(c, OrderCommand::PlaceOrder { .. })
     }).collect();
     assert!(!place_orders.is_empty(), "Not-paused worker should place initial orders after adjust");
 }
@@ -1166,7 +1166,7 @@ async fn adjust_grid_sends_cancel_all_orders() {
 
     let commands = order_executor.commands().await;
     let cancel_cmd = commands.iter().find(|c| {
-        matches!(c, GridOrderCommand::CancelAllOrders { .. })
+        matches!(c, OrderCommand::CancelAllOrders { .. })
     });
     assert!(cancel_cmd.is_some(), "adjust_grid should send CancelAllOrders");
 }
@@ -1328,9 +1328,9 @@ async fn on_order_event_order_placed_dispatches() {
     let order_id = Uuid::new_v4();
     let buy_price = worker.levels[2].buy_price;
 
-    worker.on_order_event(GridOrderEvent::OrderPlaced {
-        order: GridOrderInfo {
-            id: order_id, side: GridSide::Buy,
+    worker.on_order_event(OrderEvent::OrderPlaced {
+        order: OrderInfo {
+            id: order_id, side: OrderSide::Buy,
             fill_price: Some(buy_price), request_price: None, filled: 0.0,
         },
     }).await;
@@ -1347,9 +1347,9 @@ async fn on_order_event_order_filled_dispatches() {
     let quantity = worker.levels[3].quantity;
     worker.order_level_map.insert(order_id, (3, "buy".to_string()));
 
-    worker.on_order_event(GridOrderEvent::OrderFilled {
-        order: GridOrderInfo {
-            id: order_id, side: GridSide::Buy,
+    worker.on_order_event(OrderEvent::OrderFilled {
+        order: OrderInfo {
+            id: order_id, side: OrderSide::Buy,
             fill_price: Some(buy_price), request_price: None, filled: quantity,
         },
     }).await;
@@ -1365,7 +1365,7 @@ async fn on_order_event_order_canceled_dispatches() {
     worker.order_level_map.insert(order_id, (2, "buy".to_string()));
     worker.levels[2].buy_order_id = Some(order_id);
 
-    worker.on_order_event(GridOrderEvent::OrderCanceled { order_id }).await;
+    worker.on_order_event(OrderEvent::OrderCanceled { order_id }).await;
 
     assert!(!worker.order_level_map.contains_key(&order_id));
     assert!(worker.levels[2].buy_order_id.is_none());
@@ -1382,7 +1382,7 @@ async fn place_initial_orders_only_below_current_price() {
 
     let commands = order_executor.commands().await;
     for cmd in &commands {
-        if let GridOrderCommand::PlaceOrder { side: GridSide::Buy, price, .. } = cmd {
+        if let OrderCommand::PlaceOrder { side: OrderSide::Buy, price, .. } = cmd {
             let p = price.unwrap();
             assert!(p < 55000.0, "Buy order price {} should be below current price 55000", p);
         }
@@ -1402,7 +1402,7 @@ async fn place_initial_orders_within_range() {
 
     let commands = order_executor.commands().await;
     let buy_orders: Vec<_> = commands.iter().filter_map(|c| {
-        if let GridOrderCommand::PlaceOrder { side: GridSide::Buy, price, .. } = c {
+        if let OrderCommand::PlaceOrder { side: OrderSide::Buy, price, .. } = c {
             Some(price.unwrap())
         } else {
             None
@@ -1473,7 +1473,7 @@ async fn execute_decision_run_grid_places_initial_orders_on_resume() {
     assert!(!worker.paused);
     let commands = order_executor.commands().await;
     let buy_count = commands.iter().filter(|c| {
-        matches!(c, GridOrderCommand::PlaceOrder { side: GridSide::Buy, .. })
+        matches!(c, OrderCommand::PlaceOrder { side: OrderSide::Buy, .. })
     }).count();
     assert!(buy_count > 0, "Resuming should place initial buy orders");
 }
@@ -1494,8 +1494,8 @@ async fn on_order_filled_sell_zero_profit_pct() {
     let sell_order_id = Uuid::new_v4();
     worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
 
-    let order = GridOrderInfo {
-        id: sell_order_id, side: GridSide::Sell,
+    let order = OrderInfo {
+        id: sell_order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: quantity,
     };
     worker.on_order_filled(&order).await;

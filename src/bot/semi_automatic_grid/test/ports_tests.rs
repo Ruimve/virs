@@ -2,59 +2,59 @@ use super::common::*;
 use crate::bot::semi_automatic_grid::ports::*;
 use uuid::Uuid;
 
-// ── GridSide ──
+// ── OrderSide ──
 
 #[test]
 fn grid_side_as_str() {
-    assert_eq!(GridSide::Buy.as_str(), "buy");
-    assert_eq!(GridSide::Sell.as_str(), "sell");
+    assert_eq!(OrderSide::Buy.as_str(), "buy");
+    assert_eq!(OrderSide::Sell.as_str(), "sell");
 }
 
 #[test]
 fn grid_side_serialization_roundtrip() {
-    let buy_json = serde_json::to_string(&GridSide::Buy).unwrap();
-    let sell_json = serde_json::to_string(&GridSide::Sell).unwrap();
-    let buy: GridSide = serde_json::from_str(&buy_json).unwrap();
-    let sell: GridSide = serde_json::from_str(&sell_json).unwrap();
-    assert_eq!(buy, GridSide::Buy);
-    assert_eq!(sell, GridSide::Sell);
+    let buy_json = serde_json::to_string(&OrderSide::Buy).unwrap();
+    let sell_json = serde_json::to_string(&OrderSide::Sell).unwrap();
+    let buy: OrderSide = serde_json::from_str(&buy_json).unwrap();
+    let sell: OrderSide = serde_json::from_str(&sell_json).unwrap();
+    assert_eq!(buy, OrderSide::Buy);
+    assert_eq!(sell, OrderSide::Sell);
 }
 
 #[test]
 fn grid_side_deserialize_invalid() {
-    let result = serde_json::from_str::<GridSide>(r#""Invalid""#);
+    let result = serde_json::from_str::<OrderSide>(r#""Invalid""#);
     assert!(result.is_err());
 }
 
 #[test]
 fn grid_side_equality() {
-    assert_eq!(GridSide::Buy, GridSide::Buy);
-    assert_eq!(GridSide::Sell, GridSide::Sell);
-    assert_ne!(GridSide::Buy, GridSide::Sell);
+    assert_eq!(OrderSide::Buy, OrderSide::Buy);
+    assert_eq!(OrderSide::Sell, OrderSide::Sell);
+    assert_ne!(OrderSide::Buy, OrderSide::Sell);
 }
 
 #[test]
 fn grid_side_copy_semantics() {
-    let a = GridSide::Buy;
+    let a = OrderSide::Buy;
     let b = a;
     assert_eq!(a, b);
 }
 
-// ── GridOrderCommand ──
+// ── OrderCommand ──
 
 #[test]
 fn grid_order_command_place_buy() {
-    let cmd = GridOrderCommand::PlaceOrder {
+    let cmd = OrderCommand::PlaceOrder {
         symbol: "BTCUSDT".to_string(),
-        side: GridSide::Buy,
+        side: OrderSide::Buy,
         amount: 0.001,
         price: Some(50000.0),
         reduce_only: false,
     };
     match &cmd {
-        GridOrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only } => {
+        OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only } => {
             assert_eq!(symbol, "BTCUSDT");
-            assert_eq!(*side, GridSide::Buy);
+            assert_eq!(*side, OrderSide::Buy);
             assert!((amount - 0.001).abs() < f64::EPSILON);
             assert_eq!(*price, Some(50000.0));
             assert!(!reduce_only);
@@ -65,16 +65,16 @@ fn grid_order_command_place_buy() {
 
 #[test]
 fn grid_order_command_place_sell_reduce_only() {
-    let cmd = GridOrderCommand::PlaceOrder {
+    let cmd = OrderCommand::PlaceOrder {
         symbol: "ETHUSDT".to_string(),
-        side: GridSide::Sell,
+        side: OrderSide::Sell,
         amount: 0.01,
         price: None,
         reduce_only: true,
     };
     match &cmd {
-        GridOrderCommand::PlaceOrder { side, price, reduce_only, .. } => {
-            assert_eq!(*side, GridSide::Sell);
+        OrderCommand::PlaceOrder { side, price, reduce_only, .. } => {
+            assert_eq!(*side, OrderSide::Sell);
             assert!(price.is_none());
             assert!(*reduce_only);
         }
@@ -84,66 +84,66 @@ fn grid_order_command_place_sell_reduce_only() {
 
 #[test]
 fn grid_order_command_place_zero_amount() {
-    let cmd = GridOrderCommand::PlaceOrder {
+    let cmd = OrderCommand::PlaceOrder {
         symbol: "BTCUSDT".to_string(),
-        side: GridSide::Buy,
+        side: OrderSide::Buy,
         amount: 0.0,
         price: Some(50000.0),
         reduce_only: false,
     };
     match &cmd {
-        GridOrderCommand::PlaceOrder { amount, .. } => assert!((amount).abs() < f64::EPSILON),
+        OrderCommand::PlaceOrder { amount, .. } => assert!((amount).abs() < f64::EPSILON),
         _ => panic!("Expected PlaceOrder"),
     }
 }
 
 #[test]
 fn grid_order_command_place_large_amount() {
-    let cmd = GridOrderCommand::PlaceOrder {
+    let cmd = OrderCommand::PlaceOrder {
         symbol: "BTCUSDT".to_string(),
-        side: GridSide::Buy,
+        side: OrderSide::Buy,
         amount: 1000000.0,
         price: Some(1.0),
         reduce_only: false,
     };
     match &cmd {
-        GridOrderCommand::PlaceOrder { amount, .. } => assert!((*amount - 1000000.0).abs() < f64::EPSILON),
+        OrderCommand::PlaceOrder { amount, .. } => assert!((*amount - 1000000.0).abs() < f64::EPSILON),
         _ => panic!("Expected PlaceOrder"),
     }
 }
 
 #[test]
 fn grid_order_command_cancel_all_with_symbol() {
-    let cmd = GridOrderCommand::CancelAllOrders { symbol: Some("ETHUSDT".to_string()) };
+    let cmd = OrderCommand::CancelAllOrders { symbol: Some("ETHUSDT".to_string()) };
     match &cmd {
-        GridOrderCommand::CancelAllOrders { symbol } => assert_eq!(symbol, &Some("ETHUSDT".to_string())),
+        OrderCommand::CancelAllOrders { symbol } => assert_eq!(symbol, &Some("ETHUSDT".to_string())),
         _ => panic!("Expected CancelAllOrders"),
     }
 }
 
 #[test]
 fn grid_order_command_cancel_all_no_symbol() {
-    let cmd = GridOrderCommand::CancelAllOrders { symbol: None };
+    let cmd = OrderCommand::CancelAllOrders { symbol: None };
     match &cmd {
-        GridOrderCommand::CancelAllOrders { symbol } => assert!(symbol.is_none()),
+        OrderCommand::CancelAllOrders { symbol } => assert!(symbol.is_none()),
         _ => panic!("Expected CancelAllOrders"),
     }
 }
 
-// ── GridOrderInfo ──
+// ── OrderInfo ──
 
 #[test]
 fn grid_order_info_construction() {
     let id = Uuid::new_v4();
-    let info = GridOrderInfo {
+    let info = OrderInfo {
         id,
-        side: GridSide::Buy,
+        side: OrderSide::Buy,
         fill_price: Some(51000.0),
         request_price: Some(50000.0),
         filled: 0.001,
     };
     assert_eq!(info.id, id);
-    assert_eq!(info.side, GridSide::Buy);
+    assert_eq!(info.side, OrderSide::Buy);
     assert_eq!(info.fill_price, Some(51000.0));
     assert_eq!(info.request_price, Some(50000.0));
     assert!((info.filled - 0.001).abs() < f64::EPSILON);
@@ -151,9 +151,9 @@ fn grid_order_info_construction() {
 
 #[test]
 fn grid_order_info_no_prices() {
-    let info = GridOrderInfo {
+    let info = OrderInfo {
         id: Uuid::new_v4(),
-        side: GridSide::Sell,
+        side: OrderSide::Sell,
         fill_price: None,
         request_price: None,
         filled: 0.0,
@@ -165,9 +165,9 @@ fn grid_order_info_no_prices() {
 
 #[test]
 fn grid_order_info_fill_price_only() {
-    let info = GridOrderInfo {
+    let info = OrderInfo {
         id: Uuid::new_v4(),
-        side: GridSide::Buy,
+        side: OrderSide::Buy,
         fill_price: Some(50000.0),
         request_price: None,
         filled: 0.001,
@@ -178,9 +178,9 @@ fn grid_order_info_fill_price_only() {
 
 #[test]
 fn grid_order_info_request_price_only() {
-    let info = GridOrderInfo {
+    let info = OrderInfo {
         id: Uuid::new_v4(),
-        side: GridSide::Sell,
+        side: OrderSide::Sell,
         fill_price: None,
         request_price: Some(52000.0),
         filled: 0.001,
@@ -191,9 +191,9 @@ fn grid_order_info_request_price_only() {
 
 #[test]
 fn grid_order_info_zero_filled() {
-    let info = GridOrderInfo {
+    let info = OrderInfo {
         id: Uuid::new_v4(),
-        side: GridSide::Buy,
+        side: OrderSide::Buy,
         fill_price: Some(50000.0),
         request_price: None,
         filled: 0.0,
@@ -201,21 +201,21 @@ fn grid_order_info_zero_filled() {
     assert!((info.filled).abs() < f64::EPSILON);
 }
 
-// ── GridOrderEvent ──
+// ── OrderEvent ──
 
 #[test]
 fn grid_order_event_order_placed() {
     let id = Uuid::new_v4();
-    let event = GridOrderEvent::OrderPlaced {
-        order: GridOrderInfo {
-            id, side: GridSide::Buy, fill_price: Some(50000.0),
+    let event = OrderEvent::OrderPlaced {
+        order: OrderInfo {
+            id, side: OrderSide::Buy, fill_price: Some(50000.0),
             request_price: None, filled: 0.0,
         },
     };
     match event {
-        GridOrderEvent::OrderPlaced { order } => {
+        OrderEvent::OrderPlaced { order } => {
             assert_eq!(order.id, id);
-            assert_eq!(order.side, GridSide::Buy);
+            assert_eq!(order.side, OrderSide::Buy);
         }
         _ => panic!("Expected OrderPlaced"),
     }
@@ -224,16 +224,16 @@ fn grid_order_event_order_placed() {
 #[test]
 fn grid_order_event_order_filled() {
     let id = Uuid::new_v4();
-    let event = GridOrderEvent::OrderFilled {
-        order: GridOrderInfo {
-            id, side: GridSide::Sell, fill_price: Some(52000.0),
+    let event = OrderEvent::OrderFilled {
+        order: OrderInfo {
+            id, side: OrderSide::Sell, fill_price: Some(52000.0),
             request_price: Some(52260.0), filled: 0.001,
         },
     };
     match event {
-        GridOrderEvent::OrderFilled { order } => {
+        OrderEvent::OrderFilled { order } => {
             assert_eq!(order.id, id);
-            assert_eq!(order.side, GridSide::Sell);
+            assert_eq!(order.side, OrderSide::Sell);
             assert!((order.filled - 0.001).abs() < f64::EPSILON);
         }
         _ => panic!("Expected OrderFilled"),
@@ -243,9 +243,9 @@ fn grid_order_event_order_filled() {
 #[test]
 fn grid_order_event_order_canceled() {
     let id = Uuid::new_v4();
-    let event = GridOrderEvent::OrderCanceled { order_id: id };
+    let event = OrderEvent::OrderCanceled { order_id: id };
     match event {
-        GridOrderEvent::OrderCanceled { order_id } => assert_eq!(order_id, id),
+        OrderEvent::OrderCanceled { order_id } => assert_eq!(order_id, id),
         _ => panic!("Expected OrderCanceled"),
     }
 }
@@ -253,9 +253,9 @@ fn grid_order_event_order_canceled() {
 #[test]
 fn grid_order_event_order_failed() {
     let id = Uuid::new_v4();
-    let event = GridOrderEvent::OrderFailed { order_id: id, reason: "Insufficient margin".to_string() };
+    let event = OrderEvent::OrderFailed { order_id: id, reason: "Insufficient margin".to_string() };
     match event {
-        GridOrderEvent::OrderFailed { order_id, reason } => {
+        OrderEvent::OrderFailed { order_id, reason } => {
             assert_eq!(order_id, id);
             assert_eq!(reason, "Insufficient margin");
         }
@@ -266,21 +266,21 @@ fn grid_order_event_order_failed() {
 #[test]
 fn grid_order_event_order_failed_empty_reason() {
     let id = Uuid::new_v4();
-    let event = GridOrderEvent::OrderFailed { order_id: id, reason: String::new() };
+    let event = OrderEvent::OrderFailed { order_id: id, reason: String::new() };
     match event {
-        GridOrderEvent::OrderFailed { reason, .. } => assert!(reason.is_empty()),
+        OrderEvent::OrderFailed { reason, .. } => assert!(reason.is_empty()),
         _ => panic!("Expected OrderFailed"),
     }
 }
 
 #[test]
 fn grid_order_event_risk_alert() {
-    let event = GridOrderEvent::RiskAlert {
+    let event = OrderEvent::RiskAlert {
         level: "CloseAll".to_string(),
         message: "High exposure".to_string(),
     };
     match event {
-        GridOrderEvent::RiskAlert { level, message } => {
+        OrderEvent::RiskAlert { level, message } => {
             assert_eq!(level, "CloseAll");
             assert_eq!(message, "High exposure");
         }
@@ -290,25 +290,25 @@ fn grid_order_event_risk_alert() {
 
 #[test]
 fn grid_order_event_risk_alert_info_level() {
-    let event = GridOrderEvent::RiskAlert {
+    let event = OrderEvent::RiskAlert {
         level: "Info".to_string(),
         message: "Just info".to_string(),
     };
     match event {
-        GridOrderEvent::RiskAlert { level, .. } => assert_eq!(level, "Info"),
+        OrderEvent::RiskAlert { level, .. } => assert_eq!(level, "Info"),
         _ => panic!("Expected RiskAlert"),
     }
 }
 
 #[test]
 fn grid_order_event_liquidation_warning() {
-    let event = GridOrderEvent::LiquidationWarning {
+    let event = OrderEvent::LiquidationWarning {
         symbol: "BTCUSDT".to_string(),
         liquidation_price: 45000.0,
         current_price: 46000.0,
     };
     match event {
-        GridOrderEvent::LiquidationWarning { symbol, liquidation_price, current_price } => {
+        OrderEvent::LiquidationWarning { symbol, liquidation_price, current_price } => {
             assert_eq!(symbol, "BTCUSDT");
             assert!((liquidation_price - 45000.0).abs() < f64::EPSILON);
             assert!((current_price - 46000.0).abs() < f64::EPSILON);
@@ -319,13 +319,13 @@ fn grid_order_event_liquidation_warning() {
 
 #[test]
 fn grid_order_event_liquidation_warning_close_to_liquidation() {
-    let event = GridOrderEvent::LiquidationWarning {
+    let event = OrderEvent::LiquidationWarning {
         symbol: "ETHUSDT".to_string(),
         liquidation_price: 3000.0,
         current_price: 3001.0,
     };
     match event {
-        GridOrderEvent::LiquidationWarning { current_price, liquidation_price, .. } => {
+        OrderEvent::LiquidationWarning { current_price, liquidation_price, .. } => {
             assert!((current_price - liquidation_price - 1.0).abs() < f64::EPSILON);
         }
         _ => panic!("Expected LiquidationWarning"),
@@ -568,9 +568,9 @@ async fn mock_price_provider_negative_price_returns_none() {
 #[tokio::test]
 async fn mock_order_executor_success() {
     let executor = MockOrderExecutor::new();
-    let cmd = GridOrderCommand::PlaceOrder {
+    let cmd = OrderCommand::PlaceOrder {
         symbol: "BTCUSDT".to_string(),
-        side: GridSide::Buy,
+        side: OrderSide::Buy,
         amount: 0.001,
         price: Some(50000.0),
         reduce_only: false,
@@ -584,7 +584,7 @@ async fn mock_order_executor_success() {
 #[tokio::test]
 async fn mock_order_executor_failure() {
     let executor = MockOrderExecutor::failing();
-    let cmd = GridOrderCommand::CancelAllOrders { symbol: None };
+    let cmd = OrderCommand::CancelAllOrders { symbol: None };
     let result = executor.send_command(cmd).await;
     assert!(result.is_err());
 }
@@ -759,49 +759,49 @@ fn grid_bot_config_large_profit_pct() {
     assert!((config.grid_profit_pct - 100.0).abs() < f64::EPSILON);
 }
 
-// ── GridOrderCommand 边界补充 ──
+// ── OrderCommand 边界补充 ──
 
 #[test]
 fn grid_order_command_place_negative_amount() {
-    let cmd = GridOrderCommand::PlaceOrder {
+    let cmd = OrderCommand::PlaceOrder {
         symbol: "BTCUSDT".to_string(),
-        side: GridSide::Sell,
+        side: OrderSide::Sell,
         amount: -0.001,
         price: Some(50000.0),
         reduce_only: false,
     };
     match &cmd {
-        GridOrderCommand::PlaceOrder { amount, .. } => assert!(*amount < 0.0),
+        OrderCommand::PlaceOrder { amount, .. } => assert!(*amount < 0.0),
         _ => panic!("Expected PlaceOrder"),
     }
 }
 
 #[test]
 fn grid_order_command_place_negative_price() {
-    let cmd = GridOrderCommand::PlaceOrder {
+    let cmd = OrderCommand::PlaceOrder {
         symbol: "BTCUSDT".to_string(),
-        side: GridSide::Buy,
+        side: OrderSide::Buy,
         amount: 0.001,
         price: Some(-50000.0),
         reduce_only: false,
     };
     match &cmd {
-        GridOrderCommand::PlaceOrder { price, .. } => assert!(price.unwrap() < 0.0),
+        OrderCommand::PlaceOrder { price, .. } => assert!(price.unwrap() < 0.0),
         _ => panic!("Expected PlaceOrder"),
     }
 }
 
 #[test]
 fn grid_order_command_place_market_order_no_price() {
-    let cmd = GridOrderCommand::PlaceOrder {
+    let cmd = OrderCommand::PlaceOrder {
         symbol: "ETHUSDT".to_string(),
-        side: GridSide::Buy,
+        side: OrderSide::Buy,
         amount: 1.0,
         price: None,
         reduce_only: false,
     };
     match &cmd {
-        GridOrderCommand::PlaceOrder { price, reduce_only, .. } => {
+        OrderCommand::PlaceOrder { price, reduce_only, .. } => {
             assert!(price.is_none());
             assert!(!reduce_only);
         }
@@ -809,13 +809,13 @@ fn grid_order_command_place_market_order_no_price() {
     }
 }
 
-// ── GridOrderInfo 边界补充 ──
+// ── OrderInfo 边界补充 ──
 
 #[test]
 fn grid_order_info_negative_filled() {
-    let info = GridOrderInfo {
+    let info = OrderInfo {
         id: Uuid::new_v4(),
-        side: GridSide::Sell,
+        side: OrderSide::Sell,
         fill_price: Some(50000.0),
         request_price: None,
         filled: -0.001,
@@ -825,9 +825,9 @@ fn grid_order_info_negative_filled() {
 
 #[test]
 fn grid_order_info_very_large_filled() {
-    let info = GridOrderInfo {
+    let info = OrderInfo {
         id: Uuid::new_v4(),
-        side: GridSide::Buy,
+        side: OrderSide::Buy,
         fill_price: Some(50000.0),
         request_price: None,
         filled: 1e10,
@@ -837,9 +837,9 @@ fn grid_order_info_very_large_filled() {
 
 #[test]
 fn grid_order_info_both_prices_equal() {
-    let info = GridOrderInfo {
+    let info = OrderInfo {
         id: Uuid::new_v4(),
-        side: GridSide::Buy,
+        side: OrderSide::Buy,
         fill_price: Some(50000.0),
         request_price: Some(50000.0),
         filled: 0.001,

@@ -35,8 +35,8 @@ fn convert_order_placed_buy() {
     let event = EngineEvent::OrderPlaced { order };
     let result = convert_pe_event(event).unwrap();
     match result {
-        GridOrderEvent::OrderPlaced { order: info } => {
-            assert_eq!(info.side, GridSide::Buy);
+        OrderEvent::OrderPlaced { order: info } => {
+            assert_eq!(info.side, OrderSide::Buy);
             assert_eq!(info.request_price, Some(50000.0));
             assert!((info.filled - 0.001).abs() < f64::EPSILON);
         }
@@ -50,8 +50,8 @@ fn convert_order_placed_sell() {
     let event = EngineEvent::OrderPlaced { order };
     let result = convert_pe_event(event).unwrap();
     match result {
-        GridOrderEvent::OrderPlaced { order: info } => {
-            assert_eq!(info.side, GridSide::Sell);
+        OrderEvent::OrderPlaced { order: info } => {
+            assert_eq!(info.side, OrderSide::Sell);
         }
         _ => panic!("Expected OrderPlaced"),
     }
@@ -64,8 +64,8 @@ fn convert_order_filled() {
     let event = EngineEvent::OrderFilled { order, trade };
     let result = convert_pe_event(event).unwrap();
     match result {
-        GridOrderEvent::OrderFilled { order: info } => {
-            assert_eq!(info.side, GridSide::Buy);
+        OrderEvent::OrderFilled { order: info } => {
+            assert_eq!(info.side, OrderSide::Buy);
             assert_eq!(info.fill_price, Some(51000.0));
             assert_eq!(info.request_price, Some(50000.0));
             assert!((info.filled - 0.001).abs() < f64::EPSILON);
@@ -81,7 +81,7 @@ fn convert_order_canceled() {
     let event = EngineEvent::OrderCanceled { order };
     let result = convert_pe_event(event).unwrap();
     match result {
-        GridOrderEvent::OrderCanceled { order_id: id } => assert_eq!(id, order_id),
+        OrderEvent::OrderCanceled { order_id: id } => assert_eq!(id, order_id),
         _ => panic!("Expected OrderCanceled"),
     }
 }
@@ -93,7 +93,7 @@ fn convert_order_failed() {
     let event = EngineEvent::OrderFailed { order_id, reason: reason.clone() };
     let result = convert_pe_event(event).unwrap();
     match result {
-        GridOrderEvent::OrderFailed { order_id: id, reason: r } => {
+        OrderEvent::OrderFailed { order_id: id, reason: r } => {
             assert_eq!(id, order_id);
             assert_eq!(r, reason);
         }
@@ -108,7 +108,7 @@ fn convert_risk_alert() {
     let event = EngineEvent::RiskAlert { level: level.clone(), message: message.clone() };
     let result = convert_pe_event(event).unwrap();
     match result {
-        GridOrderEvent::RiskAlert { level: l, message: m } => {
+        OrderEvent::RiskAlert { level: l, message: m } => {
             assert_eq!(l, level);
             assert_eq!(m, message);
         }
@@ -126,7 +126,7 @@ fn convert_liquidation_warning() {
     };
     let result = convert_pe_event(event).unwrap();
     match result {
-        GridOrderEvent::LiquidationWarning { symbol, liquidation_price, current_price } => {
+        OrderEvent::LiquidationWarning { symbol, liquidation_price, current_price } => {
             assert_eq!(symbol, "BTCUSDT");
             assert!((liquidation_price - 45000.0).abs() < f64::EPSILON);
             assert!((current_price - 46000.0).abs() < f64::EPSILON);

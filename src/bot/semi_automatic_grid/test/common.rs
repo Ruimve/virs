@@ -29,7 +29,7 @@ impl PriceProvider for MockPriceProvider {
 }
 
 pub struct MockOrderExecutor {
-    pub commands: Arc<Mutex<Vec<GridOrderCommand>>>,
+    pub commands: Arc<Mutex<Vec<OrderCommand>>>,
     pub should_fail: bool,
 }
 
@@ -48,14 +48,14 @@ impl MockOrderExecutor {
         }
     }
 
-    pub async fn commands(&self) -> Vec<GridOrderCommand> {
+    pub async fn commands(&self) -> Vec<OrderCommand> {
         self.commands.lock().await.clone()
     }
 }
 
 #[async_trait]
 impl OrderExecutor for MockOrderExecutor {
-    async fn send_command(&self, cmd: GridOrderCommand) -> anyhow::Result<()> {
+    async fn send_command(&self, cmd: OrderCommand) -> anyhow::Result<()> {
         if self.should_fail {
             anyhow::bail!("mock order executor failure");
         }

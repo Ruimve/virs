@@ -19,7 +19,7 @@ use crate::trading::ports::*;
 struct PendingOrder {
     id: Uuid,
     symbol: String,
-    side: GridSide,
+    side: OrderSide,
     amount: f64,
     price: f64,
     reduce_only: bool,
@@ -30,18 +30,18 @@ struct PendingOrder {
 ///
 /// 实现 `OrderExecutor` trait，本地维护挂单簿。
 /// 不发送真实订单，而是等待 `on_price_tick` 检查触发条件后
-/// 通过 `event_tx` 发送模拟的 `GridOrderEvent`。
+/// 通过 `event_tx` 发送模拟的 `OrderEvent`。
 pub struct PaperOrderExecutor {
     /// 挂单簿: order_id -> PendingOrder
     pending: Arc<Mutex<HashMap<Uuid, PendingOrder>>>,
     /// 事件发送通道（将模拟事件发送给 GridWorker）
-    event_tx: broadcast::Sender<GridOrderEvent>,
+    event_tx: broadcast::Sender<OrderEvent>,
     /// 是否启用
     enabled: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl PaperOrderExecutor {
-    pub fn new(event_tx: broadcast::Sender<GridOrderEvent>) -> Self {
+    pub fn new(event_tx: broadcast::Sender<OrderEvent>) -> Self {
         Self {
             pending: Arc::new(Mutex::new(HashMap::new())),
             event_tx,
@@ -65,7 +65,7 @@ impl PaperOrderExecutor {
         self.enabled.store(false, std::sync::atomic::Ordering::Relaxed);
         let mut pending = self.pending.lock().await;
         for order_id in pending.keys() {
-            let _ = self.event_tx.send(GridOrderEvent::OrderCanceled { order_id: *order_id });
+            let _ = self.event_tx.send(OrderEvent::OrderCanceled { order_id: *order_id });
         }
         pending.clear();
         info!("Paper trading disabled, all pending orders canceled");
@@ -94,8 +94,8 @@ impl PaperOrderExecutor {
                     }
 
                     let filled = match order.side {
-                        GridSide::Buy => current_price <= order.price,
-                        GridSide::Sell => current_price >= order.price,
+                        OrderSide::Buy => current_price <= order.price,
+                        OrderSide::Sell => current_price >= order.price,
                     };
 
                     if filled {
@@ -113,7 +113,7 @@ impl PaperOrderExecutor {
 
     /// 模拟成交事件
     async fn emit_filled(&self, order: &PendingOrder, fill_price: f64) {
-        let order_info = GridOrderInfo {
+        let order_info = OrderInfo {
             id: order.id,
             side: order.side,
             fill_price: Some(fill_price),
@@ -122,12 +122,12 @@ impl PaperOrderExecutor {
         };
 
         // 先发送 OrderPlaced（如果 worker 之前没收到的话）
-        let _ = self.event_tx.send(GridOrderEvent::OrderPlaced {
+        let _ = self.event_tx.send(OrderEvent::OrderPlaced {
             order: order_info.clone(),
         });
 
         // 再发送 OrderFilled
-        let _ = self.event_tx.send(GridOrderEvent::OrderFilled {
+        let _ = self.event_tx.send(OrderEvent::OrderFilled {
             order: order_info,
         });
 
@@ -155,13 +155,13 @@ impl PaperOrderExecutor {
 
 #[async_trait]
 impl OrderExecutor for PaperOrderExecutor {
-    async fn send_command(&self, command: GridOrderCommand) -> anyhow::Result<()> {
+    async fn send_command(&self, command: OrderCommand) -> anyhow::Result<()> {
         if !self.is_enabled() {
             anyhow::bail!("Paper trading is disabled");
         }
 
         match command {
-            GridOrderCommand::PlaceOrder {
+            OrderCommand::PlaceOrder {
                 symbol,
                 side,
                 amount,
@@ -184,8 +184,8 @@ impl OrderExecutor for PaperOrderExecutor {
                 self.pending.lock().await.insert(order_id, order.clone());
 
                 // 通知 worker 订单已挂出
-                let _ = self.event_tx.send(GridOrderEvent::OrderPlaced {
-                    order: GridOrderInfo {
+                let _ = self.event_tx.send(OrderEvent::OrderPlaced {
+                    order: OrderInfo {
                         id: order_id,
                         side: order.side,
                         fill_price: None,
@@ -203,10 +203,10 @@ impl OrderExecutor for PaperOrderExecutor {
                     "Paper order placed"
                 );
             }
-            GridOrderCommand::CancelAllOrders { symbol: _ } => {
+            OrderCommand::CancelAllOrders { symbol: _ } => {
                 let mut pending = self.pending.lock().await;
                 for order_id in pending.keys() {
-                    let _ = self.event_tx.send(GridOrderEvent::OrderCanceled { order_id: *order_id });
+                    let _ = self.event_tx.send(OrderEvent::OrderCanceled { order_id: *order_id });
                 }
                 let count = pending.len();
                 pending.clear();

@@ -461,7 +461,7 @@ async fn stop_bot_sends_cancel_all_orders() {
 
     let commands = order_executor.commands().await;
     let cancel_cmd = commands.iter().find(|c| {
-        matches!(c, GridOrderCommand::CancelAllOrders { .. })
+        matches!(c, OrderCommand::CancelAllOrders { .. })
     });
     assert!(cancel_cmd.is_some(), "stop_bot should send CancelAllOrders");
 }
