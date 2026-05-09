@@ -19,8 +19,86 @@ use tracing::info;
 
 use crate::trading::ccxt::types::*;
 use crate::trading::ccxt::errors::ExchangeError;
-use crate::trading::ccxt::auth::OkxSigner;
+use crate::trading::ccxt::auth::{Signer, SignedRequest, hmac_sha256_base64, insert_header};
 use crate::trading::ccxt::{Exchange, ExchangeClient, parse_str, parse_str_opt, parse_f64, parse_i64, parse_u32};
+
+// ============================================================
+// OKX Signer (HMAC-SHA256 + Base64, timestamp + passphrase)
+// ============================================================
+
+/// OKX-specific request signer.
+pub struct OkxSigner {
+    api_key: String,
+    api_secret: String,
+    passphrase: String,
+}
+
+impl OkxSigner {
+    pub fn new(api_key: String, api_secret: String, passphrase: String) -> Self {
+        Self { api_key, api_secret, passphrase }
+    }
+}
+
+impl Signer for OkxSigner {
+    fn sign_get(
+        &self,
+        path: &str,
+        query_params: &mut Vec<(String, String)>,
+    ) -> Result<SignedRequest, ExchangeError> {
+        let timestamp = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+
+        let query_string = query_params
+            .iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect::<Vec<_>>()
+            .join("&");
+
+        let sign_str = format!("{}GET{}{}", timestamp, path, query_string);
+        let signature = hmac_sha256_base64(&self.api_secret, &sign_str);
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        insert_header(&mut headers, "ok-access-key", &self.api_key)?;
+        insert_header(&mut headers, "ok-access-sign", &signature)?;
+        insert_header(&mut headers, "ok-access-timestamp", &timestamp)?;
+        insert_header(&mut headers, "ok-access-passphrase", &self.passphrase)?;
+
+        Ok(SignedRequest {
+            headers,
+            query_params: query_params.clone(),
+            body: None,
+        })
+    }
+
+    fn sign_post(
+        &self,
+        path: &str,
+        body: &mut serde_json::Value,
+    ) -> Result<SignedRequest, ExchangeError> {
+        let timestamp = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+        let body_str = serde_json::to_string(body)
+            .map_err(|e| ExchangeError::Internal(format!("Failed to serialize body: {}", e)))?;
+
+        let sign_str = format!("{}POST{}{}", timestamp, path, body_str);
+        let signature = hmac_sha256_base64(&self.api_secret, &sign_str);
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        insert_header(&mut headers, "ok-access-key", &self.api_key)?;
+        insert_header(&mut headers, "ok-access-sign", &signature)?;
+        insert_header(&mut headers, "ok-access-timestamp", &timestamp)?;
+        insert_header(&mut headers, "ok-access-passphrase", &self.passphrase)?;
+        insert_header(&mut headers, "content-type", "application/json")?;
+
+        Ok(SignedRequest {
+            headers,
+            query_params: Vec::new(),
+            body: Some(body.clone()),
+        })
+    }
+}
+
+// ============================================================
+// OKX Exchange
+// ============================================================
 
 /// OKX exchange implementation.
 pub struct OkxExchange {

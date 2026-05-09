@@ -24,8 +24,108 @@ use tracing::info;
 
 use crate::trading::ccxt::types::*;
 use crate::trading::ccxt::errors::ExchangeError;
-use crate::trading::ccxt::auth::BinanceSigner;
+use crate::trading::ccxt::auth::{Signer, SignedRequest, hmac_sha256_hex, insert_header};
 use crate::trading::ccxt::{Exchange, ExchangeClient, parse_f64, parse_str, parse_str_opt, parse_u32};
+
+// ============================================================
+// Binance Signer (HMAC-SHA256 via query string)
+// ============================================================
+
+/// Binance-specific request signer.
+pub struct BinanceSigner {
+    api_key: String,
+    api_secret: String,
+}
+
+impl BinanceSigner {
+    pub fn new(api_key: String, api_secret: String) -> Self {
+        Self { api_key, api_secret }
+    }
+}
+
+impl Signer for BinanceSigner {
+    fn sign_get(
+        &self,
+        _path: &str,
+        query_params: &mut Vec<(String, String)>,
+    ) -> Result<SignedRequest, ExchangeError> {
+        let timestamp = Utc::now().timestamp_millis();
+        query_params.push(("timestamp".into(), timestamp.to_string()));
+
+        let query_string = query_params
+            .iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect::<Vec<_>>()
+            .join("&");
+
+        let signature = hmac_sha256_hex(&self.api_secret, &query_string);
+        query_params.push(("signature".into(), signature));
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        insert_header(&mut headers, "x-mbx-apikey", &self.api_key)?;
+
+        Ok(SignedRequest {
+            headers,
+            query_params: query_params.clone(),
+            body: None,
+        })
+    }
+
+    fn sign_post(
+        &self,
+        _path: &str,
+        body: &mut serde_json::Value,
+    ) -> Result<SignedRequest, ExchangeError> {
+        let mut query_params = vec![(
+            "timestamp".into(),
+            Utc::now().timestamp_millis().to_string(),
+        )];
+
+        let form_body = if body.is_object() {
+            let mut pairs: Vec<(String, String)> = body
+                .as_object()
+                .unwrap()
+                .iter()
+                .map(|(k, v)| {
+                    let val = if v.is_string() {
+                        v.as_str().unwrap().to_string()
+                    } else {
+                        v.to_string()
+                    };
+                    (k.clone(), val)
+                })
+                .collect();
+            pairs.push(("timestamp".into(), query_params[0].1.clone()));
+
+            let query_string = pairs
+                .iter()
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect::<Vec<_>>()
+                .join("&");
+
+            let signature = hmac_sha256_hex(&self.api_secret, &query_string);
+            pairs.push(("signature".into(), signature));
+
+            query_params = pairs;
+            Some(serde_json::Value::String(query_string))
+        } else {
+            None
+        };
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        insert_header(&mut headers, "x-mbx-apikey", &self.api_key)?;
+
+        Ok(SignedRequest {
+            headers,
+            query_params,
+            body: form_body,
+        })
+    }
+}
+
+// ============================================================
+// Binance Exchange
+// ============================================================
 
 /// Binance exchange implementation.
 pub struct BinanceExchange {

@@ -17,8 +17,84 @@ use tracing::info;
 
 use crate::trading::ccxt::types::*;
 use crate::trading::ccxt::errors::ExchangeError;
-use crate::trading::ccxt::auth::BybitSigner;
+use crate::trading::ccxt::auth::{Signer, SignedRequest, hmac_sha256_hex, insert_header};
 use crate::trading::ccxt::{Exchange, ExchangeClient, parse_str, parse_str_opt, parse_f64, parse_i64};
+
+// ============================================================
+// Bybit Signer (HMAC-SHA256, similar to Binance but with recv_window)
+// ============================================================
+
+/// Bybit-specific request signer.
+pub struct BybitSigner {
+    api_key: String,
+    api_secret: String,
+}
+
+impl BybitSigner {
+    pub fn new(api_key: String, api_secret: String) -> Self {
+        Self { api_key, api_secret }
+    }
+}
+
+impl Signer for BybitSigner {
+    fn sign_get(
+        &self,
+        path: &str,
+        query_params: &mut Vec<(String, String)>,
+    ) -> Result<SignedRequest, ExchangeError> {
+        let timestamp = Utc::now().timestamp_millis();
+        query_params.push(("timestamp".into(), timestamp.to_string()));
+        query_params.push(("recv_window".into(), "5000".into()));
+
+        let query_string = query_params
+            .iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect::<Vec<_>>()
+            .join("&");
+
+        let pre_sign = format!("{}GET{}{}", timestamp, path, query_string);
+        let signature = hmac_sha256_hex(&self.api_secret, &pre_sign);
+        query_params.push(("sign".into(), signature));
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        insert_header(&mut headers, "x-api-key", &self.api_key)?;
+
+        Ok(SignedRequest {
+            headers,
+            query_params: query_params.clone(),
+            body: None,
+        })
+    }
+
+    fn sign_post(
+        &self,
+        path: &str,
+        body: &mut serde_json::Value,
+    ) -> Result<SignedRequest, ExchangeError> {
+        let timestamp = Utc::now().timestamp_millis();
+        let body_str = serde_json::to_string(body)
+            .map_err(|e| ExchangeError::Internal(format!("Failed to serialize body: {}", e)))?;
+
+        let pre_sign = format!("{}POST{}{}", timestamp, path, body_str);
+        let signature = hmac_sha256_hex(&self.api_secret, &pre_sign);
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        insert_header(&mut headers, "x-api-key", &self.api_key)?;
+        insert_header(&mut headers, "x-timestamp", &timestamp.to_string())?;
+        insert_header(&mut headers, "x-sign", &signature)?;
+        insert_header(&mut headers, "content-type", "application/json")?;
+
+        Ok(SignedRequest {
+            headers,
+            query_params: Vec::new(),
+            body: Some(body.clone()),
+        })
+    }
+}
+
+// ============================================================
+// Bybit Exchange
+// ============================================================
 
 /// Bybit exchange implementation.
 pub struct BybitExchange {
