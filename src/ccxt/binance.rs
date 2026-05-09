@@ -21,7 +21,7 @@ use tracing::info;
 use super::types::*;
 use super::errors::ExchangeError;
 use super::auth::BinanceSigner;
-use super::{Exchange, ExchangeClient, parse_f64, parse_str, parse_str_opt, parse_u32, parse_i64};
+use super::{Exchange, ExchangeClient, parse_f64, parse_str, parse_str_opt, parse_u32};
 
 /// Binance exchange implementation.
 pub struct BinanceExchange {

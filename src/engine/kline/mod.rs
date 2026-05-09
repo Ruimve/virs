@@ -78,6 +78,7 @@ pub struct KlineEngine {
     source: Arc<dyn KlineSource>,
     persistence: Arc<dyn KlinePersistence>,
     subscriptions: Arc<DashMap<String, SubscriptionEntry>>,
+    symbol_index: Arc<DashMap<String, String>>,
     event_tx: broadcast::Sender<KlineEvent>,
     spot_handler: MarketWsHandler,
     perpetual_handler: MarketWsHandler,
@@ -98,6 +99,7 @@ impl KlineEngine {
             source,
             persistence: Arc::new(NoOpPersistence),
             subscriptions: Arc::new(DashMap::new()),
+            symbol_index: Arc::new(DashMap::new()),
             event_tx,
             spot_handler: MarketWsHandler::new(spot_ws),
             perpetual_handler: MarketWsHandler::new(perpetual_ws),
@@ -123,6 +125,7 @@ impl KlineEngine {
 
         let event_tx = self.event_tx.clone();
         let subscriptions = self.subscriptions.clone();
+        let symbol_index = self.symbol_index.clone();
         let source = self.source.clone();
         let persistence = self.persistence.clone();
         let started = self.started.clone();
@@ -167,8 +170,8 @@ impl KlineEngine {
                     Ok(WsEvent::Candle(update)) => {
                         let symbol = update.symbol;
 
-                        let sub_key = match subscriptions.iter().find(|e| e.value().symbol == symbol) {
-                            Some(entry) => subscription_key(&entry.exchange, &symbol),
+                        let sub_key = match symbol_index.get(&symbol).map(|r| r.value().clone()) {
+                            Some(key) => key,
                             None => continue,
                         };
 
@@ -185,7 +188,7 @@ impl KlineEngine {
                             symbol, candle_1m.open_time, candle_1m.close, candle_1m.volume, is_closed
                         );
 
-                        let (exchange, persist_data) = {
+                        let (exchange, persist_data, higher_updates) = {
                             let mut guard = cache.lock().await;
 
                             guard.update_candle(Timeframe::M1, candle_1m.clone());
@@ -201,43 +204,43 @@ impl KlineEngine {
                                 None => continue,
                             };
 
-                            let event_type = if is_closed {
-                                KlineEventType::Closed
-                            } else {
-                                KlineEventType::Update
-                            };
-
-                            let _ = event_tx.send(KlineEvent {
-                                exchange: exchange.clone(),
-                                symbol: symbol.clone(),
-                                timeframe: Timeframe::M1,
-                                candle: candle_1m.clone(),
-                                event_type,
-                            });
-
-                            for (tf, candle) in higher_updates {
-                                let ht_event_type = if candle.closed {
-                                    KlineEventType::Closed
-                                } else {
-                                    KlineEventType::Update
-                                };
-                                let _ = event_tx.send(KlineEvent {
-                                    exchange: exchange.clone(),
-                                    symbol: symbol.clone(),
-                                    timeframe: tf,
-                                    candle,
-                                    event_type: ht_event_type,
-                                });
-                            }
-
                             let persist_data = if is_closed {
                                 Some(guard.get_klines(Timeframe::M1))
                             } else {
                                 None
                             };
 
-                            (exchange, persist_data)
+                            (exchange, persist_data, higher_updates)
                         };
+
+                        let event_type = if is_closed {
+                            KlineEventType::Closed
+                        } else {
+                            KlineEventType::Update
+                        };
+
+                        let _ = event_tx.send(KlineEvent {
+                            exchange: exchange.clone(),
+                            symbol: symbol.clone(),
+                            timeframe: Timeframe::M1,
+                            candle: candle_1m.clone(),
+                            event_type,
+                        });
+
+                        for (tf, candle) in higher_updates {
+                            let ht_event_type = if candle.closed {
+                                KlineEventType::Closed
+                            } else {
+                                KlineEventType::Update
+                            };
+                            let _ = event_tx.send(KlineEvent {
+                                exchange: exchange.clone(),
+                                symbol: symbol.clone(),
+                                timeframe: tf,
+                                candle,
+                                event_type: ht_event_type,
+                            });
+                        }
 
                         if let Some(data) = persist_data {
                             let _ = persistence.save_candles(
@@ -344,6 +347,7 @@ impl KlineEngine {
         };
 
         self.subscriptions.insert(key.clone(), entry);
+        self.symbol_index.insert(symbol.to_string(), key);
 
         match market_type {
             MarketType::Spot => {
@@ -410,6 +414,7 @@ impl KlineEngine {
         }
 
         self.subscriptions.remove(&key);
+        self.symbol_index.remove(symbol);
 
         tracing::info!("[KlineEngine] Unsubscribed from {}/{}", exchange, symbol);
         Ok(())

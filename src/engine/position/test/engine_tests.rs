@@ -27,6 +27,18 @@ fn collect_events(rx: &mut broadcast::Receiver<EngineEvent>, max: usize) -> Vec<
     test_helpers::collect_events(rx, max)
 }
 
+fn insert_position(inner: &Arc<EngineInner>, key: (String, String, PositionSide), pos: Position) {
+    inner.position_id_index.insert(pos.id, key.clone());
+    inner.positions.insert(key, pos);
+}
+
+fn insert_order(inner: &Arc<EngineInner>, order: Order) {
+    if let Some(ref eoid) = order.exchange_order_id {
+        inner.exchange_order_id_index.insert(eoid.clone(), order.id);
+    }
+    inner.orders.insert(order.id, order);
+}
+
 #[test]
 fn test_engine_config_default() {
     let config = make_engine_config();
@@ -90,6 +102,7 @@ async fn test_mock_exchange_place_order_tracking() {
         price: None,
         reduce_only: false,
         position_side: Some(PositionSide::Long),
+        position_id: None,
     };
     mock.place_order(params).await.unwrap();
     assert_eq!(mock.place_order_count().await, 1);
@@ -152,6 +165,7 @@ async fn test_mock_exchange_place_order_default() {
         price: None,
         reduce_only: false,
         position_side: Some(PositionSide::Long),
+        position_id: None,
     };
     let order = mock.place_order(params).await.unwrap();
     assert_eq!(order.symbol, "BTC/USDT");
@@ -233,10 +247,7 @@ async fn test_handle_open_position_already_exists() {
     let mut rx = subscribe(&inner);
 
     let pos = make_position_side("BTC/USDT", PositionSide::Long, 1.0, 50000.0, 5);
-    inner.positions.insert(
-        ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long),
-        pos,
-    );
+    insert_position(&inner, ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long), pos);
 
     handle_open_position(
         &inner,
@@ -431,7 +442,7 @@ async fn test_handle_close_position_success() {
     let pos = make_position_side("BTC/USDT", PositionSide::Long, 1.0, 50000.0, 5);
     let pos_id = pos.id;
     let key = ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long);
-    inner.positions.insert(key.clone(), pos);
+    insert_position(&inner, key.clone(), pos);
 
     handle_close_position(&inner, pos_id, OrderType::Market, None).await;
 
@@ -463,7 +474,7 @@ async fn test_handle_close_position_zero_size() {
     let mut pos = make_position_side("BTC/USDT", PositionSide::Long, 0.0, 50000.0, 5);
     let pos_id = pos.id;
     let key = ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long);
-    inner.positions.insert(key, pos);
+    insert_position(&inner, key, pos);
 
     handle_close_position(&inner, pos_id, OrderType::Market, None).await;
 
@@ -480,10 +491,7 @@ async fn test_handle_close_position_exchange_error() {
 
     let pos = make_position_side("BTC/USDT", PositionSide::Long, 1.0, 50000.0, 5);
     let pos_id = pos.id;
-    inner.positions.insert(
-        ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long),
-        pos,
-    );
+    insert_position(&inner, ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long), pos);
 
     handle_close_position(&inner, pos_id, OrderType::Market, None).await;
 
@@ -500,10 +508,7 @@ async fn test_handle_close_position_short_side() {
 
     let pos = make_position_side("BTC/USDT", PositionSide::Short, 1.0, 50000.0, 5);
     let pos_id = pos.id;
-    inner.positions.insert(
-        ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Short),
-        pos,
-    );
+    insert_position(&inner, ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Short), pos);
 
     handle_close_position(&inner, pos_id, OrderType::Market, None).await;
 
@@ -519,10 +524,7 @@ async fn test_handle_modify_position_success() {
 
     let pos = make_position_side("BTC/USDT", PositionSide::Long, 1.0, 50000.0, 5);
     let pos_id = pos.id;
-    inner.positions.insert(
-        ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long),
-        pos,
-    );
+    insert_position(&inner, ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long), pos);
 
     handle_modify_position(&inner, pos_id, Some(45000.0), Some(60000.0)).await;
 
@@ -557,10 +559,7 @@ async fn test_handle_modify_position_clear_sl_tp() {
     pos.stop_loss = Some(45000.0);
     pos.take_profit = Some(60000.0);
     let pos_id = pos.id;
-    inner.positions.insert(
-        ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long),
-        pos,
-    );
+    insert_position(&inner, ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long), pos);
 
     handle_modify_position(&inner, pos_id, None, None).await;
 
@@ -586,6 +585,7 @@ async fn test_handle_place_order_success() {
         price: None,
         reduce_only: false,
         position_side: Some(PositionSide::Long),
+        position_id: None,
     };
 
     handle_place_order(&inner, params).await;
@@ -609,6 +609,7 @@ async fn test_handle_place_order_exchange_error() {
         price: None,
         reduce_only: false,
         position_side: Some(PositionSide::Long),
+        position_id: None,
     };
 
     handle_place_order(&inner, params).await;
@@ -624,7 +625,7 @@ async fn test_handle_cancel_order_success() {
     let mut order = make_order("BTC/USDT", Side::Buy, OrderType::Limit, 1.0, Some(49000.0));
     order.exchange_order_id = Some("ex_123".to_string());
     let order_id = order.id;
-    inner.orders.insert(order_id, order.clone());
+    insert_order(&inner, order.clone());
 
     let cancelled = {
         let mut o = order.clone();
@@ -661,7 +662,7 @@ async fn test_handle_cancel_order_no_exchange_id() {
     let mut order = make_order("BTC/USDT", Side::Buy, OrderType::Limit, 1.0, Some(49000.0));
     order.exchange_order_id = None;
     let order_id = order.id;
-    inner.orders.insert(order_id, order);
+    insert_order(&inner, order);
 
     handle_cancel_order(&inner, order_id).await;
 
@@ -676,7 +677,7 @@ async fn test_handle_cancel_order_exchange_error() {
     let mut order = make_order("BTC/USDT", Side::Buy, OrderType::Limit, 1.0, Some(49000.0));
     order.exchange_order_id = Some("ex_123".to_string());
     let order_id = order.id;
-    inner.orders.insert(order_id, order);
+    insert_order(&inner, order);
 
     mock.set_cancel_order_ok({
         let mut o = make_order("BTC/USDT", Side::Buy, OrderType::Limit, 1.0, Some(49000.0));
@@ -708,10 +709,7 @@ async fn test_handle_cancel_all_orders_with_position_id() {
     let (inner, mock) = make_inner_with_mock();
     let pos = make_position_side("BTC/USDT", PositionSide::Long, 1.0, 50000.0, 5);
     let pos_id = pos.id;
-    inner.positions.insert(
-        ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long),
-        pos,
-    );
+    insert_position(&inner, ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long), pos);
 
     let order1 = make_order("BTC/USDT", Side::Buy, OrderType::Limit, 1.0, Some(49000.0));
     mock.set_cancel_all_ok(vec![order1]).await;
@@ -768,16 +766,13 @@ async fn test_handle_ws_order_update_filled() {
 
     let pos = make_position_side("BTC/USDT", PositionSide::Long, 1.0, 50000.0, 5);
     let pos_id = pos.id;
-    inner.positions.insert(
-        ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long),
-        pos,
-    );
+    insert_position(&inner, ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long), pos);
 
     let mut order = make_order("BTC/USDT", Side::Buy, OrderType::Market, 1.0, None);
     order.position_id = pos_id;
     order.exchange_order_id = Some("ex_ws_001".to_string());
     let order_id = order.id;
-    inner.orders.insert(order_id, order);
+    insert_order(&inner, order);
 
     handle_ws_order_update(
         &inner,
@@ -805,17 +800,14 @@ async fn test_handle_ws_order_update_partial_fill() {
 
     let pos = make_position_side("BTC/USDT", PositionSide::Long, 1.0, 50000.0, 5);
     let pos_id = pos.id;
-    inner.positions.insert(
-        ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long),
-        pos,
-    );
+    insert_position(&inner, ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long), pos);
 
     let mut order = make_order("BTC/USDT", Side::Buy, OrderType::Limit, 2.0, Some(49000.0));
     order.position_id = pos_id;
     order.exchange_order_id = Some("ex_ws_002".to_string());
     order.filled = 0.5;
     let order_id = order.id;
-    inner.orders.insert(order_id, order);
+    insert_order(&inner, order);
 
     handle_ws_order_update(
         &inner,
@@ -867,14 +859,14 @@ async fn test_handle_ws_order_update_reduce_only_closes_position() {
     let pos = make_position_side("BTC/USDT", PositionSide::Long, 1.0, 50000.0, 5);
     let pos_id = pos.id;
     let key = ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long);
-    inner.positions.insert(key.clone(), pos);
+    insert_position(&inner, key.clone(), pos);
 
     let mut order = make_order("BTC/USDT", Side::Sell, OrderType::Market, 1.0, None);
     order.position_id = pos_id;
     order.reduce_only = true;
     order.exchange_order_id = Some("ex_close_001".to_string());
     let order_id = order.id;
-    inner.orders.insert(order_id, order);
+    insert_order(&inner, order);
 
     handle_ws_order_update(
         &inner,
@@ -906,14 +898,14 @@ async fn test_handle_ws_order_update_reduce_only_partial_close() {
     let pos = make_position_side("BTC/USDT", PositionSide::Long, 2.0, 50000.0, 5);
     let pos_id = pos.id;
     let key = ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long);
-    inner.positions.insert(key.clone(), pos);
+    insert_position(&inner, key.clone(), pos);
 
     let mut order = make_order("BTC/USDT", Side::Sell, OrderType::Market, 1.0, None);
     order.position_id = pos_id;
     order.reduce_only = true;
     order.exchange_order_id = Some("ex_partial_close".to_string());
     let order_id = order.id;
-    inner.orders.insert(order_id, order);
+    insert_order(&inner, order);
 
     handle_ws_order_update(
         &inner,
@@ -942,17 +934,14 @@ async fn test_handle_ws_order_update_open_order_updates_entry_price() {
 
     let pos = make_position_side("BTC/USDT", PositionSide::Long, 1.0, 50000.0, 5);
     let pos_id = pos.id;
-    inner.positions.insert(
-        ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long),
-        pos,
-    );
+    insert_position(&inner, ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long), pos);
 
     let mut order = make_order("BTC/USDT", Side::Buy, OrderType::Market, 1.0, None);
     order.position_id = pos_id;
     order.reduce_only = false;
     order.exchange_order_id = Some("ex_add_001".to_string());
     let order_id = order.id;
-    inner.orders.insert(order_id, order);
+    insert_order(&inner, order);
 
     handle_ws_order_update(
         &inner,
@@ -981,17 +970,14 @@ async fn test_handle_ws_order_update_short_position_pnl() {
 
     let pos = make_position_side("BTC/USDT", PositionSide::Short, 1.0, 50000.0, 5);
     let pos_id = pos.id;
-    inner.positions.insert(
-        ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Short),
-        pos,
-    );
+    insert_position(&inner, ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Short), pos);
 
     let mut order = make_order("BTC/USDT", Side::Buy, OrderType::Market, 1.0, None);
     order.position_id = pos_id;
     order.reduce_only = true;
     order.exchange_order_id = Some("ex_short_close".to_string());
     let order_id = order.id;
-    inner.orders.insert(order_id, order);
+    insert_order(&inner, order);
 
     handle_ws_order_update(
         &inner,
@@ -1017,17 +1003,11 @@ async fn test_inner_positions_dashmap() {
     assert!(inner.positions.is_empty());
 
     let pos = make_position_side("BTC/USDT", PositionSide::Long, 1.0, 50000.0, 5);
-    inner.positions.insert(
-        ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long),
-        pos,
-    );
+    insert_position(&inner, ("binance".to_string(), "BTC/USDT".to_string(), PositionSide::Long), pos);
     assert_eq!(inner.positions.len(), 1);
 
     let pos2 = make_position_side("ETH/USDT", PositionSide::Short, 10.0, 3000.0, 3);
-    inner.positions.insert(
-        ("binance".to_string(), "ETH/USDT".to_string(), PositionSide::Short),
-        pos2,
-    );
+    insert_position(&inner, ("binance".to_string(), "ETH/USDT".to_string(), PositionSide::Short), pos2);
     assert_eq!(inner.positions.len(), 2);
 }
 
@@ -1037,7 +1017,7 @@ async fn test_inner_orders_dashmap() {
     assert!(inner.orders.is_empty());
 
     let order = make_order("BTC/USDT", Side::Buy, OrderType::Limit, 1.0, Some(49000.0));
-    inner.orders.insert(order.id, order);
+    insert_order(&inner, order);
     assert_eq!(inner.orders.len(), 1);
 }
 
@@ -1156,6 +1136,7 @@ async fn test_place_order_command_construction() {
         price: None,
         reduce_only: false,
         position_side: Some(PositionSide::Long),
+        position_id: None,
     };
     let cmd = EngineCommand::PlaceOrder { params };
 
@@ -1210,6 +1191,7 @@ async fn test_mock_exchange_place_order_err() {
         price: None,
         reduce_only: false,
         position_side: Some(PositionSide::Long),
+        position_id: None,
     };
 
     let result = mock.place_order(params).await;

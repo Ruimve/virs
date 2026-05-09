@@ -42,7 +42,7 @@ use auth::Signer;
 pub use types::{
     Ticker, Kline, OrderBook, Balance, Order,
     MarketInfo, MarketType, Side, OrderType, OrderStatus,
-    PlaceOrderParams, ExchangeCapabilities, FundingHistoryEntry,
+    PlaceOrderParams, ExchangeCapabilities,
 };
 
 /// Unified exchange trait — the core abstraction following CCXT's design.

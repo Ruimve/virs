@@ -11,10 +11,30 @@ use uuid::Uuid;
 use super::config::EngineConfig;
 use super::error::*;
 use super::exchange::Exchange;
-use super::persistence::{Persistence, PnlSnapshotRow};
+use super::persistence::{PositionPersistence, PnlSnapshotRow};
 use super::risk::{DrawdownAction, RiskChecker};
 use super::tracker::PnlTracker;
 use super::types::*;
+
+macro_rules! persist {
+    ($expr:expr, $label:expr) => {
+        let mut attempts = 0u32;
+        loop {
+            match $expr.await {
+                Ok(()) => break,
+                Err(e) => {
+                    attempts += 1;
+                    if attempts >= 3 {
+                        error!(error = %e, attempts, $label);
+                        break;
+                    }
+                    warn!(error = %e, attempt = attempts, $label);
+                    tokio::time::sleep(std::time::Duration::from_millis(100 * attempts as u64)).await;
+                }
+            }
+        }
+    };
+}
 
 // ============================================================================
 // EngineInner - 内部共享状态
@@ -28,13 +48,16 @@ use super::types::*;
 pub(crate) struct EngineInner {
     pub(crate) config: EngineConfig,
     pub(crate) exchange: Box<dyn Exchange>,
-    pub(crate) persistence: Persistence,
+    pub(crate) persistence: Box<dyn PositionPersistence>,
     pub(crate) positions: DashMap<(String, String, PositionSide), Position>,
     pub(crate) orders: DashMap<Uuid, Order>,
     pub(crate) event_tx: broadcast::Sender<EngineEvent>,
     pub(crate) risk_checker: Mutex<RiskChecker>,
     pub(crate) tracker: Mutex<PnlTracker>,
     pub(crate) state: RwLock<EngineState>,
+    pub(crate) exchange_order_id_index: DashMap<String, Uuid>,
+    pub(crate) position_id_index: DashMap<Uuid, (String, String, PositionSide)>,
+    pub(crate) last_close_all: RwLock<Option<chrono::DateTime<Utc>>>,
 }
 
 impl EngineInner {
@@ -73,12 +96,12 @@ impl PositionEngine {
     /// 创建新的 PositionEngine 实例。
     ///
     /// 调用 [`run()`](Self::run) 启动引擎主循环。
-    pub fn new(config: EngineConfig, exchange: Box<dyn Exchange>, db: PgPool) -> Self {
+    pub fn new(config: EngineConfig, exchange: Box<dyn Exchange>, persistence: Box<dyn PositionPersistence>) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel(256);
         let event_tx = broadcast::channel(256).0;
 
         let inner = EngineInner {
-            persistence: Persistence::new(db),
+            persistence,
             risk_checker: Mutex::new(RiskChecker::new(config.risk.clone())),
             tracker: Mutex::new(PnlTracker::new(0.0)),
             state: RwLock::new(EngineState::Created),
@@ -87,6 +110,9 @@ impl PositionEngine {
             event_tx,
             positions: DashMap::new(),
             orders: DashMap::new(),
+            exchange_order_id_index: DashMap::new(),
+            position_id_index: DashMap::new(),
+            last_close_all: RwLock::new(None),
         };
 
         Self {
@@ -219,6 +245,7 @@ impl PositionEngine {
             .await?;
         for pos in open_positions {
             let key = (pos.exchange.clone(), pos.symbol.clone(), pos.side);
+            self.inner.position_id_index.insert(pos.id, key.clone());
             self.inner.positions.insert(key, pos);
         }
         info!(
@@ -234,6 +261,9 @@ impl PositionEngine {
             .get_active_orders(engine_id)
             .await?;
         for order in active_orders {
+            if let Some(ref eoid) = order.exchange_order_id {
+                self.inner.exchange_order_id_index.insert(eoid.clone(), order.id);
+            }
             self.inner.orders.insert(order.id, order);
         }
         info!(
@@ -250,12 +280,18 @@ impl PositionEngine {
             .await?
         {
             let mut tracker = self.inner.tracker.lock().unwrap();
-            let approx_peak = (snapshot.total_realized_pnl + snapshot.total_unrealized_pnl)
-                .max(snapshot.total_realized_pnl);
-            tracker.restore_from_snapshot(approx_peak, snapshot.total_realized_pnl, 0, 0, 0.0);
+            tracker.restore_from_snapshot(
+                snapshot.peak_equity,
+                snapshot.total_realized_pnl,
+                snapshot.total_trades as u32,
+                snapshot.profit_trades as u32,
+                snapshot.total_cost,
+                snapshot.consecutive_losses as u32,
+            );
             info!(
                 engine_id = %engine_id,
                 realized_pnl = snapshot.total_realized_pnl,
+                peak_equity = snapshot.peak_equity,
                 "Restored PnlTracker from snapshot"
             );
         }
@@ -283,7 +319,7 @@ impl PositionEngine {
                             pos.liquidation_price = ep.liquidation_price;
                             pos.updated_at = Utc::now();
                             drop(local);
-                            self.inner.persistence.upsert_position(&pos).await.ok();
+                            persist!(self.inner.persistence.upsert_position(&pos), "Failed to persist position in poll_loop");
                             self.inner.positions.insert(key, pos);
                         }
                         None => {
@@ -321,7 +357,8 @@ impl PositionEngine {
                                 position.symbol.clone(),
                                 position.side,
                             );
-                            self.inner.persistence.upsert_position(&position).await.ok();
+                            self.inner.position_id_index.insert(position.id, new_key.clone());
+                            persist!(self.inner.persistence.upsert_position(&position), "Failed to persist new position in poll_loop");
                             self.inner.positions.insert(new_key, position);
                             info!(symbol = %ep.symbol, "Recovered external position");
                         }
@@ -404,17 +441,13 @@ pub(crate) async fn command_loop(inner: Arc<EngineInner>, mut cmd_rx: mpsc::Rece
             EngineCommand::Shutdown => {
                 info!("Shutdown command received");
                 inner.set_state(EngineState::ShuttingDown);
-                inner
-                    .persistence
-                    .insert_event(
-                        &inner.config.engine_id,
-                        "engine_shutting_down",
-                        None,
-                        "Engine shutting down",
-                        "info",
-                    )
-                    .await
-                    .ok();
+                persist!(inner.persistence.insert_event(
+                    &inner.config.engine_id,
+                    "engine_shutting_down",
+                    None,
+                    "Engine shutting down",
+                    "info",
+                ), "Failed to persist shutdown event");
                 break;
             }
         }
@@ -440,6 +473,11 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
         let exchange_name = inner.exchange.name().to_string();
         match inner.exchange.get_positions(None).await {
             Ok(exchange_positions) => {
+                let exchange_keys: std::collections::HashSet<(String, String, PositionSide)> = exchange_positions
+                    .iter()
+                    .map(|ep| (exchange_name.clone(), ep.symbol.clone(), ep.side))
+                    .collect();
+
                 for ep in &exchange_positions {
                     let key = (exchange_name.clone(), ep.symbol.clone(), ep.side);
                     match inner.positions.get(&key) {
@@ -453,15 +491,15 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                                     "Position size mismatch detected"
                                 );
                             }
-                            // 无论是否 mismatch，都更新价格和盈亏
+                            // 仅更新价格和盈亏字段，不覆盖 size
+                            // size 由 WS 回调实时维护，避免旧快照覆盖新数据
                             let mut pos = local.value().clone();
-                            pos.size = ep.size;
                             pos.current_price = ep.entry_price;
                             pos.unrealized_pnl = ep.unrealized_pnl;
                             pos.liquidation_price = ep.liquidation_price;
                             pos.updated_at = Utc::now();
                             drop(local);
-                            inner.persistence.upsert_position(&pos).await.ok();
+                            persist!(inner.persistence.upsert_position(&pos), "Failed to persist position in sync_loop");
                             inner.positions.insert(key, pos);
                         }
                         None => {
@@ -500,8 +538,72 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                                 position.symbol.clone(),
                                 position.side,
                             );
-                            inner.persistence.upsert_position(&position).await.ok();
+                            inner.position_id_index.insert(position.id, new_key.clone());
+                            persist!(inner.persistence.upsert_position(&position), "Failed to persist new position in sync_loop");
                             inner.positions.insert(new_key, position);
+                        }
+                    }
+                }
+
+                // 检测本地有但交易所没有的仓位（可能被外部强平）
+                let local_keys: Vec<(String, String, PositionSide)> = inner
+                    .positions
+                    .iter()
+                    .filter_map(|r| {
+                        let pos = r.value();
+                        if pos.exchange == exchange_name && pos.status != PositionStatus::Closed {
+                            Some((pos.exchange.clone(), pos.symbol.clone(), pos.side))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                for lk in &local_keys {
+                    if !exchange_keys.contains(lk) {
+                        warn!(
+                            symbol = %lk.1,
+                            side = ?lk.2,
+                            "Position exists locally but not on exchange (possibly liquidated externally)"
+                        );
+
+                        let active_order_ids: Vec<Uuid> = inner
+                            .orders
+                            .iter()
+                            .filter(|r| {
+                                let o = r.value();
+                                o.symbol == lk.1
+                                    && !matches!(
+                                        o.status,
+                                        OrderStatus::Filled
+                                            | OrderStatus::Canceled
+                                            | OrderStatus::Failed
+                                    )
+                            })
+                            .map(|r| r.key().clone())
+                            .collect();
+
+                        for oid in &active_order_ids {
+                            if let Err(e) = inner.exchange.cancel_order(&lk.1, &oid.to_string()).await {
+                                warn!(order_id = %oid, error = %e, "Failed to cancel active order before closing position in sync_loop");
+                            }
+                            if let Some(mut order) = inner.orders.get_mut(oid) {
+                                order.status = OrderStatus::Canceled;
+                            }
+                        }
+
+                        if let Some(mut pos) = inner.positions.get_mut(lk) {
+                            pos.status = PositionStatus::Closed;
+                            pos.size = 0.0;
+                            pos.closed_at = Some(Utc::now());
+                            pos.updated_at = Utc::now();
+                            let closed_pos = pos.clone();
+                            drop(pos);
+                            inner.position_id_index.remove(&closed_pos.id);
+                            inner.positions.remove(lk);
+                            persist!(inner.persistence.upsert_position(&closed_pos), "Failed to persist closed position in sync_loop");
+                            inner.emit_event(EngineEvent::PositionClosed {
+                                position: closed_pos,
+                            });
                         }
                     }
                 }
@@ -521,11 +623,26 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
             .iter()
             .map(|r| r.value().symbol.clone())
             .collect();
-        for sym in &symbols_to_check {
-            match inner.exchange.get_funding_rate(sym).await {
+        let funding_futures: Vec<_> = symbols_to_check
+            .iter()
+            .map(|sym| {
+                let sym = sym.clone();
+                let inner = inner.clone();
+                async move {
+                    let result = inner.exchange.get_funding_rate(&sym).await;
+                    (sym, result)
+                }
+            })
+            .collect();
+        let funding_results = futures_util::future::join_all(funding_futures).await;
+        for (sym, result) in funding_results {
+            match result {
                 Ok(funding) => {
-                    let risk_checker = inner.risk_checker.lock().unwrap();
-                    if let Some(alert) = risk_checker.check_funding_rate(sym, funding.rate) {
+                    let alert = {
+                        let risk_checker = inner.risk_checker.lock().unwrap();
+                        risk_checker.check_funding_rate(&sym, funding.rate)
+                    };
+                    if let Some(alert) = alert {
                         inner.emit_event(EngineEvent::RiskAlert {
                             level: alert.severity,
                             message: alert.message,
@@ -539,22 +656,23 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
         }
 
         // 3. 检查强平预警
-        for entry in inner.positions.iter() {
-            let pos = entry.value();
+        {
             let risk_checker = inner.risk_checker.lock().unwrap();
-            if let Some(distance_pct) = risk_checker.check_liquidation(pos) {
-                inner.emit_event(EngineEvent::LiquidationWarning {
-                    position_id: pos.id,
-                    symbol: pos.symbol.clone(),
-                    liquidation_price: pos.liquidation_price.unwrap_or(0.0),
-                    current_price: pos.current_price,
-                });
-                warn!(
-                    position_id = %pos.id,
-                    symbol = %pos.symbol,
-                    distance_pct,
-                    "Liquidation warning"
-                );
+            for entry in inner.positions.iter() {
+                let pos = entry.value();
+                if let Some(_distance_pct) = risk_checker.check_liquidation(pos) {
+                    inner.emit_event(EngineEvent::LiquidationWarning {
+                        position_id: pos.id,
+                        symbol: pos.symbol.clone(),
+                        liquidation_price: pos.liquidation_price.unwrap_or(0.0),
+                        current_price: pos.current_price,
+                    });
+                    warn!(
+                        position_id = %pos.id,
+                        symbol = %pos.symbol,
+                        "Liquidation warning"
+                    );
+                }
             }
         }
 
@@ -587,54 +705,170 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                 open_position_count: snapshot.open_positions_count as i32,
                 total_margin: positions.iter().map(|p| p.margin).sum(),
                 drawdown_pct: snapshot.max_drawdown,
+                peak_equity: {
+                    let tracker = inner.tracker.lock().unwrap();
+                    tracker.peak_equity()
+                },
+                total_trades: {
+                    let tracker = inner.tracker.lock().unwrap();
+                    tracker.total_trades() as i32
+                },
+                profit_trades: {
+                    let tracker = inner.tracker.lock().unwrap();
+                    tracker.profit_trades() as i32
+                },
+                total_cost: {
+                    let tracker = inner.tracker.lock().unwrap();
+                    tracker.total_cost()
+                },
+                consecutive_losses: {
+                    let tracker = inner.tracker.lock().unwrap();
+                    tracker.consecutive_losses() as i32
+                },
             };
-            inner
-                .persistence
-                .insert_pnl_snapshot(&inner.config.engine_id, &pnl_row)
-                .await
-                .ok();
+            persist!(inner.persistence.insert_pnl_snapshot(&inner.config.engine_id, &pnl_row), "Failed to persist pnl snapshot");
         }
 
         // 5. 检查回撤
-        {
+        let drawdown_check = {
             let tracker = inner.tracker.lock().unwrap();
             let peak = tracker.peak_equity();
             let snap = tracker.snapshot(0.0, inner.positions.len());
-            drop(tracker);
-
             let risk_checker = inner.risk_checker.lock().unwrap();
-            if let Some(action) = risk_checker.check_drawdown(peak, snap.equity) {
-                match action {
-                    DrawdownAction::Warning => {
-                        inner.emit_event(EngineEvent::RiskAlert {
-                            level: "warning".to_string(),
-                            message: format!(
-                                "Drawdown warning: {:.2}%",
-                                snap.max_drawdown * 100.0
-                            ),
-                        });
-                    }
-                    DrawdownAction::Pause => {
-                        inner.emit_event(EngineEvent::RiskAlert {
-                            level: "critical".to_string(),
-                            message: format!(
-                                "Drawdown critical, pausing new positions: {:.2}%",
-                                snap.max_drawdown * 100.0
-                            ),
-                        });
-                    }
-                    DrawdownAction::CloseAll => {
-                        inner.emit_event(EngineEvent::RiskAlert {
-                            level: "critical".to_string(),
-                            message: format!(
-                                "Max drawdown exceeded, closing all positions: {:.2}%",
-                                snap.max_drawdown * 100.0
-                            ),
-                        });
-                        // TODO: 触发平仓所有仓位
-                    }
-                    DrawdownAction::Normal => {}
+            let action = risk_checker.check_drawdown(peak, snap.equity);
+            (action, snap)
+        };
+        if let Some(action) = drawdown_check.0 {
+            let snap = &drawdown_check.1;
+            match action {
+                DrawdownAction::Warning => {
+                    inner.emit_event(EngineEvent::RiskAlert {
+                        level: "warning".to_string(),
+                        message: format!(
+                            "Drawdown warning: {:.2}%",
+                            snap.max_drawdown * 100.0
+                        ),
+                    });
                 }
+                DrawdownAction::Pause => {
+                    inner.emit_event(EngineEvent::RiskAlert {
+                        level: "critical".to_string(),
+                        message: format!(
+                            "Drawdown critical, pausing new positions: {:.2}%",
+                            snap.max_drawdown * 100.0
+                        ),
+                    });
+                }
+                DrawdownAction::CloseAll => {
+                    let now = Utc::now();
+                    let cooldown = chrono::Duration::seconds(inner.config.sync_interval_secs as i64 * 2);
+                    let in_cooldown = {
+                        let last = inner.last_close_all.read().unwrap();
+                        last.map(|t| now - t < cooldown).unwrap_or(false)
+                    };
+                    if in_cooldown {
+                        warn!("CloseAll in cooldown, skipping duplicate trigger");
+                        continue;
+                    }
+
+                    inner.emit_event(EngineEvent::RiskAlert {
+                        level: "critical".to_string(),
+                        message: format!(
+                            "Max drawdown exceeded, closing all positions: {:.2}%",
+                            snap.max_drawdown * 100.0
+                        ),
+                    });
+
+                    *inner.last_close_all.write().unwrap() = Some(now);
+
+                    let positions_to_close: Vec<(Uuid, String, PositionSide, f64)> = inner
+                        .positions
+                        .iter()
+                        .filter_map(|r| {
+                            let pos = r.value();
+                            if pos.size > 0.0 && pos.status != PositionStatus::Closing {
+                                Some((pos.id, pos.symbol.clone(), pos.side, pos.size))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    for (pid, _, _, _) in &positions_to_close {
+                        let pos_key = inner.position_id_index.get(pid).map(|r| r.value().clone());
+                        if let Some(key) = pos_key {
+                            if let Some(mut pos) = inner.positions.get_mut(&key) {
+                                pos.status = PositionStatus::Closing;
+                                pos.updated_at = now;
+                            }
+                        }
+                    }
+                    let close_futures: Vec<_> = positions_to_close
+                        .into_iter()
+                        .map(|(pid, sym, side, size)| {
+                            let inner = inner.clone();
+                            async move {
+                                let close_side = match side {
+                                    PositionSide::Long => Side::Sell,
+                                    PositionSide::Short => Side::Buy,
+                                    PositionSide::Both => Side::Sell,
+                                };
+                                let params = PlaceOrderParams {
+                                    symbol: sym.clone(),
+                                    side: close_side,
+                                    order_type: OrderType::Market,
+                                    amount: size,
+                                    price: None,
+                                    reduce_only: true,
+                                    position_side: Some(side),
+                                    position_id: Some(pid),
+                                };
+                                let mut attempts = 0u32;
+                                let max_attempts = 3;
+                                loop {
+                                    match inner.exchange.place_order(params.clone()).await {
+                                        Ok(order) => {
+                                            if let Some(ref eoid) = order.exchange_order_id {
+                                                inner.exchange_order_id_index.insert(eoid.clone(), order.id);
+                                            }
+                                            inner.orders.insert(order.id, order.clone());
+                                            persist!(inner.persistence.insert_order(&order), "Failed to persist emergency close order");
+                                            warn!(
+                                                position_id = %pid,
+                                                symbol = %sym,
+                                                "Emergency close order placed due to max drawdown"
+                                            );
+                                            return;
+                                        }
+                                        Err(e) => {
+                                            attempts += 1;
+                                            if attempts >= max_attempts {
+                                                error!(
+                                                    position_id = %pid,
+                                                    symbol = %sym,
+                                                    error = %e,
+                                                    attempts,
+                                                    "Failed to place emergency close order after retries"
+                                                );
+                                                return;
+                                            }
+                                            warn!(
+                                                position_id = %pid,
+                                                symbol = %sym,
+                                                error = %e,
+                                                attempt = attempts,
+                                                "Emergency close order failed, retrying"
+                                            );
+                                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                                        }
+                                    }
+                                }
+                            }
+                        })
+                        .collect();
+                    futures_util::future::join_all(close_futures).await;
+                }
+                DrawdownAction::Normal => {}
             }
         }
     }
@@ -680,17 +914,13 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: mpsc::Recei
                 } else {
                     ("ws_disconnected", "warning", "WebSocket disconnected")
                 };
-                inner
-                    .persistence
-                    .insert_event(
-                        &inner.config.engine_id,
-                        event_type,
-                        None,
-                        message,
-                        severity,
-                    )
-                    .await
-                    .ok();
+                persist!(inner.persistence.insert_event(
+                    &inner.config.engine_id,
+                    event_type,
+                    None,
+                    message,
+                    severity,
+                ), "Failed to persist ws connection event");
             }
         }
     }
@@ -712,20 +942,11 @@ pub(crate) async fn handle_ws_order_update(
     commission: f64,
     timestamp: chrono::DateTime<Utc>,
 ) {
-    // 1. 查找本地 Order（通过 exchange_order_id 匹配）
-    let (order_id, position_id, prev_filled) = {
-        let entry = inner.orders.iter().find(|r| {
-            r.value()
-                .exchange_order_id
-                .as_deref()
-                .map(|id| id == exchange_order_id)
-                .unwrap_or(false)
-        });
-        match entry {
-            Some(e) => {
-                let o = e.value();
-                (o.id, o.position_id, o.filled)
-            }
+    // 1. 查找本地 Order（通过 exchange_order_id_index O(1) 查找）
+    let (order_id, position_id, prev_filled, is_reduce_only) = {
+        let order_id_opt = inner.exchange_order_id_index.get(exchange_order_id).map(|r| *r.value());
+        let order_id = match order_id_opt {
+            Some(id) => id,
             None => {
                 debug!(
                     exchange_order_id,
@@ -733,7 +954,18 @@ pub(crate) async fn handle_ws_order_update(
                 );
                 return;
             }
-        }
+        };
+        let order = match inner.orders.get(&order_id) {
+            Some(o) => o,
+            None => {
+                debug!(
+                    exchange_order_id,
+                    "Order index points to missing order"
+                );
+                return;
+            }
+        };
+        (order.id, order.position_id, order.filled, order.reduce_only)
     };
 
     // 2. 更新 Order
@@ -747,32 +979,69 @@ pub(crate) async fn handle_ws_order_update(
             order.updated_at = timestamp;
             let updated_order = order.clone();
             drop(order);
-            inner.persistence.update_order(&updated_order).await.ok();
+            persist!(inner.persistence.update_order(&updated_order), "Failed to persist order update in ws_feed");
         }
     }
 
     // 3. 部分成交或完全成交时创建 Trade 记录
     if matches!(status, OrderStatus::PartiallyFilled | OrderStatus::Filled) {
-        let trade_fill = (filled - prev_filled).max(0.0);
+        let trade_fill = filled - prev_filled;
+
+        if trade_fill < 0.0 {
+            warn!(
+                order_id = %order_id,
+                prev_filled,
+                new_filled = filled,
+                "WS order update out of order: filled decreased, skipping PnL calculation"
+            );
+            return;
+        }
 
         if trade_fill > 0.0 {
             // 计算 PnL
             let (pnl, trade_side) = {
-                let pos_entry = inner
-                    .positions
-                    .iter()
-                    .find(|r| r.value().id == position_id);
-                match pos_entry {
-                    Some(pe) => {
-                        let pos = pe.value();
-                        let p = match pos.side {
-                            PositionSide::Long => (price - pos.entry_price) * trade_fill,
-                            PositionSide::Short => (pos.entry_price - price) * trade_fill,
-                            PositionSide::Both => 0.0,
-                        };
-                        (p, pos.side)
+                let pos_key = inner.position_id_index.get(&position_id).map(|r| r.value().clone());
+                match pos_key {
+                    Some(key) => {
+                        let pos_entry = inner.positions.get(&key);
+                        match pos_entry {
+                            Some(pe) => {
+                                let pos = pe.value();
+                                if is_reduce_only {
+                                    let p = match pos.side {
+                                        PositionSide::Long => (price - pos.entry_price) * trade_fill,
+                                        PositionSide::Short => (pos.entry_price - price) * trade_fill,
+                                        PositionSide::Both => {
+                                            if pos.size >= 0.0 {
+                                                (price - pos.entry_price) * trade_fill
+                                            } else {
+                                                (pos.entry_price - price) * trade_fill
+                                            }
+                                        }
+                                    };
+                                    let side = match pos.side {
+                                        PositionSide::Long => Side::Sell,
+                                        PositionSide::Short => Side::Buy,
+                                        PositionSide::Both => {
+                                            if pos.size >= 0.0 { Side::Sell } else { Side::Buy }
+                                        }
+                                    };
+                                    (p, side)
+                                } else {
+                                    let side = match pos.side {
+                                        PositionSide::Long => Side::Buy,
+                                        PositionSide::Short => Side::Sell,
+                                        PositionSide::Both => {
+                                            if pos.size >= 0.0 { Side::Buy } else { Side::Sell }
+                                        }
+                                    };
+                                    (0.0, side)
+                                }
+                            }
+                            None => (0.0, Side::Buy),
+                        }
                     }
-                    None => (0.0, PositionSide::Both),
+                    None => (0.0, Side::Buy),
                 }
             };
 
@@ -782,21 +1051,17 @@ pub(crate) async fn handle_ws_order_update(
                 order_id,
                 exchange: inner.exchange.name().to_string(),
                 symbol: symbol.to_string(),
-                side: match trade_side {
-                    PositionSide::Long => Side::Buy,
-                    PositionSide::Short => Side::Sell,
-                    PositionSide::Both => Side::Buy,
-                },
+                side: trade_side,
                 price,
                 amount: trade_fill,
                 fee: commission,
                 fee_currency: String::new(),
                 pnl,
-                trade_type: "trade".to_string(),
+                trade_type: if is_reduce_only { TradeType::Close } else { TradeType::Open },
                 created_at: timestamp,
             };
 
-            inner.persistence.insert_trade(&trade).await.ok();
+            persist!(inner.persistence.insert_trade(&trade), "Failed to persist trade");
 
             // 更新 PnlTracker
             {
@@ -808,6 +1073,16 @@ pub(crate) async fn handle_ws_order_update(
             {
                 let mut risk_checker = inner.risk_checker.lock().unwrap();
                 risk_checker.record_trade_result(pnl);
+            }
+
+            // 更新仓位已实现盈亏（平仓成交时累加）
+            if pnl != 0.0 {
+                let pos_key = inner.position_id_index.get(&position_id).map(|r| r.value().clone());
+                if let Some(key) = pos_key {
+                    if let Some(mut pos) = inner.positions.get_mut(&key) {
+                        pos.realized_pnl += pnl;
+                    }
+                }
             }
 
             // 发出事件
@@ -858,28 +1133,19 @@ pub(crate) async fn handle_ws_order_update(
 
     // 4. 订单完全成交时更新仓位
     if status == OrderStatus::Filled {
-        let pos_entry = inner
-            .positions
-            .iter()
-            .find(|r| r.value().id == position_id)
-            .map(|r| r.value().clone());
+        let pos_key = inner.position_id_index.get(&position_id).map(|r| r.value().clone());
+        let pos_entry = match pos_key {
+            Some(key) => inner.positions.get(&key).map(|r| r.value().clone()),
+            None => None,
+        };
 
         if let Some(mut position) = pos_entry {
             let order = inner.orders.get(&order_id).map(|r| r.value().clone());
 
             if let Some(order) = order {
                 if order.reduce_only {
-                    // 平仓订单成交
+                    // 平仓订单成交（realized_pnl 已在 trade 处理阶段累加）
                     position.size -= order.filled;
-                    position.realized_pnl += if let Some(fp) = order.fill_price {
-                        match position.side {
-                            PositionSide::Long => (fp - position.entry_price) * order.filled,
-                            PositionSide::Short => (position.entry_price - fp) * order.filled,
-                            PositionSide::Both => 0.0,
-                        }
-                    } else {
-                        0.0
-                    };
 
                     if position.size.abs() < 1e-8 {
                         position.size = 0.0;
@@ -917,11 +1183,12 @@ pub(crate) async fn handle_ws_order_update(
                 );
 
                 if position.status == PositionStatus::Closed {
+                    inner.position_id_index.remove(&position.id);
                     inner.positions.remove(&key);
                 } else {
                     inner.positions.insert(key, position.clone());
                 }
-                inner.persistence.upsert_position(&position).await.ok();
+                persist!(inner.persistence.upsert_position(&position), "Failed to persist position in ws_feed close");
             }
         }
     }
@@ -945,37 +1212,38 @@ pub(crate) async fn poll_loop(inner: Arc<EngineInner>) {
         match inner.exchange.get_open_orders(None).await {
             Ok(exchange_orders) => {
                 for eo in &exchange_orders {
-                    // 通过 exchange_order_id 匹配本地订单
-                    let matched = inner.orders.iter().find(|r| {
-                        r.value()
-                            .exchange_order_id
-                            .as_deref()
-                            .map(|id| id == eo.exchange_order_id.as_deref().unwrap_or(""))
-                            .unwrap_or(false)
-                    });
+                    let eoid = match eo.exchange_order_id.as_deref() {
+                        Some(id) => id,
+                        None => continue,
+                    };
+                    let local_id = match inner.exchange_order_id_index.get(eoid) {
+                        Some(r) => *r.value(),
+                        None => continue,
+                    };
+                    let local = match inner.orders.get(&local_id) {
+                        Some(r) => r,
+                        None => continue,
+                    };
 
-                    if let Some(entry) = matched {
-                        let local = entry.value();
-                        if local.status != eo.status
-                            || (local.filled - eo.filled).abs() > 1e-8
-                        {
-                            warn!(
-                                order_id = %local.id,
-                                local_status = ?local.status,
-                                exchange_status = ?eo.status,
-                                "Order status mismatch detected in poll"
-                            );
-                            let mut updated = local.clone();
-                            updated.status = eo.status;
-                            updated.filled = eo.filled;
-                            updated.remaining = eo.remaining;
-                            updated.fill_price = eo.fill_price;
-                            updated.fee = eo.fee;
-                            updated.updated_at = Utc::now();
-                            drop(entry);
-                            inner.orders.insert(updated.id, updated.clone());
-                            inner.persistence.update_order(&updated).await.ok();
-                        }
+                    if local.status != eo.status
+                        || (local.filled - eo.filled).abs() > 1e-8
+                    {
+                        warn!(
+                            order_id = %local.id,
+                            local_status = ?local.status,
+                            exchange_status = ?eo.status,
+                            "Order status mismatch detected in poll"
+                        );
+                        let mut updated = local.value().clone();
+                        updated.status = eo.status;
+                        updated.filled = eo.filled;
+                        updated.remaining = eo.remaining;
+                        updated.fill_price = eo.fill_price;
+                        updated.fee = eo.fee;
+                        updated.updated_at = Utc::now();
+                        drop(local);
+                        inner.orders.insert(updated.id, updated.clone());
+                        persist!(inner.persistence.update_order(&updated), "Failed to persist order update in ws_feed partial");
                     }
                 }
             }
@@ -1022,7 +1290,14 @@ pub(crate) async fn handle_open_position(
     if let Some(lev) = leverage {
         if let Err(e) = inner.exchange.set_leverage(&symbol, lev).await {
             let msg = format!("Failed to set leverage: {}", e);
-            error!(error = %e, "Failed to set leverage for {}", symbol);
+            error!(error = %e, symbol = %symbol, leverage = lev, "Failed to set leverage");
+            inner.emit_event(EngineEvent::RiskAlert {
+                level: "warning".to_string(),
+                message: format!(
+                    "Leverage inconsistency: {}x requested for {} but exchange returned error: {}. Position may have incorrect leverage.",
+                    lev, symbol, e
+                ),
+            });
             inner.emit_event(EngineEvent::OrderFailed {
                 order_id: Uuid::nil(),
                 reason: msg,
@@ -1037,7 +1312,10 @@ pub(crate) async fn handle_open_position(
     // 获取余额来计算 total_equity（在锁之前调用 async）
     let total_equity = inner.exchange.get_balance().await
         .map(|b| b.total)
-        .unwrap_or(0.0);
+        .unwrap_or_else(|e| {
+            warn!(error = %e, "Failed to get balance for risk check, using tracker equity as fallback");
+            inner.tracker.lock().unwrap().equity()
+        });
 
     {
         let positions_owned: Vec<Position> = inner.positions.iter().map(|r| r.value().clone()).collect();
@@ -1101,6 +1379,7 @@ pub(crate) async fn handle_open_position(
         price,
         reduce_only: false,
         position_side: Some(side),
+        position_id: Some(position_id),
     };
 
     match inner.exchange.place_order(params).await {
@@ -1115,11 +1394,15 @@ pub(crate) async fn handle_open_position(
                 0.0
             };
 
+            inner.position_id_index.insert(position.id, key.clone());
             inner.positions.insert(key, position.clone());
+            if let Some(ref eoid) = order.exchange_order_id {
+                inner.exchange_order_id_index.insert(eoid.clone(), order.id);
+            }
             inner.orders.insert(order.id, order.clone());
 
-            inner.persistence.upsert_position(&position).await.ok();
-            inner.persistence.insert_order(&order).await.ok();
+            persist!(inner.persistence.upsert_position(&position), "Failed to persist position in open_position");
+            persist!(inner.persistence.insert_order(&order), "Failed to persist order in open_position");
 
             inner.emit_event(EngineEvent::PositionOpened {
                 position: position.clone(),
@@ -1155,11 +1438,13 @@ pub(crate) async fn handle_close_position(
     price: Option<f64>,
 ) {
     // 查找仓位
-    let position = inner
-        .positions
-        .iter()
-        .find(|r| r.value().id == position_id)
-        .map(|r| r.value().clone());
+    let position = {
+        let pos_key = inner.position_id_index.get(&position_id).map(|r| r.value().clone());
+        match pos_key {
+            Some(key) => inner.positions.get(&key).map(|r| r.value().clone()),
+            None => None,
+        }
+    };
 
     let position = match position {
         Some(p) => p,
@@ -1197,12 +1482,16 @@ pub(crate) async fn handle_close_position(
         price,
         reduce_only: true,
         position_side: Some(position.side),
+        position_id: Some(position.id),
     };
 
     match inner.exchange.place_order(params).await {
         Ok(order) => {
+            if let Some(ref eoid) = order.exchange_order_id {
+                inner.exchange_order_id_index.insert(eoid.clone(), order.id);
+            }
             inner.orders.insert(order.id, order.clone());
-            inner.persistence.insert_order(&order).await.ok();
+            persist!(inner.persistence.insert_order(&order), "Failed to persist order in close_position");
             inner.emit_event(EngineEvent::OrderPlaced { order });
 
             // 标记仓位为 Closing
@@ -1242,10 +1531,9 @@ pub(crate) async fn handle_modify_position(
 ) {
     // 查找仓位的 DashMap key
     let key_opt = inner
-        .positions
-        .iter()
-        .find(|r| r.value().id == position_id)
-        .map(|r| r.key().clone());
+        .position_id_index
+        .get(&position_id)
+        .map(|r| r.value().clone());
 
     let key = match key_opt {
         Some(k) => k,
@@ -1266,7 +1554,7 @@ pub(crate) async fn handle_modify_position(
         pos.updated_at = Utc::now();
         let updated = pos.clone();
         drop(pos);
-        inner.persistence.upsert_position(&updated).await.ok();
+        persist!(inner.persistence.upsert_position(&updated), "Failed to persist position in modify_position");
         inner.emit_event(EngineEvent::PositionModified {
             position_id,
             stop_loss,
@@ -1279,11 +1567,16 @@ pub(crate) async fn handle_modify_position(
 /// 处理通用下单命令。
 pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, params: PlaceOrderParams) {
     // 风控检查
+    let total_equity = inner.exchange.get_balance().await
+        .map(|b| b.total)
+        .unwrap_or_else(|e| {
+            warn!(error = %e, "Failed to get balance for risk check, using tracker equity as fallback");
+            inner.tracker.lock().unwrap().equity()
+        });
     {
         let positions_owned: Vec<Position> = inner.positions.iter().map(|r| r.value().clone()).collect();
         let positions: Vec<&Position> = positions_owned.iter().collect();
         let risk_checker = inner.risk_checker.lock().unwrap();
-        let total_equity = inner.tracker.lock().unwrap().equity();
         if let Err(e) =
             risk_checker.check_place_order(&positions, &params.symbol, params.amount, total_equity)
         {
@@ -1298,9 +1591,12 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, params: PlaceOr
     }
 
     match inner.exchange.place_order(params.clone()).await {
-        Ok(order) => {
+        Ok(mut order) => {
+            if let Some(pid) = params.position_id {
+                order.position_id = pid;
+            }
             inner.orders.insert(order.id, order.clone());
-            inner.persistence.insert_order(&order).await.ok();
+            persist!(inner.persistence.insert_order(&order), "Failed to persist order in place_order");
             inner.emit_event(EngineEvent::OrderPlaced {
                 order: order.clone(),
             });
@@ -1359,11 +1655,7 @@ pub(crate) async fn handle_cancel_order(inner: &Arc<EngineInner>, order_id: Uuid
             inner
                 .orders
                 .insert(cancelled_order.id, cancelled_order.clone());
-            inner
-                .persistence
-                .update_order(&cancelled_order)
-                .await
-                .ok();
+            persist!(inner.persistence.update_order(&cancelled_order), "Failed to persist cancelled order in cancel_order");
             inner.emit_event(EngineEvent::OrderCanceled {
                 order: cancelled_order,
             });
@@ -1405,7 +1697,7 @@ pub(crate) async fn handle_cancel_all_orders(
         Ok(cancelled_orders) => {
             for order in &cancelled_orders {
                 inner.orders.insert(order.id, order.clone());
-                inner.persistence.update_order(order).await.ok();
+                persist!(inner.persistence.update_order(order), "Failed to persist cancelled order");
                 inner.emit_event(EngineEvent::OrderCanceled {
                     order: order.clone(),
                 });
@@ -1436,6 +1728,7 @@ pub(crate) async fn handle_sync_positions(inner: &Arc<EngineInner>) {
 #[cfg(test)]
 pub(crate) mod test_helpers {
     use super::*;
+    use super::persistence::Persistence;
     use crate::engine::position::config::RiskConfig;
 
     pub(crate) fn make_test_inner(
@@ -1447,7 +1740,7 @@ pub(crate) mod test_helpers {
         let event_tx = broadcast::channel(256).0;
 
         Arc::new(EngineInner {
-            persistence: Persistence::new(db),
+            persistence: Box::new(Persistence::new(db)),
             risk_checker: Mutex::new(RiskChecker::new(config.risk.clone())),
             tracker: Mutex::new(PnlTracker::new(10000.0)),
             state: RwLock::new(EngineState::Running),
@@ -1456,6 +1749,9 @@ pub(crate) mod test_helpers {
             event_tx,
             positions: DashMap::new(),
             orders: DashMap::new(),
+            exchange_order_id_index: DashMap::new(),
+            position_id_index: DashMap::new(),
+            last_close_all: RwLock::new(None),
         })
     }
 

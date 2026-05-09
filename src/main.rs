@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use tracing::{info, warn, error};
+use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod api;
@@ -122,7 +122,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Start Grid Engine
     let (pe_cmd_tx, _pe_cmd_rx) = tokio::sync::mpsc::channel(256);
-    let (pe_event_tx, pe_event_rx) = tokio::sync::broadcast::channel(256);
+    let (_pe_event_tx, pe_event_rx) = tokio::sync::broadcast::channel(256);
     let (grid_event_tx, _grid_event_rx) = tokio::sync::broadcast::channel(256);
 
     // Paper 交易执行器

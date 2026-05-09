@@ -99,7 +99,7 @@ fn test_unrealized_pnl_multiple_positions() {
 fn test_record_trade_updates_realized() {
     let mut tracker = PnlTracker::new(10000.0);
 
-    let mut trade = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut trade = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     trade.pnl = 100.0;
 
     tracker.record_trade(&trade);
@@ -113,7 +113,7 @@ fn test_record_trade_updates_realized() {
 fn test_record_trade_negative_pnl() {
     let mut tracker = PnlTracker::new(10000.0);
 
-    let mut trade = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut trade = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     trade.pnl = -50.0;
 
     tracker.record_trade(&trade);
@@ -127,11 +127,11 @@ fn test_record_trade_negative_pnl() {
 fn test_record_multiple_trades() {
     let mut tracker = PnlTracker::new(10000.0);
 
-    let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t1.pnl = 100.0;
-    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t2.pnl = -50.0;
-    let mut t3 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t3 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t3.pnl = 200.0;
 
     tracker.record_trade(&t1);
@@ -186,7 +186,7 @@ fn test_max_drawdown_calculation() {
     let mut tracker = PnlTracker::new(10000.0);
 
     // First: record a profit to push equity to 11000
-    let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t1.pnl = 1000.0;
     tracker.record_trade(&t1);
     // record_trade 更新 realized_pnl 但不更新 peak_equity
@@ -195,7 +195,7 @@ fn test_max_drawdown_calculation() {
     assert_eq!(tracker.peak_equity(), 10000.0);
 
     // Then: record a loss to bring equity to 8000
-    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t2.pnl = -2000.0;
     tracker.record_trade(&t2);
     let snap = tracker.snapshot(0.0, 0);
@@ -217,12 +217,12 @@ fn test_snapshot_win_rate() {
 
     // 7 wins, 3 losses
     for _ in 0..7 {
-        let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+        let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
         t.pnl = 10.0;
         tracker.record_trade(&t);
     }
     for _ in 0..3 {
-        let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+        let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
         t.pnl = -10.0;
         tracker.record_trade(&t);
     }
@@ -244,11 +244,11 @@ fn test_snapshot_pnl_ratio() {
     let mut tracker = PnlTracker::new(10000.0);
 
     // total_profit = 1000, total_loss = 500
-    let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t1.pnl = 1000.0;
     tracker.record_trade(&t1);
 
-    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t2.pnl = -500.0;
     tracker.record_trade(&t2);
 
@@ -260,11 +260,11 @@ fn test_snapshot_pnl_ratio() {
 fn test_snapshot_pnl_ratio_no_losses() {
     let mut tracker = PnlTracker::new(10000.0);
 
-    let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t1.pnl = 500.0;
     tracker.record_trade(&t1);
 
-    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t2.pnl = 300.0;
     tracker.record_trade(&t2);
 
@@ -278,20 +278,20 @@ fn test_snapshot_avg_pnl_ratio() {
     let mut tracker = PnlTracker::new(10000.0);
 
     // 2 profit trades: 200 + 200 = 400 total, avg_profit = 200
-    let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t1.pnl = 200.0;
     tracker.record_trade(&t1);
 
-    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t2.pnl = 200.0;
     tracker.record_trade(&t2);
 
     // 2 loss trades: 100 + 100 = 200 total, avg_loss = 100
-    let mut t3 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t3 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t3.pnl = -100.0;
     tracker.record_trade(&t3);
 
-    let mut t4 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t4 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t4.pnl = -100.0;
     tracker.record_trade(&t4);
 
@@ -308,24 +308,24 @@ fn test_snapshot_avg_pnl_ratio() {
 fn test_restore_from_snapshot() {
     let mut tracker = PnlTracker::new(10000.0);
 
-    tracker.restore_from_snapshot(15000.0, 3000.0, 10, 7, 5000.0);
+    tracker.restore_from_snapshot(15000.0, 3000.0, 10, 7, 5000.0, 2);
 
     assert_eq!(tracker.peak_equity(), 15000.0);
     assert_eq!(tracker.total_realized_pnl(), 3000.0);
     assert_eq!(tracker.total_trades(), 10);
     assert_eq!(tracker.profit_trades(), 7);
     assert_eq!(tracker.total_cost(), 5000.0);
+    assert_eq!(tracker.consecutive_losses(), 2);
 }
 
 #[test]
 fn test_restore_preserves_behavior() {
     let mut tracker = PnlTracker::new(10000.0);
 
-    // Restore with some state
-    tracker.restore_from_snapshot(15000.0, 3000.0, 10, 7, 5000.0);
+    tracker.restore_from_snapshot(15000.0, 3000.0, 10, 7, 5000.0, 1);
 
     // Record a new trade after restore
-    let mut trade = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut trade = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     trade.pnl = 500.0;
     tracker.record_trade(&trade);
 
@@ -347,7 +347,7 @@ fn test_restore_preserves_behavior() {
 fn test_open_trade_increases_cost() {
     let mut tracker = PnlTracker::new(10000.0);
 
-    let mut trade = make_trade(Uuid::nil(), Uuid::nil(), Side::Buy, 100.0, 1.0, "open");
+    let mut trade = make_trade(Uuid::nil(), Uuid::nil(), Side::Buy, 100.0, 1.0, TradeType::Open);
     trade.pnl = 0.0;
     trade.fee = 0.05;
 
@@ -362,14 +362,14 @@ fn test_close_trade_no_cost() {
     let mut tracker = PnlTracker::new(10000.0);
 
     // Record an open trade first
-    let mut open_trade = make_trade(Uuid::nil(), Uuid::nil(), Side::Buy, 100.0, 1.0, "open");
+    let mut open_trade = make_trade(Uuid::nil(), Uuid::nil(), Side::Buy, 100.0, 1.0, TradeType::Open);
     open_trade.pnl = 0.0;
     open_trade.fee = 0.05;
     tracker.record_trade(&open_trade);
     assert!((tracker.total_cost() - 100.05).abs() < 0.001);
 
     // Record a close trade
-    let mut close_trade = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut close_trade = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     close_trade.pnl = 50.0;
     close_trade.fee = 0.05;
     tracker.record_trade(&close_trade);
@@ -409,7 +409,7 @@ fn test_unrealized_pnl_missing_price() {
 fn test_snapshot_pnl_ratio_zero_loss() {
     // 全部亏损 -> pnl_ratio = Some(0.0)（total_profit_amount / total_loss_amount = 0/100）
     let mut tracker = PnlTracker::new(10000.0);
-    let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t.pnl = -100.0;
     tracker.record_trade(&t);
     let snap = tracker.snapshot(0.0, 0);
@@ -420,7 +420,7 @@ fn test_snapshot_pnl_ratio_zero_loss() {
 fn test_avg_pnl_ratio_only_profit() {
     // 只有盈利交易 -> avg_pnl_ratio=None
     let mut tracker = PnlTracker::new(10000.0);
-    let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t.pnl = 100.0;
     tracker.record_trade(&t);
     let snap = tracker.snapshot(0.0, 0);
@@ -436,12 +436,12 @@ fn test_equity_method() {
     let mut tracker = PnlTracker::new(10000.0);
     assert!((tracker.equity() - 10000.0).abs() < 0.01);
 
-    let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t.pnl = 500.0;
     tracker.record_trade(&t);
     assert!((tracker.equity() - 10500.0).abs() < 0.01);
 
-    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t2.pnl = -200.0;
     tracker.record_trade(&t2);
     assert!((tracker.equity() - 10300.0).abs() < 0.01);
@@ -470,7 +470,7 @@ fn test_unrealized_pnl_short_loss() {
 #[test]
 fn test_record_trade_zero_pnl() {
     let mut tracker = PnlTracker::new(10000.0);
-    let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t.pnl = 0.0;
     tracker.record_trade(&t);
     assert_eq!(tracker.total_realized_pnl(), 0.0);
@@ -481,7 +481,7 @@ fn test_record_trade_zero_pnl() {
 #[test]
 fn test_record_trade_zero_fee() {
     let mut tracker = PnlTracker::new(10000.0);
-    let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Buy, 100.0, 1.0, "open");
+    let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Buy, 100.0, 1.0, TradeType::Open);
     t.pnl = 0.0;
     t.fee = 0.0;
     tracker.record_trade(&t);
@@ -517,7 +517,7 @@ fn test_update_unrealized_then_restore_then_update() {
     tracker.update_unrealized(&[&pos], &prices);
     assert_eq!(tracker.peak_equity(), 10010.0);
 
-    tracker.restore_from_snapshot(20000.0, 5000.0, 20, 15, 8000.0);
+    tracker.restore_from_snapshot(20000.0, 5000.0, 20, 15, 8000.0, 3);
     assert_eq!(tracker.peak_equity(), 20000.0);
 
     let pos2 = make_position_side("BTCUSDT", PositionSide::Long, 1.0, 100.0, 10);
@@ -553,7 +553,7 @@ fn test_peak_equity_multiple_updates() {
 fn test_snapshot_all_loss_trades() {
     let mut tracker = PnlTracker::new(10000.0);
     for _ in 0..5 {
-        let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+        let mut t = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
         t.pnl = -50.0;
         tracker.record_trade(&t);
     }
@@ -583,11 +583,11 @@ fn test_snapshot_drawdown_after_loss() {
 fn test_record_trade_profit_and_loss_mixed() {
     let mut tracker = PnlTracker::new(10000.0);
 
-    let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t1.pnl = 300.0;
     tracker.record_trade(&t1);
 
-    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, "close");
+    let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t2.pnl = -100.0;
     tracker.record_trade(&t2);
 

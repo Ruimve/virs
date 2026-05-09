@@ -260,6 +260,7 @@ impl OrderExecutor for PeOrderExecutor {
                         price,
                         reduce_only,
                         position_side: Some(pe_types::PositionSide::Long),
+                        position_id: None,
                     },
                 }
             }

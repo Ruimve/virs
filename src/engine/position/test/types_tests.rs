@@ -465,7 +465,7 @@ fn test_trade_types() {
         fee: 25.0,
         fee_currency: "USDT".to_string(),
         pnl: 0.0,
-        trade_type: "Open".to_string(),
+        trade_type: TradeType::Open,
         created_at: now,
     };
 
@@ -481,7 +481,7 @@ fn test_trade_types() {
         fee: 25.5,
         fee_currency: "USDT".to_string(),
         pnl: 1000.0,
-        trade_type: "close".to_string(),
+        trade_type: TradeType::Close,
         created_at: now,
     };
 
@@ -497,13 +497,13 @@ fn test_trade_types() {
         fee: 12.625,
         fee_currency: "USDT".to_string(),
         pnl: 250.0,
-        trade_type: "partial_close".to_string(),
+        trade_type: TradeType::Close,
         created_at: now,
     };
 
-    assert_eq!(open_trade.trade_type, "Open");
-    assert_eq!(close_trade.trade_type, "close");
-    assert_eq!(partial_close_trade.trade_type, "partial_close");
+    assert_eq!(open_trade.trade_type, TradeType::Open);
+    assert_eq!(close_trade.trade_type, TradeType::Close);
+    assert_eq!(partial_close_trade.trade_type, TradeType::Close);
 }
 
 #[test]
@@ -530,7 +530,7 @@ fn test_trade_pnl_calculation() {
         fee: 25.5,
         fee_currency: "USDT".to_string(),
         pnl: long_close_pnl,
-        trade_type: "close".to_string(),
+        trade_type: TradeType::Close,
         created_at: now,
     };
     assert!((long_trade.pnl - 1000.0).abs() < F64_EPS);
@@ -547,7 +547,7 @@ fn test_trade_pnl_calculation() {
         fee: 24.5,
         fee_currency: "USDT".to_string(),
         pnl: short_close_pnl,
-        trade_type: "close".to_string(),
+        trade_type: TradeType::Close,
         created_at: now,
     };
     assert!((short_trade.pnl - 1000.0).abs() < F64_EPS);
@@ -574,7 +574,7 @@ fn test_trade_fee_currency() {
         fee: 25.0,
         fee_currency: "USDT".to_string(),
         pnl: 0.0,
-        trade_type: "Open".to_string(),
+        trade_type: TradeType::Open,
         created_at: now,
     };
 
@@ -700,6 +700,7 @@ fn test_place_order_params_market() {
         price: None,
         reduce_only: false,
         position_side: None,
+        position_id: None,
     };
 
     assert_eq!(params.order_type, OrderType::Market);
@@ -718,6 +719,7 @@ fn test_place_order_params_limit() {
         price: Some(100.0),
         reduce_only: false,
         position_side: None,
+        position_id: None,
     };
 
     assert_eq!(params.order_type, OrderType::Limit);
@@ -735,6 +737,7 @@ fn test_place_order_params_reduce_only() {
         price: None,
         reduce_only: true,
         position_side: Some(PositionSide::Long),
+        position_id: None,
     };
 
     assert!(params.reduce_only);
@@ -794,6 +797,7 @@ fn test_engine_command_all_variants_constructible() {
             price: Some(50000.0),
             reduce_only: false,
             position_side: None,
+            position_id: None,
         },
     };
     assert!(matches!(cmd4, EngineCommand::PlaceOrder { .. }));
@@ -888,7 +892,7 @@ fn test_engine_event_all_variants_constructible() {
         fee: 25.0,
         fee_currency: "USDT".to_string(),
         pnl: 0.0,
-        trade_type: "Open".to_string(),
+        trade_type: TradeType::Open,
         created_at: now,
     };
 
@@ -1195,7 +1199,7 @@ fn test_trade_serialization_roundtrip() {
         fee: 25.5,
         fee_currency: "USDT".to_string(),
         pnl: 1000.0,
-        trade_type: "close".to_string(),
+        trade_type: TradeType::Close,
         created_at: now,
     };
 
@@ -1442,7 +1446,7 @@ fn test_trade_serde_roundtrip() {
         fee: 25.5,
         fee_currency: "USDT".to_string(),
         pnl: 1000.0,
-        trade_type: "close".to_string(),
+        trade_type: TradeType::Close,
         created_at: now,
     };
     let json = serde_json::to_string(&trade).unwrap();
@@ -1462,6 +1466,7 @@ fn test_place_order_params_construction() {
         price: None,
         reduce_only: false,
         position_side: Some(PositionSide::Long),
+        position_id: None,
     };
     assert_eq!(params.symbol, "BTC/USDT");
     assert_eq!(params.side, Side::Buy);

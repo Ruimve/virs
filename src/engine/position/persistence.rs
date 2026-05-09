@@ -2,9 +2,24 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::config::EngineConfig;
 use super::error::Result;
 use super::types::*;
+
+#[async_trait::async_trait]
+pub trait PositionPersistence: Send + Sync {
+    async fn init_tables(&self) -> Result<()>;
+    async fn upsert_position(&self, pos: &Position) -> Result<()>;
+    async fn get_open_positions(&self, engine_id: &str) -> Result<Vec<Position>>;
+    async fn get_position(&self, id: &Uuid) -> Result<Option<Position>>;
+    async fn insert_order(&self, order: &Order) -> Result<()>;
+    async fn update_order(&self, order: &Order) -> Result<()>;
+    async fn get_active_orders(&self, engine_id: &str) -> Result<Vec<Order>>;
+    async fn insert_trade(&self, trade: &Trade) -> Result<()>;
+    async fn get_trades_by_position(&self, position_id: &Uuid) -> Result<Vec<Trade>>;
+    async fn insert_pnl_snapshot(&self, engine_id: &str, snapshot: &PnlSnapshotRow) -> Result<()>;
+    async fn get_latest_snapshot(&self, engine_id: &str) -> Result<Option<PnlSnapshotRow>>;
+    async fn insert_event(&self, engine_id: &str, event_type: &str, symbol: Option<&str>, message: &str, severity: &str) -> Result<()>;
+}
 
 // ============================================================================
 // PnlSnapshotRow - 本地定义，用于数据库读写
@@ -23,6 +38,11 @@ pub struct PnlSnapshotRow {
     pub open_position_count: i32,
     pub total_margin: f64,
     pub drawdown_pct: f64,
+    pub peak_equity: f64,
+    pub total_trades: i32,
+    pub profit_trades: i32,
+    pub total_cost: f64,
+    pub consecutive_losses: i32,
 }
 
 // ============================================================================
@@ -37,13 +57,65 @@ impl Persistence {
     pub fn new(db: PgPool) -> Self {
         Self { db }
     }
+}
 
+#[async_trait::async_trait]
+impl PositionPersistence for Persistence {
+    async fn init_tables(&self) -> Result<()> {
+        self.init_tables_impl().await
+    }
+
+    async fn upsert_position(&self, pos: &Position) -> Result<()> {
+        self.upsert_position_impl(pos).await
+    }
+
+    async fn get_open_positions(&self, engine_id: &str) -> Result<Vec<Position>> {
+        self.get_open_positions_impl(engine_id).await
+    }
+
+    async fn get_position(&self, id: &Uuid) -> Result<Option<Position>> {
+        self.get_position_impl(id).await
+    }
+
+    async fn insert_order(&self, order: &Order) -> Result<()> {
+        self.insert_order_impl(order).await
+    }
+
+    async fn update_order(&self, order: &Order) -> Result<()> {
+        self.update_order_impl(order).await
+    }
+
+    async fn get_active_orders(&self, engine_id: &str) -> Result<Vec<Order>> {
+        self.get_active_orders_impl(engine_id).await
+    }
+
+    async fn insert_trade(&self, trade: &Trade) -> Result<()> {
+        self.insert_trade_impl(trade).await
+    }
+
+    async fn get_trades_by_position(&self, position_id: &Uuid) -> Result<Vec<Trade>> {
+        self.get_trades_by_position_impl(position_id).await
+    }
+
+    async fn insert_pnl_snapshot(&self, engine_id: &str, snapshot: &PnlSnapshotRow) -> Result<()> {
+        self.insert_pnl_snapshot_impl(engine_id, snapshot).await
+    }
+
+    async fn get_latest_snapshot(&self, engine_id: &str) -> Result<Option<PnlSnapshotRow>> {
+        self.get_latest_snapshot_impl(engine_id).await
+    }
+
+    async fn insert_event(&self, engine_id: &str, event_type: &str, symbol: Option<&str>, message: &str, severity: &str) -> Result<()> {
+        self.insert_event_impl(engine_id, event_type, symbol, message, severity).await
+    }
+}
+
+impl Persistence {
     // -----------------------------------------------------------------------
     // 初始化数据库表
     // -----------------------------------------------------------------------
 
-    /// 初始化数据库表（如果不存在则创建）
-    pub async fn init_tables(&self) -> Result<()> {
+    async fn init_tables_impl(&self) -> Result<()> {
         // pe_positions
         sqlx::query(
             r#"
@@ -142,7 +214,12 @@ impl Persistence {
                 position_count          INT NOT NULL,
                 open_position_count     INT NOT NULL,
                 total_margin            DOUBLE PRECISION NOT NULL,
-                drawdown_pct            DOUBLE PRECISION NOT NULL DEFAULT 0
+                drawdown_pct            DOUBLE PRECISION NOT NULL DEFAULT 0,
+                peak_equity             DOUBLE PRECISION NOT NULL DEFAULT 0,
+                total_trades            INT NOT NULL DEFAULT 0,
+                profit_trades           INT NOT NULL DEFAULT 0,
+                total_cost              DOUBLE PRECISION NOT NULL DEFAULT 0,
+                consecutive_losses      INT NOT NULL DEFAULT 0
             )
             "#,
         )
@@ -229,7 +306,7 @@ impl Persistence {
     // ===================================================================
 
     /// 插入或更新持仓（基于 UNIQUE(engine_id, exchange, symbol, side)）
-    pub async fn upsert_position(&self, pos: &Position) -> Result<()> {
+    async fn upsert_position_impl(&self, pos: &Position) -> Result<()> {
         let side_str = format!("{:?}", pos.side);
         let status_str = format!("{:?}", pos.status);
 
@@ -244,7 +321,6 @@ impl Persistence {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
             ON CONFLICT (engine_id, exchange, symbol, side)
             DO UPDATE SET
-                id              = EXCLUDED.id,
                 strategy_id     = EXCLUDED.strategy_id,
                 status          = EXCLUDED.status,
                 size            = EXCLUDED.size,
@@ -290,7 +366,7 @@ impl Persistence {
     }
 
     /// 获取指定引擎的所有未关闭持仓
-    pub async fn get_open_positions(&self, engine_id: &str) -> Result<Vec<Position>> {
+    async fn get_open_positions_impl(&self, engine_id: &str) -> Result<Vec<Position>> {
         let rows = sqlx::query_as::<_, PositionRow>(
             r#"
             SELECT * FROM pe_positions
@@ -306,7 +382,7 @@ impl Persistence {
     }
 
     /// 按 ID 获取单个持仓
-    pub async fn get_position(&self, id: &Uuid) -> Result<Option<Position>> {
+    async fn get_position_impl(&self, id: &Uuid) -> Result<Option<Position>> {
         let row = sqlx::query_as::<_, PositionRow>(
             "SELECT * FROM pe_positions WHERE id = $1",
         )
@@ -322,7 +398,7 @@ impl Persistence {
     // ===================================================================
 
     /// 插入新订单
-    pub async fn insert_order(&self, order: &Order) -> Result<()> {
+    async fn insert_order_impl(&self, order: &Order) -> Result<()> {
         let side_str = format!("{:?}", order.side);
         let order_type_str = format!("{:?}", order.order_type);
         let status_str = format!("{:?}", order.status);
@@ -365,7 +441,7 @@ impl Persistence {
     }
 
     /// 更新订单（仅更新成交相关字段）
-    pub async fn update_order(&self, order: &Order) -> Result<()> {
+    async fn update_order_impl(&self, order: &Order) -> Result<()> {
         let status_str = format!("{:?}", order.status);
 
         sqlx::query(
@@ -398,7 +474,7 @@ impl Persistence {
     }
 
     /// 获取指定引擎的活跃订单（open / partially_filled）
-    pub async fn get_active_orders(&self, engine_id: &str) -> Result<Vec<Order>> {
+    async fn get_active_orders_impl(&self, engine_id: &str) -> Result<Vec<Order>> {
         let rows = sqlx::query_as::<_, OrderRow>(
             r#"
             SELECT o.* FROM pe_orders o
@@ -419,8 +495,9 @@ impl Persistence {
     // ===================================================================
 
     /// 插入成交记录
-    pub async fn insert_trade(&self, trade: &Trade) -> Result<()> {
+    async fn insert_trade_impl(&self, trade: &Trade) -> Result<()> {
         let side_str = format!("{:?}", trade.side);
+        let trade_type_str = format!("{:?}", trade.trade_type).to_lowercase();
 
         sqlx::query(
             r#"
@@ -442,7 +519,7 @@ impl Persistence {
         .bind(trade.fee)
         .bind(&trade.fee_currency)
         .bind(trade.pnl)
-        .bind(&trade.trade_type)
+        .bind(&trade_type_str)
         .bind(trade.created_at)
         .execute(&self.db)
         .await?;
@@ -451,7 +528,7 @@ impl Persistence {
     }
 
     /// 获取指定持仓的所有成交记录
-    pub async fn get_trades_by_position(&self, position_id: &Uuid) -> Result<Vec<Trade>> {
+    async fn get_trades_by_position_impl(&self, position_id: &Uuid) -> Result<Vec<Trade>> {
         let rows = sqlx::query_as::<_, TradeRow>(
             r#"
             SELECT * FROM pe_trades
@@ -471,7 +548,7 @@ impl Persistence {
     // ===================================================================
 
     /// 插入 PnL 快照
-    pub async fn insert_pnl_snapshot(
+    async fn insert_pnl_snapshot_impl(
         &self,
         engine_id: &str,
         snapshot: &PnlSnapshotRow,
@@ -481,9 +558,10 @@ impl Persistence {
             INSERT INTO pe_pnl_snapshots (
                 id, engine_id, timestamp,
                 total_unrealized_pnl, total_realized_pnl, total_pnl,
-                position_count, open_position_count, total_margin, drawdown_pct
+                position_count, open_position_count, total_margin, drawdown_pct,
+                peak_equity, total_trades, profit_trades, total_cost, consecutive_losses
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             "#,
         )
         .bind(snapshot.id)
@@ -496,6 +574,11 @@ impl Persistence {
         .bind(snapshot.open_position_count)
         .bind(snapshot.total_margin)
         .bind(snapshot.drawdown_pct)
+        .bind(snapshot.peak_equity)
+        .bind(snapshot.total_trades)
+        .bind(snapshot.profit_trades)
+        .bind(snapshot.total_cost)
+        .bind(snapshot.consecutive_losses)
         .execute(&self.db)
         .await?;
 
@@ -503,7 +586,7 @@ impl Persistence {
     }
 
     /// 获取指定引擎的最新 PnL 快照
-    pub async fn get_latest_snapshot(&self, engine_id: &str) -> Result<Option<PnlSnapshotRow>> {
+    async fn get_latest_snapshot_impl(&self, engine_id: &str) -> Result<Option<PnlSnapshotRow>> {
         let row = sqlx::query_as::<_, PnlSnapshotRow>(
             r#"
             SELECT * FROM pe_pnl_snapshots
@@ -524,7 +607,7 @@ impl Persistence {
     // ===================================================================
 
     /// 插入引擎事件
-    pub async fn insert_event(
+    async fn insert_event_impl(
         &self,
         engine_id: &str,
         event_type: &str,
@@ -725,6 +808,10 @@ impl TradeRow {
             "Sell" => Side::Sell,
             _ => return None,
         };
+        let trade_type = match self.trade_type.to_lowercase().as_str() {
+            "open" => TradeType::Open,
+            _ => TradeType::Close,
+        };
         Some(Trade {
             id: self.id,
             position_id: self.position_id,
@@ -737,7 +824,7 @@ impl TradeRow {
             fee: self.fee,
             fee_currency: self.fee_currency,
             pnl: self.pnl,
-            trade_type: self.trade_type,
+            trade_type,
             created_at: self.created_at,
         })
     }

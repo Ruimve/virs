@@ -212,8 +212,15 @@ pub struct Trade {
     pub fee: f64,
     pub fee_currency: String,
     pub pnl: f64,
-    pub trade_type: String,
+    pub trade_type: TradeType,
     pub created_at: DateTime<Utc>,
+}
+
+/// 成交类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TradeType {
+    Open,
+    Close,
 }
 
 // ============================================================================
@@ -320,4 +327,5 @@ pub struct PlaceOrderParams {
     pub price: Option<f64>,
     pub reduce_only: bool,
     pub position_side: Option<PositionSide>,
+    pub position_id: Option<Uuid>,
 }

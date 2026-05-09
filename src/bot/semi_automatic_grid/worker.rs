@@ -528,7 +528,7 @@ impl GridWorker {
     async fn on_llm_decision(&mut self) {
         info!(bot_id = %self.bot.id, "LLM decision tick");
 
-        let filled_count = self.levels.iter().filter(|l| l.buy_filled).count();
+        let _filled_count = self.levels.iter().filter(|l| l.buy_filled).count();
         let total_hold: f64 = self.levels.iter().map(|l| l.hold_quantity).sum();
 
         let snapshot = self.market_data_provider.get_market_snapshot(&self.bot.exchange, &self.bot.symbol).await;

@@ -1,4 +1,4 @@
-use super::types::{Position, Trade};
+use super::types::{Position, Trade, TradeType};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
@@ -39,22 +39,15 @@ pub struct PnlSnapshot {
 ///
 /// 负责追踪未实现盈亏、已实现盈亏、胜率、回撤等指标。
 pub struct PnlTracker {
-    /// 历史最高权益
     peak_equity: f64,
-    /// 累计已实现盈亏
     total_realized_pnl: f64,
-    /// 总交易次数
     total_trades: u32,
-    /// 盈利交易次数
     profit_trades: u32,
-    /// 累计开仓成本
     total_cost: f64,
-    /// 累计盈利金额（用于计算盈亏比）
     total_profit_amount: f64,
-    /// 累计亏损金额（用于计算盈亏比）
     total_loss_amount: f64,
-    /// 初始权益
     initial_equity: f64,
+    consecutive_losses: u32,
 }
 
 impl PnlTracker {
@@ -71,6 +64,7 @@ impl PnlTracker {
             total_profit_amount: 0.0,
             total_loss_amount: 0.0,
             initial_equity,
+            consecutive_losses: 0,
         }
     }
 
@@ -131,12 +125,13 @@ impl PnlTracker {
         if trade.pnl >= 0.0 {
             self.profit_trades += 1;
             self.total_profit_amount += trade.pnl;
+            self.consecutive_losses = 0;
         } else {
             self.total_loss_amount += trade.pnl.abs();
+            self.consecutive_losses += 1;
         }
 
-        // 累计开仓成本（买入方向的开仓记为成本）
-        if trade.trade_type == "open" {
+        if trade.trade_type == TradeType::Open {
             self.total_cost += trade.price * trade.amount + trade.fee;
         }
     }
@@ -213,12 +208,14 @@ impl PnlTracker {
         total_trades: u32,
         profit_trades: u32,
         total_cost: f64,
+        consecutive_losses: u32,
     ) {
         self.peak_equity = peak_equity;
         self.total_realized_pnl = realized_pnl;
         self.total_trades = total_trades;
         self.profit_trades = profit_trades;
         self.total_cost = total_cost;
+        self.consecutive_losses = consecutive_losses;
     }
 
     // -----------------------------------------------------------------------
@@ -252,6 +249,10 @@ impl PnlTracker {
     /// 获取累计开仓成本。
     pub fn total_cost(&self) -> f64 {
         self.total_cost
+    }
+
+    pub fn consecutive_losses(&self) -> u32 {
+        self.consecutive_losses
     }
 }
 

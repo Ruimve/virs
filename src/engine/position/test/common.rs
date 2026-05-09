@@ -85,7 +85,7 @@ pub fn make_trade(
     side: Side,
     price: f64,
     amount: f64,
-    trade_type: &str,
+    trade_type: TradeType,
 ) -> Trade {
     Trade {
         id: Uuid::new_v4(),
@@ -99,7 +99,7 @@ pub fn make_trade(
         fee: price * amount * 0.0005,
         fee_currency: "USDT".to_string(),
         pnl: 0.0,
-        trade_type: trade_type.to_string(),
+        trade_type,
         created_at: Utc::now(),
     }
 }

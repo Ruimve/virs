@@ -1,5 +1,4 @@
 use crate::exchange::Exchange;
-use crate::models::MarketType;
 use dashmap::DashMap;
 use std::sync::Arc;
 use tracing::info;

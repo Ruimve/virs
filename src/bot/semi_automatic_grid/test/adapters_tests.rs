@@ -25,7 +25,7 @@ fn make_trade() -> Trade {
         symbol: "BTCUSDT".to_string(), side: Side::Buy,
         price: 50000.0, amount: 0.001, fee: 0.05,
         fee_currency: "USDT".to_string(), pnl: 0.0,
-        trade_type: "maker".to_string(), created_at: Utc::now(),
+        trade_type: TradeType::Open, created_at: Utc::now(),
     }
 }
 

@@ -186,7 +186,7 @@ impl GridEngine {
             info!(bot_id = %bot_id, "Grid bot worker aborted for adjustment");
         }
 
-        if let Ok(Some(bot)) = self.store.load_bot(bot_id).await {
+        if let Ok(Some(_bot)) = self.store.load_bot(bot_id).await {
             // 重新启动（bot 参数已在 reanalyze 时更新）
             self.start_bot(bot_id).await;
         }
