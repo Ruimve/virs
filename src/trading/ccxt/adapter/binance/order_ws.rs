@@ -8,7 +8,8 @@ use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite};
 
-use crate::engine::position::types::{OrderStatus, WsFeedEvent};
+// Re-export for convenience
+pub use crate::engine::position::types::{OrderStatus, WsFeedEvent};
 
 // ============================================================
 // Binance User Data Stream 消息格式

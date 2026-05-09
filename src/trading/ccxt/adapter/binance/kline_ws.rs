@@ -9,7 +9,9 @@ use serde::Deserialize;
 use tokio::sync::{broadcast, mpsc, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite};
 
-use crate::engine::kline::types::{Candle, KlineWsClient, WsCandleUpdate, WsEvent};
+// Re-export for convenience
+pub use crate::engine::kline::types::{Candle, WsCandleUpdate, WsEvent};
+use crate::engine::kline::types::KlineWsClient;
 
 fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()

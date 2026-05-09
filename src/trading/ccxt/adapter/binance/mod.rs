@@ -13,15 +13,19 @@
 //! - Ticker, OHLCV, OrderBook, Balance
 //! - Create/Cancel/Fetch orders
 //! - Leverage, Positions, Funding rate (perpetual)
+//! - WebSocket: K-line stream, Order updates
+
+pub mod kline_ws;
+pub mod order_ws;
 
 use async_trait::async_trait;
 use chrono::Utc;
 use tracing::info;
 
-use super::types::*;
-use super::errors::ExchangeError;
-use super::auth::BinanceSigner;
-use super::{Exchange, ExchangeClient, parse_f64, parse_str, parse_str_opt, parse_u32};
+use crate::trading::ccxt::types::*;
+use crate::trading::ccxt::errors::ExchangeError;
+use crate::trading::ccxt::auth::BinanceSigner;
+use crate::trading::ccxt::{Exchange, ExchangeClient, parse_f64, parse_str, parse_str_opt, parse_u32};
 
 /// Binance exchange implementation.
 pub struct BinanceExchange {

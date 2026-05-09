@@ -17,10 +17,10 @@ use async_trait::async_trait;
 use chrono::Utc;
 use tracing::info;
 
-use super::types::*;
-use super::errors::ExchangeError;
-use super::auth::OkxSigner;
-use super::{Exchange, ExchangeClient, parse_str, parse_str_opt, parse_f64, parse_i64, parse_u32};
+use crate::trading::ccxt::types::*;
+use crate::trading::ccxt::errors::ExchangeError;
+use crate::trading::ccxt::auth::OkxSigner;
+use crate::trading::ccxt::{Exchange, ExchangeClient, parse_str, parse_str_opt, parse_f64, parse_i64, parse_u32};
 
 /// OKX exchange implementation.
 pub struct OkxExchange {

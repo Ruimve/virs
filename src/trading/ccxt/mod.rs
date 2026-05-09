@@ -12,23 +12,21 @@
 //! Architecture:
 //! ```text
 //! ccxt/
-//! ├── mod.rs        (Exchange trait, ExchangeClient base, factory)
-//! ├── types.rs      (unified types: Ticker, Kline, Order, etc.)
-//! ├── errors.rs     (ExchangeError hierarchy)
-//! ├── auth.rs       (Signer trait, Binance/OKX/Bybit signers)
-//! ├── binance.rs    (Binance implementation)
-//! ├── okx.rs        (OKX implementation)
-//! └── bybit.rs      (Bybit implementation)
+//! ├── mod.rs           (Exchange trait, ExchangeClient base, factory)
+//! ├── types.rs         (unified types: Ticker, Kline, Order, etc.)
+//! ├── errors.rs        (ExchangeError hierarchy)
+//! ├── auth.rs          (Signer trait, Binance/OKX/Bybit signers)
+//! ├── kline_source.rs  (KlineSource adapter for engine)
+//! └── adapter/
+//!     ├── binance/     (Binance REST + WebSocket)
+//!     ├── okx/         (OKX REST)
+//!     └── bybit/       (Bybit REST)
 //! ```
 
 pub mod types;
 pub mod errors;
 pub mod auth;
-pub mod binance;
-pub mod okx;
-pub mod bybit;
-pub mod binance_kline_ws;
-pub mod binance_order_ws;
+pub mod adapter;
 pub mod kline_source;
 
 use async_trait::async_trait;
@@ -434,7 +432,7 @@ pub fn create_exchange(
     market_type: &types::MarketType,
 ) -> Result<Box<dyn Exchange>, ExchangeError> {
     match id.to_lowercase().as_str() {
-        "binance" => Ok(Box::new(binance::BinanceExchange::new(
+        "binance" => Ok(Box::new(adapter::binance::BinanceExchange::new(
             api_key, api_secret, proxy_url, market_type,
         )?)),
         "okx" => {
@@ -442,11 +440,11 @@ pub fn create_exchange(
                 .ok_or_else(|| ExchangeError::InvalidRequest(
                     "OKX requires a passphrase".into()
                 ))?;
-            Ok(Box::new(okx::OkxExchange::new(
+            Ok(Box::new(adapter::okx::OkxExchange::new(
                 api_key, api_secret, pass, proxy_url, market_type,
             )?))
         }
-        "bybit" => Ok(Box::new(bybit::BybitExchange::new(
+        "bybit" => Ok(Box::new(adapter::bybit::BybitExchange::new(
             api_key, api_secret, proxy_url, market_type,
         )?)),
         _ => Err(ExchangeError::NotSupported(format!(
