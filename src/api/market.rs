@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::api::AppState;
 use crate::api::middleware::OptionalAuthUser;
-use crate::exchange::ExchangeFactory;
+use crate::trading::exchange::ExchangeFactory;
 use crate::models::*;
 use crate::utils::crypto;
 

@@ -11,7 +11,7 @@ use crate::api::AppState;
 use crate::api::middleware::AuthUser;
 use crate::models::*;
 use crate::utils::crypto;
-use crate::exchange::ExchangeFactory;
+use crate::trading::exchange::ExchangeFactory;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CredentialRequest {

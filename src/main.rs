@@ -4,17 +4,16 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod api;
 mod bot;
-mod ccxt;
 mod config;
 mod engine;
-mod exchange;
 mod indicators;
 mod models;
 mod services;
+mod trading;
 mod utils;
 
 use config::load_config;
-use exchange::registry::ExchangeRegistry;
+use trading::exchange::registry::ExchangeRegistry;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -113,9 +112,9 @@ async fn main() -> anyhow::Result<()> {
         proxy_url: config.proxy.clone(),
         ..Default::default()
     };
-    let kline_source = std::sync::Arc::new(ccxt::kline_source::CcxtKlineSource::new(config.proxy.clone()));
-    let spot_ws = std::sync::Arc::new(tokio::sync::Mutex::new(ccxt::binance_kline_ws::BinanceKlineWs::new_spot(config.proxy.as_deref())));
-    let perpetual_ws = std::sync::Arc::new(tokio::sync::Mutex::new(ccxt::binance_kline_ws::BinanceKlineWs::new_perpetual(config.proxy.as_deref())));
+    let kline_source = std::sync::Arc::new(trading::ccxt::kline_source::CcxtKlineSource::new(config.proxy.clone()));
+    let spot_ws = std::sync::Arc::new(tokio::sync::Mutex::new(trading::ccxt::binance_kline_ws::BinanceKlineWs::new_spot(config.proxy.as_deref())));
+    let perpetual_ws = std::sync::Arc::new(tokio::sync::Mutex::new(trading::ccxt::binance_kline_ws::BinanceKlineWs::new_perpetual(config.proxy.as_deref())));
     let kline_engine = std::sync::Arc::new(engine::kline::KlineEngine::new(kline_config, kline_source, spot_ws, perpetual_ws));
     kline_engine.start().await;
     info!("✅ Kline engine started");
@@ -126,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
     let (grid_event_tx, _grid_event_rx) = tokio::sync::broadcast::channel(256);
 
     // Paper 交易执行器
-    let paper_executor = Arc::new(engine::paper::PaperOrderExecutor::new(grid_event_tx.clone()));
+    let paper_executor = Arc::new(trading::paper::PaperOrderExecutor::new(grid_event_tx.clone()));
     let paper_for_tick = paper_executor.clone();
 
     // Adapter 实现

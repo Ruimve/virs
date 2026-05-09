@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::bot::semi_automatic_grid::ports::*;
 use crate::config::AiConfig;
-use crate::exchange::registry::ExchangeRegistry;
+use crate::trading::exchange::registry::ExchangeRegistry;
 use crate::engine::position::types as pe_types;
 use crate::services::ai::{AiService, AiUserConfig};
 use crate::indicators;
@@ -663,13 +663,13 @@ pub fn convert_pe_event(event: pe_types::EngineEvent) -> Option<GridOrderEvent> 
 /// 根据 paper 模式开关，将命令转发到真实执行器或 Paper 执行器。
 pub struct SwitchableOrderExecutor {
     real: Arc<dyn OrderExecutor>,
-    paper: Arc<crate::engine::paper::PaperOrderExecutor>,
+    paper: Arc<crate::trading::paper::PaperOrderExecutor>,
 }
 
 impl SwitchableOrderExecutor {
     pub fn new(
         real: Arc<dyn OrderExecutor>,
-        paper: Arc<crate::engine::paper::PaperOrderExecutor>,
+        paper: Arc<crate::trading::paper::PaperOrderExecutor>,
     ) -> Self {
         Self { real, paper }
     }

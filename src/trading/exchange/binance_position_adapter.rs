@@ -3,8 +3,8 @@ use chrono::Utc;
 use tokio::sync::mpsc;
 use tracing::{warn, info};
 
-use crate::ccxt::binance_order_ws::BinanceOrderWs;
-use crate::exchange::Exchange as VirsExchange;
+use crate::trading::ccxt::binance_order_ws::BinanceOrderWs;
+use crate::trading::exchange::Exchange as VirsExchange;
 use crate::models;
 use crate::engine::position::exchange::Exchange as PeExchange;
 use crate::engine::position::types::*;

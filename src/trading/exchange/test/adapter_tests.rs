@@ -1,7 +1,7 @@
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::exchange::binance_position_adapter::*;
+use crate::trading::exchange::binance_position_adapter::*;
 use crate::models;
 use crate::engine::position::types::*;
 

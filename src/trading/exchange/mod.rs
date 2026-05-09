@@ -2,7 +2,7 @@
 //!
 //! This module provides a thin adapter between the application's internal
 //! `Exchange` trait (used by engine/api) and the CCXT-style exchange layer
-//! (`crate::ccxt` module). This keeps the ccxt module isolated while
+//! (`crate::trading::ccxt` module). This keeps the ccxt module isolated while
 //! allowing the rest of the application to use a simplified interface.
 
 pub mod binance_position_adapter;
@@ -13,7 +13,7 @@ mod test;
 
 use async_trait::async_trait;
 use crate::models::*;
-use crate::ccxt::{self, Exchange as CcxtExchange, PlaceOrderParams, MarketType as CcxtMarketType};
+use crate::trading::ccxt::{self, Exchange as CcxtExchange, PlaceOrderParams, MarketType as CcxtMarketType};
 
 // Re-export the old Exchange trait and factory for backward compatibility
 // with engine and other modules that use it.

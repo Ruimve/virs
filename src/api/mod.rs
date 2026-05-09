@@ -21,7 +21,7 @@ use tower_http::cors::{CorsLayer, Any};
 use std::sync::Arc;
 
 use crate::config::AppConfig;
-use crate::exchange::registry::ExchangeRegistry;
+use crate::trading::exchange::registry::ExchangeRegistry;
 
 pub fn build_router(
     config: Arc<AppConfig>,
@@ -30,7 +30,7 @@ pub fn build_router(
     ws_broadcaster: Arc<ws::WsBroadcaster>,
     kline_engine: Option<Arc<crate::engine::kline::KlineEngine>>,
     grid_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::semi_automatic_grid::types::GridCommand>>,
-    paper_executor: Option<Arc<crate::engine::paper::PaperOrderExecutor>>,
+    paper_executor: Option<Arc<crate::trading::paper::PaperOrderExecutor>>,
 ) -> Router {
     let state = Arc::new(AppState {
         config,
@@ -171,5 +171,5 @@ pub struct AppState {
     pub kline_engine: Option<Arc<crate::engine::kline::KlineEngine>>,
     pub http_client: reqwest::Client,
     pub grid_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::semi_automatic_grid::types::GridCommand>>,
-    pub paper_executor: Option<Arc<crate::engine::paper::PaperOrderExecutor>>,
+    pub paper_executor: Option<Arc<crate::trading::paper::PaperOrderExecutor>>,
 }

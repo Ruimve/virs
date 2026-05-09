@@ -286,7 +286,7 @@ async fn compute_grid_indicators(
     klines_1h: &[Kline],
     klines_4h: &[Kline],
     klines_15m: &[Kline],
-    exchange: &dyn crate::exchange::Exchange,
+    exchange: &dyn crate::trading::exchange::Exchange,
     symbol: &str,
 ) -> GridIndicators {
     let last_idx = klines_1h.len().saturating_sub(1);

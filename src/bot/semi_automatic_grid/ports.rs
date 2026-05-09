@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-pub use crate::engine::ports::{GridSide, GridOrderInfo, GridOrderCommand, GridOrderEvent, OrderExecutor};
+pub use crate::trading::ports::{GridSide, GridOrderInfo, GridOrderCommand, GridOrderEvent, OrderExecutor};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AnalysisLogEntry {
