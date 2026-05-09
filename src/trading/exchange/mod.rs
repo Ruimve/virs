@@ -605,4 +605,24 @@ impl ExchangeFactory {
             .map_err(|e| anyhow::anyhow!("Failed to create exchange '{}': {}", name, e))?;
         Ok(Box::new(CcxtAdapter::new(ccxt_ex, market_type)))
     }
+
+    /// Create a K-line WebSocket client for Binance.
+    /// Returns a client that implements `engine::kline::types::KlineWsClient`.
+    pub fn create_binance_kline_ws(
+        market_type: MarketType,
+        proxy_url: Option<&str>,
+    ) -> std::sync::Arc<tokio::sync::Mutex<dyn crate::engine::kline::types::KlineWsClient>> {
+        use crate::trading::ccxt::adapter::binance::kline_ws::BinanceKlineWs;
+        let ws = match market_type {
+            MarketType::Spot => BinanceKlineWs::new_spot(proxy_url),
+            MarketType::Perpetual => BinanceKlineWs::new_perpetual(proxy_url),
+        };
+        std::sync::Arc::new(tokio::sync::Mutex::new(ws))
+    }
+
+    /// Create a K-line data source (HTTP-based).
+    /// Returns a source that implements `engine::kline::types::KlineSource`.
+    pub fn create_kline_source(proxy_url: Option<String>) -> std::sync::Arc<dyn crate::engine::kline::types::KlineSource> {
+        std::sync::Arc::new(crate::trading::ccxt::kline_source::CcxtKlineSource::new(proxy_url))
+    }
 }
