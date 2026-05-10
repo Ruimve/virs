@@ -279,7 +279,10 @@ struct GridIndicators {
     h4_ema50: f64,
     h4_adx: f64,
     h4_bb_width_pct: f64,
-    account_balance: f64,
+    // 账户余额
+    total_balance: f64,
+    available_balance: f64,
+    used_margin: f64,
 }
 
 async fn compute_grid_indicators(
@@ -408,9 +411,16 @@ async fn compute_grid_indicators(
     let m15_ema20 = if !klines_15m.is_empty() { indicators::ema_at(klines_15m, m15_last, 20) } else { 0.0 };
     let m15_ema50 = if klines_15m.len() >= 50 { indicators::ema_at(klines_15m, m15_last, 50) } else { 0.0 };
 
-    let account_balance = exchange.get_balances().await
-        .map(|bs| bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT")).map(|b| b.total).unwrap_or(0.0))
-        .unwrap_or(0.0);
+    // 获取账户余额
+    let (total_balance, available_balance, used_margin) = exchange.get_balances().await
+        .map(|bs| {
+            let usdt = bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT"));
+            match usdt {
+                Some(b) => (b.total, b.free, b.used),
+                None => (0.0, 0.0, 0.0),
+            }
+        })
+        .unwrap_or((0.0, 0.0, 0.0));
 
     GridIndicators {
         current_price,
@@ -462,7 +472,9 @@ async fn compute_grid_indicators(
         h4_ema50,
         h4_adx,
         h4_bb_width_pct,
-        account_balance,
+        total_balance,
+        available_balance,
+        used_margin,
     }
 }
 
@@ -471,7 +483,9 @@ fn build_user_prompt(template: &str, ind: &GridIndicators, bot: &crate::models::
         (ind.ema20 - ind.ema50) / ind.ema50 * 100.0
     } else { 0.0 };
 
-    let total_investment = ind.account_balance;
+    let margin_usage_rate = if ind.total_balance > 0.0 {
+        ind.used_margin / ind.total_balance * 100.0
+    } else { 0.0 };
     let grid_status = match bot.status {
         crate::models::StrategyStatus::Running => "running",
         crate::models::StrategyStatus::Paused => "paused",
@@ -499,7 +513,10 @@ fn build_user_prompt(template: &str, ind: &GridIndicators, bot: &crate::models::
     template
         .replace("{timestamp}", &chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string())
         .replace("{symbol}", &bot.symbol)
-        .replace("{total_investment}", &format!("{:.2}", total_investment))
+        .replace("{total_balance}", &format!("{:.2}", ind.total_balance))
+        .replace("{available_balance}", &format!("{:.2}", ind.available_balance))
+        .replace("{used_margin}", &format!("{:.2}", ind.used_margin))
+        .replace("{margin_usage_rate}", &format!("{:.1}", margin_usage_rate))
         .replace("{leverage}", &bot.leverage.to_string())
         .replace("{grid_status}", grid_status)
         .replace("{last_adjust_time}", &last_adjust_time)
@@ -509,7 +526,6 @@ fn build_user_prompt(template: &str, ind: &GridIndicators, bot: &crate::models::
         .replace("{position_side}", "long")
         .replace("{entry_price}", "0")
         .replace("{unrealized_pnl}", &format!("{:.2}", bot.total_pnl))
-        .replace("{used_margin}", &format!("{:.2}", total_investment / bot.leverage as f64))
         .replace("{open_orders}", "[]")
         .replace("{funding_rate}", &format!("{:.6}", ind.funding_rate))
         .replace("{funding_next_time}", &ind.funding_next_time)

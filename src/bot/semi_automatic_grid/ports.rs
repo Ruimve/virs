@@ -172,8 +172,19 @@ pub struct MarketSnapshot {
     pub h4_bb_width_pct: f64,
 }
 
+/// 账户余额信息
+#[derive(Debug, Clone, Default)]
+pub struct AccountBalance {
+    /// 总资产（可用 + 占用）
+    pub total: f64,
+    /// 可用余额
+    pub free: f64,
+    /// 已用保证金
+    pub used: f64,
+}
+
 #[async_trait]
 pub trait MarketDataProvider: Send + Sync {
     async fn get_market_snapshot(&self, exchange: &str, symbol: &str) -> MarketSnapshot;
-    async fn get_account_balance(&self, exchange: &str) -> f64;
+    async fn get_account_balance(&self, exchange: &str) -> AccountBalance;
 }

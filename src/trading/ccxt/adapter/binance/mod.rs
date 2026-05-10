@@ -399,7 +399,7 @@ impl Exchange for BinanceExchange {
             // USDT-M Futures: /fapi/v2/balance returns an array
             let params: Vec<(String, String)> = vec![];
             let data = self.client
-                .signed_get(&self.signer, "/fapi/v2/balance", params)
+                .signed_get(&self.signer, "/fapi/v3/balance", params)
                 .await?;
 
             let balances = data.as_array()

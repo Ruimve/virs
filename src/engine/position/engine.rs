@@ -1728,7 +1728,7 @@ pub(crate) async fn handle_sync_positions(inner: &Arc<EngineInner>) {
 #[cfg(test)]
 pub(crate) mod test_helpers {
     use super::*;
-    use super::persistence::Persistence;
+    use crate::engine::position::persistence::Persistence;
     use crate::engine::position::config::RiskConfig;
 
     pub(crate) fn make_test_inner(

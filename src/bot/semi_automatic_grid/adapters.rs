@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use sqlx::PgPool;
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::bot::semi_automatic_grid::ports::*;
@@ -57,7 +58,10 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = match self.exchange_registry.get(&exchange_key) {
             Some(e) => e,
-            None => return MarketSnapshot::default(),
+            None => {
+                warn!(exchange, symbol, exchange_key, "Exchange not found in registry, returning empty snapshot");
+                return MarketSnapshot::default();
+            }
         };
 
         let now_ms = chrono::Utc::now().timestamp_millis();
@@ -67,7 +71,14 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
 
         let klines_1h = match ex.get_klines_range(symbol, "1h", start_1h, now_ms).await {
             Ok(k) if k.len() >= 30 => k,
-            _ => return MarketSnapshot::default(),
+            Ok(k) => {
+                warn!(exchange, symbol, count = k.len(), "1h klines insufficient (< 30), returning empty snapshot");
+                return MarketSnapshot::default();
+            }
+            Err(e) => {
+                warn!(exchange, symbol, error = %e, "Failed to fetch 1h klines, returning empty snapshot");
+                return MarketSnapshot::default();
+            }
         };
 
         let klines_4h = match ex.get_klines_range(symbol, "4h", start_4h, now_ms).await {
@@ -219,15 +230,29 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         }
     }
 
-    async fn get_account_balance(&self, exchange: &str) -> f64 {
+    async fn get_account_balance(&self, exchange: &str) -> super::ports::AccountBalance {
+        use super::ports::AccountBalance;
+        
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = match self.exchange_registry.get(&exchange_key) {
             Some(e) => e,
-            None => return 0.0,
+            None => return AccountBalance::default(),
         };
-        ex.get_balances().await
-            .map(|bs| bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT")).map(|b| b.total).unwrap_or(0.0))
-            .unwrap_or(0.0)
+        
+        match ex.get_balances().await {
+            Ok(bs) => {
+                let usdt = bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT"));
+                match usdt {
+                    Some(b) => AccountBalance {
+                        total: b.total,
+                        free: b.free,
+                        used: b.used,
+                    },
+                    None => AccountBalance::default(),
+                }
+            }
+            Err(_) => AccountBalance::default(),
+        }
     }
 }
 

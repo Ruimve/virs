@@ -71,7 +71,12 @@ pub enum GridEvent {
 /// Default user prompt template for AI analysis
 pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}
 交易对：{symbol}
-总投资额：{total_investment} USDT
+
+## 账户资产
+- 总资产：{total_balance} USDT
+- 可用余额：{available_balance} USDT
+- 已用保证金：{used_margin} USDT
+- 保证金使用率：{margin_usage_rate}%
 杠杆倍数：{leverage}
 
 ## 网格运行状态
@@ -87,7 +92,6 @@ pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}
 - 持仓方向：{position_side}
 - 开仓均价：{entry_price}
 - 未实现盈亏：{unrealized_pnl} USDT
-- 已用保证金：{used_margin} USDT
 
 ## 当前挂单（与交易所实际一致）
 {open_orders}

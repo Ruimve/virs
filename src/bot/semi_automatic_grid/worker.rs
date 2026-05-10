@@ -142,13 +142,24 @@ impl GridWorker {
         self.place_initial_orders().await;
 
         let mut price_tick = tokio::time::interval(Duration::from_secs(5));
-        let llm_interval_secs = if self.bot.dynamic_adjust {
-            self.bot.adjust_interval_secs.max(60) as u64
+
+        let (llm_signal_tx, mut llm_signal_rx) = mpsc::channel::<()>(1);
+        if self.bot.dynamic_adjust {
+            let interval_secs = self.bot.adjust_interval_secs.max(60) as u64;
+            info!(bot_id = %self.bot.id, interval_secs, "LLM periodic analysis enabled");
+            tokio::spawn(async move {
+                let mut tick = tokio::time::interval(Duration::from_secs(interval_secs));
+                tick.tick().await;
+                loop {
+                    tick.tick().await;
+                    if llm_signal_tx.send(()).await.is_err() {
+                        break;
+                    }
+                }
+            });
         } else {
-            u64::MAX
-        };
-        let mut llm_tick = tokio::time::interval(Duration::from_secs(llm_interval_secs));
-        llm_tick.tick().await;
+            info!(bot_id = %self.bot.id, "LLM periodic analysis disabled (dynamic_adjust=false)");
+        }
 
         loop {
             tokio::select! {
@@ -162,10 +173,8 @@ impl GridWorker {
                         self.on_price_tick().await;
                     }
                 }
-                _ = llm_tick.tick() => {
-                    if llm_interval_secs != u64::MAX {
-                        self.on_llm_decision().await;
-                    }
+                Some(()) = llm_signal_rx.recv() => {
+                    self.on_llm_decision().await;
                 }
                 event = self.event_rx.recv() => {
                     match event {
@@ -528,10 +537,28 @@ impl GridWorker {
     async fn on_llm_decision(&mut self) {
         info!(bot_id = %self.bot.id, "LLM decision tick");
 
+        if !self.ai_service.is_available() {
+            warn!(bot_id = %self.bot.id, "AI service not available, skipping LLM decision");
+            let _ = self.grid_event_tx.send(GridEvent::BotError {
+                bot_id: self.bot.id,
+                error: "LLM decision skipped: AI service not configured".to_string(),
+            });
+            return;
+        }
+
         let _filled_count = self.levels.iter().filter(|l| l.buy_filled).count();
         let total_hold: f64 = self.levels.iter().map(|l| l.hold_quantity).sum();
 
         let snapshot = self.market_data_provider.get_market_snapshot(&self.bot.exchange, &self.bot.symbol).await;
+
+        if snapshot.current_price <= 0.0 {
+            warn!(bot_id = %self.bot.id, "Market snapshot has zero price, skipping LLM decision");
+            let _ = self.grid_event_tx.send(GridEvent::BotError {
+                bot_id: self.bot.id,
+                error: "LLM decision skipped: market data unavailable".to_string(),
+            });
+            return;
+        }
 
         let grid_status = if self.paused { "paused" } else if self.levels.is_empty() { "empty" } else { "running" };
 
@@ -562,14 +589,20 @@ impl GridWorker {
             (snapshot.ema20 - snapshot.ema50) / snapshot.ema50 * 100.0
         } else { 0.0 };
 
-        let total_investment = self.market_data_provider.get_account_balance(&self.bot.exchange).await;
+        let account = self.market_data_provider.get_account_balance(&self.bot.exchange).await;
+        let margin_usage_rate = if account.total > 0.0 {
+            account.used / account.total * 100.0
+        } else { 0.0 };
 
         let template = super::types::DEFAULT_USER_PROMPT_TEMPLATE;
 
         let user_prompt = template
             .replace("{timestamp}", &chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string())
             .replace("{symbol}", &self.bot.symbol)
-            .replace("{total_investment}", &format!("{:.2}", total_investment))
+            .replace("{total_balance}", &format!("{:.2}", account.total))
+            .replace("{available_balance}", &format!("{:.2}", account.free))
+            .replace("{used_margin}", &format!("{:.2}", account.used))
+            .replace("{margin_usage_rate}", &format!("{:.1}", margin_usage_rate))
             .replace("{leverage}", &self.bot.leverage.to_string())
             .replace("{grid_status}", grid_status)
             .replace("{last_adjust_time}", "N/A")
@@ -579,7 +612,6 @@ impl GridWorker {
             .replace("{position_side}", "long")
             .replace("{entry_price}", &format!("{:.2}", self.bot.lower_price))
             .replace("{unrealized_pnl}", &format!("{:.2}", self.total_pnl))
-            .replace("{used_margin}", &format!("{:.2}", total_investment / self.bot.leverage as f64))
             .replace("{open_orders}", "[]")
             .replace("{funding_rate}", &format!("{:.6}", snapshot.funding_rate))
             .replace("{funding_next_time}", "N/A")
@@ -628,7 +660,11 @@ impl GridWorker {
             }
             None => {
                 let rule_action = self.simple_rule_decision();
-                info!(bot_id = %self.bot.id, action = rule_action.as_str(), source = "rule_fallback", "Rule-based decision");
+                warn!(bot_id = %self.bot.id, action = rule_action.as_str(), source = "rule_fallback", "LLM call failed, falling back to rule-based decision");
+                let _ = self.grid_event_tx.send(GridEvent::BotError {
+                    bot_id: self.bot.id,
+                    error: "LLM call failed, using rule-based fallback".to_string(),
+                });
                 rule_action
             }
         };

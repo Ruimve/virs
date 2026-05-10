@@ -447,8 +447,12 @@ impl crate::bot::semi_automatic_grid::ports::MarketDataProvider for MockMarketDa
         }
     }
 
-    async fn get_account_balance(&self, _exchange: &str) -> f64 {
-        10000.0
+    async fn get_account_balance(&self, _exchange: &str) -> super::super::ports::AccountBalance {
+        super::super::ports::AccountBalance {
+            total: 10000.0,
+            free: 8000.0,
+            used: 2000.0,
+        }
     }
 }
 
