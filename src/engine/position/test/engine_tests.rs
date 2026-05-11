@@ -103,6 +103,7 @@ async fn test_mock_exchange_place_order_tracking() {
         reduce_only: false,
         position_side: Some(PositionSide::Long),
         position_id: None,
+    client_order_id: None,
     };
     mock.place_order(params).await.unwrap();
     assert_eq!(mock.place_order_count().await, 1);
@@ -166,6 +167,7 @@ async fn test_mock_exchange_place_order_default() {
         reduce_only: false,
         position_side: Some(PositionSide::Long),
         position_id: None,
+    client_order_id: None,
     };
     let order = mock.place_order(params).await.unwrap();
     assert_eq!(order.symbol, "BTC/USDT");
@@ -586,6 +588,7 @@ async fn test_handle_place_order_success() {
         reduce_only: false,
         position_side: Some(PositionSide::Long),
         position_id: None,
+    client_order_id: None,
     };
 
     handle_place_order(&inner, params).await;
@@ -610,6 +613,7 @@ async fn test_handle_place_order_exchange_error() {
         reduce_only: false,
         position_side: Some(PositionSide::Long),
         position_id: None,
+    client_order_id: None,
     };
 
     handle_place_order(&inner, params).await;
@@ -1137,6 +1141,7 @@ async fn test_place_order_command_construction() {
         reduce_only: false,
         position_side: Some(PositionSide::Long),
         position_id: None,
+    client_order_id: None,
     };
     let cmd = EngineCommand::PlaceOrder { params };
 
@@ -1192,6 +1197,7 @@ async fn test_mock_exchange_place_order_err() {
         reduce_only: false,
         position_side: Some(PositionSide::Long),
         position_id: None,
+    client_order_id: None,
     };
 
     let result = mock.place_order(params).await;

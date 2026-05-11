@@ -115,10 +115,12 @@ impl PaperOrderExecutor {
     async fn emit_filled(&self, order: &PendingOrder, fill_price: f64) {
         let order_info = OrderInfo {
             id: order.id,
+            symbol: order.symbol.clone(),
             side: order.side,
             fill_price: Some(fill_price),
             request_price: Some(order.price),
             filled: order.amount,
+            client_order_id: None,
         };
 
         // 先发送 OrderPlaced（如果 worker 之前没收到的话）
@@ -167,6 +169,7 @@ impl OrderExecutor for PaperOrderExecutor {
                 amount,
                 price,
                 reduce_only,
+                client_order_id: _,
             } => {
                 let order = PendingOrder {
                     id: Uuid::new_v4(),
@@ -180,17 +183,17 @@ impl OrderExecutor for PaperOrderExecutor {
 
                 let order_id = order.id;
 
-                // 记录挂单
                 self.pending.lock().await.insert(order_id, order.clone());
 
-                // 通知 worker 订单已挂出
                 let _ = self.event_tx.send(OrderEvent::OrderPlaced {
                     order: OrderInfo {
                         id: order_id,
+                        symbol: order.symbol.clone(),
                         side: order.side,
                         fill_price: None,
                         request_price: Some(order.price),
                         filled: 0.0,
+                        client_order_id: None,
                     },
                 });
 
@@ -211,6 +214,9 @@ impl OrderExecutor for PaperOrderExecutor {
                 let count = pending.len();
                 pending.clear();
                 debug!(count, "Paper orders canceled");
+            }
+            OrderCommand::CloseAllPositions { symbol: _ } => {
+                debug!("Paper CloseAllPositions - no-op in paper trading");
             }
         }
 

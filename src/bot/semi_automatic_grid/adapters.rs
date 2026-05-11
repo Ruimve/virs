@@ -291,7 +291,7 @@ impl PeOrderExecutor {
 impl OrderExecutor for PeOrderExecutor {
     async fn send_command(&self, command: OrderCommand) -> anyhow::Result<()> {
         let pe_cmd = match command {
-            OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only } => {
+            OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only, client_order_id } => {
                 pe_types::EngineCommand::PlaceOrder {
                     params: pe_types::PlaceOrderParams {
                         symbol,
@@ -305,6 +305,7 @@ impl OrderExecutor for PeOrderExecutor {
                         reduce_only,
                         position_side: Some(pe_types::PositionSide::Long),
                         position_id: None,
+                        client_order_id,
                     },
                 }
             }
@@ -313,6 +314,10 @@ impl OrderExecutor for PeOrderExecutor {
                     position_id: None,
                     symbol,
                 }
+            }
+            OrderCommand::CloseAllPositions { symbol: _ } => {
+                warn!("CloseAllPositions not yet implemented via PE - requires position_id lookup");
+                return Ok(());
             }
         };
         self.pe_cmd_tx.send(pe_cmd).await?;
@@ -664,6 +669,7 @@ pub fn convert_pe_event(event: pe_types::EngineEvent) -> Option<OrderEvent> {
         pe_types::EngineEvent::OrderPlaced { order } => Some(OrderEvent::OrderPlaced {
             order: OrderInfo {
                 id: order.id,
+                symbol: order.symbol.clone(),
                 side: match order.side {
                     pe_types::Side::Buy => OrderSide::Buy,
                     pe_types::Side::Sell => OrderSide::Sell,
@@ -671,11 +677,13 @@ pub fn convert_pe_event(event: pe_types::EngineEvent) -> Option<OrderEvent> {
                 fill_price: order.fill_price,
                 request_price: order.request_price,
                 filled: order.filled,
+                client_order_id: order.client_order_id.clone(),
             },
         }),
         pe_types::EngineEvent::OrderFilled { order, trade: _ } => Some(OrderEvent::OrderFilled {
             order: OrderInfo {
                 id: order.id,
+                symbol: order.symbol.clone(),
                 side: match order.side {
                     pe_types::Side::Buy => OrderSide::Buy,
                     pe_types::Side::Sell => OrderSide::Sell,
@@ -683,6 +691,7 @@ pub fn convert_pe_event(event: pe_types::EngineEvent) -> Option<OrderEvent> {
                 fill_price: order.fill_price,
                 request_price: order.request_price,
                 filled: order.filled,
+                client_order_id: order.client_order_id.clone(),
             },
         }),
         pe_types::EngineEvent::OrderCanceled { order } => Some(OrderEvent::OrderCanceled {

@@ -142,7 +142,7 @@ async fn delete_bot() {
     let bot = make_bot_config();
     store.add_bot(bot.clone()).await;
     engine.start_bot(bot.id).await;
-    engine.delete_bot(bot.id).await;
+    engine.delete_bot(bot.id, false).await;
     let deleted = store.deleted_bots.lock().await;
     assert!(deleted.contains(&bot.id));
 }
@@ -151,7 +151,7 @@ async fn delete_bot() {
 async fn delete_bot_not_running() {
     let (mut engine, _cmd_tx, _grid_event_tx, store) = make_engine();
     let bot_id = Uuid::new_v4();
-    engine.delete_bot(bot_id).await;
+    engine.delete_bot(bot_id, false).await;
     let deleted = store.deleted_bots.lock().await;
     assert!(deleted.contains(&bot_id));
 }
@@ -324,7 +324,7 @@ async fn delete_bot_emits_stopped_event() {
     engine.start_bot(bot.id).await;
     let _ = event_rx.recv().await;
 
-    engine.delete_bot(bot.id).await;
+    engine.delete_bot(bot.id, false).await;
 
     let event = event_rx.recv().await.unwrap();
     match event {

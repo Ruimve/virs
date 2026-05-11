@@ -376,7 +376,7 @@ fn grid_command_debug_all_variants() {
     assert!(format!("{:?}", GridCommand::StopBot { bot_id }).contains("StopBot"));
     assert!(format!("{:?}", GridCommand::PauseBot { bot_id }).contains("PauseBot"));
     assert!(format!("{:?}", GridCommand::ResumeBot { bot_id }).contains("ResumeBot"));
-    assert!(format!("{:?}", GridCommand::DeleteBot { bot_id }).contains("DeleteBot"));
+    assert!(format!("{:?}", GridCommand::DeleteBot { bot_id, close_position: false }).contains("DeleteBot"));
     assert!(format!("{:?}", GridCommand::AdjustGrid { bot_id }).contains("AdjustGrid"));
     assert!(format!("{:?}", GridCommand::Shutdown).contains("Shutdown"));
 }

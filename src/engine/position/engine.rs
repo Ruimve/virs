@@ -822,6 +822,7 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                                     reduce_only: true,
                                     position_side: Some(side),
                                     position_id: Some(pid),
+                                    client_order_id: None,
                                 };
                                 let mut attempts = 0u32;
                                 let max_attempts = 3;
@@ -1380,6 +1381,7 @@ pub(crate) async fn handle_open_position(
         reduce_only: false,
         position_side: Some(side),
         position_id: Some(position_id),
+        client_order_id: None,
     };
 
     match inner.exchange.place_order(params).await {
@@ -1483,6 +1485,7 @@ pub(crate) async fn handle_close_position(
         reduce_only: true,
         position_side: Some(position.side),
         position_id: Some(position.id),
+        client_order_id: None,
     };
 
     match inner.exchange.place_order(params).await {

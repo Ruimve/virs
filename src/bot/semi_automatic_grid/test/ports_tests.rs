@@ -50,9 +50,10 @@ fn grid_order_command_place_buy() {
         amount: 0.001,
         price: Some(50000.0),
         reduce_only: false,
+    client_order_id: None,
     };
     match &cmd {
-        OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only } => {
+        OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only, client_order_id: _ } => {
             assert_eq!(symbol, "BTCUSDT");
             assert_eq!(*side, OrderSide::Buy);
             assert!((amount - 0.001).abs() < f64::EPSILON);
@@ -71,6 +72,7 @@ fn grid_order_command_place_sell_reduce_only() {
         amount: 0.01,
         price: None,
         reduce_only: true,
+    client_order_id: None,
     };
     match &cmd {
         OrderCommand::PlaceOrder { side, price, reduce_only, .. } => {
@@ -90,6 +92,7 @@ fn grid_order_command_place_zero_amount() {
         amount: 0.0,
         price: Some(50000.0),
         reduce_only: false,
+    client_order_id: None,
     };
     match &cmd {
         OrderCommand::PlaceOrder { amount, .. } => assert!((amount).abs() < f64::EPSILON),
@@ -105,6 +108,7 @@ fn grid_order_command_place_large_amount() {
         amount: 1000000.0,
         price: Some(1.0),
         reduce_only: false,
+    client_order_id: None,
     };
     match &cmd {
         OrderCommand::PlaceOrder { amount, .. } => assert!((*amount - 1000000.0).abs() < f64::EPSILON),
@@ -141,6 +145,8 @@ fn grid_order_info_construction() {
         fill_price: Some(51000.0),
         request_price: Some(50000.0),
         filled: 0.001,
+                symbol: "BTC/USDT".to_string(),
+                client_order_id: None,
     };
     assert_eq!(info.id, id);
     assert_eq!(info.side, OrderSide::Buy);
@@ -157,6 +163,8 @@ fn grid_order_info_no_prices() {
         fill_price: None,
         request_price: None,
         filled: 0.0,
+                symbol: "BTC/USDT".to_string(),
+                client_order_id: None,
     };
     assert!(info.fill_price.is_none());
     assert!(info.request_price.is_none());
@@ -171,6 +179,8 @@ fn grid_order_info_fill_price_only() {
         fill_price: Some(50000.0),
         request_price: None,
         filled: 0.001,
+                symbol: "BTC/USDT".to_string(),
+                client_order_id: None,
     };
     assert!(info.fill_price.is_some());
     assert!(info.request_price.is_none());
@@ -184,6 +194,8 @@ fn grid_order_info_request_price_only() {
         fill_price: None,
         request_price: Some(52000.0),
         filled: 0.001,
+                symbol: "BTC/USDT".to_string(),
+                client_order_id: None,
     };
     assert!(info.fill_price.is_none());
     assert!(info.request_price.is_some());
@@ -197,6 +209,8 @@ fn grid_order_info_zero_filled() {
         fill_price: Some(50000.0),
         request_price: None,
         filled: 0.0,
+                symbol: "BTC/USDT".to_string(),
+                client_order_id: None,
     };
     assert!((info.filled).abs() < f64::EPSILON);
 }
@@ -210,6 +224,8 @@ fn grid_order_event_order_placed() {
         order: OrderInfo {
             id, side: OrderSide::Buy, fill_price: Some(50000.0),
             request_price: None, filled: 0.0,
+                symbol: "BTC/USDT".to_string(),
+                client_order_id: None,
         },
     };
     match event {
@@ -228,6 +244,8 @@ fn grid_order_event_order_filled() {
         order: OrderInfo {
             id, side: OrderSide::Sell, fill_price: Some(52000.0),
             request_price: Some(52260.0), filled: 0.001,
+                symbol: "BTC/USDT".to_string(),
+                client_order_id: None,
         },
     };
     match event {
@@ -574,6 +592,7 @@ async fn mock_order_executor_success() {
         amount: 0.001,
         price: Some(50000.0),
         reduce_only: false,
+    client_order_id: None,
     };
     let result = executor.send_command(cmd).await;
     assert!(result.is_ok());
@@ -769,6 +788,7 @@ fn grid_order_command_place_negative_amount() {
         amount: -0.001,
         price: Some(50000.0),
         reduce_only: false,
+    client_order_id: None,
     };
     match &cmd {
         OrderCommand::PlaceOrder { amount, .. } => assert!(*amount < 0.0),
@@ -784,6 +804,7 @@ fn grid_order_command_place_negative_price() {
         amount: 0.001,
         price: Some(-50000.0),
         reduce_only: false,
+    client_order_id: None,
     };
     match &cmd {
         OrderCommand::PlaceOrder { price, .. } => assert!(price.unwrap() < 0.0),
@@ -799,6 +820,7 @@ fn grid_order_command_place_market_order_no_price() {
         amount: 1.0,
         price: None,
         reduce_only: false,
+    client_order_id: None,
     };
     match &cmd {
         OrderCommand::PlaceOrder { price, reduce_only, .. } => {
@@ -819,6 +841,8 @@ fn grid_order_info_negative_filled() {
         fill_price: Some(50000.0),
         request_price: None,
         filled: -0.001,
+                symbol: "BTC/USDT".to_string(),
+                client_order_id: None,
     };
     assert!(info.filled < 0.0);
 }
@@ -831,6 +855,8 @@ fn grid_order_info_very_large_filled() {
         fill_price: Some(50000.0),
         request_price: None,
         filled: 1e10,
+                symbol: "BTC/USDT".to_string(),
+                client_order_id: None,
     };
     assert!(info.filled > 1e9);
 }
@@ -843,6 +869,8 @@ fn grid_order_info_both_prices_equal() {
         fill_price: Some(50000.0),
         request_price: Some(50000.0),
         filled: 0.001,
+                symbol: "BTC/USDT".to_string(),
+                client_order_id: None,
     };
     assert_eq!(info.fill_price, info.request_price);
 }

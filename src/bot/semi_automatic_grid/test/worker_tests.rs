@@ -234,43 +234,49 @@ async fn on_order_placed_via_map() {
         id: order_id, side: OrderSide::Buy,
         fill_price: Some(worker.levels[3].buy_price),
         request_price: None, filled: 0.0,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_placed(&order).await;
     assert_eq!(worker.order_level_map.len(), 1);
 }
 
 #[tokio::test]
-async fn on_order_placed_via_price_buy() {
+async fn on_order_placed_via_client_order_id_buy() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
-    let buy_price = worker.levels[2].buy_price;
+    let level_idx = 2;
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
-        fill_price: Some(buy_price), request_price: None, filled: 0.0,
+        fill_price: Some(worker.levels[level_idx].buy_price), request_price: None, filled: 0.0,
+        symbol: "BTCUSDT".to_string(),
+        client_order_id: Some(format!("grid:{}:{}:buy", worker.bot.id, level_idx)),
     };
     worker.on_order_placed(&order).await;
     assert!(worker.order_level_map.contains_key(&order_id));
     let (idx, side) = worker.order_level_map.get(&order_id).unwrap();
-    assert_eq!(*idx, 2);
+    assert_eq!(*idx, level_idx);
     assert_eq!(side, "buy");
-    assert_eq!(worker.levels[2].buy_order_id, Some(order_id));
+    assert_eq!(worker.levels[level_idx].buy_order_id, Some(order_id));
 }
 
 #[tokio::test]
-async fn on_order_placed_via_price_sell() {
+async fn on_order_placed_via_client_order_id_sell() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
-    let sell_price = worker.levels[3].sell_price;
+    let level_idx = 3;
     let order = OrderInfo {
         id: order_id, side: OrderSide::Sell,
-        fill_price: Some(sell_price), request_price: None, filled: 0.0,
+        fill_price: Some(worker.levels[level_idx].sell_price), request_price: None, filled: 0.0,
+        symbol: "BTCUSDT".to_string(),
+        client_order_id: Some(format!("grid:{}:{}:sell", worker.bot.id, level_idx)),
     };
     worker.on_order_placed(&order).await;
     assert!(worker.order_level_map.contains_key(&order_id));
     let (idx, side) = worker.order_level_map.get(&order_id).unwrap();
-    assert_eq!(*idx, 3);
+    assert_eq!(*idx, level_idx);
     assert_eq!(side, "sell");
-    assert_eq!(worker.levels[3].sell_order_id, Some(order_id));
+    assert_eq!(worker.levels[level_idx].sell_order_id, Some(order_id));
 }
 
 #[tokio::test]
@@ -280,6 +286,8 @@ async fn on_order_placed_no_match() {
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
         fill_price: Some(99999.0), request_price: None, filled: 0.0,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_placed(&order).await;
     assert!(!worker.order_level_map.contains_key(&order_id));
@@ -292,23 +300,26 @@ async fn on_order_placed_no_prices() {
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
         fill_price: None, request_price: None, filled: 0.0,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_placed(&order).await;
     assert!(!worker.order_level_map.contains_key(&order_id));
 }
 
 #[tokio::test]
-async fn on_order_placed_request_price_fallback() {
+async fn on_order_placed_client_order_id_no_match() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
     let buy_price = worker.levels[2].buy_price;
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
         fill_price: None, request_price: Some(buy_price), filled: 0.0,
+        symbol: "BTCUSDT".to_string(),
+        client_order_id: None,
     };
     worker.on_order_placed(&order).await;
-    assert!(worker.order_level_map.contains_key(&order_id));
-    assert_eq!(worker.levels[2].buy_order_id, Some(order_id));
+    assert!(!worker.order_level_map.contains_key(&order_id));
 }
 
 // ── on_order_filled ──
@@ -323,6 +334,8 @@ async fn on_order_filled_buy() {
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
         fill_price: Some(buy_price), request_price: None, filled: quantity,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_filled(&order).await;
     assert!(worker.levels[3].buy_filled);
@@ -347,6 +360,8 @@ async fn on_order_filled_sell_with_rebuy() {
     let order = OrderInfo {
         id: sell_order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: quantity,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_filled(&order).await;
     assert!(worker.levels[3].sell_filled);
@@ -371,6 +386,8 @@ async fn on_order_filled_sell_pnl_calculation() {
     let order = OrderInfo {
         id: sell_order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: quantity,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_filled(&order).await;
     let expected_pnl = (sell_price - buy_price) * quantity;
@@ -384,6 +401,8 @@ async fn on_order_filled_no_match() {
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
         fill_price: Some(50000.0), request_price: None, filled: 0.001,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_filled(&order).await;
     assert_eq!(worker.total_trades, 0);
@@ -399,6 +418,8 @@ async fn on_order_filled_zero_filled() {
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
         fill_price: Some(buy_price), request_price: None, filled: 0.0,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_filled(&order).await;
     assert!(worker.levels[3].buy_filled);
@@ -413,6 +434,8 @@ async fn on_order_filled_side_mismatch() {
     let order = OrderInfo {
         id: order_id, side: OrderSide::Sell,
         fill_price: Some(worker.levels[3].sell_price), request_price: None, filled: 0.001,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_filled(&order).await;
     assert_eq!(worker.total_trades, 0);
@@ -912,6 +935,8 @@ async fn on_order_filled_sell_triggers_grid_trade_closed_event() {
     let order = OrderInfo {
         id: sell_order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: quantity,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_filled(&order).await;
 
@@ -948,6 +973,8 @@ async fn on_order_filled_sell_triggers_grid_filled_event() {
     let order = OrderInfo {
         id: sell_order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: quantity,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_filled(&order).await;
 
@@ -985,6 +1012,8 @@ async fn on_order_filled_buy_triggers_grid_filled_event() {
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
         fill_price: Some(buy_price), request_price: None, filled: quantity,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_filled(&order).await;
 
@@ -1018,6 +1047,8 @@ async fn on_order_filled_buy_no_trade_closed_event() {
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
         fill_price: Some(buy_price), request_price: None, filled: quantity,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_filled(&order).await;
 
@@ -1048,6 +1079,8 @@ async fn on_order_filled_sell_places_rebuy_order() {
     let order = OrderInfo {
         id: sell_order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: quantity,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_filled(&order).await;
 
@@ -1332,6 +1365,8 @@ async fn on_order_event_order_placed_dispatches() {
         order: OrderInfo {
             id: order_id, side: OrderSide::Buy,
             fill_price: Some(buy_price), request_price: None, filled: 0.0,
+            symbol: "BTCUSDT".to_string(),
+            client_order_id: Some(format!("grid:{}:2:buy", worker.bot.id)),
         },
     }).await;
 
@@ -1351,6 +1386,8 @@ async fn on_order_event_order_filled_dispatches() {
         order: OrderInfo {
             id: order_id, side: OrderSide::Buy,
             fill_price: Some(buy_price), request_price: None, filled: quantity,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
         },
     }).await;
 
@@ -1497,6 +1534,8 @@ async fn on_order_filled_sell_zero_profit_pct() {
     let order = OrderInfo {
         id: sell_order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: quantity,
+                symbol: "BTCUSDT".to_string(),
+                client_order_id: None,
     };
     worker.on_order_filled(&order).await;
 

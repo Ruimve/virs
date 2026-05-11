@@ -1407,13 +1407,20 @@ pub async fn stop_bot(
 
 // ── 3.7 DELETE /api/grid/{id}/delete ──
 
+#[derive(Debug, Deserialize)]
+pub struct DeleteBotParams {
+    pub close_position: Option<bool>,
+}
+
 pub async fn delete_bot(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
     Path(id): Path<Uuid>,
+    Query(params): Query<DeleteBotParams>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)>
 {
     let user_id = parse_user_id(&auth)?;
+    let close_position = params.close_position.unwrap_or(false);
 
     let bot = sqlx::query_as::<_, GridBot>(
         r#"SELECT * FROM qd_grid_bots WHERE id = $1 AND user_id = $2"#,
@@ -1431,13 +1438,40 @@ pub async fn delete_bot(
 
     match bot {
         Some(b) => {
-            if b.status == StrategyStatus::Running {
+            if b.status == StrategyStatus::Running && !close_position {
                 return Err((
                     StatusCode::BAD_REQUEST,
                     Json(ApiResponse::<serde_json::Value>::err(
-                        "Cannot delete a running bot. Stop it first.",
+                        "Cannot delete a running bot without close_position. Use close_position=true to stop and close positions.",
                     )),
                 ));
+            }
+
+            if let Some(ref grid_cmd_tx) = state.grid_cmd_tx {
+                if let Err(e) = grid_cmd_tx.send(crate::bot::semi_automatic_grid::types::GridCommand::DeleteBot {
+                    bot_id: id,
+                    close_position,
+                }).await {
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<serde_json::Value>::err(format!(
+                            "Failed to send delete command: {}", e
+                        ))),
+                    ));
+                }
+            } else {
+                sqlx::query("DELETE FROM qd_grid_bots WHERE id = $1")
+                    .bind(id)
+                    .execute(&state.db_pool)
+                    .await
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(ApiResponse::<serde_json::Value>::err(format!(
+                                "Failed to delete bot: {}", e
+                            ))),
+                        )
+                    })?;
             }
         }
         None => {
@@ -1448,22 +1482,13 @@ pub async fn delete_bot(
         }
     }
 
-    sqlx::query("DELETE FROM qd_grid_bots WHERE id = $1")
-        .bind(id)
-        .execute(&state.db_pool)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<serde_json::Value>::err(format!(
-                    "Failed to delete bot: {}", e
-                ))),
-            )
-        })?;
-
     Ok(Json(ApiResponse::ok_with_message(
-        serde_json::json!({ "deleted": true }),
-        "Grid bot deleted successfully",
+        serde_json::json!({ "deleted": true, "close_position": close_position }),
+        if close_position {
+            "Grid bot deleted with positions closed"
+        } else {
+            "Grid bot deleted (positions remain open)"
+        },
     )))
 }
 

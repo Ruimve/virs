@@ -38,7 +38,7 @@ pub enum GridCommand {
     StopBot { bot_id: Uuid },
     PauseBot { bot_id: Uuid },
     ResumeBot { bot_id: Uuid },
-    DeleteBot { bot_id: Uuid },
+    DeleteBot { bot_id: Uuid, close_position: bool },
     AdjustGrid { bot_id: Uuid },
     Shutdown,
 }

@@ -20,10 +20,12 @@ impl OrderSide {
 #[derive(Debug, Clone)]
 pub struct OrderInfo {
     pub id: Uuid,
+    pub symbol: String,
     pub side: OrderSide,
     pub fill_price: Option<f64>,
     pub request_price: Option<f64>,
     pub filled: f64,
+    pub client_order_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,9 +36,13 @@ pub enum OrderCommand {
         amount: f64,
         price: Option<f64>,
         reduce_only: bool,
+        client_order_id: Option<String>,
     },
     CancelAllOrders {
         symbol: Option<String>,
+    },
+    CloseAllPositions {
+        symbol: String,
     },
 }
 

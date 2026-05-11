@@ -296,9 +296,15 @@ impl GridWorker {
     pub(crate) async fn on_order_event(&mut self, event: OrderEvent) {
         match event {
             OrderEvent::OrderPlaced { order } => {
+                if order.symbol != self.bot.symbol {
+                    return;
+                }
                 self.on_order_placed(&order).await;
             }
             OrderEvent::OrderFilled { order } => {
+                if order.symbol != self.bot.symbol {
+                    return;
+                }
                 self.on_order_filled(&order).await;
             }
             OrderEvent::OrderCanceled { order_id } => {
@@ -343,38 +349,42 @@ impl GridWorker {
             return;
         }
 
-        if let Some(price) = order.fill_price.or(order.request_price) {
-            let mut matched: Option<(usize, bool, String)> = None;
+        if let Some(ref coi) = order.client_order_id {
+            if let Some((level_idx, side)) = Self::parse_client_order_id(coi) {
+                if level_idx < self.levels.len() {
+                    self.order_level_map.insert(order.id, (level_idx, side.clone()));
 
-            for (idx, level) in self.levels.iter().enumerate() {
-                let is_buy = order.side == OrderSide::Buy
-                    && (price - level.buy_price).abs() < level.buy_price * 0.001;
-                let is_sell = order.side == OrderSide::Sell
-                    && (price - level.sell_price).abs() < level.sell_price * 0.001;
+                    if side == "buy" {
+                        self.levels[level_idx].buy_order_id = Some(order.id);
+                    } else {
+                        self.levels[level_idx].sell_order_id = Some(order.id);
+                    }
 
-                if is_buy || is_sell {
-                    let side_str = if is_buy { "buy" } else { "sell" };
-                    matched = Some((idx, is_buy, side_str.to_string()));
-                    break;
+                    info!(
+                        bot_id = %self.bot.id, level = self.levels[level_idx].level,
+                        side = %side, order_id = %order.id,
+                        "Grid order placed (via client_order_id)"
+                    );
+                    return;
                 }
-            }
-
-            if let Some((idx, is_buy, side_str)) = matched {
-                self.order_level_map.insert(order.id, (idx, side_str.clone()));
-
-                if is_buy {
-                    self.levels[idx].buy_order_id = Some(order.id);
-                } else {
-                    self.levels[idx].sell_order_id = Some(order.id);
-                }
-
-                info!(
-                    bot_id = %self.bot.id, level = self.levels[idx].level,
-                    side = %side_str, price, order_id = %order.id,
-                    "Grid order placed (via price)"
-                );
             }
         }
+
+        debug!(
+            bot_id = %self.bot.id, order_id = %order.id,
+            "Order placed event received but no matching grid level"
+        );
+    }
+
+    fn parse_client_order_id(coi: &str) -> Option<(usize, String)> {
+        let parts: Vec<&str> = coi.splitn(4, ':').collect();
+        if parts.len() == 4 && parts[0] == "grid" {
+            if let Ok(level_idx) = parts[2].parse::<usize>() {
+                let side = parts[3].to_string();
+                return Some((level_idx, side));
+            }
+        }
+        None
     }
 
     pub(crate) async fn on_order_filled(&mut self, order: &OrderInfo) {
@@ -476,12 +486,14 @@ impl GridWorker {
     // ── 下单 ──
 
     async fn place_buy_order(&self, level: &GridLevel) {
+        let client_order_id = Some(format!("grid:{}:{}:buy", self.bot.id, level.level));
         let cmd = OrderCommand::PlaceOrder {
             symbol: self.bot.symbol.clone(),
             side: OrderSide::Buy,
             amount: level.quantity,
             price: Some(level.buy_price),
             reduce_only: false,
+            client_order_id,
         };
         if let Err(e) = self.order_executor.send_command(cmd).await {
             error!(bot_id = %self.bot.id, level = level.level, error = %e, "Failed to send buy order");
@@ -489,12 +501,14 @@ impl GridWorker {
     }
 
     async fn place_sell_order(&self, level: &GridLevel) {
+        let client_order_id = Some(format!("grid:{}:{}:sell", self.bot.id, level.level));
         let cmd = OrderCommand::PlaceOrder {
             symbol: self.bot.symbol.clone(),
             side: OrderSide::Sell,
             amount: level.hold_quantity.min(level.quantity),
             price: Some(level.sell_price),
             reduce_only: true,
+            client_order_id,
         };
         if let Err(e) = self.order_executor.send_command(cmd).await {
             error!(bot_id = %self.bot.id, level = level.level, error = %e, "Failed to send sell order");
@@ -563,12 +577,21 @@ impl GridWorker {
         let grid_status = if self.paused { "paused" } else if self.levels.is_empty() { "empty" } else { "running" };
 
         let grid_levels_json: Vec<serde_json::Value> = self.levels.iter().map(|l| {
+            let side = if l.buy_filled && l.sell_filled {
+                "sold"
+            } else if l.buy_filled && l.hold_quantity > 0.0 {
+                "hold"
+            } else {
+                "buy"
+            };
             serde_json::json!({
                 "level": l.level,
                 "price": l.price,
-                "side": "buy",
+                "side": side,
                 "quantity_usdt": l.quantity * l.price,
-                "filled": l.buy_filled,
+                "buy_filled": l.buy_filled,
+                "sell_filled": l.sell_filled,
+                "hold_quantity": l.hold_quantity,
             })
         }).collect();
 

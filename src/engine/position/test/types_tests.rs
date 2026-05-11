@@ -701,6 +701,7 @@ fn test_place_order_params_market() {
         reduce_only: false,
         position_side: None,
         position_id: None,
+    client_order_id: None,
     };
 
     assert_eq!(params.order_type, OrderType::Market);
@@ -720,6 +721,7 @@ fn test_place_order_params_limit() {
         reduce_only: false,
         position_side: None,
         position_id: None,
+    client_order_id: None,
     };
 
     assert_eq!(params.order_type, OrderType::Limit);
@@ -738,6 +740,7 @@ fn test_place_order_params_reduce_only() {
         reduce_only: true,
         position_side: Some(PositionSide::Long),
         position_id: None,
+    client_order_id: None,
     };
 
     assert!(params.reduce_only);
@@ -798,6 +801,7 @@ fn test_engine_command_all_variants_constructible() {
             reduce_only: false,
             position_side: None,
             position_id: None,
+        client_order_id: None,
         },
     };
     assert!(matches!(cmd4, EngineCommand::PlaceOrder { .. }));
@@ -1467,6 +1471,7 @@ fn test_place_order_params_construction() {
         reduce_only: false,
         position_side: Some(PositionSide::Long),
         position_id: None,
+    client_order_id: None,
     };
     assert_eq!(params.symbol, "BTC/USDT");
     assert_eq!(params.side, Side::Buy);

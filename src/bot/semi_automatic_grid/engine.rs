@@ -77,7 +77,7 @@ impl GridEngine {
                 GridCommand::StopBot { bot_id } => self.stop_bot(bot_id, "user requested").await,
                 GridCommand::PauseBot { bot_id } => self.pause_bot(bot_id).await,
                 GridCommand::ResumeBot { bot_id } => self.resume_bot(bot_id).await,
-                GridCommand::DeleteBot { bot_id } => self.delete_bot(bot_id).await,
+                GridCommand::DeleteBot { bot_id, close_position } => self.delete_bot(bot_id, close_position).await,
                 GridCommand::AdjustGrid { bot_id } => self.adjust_grid(bot_id).await,
                 GridCommand::Shutdown => {
                     self.shutdown_all().await;
@@ -143,7 +143,10 @@ impl GridEngine {
     }
 
     pub(crate) async fn stop_bot(&mut self, bot_id: Uuid, reason: &str) {
-        let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders { symbol: None }).await;
+        let symbol = self.store.load_bot(bot_id).await.ok().flatten().map(|b| b.symbol.clone());
+        let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
+            symbol,
+        }).await;
 
         if let Some(tx) = self.shutdown_txs.remove(&bot_id) {
             let _ = tx.send(()).await;
@@ -174,10 +177,28 @@ impl GridEngine {
         self.start_bot(bot_id).await;
     }
 
-    pub(crate) async fn delete_bot(&mut self, bot_id: Uuid) {
+    pub(crate) async fn delete_bot(&mut self, bot_id: Uuid, close_position: bool) {
+        let symbol = self.store.load_bot(bot_id).await.ok().flatten().map(|b| b.symbol.clone());
+
+        if close_position {
+            if let Some(ref sym) = symbol {
+                let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
+                    symbol: Some(sym.clone()),
+                }).await;
+
+                let _ = self.order_executor.send_command(OrderCommand::CloseAllPositions {
+                    symbol: sym.clone(),
+                }).await;
+
+                info!(bot_id = %bot_id, symbol = %sym, "Close position requested before deletion");
+            } else {
+                warn!(bot_id = %bot_id, "Cannot close position: bot not found in store");
+            }
+        }
+
         self.stop_bot(bot_id, "deleted").await;
         let _ = self.store.delete_bot(bot_id).await;
-        info!(bot_id = %bot_id, "Grid bot deleted");
+        info!(bot_id = %bot_id, close_position, "Grid bot deleted");
     }
 
     pub(crate) async fn adjust_grid(&mut self, bot_id: Uuid) {
