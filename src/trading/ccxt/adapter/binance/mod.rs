@@ -395,12 +395,16 @@ impl Exchange for BinanceExchange {
     }
 
     async fn fetch_balance(&self) -> Result<Vec<Balance>, ExchangeError> {
+        tracing::info!("[BinanceExchange::fetch_balance] Called, is_perpetual={}", self.is_perpetual());
         if self.is_perpetual() {
-            // USDT-M Futures: /fapi/v2/balance returns an array
+            // USDT-M Futures: /fapi/v3/balance returns an array
+            tracing::info!("[BinanceExchange::fetch_balance] /fapi/v3/balance raw response: {}", "start");
             let params: Vec<(String, String)> = vec![];
             let data = self.client
                 .signed_get(&self.signer, "/fapi/v3/balance", params)
                 .await?;
+
+            tracing::info!("[BinanceExchange::fetch_balance] /fapi/v3/balance raw response: {}", serde_json::to_string_pretty(&data).unwrap_or_default());
 
             let balances = data.as_array()
                 .ok_or_else(|| ExchangeError::Internal("Invalid futures balance response from Binance".into()))?;

@@ -456,8 +456,10 @@ impl Exchange for CcxtAdapter {
     }
 
     async fn get_balances(&self) -> anyhow::Result<Vec<Balance>> {
+        tracing::info!("[CcxtAdapter::get_balances] Calling inner.fetch_balance()...");
         let cbs = self.inner.fetch_balance().await
             .map_err(|e| anyhow::anyhow!("ccxt balance error: {}", e))?;
+        tracing::info!("[CcxtAdapter::get_balances] fetch_balance returned {} balances", cbs.len());
         Ok(cbs.into_iter().map(to_models_balance).collect())
     }
 

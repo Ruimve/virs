@@ -234,24 +234,43 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         use super::ports::AccountBalance;
         
         let exchange_key = format!("{}:perpetual", exchange);
+        tracing::info!("[get_account_balance] Looking for exchange_key: {}", exchange_key);
+        
         let ex = match self.exchange_registry.get(&exchange_key) {
-            Some(e) => e,
-            None => return AccountBalance::default(),
+            Some(e) => {
+                tracing::info!("[get_account_balance] Found exchange in registry");
+                e
+            },
+            None => {
+                tracing::warn!("[get_account_balance] Exchange NOT found in registry, returning default");
+                return AccountBalance::default();
+            },
         };
         
+        tracing::info!("[get_account_balance] Calling ex.get_balances()...");
         match ex.get_balances().await {
             Ok(bs) => {
+                tracing::info!("[get_account_balance] get_balances returned {} balances", bs.len());
                 let usdt = bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT"));
                 match usdt {
-                    Some(b) => AccountBalance {
-                        total: b.total,
-                        free: b.free,
-                        used: b.used,
+                    Some(b) => {
+                        tracing::info!("[get_account_balance] USDT balance: total={}, free={}, used={}", b.total, b.free, b.used);
+                        AccountBalance {
+                            total: b.total,
+                            free: b.free,
+                            used: b.used,
+                        }
                     },
-                    None => AccountBalance::default(),
+                    None => {
+                        tracing::warn!("[get_account_balance] No USDT balance found");
+                        AccountBalance::default()
+                    },
                 }
             }
-            Err(_) => AccountBalance::default(),
+            Err(e) => {
+                tracing::error!("[get_account_balance] get_balances error: {:?}", e);
+                AccountBalance::default()
+            },
         }
     }
 }
