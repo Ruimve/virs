@@ -91,6 +91,16 @@ impl GridAiService {
         self.resolver.is_available()
     }
 
+    pub async fn is_available_for_user(&self, user_id: &Uuid) -> bool {
+        if self.resolver.is_available() {
+            return true;
+        }
+        match self.credential_store.load_credentials(*user_id).await {
+            Ok(creds) => !creds.is_empty(),
+            Err(_) => false,
+        }
+    }
+
     pub async fn call_llm(
         &self,
         user_id: &Uuid,

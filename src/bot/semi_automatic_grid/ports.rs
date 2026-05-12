@@ -98,6 +98,7 @@ pub trait GridStore: Send + Sync {
         quantity_per_grid: f64,
         leverage: i32,
         ai_analysis: &str,
+        grid_levels_json: Option<&str>,
     ) -> anyhow::Result<()>;
     async fn save_analysis_log(
         &self,

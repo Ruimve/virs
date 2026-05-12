@@ -513,14 +513,15 @@ impl GridStore for PgGridStore {
         quantity_per_grid: f64,
         leverage: i32,
         ai_analysis: &str,
+        grid_levels_json: Option<&str>,
     ) -> anyhow::Result<()> {
         sqlx::query(
             r#"UPDATE qd_grid_bots SET
                 market_regime = $1, upper_price = $2, lower_price = $3,
                 grid_count = $4, grid_profit_pct = $5, quantity_per_grid = $6,
-                leverage = $7, ai_analysis = $8, last_adjusted_at = NOW(),
-                updated_at = NOW()
-               WHERE id = $9"#,
+                leverage = $7, ai_analysis = $8, grid_levels_json = $9,
+                last_adjusted_at = NOW(), updated_at = NOW()
+               WHERE id = $10"#,
         )
         .bind(market_regime)
         .bind(upper_price)
@@ -530,6 +531,7 @@ impl GridStore for PgGridStore {
         .bind(quantity_per_grid)
         .bind(leverage)
         .bind(ai_analysis)
+        .bind(grid_levels_json)
         .bind(bot_id)
         .execute(&self.db)
         .await?;

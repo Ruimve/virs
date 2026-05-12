@@ -184,6 +184,7 @@ impl GridStore for MockWorkerStore {
         _quantity_per_grid: f64,
         _leverage: i32,
         _ai_analysis: &str,
+        _grid_levels_json: Option<&str>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -289,6 +290,7 @@ impl GridStore for MockEngineStore {
         _quantity_per_grid: f64,
         _leverage: i32,
         _ai_analysis: &str,
+        _grid_levels_json: Option<&str>,
     ) -> anyhow::Result<()> {
         Ok(())
     }

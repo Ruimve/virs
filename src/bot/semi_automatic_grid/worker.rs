@@ -760,7 +760,7 @@ impl GridWorker {
     async fn on_llm_decision(&mut self) {
         info!(bot_id = %self.bot.id, "LLM decision tick");
 
-        if !self.ai_service.is_available() {
+        if !self.ai_service.is_available_for_user(&self.bot.user_id).await {
             warn!(bot_id = %self.bot.id, "AI service not available, skipping LLM decision");
             let _ = self.grid_event_tx.send(GridEvent::BotError {
                 bot_id: self.bot.id,
@@ -889,11 +889,33 @@ impl GridWorker {
         let action = match decision {
             Some(ref d) => {
                 info!(bot_id = %self.bot.id, action = d.action.as_str(), reason = %d.reason, source = "llm", "LLM decision");
+
+                let result = serde_json::json!({
+                    "action": d.action.as_str(),
+                    "reason": d.reason,
+                    "upper_price": d.upper_price,
+                    "lower_price": d.lower_price,
+                });
+                let _ = self.store.save_analysis_log(
+                    self.bot.id, "periodic", system_prompt, &user_prompt,
+                    &result, None,
+                ).await;
+
                 d.action.clone()
             }
             None => {
                 let rule_action = self.simple_rule_decision();
                 warn!(bot_id = %self.bot.id, action = rule_action.as_str(), source = "rule_fallback", "LLM call failed, falling back to rule-based decision");
+
+                let result = serde_json::json!({
+                    "action": rule_action.as_str(),
+                    "reason": "LLM call failed, using rule-based fallback",
+                });
+                let _ = self.store.save_analysis_log(
+                    self.bot.id, "periodic", system_prompt, &user_prompt,
+                    &result, Some("LLM call failed"),
+                ).await;
+
                 let _ = self.grid_event_tx.send(GridEvent::BotError {
                     bot_id: self.bot.id,
                     error: "LLM call failed, using rule-based fallback".to_string(),
