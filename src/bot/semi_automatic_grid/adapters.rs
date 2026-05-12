@@ -547,14 +547,16 @@ impl GridStore for PgGridStore {
         result: &serde_json::Value,
         error: Option<&str>,
     ) -> anyhow::Result<()> {
+        let status = if error.is_some() { "failed" } else { "completed" };
         sqlx::query(
-            r#"INSERT INTO qd_grid_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, result, error)
-               VALUES ($1, $2, $3, $4, $5, $6)"#,
+            r#"INSERT INTO qd_grid_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, error, completed_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())"#,
         )
         .bind(bot_id)
         .bind(analysis_type)
         .bind(system_prompt)
         .bind(user_prompt)
+        .bind(status)
         .bind(result)
         .bind(error)
         .execute(&self.db)
