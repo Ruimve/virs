@@ -277,6 +277,7 @@ CREATE TABLE IF NOT EXISTS qd_grid_bots (
     -- AI 分析结果
     market_regime VARCHAR(20),
     ai_analysis TEXT,
+    grid_levels_json TEXT,
     system_prompt TEXT,
     user_prompt TEXT,
 
@@ -339,3 +340,9 @@ CREATE TABLE IF NOT EXISTS qd_grid_analysis_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_grid_analysis_logs_bot ON qd_grid_analysis_logs(bot_id);
+
+-- Add grid_levels_json column to existing databases
+DO $$ BEGIN
+    ALTER TABLE qd_grid_bots ADD COLUMN IF NOT EXISTS grid_levels_json TEXT;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;

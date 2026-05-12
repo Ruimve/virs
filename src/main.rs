@@ -135,7 +135,7 @@ async fn main() -> anyhow::Result<()> {
     let grid_market_data_provider: Arc<dyn bot::semi_automatic_grid::ports::MarketDataProvider> =
         Arc::new(bot::semi_automatic_grid::adapters::ExchangeMarketDataProvider::new(exchange_registry.clone()));
     let real_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
-        Arc::new(bot::semi_automatic_grid::adapters::PeOrderExecutor::new(pe_cmd_tx));
+        Arc::new(bot::semi_automatic_grid::adapters::PeOrderExecutor::new(pe_cmd_tx, exchange_registry.clone()));
     let grid_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
         Arc::new(bot::semi_automatic_grid::adapters::SwitchableOrderExecutor::new(
             real_order_executor,

@@ -81,7 +81,7 @@ fn convert_order_canceled() {
     let event = EngineEvent::OrderCanceled { order };
     let result = convert_pe_event(event).unwrap();
     match result {
-        OrderEvent::OrderCanceled { order_id: id } => assert_eq!(id, order_id),
+        OrderEvent::OrderCanceled { order_id: id, .. } => assert_eq!(id, order_id),
         _ => panic!("Expected OrderCanceled"),
     }
 }

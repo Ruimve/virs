@@ -27,6 +27,23 @@ interface GridBot {
   updated_at: string;
 }
 
+interface GridLevelInfo {
+  level: number;
+  price: number;
+  side: string;
+  buy_price: number;
+  sell_price: number;
+  open_price: number;
+  close_price: number;
+  filled: boolean;
+  quantity: number;
+  buy_filled: boolean;
+  sell_filled: boolean;
+  hold_quantity: number;
+  avg_buy_price: number;
+  last_fill_price: number;
+}
+
 interface GridTrade {
   id: string;
   bot_id: string;
@@ -74,7 +91,7 @@ export default function GridPage() {
   // Trade modal
   const [showTrades, setShowTrades] = createSignal(false);
   const [trades, setTrades] = createSignal<GridTrade[]>([]);
-  const [gridLevels, setGridLevels] = createSignal<{ level: number; price: number; filled: boolean; quantity: number }[]>([]);
+  const [gridLevels, setGridLevels] = createSignal<GridLevelInfo[]>([]);
   const [tradeBotName, setTradeBotName] = createSignal('');
   const [loadingTrades, setLoadingTrades] = createSignal(false);
 
@@ -90,7 +107,7 @@ export default function GridPage() {
 
   // Grid levels in card
   const [expandedBotId, setExpandedBotId] = createSignal<string | null>(null);
-  const [cardGridLevels, setCardGridLevels] = createSignal<{ level: number; price: number; filled: boolean; quantity: number }[]>([]);
+  const [cardGridLevels, setCardGridLevels] = createSignal<GridLevelInfo[]>([]);
   const [loadingGridLevels, setLoadingGridLevels] = createSignal(false);
 
   const toggleGridLevels = async (bot: GridBot) => {
@@ -102,7 +119,7 @@ export default function GridPage() {
     setExpandedBotId(bot.id);
     setLoadingGridLevels(true);
     try {
-      const res = await api.get<{ grid_levels: { level: number; price: number; filled: boolean; quantity: number }[] }>(`/grid/${bot.id}/trades`);
+      const res = await api.get<{ grid_levels: GridLevelInfo[] }>(`/grid/${bot.id}/trades`);
       setCardGridLevels(res.data?.grid_levels || []);
     } catch (e) {
       console.error(e);
@@ -234,7 +251,7 @@ export default function GridPage() {
     setShowTrades(true);
     setLoadingTrades(true);
     try {
-      const res = await api.get<{ items: GridTrade[]; grid_levels: { level: number; price: number; filled: boolean; quantity: number }[] }>(`/grid/${bot.id}/trades`);
+      const res = await api.get<{ items: GridTrade[]; grid_levels: GridLevelInfo[] }>(`/grid/${bot.id}/trades`);
       setTrades(res.data?.items || []);
       setGridLevels(res.data?.grid_levels || []);
     } catch (e) {
@@ -570,27 +587,42 @@ export default function GridPage() {
                                   <thead class="sticky top-0 bg-white">
                                     <tr class="text-gray-400 border-b border-gray-100">
                                       <th class="text-left px-2.5 py-1.5 font-medium">层级</th>
-                                      <th class="text-right px-2.5 py-1.5 font-medium">价格</th>
-                                      <th class="text-right px-2.5 py-1.5 font-medium">成交量</th>
+                                      <th class="text-center px-2 py-1.5 font-medium">方向</th>
+                                      <th class="text-right px-2.5 py-1.5 font-medium">开仓价</th>
+                                      <th class="text-right px-2.5 py-1.5 font-medium">平仓价</th>
+                                      <th class="text-right px-2.5 py-1.5 font-medium">成交价</th>
+                                      <th class="text-right px-2.5 py-1.5 font-medium">持仓</th>
                                       <th class="text-center px-2 py-1.5 font-medium">状态</th>
                                     </tr>
                                   </thead>
                                   <tbody>
                                     <For each={cardGridLevels()}>
-                                      {(level) => (
-                                        <tr class={`border-b border-gray-50 ${level.filled ? 'bg-emerald-50/50' : ''}`}>
+                                      {(level) => {
+                                        const isHolding = level.side === 'buy' ? level.buy_filled && !level.sell_filled : level.sell_filled && !level.buy_filled;
+                                        const isClosed = level.buy_filled && level.sell_filled;
+                                        return (
+                                        <tr class={`border-b border-gray-50 ${isHolding ? 'bg-emerald-50/50' : isClosed ? 'bg-gray-50/50' : ''}`}>
                                           <td class="px-2.5 py-1 text-gray-600 font-mono">{level.level}</td>
-                                          <td class="px-2.5 py-1 text-gray-600 text-right font-mono">{level.price.toFixed(2)}</td>
-                                          <td class="px-2.5 py-1 text-gray-600 text-right font-mono">{level.quantity > 0 ? level.quantity.toFixed(4) : '-'}</td>
                                           <td class="px-2 py-1 text-center">
-                                            {level.filled ? (
-                                              <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                            <span class={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${level.side === 'buy' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                              {level.side === 'buy' ? '多' : '空'}
+                                            </span>
+                                          </td>
+                                          <td class="px-2.5 py-1 text-emerald-600 text-right font-mono">{level.open_price.toFixed(2)}</td>
+                                          <td class="px-2.5 py-1 text-red-500 text-right font-mono">{level.close_price.toFixed(2)}</td>
+                                          <td class="px-2.5 py-1 text-gray-700 text-right font-mono">{level.last_fill_price > 0 ? level.last_fill_price.toFixed(2) : '-'}</td>
+                                          <td class="px-2.5 py-1 text-gray-600 text-right font-mono">{Math.abs(level.hold_quantity) > 0 ? Math.abs(level.hold_quantity).toFixed(4) : '-'}</td>
+                                          <td class="px-2 py-1 text-center">
+                                            {isClosed ? (
+                                              <span class="inline-block w-1.5 h-1.5 rounded-full bg-gray-400" title="已平仓"></span>
+                                            ) : isHolding ? (
+                                              <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" title="持仓中"></span>
                                             ) : (
-                                              <span class="inline-block w-1.5 h-1.5 rounded-full bg-gray-300"></span>
+                                              <span class="inline-block w-1.5 h-1.5 rounded-full bg-gray-300" title="等待"></span>
                                             )}
                                           </td>
                                         </tr>
-                                      )}
+                                      )}}
                                     </For>
                                   </tbody>
                                 </table>
@@ -632,27 +664,42 @@ export default function GridPage() {
                       <thead>
                         <tr class="text-gray-400 border-b border-gray-100">
                           <th class="text-left px-3 py-1.5 font-medium">层级</th>
-                          <th class="text-right px-3 py-1.5 font-medium">价格</th>
-                          <th class="text-right px-3 py-1.5 font-medium">成交量</th>
+                          <th class="text-center px-2 py-1.5 font-medium">方向</th>
+                          <th class="text-right px-3 py-1.5 font-medium">开仓价</th>
+                          <th class="text-right px-3 py-1.5 font-medium">平仓价</th>
+                          <th class="text-right px-3 py-1.5 font-medium">成交价</th>
+                          <th class="text-right px-3 py-1.5 font-medium">持仓</th>
                           <th class="text-center px-2 py-1.5 font-medium">状态</th>
                         </tr>
                       </thead>
                       <tbody>
                         <For each={gridLevels()}>
-                          {(level) => (
-                            <tr class={`border-b border-gray-50 ${level.filled ? 'bg-emerald-50/50' : ''}`}>
+                          {(level) => {
+                            const isHolding = level.side === 'buy' ? level.buy_filled && !level.sell_filled : level.sell_filled && !level.buy_filled;
+                            const isClosed = level.buy_filled && level.sell_filled;
+                            return (
+                            <tr class={`border-b border-gray-50 ${isHolding ? 'bg-emerald-50/50' : isClosed ? 'bg-gray-50/50' : ''}`}>
                               <td class="px-3 py-1.5 text-gray-600 font-mono">{level.level}</td>
-                              <td class="px-3 py-1.5 text-gray-600 text-right font-mono">{level.price.toFixed(2)}</td>
-                              <td class="px-3 py-1.5 text-gray-600 text-right font-mono">{level.quantity > 0 ? level.quantity.toFixed(4) : '-'}</td>
                               <td class="px-2 py-1.5 text-center">
-                                {level.filled ? (
-                                  <span class="inline-block w-2 h-2 rounded-full bg-emerald-500" title="已成交"></span>
+                                <span class={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${level.side === 'buy' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                  {level.side === 'buy' ? '多' : '空'}
+                                </span>
+                              </td>
+                              <td class="px-3 py-1.5 text-emerald-600 text-right font-mono">{level.open_price.toFixed(2)}</td>
+                              <td class="px-3 py-1.5 text-red-500 text-right font-mono">{level.close_price.toFixed(2)}</td>
+                              <td class="px-3 py-1.5 text-gray-700 text-right font-mono">{level.last_fill_price > 0 ? level.last_fill_price.toFixed(2) : '-'}</td>
+                              <td class="px-3 py-1.5 text-gray-600 text-right font-mono">{Math.abs(level.hold_quantity) > 0 ? Math.abs(level.hold_quantity).toFixed(4) : '-'}</td>
+                              <td class="px-2 py-1.5 text-center">
+                                {isClosed ? (
+                                  <span class="inline-block w-2 h-2 rounded-full bg-gray-400" title="已平仓"></span>
+                                ) : isHolding ? (
+                                  <span class="inline-block w-2 h-2 rounded-full bg-emerald-500" title="持仓中"></span>
                                 ) : (
-                                  <span class="inline-block w-2 h-2 rounded-full bg-gray-300" title="未成交"></span>
+                                  <span class="inline-block w-2 h-2 rounded-full bg-gray-300" title="等待"></span>
                                 )}
                               </td>
                             </tr>
-                          )}
+                          )}}
                         </For>
                       </tbody>
                     </table>

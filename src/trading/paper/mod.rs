@@ -65,7 +65,7 @@ impl PaperOrderExecutor {
         self.enabled.store(false, std::sync::atomic::Ordering::Relaxed);
         let mut pending = self.pending.lock().await;
         for order_id in pending.keys() {
-            let _ = self.event_tx.send(OrderEvent::OrderCanceled { order_id: *order_id });
+            let _ = self.event_tx.send(OrderEvent::OrderCanceled { order_id: *order_id, symbol: None });
         }
         pending.clear();
         info!("Paper trading disabled, all pending orders canceled");
@@ -209,7 +209,7 @@ impl OrderExecutor for PaperOrderExecutor {
             OrderCommand::CancelAllOrders { symbol: _ } => {
                 let mut pending = self.pending.lock().await;
                 for order_id in pending.keys() {
-                    let _ = self.event_tx.send(OrderEvent::OrderCanceled { order_id: *order_id });
+                    let _ = self.event_tx.send(OrderEvent::OrderCanceled { order_id: *order_id, symbol: None });
                 }
                 let count = pending.len();
                 pending.clear();

@@ -15,11 +15,19 @@ fn calculate_levels_basic() {
     assert_eq!(levels.len(), 10);
     let grid_spacing = (60000.0 - 50000.0) / 10.0;
     let profit_factor = 1.0 + 0.5 / 100.0;
+    let mid_price = (60000.0 + 50000.0) / 2.0;
     for (i, level) in levels.iter().enumerate() {
-        let expected_buy = 50000.0 + grid_spacing * (i as f64 + 0.5);
-        let expected_sell = expected_buy * profit_factor;
-        let expected_qty = 100.0 / expected_buy;
+        let expected_price = 50000.0 + grid_spacing * (i as f64 + 0.5);
+        let expected_side = if expected_price < mid_price { "buy" } else { "sell" };
+        let (expected_buy, expected_sell) = if expected_side == "buy" {
+            (expected_price, expected_price * profit_factor)
+        } else {
+            (expected_price / profit_factor, expected_price)
+        };
+        let expected_qty = 100.0 / expected_price;
         assert_eq!(level.level, i as i32);
+        assert_eq!(level.side, expected_side);
+        assert!((level.price - expected_price).abs() < 0.01);
         assert!((level.buy_price - expected_buy).abs() < 0.01);
         assert!((level.sell_price - expected_sell).abs() < 0.01);
         assert!((level.quantity - expected_qty).abs() < 0.0000001);
@@ -38,7 +46,10 @@ fn calculate_levels_single() {
     let levels = GridWorker::calculate_levels(&bot);
     assert_eq!(levels.len(), 1);
     let grid_spacing = (60000.0 - 50000.0) / 1.0;
-    let expected_buy = 50000.0 + grid_spacing * 0.5;
+    let expected_price = 50000.0 + grid_spacing * 0.5;
+    let mid_price = (60000.0 + 50000.0) / 2.0;
+    let expected_side = if expected_price < mid_price { "buy" } else { "sell" };
+    let expected_buy = if expected_side == "buy" { expected_price } else { expected_price / (1.0 + 0.5 / 100.0) };
     assert!((levels[0].buy_price - expected_buy).abs() < 0.01);
 }
 
@@ -77,8 +88,10 @@ fn calculate_levels_equal_prices() {
     bot.lower_price = 50000.0;
     let levels = GridWorker::calculate_levels(&bot);
     assert_eq!(levels.len(), 10);
+    let profit_factor = 1.0 + 0.5 / 100.0;
     for level in &levels {
-        assert!((level.buy_price - 50000.0).abs() < 0.01);
+        let expected_buy = if level.side == "buy" { 50000.0 } else { 50000.0 / profit_factor };
+        assert!((level.buy_price - expected_buy).abs() < 0.01);
     }
 }
 
@@ -354,6 +367,7 @@ async fn on_order_filled_sell_with_rebuy() {
     let quantity = worker.levels[3].quantity;
     worker.levels[3].buy_filled = true;
     worker.levels[3].hold_quantity = quantity;
+    worker.levels[3].avg_buy_price = buy_price;
     let sell_order_id = Uuid::new_v4();
     worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
     worker.levels[3].sell_order_id = Some(sell_order_id);
@@ -381,6 +395,7 @@ async fn on_order_filled_sell_pnl_calculation() {
     let quantity = worker.levels[3].quantity;
     worker.levels[3].buy_filled = true;
     worker.levels[3].hold_quantity = quantity;
+    worker.levels[3].avg_buy_price = buy_price;
     let sell_order_id = Uuid::new_v4();
     worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
     let order = OrderInfo {
@@ -743,17 +758,17 @@ async fn fetch_current_price_invalid_falls_back() {
 async fn load_existing_trades_buy_and_sell() {
     let bot = make_bot_config();
     let store = Arc::new(MockWorkerStore::new().with_trades(vec![
-        GridTradeRecord { grid_level: 3, side: "buy".to_string(), quantity: 0.001, pnl: 0.0 },
-        GridTradeRecord { grid_level: 3, side: "sell".to_string(), quantity: 0.001, pnl: 5.0 },
-        GridTradeRecord { grid_level: 5, side: "buy".to_string(), quantity: 0.002, pnl: 0.0 },
+        GridTradeRecord { grid_level: 3, side: "buy".to_string(), price: 50000.0, quantity: 0.001, pnl: 0.0 },
+        GridTradeRecord { grid_level: 3, side: "sell".to_string(), price: 50250.0, quantity: 0.001, pnl: 5.0 },
+        GridTradeRecord { grid_level: 2, side: "buy".to_string(), price: 51000.0, quantity: 0.002, pnl: 0.0 },
     ]));
     let mut worker = make_worker_with_store(bot, 55000.0, store);
     worker.load_existing_trades().await;
     assert!(worker.levels[3].buy_filled);
     assert!(worker.levels[3].sell_filled);
     assert!((worker.levels[3].hold_quantity).abs() < f64::EPSILON);
-    assert!(worker.levels[5].buy_filled);
-    assert!((worker.levels[5].hold_quantity - 0.002).abs() < f64::EPSILON);
+    assert!(worker.levels[2].buy_filled);
+    assert!((worker.levels[2].hold_quantity - 0.002).abs() < f64::EPSILON);
     assert!((worker.total_pnl - 5.0).abs() < f64::EPSILON);
     assert_eq!(worker.total_trades, 3);
 }
@@ -771,8 +786,8 @@ async fn load_existing_trades_empty() {
 async fn load_existing_trades_invalid_level_ignored() {
     let bot = make_bot_config();
     let store = Arc::new(MockWorkerStore::new().with_trades(vec![
-        GridTradeRecord { grid_level: 99, side: "buy".to_string(), quantity: 0.001, pnl: 0.0 },
-        GridTradeRecord { grid_level: -1, side: "buy".to_string(), quantity: 0.001, pnl: 0.0 },
+        GridTradeRecord { grid_level: 99, side: "buy".to_string(), price: 0.0, quantity: 0.001, pnl: 0.0 },
+        GridTradeRecord { grid_level: -1, side: "buy".to_string(), price: 0.0, quantity: 0.001, pnl: 0.0 },
     ]));
     let mut worker = make_worker_with_store(bot, 55000.0, store);
     worker.load_existing_trades().await;
@@ -824,7 +839,7 @@ async fn place_initial_orders_with_hold_sells() {
 async fn on_price_tick_places_buy_below_current() {
     let order_executor = Arc::new(MockOrderExecutor::new());
     let mut worker = make_worker_with_executor(make_bot_config(), 55000.0, order_executor.clone());
-    worker.current_price = 55000.0;
+    worker.current_price = 48000.0;
     worker.on_price_tick().await;
     let commands = order_executor.commands().await;
     assert!(!commands.is_empty());
@@ -929,6 +944,7 @@ async fn on_order_filled_sell_triggers_grid_trade_closed_event() {
     let quantity = worker.levels[3].quantity;
     worker.levels[3].buy_filled = true;
     worker.levels[3].hold_quantity = quantity;
+    worker.levels[3].avg_buy_price = buy_price;
     let sell_order_id = Uuid::new_v4();
     worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
 
@@ -1105,7 +1121,7 @@ async fn on_order_filled_sell_places_rebuy_order() {
 async fn on_price_tick_paused_still_processes() {
     let order_executor = Arc::new(MockOrderExecutor::new());
     let mut worker = make_worker_with_executor(make_bot_config(), 55000.0, order_executor.clone());
-    worker.current_price = 55000.0;
+    worker.current_price = 48000.0;
     worker.paused = true;
     worker.on_price_tick().await;
     let commands = order_executor.commands().await;
@@ -1119,9 +1135,9 @@ async fn on_price_tick_sell_order_when_hold_and_price_at_sell_price() {
     let order_executor = Arc::new(MockOrderExecutor::new());
     let mut worker = make_worker_with_executor(make_bot_config(), 55000.0, order_executor.clone());
 
-    worker.levels[5].buy_filled = true;
-    worker.levels[5].hold_quantity = worker.levels[5].quantity;
-    worker.current_price = worker.levels[5].sell_price;
+    worker.levels[3].buy_filled = true;
+    worker.levels[3].hold_quantity = worker.levels[3].quantity;
+    worker.current_price = worker.levels[3].sell_price;
 
     worker.on_price_tick().await;
 
@@ -1239,8 +1255,8 @@ fn recalculate_levels_resets_all_level_state() {
 async fn load_existing_trades_sell_reduces_hold_quantity() {
     let bot = make_bot_config();
     let store = Arc::new(MockWorkerStore::new().with_trades(vec![
-        GridTradeRecord { grid_level: 3, side: "buy".to_string(), quantity: 0.002, pnl: 0.0 },
-        GridTradeRecord { grid_level: 3, side: "sell".to_string(), quantity: 0.001, pnl: 3.0 },
+        GridTradeRecord { grid_level: 3, side: "buy".to_string(), price: 50000.0, quantity: 0.002, pnl: 0.0 },
+        GridTradeRecord { grid_level: 3, side: "sell".to_string(), price: 50250.0, quantity: 0.001, pnl: 3.0 },
     ]));
     let mut worker = make_worker_with_store(bot, 55000.0, store);
     worker.load_existing_trades().await;
@@ -1257,14 +1273,14 @@ async fn load_existing_trades_sell_reduces_hold_quantity() {
 async fn load_existing_trades_multiple_buys_accumulate() {
     let bot = make_bot_config();
     let store = Arc::new(MockWorkerStore::new().with_trades(vec![
-        GridTradeRecord { grid_level: 5, side: "buy".to_string(), quantity: 0.001, pnl: 0.0 },
-        GridTradeRecord { grid_level: 5, side: "buy".to_string(), quantity: 0.001, pnl: 0.0 },
+        GridTradeRecord { grid_level: 2, side: "buy".to_string(), price: 51000.0, quantity: 0.001, pnl: 0.0 },
+        GridTradeRecord { grid_level: 2, side: "buy".to_string(), price: 51000.0, quantity: 0.001, pnl: 0.0 },
     ]));
     let mut worker = make_worker_with_store(bot, 55000.0, store);
     worker.load_existing_trades().await;
 
-    assert!(worker.levels[5].buy_filled);
-    assert!((worker.levels[5].hold_quantity - 0.002).abs() < f64::EPSILON);
+    assert!(worker.levels[2].buy_filled);
+    assert!((worker.levels[2].hold_quantity - 0.002).abs() < f64::EPSILON);
     assert_eq!(worker.total_trades, 2);
 }
 
@@ -1402,7 +1418,7 @@ async fn on_order_event_order_canceled_dispatches() {
     worker.order_level_map.insert(order_id, (2, "buy".to_string()));
     worker.levels[2].buy_order_id = Some(order_id);
 
-    worker.on_order_event(OrderEvent::OrderCanceled { order_id }).await;
+    worker.on_order_event(OrderEvent::OrderCanceled { order_id, symbol: None }).await;
 
     assert!(!worker.order_level_map.contains_key(&order_id));
     assert!(worker.levels[2].buy_order_id.is_none());

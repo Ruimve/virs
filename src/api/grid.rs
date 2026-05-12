@@ -958,9 +958,9 @@ pub async fn create_bot(
         r#"INSERT INTO qd_grid_bots (
             user_id, name, symbol, exchange, status,
             upper_price, lower_price, grid_count, grid_profit_pct, quantity_per_grid, leverage,
-            market_regime, ai_analysis, system_prompt, user_prompt,
+            market_regime, ai_analysis, grid_levels_json, system_prompt, user_prompt,
             dynamic_adjust, adjust_interval_secs
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         RETURNING *"#,
     )
     .bind(user_id)
@@ -974,6 +974,7 @@ pub async fn create_bot(
     .bind(grid_profit_pct)
     .bind(quantity_per_grid)
     .bind(leverage)
+    .bind(&None::<String>)
     .bind(&None::<String>)
     .bind(&None::<String>)
     .bind(&body.system_prompt)
@@ -1102,9 +1103,48 @@ pub async fn get_bot(
 
     let filled_set: std::collections::HashSet<i32> = filled_levels.into_iter().collect();
 
-    // 计算每个层级的成交量
     let level_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
         r#"SELECT grid_level, SUM(quantity) FROM qd_grid_trades WHERE bot_id = $1 GROUP BY grid_level"#,
+    )
+    .bind(id)
+    .fetch_all(&state.db_pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
+    let buy_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+        r#"SELECT grid_level, AVG(price) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'buy' GROUP BY grid_level"#,
+    )
+    .bind(id)
+    .fetch_all(&state.db_pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
+    let sell_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+        r#"SELECT grid_level, MAX(price) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'sell' GROUP BY grid_level"#,
+    )
+    .bind(id)
+    .fetch_all(&state.db_pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
+    let buy_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+        r#"SELECT grid_level, SUM(quantity) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'buy' GROUP BY grid_level"#,
+    )
+    .bind(id)
+    .fetch_all(&state.db_pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
+    let sell_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+        r#"SELECT grid_level, SUM(quantity) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'sell' GROUP BY grid_level"#,
     )
     .bind(id)
     .fetch_all(&state.db_pool)
@@ -1118,16 +1158,51 @@ pub async fn get_bot(
     } else {
         0.0
     };
+    let profit_factor = 1.0 + bot.grid_profit_pct / 100.0;
+    let mid_price = (bot.upper_price + bot.lower_price) / 2.0;
+
+    let llm_levels: Vec<serde_json::Value> = bot.grid_levels_json
+        .as_ref()
+        .and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(s).ok())
+        .unwrap_or_default();
 
     let mut grid_levels = Vec::new();
     for i in 0..=bot.grid_count {
         let price = bot.lower_price + grid_spacing * i as f64;
+        let llm_level = llm_levels.iter().find(|v| v["level"].as_i64() == Some(i as i64));
+        let side = if let Some(l) = llm_level {
+            l["side"].as_str().unwrap_or("buy")
+        } else {
+            if price < mid_price { "buy" } else { "sell" }
+        };
+        let (buy_price, sell_price) = if side == "buy" {
+            (price, price * profit_factor)
+        } else {
+            (price / profit_factor, price)
+        };
         let quantity = level_quantities.get(&i).copied().unwrap_or(0.0);
+        let buy_qty = buy_quantities.get(&i).copied().unwrap_or(0.0);
+        let sell_qty = sell_quantities.get(&i).copied().unwrap_or(0.0);
+        let hold_quantity = if side == "buy" { (buy_qty - sell_qty).max(0.0) } else { (sell_qty - buy_qty).max(0.0) * -1.0 };
+        let avg_buy_price = buy_fill_prices.get(&i).copied().unwrap_or(0.0);
+        let last_sell_price = sell_fill_prices.get(&i).copied().unwrap_or(0.0);
+        let has_buy = buy_fill_prices.contains_key(&i);
+        let has_sell = sell_fill_prices.contains_key(&i);
         grid_levels.push(serde_json::json!({
             "level": i,
             "price": price,
+            "side": side,
+            "buy_price": buy_price,
+            "sell_price": sell_price,
+            "open_price": if side == "buy" { buy_price } else { sell_price },
+            "close_price": if side == "buy" { sell_price } else { buy_price },
             "filled": filled_set.contains(&i),
             "quantity": quantity,
+            "buy_filled": has_buy,
+            "sell_filled": has_sell,
+            "hold_quantity": hold_quantity,
+            "avg_buy_price": avg_buy_price,
+            "last_fill_price": if has_sell { last_sell_price } else if has_buy { avg_buy_price } else { 0.0 },
         }));
     }
 
@@ -1249,16 +1324,19 @@ pub async fn start_bot(
                 let new_leverage = ai.result["leverage"].as_i64().unwrap_or(1) as i32;
                 let new_market_regime = ai.result["market_regime"].as_str().unwrap_or("ranging").to_string();
                 let new_analysis = ai.result["analysis"].as_str().unwrap_or("").to_string();
+                let new_grid_levels_json = ai.result.get("grid_levels")
+                    .filter(|v| v.is_array())
+                    .map(|v| serde_json::to_string(v).unwrap_or_default());
 
                 // 更新 bot 参数
                 let updated = sqlx::query_as::<_, GridBot>(
                     r#"UPDATE qd_grid_bots SET
                         upper_price = $1, lower_price = $2, grid_count = $3,
                         grid_profit_pct = $4, quantity_per_grid = $5, leverage = $6,
-                        market_regime = $7, ai_analysis = $8,
-                        system_prompt = $9, user_prompt = $10,
+                        market_regime = $7, ai_analysis = $8, grid_levels_json = $9,
+                        system_prompt = $10, user_prompt = $11,
                         updated_at = NOW()
-                       WHERE id = $11 RETURNING *"#,
+                       WHERE id = $12 RETURNING *"#,
                 )
                 .bind(new_upper_price)
                 .bind(new_lower_price)
@@ -1268,6 +1346,7 @@ pub async fn start_bot(
                 .bind(new_leverage)
                 .bind(&new_market_regime)
                 .bind(&new_analysis)
+                .bind(&new_grid_levels_json)
                 .bind(&system_prompt)
                 .bind(&user_prompt)
                 .bind(id)
@@ -1584,21 +1663,96 @@ pub async fn get_trades(
         .into_iter()
         .collect();
 
+        let buy_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+            r#"SELECT grid_level, AVG(price) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'buy' GROUP BY grid_level"#,
+        )
+        .bind(id)
+        .fetch_all(&state.db_pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+        let sell_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+            r#"SELECT grid_level, MAX(price) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'sell' GROUP BY grid_level"#,
+        )
+        .bind(id)
+        .fetch_all(&state.db_pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+        let buy_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+            r#"SELECT grid_level, SUM(quantity) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'buy' GROUP BY grid_level"#,
+        )
+        .bind(id)
+        .fetch_all(&state.db_pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+        let sell_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+            r#"SELECT grid_level, SUM(quantity) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'sell' GROUP BY grid_level"#,
+        )
+        .bind(id)
+        .fetch_all(&state.db_pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
         let grid_spacing = if b.grid_count > 1 {
             (b.upper_price - b.lower_price) / b.grid_count as f64
         } else {
             0.0
         };
+        let profit_factor = 1.0 + b.grid_profit_pct / 100.0;
+        let mid_price = (b.upper_price + b.lower_price) / 2.0;
+
+        let llm_levels: Vec<serde_json::Value> = b.grid_levels_json
+            .as_ref()
+            .and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(s).ok())
+            .unwrap_or_default();
 
         (0..=b.grid_count)
             .map(|i| {
                 let price = b.lower_price + grid_spacing * i as f64;
+                let llm_level = llm_levels.iter().find(|v| v["level"].as_i64() == Some(i as i64));
+                let side = if let Some(l) = llm_level {
+                    l["side"].as_str().unwrap_or("buy")
+                } else {
+                    if price < mid_price { "buy" } else { "sell" }
+                };
+                let (buy_price, sell_price) = if side == "buy" {
+                    (price, price * profit_factor)
+                } else {
+                    (price / profit_factor, price)
+                };
                 let quantity = level_quantities.get(&i).copied().unwrap_or(0.0);
+                let buy_qty = buy_quantities.get(&i).copied().unwrap_or(0.0);
+                let sell_qty = sell_quantities.get(&i).copied().unwrap_or(0.0);
+                let hold_quantity = if side == "buy" { (buy_qty - sell_qty).max(0.0) } else { (sell_qty - buy_qty).max(0.0) * -1.0 };
+                let avg_buy_price = buy_fill_prices.get(&i).copied().unwrap_or(0.0);
+                let last_sell_price = sell_fill_prices.get(&i).copied().unwrap_or(0.0);
+                let has_buy = buy_fill_prices.contains_key(&i);
+                let has_sell = sell_fill_prices.contains_key(&i);
                 serde_json::json!({
                     "level": i,
                     "price": price,
+                    "side": side,
+                    "buy_price": buy_price,
+                    "sell_price": sell_price,
+                    "open_price": if side == "buy" { buy_price } else { sell_price },
+                    "close_price": if side == "buy" { sell_price } else { buy_price },
                     "filled": filled_set.contains(&i),
                     "quantity": quantity,
+                    "buy_filled": has_buy,
+                    "sell_filled": has_sell,
+                    "hold_quantity": hold_quantity,
+                    "avg_buy_price": avg_buy_price,
+                    "last_fill_price": if has_sell { last_sell_price } else if has_buy { avg_buy_price } else { 0.0 },
                 })
             })
             .collect::<Vec<_>>()
@@ -1713,14 +1867,18 @@ pub async fn reanalyze(
             let new_quantity_per_grid = ai.result["quantity_per_grid"].as_f64().unwrap_or(bot.quantity_per_grid);
             let new_leverage = ai.result["leverage"].as_i64().unwrap_or(bot.leverage as i64) as i32;
             let new_analysis = ai.result["analysis"].as_str().unwrap_or("").to_string();
+            let new_grid_levels_json = ai.result.get("grid_levels")
+                .filter(|v| v.is_array())
+                .map(|v| serde_json::to_string(v).unwrap_or_default());
 
             let updated = sqlx::query_as::<_, GridBot>(
                 r#"UPDATE qd_grid_bots SET
                     upper_price = $1, lower_price = $2, grid_count = $3,
                     grid_profit_pct = $4, quantity_per_grid = $5, leverage = $6,
-                    market_regime = $7, ai_analysis = $8, last_adjusted_at = NOW(),
+                    market_regime = $7, ai_analysis = $8, grid_levels_json = $9,
+                    last_adjusted_at = NOW(),
                     updated_at = NOW()
-                   WHERE id = $9 RETURNING *"#,
+                   WHERE id = $10 RETURNING *"#,
             )
             .bind(new_upper_price)
             .bind(new_lower_price)
@@ -1730,6 +1888,7 @@ pub async fn reanalyze(
             .bind(new_leverage)
             .bind(&new_market_regime)
             .bind(&new_analysis)
+            .bind(&new_grid_levels_json)
             .bind(id)
             .fetch_one(&state.db_pool)
             .await

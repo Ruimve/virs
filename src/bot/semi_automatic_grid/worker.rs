@@ -42,6 +42,8 @@ pub struct GridWorker {
     pub(crate) order_level_map: HashMap<Uuid, (usize, String)>,
     /// 初始挂单范围（当前价格 ±N 层）
     initial_order_range: usize,
+    /// 防重下单：(level_index, side) -> true 表示已发送但尚未收到 on_order_placed
+    pending_orders: HashMap<(usize, String), bool>,
 }
 
 impl GridWorker {
@@ -74,30 +76,49 @@ impl GridWorker {
             paused: false,
             order_level_map: HashMap::new(),
             initial_order_range: 3,
+            pending_orders: HashMap::new(),
         }
     }
 
     /// 根据网格参数计算所有层级价格
+    /// 优先使用 LLM 返回的 grid_levels（含每层 side），回退到 mid_price 判定
     pub(crate) fn calculate_levels(bot: &GridBotConfig) -> Vec<GridLevel> {
         if bot.grid_count <= 0 || bot.upper_price <= 0.0 || bot.lower_price <= 0.0 {
             return vec![];
         }
         let grid_spacing = (bot.upper_price - bot.lower_price) / bot.grid_count as f64;
         let profit_factor = 1.0 + bot.grid_profit_pct / 100.0;
+        let mid_price = (bot.upper_price + bot.lower_price) / 2.0;
+
+        let llm_levels: Vec<serde_json::Value> = bot.grid_levels_json
+            .as_ref()
+            .and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(s).ok())
+            .unwrap_or_default();
 
         (0..bot.grid_count)
             .map(|i| {
-                let buy_price = bot.lower_price + grid_spacing * (i as f64 + 0.5);
-                let sell_price = buy_price * profit_factor;
-                let quantity = if buy_price > 0.0 {
-                    bot.quantity_per_grid / buy_price
+                let price = bot.lower_price + grid_spacing * (i as f64 + 0.5);
+                let llm_level = llm_levels.iter().find(|v| v["level"].as_i64() == Some(i as i64));
+                let side = if let Some(l) = llm_level {
+                    l["side"].as_str().unwrap_or("buy").to_string()
+                } else {
+                    if price < mid_price { "buy".to_string() } else { "sell".to_string() }
+                };
+                let (buy_price, sell_price) = if side == "buy" {
+                    (price, price * profit_factor)
+                } else {
+                    (price / profit_factor, price)
+                };
+                let quantity = if price > 0.0 {
+                    bot.quantity_per_grid / price
                 } else {
                     0.0
                 };
 
                 GridLevel {
                     level: i,
-                    price: buy_price,
+                    price,
+                    side,
                     buy_price,
                     sell_price,
                     quantity,
@@ -106,6 +127,8 @@ impl GridWorker {
                     buy_filled: false,
                     sell_filled: false,
                     hold_quantity: 0.0,
+                    avg_buy_price: 0.0,
+                    last_fill_price: None,
                 }
             })
             .collect()
@@ -203,12 +226,45 @@ impl GridWorker {
         for trade in trades {
             let level_idx = trade.grid_level as usize;
             if level_idx < self.levels.len() {
-                if trade.side == "buy" {
-                    self.levels[level_idx].buy_filled = true;
-                    self.levels[level_idx].hold_quantity += trade.quantity;
+                let level_side = self.levels[level_idx].side.clone();
+                if level_side == "buy" {
+                    if trade.side == "buy" {
+                        let level = &mut self.levels[level_idx];
+                        let old_total = level.avg_buy_price * level.hold_quantity;
+                        let new_total = old_total + trade.price * trade.quantity;
+                        level.hold_quantity += trade.quantity;
+                        level.avg_buy_price = if level.hold_quantity > 0.0 {
+                            new_total / level.hold_quantity
+                        } else {
+                            0.0
+                        };
+                        level.buy_filled = true;
+                        level.last_fill_price = Some(trade.price);
+                    } else {
+                        let level = &mut self.levels[level_idx];
+                        level.hold_quantity = (level.hold_quantity - trade.quantity).max(0.0);
+                        level.sell_filled = true;
+                        level.last_fill_price = Some(trade.price);
+                    }
                 } else {
-                    self.levels[level_idx].sell_filled = true;
-                    self.levels[level_idx].hold_quantity -= trade.quantity;
+                    if trade.side == "sell" {
+                        let level = &mut self.levels[level_idx];
+                        let old_total = level.avg_buy_price * level.hold_quantity.abs();
+                        let new_total = old_total + trade.price * trade.quantity;
+                        level.hold_quantity -= trade.quantity;
+                        level.avg_buy_price = if new_total > 0.0 {
+                            new_total / trade.quantity
+                        } else {
+                            0.0
+                        };
+                        level.sell_filled = true;
+                        level.last_fill_price = Some(trade.price);
+                    } else {
+                        let level = &mut self.levels[level_idx];
+                        level.hold_quantity = (level.hold_quantity + trade.quantity).min(0.0);
+                        level.buy_filled = true;
+                        level.last_fill_price = Some(trade.price);
+                    }
                 }
             }
             self.total_pnl += trade.pnl;
@@ -233,20 +289,48 @@ impl GridWorker {
 
         let current_level_idx = self.find_level_by_price(self.current_price);
 
-        for i in 0..self.levels.len() {
-            let level = &self.levels[i];
-            if level.buy_price < self.current_price
-                && !level.buy_filled
-                && level.buy_order_id.is_none()
-                && i.saturating_sub(current_level_idx) <= self.initial_order_range
-            {
-                self.place_buy_order(level).await;
-            }
+        let buy_init_levels: Vec<GridLevel> = self.levels.iter().enumerate()
+            .filter(|(i, level)| {
+                level.side == "buy"
+                    && level.buy_price < self.current_price
+                    && !level.buy_filled
+                    && level.buy_order_id.is_none()
+                    && i.saturating_sub(current_level_idx) <= self.initial_order_range
+            })
+            .map(|(_, level)| level.clone())
+            .collect();
+
+        for level in &buy_init_levels {
+            self.place_buy_order(level).await;
         }
 
-        for level in &self.levels {
-            if level.hold_quantity > 0.0 && level.sell_order_id.is_none() {
+        let sell_init_levels: Vec<GridLevel> = self.levels.iter().enumerate()
+            .filter(|(i, level)| {
+                level.side == "sell"
+                    && level.sell_price > self.current_price
+                    && !level.sell_filled
+                    && level.sell_order_id.is_none()
+                    && current_level_idx.saturating_sub(*i) <= self.initial_order_range
+            })
+            .map(|(_, level)| level.clone())
+            .collect();
+
+        for level in &sell_init_levels {
+            self.place_sell_order(level).await;
+        }
+
+        let close_levels: Vec<GridLevel> = self.levels.iter()
+            .filter(|level| level.hold_quantity > 0.0
+                && ((level.side == "buy" && level.sell_order_id.is_none())
+                    || (level.side == "sell" && level.buy_order_id.is_none())))
+            .cloned()
+            .collect();
+
+        for level in &close_levels {
+            if level.side == "buy" {
                 self.place_sell_order(level).await;
+            } else {
+                self.place_buy_order(level).await;
             }
         }
 
@@ -273,19 +357,60 @@ impl GridWorker {
             return;
         }
 
-        for level in &self.levels {
-            if self.current_price < level.buy_price
-                && !level.buy_filled
-                && level.buy_order_id.is_none()
-            {
-                self.place_buy_order(level).await;
-            }
-            if level.hold_quantity > 0.0
-                && self.current_price >= level.sell_price
-                && level.sell_order_id.is_none()
-            {
-                self.place_sell_order(level).await;
-            }
+        let buy_open_levels: Vec<GridLevel> = self.levels.iter()
+            .filter(|level| {
+                level.side == "buy"
+                    && self.current_price < level.buy_price
+                    && !level.buy_filled
+                    && level.buy_order_id.is_none()
+            })
+            .cloned()
+            .collect();
+
+        for level in &buy_open_levels {
+            self.place_buy_order(level).await;
+        }
+
+        let sell_open_levels: Vec<GridLevel> = self.levels.iter()
+            .filter(|level| {
+                level.side == "sell"
+                    && self.current_price > level.sell_price
+                    && !level.sell_filled
+                    && level.sell_order_id.is_none()
+            })
+            .cloned()
+            .collect();
+
+        for level in &sell_open_levels {
+            self.place_sell_order(level).await;
+        }
+
+        let buy_close_levels: Vec<GridLevel> = self.levels.iter()
+            .filter(|level| {
+                level.side == "buy"
+                    && level.hold_quantity > 0.0
+                    && self.current_price >= level.sell_price
+                    && level.sell_order_id.is_none()
+            })
+            .cloned()
+            .collect();
+
+        for level in &buy_close_levels {
+            self.place_sell_order(level).await;
+        }
+
+        let sell_close_levels: Vec<GridLevel> = self.levels.iter()
+            .filter(|level| {
+                level.side == "sell"
+                    && level.hold_quantity < 0.0
+                    && self.current_price <= level.buy_price
+                    && level.buy_order_id.is_none()
+            })
+            .cloned()
+            .collect();
+
+        for level in &sell_close_levels {
+            self.place_buy_order(level).await;
         }
 
         self.broadcast_state();
@@ -307,7 +432,12 @@ impl GridWorker {
                 }
                 self.on_order_filled(&order).await;
             }
-            OrderEvent::OrderCanceled { order_id } => {
+            OrderEvent::OrderCanceled { order_id, symbol } => {
+                if let Some(ref sym) = symbol {
+                    if sym != &self.bot.symbol {
+                        return;
+                    }
+                }
                 self.on_order_canceled(order_id).await;
             }
             OrderEvent::OrderFailed { order_id, reason } => {
@@ -350,8 +480,9 @@ impl GridWorker {
         }
 
         if let Some(ref coi) = order.client_order_id {
-            if let Some((level_idx, side)) = Self::parse_client_order_id(coi) {
+            if let Some((level_idx, side)) = Self::parse_client_order_id(coi, &self.bot.id) {
                 if level_idx < self.levels.len() {
+                    self.pending_orders.remove(&(level_idx, side.clone()));
                     self.order_level_map.insert(order.id, (level_idx, side.clone()));
 
                     if side == "buy" {
@@ -376,9 +507,12 @@ impl GridWorker {
         );
     }
 
-    fn parse_client_order_id(coi: &str) -> Option<(usize, String)> {
+    fn parse_client_order_id(coi: &str, bot_id: &Uuid) -> Option<(usize, String)> {
         let parts: Vec<&str> = coi.splitn(4, ':').collect();
         if parts.len() == 4 && parts[0] == "grid" {
+            if parts[1] != bot_id.to_string() {
+                return None;
+            }
             if let Ok(level_idx) = parts[2].parse::<usize>() {
                 let side = parts[3].to_string();
                 return Some((level_idx, side));
@@ -409,45 +543,94 @@ impl GridWorker {
         let is_buy_match = order.side == OrderSide::Buy;
         let is_sell_match = !is_buy_match;
         let level_num = level.level;
+        let level_side = level.side.clone();
 
-        let rebuy_level = if is_sell_match {
-            Some(GridLevel {
-                level: level.level, price: level.price,
-                buy_price: level.buy_price, sell_price: level.sell_price,
-                quantity: level.quantity, buy_order_id: None, sell_order_id: None,
-                buy_filled: false, sell_filled: false, hold_quantity: 0.0,
-            })
+        if level_side == "buy" {
+            if is_buy_match {
+                let old_total = level.avg_buy_price * level.hold_quantity;
+                let new_total = old_total + price * order.filled;
+                level.hold_quantity += order.filled;
+                level.avg_buy_price = if level.hold_quantity > 0.0 {
+                    new_total / level.hold_quantity
+                } else {
+                    0.0
+                };
+                level.buy_filled = true;
+                level.buy_order_id = None;
+                level.last_fill_price = Some(price);
+            } else {
+                level.sell_filled = true;
+                level.sell_order_id = None;
+                level.hold_quantity = (level.hold_quantity - order.filled).max(0.0);
+                level.last_fill_price = Some(price);
+            }
         } else {
-            None
-        };
-
-        if is_buy_match {
-            level.buy_filled = true;
-            level.buy_order_id = None;
-            level.hold_quantity += order.filled;
-        } else {
-            level.sell_filled = true;
-            level.sell_order_id = None;
-            level.hold_quantity -= order.filled;
+            if is_sell_match {
+                let old_total = level.avg_buy_price * level.hold_quantity.abs();
+                let new_total = old_total + price * order.filled;
+                level.hold_quantity -= order.filled;
+                level.avg_buy_price = if new_total > 0.0 {
+                    new_total / order.filled
+                } else {
+                    0.0
+                };
+                level.sell_filled = true;
+                level.sell_order_id = None;
+                level.last_fill_price = Some(price);
+            } else {
+                level.buy_filled = true;
+                level.buy_order_id = None;
+                level.hold_quantity = (level.hold_quantity + order.filled).min(0.0);
+                level.last_fill_price = Some(price);
+            }
         }
 
         self.order_level_map.remove(&order.id);
+        self.pending_orders.remove(&(idx, side_str.to_string()));
 
-        let pnl = if is_sell_match {
-            let buy_cost = level.buy_price * order.filled;
-            let sell_revenue = price * order.filled;
-            sell_revenue - buy_cost
+        let pnl = if level_side == "buy" {
+            if is_sell_match && self.levels[idx].avg_buy_price > 0.0 {
+                let buy_cost = self.levels[idx].avg_buy_price * order.filled;
+                let sell_revenue = price * order.filled;
+                sell_revenue - buy_cost
+            } else {
+                0.0
+            }
         } else {
-            0.0
+            if is_buy_match && self.levels[idx].avg_buy_price > 0.0 {
+                let sell_revenue = self.levels[idx].avg_buy_price * order.filled;
+                let buy_cost = price * order.filled;
+                sell_revenue - buy_cost
+            } else {
+                0.0
+            }
         };
 
-        let hold = level.hold_quantity;
+        let hold = self.levels[idx].hold_quantity;
         self.total_pnl += pnl;
         self.total_trades += 1;
         self.grid_filled_count += 1;
 
-        if let Some(rebuy) = rebuy_level {
+        if level_side == "buy" && is_sell_match && hold <= 0.0 {
+            let rebuy = GridLevel {
+                level: level_num, price: self.levels[idx].price,
+                side: self.levels[idx].side.clone(),
+                buy_price: self.levels[idx].buy_price, sell_price: self.levels[idx].sell_price,
+                quantity: self.levels[idx].quantity, buy_order_id: None, sell_order_id: None,
+                buy_filled: false, sell_filled: false, hold_quantity: 0.0,
+                avg_buy_price: 0.0, last_fill_price: None,
+            };
             self.place_buy_order(&rebuy).await;
+        } else if level_side == "sell" && is_buy_match && hold >= 0.0 {
+            let reoffer = GridLevel {
+                level: level_num, price: self.levels[idx].price,
+                side: self.levels[idx].side.clone(),
+                buy_price: self.levels[idx].buy_price, sell_price: self.levels[idx].sell_price,
+                quantity: self.levels[idx].quantity, buy_order_id: None, sell_order_id: None,
+                buy_filled: false, sell_filled: false, hold_quantity: 0.0,
+                avg_buy_price: 0.0, last_fill_price: None,
+            };
+            self.place_sell_order(&reoffer).await;
         }
 
         self.record_trade(level_num, side_str, price, order.filled, pnl).await;
@@ -472,46 +655,72 @@ impl GridWorker {
     }
 
     pub(crate) fn clear_order_id(&mut self, order_id: Uuid) {
-        self.order_level_map.remove(&order_id);
+        if let Some((idx, side)) = self.order_level_map.remove(&order_id) {
+            self.pending_orders.remove(&(idx, side));
+        }
         for level in &mut self.levels {
             if level.buy_order_id == Some(order_id) {
                 level.buy_order_id = None;
+                self.pending_orders.remove(&(level.level as usize, "buy".to_string()));
             }
             if level.sell_order_id == Some(order_id) {
                 level.sell_order_id = None;
+                self.pending_orders.remove(&(level.level as usize, "sell".to_string()));
             }
         }
     }
 
     // ── 下单 ──
 
-    async fn place_buy_order(&self, level: &GridLevel) {
+    async fn place_buy_order(&mut self, level: &GridLevel) {
+        let key = (level.level as usize, "buy".to_string());
+        if self.pending_orders.contains_key(&key) {
+            return;
+        }
+        let (amount, reduce_only) = if level.side == "sell" {
+            (level.hold_quantity.abs().min(level.quantity), true)
+        } else {
+            (level.quantity, false)
+        };
         let client_order_id = Some(format!("grid:{}:{}:buy", self.bot.id, level.level));
         let cmd = OrderCommand::PlaceOrder {
             symbol: self.bot.symbol.clone(),
             side: OrderSide::Buy,
-            amount: level.quantity,
+            amount,
             price: Some(level.buy_price),
-            reduce_only: false,
+            reduce_only,
             client_order_id,
         };
         if let Err(e) = self.order_executor.send_command(cmd).await {
             error!(bot_id = %self.bot.id, level = level.level, error = %e, "Failed to send buy order");
+        } else {
+            self.pending_orders.insert(key, true);
         }
     }
 
-    async fn place_sell_order(&self, level: &GridLevel) {
+    async fn place_sell_order(&mut self, level: &GridLevel) {
+        let key = (level.level as usize, "sell".to_string());
+        if self.pending_orders.contains_key(&key) {
+            return;
+        }
+        let (amount, reduce_only) = if level.side == "sell" {
+            (level.quantity, false)
+        } else {
+            (level.hold_quantity.min(level.quantity), true)
+        };
         let client_order_id = Some(format!("grid:{}:{}:sell", self.bot.id, level.level));
         let cmd = OrderCommand::PlaceOrder {
             symbol: self.bot.symbol.clone(),
             side: OrderSide::Sell,
-            amount: level.hold_quantity.min(level.quantity),
+            amount,
             price: Some(level.sell_price),
-            reduce_only: true,
+            reduce_only,
             client_order_id,
         };
         if let Err(e) = self.order_executor.send_command(cmd).await {
             error!(bot_id = %self.bot.id, level = level.level, error = %e, "Failed to send sell order");
+        } else {
+            self.pending_orders.insert(key, true);
         }
     }
 
@@ -577,21 +786,22 @@ impl GridWorker {
         let grid_status = if self.paused { "paused" } else if self.levels.is_empty() { "empty" } else { "running" };
 
         let grid_levels_json: Vec<serde_json::Value> = self.levels.iter().map(|l| {
-            let side = if l.buy_filled && l.sell_filled {
-                "sold"
-            } else if l.buy_filled && l.hold_quantity > 0.0 {
-                "hold"
+            let status = if l.side == "buy" {
+                if l.buy_filled && l.sell_filled { "sold" } else if l.buy_filled && l.hold_quantity > 0.0 { "hold" } else { "buy" }
             } else {
-                "buy"
+                if l.sell_filled && l.buy_filled { "bought" } else if l.sell_filled && l.hold_quantity < 0.0 { "hold" } else { "sell" }
             };
             serde_json::json!({
                 "level": l.level,
                 "price": l.price,
-                "side": side,
+                "side": l.side,
+                "status": status,
                 "quantity_usdt": l.quantity * l.price,
                 "buy_filled": l.buy_filled,
                 "sell_filled": l.sell_filled,
                 "hold_quantity": l.hold_quantity,
+                "avg_buy_price": if l.avg_buy_price > 0.0 { l.avg_buy_price } else { l.buy_price },
+                "last_fill_price": l.last_fill_price,
             })
         }).collect();
 

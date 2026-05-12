@@ -161,6 +161,11 @@ impl GridEngine {
     }
 
     pub(crate) async fn pause_bot(&mut self, bot_id: Uuid) {
+        let symbol = self.store.load_bot(bot_id).await.ok().flatten().map(|b| b.symbol.clone());
+        let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
+            symbol,
+        }).await;
+
         if let Some(tx) = self.shutdown_txs.remove(&bot_id) {
             let _ = tx.send(()).await;
         }

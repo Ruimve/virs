@@ -279,11 +279,12 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
 
 pub struct PeOrderExecutor {
     pe_cmd_tx: tokio::sync::mpsc::Sender<pe_types::EngineCommand>,
+    exchange_registry: Arc<ExchangeRegistry>,
 }
 
 impl PeOrderExecutor {
-    pub fn new(pe_cmd_tx: tokio::sync::mpsc::Sender<pe_types::EngineCommand>) -> Self {
-        Self { pe_cmd_tx }
+    pub fn new(pe_cmd_tx: tokio::sync::mpsc::Sender<pe_types::EngineCommand>, exchange_registry: Arc<ExchangeRegistry>) -> Self {
+        Self { pe_cmd_tx, exchange_registry }
     }
 }
 
@@ -315,8 +316,40 @@ impl OrderExecutor for PeOrderExecutor {
                     symbol,
                 }
             }
-            OrderCommand::CloseAllPositions { symbol: _ } => {
-                warn!("CloseAllPositions not yet implemented via PE - requires position_id lookup");
+            OrderCommand::CloseAllPositions { symbol } => {
+                let exchange_key = format!("perpetual:{}", symbol);
+                if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+                    match ex.get_positions(Some(&symbol)).await {
+                        Ok(positions) => {
+                            for pos in positions {
+                                if pos.symbol == symbol && pos.size.abs() > 0.0 {
+                                    let is_long = pos.size > 0.0;
+                                    let close_cmd = pe_types::EngineCommand::PlaceOrder {
+                                        params: pe_types::PlaceOrderParams {
+                                            symbol: symbol.clone(),
+                                            side: if is_long { pe_types::Side::Sell } else { pe_types::Side::Buy },
+                                            order_type: pe_types::OrderType::Market,
+                                            amount: pos.size.abs(),
+                                            price: None,
+                                            reduce_only: true,
+                                            position_side: Some(if is_long { pe_types::PositionSide::Long } else { pe_types::PositionSide::Short }),
+                                            position_id: None,
+                                            client_order_id: Some(format!("grid:close:{}", symbol)),
+                                        },
+                                    };
+                                    if let Err(e) = self.pe_cmd_tx.send(close_cmd).await {
+                                        warn!(symbol = %symbol, error = %e, "Failed to send close position order");
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!(symbol = %symbol, error = %e, "Failed to get positions for CloseAllPositions");
+                        }
+                    }
+                } else {
+                    warn!(exchange_key = %exchange_key, "Exchange not found for CloseAllPositions");
+                }
                 return Ok(());
             }
         };
@@ -371,6 +404,7 @@ impl GridStore for PgGridStore {
             .map(|t| GridTradeRecord {
                 grid_level: t.grid_level,
                 side: t.side,
+                price: t.price,
                 quantity: t.quantity,
                 pnl: t.pnl,
             })
@@ -568,6 +602,7 @@ fn bot_to_config(bot: &crate::models::GridBot) -> GridBotConfig {
         dynamic_adjust: bot.dynamic_adjust,
         adjust_interval_secs: bot.adjust_interval_secs,
         market_regime: bot.market_regime.clone(),
+        grid_levels_json: bot.grid_levels_json.clone(),
         system_prompt: bot.system_prompt.clone(),
     }
 }
@@ -696,6 +731,7 @@ pub fn convert_pe_event(event: pe_types::EngineEvent) -> Option<OrderEvent> {
         }),
         pe_types::EngineEvent::OrderCanceled { order } => Some(OrderEvent::OrderCanceled {
             order_id: order.id,
+            symbol: Some(order.symbol.clone()),
         }),
         pe_types::EngineEvent::OrderFailed { order_id, reason } => Some(OrderEvent::OrderFailed {
             order_id,

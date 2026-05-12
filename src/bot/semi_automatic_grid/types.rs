@@ -5,16 +5,19 @@ use uuid::Uuid;
 /// 单个网格层的状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GridLevel {
-    pub level: i32,           // 层级编号 (0 = 最低价, grid_count-1 = 最高价)
-    pub price: f64,           // 该层价格
-    pub buy_price: f64,       // 买入挂单价格（该层价格）
-    pub sell_price: f64,      // 卖出挂单价格（下一层价格 = buy_price * (1 + profit_pct)）
-    pub quantity: f64,        // 该层数量
-    pub buy_order_id: Option<Uuid>,   // 买入订单 ID（Position Engine 内部）
-    pub sell_order_id: Option<Uuid>,  // 卖出订单 ID
-    pub buy_filled: bool,     // 买入是否已成交
-    pub sell_filled: bool,    // 卖出是否已成交
-    pub hold_quantity: f64,   // 当前持有数量（买入成交 - 卖出成交）
+    pub level: i32,
+    pub price: f64,
+    pub side: String,
+    pub buy_price: f64,
+    pub sell_price: f64,
+    pub quantity: f64,
+    pub buy_order_id: Option<Uuid>,
+    pub sell_order_id: Option<Uuid>,
+    pub buy_filled: bool,
+    pub sell_filled: bool,
+    pub hold_quantity: f64,
+    pub avg_buy_price: f64,
+    pub last_fill_price: Option<f64>,
 }
 
 /// 网格运行状态

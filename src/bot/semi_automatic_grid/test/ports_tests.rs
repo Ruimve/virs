@@ -261,9 +261,9 @@ fn grid_order_event_order_filled() {
 #[test]
 fn grid_order_event_order_canceled() {
     let id = Uuid::new_v4();
-    let event = OrderEvent::OrderCanceled { order_id: id };
+    let event = OrderEvent::OrderCanceled { order_id: id, symbol: None };
     match event {
-        OrderEvent::OrderCanceled { order_id } => assert_eq!(order_id, id),
+        OrderEvent::OrderCanceled { order_id, .. } => assert_eq!(order_id, id),
         _ => panic!("Expected OrderCanceled"),
     }
 }
@@ -357,6 +357,7 @@ fn grid_trade_record_construction() {
     let record = GridTradeRecord {
         grid_level: 3,
         side: "buy".to_string(),
+        price: 50000.0,
         quantity: 0.001,
         pnl: 5.0,
     };
@@ -371,6 +372,7 @@ fn grid_trade_record_negative_pnl() {
     let record = GridTradeRecord {
         grid_level: 5,
         side: "sell".to_string(),
+        price: 51000.0,
         quantity: 0.002,
         pnl: -3.5,
     };
@@ -382,6 +384,7 @@ fn grid_trade_record_zero_pnl() {
     let record = GridTradeRecord {
         grid_level: 0,
         side: "buy".to_string(),
+        price: 50000.0,
         quantity: 0.001,
         pnl: 0.0,
     };
@@ -393,6 +396,7 @@ fn grid_trade_record_zero_quantity() {
     let record = GridTradeRecord {
         grid_level: 2,
         side: "sell".to_string(),
+        price: 0.0,
         quantity: 0.0,
         pnl: 0.0,
     };
@@ -404,6 +408,7 @@ fn grid_trade_record_negative_level() {
     let record = GridTradeRecord {
         grid_level: -1,
         side: "buy".to_string(),
+        price: 50000.0,
         quantity: 0.001,
         pnl: 0.0,
     };
@@ -430,6 +435,7 @@ fn grid_bot_config_construction() {
         dynamic_adjust: true,
         adjust_interval_secs: 300,
         market_regime: Some("trending".to_string()),
+        grid_levels_json: None,
         system_prompt: Some("test prompt".to_string()),
     };
     assert_eq!(config.id, id);
@@ -448,7 +454,7 @@ fn grid_bot_config_zero_grid_count() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert_eq!(config.grid_count, 0);
 }
@@ -463,7 +469,7 @@ fn grid_bot_config_inverted_prices() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert!(config.upper_price < config.lower_price);
 }
@@ -478,7 +484,7 @@ fn grid_bot_config_zero_profit_pct() {
         grid_profit_pct: 0.0, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert!((config.grid_profit_pct).abs() < f64::EPSILON);
 }
@@ -493,7 +499,7 @@ fn grid_bot_config_zero_quantity() {
         grid_profit_pct: 0.5, quantity_per_grid: 0.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert!((config.quantity_per_grid).abs() < f64::EPSILON);
 }
@@ -508,7 +514,7 @@ fn grid_bot_config_negative_profit_pct() {
         grid_profit_pct: -1.0, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert!(config.grid_profit_pct < 0.0);
 }
@@ -523,7 +529,7 @@ fn grid_bot_config_negative_grid_count() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert!(config.grid_count < 0);
 }
@@ -538,7 +544,7 @@ fn grid_bot_config_no_optional_fields() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert!(config.market_regime.is_none());
     assert!(config.system_prompt.is_none());
@@ -554,7 +560,7 @@ fn grid_bot_config_zero_prices() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert!((config.upper_price).abs() < f64::EPSILON);
     assert!((config.lower_price).abs() < f64::EPSILON);
@@ -618,8 +624,8 @@ async fn mock_store_load_trades_empty() {
 #[tokio::test]
 async fn mock_store_load_trades_with_data() {
     let store = MockWorkerStore::new().with_trades(vec![
-        GridTradeRecord { grid_level: 0, side: "buy".to_string(), quantity: 0.001, pnl: 0.0 },
-        GridTradeRecord { grid_level: 1, side: "sell".to_string(), quantity: 0.001, pnl: 5.0 },
+        GridTradeRecord { grid_level: 0, side: "buy".to_string(), price: 50000.0, quantity: 0.001, pnl: 0.0 },
+        GridTradeRecord { grid_level: 1, side: "sell".to_string(), price: 51000.0, quantity: 0.001, pnl: 5.0 },
     ]);
     let trades = store.load_trades(Uuid::new_v4()).await.unwrap();
     assert_eq!(trades.len(), 2);
@@ -696,7 +702,7 @@ fn grid_bot_config_same_upper_lower_price() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert!((config.upper_price - config.lower_price).abs() < f64::EPSILON);
 }
@@ -711,7 +717,7 @@ fn grid_bot_config_very_large_grid_count() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert_eq!(config.grid_count, 10000);
 }
@@ -726,7 +732,7 @@ fn grid_bot_config_very_small_prices() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert!(config.upper_price < 1.0);
     assert!(config.lower_price < 1.0);
@@ -742,7 +748,7 @@ fn grid_bot_config_negative_prices() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert!(config.upper_price < 0.0);
     assert!(config.lower_price < 0.0);
@@ -758,7 +764,7 @@ fn grid_bot_config_negative_quantity() {
         grid_profit_pct: 0.5, quantity_per_grid: -100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert!(config.quantity_per_grid < 0.0);
 }
@@ -773,7 +779,7 @@ fn grid_bot_config_large_profit_pct() {
         grid_profit_pct: 100.0, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None,
     };
     assert!((config.grid_profit_pct - 100.0).abs() < f64::EPSILON);
 }
@@ -882,6 +888,7 @@ fn grid_trade_record_very_large_pnl() {
     let record = GridTradeRecord {
         grid_level: 0,
         side: "sell".to_string(),
+        price: 100000.0,
         quantity: 100.0,
         pnl: 1e8,
     };
@@ -893,6 +900,7 @@ fn grid_trade_record_very_large_quantity() {
     let record = GridTradeRecord {
         grid_level: 0,
         side: "buy".to_string(),
+        price: 1.0,
         quantity: 1e6,
         pnl: 0.0,
     };
@@ -904,6 +912,7 @@ fn grid_trade_record_invalid_side_string() {
     let record = GridTradeRecord {
         grid_level: 0,
         side: "unknown".to_string(),
+        price: 0.0,
         quantity: 0.001,
         pnl: 0.0,
     };

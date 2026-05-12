@@ -106,9 +106,10 @@ fn grid_event_status_update_roundtrip() {
         symbol: "BTCUSDT".to_string(),
         exchange: "binance".to_string(),
         levels: vec![GridLevel {
-            level: 0, price: 50000.0, buy_price: 50000.0, sell_price: 50250.0,
+            level: 0, price: 50000.0, side: "buy".to_string(), buy_price: 50000.0, sell_price: 50250.0,
             quantity: 0.002, buy_order_id: Some(Uuid::new_v4()), sell_order_id: None,
             buy_filled: true, sell_filled: false, hold_quantity: 0.002,
+            avg_buy_price: 50000.0, last_fill_price: Some(50000.0),
         }],
         current_price: 55000.0,
         total_pnl: 100.0,
@@ -137,9 +138,10 @@ fn grid_event_status_update_roundtrip() {
 #[test]
 fn grid_level_roundtrip_default() {
     let level = GridLevel {
-        level: 3, price: 52000.0, buy_price: 52000.0, sell_price: 52260.0,
+        level: 3, price: 52000.0, side: "buy".to_string(), buy_price: 52000.0, sell_price: 52260.0,
         quantity: 0.0019, buy_order_id: None, sell_order_id: None,
         buy_filled: false, sell_filled: false, hold_quantity: 0.0,
+        avg_buy_price: 0.0, last_fill_price: None,
     };
     let json = serde_json::to_string(&level).unwrap();
     let de: GridLevel = serde_json::from_str(&json).unwrap();
@@ -160,9 +162,10 @@ fn grid_level_roundtrip_with_order_ids() {
     let buy_id = Uuid::new_v4();
     let sell_id = Uuid::new_v4();
     let level = GridLevel {
-        level: 3, price: 52000.0, buy_price: 52000.0, sell_price: 52260.0,
+        level: 3, price: 52000.0, side: "buy".to_string(), buy_price: 52000.0, sell_price: 52260.0,
         quantity: 0.0019, buy_order_id: Some(buy_id), sell_order_id: Some(sell_id),
         buy_filled: true, sell_filled: false, hold_quantity: 0.0019,
+        avg_buy_price: 52000.0, last_fill_price: Some(52000.0),
     };
     let json = serde_json::to_string(&level).unwrap();
     let de: GridLevel = serde_json::from_str(&json).unwrap();
@@ -176,9 +179,10 @@ fn grid_level_roundtrip_with_order_ids() {
 #[test]
 fn grid_level_roundtrip_sell_filled_hold_zero() {
     let level = GridLevel {
-        level: 1, price: 51000.0, buy_price: 51000.0, sell_price: 51255.0,
+        level: 1, price: 51000.0, side: "buy".to_string(), buy_price: 51000.0, sell_price: 51255.0,
         quantity: 0.0019, buy_order_id: None, sell_order_id: None,
         buy_filled: true, sell_filled: true, hold_quantity: 0.0,
+        avg_buy_price: 51000.0, last_fill_price: Some(51255.0),
     };
     let json = serde_json::to_string(&level).unwrap();
     let de: GridLevel = serde_json::from_str(&json).unwrap();
@@ -190,9 +194,10 @@ fn grid_level_roundtrip_sell_filled_hold_zero() {
 #[test]
 fn grid_level_roundtrip_negative_hold_quantity() {
     let level = GridLevel {
-        level: 2, price: 52000.0, buy_price: 52000.0, sell_price: 52260.0,
+        level: 2, price: 52000.0, side: "sell".to_string(), buy_price: 52000.0, sell_price: 52260.0,
         quantity: 0.0019, buy_order_id: None, sell_order_id: None,
         buy_filled: true, sell_filled: true, hold_quantity: -0.001,
+        avg_buy_price: 52000.0, last_fill_price: Some(52260.0),
     };
     let json = serde_json::to_string(&level).unwrap();
     let de: GridLevel = serde_json::from_str(&json).unwrap();
@@ -202,9 +207,10 @@ fn grid_level_roundtrip_negative_hold_quantity() {
 #[test]
 fn grid_level_roundtrip_zero_prices() {
     let level = GridLevel {
-        level: 0, price: 0.0, buy_price: 0.0, sell_price: 0.0,
+        level: 0, price: 0.0, side: "buy".to_string(), buy_price: 0.0, sell_price: 0.0,
         quantity: 0.0, buy_order_id: None, sell_order_id: None,
         buy_filled: false, sell_filled: false, hold_quantity: 0.0,
+        avg_buy_price: 0.0, last_fill_price: None,
     };
     let json = serde_json::to_string(&level).unwrap();
     let de: GridLevel = serde_json::from_str(&json).unwrap();
@@ -237,19 +243,22 @@ fn grid_state_roundtrip_multiple_levels() {
     let bot_id = Uuid::new_v4();
     let levels = vec![
         GridLevel {
-            level: 0, price: 50000.0, buy_price: 50000.0, sell_price: 50250.0,
+            level: 0, price: 50000.0, side: "buy".to_string(), buy_price: 50000.0, sell_price: 50250.0,
             quantity: 0.002, buy_order_id: None, sell_order_id: None,
             buy_filled: false, sell_filled: false, hold_quantity: 0.0,
+            avg_buy_price: 0.0, last_fill_price: None,
         },
         GridLevel {
-            level: 1, price: 51000.0, buy_price: 51000.0, sell_price: 51255.0,
+            level: 1, price: 51000.0, side: "buy".to_string(), buy_price: 51000.0, sell_price: 51255.0,
             quantity: 0.0019, buy_order_id: Some(Uuid::new_v4()), sell_order_id: None,
             buy_filled: true, sell_filled: false, hold_quantity: 0.0019,
+            avg_buy_price: 51000.0, last_fill_price: Some(51000.0),
         },
         GridLevel {
-            level: 2, price: 52000.0, buy_price: 52000.0, sell_price: 52260.0,
+            level: 2, price: 52000.0, side: "buy".to_string(), buy_price: 52000.0, sell_price: 52260.0,
             quantity: 0.0019, buy_order_id: None, sell_order_id: Some(Uuid::new_v4()),
             buy_filled: true, sell_filled: true, hold_quantity: 0.0,
+            avg_buy_price: 52000.0, last_fill_price: Some(52260.0),
         },
     ];
     let state = GridState {
@@ -386,9 +395,10 @@ fn grid_command_debug_all_variants() {
 #[test]
 fn grid_level_max_level_number() {
     let level = GridLevel {
-        level: i32::MAX, price: 1.0, buy_price: 1.0, sell_price: 1.01,
+        level: i32::MAX, price: 1.0, side: "buy".to_string(), buy_price: 1.0, sell_price: 1.01,
         quantity: 100.0, buy_order_id: None, sell_order_id: None,
         buy_filled: false, sell_filled: false, hold_quantity: 0.0,
+        avg_buy_price: 0.0, last_fill_price: None,
     };
     assert_eq!(level.level, i32::MAX);
 }
@@ -396,9 +406,10 @@ fn grid_level_max_level_number() {
 #[test]
 fn grid_level_very_small_quantity() {
     let level = GridLevel {
-        level: 0, price: 100000.0, buy_price: 100000.0, sell_price: 100500.0,
+        level: 0, price: 100000.0, side: "buy".to_string(), buy_price: 100000.0, sell_price: 100500.0,
         quantity: 0.00000001, buy_order_id: None, sell_order_id: None,
         buy_filled: false, sell_filled: false, hold_quantity: 0.00000001,
+        avg_buy_price: 0.0, last_fill_price: None,
     };
     assert!((level.quantity - 0.00000001).abs() < 1e-12);
     assert!((level.hold_quantity - 0.00000001).abs() < 1e-12);

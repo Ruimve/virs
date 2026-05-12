@@ -19,6 +19,7 @@ pub struct AnalysisLogEntry {
 pub struct GridTradeRecord {
     pub grid_level: i32,
     pub side: String,
+    pub price: f64,
     pub quantity: f64,
     pub pnl: f64,
 }
@@ -39,6 +40,7 @@ pub struct GridBotConfig {
     pub dynamic_adjust: bool,
     pub adjust_interval_secs: i32,
     pub market_regime: Option<String>,
+    pub grid_levels_json: Option<String>,
     pub system_prompt: Option<String>,
 }
 

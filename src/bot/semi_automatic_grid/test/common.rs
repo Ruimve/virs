@@ -382,6 +382,7 @@ pub fn make_bot_config() -> GridBotConfig {
         dynamic_adjust: false,
         adjust_interval_secs: 300,
         market_regime: None,
+        grid_levels_json: None,
         system_prompt: None,
     }
 }

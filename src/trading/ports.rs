@@ -50,7 +50,7 @@ pub enum OrderCommand {
 pub enum OrderEvent {
     OrderPlaced { order: OrderInfo },
     OrderFilled { order: OrderInfo },
-    OrderCanceled { order_id: Uuid },
+    OrderCanceled { order_id: Uuid, symbol: Option<String> },
     OrderFailed { order_id: Uuid, reason: String },
     RiskAlert { level: String, message: String },
     LiquidationWarning {

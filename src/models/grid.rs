@@ -30,6 +30,7 @@ pub struct GridBot {
     pub leverage: i32,
     pub market_regime: Option<String>,
     pub ai_analysis: Option<String>,
+    pub grid_levels_json: Option<String>,
     pub system_prompt: Option<String>,
     pub user_prompt: Option<String>,
     pub dynamic_adjust: bool,
