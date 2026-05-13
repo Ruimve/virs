@@ -92,7 +92,10 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         };
 
         let last_idx = klines_1h.len().saturating_sub(1);
-        let current_price = klines_1h.last().map(|k| k.close).unwrap_or(0.0);
+        let current_price = match ex.get_ticker(symbol).await {
+            Ok(t) if t.last > 0.0 => t.last,
+            _ => klines_1h.last().map(|k| k.close).unwrap_or(0.0),
+        };
 
         let rsi = indicators::rsi_at(&klines_1h, last_idx, 14);
         let atr = indicators::atr_at(&klines_1h, last_idx, 14);
@@ -513,13 +516,13 @@ impl GridStore for PgGridStore {
         quantity_per_grid: f64,
         leverage: i32,
         ai_analysis: &str,
-        grid_levels_json: Option<&str>,
+        grid_levels_json: Option<&serde_json::Value>,
     ) -> anyhow::Result<()> {
         sqlx::query(
             r#"UPDATE qd_grid_bots SET
                 market_regime = $1, upper_price = $2, lower_price = $3,
                 grid_count = $4, grid_profit_pct = $5, quantity_per_grid = $6,
-                leverage = $7, ai_analysis = $8, grid_levels_json = $9,
+                leverage = $7, ai_analysis = $8, grid_levels_json = $9::jsonb,
                 last_adjusted_at = NOW(), updated_at = NOW()
                WHERE id = $10"#,
         )

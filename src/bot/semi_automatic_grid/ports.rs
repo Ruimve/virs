@@ -40,7 +40,7 @@ pub struct GridBotConfig {
     pub dynamic_adjust: bool,
     pub adjust_interval_secs: i32,
     pub market_regime: Option<String>,
-    pub grid_levels_json: Option<String>,
+    pub grid_levels_json: Option<serde_json::Value>,
     pub system_prompt: Option<String>,
 }
 
@@ -98,7 +98,7 @@ pub trait GridStore: Send + Sync {
         quantity_per_grid: f64,
         leverage: i32,
         ai_analysis: &str,
-        grid_levels_json: Option<&str>,
+        grid_levels_json: Option<&serde_json::Value>,
     ) -> anyhow::Result<()>;
     async fn save_analysis_log(
         &self,

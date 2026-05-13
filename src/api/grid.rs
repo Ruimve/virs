@@ -960,7 +960,7 @@ pub async fn create_bot(
             upper_price, lower_price, grid_count, grid_profit_pct, quantity_per_grid, leverage,
             market_regime, ai_analysis, grid_levels_json, system_prompt, user_prompt,
             dynamic_adjust, adjust_interval_secs
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18)
         RETURNING *"#,
     )
     .bind(user_id)
@@ -976,7 +976,7 @@ pub async fn create_bot(
     .bind(leverage)
     .bind(&None::<String>)
     .bind(&None::<String>)
-    .bind(&None::<String>)
+    .bind(&None::<serde_json::Value>)
     .bind(&body.system_prompt)
     .bind(&body.user_prompt)
     .bind(dynamic_adjust)
@@ -1163,7 +1163,7 @@ pub async fn get_bot(
 
     let llm_levels: Vec<serde_json::Value> = bot.grid_levels_json
         .as_ref()
-        .and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(s).ok())
+        .and_then(|v| v.as_array().cloned())
         .unwrap_or_default();
 
     let mut grid_levels = Vec::new();
@@ -1326,14 +1326,14 @@ pub async fn start_bot(
                 let new_analysis = ai.result["analysis"].as_str().unwrap_or("").to_string();
                 let new_grid_levels_json = ai.result.get("grid_levels")
                     .filter(|v| v.is_array())
-                    .map(|v| serde_json::to_string(v).unwrap_or_default());
+                    .cloned();
 
                 // 更新 bot 参数
                 let updated = sqlx::query_as::<_, GridBot>(
                     r#"UPDATE qd_grid_bots SET
                         upper_price = $1, lower_price = $2, grid_count = $3,
                         grid_profit_pct = $4, quantity_per_grid = $5, leverage = $6,
-                        market_regime = $7, ai_analysis = $8, grid_levels_json = $9,
+                        market_regime = $7, ai_analysis = $8, grid_levels_json = $9::jsonb,
                         system_prompt = $10, user_prompt = $11,
                         updated_at = NOW()
                        WHERE id = $12 RETURNING *"#,
@@ -1713,7 +1713,7 @@ pub async fn get_trades(
 
         let llm_levels: Vec<serde_json::Value> = b.grid_levels_json
             .as_ref()
-            .and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(s).ok())
+            .and_then(|v| v.as_array().cloned())
             .unwrap_or_default();
 
         (0..=b.grid_count)
@@ -1869,13 +1869,13 @@ pub async fn reanalyze(
             let new_analysis = ai.result["analysis"].as_str().unwrap_or("").to_string();
             let new_grid_levels_json = ai.result.get("grid_levels")
                 .filter(|v| v.is_array())
-                .map(|v| serde_json::to_string(v).unwrap_or_default());
+                .cloned();
 
             let updated = sqlx::query_as::<_, GridBot>(
                 r#"UPDATE qd_grid_bots SET
                     upper_price = $1, lower_price = $2, grid_count = $3,
                     grid_profit_pct = $4, quantity_per_grid = $5, leverage = $6,
-                    market_regime = $7, ai_analysis = $8, grid_levels_json = $9,
+                    market_regime = $7, ai_analysis = $8, grid_levels_json = $9::jsonb,
                     last_adjusted_at = NOW(),
                     updated_at = NOW()
                    WHERE id = $10 RETURNING *"#,

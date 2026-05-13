@@ -92,7 +92,7 @@ impl GridWorker {
 
         let llm_levels: Vec<serde_json::Value> = bot.grid_levels_json
             .as_ref()
-            .and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(s).ok())
+            .and_then(|v| v.as_array().cloned())
             .unwrap_or_default();
 
         (0..bot.grid_count)
