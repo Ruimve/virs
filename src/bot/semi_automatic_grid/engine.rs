@@ -9,28 +9,21 @@ use crate::bot::semi_automatic_grid::ai::GridAiService;
 use crate::bot::semi_automatic_grid::ports::*;
 use crate::bot::semi_automatic_grid::types::{GridCommand, GridEvent};
 use crate::bot::semi_automatic_grid::worker::GridWorker;
+use crate::engine::kline::KlineEngine;
+use crate::engine::kline::types::MarketType;
 
 pub struct GridEngine {
-    /// 数据存储
     store: Arc<dyn GridStore>,
-    /// AI 决策服务
     ai_service: Arc<GridAiService>,
-    /// 价格提供者
     price_provider: Arc<dyn PriceProvider>,
-    /// 订单执行器
     order_executor: Arc<dyn OrderExecutor>,
-    /// 市场数据提供者
     market_data_provider: Arc<dyn MarketDataProvider>,
-    /// 外部事件广播（adapter 将 PE 事件转换后发送到此通道）
     event_tx: broadcast::Sender<OrderEvent>,
-    /// 网格事件广播（发送给前端）
     grid_event_tx: broadcast::Sender<GridEvent>,
-    /// 网格命令接收
     cmd_rx: Option<mpsc::Receiver<GridCommand>>,
-    /// 运行中的 bot workers
     workers: HashMap<Uuid, tokio::task::JoinHandle<()>>,
-    /// 运行中 bot 的 shutdown channel
     shutdown_txs: HashMap<Uuid, mpsc::Sender<()>>,
+    kline_engine: Option<Arc<KlineEngine>>,
 }
 
 impl GridEngine {
@@ -41,6 +34,7 @@ impl GridEngine {
         order_executor: Arc<dyn OrderExecutor>,
         market_data_provider: Arc<dyn MarketDataProvider>,
         event_tx: broadcast::Sender<OrderEvent>,
+        kline_engine: Option<Arc<KlineEngine>>,
     ) -> (Self, mpsc::Sender<GridCommand>, broadcast::Sender<GridEvent>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
         let (grid_event_tx, _) = broadcast::channel(256);
@@ -56,6 +50,7 @@ impl GridEngine {
             cmd_rx: Some(cmd_rx),
             workers: HashMap::new(),
             shutdown_txs: HashMap::new(),
+            kline_engine,
         };
 
         (engine, cmd_tx, grid_event_tx)
@@ -125,6 +120,12 @@ impl GridEngine {
         let order_executor = self.order_executor.clone();
         let ai_service = self.ai_service.clone();
         let market_data_provider = self.market_data_provider.clone();
+
+        if let Some(ref engine) = self.kline_engine {
+            if let Err(e) = engine.subscribe(&bot.exchange, &bot.symbol, MarketType::Perpetual).await {
+                warn!(bot_id = %bot_id, exchange = %bot.exchange, symbol = %bot.symbol, error = %e, "Failed to subscribe KlineEngine");
+            }
+        }
 
         let handle = tokio::spawn(async move {
             let mut worker = GridWorker::new(

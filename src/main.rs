@@ -131,9 +131,11 @@ async fn main() -> anyhow::Result<()> {
     // Adapter 实现
     let grid_store = Arc::new(bot::semi_automatic_grid::adapters::PgGridStore::new(db_pool.clone()));
     let grid_price_provider: Arc<dyn bot::semi_automatic_grid::ports::PriceProvider> =
-        Arc::new(bot::semi_automatic_grid::adapters::ExchangePriceProvider::new(exchange_registry.clone()));
+        Arc::new(bot::semi_automatic_grid::adapters::ExchangePriceProvider::new(exchange_registry.clone())
+            .with_kline_engine(kline_engine.clone()));
     let grid_market_data_provider: Arc<dyn bot::semi_automatic_grid::ports::MarketDataProvider> =
-        Arc::new(bot::semi_automatic_grid::adapters::ExchangeMarketDataProvider::new(exchange_registry.clone()));
+        Arc::new(bot::semi_automatic_grid::adapters::ExchangeMarketDataProvider::new(exchange_registry.clone())
+            .with_kline_engine(kline_engine.clone()));
     let real_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
         Arc::new(bot::semi_automatic_grid::adapters::PeOrderExecutor::new(pe_cmd_tx, exchange_registry.clone()));
     let grid_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
@@ -162,6 +164,7 @@ async fn main() -> anyhow::Result<()> {
         grid_order_executor,
         grid_market_data_provider,
         grid_event_tx.clone(),
+        Some(kline_engine.clone()),
     );
 
     // PE 事件转换 bridge

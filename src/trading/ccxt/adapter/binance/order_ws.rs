@@ -91,9 +91,12 @@ struct ExecutionReportInner {
     /// 剩余数量
     #[serde(rename = "Q")]
     remaining_qty: Option<String>,
-    /// 成交价格
+    /// 成交价格（最后一笔成交价）
     #[serde(rename = "L")]
     last_fill_price: String,
+    /// 累计成交均价（仅永续合约 ORDER_TRADE_UPDATE 提供）
+    #[serde(rename = "ap")]
+    avg_fill_price: Option<String>,
     /// 成交数量
     #[serde(rename = "l")]
     last_fill_qty: String,
@@ -145,7 +148,11 @@ impl ExecutionReportInner {
                     let filled = self.filled_qty.parse::<f64>().unwrap_or(0.0);
                     (orig - filled).max(0.0)
                 }),
-            price: self.last_fill_price.parse().unwrap_or(0.0),
+            price: self.avg_fill_price
+                .as_ref()
+                .and_then(|s| s.parse::<f64>().ok())
+                .filter(|&p| p > 0.0)
+                .unwrap_or_else(|| self.last_fill_price.parse().unwrap_or(0.0)),
             amount: self.orig_qty.parse().unwrap_or(0.0),
             commission: self.commission.parse().unwrap_or(0.0),
             timestamp: DateTime::from_timestamp_millis(self.trade_time)
@@ -546,6 +553,7 @@ mod tests {
                 filled_qty: "0.0".to_string(),
                 remaining_qty: Some("1.0".to_string()),
                 last_fill_price: "0.0".to_string(),
+                avg_fill_price: None,
                 last_fill_qty: "0.0".to_string(),
                 commission: "0.0".to_string(),
                 commission_asset: "USDT".to_string(),
@@ -635,6 +643,7 @@ mod tests {
             filled_qty: "3.0".to_string(),
             remaining_qty: None, // None -> fallback
             last_fill_price: "65000.00".to_string(),
+            avg_fill_price: None,
             last_fill_qty: "3.0".to_string(),
             commission: "0.195".to_string(),
             commission_asset: "USDT".to_string(),
@@ -699,6 +708,7 @@ mod tests {
             filled_qty: filled_qty.to_string(),
             remaining_qty: Some(remaining_qty.to_string()),
             last_fill_price: last_fill_price.to_string(),
+            avg_fill_price: None,
             last_fill_qty: last_fill_qty.to_string(),
             commission: commission.to_string(),
             commission_asset: "USDT".to_string(),

@@ -14,23 +14,58 @@ use crate::bot::semi_automatic_grid::ports::*;
 use crate::config::AiConfig;
 use crate::trading::exchange::registry::ExchangeRegistry;
 use crate::engine::position::types as pe_types;
+use crate::engine::kline::KlineEngine;
+use crate::engine::kline::types::{Candle, Timeframe};
 use crate::services::ai::{AiService, AiUserConfig};
 use crate::indicators;
 use crate::models::Kline;
 
+fn candle_to_kline(c: &Candle) -> Kline {
+    Kline {
+        open_time: c.open_time,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+        volume: c.volume,
+        close_time: c.close_time,
+        quote_volume: c.quote_volume,
+        trades: c.trades,
+        symbol: String::new(),
+        exchange: String::new(),
+        interval: String::new(),
+    }
+}
+
 pub struct ExchangePriceProvider {
     exchange_registry: Arc<ExchangeRegistry>,
+    kline_engine: Option<Arc<KlineEngine>>,
 }
 
 impl ExchangePriceProvider {
     pub fn new(exchange_registry: Arc<ExchangeRegistry>) -> Self {
-        Self { exchange_registry }
+        Self { exchange_registry, kline_engine: None }
+    }
+
+    pub fn with_kline_engine(mut self, engine: Arc<KlineEngine>) -> Self {
+        self.kline_engine = Some(engine);
+        self
     }
 }
 
 #[async_trait]
 impl PriceProvider for ExchangePriceProvider {
     async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64> {
+        if let Some(ref engine) = self.kline_engine {
+            if let Some(candles) = engine.get_klines_async(exchange, symbol, Timeframe::M1).await {
+                if let Some(last) = candles.last() {
+                    if last.close > 0.0 {
+                        return Some(last.close);
+                    }
+                }
+            }
+        }
+
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key)?;
         match ex.get_ticker(symbol).await {
@@ -44,11 +79,39 @@ impl PriceProvider for ExchangePriceProvider {
 
 pub struct ExchangeMarketDataProvider {
     exchange_registry: Arc<ExchangeRegistry>,
+    kline_engine: Option<Arc<KlineEngine>>,
 }
 
 impl ExchangeMarketDataProvider {
     pub fn new(exchange_registry: Arc<ExchangeRegistry>) -> Self {
-        Self { exchange_registry }
+        Self { exchange_registry, kline_engine: None }
+    }
+
+    pub fn with_kline_engine(mut self, engine: Arc<KlineEngine>) -> Self {
+        self.kline_engine = Some(engine);
+        self
+    }
+
+    async fn get_klines_from_cache_or_rest(
+        &self,
+        exchange: &str,
+        symbol: &str,
+        timeframe: Timeframe,
+        min_count: usize,
+    ) -> Option<Vec<Kline>> {
+        if let Some(ref engine) = self.kline_engine {
+            if let Some(candles) = engine.get_klines_async(exchange, symbol, timeframe).await {
+                if candles.len() >= min_count {
+                    return Some(candles.iter().map(candle_to_kline).collect());
+                }
+                debug!(
+                    exchange, symbol, timeframe = timeframe.as_str(),
+                    cached = candles.len(), required = min_count,
+                    "KlineEngine cache insufficient, falling back to REST"
+                );
+            }
+        }
+        None
     }
 }
 
@@ -64,38 +127,66 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             }
         };
 
-        let now_ms = chrono::Utc::now().timestamp_millis();
-        let start_1h = now_ms - 200 * 3600 * 1000;
-        let start_4h = now_ms - 50 * 4 * 3600 * 1000;
-        let start_15m = now_ms - 200 * 15 * 60 * 1000;
-
-        let klines_1h = match ex.get_klines_range(symbol, "1h", start_1h, now_ms).await {
-            Ok(k) if k.len() >= 30 => k,
-            Ok(k) => {
+        let klines_1h = match self.get_klines_from_cache_or_rest(exchange, symbol, Timeframe::H1, 30).await {
+            Some(k) if k.len() >= 30 => k,
+            Some(k) => {
                 warn!(exchange, symbol, count = k.len(), "1h klines insufficient (< 30), returning empty snapshot");
                 return MarketSnapshot::default();
             }
-            Err(e) => {
-                warn!(exchange, symbol, error = %e, "Failed to fetch 1h klines, returning empty snapshot");
-                return MarketSnapshot::default();
+            None => {
+                let now_ms = chrono::Utc::now().timestamp_millis();
+                let start_1h = now_ms - 200 * 3600 * 1000;
+                match ex.get_klines_range(symbol, "1h", start_1h, now_ms).await {
+                    Ok(k) if k.len() >= 30 => k,
+                    Ok(k) => {
+                        warn!(exchange, symbol, count = k.len(), "1h klines insufficient (< 30), returning empty snapshot");
+                        return MarketSnapshot::default();
+                    }
+                    Err(e) => {
+                        warn!(exchange, symbol, error = %e, "Failed to fetch 1h klines, returning empty snapshot");
+                        return MarketSnapshot::default();
+                    }
+                }
             }
         };
 
-        let klines_4h = match ex.get_klines_range(symbol, "4h", start_4h, now_ms).await {
-            Ok(k) => k,
-            Err(_) => vec![],
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let start_4h = now_ms - 50 * 4 * 3600 * 1000;
+        let start_15m = now_ms - 200 * 15 * 60 * 1000;
+
+        let klines_4h = match self.get_klines_from_cache_or_rest(exchange, symbol, Timeframe::H4, 1).await {
+            Some(k) => k,
+            None => match ex.get_klines_range(symbol, "4h", start_4h, now_ms).await {
+                Ok(k) => k,
+                Err(_) => vec![],
+            },
         };
 
-        let klines_15m = match ex.get_klines_range(symbol, "15m", start_15m, now_ms).await {
-            Ok(k) => k,
-            Err(_) => vec![],
+        let klines_15m = match self.get_klines_from_cache_or_rest(exchange, symbol, Timeframe::M15, 1).await {
+            Some(k) => k,
+            None => match ex.get_klines_range(symbol, "15m", start_15m, now_ms).await {
+                Ok(k) => k,
+                Err(_) => vec![],
+            },
         };
 
         let last_idx = klines_1h.len().saturating_sub(1);
-        let current_price = match ex.get_ticker(symbol).await {
-            Ok(t) if t.last > 0.0 => t.last,
-            _ => klines_1h.last().map(|k| k.close).unwrap_or(0.0),
-        };
+        let mut current_price: f64 = 0.0;
+        if let Some(ref engine) = self.kline_engine {
+            if let Some(candles) = engine.get_klines_async(exchange, symbol, Timeframe::M1).await {
+                if let Some(last) = candles.last() {
+                    if last.close > 0.0 {
+                        current_price = last.close;
+                    }
+                }
+            }
+        }
+        if current_price <= 0.0 {
+            current_price = match ex.get_ticker(symbol).await {
+                Ok(t) if t.last > 0.0 => t.last,
+                _ => klines_1h.last().map(|k| k.close).unwrap_or(0.0),
+            };
+        }
 
         let rsi = indicators::rsi_at(&klines_1h, last_idx, 14);
         let atr = indicators::atr_at(&klines_1h, last_idx, 14);
@@ -169,7 +260,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         let h4_bb_width_pct = if !klines_4h.is_empty() { indicators::bbands_width_at(&klines_4h, h4_last, 20, 2.0) } else { 0.0 };
 
         let m15_last = klines_15m.len().saturating_sub(1);
-        let m15_current_price = klines_15m.last().map(|k| k.close).unwrap_or(0.0);
+        let m15_current_price = current_price;
         let m15_bb_width_pct = if !klines_15m.is_empty() { indicators::bbands_width_at(&klines_15m, m15_last, 20, 2.0) } else { 0.0 };
         let m15_atr = if !klines_15m.is_empty() { indicators::atr_at(&klines_15m, m15_last, 14) } else { 0.0 };
         let m15_atr_sma20 = if klines_15m.len() >= 20 {
