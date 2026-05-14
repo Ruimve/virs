@@ -814,37 +814,30 @@ impl GridWorker {
 
         let grid_status = if self.paused { "paused" } else if self.levels.is_empty() { "empty" } else { "running" };
 
-        let grid_levels_json: Vec<serde_json::Value> = self.levels.iter().map(|l| {
-            let status = if l.side == "buy" {
-                if l.buy_filled && l.sell_filled { "sold" } else if l.buy_filled && l.hold_quantity > 0.0 { "hold" } else { "buy" }
-            } else {
-                if l.sell_filled && l.buy_filled { "bought" } else if l.sell_filled && l.hold_quantity < 0.0 { "hold" } else { "sell" }
-            };
-            serde_json::json!({
-                "level": l.level,
-                "price": l.price,
-                "side": l.side,
-                "status": status,
-                "quantity_usdt": l.quantity * l.price,
-                "buy_filled": l.buy_filled,
-                "sell_filled": l.sell_filled,
-                "hold_quantity": l.hold_quantity,
-                "avg_buy_price": if l.avg_buy_price > 0.0 { l.avg_buy_price } else { l.buy_price },
-                "last_fill_price": l.last_fill_price,
-            })
-        }).collect();
-
         let current_grid_config = if grid_status == "empty" {
             "none".to_string()
         } else {
-            serde_json::json!({
-                "upper_price": self.bot.upper_price,
-                "lower_price": self.bot.lower_price,
-                "grid_count": self.bot.grid_count,
-                "grid_profit_pct": self.bot.grid_profit_pct,
-                "quantity_per_grid": self.bot.quantity_per_grid,
-                "grid_levels": grid_levels_json,
-            }).to_string()
+            let mut md = String::new();
+            md.push_str(&format!("- 上界价格：{:.2}\n", self.bot.upper_price));
+            md.push_str(&format!("- 下界价格：{:.2}\n", self.bot.lower_price));
+            md.push_str(&format!("- 网格数量：{}\n", self.bot.grid_count));
+            md.push_str(&format!("- 网格利润：{:.2}%\n", self.bot.grid_profit_pct));
+            md.push_str(&format!("- 每格金额：{:.2} USDT\n\n", self.bot.quantity_per_grid));
+            md.push_str("| 层级 | 价格 | 方向 | 状态 | 金额(USDT) | 持仓量 | 均价 |\n");
+            md.push_str("|------|------|------|------|------------|--------|------|\n");
+            for l in &self.levels {
+                let status = if l.side == "buy" {
+                    if l.buy_filled && l.sell_filled { "sold" } else if l.buy_filled && l.hold_quantity > 0.0 { "hold" } else { "buy" }
+                } else {
+                    if l.sell_filled && l.buy_filled { "bought" } else if l.sell_filled && l.hold_quantity < 0.0 { "hold" } else { "sell" }
+                };
+                let avg_price = if l.avg_buy_price > 0.0 { l.avg_buy_price } else { l.buy_price };
+                md.push_str(&format!(
+                    "| {} | {:.2} | {} | {} | {:.2} | {:.6} | {:.2} |\n",
+                    l.level, l.price, l.side, status, l.quantity * l.price, l.hold_quantity, avg_price
+                ));
+            }
+            md
         };
 
         let ema_distance_pct = if snapshot.ema50 > 0.0 {

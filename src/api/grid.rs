@@ -498,13 +498,10 @@ fn build_user_prompt(template: &str, ind: &GridIndicators, bot: &crate::models::
     let current_grid_config = if grid_status == "empty" {
         "none".to_string()
     } else {
-        serde_json::json!({
-            "upper_price": bot.upper_price,
-            "lower_price": bot.lower_price,
-            "grid_count": bot.grid_count,
-            "grid_profit_pct": bot.grid_profit_pct,
-            "quantity_per_grid": bot.quantity_per_grid,
-        }).to_string()
+        format!(
+            "- 上界价格：{:.2}\n- 下界价格：{:.2}\n- 网格数量：{}\n- 网格利润：{:.2}%\n- 每格金额：{:.2} USDT",
+            bot.upper_price, bot.lower_price, bot.grid_count, bot.grid_profit_pct, bot.quantity_per_grid
+        )
     };
 
     let h1_atr_sma20_str = if ind.h1_atr_sma20.is_nan() { "N/A".to_string() } else { format!("{:.4}", ind.h1_atr_sma20) };
