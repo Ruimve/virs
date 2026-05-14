@@ -1,5 +1,13 @@
-import { createSignal, For, Show, onMount } from 'solid-js';
+import { createSignal, For, Show, onMount, onCleanup } from 'solid-js';
 import { api } from '../../lib/api';
+
+function formatSmart(value: number): string {
+  if (value === 0) return '0';
+  if (value >= 1) return value.toFixed(4);
+  if (value >= 0.001) return value.toFixed(6);
+  if (value >= 0.000001) return value.toFixed(8);
+  return value.toExponential(2);
+}
 
 // ── Types ──
 
@@ -154,15 +162,15 @@ export default function GridPage() {
     }
   };
 
-  const loadBots = async () => {
-    setLoading(true);
+  const loadBots = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const res = await api.get<{ items: GridBot[]; total: number }>('/grid/list');
       if (res.data) setBots(res.data.items);
     } catch (e: any) {
       console.error('Failed to load bots:', e);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -298,7 +306,12 @@ export default function GridPage() {
     return <span class="text-gray-400">0.00</span>;
   };
 
-  onMount(() => { loadBots(); loadPaperStatus(); });
+  onMount(() => {
+    loadBots();
+    loadPaperStatus();
+    const interval = setInterval(() => { loadBots(false); }, 10000);
+    onCleanup(() => clearInterval(interval));
+  });
 
   return (
     <div class="min-h-screen bg-gray-50 text-gray-900">
@@ -611,7 +624,7 @@ export default function GridPage() {
                                           <td class="px-2.5 py-1 text-emerald-600 text-right font-mono">{level.open_price.toFixed(2)}</td>
                                           <td class="px-2.5 py-1 text-red-500 text-right font-mono">{level.close_price.toFixed(2)}</td>
                                           <td class="px-2.5 py-1 text-gray-700 text-right font-mono">{level.last_fill_price > 0 ? level.last_fill_price.toFixed(2) : '-'}</td>
-                                          <td class="px-2.5 py-1 text-gray-600 text-right font-mono">{Math.abs(level.hold_quantity) > 0 ? Math.abs(level.hold_quantity).toFixed(4) : '-'}</td>
+                                          <td class="px-2.5 py-1 text-gray-600 text-right font-mono">{Math.abs(level.hold_quantity) > 0 ? `${formatSmart(Math.abs(level.hold_quantity))} ≈ $${(Math.abs(level.hold_quantity) * level.price).toFixed(2)}` : '-'}</td>
                                           <td class="px-2 py-1 text-center">
                                             {isClosed ? (
                                               <span class="inline-block w-1.5 h-1.5 rounded-full bg-gray-400" title="已平仓"></span>
@@ -688,7 +701,7 @@ export default function GridPage() {
                               <td class="px-3 py-1.5 text-emerald-600 text-right font-mono">{level.open_price.toFixed(2)}</td>
                               <td class="px-3 py-1.5 text-red-500 text-right font-mono">{level.close_price.toFixed(2)}</td>
                               <td class="px-3 py-1.5 text-gray-700 text-right font-mono">{level.last_fill_price > 0 ? level.last_fill_price.toFixed(2) : '-'}</td>
-                              <td class="px-3 py-1.5 text-gray-600 text-right font-mono">{Math.abs(level.hold_quantity) > 0 ? Math.abs(level.hold_quantity).toFixed(4) : '-'}</td>
+                              <td class="px-3 py-1.5 text-gray-600 text-right font-mono">{Math.abs(level.hold_quantity) > 0 ? `${formatSmart(Math.abs(level.hold_quantity))} ≈ $${(Math.abs(level.hold_quantity) * level.price).toFixed(2)}` : '-'}</td>
                               <td class="px-2 py-1.5 text-center">
                                 {isClosed ? (
                                   <span class="inline-block w-2 h-2 rounded-full bg-gray-400" title="已平仓"></span>

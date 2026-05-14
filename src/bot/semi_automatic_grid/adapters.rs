@@ -119,33 +119,48 @@ impl ExchangeMarketDataProvider {
 impl MarketDataProvider for ExchangeMarketDataProvider {
     async fn get_market_snapshot(&self, exchange: &str, symbol: &str) -> MarketSnapshot {
         let exchange_key = format!("{}:perpetual", exchange);
-        let ex = match self.exchange_registry.get(&exchange_key) {
-            Some(e) => e,
-            None => {
-                warn!(exchange, symbol, exchange_key, "Exchange not found in registry, returning empty snapshot");
-                return MarketSnapshot::default();
-            }
-        };
+        let ex = self.exchange_registry.get(&exchange_key);
 
         let klines_1h = match self.get_klines_from_cache_or_rest(exchange, symbol, Timeframe::H1, 30).await {
             Some(k) if k.len() >= 30 => k,
             Some(k) => {
-                warn!(exchange, symbol, count = k.len(), "1h klines insufficient (< 30), returning empty snapshot");
-                return MarketSnapshot::default();
+                if let Some(ref ex) = ex {
+                    let now_ms = chrono::Utc::now().timestamp_millis();
+                    let start_1h = now_ms - 200 * 3600 * 1000;
+                    match ex.get_klines_range(symbol, "1h", start_1h, now_ms).await {
+                        Ok(k) if k.len() >= 30 => k,
+                        Ok(k) => {
+                            warn!(exchange, symbol, count = k.len(), "1h klines insufficient (< 30), returning empty snapshot");
+                            return MarketSnapshot::default();
+                        }
+                        Err(e) => {
+                            warn!(exchange, symbol, error = %e, "Failed to fetch 1h klines, returning empty snapshot");
+                            return MarketSnapshot::default();
+                        }
+                    }
+                } else {
+                    warn!(exchange, symbol, count = k.len(), "1h klines insufficient (< 30) and no exchange for REST fallback");
+                    return MarketSnapshot::default();
+                }
             }
             None => {
-                let now_ms = chrono::Utc::now().timestamp_millis();
-                let start_1h = now_ms - 200 * 3600 * 1000;
-                match ex.get_klines_range(symbol, "1h", start_1h, now_ms).await {
-                    Ok(k) if k.len() >= 30 => k,
-                    Ok(k) => {
-                        warn!(exchange, symbol, count = k.len(), "1h klines insufficient (< 30), returning empty snapshot");
-                        return MarketSnapshot::default();
+                if let Some(ref ex) = ex {
+                    let now_ms = chrono::Utc::now().timestamp_millis();
+                    let start_1h = now_ms - 200 * 3600 * 1000;
+                    match ex.get_klines_range(symbol, "1h", start_1h, now_ms).await {
+                        Ok(k) if k.len() >= 30 => k,
+                        Ok(k) => {
+                            warn!(exchange, symbol, count = k.len(), "1h klines insufficient (< 30), returning empty snapshot");
+                            return MarketSnapshot::default();
+                        }
+                        Err(e) => {
+                            warn!(exchange, symbol, error = %e, "Failed to fetch 1h klines, returning empty snapshot");
+                            return MarketSnapshot::default();
+                        }
                     }
-                    Err(e) => {
-                        warn!(exchange, symbol, error = %e, "Failed to fetch 1h klines, returning empty snapshot");
-                        return MarketSnapshot::default();
-                    }
+                } else {
+                    warn!(exchange, symbol, "No 1h klines in cache and no exchange for REST fallback, returning empty snapshot");
+                    return MarketSnapshot::default();
                 }
             }
         };
@@ -156,17 +171,23 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
 
         let klines_4h = match self.get_klines_from_cache_or_rest(exchange, symbol, Timeframe::H4, 1).await {
             Some(k) => k,
-            None => match ex.get_klines_range(symbol, "4h", start_4h, now_ms).await {
-                Ok(k) => k,
-                Err(_) => vec![],
+            None => match ex {
+                Some(ref ex) => match ex.get_klines_range(symbol, "4h", start_4h, now_ms).await {
+                    Ok(k) => k,
+                    Err(_) => vec![],
+                },
+                None => vec![],
             },
         };
 
         let klines_15m = match self.get_klines_from_cache_or_rest(exchange, symbol, Timeframe::M15, 1).await {
             Some(k) => k,
-            None => match ex.get_klines_range(symbol, "15m", start_15m, now_ms).await {
-                Ok(k) => k,
-                Err(_) => vec![],
+            None => match ex {
+                Some(ref ex) => match ex.get_klines_range(symbol, "15m", start_15m, now_ms).await {
+                    Ok(k) => k,
+                    Err(_) => vec![],
+                },
+                None => vec![],
             },
         };
 
@@ -182,10 +203,17 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             }
         }
         if current_price <= 0.0 {
-            current_price = match ex.get_ticker(symbol).await {
-                Ok(t) if t.last > 0.0 => t.last,
-                _ => klines_1h.last().map(|k| k.close).unwrap_or(0.0),
-            };
+            match ex {
+                Some(ref ex) => {
+                    current_price = match ex.get_ticker(symbol).await {
+                        Ok(t) if t.last > 0.0 => t.last,
+                        _ => klines_1h.last().map(|k| k.close).unwrap_or(0.0),
+                    };
+                }
+                None => {
+                    current_price = klines_1h.last().map(|k| k.close).unwrap_or(0.0);
+                }
+            }
         }
 
         let rsi = indicators::rsi_at(&klines_1h, last_idx, 14);
@@ -232,7 +260,10 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         let macd_signal = indicators::macd_signal_at(&klines_1h, last_idx, 12, 26, 9);
         let adx = indicators::adx_at(&klines_1h, last_idx, 14);
 
-        let funding_rate = ex.get_funding_rate(symbol).await.map(|fr| fr.rate).unwrap_or(0.0);
+        let funding_rate = match ex {
+            Some(ref ex) => ex.get_funding_rate(symbol).await.map(|fr| fr.rate).unwrap_or(0.0),
+            None => 0.0,
+        };
 
         let h1_atr_sma20 = if klines_1h.len() >= 20 {
             let atr_series = indicators::atr(&klines_1h, 14);

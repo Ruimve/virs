@@ -669,6 +669,8 @@ impl GridWorker {
             bot_id: self.bot.id, level: level_num, side: side_str.to_string(), price, quantity: order.filled,
         });
 
+        self.save_stats().await;
+
         info!(
             bot_id = %self.bot.id, level = level_num, side = %side_str,
             price, quantity = order.filled, pnl, hold,
