@@ -252,8 +252,8 @@ impl GridWorker {
                         let old_total = level.avg_buy_price * level.hold_quantity.abs();
                         let new_total = old_total + trade.price * trade.quantity;
                         level.hold_quantity -= trade.quantity;
-                        level.avg_buy_price = if new_total > 0.0 {
-                            new_total / trade.quantity
+                        level.avg_buy_price = if level.hold_quantity.abs() > 0.0 {
+                            new_total / level.hold_quantity.abs()
                         } else {
                             0.0
                         };
@@ -320,9 +320,9 @@ impl GridWorker {
         }
 
         let close_levels: Vec<GridLevel> = self.levels.iter()
-            .filter(|level| level.hold_quantity > 0.0
-                && ((level.side == "buy" && level.sell_order_id.is_none())
-                    || (level.side == "sell" && level.buy_order_id.is_none())))
+            .filter(|level| level.hold_quantity.abs() > 0.0
+                && ((level.side == "buy" && level.hold_quantity > 0.0 && level.sell_order_id.is_none())
+                    || (level.side == "sell" && level.hold_quantity < 0.0 && level.buy_order_id.is_none())))
             .cloned()
             .collect();
 
@@ -341,7 +341,7 @@ impl GridWorker {
         let mut closest = 0;
         let mut min_diff = f64::MAX;
         for (i, level) in self.levels.iter().enumerate() {
-            let diff = (price - level.buy_price).abs();
+            let diff = (price - level.price).abs();
             if diff < min_diff {
                 min_diff = diff;
                 closest = i;
@@ -374,7 +374,7 @@ impl GridWorker {
         let sell_open_levels: Vec<GridLevel> = self.levels.iter()
             .filter(|level| {
                 level.side == "sell"
-                    && self.current_price > level.sell_price
+                    && level.sell_price > self.current_price
                     && !level.sell_filled
                     && level.sell_order_id.is_none()
             })
@@ -569,8 +569,8 @@ impl GridWorker {
                 let old_total = level.avg_buy_price * level.hold_quantity.abs();
                 let new_total = old_total + price * order.filled;
                 level.hold_quantity -= order.filled;
-                level.avg_buy_price = if new_total > 0.0 {
-                    new_total / order.filled
+                level.avg_buy_price = if level.hold_quantity.abs() > 0.0 {
+                    new_total / level.hold_quantity.abs()
                 } else {
                     0.0
                 };

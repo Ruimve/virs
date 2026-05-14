@@ -387,6 +387,17 @@ impl OrderExecutor for PeOrderExecutor {
     async fn send_command(&self, command: OrderCommand) -> anyhow::Result<()> {
         let pe_cmd = match command {
             OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only, client_order_id } => {
+                let position_side = if reduce_only {
+                    match side {
+                        OrderSide::Buy => pe_types::PositionSide::Short,
+                        OrderSide::Sell => pe_types::PositionSide::Long,
+                    }
+                } else {
+                    match side {
+                        OrderSide::Buy => pe_types::PositionSide::Long,
+                        OrderSide::Sell => pe_types::PositionSide::Short,
+                    }
+                };
                 pe_types::EngineCommand::PlaceOrder {
                     params: pe_types::PlaceOrderParams {
                         symbol,
@@ -398,7 +409,7 @@ impl OrderExecutor for PeOrderExecutor {
                         amount,
                         price,
                         reduce_only,
-                        position_side: Some(pe_types::PositionSide::Long),
+                        position_side: Some(position_side),
                         position_id: None,
                         client_order_id,
                     },
