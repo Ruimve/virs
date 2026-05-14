@@ -20,7 +20,7 @@ use tracing::info;
 use crate::trading::ccxt::types::*;
 use crate::trading::ccxt::errors::ExchangeError;
 use crate::trading::ccxt::auth::{Signer, SignedRequest, hmac_sha256_base64, insert_header};
-use crate::trading::ccxt::{Exchange, ExchangeClient, parse_str, parse_str_opt, parse_f64, parse_i64, parse_u32};
+use crate::trading::ccxt::{Exchange, ExchangeClient, parse_str, parse_f64, parse_i64, parse_u32};
 
 // ============================================================
 // OKX Signer (HMAC-SHA256 + Base64, timestamp + passphrase)
@@ -372,21 +372,74 @@ impl Exchange for OkxExchange {
         }
 
         // OKX returns candles in reverse chronological order
-        let mut klines: Vec<Kline> = arr.iter().map(|k| {
-            let a = k.as_array().unwrap();
-            Kline {
-                timestamp: a[0].as_str().unwrap_or("0").parse().unwrap_or(0),
-                open: a[1].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                high: a[2].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                low: a[3].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                close: a[4].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                volume: a[5].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                quote_volume: a[6].as_str().unwrap_or("0").parse().ok(),
+        let mut klines: Vec<Kline> = arr.iter().filter_map(|k| {
+            let a = match k.as_array() {
+                Some(a) if a.len() >= 6 => a,
+                _ => {
+                    tracing::warn!("[OKX] Skipping malformed kline entry: {:?}", k);
+                    return None;
+                }
+            };
+            let timestamp = match a[0].as_str().and_then(|s| s.parse::<i64>().ok()) {
+                Some(t) if t > 0 => t,
+                _ => {
+                    tracing::warn!("[OKX] Skipping kline with invalid timestamp: {:?}", a[0]);
+                    return None;
+                }
+            };
+            let open = match a[1].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) if v > 0.0 => v,
+                _ => {
+                    tracing::warn!("[OKX] Skipping kline with invalid open: {:?}", a[1]);
+                    return None;
+                }
+            };
+            let high = match a[2].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) if v > 0.0 => v,
+                _ => {
+                    tracing::warn!("[OKX] Skipping kline with invalid high: {:?}", a[2]);
+                    return None;
+                }
+            };
+            let low = match a[3].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) if v > 0.0 => v,
+                _ => {
+                    tracing::warn!("[OKX] Skipping kline with invalid low: {:?}", a[3]);
+                    return None;
+                }
+            };
+            let close = match a[4].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) if v > 0.0 => v,
+                _ => {
+                    tracing::warn!("[OKX] Skipping kline with invalid close: {:?}", a[4]);
+                    return None;
+                }
+            };
+            let volume = match a[5].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) => v,
+                _ => {
+                    tracing::warn!("[OKX] Skipping kline with invalid volume: {:?}", a[5]);
+                    return None;
+                }
+            };
+            Some(Kline {
+                timestamp,
+                open,
+                high,
+                low,
+                close,
+                volume,
+                quote_volume: a.get(6).and_then(|v| v.as_str()).and_then(|s| s.parse().ok()),
                 trades: None,
-            }
+            })
         }).collect();
 
-        // Reverse to chronological order
+        if klines.is_empty() {
+            return Err(ExchangeError::no_data(format!(
+                "All kline entries invalid for {} ({}) on OKX", symbol, timeframe
+            )));
+        }
+
         klines.reverse();
         Ok(klines)
     }
@@ -556,8 +609,8 @@ impl Exchange for OkxExchange {
             .ok_or_else(|| ExchangeError::Internal("No order data in OKX response".into()))?;
 
         Ok(Order {
-            id: parse_str(order_data, "ordId"),
-            client_order_id: parse_str_opt(order_data, "clOrdId"),
+            id: parse_str(order_data, "ordId").ok_or_else(|| ExchangeError::no_data(format!("ordId missing in create_order response")))?,
+            client_order_id: parse_str(order_data, "clOrdId"),
             symbol: params.symbol,
             side: params.side,
             order_type: params.order_type,
@@ -592,7 +645,7 @@ impl Exchange for OkxExchange {
 
         Ok(Order {
             id: order_id.to_string(),
-            client_order_id: parse_str_opt(order_data, "clOrdId"),
+            client_order_id: parse_str(order_data, "clOrdId"),
             symbol: symbol.to_string(),
             side: Side::Buy, // Not reliably returned in cancel response
             order_type: OrderType::Market,
@@ -630,11 +683,11 @@ impl Exchange for OkxExchange {
         let amount = order_data.get("sz").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0.0);
 
         Ok(Order {
-            id: parse_str(order_data, "ordId"),
-            client_order_id: parse_str_opt(order_data, "clOrdId"),
+            id: parse_str(order_data, "ordId").ok_or_else(|| ExchangeError::no_data(format!("ordId missing in fetch_order response")))?,
+            client_order_id: parse_str(order_data, "clOrdId"),
             symbol: symbol.to_string(),
-            side: if parse_str(order_data, "side") == "buy" { Side::Buy } else { Side::Sell },
-            order_type: match parse_str(order_data, "ordType").as_str() {
+            side: if parse_str(order_data, "side").unwrap_or_default() == "buy" { Side::Buy } else { Side::Sell },
+            order_type: match parse_str(order_data, "ordType").unwrap_or_default().as_str() {
                 "market" => OrderType::Market,
                 "limit" => OrderType::Limit,
                 _ => OrderType::Market,
@@ -644,7 +697,7 @@ impl Exchange for OkxExchange {
             cost: None,
             filled,
             remaining: amount - filled,
-            status: Self::parse_order_status(&parse_str(order_data, "state")),
+            status: Self::parse_order_status(&parse_str(order_data, "state").ok_or_else(|| ExchangeError::no_data(format!("state missing in fetch_order response")))?),
             fee: None,
             created_at: None,
             updated_at: Some(Utc::now()),
@@ -665,15 +718,17 @@ impl Exchange for OkxExchange {
         Self::check_okx_code(&data)?;
 
         let arr = Self::extract_data_array(&data).cloned().unwrap_or_default();
-        let orders = arr.iter().map(|o| {
+        let orders: Vec<Order> = arr.iter().filter_map(|o| {
             let filled = o.get("fillSz").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0.0);
             let amount = o.get("sz").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0.0);
-            Order {
-                id: parse_str(o, "ordId"),
-                client_order_id: parse_str_opt(o, "clOrdId"),
-                symbol: Self::to_unified_symbol(&parse_str(o, "instId")),
-                side: if parse_str(o, "side") == "buy" { Side::Buy } else { Side::Sell },
-                order_type: match parse_str(o, "ordType").as_str() {
+            let inst_id = parse_str(o, "instId")?;
+            let state_str = parse_str(o, "state")?;
+            Some(Order {
+                id: parse_str(o, "ordId")?,
+                client_order_id: parse_str(o, "clOrdId"),
+                symbol: Self::to_unified_symbol(&inst_id),
+                side: if parse_str(o, "side").unwrap_or_default() == "buy" { Side::Buy } else { Side::Sell },
+                order_type: match parse_str(o, "ordType").unwrap_or_default().as_str() {
                     "market" => OrderType::Market,
                     "limit" => OrderType::Limit,
                     _ => OrderType::Market,
@@ -683,12 +738,12 @@ impl Exchange for OkxExchange {
                 cost: None,
                 filled,
                 remaining: amount - filled,
-                status: Self::parse_order_status(&parse_str(o, "state")),
+                status: Self::parse_order_status(&state_str),
                 fee: None,
                 created_at: None,
                 updated_at: None,
                 info: o.clone(),
-            }
+            })
         }).collect();
 
         Ok(orders)
@@ -748,11 +803,10 @@ impl Exchange for OkxExchange {
                     return None;
                 }
 
-                let side = match parse_str(p, "posSide").as_str() {
+                let side = match parse_str(p, "posSide").unwrap_or_default().as_str() {
                     "long" => PositionSide::Long,
                     "short" => PositionSide::Short,
                     _ => {
-                        // net mode: determine side from sign
                         if pos_size > 0.0 {
                             PositionSide::Long
                         } else {
@@ -761,12 +815,12 @@ impl Exchange for OkxExchange {
                     }
                 };
 
-                let margin_mode = match parse_str(p, "mgnMode").as_str() {
+                let margin_mode = match parse_str(p, "mgnMode").unwrap_or_default().as_str() {
                     "isolated" => MarginMode::Isolated,
                     _ => MarginMode::Cross,
                 };
 
-                let inst_id = parse_str(p, "instId");
+                let inst_id = parse_str(p, "instId").unwrap_or_default();
                 let unified_symbol = Self::to_unified_symbol(&inst_id);
 
                 Some(Position {
@@ -774,7 +828,7 @@ impl Exchange for OkxExchange {
                     side,
                     size: pos_size.abs(),
                     entry_price: parse_f64(p, "avgPx").unwrap_or(0.0),
-                    leverage: parse_u32(p, "lever"),
+                    leverage: parse_u32(p, "lever").unwrap_or(1),
                     unrealized_pnl: parse_f64(p, "upl").unwrap_or(0.0),
                     margin_mode,
                     liquidation_price: parse_f64(p, "liqPx"),
@@ -806,7 +860,7 @@ impl Exchange for OkxExchange {
         })?;
 
         let rate = parse_f64(latest, "fundingRate").unwrap_or(0.0);
-        let next_time = parse_i64(latest, "fundingTime");
+        let next_time = parse_i64(latest, "fundingTime").unwrap_or(0);
         let next_funding_time = if next_time > 0 {
             chrono::DateTime::from_timestamp_millis(next_time)
         } else {
@@ -859,17 +913,15 @@ impl Exchange for OkxExchange {
             }
 
             for item in &rates {
-                let funding_time = parse_i64(item, "fundingTime");
+                let funding_time = parse_i64(item, "fundingTime").unwrap_or(0);
                 let rate = parse_f64(item, "fundingRate").unwrap_or(0.0);
-                // Filter by start_time
                 if funding_time >= start_time {
                     all_entries.push(FundingHistoryEntry { funding_time, rate });
                 }
             }
 
-            // OKX pagination: use the earliest fundingTime as 'after' cursor
             if let Some(earliest) = rates.last() {
-                let earliest_time = parse_i64(earliest, "fundingTime");
+                let earliest_time = parse_i64(earliest, "fundingTime").unwrap_or(0);
                 if earliest_time <= start_time {
                     break;
                 }

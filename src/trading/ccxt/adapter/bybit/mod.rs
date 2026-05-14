@@ -18,7 +18,7 @@ use tracing::info;
 use crate::trading::ccxt::types::*;
 use crate::trading::ccxt::errors::ExchangeError;
 use crate::trading::ccxt::auth::{Signer, SignedRequest, hmac_sha256_hex, insert_header};
-use crate::trading::ccxt::{Exchange, ExchangeClient, parse_str, parse_str_opt, parse_f64, parse_i64};
+use crate::trading::ccxt::{Exchange, ExchangeClient, parse_str, parse_f64, parse_i64};
 
 // ============================================================
 // Bybit Signer (HMAC-SHA256, similar to Binance but with recv_window)
@@ -327,19 +327,73 @@ impl Exchange for BybitExchange {
         }
 
         // Bybit returns newest first, reverse to chronological
-        let mut klines: Vec<Kline> = list.iter().map(|k| {
-            let a = k.as_array().unwrap();
-            Kline {
-                timestamp: a[0].as_str().unwrap_or("0").parse().unwrap_or(0),
-                open: a[1].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                high: a[2].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                low: a[3].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                close: a[4].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                volume: a[5].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                quote_volume: a[6].as_str().unwrap_or("0").parse().ok(),
+        let mut klines: Vec<Kline> = list.iter().filter_map(|k| {
+            let a = match k.as_array() {
+                Some(a) if a.len() >= 6 => a,
+                _ => {
+                    tracing::warn!("[Bybit] Skipping malformed kline entry: {:?}", k);
+                    return None;
+                }
+            };
+            let timestamp = match a[0].as_str().and_then(|s| s.parse::<i64>().ok()) {
+                Some(t) if t > 0 => t,
+                _ => {
+                    tracing::warn!("[Bybit] Skipping kline with invalid timestamp: {:?}", a[0]);
+                    return None;
+                }
+            };
+            let open = match a[1].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) if v > 0.0 => v,
+                _ => {
+                    tracing::warn!("[Bybit] Skipping kline with invalid open: {:?}", a[1]);
+                    return None;
+                }
+            };
+            let high = match a[2].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) if v > 0.0 => v,
+                _ => {
+                    tracing::warn!("[Bybit] Skipping kline with invalid high: {:?}", a[2]);
+                    return None;
+                }
+            };
+            let low = match a[3].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) if v > 0.0 => v,
+                _ => {
+                    tracing::warn!("[Bybit] Skipping kline with invalid low: {:?}", a[3]);
+                    return None;
+                }
+            };
+            let close = match a[4].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) if v > 0.0 => v,
+                _ => {
+                    tracing::warn!("[Bybit] Skipping kline with invalid close: {:?}", a[4]);
+                    return None;
+                }
+            };
+            let volume = match a[5].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) => v,
+                _ => {
+                    tracing::warn!("[Bybit] Skipping kline with invalid volume: {:?}", a[5]);
+                    return None;
+                }
+            };
+            Some(Kline {
+                timestamp,
+                open,
+                high,
+                low,
+                close,
+                volume,
+                quote_volume: a.get(6).and_then(|v| v.as_str()).and_then(|s| s.parse().ok()),
                 trades: None,
-            }
+            })
         }).collect();
+
+        if klines.is_empty() {
+            return Err(ExchangeError::no_data(format!(
+                "All kline entries invalid for {} ({}) on Bybit", symbol, timeframe
+            )));
+        }
 
         klines.reverse();
         Ok(klines)
@@ -453,7 +507,7 @@ impl Exchange for BybitExchange {
                 }
 
                 Some(MarketInfo {
-                    id: parse_str(inst, "symbol"),
+                    id: parse_str(inst, "symbol").unwrap_or_default(),
                     symbol: format!("{}/{}", base, quote),
                     base: base.to_string(),
                     quote: quote.to_string(),
@@ -521,8 +575,8 @@ impl Exchange for BybitExchange {
             .ok_or_else(|| ExchangeError::Internal("No order result from Bybit".into()))?;
 
         Ok(Order {
-            id: parse_str(result, "orderId"),
-            client_order_id: parse_str_opt(result, "orderLinkId"),
+            id: parse_str(result, "orderId").ok_or_else(|| ExchangeError::no_data(format!("orderId missing in create_order response")))?,
+            client_order_id: parse_str(result, "orderLinkId"),
             symbol: params.symbol,
             side: params.side,
             order_type: params.order_type,
@@ -558,7 +612,7 @@ impl Exchange for BybitExchange {
 
         Ok(Order {
             id: order_id.to_string(),
-            client_order_id: parse_str_opt(result, "orderLinkId"),
+            client_order_id: parse_str(result, "orderLinkId"),
             symbol: symbol.to_string(),
             side: Side::Buy, // Not returned in cancel response
             order_type: OrderType::Market,
@@ -599,11 +653,11 @@ impl Exchange for BybitExchange {
         let amount = list.get("qty").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0.0);
 
         Ok(Order {
-            id: parse_str(list, "orderId"),
-            client_order_id: parse_str_opt(list, "orderLinkId"),
+            id: parse_str(list, "orderId").ok_or_else(|| ExchangeError::no_data(format!("orderId missing in fetch_order response")))?,
+            client_order_id: parse_str(list, "orderLinkId"),
             symbol: symbol.to_string(),
-            side: if parse_str(list, "side") == "Buy" { Side::Buy } else { Side::Sell },
-            order_type: match parse_str(list, "orderType").as_str() {
+            side: if parse_str(list, "side").unwrap_or_default() == "Buy" { Side::Buy } else { Side::Sell },
+            order_type: match parse_str(list, "orderType").unwrap_or_default().as_str() {
                 "Market" => OrderType::Market,
                 "Limit" => OrderType::Limit,
                 _ => OrderType::Market,
@@ -613,7 +667,7 @@ impl Exchange for BybitExchange {
             cost: None,
             filled,
             remaining: amount - filled,
-            status: Self::parse_order_status(&parse_str(list, "orderStatus")),
+            status: Self::parse_order_status(&parse_str(list, "orderStatus").ok_or_else(|| ExchangeError::no_data(format!("orderStatus missing in fetch_order response")))?),
             fee: None,
             created_at: None,
             updated_at: Some(Utc::now()),
@@ -636,15 +690,17 @@ impl Exchange for BybitExchange {
         let list = data.pointer("/result/list").and_then(|l| l.as_array())
             .cloned().unwrap_or_default();
 
-        let orders = list.iter().map(|o| {
+        let orders: Vec<Order> = list.iter().filter_map(|o| {
             let filled = o.get("cumExecQty").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0.0);
             let amount = o.get("qty").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0.0);
-            Order {
-                id: parse_str(o, "orderId"),
-                client_order_id: parse_str_opt(o, "orderLinkId"),
-                symbol: Self::to_unified_symbol(&parse_str(o, "symbol")),
-                side: if parse_str(o, "side") == "Buy" { Side::Buy } else { Side::Sell },
-                order_type: match parse_str(o, "orderType").as_str() {
+            let symbol_str = parse_str(o, "symbol")?;
+            let status_str = parse_str(o, "orderStatus")?;
+            Some(Order {
+                id: parse_str(o, "orderId")?,
+                client_order_id: parse_str(o, "orderLinkId"),
+                symbol: Self::to_unified_symbol(&symbol_str),
+                side: if parse_str(o, "side").unwrap_or_default() == "Buy" { Side::Buy } else { Side::Sell },
+                order_type: match parse_str(o, "orderType").unwrap_or_default().as_str() {
                     "Market" => OrderType::Market,
                     "Limit" => OrderType::Limit,
                     _ => OrderType::Market,
@@ -654,12 +710,12 @@ impl Exchange for BybitExchange {
                 cost: None,
                 filled,
                 remaining: amount - filled,
-                status: Self::parse_order_status(&parse_str(o, "orderStatus")),
+                status: Self::parse_order_status(&status_str),
                 fee: None,
                 created_at: None,
                 updated_at: None,
                 info: o.clone(),
-            }
+            })
         }).collect();
 
         Ok(orders)
@@ -697,32 +753,34 @@ impl Exchange for BybitExchange {
 
         let positions: Vec<Position> = result.iter()
             .filter_map(|p| {
-                let size: f64 = parse_str(p, "size").parse().ok()?;
+                let size: f64 = parse_str(p, "size").unwrap_or_default().parse().ok()?;
                 if size == 0.0 {
                     return None;
                 }
 
-                let side = match parse_str(p, "side").as_str() {
+                let side = match parse_str(p, "side").unwrap_or_default().as_str() {
                     "Buy" => PositionSide::Long,
                     "Sell" => PositionSide::Short,
                     _ => return None,
                 };
 
-                let leverage = parse_str(p, "leverage").parse().unwrap_or(1);
-                let margin_mode = match parse_str(p, "tradeMode").as_str() {
+                let leverage: u32 = parse_str(p, "leverage").unwrap_or_default().parse().unwrap_or(1);
+                let margin_mode = match parse_str(p, "tradeMode").unwrap_or_default().as_str() {
                     "1" => MarginMode::Cross,
                     "0" | _ => MarginMode::Isolated,
                 };
 
+                let symbol_str = parse_str(p, "symbol").unwrap_or_default();
+
                 Some(Position {
-                    symbol: Self::to_unified_symbol(&parse_str(p, "symbol")),
+                    symbol: Self::to_unified_symbol(&symbol_str),
                     side,
                     size,
-                    entry_price: parse_str(p, "avgPrice").parse().unwrap_or(0.0),
+                    entry_price: parse_str(p, "avgPrice").unwrap_or_default().parse().unwrap_or(0.0),
                     leverage,
-                    unrealized_pnl: parse_str(p, "unrealisedPnl").parse().unwrap_or(0.0),
+                    unrealized_pnl: parse_str(p, "unrealisedPnl").unwrap_or_default().parse().unwrap_or(0.0),
                     margin_mode,
-                    liquidation_price: parse_str(p, "liqPrice").parse().ok(),
+                    liquidation_price: parse_str(p, "liqPrice").unwrap_or_default().parse().ok(),
                     info: p.clone(),
                 })
             })
@@ -746,10 +804,10 @@ impl Exchange for BybitExchange {
             .ok_or_else(|| ExchangeError::Internal("No ticker from Bybit".into()))?;
 
         let ticker = result.first()
-            .ok_or_else(|| ExchangeError::NoData("No data".into()))?;
+            .ok_or_else(|| ExchangeError::no_data(format!("No funding rate data from Bybit")))?;
 
         let rate = parse_f64(ticker, "fundingRate").unwrap_or(0.0);
-        let next_time = parse_i64(ticker, "nextFundingTime");
+        let next_time = parse_i64(ticker, "nextFundingTime").unwrap_or(0);
         let next_time = if next_time > 0 {
             DateTime::from_timestamp_millis(next_time)
         } else {
@@ -801,7 +859,7 @@ impl Exchange for BybitExchange {
             }
 
             for item in &list {
-                let funding_time = parse_i64(item, "fundingTime");
+                let funding_time = parse_i64(item, "fundingTime").unwrap_or(0);
                 let rate = parse_f64(item, "fundingRate").unwrap_or(0.0);
                 all_entries.push(FundingHistoryEntry { funding_time, rate });
             }

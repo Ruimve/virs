@@ -466,19 +466,8 @@ pub fn parse_f64(v: &Value, field: &str) -> Option<f64> {
     })
 }
 
-/// Parse a string field.
-pub fn parse_str(v: &Value, field: &str) -> String {
-    v.get(field)
-        .and_then(|f| {
-            f.as_str()
-                .map(String::from)
-                .or_else(|| f.as_i64().map(|n| n.to_string()))
-                .or_else(|| f.as_f64().map(|n| n.to_string()))
-        })
-        .unwrap_or_default()
-}
-
-pub fn parse_str_opt(v: &Value, field: &str) -> Option<String> {
+/// Parse a string or number field as String, returning None if missing.
+pub fn parse_str(v: &Value, field: &str) -> Option<String> {
     v.get(field).and_then(|f| {
         f.as_str()
             .map(String::from)
@@ -487,16 +476,15 @@ pub fn parse_str_opt(v: &Value, field: &str) -> Option<String> {
     })
 }
 
-/// Parse a numeric field as i64.
-pub fn parse_i64(v: &Value, field: &str) -> i64 {
+/// Parse a numeric field as i64, returning None if missing or invalid.
+pub fn parse_i64(v: &Value, field: &str) -> Option<i64> {
     v.get(field)
         .and_then(|f| f.as_i64().or_else(|| f.as_str().and_then(|s| s.parse().ok())))
-        .unwrap_or(0)
 }
 
-/// Parse a numeric field as u32.
-pub fn parse_u32(v: &Value, field: &str) -> u32 {
+/// Parse a numeric field as u32, returning None if missing or invalid.
+pub fn parse_u32(v: &Value, field: &str) -> Option<u32> {
     v.get(field)
         .and_then(|f| f.as_u64().or_else(|| f.as_str().and_then(|s| s.parse().ok())))
-        .unwrap_or(0) as u32
+        .map(|v| v as u32)
 }

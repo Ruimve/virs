@@ -25,7 +25,7 @@ use tracing::info;
 use crate::trading::ccxt::types::*;
 use crate::trading::ccxt::errors::ExchangeError;
 use crate::trading::ccxt::auth::{Signer, SignedRequest, hmac_sha256_hex, insert_header};
-use crate::trading::ccxt::{Exchange, ExchangeClient, parse_f64, parse_str, parse_str_opt, parse_u32};
+use crate::trading::ccxt::{Exchange, ExchangeClient, parse_f64, parse_str, parse_u32};
 
 // ============================================================
 // Binance Signer (HMAC-SHA256 via query string)
@@ -352,19 +352,73 @@ impl Exchange for BinanceExchange {
             )));
         }
 
-        let klines = arr.iter().map(|k| {
-            let a = k.as_array().unwrap();
-            Kline {
-                timestamp: a[0].as_i64().unwrap_or(0),
-                open: a[1].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                high: a[2].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                low: a[3].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                close: a[4].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                volume: a[5].as_str().unwrap_or("0").parse().unwrap_or(0.0),
-                quote_volume: a[7].as_str().unwrap_or("0").parse().ok(),
-                trades: a[8].as_i64(),
-            }
+        let klines: Vec<Kline> = arr.iter().filter_map(|k| {
+            let a = match k.as_array() {
+                Some(a) if a.len() >= 6 => a,
+                _ => {
+                    tracing::warn!("[Binance] Skipping malformed kline entry: {:?}", k);
+                    return None;
+                }
+            };
+            let timestamp = match a[0].as_i64() {
+                Some(t) if t > 0 => t,
+                _ => {
+                    tracing::warn!("[Binance] Skipping kline with invalid timestamp: {:?}", a[0]);
+                    return None;
+                }
+            };
+            let open = match a[1].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) if v > 0.0 => v,
+                _ => {
+                    tracing::warn!("[Binance] Skipping kline with invalid open: {:?}", a[1]);
+                    return None;
+                }
+            };
+            let high = match a[2].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) if v > 0.0 => v,
+                _ => {
+                    tracing::warn!("[Binance] Skipping kline with invalid high: {:?}", a[2]);
+                    return None;
+                }
+            };
+            let low = match a[3].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) if v > 0.0 => v,
+                _ => {
+                    tracing::warn!("[Binance] Skipping kline with invalid low: {:?}", a[3]);
+                    return None;
+                }
+            };
+            let close = match a[4].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) if v > 0.0 => v,
+                _ => {
+                    tracing::warn!("[Binance] Skipping kline with invalid close: {:?}", a[4]);
+                    return None;
+                }
+            };
+            let volume = match a[5].as_str().and_then(|s| s.parse::<f64>().ok()) {
+                Some(v) => v,
+                _ => {
+                    tracing::warn!("[Binance] Skipping kline with invalid volume: {:?}", a[5]);
+                    return None;
+                }
+            };
+            Some(Kline {
+                timestamp,
+                open,
+                high,
+                low,
+                close,
+                volume,
+                quote_volume: a.get(7).and_then(|v| v.as_str()).and_then(|s| s.parse().ok()),
+                trades: a.get(8).and_then(|v| v.as_i64()),
+            })
         }).collect();
+
+        if klines.is_empty() {
+            return Err(ExchangeError::no_data(format!(
+                "All kline entries invalid for {} ({}) on Binance", symbol, timeframe
+            )));
+        }
 
         Ok(klines)
     }
@@ -418,7 +472,7 @@ impl Exchange for BinanceExchange {
                         return None; // Skip zero balances
                     }
                     Some(Balance {
-                        asset: parse_str(b, "asset"),
+                        asset: parse_str(b, "asset").unwrap_or_default(),
                         free,
                         used,
                         total,
@@ -445,7 +499,7 @@ impl Exchange for BinanceExchange {
                         return None; // Skip zero balances
                     }
                     Some(Balance {
-                        asset: parse_str(b, "asset"),
+                        asset: parse_str(b, "asset").unwrap_or_default(),
                         free,
                         used,
                         total: free + used,
@@ -466,21 +520,32 @@ impl Exchange for BinanceExchange {
 
         let markets: Vec<MarketInfo> = symbols.iter()
             .filter_map(|s| {
-                let status = parse_str(s, "status");
+                let status = match parse_str(s, "status") {
+                    Some(v) => v,
+                    None => return None,
+                };
                 if status != "TRADING" {
                     return None;
                 }
 
-                // For perpetual, only keep PERPETUAL contracts
                 if self.is_perpetual() {
-                    let contract_type = parse_str(s, "contractType");
+                    let contract_type = match parse_str(s, "contractType") {
+                        Some(v) => v,
+                        None => return None,
+                    };
                     if contract_type != "PERPETUAL" {
                         return None;
                     }
                 }
 
-                let base = parse_str(s, "baseAsset");
-                let quote = parse_str(s, "quoteAsset");
+                let base = match parse_str(s, "baseAsset") {
+                    Some(v) => v,
+                    None => return None,
+                };
+                let quote = match parse_str(s, "quoteAsset") {
+                    Some(v) => v,
+                    None => return None,
+                };
                 let symbol = format!("{}/{}", base, quote);
 
                 let market_type = if self.is_perpetual() {
@@ -490,7 +555,7 @@ impl Exchange for BinanceExchange {
                 };
 
                 Some(MarketInfo {
-                    id: parse_str(s, "symbol"),
+                    id: match parse_str(s, "symbol") { Some(v) => v, None => return None },
                     symbol,
                     base,
                     quote,
@@ -500,9 +565,9 @@ impl Exchange for BinanceExchange {
                     max_amount: parse_f64(s, "maxQty"),
                     min_price: parse_f64(s, "minPrice"),
                     max_price: parse_f64(s, "maxPrice"),
-                    min_cost: None, // Binance doesn't directly expose minCost
-                    price_precision: Some(parse_u32(s, "pricePrecision")),
-                    amount_precision: Some(parse_u32(s, "quantityPrecision")),
+                    min_cost: None,
+                    price_precision: parse_u32(s, "pricePrecision"),
+                    amount_precision: parse_u32(s, "quantityPrecision"),
                     info: s.clone(),
                 })
             })
@@ -560,8 +625,8 @@ impl Exchange for BinanceExchange {
             .await?;
 
         Ok(Order {
-            id: parse_str(&data, "orderId"),
-            client_order_id: parse_str_opt(&data, "clientOrderId"),
+            id: parse_str(&data, "orderId").ok_or_else(|| ExchangeError::no_data(format!("orderId missing in create_order response")))?,
+            client_order_id: parse_str(&data, "clientOrderId"),
             symbol: params.symbol,
             side: params.side,
             order_type: params.order_type,
@@ -571,7 +636,7 @@ impl Exchange for BinanceExchange {
             filled: parse_f64(&data, "executedQty").unwrap_or(0.0),
             remaining: parse_f64(&data, "origQty").unwrap_or(params.amount)
                 - parse_f64(&data, "executedQty").unwrap_or(0.0),
-            status: Self::parse_order_status(&parse_str(&data, "status")),
+            status: Self::parse_order_status(&parse_str(&data, "status").ok_or_else(|| ExchangeError::no_data(format!("status missing in create_order response")))?),
             fee: None,
             created_at: Some(Utc::now()),
             updated_at: Some(Utc::now()),
@@ -591,12 +656,14 @@ impl Exchange for BinanceExchange {
             .signed_post(&self.signer, &path, body)
             .await?;
 
+        let side_str = parse_str(&data, "side").ok_or_else(|| ExchangeError::no_data(format!("side missing in cancel_order response")))?;
+        let type_str = parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data(format!("type missing in cancel_order response")))?;
         Ok(Order {
-            id: parse_str(&data, "orderId"),
-            client_order_id: parse_str_opt(&data, "clientOrderId"),
+            id: parse_str(&data, "orderId").ok_or_else(|| ExchangeError::no_data(format!("orderId missing in cancel_order response")))?,
+            client_order_id: parse_str(&data, "clientOrderId"),
             symbol: symbol.to_string(),
-            side: if parse_str(&data, "side") == "BUY" { Side::Buy } else { Side::Sell },
-            order_type: Self::parse_order_type(&parse_str(&data, "type")),
+            side: if side_str == "BUY" { Side::Buy } else { Side::Sell },
+            order_type: Self::parse_order_type(&type_str),
             price: parse_f64(&data, "price"),
             amount: parse_f64(&data, "origQty").unwrap_or(0.0),
             cost: None,
@@ -622,19 +689,22 @@ impl Exchange for BinanceExchange {
             .signed_get(&self.signer, &path, params)
             .await?;
 
+        let side_str = parse_str(&data, "side").ok_or_else(|| ExchangeError::no_data(format!("side missing in fetch_order response")))?;
+        let type_str = parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data(format!("type missing in fetch_order response")))?;
+        let status_str = parse_str(&data, "status").ok_or_else(|| ExchangeError::no_data(format!("status missing in fetch_order response")))?;
         Ok(Order {
-            id: parse_str(&data, "orderId"),
-            client_order_id: parse_str_opt(&data, "clientOrderId"),
+            id: parse_str(&data, "orderId").ok_or_else(|| ExchangeError::no_data(format!("orderId missing in fetch_order response")))?,
+            client_order_id: parse_str(&data, "clientOrderId"),
             symbol: symbol.to_string(),
-            side: if parse_str(&data, "side") == "BUY" { Side::Buy } else { Side::Sell },
-            order_type: Self::parse_order_type(&parse_str(&data, "type")),
+            side: if side_str == "BUY" { Side::Buy } else { Side::Sell },
+            order_type: Self::parse_order_type(&type_str),
             price: parse_f64(&data, "price"),
             amount: parse_f64(&data, "origQty").unwrap_or(0.0),
             cost: None,
             filled: parse_f64(&data, "executedQty").unwrap_or(0.0),
             remaining: parse_f64(&data, "origQty").unwrap_or(0.0)
                 - parse_f64(&data, "executedQty").unwrap_or(0.0),
-            status: Self::parse_order_status(&parse_str(&data, "status")),
+            status: Self::parse_order_status(&status_str),
             fee: None,
             created_at: None,
             updated_at: Some(Utc::now()),
@@ -655,25 +725,29 @@ impl Exchange for BinanceExchange {
             .await?;
 
         let arr = data.as_array().cloned().unwrap_or_default();
-        let orders = arr.iter().map(|o| {
-            Order {
-                id: parse_str(o, "orderId"),
-                client_order_id: parse_str_opt(o, "clientOrderId"),
-                symbol: Self::to_unified_symbol(&parse_str(o, "symbol")),
-                side: if parse_str(o, "side") == "BUY" { Side::Buy } else { Side::Sell },
-                order_type: Self::parse_order_type(&parse_str(o, "type")),
+        let orders: Vec<Order> = arr.iter().filter_map(|o| {
+            let side_str = parse_str(o, "side")?;
+            let type_str = parse_str(o, "type")?;
+            let status_str = parse_str(o, "status")?;
+            let symbol_str = parse_str(o, "symbol")?;
+            Some(Order {
+                id: parse_str(o, "orderId")?,
+                client_order_id: parse_str(o, "clientOrderId"),
+                symbol: Self::to_unified_symbol(&symbol_str),
+                side: if side_str == "BUY" { Side::Buy } else { Side::Sell },
+                order_type: Self::parse_order_type(&type_str),
                 price: parse_f64(o, "price"),
                 amount: parse_f64(o, "origQty").unwrap_or(0.0),
                 cost: None,
                 filled: parse_f64(o, "executedQty").unwrap_or(0.0),
                 remaining: parse_f64(o, "origQty").unwrap_or(0.0)
                     - parse_f64(o, "executedQty").unwrap_or(0.0),
-                status: Self::parse_order_status(&parse_str(o, "status")),
+                status: Self::parse_order_status(&status_str),
                 fee: None,
                 created_at: None,
                 updated_at: None,
                 info: o.clone(),
-            }
+            })
         }).collect();
 
         Ok(orders)
@@ -745,7 +819,7 @@ impl Exchange for BinanceExchange {
             .filter_map(|p| {
                 let pos_amt = parse_f64(p, "positionAmt").unwrap_or(0.0);
                 if pos_amt == 0.0 {
-                    return None; // Skip positions with zero amount
+                    return None;
                 }
 
                 let side = if pos_amt > 0.0 {
@@ -755,18 +829,20 @@ impl Exchange for BinanceExchange {
                 };
                 let size = pos_amt.abs();
 
-                let margin_type_str = parse_str(p, "marginType");
+                let margin_type_str = parse_str(p, "marginType").unwrap_or_default();
                 let margin_mode = match margin_type_str.as_str() {
                     "isolated" => MarginMode::Isolated,
                     _ => MarginMode::Cross,
                 };
 
+                let symbol_str = parse_str(p, "symbol").unwrap_or_default();
+
                 Some(Position {
-                    symbol: Self::to_unified_symbol(&parse_str(p, "symbol")),
+                    symbol: Self::to_unified_symbol(&symbol_str),
                     side,
                     size,
                     entry_price: parse_f64(p, "entryPrice").unwrap_or(0.0),
-                    leverage: parse_u32(p, "leverage"),
+                    leverage: parse_u32(p, "leverage").unwrap_or(1),
                     unrealized_pnl: parse_f64(p, "unRealizedProfit").unwrap_or(0.0),
                     margin_mode,
                     liquidation_price: parse_f64(p, "liquidationPrice"),

@@ -66,8 +66,8 @@ impl ExchangeError {
 
     /// Create a "no data available" error — used when the exchange returns
     /// empty results and we must NOT return mock/fake data.
-    pub fn no_data(context: impl Into<String>) -> Self {
-        Self::NoData(context.into())
+    pub fn no_data(context: String) -> Self {
+        Self::NoData(context)
     }
 
     /// Check if this error is retryable (network, rate limit, internal).
