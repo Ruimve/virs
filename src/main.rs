@@ -188,6 +188,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Paper 交易 price tick 协程
     let price_provider_for_paper = grid_price_provider;
+    let kline_engine_for_paper = kline_engine.clone();
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(3));
         loop {
@@ -195,8 +196,10 @@ async fn main() -> anyhow::Result<()> {
             if !paper_for_tick.is_enabled() {
                 continue;
             }
-            if let Some(price) = price_provider_for_paper.get_price("binance", "BTCUSDT").await {
-                paper_for_tick.on_price_tick("BTCUSDT", price).await;
+            for (exchange, symbol, _market_type) in kline_engine_for_paper.subscribed_symbols() {
+                if let Some(price) = price_provider_for_paper.get_price(&exchange, &symbol).await {
+                    paper_for_tick.on_price_tick(&symbol, price).await;
+                }
             }
         }
     });

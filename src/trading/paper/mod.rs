@@ -23,6 +23,7 @@ struct PendingOrder {
     amount: f64,
     price: f64,
     reduce_only: bool,
+    client_order_id: Option<String>,
     created_at: chrono::DateTime<Utc>,
 }
 
@@ -120,7 +121,7 @@ impl PaperOrderExecutor {
             fill_price: Some(fill_price),
             request_price: Some(order.price),
             filled: order.amount,
-            client_order_id: None,
+            client_order_id: order.client_order_id.clone(),
         };
 
         // 先发送 OrderPlaced（如果 worker 之前没收到的话）
@@ -169,7 +170,7 @@ impl OrderExecutor for PaperOrderExecutor {
                 amount,
                 price,
                 reduce_only,
-                client_order_id: _,
+                client_order_id,
             } => {
                 let order = PendingOrder {
                     id: Uuid::new_v4(),
@@ -178,6 +179,7 @@ impl OrderExecutor for PaperOrderExecutor {
                     amount,
                     price: price.unwrap_or(0.0),
                     reduce_only,
+                    client_order_id: client_order_id.clone(),
                     created_at: Utc::now(),
                 };
 
@@ -193,7 +195,7 @@ impl OrderExecutor for PaperOrderExecutor {
                         fill_price: None,
                         request_price: Some(order.price),
                         filled: 0.0,
-                        client_order_id: None,
+                        client_order_id: order.client_order_id.clone(),
                     },
                 });
 

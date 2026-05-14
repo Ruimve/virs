@@ -764,8 +764,8 @@ async fn load_existing_trades_buy_and_sell() {
     ]));
     let mut worker = make_worker_with_store(bot, 55000.0, store);
     worker.load_existing_trades().await;
-    assert!(worker.levels[3].buy_filled);
-    assert!(worker.levels[3].sell_filled);
+    assert!(!worker.levels[3].buy_filled);
+    assert!(!worker.levels[3].sell_filled);
     assert!((worker.levels[3].hold_quantity).abs() < f64::EPSILON);
     assert!(worker.levels[2].buy_filled);
     assert!((worker.levels[2].hold_quantity - 0.002).abs() < f64::EPSILON);

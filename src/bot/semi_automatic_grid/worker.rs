@@ -158,8 +158,19 @@ impl GridWorker {
             return;
         }
 
-        self.current_price = self.fetch_current_price().await;
-        info!(bot_id = %self.bot.id, price = self.current_price, "Initial price fetched");
+        for attempt in 1..=10 {
+            self.current_price = self.fetch_current_price().await;
+            if self.current_price > 0.0 {
+                break;
+            }
+            warn!(bot_id = %self.bot.id, attempt, "Failed to fetch initial price, retrying in 5s...");
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        }
+        if self.current_price <= 0.0 {
+            error!(bot_id = %self.bot.id, "Failed to fetch initial price after 10 attempts, worker will continue retrying in main loop");
+        } else {
+            info!(bot_id = %self.bot.id, price = self.current_price, "Initial price fetched");
+        }
 
         self.load_existing_trades().await;
         self.place_initial_orders().await;
@@ -277,6 +288,22 @@ impl GridWorker {
             total_pnl = self.total_pnl,
             "Loaded existing grid trades"
         );
+
+        for level in &mut self.levels {
+            let cycle_complete = if level.side == "buy" {
+                level.buy_filled && level.sell_filled && level.hold_quantity <= 0.0
+            } else {
+                level.sell_filled && level.buy_filled && level.hold_quantity >= 0.0
+            };
+            if cycle_complete {
+                level.buy_filled = false;
+                level.sell_filled = false;
+                level.buy_order_id = None;
+                level.sell_order_id = None;
+                level.hold_quantity = 0.0;
+                level.avg_buy_price = 0.0;
+            }
+        }
     }
 
     // ── 初始挂单 ──
