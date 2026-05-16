@@ -1,9 +1,9 @@
 use crate::bot::semi_automatic_grid::types::DEFAULT_USER_PROMPT_TEMPLATE;
 use crate::bot::semi_automatic_grid::utils::indicators::MarketIndicators;
 
-/// Prompt 模板渲染所需的上下文数据
-///
-/// 包含所有占位符的值，用于将模板字符串渲染为最终 prompt
+/** Prompt 模板渲染所需的上下文数据
+
+包含所有占位符的值，用于将模板字符串渲染为最终 prompt */
 pub struct PromptContext {
     pub timestamp: String,
     pub symbol: String,
@@ -29,9 +29,9 @@ pub struct PromptContext {
     pub ind: MarketIndicators,
 }
 
-/// 将 PromptContext 中的值替换到模板字符串中
-///
-/// 遍历所有占位符 {xxx} 并用 context 中对应的值替换
+/** 将 PromptContext 中的值替换到模板字符串中
+
+遍历所有占位符 {xxx} 并用 context 中对应的值替换 */
 pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
     let h1_atr_sma20_str = if ctx.ind.h1_atr_sma20.is_nan() { "N/A".to_string() } else { format!("{:.4}", ctx.ind.h1_atr_sma20) };
     let m15_atr_sma20_str = if ctx.ind.m15_atr_sma20.is_nan() { "N/A".to_string() } else { format!("{:.4}", ctx.ind.m15_atr_sma20) };
@@ -95,9 +95,9 @@ pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
         .replace("{trigger_reason}", &ctx.trigger_reason)
 }
 
-/// 构建网格配置的文本描述，用于 prompt 中 {current_grid_config} 占位符
-///
-/// 当网格状态为 empty 时返回 "none"，否则返回格式化的配置详情和层级表格
+/** 构建网格配置的文本描述，用于 prompt 中 {current_grid_config} 占位符
+
+当网格状态为 empty 时返回 "none"，否则返回格式化的配置详情和层级表格 */
 pub fn format_grid_config(
     grid_status: &str,
     upper_price: f64,
@@ -134,9 +134,9 @@ pub fn format_grid_config(
     md
 }
 
-/// 构建简化版网格配置文本（仅含参数，不含层级表格）
-///
-/// 用于 API 层初始分析时，此时尚无运行时层级数据
+/** 构建简化版网格配置文本（仅含参数，不含层级表格）
+
+用于 API 层初始分析时，此时尚无运行时层级数据 */
 pub fn format_grid_config_simple(
     grid_status: &str,
     upper_price: f64,
@@ -154,7 +154,7 @@ pub fn format_grid_config_simple(
     )
 }
 
-/// 获取默认用户 prompt 模板
+/** 获取默认用户 prompt 模板 */
 pub fn default_template() -> &'static str {
     DEFAULT_USER_PROMPT_TEMPLATE
 }

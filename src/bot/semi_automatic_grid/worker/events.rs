@@ -2,72 +2,23 @@ use chrono::Utc;
 use tracing::{info, warn};
 
 use crate::bot::semi_automatic_grid::ports::*;
-use crate::bot::semi_automatic_grid::types::{GridEvent, GridLevel, GridState};
+use crate::bot::semi_automatic_grid::types::{GridEvent, GridState};
+use crate::bot::semi_automatic_grid::utils::holdings::{apply_fill_to_level, calculate_fill_pnl, is_close_trade};
 use crate::bot::semi_automatic_grid::worker::GridWorker;
 
 impl GridWorker {
-    /// 加载历史成交记录，恢复网格层持仓状态
-    ///
-    /// 从数据库加载该 bot 的所有历史成交，按价格匹配到网格层，
-    /// 重建每层的持仓量、均价、已填充标志等状态
+/** 加载历史成交记录，恢复网格层持仓状态
+
+从数据库加载该 bot 的所有历史成交，按价格匹配到网格层，
+重建每层的持仓量、均价、已填充标志等状态 */
     pub(crate) async fn load_existing_trades(&mut self) {
         let trades = self.store.load_trades(self.bot.id).await.unwrap_or_default();
-
-        /* 计算最大匹配距离（半格间距），用于将成交匹配到网格层 */
-        let max_dist = if self.levels.len() > 1 {
-            (self.bot.upper_price - self.bot.lower_price) / self.levels.len() as f64
-        } else {
-            0.0
-        };
+        let max_dist = self.grid_spacing();
 
         let trade_count = trades.len();
         for trade in trades {
-            let level_idx = self.find_level_by_price_within(trade.price, max_dist);
-            if let Some(level_idx) = level_idx {
-                let level_side = self.levels[level_idx].side.clone();
-                if level_side == "buy" {
-                    if trade.side == "buy" {
-                        /* buy 层买入：加权平均计算新均价 */
-                        let level = &mut self.levels[level_idx];
-                        let old_total = level.avg_buy_price * level.hold_quantity;
-                        let new_total = old_total + trade.price * trade.quantity;
-                        level.hold_quantity += trade.quantity;
-                        level.avg_buy_price = if level.hold_quantity > 0.0 {
-                            new_total / level.hold_quantity
-                        } else {
-                            0.0
-                        };
-                        level.buy_filled = true;
-                        level.last_fill_price = Some(trade.price);
-                    } else {
-                        /* buy 层卖出：减少持仓量 */
-                        let level = &mut self.levels[level_idx];
-                        level.hold_quantity = (level.hold_quantity - trade.quantity).max(0.0);
-                        level.sell_filled = true;
-                        level.last_fill_price = Some(trade.price);
-                    }
-                } else {
-                    if trade.side == "sell" {
-                        /* sell 层卖出开空：加权平均计算新均价 */
-                        let level = &mut self.levels[level_idx];
-                        let old_total = level.avg_buy_price * level.hold_quantity.abs();
-                        let new_total = old_total + trade.price * trade.quantity;
-                        level.hold_quantity -= trade.quantity;
-                        level.avg_buy_price = if level.hold_quantity.abs() > 0.0 {
-                            new_total / level.hold_quantity.abs()
-                        } else {
-                            0.0
-                        };
-                        level.sell_filled = true;
-                        level.last_fill_price = Some(trade.price);
-                    } else {
-                        /* sell 层买入平空：减少空头持仓 */
-                        let level = &mut self.levels[level_idx];
-                        level.hold_quantity = (level.hold_quantity + trade.quantity).min(0.0);
-                        level.buy_filled = true;
-                        level.last_fill_price = Some(trade.price);
-                    }
-                }
+            if let Some(level_idx) = self.find_level_by_price_within(trade.price, max_dist) {
+                apply_fill_to_level(&mut self.levels[level_idx], &trade.side, trade.price, trade.quantity);
             } else {
                 warn!(
                     bot_id = %self.bot.id, trade_price = trade.price, grid_level = trade.grid_level,
@@ -76,12 +27,7 @@ impl GridWorker {
             }
             self.total_pnl += trade.pnl;
             self.total_trades += 1;
-            /* 更新连续亏损计数 */
-            if trade.pnl < 0.0 {
-                self.consecutive_losses += 1;
-            } else if trade.pnl > 0.0 {
-                self.consecutive_losses = 0;
-            }
+            self.update_consecutive_losses(trade.pnl);
         }
 
         info!(
@@ -91,7 +37,11 @@ impl GridWorker {
             "Loaded existing grid trades"
         );
 
-        /* 重置已完成周期的层级状态，使其可以重新开仓 */
+        self.reset_completed_cycles();
+    }
+
+/** 重置已完成买卖周期的层级状态，使其可以重新开仓 */
+    fn reset_completed_cycles(&mut self) {
         for level in &mut self.levels {
             let cycle_complete = if level.side == "buy" {
                 level.buy_filled && level.sell_filled && level.hold_quantity <= 0.0
@@ -109,7 +59,25 @@ impl GridWorker {
         }
     }
 
-    /// 根据价格找到最近的网格层索引
+/** 计算网格间距（用于价格匹配的最大距离） */
+    pub(crate) fn grid_spacing(&self) -> f64 {
+        if self.levels.len() > 1 {
+            (self.bot.upper_price - self.bot.lower_price) / self.levels.len() as f64
+        } else {
+            0.0
+        }
+    }
+
+/** 更新连续亏损计数 */
+    pub(crate) fn update_consecutive_losses(&mut self, pnl: f64) {
+        if pnl < 0.0 {
+            self.consecutive_losses += 1;
+        } else if pnl > 0.0 {
+            self.consecutive_losses = 0;
+        }
+    }
+
+/** 根据价格找到最近的网格层索引 */
     pub(crate) fn find_level_by_price(&self, price: f64) -> usize {
         let mut closest = 0;
         let mut min_diff = f64::MAX;
@@ -123,7 +91,7 @@ impl GridWorker {
         closest
     }
 
-    /// 根据价格找到最近的网格层索引，要求距离不超过 max_dist
+/** 根据价格找到最近的网格层索引，要求距离不超过 max_dist */
     pub(crate) fn find_level_by_price_within(&self, price: f64, max_dist: f64) -> Option<usize> {
         let (idx, dist) = self.levels.iter().enumerate()
             .map(|(i, l)| (i, (l.price - price).abs()))
@@ -135,9 +103,9 @@ impl GridWorker {
         }
     }
 
-    /// 计算未实现盈亏
-    ///
-    /// 基于各层持仓量和均价，与当前价格比较计算浮动盈亏
+/** 计算未实现盈亏
+
+基于各层持仓量和均价，与当前价格比较计算浮动盈亏 */
     pub(crate) fn compute_unrealized_pnl(&self) -> f64 {
         if self.current_price <= 0.0 {
             return 0.0;
@@ -154,7 +122,7 @@ impl GridWorker {
             .sum()
     }
 
-    /// 计算所有持仓的加权平均入场价格
+/** 计算所有持仓的加权平均入场价格 */
     pub(crate) fn compute_weighted_avg_entry_price(&self) -> f64 {
         let mut total_cost = 0.0;
         let mut total_qty = 0.0;
@@ -167,7 +135,7 @@ impl GridWorker {
         if total_qty > 0.0 { total_cost / total_qty } else { 0.0 }
     }
 
-    /// 格式化当前挂单信息，用于 AI prompt 中 {open_orders} 占位符
+/** 格式化当前挂单信息，用于 AI prompt 中 {open_orders} 占位符 */
     pub(crate) fn format_open_orders(&self) -> String {
         let orders: Vec<String> = self.levels.iter()
             .filter(|l| l.buy_order_id.is_some() || l.sell_order_id.is_some())
@@ -185,14 +153,12 @@ impl GridWorker {
         if orders.is_empty() { "[]".to_string() } else { format!("[{}]", orders.join(", ")) }
     }
 
-    /// 持久化统计数据到数据库
+/** 持久化统计数据到数据库 */
     pub(crate) async fn save_stats(&self) {
         let _ = self.store.save_stats(self.bot.id, self.total_pnl, self.compute_unrealized_pnl(), self.total_trades, self.grid_filled_count).await;
     }
 
-    /// 广播当前网格状态
-    ///
-    /// 将所有层级、价格、盈亏等信息打包为 GridState 并通过事件通道广播
+/** 广播当前网格状态 */
     pub(crate) fn broadcast_state(&self) {
         let state = GridState {
             bot_id: self.bot.id,
@@ -209,7 +175,7 @@ impl GridWorker {
         let _ = self.grid_event_tx.send(GridEvent::StatusUpdate { bot_id: self.bot.id, state });
     }
 
-    /// 记录单笔交易到数据库
+/** 记录单笔交易到数据库 */
     async fn record_trade(&self, level: i32, side: &str, price: f64, quantity: f64, pnl: f64) {
         let pnl_pct = if price > 0.0 { pnl / (price * quantity) * 100.0 } else { 0.0 };
         let _ = self.store.record_trade(
@@ -218,9 +184,7 @@ impl GridWorker {
         ).await;
     }
 
-    /// 处理外部订单事件
-    ///
-    /// 根据事件类型分发到对应的处理函数
+/** 处理外部订单事件 */
     pub(crate) async fn on_order_event(&mut self, event: OrderEvent) {
         match event {
             OrderEvent::OrderPlaced { order } => {
@@ -264,7 +228,7 @@ impl GridWorker {
         }
     }
 
-    /// 暂停网格并取消所有挂单
+/** 暂停网格并取消所有挂单 */
     pub(crate) async fn pause_with_cancel(&mut self, reason: &str) {
         if !self.paused {
             self.paused = true;
@@ -275,20 +239,14 @@ impl GridWorker {
         }
     }
 
-    /// 处理订单已挂出事件
-    ///
-    /// 通过 order_level_map 或 client_order_id 将订单与网格层关联
-    pub(crate) async fn on_order_placed(&mut self, order: &OrderInfo) {
-        if let Some(&(level_idx, ref side)) = self.order_level_map.get(&order.id) {
-            info!(bot_id = %self.bot.id, level = level_idx, side = %side, order_id = %order.id, "Grid order placed (via map)");
-            return;
-        }
+/** 处理订单已挂出事件
 
+优先通过 client_order_id 解析层级映射，回退到 order_id 反查 */
+    pub(crate) async fn on_order_placed(&mut self, order: &OrderInfo) {
         if let Some(ref coi) = order.client_order_id {
-            if let Some((level_idx, side)) = Self::parse_client_order_id(coi, &self.bot.id) {
+            if let Some((level_idx, side)) = Self::parse_client_order_id(coi) {
                 if level_idx < self.levels.len() {
                     self.pending_orders.remove(&(level_idx, side.clone()));
-                    self.order_level_map.insert(order.id, (level_idx, side.clone()));
 
                     if side == "buy" {
                         self.levels[level_idx].buy_order_id = Some(order.id);
@@ -299,21 +257,24 @@ impl GridWorker {
                     info!(
                         bot_id = %self.bot.id, level = self.levels[level_idx].level,
                         side = %side, order_id = %order.id,
-                        "Grid order placed (via client_order_id)"
+                        "Grid order placed"
                     );
                     return;
                 }
             }
         }
+
+        if let Some((level_idx, side)) = self.find_level_by_order_id(order.id) {
+            info!(bot_id = %self.bot.id, level = level_idx, side = %side, order_id = %order.id, "Grid order placed (via order_id lookup)");
+        }
     }
 
-    /// 解析 client_order_id 格式 "grid:{bot_id}:{level_idx}:{side}"
-    fn parse_client_order_id(coi: &str, bot_id: &uuid::Uuid) -> Option<(usize, String)> {
+/** 解析 client_order_id 格式 "grid:{bot_id}:{level_idx}:{side}"
+
+不再比较 bot_id（同一 worker 只会收到自己的事件），避免 Uuid→String 转换开销 */
+    fn parse_client_order_id(coi: &str) -> Option<(usize, String)> {
         let parts: Vec<&str> = coi.splitn(4, ':').collect();
         if parts.len() == 4 && parts[0] == "grid" {
-            if parts[1] != bot_id.to_string() {
-                return None;
-            }
             if let Ok(level_idx) = parts[2].parse::<usize>() {
                 let side = parts[3].to_string();
                 return Some((level_idx, side));
@@ -322,136 +283,41 @@ impl GridWorker {
         None
     }
 
-    /// 处理订单成交事件
-    ///
-    /// 更新网格层持仓状态、计算盈亏、触发反向挂单、记录交易
+/** 处理订单成交事件
+
+更新网格层持仓状态、计算盈亏、触发反向挂单、记录交易 */
     pub(crate) async fn on_order_filled(&mut self, order: &OrderInfo) {
         let side_str = order.side.as_str();
 
-        /* 通过 order_level_map 查找匹配的网格层 */
-        let matched_idx = if let Some(&(idx, ref side)) = self.order_level_map.get(&order.id) {
-            if side == side_str { Some(idx) } else { None }
-        } else {
-            None
-        };
-
-        let idx = match matched_idx {
-            Some(i) => i,
-            None => {
+        let idx = match self.find_level_by_order_id(order.id) {
+            Some((i, ref side)) if side == side_str => i,
+            _ => {
+                warn!(bot_id = %self.bot.id, order_id = %order.id, side = %side_str, "Order filled but not matched to any grid level");
                 return;
             }
         };
 
         let price = order.fill_price.unwrap_or(0.0);
-        let level = &mut self.levels[idx];
-        let is_buy_match = order.side == OrderSide::Buy;
-        let is_sell_match = !is_buy_match;
-        let level_num = level.level;
-        let level_side = level.side.clone();
-        let entry_price = level.avg_buy_price;
+        let level_side = self.levels[idx].side.clone();
+        let level_num = self.levels[idx].level;
+        let entry_price = self.levels[idx].avg_buy_price;
 
-        /* 根据层级方向和成交方向更新持仓 */
-        if level_side == "buy" {
-            if is_buy_match {
-                let old_total = level.avg_buy_price * level.hold_quantity;
-                let new_total = old_total + price * order.filled;
-                level.hold_quantity += order.filled;
-                level.avg_buy_price = if level.hold_quantity > 0.0 {
-                    new_total / level.hold_quantity
-                } else {
-                    0.0
-                };
-                level.buy_filled = true;
-                level.buy_order_id = None;
-                level.last_fill_price = Some(price);
-            } else {
-                level.sell_filled = true;
-                level.sell_order_id = None;
-                level.hold_quantity = (level.hold_quantity - order.filled).max(0.0);
-                level.last_fill_price = Some(price);
-            }
-        } else {
-            if is_sell_match {
-                let old_total = level.avg_buy_price * level.hold_quantity.abs();
-                let new_total = old_total + price * order.filled;
-                level.hold_quantity -= order.filled;
-                level.avg_buy_price = if level.hold_quantity.abs() > 0.0 {
-                    new_total / level.hold_quantity.abs()
-                } else {
-                    0.0
-                };
-                level.sell_filled = true;
-                level.sell_order_id = None;
-                level.last_fill_price = Some(price);
-            } else {
-                level.buy_filled = true;
-                level.buy_order_id = None;
-                level.hold_quantity = (level.hold_quantity + order.filled).min(0.0);
-                level.last_fill_price = Some(price);
-            }
-        }
+        apply_fill_to_level(&mut self.levels[idx], side_str, price, order.filled);
 
-        self.order_level_map.remove(&order.id);
         self.pending_orders.remove(&(idx, side_str.to_string()));
 
-        /* 计算本次成交的已实现盈亏 */
-        let pnl = if level_side == "buy" {
-            if is_sell_match && entry_price > 0.0 {
-                let buy_cost = entry_price * order.filled;
-                let sell_revenue = price * order.filled;
-                sell_revenue - buy_cost
-            } else {
-                0.0
-            }
-        } else {
-            if is_buy_match && entry_price > 0.0 {
-                let sell_revenue = entry_price * order.filled;
-                let buy_cost = price * order.filled;
-                sell_revenue - buy_cost
-            } else {
-                0.0
-            }
-        };
-
+        let pnl = calculate_fill_pnl(&level_side, side_str, entry_price, price, order.filled);
         let hold = self.levels[idx].hold_quantity;
         self.total_pnl += pnl;
         self.total_trades += 1;
         self.grid_filled_count += 1;
+        self.update_consecutive_losses(pnl);
 
-        /* 更新连续亏损计数 */
-        if pnl < 0.0 {
-            self.consecutive_losses += 1;
-        } else if pnl > 0.0 {
-            self.consecutive_losses = 0;
-        }
-
-        /* 完成一个买卖周期后，自动挂反向单 */
-        if level_side == "buy" && is_sell_match && hold <= 0.0 {
-            let rebuy = GridLevel {
-                level: level_num, price: self.levels[idx].price,
-                side: self.levels[idx].side.clone(),
-                buy_price: self.levels[idx].buy_price, sell_price: self.levels[idx].sell_price,
-                quantity: self.levels[idx].quantity, buy_order_id: None, sell_order_id: None,
-                buy_filled: false, sell_filled: false, hold_quantity: 0.0,
-                avg_buy_price: 0.0, last_fill_price: None,
-            };
-            self.place_buy_order(&rebuy).await;
-        } else if level_side == "sell" && is_buy_match && hold >= 0.0 {
-            let reoffer = GridLevel {
-                level: level_num, price: self.levels[idx].price,
-                side: self.levels[idx].side.clone(),
-                buy_price: self.levels[idx].buy_price, sell_price: self.levels[idx].sell_price,
-                quantity: self.levels[idx].quantity, buy_order_id: None, sell_order_id: None,
-                buy_filled: false, sell_filled: false, hold_quantity: 0.0,
-                avg_buy_price: 0.0, last_fill_price: None,
-            };
-            self.place_sell_order(&reoffer).await;
-        }
+        self.place_reverse_order_if_cycle_complete(idx, &level_side, side_str, hold).await;
 
         self.record_trade(level_num, side_str, price, order.filled, pnl).await;
 
-        /* 广播交易事件 */
-        if is_sell_match {
+        if is_close_trade(&level_side, side_str) {
             let _ = self.grid_event_tx.send(GridEvent::GridTradeClosed { bot_id: self.bot.id, level: level_num, pnl });
         }
         let _ = self.grid_event_tx.send(GridEvent::GridFilled {
@@ -467,25 +333,48 @@ impl GridWorker {
         );
     }
 
-    /// 处理订单取消事件
+/** 买卖周期完成后，自动挂反向单重新开仓 */
+    async fn place_reverse_order_if_cycle_complete(
+        &mut self,
+        idx: usize,
+        level_side: &str,
+        trade_side: &str,
+        hold: f64,
+    ) {
+        let cycle_complete = if level_side == "buy" {
+            is_close_trade(level_side, trade_side) && hold <= 0.0
+        } else {
+            is_close_trade(level_side, trade_side) && hold >= 0.0
+        };
+
+        if !cycle_complete {
+            return;
+        }
+
+        let reset_level = self.levels[idx].reset_for_relist();
+        if level_side == "buy" {
+            self.place_buy_order(&reset_level).await;
+        } else {
+            self.place_sell_order(&reset_level).await;
+        }
+    }
+
+/** 处理订单取消事件 */
     pub(crate) async fn on_order_canceled(&mut self, order_id: uuid::Uuid) {
         self.clear_order_id(order_id);
     }
 
-    /// 清除指定订单在网格层和映射表中的记录
+/** 清除指定订单在网格层中的记录
+
+通过 find_level_by_order_id 反查层级，清除 order_id 和 pending 标记 */
     pub(crate) fn clear_order_id(&mut self, order_id: uuid::Uuid) {
-        if let Some((idx, side)) = self.order_level_map.remove(&order_id) {
+        if let Some((idx, side)) = self.find_level_by_order_id(order_id) {
+            if side == "buy" {
+                self.levels[idx].buy_order_id = None;
+            } else {
+                self.levels[idx].sell_order_id = None;
+            }
             self.pending_orders.remove(&(idx, side));
-        }
-        for level in &mut self.levels {
-            if level.buy_order_id == Some(order_id) {
-                level.buy_order_id = None;
-                self.pending_orders.remove(&(level.level as usize, "buy".to_string()));
-            }
-            if level.sell_order_id == Some(order_id) {
-                level.sell_order_id = None;
-                self.pending_orders.remove(&(level.level as usize, "sell".to_string()));
-            }
         }
     }
 }

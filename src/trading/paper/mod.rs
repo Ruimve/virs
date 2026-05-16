@@ -208,6 +208,15 @@ impl OrderExecutor for PaperOrderExecutor {
                     "Paper order placed"
                 );
             }
+            OrderCommand::CancelOrder { order_id, symbol: _ } => {
+                let mut pending = self.pending.lock().await;
+                if pending.remove(&order_id).is_some() {
+                    let _ = self.event_tx.send(OrderEvent::OrderCanceled { order_id, symbol: None });
+                    debug!(order_id = %order_id, "Paper order canceled");
+                } else {
+                    debug!(order_id = %order_id, "Paper cancel order not found");
+                }
+            }
             OrderCommand::CancelAllOrders { symbol: _ } => {
                 let mut pending = self.pending.lock().await;
                 for order_id in pending.keys() {

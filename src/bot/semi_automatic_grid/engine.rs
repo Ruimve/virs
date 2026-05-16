@@ -12,43 +12,43 @@ use crate::bot::semi_automatic_grid::worker::GridWorker;
 use crate::engine::kline::KlineEngine;
 use crate::engine::kline::types::MarketType;
 
-/// 网格引擎
-///
-/// 管理所有网格 bot 的生命周期，包括启动、停止、暂停、恢复、删除和调整。
-/// 通过 mpsc channel 接收外部命令，通过 broadcast channel 推送事件给前端。
+/** 网格引擎
+
+管理所有网格 bot 的生命周期，包括启动、停止、暂停、恢复、删除和调整。
+通过 mpsc channel 接收外部命令，通过 broadcast channel 推送事件给前端。 */
 pub struct GridEngine {
-    /// 数据存储端口
+/** 数据存储端口 */
     store: Arc<dyn GridStore>,
-    /// AI 决策服务
+/** AI 决策服务 */
     ai_service: Arc<GridAiService>,
-    /// 价格提供者端口
+/** 价格提供者端口 */
     price_provider: Arc<dyn PriceProvider>,
-    /// 订单执行器端口
+/** 订单执行器端口 */
     order_executor: Arc<dyn OrderExecutor>,
-    /// 市场数据提供者端口
+/** 市场数据提供者端口 */
     market_data_provider: Arc<dyn MarketDataProvider>,
-    /// 外部订单事件广播源
+/** 外部订单事件广播源 */
     event_tx: broadcast::Sender<OrderEvent>,
-    /// 网格事件广播（推送给前端 WebSocket）
+/** 网格事件广播（推送给前端 WebSocket） */
     grid_event_tx: broadcast::Sender<GridEvent>,
-    /// 命令接收端（启动时取出，仅一次）
+/** 命令接收端（启动时取出，仅一次） */
     cmd_rx: Option<mpsc::Receiver<GridCommand>>,
-    /// bot_id -> worker 任务句柄
+/** bot_id -> worker 任务句柄 */
     workers: HashMap<Uuid, tokio::task::JoinHandle<()>>,
-    /// bot_id -> 关闭信号发送端
+/** bot_id -> 关闭信号发送端 */
     shutdown_txs: HashMap<Uuid, mpsc::Sender<()>>,
-    /// bot_id -> 调整信号发送端
+/** bot_id -> 调整信号发送端 */
     adjust_txs: HashMap<Uuid, mpsc::Sender<()>>,
-    /// bot_id -> 交易对名称（用于停止时撤单）
+/** bot_id -> 交易对名称（用于停止时撤单） */
     bot_symbols: HashMap<Uuid, String>,
-    /// K 线引擎（用于订阅实时 K 线数据）
+/** K 线引擎（用于订阅实时 K 线数据） */
     kline_engine: Option<Arc<KlineEngine>>,
 }
 
 impl GridEngine {
-    /// 创建 GridEngine 实例
-    ///
-    /// 返回 (engine, command_sender, event_sender) 三元组
+/** 创建 GridEngine 实例
+
+返回 (engine, command_sender, event_sender) 三元组 */
     pub fn new(
         store: Arc<dyn GridStore>,
         ai_service: Arc<GridAiService>,
@@ -80,14 +80,14 @@ impl GridEngine {
         (engine, cmd_tx, grid_event_tx)
     }
 
-    /// 订阅网格事件广播
+/** 订阅网格事件广播 */
     pub fn subscribe_events(&self) -> broadcast::Receiver<GridEvent> {
         self.grid_event_tx.subscribe()
     }
 
-    /// 启动引擎主循环
-    ///
-    /// 先恢复之前运行中的 bot，然后进入命令接收循环
+/** 启动引擎主循环
+
+先恢复之前运行中的 bot，然后进入命令接收循环 */
     pub async fn run(&mut self) {
         let mut cmd_rx = self.cmd_rx.take().expect("GridEngine already running");
 
@@ -111,9 +111,9 @@ impl GridEngine {
         info!("GridEngine shutdown complete");
     }
 
-    /// 恢复之前运行中的 bot
-    ///
-    /// 从数据库加载状态为 "running" 的 bot，先标记为 "stopped" 再重新启动
+/** 恢复之前运行中的 bot
+
+从数据库加载状态为 "running" 的 bot，先标记为 "stopped" 再重新启动 */
     pub(crate) async fn restore_running_bots(&mut self) {
         let running_bots = self.store.load_running_bots().await.unwrap_or_default();
 
@@ -124,9 +124,9 @@ impl GridEngine {
         }
     }
 
-    /// 启动指定 bot
-    ///
-    /// 创建 GridWorker 并在独立 tokio 任务中运行
+/** 启动指定 bot
+
+创建 GridWorker 并在独立 tokio 任务中运行 */
     pub(crate) async fn start_bot(&mut self, bot_id: Uuid) {
         if self.workers.contains_key(&bot_id) {
             warn!(bot_id = %bot_id, "Bot already running");
@@ -181,26 +181,34 @@ impl GridEngine {
         info!(bot_id = %bot_id, "Grid bot started");
     }
 
-    /// 停止指定 bot
-    ///
-    /// 取消所有挂单并关闭 worker 任务
+/** 停止指定 bot
+
+取消所有挂单并关闭 worker 任务，状态设为 "stopped" */
     pub(crate) async fn stop_bot(&mut self, bot_id: Uuid, reason: &str) {
-        self.stop_bot_with_symbol(bot_id, reason, None).await;
+        self.stop_or_pause_bot(bot_id, reason, "stopped", None).await;
     }
 
-    /// 带交易对名称的停止 bot
-    ///
-    /// 优先使用缓存的 symbol，回退到数据库查询，确保撤单时能传递正确的 symbol
-    async fn stop_bot_with_symbol(&mut self, bot_id: Uuid, reason: &str, symbol: Option<String>) {
-        let cancel_symbol = match symbol {
+/** 暂停指定 bot
+
+取消所有挂单、关闭 worker 任务，状态保留为 "paused" */
+    pub(crate) async fn pause_bot(&mut self, bot_id: Uuid) {
+        self.stop_or_pause_bot(bot_id, "paused", "paused", None).await;
+    }
+
+/** 停止或暂停 bot 的通用方法
+
+合并 stop_bot / pause_bot / delete_bot 中的重复逻辑：
+1. 解析 symbol（优先缓存 → 回退数据库）
+2. 取消所有挂单
+3. 优雅关闭 worker
+4. 更新 bot 状态 */
+    async fn stop_or_pause_bot(&mut self, bot_id: Uuid, reason: &str, target_status: &str, symbol_override: Option<String>) {
+        let cancel_symbol = match symbol_override {
             Some(s) => Some(s),
-            None => {
-                if let Some(s) = self.bot_symbols.get(&bot_id).cloned() {
-                    Some(s)
-                } else {
-                    self.store.load_bot(bot_id).await.ok().flatten().map(|b| b.symbol.clone())
-                }
-            }
+            None => match self.bot_symbols.get(&bot_id).cloned() {
+                Some(s) => Some(s),
+                None => self.store.load_bot(bot_id).await.ok().flatten().map(|b| b.symbol.clone()),
+            },
         };
 
         let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
@@ -209,33 +217,14 @@ impl GridEngine {
 
         self.graceful_shutdown_worker(bot_id).await;
 
-        let _ = self.store.update_bot_status(bot_id, "stopped").await;
+        let _ = self.store.update_bot_status(bot_id, target_status).await;
         let _ = self.grid_event_tx.send(GridEvent::BotStopped { bot_id, reason: reason.to_string() });
-        info!(bot_id = %bot_id, "Grid bot stopped: {}", reason);
+        info!(bot_id = %bot_id, "Grid bot {}: {}", target_status, reason);
     }
 
-    /// 暂停指定 bot
-    ///
-    /// 取消所有挂单、关闭 worker 任务，但保留 bot 状态为 "paused"
-    pub(crate) async fn pause_bot(&mut self, bot_id: Uuid) {
-        let symbol = if let Some(s) = self.bot_symbols.get(&bot_id).cloned() {
-            Some(s)
-        } else {
-            self.store.load_bot(bot_id).await.ok().flatten().map(|b| b.symbol.clone())
-        };
-        let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
-            symbol,
-        }).await;
+/** 优雅关闭 worker 任务
 
-        self.graceful_shutdown_worker(bot_id).await;
-
-        let _ = self.store.update_bot_status(bot_id, "paused").await;
-        info!(bot_id = %bot_id, "Grid bot paused");
-    }
-
-    /// 优雅关闭 worker 任务
-    ///
-    /// 发送关闭信号，等待最多 5 秒，超时则强制 abort
+发送关闭信号，等待最多 5 秒，超时则强制 abort */
     async fn graceful_shutdown_worker(&mut self, bot_id: Uuid) {
         if let Some(tx) = self.shutdown_txs.remove(&bot_id) {
             let _ = tx.send(()).await;
@@ -259,17 +248,17 @@ impl GridEngine {
         }
     }
 
-    /// 恢复指定 bot
-    ///
-    /// 先标记为 "stopped" 再重新启动（复用 start_bot 逻辑）
+/** 恢复指定 bot
+
+先标记为 "stopped" 再重新启动（复用 start_bot 逻辑） */
     pub(crate) async fn resume_bot(&mut self, bot_id: Uuid) {
         let _ = self.store.update_bot_status(bot_id, "stopped").await;
         self.start_bot(bot_id).await;
     }
 
-    /// 删除指定 bot
-    ///
-    /// 可选平仓：先取消挂单再发送 CloseAllPositions 命令
+/** 删除指定 bot
+
+可选平仓：先取消挂单再发送 CloseAllPositions 命令 */
     pub(crate) async fn delete_bot(&mut self, bot_id: Uuid, close_position: bool) {
         let bot_info = self.store.load_bot(bot_id).await.ok().flatten();
         let symbol = bot_info.as_ref().map(|b| b.symbol.clone());
@@ -292,14 +281,14 @@ impl GridEngine {
             }
         }
 
-        self.stop_bot_with_symbol(bot_id, "deleted", symbol).await;
+        self.stop_or_pause_bot(bot_id, "deleted", "stopped", symbol).await;
         let _ = self.store.delete_bot(bot_id).await;
         info!(bot_id = %bot_id, close_position, "Grid bot deleted");
     }
 
-    /// 触发指定 bot 的网格调整
-    ///
-    /// 通过 adjust channel 通知 worker 重新加载配置
+/** 触发指定 bot 的网格调整
+
+通过 adjust channel 通知 worker 重新加载配置 */
     pub(crate) async fn adjust_grid(&mut self, bot_id: Uuid) {
         if let Some(adjust_tx) = self.adjust_txs.get(&bot_id) {
             if let Err(e) = adjust_tx.send(()).await {
@@ -312,7 +301,7 @@ impl GridEngine {
         }
     }
 
-    /// 关闭所有 bot 并停止引擎
+/** 关闭所有 bot 并停止引擎 */
     pub(crate) async fn shutdown_all(&mut self) {
         let bot_ids: Vec<Uuid> = self.workers.keys().copied().collect();
         for id in bot_ids {

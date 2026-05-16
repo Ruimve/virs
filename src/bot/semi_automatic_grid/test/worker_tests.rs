@@ -234,7 +234,7 @@ fn simple_rule_decision_just_below_lower() {
 async fn on_order_placed_via_map() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
-    worker.order_level_map.insert(order_id, (3, "buy".to_string()));
+    worker.levels[3].buy_order_id = Some(order_id);
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
         fill_price: Some(worker.levels[3].buy_price),
@@ -243,7 +243,7 @@ async fn on_order_placed_via_map() {
                 client_order_id: None,
     };
     worker.on_order_placed(&order).await;
-    assert_eq!(worker.order_level_map.len(), 1);
+    assert_eq!(worker.levels.iter().filter(|l| l.buy_order_id.is_some() || l.sell_order_id.is_some()).count(), 1);
 }
 
 #[tokio::test]
@@ -258,9 +258,9 @@ async fn on_order_placed_via_client_order_id_buy() {
         client_order_id: Some(format!("grid:{}:{}:buy", worker.bot.id, level_idx)),
     };
     worker.on_order_placed(&order).await;
-    assert!(worker.order_level_map.contains_key(&order_id));
-    let (idx, side) = worker.order_level_map.get(&order_id).unwrap();
-    assert_eq!(*idx, level_idx);
+    assert!(worker.find_level_by_order_id(order_id).is_some());
+    let (idx, side) = worker.find_level_by_order_id(order_id).unwrap();
+    assert_eq!(idx, level_idx);
     assert_eq!(side, "buy");
     assert_eq!(worker.levels[level_idx].buy_order_id, Some(order_id));
 }
@@ -277,9 +277,9 @@ async fn on_order_placed_via_client_order_id_sell() {
         client_order_id: Some(format!("grid:{}:{}:sell", worker.bot.id, level_idx)),
     };
     worker.on_order_placed(&order).await;
-    assert!(worker.order_level_map.contains_key(&order_id));
-    let (idx, side) = worker.order_level_map.get(&order_id).unwrap();
-    assert_eq!(*idx, level_idx);
+    assert!(worker.find_level_by_order_id(order_id).is_some());
+    let (idx, side) = worker.find_level_by_order_id(order_id).unwrap();
+    assert_eq!(idx, level_idx);
     assert_eq!(side, "sell");
     assert_eq!(worker.levels[level_idx].sell_order_id, Some(order_id));
 }
@@ -295,7 +295,7 @@ async fn on_order_placed_no_match() {
                 client_order_id: None,
     };
     worker.on_order_placed(&order).await;
-    assert!(!worker.order_level_map.contains_key(&order_id));
+    assert!(!worker.find_level_by_order_id(order_id).is_some());
 }
 
 #[tokio::test]
@@ -309,7 +309,7 @@ async fn on_order_placed_no_prices() {
                 client_order_id: None,
     };
     worker.on_order_placed(&order).await;
-    assert!(!worker.order_level_map.contains_key(&order_id));
+    assert!(!worker.find_level_by_order_id(order_id).is_some());
 }
 
 #[tokio::test]
@@ -324,7 +324,7 @@ async fn on_order_placed_client_order_id_no_match() {
         client_order_id: None,
     };
     worker.on_order_placed(&order).await;
-    assert!(!worker.order_level_map.contains_key(&order_id));
+    assert!(!worker.find_level_by_order_id(order_id).is_some());
 }
 
 // ── on_order_filled ──
@@ -335,7 +335,7 @@ async fn on_order_filled_buy() {
     let order_id = Uuid::new_v4();
     let buy_price = worker.levels[3].buy_price;
     let quantity = worker.levels[3].quantity;
-    worker.order_level_map.insert(order_id, (3, "buy".to_string()));
+    worker.levels[3].buy_order_id = Some(order_id);
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
         fill_price: Some(buy_price), request_price: None, filled: quantity,
@@ -348,7 +348,7 @@ async fn on_order_filled_buy() {
     assert!((worker.levels[3].hold_quantity - quantity).abs() < f64::EPSILON);
     assert_eq!(worker.total_trades, 1);
     assert_eq!(worker.grid_filled_count, 1);
-    assert!(!worker.order_level_map.contains_key(&order_id));
+    assert!(!worker.find_level_by_order_id(order_id).is_some());
 }
 
 #[tokio::test]
@@ -361,7 +361,7 @@ async fn on_order_filled_sell_with_rebuy() {
     worker.levels[3].hold_quantity = quantity;
     worker.levels[3].avg_buy_price = buy_price;
     let sell_order_id = Uuid::new_v4();
-    worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
+    worker.levels[3].sell_order_id = Some(sell_order_id);
     worker.levels[3].sell_order_id = Some(sell_order_id);
     let order = OrderInfo {
         id: sell_order_id, side: OrderSide::Sell,
@@ -376,7 +376,7 @@ async fn on_order_filled_sell_with_rebuy() {
     assert!(worker.total_pnl > 0.0);
     assert_eq!(worker.total_trades, 1);
     assert_eq!(worker.grid_filled_count, 1);
-    assert!(!worker.order_level_map.contains_key(&sell_order_id));
+    assert!(!worker.find_level_by_order_id(sell_order_id).is_some());
 }
 
 #[tokio::test]
@@ -389,7 +389,7 @@ async fn on_order_filled_sell_pnl_calculation() {
     worker.levels[3].hold_quantity = quantity;
     worker.levels[3].avg_buy_price = buy_price;
     let sell_order_id = Uuid::new_v4();
-    worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
+    worker.levels[3].sell_order_id = Some(sell_order_id);
     let order = OrderInfo {
         id: sell_order_id, side: OrderSide::Sell,
         fill_price: Some(sell_price), request_price: None, filled: quantity,
@@ -421,7 +421,7 @@ async fn on_order_filled_zero_filled() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
     let buy_price = worker.levels[3].buy_price;
-    worker.order_level_map.insert(order_id, (3, "buy".to_string()));
+    worker.levels[3].buy_order_id = Some(order_id);
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
         fill_price: Some(buy_price), request_price: None, filled: 0.0,
@@ -437,7 +437,7 @@ async fn on_order_filled_zero_filled() {
 async fn on_order_filled_side_mismatch() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
-    worker.order_level_map.insert(order_id, (3, "buy".to_string()));
+    worker.levels[3].buy_order_id = Some(order_id);
     let order = OrderInfo {
         id: order_id, side: OrderSide::Sell,
         fill_price: Some(worker.levels[3].sell_price), request_price: None, filled: 0.001,
@@ -454,10 +454,10 @@ async fn on_order_filled_side_mismatch() {
 async fn clear_order_id_buy() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
-    worker.order_level_map.insert(order_id, (2, "buy".to_string()));
+    worker.levels[2].buy_order_id = Some(order_id);
     worker.levels[2].buy_order_id = Some(order_id);
     worker.clear_order_id(order_id);
-    assert!(!worker.order_level_map.contains_key(&order_id));
+    assert!(!worker.find_level_by_order_id(order_id).is_some());
     assert!(worker.levels[2].buy_order_id.is_none());
 }
 
@@ -465,10 +465,10 @@ async fn clear_order_id_buy() {
 async fn clear_order_id_sell() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
-    worker.order_level_map.insert(order_id, (2, "sell".to_string()));
+    worker.levels[2].sell_order_id = Some(order_id);
     worker.levels[2].sell_order_id = Some(order_id);
     worker.clear_order_id(order_id);
-    assert!(!worker.order_level_map.contains_key(&order_id));
+    assert!(!worker.find_level_by_order_id(order_id).is_some());
     assert!(worker.levels[2].sell_order_id.is_none());
 }
 
@@ -477,17 +477,17 @@ async fn clear_order_id_nonexistent() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
     worker.clear_order_id(order_id);
-    assert!(worker.order_level_map.is_empty());
+    assert!(worker.levels.iter().all(|l| l.buy_order_id.is_none() && l.sell_order_id.is_none()));
 }
 
 #[tokio::test]
 async fn on_order_canceled() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
-    worker.order_level_map.insert(order_id, (1, "buy".to_string()));
+    worker.levels[1].buy_order_id = Some(order_id);
     worker.levels[1].buy_order_id = Some(order_id);
     worker.on_order_canceled(order_id).await;
-    assert!(!worker.order_level_map.contains_key(&order_id));
+    assert!(!worker.find_level_by_order_id(order_id).is_some());
     assert!(worker.levels[1].buy_order_id.is_none());
 }
 
@@ -497,12 +497,12 @@ async fn on_order_canceled() {
 async fn on_order_event_order_failed() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
-    worker.order_level_map.insert(order_id, (2, "buy".to_string()));
+    worker.levels[2].buy_order_id = Some(order_id);
     worker.levels[2].buy_order_id = Some(order_id);
     worker.on_order_event(OrderEvent::OrderFailed {
         order_id, reason: "timeout".to_string(),
     }).await;
-    assert!(!worker.order_level_map.contains_key(&order_id));
+    assert!(!worker.find_level_by_order_id(order_id).is_some());
     assert!(worker.levels[2].buy_order_id.is_none());
 }
 
@@ -711,12 +711,12 @@ async fn adjust_grid_zero_values_ignored() {
 }
 
 #[tokio::test]
-async fn adjust_grid_clears_order_level_map() {
+async fn adjust_grid_clears_level_order_ids() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
-    worker.order_level_map.insert(Uuid::new_v4(), (2, "buy".to_string()));
-    assert_eq!(worker.order_level_map.len(), 1);
+    worker.levels[2].buy_order_id = Some(Uuid::new_v4());
+    assert_eq!(worker.levels.iter().filter(|l| l.buy_order_id.is_some() || l.sell_order_id.is_some()).count(), 1);
     worker.adjust_grid(Some(65000.0), Some(48000.0), false).await;
-    assert!(worker.order_level_map.is_empty());
+    assert!(worker.levels.iter().all(|l| l.buy_order_id.is_none() && l.sell_order_id.is_none()));
 }
 
 // ── fetch_current_price ──
@@ -865,10 +865,10 @@ async fn on_price_tick_sell_when_hold_and_price_above() {
 #[test]
 fn recalculate_levels_clears_map() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
-    worker.order_level_map.insert(Uuid::new_v4(), (2, "buy".to_string()));
-    assert_eq!(worker.order_level_map.len(), 1);
+    worker.levels[2].buy_order_id = Some(Uuid::new_v4());
+    assert_eq!(worker.levels.iter().filter(|l| l.buy_order_id.is_some() || l.sell_order_id.is_some()).count(), 1);
     worker.recalculate_levels();
-    assert!(worker.order_level_map.is_empty());
+    assert!(worker.levels.iter().all(|l| l.buy_order_id.is_none() && l.sell_order_id.is_none()));
     assert_eq!(worker.levels.len(), 10);
 }
 
@@ -938,7 +938,7 @@ async fn on_order_filled_sell_triggers_grid_trade_closed_event() {
     worker.levels[3].hold_quantity = quantity;
     worker.levels[3].avg_buy_price = buy_price;
     let sell_order_id = Uuid::new_v4();
-    worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
+    worker.levels[3].sell_order_id = Some(sell_order_id);
 
     let order = OrderInfo {
         id: sell_order_id, side: OrderSide::Sell,
@@ -976,7 +976,7 @@ async fn on_order_filled_sell_triggers_grid_filled_event() {
     worker.levels[3].buy_filled = true;
     worker.levels[3].hold_quantity = quantity;
     let sell_order_id = Uuid::new_v4();
-    worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
+    worker.levels[3].sell_order_id = Some(sell_order_id);
 
     let order = OrderInfo {
         id: sell_order_id, side: OrderSide::Sell,
@@ -1015,7 +1015,7 @@ async fn on_order_filled_buy_triggers_grid_filled_event() {
     let buy_price = worker.levels[3].buy_price;
     let quantity = worker.levels[3].quantity;
     let order_id = Uuid::new_v4();
-    worker.order_level_map.insert(order_id, (3, "buy".to_string()));
+    worker.levels[3].buy_order_id = Some(order_id);
 
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
@@ -1050,7 +1050,7 @@ async fn on_order_filled_buy_no_trade_closed_event() {
     let buy_price = worker.levels[3].buy_price;
     let quantity = worker.levels[3].quantity;
     let order_id = Uuid::new_v4();
-    worker.order_level_map.insert(order_id, (3, "buy".to_string()));
+    worker.levels[3].buy_order_id = Some(order_id);
 
     let order = OrderInfo {
         id: order_id, side: OrderSide::Buy,
@@ -1082,7 +1082,7 @@ async fn on_order_filled_sell_places_rebuy_order() {
     worker.levels[3].buy_filled = true;
     worker.levels[3].hold_quantity = quantity;
     let sell_order_id = Uuid::new_v4();
-    worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
+    worker.levels[3].sell_order_id = Some(sell_order_id);
 
     let order = OrderInfo {
         id: sell_order_id, side: OrderSide::Sell,
@@ -1381,7 +1381,7 @@ async fn on_order_event_order_placed_dispatches() {
         },
     }).await;
 
-    assert!(worker.order_level_map.contains_key(&order_id));
+    assert!(worker.find_level_by_order_id(order_id).is_some());
     assert_eq!(worker.levels[2].buy_order_id, Some(order_id));
 }
 
@@ -1391,7 +1391,7 @@ async fn on_order_event_order_filled_dispatches() {
     let order_id = Uuid::new_v4();
     let buy_price = worker.levels[3].buy_price;
     let quantity = worker.levels[3].quantity;
-    worker.order_level_map.insert(order_id, (3, "buy".to_string()));
+    worker.levels[3].buy_order_id = Some(order_id);
 
     worker.on_order_event(OrderEvent::OrderFilled {
         order: OrderInfo {
@@ -1410,12 +1410,12 @@ async fn on_order_event_order_filled_dispatches() {
 async fn on_order_event_order_canceled_dispatches() {
     let mut worker = make_worker(make_bot_config(), 55000.0);
     let order_id = Uuid::new_v4();
-    worker.order_level_map.insert(order_id, (2, "buy".to_string()));
+    worker.levels[2].buy_order_id = Some(order_id);
     worker.levels[2].buy_order_id = Some(order_id);
 
     worker.on_order_event(OrderEvent::OrderCanceled { order_id, symbol: None }).await;
 
-    assert!(!worker.order_level_map.contains_key(&order_id));
+    assert!(!worker.find_level_by_order_id(order_id).is_some());
     assert!(worker.levels[2].buy_order_id.is_none());
 }
 
@@ -1540,7 +1540,7 @@ async fn on_order_filled_sell_zero_profit_pct() {
     worker.levels[3].buy_filled = true;
     worker.levels[3].hold_quantity = quantity;
     let sell_order_id = Uuid::new_v4();
-    worker.order_level_map.insert(sell_order_id, (3, "sell".to_string()));
+    worker.levels[3].sell_order_id = Some(sell_order_id);
 
     let order = OrderInfo {
         id: sell_order_id, side: OrderSide::Sell,

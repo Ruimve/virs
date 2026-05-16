@@ -38,6 +38,10 @@ pub enum OrderCommand {
         reduce_only: bool,
         client_order_id: Option<String>,
     },
+    CancelOrder {
+        order_id: Uuid,
+        symbol: String,
+    },
     CancelAllOrders {
         symbol: Option<String>,
     },

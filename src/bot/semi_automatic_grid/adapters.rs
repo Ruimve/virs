@@ -1,7 +1,7 @@
-//! Grid Engine 的 Adapter 实现
-//!
-//! 将外部模块（ExchangeRegistry, Position Engine, Database, AiService 等）
-//! 适配为 semi_automatic_grid 模块定义的 trait 接口。
+/*! Grid Engine 的 Adapter 实现 */
+/*!  */
+/*! 将外部模块（ExchangeRegistry, Position Engine, Database, AiService 等） */
+/*! 适配为 semi_automatic_grid 模块定义的 trait 接口。 */
 
 use std::sync::Arc;
 
@@ -91,6 +91,47 @@ impl ExchangeMarketDataProvider {
         self
     }
 
+/** 从缓存或 REST API 获取 K 线数据
+
+优先从 KlineEngine 缓存获取，缓存不足时回退到交易所 REST API。
+required 为 true 时，数据不足返回 None；为 false 时返回空向量 */
+    async fn fetch_klines(
+        &self,
+        exchange: &str,
+        symbol: &str,
+        timeframe: Timeframe,
+        min_count: usize,
+        interval_str: &str,
+        start_ms: i64,
+        required: bool,
+    ) -> Option<Vec<Kline>> {
+        if let Some(klines) = self.get_klines_from_cache_or_rest(exchange, symbol, timeframe, min_count).await {
+            return Some(klines);
+        }
+
+        let exchange_key = format!("{}:perpetual", exchange);
+        let ex = self.exchange_registry.get(&exchange_key);
+        match ex {
+            Some(ref ex) => match ex.get_klines_range(symbol, interval_str, start_ms, chrono::Utc::now().timestamp_millis()).await {
+                Ok(k) if k.len() >= min_count => Some(k),
+                Ok(k) if !required => Some(k),
+                Ok(k) => {
+                    warn!(exchange, symbol, count = k.len(), required = min_count, "{} klines insufficient, returning empty", interval_str);
+                    if required { None } else { Some(k) }
+                }
+                Err(e) => {
+                    warn!(exchange, symbol, error = %e, "Failed to fetch {} klines", interval_str);
+                    if required { None } else { Some(vec![]) }
+                }
+            },
+            None => {
+                warn!(exchange, symbol, "No {} klines in cache and no exchange for REST fallback", interval_str);
+                if required { None } else { Some(vec![]) }
+            }
+        }
+    }
+
+/** 从缓存获取 K 线数据（内部辅助方法） */
     async fn get_klines_from_cache_or_rest(
         &self,
         exchange: &str,
@@ -112,112 +153,64 @@ impl ExchangeMarketDataProvider {
         }
         None
     }
+
+/** 获取当前价格
+
+优先从 1 分钟 K 线缓存获取，回退到交易所 ticker，最后回退到 1h K 线收盘价 */
+    async fn fetch_current_price(&self, exchange: &str, symbol: &str, klines_1h: &[Kline]) -> f64 {
+        if let Some(ref engine) = self.kline_engine {
+            if let Some(candles) = engine.get_klines_async(exchange, symbol, Timeframe::M1).await {
+                if let Some(last) = candles.last() {
+                    if last.close > 0.0 {
+                        return last.close;
+                    }
+                }
+            }
+        }
+
+        let exchange_key = format!("{}:perpetual", exchange);
+        if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+            if let Ok(t) = ex.get_ticker(symbol).await {
+                if t.last > 0.0 {
+                    return t.last;
+                }
+            }
+        }
+
+        klines_1h.last().map(|k| k.close).unwrap_or(0.0)
+    }
 }
 
 #[async_trait]
 impl MarketDataProvider for ExchangeMarketDataProvider {
     async fn get_market_snapshot(&self, exchange: &str, symbol: &str) -> MarketSnapshot {
-        let exchange_key = format!("{}:perpetual", exchange);
-        let ex = self.exchange_registry.get(&exchange_key);
-
-        let klines_1h = match self.get_klines_from_cache_or_rest(exchange, symbol, Timeframe::H1, 30).await {
-            Some(k) if k.len() >= 30 => k,
-            Some(k) => {
-                if let Some(ref ex) = ex {
-                    let now_ms = chrono::Utc::now().timestamp_millis();
-                    let start_1h = now_ms - 200 * 3600 * 1000;
-                    match ex.get_klines_range(symbol, "1h", start_1h, now_ms).await {
-                        Ok(k) if k.len() >= 30 => k,
-                        Ok(k) => {
-                            warn!(exchange, symbol, count = k.len(), "1h klines insufficient (< 30), returning empty snapshot");
-                            return MarketSnapshot::default();
-                        }
-                        Err(e) => {
-                            warn!(exchange, symbol, error = %e, "Failed to fetch 1h klines, returning empty snapshot");
-                            return MarketSnapshot::default();
-                        }
-                    }
-                } else {
-                    warn!(exchange, symbol, count = k.len(), "1h klines insufficient (< 30) and no exchange for REST fallback");
-                    return MarketSnapshot::default();
-                }
-            }
-            None => {
-                if let Some(ref ex) = ex {
-                    let now_ms = chrono::Utc::now().timestamp_millis();
-                    let start_1h = now_ms - 200 * 3600 * 1000;
-                    match ex.get_klines_range(symbol, "1h", start_1h, now_ms).await {
-                        Ok(k) if k.len() >= 30 => k,
-                        Ok(k) => {
-                            warn!(exchange, symbol, count = k.len(), "1h klines insufficient (< 30), returning empty snapshot");
-                            return MarketSnapshot::default();
-                        }
-                        Err(e) => {
-                            warn!(exchange, symbol, error = %e, "Failed to fetch 1h klines, returning empty snapshot");
-                            return MarketSnapshot::default();
-                        }
-                    }
-                } else {
-                    warn!(exchange, symbol, "No 1h klines in cache and no exchange for REST fallback, returning empty snapshot");
-                    return MarketSnapshot::default();
-                }
-            }
-        };
-
         let now_ms = chrono::Utc::now().timestamp_millis();
-        let start_4h = now_ms - 50 * 4 * 3600 * 1000;
-        let start_15m = now_ms - 200 * 15 * 60 * 1000;
 
-        let klines_4h = match self.get_klines_from_cache_or_rest(exchange, symbol, Timeframe::H4, 1).await {
+        let klines_1h = match self.fetch_klines(
+            exchange, symbol, Timeframe::H1, 30, "1h",
+            now_ms - 200 * 3600 * 1000, true,
+        ).await {
             Some(k) => k,
-            None => match ex {
-                Some(ref ex) => match ex.get_klines_range(symbol, "4h", start_4h, now_ms).await {
-                    Ok(k) => k,
-                    Err(_) => vec![],
-                },
-                None => vec![],
-            },
+            None => return MarketSnapshot::default(),
         };
 
-        let klines_15m = match self.get_klines_from_cache_or_rest(exchange, symbol, Timeframe::M15, 1).await {
-            Some(k) => k,
-            None => match ex {
-                Some(ref ex) => match ex.get_klines_range(symbol, "15m", start_15m, now_ms).await {
-                    Ok(k) => k,
-                    Err(_) => vec![],
-                },
-                None => vec![],
-            },
-        };
+        let klines_4h = self.fetch_klines(
+            exchange, symbol, Timeframe::H4, 1, "4h",
+            now_ms - 50 * 4 * 3600 * 1000, false,
+        ).await.unwrap_or_default();
 
-        let last_idx = klines_1h.len().saturating_sub(1);
-        let mut current_price: f64 = 0.0;
-        if let Some(ref engine) = self.kline_engine {
-            if let Some(candles) = engine.get_klines_async(exchange, symbol, Timeframe::M1).await {
-                if let Some(last) = candles.last() {
-                    if last.close > 0.0 {
-                        current_price = last.close;
-                    }
-                }
-            }
-        }
-        if current_price <= 0.0 {
-            match ex {
-                Some(ref ex) => {
-                    current_price = match ex.get_ticker(symbol).await {
-                        Ok(t) if t.last > 0.0 => t.last,
-                        _ => klines_1h.last().map(|k| k.close).unwrap_or(0.0),
-                    };
-                }
-                None => {
-                    current_price = klines_1h.last().map(|k| k.close).unwrap_or(0.0);
-                }
-            }
-        }
+        let klines_15m = self.fetch_klines(
+            exchange, symbol, Timeframe::M15, 1, "15m",
+            now_ms - 200 * 15 * 60 * 1000, false,
+        ).await.unwrap_or_default();
 
-        let funding_rate = match ex {
-            Some(ref ex) => ex.get_funding_rate(symbol).await.map(|fr| fr.rate).unwrap_or(0.0),
-            None => 0.0,
+        let current_price = self.fetch_current_price(exchange, symbol, &klines_1h).await;
+
+        let exchange_key = format!("{}:perpetual", exchange);
+        let funding_rate = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+            ex.get_funding_rate(symbol).await.map(|fr| fr.rate).unwrap_or(0.0)
+        } else {
+            0.0
         };
 
         let ind = super::utils::compute_market_indicators(
@@ -228,52 +221,12 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             "N/A".to_string(),
         );
 
+        let effective_price = if current_price > 0.0 { current_price } else { ind.current_price };
+
         MarketSnapshot {
-            current_price: if current_price > 0.0 { current_price } else { ind.current_price },
-            rsi: ind.rsi,
-            atr: ind.atr,
-            atr_pct: ind.atr_pct,
-            bb_width: ind.bb_width,
-            bb_upper: ind.bb_upper,
-            bb_middle: ind.bb_middle,
-            bb_lower: ind.bb_lower,
-            ema12: ind.ema12,
-            ema12_trend: ind.ema12_trend,
-            ema20: ind.ema20,
-            ema26: ind.ema26,
-            ema26_trend: ind.ema26_trend,
-            ema50: ind.ema50,
-            ema_4h: ind.h4_ema20,
-            volatility: ind.volatility,
-            change_1h: ind.change_1h,
-            change_4h: ind.change_4h,
-            change_24h: ind.change_24h,
-            funding_rate: ind.funding_rate,
-            macd: ind.macd,
-            macd_signal: ind.macd_signal,
-            adx: ind.adx,
-            price_high: ind.price_high,
-            price_low: ind.price_low,
-            h1_atr_sma20: ind.h1_atr_sma20,
-            h1_candle_body: ind.h1_candle_body,
-            h1_bars_outside_band: ind.h1_bars_outside_band,
-            h1_bandwidth_5bars_ago: ind.h1_bandwidth_5bars_ago,
-            h1_high_20: ind.h1_high_20,
-            h1_low_20: ind.h1_low_20,
-            nearest_round_up: ind.nearest_round_up,
-            nearest_round_down: ind.nearest_round_down,
-            m15_current_price: ind.m15_current_price,
-            m15_bb_width_pct: ind.m15_bb_width_pct,
-            m15_atr: ind.m15_atr,
-            m15_atr_sma20: ind.m15_atr_sma20,
-            m15_adx: ind.m15_adx,
-            m15_bars_outside_band: ind.m15_bars_outside_band,
-            m15_ema20: ind.m15_ema20,
-            m15_ema50: ind.m15_ema50,
-            h4_ema20: ind.h4_ema20,
-            h4_ema50: ind.h4_ema50,
-            h4_adx: ind.h4_adx,
-            h4_bb_width_pct: ind.h4_bb_width_pct,
+            current_price: effective_price,
+            funding_rate,
+            indicators: ind,
         }
     }
 
@@ -360,6 +313,9 @@ impl OrderExecutor for PeOrderExecutor {
                         client_order_id,
                     },
                 }
+            }
+            OrderCommand::CancelOrder { order_id, symbol: _ } => {
+                pe_types::EngineCommand::CancelOrder { order_id }
             }
             OrderCommand::CancelAllOrders { symbol } => {
                 pe_types::EngineCommand::CancelAllOrders {
@@ -754,7 +710,7 @@ impl LlmProviderResolver for DefaultLlmResolver {
 
 // ── PE 事件转换 ──
 
-/// 将 Position Engine 的 EngineEvent 转换为 OrderEvent
+/** 将 Position Engine 的 EngineEvent 转换为 OrderEvent */
 pub fn convert_pe_event(event: pe_types::EngineEvent) -> Option<OrderEvent> {
     match event {
         pe_types::EngineEvent::OrderPlaced { order } => Some(OrderEvent::OrderPlaced {
@@ -803,9 +759,9 @@ pub fn convert_pe_event(event: pe_types::EngineEvent) -> Option<OrderEvent> {
 
 // ── SwitchableOrderExecutor ──
 
-/// 可切换的订单执行器
-///
-/// 根据 paper 模式开关，将命令转发到真实执行器或 Paper 执行器。
+/** 可切换的订单执行器
+
+根据 paper 模式开关，将命令转发到真实执行器或 Paper 执行器。 */
 pub struct SwitchableOrderExecutor {
     real: Arc<dyn OrderExecutor>,
     paper: Arc<crate::trading::paper::PaperOrderExecutor>,

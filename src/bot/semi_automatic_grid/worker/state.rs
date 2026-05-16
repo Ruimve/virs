@@ -6,10 +6,10 @@ use tracing::{error, info, warn};
 use crate::bot::semi_automatic_grid::worker::GridWorker;
 
 impl GridWorker {
-    /// 主运行循环
-    ///
-    /// 启动后先获取初始价格、加载历史成交、挂初始订单，
-    /// 然后进入 select 循环处理价格 tick、LLM 决策、订单事件和外部命令
+/** 主运行循环
+
+启动后先获取初始价格、加载历史成交、挂初始订单，
+然后进入 select 循环处理价格 tick、LLM 决策、订单事件和外部命令 */
     pub async fn run(&mut self, mut shutdown_rx: mpsc::Receiver<()>, mut adjust_rx: mpsc::Receiver<()>) {
         info!(
             bot_id = %self.bot.id,
@@ -103,9 +103,9 @@ impl GridWorker {
         self.save_stats().await;
     }
 
-    /// 获取实时价格
-    ///
-    /// 优先从价格提供者获取，失败时回退到上次缓存价格
+/** 获取实时价格
+
+优先从价格提供者获取，失败时回退到上次缓存价格 */
     pub(crate) async fn fetch_current_price(&self) -> f64 {
         match self.price_provider.get_price(&self.bot.exchange, &self.bot.symbol).await {
             Some(price) if price > 0.0 => price,

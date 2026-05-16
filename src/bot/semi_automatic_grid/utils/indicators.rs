@@ -1,63 +1,7 @@
 use crate::indicators;
 use crate::models::Kline;
-use crate::bot::semi_automatic_grid::ports::MarketSnapshot;
 
-impl From<MarketSnapshot> for MarketIndicators {
-    fn from(s: MarketSnapshot) -> Self {
-        MarketIndicators {
-            current_price: s.current_price,
-            rsi: s.rsi,
-            atr: s.atr,
-            atr_pct: s.atr_pct,
-            bb_width: s.bb_width,
-            bb_upper: s.bb_upper,
-            bb_middle: s.bb_middle,
-            bb_lower: s.bb_lower,
-            ema12: s.ema12,
-            ema20: s.ema20,
-            ema26: s.ema26,
-            ema50: s.ema50,
-            ema12_trend: s.ema12_trend,
-            ema20_trend: String::new(),
-            ema26_trend: s.ema26_trend,
-            ema50_trend: String::new(),
-            price_high: s.price_high,
-            price_low: s.price_low,
-            volatility: s.volatility,
-            change_1h: s.change_1h,
-            change_4h: s.change_4h,
-            change_24h: s.change_24h,
-            macd: s.macd,
-            macd_signal: s.macd_signal,
-            macd_histogram: 0.0,
-            adx: s.adx,
-            funding_rate: s.funding_rate,
-            funding_next_time: String::new(),
-            h1_atr_sma20: s.h1_atr_sma20,
-            h1_candle_body: s.h1_candle_body,
-            h1_bars_outside_band: s.h1_bars_outside_band,
-            h1_bandwidth_5bars_ago: s.h1_bandwidth_5bars_ago,
-            h1_high_20: s.h1_high_20,
-            h1_low_20: s.h1_low_20,
-            nearest_round_up: s.nearest_round_up,
-            nearest_round_down: s.nearest_round_down,
-            m15_current_price: s.m15_current_price,
-            m15_bb_width_pct: s.m15_bb_width_pct,
-            m15_atr: s.m15_atr,
-            m15_atr_sma20: s.m15_atr_sma20,
-            m15_adx: s.m15_adx,
-            m15_bars_outside_band: s.m15_bars_outside_band,
-            m15_ema20: s.m15_ema20,
-            m15_ema50: s.m15_ema50,
-            h4_ema20: s.h4_ema20,
-            h4_ema50: s.h4_ema50,
-            h4_adx: s.h4_adx,
-            h4_bb_width_pct: s.h4_bb_width_pct,
-        }
-    }
-}
-
-/// 多周期市场指标计算结果
+/** 多周期市场指标计算结果 */
 #[derive(Debug, Clone, Default)]
 pub struct MarketIndicators {
     pub current_price: f64,
@@ -110,7 +54,7 @@ pub struct MarketIndicators {
     pub h4_bb_width_pct: f64,
 }
 
-/// 根据 EMA 当前值与历史值判断趋势方向
+/** 根据 EMA 当前值与历史值判断趋势方向 */
 fn ema_trend(current: f64, previous: f64) -> &'static str {
     if current > previous {
         "上升"
@@ -121,14 +65,14 @@ fn ema_trend(current: f64, previous: f64) -> &'static str {
     }
 }
 
-/// 基于1h/4h/15m K线数据统一计算所有市场指标
-///
-/// 参数:
-/// - klines_1h: 1小时K线（至少30根）
-/// - klines_4h: 4小时K线（可为空）
-/// - klines_15m: 15分钟K线（可为空）
-/// - funding_rate: 当前资金费率
-/// - funding_next_time: 下次结算时间字符串
+/** 基于1h/4h/15m K线数据统一计算所有市场指标
+
+参数:
+- klines_1h: 1小时K线（至少30根）
+- klines_4h: 4小时K线（可为空）
+- klines_15m: 15分钟K线（可为空）
+- funding_rate: 当前资金费率
+- funding_next_time: 下次结算时间字符串 */
 pub fn compute_market_indicators(
     klines_1h: &[Kline],
     klines_4h: &[Kline],
