@@ -71,6 +71,7 @@ pub trait GridStore: Send + Sync {
         &self,
         bot_id: Uuid,
         total_pnl: f64,
+        unrealized_pnl: f64,
         total_trades: i32,
         grid_filled_count: i32,
     ) -> anyhow::Result<()>;

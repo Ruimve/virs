@@ -654,13 +654,14 @@ async fn mock_store_record_trade() {
 async fn mock_store_save_stats() {
     let store = MockWorkerStore::new();
     let bot_id = Uuid::new_v4();
-    store.save_stats(bot_id, 100.0, 10, 5).await.unwrap();
+    store.save_stats(bot_id, 100.0, 25.0, 10, 5).await.unwrap();
     let stats = store.stats_saved.lock().await;
     assert_eq!(stats.len(), 1);
     assert_eq!(stats[0].0, bot_id);
     assert!((stats[0].1 - 100.0).abs() < f64::EPSILON);
-    assert_eq!(stats[0].2, 10);
-    assert_eq!(stats[0].3, 5);
+    assert!((stats[0].2 - 25.0).abs() < f64::EPSILON);
+    assert_eq!(stats[0].3, 10);
+    assert_eq!(stats[0].4, 5);
 }
 
 #[tokio::test]

@@ -113,6 +113,7 @@ fn grid_event_status_update_roundtrip() {
         }],
         current_price: 55000.0,
         total_pnl: 100.0,
+        unrealized_pnl: 1.0,
         total_trades: 5,
         grid_filled_count: 3,
         last_tick_at: chrono::Utc::now(),
@@ -227,7 +228,7 @@ fn grid_state_roundtrip_empty_levels() {
     let bot_id = Uuid::new_v4();
     let state = GridState {
         bot_id, symbol: "BTCUSDT".to_string(), exchange: "binance".to_string(),
-        levels: vec![], current_price: 55000.0, total_pnl: 0.0,
+        levels: vec![], current_price: 55000.0, total_pnl: 0.0, unrealized_pnl: 0.0,
         total_trades: 0, grid_filled_count: 0, last_tick_at: chrono::Utc::now(),
     };
     let json = serde_json::to_string(&state).unwrap();
@@ -263,7 +264,7 @@ fn grid_state_roundtrip_multiple_levels() {
     ];
     let state = GridState {
         bot_id, symbol: "BTCUSDT".to_string(), exchange: "binance".to_string(),
-        levels, current_price: 55000.0, total_pnl: 50.0,
+        levels, current_price: 55000.0, total_pnl: 50.0, unrealized_pnl: 7.6,
         total_trades: 2, grid_filled_count: 1, last_tick_at: chrono::Utc::now(),
     };
     let json = serde_json::to_string(&state).unwrap();
@@ -282,7 +283,7 @@ fn grid_state_roundtrip_negative_pnl() {
     let bot_id = Uuid::new_v4();
     let state = GridState {
         bot_id, symbol: "BTCUSDT".to_string(), exchange: "binance".to_string(),
-        levels: vec![], current_price: 45000.0, total_pnl: -100.0,
+        levels: vec![], current_price: 45000.0, total_pnl: -100.0, unrealized_pnl: -20.0,
         total_trades: 5, grid_filled_count: 3, last_tick_at: chrono::Utc::now(),
     };
     let json = serde_json::to_string(&state).unwrap();

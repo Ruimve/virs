@@ -36,6 +36,7 @@ pub struct GridWorker {
     pub(crate) total_pnl: f64,
     pub(crate) total_trades: i32,
     pub(crate) grid_filled_count: i32,
+    pub(crate) consecutive_losses: i32,
     /// 是否暂停
     pub(crate) paused: bool,
     /// order_id -> (level_index, side) 的映射
@@ -73,6 +74,7 @@ impl GridWorker {
             total_pnl: 0.0,
             total_trades: 0,
             grid_filled_count: 0,
+            consecutive_losses: 0,
             paused: false,
             order_level_map: HashMap::new(),
             initial_order_range: 3,
@@ -83,7 +85,7 @@ impl GridWorker {
     /// 根据网格参数计算所有层级价格
     /// 优先使用 LLM 返回的 grid_levels（含每层 side），回退到 mid_price 判定
     pub(crate) fn calculate_levels(bot: &GridBotConfig) -> Vec<GridLevel> {
-        if bot.grid_count <= 0 || bot.upper_price <= 0.0 || bot.lower_price <= 0.0 {
+        if bot.grid_count <= 0 || bot.upper_price <= 0.0 || bot.lower_price <= 0.0 || bot.upper_price <= bot.lower_price {
             return vec![];
         }
         let grid_spacing = (bot.upper_price - bot.lower_price) / bot.grid_count as f64;
@@ -145,7 +147,7 @@ impl GridWorker {
 
     // ── 主运行循环 ──
 
-    pub async fn run(&mut self, mut shutdown_rx: mpsc::Receiver<()>) {
+    pub async fn run(&mut self, mut shutdown_rx: mpsc::Receiver<()>, mut adjust_rx: mpsc::Receiver<()>) {
         info!(
             bot_id = %self.bot.id,
             symbol = %self.bot.symbol,
@@ -154,8 +156,12 @@ impl GridWorker {
         );
 
         if self.levels.is_empty() {
-            error!(bot_id = %self.bot.id, "No grid levels calculated, check bot parameters");
-            return;
+            if self.bot.dynamic_adjust {
+                warn!(bot_id = %self.bot.id, "No grid levels yet, waiting for LLM to configure grid parameters");
+            } else {
+                error!(bot_id = %self.bot.id, "No grid levels calculated and dynamic_adjust is disabled, check bot parameters");
+                return;
+            }
         }
 
         for attempt in 1..=10 {
@@ -201,6 +207,9 @@ impl GridWorker {
                     info!(bot_id = %self.bot.id, "GridWorker shutting down");
                     break;
                 }
+                Some(()) = adjust_rx.recv() => {
+                    self.on_adjust_signal().await;
+                }
                 _ = price_tick.tick() => {
                     self.current_price = self.fetch_current_price().await;
                     if !self.paused {
@@ -233,10 +242,16 @@ impl GridWorker {
     pub(crate) async fn load_existing_trades(&mut self) {
         let trades = self.store.load_trades(self.bot.id).await.unwrap_or_default();
 
+        let max_dist = if self.levels.len() > 1 {
+            (self.bot.upper_price - self.bot.lower_price) / self.levels.len() as f64
+        } else {
+            0.0
+        };
+
         let trade_count = trades.len();
         for trade in trades {
-            let level_idx = trade.grid_level as usize;
-            if level_idx < self.levels.len() {
+            let level_idx = self.find_level_by_price_within(trade.price, max_dist);
+            if let Some(level_idx) = level_idx {
                 let level_side = self.levels[level_idx].side.clone();
                 if level_side == "buy" {
                     if trade.side == "buy" {
@@ -277,9 +292,19 @@ impl GridWorker {
                         level.last_fill_price = Some(trade.price);
                     }
                 }
+            } else {
+                warn!(
+                    bot_id = %self.bot.id, trade_price = trade.price, grid_level = trade.grid_level,
+                    "Trade could not be matched to any grid level by price, skipping"
+                );
             }
             self.total_pnl += trade.pnl;
             self.total_trades += 1;
+            if trade.pnl < 0.0 {
+                self.consecutive_losses += 1;
+            } else if trade.pnl > 0.0 {
+                self.consecutive_losses = 0;
+            }
         }
 
         info!(
@@ -337,7 +362,7 @@ impl GridWorker {
                     && level.sell_price > self.current_price
                     && !level.sell_filled
                     && level.sell_order_id.is_none()
-                    && current_level_idx.saturating_sub(*i) <= self.initial_order_range
+                    && i.saturating_sub(current_level_idx) <= self.initial_order_range
             })
             .map(|(_, level)| level.clone())
             .collect();
@@ -375,6 +400,17 @@ impl GridWorker {
             }
         }
         closest
+    }
+
+    fn find_level_by_price_within(&self, price: f64, max_dist: f64) -> Option<usize> {
+        let (idx, dist) = self.levels.iter().enumerate()
+            .map(|(i, l)| (i, (l.price - price).abs()))
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))?;
+        if max_dist <= 0.0 || dist <= max_dist {
+            Some(idx)
+        } else {
+            None
+        }
     }
 
     // ── 价格 tick ──
@@ -571,6 +607,7 @@ impl GridWorker {
         let is_sell_match = !is_buy_match;
         let level_num = level.level;
         let level_side = level.side.clone();
+        let entry_price = level.avg_buy_price;
 
         if level_side == "buy" {
             if is_buy_match {
@@ -616,16 +653,16 @@ impl GridWorker {
         self.pending_orders.remove(&(idx, side_str.to_string()));
 
         let pnl = if level_side == "buy" {
-            if is_sell_match && self.levels[idx].avg_buy_price > 0.0 {
-                let buy_cost = self.levels[idx].avg_buy_price * order.filled;
+            if is_sell_match && entry_price > 0.0 {
+                let buy_cost = entry_price * order.filled;
                 let sell_revenue = price * order.filled;
                 sell_revenue - buy_cost
             } else {
                 0.0
             }
         } else {
-            if is_buy_match && self.levels[idx].avg_buy_price > 0.0 {
-                let sell_revenue = self.levels[idx].avg_buy_price * order.filled;
+            if is_buy_match && entry_price > 0.0 {
+                let sell_revenue = entry_price * order.filled;
                 let buy_cost = price * order.filled;
                 sell_revenue - buy_cost
             } else {
@@ -637,6 +674,12 @@ impl GridWorker {
         self.total_pnl += pnl;
         self.total_trades += 1;
         self.grid_filled_count += 1;
+
+        if pnl < 0.0 {
+            self.consecutive_losses += 1;
+        } else if pnl > 0.0 {
+            self.consecutive_losses = 0;
+        }
 
         if level_side == "buy" && is_sell_match && hold <= 0.0 {
             let rebuy = GridLevel {
@@ -764,7 +807,7 @@ impl GridWorker {
     }
 
     async fn save_stats(&self) {
-        let _ = self.store.save_stats(self.bot.id, self.total_pnl, self.total_trades, self.grid_filled_count).await;
+        let _ = self.store.save_stats(self.bot.id, self.total_pnl, self.compute_unrealized_pnl(), self.total_trades, self.grid_filled_count).await;
     }
 
     // ── 状态广播 ──
@@ -777,6 +820,7 @@ impl GridWorker {
             levels: self.levels.clone(),
             current_price: self.current_price,
             total_pnl: self.total_pnl,
+            unrealized_pnl: self.compute_unrealized_pnl(),
             total_trades: self.total_trades,
             grid_filled_count: self.grid_filled_count,
             last_tick_at: Utc::now(),
@@ -841,12 +885,12 @@ impl GridWorker {
         };
 
         let ema_distance_pct = if snapshot.ema50 > 0.0 {
-            (snapshot.ema20 - snapshot.ema50) / snapshot.ema50 * 100.0
+            (snapshot.ema20 - snapshot.ema50) / snapshot.ema50
         } else { 0.0 };
 
         let account = self.market_data_provider.get_account_balance(&self.bot.exchange).await;
         let margin_usage_rate = if account.total > 0.0 {
-            account.used / account.total * 100.0
+            account.used / account.total
         } else { 0.0 };
 
         let template = super::types::DEFAULT_USER_PROMPT_TEMPLATE;
@@ -861,13 +905,13 @@ impl GridWorker {
             .replace("{leverage}", &self.bot.leverage.to_string())
             .replace("{grid_status}", grid_status)
             .replace("{last_adjust_time}", "N/A")
-            .replace("{consecutive_losses}", "0")
+            .replace("{consecutive_losses}", &self.consecutive_losses.to_string())
             .replace("{current_grid_config}", &current_grid_config)
             .replace("{position_base}", &format!("{:.6}", total_hold))
-            .replace("{position_side}", "long")
-            .replace("{entry_price}", &format!("{:.2}", self.bot.lower_price))
-            .replace("{unrealized_pnl}", &format!("{:.2}", self.total_pnl))
-            .replace("{open_orders}", "[]")
+            .replace("{position_side}", if total_hold > 0.0 { "long" } else if total_hold < 0.0 { "short" } else { "none" })
+            .replace("{entry_price}", &format!("{:.2}", self.compute_weighted_avg_entry_price()))
+            .replace("{unrealized_pnl}", &format!("{:.2}", self.compute_unrealized_pnl()))
+            .replace("{open_orders}", &self.format_open_orders())
             .replace("{funding_rate}", &format!("{:.6}", snapshot.funding_rate))
             .replace("{funding_next_time}", "N/A")
             .replace("{event_flag}", "false")
@@ -966,19 +1010,59 @@ impl GridWorker {
                 let new_qty = self.bot.quantity_per_grid * 0.5;
                 let _ = self.store.update_quantity_per_grid(self.bot.id, new_qty).await;
                 self.bot.quantity_per_grid = new_qty;
-                self.levels = Self::calculate_levels(&self.bot);
+                self.recalculate_levels();
                 warn!(bot_id = %self.bot.id, new_qty, "Position reduced by decision");
             }
             GridAction::AdjustGrid { .. } => {
                 if let Some(d) = decision {
-                    self.adjust_grid(d.upper_price, d.lower_price).await;
+                    self.adjust_grid(d.upper_price, d.lower_price, false).await;
                 }
             }
             GridAction::Hold => {}
         }
     }
 
-    pub(crate) async fn adjust_grid(&mut self, new_upper: Option<f64>, new_lower: Option<f64>) {
+    pub async fn on_adjust_signal(&mut self) {
+        match self.store.load_bot(self.bot.id).await {
+            Ok(Some(updated_bot)) => {
+                let price_changed = (updated_bot.upper_price - self.bot.upper_price).abs() > f64::EPSILON
+                    || (updated_bot.lower_price - self.bot.lower_price).abs() > f64::EPSILON;
+                let structure_changed = updated_bot.grid_count != self.bot.grid_count
+                    || (updated_bot.grid_profit_pct - self.bot.grid_profit_pct).abs() > f64::EPSILON;
+
+                if price_changed || structure_changed {
+                    if structure_changed {
+                        self.bot.grid_count = updated_bot.grid_count;
+                        self.bot.grid_profit_pct = updated_bot.grid_profit_pct;
+                    }
+                    let new_upper = if (updated_bot.upper_price - self.bot.upper_price).abs() > f64::EPSILON {
+                        Some(updated_bot.upper_price)
+                    } else {
+                        None
+                    };
+                    let new_lower = if (updated_bot.lower_price - self.bot.lower_price).abs() > f64::EPSILON {
+                        Some(updated_bot.lower_price)
+                    } else {
+                        None
+                    };
+                    self.adjust_grid(new_upper, new_lower, structure_changed).await;
+                } else {
+                    self.bot.quantity_per_grid = updated_bot.quantity_per_grid;
+                    self.bot.dynamic_adjust = updated_bot.dynamic_adjust;
+                    self.bot.adjust_interval_secs = updated_bot.adjust_interval_secs;
+                    info!(bot_id = %self.bot.id, "Adjust signal received, non-structural params updated");
+                }
+            }
+            Ok(None) => {
+                warn!(bot_id = %self.bot.id, "Adjust signal received but bot not found in store");
+            }
+            Err(e) => {
+                warn!(bot_id = %self.bot.id, error = %e, "Adjust signal received but failed to load bot from store");
+            }
+        }
+    }
+
+    pub async fn adjust_grid(&mut self, new_upper: Option<f64>, new_lower: Option<f64>, force_recalculate: bool) {
         let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
             symbol: Some(self.bot.symbol.clone()),
         }).await;
@@ -997,8 +1081,17 @@ impl GridWorker {
             }
         }
 
-        if !updated {
+        if !updated && !force_recalculate {
             debug!(bot_id = %self.bot.id, "adjust_grid: no parameter changes");
+            return;
+        }
+
+        if self.bot.upper_price <= self.bot.lower_price {
+            warn!(
+                bot_id = %self.bot.id,
+                upper = self.bot.upper_price, lower = self.bot.lower_price,
+                "adjust_grid: upper_price <= lower_price, skipping recalculate"
+            );
             return;
         }
 
@@ -1015,10 +1108,57 @@ impl GridWorker {
             "Grid adjusted"
         );
 
-        let _ = self.grid_event_tx.send(GridEvent::BotError {
+        let _ = self.grid_event_tx.send(GridEvent::GridAdjusted {
             bot_id: self.bot.id,
-            error: format!("Grid adjusted: upper={:.2}, lower={:.2}, levels={}", self.bot.upper_price, self.bot.lower_price, self.levels.len()),
+            upper_price: self.bot.upper_price,
+            lower_price: self.bot.lower_price,
+            level_count: self.levels.len(),
         });
+    }
+
+    fn compute_unrealized_pnl(&self) -> f64 {
+        if self.current_price <= 0.0 {
+            return 0.0;
+        }
+        self.levels.iter()
+            .filter(|l| l.hold_quantity.abs() > 0.0 && l.avg_buy_price > 0.0)
+            .map(|l| {
+                if l.hold_quantity > 0.0 {
+                    (self.current_price - l.avg_buy_price) * l.hold_quantity
+                } else {
+                    (l.avg_buy_price - self.current_price) * l.hold_quantity.abs()
+                }
+            })
+            .sum()
+    }
+
+    fn compute_weighted_avg_entry_price(&self) -> f64 {
+        let mut total_cost = 0.0;
+        let mut total_qty = 0.0;
+        for level in &self.levels {
+            if level.hold_quantity.abs() > 0.0 && level.avg_buy_price > 0.0 {
+                total_cost += level.avg_buy_price * level.hold_quantity.abs();
+                total_qty += level.hold_quantity.abs();
+            }
+        }
+        if total_qty > 0.0 { total_cost / total_qty } else { 0.0 }
+    }
+
+    fn format_open_orders(&self) -> String {
+        let orders: Vec<String> = self.levels.iter()
+            .filter(|l| l.buy_order_id.is_some() || l.sell_order_id.is_some())
+            .map(|l| {
+                let mut parts = Vec::new();
+                if let Some(id) = l.buy_order_id {
+                    parts.push(format!("{{level:{}, side:buy, price:{:.2}, qty:{:.6}, id:{}}}", l.level, l.buy_price, l.quantity, id));
+                }
+                if let Some(id) = l.sell_order_id {
+                    parts.push(format!("{{level:{}, side:sell, price:{:.2}, qty:{:.6}, id:{}}}", l.level, l.sell_price, l.quantity, id));
+                }
+                parts.join(", ")
+            })
+            .collect();
+        if orders.is_empty() { "[]".to_string() } else { format!("[{}]", orders.join(", ")) }
     }
 
     pub(crate) fn simple_rule_decision(&self) -> GridAction {
@@ -1035,9 +1175,44 @@ impl GridWorker {
     }
 
     pub fn recalculate_levels(&mut self) {
+        let old_levels = std::mem::take(&mut self.levels);
+        let holdings: Vec<GridLevel> = old_levels.iter()
+            .filter(|l| l.hold_quantity.abs() > 0.0 || l.buy_filled || l.sell_filled)
+            .cloned()
+            .collect();
+        drop(old_levels);
+
         self.levels = Self::calculate_levels(&self.bot);
+
+        let max_dist = if self.levels.len() > 1 {
+            (self.bot.upper_price - self.bot.lower_price) / self.levels.len() as f64
+        } else {
+            0.0
+        };
+
+        let mut matched = std::collections::HashSet::new();
+        for old in &holdings {
+            if let Some(idx) = self.find_level_by_price_within(old.price, max_dist) {
+                if matched.contains(&idx) {
+                    warn!(
+                        bot_id = %self.bot.id, old_price = old.price, new_idx = idx,
+                        "Multiple old holdings matched to same new level, skipping later one"
+                    );
+                    continue;
+                }
+                matched.insert(idx);
+                let level = &mut self.levels[idx];
+                level.hold_quantity = old.hold_quantity;
+                level.avg_buy_price = old.avg_buy_price;
+                level.buy_filled = old.buy_filled;
+                level.sell_filled = old.sell_filled;
+                level.last_fill_price = old.last_fill_price;
+            }
+        }
+
         self.order_level_map.clear();
-        info!(bot_id = %self.bot.id, grid_count = self.levels.len(), "Grid levels recalculated");
+        self.pending_orders.clear();
+        info!(bot_id = %self.bot.id, grid_count = self.levels.len(), holdings_matched = holdings.len(), "Grid levels recalculated (preserved holdings by price)");
     }
 }
 

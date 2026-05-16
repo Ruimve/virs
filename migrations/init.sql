@@ -364,3 +364,8 @@ DO $$ BEGIN
     ALTER TABLE qd_grid_analysis_logs ADD CONSTRAINT chk_analysis_status CHECK (status IN ('pending', 'completed', 'failed'));
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
+
+DO $$ BEGIN
+    ALTER TABLE qd_grid_bots ADD COLUMN IF NOT EXISTS unrealized_pnl DOUBLE PRECISION NOT NULL DEFAULT 0;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;

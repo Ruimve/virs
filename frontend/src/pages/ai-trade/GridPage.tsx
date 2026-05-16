@@ -24,6 +24,7 @@ interface GridBot {
   grid_profit_pct: number;
   quantity_per_grid: number;
   total_pnl: number;
+  unrealized_pnl: number;
   total_trades: number;
   grid_filled_count: number;
   market_regime: string | null;
@@ -553,7 +554,7 @@ export default function GridPage() {
                         </div>
 
                         {/* Stats row */}
-                        <div class="grid grid-cols-6 gap-3 mt-3 pt-3 border-t border-gray-100">
+                        <div class="grid grid-cols-7 gap-3 mt-3 pt-3 border-t border-gray-100">
                           <div>
                             <div class="text-[10px] text-gray-400">价格区间</div>
                             <div class="text-xs text-gray-600 font-mono mt-0.5">
@@ -577,8 +578,12 @@ export default function GridPage() {
                             <div class="text-xs text-gray-600 font-mono mt-0.5">{bot.total_trades}</div>
                           </div>
                           <div>
-                            <div class="text-[10px] text-gray-400">累计盈亏</div>
+                            <div class="text-[10px] text-gray-400">已实现盈亏</div>
                             <div class="text-xs font-mono mt-0.5">{formatPnl(bot.total_pnl)}</div>
+                          </div>
+                          <div>
+                            <div class="text-[10px] text-gray-400">未实现盈亏</div>
+                            <div class="text-xs font-mono mt-0.5">{formatPnl(bot.unrealized_pnl)}</div>
                           </div>
                         </div>
 

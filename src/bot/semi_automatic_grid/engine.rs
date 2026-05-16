@@ -23,6 +23,8 @@ pub struct GridEngine {
     cmd_rx: Option<mpsc::Receiver<GridCommand>>,
     workers: HashMap<Uuid, tokio::task::JoinHandle<()>>,
     shutdown_txs: HashMap<Uuid, mpsc::Sender<()>>,
+    adjust_txs: HashMap<Uuid, mpsc::Sender<()>>,
+    bot_symbols: HashMap<Uuid, String>,
     kline_engine: Option<Arc<KlineEngine>>,
 }
 
@@ -50,6 +52,8 @@ impl GridEngine {
             cmd_rx: Some(cmd_rx),
             workers: HashMap::new(),
             shutdown_txs: HashMap::new(),
+            adjust_txs: HashMap::new(),
+            bot_symbols: HashMap::new(),
             kline_engine,
         };
 
@@ -113,6 +117,7 @@ impl GridEngine {
         };
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>(1);
+        let (adjust_tx, adjust_rx) = mpsc::channel::<()>(1);
         let event_rx = self.event_tx.subscribe();
         let grid_event_tx = self.grid_event_tx.clone();
         let store = self.store.clone();
@@ -120,6 +125,7 @@ impl GridEngine {
         let order_executor = self.order_executor.clone();
         let ai_service = self.ai_service.clone();
         let market_data_provider = self.market_data_provider.clone();
+        let bot_symbol = bot.symbol.clone();
 
         if let Some(ref engine) = self.kline_engine {
             if let Err(e) = engine.subscribe(&bot.exchange, &bot.symbol, MarketType::Perpetual).await {
@@ -132,11 +138,13 @@ impl GridEngine {
                 bot, price_provider, order_executor, ai_service, store,
                 market_data_provider, event_rx, grid_event_tx,
             );
-            worker.run(shutdown_rx).await;
+            worker.run(shutdown_rx, adjust_rx).await;
         });
 
         self.workers.insert(bot_id, handle);
         self.shutdown_txs.insert(bot_id, shutdown_tx);
+        self.adjust_txs.insert(bot_id, adjust_tx);
+        self.bot_symbols.insert(bot_id, bot_symbol);
 
         let _ = self.store.update_bot_status(bot_id, "running").await;
         let _ = self.grid_event_tx.send(GridEvent::BotStarted { bot_id });
@@ -144,17 +152,26 @@ impl GridEngine {
     }
 
     pub(crate) async fn stop_bot(&mut self, bot_id: Uuid, reason: &str) {
-        let symbol = self.store.load_bot(bot_id).await.ok().flatten().map(|b| b.symbol.clone());
+        self.stop_bot_with_symbol(bot_id, reason, None).await;
+    }
+
+    async fn stop_bot_with_symbol(&mut self, bot_id: Uuid, reason: &str, symbol: Option<String>) {
+        let cancel_symbol = match symbol {
+            Some(s) => Some(s),
+            None => {
+                if let Some(s) = self.bot_symbols.get(&bot_id).cloned() {
+                    Some(s)
+                } else {
+                    self.store.load_bot(bot_id).await.ok().flatten().map(|b| b.symbol.clone())
+                }
+            }
+        };
+
         let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
-            symbol,
+            symbol: cancel_symbol,
         }).await;
 
-        if let Some(tx) = self.shutdown_txs.remove(&bot_id) {
-            let _ = tx.send(()).await;
-        }
-        if let Some(handle) = self.workers.remove(&bot_id) {
-            handle.abort();
-        }
+        self.graceful_shutdown_worker(bot_id).await;
 
         let _ = self.store.update_bot_status(bot_id, "stopped").await;
         let _ = self.grid_event_tx.send(GridEvent::BotStopped { bot_id, reason: reason.to_string() });
@@ -162,20 +179,42 @@ impl GridEngine {
     }
 
     pub(crate) async fn pause_bot(&mut self, bot_id: Uuid) {
-        let symbol = self.store.load_bot(bot_id).await.ok().flatten().map(|b| b.symbol.clone());
+        let symbol = if let Some(s) = self.bot_symbols.get(&bot_id).cloned() {
+            Some(s)
+        } else {
+            self.store.load_bot(bot_id).await.ok().flatten().map(|b| b.symbol.clone())
+        };
         let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
             symbol,
         }).await;
 
-        if let Some(tx) = self.shutdown_txs.remove(&bot_id) {
-            let _ = tx.send(()).await;
-        }
-        if let Some(handle) = self.workers.remove(&bot_id) {
-            handle.abort();
-        }
+        self.graceful_shutdown_worker(bot_id).await;
 
         let _ = self.store.update_bot_status(bot_id, "paused").await;
         info!(bot_id = %bot_id, "Grid bot paused");
+    }
+
+    async fn graceful_shutdown_worker(&mut self, bot_id: Uuid) {
+        if let Some(tx) = self.shutdown_txs.remove(&bot_id) {
+            let _ = tx.send(()).await;
+        }
+        self.adjust_txs.remove(&bot_id);
+        self.bot_symbols.remove(&bot_id);
+        if let Some(handle) = self.workers.remove(&bot_id) {
+            let abort_handle = handle.abort_handle();
+            match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
+                Ok(Ok(())) => {
+                    info!(bot_id = %bot_id, "Grid worker exited gracefully");
+                }
+                Ok(Err(e)) => {
+                    warn!(bot_id = %bot_id, error = %e, "Grid worker exited with error");
+                }
+                Err(_) => {
+                    abort_handle.abort();
+                    warn!(bot_id = %bot_id, "Grid worker shutdown timed out, aborted");
+                }
+            }
+        }
     }
 
     pub(crate) async fn resume_bot(&mut self, bot_id: Uuid) {
@@ -184,16 +223,19 @@ impl GridEngine {
     }
 
     pub(crate) async fn delete_bot(&mut self, bot_id: Uuid, close_position: bool) {
-        let symbol = self.store.load_bot(bot_id).await.ok().flatten().map(|b| b.symbol.clone());
+        let bot_info = self.store.load_bot(bot_id).await.ok().flatten();
+        let symbol = bot_info.as_ref().map(|b| b.symbol.clone());
+        let exchange = bot_info.as_ref().map(|b| b.exchange.clone());
 
         if close_position {
-            if let Some(ref sym) = symbol {
+            if let (Some(ref sym), Some(ref ex)) = (&symbol, &exchange) {
                 let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
                     symbol: Some(sym.clone()),
                 }).await;
 
                 let _ = self.order_executor.send_command(OrderCommand::CloseAllPositions {
                     symbol: sym.clone(),
+                    exchange: ex.clone(),
                 }).await;
 
                 info!(bot_id = %bot_id, symbol = %sym, "Close position requested before deletion");
@@ -202,20 +244,20 @@ impl GridEngine {
             }
         }
 
-        self.stop_bot(bot_id, "deleted").await;
+        self.stop_bot_with_symbol(bot_id, "deleted", symbol).await;
         let _ = self.store.delete_bot(bot_id).await;
         info!(bot_id = %bot_id, close_position, "Grid bot deleted");
     }
 
     pub(crate) async fn adjust_grid(&mut self, bot_id: Uuid) {
-        if let Some(handle) = self.workers.remove(&bot_id) {
-            handle.abort();
-            info!(bot_id = %bot_id, "Grid bot worker aborted for adjustment");
-        }
-
-        if let Ok(Some(_bot)) = self.store.load_bot(bot_id).await {
-            // 重新启动（bot 参数已在 reanalyze 时更新）
-            self.start_bot(bot_id).await;
+        if let Some(adjust_tx) = self.adjust_txs.get(&bot_id) {
+            if let Err(e) = adjust_tx.send(()).await {
+                warn!(bot_id = %bot_id, error = %e, "Failed to send adjust signal to worker");
+            } else {
+                info!(bot_id = %bot_id, "Adjust signal sent to running worker");
+            }
+        } else {
+            warn!(bot_id = %bot_id, "Cannot adjust: bot not running or adjust channel missing");
         }
     }
 

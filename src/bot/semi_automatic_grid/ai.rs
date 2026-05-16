@@ -27,7 +27,7 @@ impl GridAction {
     }
 
     pub fn from_str(s: &str, upper_price: Option<f64>, lower_price: Option<f64>) -> Self {
-        match s {
+        match s.to_lowercase().as_str() {
             "run_grid" => GridAction::RunGrid,
             "pause_grid" => GridAction::PauseGrid,
             "adjust_grid" => GridAction::AdjustGrid {
@@ -35,7 +35,11 @@ impl GridAction {
                 lower_price,
             },
             "reduce_position" => GridAction::ReducePosition,
-            _ => GridAction::Hold,
+            "hold" => GridAction::Hold,
+            _ => {
+                tracing::warn!(action = s, "Unknown LLM action, falling back to Hold");
+                GridAction::Hold
+            }
         }
     }
 }
@@ -55,8 +59,24 @@ impl GridDecision {
             .as_str()
             .unwrap_or("No reason provided")
             .to_string();
-        let upper_price = json["upper_price"].as_f64();
-        let lower_price = json["lower_price"].as_f64();
+        let mut upper_price = json["upper_price"].as_f64();
+        let mut lower_price = json["lower_price"].as_f64();
+
+        if upper_price.is_some() && upper_price.unwrap() <= 0.0 {
+            warn!("GridDecision: upper_price <= 0, ignoring");
+            upper_price = None;
+        }
+        if lower_price.is_some() && lower_price.unwrap() <= 0.0 {
+            warn!("GridDecision: lower_price <= 0, ignoring");
+            lower_price = None;
+        }
+        if let (Some(u), Some(l)) = (upper_price, lower_price) {
+            if u <= l {
+                warn!(upper = u, lower = l, "GridDecision: upper_price <= lower_price, ignoring both");
+                upper_price = None;
+                lower_price = None;
+            }
+        }
 
         let action = GridAction::from_str(action_str, upper_price, lower_price);
 
@@ -80,10 +100,15 @@ impl GridAiService {
         resolver: Box<dyn LlmProviderResolver>,
         credential_store: Box<dyn CredentialStore>,
     ) -> Self {
+        let http_client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(120))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
         Self {
             resolver,
             credential_store,
-            http_client: reqwest::Client::new(),
+            http_client,
         }
     }
 

@@ -164,11 +164,19 @@ async fn adjust_grid() {
     let mut event_rx = grid_event_tx.subscribe();
     engine.start_bot(bot.id).await;
     let _ = event_rx.recv().await;
+
+    let mut updated_bot = bot.clone();
+    updated_bot.upper_price = 70000.0;
+    store.update_bot_config(updated_bot).await;
+
     engine.adjust_grid(bot.id).await;
     let event = event_rx.recv().await.unwrap();
     match event {
-        GridEvent::BotStarted { bot_id } => assert_eq!(bot_id, bot.id),
-        _ => panic!("Expected BotStarted after adjust_grid"),
+        GridEvent::GridAdjusted { bot_id, upper_price, .. } => {
+            assert_eq!(bot_id, bot.id);
+            assert!((upper_price - 70000.0).abs() < f64::EPSILON);
+        }
+        _ => panic!("Expected GridAdjusted after adjust_grid"),
     }
 }
 
@@ -402,12 +410,19 @@ async fn adjust_grid_restarts_bot_with_new_params() {
     engine.start_bot(bot.id).await;
     let _ = event_rx.recv().await;
 
+    let mut updated_bot = bot.clone();
+    updated_bot.lower_price = 45000.0;
+    store.update_bot_config(updated_bot).await;
+
     engine.adjust_grid(bot.id).await;
 
     let event = event_rx.recv().await.unwrap();
     match event {
-        GridEvent::BotStarted { bot_id } => assert_eq!(bot_id, bot.id),
-        _ => panic!("Expected BotStarted after adjust"),
+        GridEvent::GridAdjusted { bot_id, lower_price, .. } => {
+            assert_eq!(bot_id, bot.id);
+            assert!((lower_price - 45000.0).abs() < f64::EPSILON);
+        }
+        _ => panic!("Expected GridAdjusted after adjust"),
     }
 }
 

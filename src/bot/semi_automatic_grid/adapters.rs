@@ -359,27 +359,20 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         use super::ports::AccountBalance;
         
         let exchange_key = format!("{}:perpetual", exchange);
-        tracing::info!("[get_account_balance] Looking for exchange_key: {}", exchange_key);
         
         let ex = match self.exchange_registry.get(&exchange_key) {
-            Some(e) => {
-                tracing::info!("[get_account_balance] Found exchange in registry");
-                e
-            },
+            Some(e) => e,
             None => {
                 tracing::warn!("[get_account_balance] Exchange NOT found in registry, returning default");
                 return AccountBalance::default();
             },
         };
         
-        tracing::info!("[get_account_balance] Calling ex.get_balances()...");
         match ex.get_balances().await {
             Ok(bs) => {
-                tracing::info!("[get_account_balance] get_balances returned {} balances", bs.len());
                 let usdt = bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT"));
                 match usdt {
                     Some(b) => {
-                        tracing::info!("[get_account_balance] USDT balance: total={}, free={}, used={}", b.total, b.free, b.used);
                         AccountBalance {
                             total: b.total,
                             free: b.free,
@@ -452,8 +445,8 @@ impl OrderExecutor for PeOrderExecutor {
                     symbol,
                 }
             }
-            OrderCommand::CloseAllPositions { symbol } => {
-                let exchange_key = format!("perpetual:{}", symbol);
+            OrderCommand::CloseAllPositions { symbol, exchange } => {
+                let exchange_key = format!("{}:perpetual", exchange);
                 if let Some(ex) = self.exchange_registry.get(&exchange_key) {
                     match ex.get_positions(Some(&symbol)).await {
                         Ok(positions) => {
@@ -579,12 +572,13 @@ impl GridStore for PgGridStore {
         Ok(())
     }
 
-    async fn save_stats(&self, bot_id: Uuid, total_pnl: f64, total_trades: i32, grid_filled_count: i32) -> anyhow::Result<()> {
+    async fn save_stats(&self, bot_id: Uuid, total_pnl: f64, unrealized_pnl: f64, total_trades: i32, grid_filled_count: i32) -> anyhow::Result<()> {
         sqlx::query(
-            "UPDATE qd_grid_bots SET total_pnl = $2, total_trades = $3, grid_filled_count = $4, updated_at = NOW() WHERE id = $1",
+            "UPDATE qd_grid_bots SET total_pnl = $2, unrealized_pnl = $3, total_trades = $4, grid_filled_count = $5, updated_at = NOW() WHERE id = $1",
         )
         .bind(bot_id)
         .bind(total_pnl)
+        .bind(unrealized_pnl)
         .bind(total_trades)
         .bind(grid_filled_count)
         .execute(&self.db)

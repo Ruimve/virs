@@ -37,6 +37,7 @@ pub struct GridBot {
     pub adjust_interval_secs: i32,
     pub last_adjusted_at: Option<DateTime<Utc>>,
     pub total_pnl: f64,
+    pub unrealized_pnl: f64,
     pub total_trades: i32,
     pub grid_filled_count: i32,
     pub created_at: DateTime<Utc>,

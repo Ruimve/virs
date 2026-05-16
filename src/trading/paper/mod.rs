@@ -217,7 +217,7 @@ impl OrderExecutor for PaperOrderExecutor {
                 pending.clear();
                 debug!(count, "Paper orders canceled");
             }
-            OrderCommand::CloseAllPositions { symbol: _ } => {
+            OrderCommand::CloseAllPositions { symbol: _, exchange: _ } => {
                 debug!("Paper CloseAllPositions - no-op in paper trading");
             }
         }

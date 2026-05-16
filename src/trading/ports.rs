@@ -43,6 +43,7 @@ pub enum OrderCommand {
     },
     CloseAllPositions {
         symbol: String,
+        exchange: String,
     },
 }
 

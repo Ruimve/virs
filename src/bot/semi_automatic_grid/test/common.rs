@@ -68,7 +68,7 @@ pub struct MockWorkerStore {
     pub trades: Vec<GridTradeRecord>,
     pub bot: Option<GridBotConfig>,
     pub recorded_trades: Arc<Mutex<Vec<(Uuid, String, i32, f64, f64, f64)>>>,
-    pub stats_saved: Arc<Mutex<Vec<(Uuid, f64, i32, i32)>>>,
+    pub stats_saved: Arc<Mutex<Vec<(Uuid, f64, f64, i32, i32)>>>,
     pub statuses_updated: Arc<Mutex<Vec<(Uuid, String)>>>,
     pub grid_params_updated: Arc<Mutex<Vec<(Uuid, f64, f64)>>>,
     pub quantities_updated: Arc<Mutex<Vec<(Uuid, f64)>>>,
@@ -148,8 +148,8 @@ impl GridStore for MockWorkerStore {
         Ok(())
     }
 
-    async fn save_stats(&self, bot_id: Uuid, total_pnl: f64, total_trades: i32, grid_filled_count: i32) -> anyhow::Result<()> {
-        self.stats_saved.lock().await.push((bot_id, total_pnl, total_trades, grid_filled_count));
+    async fn save_stats(&self, bot_id: Uuid, total_pnl: f64, unrealized_pnl: f64, total_trades: i32, grid_filled_count: i32) -> anyhow::Result<()> {
+        self.stats_saved.lock().await.push((bot_id, total_pnl, unrealized_pnl, total_trades, grid_filled_count));
         Ok(())
     }
 
@@ -238,6 +238,13 @@ impl MockEngineStore {
     pub async fn add_bot(&self, bot: GridBotConfig) {
         self.bots.lock().await.push(bot);
     }
+
+    pub async fn update_bot_config(&self, bot: GridBotConfig) {
+        let mut bots = self.bots.lock().await;
+        if let Some(existing) = bots.iter_mut().find(|b| b.id == bot.id) {
+            *existing = bot;
+        }
+    }
 }
 
 #[async_trait]
@@ -266,7 +273,7 @@ impl GridStore for MockEngineStore {
         _side: &str, _grid_level: i32, _price: f64, _quantity: f64, _pnl: f64, _pnl_pct: f64,
     ) -> anyhow::Result<()> { Ok(()) }
 
-    async fn save_stats(&self, _bot_id: Uuid, _total_pnl: f64, _total_trades: i32, _grid_filled_count: i32) -> anyhow::Result<()> { Ok(()) }
+    async fn save_stats(&self, _bot_id: Uuid, _total_pnl: f64, _unrealized_pnl: f64, _total_trades: i32, _grid_filled_count: i32) -> anyhow::Result<()> { Ok(()) }
 
     async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> anyhow::Result<()> {
         self.statuses.lock().await.push((bot_id, status.to_string()));

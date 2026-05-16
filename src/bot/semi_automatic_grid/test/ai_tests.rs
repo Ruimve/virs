@@ -65,7 +65,8 @@ fn grid_action_from_str_adjust_grid_with_partial_prices() {
 fn grid_action_from_str_unknown_falls_to_hold() {
     assert!(matches!(GridAction::from_str("unknown_action", None, None), GridAction::Hold));
     assert!(matches!(GridAction::from_str("", None, None), GridAction::Hold));
-    assert!(matches!(GridAction::from_str("RUN_GRID", None, None), GridAction::Hold));
+    assert!(matches!(GridAction::from_str("RUN_GRID", None, None), GridAction::RunGrid));
+    assert!(matches!(GridAction::from_str("pause_grid", None, None), GridAction::PauseGrid));
     assert!(matches!(GridAction::from_str("PauseGrid", None, None), GridAction::Hold));
 }
 
@@ -244,8 +245,8 @@ fn grid_decision_from_json_negative_prices() {
     let decision = GridDecision::from_json(&json);
     match decision.action {
         GridAction::AdjustGrid { upper_price, lower_price } => {
-            assert_eq!(upper_price, Some(-100.0));
-            assert_eq!(lower_price, Some(-200.0));
+            assert_eq!(upper_price, None);
+            assert_eq!(lower_price, None);
         }
         _ => panic!("Expected AdjustGrid"),
     }
@@ -262,8 +263,8 @@ fn grid_decision_from_json_zero_prices() {
     let decision = GridDecision::from_json(&json);
     match decision.action {
         GridAction::AdjustGrid { upper_price, lower_price } => {
-            assert_eq!(upper_price, Some(0.0));
-            assert_eq!(lower_price, Some(0.0));
+            assert_eq!(upper_price, None);
+            assert_eq!(lower_price, None);
         }
         _ => panic!("Expected AdjustGrid"),
     }
@@ -514,7 +515,8 @@ fn grid_decision_from_json_inverted_prices() {
     let decision = GridDecision::from_json(&json);
     match decision.action {
         GridAction::AdjustGrid { upper_price, lower_price } => {
-            assert!(upper_price.unwrap() < lower_price.unwrap());
+            assert_eq!(upper_price, None);
+            assert_eq!(lower_price, None);
         }
         _ => panic!("Expected AdjustGrid"),
     }

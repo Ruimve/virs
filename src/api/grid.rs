@@ -522,7 +522,7 @@ fn build_user_prompt(template: &str, ind: &GridIndicators, bot: &crate::models::
         .replace("{position_base}", "0")
         .replace("{position_side}", "long")
         .replace("{entry_price}", "0")
-        .replace("{unrealized_pnl}", &format!("{:.2}", bot.total_pnl))
+        .replace("{unrealized_pnl}", "0.00")
         .replace("{open_orders}", "[]")
         .replace("{funding_rate}", &format!("{:.6}", ind.funding_rate))
         .replace("{funding_next_time}", &ind.funding_next_time)
