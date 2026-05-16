@@ -1,7 +1,8 @@
-use tracing::{debug, warn};
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::bot::semi_automatic_grid::ports::{CredentialStore, LlmProviderResolver};
+use crate::bot::semi_automatic_grid::utils::ai_client::{call_llm_api, create_llm_http_client};
 
 #[derive(Debug, Clone)]
 pub enum GridAction {
@@ -100,15 +101,10 @@ impl GridAiService {
         resolver: Box<dyn LlmProviderResolver>,
         credential_store: Box<dyn CredentialStore>,
     ) -> Self {
-        let http_client = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .timeout(std::time::Duration::from_secs(120))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
         Self {
             resolver,
             credential_store,
-            http_client,
+            http_client: create_llm_http_client(),
         }
     }
 
@@ -137,53 +133,17 @@ impl GridAiService {
         let (api_key, base_url, model, provider) =
             self.resolver.resolve(&user_creds)?;
 
-        let request_body = serde_json::json!({
-            "model": model,
-            "messages": [
-                { "role": "system", "content": system_prompt },
-                { "role": "user", "content": user_prompt }
-            ],
-            "response_format": { "type": "json_object" },
-            "temperature": 0.5,
-        });
+        let result = call_llm_api(
+            &self.http_client,
+            &api_key,
+            &base_url,
+            &model,
+            system_prompt,
+            user_prompt,
+            &provider,
+        ).await?;
 
-        debug!(
-            provider = %provider,
-            model = %model,
-            "Calling LLM for grid decision"
-        );
-
-        let response = self
-            .http_client
-            .post(format!("{}/chat/completions", base_url))
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body_text = response.text().await.unwrap_or_default();
-            anyhow::bail!("{} API returned {}: {}", provider, status, body_text);
-        }
-
-        let json: serde_json::Value = response.json().await?;
-        let content = json["choices"][0]["message"]["content"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-
-        if content.is_empty() {
-            anyhow::bail!("AI returned empty response");
-        }
-
-        let result: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
-            warn!("Failed to parse AI JSON response: {}, raw: {}", e, content);
-            e
-        })?;
-
-        Ok(result)
+        Ok(result.content)
     }
 
     pub async fn grid_decision(
