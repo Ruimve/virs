@@ -177,6 +177,10 @@ pub trait Exchange: Send + Sync {
         symbol: Option<&str>,
     ) -> Result<Vec<types::Position>, ExchangeError>;
 
+    /// Fetch the account's position mode (hedge vs one-way).
+    /// Returns `ExchangeError::NotSupported` for spot exchanges.
+    async fn get_position_mode(&self) -> Result<types::PositionMode, ExchangeError>;
+
     /// Fetch funding rate for a perpetual contract.
     /// Returns `ExchangeError::NotSupported` for spot exchanges.
     async fn fetch_funding_rate(

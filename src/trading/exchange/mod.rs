@@ -110,6 +110,10 @@ pub trait Exchange: Send + Sync {
     /// Returns error if this is a spot exchange.
     async fn get_positions(&self, symbol: Option<&str>) -> anyhow::Result<Vec<ExchangePosition>>;
 
+    /// Fetch the account's position mode (hedge vs one-way).
+    /// Returns error if this is a spot exchange.
+    async fn get_position_mode(&self) -> anyhow::Result<PositionMode>;
+
     /// Fetch funding rate for a perpetual contract.
     /// Returns error if this is a spot exchange.
     async fn get_funding_rate(&self, symbol: &str) -> anyhow::Result<FundingRate>;
@@ -215,6 +219,10 @@ impl Exchange for Box<dyn Exchange> {
 
     async fn get_positions(&self, symbol: Option<&str>) -> anyhow::Result<Vec<ExchangePosition>> {
         (**self).get_positions(symbol).await
+    }
+
+    async fn get_position_mode(&self) -> anyhow::Result<PositionMode> {
+        (**self).get_position_mode().await
     }
 
     async fn get_funding_rate(&self, symbol: &str) -> anyhow::Result<FundingRate> {
@@ -562,6 +570,15 @@ impl Exchange for CcxtAdapter {
             unrealized_pnl: p.unrealized_pnl,
             liquidation_price: p.liquidation_price,
         }).collect())
+    }
+
+    async fn get_position_mode(&self) -> anyhow::Result<PositionMode> {
+        let mode = self.inner.get_position_mode().await
+            .map_err(|e| anyhow::anyhow!("ccxt get_position_mode error: {}", e))?;
+        Ok(match mode {
+            ccxt::types::PositionMode::OneWay => PositionMode::OneWay,
+            ccxt::types::PositionMode::Hedge => PositionMode::Hedge,
+        })
     }
 
     async fn get_funding_rate(&self, symbol: &str) -> anyhow::Result<FundingRate> {

@@ -211,13 +211,20 @@ impl PeExchange for CcxtExchangeAdapter {
     // ── 交易 ──
 
     async fn place_order(&self, params: PlaceOrderParams) -> Result<Order> {
+        let reduce_only_param = if params.position_side.is_some() {
+            None
+        } else if params.reduce_only {
+            Some(true)
+        } else {
+            None
+        };
         let virs_order = self.inner.place_order_with_options(
             &params.symbol,
             convert_to_virs_side(&params.side),
             convert_order_type(&params.order_type),
             params.amount,
             params.price,
-            if params.reduce_only { Some(true) } else { None },
+            reduce_only_param,
             convert_position_side(&params.position_side),
         ).await.map_err(to_pe_error)?;
 
@@ -233,12 +240,13 @@ impl PeExchange for CcxtExchangeAdapter {
         Ok(pe_order)
     }
 
-    async fn cancel_all_orders(&self, symbol: &str) -> Result<Vec<Order>> {
-        let open_orders = self.inner.get_open_orders(Some(symbol)).await.map_err(to_pe_error)?;
+    async fn cancel_all_orders(&self, symbol: Option<&str>) -> Result<Vec<Order>> {
+        let open_orders = self.inner.get_open_orders(symbol).await.map_err(to_pe_error)?;
 
         let mut canceled = Vec::new();
         for o in &open_orders {
-            match self.inner.cancel_order(symbol, &o.id).await {
+            let sym = o.symbol.as_str();
+            match self.inner.cancel_order(sym, &o.id).await {
                 Ok(virs_order) => {
                     let mut pe_order = convert_order(&virs_order);
                     pe_order.exchange = self.name().to_string();
@@ -272,6 +280,14 @@ impl PeExchange for CcxtExchangeAdapter {
 
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> Result<()> {
         self.inner.set_leverage(symbol, leverage).await.map_err(to_pe_error)
+    }
+
+    async fn get_position_mode(&self) -> Result<PositionMode> {
+        let mode = self.inner.get_position_mode().await.map_err(to_pe_error)?;
+        Ok(match mode {
+            crate::models::PositionMode::OneWay => PositionMode::OneWay,
+            crate::models::PositionMode::Hedge => PositionMode::Hedge,
+        })
     }
 
     // ── WebSocket 成交回报 ──

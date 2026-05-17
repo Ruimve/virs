@@ -370,7 +370,8 @@ async fn on_order_filled_sell_with_rebuy() {
                 client_order_id: None,
     };
     worker.on_order_filled(&order).await;
-    assert!(worker.levels[3].sell_filled);
+    assert!(!worker.levels[3].sell_filled);
+    assert!(!worker.levels[3].buy_filled);
     assert!(worker.levels[3].sell_order_id.is_none());
     assert!((worker.levels[3].hold_quantity).abs() < f64::EPSILON);
     assert!(worker.total_pnl > 0.0);
@@ -1316,7 +1317,7 @@ async fn save_stats_records_to_store() {
     let bot = make_bot_config();
     let bot_id = bot.id;
 
-    store.save_stats(bot_id, 50.0, 10.0, 5, 3).await.unwrap();
+    store.save_stats(bot_id, 50.0, 10.0, 5, 3, None).await.unwrap();
 
     let stats = store.stats_saved.lock().await;
     assert!(stats.iter().any(|(id, pnl, upnl, trades, filled)| {

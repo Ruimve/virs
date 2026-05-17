@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite};
 
 // Re-export for convenience
-pub use crate::engine::position::types::{OrderStatus, WsFeedEvent};
+pub use crate::engine::position::types::{OrderStatus, PositionSide, WsFeedEvent};
 
 // ============================================================
 // Binance User Data Stream 消息格式
@@ -115,6 +115,9 @@ struct ExecutionReportInner {
     /// 工作类型
     #[serde(rename = "w")]
     working_type: String,
+    /// 持仓方向: LONG / SHORT / BOTH（双向持仓模式下区分多空持仓）
+    #[serde(rename = "ps")]
+    position_side: Option<String>,
 }
 
 impl ExecutionReportInner {
@@ -134,6 +137,12 @@ impl ExecutionReportInner {
     /// 转换为 WsFeedEvent::OrderUpdate
     fn to_ws_feed_event(&self) -> Option<WsFeedEvent> {
         let status = self.to_order_status()?;
+
+        let position_side = self.position_side.as_ref().and_then(|ps| match ps.as_str() {
+            "LONG" => Some(PositionSide::Long),
+            "SHORT" => Some(PositionSide::Short),
+            _ => None,
+        });
 
         Some(WsFeedEvent::OrderUpdate {
             exchange_order_id: self.order_id.to_string(),
@@ -157,6 +166,7 @@ impl ExecutionReportInner {
             commission: self.commission.parse().unwrap_or(0.0),
             timestamp: DateTime::from_timestamp_millis(self.trade_time)
                 .unwrap_or_else(Utc::now),
+            position_side,
         })
     }
 }
@@ -560,6 +570,7 @@ mod tests {
                 trade_time: 0,
                 is_reduce_only: false,
                 working_type: "CONTRACT_PRICE".to_string(),
+                position_side: None,
             };
             assert_eq!(
                 inner.to_order_status(),
@@ -650,6 +661,7 @@ mod tests {
             trade_time: 1713900000123,
             is_reduce_only: false,
             working_type: "CONTRACT_PRICE".to_string(),
+            position_side: None,
         };
         let event = inner.to_ws_feed_event().unwrap();
         let (_, _, _, _, remaining, _, _, _) = unwrap_order_update(event);
@@ -715,6 +727,7 @@ mod tests {
             trade_time: 1713900000123,
             is_reduce_only: false,
             working_type: "CONTRACT_PRICE".to_string(),
+            position_side: None,
         }
     }
 }

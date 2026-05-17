@@ -41,6 +41,12 @@ pub enum PositionEngineError {
 
     #[error("Configuration error: {0}")]
     Config(String),
+
+    #[error("Position mode mismatch: expected={expected}, actual={actual}")]
+    PositionModeMismatch { expected: String, actual: String },
+
+    #[error("Position mode query failed: {0}")]
+    PositionModeQueryFailed(String),
 }
 
 pub type Result<T> = std::result::Result<T, PositionEngineError>;

@@ -17,6 +17,16 @@ impl OrderSide {
     }
 }
 
+/** 持仓方向
+
+用于双向持仓模式（Hedge Mode）下指定订单影响的持仓方向。
+单向持仓模式下应为 None */
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PositionSide {
+    Long,
+    Short,
+}
+
 #[derive(Debug, Clone)]
 pub struct OrderInfo {
     pub id: Uuid,
@@ -36,6 +46,7 @@ pub enum OrderCommand {
         amount: f64,
         price: Option<f64>,
         reduce_only: bool,
+        position_side: Option<PositionSide>,
         client_order_id: Option<String>,
     },
     CancelOrder {

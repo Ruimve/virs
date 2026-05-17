@@ -617,6 +617,16 @@ impl Exchange for BinanceExchange {
                 _ => "BOTH",  // one-way mode
             };
             body["positionSide"] = serde_json::json!(position_side);
+
+            // 双向持仓模式下通过 positionSide 区分开平仓，不需要 reduceOnly
+            // 单向持仓模式下需要 reduceOnly 来标记平仓单
+            if params.position_side.is_none() {
+                if let Some(reduce) = params.reduce_only {
+                    if reduce {
+                        body["reduceOnly"] = serde_json::json!(true);
+                    }
+                }
+            }
         }
 
         let path = format!("{}/order", self.api_prefix());
@@ -852,6 +862,28 @@ impl Exchange for BinanceExchange {
             .collect();
 
         Ok(positions)
+    }
+
+    async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError> {
+        if !self.is_perpetual() {
+            return Err(ExchangeError::NotSupported(
+                "Position mode is only supported for perpetual futures".into(),
+            ));
+        }
+
+        let params: Vec<(String, String)> = vec![];
+        let data = self.client
+            .signed_get(&self.signer, "/fapi/v1/positionSide/dual", params)
+            .await?;
+
+        let dual_side = data.get("dualSidePosition")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if dual_side {
+            Ok(PositionMode::Hedge)
+        } else {
+            Ok(PositionMode::OneWay)
+        }
     }
 
     async fn fetch_funding_rate(

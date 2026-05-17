@@ -51,3 +51,9 @@ pub enum PositionSide {
     Long,
     Short,
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PositionMode {
+    OneWay,
+    Hedge,
+}

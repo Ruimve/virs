@@ -605,6 +605,7 @@ fn test_ws_feed_event_order_update_fields() {
         amount: 1.0,
         commission: 25.0,
         timestamp: now,
+        position_side: None,
     };
 
     if let WsFeedEvent::OrderUpdate {
@@ -617,6 +618,7 @@ fn test_ws_feed_event_order_update_fields() {
         amount,
         commission,
         timestamp,
+        position_side: _,
     } = event
     {
         assert_eq!(exchange_order_id, "ord_12345");
@@ -664,6 +666,7 @@ fn test_ws_feed_event_clone() {
         amount: 1.0,
         commission: 1.5,
         timestamp: now,
+        position_side: None,
     };
 
     let cloned = event.clone();
@@ -764,6 +767,7 @@ fn test_engine_command_all_variants_constructible() {
         exchange: "binance".to_string(),
         symbol: "BTC/USDT".to_string(),
         side: PositionSide::Long,
+        order_side: Side::Buy,
         size: 1.0,
         leverage: Some(10),
         order_type: OrderType::Market,
@@ -1485,6 +1489,7 @@ fn test_engine_command_variants() {
         exchange: "binance".to_string(),
         symbol: "BTC/USDT".to_string(),
         side: PositionSide::Long,
+        order_side: Side::Buy,
         size: 1.0,
         leverage: Some(10),
         order_type: OrderType::Market,
@@ -1652,4 +1657,36 @@ fn test_invalid_side_deserialization() {
 fn test_invalid_order_status_deserialization() {
     let result = serde_json::from_str::<OrderStatus>("\"InvalidStatus\"");
     assert!(result.is_err(), "无效的 OrderStatus 值应反序列化失败");
+}
+
+// ============================================================
+// PositionMode (4 tests)
+// ============================================================
+
+#[test]
+fn test_position_mode_serialization() {
+    assert_eq!(serde_json::to_string(&PositionMode::OneWay).unwrap(), "\"OneWay\"");
+    assert_eq!(serde_json::to_string(&PositionMode::Hedge).unwrap(), "\"Hedge\"");
+}
+
+#[test]
+fn test_position_mode_deserialization() {
+    let oneway: PositionMode = serde_json::from_str("\"OneWay\"").unwrap();
+    let hedge: PositionMode = serde_json::from_str("\"Hedge\"").unwrap();
+    assert_eq!(oneway, PositionMode::OneWay);
+    assert_eq!(hedge, PositionMode::Hedge);
+}
+
+#[test]
+fn test_position_mode_equality() {
+    assert_eq!(PositionMode::OneWay, PositionMode::OneWay);
+    assert_eq!(PositionMode::Hedge, PositionMode::Hedge);
+    assert_ne!(PositionMode::OneWay, PositionMode::Hedge);
+}
+
+#[test]
+fn test_position_mode_copy() {
+    let a = PositionMode::Hedge;
+    let b = a;
+    assert_eq!(a, b);
 }

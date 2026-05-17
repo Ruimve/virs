@@ -840,6 +840,10 @@ impl Exchange for OkxExchange {
         Ok(result)
     }
 
+    async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError> {
+        Err(ExchangeError::NotSupported("get_position_mode not implemented for OKX".into()))
+    }
+
     async fn fetch_funding_rate(
         &self,
         symbol: &str,

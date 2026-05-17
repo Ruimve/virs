@@ -48,6 +48,7 @@ pub struct PnlTracker {
     total_loss_amount: f64,
     initial_equity: f64,
     consecutive_losses: u32,
+    last_unrealized_pnl: f64,
 }
 
 impl PnlTracker {
@@ -65,6 +66,7 @@ impl PnlTracker {
             total_loss_amount: 0.0,
             initial_equity,
             consecutive_losses: 0,
+            last_unrealized_pnl: 0.0,
         }
     }
 
@@ -108,6 +110,7 @@ impl PnlTracker {
             self.peak_equity = equity;
         }
 
+        self.last_unrealized_pnl = unrealized_pnl;
         self.snapshot(unrealized_pnl, positions.len())
     }
 
@@ -122,17 +125,22 @@ impl PnlTracker {
         self.total_realized_pnl += trade.pnl;
         self.total_trades += 1;
 
-        if trade.pnl >= 0.0 {
+        if trade.pnl > 0.0 {
             self.profit_trades += 1;
             self.total_profit_amount += trade.pnl;
             self.consecutive_losses = 0;
-        } else {
+        } else if trade.pnl < 0.0 {
             self.total_loss_amount += trade.pnl.abs();
             self.consecutive_losses += 1;
         }
 
         if trade.trade_type == TradeType::Open {
             self.total_cost += trade.price * trade.amount + trade.fee;
+        }
+
+        let equity = self.initial_equity + self.total_realized_pnl + self.last_unrealized_pnl;
+        if equity > self.peak_equity {
+            self.peak_equity = equity;
         }
     }
 

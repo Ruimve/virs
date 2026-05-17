@@ -170,6 +170,7 @@ impl OrderExecutor for PaperOrderExecutor {
                 amount,
                 price,
                 reduce_only,
+                position_side: _,
                 client_order_id,
             } => {
                 let order = PendingOrder {

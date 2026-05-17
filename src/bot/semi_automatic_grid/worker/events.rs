@@ -155,7 +155,8 @@ impl GridWorker {
 
 /** 持久化统计数据到数据库 */
     pub(crate) async fn save_stats(&self) {
-        let _ = self.store.save_stats(self.bot.id, self.total_pnl, self.compute_unrealized_pnl(), self.total_trades, self.grid_filled_count).await;
+        let levels_json = serde_json::to_value(&self.levels).ok();
+        let _ = self.store.save_stats(self.bot.id, self.total_pnl, self.compute_unrealized_pnl(), self.total_trades, self.grid_filled_count, levels_json.as_ref()).await;
     }
 
 /** 广播当前网格状态 */
@@ -352,6 +353,7 @@ impl GridWorker {
         }
 
         let reset_level = self.levels[idx].reset_for_relist();
+        self.levels[idx] = reset_level.clone();
         if level_side == "buy" {
             self.place_buy_order(&reset_level).await;
         } else {

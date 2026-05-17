@@ -21,6 +21,13 @@ pub enum PositionSide {
     Both,
 }
 
+/// 持仓模式
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PositionMode {
+    OneWay,
+    Hedge,
+}
+
 /// 订单类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum OrderType {
@@ -137,6 +144,8 @@ pub enum WsFeedEvent {
         amount: f64,
         commission: f64,
         timestamp: DateTime<Utc>,
+        /** 持仓方向（双向持仓模式下区分多空持仓） */
+        position_side: Option<PositionSide>,
     },
     ConnectionChanged {
         connected: bool,
@@ -234,6 +243,7 @@ pub enum EngineCommand {
         exchange: String,
         symbol: String,
         side: PositionSide,
+        order_side: Side,
         size: f64,
         leverage: Option<u32>,
         order_type: OrderType,

@@ -391,7 +391,7 @@ impl Exchange for MockExchange {
         }
     }
 
-    async fn cancel_all_orders(&self, _symbol: &str) -> Result<Vec<Order>> {
+    async fn cancel_all_orders(&self, _symbol: Option<&str>) -> Result<Vec<Order>> {
         let inner = self.inner.lock().await;
         match &inner.cancel_all_ok {
             Some(orders) => Ok(orders.clone()),
@@ -410,6 +410,10 @@ impl Exchange for MockExchange {
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> Result<()> {
         self.inner.lock().await.leverage_log.push((symbol.to_string(), leverage));
         Ok(())
+    }
+
+    async fn get_position_mode(&self) -> Result<PositionMode> {
+        Ok(PositionMode::Hedge)
     }
 
     async fn subscribe_order_updates(&self, _symbols: &[&str]) -> Result<mpsc::Receiver<WsFeedEvent>> {

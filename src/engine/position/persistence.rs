@@ -298,6 +298,12 @@ impl Persistence {
         .execute(&self.db)
         .await?;
 
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_pe_orders_exchange_order_id ON pe_orders (exchange_order_id)",
+        )
+        .execute(&self.db)
+        .await?;
+
         Ok(())
     }
 
@@ -447,17 +453,19 @@ impl Persistence {
         sqlx::query(
             r#"
             UPDATE pe_orders SET
-                filled          = $1,
-                remaining       = $2,
-                status          = $3,
-                fee             = $4,
-                fee_currency    = $5,
-                slippage        = $6,
-                fill_price      = $7,
-                updated_at      = $8
-            WHERE id = $9
+                exchange_order_id = $1,
+                filled          = $2,
+                remaining       = $3,
+                status          = $4,
+                fee             = $5,
+                fee_currency    = $6,
+                slippage        = $7,
+                fill_price      = $8,
+                updated_at      = $9
+            WHERE id = $10
             "#,
         )
+        .bind(&order.exchange_order_id)
         .bind(order.filled)
         .bind(order.remaining)
         .bind(&status_str)

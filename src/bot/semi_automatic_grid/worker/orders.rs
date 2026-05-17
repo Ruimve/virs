@@ -143,11 +143,11 @@ impl GridWorker {
             return;
         }
 
-        let (amount, reduce_only) = match (dir, level.side.as_str()) {
-            (OrderDir::Buy, "sell") => (level.hold_quantity.abs().min(level.quantity), true),
-            (OrderDir::Buy, _) => (level.quantity, false),
-            (OrderDir::Sell, "sell") => (level.quantity, false),
-            (OrderDir::Sell, _) => (level.hold_quantity.min(level.quantity), true),
+        let (amount, reduce_only, position_side) = match (dir, level.side.as_str()) {
+            (OrderDir::Buy, "sell") => (level.hold_quantity.abs().min(level.quantity), true, Some(PositionSide::Short)),
+            (OrderDir::Buy, _) => (level.quantity, false, Some(PositionSide::Long)),
+            (OrderDir::Sell, "sell") => (level.quantity, false, Some(PositionSide::Short)),
+            (OrderDir::Sell, _) => (level.hold_quantity.min(level.quantity), true, Some(PositionSide::Long)),
         };
 
         let client_order_id = Some(format!("grid:{}:{}:{}", self.bot.id, level.level, key_side));
@@ -157,6 +157,7 @@ impl GridWorker {
             amount,
             price: Some(price),
             reduce_only,
+            position_side,
             client_order_id,
         };
 

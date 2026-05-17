@@ -616,8 +616,8 @@ export default function GridPage() {
                                   <tbody>
                                     <For each={cardGridLevels()}>
                                       {(level) => {
-                                        const isHolding = level.side === 'buy' ? level.buy_filled && !level.sell_filled : level.sell_filled && !level.buy_filled;
-                                        const isClosed = level.buy_filled && level.sell_filled;
+                                        const isHolding = Math.abs(level.hold_quantity) > 0;
+                                        const isClosed = (level.buy_filled && level.sell_filled) && Math.abs(level.hold_quantity) === 0;
                                         return (
                                         <tr class={`border-b border-gray-50 ${isHolding ? 'bg-emerald-50/50' : isClosed ? 'bg-gray-50/50' : ''}`}>
                                           <td class="px-2.5 py-1 text-gray-600 font-mono">{level.level}</td>
@@ -693,8 +693,8 @@ export default function GridPage() {
                       <tbody>
                         <For each={gridLevels()}>
                           {(level) => {
-                            const isHolding = level.side === 'buy' ? level.buy_filled && !level.sell_filled : level.sell_filled && !level.buy_filled;
-                            const isClosed = level.buy_filled && level.sell_filled;
+                            const isHolding = Math.abs(level.hold_quantity) > 0;
+                            const isClosed = (level.buy_filled && level.sell_filled) && Math.abs(level.hold_quantity) === 0;
                             return (
                             <tr class={`border-b border-gray-50 ${isHolding ? 'bg-emerald-50/50' : isClosed ? 'bg-gray-50/50' : ''}`}>
                               <td class="px-3 py-1.5 text-gray-600 font-mono">{level.level}</td>

@@ -19,12 +19,13 @@ pub trait Exchange: Send + Sync {
     // 交易
     async fn place_order(&self, params: PlaceOrderParams) -> Result<Order>;
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<Order>;
-    async fn cancel_all_orders(&self, symbol: &str) -> Result<Vec<Order>>;
+    async fn cancel_all_orders(&self, symbol: Option<&str>) -> Result<Vec<Order>>;
     async fn get_open_orders(&self, symbol: Option<&str>) -> Result<Vec<Order>>;
     async fn get_order(&self, symbol: &str, order_id: &str) -> Result<Order>;
 
     // 永续合约特有
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> Result<()>;
+    async fn get_position_mode(&self) -> Result<PositionMode>;
 
     // WebSocket 成交回报
     async fn subscribe_order_updates(&self, symbols: &[&str]) -> Result<mpsc::Receiver<WsFeedEvent>>;

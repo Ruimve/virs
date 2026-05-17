@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-pub use crate::trading::ports::{OrderSide, OrderInfo, OrderCommand, OrderEvent, OrderExecutor};
+pub use crate::trading::ports::{OrderSide, OrderInfo, OrderCommand, OrderEvent, OrderExecutor, PositionSide};
 
 /** AI 分析日志持久化记录 */
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -113,6 +113,7 @@ pub trait GridStore: Send + Sync {
         unrealized_pnl: f64,
         total_trades: i32,
         grid_filled_count: i32,
+        levels_json: Option<&serde_json::Value>,
     ) -> anyhow::Result<()>;
 /** 更新 bot 运行状态 */
     async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> anyhow::Result<()>;

@@ -148,7 +148,7 @@ impl GridStore for MockWorkerStore {
         Ok(())
     }
 
-    async fn save_stats(&self, bot_id: Uuid, total_pnl: f64, unrealized_pnl: f64, total_trades: i32, grid_filled_count: i32) -> anyhow::Result<()> {
+    async fn save_stats(&self, bot_id: Uuid, total_pnl: f64, unrealized_pnl: f64, total_trades: i32, grid_filled_count: i32, _levels_json: Option<&serde_json::Value>) -> anyhow::Result<()> {
         self.stats_saved.lock().await.push((bot_id, total_pnl, unrealized_pnl, total_trades, grid_filled_count));
         Ok(())
     }
@@ -273,7 +273,7 @@ impl GridStore for MockEngineStore {
         _side: &str, _grid_level: i32, _price: f64, _quantity: f64, _pnl: f64, _pnl_pct: f64,
     ) -> anyhow::Result<()> { Ok(()) }
 
-    async fn save_stats(&self, _bot_id: Uuid, _total_pnl: f64, _unrealized_pnl: f64, _total_trades: i32, _grid_filled_count: i32) -> anyhow::Result<()> { Ok(()) }
+    async fn save_stats(&self, _bot_id: Uuid, _total_pnl: f64, _unrealized_pnl: f64, _total_trades: i32, _grid_filled_count: i32, _levels_json: Option<&serde_json::Value>) -> anyhow::Result<()> { Ok(()) }
 
     async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> anyhow::Result<()> {
         self.statuses.lock().await.push((bot_id, status.to_string()));

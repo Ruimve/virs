@@ -51,9 +51,10 @@ fn grid_order_command_place_buy() {
         price: Some(50000.0),
         reduce_only: false,
     client_order_id: None,
+        position_side: None,
     };
     match &cmd {
-        OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only, client_order_id: _ } => {
+        OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only, client_order_id: _, position_side: _ } => {
             assert_eq!(symbol, "BTCUSDT");
             assert_eq!(*side, OrderSide::Buy);
             assert!((amount - 0.001).abs() < f64::EPSILON);
@@ -73,6 +74,7 @@ fn grid_order_command_place_sell_reduce_only() {
         price: None,
         reduce_only: true,
     client_order_id: None,
+        position_side: None,
     };
     match &cmd {
         OrderCommand::PlaceOrder { side, price, reduce_only, .. } => {
@@ -93,6 +95,7 @@ fn grid_order_command_place_zero_amount() {
         price: Some(50000.0),
         reduce_only: false,
     client_order_id: None,
+        position_side: None,
     };
     match &cmd {
         OrderCommand::PlaceOrder { amount, .. } => assert!((amount).abs() < f64::EPSILON),
@@ -109,6 +112,7 @@ fn grid_order_command_place_large_amount() {
         price: Some(1.0),
         reduce_only: false,
     client_order_id: None,
+        position_side: None,
     };
     match &cmd {
         OrderCommand::PlaceOrder { amount, .. } => assert!((*amount - 1000000.0).abs() < f64::EPSILON),
@@ -599,6 +603,7 @@ async fn mock_order_executor_success() {
         price: Some(50000.0),
         reduce_only: false,
     client_order_id: None,
+        position_side: None,
     };
     let result = executor.send_command(cmd).await;
     assert!(result.is_ok());
@@ -654,7 +659,7 @@ async fn mock_store_record_trade() {
 async fn mock_store_save_stats() {
     let store = MockWorkerStore::new();
     let bot_id = Uuid::new_v4();
-    store.save_stats(bot_id, 100.0, 25.0, 10, 5).await.unwrap();
+    store.save_stats(bot_id, 100.0, 25.0, 10, 5, None).await.unwrap();
     let stats = store.stats_saved.lock().await;
     assert_eq!(stats.len(), 1);
     assert_eq!(stats[0].0, bot_id);
@@ -796,6 +801,7 @@ fn grid_order_command_place_negative_amount() {
         price: Some(50000.0),
         reduce_only: false,
     client_order_id: None,
+        position_side: None,
     };
     match &cmd {
         OrderCommand::PlaceOrder { amount, .. } => assert!(*amount < 0.0),
@@ -812,6 +818,7 @@ fn grid_order_command_place_negative_price() {
         price: Some(-50000.0),
         reduce_only: false,
     client_order_id: None,
+        position_side: None,
     };
     match &cmd {
         OrderCommand::PlaceOrder { price, .. } => assert!(price.unwrap() < 0.0),
@@ -828,6 +835,7 @@ fn grid_order_command_place_market_order_no_price() {
         price: None,
         reduce_only: false,
     client_order_id: None,
+        position_side: None,
     };
     match &cmd {
         OrderCommand::PlaceOrder { price, reduce_only, .. } => {

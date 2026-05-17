@@ -189,10 +189,8 @@ fn test_max_drawdown_calculation() {
     let mut t1 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
     t1.pnl = 1000.0;
     tracker.record_trade(&t1);
-    // record_trade 更新 realized_pnl 但不更新 peak_equity
-    // peak_equity 只在 update_unrealized 中更新
-    // 所以 peak 仍为 10000（初始值）
-    assert_eq!(tracker.peak_equity(), 10000.0);
+    // record_trade 现在也会更新 peak_equity
+    assert_eq!(tracker.peak_equity(), 11000.0);
 
     // Then: record a loss to bring equity to 8000
     let mut t2 = make_trade(Uuid::nil(), Uuid::nil(), Side::Sell, 100.0, 1.0, TradeType::Close);
@@ -201,9 +199,9 @@ fn test_max_drawdown_calculation() {
     let snap = tracker.snapshot(0.0, 0);
 
     // equity = 10000 + 1000 - 2000 = 9000
-    // peak is still 10000 (only update_unrealized updates peak)
-    // drawdown = (10000 - 9000) / 10000 = 0.1
-    let expected_dd = 1000.0 / 10000.0;
+    // peak is 11000 (updated by record_trade)
+    // drawdown = (11000 - 9000) / 11000 = 0.1818...
+    let expected_dd = 2000.0 / 11000.0;
     assert!((snap.max_drawdown - expected_dd).abs() < 0.001);
 }
 
@@ -475,7 +473,7 @@ fn test_record_trade_zero_pnl() {
     tracker.record_trade(&t);
     assert_eq!(tracker.total_realized_pnl(), 0.0);
     assert_eq!(tracker.total_trades(), 1);
-    assert_eq!(tracker.profit_trades(), 1, "pnl=0 应视为盈利交易");
+    assert_eq!(tracker.profit_trades(), 0, "pnl=0 不计入盈利交易");
 }
 
 #[test]

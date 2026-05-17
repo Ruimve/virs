@@ -285,18 +285,11 @@ impl PeOrderExecutor {
 impl OrderExecutor for PeOrderExecutor {
     async fn send_command(&self, command: OrderCommand) -> anyhow::Result<()> {
         let pe_cmd = match command {
-            OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only, client_order_id } => {
-                let position_side = if reduce_only {
-                    match side {
-                        OrderSide::Buy => pe_types::PositionSide::Short,
-                        OrderSide::Sell => pe_types::PositionSide::Long,
-                    }
-                } else {
-                    match side {
-                        OrderSide::Buy => pe_types::PositionSide::Long,
-                        OrderSide::Sell => pe_types::PositionSide::Short,
-                    }
-                };
+            OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only, position_side, client_order_id } => {
+                let pe_position_side = position_side.map(|ps| match ps {
+                    crate::trading::ports::PositionSide::Long => pe_types::PositionSide::Long,
+                    crate::trading::ports::PositionSide::Short => pe_types::PositionSide::Short,
+                });
                 pe_types::EngineCommand::PlaceOrder {
                     params: pe_types::PlaceOrderParams {
                         symbol,
@@ -308,7 +301,7 @@ impl OrderExecutor for PeOrderExecutor {
                         amount,
                         price,
                         reduce_only,
-                        position_side: Some(position_side),
+                        position_side: pe_position_side,
                         position_id: None,
                         client_order_id,
                     },
@@ -450,15 +443,16 @@ impl GridStore for PgGridStore {
         Ok(())
     }
 
-    async fn save_stats(&self, bot_id: Uuid, total_pnl: f64, unrealized_pnl: f64, total_trades: i32, grid_filled_count: i32) -> anyhow::Result<()> {
+    async fn save_stats(&self, bot_id: Uuid, total_pnl: f64, unrealized_pnl: f64, total_trades: i32, grid_filled_count: i32, levels_json: Option<&serde_json::Value>) -> anyhow::Result<()> {
         sqlx::query(
-            "UPDATE qd_grid_bots SET total_pnl = $2, unrealized_pnl = $3, total_trades = $4, grid_filled_count = $5, updated_at = NOW() WHERE id = $1",
+            "UPDATE qd_grid_bots SET total_pnl = $2, unrealized_pnl = $3, total_trades = $4, grid_filled_count = $5, grid_levels_json = $6::jsonb, updated_at = NOW() WHERE id = $1",
         )
         .bind(bot_id)
         .bind(total_pnl)
         .bind(unrealized_pnl)
         .bind(total_trades)
         .bind(grid_filled_count)
+        .bind(levels_json)
         .execute(&self.db)
         .await?;
         Ok(())

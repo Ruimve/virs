@@ -789,6 +789,10 @@ impl Exchange for BybitExchange {
         Ok(positions)
     }
 
+    async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError> {
+        Err(ExchangeError::NotSupported("get_position_mode not implemented for Bybit".into()))
+    }
+
     async fn fetch_funding_rate(&self, symbol: &str) -> Result<FundingRate, ExchangeError> {
         let native = Self::to_native_symbol(symbol);
         let data = self.client

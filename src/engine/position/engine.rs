@@ -58,6 +58,7 @@ pub(crate) struct EngineInner {
     pub(crate) exchange_order_id_index: DashMap<String, Uuid>,
     pub(crate) position_id_index: DashMap<Uuid, (String, String, PositionSide)>,
     pub(crate) last_close_all: RwLock<Option<chrono::DateTime<Utc>>>,
+    pub(crate) position_mode: RwLock<PositionMode>,
 }
 
 impl EngineInner {
@@ -113,6 +114,7 @@ impl PositionEngine {
             exchange_order_id_index: DashMap::new(),
             position_id_index: DashMap::new(),
             last_close_all: RwLock::new(None),
+            position_mode: RwLock::new(PositionMode::OneWay),
         };
 
         Self {
@@ -167,6 +169,26 @@ impl PositionEngine {
     pub async fn run(&mut self) -> Result<()> {
         // 1. 初始化数据库表
         self.inner.persistence.init_tables().await?;
+
+        // 1.5 获取持仓模式（双向/单向）
+        match self.inner.exchange.get_position_mode().await {
+            Ok(mode) => {
+                info!(
+                    engine_id = %self.inner.config.engine_id,
+                    position_mode = ?mode,
+                    "Fetched position mode from exchange"
+                );
+                *self.inner.position_mode.write().unwrap() = mode;
+            }
+            Err(e) => {
+                warn!(
+                    engine_id = %self.inner.config.engine_id,
+                    error = %e,
+                    "Failed to get position mode from exchange"
+                );
+                return Err(PositionEngineError::PositionModeQueryFailed(e.to_string()));
+            }
+        }
 
         // 2. 从数据库恢复状态
         self.recover_state().await?;
@@ -386,6 +408,7 @@ pub(crate) async fn command_loop(inner: Arc<EngineInner>, mut cmd_rx: mpsc::Rece
                 exchange,
                 symbol,
                 side,
+                order_side,
                 size,
                 leverage,
                 order_type,
@@ -399,6 +422,7 @@ pub(crate) async fn command_loop(inner: Arc<EngineInner>, mut cmd_rx: mpsc::Rece
                     exchange,
                     symbol,
                     side,
+                    order_side,
                     size,
                     leverage,
                     order_type,
@@ -813,7 +837,7 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                                     PositionSide::Short => Side::Buy,
                                     PositionSide::Both => Side::Sell,
                                 };
-                                let params = PlaceOrderParams {
+                                let mut params = PlaceOrderParams {
                                     symbol: sym.clone(),
                                     side: close_side,
                                     order_type: OrderType::Market,
@@ -824,11 +848,14 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                                     position_id: Some(pid),
                                     client_order_id: None,
                                 };
+                                let mode = *inner.position_mode.read().unwrap();
+                                adjust_params_for_position_mode(&mut params, mode);
                                 let mut attempts = 0u32;
                                 let max_attempts = 3;
                                 loop {
                                     match inner.exchange.place_order(params.clone()).await {
-                                        Ok(order) => {
+                                        Ok(mut order) => {
+                                            order.reduce_only = params.reduce_only;
                                             if let Some(ref eoid) = order.exchange_order_id {
                                                 inner.exchange_order_id_index.insert(eoid.clone(), order.id);
                                             }
@@ -893,6 +920,7 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: mpsc::Recei
                 amount,
                 commission,
                 timestamp,
+                position_side,
             } => {
                 handle_ws_order_update(
                     &inner,
@@ -905,6 +933,7 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: mpsc::Recei
                     amount,
                     commission,
                     timestamp,
+                    position_side,
                 )
                 .await;
             }
@@ -942,6 +971,7 @@ pub(crate) async fn handle_ws_order_update(
     amount: f64,
     commission: f64,
     timestamp: chrono::DateTime<Utc>,
+    ws_position_side: Option<PositionSide>,
 ) {
     // 1. 查找本地 Order（通过 exchange_order_id_index O(1) 查找）
     let (order_id, position_id, prev_filled, is_reduce_only) = {
@@ -966,7 +996,43 @@ pub(crate) async fn handle_ws_order_update(
                 return;
             }
         };
-        (order.id, order.position_id, order.filled, order.reduce_only)
+
+        if let Some(ref ws_ps) = ws_position_side {
+            if let Some(pos_key) = inner.position_id_index.get(&order.position_id).map(|r| r.value().clone()) {
+                let pos_side = &pos_key.2;
+                let expected_side = match ws_ps {
+                    PositionSide::Long => PositionSide::Long,
+                    PositionSide::Short => PositionSide::Short,
+                    PositionSide::Both => PositionSide::Both,
+                };
+                if pos_side != &expected_side {
+                    warn!(
+                        exchange_order_id,
+                        order_id = %order.id,
+                        ws_position_side = ?ws_ps,
+                        local_position_side = ?pos_side,
+                        "WS position_side mismatch with local position side"
+                    );
+                }
+            }
+        }
+
+        let is_reduce_only = {
+            let order_reduce = order.reduce_only;
+            if order_reduce {
+                true
+            } else if let Some(ref ws_ps) = ws_position_side {
+                match (&order.side, ws_ps) {
+                    (Side::Sell, PositionSide::Long) => true,
+                    (Side::Buy, PositionSide::Short) => true,
+                    _ => false,
+                }
+            } else {
+                false
+            }
+        };
+
+        (order.id, order.position_id, order.filled, is_reduce_only)
     };
 
     // 2. 更新 Order
@@ -1144,7 +1210,7 @@ pub(crate) async fn handle_ws_order_update(
             let order = inner.orders.get(&order_id).map(|r| r.value().clone());
 
             if let Some(order) = order {
-                if order.reduce_only {
+                if is_reduce_only {
                     // 平仓订单成交（realized_pnl 已在 trade 处理阶段累加）
                     position.size -= order.filled;
 
@@ -1266,6 +1332,7 @@ pub(crate) async fn handle_open_position(
     exchange: String,
     symbol: String,
     side: PositionSide,
+    order_side: Side,
     size: f64,
     leverage: Option<u32>,
     order_type: OrderType,
@@ -1366,15 +1433,15 @@ pub(crate) async fn handle_open_position(
     };
 
     // 构造下单参数
-    let order_side = match side {
+    let resolved_side = match side {
         PositionSide::Long => Side::Buy,
         PositionSide::Short => Side::Sell,
-        PositionSide::Both => Side::Buy,
+        PositionSide::Both => order_side,
     };
 
-    let params = PlaceOrderParams {
+    let mut params = PlaceOrderParams {
         symbol: symbol.clone(),
-        side: order_side,
+        side: resolved_side,
         order_type,
         amount: size,
         price,
@@ -1383,9 +1450,13 @@ pub(crate) async fn handle_open_position(
         position_id: Some(position_id),
         client_order_id: None,
     };
+    let mode = *inner.position_mode.read().unwrap();
+    adjust_params_for_position_mode(&mut params, mode);
+    let reduce_only = params.reduce_only;
 
     match inner.exchange.place_order(params).await {
-        Ok(order) => {
+        Ok(mut order) => {
+            order.reduce_only = reduce_only;
             position.status = PositionStatus::Open;
             position.size = order.filled;
             position.entry_price = order.fill_price.unwrap_or(0.0);
@@ -1461,7 +1532,7 @@ pub(crate) async fn handle_close_position(
         }
     };
 
-    if position.size <= 0.0 {
+    if position.size == 0.0 {
         let msg = format!("Position {} has zero size", position_id);
         inner.emit_event(EngineEvent::OrderFailed {
             order_id: Uuid::nil(),
@@ -1473,10 +1544,16 @@ pub(crate) async fn handle_close_position(
     let close_side = match position.side {
         PositionSide::Long => Side::Sell,
         PositionSide::Short => Side::Buy,
-        PositionSide::Both => Side::Sell,
+        PositionSide::Both => {
+            if position.size >= 0.0 {
+                Side::Sell
+            } else {
+                Side::Buy
+            }
+        }
     };
 
-    let params = PlaceOrderParams {
+    let mut params = PlaceOrderParams {
         symbol: position.symbol.clone(),
         side: close_side,
         order_type,
@@ -1487,9 +1564,13 @@ pub(crate) async fn handle_close_position(
         position_id: Some(position.id),
         client_order_id: None,
     };
+    let mode = *inner.position_mode.read().unwrap();
+    adjust_params_for_position_mode(&mut params, mode);
+    let reduce_only = params.reduce_only;
 
     match inner.exchange.place_order(params).await {
-        Ok(order) => {
+        Ok(mut order) => {
+            order.reduce_only = reduce_only;
             if let Some(ref eoid) = order.exchange_order_id {
                 inner.exchange_order_id_index.insert(eoid.clone(), order.id);
             }
@@ -1567,8 +1648,34 @@ pub(crate) async fn handle_modify_position(
     }
 }
 
+/// 根据持仓模式调整下单参数。
+///
+/// - Hedge 模式：position_side 必须为 Long/Short（不能为 None 或 Both），reduce_only 不传给交易所
+/// - OneWay 模式：position_side 不传给交易所，平仓时传 reduce_only
+pub(crate) fn adjust_params_for_position_mode(params: &mut PlaceOrderParams, mode: PositionMode) {
+    match mode {
+        PositionMode::Hedge => {
+            if params.position_side.is_none() || params.position_side == Some(PositionSide::Both) {
+                params.position_side = match (&params.side, params.reduce_only) {
+                    (Side::Buy, false) => Some(PositionSide::Long),
+                    (Side::Sell, false) => Some(PositionSide::Short),
+                    (Side::Sell, true) => Some(PositionSide::Long),
+                    (Side::Buy, true) => Some(PositionSide::Short),
+                };
+            }
+            params.reduce_only = false;
+        }
+        PositionMode::OneWay => {
+            params.position_side = None;
+        }
+    }
+}
+
 /// 处理通用下单命令。
-pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, params: PlaceOrderParams) {
+pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: PlaceOrderParams) {
+    let mode = *inner.position_mode.read().unwrap();
+    adjust_params_for_position_mode(&mut params, mode);
+
     // 风控检查
     let total_equity = inner.exchange.get_balance().await
         .map(|b| b.total)
@@ -1598,6 +1705,7 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, params: PlaceOr
             if let Some(pid) = params.position_id {
                 order.position_id = pid;
             }
+            order.reduce_only = params.reduce_only;
             inner.orders.insert(order.id, order.clone());
             persist!(inner.persistence.insert_order(&order), "Failed to persist order in place_order");
             inner.emit_event(EngineEvent::OrderPlaced {
@@ -1694,9 +1802,7 @@ pub(crate) async fn handle_cancel_all_orders(
         None
     };
 
-    // cancel_all_orders 需要 &str，如果没有指定 symbol 则使用空字符串表示全部取消
-    let symbol_arg = target_symbol.as_deref().unwrap_or("");
-    match inner.exchange.cancel_all_orders(symbol_arg).await {
+    match inner.exchange.cancel_all_orders(target_symbol.as_deref()).await {
         Ok(cancelled_orders) => {
             for order in &cancelled_orders {
                 inner.orders.insert(order.id, order.clone());
@@ -1755,6 +1861,7 @@ pub(crate) mod test_helpers {
             exchange_order_id_index: DashMap::new(),
             position_id_index: DashMap::new(),
             last_close_all: RwLock::new(None),
+            position_mode: RwLock::new(PositionMode::Hedge),
         })
     }
 

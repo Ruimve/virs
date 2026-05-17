@@ -1164,8 +1164,8 @@ pub async fn get_bot(
         .unwrap_or_default();
 
     let mut grid_levels = Vec::new();
-    for i in 0..=bot.grid_count {
-        let price = bot.lower_price + grid_spacing * i as f64;
+    for i in 0..bot.grid_count {
+        let price = bot.lower_price + grid_spacing * (i as f64 + 0.5);
         let llm_level = llm_levels.iter().find(|v| v["level"].as_i64() == Some(i as i64));
         let side = if let Some(l) = llm_level {
             l["side"].as_str().unwrap_or("buy")
@@ -1177,14 +1177,21 @@ pub async fn get_bot(
         } else {
             (price / profit_factor, price)
         };
-        let quantity = level_quantities.get(&i).copied().unwrap_or(0.0);
-        let buy_qty = buy_quantities.get(&i).copied().unwrap_or(0.0);
-        let sell_qty = sell_quantities.get(&i).copied().unwrap_or(0.0);
-        let hold_quantity = if side == "buy" { (buy_qty - sell_qty).max(0.0) } else { (sell_qty - buy_qty).max(0.0) * -1.0 };
-        let avg_buy_price = buy_fill_prices.get(&i).copied().unwrap_or(0.0);
-        let last_sell_price = sell_fill_prices.get(&i).copied().unwrap_or(0.0);
-        let has_buy = buy_fill_prices.contains_key(&i);
-        let has_sell = sell_fill_prices.contains_key(&i);
+        let runtime_level = llm_levels.iter().find(|v| v["level"].as_i64() == Some(i as i64));
+        let hold_quantity = runtime_level.and_then(|v| v["hold_quantity"].as_f64()).unwrap_or_else(|| {
+            let buy_qty = buy_quantities.get(&i).copied().unwrap_or(0.0);
+            let sell_qty = sell_quantities.get(&i).copied().unwrap_or(0.0);
+            if side == "buy" { (buy_qty - sell_qty).max(0.0) } else { (sell_qty - buy_qty).max(0.0) * -1.0 }
+        });
+        let buy_filled = runtime_level.and_then(|v| v["buy_filled"].as_bool()).unwrap_or_else(|| buy_fill_prices.contains_key(&i));
+        let sell_filled = runtime_level.and_then(|v| v["sell_filled"].as_bool()).unwrap_or_else(|| sell_fill_prices.contains_key(&i));
+        let avg_buy_price = runtime_level.and_then(|v| v["avg_buy_price"].as_f64()).unwrap_or_else(|| buy_fill_prices.get(&i).copied().unwrap_or(0.0));
+        let last_fill_price = runtime_level.and_then(|v| v["last_fill_price"].as_f64()).unwrap_or_else(|| {
+            if sell_fill_prices.contains_key(&i) { sell_fill_prices.get(&i).copied().unwrap_or(0.0) }
+            else if buy_fill_prices.contains_key(&i) { buy_fill_prices.get(&i).copied().unwrap_or(0.0) }
+            else { 0.0 }
+        });
+        let quantity = runtime_level.and_then(|v| v["quantity"].as_f64()).unwrap_or_else(|| level_quantities.get(&i).copied().unwrap_or(0.0));
         grid_levels.push(serde_json::json!({
             "level": i,
             "price": price,
@@ -1195,11 +1202,11 @@ pub async fn get_bot(
             "close_price": if side == "buy" { sell_price } else { buy_price },
             "filled": filled_set.contains(&i),
             "quantity": quantity,
-            "buy_filled": has_buy,
-            "sell_filled": has_sell,
+            "buy_filled": buy_filled,
+            "sell_filled": sell_filled,
             "hold_quantity": hold_quantity,
             "avg_buy_price": avg_buy_price,
-            "last_fill_price": if has_sell { last_sell_price } else if has_buy { avg_buy_price } else { 0.0 },
+            "last_fill_price": last_fill_price,
         }));
     }
 
@@ -1713,9 +1720,9 @@ pub async fn get_trades(
             .and_then(|v| v.as_array().cloned())
             .unwrap_or_default();
 
-        (0..=b.grid_count)
+        (0..b.grid_count)
             .map(|i| {
-                let price = b.lower_price + grid_spacing * i as f64;
+                let price = b.lower_price + grid_spacing * (i as f64 + 0.5);
                 let llm_level = llm_levels.iter().find(|v| v["level"].as_i64() == Some(i as i64));
                 let side = if let Some(l) = llm_level {
                     l["side"].as_str().unwrap_or("buy")
@@ -1727,14 +1734,21 @@ pub async fn get_trades(
                 } else {
                     (price / profit_factor, price)
                 };
-                let quantity = level_quantities.get(&i).copied().unwrap_or(0.0);
-                let buy_qty = buy_quantities.get(&i).copied().unwrap_or(0.0);
-                let sell_qty = sell_quantities.get(&i).copied().unwrap_or(0.0);
-                let hold_quantity = if side == "buy" { (buy_qty - sell_qty).max(0.0) } else { (sell_qty - buy_qty).max(0.0) * -1.0 };
-                let avg_buy_price = buy_fill_prices.get(&i).copied().unwrap_or(0.0);
-                let last_sell_price = sell_fill_prices.get(&i).copied().unwrap_or(0.0);
-                let has_buy = buy_fill_prices.contains_key(&i);
-                let has_sell = sell_fill_prices.contains_key(&i);
+                let runtime_level = llm_levels.iter().find(|v| v["level"].as_i64() == Some(i as i64));
+                let hold_quantity = runtime_level.and_then(|v| v["hold_quantity"].as_f64()).unwrap_or_else(|| {
+                    let buy_qty = buy_quantities.get(&i).copied().unwrap_or(0.0);
+                    let sell_qty = sell_quantities.get(&i).copied().unwrap_or(0.0);
+                    if side == "buy" { (buy_qty - sell_qty).max(0.0) } else { (sell_qty - buy_qty).max(0.0) * -1.0 }
+                });
+                let buy_filled = runtime_level.and_then(|v| v["buy_filled"].as_bool()).unwrap_or_else(|| buy_fill_prices.contains_key(&i));
+                let sell_filled = runtime_level.and_then(|v| v["sell_filled"].as_bool()).unwrap_or_else(|| sell_fill_prices.contains_key(&i));
+                let avg_buy_price = runtime_level.and_then(|v| v["avg_buy_price"].as_f64()).unwrap_or_else(|| buy_fill_prices.get(&i).copied().unwrap_or(0.0));
+                let last_fill_price = runtime_level.and_then(|v| v["last_fill_price"].as_f64()).unwrap_or_else(|| {
+                    if sell_fill_prices.contains_key(&i) { sell_fill_prices.get(&i).copied().unwrap_or(0.0) }
+                    else if buy_fill_prices.contains_key(&i) { buy_fill_prices.get(&i).copied().unwrap_or(0.0) }
+                    else { 0.0 }
+                });
+                let quantity = runtime_level.and_then(|v| v["quantity"].as_f64()).unwrap_or_else(|| level_quantities.get(&i).copied().unwrap_or(0.0));
                 serde_json::json!({
                     "level": i,
                     "price": price,
@@ -1745,11 +1759,11 @@ pub async fn get_trades(
                     "close_price": if side == "buy" { sell_price } else { buy_price },
                     "filled": filled_set.contains(&i),
                     "quantity": quantity,
-                    "buy_filled": has_buy,
-                    "sell_filled": has_sell,
+                    "buy_filled": buy_filled,
+                    "sell_filled": sell_filled,
                     "hold_quantity": hold_quantity,
                     "avg_buy_price": avg_buy_price,
-                    "last_fill_price": if has_sell { last_sell_price } else if has_buy { avg_buy_price } else { 0.0 },
+                    "last_fill_price": last_fill_price,
                 })
             })
             .collect::<Vec<_>>()

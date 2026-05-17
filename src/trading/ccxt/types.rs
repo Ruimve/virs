@@ -184,6 +184,12 @@ pub enum PositionSide {
     Short,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PositionMode {
+    OneWay,
+    Hedge,
+}
+
 /// Funding rate info for perpetual contracts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FundingRate {

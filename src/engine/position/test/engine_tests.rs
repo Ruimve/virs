@@ -1,5 +1,5 @@
 use super::common::*;
-use super::super::engine::{test_helpers, EngineInner, handle_open_position, handle_close_position, handle_modify_position, handle_place_order, handle_cancel_order, handle_cancel_all_orders, handle_sync_positions, handle_ws_order_update};
+use super::super::engine::{test_helpers, EngineInner, handle_open_position, handle_close_position, handle_modify_position, handle_place_order, handle_cancel_order, handle_cancel_all_orders, handle_sync_positions, handle_ws_order_update, adjust_params_for_position_mode};
 use super::super::exchange::Exchange;
 use super::super::types::*;
 use super::super::error::PositionEngineError;
@@ -186,7 +186,7 @@ async fn test_mock_exchange_cancel_order_not_configured() {
 #[tokio::test]
 async fn test_mock_exchange_cancel_all_default() {
     let mock = MockExchange::new("binance");
-    let result = mock.cancel_all_orders("BTC/USDT").await.unwrap();
+    let result = mock.cancel_all_orders(Some("BTC/USDT")).await.unwrap();
     assert!(result.is_empty());
 }
 
@@ -218,6 +218,7 @@ async fn test_handle_open_position_success() {
         "binance".to_string(),
         "BTC/USDT".to_string(),
         PositionSide::Long,
+        Side::Buy,
         1.0,
         Some(5),
         OrderType::Market,
@@ -256,6 +257,7 @@ async fn test_handle_open_position_already_exists() {
         "binance".to_string(),
         "BTC/USDT".to_string(),
         PositionSide::Long,
+        Side::Buy,
         1.0,
         Some(5),
         OrderType::Market,
@@ -282,6 +284,7 @@ async fn test_handle_open_position_exchange_error() {
         "binance".to_string(),
         "BTC/USDT".to_string(),
         PositionSide::Long,
+        Side::Buy,
         1.0,
         Some(5),
         OrderType::Market,
@@ -311,6 +314,7 @@ async fn test_handle_open_position_short_side() {
         "binance".to_string(),
         "BTC/USDT".to_string(),
         PositionSide::Short,
+        Side::Sell,
         1.0,
         Some(5),
         OrderType::Market,
@@ -337,6 +341,7 @@ async fn test_handle_open_position_with_stop_loss_take_profit() {
         "binance".to_string(),
         "BTC/USDT".to_string(),
         PositionSide::Long,
+        Side::Buy,
         1.0,
         Some(5),
         OrderType::Market,
@@ -365,6 +370,7 @@ async fn test_handle_open_position_leverage_set() {
         "binance".to_string(),
         "BTC/USDT".to_string(),
         PositionSide::Long,
+        Side::Buy,
         1.0,
         Some(10),
         OrderType::Market,
@@ -394,6 +400,7 @@ async fn test_handle_open_position_limit_order() {
         "binance".to_string(),
         "BTC/USDT".to_string(),
         PositionSide::Long,
+        Side::Buy,
         1.0,
         Some(5),
         OrderType::Limit,
@@ -419,6 +426,7 @@ async fn test_handle_open_position_with_strategy_id() {
         "binance".to_string(),
         "BTC/USDT".to_string(),
         PositionSide::Long,
+        Side::Buy,
         1.0,
         Some(5),
         OrderType::Market,
@@ -789,6 +797,7 @@ async fn test_handle_ws_order_update_filled() {
         1.0,
         0.5,
         chrono::Utc::now(),
+        None,
     )
     .await;
 
@@ -824,6 +833,7 @@ async fn test_handle_ws_order_update_partial_fill() {
         2.0,
         0.3,
         chrono::Utc::now(),
+        None,
     )
     .await;
 
@@ -848,6 +858,7 @@ async fn test_handle_ws_order_update_unknown_order() {
         1.0,
         0.0,
         chrono::Utc::now(),
+        None,
     )
     .await;
 
@@ -883,6 +894,7 @@ async fn test_handle_ws_order_update_reduce_only_closes_position() {
         1.0,
         0.5,
         chrono::Utc::now(),
+        None,
     )
     .await;
 
@@ -922,6 +934,7 @@ async fn test_handle_ws_order_update_reduce_only_partial_close() {
         1.0,
         0.5,
         chrono::Utc::now(),
+        None,
     )
     .await;
 
@@ -958,6 +971,7 @@ async fn test_handle_ws_order_update_open_order_updates_entry_price() {
         1.0,
         0.5,
         chrono::Utc::now(),
+        None,
     )
     .await;
 
@@ -994,6 +1008,7 @@ async fn test_handle_ws_order_update_short_position_pnl() {
         1.0,
         0.5,
         chrono::Utc::now(),
+        None,
     )
     .await;
 
@@ -1031,6 +1046,7 @@ async fn test_open_position_command_construction() {
         exchange: "binance".to_string(),
         symbol: "BTC/USDT".to_string(),
         side: PositionSide::Long,
+        order_side: Side::Buy,
         size: 1.0,
         leverage: Some(10),
         order_type: OrderType::Market,
@@ -1203,4 +1219,102 @@ async fn test_mock_exchange_place_order_err() {
     let result = mock.place_order(params).await;
     assert!(result.is_err());
     assert_eq!(mock.place_order_count().await, 1);
+}
+
+// ============================================================
+// adjust_params_for_position_mode tests (10 tests)
+// ============================================================
+
+fn make_place_order_params(side: Side, reduce_only: bool, position_side: Option<PositionSide>) -> PlaceOrderParams {
+    PlaceOrderParams {
+        symbol: "BTC/USDT".to_string(),
+        side,
+        order_type: OrderType::Market,
+        amount: 1.0,
+        price: None,
+        reduce_only,
+        position_side,
+        position_id: None,
+        client_order_id: None,
+    }
+}
+
+#[test]
+fn test_adjust_hedge_mode_buy_open_infers_long() {
+    let mut params = make_place_order_params(Side::Buy, false, None);
+    adjust_params_for_position_mode(&mut params, PositionMode::Hedge);
+    assert_eq!(params.position_side, Some(PositionSide::Long));
+    assert!(!params.reduce_only);
+}
+
+#[test]
+fn test_adjust_hedge_mode_sell_open_infers_short() {
+    let mut params = make_place_order_params(Side::Sell, false, None);
+    adjust_params_for_position_mode(&mut params, PositionMode::Hedge);
+    assert_eq!(params.position_side, Some(PositionSide::Short));
+    assert!(!params.reduce_only);
+}
+
+#[test]
+fn test_adjust_hedge_mode_sell_close_infers_long() {
+    let mut params = make_place_order_params(Side::Sell, true, None);
+    adjust_params_for_position_mode(&mut params, PositionMode::Hedge);
+    assert_eq!(params.position_side, Some(PositionSide::Long));
+    assert!(!params.reduce_only);
+}
+
+#[test]
+fn test_adjust_hedge_mode_buy_close_infers_short() {
+    let mut params = make_place_order_params(Side::Buy, true, None);
+    adjust_params_for_position_mode(&mut params, PositionMode::Hedge);
+    assert_eq!(params.position_side, Some(PositionSide::Short));
+    assert!(!params.reduce_only);
+}
+
+#[test]
+fn test_adjust_hedge_mode_explicit_position_side_preserved() {
+    let mut params = make_place_order_params(Side::Buy, true, Some(PositionSide::Long));
+    adjust_params_for_position_mode(&mut params, PositionMode::Hedge);
+    assert_eq!(params.position_side, Some(PositionSide::Long));
+    assert!(!params.reduce_only);
+}
+
+#[test]
+fn test_adjust_hedge_mode_both_replaced() {
+    let mut params = make_place_order_params(Side::Buy, false, Some(PositionSide::Both));
+    adjust_params_for_position_mode(&mut params, PositionMode::Hedge);
+    assert_eq!(params.position_side, Some(PositionSide::Long));
+    assert!(!params.reduce_only);
+}
+
+#[test]
+fn test_adjust_oneway_mode_clears_position_side() {
+    let mut params = make_place_order_params(Side::Buy, false, Some(PositionSide::Long));
+    adjust_params_for_position_mode(&mut params, PositionMode::OneWay);
+    assert_eq!(params.position_side, None);
+    assert!(!params.reduce_only);
+}
+
+#[test]
+fn test_adjust_oneway_mode_preserves_reduce_only() {
+    let mut params = make_place_order_params(Side::Sell, true, Some(PositionSide::Long));
+    adjust_params_for_position_mode(&mut params, PositionMode::OneWay);
+    assert_eq!(params.position_side, None);
+    assert!(params.reduce_only);
+}
+
+#[test]
+fn test_adjust_oneway_mode_no_position_side_no_reduce() {
+    let mut params = make_place_order_params(Side::Buy, false, None);
+    adjust_params_for_position_mode(&mut params, PositionMode::OneWay);
+    assert_eq!(params.position_side, None);
+    assert!(!params.reduce_only);
+}
+
+#[test]
+fn test_adjust_oneway_mode_close_order_reduce_only_kept() {
+    let mut params = make_place_order_params(Side::Sell, true, None);
+    adjust_params_for_position_mode(&mut params, PositionMode::OneWay);
+    assert_eq!(params.position_side, None);
+    assert!(params.reduce_only);
 }
