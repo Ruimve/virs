@@ -183,8 +183,8 @@ impl RiskChecker {
                 alert_type: "funding_rate".to_string(),
                 severity: severity.to_string(),
                 message: format!(
-                    "品种 {} 资金费率 {} 超过阈值 {}",
-                    symbol, rate, self.config.funding_rate_threshold
+                    "品种 {} 资金费率 {:.4}% 超过阈值 {:.4}%",
+                    symbol, rate * 100.0, self.config.funding_rate_threshold * 100.0
                 ),
             })
         } else {

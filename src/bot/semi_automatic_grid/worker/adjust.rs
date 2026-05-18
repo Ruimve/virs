@@ -78,7 +78,30 @@ impl GridWorker {
         }
 
         let grid_status = if self.paused { "paused" } else if self.levels.is_empty() { "empty" } else { "running" };
-        let total_hold: f64 = self.levels.iter().map(|l| l.hold_quantity).sum();
+
+        let current_price = self.current_price;
+        let long_qty: f64 = self.levels.iter().filter(|l| l.hold_quantity > 0.0).map(|l| l.hold_quantity).sum();
+        let short_qty: f64 = self.levels.iter().filter(|l| l.hold_quantity < 0.0).map(|l| l.hold_quantity.abs()).sum();
+        let long_cost: f64 = self.levels.iter().filter(|l| l.hold_quantity > 0.0 && l.avg_buy_price > 0.0).map(|l| l.avg_buy_price * l.hold_quantity).sum();
+        let short_cost: f64 = self.levels.iter().filter(|l| l.hold_quantity < 0.0 && l.avg_buy_price > 0.0).map(|l| l.avg_buy_price * l.hold_quantity.abs()).sum();
+        let long_avg = if long_qty > 0.0 { long_cost / long_qty } else { 0.0 };
+        let short_avg = if short_qty > 0.0 { short_cost / short_qty } else { 0.0 };
+        let long_pnl = if long_qty > 0.0 && current_price > 0.0 { (current_price - long_avg) * long_qty } else { 0.0 };
+        let short_pnl = if short_qty > 0.0 && current_price > 0.0 { (short_avg - current_price) * short_qty } else { 0.0 };
+
+        let position_info = if long_qty <= 0.0 && short_qty <= 0.0 {
+            "none".to_string()
+        } else {
+            let mut s = String::new();
+            if long_qty > 0.0 {
+                s.push_str(&format!("- Long: 币数 {:.6}, 均价 {:.2}, 未实现盈亏 {:.2} USDT", long_qty, long_avg, long_pnl));
+            }
+            if short_qty > 0.0 {
+                if !s.is_empty() { s.push('\n'); }
+                s.push_str(&format!("- Short: 币数 {:.6}, 均价 {:.2}, 未实现盈亏 {:.2} USDT", short_qty, short_avg, short_pnl));
+            }
+            s
+        };
 
         let current_grid_config = prompt::format_grid_config(
             grid_status,
@@ -106,10 +129,7 @@ impl GridWorker {
             last_adjust_time: "N/A".to_string(),
             consecutive_losses: self.consecutive_losses,
             current_grid_config,
-            position_base: total_hold,
-            position_side: if total_hold > 0.0 { "long".to_string() } else if total_hold < 0.0 { "short".to_string() } else { "none".to_string() },
-            entry_price: self.compute_weighted_avg_entry_price(),
-            unrealized_pnl: self.compute_unrealized_pnl(),
+            position_info,
             funding_rate: snapshot.indicators.funding_rate,
             funding_next_time: "N/A".to_string(),
             event_flag: false,

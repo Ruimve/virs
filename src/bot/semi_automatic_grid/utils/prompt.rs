@@ -16,10 +16,7 @@ pub struct PromptContext {
     pub last_adjust_time: String,
     pub consecutive_losses: i32,
     pub current_grid_config: String,
-    pub position_base: f64,
-    pub position_side: String,
-    pub entry_price: f64,
-    pub unrealized_pnl: f64,
+    pub position_info: String,
     pub funding_rate: f64,
     pub funding_next_time: String,
     pub event_flag: bool,
@@ -52,11 +49,8 @@ pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
         .replace("{last_adjust_time}", &ctx.last_adjust_time)
         .replace("{consecutive_losses}", &ctx.consecutive_losses.to_string())
         .replace("{current_grid_config}", &ctx.current_grid_config)
-        .replace("{position_base}", &format!("{:.6}", ctx.position_base))
-        .replace("{position_side}", &ctx.position_side)
-        .replace("{entry_price}", &format!("{:.2}", ctx.entry_price))
-        .replace("{unrealized_pnl}", &format!("{:.2}", ctx.unrealized_pnl))
-        .replace("{funding_rate}", &format!("{:.6}", ctx.funding_rate))
+        .replace("{position_info}", &ctx.position_info)
+        .replace("{funding_rate}", &format!("{:.4}%", ctx.funding_rate * 100.0))
         .replace("{funding_next_time}", &ctx.funding_next_time)
         .replace("{event_flag}", &ctx.event_flag.to_string())
         .replace("{event_description}", &ctx.event_description)

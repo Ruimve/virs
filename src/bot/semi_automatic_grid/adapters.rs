@@ -106,12 +106,13 @@ required 为 true 时，数据不足返回 None；为 false 时返回空向量 *
         required: bool,
     ) -> Option<Vec<Kline>> {
         if let Some(klines) = self.get_klines_from_cache_or_rest(exchange, symbol, timeframe, min_count).await {
+            tracing::info!(exchange, symbol, interval = interval_str, count = klines.len(), source = "cache", "Fetched klines");
             return Some(klines);
         }
 
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key);
-        match ex {
+        let result = match ex {
             Some(ref ex) => match ex.get_klines_range(symbol, interval_str, start_ms, chrono::Utc::now().timestamp_millis()).await {
                 Ok(k) if k.len() >= min_count => Some(k),
                 Ok(k) if !required => Some(k),
@@ -128,7 +129,11 @@ required 为 true 时，数据不足返回 None；为 false 时返回空向量 *
                 warn!(exchange, symbol, "No {} klines in cache and no exchange for REST fallback", interval_str);
                 if required { None } else { Some(vec![]) }
             }
+        };
+        if let Some(ref klines) = result {
+            tracing::info!(exchange, symbol, interval = interval_str, count = klines.len(), source = "rest", "Fetched klines");
         }
+        result
     }
 
 /** 从缓存获取 K 线数据（内部辅助方法） */
@@ -195,12 +200,13 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         };
 
         let klines_4h = self.fetch_klines(
-            exchange, symbol, Timeframe::H4, 1, "4h",
-            now_ms - 50 * 4 * 3600 * 1000, false,
+            exchange, symbol, Timeframe::H4, 50, "4h",
+            now_ms - 100 * 4 * 3600 * 1000, false,
         ).await.unwrap_or_default();
+        tracing::info!(exchange, symbol, h4_count = klines_4h.len(), "Fetched 4h klines for market snapshot");
 
         let klines_15m = self.fetch_klines(
-            exchange, symbol, Timeframe::M15, 1, "15m",
+            exchange, symbol, Timeframe::M15, 50, "15m",
             now_ms - 200 * 15 * 60 * 1000, false,
         ).await.unwrap_or_default();
 

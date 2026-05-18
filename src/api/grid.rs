@@ -480,11 +480,11 @@ async fn compute_grid_indicators(
 
 fn build_user_prompt(template: &str, ind: &GridIndicators, bot: &crate::models::GridBot) -> String {
     let ema_distance_pct = if ind.ema50 > 0.0 {
-        (ind.ema20 - ind.ema50) / ind.ema50 * 100.0
+        (ind.ema20 - ind.ema50) / ind.ema50
     } else { 0.0 };
 
     let margin_usage_rate = if ind.total_balance > 0.0 {
-        ind.used_margin / ind.total_balance * 100.0
+        ind.used_margin / ind.total_balance
     } else { 0.0 };
     let grid_status = match bot.status {
         crate::models::StrategyStatus::Running => "running",
@@ -519,12 +519,9 @@ fn build_user_prompt(template: &str, ind: &GridIndicators, bot: &crate::models::
         .replace("{last_adjust_time}", &last_adjust_time)
         .replace("{consecutive_losses}", "0")
         .replace("{current_grid_config}", &current_grid_config)
-        .replace("{position_base}", "0")
-        .replace("{position_side}", "long")
-        .replace("{entry_price}", "0")
-        .replace("{unrealized_pnl}", "0.00")
+        .replace("{position_info}", "none")
         .replace("{open_orders}", "[]")
-        .replace("{funding_rate}", &format!("{:.6}", ind.funding_rate))
+        .replace("{funding_rate}", &format!("{:.4}%", ind.funding_rate * 100.0))
         .replace("{funding_next_time}", &ind.funding_next_time)
         .replace("{event_flag}", "false")
         .replace("{event_description}", "")

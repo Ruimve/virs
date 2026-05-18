@@ -898,20 +898,11 @@ impl Exchange for BinanceExchange {
 
         let native = Self::to_native_symbol(symbol);
         let data = self.client
-            .public_get("/fapi/v1/fundingRate", &[("symbol", native.as_str())])
+            .public_get("/fapi/v1/premiumIndex", &[("symbol", native.as_str())])
             .await?;
 
-        let arr = data.as_array()
-            .ok_or_else(|| ExchangeError::Internal("Invalid fundingRate response from Binance".into()))?;
-
-        // Get the last (most recent) entry
-        let last = arr.last()
-            .ok_or_else(|| ExchangeError::no_data(format!(
-                "No funding rate data for {} on Binance", symbol
-            )))?;
-
-        let rate = parse_f64(last, "fundingRate").unwrap_or(0.0);
-        let funding_time = last.get("fundingTime")
+        let rate = parse_f64(&data, "lastFundingRate").unwrap_or(0.0);
+        let next_funding_time = data.get("nextFundingTime")
             .and_then(|t| t.as_i64())
             .map(|ts| {
                 chrono::DateTime::from_timestamp_millis(ts)
@@ -921,8 +912,8 @@ impl Exchange for BinanceExchange {
         Ok(FundingRate {
             symbol: symbol.to_string(),
             rate,
-            next_funding_time: funding_time,
-            info: last.clone(),
+            next_funding_time,
+            info: data,
         })
     }
 

@@ -158,7 +158,7 @@ pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}
 - 可用余额：{available_balance} USDT
 - 已用保证金：{used_margin} USDT
 - 保证金使用率：{margin_usage_rate}%
-杠杆倍数：{leverage}
+- 杠杆倍数：{leverage}
 
 ## 网格运行状态
 - 状态：{grid_status}
@@ -169,10 +169,7 @@ pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}
 {current_grid_config}
 
 ## 当前持仓
-- 持仓币数：{position_base}
-- 持仓方向：{position_side}
-- 开仓均价：{entry_price}
-- 未实现盈亏：{unrealized_pnl} USDT
+{position_info}
 
 ## 资金费率与事件
 - 当前资金费率：{funding_rate}
