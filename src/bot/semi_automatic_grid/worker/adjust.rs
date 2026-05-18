@@ -18,11 +18,19 @@ pub const LLM_RUNTIME_PROMPT: &str = r#"你是一位正在管理加密货币网�
 2. **pause_grid**: 价格突破网格区间（超过上下界 2%）、市场转为强趋势、或连续亏损时暂停
 3. **adjust_grid**: 市场波动率显著变化，需要调整网格上下界时
 4. **reduce_position**: 高波动或连续亏损时，减半仓位
-5. **hold**: 当前状态良好，无需操作
+5. **cancel_order**: 取消指定层级的挂单，需提供 cancel_level（层级编号）和 cancel_side（"buy" 或 "sell"）
+6. **hold**: 当前状态良好，无需操作
+
+## 网格层级状态说明
+- **waiting**: 等待价格触发，尚未挂单
+- **pending_buy/pending_sell**: 已挂出买单/卖单，等待成交
+- **holding**: 已成交，持仓中
+- **closed**: 买卖周期完成，已平仓
 
 ## 注意
 - 暂停后不会自动恢复，需要明确的 run_grid 指令
 - adjust_grid 必须返回新的 upper_price 和 lower_price
+- cancel_order 必须指定 cancel_level（层级编号）和 cancel_side（"buy" 或 "sell"），且该层级必须处于 pending 状态
 - 优先保守操作，避免在不确定时频繁调整"#;
 
 impl GridWorker {
@@ -102,7 +110,6 @@ impl GridWorker {
             position_side: if total_hold > 0.0 { "long".to_string() } else if total_hold < 0.0 { "short".to_string() } else { "none".to_string() },
             entry_price: self.compute_weighted_avg_entry_price(),
             unrealized_pnl: self.compute_unrealized_pnl(),
-            open_orders: self.format_open_orders(),
             funding_rate: snapshot.indicators.funding_rate,
             funding_next_time: "N/A".to_string(),
             event_flag: false,
@@ -135,6 +142,8 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                     "reason": d.reason,
                     "upper_price": d.upper_price,
                     "lower_price": d.lower_price,
+                    "cancel_level": d.cancel_level,
+                    "cancel_side": d.cancel_side,
                 });
                 let _ = self.store.save_analysis_log(
                     self.bot.id, "periodic", system_prompt, user_prompt,
@@ -188,6 +197,15 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
             GridAction::AdjustGrid { .. } => {
                 if let Some(d) = decision {
                     self.adjust_grid(d.upper_price, d.lower_price, false).await;
+                }
+            }
+            GridAction::CancelOrder { level, side } => {
+                let level_idx = self.levels.iter().position(|l| l.level == *level);
+                if let Some(idx) = level_idx {
+                    self.cancel_level_order(idx, side).await;
+                    info!(bot_id = %self.bot.id, level = level, side = %side, "Order canceled by LLM decision");
+                } else {
+                    warn!(bot_id = %self.bot.id, level = level, side = %side, "CancelOrder: level not found");
                 }
             }
             GridAction::Hold => {}

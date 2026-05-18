@@ -12,6 +12,7 @@ fn grid_action_as_str_all_variants() {
     assert_eq!(GridAction::AdjustGrid { upper_price: None, lower_price: None }.as_str(), "adjust_grid");
     assert_eq!(GridAction::AdjustGrid { upper_price: Some(65000.0), lower_price: Some(45000.0) }.as_str(), "adjust_grid");
     assert_eq!(GridAction::ReducePosition.as_str(), "reduce_position");
+    assert_eq!(GridAction::CancelOrder { level: 3, side: "buy".to_string() }.as_str(), "cancel_order");
     assert_eq!(GridAction::Hold.as_str(), "hold");
 }
 
@@ -19,15 +20,15 @@ fn grid_action_as_str_all_variants() {
 
 #[test]
 fn grid_action_from_str_known_actions() {
-    assert!(matches!(GridAction::from_str("run_grid", None, None), GridAction::RunGrid));
-    assert!(matches!(GridAction::from_str("pause_grid", None, None), GridAction::PauseGrid));
-    assert!(matches!(GridAction::from_str("reduce_position", None, None), GridAction::ReducePosition));
-    assert!(matches!(GridAction::from_str("hold", None, None), GridAction::Hold));
+    assert!(matches!(GridAction::from_str("run_grid", None, None, None, None), GridAction::RunGrid));
+    assert!(matches!(GridAction::from_str("pause_grid", None, None, None, None), GridAction::PauseGrid));
+    assert!(matches!(GridAction::from_str("reduce_position", None, None, None, None), GridAction::ReducePosition));
+    assert!(matches!(GridAction::from_str("hold", None, None, None, None), GridAction::Hold));
 }
 
 #[test]
 fn grid_action_from_str_adjust_grid_with_prices() {
-    let action = GridAction::from_str("adjust_grid", Some(65000.0), Some(48000.0));
+    let action = GridAction::from_str("adjust_grid", Some(65000.0), Some(48000.0), None, None);
     match action {
         GridAction::AdjustGrid { upper_price, lower_price } => {
             assert_eq!(upper_price, Some(65000.0));
@@ -39,7 +40,7 @@ fn grid_action_from_str_adjust_grid_with_prices() {
 
 #[test]
 fn grid_action_from_str_adjust_grid_with_none_prices() {
-    let action = GridAction::from_str("adjust_grid", None, None);
+    let action = GridAction::from_str("adjust_grid", None, None, None, None);
     match action {
         GridAction::AdjustGrid { upper_price, lower_price } => {
             assert_eq!(upper_price, None);
@@ -51,7 +52,7 @@ fn grid_action_from_str_adjust_grid_with_none_prices() {
 
 #[test]
 fn grid_action_from_str_adjust_grid_with_partial_prices() {
-    let action = GridAction::from_str("adjust_grid", Some(65000.0), None);
+    let action = GridAction::from_str("adjust_grid", Some(65000.0), None, None, None);
     match action {
         GridAction::AdjustGrid { upper_price, lower_price } => {
             assert_eq!(upper_price, Some(65000.0));
@@ -63,11 +64,11 @@ fn grid_action_from_str_adjust_grid_with_partial_prices() {
 
 #[test]
 fn grid_action_from_str_unknown_falls_to_hold() {
-    assert!(matches!(GridAction::from_str("unknown_action", None, None), GridAction::Hold));
-    assert!(matches!(GridAction::from_str("", None, None), GridAction::Hold));
-    assert!(matches!(GridAction::from_str("RUN_GRID", None, None), GridAction::RunGrid));
-    assert!(matches!(GridAction::from_str("pause_grid", None, None), GridAction::PauseGrid));
-    assert!(matches!(GridAction::from_str("PauseGrid", None, None), GridAction::Hold));
+    assert!(matches!(GridAction::from_str("unknown_action", None, None, None, None), GridAction::Hold));
+    assert!(matches!(GridAction::from_str("", None, None, None, None), GridAction::Hold));
+    assert!(matches!(GridAction::from_str("RUN_GRID", None, None, None, None), GridAction::RunGrid));
+    assert!(matches!(GridAction::from_str("pause_grid", None, None, None, None), GridAction::PauseGrid));
+    assert!(matches!(GridAction::from_str("PauseGrid", None, None, None, None), GridAction::Hold));
 }
 
 // ── GridDecision::from_json ──
@@ -544,6 +545,8 @@ fn grid_decision_clone() {
         reason: "test clone".to_string(),
         upper_price: None,
         lower_price: None,
+        cancel_level: None,
+        cancel_side: None,
     };
     let cloned = decision.clone();
     assert!(matches!(cloned.action, GridAction::ReducePosition));

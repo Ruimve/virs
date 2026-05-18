@@ -13,6 +13,10 @@ pub enum GridAction {
         lower_price: Option<f64>,
     },
     ReducePosition,
+    CancelOrder {
+        level: i32,
+        side: String,
+    },
     Hold,
 }
 
@@ -23,11 +27,12 @@ impl GridAction {
             Self::PauseGrid => "pause_grid",
             Self::AdjustGrid { .. } => "adjust_grid",
             Self::ReducePosition => "reduce_position",
+            Self::CancelOrder { .. } => "cancel_order",
             Self::Hold => "hold",
         }
     }
 
-    pub fn from_str(s: &str, upper_price: Option<f64>, lower_price: Option<f64>) -> Self {
+    pub fn from_str(s: &str, upper_price: Option<f64>, lower_price: Option<f64>, cancel_level: Option<i32>, cancel_side: Option<String>) -> Self {
         match s.to_lowercase().as_str() {
             "run_grid" => GridAction::RunGrid,
             "pause_grid" => GridAction::PauseGrid,
@@ -36,6 +41,10 @@ impl GridAction {
                 lower_price,
             },
             "reduce_position" => GridAction::ReducePosition,
+            "cancel_order" => GridAction::CancelOrder {
+                level: cancel_level.unwrap_or(0),
+                side: cancel_side.unwrap_or_else(|| "buy".to_string()),
+            },
             "hold" => GridAction::Hold,
             _ => {
                 tracing::warn!(action = s, "Unknown LLM action, falling back to Hold");
@@ -51,6 +60,8 @@ pub struct GridDecision {
     pub reason: String,
     pub upper_price: Option<f64>,
     pub lower_price: Option<f64>,
+    pub cancel_level: Option<i32>,
+    pub cancel_side: Option<String>,
 }
 
 impl GridDecision {
@@ -62,6 +73,8 @@ impl GridDecision {
             .to_string();
         let mut upper_price = json["upper_price"].as_f64();
         let mut lower_price = json["lower_price"].as_f64();
+        let cancel_level = json["cancel_level"].as_i64().map(|v| v as i32);
+        let cancel_side = json["cancel_side"].as_str().map(|s| s.to_string());
 
         if upper_price.is_some() && upper_price.unwrap() <= 0.0 {
             warn!("GridDecision: upper_price <= 0, ignoring");
@@ -79,13 +92,15 @@ impl GridDecision {
             }
         }
 
-        let action = GridAction::from_str(action_str, upper_price, lower_price);
+        let action = GridAction::from_str(action_str, upper_price, lower_price, cancel_level, cancel_side.clone());
 
         GridDecision {
             action,
             reason,
             upper_price,
             lower_price,
+            cancel_level,
+            cancel_side,
         }
     }
 }

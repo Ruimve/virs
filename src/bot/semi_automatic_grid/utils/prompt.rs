@@ -20,7 +20,6 @@ pub struct PromptContext {
     pub position_side: String,
     pub entry_price: f64,
     pub unrealized_pnl: f64,
-    pub open_orders: String,
     pub funding_rate: f64,
     pub funding_next_time: String,
     pub event_flag: bool,
@@ -57,7 +56,6 @@ pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
         .replace("{position_side}", &ctx.position_side)
         .replace("{entry_price}", &format!("{:.2}", ctx.entry_price))
         .replace("{unrealized_pnl}", &format!("{:.2}", ctx.unrealized_pnl))
-        .replace("{open_orders}", &ctx.open_orders)
         .replace("{funding_rate}", &format!("{:.6}", ctx.funding_rate))
         .replace("{funding_next_time}", &ctx.funding_next_time)
         .replace("{event_flag}", &ctx.event_flag.to_string())
@@ -121,9 +119,9 @@ pub fn format_grid_config(
     md.push_str("|------|------|------|------|------------|--------|------|\n");
     for l in levels {
         let status = if l.side == "buy" {
-            if l.buy_filled && l.sell_filled { "sold" } else if l.buy_filled && l.hold_quantity > 0.0 { "hold" } else { "buy" }
+            if l.buy_filled && l.sell_filled { "closed" } else if l.buy_filled && l.hold_quantity > 0.0 { "holding" } else if l.buy_order_id.is_some() { "pending_buy" } else { "waiting" }
         } else {
-            if l.sell_filled && l.buy_filled { "bought" } else if l.sell_filled && l.hold_quantity < 0.0 { "hold" } else { "sell" }
+            if l.sell_filled && l.buy_filled { "closed" } else if l.sell_filled && l.hold_quantity < 0.0 { "holding" } else if l.sell_order_id.is_some() { "pending_sell" } else { "waiting" }
         };
         let avg_price = if l.avg_buy_price > 0.0 { l.avg_buy_price } else { l.buy_price };
         md.push_str(&format!(

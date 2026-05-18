@@ -174,9 +174,6 @@ pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}
 - 开仓均价：{entry_price}
 - 未实现盈亏：{unrealized_pnl} USDT
 
-## 当前挂单（与交易所实际一致）
-{open_orders}
-
 ## 资金费率与事件
 - 当前资金费率：{funding_rate}
 - 下一个结算时间：{funding_next_time}
