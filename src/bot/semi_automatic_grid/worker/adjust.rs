@@ -142,6 +142,11 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                     "lower_price": d.lower_price,
                     "cancel_level": d.cancel_level,
                     "cancel_side": d.cancel_side,
+                    "grid_count": d.grid_count,
+                    "grid_profit_pct": d.grid_profit_pct,
+                    "quantity_per_grid": d.quantity_per_grid,
+                    "leverage": d.leverage,
+                    "market_regime": d.market_regime,
                 });
                 let _ = self.store.save_analysis_log(
                     self.bot.id, "periodic", system_prompt, user_prompt,
@@ -174,6 +179,14 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
 
 /** 执行 AI 决策 */
     pub(crate) async fn execute_decision(&mut self, action: &GridAction, decision: Option<&GridDecision>) {
+        let needs_params = self.bot.upper_price <= 0.0 || self.bot.lower_price <= 0.0;
+
+        if let Some(d) = decision {
+            if needs_params || matches!(action, GridAction::AdjustGrid { .. }) {
+                self.apply_llm_params(d).await;
+            }
+        }
+
         match action {
             GridAction::PauseGrid => {
                 self.pause_with_cancel("LLM decision").await;
@@ -193,7 +206,11 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                 warn!(bot_id = %self.bot.id, new_qty, "Position reduced by decision");
             }
             GridAction::AdjustGrid { .. } => {
-                if let Some(d) = decision {
+                if needs_params {
+                    if !self.levels.is_empty() && !self.paused {
+                        self.place_initial_orders().await;
+                    }
+                } else if let Some(d) = decision {
                     self.adjust_grid(d.upper_price, d.lower_price, false).await;
                 }
             }
@@ -206,8 +223,95 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                     warn!(bot_id = %self.bot.id, level = level, side = %side, "CancelOrder: level not found");
                 }
             }
-            GridAction::Hold => {}
+            GridAction::Hold => {
+                if needs_params && !self.levels.is_empty() && !self.paused {
+                    self.place_initial_orders().await;
+                }
+            }
         }
+    }
+
+/** 将 LLM 决策中的网格参数应用到 bot 配置并持久化
+
+当 bot 参数为空（首次分析）或 LLM 返回 adjust_grid 时调用，
+更新 grid_count/grid_profit_pct/quantity_per_grid/leverage 等结构参数 */
+    async fn apply_llm_params(&mut self, d: &GridDecision) {
+        let needs_params = self.bot.upper_price <= 0.0 || self.bot.lower_price <= 0.0;
+        let mut structure_changed = false;
+
+        if let Some(count) = d.grid_count {
+            if count > 0 && count != self.bot.grid_count {
+                self.bot.grid_count = count;
+                structure_changed = true;
+            }
+        }
+        if let Some(pct) = d.grid_profit_pct {
+            if pct > 0.0 && (pct - self.bot.grid_profit_pct).abs() > f64::EPSILON {
+                self.bot.grid_profit_pct = pct;
+                structure_changed = true;
+            }
+        }
+        if let Some(qty) = d.quantity_per_grid {
+            if qty > 0.0 {
+                self.bot.quantity_per_grid = qty;
+            }
+        }
+        if let Some(lev) = d.leverage {
+            if lev > 0 {
+                self.bot.leverage = lev;
+            }
+        }
+        if let Some(ref regime) = d.market_regime {
+            self.bot.market_regime = Some(regime.clone());
+        }
+        if let Some(ref levels_json) = d.grid_levels_json {
+            self.bot.grid_levels_json = Some(levels_json.clone());
+        }
+
+        if needs_params {
+            if let Some(upper) = d.upper_price {
+                if upper > 0.0 {
+                    self.bot.upper_price = upper;
+                    structure_changed = true;
+                }
+            }
+            if let Some(lower) = d.lower_price {
+                if lower > 0.0 {
+                    self.bot.lower_price = lower;
+                    structure_changed = true;
+                }
+            }
+            if self.bot.upper_price > 0.0 && self.bot.lower_price > 0.0 {
+                let _ = self.store.update_grid_params(self.bot.id, self.bot.upper_price, self.bot.lower_price).await;
+            }
+        }
+
+        if structure_changed {
+            self.recalculate_levels();
+        }
+
+        let _ = self.store.update_ai_analysis(
+            self.bot.id,
+            self.bot.market_regime.as_deref().unwrap_or("ranging"),
+            self.bot.upper_price,
+            self.bot.lower_price,
+            self.bot.grid_count,
+            self.bot.grid_profit_pct,
+            self.bot.quantity_per_grid,
+            self.bot.leverage,
+            d.analysis.as_deref().unwrap_or(""),
+            d.grid_levels_json.as_ref(),
+        ).await;
+
+        info!(
+            bot_id = %self.bot.id,
+            grid_count = self.bot.grid_count,
+            grid_profit_pct = self.bot.grid_profit_pct,
+            quantity_per_grid = self.bot.quantity_per_grid,
+            leverage = self.bot.leverage,
+            structure_changed,
+            "LLM params applied"
+        );
     }
 
 /** 简单规则决策（LLM 不可用时的回退策略）

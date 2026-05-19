@@ -238,7 +238,7 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位专业的加密货币量�
 6. 杠杆：震荡≤10x，高波动/事件≤3x，趋势暂停时0。
 7. 紧急熔断：15m单根涨跌幅>ATR*3 → 立即取消所有挂单并暂停，待波动正常。
 
-## 输出JSON（无代码块）
+## 请严格遵循以下JSON格式，必须包含所有字段：
 {
   "market_regime": "ranging|trending_up|trending_down|volatile|transition",
   "confidence": 0.0-1.0,

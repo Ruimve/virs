@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::bot::semi_automatic_grid::ports::{CredentialStore, LlmProviderResolver};
 use crate::bot::semi_automatic_grid::utils::ai_client::{call_llm_api, create_llm_http_client};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum GridAction {
     RunGrid,
     PauseGrid,
@@ -23,7 +23,7 @@ pub enum GridAction {
 impl GridAction {
     pub fn as_str(&self) -> &str {
         match self {
-            Self::RunGrid => "run_grid",
+            Self::RunGrid => "resume_grid",
             Self::PauseGrid => "pause_grid",
             Self::AdjustGrid { .. } => "adjust_grid",
             Self::ReducePosition => "reduce_position",
@@ -62,19 +62,39 @@ pub struct GridDecision {
     pub lower_price: Option<f64>,
     pub cancel_level: Option<i32>,
     pub cancel_side: Option<String>,
+    pub grid_count: Option<i32>,
+    pub grid_profit_pct: Option<f64>,
+    pub quantity_per_grid: Option<f64>,
+    pub leverage: Option<i32>,
+    pub market_regime: Option<String>,
+    pub analysis: Option<String>,
+    pub grid_levels_json: Option<serde_json::Value>,
 }
 
 impl GridDecision {
     pub fn from_json(json: &serde_json::Value) -> Self {
-        let action_str = json["recommended_action"].as_str().unwrap_or("hold");
+        let action_str = json["recommended_action"]
+            .as_str()
+            .or_else(|| json["action"].as_str())
+            .unwrap_or("hold");
         let reason = json["action_reason"]
             .as_str()
+            .or_else(|| json["reason"].as_str())
             .unwrap_or("No reason provided")
             .to_string();
         let mut upper_price = json["upper_price"].as_f64();
         let mut lower_price = json["lower_price"].as_f64();
         let cancel_level = json["cancel_level"].as_i64().map(|v| v as i32);
         let cancel_side = json["cancel_side"].as_str().map(|s| s.to_string());
+        let grid_count = json["grid_count"].as_i64().map(|v| v as i32);
+        let grid_profit_pct = json["grid_profit_pct"].as_f64();
+        let quantity_per_grid = json["quantity_per_grid"].as_f64();
+        let leverage = json["leverage"].as_i64().map(|v| v as i32);
+        let market_regime = json["market_regime"].as_str().map(|s| s.to_string());
+        let analysis = json["analysis"].as_str().map(|s| s.to_string());
+        let grid_levels_json = json.get("grid_levels")
+            .filter(|v| v.is_array())
+            .cloned();
 
         if upper_price.is_some() && upper_price.unwrap() <= 0.0 {
             warn!("GridDecision: upper_price <= 0, ignoring");
@@ -101,6 +121,13 @@ impl GridDecision {
             lower_price,
             cancel_level,
             cancel_side,
+            grid_count,
+            grid_profit_pct,
+            quantity_per_grid,
+            leverage,
+            market_regime,
+            analysis,
+            grid_levels_json,
         }
     }
 }

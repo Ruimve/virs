@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 #[test]
 fn grid_action_as_str_all_variants() {
-    assert_eq!(GridAction::RunGrid.as_str(), "run_grid");
+    assert_eq!(GridAction::RunGrid.as_str(), "resume_grid");
     assert_eq!(GridAction::PauseGrid.as_str(), "pause_grid");
     assert_eq!(GridAction::AdjustGrid { upper_price: None, lower_price: None }.as_str(), "adjust_grid");
     assert_eq!(GridAction::AdjustGrid { upper_price: Some(65000.0), lower_price: Some(45000.0) }.as_str(), "adjust_grid");
@@ -568,6 +568,13 @@ fn grid_decision_clone() {
         lower_price: None,
         cancel_level: None,
         cancel_side: None,
+        grid_count: None,
+        grid_profit_pct: None,
+        quantity_per_grid: None,
+        leverage: None,
+        market_regime: None,
+        analysis: None,
+        grid_levels_json: None,
     };
     let cloned = decision.clone();
     assert!(matches!(cloned.action, GridAction::ReducePosition));
@@ -609,4 +616,117 @@ impl CredentialStore for MockFailingCredentialStore {
     async fn load_credentials(&self, _user_id: Uuid) -> anyhow::Result<Vec<(String, String)>> {
         anyhow::bail!("credential load failed")
     }
+}
+
+// ── GridDecision 新字段解析 ──
+
+#[test]
+fn grid_decision_from_json_full_params() {
+    let json = serde_json::json!({
+        "recommended_action": "adjust_grid",
+        "action_reason": "Volatility increased",
+        "upper_price": 65000.0,
+        "lower_price": 45000.0,
+        "grid_count": 10,
+        "grid_profit_pct": 0.5,
+        "quantity_per_grid": 20.0,
+        "leverage": 3,
+        "market_regime": "ranging",
+        "analysis": "Market is ranging with moderate volatility",
+        "grid_levels": [
+            { "level": 1, "price": 47000.0, "side": "buy", "quantity_usdt": 20.0 },
+            { "level": 2, "price": 63000.0, "side": "sell", "quantity_usdt": 20.0 }
+        ]
+    });
+    let decision = GridDecision::from_json(&json);
+    assert_eq!(decision.grid_count, Some(10));
+    assert_eq!(decision.grid_profit_pct, Some(0.5));
+    assert_eq!(decision.quantity_per_grid, Some(20.0));
+    assert_eq!(decision.leverage, Some(3));
+    assert_eq!(decision.market_regime, Some("ranging".to_string()));
+    assert_eq!(decision.analysis, Some("Market is ranging with moderate volatility".to_string()));
+    assert!(decision.grid_levels_json.is_some());
+    assert_eq!(decision.grid_levels_json.unwrap().as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn grid_decision_from_json_missing_optional_params() {
+    let json = serde_json::json!({
+        "recommended_action": "hold",
+        "action_reason": "No change needed"
+    });
+    let decision = GridDecision::from_json(&json);
+    assert_eq!(decision.grid_count, None);
+    assert_eq!(decision.grid_profit_pct, None);
+    assert_eq!(decision.quantity_per_grid, None);
+    assert_eq!(decision.leverage, None);
+    assert_eq!(decision.market_regime, None);
+    assert_eq!(decision.analysis, None);
+    assert_eq!(decision.grid_levels_json, None);
+}
+
+#[test]
+fn grid_decision_from_json_partial_params() {
+    let json = serde_json::json!({
+        "recommended_action": "adjust_grid",
+        "action_reason": "test",
+        "upper_price": 70000.0,
+        "lower_price": 50000.0,
+        "grid_count": 8,
+        "leverage": 5
+    });
+    let decision = GridDecision::from_json(&json);
+    assert_eq!(decision.grid_count, Some(8));
+    assert_eq!(decision.grid_profit_pct, None);
+    assert_eq!(decision.quantity_per_grid, None);
+    assert_eq!(decision.leverage, Some(5));
+}
+
+#[test]
+fn grid_decision_from_json_grid_levels_not_array() {
+    let json = serde_json::json!({
+        "recommended_action": "hold",
+        "action_reason": "test",
+        "grid_levels": "not_an_array"
+    });
+    let decision = GridDecision::from_json(&json);
+    assert_eq!(decision.grid_levels_json, None);
+}
+
+#[test]
+fn grid_decision_from_json_as_str_matches_prompt() {
+    assert_eq!(GridAction::RunGrid.as_str(), "resume_grid");
+    assert_eq!(GridAction::PauseGrid.as_str(), "pause_grid");
+    assert_eq!(GridAction::AdjustGrid { upper_price: None, lower_price: None }.as_str(), "adjust_grid");
+    assert_eq!(GridAction::ReducePosition.as_str(), "reduce_position");
+    assert_eq!(GridAction::CancelOrder { level: 1, side: "buy".to_string() }.as_str(), "cancel_order");
+    assert_eq!(GridAction::Hold.as_str(), "hold");
+}
+
+#[test]
+fn grid_decision_from_json_action_field_fallback() {
+    let json = serde_json::json!({
+        "action": "adjust_grid",
+        "reason": "Volatility increased",
+        "upper_price": 65000.0,
+        "lower_price": 45000.0
+    });
+    let decision = GridDecision::from_json(&json);
+    assert_eq!(decision.action, GridAction::AdjustGrid { upper_price: Some(65000.0), lower_price: Some(45000.0) });
+    assert_eq!(decision.reason, "Volatility increased");
+    assert_eq!(decision.upper_price, Some(65000.0));
+    assert_eq!(decision.lower_price, Some(45000.0));
+}
+
+#[test]
+fn grid_decision_from_json_recommended_action_takes_priority() {
+    let json = serde_json::json!({
+        "recommended_action": "hold",
+        "action": "adjust_grid",
+        "action_reason": "from recommended",
+        "reason": "from action"
+    });
+    let decision = GridDecision::from_json(&json);
+    assert_eq!(decision.action, GridAction::Hold);
+    assert_eq!(decision.reason, "from recommended");
 }

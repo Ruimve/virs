@@ -84,7 +84,6 @@ pub fn build_router(
         .route("/api/kline/backtest/data", get(crate::api::kline::get_backtest_data))
         .route("/ws/kline", get(crate::api::kline::kline_ws_handler))
         .route("/ws", get(ws::ws_handler))
-        .route("/api/grid/analyze", post(grid::analyze))
         .route("/api/grid/create", post(grid::create_bot))
         .route("/api/grid/list", get(grid::list_bots))
         .route("/api/grid/analysis-logs", get(grid::get_analysis_logs))
@@ -96,7 +95,6 @@ pub fn build_router(
         .route("/api/grid/{id}/stop", post(grid::stop_bot))
         .route("/api/grid/{id}/delete", delete(grid::delete_bot))
         .route("/api/grid/{id}/trades", get(grid::get_trades))
-        .route("/api/grid/{id}/reanalyze", post(grid::reanalyze))
         .with_state(state)
         .layer(
             CorsLayer::new()

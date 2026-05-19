@@ -20,7 +20,7 @@ impl GridWorker {
 
         if self.levels.is_empty() {
             if self.bot.dynamic_adjust {
-                warn!(bot_id = %self.bot.id, "No grid levels yet, waiting for LLM to configure grid parameters");
+                warn!(bot_id = %self.bot.id, "No grid levels yet, will trigger initial LLM analysis after price fetch");
             } else {
                 error!(bot_id = %self.bot.id, "No grid levels calculated and dynamic_adjust is disabled, check bot parameters");
                 return;
@@ -43,6 +43,16 @@ impl GridWorker {
         }
 
         self.load_existing_trades().await;
+
+        if self.bot.upper_price <= 0.0 || self.bot.lower_price <= 0.0 || self.levels.is_empty() {
+            info!(bot_id = %self.bot.id, "Grid parameters empty, triggering initial LLM analysis");
+            self.on_llm_decision().await;
+            if self.levels.is_empty() {
+                error!(bot_id = %self.bot.id, "Initial LLM analysis did not set grid parameters, worker cannot continue");
+                return;
+            }
+        }
+
         self.place_initial_orders().await;
 
         let mut price_tick = tokio::time::interval(Duration::from_secs(5));
