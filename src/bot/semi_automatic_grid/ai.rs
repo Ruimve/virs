@@ -34,7 +34,7 @@ impl GridAction {
 
     pub fn from_str(s: &str, upper_price: Option<f64>, lower_price: Option<f64>, cancel_level: Option<i32>, cancel_side: Option<String>) -> Self {
         match s.to_lowercase().as_str() {
-            "run_grid" => GridAction::RunGrid,
+            "resume_grid" => GridAction::RunGrid,
             "pause_grid" => GridAction::PauseGrid,
             "adjust_grid" => GridAction::AdjustGrid {
                 upper_price,
@@ -66,8 +66,8 @@ pub struct GridDecision {
 
 impl GridDecision {
     pub fn from_json(json: &serde_json::Value) -> Self {
-        let action_str = json["action"].as_str().unwrap_or("hold");
-        let reason = json["reason"]
+        let action_str = json["recommended_action"].as_str().unwrap_or("hold");
+        let reason = json["action_reason"]
             .as_str()
             .unwrap_or("No reason provided")
             .to_string();

@@ -4,35 +4,13 @@ use tracing::{debug, info, warn};
 
 use crate::bot::semi_automatic_grid::ai::{GridAction, GridDecision};
 use crate::bot::semi_automatic_grid::ports::*;
-use crate::bot::semi_automatic_grid::types::GridEvent;
+use crate::bot::semi_automatic_grid::types::{self, GridEvent};
 use crate::bot::semi_automatic_grid::utils::prompt::{self, PromptContext};
 use crate::bot::semi_automatic_grid::worker::GridWorker;
 
 /** LLM 运行时系统提示词
 
 定义 AI 助手的角色、决策规则和注意事项 */
-pub const LLM_RUNTIME_PROMPT: &str = r#"你是一位正在管理加密货币网格交易机器人的 AI 助手。你的职责是根据当前市场状态和机器人运行数据，做出最优决策。
-
-## 决策规则
-1. **run_grid**: 价格在网格区间内且市场状态适合网格交易时，继续运行
-2. **pause_grid**: 价格突破网格区间（超过上下界 2%）、市场转为强趋势、或连续亏损时暂停
-3. **adjust_grid**: 市场波动率显著变化，需要调整网格上下界时
-4. **reduce_position**: 高波动或连续亏损时，减半仓位
-5. **cancel_order**: 取消指定层级的挂单，需提供 cancel_level（层级编号）和 cancel_side（"buy" 或 "sell"）
-6. **hold**: 当前状态良好，无需操作
-
-## 网格层级状态说明
-- **waiting**: 等待价格触发，尚未挂单
-- **pending_buy/pending_sell**: 已挂出买单/卖单，等待成交
-- **holding**: 已成交，持仓中
-- **closed**: 买卖周期完成，已平仓
-
-## 注意
-- 暂停后不会自动恢复，需要明确的 run_grid 指令
-- adjust_grid 必须返回新的 upper_price 和 lower_price
-- cancel_order 必须指定 cancel_level（层级编号）和 cancel_side（"buy" 或 "sell"），且该层级必须处于 pending 状态
-- 优先保守操作，避免在不确定时频繁调整"#;
-
 impl GridWorker {
 /** LLM 周期性决策入口
 
@@ -139,7 +117,7 @@ impl GridWorker {
         };
 
         let user_prompt = prompt::render_prompt(template, &ctx);
-        let system_prompt = self.bot.system_prompt.as_deref().unwrap_or(LLM_RUNTIME_PROMPT).to_string();
+        let system_prompt = self.bot.system_prompt.as_deref().unwrap_or(types::DEFAULT_SYSTEM_PROMPT).to_string();
 
         Some((system_prompt, user_prompt))
     }
