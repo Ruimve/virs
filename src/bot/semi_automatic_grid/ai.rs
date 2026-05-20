@@ -58,6 +58,7 @@ impl GridAction {
 pub struct GridDecision {
     pub action: GridAction,
     pub reason: String,
+    pub confidence: f64,
     pub upper_price: Option<f64>,
     pub lower_price: Option<f64>,
     pub cancel_level: Option<i32>,
@@ -69,6 +70,9 @@ pub struct GridDecision {
     pub market_regime: Option<String>,
     pub analysis: Option<String>,
     pub grid_levels_json: Option<serde_json::Value>,
+    pub funding_rate_warning: Option<String>,
+    pub event_impact: Option<String>,
+    pub risk_warning: Option<String>,
 }
 
 impl GridDecision {
@@ -95,6 +99,16 @@ impl GridDecision {
         let grid_levels_json = json.get("grid_levels")
             .filter(|v| v.is_array())
             .cloned();
+        let confidence = json["confidence"].as_f64().unwrap_or(0.5).clamp(0.0, 1.0);
+        let funding_rate_warning = json["funding_rate_warning"].as_str()
+            .filter(|s| !s.eq_ignore_ascii_case("none"))
+            .map(|s| s.to_string());
+        let event_impact = json["event_impact"].as_str()
+            .filter(|s| !s.eq_ignore_ascii_case("none"))
+            .map(|s| s.to_string());
+        let risk_warning = json["risk_warning"].as_str()
+            .filter(|s| !s.eq_ignore_ascii_case("none"))
+            .map(|s| s.to_string());
 
         if upper_price.is_some() && upper_price.unwrap() <= 0.0 {
             warn!("GridDecision: upper_price <= 0, ignoring");
@@ -117,6 +131,7 @@ impl GridDecision {
         GridDecision {
             action,
             reason,
+            confidence,
             upper_price,
             lower_price,
             cancel_level,
@@ -128,6 +143,9 @@ impl GridDecision {
             market_regime,
             analysis,
             grid_levels_json,
+            funding_rate_warning,
+            event_impact,
+            risk_warning,
         }
     }
 }

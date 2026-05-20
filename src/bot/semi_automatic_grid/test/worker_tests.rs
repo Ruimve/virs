@@ -625,6 +625,7 @@ async fn execute_decision_adjust_grid_with_decision() {
             lower_price: Some(48000.0),
         },
         reason: "test".to_string(),
+        confidence: 0.8,
         upper_price: Some(65000.0),
         lower_price: Some(48000.0),
         cancel_level: None,
@@ -636,6 +637,9 @@ async fn execute_decision_adjust_grid_with_decision() {
         market_regime: None,
         analysis: None,
         grid_levels_json: None,
+        funding_rate_warning: None,
+        event_impact: None,
+        risk_warning: None,
     };
     worker.execute_decision(&GridAction::AdjustGrid { upper_price: Some(65000.0), lower_price: Some(48000.0) }, Some(&decision)).await;
     assert!((worker.bot.upper_price - 65000.0).abs() < f64::EPSILON);

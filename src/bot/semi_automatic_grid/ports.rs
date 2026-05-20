@@ -70,6 +70,7 @@ pub struct GridBotConfig {
     pub grid_levels_json: Option<serde_json::Value>,
 /** 自定义系统提示词 */
     pub system_prompt: Option<String>,
+    pub last_adjusted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /** 价格提供者端口

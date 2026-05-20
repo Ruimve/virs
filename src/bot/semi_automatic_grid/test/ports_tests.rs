@@ -441,6 +441,7 @@ fn grid_bot_config_construction() {
         market_regime: Some("trending".to_string()),
         grid_levels_json: None,
         system_prompt: Some("test prompt".to_string()),
+        last_adjusted_at: None,
     };
     assert_eq!(config.id, id);
     assert!(config.dynamic_adjust);
@@ -458,7 +459,7 @@ fn grid_bot_config_zero_grid_count() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert_eq!(config.grid_count, 0);
 }
@@ -473,7 +474,7 @@ fn grid_bot_config_inverted_prices() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert!(config.upper_price < config.lower_price);
 }
@@ -488,7 +489,7 @@ fn grid_bot_config_zero_profit_pct() {
         grid_profit_pct: 0.0, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert!((config.grid_profit_pct).abs() < f64::EPSILON);
 }
@@ -503,7 +504,7 @@ fn grid_bot_config_zero_quantity() {
         grid_profit_pct: 0.5, quantity_per_grid: 0.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert!((config.quantity_per_grid).abs() < f64::EPSILON);
 }
@@ -518,7 +519,7 @@ fn grid_bot_config_negative_profit_pct() {
         grid_profit_pct: -1.0, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert!(config.grid_profit_pct < 0.0);
 }
@@ -533,7 +534,7 @@ fn grid_bot_config_negative_grid_count() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert!(config.grid_count < 0);
 }
@@ -548,7 +549,7 @@ fn grid_bot_config_no_optional_fields() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert!(config.market_regime.is_none());
     assert!(config.system_prompt.is_none());
@@ -564,7 +565,7 @@ fn grid_bot_config_zero_prices() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert!((config.upper_price).abs() < f64::EPSILON);
     assert!((config.lower_price).abs() < f64::EPSILON);
@@ -708,7 +709,7 @@ fn grid_bot_config_same_upper_lower_price() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert!((config.upper_price - config.lower_price).abs() < f64::EPSILON);
 }
@@ -723,7 +724,7 @@ fn grid_bot_config_very_large_grid_count() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert_eq!(config.grid_count, 10000);
 }
@@ -738,7 +739,7 @@ fn grid_bot_config_very_small_prices() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert!(config.upper_price < 1.0);
     assert!(config.lower_price < 1.0);
@@ -754,7 +755,7 @@ fn grid_bot_config_negative_prices() {
         grid_profit_pct: 0.5, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert!(config.upper_price < 0.0);
     assert!(config.lower_price < 0.0);
@@ -770,7 +771,7 @@ fn grid_bot_config_negative_quantity() {
         grid_profit_pct: 0.5, quantity_per_grid: -100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert!(config.quantity_per_grid < 0.0);
 }
@@ -785,7 +786,7 @@ fn grid_bot_config_large_profit_pct() {
         grid_profit_pct: 100.0, quantity_per_grid: 100.0,
         leverage: 10,
         dynamic_adjust: false, adjust_interval_secs: 300,
-        market_regime: None, grid_levels_json: None, system_prompt: None,
+        market_regime: None, grid_levels_json: None, system_prompt: None, last_adjusted_at: None,
     };
     assert!((config.grid_profit_pct - 100.0).abs() < f64::EPSILON);
 }

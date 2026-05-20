@@ -616,6 +616,7 @@ fn bot_to_config(bot: &crate::models::GridBot) -> GridBotConfig {
         market_regime: bot.market_regime.clone(),
         grid_levels_json: bot.grid_levels_json.clone(),
         system_prompt: bot.system_prompt.clone(),
+        last_adjusted_at: bot.last_adjusted_at,
     }
 }
 

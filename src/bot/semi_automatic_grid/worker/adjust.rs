@@ -104,7 +104,9 @@ impl GridWorker {
             margin_usage_rate,
             leverage: self.bot.leverage,
             grid_status: grid_status.to_string(),
-            last_adjust_time: "N/A".to_string(),
+            last_adjust_time: self.bot.last_adjusted_at
+                .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                .unwrap_or_else(|| "N/A".to_string()),
             consecutive_losses: self.consecutive_losses,
             current_grid_config,
             position_info,
@@ -133,11 +135,22 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
     ) -> GridAction {
         match decision {
             Some(d) => {
-                info!(bot_id = %self.bot.id, action = d.action.as_str(), reason = %d.reason, source = "llm", "LLM decision");
+                info!(bot_id = %self.bot.id, action = d.action.as_str(), reason = %d.reason, confidence = d.confidence, source = "llm", "LLM decision");
+
+                if let Some(ref w) = d.funding_rate_warning {
+                    warn!(bot_id = %self.bot.id, warning = %w, "Funding rate warning from LLM");
+                }
+                if let Some(ref w) = d.risk_warning {
+                    warn!(bot_id = %self.bot.id, warning = %w, "Risk warning from LLM");
+                }
+                if let Some(ref w) = d.event_impact {
+                    info!(bot_id = %self.bot.id, impact = %w, "Event impact from LLM");
+                }
 
                 let result = serde_json::json!({
                     "action": d.action.as_str(),
                     "reason": d.reason,
+                    "confidence": d.confidence,
                     "upper_price": d.upper_price,
                     "lower_price": d.lower_price,
                     "cancel_level": d.cancel_level,
@@ -147,6 +160,9 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                     "quantity_per_grid": d.quantity_per_grid,
                     "leverage": d.leverage,
                     "market_regime": d.market_regime,
+                    "funding_rate_warning": d.funding_rate_warning,
+                    "event_impact": d.event_impact,
+                    "risk_warning": d.risk_warning,
                 });
                 let _ = self.store.save_analysis_log(
                     self.bot.id, "periodic", system_prompt, user_prompt,
@@ -183,7 +199,7 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
 
         if let Some(d) = decision {
             if needs_params || matches!(action, GridAction::AdjustGrid { .. }) {
-                self.apply_llm_params(d).await;
+                self.apply_llm_params(d, needs_params).await;
             }
         }
 
@@ -235,8 +251,7 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
 
 当 bot 参数为空（首次分析）或 LLM 返回 adjust_grid 时调用，
 更新 grid_count/grid_profit_pct/quantity_per_grid/leverage 等结构参数 */
-    async fn apply_llm_params(&mut self, d: &GridDecision) {
-        let needs_params = self.bot.upper_price <= 0.0 || self.bot.lower_price <= 0.0;
+    async fn apply_llm_params(&mut self, d: &GridDecision, needs_params: bool) {
         let mut structure_changed = false;
 
         if let Some(count) = d.grid_count {

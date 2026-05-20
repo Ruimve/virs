@@ -393,6 +393,7 @@ pub fn make_bot_config() -> GridBotConfig {
         market_regime: None,
         grid_levels_json: None,
         system_prompt: None,
+        last_adjusted_at: None,
     }
 }
 

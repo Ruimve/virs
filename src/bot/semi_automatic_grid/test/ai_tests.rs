@@ -564,6 +564,7 @@ fn grid_decision_clone() {
     let decision = GridDecision {
         action: GridAction::ReducePosition,
         reason: "test clone".to_string(),
+        confidence: 0.8,
         upper_price: None,
         lower_price: None,
         cancel_level: None,
@@ -575,6 +576,9 @@ fn grid_decision_clone() {
         market_regime: None,
         analysis: None,
         grid_levels_json: None,
+        funding_rate_warning: None,
+        event_impact: None,
+        risk_warning: None,
     };
     let cloned = decision.clone();
     assert!(matches!(cloned.action, GridAction::ReducePosition));

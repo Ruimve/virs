@@ -27,8 +27,6 @@ pub async fn call_llm_api(
     user_prompt: &str,
     provider_name: &str,
 ) -> anyhow::Result<LlmCallResult> {
-    println!("promptPrompt: {}", system_prompt);
-    println!("promptPrompt: {}", user_prompt);
     let request_body = serde_json::json!({
         "model": model,
         "messages": [
