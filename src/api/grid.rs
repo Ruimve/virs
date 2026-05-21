@@ -222,8 +222,18 @@ pub async fn get_bot(
 
     let filled_set: std::collections::HashSet<i32> = filled_levels.into_iter().collect();
 
+    let sell_filled_levels: std::collections::HashSet<i32> = sqlx::query_scalar(
+        r#"SELECT DISTINCT grid_level FROM qd_grid_trades WHERE bot_id = $1 AND close_side = 'sell'"#,
+    )
+    .bind(id)
+    .fetch_all(&state.db_pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
     let level_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-        r#"SELECT grid_level, SUM(quantity) FROM qd_grid_trades WHERE bot_id = $1 GROUP BY grid_level"#,
+        r#"SELECT grid_level, SUM(open_quantity) FROM qd_grid_trades WHERE bot_id = $1 GROUP BY grid_level"#,
     )
     .bind(id)
     .fetch_all(&state.db_pool)
@@ -232,8 +242,8 @@ pub async fn get_bot(
     .into_iter()
     .collect();
 
-    let buy_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-        r#"SELECT grid_level, AVG(open_price) FROM qd_grid_trades WHERE bot_id = $1 AND open_side = 'buy' GROUP BY grid_level"#,
+    let buy_avg_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+        r#"SELECT grid_level, CASE WHEN SUM(open_quantity) > 0 THEN SUM(open_price * open_quantity) / SUM(open_quantity) ELSE 0 END FROM qd_grid_trades WHERE bot_id = $1 AND open_side = 'buy' GROUP BY grid_level"#,
     )
     .bind(id)
     .fetch_all(&state.db_pool)
@@ -242,8 +252,8 @@ pub async fn get_bot(
     .into_iter()
     .collect();
 
-    let sell_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-        r#"SELECT grid_level, MAX(close_price) FROM qd_grid_trades WHERE bot_id = $1 AND close_side = 'sell' AND close_price IS NOT NULL GROUP BY grid_level"#,
+    let last_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+        r#"SELECT DISTINCT ON (grid_level) grid_level, COALESCE(close_price, open_price) FROM qd_grid_trades WHERE bot_id = $1 ORDER BY grid_level, created_at DESC"#,
     )
     .bind(id)
     .fetch_all(&state.db_pool)
@@ -294,26 +304,27 @@ pub async fn get_bot(
         } else {
             if price < mid_price { "buy" } else { "sell" }
         };
-        let (buy_price, sell_price) = if side == "buy" {
+        let (buy_price, sell_price) = if let Some(l) = llm_level {
+            let bp = l["buy_price"].as_f64().unwrap_or_else(|| if side == "buy" { price } else { price / profit_factor });
+            let sp = l["sell_price"].as_f64().unwrap_or_else(|| if side == "buy" { price * profit_factor } else { price });
+            (bp, sp)
+        } else if side == "buy" {
             (price, price * profit_factor)
         } else {
             (price / profit_factor, price)
         };
-        let runtime_level = llm_levels.iter().find(|v| v["level"].as_i64() == Some(i as i64));
-        let hold_quantity = runtime_level.and_then(|v| v["hold_quantity"].as_f64()).unwrap_or_else(|| {
+        let hold_quantity = llm_level.and_then(|v| v["hold_quantity"].as_f64()).unwrap_or_else(|| {
             let buy_qty = buy_quantities.get(&i).copied().unwrap_or(0.0);
             let sell_qty = sell_quantities.get(&i).copied().unwrap_or(0.0);
             if side == "buy" { (buy_qty - sell_qty).max(0.0) } else { (sell_qty - buy_qty).max(0.0) * -1.0 }
         });
-        let buy_filled = runtime_level.and_then(|v| v["buy_filled"].as_bool()).unwrap_or_else(|| buy_fill_prices.contains_key(&i));
-        let sell_filled = runtime_level.and_then(|v| v["sell_filled"].as_bool()).unwrap_or_else(|| sell_fill_prices.contains_key(&i));
-        let avg_buy_price = runtime_level.and_then(|v| v["avg_buy_price"].as_f64()).unwrap_or_else(|| buy_fill_prices.get(&i).copied().unwrap_or(0.0));
-        let last_fill_price = runtime_level.and_then(|v| v["last_fill_price"].as_f64()).unwrap_or_else(|| {
-            if sell_fill_prices.contains_key(&i) { sell_fill_prices.get(&i).copied().unwrap_or(0.0) }
-            else if buy_fill_prices.contains_key(&i) { buy_fill_prices.get(&i).copied().unwrap_or(0.0) }
-            else { 0.0 }
+        let buy_filled = llm_level.and_then(|v| v["buy_filled"].as_bool()).unwrap_or_else(|| buy_avg_prices.contains_key(&i));
+        let sell_filled = llm_level.and_then(|v| v["sell_filled"].as_bool()).unwrap_or_else(|| sell_filled_levels.contains(&i));
+        let avg_buy_price = llm_level.and_then(|v| v["avg_buy_price"].as_f64()).unwrap_or_else(|| buy_avg_prices.get(&i).copied().unwrap_or(0.0));
+        let last_fill_price = llm_level.and_then(|v| v["last_fill_price"].as_f64()).unwrap_or_else(|| {
+            last_fill_prices.get(&i).copied().unwrap_or(0.0)
         });
-        let quantity = runtime_level.and_then(|v| v["quantity"].as_f64()).unwrap_or_else(|| level_quantities.get(&i).copied().unwrap_or(0.0));
+        let quantity = llm_level.and_then(|v| v["quantity"].as_f64()).unwrap_or_else(|| level_quantities.get(&i).copied().unwrap_or(0.0));
         grid_levels.push(serde_json::json!({
             "level": i,
             "price": price,
@@ -677,7 +688,7 @@ pub async fn get_trades(
         let filled_set: std::collections::HashSet<i32> = filled_levels.into_iter().collect();
 
         let level_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-            r#"SELECT grid_level, SUM(quantity) FROM qd_grid_trades WHERE bot_id = $1 GROUP BY grid_level"#,
+            r#"SELECT grid_level, SUM(open_quantity) FROM qd_grid_trades WHERE bot_id = $1 GROUP BY grid_level"#,
         )
         .bind(id)
         .fetch_all(&state.db_pool)
@@ -686,8 +697,8 @@ pub async fn get_trades(
         .into_iter()
         .collect();
 
-        let buy_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-            r#"SELECT grid_level, AVG(open_price) FROM qd_grid_trades WHERE bot_id = $1 AND open_side = 'buy' GROUP BY grid_level"#,
+        let buy_avg_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+            r#"SELECT grid_level, CASE WHEN SUM(open_quantity) > 0 THEN SUM(open_price * open_quantity) / SUM(open_quantity) ELSE 0 END FROM qd_grid_trades WHERE bot_id = $1 AND open_side = 'buy' GROUP BY grid_level"#,
         )
         .bind(id)
         .fetch_all(&state.db_pool)
@@ -696,8 +707,18 @@ pub async fn get_trades(
         .into_iter()
         .collect();
 
-        let sell_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-            r#"SELECT grid_level, MAX(close_price) FROM qd_grid_trades WHERE bot_id = $1 AND close_side = 'sell' AND close_price IS NOT NULL GROUP BY grid_level"#,
+        let last_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
+            r#"SELECT DISTINCT ON (grid_level) grid_level, COALESCE(close_price, open_price) FROM qd_grid_trades WHERE bot_id = $1 ORDER BY grid_level, created_at DESC"#,
+        )
+        .bind(id)
+        .fetch_all(&state.db_pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+        let sell_filled_levels: std::collections::HashSet<i32> = sqlx::query_scalar(
+            r#"SELECT DISTINCT grid_level FROM qd_grid_trades WHERE bot_id = $1 AND close_side = 'sell'"#,
         )
         .bind(id)
         .fetch_all(&state.db_pool)
@@ -748,26 +769,27 @@ pub async fn get_trades(
                 } else {
                     if price < mid_price { "buy" } else { "sell" }
                 };
-                let (buy_price, sell_price) = if side == "buy" {
+                let (buy_price, sell_price) = if let Some(l) = llm_level {
+                    let bp = l["buy_price"].as_f64().unwrap_or_else(|| if side == "buy" { price } else { price / profit_factor });
+                    let sp = l["sell_price"].as_f64().unwrap_or_else(|| if side == "buy" { price * profit_factor } else { price });
+                    (bp, sp)
+                } else if side == "buy" {
                     (price, price * profit_factor)
                 } else {
                     (price / profit_factor, price)
                 };
-                let runtime_level = llm_levels.iter().find(|v| v["level"].as_i64() == Some(i as i64));
-                let hold_quantity = runtime_level.and_then(|v| v["hold_quantity"].as_f64()).unwrap_or_else(|| {
+                let hold_quantity = llm_level.and_then(|v| v["hold_quantity"].as_f64()).unwrap_or_else(|| {
                     let buy_qty = buy_quantities.get(&i).copied().unwrap_or(0.0);
                     let sell_qty = sell_quantities.get(&i).copied().unwrap_or(0.0);
                     if side == "buy" { (buy_qty - sell_qty).max(0.0) } else { (sell_qty - buy_qty).max(0.0) * -1.0 }
                 });
-                let buy_filled = runtime_level.and_then(|v| v["buy_filled"].as_bool()).unwrap_or_else(|| buy_fill_prices.contains_key(&i));
-                let sell_filled = runtime_level.and_then(|v| v["sell_filled"].as_bool()).unwrap_or_else(|| sell_fill_prices.contains_key(&i));
-                let avg_buy_price = runtime_level.and_then(|v| v["avg_buy_price"].as_f64()).unwrap_or_else(|| buy_fill_prices.get(&i).copied().unwrap_or(0.0));
-                let last_fill_price = runtime_level.and_then(|v| v["last_fill_price"].as_f64()).unwrap_or_else(|| {
-                    if sell_fill_prices.contains_key(&i) { sell_fill_prices.get(&i).copied().unwrap_or(0.0) }
-                    else if buy_fill_prices.contains_key(&i) { buy_fill_prices.get(&i).copied().unwrap_or(0.0) }
-                    else { 0.0 }
+                let buy_filled = llm_level.and_then(|v| v["buy_filled"].as_bool()).unwrap_or_else(|| buy_avg_prices.contains_key(&i));
+                let sell_filled = llm_level.and_then(|v| v["sell_filled"].as_bool()).unwrap_or_else(|| sell_filled_levels.contains(&i));
+                let avg_buy_price = llm_level.and_then(|v| v["avg_buy_price"].as_f64()).unwrap_or_else(|| buy_avg_prices.get(&i).copied().unwrap_or(0.0));
+                let last_fill_price = llm_level.and_then(|v| v["last_fill_price"].as_f64()).unwrap_or_else(|| {
+                    last_fill_prices.get(&i).copied().unwrap_or(0.0)
                 });
-                let quantity = runtime_level.and_then(|v| v["quantity"].as_f64()).unwrap_or_else(|| level_quantities.get(&i).copied().unwrap_or(0.0));
+                let quantity = llm_level.and_then(|v| v["quantity"].as_f64()).unwrap_or_else(|| level_quantities.get(&i).copied().unwrap_or(0.0));
                 serde_json::json!({
                     "level": i,
                     "price": price,

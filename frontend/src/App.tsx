@@ -6,6 +6,7 @@ import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Market from './pages/Market'
 import GridPage from './pages/ai-trade/GridPage'
+import GridDetailPage from './pages/ai-trade/GridDetailPage'
 import AutoPage from './pages/ai-trade/AutoPage'
 import Trades from './pages/Trades'
 import Credentials from './pages/Credentials'
@@ -36,6 +37,7 @@ const App: Component = () => {
           <Route path="/market" component={Market} />
           <Route path="/grid" component={() => <Navigate href="/ai-trade/grid" />} />
           <Route path="/ai-trade/grid" component={GridPage} />
+          <Route path="/ai-trade/grid/:id" component={GridDetailPage} />
           <Route path="/ai-trade/auto" component={AutoPage} />
           <Route path="/trades" component={Trades} />
           <Route path="/credentials" component={Credentials} />

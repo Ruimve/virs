@@ -34,8 +34,10 @@ impl GridWorker {
                 );
             }
             self.total_pnl += trade.pnl;
-            self.total_trades += if trade.close_side.is_some() { 2 } else { 1 };
-            self.grid_filled_count += if trade.close_side.is_some() { 2 } else { 1 };
+            self.total_trades += 1;
+            if trade.close_side.is_some() {
+                self.grid_filled_count += 1;
+            }
         }
 
         for pnl in trades.iter().rev().filter_map(|t| if t.close_side.is_some() { Some(t.pnl) } else { None }) {
@@ -359,7 +361,9 @@ impl GridWorker {
         let hold = self.levels[idx].hold_quantity;
         self.total_pnl += pnl;
         self.total_trades += 1;
-        self.grid_filled_count += 1;
+        if is_close_trade(&level_side, side_str) {
+            self.grid_filled_count += 1;
+        }
         self.update_consecutive_losses(pnl);
 
         if is_open {
