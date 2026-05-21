@@ -20,10 +20,17 @@ interface Trade {
   bot_id: string
   symbol: string
   exchange: string
-  side: string
   grid_level: number
-  price: number
-  quantity: number
+  open_side: string
+  open_price: number
+  open_quantity: number
+  open_order_id: string | null
+  opened_at: string
+  close_side: string | null
+  close_price: number | null
+  close_quantity: number | null
+  close_order_id: string | null
+  closed_at: string | null
   pnl: number
   pnl_pct: number
   status: string
@@ -215,20 +222,20 @@ const Dashboard: Component = () => {
                     <th class="px-6 py-3 text-left text-[13px] font-medium text-gray-400 uppercase tracking-wider">
                       标的
                     </th>
-                    <th class="px-6 py-3 text-left text-[13px] font-medium text-gray-400 uppercase tracking-wider">
-                      方向
-                    </th>
                     <th class="px-6 py-3 text-right text-[13px] font-medium text-gray-400 uppercase tracking-wider">
                       网格层
                     </th>
-                    <th class="px-6 py-3 text-right text-[13px] font-medium text-gray-400 uppercase tracking-wider">
-                      数量
+                    <th class="px-6 py-3 text-left text-[13px] font-medium text-gray-400 uppercase tracking-wider">
+                      开仓
                     </th>
-                    <th class="px-6 py-3 text-right text-[13px] font-medium text-gray-400 uppercase tracking-wider">
-                      价格
+                    <th class="px-6 py-3 text-left text-[13px] font-medium text-gray-400 uppercase tracking-wider">
+                      平仓
                     </th>
                     <th class="px-6 py-3 text-right text-[13px] font-medium text-gray-400 uppercase tracking-wider">
                       盈亏
+                    </th>
+                    <th class="px-6 py-3 text-left text-[13px] font-medium text-gray-400 uppercase tracking-wider">
+                      状态
                     </th>
                   </tr>
                 </thead>
@@ -237,35 +244,37 @@ const Dashboard: Component = () => {
                     {(trade) => (
                       <tr class="hover:bg-gray-50/50 transition-colors">
                         <td class="px-6 py-3.5 text-sm text-gray-500 whitespace-nowrap">
-                          {new Date(trade.created_at).toLocaleString('zh-CN')}
+                          {new Date(trade.opened_at).toLocaleString('zh-CN')}
                         </td>
                         <td class="px-6 py-3.5 text-sm font-medium text-gray-900">
                           {trade.symbol}
                         </td>
-                        <td class="px-6 py-3.5">
-                          <span
-                            class={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${
-                              trade.side === 'buy'
-                                ? 'bg-emerald-50 text-emerald-600'
-                                : 'bg-rose-50 text-rose-600'
-                            }`}
-                          >
-                            {trade.side === 'buy' ? '买入' : '卖出'}
-                          </span>
-                        </td>
                         <td class="px-6 py-3.5 text-sm text-gray-900 text-right tabular-nums">
                           {trade.grid_level}
                         </td>
-                        <td class="px-6 py-3.5 text-sm text-gray-900 text-right tabular-nums">
-                          {trade.quantity}
+                        <td class="px-6 py-3.5">
+                          <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-50 text-emerald-600">
+                            {trade.open_side === 'buy' ? '买入' : '卖出'} {trade.open_price.toFixed(2)} × {trade.open_quantity}
+                          </span>
                         </td>
-                        <td class="px-6 py-3.5 text-sm text-gray-900 text-right tabular-nums">
-                          {trade.price.toFixed(2)}
+                        <td class="px-6 py-3.5">
+                          {trade.close_side ? (
+                            <span class={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${trade.close_side === 'buy' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                              {trade.close_side === 'buy' ? '买入' : '卖出'} {trade.close_price!.toFixed(2)} × {trade.close_quantity}
+                            </span>
+                          ) : (
+                            <span class="text-gray-400 text-xs">-</span>
+                          )}
                         </td>
                         <td class={`px-6 py-3.5 text-sm text-right tabular-nums font-medium ${
                           trade.pnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
-                          {trade.pnl >= 0 ? '+' : ''}{trade.pnl.toFixed(2)}
+                          {trade.close_side ? `${trade.pnl >= 0 ? '+' : ''}${trade.pnl.toFixed(2)}` : '-'}
+                        </td>
+                        <td class="px-6 py-3.5">
+                          <span class={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${trade.status === 'open' ? 'bg-blue-50 text-blue-600' : trade.status === 'orphaned' ? 'bg-amber-50 text-amber-600' : 'bg-gray-50 text-gray-500'}`}>
+                            {trade.status === 'open' ? '持仓中' : trade.status === 'orphaned' ? '异常' : '已平仓'}
+                          </span>
                         </td>
                       </tr>
                     )}

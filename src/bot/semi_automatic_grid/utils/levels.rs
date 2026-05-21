@@ -91,6 +91,7 @@ pub fn calculate_levels(bot: &GridBotConfig) -> Vec<GridLevel> {
                 hold_quantity: 0.0,
                 avg_buy_price: 0.0,
                 last_fill_price: None,
+                trade_id: None,
             }
         })
         .collect()

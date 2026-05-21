@@ -116,10 +116,17 @@ pub struct GridTradeRow {
     pub bot_id: uuid::Uuid,
     pub symbol: String,
     pub exchange: String,
-    pub side: String,
     pub grid_level: i32,
-    pub price: f64,
-    pub quantity: f64,
+    pub open_side: String,
+    pub open_price: f64,
+    pub open_quantity: f64,
+    pub open_order_id: Option<String>,
+    pub opened_at: chrono::DateTime<chrono::Utc>,
+    pub close_side: Option<String>,
+    pub close_price: Option<f64>,
+    pub close_quantity: Option<f64>,
+    pub close_order_id: Option<String>,
+    pub closed_at: Option<chrono::DateTime<chrono::Utc>>,
     pub pnl: f64,
     pub pnl_pct: f64,
     pub status: String,
@@ -133,10 +140,12 @@ pub async fn list_trades(
     let user_id = auth.uuid().map_err(|e| (StatusCode::UNAUTHORIZED, Json(ApiResponse::<serde_json::Value>::err(&e))))?;
 
     let rows = sqlx::query_as::<_, GridTradeRow>(
-        r#"SELECT id, bot_id, symbol, exchange, side, grid_level,
-           price, quantity, pnl, pnl_pct, status, created_at
+        r#"SELECT id, bot_id, symbol, exchange, grid_level,
+           open_side, open_price, open_quantity, open_order_id, opened_at,
+           close_side, close_price, close_quantity, close_order_id, closed_at,
+           pnl, pnl_pct, status, created_at
            FROM qd_grid_trades
-           WHERE user_id = $1 AND status = 'filled'
+           WHERE user_id = $1
            ORDER BY created_at DESC LIMIT 100"#,
     )
     .bind(user_id)

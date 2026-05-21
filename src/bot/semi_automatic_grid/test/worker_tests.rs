@@ -764,9 +764,8 @@ async fn fetch_current_price_invalid_falls_back() {
 async fn load_existing_trades_buy_and_sell() {
     let bot = make_bot_config();
     let store = Arc::new(MockWorkerStore::new().with_trades(vec![
-        GridTradeRecord { grid_level: 3, side: "buy".to_string(), price: 53500.0, quantity: 0.001, pnl: 0.0 },
-        GridTradeRecord { grid_level: 3, side: "sell".to_string(), price: 53767.5, quantity: 0.001, pnl: 5.0 },
-        GridTradeRecord { grid_level: 2, side: "buy".to_string(), price: 52500.0, quantity: 0.002, pnl: 0.0 },
+        GridTradeRecord { id: Uuid::new_v4(), grid_level: 3, open_side: "buy".to_string(), open_price: 53500.0, open_quantity: 0.001, close_side: Some("sell".to_string()), close_price: Some(53767.5), close_quantity: Some(0.001), pnl: 5.0 },
+        GridTradeRecord { id: Uuid::new_v4(), grid_level: 2, open_side: "buy".to_string(), open_price: 52500.0, open_quantity: 0.002, close_side: None, close_price: None, close_quantity: None, pnl: 0.0 },
     ]));
     let mut worker = make_worker_with_store(bot, 55000.0, store);
     worker.load_existing_trades().await;
@@ -792,8 +791,8 @@ async fn load_existing_trades_empty() {
 async fn load_existing_trades_invalid_level_ignored() {
     let bot = make_bot_config();
     let store = Arc::new(MockWorkerStore::new().with_trades(vec![
-        GridTradeRecord { grid_level: 99, side: "buy".to_string(), price: 0.0, quantity: 0.001, pnl: 0.0 },
-        GridTradeRecord { grid_level: -1, side: "buy".to_string(), price: 0.0, quantity: 0.001, pnl: 0.0 },
+        GridTradeRecord { id: Uuid::new_v4(), grid_level: 99, open_side: "buy".to_string(), open_price: 0.0, open_quantity: 0.001, close_side: None, close_price: None, close_quantity: None, pnl: 0.0 },
+        GridTradeRecord { id: Uuid::new_v4(), grid_level: -1, open_side: "buy".to_string(), open_price: 0.0, open_quantity: 0.001, close_side: None, close_price: None, close_quantity: None, pnl: 0.0 },
     ]));
     let mut worker = make_worker_with_store(bot, 55000.0, store);
     worker.load_existing_trades().await;
@@ -1254,7 +1253,7 @@ fn recalculate_levels_preserves_holdings() {
     assert!(worker.levels[3].buy_filled, "buy_filled should be preserved");
     assert!((worker.levels[3].hold_quantity - 0.001).abs() < f64::EPSILON, "hold_quantity should be preserved");
     assert!((worker.levels[3].avg_buy_price - 52000.0).abs() < f64::EPSILON, "avg_buy_price should be preserved");
-    assert!(worker.levels[3].buy_order_id.is_none(), "order_id should be cleared");
+    assert!(worker.levels[3].buy_order_id.is_some(), "order_id should be preserved for pending orders");
 }
 
 // ── load_existing_trades sell 减持 ──
@@ -1263,8 +1262,7 @@ fn recalculate_levels_preserves_holdings() {
 async fn load_existing_trades_sell_reduces_hold_quantity() {
     let bot = make_bot_config();
     let store = Arc::new(MockWorkerStore::new().with_trades(vec![
-        GridTradeRecord { grid_level: 3, side: "buy".to_string(), price: 53500.0, quantity: 0.002, pnl: 0.0 },
-        GridTradeRecord { grid_level: 3, side: "sell".to_string(), price: 53767.5, quantity: 0.001, pnl: 3.0 },
+        GridTradeRecord { id: Uuid::new_v4(), grid_level: 3, open_side: "buy".to_string(), open_price: 53500.0, open_quantity: 0.002, close_side: Some("sell".to_string()), close_price: Some(53767.5), close_quantity: Some(0.001), pnl: 3.0 },
     ]));
     let mut worker = make_worker_with_store(bot, 55000.0, store);
     worker.load_existing_trades().await;
@@ -1281,8 +1279,8 @@ async fn load_existing_trades_sell_reduces_hold_quantity() {
 async fn load_existing_trades_multiple_buys_accumulate() {
     let bot = make_bot_config();
     let store = Arc::new(MockWorkerStore::new().with_trades(vec![
-        GridTradeRecord { grid_level: 2, side: "buy".to_string(), price: 52500.0, quantity: 0.001, pnl: 0.0 },
-        GridTradeRecord { grid_level: 2, side: "buy".to_string(), price: 52500.0, quantity: 0.001, pnl: 0.0 },
+        GridTradeRecord { id: Uuid::new_v4(), grid_level: 2, open_side: "buy".to_string(), open_price: 52500.0, open_quantity: 0.001, close_side: None, close_price: None, close_quantity: None, pnl: 0.0 },
+        GridTradeRecord { id: Uuid::new_v4(), grid_level: 2, open_side: "buy".to_string(), open_price: 52500.0, open_quantity: 0.001, close_side: None, close_price: None, close_quantity: None, pnl: 0.0 },
     ]));
     let mut worker = make_worker_with_store(bot, 55000.0, store);
     worker.load_existing_trades().await;
@@ -1342,23 +1340,23 @@ async fn save_stats_records_to_store() {
     }));
 }
 
-// ── record_trade 存储验证 ──
+// ── record_open_trade 存储验证 ──
 
 #[tokio::test]
-async fn record_trade_stores_to_store() {
+async fn record_open_trade_stores_to_store() {
     let store = Arc::new(MockWorkerStore::new());
     let bot = make_bot_config();
     let bot_id = bot.id;
-    let worker = make_worker_with_store(bot, 55000.0, store.clone());
+    let _worker = make_worker_with_store(bot, 55000.0, store.clone());
 
     let (grid_event_tx, _) = broadcast::channel(16);
-    let (event_tx, event_rx) = broadcast::channel(16);
+    let (_event_tx, event_rx) = broadcast::channel(16);
     let price_provider = Arc::new(MockPriceProvider::new(55000.0));
     let order_executor = Arc::new(MockOrderExecutor::new());
     let ai_service = make_mock_ai_service();
 
-    let w2 = GridWorker::new(
-        worker.bot.clone(),
+    let _w2 = GridWorker::new(
+        _worker.bot.clone(),
         price_provider,
         order_executor,
         ai_service,
@@ -1367,15 +1365,15 @@ async fn record_trade_stores_to_store() {
         event_rx,
         grid_event_tx,
     );
-    drop(w2);
 
-    store.record_trade(bot_id, Uuid::new_v4(), "BTCUSDT", "binance", "buy", 3, 52000.0, 0.001, 0.0, 0.0).await.unwrap();
+    let trade_id = store.record_open_trade(bot_id, Uuid::new_v4(), "BTCUSDT", "binance", 3, "buy", 52000.0, 0.001, None).await.unwrap();
 
-    let recorded = store.recorded_trades.lock().await;
+    let recorded = store.open_trades.lock().await;
     assert_eq!(recorded.len(), 1);
     assert_eq!(recorded[0].0, bot_id);
-    assert_eq!(recorded[0].1, "buy");
-    assert_eq!(recorded[0].2, 3);
+    assert_eq!(recorded[0].1, trade_id);
+    assert_eq!(recorded[0].2, "buy");
+    assert_eq!(recorded[0].3, 3);
 }
 
 // ── on_order_event 完整分发验证 ──

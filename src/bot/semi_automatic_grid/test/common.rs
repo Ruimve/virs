@@ -67,13 +67,15 @@ impl OrderExecutor for MockOrderExecutor {
 pub struct MockWorkerStore {
     pub trades: Vec<GridTradeRecord>,
     pub bot: Option<GridBotConfig>,
-    pub recorded_trades: Arc<Mutex<Vec<(Uuid, String, i32, f64, f64, f64)>>>,
+    pub open_trades: Arc<Mutex<Vec<(Uuid, Uuid, String, i32, f64, f64)>>>,
+    pub closed_trades: Arc<Mutex<Vec<(Uuid, String, f64, f64, f64, f64)>>>,
     pub stats_saved: Arc<Mutex<Vec<(Uuid, f64, f64, i32, i32)>>>,
     pub statuses_updated: Arc<Mutex<Vec<(Uuid, String)>>>,
     pub grid_params_updated: Arc<Mutex<Vec<(Uuid, f64, f64)>>>,
     pub quantities_updated: Arc<Mutex<Vec<(Uuid, f64)>>>,
     pub deleted_bots: Arc<Mutex<Vec<Uuid>>>,
     pub last_adjusted: Arc<Mutex<Vec<Uuid>>>,
+    pub orphaned_trades: Arc<Mutex<Vec<(Uuid, i32, String, f64, f64, f64)>>>,
     pub should_fail_load: bool,
 }
 
@@ -82,13 +84,15 @@ impl MockWorkerStore {
         Self {
             trades: vec![],
             bot: None,
-            recorded_trades: Arc::new(Mutex::new(Vec::new())),
+            open_trades: Arc::new(Mutex::new(Vec::new())),
+            closed_trades: Arc::new(Mutex::new(Vec::new())),
             stats_saved: Arc::new(Mutex::new(Vec::new())),
             statuses_updated: Arc::new(Mutex::new(Vec::new())),
             grid_params_updated: Arc::new(Mutex::new(Vec::new())),
             quantities_updated: Arc::new(Mutex::new(Vec::new())),
             deleted_bots: Arc::new(Mutex::new(Vec::new())),
             last_adjusted: Arc::new(Mutex::new(Vec::new())),
+            orphaned_trades: Arc::new(Mutex::new(Vec::new())),
             should_fail_load: false,
         }
     }
@@ -131,21 +135,67 @@ impl GridStore for MockWorkerStore {
         Ok(self.trades.clone())
     }
 
-    async fn record_trade(
+    async fn record_open_trade(
         &self,
         bot_id: Uuid,
         _user_id: Uuid,
         _symbol: &str,
         _exchange: &str,
-        side: &str,
         grid_level: i32,
-        price: f64,
-        quantity: f64,
+        open_side: &str,
+        open_price: f64,
+        open_quantity: f64,
+        _open_order_id: Option<&str>,
+    ) -> anyhow::Result<Uuid> {
+        let trade_id = Uuid::new_v4();
+        self.open_trades.lock().await.push((bot_id, trade_id, open_side.to_string(), grid_level, open_price, open_quantity));
+        Ok(trade_id)
+    }
+
+    async fn close_trade(
+        &self,
+        trade_id: Uuid,
+        close_side: &str,
+        close_price: f64,
+        close_quantity: f64,
+        _close_order_id: Option<&str>,
+        pnl: f64,
+        pnl_pct: f64,
+    ) -> anyhow::Result<()> {
+        self.closed_trades.lock().await.push((trade_id, close_side.to_string(), close_price, close_quantity, pnl, pnl_pct));
+        Ok(())
+    }
+
+    async fn find_open_trade(&self, bot_id: Uuid, grid_level: i32) -> anyhow::Result<Option<Uuid>> {
+        let trades = self.open_trades.lock().await;
+        for (bid, tid, _, level, _, _) in trades.iter() {
+            if bid == &bot_id && level == &grid_level {
+                let is_closed = self.closed_trades.lock().await.iter().any(|(id, _, _, _, _, _)| id == tid);
+                if !is_closed {
+                    return Ok(Some(*tid));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    async fn record_orphaned_close_trade(
+        &self,
+        bot_id: Uuid,
+        _user_id: Uuid,
+        _symbol: &str,
+        _exchange: &str,
+        grid_level: i32,
+        close_side: &str,
+        close_price: f64,
+        close_quantity: f64,
+        _close_order_id: Option<&str>,
         pnl: f64,
         _pnl_pct: f64,
-    ) -> anyhow::Result<()> {
-        self.recorded_trades.lock().await.push((bot_id, side.to_string(), grid_level, price, quantity, pnl));
-        Ok(())
+    ) -> anyhow::Result<Uuid> {
+        let trade_id = Uuid::new_v4();
+        self.orphaned_trades.lock().await.push((bot_id, grid_level, close_side.to_string(), close_price, close_quantity, pnl));
+        Ok(trade_id)
     }
 
     async fn save_stats(&self, bot_id: Uuid, total_pnl: f64, unrealized_pnl: f64, total_trades: i32, grid_filled_count: i32, _levels_json: Option<&serde_json::Value>) -> anyhow::Result<()> {
@@ -268,10 +318,23 @@ impl GridStore for MockEngineStore {
         Ok(vec![])
     }
 
-    async fn record_trade(
+    async fn record_open_trade(
         &self, _bot_id: Uuid, _user_id: Uuid, _symbol: &str, _exchange: &str,
-        _side: &str, _grid_level: i32, _price: f64, _quantity: f64, _pnl: f64, _pnl_pct: f64,
+        _grid_level: i32, _open_side: &str, _open_price: f64, _open_quantity: f64, _open_order_id: Option<&str>,
+    ) -> anyhow::Result<Uuid> { Ok(Uuid::new_v4()) }
+
+    async fn close_trade(
+        &self, _trade_id: Uuid, _close_side: &str, _close_price: f64, _close_quantity: f64,
+        _close_order_id: Option<&str>, _pnl: f64, _pnl_pct: f64,
     ) -> anyhow::Result<()> { Ok(()) }
+
+    async fn find_open_trade(&self, _bot_id: Uuid, _grid_level: i32) -> anyhow::Result<Option<Uuid>> { Ok(None) }
+
+    async fn record_orphaned_close_trade(
+        &self, _bot_id: Uuid, _user_id: Uuid, _symbol: &str, _exchange: &str,
+        _grid_level: i32, _close_side: &str, _close_price: f64, _close_quantity: f64,
+        _close_order_id: Option<&str>, _pnl: f64, _pnl_pct: f64,
+    ) -> anyhow::Result<Uuid> { Ok(Uuid::new_v4()) }
 
     async fn save_stats(&self, _bot_id: Uuid, _total_pnl: f64, _unrealized_pnl: f64, _total_trades: i32, _grid_filled_count: i32, _levels_json: Option<&serde_json::Value>) -> anyhow::Result<()> { Ok(()) }
 

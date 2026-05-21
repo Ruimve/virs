@@ -233,7 +233,7 @@ pub async fn get_bot(
     .collect();
 
     let buy_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-        r#"SELECT grid_level, AVG(price) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'buy' GROUP BY grid_level"#,
+        r#"SELECT grid_level, AVG(open_price) FROM qd_grid_trades WHERE bot_id = $1 AND open_side = 'buy' GROUP BY grid_level"#,
     )
     .bind(id)
     .fetch_all(&state.db_pool)
@@ -243,7 +243,7 @@ pub async fn get_bot(
     .collect();
 
     let sell_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-        r#"SELECT grid_level, MAX(price) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'sell' GROUP BY grid_level"#,
+        r#"SELECT grid_level, MAX(close_price) FROM qd_grid_trades WHERE bot_id = $1 AND close_side = 'sell' AND close_price IS NOT NULL GROUP BY grid_level"#,
     )
     .bind(id)
     .fetch_all(&state.db_pool)
@@ -253,7 +253,7 @@ pub async fn get_bot(
     .collect();
 
     let buy_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-        r#"SELECT grid_level, SUM(quantity) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'buy' GROUP BY grid_level"#,
+        r#"SELECT grid_level, SUM(open_quantity) FROM qd_grid_trades WHERE bot_id = $1 AND open_side = 'buy' GROUP BY grid_level"#,
     )
     .bind(id)
     .fetch_all(&state.db_pool)
@@ -263,7 +263,7 @@ pub async fn get_bot(
     .collect();
 
     let sell_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-        r#"SELECT grid_level, SUM(quantity) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'sell' GROUP BY grid_level"#,
+        r#"SELECT grid_level, SUM(close_quantity) FROM qd_grid_trades WHERE bot_id = $1 AND close_side = 'sell' AND close_quantity IS NOT NULL GROUP BY grid_level"#,
     )
     .bind(id)
     .fetch_all(&state.db_pool)
@@ -687,7 +687,7 @@ pub async fn get_trades(
         .collect();
 
         let buy_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-            r#"SELECT grid_level, AVG(price) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'buy' GROUP BY grid_level"#,
+            r#"SELECT grid_level, AVG(open_price) FROM qd_grid_trades WHERE bot_id = $1 AND open_side = 'buy' GROUP BY grid_level"#,
         )
         .bind(id)
         .fetch_all(&state.db_pool)
@@ -697,7 +697,7 @@ pub async fn get_trades(
         .collect();
 
         let sell_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-            r#"SELECT grid_level, MAX(price) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'sell' GROUP BY grid_level"#,
+            r#"SELECT grid_level, MAX(close_price) FROM qd_grid_trades WHERE bot_id = $1 AND close_side = 'sell' AND close_price IS NOT NULL GROUP BY grid_level"#,
         )
         .bind(id)
         .fetch_all(&state.db_pool)
@@ -707,7 +707,7 @@ pub async fn get_trades(
         .collect();
 
         let buy_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-            r#"SELECT grid_level, SUM(quantity) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'buy' GROUP BY grid_level"#,
+            r#"SELECT grid_level, SUM(open_quantity) FROM qd_grid_trades WHERE bot_id = $1 AND open_side = 'buy' GROUP BY grid_level"#,
         )
         .bind(id)
         .fetch_all(&state.db_pool)
@@ -717,7 +717,7 @@ pub async fn get_trades(
         .collect();
 
         let sell_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-            r#"SELECT grid_level, SUM(quantity) FROM qd_grid_trades WHERE bot_id = $1 AND side = 'sell' GROUP BY grid_level"#,
+            r#"SELECT grid_level, SUM(close_quantity) FROM qd_grid_trades WHERE bot_id = $1 AND close_side = 'sell' AND close_quantity IS NOT NULL GROUP BY grid_level"#,
         )
         .bind(id)
         .fetch_all(&state.db_pool)

@@ -33,6 +33,8 @@ pub struct GridLevel {
     pub avg_buy_price: f64,
 /** 最近一次成交价格 */
     pub last_fill_price: Option<f64>,
+/** 当前开仓对应的交易记录 ID（用于配对平仓） */
+    pub trade_id: Option<Uuid>,
 }
 
 impl GridLevel {
@@ -54,6 +56,7 @@ impl GridLevel {
             hold_quantity: 0.0,
             avg_buy_price: 0.0,
             last_fill_price: None,
+            trade_id: None,
         }
     }
 }

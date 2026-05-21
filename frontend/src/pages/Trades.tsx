@@ -6,10 +6,17 @@ interface Trade {
   id: string
   bot_id: string
   symbol: string
-  side: string
   grid_level: number
-  price: number
-  quantity: number
+  open_side: string
+  open_price: number
+  open_quantity: number
+  open_order_id: string | null
+  opened_at: string
+  close_side: string | null
+  close_price: number | null
+  close_quantity: number | null
+  close_order_id: string | null
+  closed_at: string | null
   pnl: number
   pnl_pct: number
   status: string
@@ -190,11 +197,11 @@ const Trades: Component = () => {
                       <tr class="border-b border-gray-100">
                         <th class="text-left py-2.5 px-3 text-[13px] font-medium text-gray-400">时间</th>
                         <th class="text-left py-2.5 px-3 text-[13px] font-medium text-gray-400">交易对</th>
-                        <th class="text-left py-2.5 px-3 text-[13px] font-medium text-gray-400">方向</th>
                         <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">网格层</th>
-                        <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">价格</th>
-                        <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">数量</th>
+                        <th class="text-left py-2.5 px-3 text-[13px] font-medium text-gray-400">开仓</th>
+                        <th class="text-left py-2.5 px-3 text-[13px] font-medium text-gray-400">平仓</th>
                         <th class="text-right py-2.5 px-3 text-[13px] font-medium text-gray-400">盈亏</th>
+                        <th class="text-left py-2.5 px-3 text-[13px] font-medium text-gray-400">状态</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -202,36 +209,37 @@ const Trades: Component = () => {
                         {(trade) => (
                           <tr class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                             <td class="py-2.5 px-3 text-gray-600 whitespace-nowrap text-[13px]">
-                              {formatDateTime(trade.created_at)}
+                              {formatDateTime(trade.opened_at)}
                             </td>
                             <td class="py-2.5 px-3 text-gray-800 font-medium">{trade.symbol}</td>
-                            <td class="py-2.5 px-3">
-                              <span
-                                class={`inline-block px-2 py-0.5 rounded-md text-xs font-medium ${
-                                  trade.side === 'buy'
-                                    ? 'bg-emerald-50 text-emerald-600'
-                                    : 'bg-red-50 text-red-500'
-                                }`}
-                              >
-                                {trade.side === 'buy' ? '买入' : '卖出'}
-                              </span>
-                            </td>
                             <td class="py-2.5 px-3 text-right text-gray-600 text-[13px]">
                               {trade.grid_level}
                             </td>
-                            <td class="py-2.5 px-3 text-right text-gray-600 text-[13px]">
-                              {formatNumber(trade.price)}
+                            <td class="py-2.5 px-3">
+                              <span class="inline-block px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-50 text-emerald-600">
+                                {trade.open_side === 'buy' ? '买入' : '卖出'} {formatNumber(trade.open_price)} × {formatNumber(trade.open_quantity, 4)}
+                              </span>
                             </td>
-                            <td class="py-2.5 px-3 text-right text-gray-600 text-[13px]">
-                              {formatNumber(trade.quantity, 4)}
+                            <td class="py-2.5 px-3">
+                              {trade.close_side ? (
+                                <span class={`inline-block px-2 py-0.5 rounded-md text-xs font-medium ${trade.close_side === 'buy' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
+                                  {trade.close_side === 'buy' ? '买入' : '卖出'} {formatNumber(trade.close_price!)} × {formatNumber(trade.close_quantity!, 4)}
+                                </span>
+                              ) : (
+                                <span class="text-gray-400 text-xs">-</span>
+                              )}
                             </td>
                             <td
                               class={`py-2.5 px-3 text-right font-medium text-[13px] ${
                                 trade.pnl >= 0 ? 'text-emerald-600' : 'text-red-500'
                               }`}
                             >
-                              {trade.pnl >= 0 ? '+' : ''}
-                              {formatNumber(trade.pnl)}
+                              {trade.close_side ? `${trade.pnl >= 0 ? '+' : ''}${formatNumber(trade.pnl)}` : '-'}
+                            </td>
+                            <td class="py-2.5 px-3">
+                              <span class={`inline-block px-2 py-0.5 rounded-md text-xs font-medium ${trade.status === 'open' ? 'bg-blue-50 text-blue-600' : trade.status === 'orphaned' ? 'bg-amber-50 text-amber-600' : 'bg-gray-50 text-gray-500'}`}>
+                                {trade.status === 'open' ? '持仓中' : trade.status === 'orphaned' ? '异常' : '已平仓'}
+                              </span>
                             </td>
                           </tr>
                         )}

@@ -21,18 +21,26 @@ pub struct AnalysisLogEntry {
 
 /** 网格交易记录
 
-每次成交后记录的流水，用于 PnL 统计和历史回溯 */
+开仓时创建，平仓时更新。一条记录代表一个完整的交易周期 */
 #[derive(Debug, Clone)]
 pub struct GridTradeRecord {
+/** 交易记录 ID（开仓时生成，平仓时用于查找更新） */
+    pub id: Uuid,
 /** 网格层级编号 */
     pub grid_level: i32,
-/** 成交方向："buy" 或 "sell" */
-    pub side: String,
-/** 成交价格 */
-    pub price: f64,
-/** 成交数量 */
-    pub quantity: f64,
-/** 本次成交已实现盈亏 */
+/** 开仓方向："buy" 或 "sell" */
+    pub open_side: String,
+/** 开仓价格 */
+    pub open_price: f64,
+/** 开仓数量 */
+    pub open_quantity: f64,
+/** 平仓方向（None 表示未平仓） */
+    pub close_side: Option<String>,
+/** 平仓价格（None 表示未平仓） */
+    pub close_price: Option<f64>,
+/** 平仓数量（None 表示未平仓） */
+    pub close_quantity: Option<f64>,
+/** 已实现盈亏（平仓时计算） */
     pub pnl: f64,
 }
 
@@ -92,20 +100,47 @@ pub trait GridStore: Send + Sync {
     async fn load_bot(&self, bot_id: Uuid) -> anyhow::Result<Option<GridBotConfig>>;
 /** 加载指定 bot 的历史交易记录 */
     async fn load_trades(&self, bot_id: Uuid) -> anyhow::Result<Vec<GridTradeRecord>>;
-/** 记录一笔交易 */
-    async fn record_trade(
+/** 记录一笔开仓交易，返回交易记录 ID */
+    async fn record_open_trade(
         &self,
         bot_id: Uuid,
         user_id: Uuid,
         symbol: &str,
         exchange: &str,
-        side: &str,
         grid_level: i32,
-        price: f64,
-        quantity: f64,
+        open_side: &str,
+        open_price: f64,
+        open_quantity: f64,
+        open_order_id: Option<&str>,
+    ) -> anyhow::Result<Uuid>;
+/** 更新交易记录为已平仓 */
+    async fn close_trade(
+        &self,
+        trade_id: Uuid,
+        close_side: &str,
+        close_price: f64,
+        close_quantity: f64,
+        close_order_id: Option<&str>,
         pnl: f64,
         pnl_pct: f64,
     ) -> anyhow::Result<()>;
+/** 查找指定层级未平仓的交易记录 */
+    async fn find_open_trade(&self, bot_id: Uuid, grid_level: i32) -> anyhow::Result<Option<Uuid>>;
+/** 记录一笔找不到开仓记录的平仓交易（orphaned 状态） */
+    async fn record_orphaned_close_trade(
+        &self,
+        bot_id: Uuid,
+        user_id: Uuid,
+        symbol: &str,
+        exchange: &str,
+        grid_level: i32,
+        close_side: &str,
+        close_price: f64,
+        close_quantity: f64,
+        close_order_id: Option<&str>,
+        pnl: f64,
+        pnl_pct: f64,
+    ) -> anyhow::Result<Uuid>;
 /** 保存运行统计（已实现 PnL、未实现 PnL、成交次数等） */
     async fn save_stats(
         &self,

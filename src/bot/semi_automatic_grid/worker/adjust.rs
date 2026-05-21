@@ -197,9 +197,10 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
     pub(crate) async fn execute_decision(&mut self, action: &GridAction, decision: Option<&GridDecision>) {
         let needs_params = self.bot.upper_price <= 0.0 || self.bot.lower_price <= 0.0;
 
+        let mut structure_changed = false;
         if let Some(d) = decision {
             if needs_params || matches!(action, GridAction::AdjustGrid { .. }) {
-                self.apply_llm_params(d, needs_params).await;
+                structure_changed = self.apply_llm_params(d, needs_params).await;
             }
         }
 
@@ -218,7 +219,13 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                 let new_qty = self.bot.quantity_per_grid * 0.5;
                 let _ = self.store.update_quantity_per_grid(self.bot.id, new_qty).await;
                 self.bot.quantity_per_grid = new_qty;
+                let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
+                    symbol: Some(self.bot.symbol.clone()),
+                }).await;
                 self.recalculate_levels();
+                if !self.paused {
+                    self.place_initial_orders().await;
+                }
                 warn!(bot_id = %self.bot.id, new_qty, "Position reduced by decision");
             }
             GridAction::AdjustGrid { .. } => {
@@ -227,7 +234,7 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                         self.place_initial_orders().await;
                     }
                 } else if let Some(d) = decision {
-                    self.adjust_grid(d.upper_price, d.lower_price, false).await;
+                    self.adjust_grid(d.upper_price, d.lower_price, structure_changed).await;
                 }
             }
             GridAction::CancelOrder { level, side } => {
@@ -251,7 +258,7 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
 
 当 bot 参数为空（首次分析）或 LLM 返回 adjust_grid 时调用，
 更新 grid_count/grid_profit_pct/quantity_per_grid/leverage 等结构参数 */
-    async fn apply_llm_params(&mut self, d: &GridDecision, needs_params: bool) {
+    async fn apply_llm_params(&mut self, d: &GridDecision, needs_params: bool) -> bool {
         let mut structure_changed = false;
 
         if let Some(count) = d.grid_count {
@@ -327,6 +334,8 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
             structure_changed,
             "LLM params applied"
         );
+
+        structure_changed
     }
 
 /** 简单规则决策（LLM 不可用时的回退策略）
@@ -395,20 +404,14 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
 - new_lower: 新的下界价格（None 表示不变）
 - force_recalculate: 是否强制重建层级（结构参数变化时为 true） */
     pub async fn adjust_grid(&mut self, new_upper: Option<f64>, new_lower: Option<f64>, force_recalculate: bool) {
-        let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
-            symbol: Some(self.bot.symbol.clone()),
-        }).await;
-
         let mut updated = false;
         if let Some(upper) = new_upper {
             if upper > 0.0 && upper != self.bot.upper_price {
-                self.bot.upper_price = upper;
                 updated = true;
             }
         }
         if let Some(lower) = new_lower {
             if lower > 0.0 && lower != self.bot.lower_price {
-                self.bot.lower_price = lower;
                 updated = true;
             }
         }
@@ -416,6 +419,21 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
         if !updated && !force_recalculate {
             debug!(bot_id = %self.bot.id, "adjust_grid: no parameter changes");
             return;
+        }
+
+        let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
+            symbol: Some(self.bot.symbol.clone()),
+        }).await;
+
+        if let Some(upper) = new_upper {
+            if upper > 0.0 {
+                self.bot.upper_price = upper;
+            }
+        }
+        if let Some(lower) = new_lower {
+            if lower > 0.0 {
+                self.bot.lower_price = lower;
+            }
         }
 
         if self.bot.upper_price <= self.bot.lower_price {
@@ -481,6 +499,9 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                 level.buy_filled = old.buy_filled;
                 level.sell_filled = old.sell_filled;
                 level.last_fill_price = old.last_fill_price;
+                level.trade_id = old.trade_id;
+                level.buy_order_id = old.buy_order_id;
+                level.sell_order_id = old.sell_order_id;
             }
         }
 

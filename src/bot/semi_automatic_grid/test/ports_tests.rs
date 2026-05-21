@@ -359,25 +359,33 @@ fn grid_order_event_liquidation_warning_close_to_liquidation() {
 #[test]
 fn grid_trade_record_construction() {
     let record = GridTradeRecord {
+        id: Uuid::new_v4(),
         grid_level: 3,
-        side: "buy".to_string(),
-        price: 50000.0,
-        quantity: 0.001,
+        open_side: "buy".to_string(),
+        open_price: 50000.0,
+        open_quantity: 0.001,
+        close_side: None,
+        close_price: None,
+        close_quantity: None,
         pnl: 5.0,
     };
     assert_eq!(record.grid_level, 3);
-    assert_eq!(record.side, "buy");
-    assert!((record.quantity - 0.001).abs() < f64::EPSILON);
+    assert_eq!(record.open_side, "buy");
+    assert!((record.open_quantity - 0.001).abs() < f64::EPSILON);
     assert!((record.pnl - 5.0).abs() < f64::EPSILON);
 }
 
 #[test]
 fn grid_trade_record_negative_pnl() {
     let record = GridTradeRecord {
+        id: Uuid::new_v4(),
         grid_level: 5,
-        side: "sell".to_string(),
-        price: 51000.0,
-        quantity: 0.002,
+        open_side: "buy".to_string(),
+        open_price: 50000.0,
+        open_quantity: 0.002,
+        close_side: Some("sell".to_string()),
+        close_price: Some(49000.0),
+        close_quantity: Some(0.002),
         pnl: -3.5,
     };
     assert!(record.pnl < 0.0);
@@ -386,10 +394,14 @@ fn grid_trade_record_negative_pnl() {
 #[test]
 fn grid_trade_record_zero_pnl() {
     let record = GridTradeRecord {
+        id: Uuid::new_v4(),
         grid_level: 0,
-        side: "buy".to_string(),
-        price: 50000.0,
-        quantity: 0.001,
+        open_side: "buy".to_string(),
+        open_price: 50000.0,
+        open_quantity: 0.001,
+        close_side: None,
+        close_price: None,
+        close_quantity: None,
         pnl: 0.0,
     };
     assert!((record.pnl).abs() < f64::EPSILON);
@@ -398,22 +410,30 @@ fn grid_trade_record_zero_pnl() {
 #[test]
 fn grid_trade_record_zero_quantity() {
     let record = GridTradeRecord {
+        id: Uuid::new_v4(),
         grid_level: 2,
-        side: "sell".to_string(),
-        price: 0.0,
-        quantity: 0.0,
+        open_side: "sell".to_string(),
+        open_price: 0.0,
+        open_quantity: 0.0,
+        close_side: None,
+        close_price: None,
+        close_quantity: None,
         pnl: 0.0,
     };
-    assert!((record.quantity).abs() < f64::EPSILON);
+    assert!((record.open_quantity).abs() < f64::EPSILON);
 }
 
 #[test]
 fn grid_trade_record_negative_level() {
     let record = GridTradeRecord {
+        id: Uuid::new_v4(),
         grid_level: -1,
-        side: "buy".to_string(),
-        price: 50000.0,
-        quantity: 0.001,
+        open_side: "buy".to_string(),
+        open_price: 50000.0,
+        open_quantity: 0.001,
+        close_side: None,
+        close_price: None,
+        close_quantity: None,
         pnl: 0.0,
     };
     assert!(record.grid_level < 0);
@@ -630,8 +650,8 @@ async fn mock_store_load_trades_empty() {
 #[tokio::test]
 async fn mock_store_load_trades_with_data() {
     let store = MockWorkerStore::new().with_trades(vec![
-        GridTradeRecord { grid_level: 0, side: "buy".to_string(), price: 50000.0, quantity: 0.001, pnl: 0.0 },
-        GridTradeRecord { grid_level: 1, side: "sell".to_string(), price: 51000.0, quantity: 0.001, pnl: 5.0 },
+        GridTradeRecord { id: Uuid::new_v4(), grid_level: 0, open_side: "buy".to_string(), open_price: 50000.0, open_quantity: 0.001, close_side: None, close_price: None, close_quantity: None, pnl: 0.0 },
+        GridTradeRecord { id: Uuid::new_v4(), grid_level: 1, open_side: "buy".to_string(), open_price: 50000.0, open_quantity: 0.001, close_side: Some("sell".to_string()), close_price: Some(51000.0), close_quantity: Some(0.001), pnl: 5.0 },
     ]);
     let trades = store.load_trades(Uuid::new_v4()).await.unwrap();
     assert_eq!(trades.len(), 2);
@@ -645,15 +665,16 @@ async fn mock_store_failing_load() {
 }
 
 #[tokio::test]
-async fn mock_store_record_trade() {
+async fn mock_store_record_open_trade() {
     let store = MockWorkerStore::new();
     let bot_id = Uuid::new_v4();
-    store.record_trade(bot_id, Uuid::new_v4(), "BTCUSDT", "binance", "buy", 0, 50000.0, 0.001, 0.0, 0.0).await.unwrap();
-    let recorded = store.recorded_trades.lock().await;
+    let trade_id = store.record_open_trade(bot_id, Uuid::new_v4(), "BTCUSDT", "binance", 0, "buy", 50000.0, 0.001, None).await.unwrap();
+    let recorded = store.open_trades.lock().await;
     assert_eq!(recorded.len(), 1);
     assert_eq!(recorded[0].0, bot_id);
-    assert_eq!(recorded[0].1, "buy");
-    assert_eq!(recorded[0].2, 0);
+    assert_eq!(recorded[0].1, trade_id);
+    assert_eq!(recorded[0].2, "buy");
+    assert_eq!(recorded[0].3, 0);
 }
 
 #[tokio::test]
@@ -896,10 +917,14 @@ fn grid_order_info_both_prices_equal() {
 #[test]
 fn grid_trade_record_very_large_pnl() {
     let record = GridTradeRecord {
+        id: Uuid::new_v4(),
         grid_level: 0,
-        side: "sell".to_string(),
-        price: 100000.0,
-        quantity: 100.0,
+        open_side: "sell".to_string(),
+        open_price: 100000.0,
+        open_quantity: 100.0,
+        close_side: Some("buy".to_string()),
+        close_price: Some(200000.0),
+        close_quantity: Some(100.0),
         pnl: 1e8,
     };
     assert!(record.pnl > 1e7);
@@ -908,23 +933,31 @@ fn grid_trade_record_very_large_pnl() {
 #[test]
 fn grid_trade_record_very_large_quantity() {
     let record = GridTradeRecord {
+        id: Uuid::new_v4(),
         grid_level: 0,
-        side: "buy".to_string(),
-        price: 1.0,
-        quantity: 1e6,
+        open_side: "buy".to_string(),
+        open_price: 1.0,
+        open_quantity: 1e6,
+        close_side: None,
+        close_price: None,
+        close_quantity: None,
         pnl: 0.0,
     };
-    assert!(record.quantity > 1e5);
+    assert!(record.open_quantity > 1e5);
 }
 
 #[test]
 fn grid_trade_record_invalid_side_string() {
     let record = GridTradeRecord {
+        id: Uuid::new_v4(),
         grid_level: 0,
-        side: "unknown".to_string(),
-        price: 0.0,
-        quantity: 0.001,
+        open_side: "unknown".to_string(),
+        open_price: 0.0,
+        open_quantity: 0.001,
+        close_side: None,
+        close_price: None,
+        close_quantity: None,
         pnl: 0.0,
     };
-    assert_eq!(record.side, "unknown");
+    assert_eq!(record.open_side, "unknown");
 }

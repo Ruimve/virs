@@ -58,10 +58,17 @@ interface GridTrade {
   bot_id: string;
   symbol: string;
   exchange: string;
-  side: string;
   grid_level: number;
-  price: number;
-  quantity: number;
+  open_side: string;
+  open_price: number;
+  open_quantity: number;
+  open_order_id: string | null;
+  opened_at: string;
+  close_side: string | null;
+  close_price: number | null;
+  close_quantity: number | null;
+  close_order_id: string | null;
+  closed_at: string | null;
   pnl: number;
   pnl_pct: number;
   status: string;
@@ -735,26 +742,40 @@ export default function GridPage() {
                     <table class="w-full text-xs">
                       <thead>
                         <tr class="text-gray-500 border-b border-gray-100">
-                          <th class="text-left px-5 py-2.5 font-medium">时间</th>
-                          <th class="text-left px-3 py-2.5 font-medium">方向</th>
-                          <th class="text-right px-3 py-2.5 font-medium">层级</th>
-                          <th class="text-right px-3 py-2.5 font-medium">价格</th>
-                          <th class="text-right px-3 py-2.5 font-medium">数量</th>
-                          <th class="text-right px-5 py-2.5 font-medium">盈亏</th>
+                          <th class="text-left px-4 py-2.5 font-medium">层级</th>
+                          <th class="text-left px-2 py-2.5 font-medium">开仓方向</th>
+                          <th class="text-right px-2 py-2.5 font-medium">开仓价</th>
+                          <th class="text-right px-2 py-2.5 font-medium">开仓量</th>
+                          <th class="text-left px-2 py-2.5 font-medium">平仓方向</th>
+                          <th class="text-right px-2 py-2.5 font-medium">平仓价</th>
+                          <th class="text-right px-2 py-2.5 font-medium">平仓量</th>
+                          <th class="text-right px-2 py-2.5 font-medium">盈亏</th>
+                          <th class="text-left px-3 py-2.5 font-medium">状态</th>
+                          <th class="text-left px-3 py-2.5 font-medium">时间</th>
                         </tr>
                       </thead>
                       <tbody>
                         <For each={trades()}>
                           {(trade) => (
                             <tr class="border-b border-gray-50 hover:bg-gray-50">
-                              <td class="px-5 py-2.5 text-gray-500">{new Date(trade.created_at).toLocaleString('zh-CN')}</td>
-                              <td class={`px-3 py-2.5 ${trade.side === 'buy' ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {trade.side === 'buy' ? '买入' : '卖出'}
+                              <td class="px-4 py-2.5 text-gray-600 text-right font-mono">{trade.grid_level}</td>
+                              <td class={`px-2 py-2.5 ${trade.open_side === 'buy' ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {trade.open_side === 'buy' ? '买入' : '卖出'}
                               </td>
-                              <td class="px-3 py-2.5 text-gray-600 text-right font-mono">{trade.grid_level}</td>
-                              <td class="px-3 py-2.5 text-gray-600 text-right font-mono">{trade.price.toFixed(2)}</td>
-                              <td class="px-3 py-2.5 text-gray-600 text-right font-mono">{trade.quantity.toFixed(6)}</td>
-                              <td class="px-5 py-2.5 text-right font-mono">{formatPnl(trade.pnl)}</td>
+                              <td class="px-2 py-2.5 text-gray-600 text-right font-mono">{trade.open_price.toFixed(2)}</td>
+                              <td class="px-2 py-2.5 text-gray-600 text-right font-mono">{trade.open_quantity.toFixed(6)}</td>
+                              <td class={`px-2 py-2.5 ${trade.close_side === 'buy' ? 'text-emerald-600' : trade.close_side === 'sell' ? 'text-red-600' : 'text-gray-400'}`}>
+                                {trade.close_side === 'buy' ? '买入' : trade.close_side === 'sell' ? '卖出' : '-'}
+                              </td>
+                              <td class="px-2 py-2.5 text-gray-600 text-right font-mono">{trade.close_price != null ? trade.close_price.toFixed(2) : '-'}</td>
+                              <td class="px-2 py-2.5 text-gray-600 text-right font-mono">{trade.close_quantity != null ? trade.close_quantity.toFixed(6) : '-'}</td>
+                              <td class="px-2 py-2.5 text-right font-mono">{trade.close_side ? formatPnl(trade.pnl) : '-'}</td>
+                              <td class="px-3 py-2.5">
+                                <span class={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${trade.status === 'open' ? 'bg-blue-100 text-blue-700' : trade.status === 'orphaned' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                                  {trade.status === 'open' ? '持仓中' : trade.status === 'orphaned' ? '异常' : '已平仓'}
+                                </span>
+                              </td>
+                              <td class="px-3 py-2.5 text-gray-500">{new Date(trade.status === 'open' ? trade.opened_at : (trade.closed_at || trade.opened_at)).toLocaleString('zh-CN')}</td>
                             </tr>
                           )}
                         </For>

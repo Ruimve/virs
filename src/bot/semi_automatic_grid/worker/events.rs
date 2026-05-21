@@ -1,5 +1,6 @@
 use chrono::Utc;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 use crate::bot::semi_automatic_grid::ports::*;
 use crate::bot::semi_automatic_grid::types::{GridEvent, GridState};
@@ -16,18 +17,32 @@ impl GridWorker {
         let max_dist = self.grid_spacing();
 
         let trade_count = trades.len();
-        for trade in trades {
-            if let Some(level_idx) = self.find_level_by_price_within(trade.price, max_dist) {
-                apply_fill_to_level(&mut self.levels[level_idx], &trade.side, trade.price, trade.quantity);
+        for trade in &trades {
+            if let Some(level_idx) = self.find_level_by_price_within(trade.open_price, max_dist) {
+                apply_fill_to_level(&mut self.levels[level_idx], &trade.open_side, trade.open_price, trade.open_quantity);
+                if let (Some(close_side), Some(close_price), Some(close_qty)) =
+                    (&trade.close_side, trade.close_price, trade.close_quantity)
+                {
+                    apply_fill_to_level(&mut self.levels[level_idx], close_side, close_price, close_qty);
+                }
             } else {
                 warn!(
-                    bot_id = %self.bot.id, trade_price = trade.price, grid_level = trade.grid_level,
+                    bot_id = %self.bot.id, trade_price = trade.open_price, grid_level = trade.grid_level,
                     "Trade could not be matched to any grid level by price, skipping"
                 );
             }
             self.total_pnl += trade.pnl;
-            self.total_trades += 1;
+            self.total_trades += if trade.close_side.is_some() { 2 } else { 1 };
+            self.grid_filled_count += if trade.close_side.is_some() { 2 } else { 1 };
             self.update_consecutive_losses(trade.pnl);
+        }
+
+        for trade in &trades {
+            if trade.close_side.is_none() {
+                if let Some(level_idx) = self.find_level_by_price_within(trade.open_price, max_dist) {
+                    self.levels[level_idx].trade_id = Some(trade.id);
+                }
+            }
         }
 
         info!(
@@ -176,13 +191,39 @@ impl GridWorker {
         let _ = self.grid_event_tx.send(GridEvent::StatusUpdate { bot_id: self.bot.id, state });
     }
 
-/** 记录单笔交易到数据库 */
-    async fn record_trade(&self, level: i32, side: &str, price: f64, quantity: f64, pnl: f64) {
-        let pnl_pct = if price > 0.0 { pnl / (price * quantity) * 100.0 } else { 0.0 };
-        let _ = self.store.record_trade(
+/** 记录开仓交易到数据库 */
+    async fn record_open_trade(&self, level: i32, side: &str, price: f64, quantity: f64, order_id: Uuid) -> Option<Uuid> {
+        let order_id_str = order_id.to_string();
+        match self.store.record_open_trade(
             self.bot.id, self.bot.user_id, &self.bot.symbol, &self.bot.exchange,
-            side, level, price, quantity, pnl, pnl_pct,
-        ).await;
+            level, side, price, quantity, Some(&order_id_str),
+        ).await {
+            Ok(trade_id) => {
+                info!(bot_id = %self.bot.id, level, trade_id = %trade_id, "Open trade recorded");
+                Some(trade_id)
+            }
+            Err(e) => {
+                warn!(bot_id = %self.bot.id, level, error = %e, "Failed to record open trade");
+                None
+            }
+        }
+    }
+
+/** 记录平仓交易到数据库 */
+    async fn record_close_trade(&self, trade_id: Uuid, level: i32, side: &str, price: f64, quantity: f64, entry_price: f64, pnl: f64, order_id: Uuid) {
+        let pnl_pct = if entry_price > 0.0 && quantity > 0.0 {
+            pnl / (entry_price * quantity) * 100.0
+        } else {
+            0.0
+        };
+        let order_id_str = order_id.to_string();
+        if let Err(e) = self.store.close_trade(
+            trade_id, side, price, quantity, Some(&order_id_str), pnl, pnl_pct,
+        ).await {
+            warn!(bot_id = %self.bot.id, level, trade_id = %trade_id, error = %e, "Failed to close trade record");
+        } else {
+            info!(bot_id = %self.bot.id, level, trade_id = %trade_id, pnl, "Close trade recorded");
+        }
     }
 
 /** 处理外部订单事件 */
@@ -303,6 +344,8 @@ impl GridWorker {
         let level_num = self.levels[idx].level;
         let entry_price = self.levels[idx].avg_buy_price;
 
+        let is_open = !is_close_trade(&level_side, side_str);
+
         apply_fill_to_level(&mut self.levels[idx], side_str, price, order.filled);
 
         self.pending_orders.remove(&(idx, side_str.to_string()));
@@ -314,9 +357,35 @@ impl GridWorker {
         self.grid_filled_count += 1;
         self.update_consecutive_losses(pnl);
 
-        self.place_reverse_order_if_cycle_complete(idx, &level_side, side_str, hold).await;
+        if is_open {
+            if let Some(trade_id) = self.record_open_trade(level_num, side_str, price, order.filled, order.id).await {
+                self.levels[idx].trade_id = Some(trade_id);
+            }
+        } else {
+            let trade_id = if let Some(tid) = self.levels[idx].trade_id {
+                Some(tid)
+            } else {
+                self.store.find_open_trade(self.bot.id, level_num).await.ok().flatten()
+            };
+            if let Some(tid) = trade_id {
+                self.record_close_trade(tid, level_num, side_str, price, order.filled, entry_price, pnl, order.id).await;
+            } else {
+                warn!(bot_id = %self.bot.id, level = level_num, side = %side_str, price, quantity = order.filled, pnl, "No open trade found for close, recording as orphaned");
+                let pnl_pct = if entry_price > 0.0 && order.filled > 0.0 {
+                    pnl / (entry_price * order.filled) * 100.0
+                } else {
+                    0.0
+                };
+                let order_id_str = order.id.to_string();
+                let _ = self.store.record_orphaned_close_trade(
+                    self.bot.id, self.bot.user_id, &self.bot.symbol, &self.bot.exchange,
+                    level_num, side_str, price, order.filled, Some(&order_id_str), pnl, pnl_pct,
+                ).await;
+            }
+            self.levels[idx].trade_id = None;
+        }
 
-        self.record_trade(level_num, side_str, price, order.filled, pnl).await;
+        self.place_reverse_order_if_cycle_complete(idx, &level_side, side_str, hold).await;
 
         if is_close_trade(&level_side, side_str) {
             let _ = self.grid_event_tx.send(GridEvent::GridTradeClosed { bot_id: self.bot.id, level: level_num, pnl });

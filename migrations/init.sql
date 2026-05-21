@@ -299,25 +299,39 @@ CREATE TABLE IF NOT EXISTS qd_grid_bots (
 CREATE INDEX IF NOT EXISTS idx_grid_bots_user ON qd_grid_bots(user_id);
 CREATE INDEX IF NOT EXISTS idx_grid_bots_status ON qd_grid_bots(status);
 
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'qd_grid_trades' AND column_name = 'side') THEN
+        DROP TABLE IF EXISTS qd_grid_trades CASCADE;
+    END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
 CREATE TABLE IF NOT EXISTS qd_grid_trades (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bot_id UUID NOT NULL REFERENCES qd_grid_bots(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
     symbol TEXT NOT NULL,
     exchange TEXT NOT NULL,
-    side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
     grid_level INT NOT NULL,
-    price DOUBLE PRECISION NOT NULL,
-    quantity DOUBLE PRECISION NOT NULL,
+    open_side TEXT NOT NULL CHECK (open_side IN ('buy', 'sell')),
+    open_price DOUBLE PRECISION NOT NULL,
+    open_quantity DOUBLE PRECISION NOT NULL,
+    open_order_id TEXT,
+    opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    close_side TEXT CHECK (close_side IN ('buy', 'sell')),
+    close_price DOUBLE PRECISION,
+    close_quantity DOUBLE PRECISION,
+    close_order_id TEXT,
+    closed_at TIMESTAMPTZ,
     pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
     pnl_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
-    order_id TEXT,
-    status TEXT NOT NULL DEFAULT 'filled' CHECK (status IN ('filled', 'partial', 'canceled')),
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'orphaned')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_grid_trades_bot ON qd_grid_trades(bot_id);
 CREATE INDEX IF NOT EXISTS idx_grid_trades_user ON qd_grid_trades(user_id);
+CREATE INDEX IF NOT EXISTS idx_grid_trades_status ON qd_grid_trades(bot_id, status);
 CREATE INDEX IF NOT EXISTS idx_grid_trades_created ON qd_grid_trades(created_at DESC);
 
 CREATE TABLE IF NOT EXISTS qd_grid_analysis_logs (
@@ -351,12 +365,6 @@ END $$;
 
 DO $$ BEGIN
     ALTER TABLE qd_grid_bots ALTER COLUMN status TYPE TEXT;
-EXCEPTION WHEN OTHERS THEN NULL;
-END $$;
-
-DO $$ BEGIN
-    ALTER TABLE qd_grid_trades ALTER COLUMN side TYPE TEXT;
-    ALTER TABLE qd_grid_trades ALTER COLUMN status TYPE TEXT;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 

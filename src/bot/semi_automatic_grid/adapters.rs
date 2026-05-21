@@ -399,7 +399,7 @@ impl GridStore for PgGridStore {
 
     async fn load_trades(&self, bot_id: Uuid) -> anyhow::Result<Vec<GridTradeRecord>> {
         let trades: Vec<crate::models::GridTrade> = sqlx::query_as(
-            "SELECT * FROM qd_grid_trades WHERE bot_id = $1 AND status = 'filled' ORDER BY created_at",
+            "SELECT * FROM qd_grid_trades WHERE bot_id = $1 ORDER BY created_at DESC",
         )
         .bind(bot_id)
         .fetch_all(&self.db)
@@ -408,45 +408,132 @@ impl GridStore for PgGridStore {
         Ok(trades
             .into_iter()
             .map(|t| GridTradeRecord {
+                id: t.id,
                 grid_level: t.grid_level,
-                side: t.side,
-                price: t.price,
-                quantity: t.quantity,
+                open_side: t.open_side,
+                open_price: t.open_price,
+                open_quantity: t.open_quantity,
+                close_side: t.close_side,
+                close_price: t.close_price,
+                close_quantity: t.close_quantity,
                 pnl: t.pnl,
             })
             .collect())
     }
 
-    async fn record_trade(
+    async fn record_open_trade(
         &self,
         bot_id: Uuid,
         user_id: Uuid,
         symbol: &str,
         exchange: &str,
-        side: &str,
         grid_level: i32,
-        price: f64,
-        quantity: f64,
-        pnl: f64,
-        pnl_pct: f64,
-    ) -> anyhow::Result<()> {
-        sqlx::query(
-            r#"INSERT INTO qd_grid_trades (bot_id, user_id, symbol, exchange, side, grid_level, price, quantity, pnl, pnl_pct, status)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'filled')"#,
+        open_side: &str,
+        open_price: f64,
+        open_quantity: f64,
+        open_order_id: Option<&str>,
+    ) -> anyhow::Result<Uuid> {
+        let row: (Uuid,) = sqlx::query_as(
+            r#"INSERT INTO qd_grid_trades (bot_id, user_id, symbol, exchange, grid_level, open_side, open_price, open_quantity, open_order_id, status)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open')
+               RETURNING id"#,
         )
         .bind(bot_id)
         .bind(user_id)
         .bind(symbol)
         .bind(exchange)
-        .bind(side)
         .bind(grid_level)
-        .bind(price)
-        .bind(quantity)
+        .bind(open_side)
+        .bind(open_price)
+        .bind(open_quantity)
+        .bind(open_order_id)
+        .fetch_one(&self.db)
+        .await?;
+        Ok(row.0)
+    }
+
+    async fn close_trade(
+        &self,
+        trade_id: Uuid,
+        close_side: &str,
+        close_price: f64,
+        close_quantity: f64,
+        close_order_id: Option<&str>,
+        pnl: f64,
+        pnl_pct: f64,
+    ) -> anyhow::Result<()> {
+        let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
+        let result = sqlx::query(
+            r#"UPDATE qd_grid_trades SET
+               close_side = $2, close_price = $3, close_quantity = $4,
+               close_order_id = $5, closed_at = NOW(),
+               pnl = $6, pnl_pct = $7, status = 'closed'
+               WHERE id = $1 AND status = 'open'"#,
+        )
+        .bind(trade_id)
+        .bind(close_side)
+        .bind(close_price)
+        .bind(close_quantity)
+        .bind(close_order_id)
         .bind(pnl)
         .bind(pnl_pct)
         .execute(&self.db)
         .await?;
+
+        if result.rows_affected() == 0 {
+            warn!(trade_id = %trade_id, "close_trade: no open trade found, may already be closed");
+        }
         Ok(())
+    }
+
+    async fn find_open_trade(&self, bot_id: Uuid, grid_level: i32) -> anyhow::Result<Option<Uuid>> {
+        let row: Option<(Uuid,)> = sqlx::query_as(
+            "SELECT id FROM qd_grid_trades WHERE bot_id = $1 AND grid_level = $2 AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
+        )
+        .bind(bot_id)
+        .bind(grid_level)
+        .fetch_optional(&self.db)
+        .await?;
+        Ok(row.map(|r| r.0))
+    }
+
+    async fn record_orphaned_close_trade(
+        &self,
+        bot_id: Uuid,
+        user_id: Uuid,
+        symbol: &str,
+        exchange: &str,
+        grid_level: i32,
+        close_side: &str,
+        close_price: f64,
+        close_quantity: f64,
+        close_order_id: Option<&str>,
+        pnl: f64,
+        pnl_pct: f64,
+    ) -> anyhow::Result<Uuid> {
+        let open_side = if close_side == "buy" { "sell" } else { "buy" };
+        let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
+        let row: (Uuid,) = sqlx::query_as(
+            r#"INSERT INTO qd_grid_trades (bot_id, user_id, symbol, exchange, grid_level, open_side, open_price, open_quantity, close_side, close_price, close_quantity, close_order_id, closed_at, pnl, pnl_pct, status)
+               VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, NOW(), $12, $13, 'orphaned')
+               RETURNING id"#,
+        )
+        .bind(bot_id)
+        .bind(user_id)
+        .bind(symbol)
+        .bind(exchange)
+        .bind(grid_level)
+        .bind(open_side)
+        .bind(close_quantity)
+        .bind(close_side)
+        .bind(close_price)
+        .bind(close_quantity)
+        .bind(close_order_id)
+        .bind(pnl)
+        .bind(pnl_pct)
+        .fetch_one(&self.db)
+        .await?;
+        Ok(row.0)
     }
 
     async fn save_stats(&self, bot_id: Uuid, total_pnl: f64, unrealized_pnl: f64, total_trades: i32, grid_filled_count: i32, levels_json: Option<&serde_json::Value>) -> anyhow::Result<()> {
