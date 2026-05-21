@@ -13,8 +13,10 @@ impl GridWorker {
 从数据库加载该 bot 的所有历史成交，按价格匹配到网格层，
 重建每层的持仓量、均价、已填充标志等状态 */
     pub(crate) async fn load_existing_trades(&mut self) {
-        let trades = self.store.load_trades(self.bot.id).await.unwrap_or_default();
+        let mut trades = self.store.load_trades(self.bot.id).await.unwrap_or_default();
         let max_dist = self.grid_spacing();
+
+        trades.sort_by_key(|t| t.id);
 
         let trade_count = trades.len();
         for trade in &trades {
@@ -34,7 +36,10 @@ impl GridWorker {
             self.total_pnl += trade.pnl;
             self.total_trades += if trade.close_side.is_some() { 2 } else { 1 };
             self.grid_filled_count += if trade.close_side.is_some() { 2 } else { 1 };
-            self.update_consecutive_losses(trade.pnl);
+        }
+
+        for pnl in trades.iter().rev().filter_map(|t| if t.close_side.is_some() { Some(t.pnl) } else { None }) {
+            self.update_consecutive_losses(pnl);
         }
 
         for trade in &trades {
