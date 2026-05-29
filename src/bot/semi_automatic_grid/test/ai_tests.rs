@@ -575,7 +575,6 @@ fn grid_decision_clone() {
         leverage: None,
         market_regime: None,
         analysis: None,
-        grid_levels_json: None,
         funding_rate_warning: None,
         event_impact: None,
         risk_warning: None,
@@ -636,11 +635,7 @@ fn grid_decision_from_json_full_params() {
         "quantity_per_grid": 20.0,
         "leverage": 3,
         "market_regime": "ranging",
-        "analysis": "Market is ranging with moderate volatility",
-        "grid_levels": [
-            { "level": 1, "price": 47000.0, "side": "buy", "quantity_usdt": 20.0 },
-            { "level": 2, "price": 63000.0, "side": "sell", "quantity_usdt": 20.0 }
-        ]
+        "analysis": "Market is ranging with moderate volatility"
     });
     let decision = GridDecision::from_json(&json);
     assert_eq!(decision.grid_count, Some(10));
@@ -649,8 +644,6 @@ fn grid_decision_from_json_full_params() {
     assert_eq!(decision.leverage, Some(3));
     assert_eq!(decision.market_regime, Some("ranging".to_string()));
     assert_eq!(decision.analysis, Some("Market is ranging with moderate volatility".to_string()));
-    assert!(decision.grid_levels_json.is_some());
-    assert_eq!(decision.grid_levels_json.unwrap().as_array().unwrap().len(), 2);
 }
 
 #[test]
@@ -666,7 +659,6 @@ fn grid_decision_from_json_missing_optional_params() {
     assert_eq!(decision.leverage, None);
     assert_eq!(decision.market_regime, None);
     assert_eq!(decision.analysis, None);
-    assert_eq!(decision.grid_levels_json, None);
 }
 
 #[test]
@@ -684,17 +676,6 @@ fn grid_decision_from_json_partial_params() {
     assert_eq!(decision.grid_profit_pct, None);
     assert_eq!(decision.quantity_per_grid, None);
     assert_eq!(decision.leverage, Some(5));
-}
-
-#[test]
-fn grid_decision_from_json_grid_levels_not_array() {
-    let json = serde_json::json!({
-        "recommended_action": "hold",
-        "action_reason": "test",
-        "grid_levels": "not_an_array"
-    });
-    let decision = GridDecision::from_json(&json);
-    assert_eq!(decision.grid_levels_json, None);
 }
 
 #[test]

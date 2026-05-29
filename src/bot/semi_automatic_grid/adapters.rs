@@ -399,7 +399,7 @@ impl GridStore for PgGridStore {
 
     async fn load_trades(&self, bot_id: Uuid) -> anyhow::Result<Vec<GridTradeRecord>> {
         let trades: Vec<crate::models::GridTrade> = sqlx::query_as(
-            "SELECT * FROM qd_grid_trades WHERE bot_id = $1 ORDER BY created_at DESC",
+            "SELECT * FROM qd_grid_trades WHERE bot_id = $1 ORDER BY opened_at ASC",
         )
         .bind(bot_id)
         .fetch_all(&self.db)
@@ -417,6 +417,7 @@ impl GridStore for PgGridStore {
                 close_price: t.close_price,
                 close_quantity: t.close_quantity,
                 pnl: t.pnl,
+                opened_at: t.opened_at,
             })
             .collect())
     }
@@ -513,6 +514,7 @@ impl GridStore for PgGridStore {
     ) -> anyhow::Result<Uuid> {
         let open_side = if close_side == "buy" { "sell" } else { "buy" };
         let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
+        let open_quantity = close_quantity;
         let row: (Uuid,) = sqlx::query_as(
             r#"INSERT INTO qd_grid_trades (bot_id, user_id, symbol, exchange, grid_level, open_side, open_price, open_quantity, close_side, close_price, close_quantity, close_order_id, closed_at, pnl, pnl_pct, status)
                VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, NOW(), $12, $13, 'orphaned')
@@ -524,7 +526,7 @@ impl GridStore for PgGridStore {
         .bind(exchange)
         .bind(grid_level)
         .bind(open_side)
-        .bind(close_quantity)
+        .bind(open_quantity)
         .bind(close_side)
         .bind(close_price)
         .bind(close_quantity)
@@ -608,15 +610,14 @@ impl GridStore for PgGridStore {
         quantity_per_grid: f64,
         leverage: i32,
         ai_analysis: &str,
-        grid_levels_json: Option<&serde_json::Value>,
     ) -> anyhow::Result<()> {
         sqlx::query(
             r#"UPDATE qd_grid_bots SET
                 market_regime = $1, upper_price = $2, lower_price = $3,
                 grid_count = $4, grid_profit_pct = $5, quantity_per_grid = $6,
-                leverage = $7, ai_analysis = $8, grid_levels_json = $9::jsonb,
+                leverage = $7, ai_analysis = $8,
                 last_adjusted_at = NOW(), updated_at = NOW()
-               WHERE id = $10"#,
+               WHERE id = $9"#,
         )
         .bind(market_regime)
         .bind(upper_price)
@@ -626,7 +627,6 @@ impl GridStore for PgGridStore {
         .bind(quantity_per_grid)
         .bind(leverage)
         .bind(ai_analysis)
-        .bind(grid_levels_json)
         .bind(bot_id)
         .execute(&self.db)
         .await?;

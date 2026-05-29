@@ -27,13 +27,19 @@ impl GridWorker {
             return;
         }
 
+        let is_initial = self.bot.upper_price <= 0.0 || self.bot.lower_price <= 0.0 || self.levels.is_empty();
+
         let (system_prompt, user_prompt) = match self.build_llm_prompt().await {
             Some(prompts) => prompts,
             None => return,
         };
 
-        let decision = self.ai_service.grid_decision(&self.bot.user_id, &system_prompt, &user_prompt).await;
-        let action = self.handle_llm_result(&decision, &system_prompt, &user_prompt).await;
+        let decision_result = self.ai_service.grid_decision(&self.bot.user_id, &system_prompt, &user_prompt).await;
+        let (decision, raw_llm_response) = match decision_result {
+            Some((d, raw)) => (Some(d), Some(raw)),
+            None => (None, None),
+        };
+        let action = self.handle_llm_result(&decision, &system_prompt, &user_prompt, raw_llm_response.as_ref(), is_initial).await;
 
         self.execute_decision(&action, decision.as_ref()).await;
         let _ = self.store.update_last_adjusted(self.bot.id).await;
@@ -132,6 +138,8 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
         decision: &Option<GridDecision>,
         system_prompt: &str,
         user_prompt: &str,
+        raw_llm_response: Option<&serde_json::Value>,
+        is_initial: bool,
     ) -> GridAction {
         match decision {
             Some(d) => {
@@ -147,7 +155,7 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                     info!(bot_id = %self.bot.id, impact = %w, "Event impact from LLM");
                 }
 
-                let result = serde_json::json!({
+                let mut result = serde_json::json!({
                     "action": d.action.as_str(),
                     "reason": d.reason,
                     "confidence": d.confidence,
@@ -163,9 +171,13 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                     "funding_rate_warning": d.funding_rate_warning,
                     "event_impact": d.event_impact,
                     "risk_warning": d.risk_warning,
+                    "analysis": d.analysis,
                 });
+                if let Some(raw) = raw_llm_response {
+                    result.as_object_mut().unwrap().insert("raw_llm_response".to_string(), raw.clone());
+                }
                 let _ = self.store.save_analysis_log(
-                    self.bot.id, "periodic", system_prompt, user_prompt,
+                    self.bot.id, if is_initial { "initial" } else { "periodic" }, system_prompt, user_prompt,
                     &result, None,
                 ).await;
 
@@ -180,7 +192,7 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                     "reason": "LLM call failed, using rule-based fallback",
                 });
                 let _ = self.store.save_analysis_log(
-                    self.bot.id, "periodic", system_prompt, user_prompt,
+                    self.bot.id, if is_initial { "initial" } else { "periodic" }, system_prompt, user_prompt,
                     &result, Some("LLM call failed"),
                 ).await;
 
@@ -193,15 +205,22 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
         }
     }
 
-/** 执行 AI 决策 */
+/** 执行 AI 决策
+
+参数应用优先级：无论 action 是什么，LLM 返回的非结构参数（market_regime、leverage、
+quantity_per_grid）始终先应用到 bot 配置和 DB。
+结构参数（upper_price、lower_price、grid_count、grid_profit_pct）仅在
+action 为 AdjustGrid 或首次初始化时才应用，避免 Hold/PauseGrid 等操作
+意外触发网格重建。
+
+层级方向（side）由 current_price 自动判定，不再依赖 LLM 返回的 grid_levels_json。 */
     pub(crate) async fn execute_decision(&mut self, action: &GridAction, decision: Option<&GridDecision>) {
         let needs_params = self.bot.upper_price <= 0.0 || self.bot.lower_price <= 0.0;
+        let allow_structure_change = needs_params || matches!(action, GridAction::AdjustGrid { .. });
 
         let mut structure_changed = false;
         if let Some(d) = decision {
-            if needs_params || matches!(action, GridAction::AdjustGrid { .. }) {
-                structure_changed = self.apply_llm_params(d, needs_params).await;
-            }
+            structure_changed = self.apply_llm_params(d, needs_params, allow_structure_change).await;
         }
 
         match action {
@@ -211,22 +230,27 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
             GridAction::RunGrid => {
                 if self.paused {
                     self.paused = false;
+                    self.save_stats().await;
                     self.place_initial_orders().await;
                     info!(bot_id = %self.bot.id, "Grid resumed by decision");
                 }
             }
             GridAction::ReducePosition => {
-                let new_qty = self.bot.quantity_per_grid * 0.5;
-                let _ = self.store.update_quantity_per_grid(self.bot.id, new_qty).await;
-                self.bot.quantity_per_grid = new_qty;
+                let min_qty = 1.0;
+                if decision.map_or(true, |d| d.quantity_per_grid.is_none()) {
+                    let new_qty = (self.bot.quantity_per_grid * 0.5).max(min_qty);
+                    self.bot.quantity_per_grid = new_qty;
+                    let _ = self.store.update_quantity_per_grid(self.bot.id, new_qty).await;
+                }
                 let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
                     symbol: Some(self.bot.symbol.clone()),
                 }).await;
                 self.recalculate_levels();
+                self.save_stats().await;
                 if !self.paused {
                     self.place_initial_orders().await;
                 }
-                warn!(bot_id = %self.bot.id, new_qty, "Position reduced by decision");
+                warn!(bot_id = %self.bot.id, quantity_per_grid = self.bot.quantity_per_grid, "Position reduced by decision");
             }
             GridAction::AdjustGrid { .. } => {
                 if needs_params {
@@ -254,57 +278,64 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
         }
     }
 
-/** 将 LLM 决策中的网格参数应用到 bot 配置并持久化
+/** 将 LLM 决策中的参数应用到 bot 配置并持久化
 
-当 bot 参数为空（首次分析）或 LLM 返回 adjust_grid 时调用，
-更新 grid_count/grid_profit_pct/quantity_per_grid/leverage 等结构参数 */
-    async fn apply_llm_params(&mut self, d: &GridDecision, needs_params: bool) -> bool {
+参数分两类：
+- 非结构参数（始终应用）：market_regime、leverage、quantity_per_grid
+- 结构参数（仅 allow_structure_change=true 时应用）：upper_price、lower_price、
+  grid_count、grid_profit_pct，这些参数变化会触发 recalculate_levels
+
+side 由 current_price 自动判定（低于当前价 buy，高于当前价 sell），
+不再依赖 LLM 返回的 grid_levels_json。
+
+无论 action 是什么，非结构参数始终先应用，确保 LLM 的市场判断和风控建议
+（如 leverage 调整、market_regime 更新）不会因 action 类型而被跳过。 */
+    async fn apply_llm_params(&mut self, d: &GridDecision, needs_params: bool, allow_structure_change: bool) -> bool {
         let mut structure_changed = false;
 
-        if let Some(count) = d.grid_count {
-            if count > 0 && count != self.bot.grid_count {
-                self.bot.grid_count = count;
-                structure_changed = true;
-            }
-        }
-        if let Some(pct) = d.grid_profit_pct {
-            if pct > 0.0 && (pct - self.bot.grid_profit_pct).abs() > f64::EPSILON {
-                self.bot.grid_profit_pct = pct;
-                structure_changed = true;
-            }
-        }
-        if let Some(qty) = d.quantity_per_grid {
-            if qty > 0.0 {
-                self.bot.quantity_per_grid = qty;
-            }
+        if let Some(ref regime) = d.market_regime {
+            self.bot.market_regime = Some(regime.clone());
         }
         if let Some(lev) = d.leverage {
             if lev > 0 {
                 self.bot.leverage = lev;
             }
         }
-        if let Some(ref regime) = d.market_regime {
-            self.bot.market_regime = Some(regime.clone());
-        }
-        if let Some(ref levels_json) = d.grid_levels_json {
-            self.bot.grid_levels_json = Some(levels_json.clone());
+        if let Some(qty) = d.quantity_per_grid {
+            if qty > 0.0 {
+                self.bot.quantity_per_grid = qty.max(1.0);
+            }
         }
 
-        if needs_params {
-            if let Some(upper) = d.upper_price {
-                if upper > 0.0 {
-                    self.bot.upper_price = upper;
+        if allow_structure_change {
+            if let Some(count) = d.grid_count {
+                if count > 0 && count != self.bot.grid_count {
+                    self.bot.grid_count = count;
                     structure_changed = true;
                 }
             }
-            if let Some(lower) = d.lower_price {
-                if lower > 0.0 {
-                    self.bot.lower_price = lower;
+            if let Some(pct) = d.grid_profit_pct {
+                if pct > 0.0 && (pct - self.bot.grid_profit_pct).abs() > f64::EPSILON {
+                    self.bot.grid_profit_pct = pct;
                     structure_changed = true;
                 }
             }
-            if self.bot.upper_price > 0.0 && self.bot.lower_price > 0.0 {
-                let _ = self.store.update_grid_params(self.bot.id, self.bot.upper_price, self.bot.lower_price).await;
+            if needs_params {
+                if let Some(upper) = d.upper_price {
+                    if upper > 0.0 {
+                        self.bot.upper_price = upper;
+                        structure_changed = true;
+                    }
+                }
+                if let Some(lower) = d.lower_price {
+                    if lower > 0.0 {
+                        self.bot.lower_price = lower;
+                        structure_changed = true;
+                    }
+                }
+                if self.bot.upper_price > 0.0 && self.bot.lower_price > 0.0 {
+                    let _ = self.store.update_grid_params(self.bot.id, self.bot.upper_price, self.bot.lower_price).await;
+                }
             }
         }
 
@@ -322,8 +353,9 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
             self.bot.quantity_per_grid,
             self.bot.leverage,
             d.analysis.as_deref().unwrap_or(""),
-            d.grid_levels_json.as_ref(),
         ).await;
+
+        self.save_stats().await;
 
         info!(
             bot_id = %self.bot.id,
@@ -331,6 +363,7 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
             grid_profit_pct = self.bot.grid_profit_pct,
             quantity_per_grid = self.bot.quantity_per_grid,
             leverage = self.bot.leverage,
+            allow_structure_change,
             structure_changed,
             "LLM params applied"
         );
@@ -385,6 +418,12 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                     self.bot.quantity_per_grid = updated_bot.quantity_per_grid;
                     self.bot.dynamic_adjust = updated_bot.dynamic_adjust;
                     self.bot.adjust_interval_secs = updated_bot.adjust_interval_secs;
+                }
+                self.bot.system_prompt = updated_bot.system_prompt;
+                self.bot.leverage = updated_bot.leverage;
+                self.bot.market_regime = updated_bot.market_regime;
+                self.bot.grid_levels_json = updated_bot.grid_levels_json;
+                if !price_changed && !structure_changed {
                     info!(bot_id = %self.bot.id, "Adjust signal received, non-structural params updated");
                 }
             }
@@ -447,6 +486,7 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
 
         let _ = self.store.update_grid_params(self.bot.id, self.bot.upper_price, self.bot.lower_price).await;
         self.recalculate_levels();
+        self.save_stats().await;
 
         if !self.paused {
             self.place_initial_orders().await;
@@ -478,7 +518,7 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
             .collect();
         drop(old_levels);
 
-        self.levels = Self::calculate_levels(&self.bot);
+        self.levels = Self::calculate_levels(&self.bot, self.current_price);
 
         let max_dist = self.grid_spacing();
 
@@ -494,14 +534,27 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                 }
                 matched.insert(idx);
                 let level = &mut self.levels[idx];
-                level.hold_quantity = old.hold_quantity;
-                level.avg_buy_price = old.avg_buy_price;
-                level.buy_filled = old.buy_filled;
-                level.sell_filled = old.sell_filled;
-                level.last_fill_price = old.last_fill_price;
-                level.trade_id = old.trade_id;
-                level.buy_order_id = old.buy_order_id;
-                level.sell_order_id = old.sell_order_id;
+                let side_changed = old.side != level.side;
+                if side_changed {
+                    warn!(
+                        bot_id = %self.bot.id, old_side = %old.side, new_side = %level.side,
+                        old_price = old.price, new_level_price = level.price,
+                        "Level side changed after grid adjustment, clearing holdings for this level"
+                    );
+                    level.buy_filled = false;
+                    level.sell_filled = false;
+                    level.last_fill_price = None;
+                    level.trade_id = None;
+                    level.buy_order_id = None;
+                    level.sell_order_id = None;
+                } else {
+                    level.hold_quantity = old.hold_quantity;
+                    level.avg_buy_price = old.avg_buy_price;
+                    level.buy_filled = old.buy_filled;
+                    level.sell_filled = old.sell_filled;
+                    level.last_fill_price = old.last_fill_price;
+                    level.trade_id = old.trade_id;
+                }
             }
         }
 

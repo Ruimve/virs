@@ -69,7 +69,6 @@ pub struct GridDecision {
     pub leverage: Option<i32>,
     pub market_regime: Option<String>,
     pub analysis: Option<String>,
-    pub grid_levels_json: Option<serde_json::Value>,
     pub funding_rate_warning: Option<String>,
     pub event_impact: Option<String>,
     pub risk_warning: Option<String>,
@@ -96,9 +95,6 @@ impl GridDecision {
         let leverage = json["leverage"].as_i64().map(|v| v as i32);
         let market_regime = json["market_regime"].as_str().map(|s| s.to_string());
         let analysis = json["analysis"].as_str().map(|s| s.to_string());
-        let grid_levels_json = json.get("grid_levels")
-            .filter(|v| v.is_array())
-            .cloned();
         let confidence = json["confidence"].as_f64().unwrap_or(0.5).clamp(0.0, 1.0);
         let funding_rate_warning = json["funding_rate_warning"].as_str()
             .filter(|s| !s.eq_ignore_ascii_case("none"))
@@ -142,7 +138,6 @@ impl GridDecision {
             leverage,
             market_regime,
             analysis,
-            grid_levels_json,
             funding_rate_warning,
             event_impact,
             risk_warning,
@@ -211,9 +206,12 @@ impl GridAiService {
         user_id: &Uuid,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> Option<GridDecision> {
+    ) -> Option<(GridDecision, serde_json::Value)> {
         match self.call_llm(user_id, system_prompt, user_prompt).await {
-            Ok(json) => Some(GridDecision::from_json(&json)),
+            Ok(json) => {
+                let decision = GridDecision::from_json(&json);
+                Some((decision, json))
+            }
             Err(e) => {
                 warn!("LLM grid decision failed, falling back to rules: {}", e);
                 None

@@ -16,7 +16,7 @@ impl GridWorker {
         let mut trades = self.store.load_trades(self.bot.id).await.unwrap_or_default();
         let max_dist = self.grid_spacing();
 
-        trades.sort_by_key(|t| t.id);
+        trades.sort_by_key(|t| t.opened_at);
 
         let trade_count = trades.len();
         for trade in &trades {
@@ -36,6 +36,7 @@ impl GridWorker {
             self.total_pnl += trade.pnl;
             self.total_trades += 1;
             if trade.close_side.is_some() {
+                self.total_trades += 1;
                 self.grid_filled_count += 1;
             }
         }
@@ -178,7 +179,9 @@ impl GridWorker {
 /** 持久化统计数据到数据库 */
     pub(crate) async fn save_stats(&self) {
         let levels_json = serde_json::to_value(&self.levels).ok();
-        let _ = self.store.save_stats(self.bot.id, self.total_pnl, self.compute_unrealized_pnl(), self.total_trades, self.grid_filled_count, levels_json.as_ref()).await;
+        if let Err(e) = self.store.save_stats(self.bot.id, self.total_pnl, self.compute_unrealized_pnl(), self.total_trades, self.grid_filled_count, levels_json.as_ref()).await {
+            tracing::error!(bot_id = %self.bot.id, error = %e, "save_stats failed");
+        }
     }
 
 /** 广播当前网格状态 */
@@ -455,6 +458,18 @@ impl GridWorker {
                 self.levels[idx].sell_order_id = None;
             }
             self.pending_orders.remove(&(idx, side));
+        }
+    }
+
+/** 清除所有 pending_orders 并重置层级中的 order_id
+
+当 broadcast channel lag 导致事件丢失时调用，
+防止 pending_orders 中存在永远无法清理的条目 */
+    pub(crate) fn clear_pending_orders(&mut self) {
+        self.pending_orders.clear();
+        for level in &mut self.levels {
+            level.buy_order_id = None;
+            level.sell_order_id = None;
         }
     }
 }

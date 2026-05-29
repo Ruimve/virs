@@ -99,7 +99,8 @@ impl GridWorker {
                     match event {
                         Ok(event) => self.on_order_event(event).await,
                         Err(broadcast::error::RecvError::Lagged(n)) => {
-                            warn!(bot_id = %self.bot.id, lagged = n, "Event lagged");
+                            warn!(bot_id = %self.bot.id, lagged = n, "Event lagged, clearing pending orders to prevent stale state");
+                            self.clear_pending_orders();
                         }
                         Err(broadcast::error::RecvError::Closed) => {
                             warn!(bot_id = %self.bot.id, "Event channel closed");

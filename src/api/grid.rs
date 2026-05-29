@@ -165,6 +165,71 @@ pub async fn list_bots(
     }))))
 }
 
+// ── Grid Levels Builder ──
+
+fn build_grid_levels(bot: &GridBot) -> Vec<serde_json::Value> {
+    if bot.grid_count <= 0 || bot.upper_price <= 0.0 || bot.lower_price <= 0.0 || bot.upper_price <= bot.lower_price {
+        return vec![];
+    }
+
+    let snapshot_levels: Vec<serde_json::Value> = bot.grid_levels_json
+        .as_ref()
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default();
+
+    let grid_spacing = (bot.upper_price - bot.lower_price) / bot.grid_count as f64;
+    let profit_factor = 1.0 + bot.grid_profit_pct / 100.0;
+    let mid_price = (bot.upper_price + bot.lower_price) / 2.0;
+
+    (0..bot.grid_count)
+        .map(|i| {
+            let price = bot.lower_price + grid_spacing * (i as f64 + 0.5);
+            let snap = snapshot_levels.iter().find(|v| v["level"].as_i64() == Some(i as i64));
+
+            let side = snap
+                .and_then(|l| l["side"].as_str())
+                .unwrap_or(if price < mid_price { "buy" } else { "sell" });
+
+            let (buy_price, sell_price) = if let Some(l) = snap {
+                let bp = l["buy_price"].as_f64().unwrap_or_else(|| if side == "buy" { price } else { price / profit_factor });
+                let sp = l["sell_price"].as_f64().unwrap_or_else(|| if side == "buy" { price * profit_factor } else { price });
+                (bp, sp)
+            } else if side == "buy" {
+                (price, price * profit_factor)
+            } else {
+                (price / profit_factor, price)
+            };
+
+            let quantity = snap.and_then(|v| v["quantity"].as_f64())
+                .unwrap_or_else(|| bot.quantity_per_grid / price);
+
+            let hold_quantity = snap.and_then(|v| v["hold_quantity"].as_f64()).unwrap_or(0.0);
+            let avg_buy_price = snap.and_then(|v| v["avg_buy_price"].as_f64()).unwrap_or(0.0);
+            let last_fill_price = snap.and_then(|v| v["last_fill_price"].as_f64()).unwrap_or(0.0);
+            let buy_filled = snap.and_then(|v| v["buy_filled"].as_bool()).unwrap_or(false);
+            let sell_filled = snap.and_then(|v| v["sell_filled"].as_bool()).unwrap_or(false);
+            let filled = hold_quantity.abs() > 0.0 || (buy_filled && sell_filled);
+
+            serde_json::json!({
+                "level": i,
+                "price": price,
+                "side": side,
+                "buy_price": buy_price,
+                "sell_price": sell_price,
+                "open_price": if side == "buy" { buy_price } else { sell_price },
+                "close_price": if side == "buy" { sell_price } else { buy_price },
+                "filled": filled,
+                "quantity": quantity,
+                "buy_filled": buy_filled,
+                "sell_filled": sell_filled,
+                "hold_quantity": hold_quantity,
+                "avg_buy_price": avg_buy_price,
+                "last_fill_price": last_fill_price,
+            })
+        })
+        .collect()
+}
+
 // ── 3.4 GET /api/grid/{id} ──
 
 pub async fn get_bot(
@@ -212,136 +277,7 @@ pub async fn get_bot(
         )
     })?;
 
-    let filled_levels: Vec<i32> = sqlx::query_scalar(
-        r#"SELECT DISTINCT grid_level FROM qd_grid_trades WHERE bot_id = $1"#,
-    )
-    .bind(id)
-    .fetch_all(&state.db_pool)
-    .await
-    .unwrap_or_default();
-
-    let filled_set: std::collections::HashSet<i32> = filled_levels.into_iter().collect();
-
-    let sell_filled_levels: std::collections::HashSet<i32> = sqlx::query_scalar(
-        r#"SELECT DISTINCT grid_level FROM qd_grid_trades WHERE bot_id = $1 AND close_side = 'sell'"#,
-    )
-    .bind(id)
-    .fetch_all(&state.db_pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect();
-
-    let level_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-        r#"SELECT grid_level, SUM(open_quantity) FROM qd_grid_trades WHERE bot_id = $1 GROUP BY grid_level"#,
-    )
-    .bind(id)
-    .fetch_all(&state.db_pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect();
-
-    let buy_avg_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-        r#"SELECT grid_level, CASE WHEN SUM(open_quantity) > 0 THEN SUM(open_price * open_quantity) / SUM(open_quantity) ELSE 0 END FROM qd_grid_trades WHERE bot_id = $1 AND open_side = 'buy' GROUP BY grid_level"#,
-    )
-    .bind(id)
-    .fetch_all(&state.db_pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect();
-
-    let last_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-        r#"SELECT DISTINCT ON (grid_level) grid_level, COALESCE(close_price, open_price) FROM qd_grid_trades WHERE bot_id = $1 ORDER BY grid_level, created_at DESC"#,
-    )
-    .bind(id)
-    .fetch_all(&state.db_pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect();
-
-    let buy_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-        r#"SELECT grid_level, SUM(open_quantity) FROM qd_grid_trades WHERE bot_id = $1 AND open_side = 'buy' GROUP BY grid_level"#,
-    )
-    .bind(id)
-    .fetch_all(&state.db_pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect();
-
-    let sell_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-        r#"SELECT grid_level, SUM(close_quantity) FROM qd_grid_trades WHERE bot_id = $1 AND close_side = 'sell' AND close_quantity IS NOT NULL GROUP BY grid_level"#,
-    )
-    .bind(id)
-    .fetch_all(&state.db_pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect();
-
-    let grid_spacing = if bot.grid_count > 1 {
-        (bot.upper_price - bot.lower_price) / bot.grid_count as f64
-    } else {
-        0.0
-    };
-    let profit_factor = 1.0 + bot.grid_profit_pct / 100.0;
-    let mid_price = (bot.upper_price + bot.lower_price) / 2.0;
-
-    let llm_levels: Vec<serde_json::Value> = bot.grid_levels_json
-        .as_ref()
-        .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
-
-    let mut grid_levels = Vec::new();
-    for i in 0..bot.grid_count {
-        let price = bot.lower_price + grid_spacing * (i as f64 + 0.5);
-        let llm_level = llm_levels.iter().find(|v| v["level"].as_i64() == Some(i as i64));
-        let side = if let Some(l) = llm_level {
-            l["side"].as_str().unwrap_or("buy")
-        } else {
-            if price < mid_price { "buy" } else { "sell" }
-        };
-        let (buy_price, sell_price) = if let Some(l) = llm_level {
-            let bp = l["buy_price"].as_f64().unwrap_or_else(|| if side == "buy" { price } else { price / profit_factor });
-            let sp = l["sell_price"].as_f64().unwrap_or_else(|| if side == "buy" { price * profit_factor } else { price });
-            (bp, sp)
-        } else if side == "buy" {
-            (price, price * profit_factor)
-        } else {
-            (price / profit_factor, price)
-        };
-        let hold_quantity = llm_level.and_then(|v| v["hold_quantity"].as_f64()).unwrap_or_else(|| {
-            let buy_qty = buy_quantities.get(&i).copied().unwrap_or(0.0);
-            let sell_qty = sell_quantities.get(&i).copied().unwrap_or(0.0);
-            if side == "buy" { (buy_qty - sell_qty).max(0.0) } else { (sell_qty - buy_qty).max(0.0) * -1.0 }
-        });
-        let buy_filled = llm_level.and_then(|v| v["buy_filled"].as_bool()).unwrap_or_else(|| buy_avg_prices.contains_key(&i));
-        let sell_filled = llm_level.and_then(|v| v["sell_filled"].as_bool()).unwrap_or_else(|| sell_filled_levels.contains(&i));
-        let avg_buy_price = llm_level.and_then(|v| v["avg_buy_price"].as_f64()).unwrap_or_else(|| buy_avg_prices.get(&i).copied().unwrap_or(0.0));
-        let last_fill_price = llm_level.and_then(|v| v["last_fill_price"].as_f64()).unwrap_or_else(|| {
-            last_fill_prices.get(&i).copied().unwrap_or(0.0)
-        });
-        let quantity = llm_level.and_then(|v| v["quantity"].as_f64()).unwrap_or_else(|| level_quantities.get(&i).copied().unwrap_or(0.0));
-        grid_levels.push(serde_json::json!({
-            "level": i,
-            "price": price,
-            "side": side,
-            "buy_price": buy_price,
-            "sell_price": sell_price,
-            "open_price": if side == "buy" { buy_price } else { sell_price },
-            "close_price": if side == "buy" { sell_price } else { buy_price },
-            "filled": filled_set.contains(&i),
-            "quantity": quantity,
-            "buy_filled": buy_filled,
-            "sell_filled": sell_filled,
-            "hold_quantity": hold_quantity,
-            "avg_buy_price": avg_buy_price,
-            "last_fill_price": last_fill_price,
-        }));
-    }
+    let grid_levels = build_grid_levels(&bot);
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "bot": bot,
@@ -392,14 +328,6 @@ pub async fn start_bot(
                 Json(ApiResponse::<serde_json::Value>::err("Bot is already running")),
             ));
         }
-        StrategyStatus::Stopped => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<serde_json::Value>::err(
-                    "Cannot start a stopped bot. Create a new one.",
-                )),
-            ));
-        }
         _ => {}
     }
 
@@ -418,6 +346,7 @@ pub async fn start_bot(
     let _ = super::market::ensure_exchange(&state, &bot.exchange, MarketType::Perpetual).await;
 
     // 通过 GridEngine 启动 bot（首次分析由 Worker 内部自动触发）
+    // Engine 负责更新 DB 状态，避免 API 与 Engine 双写竞态
     if let Some(ref grid_cmd_tx) = state.grid_cmd_tx {
         if let Err(e) = grid_cmd_tx.send(crate::bot::semi_automatic_grid::types::GridCommand::StartBot { bot_id: id }).await {
             return Err((
@@ -427,24 +356,10 @@ pub async fn start_bot(
         }
     }
 
-    // 同步更新 DB 状态，确保 API 返回时前端能看到正确状态
-    let _ = sqlx::query(
-        r#"UPDATE qd_grid_bots SET status = $2, started_at = NOW(), updated_at = NOW() WHERE id = $1"#,
-    )
-    .bind(id)
-    .bind(StrategyStatus::Running)
-    .execute(&state.db_pool)
-    .await;
-
-    let updated = sqlx::query_as::<_, GridBot>(
-        "SELECT * FROM qd_grid_bots WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_one(&state.db_pool)
-    .await
-    .unwrap_or(bot);
-
-    Ok(Json(ApiResponse::ok(serde_json::json!({ "bot": updated }))))
+    Ok(Json(ApiResponse::ok_with_message(
+        serde_json::json!({ "bot_id": id }),
+        "Start command sent, bot will transition to running state",
+    )))
 }
 
 // ── 3.6 POST /api/grid/{id}/stop ──
@@ -489,6 +404,7 @@ pub async fn stop_bot(
     }
 
     // 通过 GridEngine 停止 bot
+    // Engine 负责更新 DB 状态，避免 API 与 Engine 双写竞态
     if let Some(ref grid_cmd_tx) = state.grid_cmd_tx {
         if let Err(e) = grid_cmd_tx.send(crate::bot::semi_automatic_grid::types::GridCommand::StopBot { bot_id: id }).await {
             return Err((
@@ -498,24 +414,10 @@ pub async fn stop_bot(
         }
     }
 
-    // 同步更新 DB 状态
-    let _ = sqlx::query(
-        r#"UPDATE qd_grid_bots SET status = $2, stopped_at = NOW(), updated_at = NOW() WHERE id = $1"#,
-    )
-    .bind(id)
-    .bind(StrategyStatus::Stopped)
-    .execute(&state.db_pool)
-    .await;
-
-    let updated = sqlx::query_as::<_, GridBot>(
-        "SELECT * FROM qd_grid_bots WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_one(&state.db_pool)
-    .await
-    .unwrap_or(bot);
-
-    Ok(Json(ApiResponse::ok(serde_json::json!({ "bot": updated }))))
+    Ok(Json(ApiResponse::ok_with_message(
+        serde_json::json!({ "bot_id": id }),
+        "Stop command sent, bot will transition to stopped state",
+    )))
 }
 
 // ── 3.7 DELETE /api/grid/{id}/delete ──
@@ -676,141 +578,7 @@ pub async fn get_trades(
     .ok()
     .flatten();
 
-    let grid_levels = if let Some(ref b) = bot {
-        let filled_levels: Vec<i32> = sqlx::query_scalar(
-            r#"SELECT DISTINCT grid_level FROM qd_grid_trades WHERE bot_id = $1"#,
-        )
-        .bind(id)
-        .fetch_all(&state.db_pool)
-        .await
-        .unwrap_or_default();
-
-        let filled_set: std::collections::HashSet<i32> = filled_levels.into_iter().collect();
-
-        let level_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-            r#"SELECT grid_level, SUM(open_quantity) FROM qd_grid_trades WHERE bot_id = $1 GROUP BY grid_level"#,
-        )
-        .bind(id)
-        .fetch_all(&state.db_pool)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
-
-        let buy_avg_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-            r#"SELECT grid_level, CASE WHEN SUM(open_quantity) > 0 THEN SUM(open_price * open_quantity) / SUM(open_quantity) ELSE 0 END FROM qd_grid_trades WHERE bot_id = $1 AND open_side = 'buy' GROUP BY grid_level"#,
-        )
-        .bind(id)
-        .fetch_all(&state.db_pool)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
-
-        let last_fill_prices: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-            r#"SELECT DISTINCT ON (grid_level) grid_level, COALESCE(close_price, open_price) FROM qd_grid_trades WHERE bot_id = $1 ORDER BY grid_level, created_at DESC"#,
-        )
-        .bind(id)
-        .fetch_all(&state.db_pool)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
-
-        let sell_filled_levels: std::collections::HashSet<i32> = sqlx::query_scalar(
-            r#"SELECT DISTINCT grid_level FROM qd_grid_trades WHERE bot_id = $1 AND close_side = 'sell'"#,
-        )
-        .bind(id)
-        .fetch_all(&state.db_pool)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
-
-        let buy_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-            r#"SELECT grid_level, SUM(open_quantity) FROM qd_grid_trades WHERE bot_id = $1 AND open_side = 'buy' GROUP BY grid_level"#,
-        )
-        .bind(id)
-        .fetch_all(&state.db_pool)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
-
-        let sell_quantities: std::collections::HashMap<i32, f64> = sqlx::query_as::<_, (i32, f64)>(
-            r#"SELECT grid_level, SUM(close_quantity) FROM qd_grid_trades WHERE bot_id = $1 AND close_side = 'sell' AND close_quantity IS NOT NULL GROUP BY grid_level"#,
-        )
-        .bind(id)
-        .fetch_all(&state.db_pool)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
-
-        let grid_spacing = if b.grid_count > 1 {
-            (b.upper_price - b.lower_price) / b.grid_count as f64
-        } else {
-            0.0
-        };
-        let profit_factor = 1.0 + b.grid_profit_pct / 100.0;
-        let mid_price = (b.upper_price + b.lower_price) / 2.0;
-
-        let llm_levels: Vec<serde_json::Value> = b.grid_levels_json
-            .as_ref()
-            .and_then(|v| v.as_array().cloned())
-            .unwrap_or_default();
-
-        (0..b.grid_count)
-            .map(|i| {
-                let price = b.lower_price + grid_spacing * (i as f64 + 0.5);
-                let llm_level = llm_levels.iter().find(|v| v["level"].as_i64() == Some(i as i64));
-                let side = if let Some(l) = llm_level {
-                    l["side"].as_str().unwrap_or("buy")
-                } else {
-                    if price < mid_price { "buy" } else { "sell" }
-                };
-                let (buy_price, sell_price) = if let Some(l) = llm_level {
-                    let bp = l["buy_price"].as_f64().unwrap_or_else(|| if side == "buy" { price } else { price / profit_factor });
-                    let sp = l["sell_price"].as_f64().unwrap_or_else(|| if side == "buy" { price * profit_factor } else { price });
-                    (bp, sp)
-                } else if side == "buy" {
-                    (price, price * profit_factor)
-                } else {
-                    (price / profit_factor, price)
-                };
-                let hold_quantity = llm_level.and_then(|v| v["hold_quantity"].as_f64()).unwrap_or_else(|| {
-                    let buy_qty = buy_quantities.get(&i).copied().unwrap_or(0.0);
-                    let sell_qty = sell_quantities.get(&i).copied().unwrap_or(0.0);
-                    if side == "buy" { (buy_qty - sell_qty).max(0.0) } else { (sell_qty - buy_qty).max(0.0) * -1.0 }
-                });
-                let buy_filled = llm_level.and_then(|v| v["buy_filled"].as_bool()).unwrap_or_else(|| buy_avg_prices.contains_key(&i));
-                let sell_filled = llm_level.and_then(|v| v["sell_filled"].as_bool()).unwrap_or_else(|| sell_filled_levels.contains(&i));
-                let avg_buy_price = llm_level.and_then(|v| v["avg_buy_price"].as_f64()).unwrap_or_else(|| buy_avg_prices.get(&i).copied().unwrap_or(0.0));
-                let last_fill_price = llm_level.and_then(|v| v["last_fill_price"].as_f64()).unwrap_or_else(|| {
-                    last_fill_prices.get(&i).copied().unwrap_or(0.0)
-                });
-                let quantity = llm_level.and_then(|v| v["quantity"].as_f64()).unwrap_or_else(|| level_quantities.get(&i).copied().unwrap_or(0.0));
-                serde_json::json!({
-                    "level": i,
-                    "price": price,
-                    "side": side,
-                    "buy_price": buy_price,
-                    "sell_price": sell_price,
-                    "open_price": if side == "buy" { buy_price } else { sell_price },
-                    "close_price": if side == "buy" { sell_price } else { buy_price },
-                    "filled": filled_set.contains(&i),
-                    "quantity": quantity,
-                    "buy_filled": buy_filled,
-                    "sell_filled": sell_filled,
-                    "hold_quantity": hold_quantity,
-                    "avg_buy_price": avg_buy_price,
-                    "last_fill_price": last_fill_price,
-                })
-            })
-            .collect::<Vec<_>>()
-    } else {
-        vec![]
-    };
+    let grid_levels = bot.as_ref().map(|b| build_grid_levels(b)).unwrap_or_default();
 
     let total_pages = (total.0 + page_size - 1) / page_size;
 

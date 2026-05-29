@@ -33,7 +33,7 @@ impl GridWorker {
                     && l.buy_price < self.current_price
                     && !l.buy_filled
                     && l.buy_order_id.is_none()
-                    && i.saturating_sub(current_level_idx) <= range
+                    && (*i as i32 - current_level_idx as i32).abs() <= range as i32
             })
             .map(|(_, l)| l.clone())
             .collect();
@@ -46,7 +46,7 @@ impl GridWorker {
                     && l.sell_price > self.current_price
                     && !l.sell_filled
                     && l.sell_order_id.is_none()
-                    && i.saturating_sub(current_level_idx) <= range
+                    && (*i as i32 - current_level_idx as i32).abs() <= range as i32
             })
             .map(|(_, l)| l.clone())
             .collect();

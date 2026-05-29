@@ -42,6 +42,8 @@ pub struct GridTradeRecord {
     pub close_quantity: Option<f64>,
 /** 已实现盈亏（平仓时计算） */
     pub pnl: f64,
+/** 开仓时间（用于按时间顺序回放交易） */
+    pub opened_at: chrono::DateTime<chrono::Utc>,
 }
 
 /** 网格 Bot 配置
@@ -180,7 +182,6 @@ pub trait GridStore: Send + Sync {
         quantity_per_grid: f64,
         leverage: i32,
         ai_analysis: &str,
-        grid_levels_json: Option<&serde_json::Value>,
     ) -> anyhow::Result<()>;
 /** 保存 AI 分析日志 */
     async fn save_analysis_log(

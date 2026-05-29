@@ -68,6 +68,8 @@ interface AnalysisLog {
   bot_id: string;
   analysis_type: string;
   status: string;
+  system_prompt: string;
+  user_prompt: string;
   result: Record<string, any>;
   error: string | null;
   created_at: string;
@@ -89,6 +91,8 @@ export default function GridDetailPage() {
   const [loadingAnalysis, setLoadingAnalysis] = createSignal(false);
 
   const [activeTab, setActiveTab] = createSignal<'levels' | 'trades' | 'analysis'>('levels');
+  const [showSystemPrompt, setShowSystemPrompt] = createSignal(false);
+  const [showUserPrompt, setShowUserPrompt] = createSignal(false);
 
   const loadBot = async () => {
     try {
@@ -475,6 +479,28 @@ export default function GridDetailPage() {
                                 <h3 class="text-sm font-medium text-gray-800">分析详情</h3>
                                 <span class="text-[10px] text-gray-400">{new Date(log().created_at).toLocaleString('zh-CN')}</span>
                               </div>
+                              <Show when={log().system_prompt}>
+                                <div>
+                                  <button onClick={() => setShowSystemPrompt(!showSystemPrompt())} class="flex items-center gap-1 text-[10px] text-gray-400 uppercase tracking-wider mb-1.5 hover:text-gray-600 transition-colors">
+                                    <svg class={`w-3 h-3 transition-transform ${showSystemPrompt() ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+                                    System Prompt
+                                  </button>
+                                  <Show when={showSystemPrompt()}>
+                                    <pre class="p-3 bg-gray-50 rounded-lg text-[11px] text-gray-600 whitespace-pre-wrap break-words max-h-48 overflow-auto border border-gray-100">{log().system_prompt}</pre>
+                                  </Show>
+                                </div>
+                              </Show>
+                              <Show when={log().user_prompt}>
+                                <div>
+                                  <button onClick={() => setShowUserPrompt(!showUserPrompt())} class="flex items-center gap-1 text-[10px] text-gray-400 uppercase tracking-wider mb-1.5 hover:text-gray-600 transition-colors">
+                                    <svg class={`w-3 h-3 transition-transform ${showUserPrompt() ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+                                    User Prompt
+                                  </button>
+                                  <Show when={showUserPrompt()}>
+                                    <pre class="p-3 bg-gray-50 rounded-lg text-[11px] text-gray-600 whitespace-pre-wrap break-words max-h-48 overflow-auto border border-gray-100">{log().user_prompt}</pre>
+                                  </Show>
+                                </div>
+                              </Show>
                               <Show when={log().result?.analysis}>
                                 <div>
                                   <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">AI 分析</div>
@@ -485,6 +511,12 @@ export default function GridDetailPage() {
                                 <div>
                                   <div class="text-[10px] text-amber-600 uppercase tracking-wider mb-1.5">风险提示</div>
                                   <p class="text-xs text-amber-700">{log().result.risk_warning}</p>
+                                </div>
+                              </Show>
+                              <Show when={log().result?.raw_llm_response}>
+                                <div>
+                                  <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">LLM 原始响应</div>
+                                  <pre class="p-3 bg-indigo-50 rounded-lg text-[11px] text-indigo-700 whitespace-pre-wrap break-words max-h-64 overflow-auto border border-indigo-100">{JSON.stringify(log().result.raw_llm_response, null, 2)}</pre>
                                 </div>
                               </Show>
                               <div>

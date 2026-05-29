@@ -1,6 +1,9 @@
 use super::common::*;
 use crate::bot::semi_automatic_grid::ports::*;
 use uuid::Uuid;
+use chrono::Utc;
+
+fn now_utc() -> chrono::DateTime<chrono::Utc> { Utc::now() }
 
 // ── OrderSide ──
 
@@ -368,6 +371,7 @@ fn grid_trade_record_construction() {
         close_price: None,
         close_quantity: None,
         pnl: 5.0,
+        opened_at: now_utc(),
     };
     assert_eq!(record.grid_level, 3);
     assert_eq!(record.open_side, "buy");
@@ -387,6 +391,7 @@ fn grid_trade_record_negative_pnl() {
         close_price: Some(49000.0),
         close_quantity: Some(0.002),
         pnl: -3.5,
+        opened_at: now_utc(),
     };
     assert!(record.pnl < 0.0);
 }
@@ -403,6 +408,7 @@ fn grid_trade_record_zero_pnl() {
         close_price: None,
         close_quantity: None,
         pnl: 0.0,
+        opened_at: now_utc(),
     };
     assert!((record.pnl).abs() < f64::EPSILON);
 }
@@ -419,6 +425,7 @@ fn grid_trade_record_zero_quantity() {
         close_price: None,
         close_quantity: None,
         pnl: 0.0,
+        opened_at: now_utc(),
     };
     assert!((record.open_quantity).abs() < f64::EPSILON);
 }
@@ -435,6 +442,7 @@ fn grid_trade_record_negative_level() {
         close_price: None,
         close_quantity: None,
         pnl: 0.0,
+        opened_at: now_utc(),
     };
     assert!(record.grid_level < 0);
 }
@@ -650,8 +658,8 @@ async fn mock_store_load_trades_empty() {
 #[tokio::test]
 async fn mock_store_load_trades_with_data() {
     let store = MockWorkerStore::new().with_trades(vec![
-        GridTradeRecord { id: Uuid::new_v4(), grid_level: 0, open_side: "buy".to_string(), open_price: 50000.0, open_quantity: 0.001, close_side: None, close_price: None, close_quantity: None, pnl: 0.0 },
-        GridTradeRecord { id: Uuid::new_v4(), grid_level: 1, open_side: "buy".to_string(), open_price: 50000.0, open_quantity: 0.001, close_side: Some("sell".to_string()), close_price: Some(51000.0), close_quantity: Some(0.001), pnl: 5.0 },
+        GridTradeRecord { id: Uuid::new_v4(), grid_level: 0, open_side: "buy".to_string(), open_price: 50000.0, open_quantity: 0.001, close_side: None, close_price: None, close_quantity: None, pnl: 0.0, opened_at: now_utc() },
+        GridTradeRecord { id: Uuid::new_v4(), grid_level: 1, open_side: "buy".to_string(), open_price: 50000.0, open_quantity: 0.001, close_side: Some("sell".to_string()), close_price: Some(51000.0), close_quantity: Some(0.001), pnl: 5.0, opened_at: now_utc() },
     ]);
     let trades = store.load_trades(Uuid::new_v4()).await.unwrap();
     assert_eq!(trades.len(), 2);
@@ -926,6 +934,7 @@ fn grid_trade_record_very_large_pnl() {
         close_price: Some(200000.0),
         close_quantity: Some(100.0),
         pnl: 1e8,
+        opened_at: now_utc(),
     };
     assert!(record.pnl > 1e7);
 }
@@ -942,6 +951,7 @@ fn grid_trade_record_very_large_quantity() {
         close_price: None,
         close_quantity: None,
         pnl: 0.0,
+        opened_at: now_utc(),
     };
     assert!(record.open_quantity > 1e5);
 }
@@ -958,6 +968,7 @@ fn grid_trade_record_invalid_side_string() {
         close_price: None,
         close_quantity: None,
         pnl: 0.0,
+        opened_at: now_utc(),
     };
     assert_eq!(record.open_side, "unknown");
 }

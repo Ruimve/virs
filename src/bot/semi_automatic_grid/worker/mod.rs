@@ -62,7 +62,7 @@ impl GridWorker {
         event_rx: broadcast::Receiver<OrderEvent>,
         grid_event_tx: broadcast::Sender<crate::bot::semi_automatic_grid::types::GridEvent>,
     ) -> Self {
-        let levels = crate::bot::semi_automatic_grid::utils::calculate_levels(&bot);
+        let levels = crate::bot::semi_automatic_grid::utils::calculate_levels(&bot, 0.0);
 
         Self {
             bot,
@@ -86,8 +86,8 @@ impl GridWorker {
     }
 
 /** 根据网格参数计算所有层级价格（委托给 utils::levels） */
-    pub(crate) fn calculate_levels(bot: &GridBotConfig) -> Vec<GridLevel> {
-        crate::bot::semi_automatic_grid::utils::calculate_levels(bot)
+    pub(crate) fn calculate_levels(bot: &GridBotConfig, current_price: f64) -> Vec<GridLevel> {
+        crate::bot::semi_automatic_grid::utils::calculate_levels(bot, current_price)
     }
 
 /** 通过 order_id 反向查找对应的层级索引和方向
