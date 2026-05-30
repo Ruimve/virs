@@ -76,32 +76,41 @@ pub struct GridDecision {
 
 impl GridDecision {
     pub fn from_json(json: &serde_json::Value) -> Self {
-        let action_str = json["recommended_action"]
+        let decision = &json["decision"];
+        let grid = &json["grid"];
+        let risk = &json["risk"];
+        let cancel = &json["cancel"];
+        let market = &json["market"];
+
+        let action_str = decision["action"]
             .as_str()
-            .or_else(|| json["action"].as_str())
             .unwrap_or("hold");
-        let reason = json["action_reason"]
+        let reason = decision["reason"]
             .as_str()
-            .or_else(|| json["reason"].as_str())
             .unwrap_or("No reason provided")
             .to_string();
-        let mut upper_price = json["upper_price"].as_f64();
-        let mut lower_price = json["lower_price"].as_f64();
-        let cancel_level = json["cancel_level"].as_i64().map(|v| v as i32);
-        let cancel_side = json["cancel_side"].as_str().map(|s| s.to_string());
-        let grid_count = json["grid_count"].as_i64().map(|v| v as i32);
-        let grid_profit_pct = json["grid_profit_pct"].as_f64();
-        let quantity_per_grid = json["quantity_per_grid"].as_f64();
-        let leverage = json["leverage"].as_i64().map(|v| v as i32);
-        let market_regime = json["market_regime"].as_str().map(|s| s.to_string());
+        let confidence = decision["confidence"].as_f64().unwrap_or(0.5).clamp(0.0, 1.0);
+
+        let mut upper_price = grid["upper_price"].as_f64();
+        let mut lower_price = grid["lower_price"].as_f64();
+        let grid_count = grid["grid_count"].as_i64().map(|v| v as i32);
+        let grid_profit_pct = grid["grid_profit_pct"].as_f64();
+
+        let quantity_per_grid = risk["quantity_per_grid"].as_f64();
+        let leverage = risk["leverage"].as_i64().map(|v| v as i32);
+
+        let cancel_level = cancel["level"].as_i64().map(|v| v as i32);
+        let cancel_side = cancel["side"].as_str().map(|s| s.to_string());
+
+        let market_regime = market["market_regime"].as_str().map(|s| s.to_string());
+        let funding_rate_warning = market["funding_rate_warning"].as_str()
+            .filter(|s| !s.eq_ignore_ascii_case("none"))
+            .map(|s| s.to_string());
+        let event_impact = market["event_impact"].as_str()
+            .filter(|s| !s.eq_ignore_ascii_case("none"))
+            .map(|s| s.to_string());
+
         let analysis = json["analysis"].as_str().map(|s| s.to_string());
-        let confidence = json["confidence"].as_f64().unwrap_or(0.5).clamp(0.0, 1.0);
-        let funding_rate_warning = json["funding_rate_warning"].as_str()
-            .filter(|s| !s.eq_ignore_ascii_case("none"))
-            .map(|s| s.to_string());
-        let event_impact = json["event_impact"].as_str()
-            .filter(|s| !s.eq_ignore_ascii_case("none"))
-            .map(|s| s.to_string());
         let risk_warning = json["risk_warning"].as_str()
             .filter(|s| !s.eq_ignore_ascii_case("none"))
             .map(|s| s.to_string());

@@ -74,10 +74,9 @@ fn grid_action_from_str_unknown_falls_to_hold() {
 // ── GridDecision::from_json ──
 
 #[test]
-fn grid_decision_from_json_recommended_action_field() {
+fn grid_decision_from_json_decision_action_field() {
     let json = serde_json::json!({
-        "recommended_action": "pause_grid",
-        "action_reason": "Price exceeded upper bound"
+        "decision": { "action": "pause_grid", "reason": "Price exceeded upper bound", "confidence": 0.8 }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::PauseGrid));
@@ -87,8 +86,7 @@ fn grid_decision_from_json_recommended_action_field() {
 #[test]
 fn grid_decision_from_json_resume_grid_action() {
     let json = serde_json::json!({
-        "recommended_action": "resume_grid",
-        "action_reason": "Market stabilized"
+        "decision": { "action": "resume_grid", "reason": "Market stabilized", "confidence": 0.7 }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::RunGrid));
@@ -97,8 +95,7 @@ fn grid_decision_from_json_resume_grid_action() {
 #[test]
 fn grid_decision_from_json_run_grid() {
     let json = serde_json::json!({
-        "recommended_action": "resume_grid",
-        "action_reason": "Price is in range"
+        "decision": { "action": "resume_grid", "reason": "Price is in range", "confidence": 0.6 }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::RunGrid));
@@ -110,10 +107,8 @@ fn grid_decision_from_json_run_grid() {
 #[test]
 fn grid_decision_from_json_pause_grid() {
     let json = serde_json::json!({
-        "recommended_action": "pause_grid",
-        "action_reason": "Price exceeded upper bound",
-        "upper_price": 62000.0,
-        "lower_price": 48000.0
+        "decision": { "action": "pause_grid", "reason": "Price exceeded upper bound", "confidence": 0.9 },
+        "grid": { "upper_price": 62000.0, "lower_price": 48000.0 }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::PauseGrid));
@@ -125,10 +120,8 @@ fn grid_decision_from_json_pause_grid() {
 #[test]
 fn grid_decision_from_json_adjust_grid() {
     let json = serde_json::json!({
-        "recommended_action": "adjust_grid",
-        "action_reason": "Volatility increased",
-        "upper_price": 65000.0,
-        "lower_price": 45000.0
+        "decision": { "action": "adjust_grid", "reason": "Volatility increased", "confidence": 0.75 },
+        "grid": { "upper_price": 65000.0, "lower_price": 45000.0 }
     });
     let decision = GridDecision::from_json(&json);
     match decision.action {
@@ -144,8 +137,7 @@ fn grid_decision_from_json_adjust_grid() {
 #[test]
 fn grid_decision_from_json_reduce_position() {
     let json = serde_json::json!({
-        "recommended_action": "reduce_position",
-        "action_reason": "High drawdown"
+        "decision": { "action": "reduce_position", "reason": "High drawdown", "confidence": 0.7 }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::ReducePosition));
@@ -155,8 +147,7 @@ fn grid_decision_from_json_reduce_position() {
 #[test]
 fn grid_decision_from_json_hold() {
     let json = serde_json::json!({
-        "recommended_action": "hold",
-        "action_reason": "No change needed"
+        "decision": { "action": "hold", "reason": "No change needed", "confidence": 0.5 }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::Hold));
@@ -165,8 +156,7 @@ fn grid_decision_from_json_hold() {
 #[test]
 fn grid_decision_from_json_unknown_action_defaults_hold() {
     let json = serde_json::json!({
-        "recommended_action": "something_else",
-        "action_reason": "Unknown"
+        "decision": { "action": "something_else", "reason": "Unknown", "confidence": 0.3 }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::Hold));
@@ -175,7 +165,7 @@ fn grid_decision_from_json_unknown_action_defaults_hold() {
 #[test]
 fn grid_decision_from_json_missing_action_defaults_hold() {
     let json = serde_json::json!({
-        "action_reason": "No action field"
+        "decision": { "reason": "No action field" }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::Hold));
@@ -193,7 +183,7 @@ fn grid_decision_from_json_empty_object() {
 #[test]
 fn grid_decision_from_json_missing_reason_defaults() {
     let json = serde_json::json!({
-        "recommended_action": "resume_grid"
+        "decision": { "action": "resume_grid" }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::RunGrid));
@@ -203,8 +193,7 @@ fn grid_decision_from_json_missing_reason_defaults() {
 #[test]
 fn grid_decision_from_json_non_string_action() {
     let json = serde_json::json!({
-        "recommended_action": 42,
-        "action_reason": "Action is number"
+        "decision": { "action": 42, "reason": "Action is number" }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::Hold));
@@ -213,8 +202,7 @@ fn grid_decision_from_json_non_string_action() {
 #[test]
 fn grid_decision_from_json_non_string_reason() {
     let json = serde_json::json!({
-        "recommended_action": "hold",
-        "action_reason": 123
+        "decision": { "action": "hold", "reason": 123 }
     });
     let decision = GridDecision::from_json(&json);
     assert_eq!(decision.reason, "No reason provided");
@@ -223,10 +211,8 @@ fn grid_decision_from_json_non_string_reason() {
 #[test]
 fn grid_decision_from_json_upper_price_not_number() {
     let json = serde_json::json!({
-        "recommended_action": "adjust_grid",
-        "action_reason": "test",
-        "upper_price": "not_a_number",
-        "lower_price": null
+        "decision": { "action": "adjust_grid", "reason": "test" },
+        "grid": { "upper_price": "not_a_number", "lower_price": null }
     });
     let decision = GridDecision::from_json(&json);
     match decision.action {
@@ -241,10 +227,8 @@ fn grid_decision_from_json_upper_price_not_number() {
 #[test]
 fn grid_decision_from_json_null_prices() {
     let json = serde_json::json!({
-        "recommended_action": "adjust_grid",
-        "action_reason": "test",
-        "upper_price": null,
-        "lower_price": null
+        "decision": { "action": "adjust_grid", "reason": "test" },
+        "grid": { "upper_price": null, "lower_price": null }
     });
     let decision = GridDecision::from_json(&json);
     match decision.action {
@@ -259,10 +243,8 @@ fn grid_decision_from_json_null_prices() {
 #[test]
 fn grid_decision_from_json_negative_prices() {
     let json = serde_json::json!({
-        "recommended_action": "adjust_grid",
-        "action_reason": "test",
-        "upper_price": -100.0,
-        "lower_price": -200.0
+        "decision": { "action": "adjust_grid", "reason": "test" },
+        "grid": { "upper_price": -100.0, "lower_price": -200.0 }
     });
     let decision = GridDecision::from_json(&json);
     match decision.action {
@@ -277,10 +259,8 @@ fn grid_decision_from_json_negative_prices() {
 #[test]
 fn grid_decision_from_json_zero_prices() {
     let json = serde_json::json!({
-        "recommended_action": "adjust_grid",
-        "action_reason": "test",
-        "upper_price": 0.0,
-        "lower_price": 0.0
+        "decision": { "action": "adjust_grid", "reason": "test" },
+        "grid": { "upper_price": 0.0, "lower_price": 0.0 }
     });
     let decision = GridDecision::from_json(&json);
     match decision.action {
@@ -295,8 +275,7 @@ fn grid_decision_from_json_zero_prices() {
 #[test]
 fn grid_decision_from_json_action_is_null() {
     let json = serde_json::json!({
-        "recommended_action": null,
-        "action_reason": "null action"
+        "decision": { "action": null, "reason": "null action" }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::Hold));
@@ -305,8 +284,7 @@ fn grid_decision_from_json_action_is_null() {
 #[test]
 fn grid_decision_from_json_action_is_boolean() {
     let json = serde_json::json!({
-        "recommended_action": true,
-        "action_reason": "bool action"
+        "decision": { "action": true, "reason": "bool action" }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::Hold));
@@ -315,8 +293,7 @@ fn grid_decision_from_json_action_is_boolean() {
 #[test]
 fn grid_decision_from_json_action_is_object() {
     let json = serde_json::json!({
-        "recommended_action": { "type": "resume_grid" },
-        "action_reason": "object action"
+        "decision": { "action": { "type": "resume_grid" }, "reason": "object action" }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::Hold));
@@ -325,8 +302,7 @@ fn grid_decision_from_json_action_is_object() {
 #[test]
 fn grid_decision_from_json_reason_is_array() {
     let json = serde_json::json!({
-        "recommended_action": "hold",
-        "action_reason": ["multiple", "reasons"]
+        "decision": { "action": "hold", "reason": ["multiple", "reasons"] }
     });
     let decision = GridDecision::from_json(&json);
     assert_eq!(decision.reason, "No reason provided");
@@ -335,8 +311,7 @@ fn grid_decision_from_json_reason_is_array() {
 #[test]
 fn grid_decision_from_json_extra_fields_ignored() {
     let json = serde_json::json!({
-        "recommended_action": "hold",
-        "action_reason": "test",
+        "decision": { "action": "hold", "reason": "test" },
         "extra_field": "ignored",
         "another": 123
     });
@@ -348,10 +323,8 @@ fn grid_decision_from_json_extra_fields_ignored() {
 #[test]
 fn grid_decision_from_json_integer_prices() {
     let json = serde_json::json!({
-        "recommended_action": "adjust_grid",
-        "action_reason": "test",
-        "upper_price": 65000,
-        "lower_price": 45000
+        "decision": { "action": "adjust_grid", "reason": "test" },
+        "grid": { "upper_price": 65000, "lower_price": 45000 }
     });
     let decision = GridDecision::from_json(&json);
     match decision.action {
@@ -367,8 +340,7 @@ fn grid_decision_from_json_integer_prices() {
 fn grid_decision_from_json_very_long_reason() {
     let long_reason = "a".repeat(10000);
     let json = serde_json::json!({
-        "recommended_action": "hold",
-        "action_reason": long_reason
+        "decision": { "action": "hold", "reason": long_reason }
     });
     let decision = GridDecision::from_json(&json);
     assert_eq!(decision.reason.len(), 10000);
@@ -443,10 +415,8 @@ async fn grid_ai_service_with_credentials_still_fails_on_bad_endpoint() {
 #[test]
 fn grid_decision_from_json_adjust_grid_prices_match_decision_fields() {
     let json = serde_json::json!({
-        "recommended_action": "adjust_grid",
-        "action_reason": "test consistency",
-        "upper_price": 70000.0,
-        "lower_price": 40000.0
+        "decision": { "action": "adjust_grid", "reason": "test consistency" },
+        "grid": { "upper_price": 70000.0, "lower_price": 40000.0 }
     });
     let decision = GridDecision::from_json(&json);
     match decision.action {
@@ -461,10 +431,8 @@ fn grid_decision_from_json_adjust_grid_prices_match_decision_fields() {
 #[test]
 fn grid_decision_from_json_non_adjust_action_still_extracts_prices() {
     let json = serde_json::json!({
-        "recommended_action": "pause_grid",
-        "action_reason": "test",
-        "upper_price": 65000.0,
-        "lower_price": 45000.0
+        "decision": { "action": "pause_grid", "reason": "test" },
+        "grid": { "upper_price": 65000.0, "lower_price": 45000.0 }
     });
     let decision = GridDecision::from_json(&json);
     assert!(matches!(decision.action, GridAction::PauseGrid));
@@ -475,10 +443,8 @@ fn grid_decision_from_json_non_adjust_action_still_extracts_prices() {
 #[test]
 fn grid_decision_from_json_very_small_prices() {
     let json = serde_json::json!({
-        "recommended_action": "adjust_grid",
-        "action_reason": "test",
-        "upper_price": 0.001,
-        "lower_price": 0.0001
+        "decision": { "action": "adjust_grid", "reason": "test" },
+        "grid": { "upper_price": 0.001, "lower_price": 0.0001 }
     });
     let decision = GridDecision::from_json(&json);
     match decision.action {
@@ -493,10 +459,8 @@ fn grid_decision_from_json_very_small_prices() {
 #[test]
 fn grid_decision_from_json_very_large_prices() {
     let json = serde_json::json!({
-        "recommended_action": "adjust_grid",
-        "action_reason": "test",
-        "upper_price": 1e10,
-        "lower_price": 1e9
+        "decision": { "action": "adjust_grid", "reason": "test" },
+        "grid": { "upper_price": 1e10, "lower_price": 1e9 }
     });
     let decision = GridDecision::from_json(&json);
     match decision.action {
@@ -511,10 +475,8 @@ fn grid_decision_from_json_very_large_prices() {
 #[test]
 fn grid_decision_from_json_float_prices() {
     let json = serde_json::json!({
-        "recommended_action": "adjust_grid",
-        "action_reason": "test",
-        "upper_price": 65000.123456,
-        "lower_price": 45000.789012
+        "decision": { "action": "adjust_grid", "reason": "test" },
+        "grid": { "upper_price": 65000.123456, "lower_price": 45000.789012 }
     });
     let decision = GridDecision::from_json(&json);
     match decision.action {
@@ -529,10 +491,8 @@ fn grid_decision_from_json_float_prices() {
 #[test]
 fn grid_decision_from_json_inverted_prices() {
     let json = serde_json::json!({
-        "recommended_action": "adjust_grid",
-        "action_reason": "test",
-        "upper_price": 40000.0,
-        "lower_price": 60000.0
+        "decision": { "action": "adjust_grid", "reason": "test" },
+        "grid": { "upper_price": 40000.0, "lower_price": 60000.0 }
     });
     let decision = GridDecision::from_json(&json);
     match decision.action {
@@ -626,15 +586,10 @@ impl CredentialStore for MockFailingCredentialStore {
 #[test]
 fn grid_decision_from_json_full_params() {
     let json = serde_json::json!({
-        "recommended_action": "adjust_grid",
-        "action_reason": "Volatility increased",
-        "upper_price": 65000.0,
-        "lower_price": 45000.0,
-        "grid_count": 10,
-        "grid_profit_pct": 0.5,
-        "quantity_per_grid": 20.0,
-        "leverage": 3,
-        "market_regime": "ranging",
+        "decision": { "action": "adjust_grid", "reason": "Volatility increased", "confidence": 0.8 },
+        "grid": { "upper_price": 65000.0, "lower_price": 45000.0, "grid_count": 10, "grid_profit_pct": 0.5 },
+        "risk": { "quantity_per_grid": 20.0, "leverage": 3 },
+        "market": { "market_regime": "ranging" },
         "analysis": "Market is ranging with moderate volatility"
     });
     let decision = GridDecision::from_json(&json);
@@ -649,8 +604,7 @@ fn grid_decision_from_json_full_params() {
 #[test]
 fn grid_decision_from_json_missing_optional_params() {
     let json = serde_json::json!({
-        "recommended_action": "hold",
-        "action_reason": "No change needed"
+        "decision": { "action": "hold", "reason": "No change needed" }
     });
     let decision = GridDecision::from_json(&json);
     assert_eq!(decision.grid_count, None);
@@ -664,12 +618,9 @@ fn grid_decision_from_json_missing_optional_params() {
 #[test]
 fn grid_decision_from_json_partial_params() {
     let json = serde_json::json!({
-        "recommended_action": "adjust_grid",
-        "action_reason": "test",
-        "upper_price": 70000.0,
-        "lower_price": 50000.0,
-        "grid_count": 8,
-        "leverage": 5
+        "decision": { "action": "adjust_grid", "reason": "test" },
+        "grid": { "upper_price": 70000.0, "lower_price": 50000.0, "grid_count": 8 },
+        "risk": { "leverage": 5 }
     });
     let decision = GridDecision::from_json(&json);
     assert_eq!(decision.grid_count, Some(8));
@@ -689,29 +640,49 @@ fn grid_decision_from_json_as_str_matches_prompt() {
 }
 
 #[test]
-fn grid_decision_from_json_action_field_fallback() {
+fn grid_decision_from_json_nested_groups_independent() {
     let json = serde_json::json!({
-        "action": "adjust_grid",
-        "reason": "Volatility increased",
-        "upper_price": 65000.0,
-        "lower_price": 45000.0
+        "decision": { "action": "cancel_order", "reason": "test" },
+        "cancel": { "level": 3, "side": "buy" },
+        "grid": { "upper_price": 70000.0, "lower_price": 50000.0 },
+        "risk": { "leverage": 5, "quantity_per_grid": 100.0 },
+        "market": { "market_regime": "volatile", "funding_rate_warning": "high rate", "event_impact": "FOMC" },
+        "analysis": "Market analysis",
+        "risk_warning": "High volatility"
     });
     let decision = GridDecision::from_json(&json);
-    assert_eq!(decision.action, GridAction::AdjustGrid { upper_price: Some(65000.0), lower_price: Some(45000.0) });
-    assert_eq!(decision.reason, "Volatility increased");
-    assert_eq!(decision.upper_price, Some(65000.0));
-    assert_eq!(decision.lower_price, Some(45000.0));
+    assert!(matches!(decision.action, GridAction::CancelOrder { .. }));
+    assert_eq!(decision.cancel_level, Some(3));
+    assert_eq!(decision.cancel_side, Some("buy".to_string()));
+    assert_eq!(decision.upper_price, Some(70000.0));
+    assert_eq!(decision.lower_price, Some(50000.0));
+    assert_eq!(decision.leverage, Some(5));
+    assert_eq!(decision.quantity_per_grid, Some(100.0));
+    assert_eq!(decision.market_regime, Some("volatile".to_string()));
+    assert_eq!(decision.funding_rate_warning, Some("high rate".to_string()));
+    assert_eq!(decision.event_impact, Some("FOMC".to_string()));
+    assert_eq!(decision.analysis, Some("Market analysis".to_string()));
+    assert_eq!(decision.risk_warning, Some("High volatility".to_string()));
 }
 
 #[test]
-fn grid_decision_from_json_recommended_action_takes_priority() {
+fn grid_decision_from_json_missing_groups_defaults() {
     let json = serde_json::json!({
-        "recommended_action": "hold",
-        "action": "adjust_grid",
-        "action_reason": "from recommended",
-        "reason": "from action"
+        "decision": { "action": "hold", "reason": "no groups" }
     });
     let decision = GridDecision::from_json(&json);
-    assert_eq!(decision.action, GridAction::Hold);
-    assert_eq!(decision.reason, "from recommended");
+    assert!(matches!(decision.action, GridAction::Hold));
+    assert_eq!(decision.upper_price, None);
+    assert_eq!(decision.lower_price, None);
+    assert_eq!(decision.grid_count, None);
+    assert_eq!(decision.grid_profit_pct, None);
+    assert_eq!(decision.leverage, None);
+    assert_eq!(decision.quantity_per_grid, None);
+    assert_eq!(decision.cancel_level, None);
+    assert_eq!(decision.cancel_side, None);
+    assert_eq!(decision.market_regime, None);
+    assert_eq!(decision.funding_rate_warning, None);
+    assert_eq!(decision.event_impact, None);
+    assert_eq!(decision.analysis, None);
+    assert_eq!(decision.risk_warning, None);
 }

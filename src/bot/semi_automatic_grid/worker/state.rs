@@ -48,12 +48,13 @@ impl GridWorker {
             info!(bot_id = %self.bot.id, "Grid parameters empty, triggering initial LLM analysis");
             self.on_llm_decision().await;
             if self.levels.is_empty() {
-                error!(bot_id = %self.bot.id, "Initial LLM analysis did not set grid parameters, worker cannot continue");
-                return;
+                warn!(bot_id = %self.bot.id, "Initial LLM analysis returned Hold or did not set grid parameters, waiting for next periodic analysis");
             }
         }
 
-        self.place_initial_orders().await;
+        if !self.levels.is_empty() {
+            self.place_initial_orders().await;
+        }
 
         let mut price_tick = tokio::time::interval(Duration::from_secs(5));
 

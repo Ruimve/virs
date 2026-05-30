@@ -461,9 +461,9 @@ export default function GridDetailPage() {
                                 </span>
                                 <span class="text-[10px] text-gray-400">{new Date(log.created_at).toLocaleString('zh-CN')}</span>
                               </div>
-                              <Show when={log.status === 'completed' && log.result?.action}>
+                              <Show when={log.status === 'completed' && log.result?.decision?.action}>
                                 <div class="text-xs text-gray-500 truncate">
-                                  {log.result.action} — {log.result.reason || ''}
+                                  {log.result.decision.action} — {log.result.decision.reason || ''}
                                 </div>
                               </Show>
                             </div>
@@ -499,6 +499,70 @@ export default function GridDetailPage() {
                                   <Show when={showUserPrompt()}>
                                     <pre class="p-3 bg-gray-50 rounded-lg text-[11px] text-gray-600 whitespace-pre-wrap break-words max-h-48 overflow-auto border border-gray-100">{log().user_prompt}</pre>
                                   </Show>
+                                </div>
+                              </Show>
+                              <Show when={log().result?.decision}>
+                                <div>
+                                  <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">决策</div>
+                                  <div class="flex items-center gap-3">
+                                    <span class={`px-2 py-0.5 text-xs rounded font-medium ${
+                                      log().result.decision.action === 'hold' ? 'bg-gray-100 text-gray-600'
+                                      : log().result.decision.action === 'pause_grid' ? 'bg-red-50 text-red-600'
+                                      : log().result.decision.action === 'resume_grid' ? 'bg-emerald-50 text-emerald-600'
+                                      : log().result.decision.action === 'adjust_grid' ? 'bg-blue-50 text-blue-600'
+                                      : log().result.decision.action === 'reduce_position' ? 'bg-amber-50 text-amber-600'
+                                      : log().result.decision.action === 'cancel_order' ? 'bg-orange-50 text-orange-600'
+                                      : 'bg-gray-100 text-gray-600'
+                                    }`}>{log().result.decision.action}</span>
+                                    <Show when={log().result.decision.confidence != null}>
+                                      <span class="text-[10px] text-gray-400">置信度 {(log().result.decision.confidence * 100).toFixed(0)}%</span>
+                                    </Show>
+                                  </div>
+                                  <Show when={log().result.decision.reason}>
+                                    <p class="text-xs text-gray-600 mt-1">{log().result.decision.reason}</p>
+                                  </Show>
+                                </div>
+                              </Show>
+                              <Show when={log().result?.grid && (log().result.grid.upper_price || log().result.grid.lower_price || log().result.grid.grid_count || log().result.grid.grid_profit_pct)}>
+                                <div>
+                                  <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">网格参数</div>
+                                  <div class="flex flex-wrap gap-3 text-xs text-gray-600">
+                                    <Show when={log().result.grid.upper_price}><span>上界 {log().result.grid.upper_price}</span></Show>
+                                    <Show when={log().result.grid.lower_price}><span>下界 {log().result.grid.lower_price}</span></Show>
+                                    <Show when={log().result.grid.grid_count}><span>层数 {log().result.grid.grid_count}</span></Show>
+                                    <Show when={log().result.grid.grid_profit_pct}><span>利润率 {log().result.grid.grid_profit_pct}%</span></Show>
+                                  </div>
+                                </div>
+                              </Show>
+                              <Show when={log().result?.risk && (log().result.risk.leverage || log().result.risk.quantity_per_grid)}>
+                                <div>
+                                  <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">风控参数</div>
+                                  <div class="flex flex-wrap gap-3 text-xs text-gray-600">
+                                    <Show when={log().result.risk.leverage}><span>杠杆 {log().result.risk.leverage}x</span></Show>
+                                    <Show when={log().result.risk.quantity_per_grid}><span>每格 {log().result.risk.quantity_per_grid} USDT</span></Show>
+                                  </div>
+                                </div>
+                              </Show>
+                              <Show when={log().result?.market}>
+                                <div>
+                                  <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">市场状态</div>
+                                  <div class="space-y-1">
+                                    <Show when={log().result.market.market_regime}>
+                                      <span class={`px-2 py-0.5 text-xs rounded font-medium ${
+                                        log().result.market.market_regime === 'ranging' ? 'bg-blue-50 text-blue-600'
+                                        : log().result.market.market_regime === 'trending_up' ? 'bg-emerald-50 text-emerald-600'
+                                        : log().result.market.market_regime === 'trending_down' ? 'bg-red-50 text-red-600'
+                                        : log().result.market.market_regime === 'volatile' ? 'bg-amber-50 text-amber-600'
+                                        : 'bg-gray-100 text-gray-600'
+                                      }`}>{log().result.market.market_regime}</span>
+                                    </Show>
+                                    <Show when={log().result.market.funding_rate_warning}>
+                                      <p class="text-xs text-amber-700">⚠ 资金费率: {log().result.market.funding_rate_warning}</p>
+                                    </Show>
+                                    <Show when={log().result.market.event_impact}>
+                                      <p class="text-xs text-purple-700">📋 事件影响: {log().result.market.event_impact}</p>
+                                    </Show>
+                                  </div>
                                 </div>
                               </Show>
                               <Show when={log().result?.analysis}>

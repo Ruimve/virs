@@ -210,7 +210,7 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位专业的加密货币量�
 ### 高斯分布生成
 - μ = (上界+下界)/2，σ = 宽度/4，分位数 p_i=(i-0.5)/N，price_i=μ+σ*Φ⁻¹(p_i)。
 - 超出边界的price_i设为边界值；若连续多个价格截断至同一值，仅保留一个，后续通过额外插值补足至N。
-- 方向：高于当前价→sell，否则→buy。列表升序。
+- 层级方向由系统根据当前价格自动判定（高于当前价→sell，低于当前价→buy），无需在返回中指定。
 
 ### 利润率
 - 取所有相邻(buy,sell)对的利润率，min值需>0.3%，否则减N或扩宽度重算。
@@ -243,26 +243,30 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位专业的加密货币量�
 
 ## 请严格遵循以下JSON格式，必须包含所有字段：
 {
-  "market_regime": "ranging|trending_up|trending_down|volatile|transition",
-  "confidence": 0.0-1.0,
-  "recommended_action": "pause_grid|resume_grid|adjust_grid|reduce_position|cancel_order|hold",
-  "action_reason": "含主周期+辅助信号依据(80字内)",
-  "upper_price": 数字（网格上界）,
-  "lower_price": 数字（网格下界）,
-  "grid_count": 数字（网格层数）,
-  "grid_profit_pct": 数字（每格利润率%）,
-  "quantity_per_grid": 数字（每格数量，USDT）,
-  "leverage": 数字（杠杆）,
-  "cancel_level": 数字（层级编号，cancel_order时必填）,
-  "cancel_side": "buy或sell"（cancel_order时必填）,
-  "funding_rate_warning": "资金费率风险说明(若有，否则填'none')",
-  "event_impact": "事件影响说明(若无事件填'none')",
-  "grid_levels":  [
-    { "level": 1, "price": 数字, "side": "buy", "quantity_usdt": 数字 },
-    { "level": 2, "price": 数字, "side": "buy", "quantity_usdt": 数字 },
-    ...
-    { "level": N, "price": 数字, "side": "sell", "quantity_usdt": 数字 }
-  ],
+  "decision": {
+    "action": "pause_grid|resume_grid|adjust_grid|reduce_position|cancel_order|hold",
+    "reason": "含主周期+辅助信号依据(80字内)",
+    "confidence": 0.0-1.0
+  },
+  "grid": {
+    "upper_price": 数字（网格上界）,
+    "lower_price": 数字（网格下界）,
+    "grid_count": 数字（网格层数）,
+    "grid_profit_pct": 数字（每格利润率%）
+  },
+  "risk": {
+    "leverage": 数字（杠杆）,
+    "quantity_per_grid": 数字（每格数量，USDT）
+  },
+  "cancel": {
+    "level": 数字（层级编号，cancel_order时必填）,
+    "side": "buy或sell"（cancel_order时必填）
+  },
+  "market": {
+    "market_regime": "ranging|trending_up|trending_down|volatile|transition",
+    "funding_rate_warning": "资金费率风险说明(若有，否则填'none')",
+    "event_impact": "事件影响说明(若无事件填'none')"
+  },
   "analysis": "多周期信号、区间逻辑、风险(300字内)",
   "risk_warning": "主要风险提示(100字内)"
 }"#;

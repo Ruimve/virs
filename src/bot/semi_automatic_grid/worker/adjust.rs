@@ -42,7 +42,9 @@ impl GridWorker {
         let action = self.handle_llm_result(&decision, &system_prompt, &user_prompt, raw_llm_response.as_ref(), is_initial).await;
 
         self.execute_decision(&action, decision.as_ref()).await;
-        let _ = self.store.update_last_adjusted(self.bot.id).await;
+        if !matches!(action, GridAction::Hold) {
+            let _ = self.store.update_last_adjusted(self.bot.id).await;
+        }
     }
 
 /** 构建 LLM 调用所需的 system_prompt 和 user_prompt
@@ -156,22 +158,32 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
                 }
 
                 let mut result = serde_json::json!({
-                    "action": d.action.as_str(),
-                    "reason": d.reason,
-                    "confidence": d.confidence,
-                    "upper_price": d.upper_price,
-                    "lower_price": d.lower_price,
-                    "cancel_level": d.cancel_level,
-                    "cancel_side": d.cancel_side,
-                    "grid_count": d.grid_count,
-                    "grid_profit_pct": d.grid_profit_pct,
-                    "quantity_per_grid": d.quantity_per_grid,
-                    "leverage": d.leverage,
-                    "market_regime": d.market_regime,
-                    "funding_rate_warning": d.funding_rate_warning,
-                    "event_impact": d.event_impact,
-                    "risk_warning": d.risk_warning,
+                    "decision": {
+                        "action": d.action.as_str(),
+                        "reason": d.reason,
+                        "confidence": d.confidence,
+                    },
+                    "grid": {
+                        "upper_price": d.upper_price,
+                        "lower_price": d.lower_price,
+                        "grid_count": d.grid_count,
+                        "grid_profit_pct": d.grid_profit_pct,
+                    },
+                    "risk": {
+                        "leverage": d.leverage,
+                        "quantity_per_grid": d.quantity_per_grid,
+                    },
+                    "cancel": {
+                        "level": d.cancel_level,
+                        "side": d.cancel_side,
+                    },
+                    "market": {
+                        "market_regime": d.market_regime,
+                        "funding_rate_warning": d.funding_rate_warning,
+                        "event_impact": d.event_impact,
+                    },
                     "analysis": d.analysis,
+                    "risk_warning": d.risk_warning,
                 });
                 if let Some(raw) = raw_llm_response {
                     result.as_object_mut().unwrap().insert("raw_llm_response".to_string(), raw.clone());
@@ -207,14 +219,18 @@ LLM 成功时记录结果并返回其 action，失败时回退到规则决策 */
 
 /** 执行 AI 决策
 
-参数应用优先级：无论 action 是什么，LLM 返回的非结构参数（market_regime、leverage、
-quantity_per_grid）始终先应用到 bot 配置和 DB。
+Hold 时不应用任何参数、不写入 DB、不下单，仅记录 analysis log。
+其他 action 正常应用参数：非结构参数（market_regime、leverage、quantity_per_grid）始终应用，
 结构参数（upper_price、lower_price、grid_count、grid_profit_pct）仅在
-action 为 AdjustGrid 或首次初始化时才应用，避免 Hold/PauseGrid 等操作
-意外触发网格重建。
+action 为 AdjustGrid 或首次初始化时应用。
 
 层级方向（side）由 current_price 自动判定，不再依赖 LLM 返回的 grid_levels_json。 */
     pub(crate) async fn execute_decision(&mut self, action: &GridAction, decision: Option<&GridDecision>) {
+        if matches!(action, GridAction::Hold) {
+            info!(bot_id = %self.bot.id, "Hold: no params applied, no orders placed");
+            return;
+        }
+
         let needs_params = self.bot.upper_price <= 0.0 || self.bot.lower_price <= 0.0;
         let allow_structure_change = needs_params || matches!(action, GridAction::AdjustGrid { .. });
 
@@ -270,11 +286,7 @@ action 为 AdjustGrid 或首次初始化时才应用，避免 Hold/PauseGrid 等
                     warn!(bot_id = %self.bot.id, level = level, side = %side, "CancelOrder: level not found");
                 }
             }
-            GridAction::Hold => {
-                if needs_params && !self.levels.is_empty() && !self.paused {
-                    self.place_initial_orders().await;
-                }
-            }
+            GridAction::Hold => unreachable!(),
         }
     }
 
