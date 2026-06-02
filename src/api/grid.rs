@@ -60,6 +60,8 @@ pub async fn create_bot(
         ));
     }
 
+    let symbol = crate::api::normalize_symbol(&body.symbol);
+
     let user_id = parse_user_id(&auth)?;
 
     let upper_price = 0.0;
@@ -84,7 +86,7 @@ pub async fn create_bot(
     )
     .bind(user_id)
     .bind(&body.name)
-    .bind(&body.symbol)
+    .bind(&symbol)
     .bind(&exchange)
     .bind(StrategyStatus::Draft)
     .bind(upper_price)

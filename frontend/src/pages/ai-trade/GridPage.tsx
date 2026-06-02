@@ -322,7 +322,7 @@ export default function GridPage() {
                   type="text"
                   value={symbol()}
                   onInput={(e) => setSymbol(e.currentTarget.value)}
-                  placeholder="例如：BTCUSDT"
+                  placeholder="例如：BTC/USDT"
                   class="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-colors"
                 />
               </div>

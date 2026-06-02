@@ -8,6 +8,7 @@ import Market from './pages/Market'
 import GridPage from './pages/ai-trade/GridPage'
 import GridDetailPage from './pages/ai-trade/GridDetailPage'
 import AutoPage from './pages/ai-trade/AutoPage'
+import AutoDetailPage from './pages/ai-trade/AutoDetailPage'
 import Trades from './pages/Trades'
 import Credentials from './pages/Credentials'
 import AiCredentials from './pages/AiCredentials'
@@ -39,6 +40,7 @@ const App: Component = () => {
           <Route path="/ai-trade/grid" component={GridPage} />
           <Route path="/ai-trade/grid/:id" component={GridDetailPage} />
           <Route path="/ai-trade/auto" component={AutoPage} />
+          <Route path="/ai-trade/auto/:id" component={AutoDetailPage} />
           <Route path="/trades" component={Trades} />
           <Route path="/credentials" component={Credentials} />
         <Route path="/ai-credentials" component={AiCredentials} />

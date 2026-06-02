@@ -10,6 +10,7 @@ pub mod ai_credentials;
 pub mod ws;
 pub mod grid;
 pub mod kline;
+pub mod auto_trade;
 
 use axum::{
     http::{header, StatusCode, Uri},
@@ -30,6 +31,7 @@ pub fn build_router(
     ws_broadcaster: Arc<ws::WsBroadcaster>,
     kline_engine: Option<Arc<crate::engine::kline::KlineEngine>>,
     grid_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::semi_automatic_grid::types::GridCommand>>,
+    auto_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::auto_trade::types::AutoCommand>>,
     paper_executor: Option<Arc<crate::trading::paper::PaperOrderExecutor>>,
 ) -> Router {
     let state = Arc::new(AppState {
@@ -40,6 +42,7 @@ pub fn build_router(
         kline_engine,
         http_client: reqwest::Client::new(),
         grid_cmd_tx,
+        auto_cmd_tx,
         paper_executor,
     });
 
@@ -95,6 +98,14 @@ pub fn build_router(
         .route("/api/grid/{id}/stop", post(grid::stop_bot))
         .route("/api/grid/{id}/delete", delete(grid::delete_bot))
         .route("/api/grid/{id}/trades", get(grid::get_trades))
+        .route("/api/auto/create", post(auto_trade::create_bot))
+        .route("/api/auto/list", get(auto_trade::list_bots))
+        .route("/api/auto/analysis-logs", get(auto_trade::get_analysis_logs))
+        .route("/api/auto/{id}", get(auto_trade::get_bot))
+        .route("/api/auto/{id}/start", post(auto_trade::start_bot))
+        .route("/api/auto/{id}/stop", post(auto_trade::stop_bot))
+        .route("/api/auto/{id}/delete", delete(auto_trade::delete_bot))
+        .route("/api/auto/{id}/trades", get(auto_trade::get_trades))
         .with_state(state)
         .layer(
             CorsLayer::new()
@@ -160,6 +171,25 @@ fn mime_guess_from_ext(ext: &str) -> &'static str {
     }
 }
 
+pub fn normalize_symbol(raw: &str) -> String {
+    let s = raw.trim().to_uppercase();
+    if s.contains('/') {
+        return s;
+    }
+    let quotes = [
+        "USDT", "USDC", "BUSD", "BTC", "ETH", "BNB", "EUR", "GBP", "TRY", "BRL", "ARS",
+    ];
+    for q in &quotes {
+        if s.ends_with(q) {
+            let base = &s[..s.len() - q.len()];
+            if !base.is_empty() {
+                return format!("{}/{}", base, q);
+            }
+        }
+    }
+    s
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<AppConfig>,
@@ -169,5 +199,6 @@ pub struct AppState {
     pub kline_engine: Option<Arc<crate::engine::kline::KlineEngine>>,
     pub http_client: reqwest::Client,
     pub grid_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::semi_automatic_grid::types::GridCommand>>,
+    pub auto_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::auto_trade::types::AutoCommand>>,
     pub paper_executor: Option<Arc<crate::trading::paper::PaperOrderExecutor>>,
 }

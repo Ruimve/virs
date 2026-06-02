@@ -137,7 +137,7 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(bot::semi_automatic_grid::adapters::ExchangeMarketDataProvider::new(exchange_registry.clone())
             .with_kline_engine(kline_engine.clone()));
     let real_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
-        Arc::new(bot::semi_automatic_grid::adapters::PeOrderExecutor::new(pe_cmd_tx, exchange_registry.clone()));
+        Arc::new(bot::semi_automatic_grid::adapters::PeOrderExecutor::new(pe_cmd_tx.clone(), exchange_registry.clone()));
     let grid_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
         Arc::new(bot::semi_automatic_grid::adapters::SwitchableOrderExecutor::new(
             real_order_executor,
@@ -210,6 +210,70 @@ async fn main() -> anyhow::Result<()> {
     });
     info!("✅ Grid engine started (paper trading available)");
 
+    // Start Auto Trade Engine
+    let auto_store = Arc::new(bot::auto_trade::adapters::PgAutoStore::new(db_pool.clone()));
+    let auto_price_provider: Arc<dyn bot::auto_trade::ports::PriceProvider> =
+        Arc::new(bot::auto_trade::adapters::ExchangePriceProvider::new(exchange_registry.clone())
+            .with_kline_engine(kline_engine.clone()));
+    let auto_market_data_provider: Arc<dyn bot::auto_trade::ports::MarketDataProvider> =
+        Arc::new(bot::auto_trade::adapters::ExchangeMarketDataProvider::new(exchange_registry.clone())
+            .with_kline_engine(kline_engine.clone())
+            .with_db(db_pool.clone(), config.server.encryption_key.clone()));
+    let auto_real_order_executor: Arc<dyn bot::auto_trade::ports::OrderExecutor> =
+        Arc::new(bot::auto_trade::adapters::PeOrderExecutor::new(pe_cmd_tx.clone(), exchange_registry.clone()));
+    let auto_order_executor: Arc<dyn bot::auto_trade::ports::OrderExecutor> =
+        Arc::new(bot::auto_trade::adapters::SwitchableOrderExecutor::new(
+            auto_real_order_executor,
+            paper_executor.clone(),
+        ));
+    let auto_credential_store: Box<dyn bot::auto_trade::ports::CredentialStore> =
+        Box::new(bot::auto_trade::adapters::PgCredentialStore::new(
+            db_pool.clone(),
+            utils::crypto::derive_key(&config.server.encryption_key),
+        ));
+    let auto_llm_resolver: Box<dyn bot::auto_trade::ports::LlmProviderResolver> =
+        Box::new(bot::auto_trade::adapters::DefaultLlmResolver::new(config.ai.clone()));
+    let auto_ai_service = Arc::new(bot::auto_trade::ai::AutoAiService::new(
+        auto_llm_resolver,
+        auto_credential_store,
+    ));
+
+    let (auto_event_tx, _auto_event_rx) = tokio::sync::broadcast::channel::<bot::auto_trade::ports::OrderEvent>(256);
+
+    let (mut auto_engine, auto_cmd_tx, _auto_event_broadcast) = bot::auto_trade::AutoEngine::new(
+        auto_store,
+        auto_ai_service,
+        auto_price_provider,
+        auto_order_executor,
+        auto_market_data_provider,
+        auto_event_tx.clone(),
+        Some(kline_engine.clone()),
+    );
+
+    let mut auto_pe_event_rx = _pe_event_tx.subscribe();
+    let auto_event_tx_for_bridge = auto_event_tx;
+    tokio::spawn(async move {
+        loop {
+            match auto_pe_event_rx.recv().await {
+                Ok(event) => {
+                    if let Some(auto_event) = bot::auto_trade::adapters::convert_pe_event(event) {
+                        let _ = auto_event_tx_for_bridge.send(auto_event);
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    tracing::warn!(lagged = n, "Auto PE event bridge lagged");
+                }
+            }
+        }
+    });
+
+    let auto_cmd_tx = Some(auto_cmd_tx);
+    tokio::spawn(async move {
+        auto_engine.run().await;
+    });
+    info!("✅ Auto trade engine started");
+
     // Build and start HTTP server
     let app = api::build_router(
         Arc::new(config.clone()),
@@ -218,6 +282,7 @@ async fn main() -> anyhow::Result<()> {
         ws_broadcaster,
         Some(kline_engine),
         grid_cmd_tx,
+        auto_cmd_tx,
         Some(paper_executor),
     );
 

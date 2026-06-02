@@ -377,3 +377,101 @@ DO $$ BEGIN
     ALTER TABLE qd_grid_bots ADD COLUMN IF NOT EXISTS unrealized_pnl DOUBLE PRECISION NOT NULL DEFAULT 0;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
+
+DO $$ BEGIN
+    ALTER TABLE qd_auto_bots ADD COLUMN IF NOT EXISTS system_prompt TEXT;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE qd_auto_bots ADD COLUMN IF NOT EXISTS user_prompt TEXT;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE qd_auto_analysis_logs ADD COLUMN IF NOT EXISTS system_prompt TEXT NOT NULL DEFAULT '';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE qd_auto_analysis_logs ADD COLUMN IF NOT EXISTS user_prompt TEXT NOT NULL DEFAULT '';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- ============================================================
+-- Auto Trade Bot (全自动交易机器人)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS qd_auto_bots (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    exchange TEXT NOT NULL DEFAULT 'binance',
+    market_type TEXT NOT NULL DEFAULT 'perpetual' CHECK (market_type IN ('perpetual', 'spot')),
+    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'running', 'paused', 'stopped', 'error')),
+
+    leverage INT NOT NULL DEFAULT 1,
+    max_position_pct DOUBLE PRECISION NOT NULL DEFAULT 80.0,
+    decide_interval_secs INT NOT NULL DEFAULT 300,
+
+    current_side TEXT CHECK (current_side IN ('long', 'short', 'none')),
+    entry_price DOUBLE PRECISION NOT NULL DEFAULT 0,
+    position_size DOUBLE PRECISION NOT NULL DEFAULT 0,
+    stop_loss DOUBLE PRECISION NOT NULL DEFAULT 0,
+    take_profit DOUBLE PRECISION NOT NULL DEFAULT 0,
+    unrealized_pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
+
+    market_regime TEXT,
+    ai_analysis TEXT,
+    system_prompt TEXT,
+    user_prompt TEXT,
+
+    total_pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
+    total_trades INT NOT NULL DEFAULT 0,
+    win_trades INT NOT NULL DEFAULT 0,
+    loss_trades INT NOT NULL DEFAULT 0,
+
+    last_decided_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at TIMESTAMPTZ,
+    stopped_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_auto_bots_user ON qd_auto_bots(user_id);
+CREATE INDEX IF NOT EXISTS idx_auto_bots_status ON qd_auto_bots(status);
+
+CREATE TABLE IF NOT EXISTS qd_auto_trades (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    bot_id UUID NOT NULL REFERENCES qd_auto_bots(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
+    symbol TEXT NOT NULL,
+    exchange TEXT NOT NULL,
+    side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+    trade_type TEXT NOT NULL CHECK (trade_type IN ('open_long', 'close_long', 'open_short', 'close_short', 'stop_loss', 'take_profit')),
+    price DOUBLE PRECISION NOT NULL,
+    quantity DOUBLE PRECISION NOT NULL,
+    pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
+    pnl_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
+    exchange_order_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_auto_trades_bot ON qd_auto_trades(bot_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_auto_trades_user ON qd_auto_trades(user_id);
+
+CREATE TABLE IF NOT EXISTS qd_auto_analysis_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    bot_id UUID NOT NULL REFERENCES qd_auto_bots(id) ON DELETE CASCADE,
+    analysis_type TEXT NOT NULL DEFAULT 'periodic',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
+    system_prompt TEXT NOT NULL DEFAULT '',
+    user_prompt TEXT NOT NULL DEFAULT '',
+    result JSONB NOT NULL DEFAULT '{}',
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_auto_analysis_logs_bot ON qd_auto_analysis_logs(bot_id, created_at DESC);

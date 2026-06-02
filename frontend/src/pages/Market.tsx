@@ -43,7 +43,7 @@ function cumEntries(entries: OrderbookEntry[]): { e: OrderbookEntry; cum: number
 const Market: Component = () => {
   const market = useMarket()
   const [exchange, setExchange] = createSignal('binance')
-  const [symbol, setSymbol] = createSignal('BTCUSDT')
+  const [symbol, setSymbol] = createSignal('BTC/USDT')
   const [interval, setInterval_] = createSignal('1h')
   const [tab, setTab] = createSignal<'overview' | 'balance'>('overview')
 
@@ -260,7 +260,7 @@ const Market: Component = () => {
               </select>
             </div>
             <div class="w-[130px]">
-              <input type="text" class={inp} value={symbol()} onInput={e => setSymbol(e.currentTarget.value)} placeholder="BTCUSDT" />
+              <input type="text" class={inp} value={symbol()} onInput={e => setSymbol(e.currentTarget.value)} placeholder="BTC/USDT" />
             </div>
             <div class="flex bg-slate-100 rounded-lg p-[3px] gap-[2px]">
               {['1m', '5m', '15m', '1h', '4h', '1d'].map(tf => (

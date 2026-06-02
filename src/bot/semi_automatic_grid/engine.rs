@@ -133,7 +133,7 @@ impl GridEngine {
             return;
         }
 
-        let bot = match self.store.load_bot(bot_id).await {
+        let mut bot = match self.store.load_bot(bot_id).await {
             Ok(Some(b)) => b,
             Ok(None) => {
                 warn!(bot_id = %bot_id, "Bot not found");
@@ -144,6 +144,14 @@ impl GridEngine {
                 return;
             }
         };
+
+        if !bot.symbol.contains('/') {
+            let normalized = crate::api::normalize_symbol(&bot.symbol);
+            if normalized != bot.symbol {
+                warn!(bot_id = %bot_id, old = %bot.symbol, new = %normalized, "Normalizing symbol format");
+                bot.symbol = normalized;
+            }
+        }
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>(1);
         let (adjust_tx, adjust_rx) = mpsc::channel::<()>(1);

@@ -42,9 +42,18 @@ impl Aggregator {
                     merged.low = candle_1m.low;
                 }
                 merged.close = candle_1m.close;
-                merged.volume += candle_1m.volume;
-                merged.quote_volume += candle_1m.quote_volume;
-                merged.trades += candle_1m.trades;
+
+                let m1_candles = cache.get_klines(Timeframe::M1);
+                let tf_ms = tf.ms();
+                let (group_volume, group_quote_volume, group_trades) = m1_candles.iter()
+                    .filter(|c| c.open_time >= aligned_open && c.open_time < aligned_open + tf_ms)
+                    .fold((0.0_f64, 0.0_f64, 0_i64), |(vol, qvol, trd), c| {
+                        (vol + c.volume, qvol + c.quote_volume, trd + c.trades)
+                    });
+                merged.volume = group_volume;
+                merged.quote_volume = group_quote_volume;
+                merged.trades = group_trades;
+
                 merged.close_time = close_time;
                 merged.closed = is_closing && candle_1m.closed;
 

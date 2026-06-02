@@ -1,7 +1,6 @@
 use crate::indicators;
 use crate::models::Kline;
 
-/** 多周期市场指标计算结果 */
 #[derive(Debug, Clone, Default)]
 pub struct MarketIndicators {
     pub current_price: f64,
@@ -40,7 +39,18 @@ pub struct MarketIndicators {
     pub h1_low_20: f64,
     pub nearest_round_up: f64,
     pub nearest_round_down: f64,
+    pub h1_volume: f64,
+    pub h1_volume_sma20: f64,
+    pub h1_ema_cross_bars_ago: i32,
+    pub h1_ema_gap_pct: f64,
+    pub h1_ema_gap_trend: String,
+    pub h1_high_50: f64,
+    pub h1_low_50: f64,
     pub m15_current_price: f64,
+    pub m15_rsi: f64,
+    pub m15_macd: f64,
+    pub m15_macd_signal: f64,
+    pub m15_macd_histogram: f64,
     pub m15_bb_width_pct: f64,
     pub m15_atr: f64,
     pub m15_atr_sma20: f64,
@@ -48,13 +58,21 @@ pub struct MarketIndicators {
     pub m15_bars_outside_band: i32,
     pub m15_ema20: f64,
     pub m15_ema50: f64,
+    pub m15_volume: f64,
+    pub m15_volume_sma20: f64,
+    pub m15_ema_cross_bars_ago: i32,
+    pub m15_high_50: f64,
+    pub m15_low_50: f64,
     pub h4_ema20: f64,
     pub h4_ema50: f64,
     pub h4_adx: f64,
     pub h4_bb_width_pct: f64,
+    pub h4_rsi: f64,
+    pub h4_macd: f64,
+    pub h4_macd_signal: f64,
+    pub h4_macd_histogram: f64,
 }
 
-/** 根据 EMA 当前值与历史值判断趋势方向 */
 fn ema_trend(current: f64, previous: f64) -> &'static str {
     if current > previous {
         "上升"
@@ -65,14 +83,6 @@ fn ema_trend(current: f64, previous: f64) -> &'static str {
     }
 }
 
-/** 基于1h/4h/15m K线数据统一计算所有市场指标
-
-参数:
-- klines_1h: 1小时K线（至少30根）
-- klines_4h: 4小时K线（可为空）
-- klines_15m: 15分钟K线（可为空）
-- funding_rate: 当前资金费率
-- funding_next_time: 下次结算时间字符串 */
 pub fn compute_market_indicators(
     klines_1h: &[Kline],
     klines_4h: &[Kline],
@@ -173,14 +183,42 @@ pub fn compute_market_indicators(
     let nearest_round_up = indicators::find_round_number(current_price, true);
     let nearest_round_down = indicators::find_round_number(current_price, false);
 
+    let h1_volume = klines_1h.last().map(|k| k.volume).unwrap_or(0.0);
+    let h1_volume_sma20 = indicators::volume_sma_at(klines_1h, last_idx, 20);
+    let h1_high_50 = indicators::highest_at(klines_1h, last_idx, 50);
+    let h1_low_50 = indicators::lowest_at(klines_1h, last_idx, 50);
+
+    let h1_ema_cross_bars_ago = compute_ema_cross_bars_ago(klines_1h, 20, 50, last_idx);
+
+    let h1_ema_gap_pct = if ema50 != 0.0 { (ema20 - ema50) / ema50 * 100.0 } else { 0.0 };
+    let h1_ema_gap_trend = {
+        let curr_gap_abs = (ema20 - ema50).abs();
+        let prev_gap_abs = (ema20_prev - ema50_prev).abs();
+        if curr_gap_abs > prev_gap_abs * 1.01 {
+            "扩大"
+        } else if curr_gap_abs < prev_gap_abs * 0.99 {
+            "缩小"
+        } else {
+            "持平"
+        }
+    };
+
     let h4_last = klines_4h.len().saturating_sub(1);
     let h4_ema20 = if !klines_4h.is_empty() { indicators::ema_at(klines_4h, h4_last, 20) } else { 0.0 };
     let h4_ema50 = if klines_4h.len() >= 50 { indicators::ema_at(klines_4h, h4_last, 50) } else { 0.0 };
     let h4_adx = if !klines_4h.is_empty() { indicators::adx_at(klines_4h, h4_last, 14) } else { 0.0 };
     let h4_bb_width_pct = if !klines_4h.is_empty() { indicators::bbands_width_at(klines_4h, h4_last, 20, 2.0) } else { 0.0 };
+    let h4_rsi = if !klines_4h.is_empty() { indicators::rsi_at(klines_4h, h4_last, 14) } else { 0.0 };
+    let h4_macd = if !klines_4h.is_empty() { indicators::macd_at(klines_4h, h4_last, 12, 26) } else { 0.0 };
+    let h4_macd_signal = if !klines_4h.is_empty() { indicators::macd_signal_at(klines_4h, h4_last, 12, 26, 9) } else { 0.0 };
+    let h4_macd_histogram = if !klines_4h.is_empty() { indicators::macd_histogram_at(klines_4h, h4_last, 12, 26, 9) } else { 0.0 };
 
     let m15_last = klines_15m.len().saturating_sub(1);
-    let m15_current_price = current_price;
+    let m15_current_price = klines_15m.last().map(|k| k.close).unwrap_or(current_price);
+    let m15_rsi = if !klines_15m.is_empty() { indicators::rsi_at(klines_15m, m15_last, 14) } else { 0.0 };
+    let m15_macd = if !klines_15m.is_empty() { indicators::macd_at(klines_15m, m15_last, 12, 26) } else { 0.0 };
+    let m15_macd_signal = if !klines_15m.is_empty() { indicators::macd_signal_at(klines_15m, m15_last, 12, 26, 9) } else { 0.0 };
+    let m15_macd_histogram = if !klines_15m.is_empty() { indicators::macd_histogram_at(klines_15m, m15_last, 12, 26, 9) } else { 0.0 };
     let m15_bb_width_pct = if !klines_15m.is_empty() { indicators::bbands_width_at(klines_15m, m15_last, 20, 2.0) } else { 0.0 };
     let m15_atr = if !klines_15m.is_empty() { indicators::atr_at(klines_15m, m15_last, 14) } else { 0.0 };
     let m15_atr_sma20 = if klines_15m.len() >= 20 {
@@ -198,6 +236,11 @@ pub fn compute_market_indicators(
     let m15_bars_outside_band = indicators::compute_bars_outside_band(klines_15m, m15_bb_upper, m15_bb_lower);
     let m15_ema20 = if !klines_15m.is_empty() { indicators::ema_at(klines_15m, m15_last, 20) } else { 0.0 };
     let m15_ema50 = if klines_15m.len() >= 50 { indicators::ema_at(klines_15m, m15_last, 50) } else { 0.0 };
+    let m15_volume = klines_15m.last().map(|k| k.volume).unwrap_or(0.0);
+    let m15_volume_sma20 = if !klines_15m.is_empty() { indicators::volume_sma_at(klines_15m, m15_last, 20) } else { 0.0 };
+    let m15_high_50 = if !klines_15m.is_empty() { indicators::highest_at(klines_15m, m15_last, 50) } else { 0.0 };
+    let m15_low_50 = if !klines_15m.is_empty() { indicators::lowest_at(klines_15m, m15_last, 50) } else { 0.0 };
+    let m15_ema_cross_bars_ago = compute_ema_cross_bars_ago(klines_15m, 20, 50, m15_last);
 
     MarketIndicators {
         current_price,
@@ -236,7 +279,18 @@ pub fn compute_market_indicators(
         h1_low_20,
         nearest_round_up,
         nearest_round_down,
+        h1_volume,
+        h1_volume_sma20,
+        h1_ema_cross_bars_ago,
+        h1_ema_gap_pct,
+        h1_ema_gap_trend: h1_ema_gap_trend.to_string(),
+        h1_high_50,
+        h1_low_50,
         m15_current_price,
+        m15_rsi,
+        m15_macd,
+        m15_macd_signal,
+        m15_macd_histogram,
         m15_bb_width_pct,
         m15_atr,
         m15_atr_sma20,
@@ -244,9 +298,39 @@ pub fn compute_market_indicators(
         m15_bars_outside_band,
         m15_ema20,
         m15_ema50,
+        m15_volume,
+        m15_volume_sma20,
+        m15_ema_cross_bars_ago,
+        m15_high_50,
+        m15_low_50,
         h4_ema20,
         h4_ema50,
         h4_adx,
         h4_bb_width_pct,
+        h4_rsi,
+        h4_macd,
+        h4_macd_signal,
+        h4_macd_histogram,
     }
+}
+
+fn compute_ema_cross_bars_ago(klines: &[Kline], fast_period: usize, slow_period: usize, last_idx: usize) -> i32 {
+    if klines.len() < slow_period + 5 {
+        return -1;
+    }
+    let lookback = 20.min(last_idx);
+    for i in 0..lookback {
+        let idx = last_idx - i;
+        if idx < 1 { break; }
+        let fast_curr = indicators::ema_at(klines, idx, fast_period);
+        let slow_curr = indicators::ema_at(klines, idx, slow_period);
+        let fast_prev = indicators::ema_at(klines, idx - 1, fast_period);
+        let slow_prev = indicators::ema_at(klines, idx - 1, slow_period);
+        if (fast_prev <= slow_prev && fast_curr > slow_curr)
+            || (fast_prev >= slow_prev && fast_curr < slow_curr)
+        {
+            return i as i32;
+        }
+    }
+    -1
 }
