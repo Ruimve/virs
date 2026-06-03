@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 pub use crate::trading::ports::{OrderSide, OrderInfo, OrderCommand, OrderEvent, OrderExecutor, PositionSide};
+pub use crate::bot::common::ports::{AccountBalance, CredentialStore, LlmProviderResolver};
 
 /** AI 分析日志持久化记录 */
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -199,27 +200,6 @@ pub trait GridStore: Send + Sync {
     async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()>;
 }
 
-/** 用户凭证存储端口
-
-加载用户自定义的 LLM API 凭证 */
-#[async_trait]
-pub trait CredentialStore: Send + Sync {
-    async fn load_credentials(&self, user_id: Uuid) -> anyhow::Result<Vec<(String, String)>>;
-}
-
-/** LLM 提供商解析器端口
-
-根据用户凭证解析出 API key、base URL、模型名称和提供商标识 */
-pub trait LlmProviderResolver: Send + Sync {
-/** 检查默认 LLM 服务是否可用 */
-    fn is_available(&self) -> bool;
-/** 从用户凭证中解析 LLM 连接参数 */
-    fn resolve(
-        &self,
-        user_credentials: &[(String, String)],
-    ) -> anyhow::Result<(String, String, String, String)>;
-}
-
 /** 市场快照
 
 包含当前价格和多周期技术指标数据，由 adapters 层从交易所获取 K 线后计算 */
@@ -231,17 +211,6 @@ pub struct MarketSnapshot {
     pub funding_rate: f64,
 /** 多周期技术指标（由 utils::compute_market_indicators 计算） */
     pub indicators: crate::bot::semi_automatic_grid::utils::indicators::MarketIndicators,
-}
-
-/** 账户余额信息 */
-#[derive(Debug, Clone, Default)]
-pub struct AccountBalance {
-/** 总资产（可用 + 占用） */
-    pub total: f64,
-/** 可用余额 */
-    pub free: f64,
-/** 已用保证金 */
-    pub used: f64,
 }
 
 /** 市场数据提供者端口

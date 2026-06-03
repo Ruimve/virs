@@ -13,41 +13,27 @@ use uuid::Uuid;
 use crate::bot::semi_automatic_grid::ports::*;
 use crate::config::AiConfig;
 use crate::trading::exchange::registry::ExchangeRegistry;
-use crate::engine::position::types as pe_types;
 use crate::engine::kline::KlineEngine;
-use crate::engine::kline::types::{Candle, Timeframe};
-use crate::services::ai::{AiService, AiUserConfig};
+use crate::engine::kline::types::Timeframe;
 use crate::models::Kline;
 
-fn candle_to_kline(c: &Candle) -> Kline {
-    Kline {
-        open_time: c.open_time,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-        volume: c.volume,
-        close_time: c.close_time,
-        quote_volume: c.quote_volume,
-        trades: c.trades,
-        symbol: String::new(),
-        exchange: String::new(),
-        interval: String::new(),
-    }
-}
+// Re-export from common
+pub use crate::bot::common::adapters::{
+    candle_to_kline, convert_pe_event, DefaultLlmResolver, ExchangePriceProvider as CommonExchangePriceProvider,
+    PeOrderExecutor, PgCredentialStore, SwitchableOrderExecutor,
+};
 
 pub struct ExchangePriceProvider {
-    exchange_registry: Arc<ExchangeRegistry>,
-    kline_engine: Option<Arc<KlineEngine>>,
+    inner: CommonExchangePriceProvider,
 }
 
 impl ExchangePriceProvider {
     pub fn new(exchange_registry: Arc<ExchangeRegistry>) -> Self {
-        Self { exchange_registry, kline_engine: None }
+        Self { inner: CommonExchangePriceProvider::new(exchange_registry, "perpetual") }
     }
 
     pub fn with_kline_engine(mut self, engine: Arc<KlineEngine>) -> Self {
-        self.kline_engine = Some(engine);
+        self.inner = self.inner.with_kline_engine(engine);
         self
     }
 }
@@ -55,22 +41,7 @@ impl ExchangePriceProvider {
 #[async_trait]
 impl PriceProvider for ExchangePriceProvider {
     async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64> {
-        if let Some(ref engine) = self.kline_engine {
-            if let Some(candles) = engine.get_klines_async(exchange, symbol, Timeframe::M1).await {
-                if let Some(last) = candles.last() {
-                    if last.close > 0.0 {
-                        return Some(last.close);
-                    }
-                }
-            }
-        }
-
-        let exchange_key = format!("{}:perpetual", exchange);
-        let ex = self.exchange_registry.get(&exchange_key)?;
-        match ex.get_ticker(symbol).await {
-            Ok(ticker) if ticker.last > 0.0 => Some(ticker.last),
-            _ => None,
-        }
+        self.inner.get_price(exchange, symbol).await
     }
 }
 
@@ -236,9 +207,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         }
     }
 
-    async fn get_account_balance(&self, exchange: &str) -> super::ports::AccountBalance {
-        use super::ports::AccountBalance;
-        
+    async fn get_account_balance(&self, exchange: &str) -> AccountBalance {
         let exchange_key = format!("{}:perpetual", exchange);
         
         let ex = match self.exchange_registry.get(&exchange_key) {
@@ -271,96 +240,6 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
                 AccountBalance::default()
             },
         }
-    }
-}
-
-// ── OrderExecutor ──
-
-pub struct PeOrderExecutor {
-    pe_cmd_tx: tokio::sync::mpsc::Sender<pe_types::EngineCommand>,
-    exchange_registry: Arc<ExchangeRegistry>,
-}
-
-impl PeOrderExecutor {
-    pub fn new(pe_cmd_tx: tokio::sync::mpsc::Sender<pe_types::EngineCommand>, exchange_registry: Arc<ExchangeRegistry>) -> Self {
-        Self { pe_cmd_tx, exchange_registry }
-    }
-}
-
-#[async_trait]
-impl OrderExecutor for PeOrderExecutor {
-    async fn send_command(&self, command: OrderCommand) -> anyhow::Result<()> {
-        let pe_cmd = match command {
-            OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only, position_side, client_order_id } => {
-                let pe_position_side = position_side.map(|ps| match ps {
-                    crate::trading::ports::PositionSide::Long => pe_types::PositionSide::Long,
-                    crate::trading::ports::PositionSide::Short => pe_types::PositionSide::Short,
-                });
-                pe_types::EngineCommand::PlaceOrder {
-                    params: pe_types::PlaceOrderParams {
-                        symbol,
-                        side: match side {
-                            OrderSide::Buy => pe_types::Side::Buy,
-                            OrderSide::Sell => pe_types::Side::Sell,
-                        },
-                        order_type: pe_types::OrderType::Limit,
-                        amount,
-                        price,
-                        reduce_only,
-                        position_side: pe_position_side,
-                        position_id: None,
-                        client_order_id,
-                    },
-                }
-            }
-            OrderCommand::CancelOrder { order_id, symbol: _ } => {
-                pe_types::EngineCommand::CancelOrder { order_id }
-            }
-            OrderCommand::CancelAllOrders { symbol } => {
-                pe_types::EngineCommand::CancelAllOrders {
-                    position_id: None,
-                    symbol,
-                }
-            }
-            OrderCommand::CloseAllPositions { symbol, exchange } => {
-                let exchange_key = format!("{}:perpetual", exchange);
-                if let Some(ex) = self.exchange_registry.get(&exchange_key) {
-                    match ex.get_positions(Some(&symbol)).await {
-                        Ok(positions) => {
-                            for pos in positions {
-                                if pos.symbol == symbol && pos.size.abs() > 0.0 {
-                                    let is_long = pos.size > 0.0;
-                                    let close_cmd = pe_types::EngineCommand::PlaceOrder {
-                                        params: pe_types::PlaceOrderParams {
-                                            symbol: symbol.clone(),
-                                            side: if is_long { pe_types::Side::Sell } else { pe_types::Side::Buy },
-                                            order_type: pe_types::OrderType::Market,
-                                            amount: pos.size.abs(),
-                                            price: None,
-                                            reduce_only: true,
-                                            position_side: Some(if is_long { pe_types::PositionSide::Long } else { pe_types::PositionSide::Short }),
-                                            position_id: None,
-                                            client_order_id: Some(format!("grid:close:{}", symbol)),
-                                        },
-                                    };
-                                    if let Err(e) = self.pe_cmd_tx.send(close_cmd).await {
-                                        warn!(symbol = %symbol, error = %e, "Failed to send close position order");
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            warn!(symbol = %symbol, error = %e, "Failed to get positions for CloseAllPositions");
-                        }
-                    }
-                } else {
-                    warn!(exchange_key = %exchange_key, "Exchange not found for CloseAllPositions");
-                }
-                return Ok(());
-            }
-        };
-        self.pe_cmd_tx.send(pe_cmd).await?;
-        Ok(())
     }
 }
 
@@ -706,172 +585,3 @@ fn bot_to_config(bot: &crate::models::GridBot) -> GridBotConfig {
         last_adjusted_at: bot.last_adjusted_at,
     }
 }
-
-// ── CredentialStore ──
-
-pub struct PgCredentialStore {
-    db: PgPool,
-    encryption_key: [u8; 32],
-}
-
-impl PgCredentialStore {
-    pub fn new(db: PgPool, encryption_key: [u8; 32]) -> Self {
-        Self { db, encryption_key }
-    }
-}
-
-#[async_trait]
-impl CredentialStore for PgCredentialStore {
-    async fn load_credentials(&self, user_id: Uuid) -> anyhow::Result<Vec<(String, String)>> {
-        #[derive(Debug, sqlx::FromRow)]
-        struct Row {
-            provider: String,
-            encrypted_api_key: String,
-        }
-
-        let rows = sqlx::query_as::<_, Row>(
-            r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials WHERE user_id = $1"#,
-        )
-        .bind(user_id)
-        .fetch_all(&self.db)
-        .await?;
-
-        let mut result = Vec::new();
-        for row in rows {
-            let decrypted = crate::utils::crypto::decrypt(&row.encrypted_api_key, &self.encryption_key)?;
-            result.push((row.provider, decrypted));
-        }
-        Ok(result)
-    }
-}
-
-// ── LlmProviderResolver ──
-
-pub struct DefaultLlmResolver {
-    ai_service: AiService,
-    ai_config: AiConfig,
-}
-
-impl DefaultLlmResolver {
-    pub fn new(ai_config: AiConfig) -> Self {
-        let ai_service = AiService::new(ai_config.clone());
-        Self { ai_service, ai_config }
-    }
-}
-
-impl LlmProviderResolver for DefaultLlmResolver {
-    fn is_available(&self) -> bool {
-        let config = AiUserConfig::default();
-        self.ai_service.is_configured_with_override(&config)
-    }
-
-    fn resolve(
-        &self,
-        user_credentials: &[(String, String)],
-    ) -> anyhow::Result<(String, String, String, String)> {
-        // 构建用户凭证配置
-        let mut user_config = AiUserConfig::default();
-        for (provider, key) in user_credentials {
-            match provider.as_str() {
-                "openrouter" => user_config.openrouter_api_key = Some(key.clone()),
-                "openai" => user_config.openai_api_key = Some(key.clone()),
-                "deepseek" => user_config.deepseek_api_key = Some(key.clone()),
-                _ => {}
-            }
-        }
-
-        let default_config = AiUserConfig::default();
-        let effective_config = if self.ai_service.is_configured_with_override(&user_config) {
-            &user_config
-        } else {
-            &default_config
-        };
-
-        let provider = self.ai_service.default_provider_with_override(effective_config);
-        let (api_key, base_url, model) = self
-            .ai_service
-            .resolve_provider_with_override(&provider, None, effective_config)?;
-
-        Ok((api_key, base_url, model, provider.to_string()))
-    }
-}
-
-// ── PE 事件转换 ──
-
-/** 将 Position Engine 的 EngineEvent 转换为 OrderEvent */
-pub fn convert_pe_event(event: pe_types::EngineEvent) -> Option<OrderEvent> {
-    match event {
-        pe_types::EngineEvent::OrderPlaced { order } => Some(OrderEvent::OrderPlaced {
-            order: OrderInfo {
-                id: order.id,
-                symbol: order.symbol.clone(),
-                side: match order.side {
-                    pe_types::Side::Buy => OrderSide::Buy,
-                    pe_types::Side::Sell => OrderSide::Sell,
-                },
-                fill_price: order.fill_price,
-                request_price: order.request_price,
-                filled: order.filled,
-                client_order_id: order.client_order_id.clone(),
-            },
-        }),
-        pe_types::EngineEvent::OrderFilled { order, trade: _ } => Some(OrderEvent::OrderFilled {
-            order: OrderInfo {
-                id: order.id,
-                symbol: order.symbol.clone(),
-                side: match order.side {
-                    pe_types::Side::Buy => OrderSide::Buy,
-                    pe_types::Side::Sell => OrderSide::Sell,
-                },
-                fill_price: order.fill_price,
-                request_price: order.request_price,
-                filled: order.filled,
-                client_order_id: order.client_order_id.clone(),
-            },
-        }),
-        pe_types::EngineEvent::OrderCanceled { order } => Some(OrderEvent::OrderCanceled {
-            order_id: order.id,
-            symbol: Some(order.symbol.clone()),
-        }),
-        pe_types::EngineEvent::OrderFailed { order_id, reason } => Some(OrderEvent::OrderFailed {
-            order_id,
-            reason,
-        }),
-        pe_types::EngineEvent::RiskAlert { level, message } => Some(OrderEvent::RiskAlert { level, message }),
-        pe_types::EngineEvent::LiquidationWarning { symbol, liquidation_price, current_price, .. } => {
-            Some(OrderEvent::LiquidationWarning { symbol, liquidation_price, current_price })
-        }
-        _ => None,
-    }
-}
-
-// ── SwitchableOrderExecutor ──
-
-/** 可切换的订单执行器
-
-根据 paper 模式开关，将命令转发到真实执行器或 Paper 执行器。 */
-pub struct SwitchableOrderExecutor {
-    real: Arc<dyn OrderExecutor>,
-    paper: Arc<crate::trading::paper::PaperOrderExecutor>,
-}
-
-impl SwitchableOrderExecutor {
-    pub fn new(
-        real: Arc<dyn OrderExecutor>,
-        paper: Arc<crate::trading::paper::PaperOrderExecutor>,
-    ) -> Self {
-        Self { real, paper }
-    }
-}
-
-#[async_trait]
-impl OrderExecutor for SwitchableOrderExecutor {
-    async fn send_command(&self, command: OrderCommand) -> anyhow::Result<()> {
-        if self.paper.is_enabled() {
-            self.paper.send_command(command).await
-        } else {
-            self.real.send_command(command).await
-        }
-    }
-}
-

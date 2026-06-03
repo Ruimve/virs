@@ -137,7 +137,7 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(bot::semi_automatic_grid::adapters::ExchangeMarketDataProvider::new(exchange_registry.clone())
             .with_kline_engine(kline_engine.clone()));
     let real_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
-        Arc::new(bot::semi_automatic_grid::adapters::PeOrderExecutor::new(pe_cmd_tx.clone(), exchange_registry.clone()));
+        Arc::new(bot::semi_automatic_grid::adapters::PeOrderExecutor::new(pe_cmd_tx.clone(), exchange_registry.clone(), "grid:close"));
     let grid_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
         Arc::new(bot::semi_automatic_grid::adapters::SwitchableOrderExecutor::new(
             real_order_executor,
@@ -221,7 +221,7 @@ async fn main() -> anyhow::Result<()> {
             .with_db(db_pool.clone(), config.server.encryption_key.clone())
             .with_paper_executor(paper_executor.clone()));
     let auto_real_order_executor: Arc<dyn bot::auto_trade::ports::OrderExecutor> =
-        Arc::new(bot::auto_trade::adapters::PeOrderExecutor::new(pe_cmd_tx.clone(), exchange_registry.clone()));
+        Arc::new(bot::auto_trade::adapters::PeOrderExecutor::new(pe_cmd_tx.clone(), exchange_registry.clone(), "auto:close"));
     let auto_order_executor: Arc<dyn bot::auto_trade::ports::OrderExecutor> =
         Arc::new(bot::auto_trade::adapters::SwitchableOrderExecutor::new(
             auto_real_order_executor,

@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 pub use crate::trading::ports::{OrderSide, OrderInfo, OrderCommand, OrderEvent, OrderExecutor, PositionSide};
+pub use crate::bot::common::ports::{AccountBalance, CredentialStore, LlmProviderResolver};
 use crate::bot::auto_trade::types::AutoBotConfig;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -24,13 +25,6 @@ pub struct MarketSnapshot {
     pub indicators: crate::bot::common::indicators::MarketIndicators,
     pub min_qty: f64,
     pub liquidation_price: Option<f64>,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct AccountBalance {
-    pub total: f64,
-    pub free: f64,
-    pub used: f64,
 }
 
 #[async_trait]
@@ -96,19 +90,6 @@ pub trait AutoStore: Send + Sync {
     async fn load_analysis_logs(&self, bot_id: Uuid) -> anyhow::Result<Vec<AutoAnalysisLogEntry>>;
     async fn load_consecutive_losses(&self, bot_id: Uuid) -> anyhow::Result<i32>;
     async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()>;
-}
-
-#[async_trait]
-pub trait CredentialStore: Send + Sync {
-    async fn load_credentials(&self, user_id: Uuid) -> anyhow::Result<Vec<(String, String)>>;
-}
-
-pub trait LlmProviderResolver: Send + Sync {
-    fn is_available(&self) -> bool;
-    fn resolve(
-        &self,
-        user_credentials: &[(String, String)],
-    ) -> anyhow::Result<(String, String, String, String)>;
 }
 
 #[async_trait]
