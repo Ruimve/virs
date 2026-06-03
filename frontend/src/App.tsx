@@ -1,6 +1,7 @@
 import { type Component, ErrorBoundary } from 'solid-js'
 import { Route, Router, Navigate } from '@solidjs/router'
 import { MarketProvider } from './lib/market-context'
+import { PaperProvider } from './lib/paper-context'
 import Login from './pages/Login'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
@@ -32,6 +33,7 @@ const App: Component = () => {
       </div>
     )}>
       <MarketProvider>
+        <PaperProvider>
         <Router root={Layout}>
           <Route path="/login" component={Login} />
           <Route path="/dashboard" component={Dashboard} />
@@ -48,6 +50,7 @@ const App: Component = () => {
           <Route path="/" component={() => <Navigate href="/dashboard" />} />
           <Route path="*" component={() => <Navigate href="/dashboard" />} />
         </Router>
+        </PaperProvider>
       </MarketProvider>
     </ErrorBoundary>
   )

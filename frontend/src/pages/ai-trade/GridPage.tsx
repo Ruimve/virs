@@ -38,9 +38,6 @@ export default function GridPage() {
   const [dynamicAdjust, setDynamicAdjust] = createSignal(true);
   const [creating, setCreating] = createSignal(false);
 
-  const [paperEnabled, setPaperEnabled] = createSignal(false);
-  const [paperLoading, setPaperLoading] = createSignal(false);
-
   const loadBots = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
@@ -50,31 +47,6 @@ export default function GridPage() {
       console.error('Failed to load bots:', e);
     } finally {
       if (showLoading) setLoading(false);
-    }
-  };
-
-  const loadPaperStatus = async () => {
-    try {
-      const res = await api.get<{ enabled: boolean; pending_count: number }>('/grid/paper/status');
-      if (res.data) setPaperEnabled(res.data.enabled);
-    } catch (e) {
-      console.error('Failed to load paper status:', e);
-    }
-  };
-
-  const togglePaper = async () => {
-    setPaperLoading(true);
-    try {
-      if (paperEnabled()) {
-        await api.post('/grid/paper/disable');
-      } else {
-        await api.post('/grid/paper/enable');
-      }
-      setPaperEnabled(!paperEnabled());
-    } catch (e: any) {
-      setError(e.response?.data?.error || '操作失败');
-    } finally {
-      setPaperLoading(false);
     }
   };
 
@@ -142,7 +114,6 @@ export default function GridPage() {
 
   onMount(() => {
     loadBots();
-    loadPaperStatus();
     const interval = setInterval(() => { loadBots(false); }, 10000);
     onCleanup(() => clearInterval(interval));
   });
@@ -156,18 +127,6 @@ export default function GridPage() {
             <p class="text-xs text-gray-500 mt-0.5">AI 驱动的网格交易策略</p>
           </div>
           <div class="flex items-center gap-3">
-            <button
-              onClick={togglePaper}
-              disabled={paperLoading()}
-              class={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                paperEnabled()
-                  ? 'bg-amber-50 border-amber-200 text-amber-700'
-                  : 'bg-white border-gray-200 text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <span class={`w-1.5 h-1.5 rounded-full ${paperEnabled() ? 'bg-amber-500' : 'bg-gray-300'}`} />
-              {paperEnabled() ? 'Paper 交易中' : 'Paper 交易'}
-            </button>
             <button
               onClick={() => setShowCreate(true)}
               class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors"

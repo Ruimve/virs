@@ -3,6 +3,7 @@ import { A, useLocation } from '@solidjs/router'
 import { getUser, isAdmin, initAuth } from '../lib/auth'
 import { logout } from '../lib/api'
 import { useMarket } from '../lib/market-context'
+import { usePaper } from '../lib/paper-context'
 import type { RouteSectionProps } from '@solidjs/router'
 
 interface NavItem {
@@ -104,6 +105,7 @@ const Layout: Component<RouteSectionProps> = (props) => {
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [expandedMenus, setExpandedMenus] = createSignal<Set<string>>(new Set())
   const market = useMarket()
+  const paper = usePaper()
 
   // 初始化认证状态
   initAuth()
@@ -277,6 +279,20 @@ const Layout: Component<RouteSectionProps> = (props) => {
                 现货
               </button>
             </div>
+
+            {/* Paper 交易开关 */}
+            <button
+              onClick={() => paper.toggle()}
+              disabled={paper.loading()}
+              class={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] font-medium border transition-all duration-200 ${
+                paper.enabled()
+                  ? 'bg-amber-50 border-amber-200 text-amber-700'
+                  : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <span class={`w-1.5 h-1.5 rounded-full ${paper.enabled() ? 'bg-amber-500' : 'bg-gray-300'}`} />
+              {paper.enabled() ? 'Paper' : 'Paper'}
+            </button>
 
             <Show when={getUser()}>
               {(currentUser) => (
