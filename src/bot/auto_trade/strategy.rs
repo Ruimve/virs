@@ -23,6 +23,7 @@ pub struct PromptContext {
     pub consecutive_losses: i32,
     pub trigger_reason: String,
     pub ind: MarketIndicators,
+    pub min_qty: f64,
 }
 
 pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
@@ -102,6 +103,7 @@ pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
         .replace("{total_pnl}", &format!("{:.2}", ctx.total_pnl))
         .replace("{consecutive_losses}", &ctx.consecutive_losses.to_string())
         .replace("{trigger_reason}", &ctx.trigger_reason)
+        .replace("{min_qty}", &format!("{:.6}", ctx.min_qty))
 }
 
 pub fn format_position_info(
@@ -109,6 +111,7 @@ pub fn format_position_info(
     entry_price: f64,
     position_size: f64,
     current_price: f64,
+    liquidation_price: Option<f64>,
 ) -> String {
     match current_side {
         Some(side) if !side.is_empty() && side != "none" => {
@@ -122,9 +125,12 @@ pub fn format_position_info(
             } else {
                 0.0
             };
+            let liq_str = liquidation_price
+                .map(|p| format!("\n- 强平价格：{:.2}", p))
+                .unwrap_or_default();
             format!(
-                "- 方向：{}\n- 入场价：{:.2}\n- 持仓量：{:.6}\n- 当前价：{:.2}\n- 未实现盈亏：{:.4} USDT ({:+.2}%)",
-                side, entry_price, position_size, current_price, unrealized_pnl, pnl_pct
+                "- 方向：{}\n- 入场价：{:.2}\n- 持仓量：{:.6}\n- 当前价：{:.2}\n- 未实现盈亏：{:.4} USDT ({:+.2}%){}",
+                side, entry_price, position_size, current_price, unrealized_pnl, pnl_pct, liq_str
             )
         }
         _ => "无仓位".to_string(),

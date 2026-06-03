@@ -22,6 +22,8 @@ pub struct MarketSnapshot {
     pub funding_rate: f64,
     pub funding_next_time: String,
     pub indicators: crate::bot::common::indicators::MarketIndicators,
+    pub min_qty: f64,
+    pub liquidation_price: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default)]

@@ -33,11 +33,8 @@ struct PendingOrder {
 /// 不发送真实订单，而是等待 `on_price_tick` 检查触发条件后
 /// 通过 `event_tx` 发送模拟的 `OrderEvent`。
 pub struct PaperOrderExecutor {
-    /// 挂单簿: order_id -> PendingOrder
     pending: Arc<Mutex<HashMap<Uuid, PendingOrder>>>,
-    /// 事件发送通道（将模拟事件发送给 GridWorker）
-    event_tx: broadcast::Sender<OrderEvent>,
-    /// 是否启用
+    event_txs: Arc<tokio::sync::RwLock<Vec<broadcast::Sender<OrderEvent>>>>,
     enabled: Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -45,12 +42,26 @@ impl PaperOrderExecutor {
     pub fn new(event_tx: broadcast::Sender<OrderEvent>) -> Self {
         Self {
             pending: Arc::new(Mutex::new(HashMap::new())),
-            event_tx,
+            event_txs: Arc::new(tokio::sync::RwLock::new(vec![event_tx])),
             enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         }
     }
 
-    /// 是否启用 paper 交易
+    pub async fn add_event_channel(&self, event_tx: broadcast::Sender<OrderEvent>) {
+        let mut txs = self.event_txs.write().await;
+        if !txs.iter().any(|tx| tx.same_channel(&event_tx)) {
+            txs.push(event_tx);
+        }
+    }
+
+    fn broadcast_event(&self, event: OrderEvent) {
+        if let Ok(txs) = self.event_txs.try_read() {
+            for tx in txs.iter() {
+                let _ = tx.send(event.clone());
+            }
+        }
+    }
+
     pub fn is_enabled(&self) -> bool {
         self.enabled.load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -66,7 +77,7 @@ impl PaperOrderExecutor {
         self.enabled.store(false, std::sync::atomic::Ordering::Relaxed);
         let mut pending = self.pending.lock().await;
         for order_id in pending.keys() {
-            let _ = self.event_tx.send(OrderEvent::OrderCanceled { order_id: *order_id, symbol: None });
+            self.broadcast_event(OrderEvent::OrderCanceled { order_id: *order_id, symbol: None });
         }
         pending.clear();
         info!("Paper trading disabled, all pending orders canceled");
@@ -125,12 +136,11 @@ impl PaperOrderExecutor {
         };
 
         // 先发送 OrderPlaced（如果 worker 之前没收到的话）
-        let _ = self.event_tx.send(OrderEvent::OrderPlaced {
+        self.broadcast_event(OrderEvent::OrderPlaced {
             order: order_info.clone(),
         });
 
-        // 再发送 OrderFilled
-        let _ = self.event_tx.send(OrderEvent::OrderFilled {
+        self.broadcast_event(OrderEvent::OrderFilled {
             order: order_info,
         });
 
@@ -173,46 +183,77 @@ impl OrderExecutor for PaperOrderExecutor {
                 position_side: _,
                 client_order_id,
             } => {
-                let order = PendingOrder {
-                    id: Uuid::new_v4(),
-                    symbol,
-                    side,
-                    amount,
-                    price: price.unwrap_or(0.0),
-                    reduce_only,
-                    client_order_id: client_order_id.clone(),
-                    created_at: Utc::now(),
-                };
+                if price.is_none() {
+                    // Market order: fill immediately, fill_price=None 让 worker 用 current_price 填充
+                    let order_id = Uuid::new_v4();
 
-                let order_id = order.id;
-
-                self.pending.lock().await.insert(order_id, order.clone());
-
-                let _ = self.event_tx.send(OrderEvent::OrderPlaced {
-                    order: OrderInfo {
+                    let order_info = OrderInfo {
                         id: order_id,
-                        symbol: order.symbol.clone(),
-                        side: order.side,
+                        symbol: symbol.clone(),
+                        side,
                         fill_price: None,
-                        request_price: Some(order.price),
-                        filled: 0.0,
-                        client_order_id: order.client_order_id.clone(),
-                    },
-                });
+                        request_price: None,
+                        filled: amount,
+                        client_order_id: client_order_id.clone(),
+                    };
 
-                debug!(
-                    order_id = %order_id,
-                    symbol = %order.symbol,
-                    side = ?order.side,
-                    price = order.price,
-                    amount = order.amount,
-                    "Paper order placed"
-                );
+                    self.broadcast_event(OrderEvent::OrderPlaced {
+                        order: order_info.clone(),
+                    });
+                    self.broadcast_event(OrderEvent::OrderFilled {
+                        order: order_info,
+                    });
+
+                    debug!(
+                        order_id = %order_id,
+                        symbol = %symbol,
+                        side = ?side,
+                        amount,
+                        "Paper market order filled immediately"
+                    );
+                } else {
+                    // Limit order: place into pending, wait for price tick
+                    let order = PendingOrder {
+                        id: Uuid::new_v4(),
+                        symbol,
+                        side,
+                        amount,
+                        price: price.unwrap_or(0.0),
+                        reduce_only,
+                        client_order_id: client_order_id.clone(),
+                        created_at: Utc::now(),
+                    };
+
+                    let order_id = order.id;
+
+                    self.pending.lock().await.insert(order_id, order.clone());
+
+                    self.broadcast_event(OrderEvent::OrderPlaced {
+                        order: OrderInfo {
+                            id: order_id,
+                            symbol: order.symbol.clone(),
+                            side: order.side,
+                            fill_price: None,
+                            request_price: Some(order.price),
+                            filled: 0.0,
+                            client_order_id: order.client_order_id.clone(),
+                        },
+                    });
+
+                    debug!(
+                        order_id = %order_id,
+                        symbol = %order.symbol,
+                        side = ?order.side,
+                        price = order.price,
+                        amount = order.amount,
+                        "Paper limit order placed"
+                    );
+                }
             }
             OrderCommand::CancelOrder { order_id, symbol: _ } => {
                 let mut pending = self.pending.lock().await;
                 if pending.remove(&order_id).is_some() {
-                    let _ = self.event_tx.send(OrderEvent::OrderCanceled { order_id, symbol: None });
+                    self.broadcast_event(OrderEvent::OrderCanceled { order_id, symbol: None });
                     debug!(order_id = %order_id, "Paper order canceled");
                 } else {
                     debug!(order_id = %order_id, "Paper cancel order not found");
@@ -221,7 +262,7 @@ impl OrderExecutor for PaperOrderExecutor {
             OrderCommand::CancelAllOrders { symbol: _ } => {
                 let mut pending = self.pending.lock().await;
                 for order_id in pending.keys() {
-                    let _ = self.event_tx.send(OrderEvent::OrderCanceled { order_id: *order_id, symbol: None });
+                    self.broadcast_event(OrderEvent::OrderCanceled { order_id: *order_id, symbol: None });
                 }
                 let count = pending.len();
                 pending.clear();

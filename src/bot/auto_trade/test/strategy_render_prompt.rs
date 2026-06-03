@@ -33,6 +33,7 @@ fn default_ctx() -> PromptContext {
         consecutive_losses: 0,
         trigger_reason: "scheduled".to_string(),
         ind: MarketIndicators::default(),
+        min_qty: 0.001,
     }
 }
 

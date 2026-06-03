@@ -67,6 +67,7 @@ impl AutoWorker {
             self.bot.entry_price,
             self.bot.position_size,
             snapshot.current_price,
+            snapshot.liquidation_price,
         );
 
         let stop_take_profit_info = strategy::format_stop_take_profit(
@@ -109,6 +110,7 @@ impl AutoWorker {
             consecutive_losses: self.consecutive_losses,
             trigger_reason: "scheduled".to_string(),
             ind: snapshot.indicators,
+            min_qty: snapshot.min_qty,
         };
 
         let template = crate::bot::auto_trade::types::DEFAULT_USER_PROMPT_TEMPLATE;
@@ -339,7 +341,7 @@ impl AutoWorker {
             symbol: self.bot.symbol.clone(),
             side: order_side,
             amount: quantity,
-            price: Some(price),
+            price: None,
             reduce_only: false,
             position_side,
             client_order_id: Some(client_order_id.clone()),
@@ -395,7 +397,7 @@ impl AutoWorker {
             symbol: self.bot.symbol.clone(),
             side: order_side,
             amount: self.bot.position_size,
-            price: Some(self.current_price),
+            price: None,
             reduce_only: true,
             position_side,
             client_order_id: Some(client_order_id.clone()),

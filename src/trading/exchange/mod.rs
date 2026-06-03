@@ -97,6 +97,9 @@ pub trait Exchange: Send + Sync {
     /// Get available trading symbols for this exchange's bound market type.
     async fn get_symbols(&self) -> anyhow::Result<Vec<String>>;
 
+    /// Get minimum order quantity for a symbol.
+    async fn get_min_qty(&self, symbol: &str) -> anyhow::Result<f64>;
+
     /// Check if exchange is healthy / reachable.
     async fn ping(&self) -> anyhow::Result<bool>;
 
@@ -207,6 +210,10 @@ impl Exchange for Box<dyn Exchange> {
 
     async fn get_symbols(&self) -> anyhow::Result<Vec<String>> {
         (**self).get_symbols().await
+    }
+
+    async fn get_min_qty(&self, symbol: &str) -> anyhow::Result<f64> {
+        (**self).get_min_qty(symbol).await
     }
 
     async fn ping(&self) -> anyhow::Result<bool> {
@@ -543,6 +550,16 @@ impl Exchange for CcxtAdapter {
             .filter(|m| m.market_type == ccxt_mt && m.active)
             .map(|m| m.symbol)
             .collect())
+    }
+
+    async fn get_min_qty(&self, symbol: &str) -> anyhow::Result<f64> {
+        let markets = self.inner.fetch_markets().await
+            .map_err(|e| anyhow::anyhow!("ccxt fetch_markets error: {}", e))?;
+        let market = markets.iter().find(|m| m.symbol == symbol);
+        match market {
+            Some(m) => Ok(m.min_amount.unwrap_or(0.0)),
+            None => Ok(0.0),
+        }
     }
 
     async fn ping(&self) -> anyhow::Result<bool> {

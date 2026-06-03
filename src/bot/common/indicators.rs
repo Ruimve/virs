@@ -183,8 +183,13 @@ pub fn compute_market_indicators(
     let nearest_round_up = indicators::find_round_number(current_price, true);
     let nearest_round_down = indicators::find_round_number(current_price, false);
 
-    let h1_volume = klines_1h.last().map(|k| k.volume).unwrap_or(0.0);
-    let h1_volume_sma20 = indicators::volume_sma_at(klines_1h, last_idx, 20);
+    let h1_last_completed = klines_1h.len().saturating_sub(2);
+    let h1_volume = klines_1h.get(h1_last_completed).map(|k| k.volume).unwrap_or(0.0);
+    let h1_volume_sma20 = if h1_last_completed >= 19 {
+        indicators::volume_sma_at(klines_1h, h1_last_completed, 20)
+    } else {
+        0.0
+    };
     let h1_high_50 = indicators::highest_at(klines_1h, last_idx, 50);
     let h1_low_50 = indicators::lowest_at(klines_1h, last_idx, 50);
 
@@ -236,8 +241,13 @@ pub fn compute_market_indicators(
     let m15_bars_outside_band = indicators::compute_bars_outside_band(klines_15m, m15_bb_upper, m15_bb_lower);
     let m15_ema20 = if !klines_15m.is_empty() { indicators::ema_at(klines_15m, m15_last, 20) } else { 0.0 };
     let m15_ema50 = if klines_15m.len() >= 50 { indicators::ema_at(klines_15m, m15_last, 50) } else { 0.0 };
-    let m15_volume = klines_15m.last().map(|k| k.volume).unwrap_or(0.0);
-    let m15_volume_sma20 = if !klines_15m.is_empty() { indicators::volume_sma_at(klines_15m, m15_last, 20) } else { 0.0 };
+    let m15_last_completed = klines_15m.len().saturating_sub(2);
+    let m15_volume = klines_15m.get(m15_last_completed).map(|k| k.volume).unwrap_or(0.0);
+    let m15_volume_sma20 = if m15_last_completed >= 19 {
+        indicators::volume_sma_at(klines_15m, m15_last_completed, 20)
+    } else {
+        0.0
+    };
     let m15_high_50 = if !klines_15m.is_empty() { indicators::highest_at(klines_15m, m15_last, 50) } else { 0.0 };
     let m15_low_50 = if !klines_15m.is_empty() { indicators::lowest_at(klines_15m, m15_last, 50) } else { 0.0 };
     let m15_ema_cross_bars_ago = compute_ema_cross_bars_ago(klines_15m, 20, 50, m15_last);

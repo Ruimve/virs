@@ -218,7 +218,8 @@ async fn main() -> anyhow::Result<()> {
     let auto_market_data_provider: Arc<dyn bot::auto_trade::ports::MarketDataProvider> =
         Arc::new(bot::auto_trade::adapters::ExchangeMarketDataProvider::new(exchange_registry.clone())
             .with_kline_engine(kline_engine.clone())
-            .with_db(db_pool.clone(), config.server.encryption_key.clone()));
+            .with_db(db_pool.clone(), config.server.encryption_key.clone())
+            .with_paper_executor(paper_executor.clone()));
     let auto_real_order_executor: Arc<dyn bot::auto_trade::ports::OrderExecutor> =
         Arc::new(bot::auto_trade::adapters::PeOrderExecutor::new(pe_cmd_tx.clone(), exchange_registry.clone()));
     let auto_order_executor: Arc<dyn bot::auto_trade::ports::OrderExecutor> =
@@ -239,6 +240,10 @@ async fn main() -> anyhow::Result<()> {
     ));
 
     let (auto_event_tx, _auto_event_rx) = tokio::sync::broadcast::channel::<bot::auto_trade::ports::OrderEvent>(256);
+
+    {
+        paper_executor.add_event_channel(auto_event_tx.clone()).await;
+    }
 
     let (mut auto_engine, auto_cmd_tx, _auto_event_broadcast) = bot::auto_trade::AutoEngine::new(
         auto_store,

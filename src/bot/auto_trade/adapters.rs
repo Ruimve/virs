@@ -74,11 +74,13 @@ pub struct ExchangeMarketDataProvider {
     kline_engine: Option<Arc<KlineEngine>>,
     db: Option<PgPool>,
     encryption_key: Option<String>,
+    paper_executor: Option<Arc<crate::trading::paper::PaperOrderExecutor>>,
+    paper_balance: Arc<tokio::sync::RwLock<Option<AccountBalance>>>,
 }
 
 impl ExchangeMarketDataProvider {
     pub fn new(exchange_registry: Arc<ExchangeRegistry>) -> Self {
-        Self { exchange_registry, kline_engine: None, db: None, encryption_key: None }
+        Self { exchange_registry, kline_engine: None, db: None, encryption_key: None, paper_executor: None, paper_balance: Arc::new(tokio::sync::RwLock::new(None)) }
     }
 
     pub fn with_kline_engine(mut self, engine: Arc<KlineEngine>) -> Self {
@@ -89,6 +91,11 @@ impl ExchangeMarketDataProvider {
     pub fn with_db(mut self, db: PgPool, encryption_key: String) -> Self {
         self.db = Some(db);
         self.encryption_key = Some(encryption_key);
+        self
+    }
+
+    pub fn with_paper_executor(mut self, paper: Arc<crate::trading::paper::PaperOrderExecutor>) -> Self {
+        self.paper_executor = Some(paper);
         self
     }
 
@@ -288,15 +295,80 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
 
         let effective_price = if current_price > 0.0 { current_price } else { ind.current_price };
 
+        // 获取最小交易数量
+        let min_qty = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+            match ex.get_min_qty(symbol).await {
+                Ok(qty) => qty,
+                Err(_) => 0.0,
+            }
+        } else {
+            0.0
+        };
+
+        // 获取强平价格（仅合约且有持仓时）
+        let liquidation_price = if market_type == "perpetual" {
+            if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+                match ex.get_positions(Some(symbol)).await {
+                    Ok(positions) => positions.iter()
+                        .find(|p| p.symbol.as_str() == symbol && p.size.abs() > 0.0)
+                        .and_then(|p| p.liquidation_price),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         MarketSnapshot {
             current_price: effective_price,
             funding_rate,
             funding_next_time,
             indicators: ind,
+            min_qty,
+            liquidation_price,
         }
     }
 
     async fn get_account_balance(&self, exchange: &str, market_type: &str) -> AccountBalance {
+        if let Some(ref paper) = self.paper_executor {
+            if paper.is_enabled() {
+                {
+                    let cached = self.paper_balance.read().await;
+                    if let Some(ref balance) = *cached {
+                        return balance.clone();
+                    }
+                }
+
+                self.ensure_exchange(exchange, market_type).await;
+                let exchange_key = format!("{}:{}", exchange, market_type);
+                let real_balance = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+                    match ex.get_balances().await {
+                        Ok(bs) => {
+                            let usdt = bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT"));
+                            usdt.map(|b| AccountBalance { total: b.total, free: b.free, used: b.used })
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Paper mode: failed to fetch real balance, balance unavailable");
+                            None
+                        }
+                    }
+                } else {
+                    tracing::warn!("Paper mode: exchange not available, balance unavailable");
+                    None
+                };
+
+                let balance = real_balance.unwrap_or(AccountBalance::default());
+                {
+                    let mut cached = self.paper_balance.write().await;
+                    *cached = Some(balance.clone());
+                }
+                tracing::info!(total = balance.total, free = balance.free, "Paper mode: initialized balance from exchange");
+                return balance;
+            }
+        }
+
         self.ensure_exchange(exchange, market_type).await;
 
         let exchange_key = format!("{}:{}", exchange, market_type);
@@ -703,7 +775,11 @@ impl OrderExecutor for PeOrderExecutor {
                             OrderSide::Buy => crate::engine::position::types::Side::Buy,
                             OrderSide::Sell => crate::engine::position::types::Side::Sell,
                         },
-                        order_type: crate::engine::position::types::OrderType::Limit,
+                        order_type: if price.is_some() {
+                            crate::engine::position::types::OrderType::Limit
+                        } else {
+                            crate::engine::position::types::OrderType::Market
+                        },
                         amount,
                         price,
                         reduce_only,

@@ -192,7 +192,9 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位加密货币交易方向�
    震荡确认类（1h ADX必须>25才可使用，防止弱趋势假信号）：
    - RSI从<30回升至>35（超卖反弹）
    - MACD柱状图由负转正（动量转换）
-5. 成交量确认：1h当前量 > 20周期均量 * 0.8
+5. 成交量确认（满足任一）：
+   - 1h上一根量 > 1h 20周期均量 * 0.8（趋势量能确认）
+   - 15m上一根量 > 15m 20周期均量 * 0.6（入场动量确认）
 
 ## 开空条件（open_short，仅合约）
 必须同时满足：
@@ -209,7 +211,9 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位加密货币交易方向�
    震荡确认类（1h ADX必须>25才可使用，防止弱趋势假信号）：
    - RSI从>70回落至<65（超买回落）
    - MACD柱状图由正转负（动量转换）
-5. 成交量确认：1h当前量 > 20周期均量 * 0.8
+5. 成交量确认（满足任一）：
+   - 1h上一根量 > 1h 20周期均量 * 0.8（趋势量能确认）
+   - 15m上一根量 > 15m 20周期均量 * 0.6（入场动量确认）
 
 ## 平仓条件（close_position）
 已有仓位时，满足任一：
@@ -261,6 +265,7 @@ pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}
 - 交易所：{exchange}
 - 市场类型：{market_type}
 - 杠杆倍数：{leverage}
+- 最小交易数量：{min_qty}
 
 ## 当前仓位
 {position_info}
@@ -298,7 +303,7 @@ pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}
 - 布林带上/中/下轨：{h1_bb_upper} / {h1_bb_middle} / {h1_bb_lower}
 - 布林带宽度：{h1_bb_width_pct}%
 - 1h涨跌幅：{h1_change}%
-- 成交量：{h1_volume}（20周期均量：{h1_volume_sma20}）
+- 成交量（上一根已完成K线）：{h1_volume}（20周期均量：{h1_volume_sma20}）
 - 50周期最高/最低：{h1_high_50} / {h1_low_50}
 
 ## 15分钟入场周期
@@ -313,7 +318,7 @@ pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}
 - MACD柱状图：{m15_macd_histogram}
 - ATR(14)：{m15_atr}
 - ADX(14)：{m15_adx}
-- 成交量：{m15_volume}（20周期均量：{m15_volume_sma20}）
+- 成交量（上一根已完成K线）：{m15_volume}（20周期均量：{m15_volume_sma20}）
 - 50周期最高/最低：{m15_high_50} / {m15_low_50}
 
 ## 统计
