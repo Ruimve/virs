@@ -52,7 +52,7 @@ pub trait AutoStore: Send + Sync {
         position_size: f64,
         stop_loss: f64,
         take_profit: f64,
-        unrealized_pnl: f64,
+        liquidation_price: Option<f64>,
     ) -> anyhow::Result<()>;
     async fn update_ai_analysis(
         &self,
@@ -77,6 +77,7 @@ pub trait AutoStore: Send + Sync {
         exchange: &str,
         side: &str,
         trade_type: &str,
+        trigger_source: &str,
         price: f64,
         quantity: f64,
         pnl: f64,

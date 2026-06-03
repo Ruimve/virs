@@ -64,6 +64,18 @@ pub enum WsEvent {
         level: String,
         message: String,
     },
+    #[serde(rename = "position_pnl")]
+    PositionPnl {
+        bot_id: String,
+        symbol: String,
+        side: String,
+        entry_price: f64,
+        position_size: f64,
+        current_price: f64,
+        unrealized_pnl: f64,
+        total_pnl: f64,
+        liquidation_price: Option<f64>,
+    },
 }
 
 pub type WsBroadcaster = broadcast::Sender<WsEvent>;

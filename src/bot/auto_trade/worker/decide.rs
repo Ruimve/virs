@@ -508,6 +508,7 @@ impl AutoWorker {
             &self.bot.exchange,
             trade_side,
             trade_type,
+            "llm",
             fill_price,
             actual_qty,
             0.0,
@@ -577,6 +578,11 @@ impl AutoWorker {
             },
         };
 
+        let trigger_source = match pending.reason.as_str() {
+            "stop_loss" | "take_profit" | "position_timeout" => "risk_control",
+            _ => "llm",
+        };
+
         let trade_side = match pending.side.as_str() {
             "long" => "sell",
             "short" => "buy",
@@ -589,6 +595,7 @@ impl AutoWorker {
             &self.bot.exchange,
             trade_side,
             effective_trade_type,
+            trigger_source,
             fill_price,
             actual_qty,
             realized_pnl,

@@ -245,7 +245,7 @@ async fn main() -> anyhow::Result<()> {
         paper_executor.add_event_channel(auto_event_tx.clone()).await;
     }
 
-    let (mut auto_engine, auto_cmd_tx, _auto_event_broadcast) = bot::auto_trade::AutoEngine::new(
+    let (mut auto_engine, auto_cmd_tx, auto_event_broadcast) = bot::auto_trade::AutoEngine::new(
         auto_store,
         auto_ai_service,
         auto_price_provider,
@@ -272,6 +272,84 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     });
+
+    // 桥接 AutoEvent → WsBroadcaster，推送实时仓位盈亏到前端
+    {
+        let mut auto_event_rx = auto_event_broadcast.subscribe();
+        let ws_broadcaster = ws_broadcaster.clone();
+        tokio::spawn(async move {
+            loop {
+                match auto_event_rx.recv().await {
+                    Ok(event) => {
+                        let ws_event = match &event {
+                            bot::auto_trade::types::AutoEvent::PriceUpdate {
+                                bot_id, symbol, side, entry_price, position_size,
+                                current_price, unrealized_pnl, total_pnl, liquidation_price,
+                            } => Some(api::ws::WsEvent::PositionPnl {
+                                bot_id: bot_id.to_string(),
+                                symbol: symbol.clone(),
+                                side: side.clone(),
+                                entry_price: *entry_price,
+                                position_size: *position_size,
+                                current_price: *current_price,
+                                unrealized_pnl: *unrealized_pnl,
+                                total_pnl: *total_pnl,
+                                liquidation_price: *liquidation_price,
+                            }),
+                            bot::auto_trade::types::AutoEvent::PositionOpened { bot_id, side, price, quantity } => {
+                                Some(api::ws::WsEvent::Position {
+                                    bot_id: bot_id.to_string(),
+                                    symbol: String::new(),
+                                    side: side.clone(),
+                                    size: *quantity,
+                                    entry_price: *price,
+                                    action: "opened".to_string(),
+                                })
+                            }
+                            bot::auto_trade::types::AutoEvent::PositionClosed { bot_id, side, price, pnl } => {
+                                Some(api::ws::WsEvent::Trade {
+                                    bot_id: bot_id.to_string(),
+                                    symbol: String::new(),
+                                    side: side.clone(),
+                                    price: *price,
+                                    amount: 0.0,
+                                    pnl: *pnl,
+                                })
+                            }
+                            bot::auto_trade::types::AutoEvent::BotStarted { bot_id } => {
+                                Some(api::ws::WsEvent::BotStatus {
+                                    bot_id: bot_id.to_string(),
+                                    name: String::new(),
+                                    status: "running".to_string(),
+                                })
+                            }
+                            bot::auto_trade::types::AutoEvent::BotStopped { bot_id, reason } => {
+                                Some(api::ws::WsEvent::BotStatus {
+                                    bot_id: bot_id.to_string(),
+                                    name: String::new(),
+                                    status: reason.clone(),
+                                })
+                            }
+                            bot::auto_trade::types::AutoEvent::BotError { bot_id, error } => {
+                                Some(api::ws::WsEvent::Notification {
+                                    level: "error".to_string(),
+                                    message: format!("Bot {}: {}", bot_id, error),
+                                })
+                            }
+                            _ => None,
+                        };
+                        if let Some(ws_event) = ws_event {
+                            let _ = ws_broadcaster.send(ws_event);
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        tracing::warn!(lagged = n, "Auto WS event bridge lagged");
+                    }
+                }
+            }
+        });
+    }
 
     let auto_cmd_tx = Some(auto_cmd_tx);
     tokio::spawn(async move {

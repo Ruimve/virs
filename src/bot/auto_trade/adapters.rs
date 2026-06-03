@@ -453,13 +453,13 @@ impl AutoStore for PgAutoStore {
         position_size: f64,
         stop_loss: f64,
         take_profit: f64,
-        unrealized_pnl: f64,
+        liquidation_price: Option<f64>,
     ) -> anyhow::Result<()> {
         sqlx::query(
             r#"UPDATE qd_auto_bots SET
                 current_side = $2, entry_price = $3, position_size = $4,
-                stop_loss = $5, take_profit = $6, unrealized_pnl = $7,
-                updated_at = NOW()
+                stop_loss = $5, take_profit = $6,
+                liquidation_price = $7, updated_at = NOW()
                WHERE id = $1"#,
         )
         .bind(bot_id)
@@ -468,7 +468,7 @@ impl AutoStore for PgAutoStore {
         .bind(position_size)
         .bind(stop_loss)
         .bind(take_profit)
-        .bind(unrealized_pnl)
+        .bind(liquidation_price)
         .execute(&self.db)
         .await?;
         Ok(())
@@ -528,6 +528,7 @@ impl AutoStore for PgAutoStore {
         exchange: &str,
         side: &str,
         trade_type: &str,
+        trigger_source: &str,
         price: f64,
         quantity: f64,
         pnl: f64,
@@ -536,8 +537,8 @@ impl AutoStore for PgAutoStore {
     ) -> anyhow::Result<Uuid> {
         let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
         let row: (Uuid,) = sqlx::query_as(
-            r#"INSERT INTO qd_auto_trades (bot_id, user_id, symbol, exchange, side, trade_type, price, quantity, pnl, pnl_pct, exchange_order_id)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            r#"INSERT INTO qd_auto_trades (bot_id, user_id, symbol, exchange, side, trade_type, trigger_source, price, quantity, pnl, pnl_pct, exchange_order_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                RETURNING id"#,
         )
         .bind(bot_id)
@@ -546,6 +547,7 @@ impl AutoStore for PgAutoStore {
         .bind(exchange)
         .bind(side)
         .bind(trade_type)
+        .bind(trigger_source)
         .bind(price)
         .bind(quantity)
         .bind(pnl)
@@ -649,6 +651,7 @@ fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
         stop_loss: bot.stop_loss,
         take_profit: bot.take_profit,
         unrealized_pnl: bot.unrealized_pnl,
+        liquidation_price: bot.liquidation_price,
         market_regime: bot.market_regime.clone(),
         ai_analysis: bot.ai_analysis.clone(),
         system_prompt: bot.system_prompt.clone(),

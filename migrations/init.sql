@@ -398,6 +398,16 @@ DO $$ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
+DO $$ BEGIN
+    ALTER TABLE qd_auto_bots ADD COLUMN IF NOT EXISTS liquidation_price DOUBLE PRECISION;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE qd_auto_trades ADD COLUMN IF NOT EXISTS trigger_source TEXT NOT NULL DEFAULT 'llm';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
 -- ============================================================
 -- Auto Trade Bot (全自动交易机器人)
 -- ============================================================
@@ -421,6 +431,7 @@ CREATE TABLE IF NOT EXISTS qd_auto_bots (
     stop_loss DOUBLE PRECISION NOT NULL DEFAULT 0,
     take_profit DOUBLE PRECISION NOT NULL DEFAULT 0,
     unrealized_pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
+    liquidation_price DOUBLE PRECISION,
 
     market_regime TEXT,
     ai_analysis TEXT,
@@ -450,6 +461,7 @@ CREATE TABLE IF NOT EXISTS qd_auto_trades (
     exchange TEXT NOT NULL,
     side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
     trade_type TEXT NOT NULL CHECK (trade_type IN ('open_long', 'close_long', 'open_short', 'close_short', 'stop_loss', 'take_profit')),
+    trigger_source TEXT NOT NULL DEFAULT 'llm' CHECK (trigger_source IN ('llm', 'risk_control')),
     price DOUBLE PRECISION NOT NULL,
     quantity DOUBLE PRECISION NOT NULL,
     pnl DOUBLE PRECISION NOT NULL DEFAULT 0,

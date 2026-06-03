@@ -29,6 +29,7 @@ fn make_bot_config() -> AutoBotConfig {
         stop_loss: 0.0,
         take_profit: 0.0,
         unrealized_pnl: 0.0,
+        liquidation_price: None,
         market_regime: None,
         ai_analysis: None,
         system_prompt: None,
@@ -62,10 +63,10 @@ impl crate::bot::auto_trade::ports::AutoStore for MockAutoStore {
     async fn load_bot(&self, _bot_id: Uuid) -> anyhow::Result<Option<AutoBotConfig>> { Ok(None) }
     async fn update_bot_status(&self, _bot_id: Uuid, _status: &str) -> anyhow::Result<()> { Ok(()) }
     async fn update_last_decided(&self, _bot_id: Uuid) -> anyhow::Result<()> { Ok(()) }
-    async fn update_position(&self, _bot_id: Uuid, _current_side: Option<&str>, _entry_price: f64, _position_size: f64, _stop_loss: f64, _take_profit: f64, _unrealized_pnl: f64) -> anyhow::Result<()> { Ok(()) }
+    async fn update_position(&self, _bot_id: Uuid, _current_side: Option<&str>, _entry_price: f64, _position_size: f64, _stop_loss: f64, _take_profit: f64, _liquidation_price: Option<f64>) -> anyhow::Result<()> { Ok(()) }
     async fn update_ai_analysis(&self, _bot_id: Uuid, _market_regime: &str, _leverage: i32, _ai_analysis: &str) -> anyhow::Result<()> { Ok(()) }
     async fn update_stats(&self, _bot_id: Uuid, _total_pnl: f64, _total_trades: i32, _win_trades: i32, _loss_trades: i32) -> anyhow::Result<()> { Ok(()) }
-    async fn record_trade(&self, _bot_id: Uuid, _user_id: Uuid, _symbol: &str, _exchange: &str, _side: &str, _trade_type: &str, _price: f64, _quantity: f64, _pnl: f64, _pnl_pct: f64, _exchange_order_id: Option<&str>) -> anyhow::Result<Uuid> { Ok(Uuid::new_v4()) }
+    async fn record_trade(&self, _bot_id: Uuid, _user_id: Uuid, _symbol: &str, _exchange: &str, _side: &str, _trade_type: &str, _trigger_source: &str, _price: f64, _quantity: f64, _pnl: f64, _pnl_pct: f64, _exchange_order_id: Option<&str>) -> anyhow::Result<Uuid> { Ok(Uuid::new_v4()) }
     async fn save_analysis_log(&self, _bot_id: Uuid, _analysis_type: &str, _system_prompt: &str, _user_prompt: &str, _result: &serde_json::Value, _error: Option<&str>) -> anyhow::Result<()> { Ok(()) }
     async fn load_analysis_logs(&self, _bot_id: Uuid) -> anyhow::Result<Vec<crate::bot::auto_trade::ports::AutoAnalysisLogEntry>> { Ok(vec![]) }
     async fn load_consecutive_losses(&self, _bot_id: Uuid) -> anyhow::Result<i32> { Ok(0) }

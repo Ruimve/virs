@@ -150,7 +150,14 @@ impl AutoWorker {
 
         let _ = self.auto_event_tx.send(AutoEvent::PriceUpdate {
             bot_id: self.bot.id,
-            price: self.current_price,
+            symbol: self.bot.symbol.clone(),
+            side: self.bot.current_side.clone().unwrap_or_default(),
+            entry_price: self.bot.entry_price,
+            position_size: self.bot.position_size,
+            current_price: self.current_price,
+            unrealized_pnl: self.bot.unrealized_pnl,
+            total_pnl: self.bot.total_pnl,
+            liquidation_price: self.bot.liquidation_price,
         });
     }
 

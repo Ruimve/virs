@@ -123,7 +123,7 @@ impl AutoWorker {
             self.bot.position_size,
             self.bot.stop_loss,
             self.bot.take_profit,
-            self.bot.unrealized_pnl,
+            self.bot.liquidation_price,
         ).await;
     }
 
