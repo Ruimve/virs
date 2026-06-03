@@ -554,6 +554,37 @@ impl Exchange for BinanceExchange {
                     MarketType::Spot
                 };
 
+                // 从 filters 数组中提取交易规则
+                let filters = s.get("filters").and_then(|f| f.as_array());
+                let (min_amount, max_amount) = filters
+                    .map(|arr| {
+                        let lot = arr.iter().find(|f| f.get("filterType").and_then(|v| v.as_str()) == Some("LOT_SIZE"));
+                        (
+                            lot.and_then(|f| parse_f64(f, "minQty")),
+                            lot.and_then(|f| parse_f64(f, "maxQty")),
+                        )
+                    })
+                    .unwrap_or((None, None));
+                let (min_price, max_price) = filters
+                    .map(|arr| {
+                        let pf = arr.iter().find(|f| f.get("filterType").and_then(|v| v.as_str()) == Some("PRICE_FILTER"));
+                        (
+                            pf.and_then(|f| parse_f64(f, "minPrice")),
+                            pf.and_then(|f| parse_f64(f, "maxPrice")),
+                        )
+                    })
+                    .unwrap_or((None, None));
+                let min_cost = filters
+                    .and_then(|arr| {
+                        // 合约用 MIN_NOTIONAL，现货用 NOTIONAL
+                        arr.iter().find(|f| {
+                            f.get("filterType").and_then(|v| v.as_str())
+                                .map(|t| t == "MIN_NOTIONAL" || t == "NOTIONAL")
+                                .unwrap_or(false)
+                        })
+                    })
+                    .and_then(|f| parse_f64(f, "notional"));
+
                 Some(MarketInfo {
                     id: match parse_str(s, "symbol") { Some(v) => v, None => return None },
                     symbol,
@@ -561,11 +592,11 @@ impl Exchange for BinanceExchange {
                     quote,
                     active: true,
                     market_type,
-                    min_amount: parse_f64(s, "minQty"),
-                    max_amount: parse_f64(s, "maxQty"),
-                    min_price: parse_f64(s, "minPrice"),
-                    max_price: parse_f64(s, "maxPrice"),
-                    min_cost: None,
+                    min_amount,
+                    max_amount,
+                    min_price,
+                    max_price,
+                    min_cost,
                     price_precision: parse_u32(s, "pricePrecision"),
                     amount_precision: parse_u32(s, "quantityPrecision"),
                     info: s.clone(),

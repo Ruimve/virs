@@ -227,6 +227,11 @@ impl AutoWorker {
             self.bot.market_type.as_str(),
         ).await;
 
+        if snapshot.current_price <= 0.0 {
+            warn!(bot_id = %self.bot.id, "Market snapshot has zero price, skipping decision execution");
+            return;
+        }
+
         match action {
             AutoAction::OpenLong | AutoAction::OpenShort => {
                 if let Some(d) = decision {

@@ -252,16 +252,37 @@ impl Exchange for Box<dyn Exchange> {
 pub struct CcxtAdapter {
     inner: Box<dyn CcxtExchange>,
     market_type: MarketType,
+    /// 缓存 markets 信息，避免每次 get_min_qty 都调用 fetch_markets
+    markets_cache: tokio::sync::RwLock<Option<Vec<ccxt::types::MarketInfo>>>,
 }
 
 impl CcxtAdapter {
     pub fn new(exchange: Box<dyn CcxtExchange>, market_type: MarketType) -> Self {
-        Self { inner: exchange, market_type }
+        Self {
+            inner: exchange,
+            market_type,
+            markets_cache: tokio::sync::RwLock::new(None),
+        }
     }
 
     /// Get a reference to the underlying ccxt exchange.
     pub fn ccxt(&self) -> &dyn CcxtExchange {
         self.inner.as_ref()
+    }
+
+    /// 获取 markets 信息（带缓存）
+    async fn get_markets_cached(&self) -> anyhow::Result<Vec<ccxt::types::MarketInfo>> {
+        {
+            let cache = self.markets_cache.read().await;
+            if cache.is_some() {
+                return Ok(cache.as_ref().unwrap().clone());
+            }
+        }
+        let markets = self.inner.fetch_markets().await
+            .map_err(|e| anyhow::anyhow!("ccxt fetch_markets error: {}", e))?;
+        let mut cache = self.markets_cache.write().await;
+        *cache = Some(markets.clone());
+        Ok(markets)
     }
 }
 
@@ -542,8 +563,7 @@ impl Exchange for CcxtAdapter {
     }
 
     async fn get_symbols(&self) -> anyhow::Result<Vec<String>> {
-        let markets = self.inner.fetch_markets().await
-            .map_err(|e| anyhow::anyhow!("ccxt fetch_markets error: {}", e))?;
+        let markets = self.get_markets_cached().await?;
         let ccxt_mt = to_ccxt_market_type(&self.market_type);
         Ok(markets
             .into_iter()
@@ -553,8 +573,7 @@ impl Exchange for CcxtAdapter {
     }
 
     async fn get_min_qty(&self, symbol: &str) -> anyhow::Result<f64> {
-        let markets = self.inner.fetch_markets().await
-            .map_err(|e| anyhow::anyhow!("ccxt fetch_markets error: {}", e))?;
+        let markets = self.get_markets_cached().await?;
         let market = markets.iter().find(|m| m.symbol == symbol);
         match market {
             Some(m) => Ok(m.min_amount.unwrap_or(0.0)),
