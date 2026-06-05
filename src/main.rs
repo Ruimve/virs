@@ -148,7 +148,7 @@ async fn main() -> anyhow::Result<()> {
             "paper",
             engine::position::types::MarketType::Perpetual,
             initial_balance,
-        ))
+        ).with_exchange_registry(exchange_registry.clone()))
     } else {
         info!("📊 Position Engine: Real exchange mode");
         Box::new(trading::exchange::binance_position_adapter::CcxtExchangeAdapter::new(

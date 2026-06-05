@@ -16,7 +16,7 @@ use self::gap::GapDetector;
 use self::types::{
     Candle, KlineEngineConfig, KlineEvent, KlineEventType, MarketType, Timeframe,
     AllTimeframesData, BacktestRangeLimit, BacktestRangeInfo, KlineWsClient, KlineSource,
-    KlinePersistence, WsEvent, subscription_key, align_open_time,
+    KlinePersistence, WsEvent, subscription_key,
 };
 
 struct NoOpPersistence;

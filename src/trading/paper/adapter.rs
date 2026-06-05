@@ -4,17 +4,19 @@
 //! Paper 模式下不发送真实订单，Market 单立即成交，Limit 单挂单等待价格触发。
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
 use chrono::Utc;
 use dashmap::DashMap;
 use tokio::sync::{mpsc, Mutex};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::engine::position::error::{PositionEngineError, Result};
 use crate::engine::position::exchange::Exchange as PeExchange;
 use crate::engine::position::types::*;
+use crate::trading::exchange::registry::ExchangeRegistry;
 
 /// Paper 模拟挂单
 #[derive(Debug, Clone)]
@@ -61,6 +63,10 @@ pub struct PaperExchangeAdapter {
     price_tx: Arc<Mutex<Option<mpsc::Sender<WsFeedEvent>>>>,
     /// 每个 symbol 的最新价格（由 on_price_tick 更新）
     last_prices: Arc<DashMap<String, f64>>,
+    /// ExchangeRegistry 引用，用于懒加载初始余额
+    exchange_registry: Option<Arc<ExchangeRegistry>>,
+    /// 余额是否已从真实交易所初始化
+    balance_initialized: Arc<AtomicBool>,
 }
 
 impl PaperExchangeAdapter {
@@ -90,6 +96,57 @@ impl PaperExchangeAdapter {
             })),
             price_tx: Arc::new(Mutex::new(None)),
             last_prices: Arc::new(DashMap::new()),
+            exchange_registry: None,
+            balance_initialized: Arc::new(AtomicBool::new(initial_balance > 0.0)),
+        }
+    }
+
+    /// 设置 ExchangeRegistry 引用，用于懒加载初始余额
+    pub fn with_exchange_registry(mut self, registry: Arc<ExchangeRegistry>) -> Self {
+        self.exchange_registry = Some(registry);
+        self
+    }
+
+    /// 懒加载初始余额：如果余额未初始化且 registry 中有交易所，从真实交易所获取余额
+    async fn ensure_balance_initialized(&self) {
+        if self.balance_initialized.load(Ordering::Relaxed) {
+            return;
+        }
+
+        let registry = match &self.exchange_registry {
+            Some(r) => r.clone(),
+            None => return,
+        };
+
+        // 从 registry 中查找 perpetual 交易所
+        let exchange = registry.registered_names()
+            .iter()
+            .find(|n| n.contains("perpetual"))
+            .and_then(|key| registry.get(key));
+
+        if let Some(ex) = exchange {
+            match ex.get_balances().await {
+                Ok(balances) => {
+                    if let Some(usdt) = balances.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT")) {
+                        let mut balance = self.balance.lock().await;
+                        if !self.balance_initialized.load(Ordering::Relaxed) {
+                            balance.free = usdt.free;
+                            balance.used = usdt.used;
+                            balance.total = usdt.total;
+                            self.balance_initialized.store(true, Ordering::Relaxed);
+                            info!(
+                                total = usdt.total,
+                                free = usdt.free,
+                                used = usdt.used,
+                                "PaperExchangeAdapter: balance initialized from real exchange"
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(error = %e, "PaperExchangeAdapter: failed to fetch balance from real exchange for initialization");
+                }
+            }
         }
     }
 
@@ -203,20 +260,45 @@ impl PaperExchangeAdapter {
                     unrealized_pnl: 0.0,
                     liquidation_price: None,
                 };
-                self.positions.insert(key, pos);
+                self.positions.insert(key.clone(), pos);
                 debug!(symbol = %order.symbol, side = ?side, size = size_delta, "Paper position opened");
             }
         }
 
         // 更新余额
         let mut balance = self.balance.lock().await;
-        let cost = fill_price * order.amount;
-        if order.side == Side::Buy {
-            balance.used += cost;
-            balance.free -= cost;
+        let leverage = 20.0_f64;
+        let notional = fill_price * order.amount;
+        let margin = notional / leverage;
+
+        // 判断是开仓还是平仓
+        // 在 Hedge 模式下：Buy+Long=开多, Sell+Long=平多, Sell+Short=开空, Buy+Short=平空
+        let position_side = order.position_side.unwrap_or(PositionSide::Both);
+        let is_opening = match (order.side, position_side) {
+            (Side::Buy, PositionSide::Long) | (Side::Buy, PositionSide::Both) => true,
+            (Side::Sell, PositionSide::Short) => true,
+            (Side::Sell, PositionSide::Long) | (Side::Sell, PositionSide::Both) => false,
+            (Side::Buy, PositionSide::Short) => false,
+        };
+
+        if is_opening {
+            // 开仓：从 free 扣除保证金，加到 used
+            balance.used += margin;
+            balance.free -= margin;
         } else {
-            balance.used -= cost.min(balance.used);
-            balance.free += cost;
+            // 平仓：释放保证金 + 计算已实现盈亏
+            // 查找对应持仓的 entry_price 来计算 PnL
+            let realized_pnl = self.positions.get(&key).map(|pos| {
+                match pos.side {
+                    PositionSide::Long => (fill_price - pos.entry_price) * order.amount,
+                    PositionSide::Short => (pos.entry_price - fill_price) * order.amount,
+                    PositionSide::Both => 0.0,
+                }
+            }).unwrap_or(0.0);
+
+            let margin_release = margin.min(balance.used);
+            balance.used -= margin_release;
+            balance.free += margin_release + realized_pnl;
         }
     }
 
@@ -260,7 +342,12 @@ impl PeExchange for PaperExchangeAdapter {
     }
 
     async fn get_balance(&self) -> Result<Balance> {
-        let balance = self.balance.lock().await;
+        // 懒加载：如果余额未初始化，尝试从真实交易所获取
+        self.ensure_balance_initialized().await;
+
+        let mut balance = self.balance.lock().await;
+        // 重算 total = free + used（确保一致性）
+        balance.total = balance.free + balance.used;
         Ok(balance.clone())
     }
 
