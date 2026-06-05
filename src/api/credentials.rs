@@ -28,15 +28,6 @@ fn default_market_type() -> MarketType {
     MarketType::Perpetual
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CredentialResponse {
-    pub id: Uuid,
-    pub exchange: String,
-    pub label: Option<String>,
-    pub market_type: MarketType,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-}
-
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct CredentialRow {
     pub id: Uuid,

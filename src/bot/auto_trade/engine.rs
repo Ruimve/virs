@@ -12,8 +12,10 @@ use crate::bot::auto_trade::worker::AutoWorker;
 use crate::engine::kline::KlineEngine;
 use crate::engine::kline::types::MarketType;
 
+#[cfg(test)]
 pub struct NoopLlmResolver;
 
+#[cfg(test)]
 impl LlmProviderResolver for NoopLlmResolver {
     fn is_available(&self) -> bool {
         false

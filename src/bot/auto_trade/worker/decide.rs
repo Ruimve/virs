@@ -285,7 +285,7 @@ impl AutoWorker {
         ).await;
     }
 
-    async fn open_position(&mut self, side: &str, decision: Option<&AutoDecision>, snapshot: &MarketSnapshot) {
+    async fn open_position(&mut self, side: &str, _decision: Option<&AutoDecision>, snapshot: &MarketSnapshot) {
         let account = self.market_data_provider.get_account_balance(
             &self.bot.exchange,
             self.bot.market_type.as_str(),

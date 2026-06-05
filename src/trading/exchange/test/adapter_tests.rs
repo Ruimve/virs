@@ -80,7 +80,7 @@ fn make_virs_order() -> models::Order {
 #[test]
 fn test_convert_order_basic_fields() {
     let virs_order = make_virs_order();
-    let pe_order = convert_order(&virs_order);
+    let pe_order = convert_order(&virs_order, "binance");
 
     assert_eq!(pe_order.symbol, "BTC/USDT:USDT");
     assert_eq!(pe_order.side, Side::Buy);
@@ -89,6 +89,7 @@ fn test_convert_order_basic_fields() {
     assert_eq!(pe_order.filled, 0.05);
     assert_eq!(pe_order.remaining, 0.05);
     assert_eq!(pe_order.status, OrderStatus::PartiallyFilled);
+    assert_eq!(pe_order.exchange, "binance");
 }
 
 #[test]
@@ -97,19 +98,19 @@ fn test_convert_order_price_fields() {
     let mut virs_order = make_virs_order();
     virs_order.filled = 0.05;
     virs_order.price = Some(50000.0);
-    let pe_order = convert_order(&virs_order);
+    let pe_order = convert_order(&virs_order, "binance");
     assert_eq!(pe_order.request_price, Some(50000.0));
     assert_eq!(pe_order.fill_price, Some(50000.0));
 
     // filled == 0 时 fill_price = None
     virs_order.filled = 0.0;
-    let pe_order = convert_order(&virs_order);
+    let pe_order = convert_order(&virs_order, "binance");
     assert_eq!(pe_order.request_price, Some(50000.0));
     assert_eq!(pe_order.fill_price, None);
 
     // price = None 时 request_price = None, fill_price = None
     virs_order.price = None;
-    let pe_order = convert_order(&virs_order);
+    let pe_order = convert_order(&virs_order, "binance");
     assert_eq!(pe_order.request_price, None);
     assert_eq!(pe_order.fill_price, None);
 }
@@ -117,7 +118,7 @@ fn test_convert_order_price_fields() {
 #[test]
 fn test_convert_order_fee_fields() {
     let virs_order = make_virs_order();
-    let pe_order = convert_order(&virs_order);
+    let pe_order = convert_order(&virs_order, "binance");
 
     assert_eq!(pe_order.fee, 0.001);
     assert_eq!(pe_order.fee_currency, "USDT");
@@ -126,7 +127,7 @@ fn test_convert_order_fee_fields() {
     let mut virs_order = make_virs_order();
     virs_order.fee = 0.0;
     virs_order.fee_currency = String::new();
-    let pe_order = convert_order(&virs_order);
+    let pe_order = convert_order(&virs_order, "binance");
     assert_eq!(pe_order.fee, 0.0);
     assert_eq!(pe_order.fee_currency, "");
 }
@@ -134,7 +135,7 @@ fn test_convert_order_fee_fields() {
 #[test]
 fn test_convert_order_id_handling() {
     let virs_order = make_virs_order();
-    let pe_order = convert_order(&virs_order);
+    let pe_order = convert_order(&virs_order, "binance");
 
     // models::Order.id (String) -> PE::Order.id (Uuid)
     // 使用有效的 UUID 字符串时应该正确解析
@@ -152,8 +153,8 @@ fn test_convert_order_id_handling() {
     // client_order_id 正确传递
     assert_eq!(pe_order.client_order_id, Some("client-123".to_string()));
 
-    // exchange 初始为空字符串
-    assert_eq!(pe_order.exchange, "");
+    // exchange 应该是传入的 exchange_name
+    assert_eq!(pe_order.exchange, "binance");
 
     // reduce_only 默认为 false
     assert!(!pe_order.reduce_only);
@@ -164,7 +165,7 @@ fn test_convert_order_id_handling() {
     // 无效 UUID 字符串时应该 fallback 到 new_v4
     let mut virs_order = make_virs_order();
     virs_order.id = "not-a-uuid".to_string();
-    let pe_order = convert_order(&virs_order);
+    let pe_order = convert_order(&virs_order, "binance");
     // 不应该是解析后的 nil UUID，而应该是一个新生成的 v4 UUID
     assert_ne!(pe_order.id, Uuid::nil());
 }

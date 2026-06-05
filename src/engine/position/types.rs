@@ -272,7 +272,16 @@ pub enum EngineCommand {
         position_id: Option<Uuid>,
         symbol: Option<String>,
     },
+    /// 关闭指定 symbol 的所有仓位（Market 单平仓）
+    CloseAllPositions {
+        symbol: String,
+    },
     SyncPositions,
+    /// 价格 tick — 用于 Paper 模式下驱动 Limit 单撮合
+    PriceTick {
+        symbol: String,
+        price: f64,
+    },
     Shutdown,
 }
 

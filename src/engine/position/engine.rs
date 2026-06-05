@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 
-use sqlx::PgPool;
 use tokio::sync::{broadcast, mpsc};
 use dashmap::DashMap;
 use tracing::{debug, error, info, warn};
@@ -47,7 +46,7 @@ macro_rules! persist {
 /// - `state`: 多读少写，用 `std::sync::RwLock` 保护。
 pub(crate) struct EngineInner {
     pub(crate) config: EngineConfig,
-    pub(crate) exchange: Box<dyn Exchange>,
+    pub(crate) exchange: Arc<dyn Exchange>,
     pub(crate) persistence: Box<dyn PositionPersistence>,
     pub(crate) positions: DashMap<(String, String, PositionSide), Position>,
     pub(crate) orders: DashMap<Uuid, Order>,
@@ -100,6 +99,7 @@ impl PositionEngine {
     pub fn new(config: EngineConfig, exchange: Box<dyn Exchange>, persistence: Box<dyn PositionPersistence>) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel(256);
         let event_tx = broadcast::channel(256).0;
+        let exchange: Arc<dyn Exchange> = Arc::from(exchange);
 
         let inner = EngineInner {
             persistence,
@@ -157,6 +157,17 @@ impl PositionEngine {
     /// 获取引擎当前状态。
     pub fn state(&self) -> EngineState {
         self.inner.get_state()
+    }
+
+    /// 查询交易所余额（Paper 模式下返回模拟余额）。
+    pub async fn get_balance(&self) -> Result<Balance> {
+        self.inner.exchange.get_balance().await
+    }
+
+    /// 获取内部 Exchange 的共享引用，用于外部查询余额等。
+    /// Paper 模式下返回 PaperExchangeAdapter，真实模式下返回 CcxtExchangeAdapter。
+    pub fn exchange(&self) -> Arc<dyn Exchange> {
+        Arc::clone(&self.inner.exchange)
     }
 
     /// 启动引擎主循环，阻塞直到引擎停止。
@@ -459,8 +470,14 @@ pub(crate) async fn command_loop(inner: Arc<EngineInner>, mut cmd_rx: mpsc::Rece
             } => {
                 handle_cancel_all_orders(&inner, position_id, symbol).await;
             }
+            EngineCommand::CloseAllPositions { symbol } => {
+                handle_close_all_positions(&inner, &symbol).await;
+            }
             EngineCommand::SyncPositions => {
                 handle_sync_positions(&inner).await;
+            }
+            EngineCommand::PriceTick { symbol, price } => {
+                inner.exchange.on_price_tick(&symbol, price).await;
             }
             EngineCommand::Shutdown => {
                 info!("Shutdown command received");
@@ -1606,6 +1623,43 @@ pub(crate) async fn handle_close_position(
     }
 }
 
+/// 处理关闭指定 symbol 所有仓位的命令。
+/// 先取消该 symbol 所有挂单，再逐个 Market 平仓。
+pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol: &str) {
+    // 1. 取消该 symbol 所有挂单
+    handle_cancel_all_orders(inner, None, Some(symbol.to_string())).await;
+
+    // 2. 收集该 symbol 所有非零仓位
+    let positions_to_close: Vec<(Uuid, PositionSide, f64)> = inner
+        .positions
+        .iter()
+        .filter(|entry| {
+            let pos = entry.value();
+            pos.symbol == symbol && pos.size > 0.0
+        })
+        .map(|entry| {
+            let pos = entry.value();
+            (pos.id, pos.side, pos.size)
+        })
+        .collect();
+
+    if positions_to_close.is_empty() {
+        info!(symbol = %symbol, "No open positions to close");
+        return;
+    }
+
+    info!(
+        symbol = %symbol,
+        count = positions_to_close.len(),
+        "Closing all positions"
+    );
+
+    // 3. 逐个 Market 平仓
+    for (position_id, _side, _size) in positions_to_close {
+        handle_close_position(inner, position_id, OrderType::Market, None).await;
+    }
+}
+
 /// 处理修改仓位命令（更新止损 / 止盈）。
 pub(crate) async fn handle_modify_position(
     inner: &Arc<EngineInner>,
@@ -1837,13 +1891,14 @@ pub(crate) async fn handle_sync_positions(inner: &Arc<EngineInner>) {
 #[cfg(test)]
 pub(crate) mod test_helpers {
     use super::*;
+    use sqlx::PgPool;
     use crate::engine::position::persistence::Persistence;
-    use crate::engine::position::config::RiskConfig;
 
     pub(crate) fn make_test_inner(
         config: EngineConfig,
         exchange: Box<dyn Exchange>,
     ) -> Arc<EngineInner> {
+        let exchange: Arc<dyn Exchange> = Arc::from(exchange);
         let db = PgPool::connect_lazy("postgres://__test__:__test__@localhost/__test__")
             .expect("connect_lazy should not fail");
         let event_tx = broadcast::channel(256).0;

@@ -166,10 +166,6 @@ impl BinanceKlineWs {
             1, 60, 30, 23 * 3600,
         )
     }
-
-    pub async fn subscription_count(&self) -> usize {
-        self.subscriptions.lock().await.len()
-    }
 }
 
 #[async_trait]
@@ -430,7 +426,6 @@ impl KlineWsClient for BinanceKlineWs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::kline::types::Candle;
 
     // ========== 消息解析（5个） ==========
 

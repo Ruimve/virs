@@ -939,6 +939,10 @@ impl Exchange for OkxExchange {
         Ok(all_entries)
     }
 
+    async fn create_listen_key(&self) -> Result<String, ExchangeError> {
+        Err(ExchangeError::NotSupported("OKX listenKey not yet implemented".into()))
+    }
+
     async fn ping(&self) -> Result<bool, ExchangeError> {
         let data = self.client.public_get("/api/v5/public/time", &[]).await?;
         Ok(data.get("code").and_then(|c| c.as_str()) == Some("0"))

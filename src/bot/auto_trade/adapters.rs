@@ -7,16 +7,17 @@ use uuid::Uuid;
 
 use crate::bot::auto_trade::ports::*;
 use crate::bot::auto_trade::types::{AutoBot, AutoBotConfig, MarketType};
-use crate::config::AiConfig;
+
 use crate::engine::kline::KlineEngine;
 use crate::engine::kline::types::Timeframe;
 use crate::models::Kline;
 use crate::trading::exchange::registry::ExchangeRegistry;
+use crate::engine::position::exchange::Exchange as PeExchange;
 
 // Re-export from common
 pub use crate::bot::common::adapters::{
-    candle_to_kline, convert_pe_event, DefaultLlmResolver, ExchangePriceProvider as CommonExchangePriceProvider,
-    PeOrderExecutor, PgCredentialStore, SwitchableOrderExecutor,
+    candle_to_kline, DefaultLlmResolver, ExchangePriceProvider as CommonExchangePriceProvider,
+    PgCredentialStore,
 };
 
 pub struct ExchangePriceProvider {
@@ -46,13 +47,13 @@ pub struct ExchangeMarketDataProvider {
     kline_engine: Option<Arc<KlineEngine>>,
     db: Option<PgPool>,
     encryption_key: Option<String>,
-    paper_executor: Option<Arc<crate::trading::paper::PaperOrderExecutor>>,
-    paper_balance: Arc<tokio::sync::RwLock<Option<AccountBalance>>>,
+    /// Position Engine 的 Exchange 引用，Paper 模式下用于查询模拟余额
+    pe_exchange: Option<Arc<dyn PeExchange>>,
 }
 
 impl ExchangeMarketDataProvider {
     pub fn new(exchange_registry: Arc<ExchangeRegistry>) -> Self {
-        Self { exchange_registry, kline_engine: None, db: None, encryption_key: None, paper_executor: None, paper_balance: Arc::new(tokio::sync::RwLock::new(None)) }
+        Self { exchange_registry, kline_engine: None, db: None, encryption_key: None, pe_exchange: None }
     }
 
     pub fn with_kline_engine(mut self, engine: Arc<KlineEngine>) -> Self {
@@ -66,8 +67,8 @@ impl ExchangeMarketDataProvider {
         self
     }
 
-    pub fn with_paper_executor(mut self, paper: Arc<crate::trading::paper::PaperOrderExecutor>) -> Self {
-        self.paper_executor = Some(paper);
+    pub fn with_pe_exchange(mut self, pe_exchange: Arc<dyn PeExchange>) -> Self {
+        self.pe_exchange = Some(pe_exchange);
         self
     }
 
@@ -304,43 +305,19 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
     }
 
     async fn get_account_balance(&self, exchange: &str, market_type: &str) -> AccountBalance {
-        if let Some(ref paper) = self.paper_executor {
-            if paper.is_enabled() {
-                {
-                    let cached = self.paper_balance.read().await;
-                    if let Some(ref balance) = *cached {
-                        return balance.clone();
-                    }
+        // Paper 模式下优先通过 PositionEngine 的 Exchange 查询模拟余额
+        if let Some(ref pe_ex) = self.pe_exchange {
+            match pe_ex.get_balance().await {
+                Ok(b) => {
+                    return AccountBalance { total: b.total, free: b.free, used: b.used };
                 }
-
-                self.ensure_exchange(exchange, market_type).await;
-                let exchange_key = format!("{}:{}", exchange, market_type);
-                let real_balance = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
-                    match ex.get_balances().await {
-                        Ok(bs) => {
-                            let usdt = bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT"));
-                            usdt.map(|b| AccountBalance { total: b.total, free: b.free, used: b.used })
-                        }
-                        Err(e) => {
-                            tracing::warn!(error = %e, "Paper mode: failed to fetch real balance, balance unavailable");
-                            None
-                        }
-                    }
-                } else {
-                    tracing::warn!("Paper mode: exchange not available, balance unavailable");
-                    None
-                };
-
-                let balance = real_balance.unwrap_or(AccountBalance::default());
-                {
-                    let mut cached = self.paper_balance.write().await;
-                    *cached = Some(balance.clone());
+                Err(e) => {
+                    tracing::warn!(error = %e, "[get_account_balance] PE exchange get_balance failed, falling back to registry");
                 }
-                tracing::info!(total = balance.total, free = balance.free, "Paper mode: initialized balance from exchange");
-                return balance;
             }
         }
 
+        // 真实模式：通过 ExchangeRegistry 查询交易所
         self.ensure_exchange(exchange, market_type).await;
 
         let exchange_key = format!("{}:{}", exchange, market_type);

@@ -1,4 +1,3 @@
-use crate::bot::semi_automatic_grid::types::DEFAULT_USER_PROMPT_TEMPLATE;
 use crate::bot::semi_automatic_grid::utils::indicators::MarketIndicators;
 
 /** Prompt 模板渲染所需的上下文数据
@@ -124,29 +123,4 @@ pub fn format_grid_config(
         ));
     }
     md
-}
-
-/** 构建简化版网格配置文本（仅含参数，不含层级表格）
-
-用于 API 层初始分析时，此时尚无运行时层级数据 */
-pub fn format_grid_config_simple(
-    grid_status: &str,
-    upper_price: f64,
-    lower_price: f64,
-    grid_count: i32,
-    grid_profit_pct: f64,
-    quantity_per_grid: f64,
-) -> String {
-    if grid_status == "empty" {
-        return "none".to_string();
-    }
-    format!(
-        "- 上界价格：{:.2}\n- 下界价格：{:.2}\n- 网格数量：{}\n- 网格利润：{:.2}%\n- 每格金额：{:.2} USDT",
-        upper_price, lower_price, grid_count, grid_profit_pct, quantity_per_grid
-    )
-}
-
-/** 获取默认用户 prompt 模板 */
-pub fn default_template() -> &'static str {
-    DEFAULT_USER_PROMPT_TEMPLATE
 }

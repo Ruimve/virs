@@ -881,6 +881,10 @@ impl Exchange for BybitExchange {
         Ok(all_entries)
     }
 
+    async fn create_listen_key(&self) -> Result<String, ExchangeError> {
+        Err(ExchangeError::NotSupported("Bybit listenKey not yet implemented".into()))
+    }
+
     async fn ping(&self) -> Result<bool, ExchangeError> {
         let data = self.client.public_get("/v5/market/time", &[]).await?;
         Ok(data.get("retCode").and_then(|c| c.as_i64()) == Some(0))

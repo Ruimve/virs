@@ -473,7 +473,6 @@ impl crate::bot::semi_automatic_grid::ports::MarketDataProvider for MockMarketDa
         use crate::bot::semi_automatic_grid::utils::indicators::MarketIndicators;
         crate::bot::semi_automatic_grid::ports::MarketSnapshot {
             current_price: 55000.0,
-            funding_rate: 0.01,
             indicators: MarketIndicators {
                 current_price: 55000.0,
                 rsi: 50.0,

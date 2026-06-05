@@ -11,16 +11,17 @@ use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::bot::semi_automatic_grid::ports::*;
-use crate::config::AiConfig;
+
 use crate::trading::exchange::registry::ExchangeRegistry;
+use crate::engine::position::exchange::Exchange as PeExchange;
 use crate::engine::kline::KlineEngine;
 use crate::engine::kline::types::Timeframe;
 use crate::models::Kline;
 
 // Re-export from common
 pub use crate::bot::common::adapters::{
-    candle_to_kline, convert_pe_event, DefaultLlmResolver, ExchangePriceProvider as CommonExchangePriceProvider,
-    PeOrderExecutor, PgCredentialStore, SwitchableOrderExecutor,
+    candle_to_kline, DefaultLlmResolver, ExchangePriceProvider as CommonExchangePriceProvider,
+    PgCredentialStore,
 };
 
 pub struct ExchangePriceProvider {
@@ -50,15 +51,22 @@ impl PriceProvider for ExchangePriceProvider {
 pub struct ExchangeMarketDataProvider {
     exchange_registry: Arc<ExchangeRegistry>,
     kline_engine: Option<Arc<KlineEngine>>,
+    /// Position Engine 的 Exchange 引用，Paper 模式下用于查询模拟余额
+    pe_exchange: Option<Arc<dyn PeExchange>>,
 }
 
 impl ExchangeMarketDataProvider {
     pub fn new(exchange_registry: Arc<ExchangeRegistry>) -> Self {
-        Self { exchange_registry, kline_engine: None }
+        Self { exchange_registry, kline_engine: None, pe_exchange: None }
     }
 
     pub fn with_kline_engine(mut self, engine: Arc<KlineEngine>) -> Self {
         self.kline_engine = Some(engine);
+        self
+    }
+
+    pub fn with_pe_exchange(mut self, pe_exchange: Arc<dyn PeExchange>) -> Self {
+        self.pe_exchange = Some(pe_exchange);
         self
     }
 
@@ -202,22 +210,38 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
 
         MarketSnapshot {
             current_price: effective_price,
-            funding_rate,
             indicators: ind,
         }
     }
 
     async fn get_account_balance(&self, exchange: &str) -> AccountBalance {
+        // Paper 模式下优先通过 PositionEngine 的 Exchange 查询模拟余额
+        if let Some(ref pe_ex) = self.pe_exchange {
+            match pe_ex.get_balance().await {
+                Ok(b) => {
+                    return AccountBalance {
+                        total: b.total,
+                        free: b.free,
+                        used: b.used,
+                    };
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "[get_account_balance] PE exchange get_balance failed, falling back to registry");
+                }
+            }
+        }
+
+        // 真实模式：通过 ExchangeRegistry 查询交易所
         let exchange_key = format!("{}:perpetual", exchange);
-        
+
         let ex = match self.exchange_registry.get(&exchange_key) {
             Some(e) => e,
             None => {
                 tracing::warn!("[get_account_balance] Exchange NOT found in registry, returning default");
                 return AccountBalance::default();
-            },
+            }
         };
-        
+
         match ex.get_balances().await {
             Ok(bs) => {
                 let usdt = bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT"));

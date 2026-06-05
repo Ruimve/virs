@@ -197,6 +197,19 @@ pub trait Exchange: Send + Sync {
         end_time: i64,    // Unix timestamp in milliseconds
     ) -> Result<Vec<types::FundingHistoryEntry>, ExchangeError>;
 
+    // ---- User Data Stream ----
+
+    /// Create a listen key for the User Data Stream (WebSocket).
+    /// Returns the listen key string on success.
+    /// Returns `ExchangeError::NotSupported` if the exchange does not support user data streams.
+    async fn create_listen_key(&self) -> Result<String, ExchangeError>;
+
+    /// Keep-alive the listen key (some exchanges require periodic PUT to extend TTL).
+    /// Default implementation is a no-op.
+    async fn keepalive_listen_key(&self, _listen_key: &str) -> Result<(), ExchangeError> {
+        Ok(())
+    }
+
     // ---- System ----
 
     /// Check if the exchange is reachable.
@@ -241,11 +254,6 @@ impl ExchangeClient {
             rate_limiter: std::sync::Arc::new(tokio::sync::Semaphore::new(max_concurrent as usize)),
             base_url: base_url.to_string(),
         })
-    }
-
-    /// Get the base URL.
-    pub fn base_url(&self) -> &str {
-        &self.base_url
     }
 
     /// Make a public GET request (no authentication).
@@ -326,20 +334,6 @@ impl ExchangeClient {
         handle_response(req.send().await?).await
     }
 
-    /// Make a public POST request (no auth, JSON body).
-    pub async fn public_post(
-        &self,
-        path: &str,
-        body: &Value,
-    ) -> Result<Value, ExchangeError> {
-        let _permit = self.rate_limiter.acquire().await
-            .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
-
-        let url = format!("{}{}", self.base_url, path);
-        let resp = self.client.post(&url).json(body).send().await?;
-
-        handle_response(resp).await
-    }
 }
 
 /// Handle HTTP response — check status, parse JSON, detect exchange errors.

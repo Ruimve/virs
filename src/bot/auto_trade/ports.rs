@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-pub use crate::trading::ports::{OrderSide, OrderInfo, OrderCommand, OrderEvent, OrderExecutor, PositionSide};
+pub use crate::trading::ports::{OrderSide, OrderCommand, OrderEvent, OrderExecutor, PositionSide};
 pub use crate::bot::common::ports::{AccountBalance, CredentialStore, LlmProviderResolver};
 use crate::bot::auto_trade::types::AutoBotConfig;
 

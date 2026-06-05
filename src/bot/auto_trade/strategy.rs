@@ -1,5 +1,4 @@
 use crate::bot::common::indicators::MarketIndicators;
-use crate::bot::auto_trade::types::DEFAULT_USER_PROMPT_TEMPLATE;
 
 pub struct PromptContext {
     pub timestamp: String,
@@ -223,8 +222,4 @@ pub fn compute_position_pct(adx: f64, consecutive_losses: i32, funding_rate: f64
     let after_loss: f64 = if consecutive_losses >= 2 { base * 0.5 } else { base };
     let after_funding: f64 = if funding_rate.abs() > 0.001 { after_loss * 0.5 } else { after_loss };
     after_funding.clamp(10.0, 100.0)
-}
-
-pub fn default_template() -> &'static str {
-    DEFAULT_USER_PROMPT_TEMPLATE
 }

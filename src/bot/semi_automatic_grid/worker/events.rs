@@ -145,37 +145,6 @@ impl GridWorker {
             .sum()
     }
 
-/** 计算所有持仓的加权平均入场价格 */
-    pub(crate) fn compute_weighted_avg_entry_price(&self) -> f64 {
-        let mut total_cost = 0.0;
-        let mut total_qty = 0.0;
-        for level in &self.levels {
-            if level.hold_quantity.abs() > 0.0 && level.avg_buy_price > 0.0 {
-                total_cost += level.avg_buy_price * level.hold_quantity.abs();
-                total_qty += level.hold_quantity.abs();
-            }
-        }
-        if total_qty > 0.0 { total_cost / total_qty } else { 0.0 }
-    }
-
-/** 格式化当前挂单信息，用于 AI prompt 中 {open_orders} 占位符 */
-    pub(crate) fn format_open_orders(&self) -> String {
-        let orders: Vec<String> = self.levels.iter()
-            .filter(|l| l.buy_order_id.is_some() || l.sell_order_id.is_some())
-            .map(|l| {
-                let mut parts = Vec::new();
-                if let Some(id) = l.buy_order_id {
-                    parts.push(format!("{{level:{}, side:buy, price:{:.2}, qty:{:.6}, id:{}}}", l.level, l.buy_price, l.quantity, id));
-                }
-                if let Some(id) = l.sell_order_id {
-                    parts.push(format!("{{level:{}, side:sell, price:{:.2}, qty:{:.6}, id:{}}}", l.level, l.sell_price, l.quantity, id));
-                }
-                parts.join(", ")
-            })
-            .collect();
-        if orders.is_empty() { "[]".to_string() } else { format!("[{}]", orders.join(", ")) }
-    }
-
 /** 持久化统计数据到数据库 */
     pub(crate) async fn save_stats(&self) {
         let levels_json = serde_json::to_value(&self.levels).ok();

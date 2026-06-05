@@ -11,6 +11,13 @@ pub struct AppConfig {
     pub notification: NotificationConfig,
     pub cache: CacheConfig,
     pub proxy: Option<String>,
+    /// Paper trading mode (true = simulated, false = real exchange)
+    #[serde(default = "default_paper")]
+    pub paper: Option<bool>,
+}
+
+fn default_paper() -> Option<bool> {
+    Some(true)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,6 +176,11 @@ pub fn load_config() -> Result<AppConfig, anyhow::Error> {
 
     let proxy = std::env::var("PROXY_URL").ok();
 
+    let paper = std::env::var("PAPER_TRADING")
+        .ok()
+        .map(|v| v == "true" || v == "1")
+        .or(Some(true)); // 默认 paper 模式
+
     Ok(AppConfig {
         server,
         database,
@@ -178,5 +190,6 @@ pub fn load_config() -> Result<AppConfig, anyhow::Error> {
         notification,
         cache,
         proxy,
+        paper,
     })
 }

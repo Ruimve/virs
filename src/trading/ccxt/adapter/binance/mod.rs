@@ -1007,6 +1007,33 @@ impl Exchange for BinanceExchange {
         Ok(all_entries)
     }
 
+    async fn create_listen_key(&self) -> Result<String, ExchangeError> {
+        let path = match self.market_type {
+            MarketType::Spot => "/api/v3/userDataStream",
+            MarketType::Perpetual => "/fapi/v1/listenKey",
+        };
+        let body = serde_json::json!({});
+        let data = self.client
+            .signed_post(&self.signer, path, body)
+            .await?;
+        data.get("listenKey")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .ok_or_else(|| ExchangeError::no_data("listenKey missing in create_listen_key response".to_string()))
+    }
+
+    async fn keepalive_listen_key(&self, listen_key: &str) -> Result<(), ExchangeError> {
+        let path = match self.market_type {
+            MarketType::Spot => "/api/v3/userDataStream",
+            MarketType::Perpetual => "/fapi/v1/listenKey",
+        };
+        let body = serde_json::json!({ "listenKey": listen_key });
+        let _ = self.client
+            .signed_post(&self.signer, path, body)
+            .await?;
+        Ok(())
+    }
+
     async fn ping(&self) -> Result<bool, ExchangeError> {
         let path = format!("{}/ping", self.api_prefix());
         let data = self.client.public_get(&path, &[]).await?;

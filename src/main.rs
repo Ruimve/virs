@@ -119,14 +119,64 @@ async fn main() -> anyhow::Result<()> {
     kline_engine.start().await;
     info!("✅ Kline engine started");
 
-    // Start Grid Engine
-    let (pe_cmd_tx, _pe_cmd_rx) = tokio::sync::mpsc::channel(256);
-    let (_pe_event_tx, pe_event_rx) = tokio::sync::broadcast::channel(256);
-    let (grid_event_tx, _grid_event_rx) = tokio::sync::broadcast::channel(256);
+    // ── Position Engine ──
+    // 通过 paper 开关决定传入哪个 Exchange 实现：
+    // - Paper 模式：PaperExchangeAdapter（模拟撮合）
+    // - 真实模式：CcxtExchangeAdapter（通过 ExchangeRegistry 动态查找交易所）
+    let paper_mode = config.paper.unwrap_or(true);
 
-    // Paper 交易执行器
-    let paper_executor = Arc::new(trading::paper::PaperOrderExecutor::new(grid_event_tx.clone()));
-    let paper_for_tick = paper_executor.clone();
+    let pe_exchange: Box<dyn engine::position::exchange::Exchange> = if paper_mode {
+        // Paper 模式：从真实交易所获取 USDT 余额作为初始模拟资金
+        let initial_balance = {
+            let temp_adapter: Box<dyn engine::position::exchange::Exchange> = Box::new(
+                trading::exchange::binance_position_adapter::CcxtExchangeAdapter::new(
+                    exchange_registry.clone(),
+                )
+            );
+            match temp_adapter.get_balance().await {
+                Ok(b) => {
+                    info!(total = b.total, free = b.free, "📊 Paper mode: fetched real exchange balance as initial capital");
+                    b.total
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "📊 Paper mode: failed to fetch real balance, using 0 as initial capital");
+                    0.0
+                }
+            }
+        };
+        Box::new(trading::paper::adapter::PaperExchangeAdapter::new(
+            "paper",
+            engine::position::types::MarketType::Perpetual,
+            initial_balance,
+        ))
+    } else {
+        info!("📊 Position Engine: Real exchange mode");
+        Box::new(trading::exchange::binance_position_adapter::CcxtExchangeAdapter::new(
+            exchange_registry.clone(),
+        ))
+    };
+
+    let pe_persistence = Box::new(engine::position::persistence::Persistence::new(db_pool.clone()));
+    let pe_config = engine::position::config::EngineConfig::default();
+
+    let mut position_engine = engine::position::PositionEngine::new(pe_config, pe_exchange, pe_persistence);
+    let pe_cmd_tx = position_engine.command_sender();
+    // 在 move 前获取多个 event receiver（Grid 和 Auto 各一个）
+    let grid_pe_event_rx = position_engine.subscribe_events();
+    let auto_pe_event_rx = position_engine.subscribe_events();
+    // 获取 Exchange 共享引用，用于 MarketDataProvider 查询余额（Paper 模式下返回模拟余额）
+    let pe_exchange_ref = position_engine.exchange();
+
+    // 启动 Position Engine 主循环
+    tokio::spawn(async move {
+        if let Err(e) = position_engine.run().await {
+            tracing::error!(error = %e, "Position Engine run failed");
+        }
+    });
+    info!("✅ Position Engine started (paper={})", paper_mode);
+
+    // Start Grid Engine
+    let (grid_event_tx, _grid_event_rx) = tokio::sync::broadcast::channel(256);
 
     // Adapter 实现
     let grid_store = Arc::new(bot::semi_automatic_grid::adapters::PgGridStore::new(db_pool.clone()));
@@ -135,13 +185,14 @@ async fn main() -> anyhow::Result<()> {
             .with_kline_engine(kline_engine.clone()));
     let grid_market_data_provider: Arc<dyn bot::semi_automatic_grid::ports::MarketDataProvider> =
         Arc::new(bot::semi_automatic_grid::adapters::ExchangeMarketDataProvider::new(exchange_registry.clone())
-            .with_kline_engine(kline_engine.clone()));
-    let real_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
-        Arc::new(bot::semi_automatic_grid::adapters::PeOrderExecutor::new(pe_cmd_tx.clone(), exchange_registry.clone(), "grid:close"));
+            .with_kline_engine(kline_engine.clone())
+            .with_pe_exchange(pe_exchange_ref.clone()));
+    // 通过 PositionEngine 创建 PeOrderExecutor（paper/real 由 PositionEngine 内部 Exchange 决定）
     let grid_order_executor: Arc<dyn bot::semi_automatic_grid::ports::OrderExecutor> =
-        Arc::new(bot::semi_automatic_grid::adapters::SwitchableOrderExecutor::new(
-            real_order_executor,
-            paper_executor.clone(),
+        Arc::new(bot::common::adapters::PeOrderExecutor::new(
+            pe_cmd_tx.clone(),
+            grid_event_tx.clone(),
+            grid_pe_event_rx,
         ));
     let grid_credential_store: Box<dyn bot::semi_automatic_grid::ports::CredentialStore> =
         Box::new(bot::semi_automatic_grid::adapters::PgCredentialStore::new(
@@ -167,42 +218,28 @@ async fn main() -> anyhow::Result<()> {
         Some(kline_engine.clone()),
     );
 
-    // PE 事件转换 bridge
-    let mut pe_event_rx_for_bridge = pe_event_rx;
-    let grid_event_tx_for_bridge = grid_event_tx.clone();
-    tokio::spawn(async move {
-        loop {
-            match pe_event_rx_for_bridge.recv().await {
-                Ok(event) => {
-                    if let Some(grid_event) = bot::semi_automatic_grid::adapters::convert_pe_event(event) {
-                        let _ = grid_event_tx_for_bridge.send(grid_event);
+    // Paper 模式 price tick 协程 — 通过 PositionEngine 驱动 PaperExchangeAdapter 的 Limit 单撮合
+    if paper_mode {
+        let price_provider_for_paper = grid_price_provider.clone();
+        let kline_engine_for_paper = kline_engine.clone();
+        let pe_cmd_tx_for_tick = pe_cmd_tx.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(std::time::Duration::from_secs(3));
+            loop {
+                tick.tick().await;
+                for (exchange, symbol, _market_type) in kline_engine_for_paper.subscribed_symbols() {
+                    if let Some(price) = price_provider_for_paper.get_price(&exchange, &symbol).await {
+                        let _ = pe_cmd_tx_for_tick.send(
+                            engine::position::types::EngineCommand::PriceTick {
+                                symbol: symbol.clone(),
+                                price,
+                            }
+                        ).await;
                     }
                 }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    tracing::warn!(lagged = n, "PE event bridge lagged");
-                }
             }
-        }
-    });
-
-    // Paper 交易 price tick 协程
-    let price_provider_for_paper = grid_price_provider;
-    let kline_engine_for_paper = kline_engine.clone();
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(std::time::Duration::from_secs(3));
-        loop {
-            tick.tick().await;
-            if !paper_for_tick.is_enabled() {
-                continue;
-            }
-            for (exchange, symbol, _market_type) in kline_engine_for_paper.subscribed_symbols() {
-                if let Some(price) = price_provider_for_paper.get_price(&exchange, &symbol).await {
-                    paper_for_tick.on_price_tick(&symbol, price).await;
-                }
-            }
-        }
-    });
+        });
+    }
 
     let grid_cmd_tx = Some(grid_cmd_tx);
     tokio::spawn(async move {
@@ -219,13 +256,13 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(bot::auto_trade::adapters::ExchangeMarketDataProvider::new(exchange_registry.clone())
             .with_kline_engine(kline_engine.clone())
             .with_db(db_pool.clone(), config.server.encryption_key.clone())
-            .with_paper_executor(paper_executor.clone()));
-    let auto_real_order_executor: Arc<dyn bot::auto_trade::ports::OrderExecutor> =
-        Arc::new(bot::auto_trade::adapters::PeOrderExecutor::new(pe_cmd_tx.clone(), exchange_registry.clone(), "auto:close"));
+            .with_pe_exchange(pe_exchange_ref.clone()));
+    let (auto_event_tx, _auto_event_rx) = tokio::sync::broadcast::channel::<bot::auto_trade::ports::OrderEvent>(256);
     let auto_order_executor: Arc<dyn bot::auto_trade::ports::OrderExecutor> =
-        Arc::new(bot::auto_trade::adapters::SwitchableOrderExecutor::new(
-            auto_real_order_executor,
-            paper_executor.clone(),
+        Arc::new(bot::common::adapters::PeOrderExecutor::new(
+            pe_cmd_tx.clone(),
+            auto_event_tx.clone(),
+            auto_pe_event_rx,
         ));
     let auto_credential_store: Box<dyn bot::auto_trade::ports::CredentialStore> =
         Box::new(bot::auto_trade::adapters::PgCredentialStore::new(
@@ -239,12 +276,6 @@ async fn main() -> anyhow::Result<()> {
         auto_credential_store,
     ));
 
-    let (auto_event_tx, _auto_event_rx) = tokio::sync::broadcast::channel::<bot::auto_trade::ports::OrderEvent>(256);
-
-    {
-        paper_executor.add_event_channel(auto_event_tx.clone()).await;
-    }
-
     let (mut auto_engine, auto_cmd_tx, auto_event_broadcast) = bot::auto_trade::AutoEngine::new(
         auto_store,
         auto_ai_service,
@@ -254,24 +285,6 @@ async fn main() -> anyhow::Result<()> {
         auto_event_tx.clone(),
         Some(kline_engine.clone()),
     );
-
-    let mut auto_pe_event_rx = _pe_event_tx.subscribe();
-    let auto_event_tx_for_bridge = auto_event_tx;
-    tokio::spawn(async move {
-        loop {
-            match auto_pe_event_rx.recv().await {
-                Ok(event) => {
-                    if let Some(auto_event) = bot::auto_trade::adapters::convert_pe_event(event) {
-                        let _ = auto_event_tx_for_bridge.send(auto_event);
-                    }
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    tracing::warn!(lagged = n, "Auto PE event bridge lagged");
-                }
-            }
-        }
-    });
 
     // 桥接 AutoEvent → WsBroadcaster，推送实时仓位盈亏到前端
     {
@@ -366,7 +379,7 @@ async fn main() -> anyhow::Result<()> {
         Some(kline_engine),
         grid_cmd_tx,
         auto_cmd_tx,
-        Some(paper_executor),
+        paper_mode,
     );
 
     let addr = format!("{}:{}", config.server.host, config.server.port);

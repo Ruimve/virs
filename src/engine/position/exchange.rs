@@ -29,4 +29,8 @@ pub trait Exchange: Send + Sync {
 
     // WebSocket 成交回报
     async fn subscribe_order_updates(&self, symbols: &[&str]) -> Result<mpsc::Receiver<WsFeedEvent>>;
+
+    /// 价格 tick — Paper 模式下驱动 Limit 单撮合
+    /// 真实交易所实现为 no-op（由 WebSocket 推送订单更新）
+    async fn on_price_tick(&self, _symbol: &str, _price: f64) {}
 }

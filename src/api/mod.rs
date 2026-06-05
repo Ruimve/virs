@@ -32,7 +32,7 @@ pub fn build_router(
     kline_engine: Option<Arc<crate::engine::kline::KlineEngine>>,
     grid_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::semi_automatic_grid::types::GridCommand>>,
     auto_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::auto_trade::types::AutoCommand>>,
-    paper_executor: Option<Arc<crate::trading::paper::PaperOrderExecutor>>,
+    paper_mode: bool,
 ) -> Router {
     let state = Arc::new(AppState {
         config,
@@ -43,7 +43,7 @@ pub fn build_router(
         http_client: reqwest::Client::new(),
         grid_cmd_tx,
         auto_cmd_tx,
-        paper_executor,
+        paper_mode,
     });
 
     let _frontend_dir = std::env::var("FRONTEND_DIR")
@@ -200,5 +200,5 @@ pub struct AppState {
     pub http_client: reqwest::Client,
     pub grid_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::semi_automatic_grid::types::GridCommand>>,
     pub auto_cmd_tx: Option<tokio::sync::mpsc::Sender<crate::bot::auto_trade::types::AutoCommand>>,
-    pub paper_executor: Option<Arc<crate::trading::paper::PaperOrderExecutor>>,
+    pub paper_mode: bool,
 }

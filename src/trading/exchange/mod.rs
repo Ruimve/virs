@@ -128,6 +128,13 @@ pub trait Exchange: Send + Sync {
         start_time: i64,
         end_time: i64,
     ) -> anyhow::Result<Vec<FundingHistoryEntry>>;
+
+    /// Create a listen key for the User Data Stream (WebSocket).
+    /// Returns the listen key string on success.
+    async fn create_listen_key(&self) -> anyhow::Result<String>;
+
+    /// Keep-alive the listen key (extend TTL).
+    async fn keepalive_listen_key(&self, listen_key: &str) -> anyhow::Result<()>;
 }
 
 #[async_trait]
@@ -244,6 +251,14 @@ impl Exchange for Box<dyn Exchange> {
     ) -> anyhow::Result<Vec<FundingHistoryEntry>> {
         (**self).get_funding_history(symbol, start_time, end_time).await
     }
+
+    async fn create_listen_key(&self) -> anyhow::Result<String> {
+        (**self).create_listen_key().await
+    }
+
+    async fn keepalive_listen_key(&self, listen_key: &str) -> anyhow::Result<()> {
+        (**self).keepalive_listen_key(listen_key).await
+    }
 }
 
 /// Adapter that wraps a ccxt Exchange into the application's Exchange trait.
@@ -265,11 +280,6 @@ impl CcxtAdapter {
         }
     }
 
-    /// Get a reference to the underlying ccxt exchange.
-    pub fn ccxt(&self) -> &dyn CcxtExchange {
-        self.inner.as_ref()
-    }
-
     /// 获取 markets 信息（带缓存）
     async fn get_markets_cached(&self) -> anyhow::Result<Vec<ccxt::types::MarketInfo>> {
         {
@@ -283,14 +293,6 @@ impl CcxtAdapter {
         let mut cache = self.markets_cache.write().await;
         *cache = Some(markets.clone());
         Ok(markets)
-    }
-}
-
-/// Convert ccxt MarketType to models MarketType.
-fn to_models_market_type(mt: &CcxtMarketType) -> MarketType {
-    match mt {
-        CcxtMarketType::Spot => MarketType::Spot,
-        CcxtMarketType::Perpetual => MarketType::Perpetual,
     }
 }
 
@@ -639,6 +641,16 @@ impl Exchange for CcxtAdapter {
             funding_time: e.funding_time,
             rate: e.rate,
         }).collect())
+    }
+
+    async fn create_listen_key(&self) -> anyhow::Result<String> {
+        self.inner.create_listen_key().await
+            .map_err(|e| anyhow::anyhow!("ccxt create_listen_key error: {}", e))
+    }
+
+    async fn keepalive_listen_key(&self, listen_key: &str) -> anyhow::Result<()> {
+        self.inner.keepalive_listen_key(listen_key).await
+            .map_err(|e| anyhow::anyhow!("ccxt keepalive_listen_key error: {}", e))
     }
 }
 

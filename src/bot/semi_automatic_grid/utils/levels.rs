@@ -70,19 +70,3 @@ pub fn calculate_levels(bot: &GridBotConfig, current_price: f64) -> Vec<GridLeve
         })
         .collect()
 }
-
-pub fn compute_grid_spacing(upper_price: f64, lower_price: f64, grid_count: i32) -> f64 {
-    if grid_count > 1 {
-        (upper_price - lower_price) / grid_count as f64
-    } else {
-        0.0
-    }
-}
-
-pub fn compute_profit_factor(grid_profit_pct: f64) -> f64 {
-    1.0 + grid_profit_pct / 100.0
-}
-
-pub fn compute_mid_price(upper_price: f64, lower_price: f64) -> f64 {
-    (upper_price + lower_price) / 2.0
-}

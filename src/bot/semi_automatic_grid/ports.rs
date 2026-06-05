@@ -207,8 +207,6 @@ pub trait GridStore: Send + Sync {
 pub struct MarketSnapshot {
 /** 当前价格（独立于指标，用于快速判断数据可用性） */
     pub current_price: f64,
-/** 资金费率（独立于指标，用于 PromptContext 直接引用） */
-    pub funding_rate: f64,
 /** 多周期技术指标（由 utils::compute_market_indicators 计算） */
     pub indicators: crate::bot::semi_automatic_grid::utils::indicators::MarketIndicators,
 }

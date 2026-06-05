@@ -602,59 +602,54 @@ pub async fn paper_status(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)>
 {
-    let paper = match &state.paper_executor {
-        Some(p) => p,
-        None => {
-            return Ok(Json(ApiResponse::ok(serde_json::json!({
-                "enabled": false,
-                "pending_count": 0,
-            }))));
-        }
-    };
-
     Ok(Json(ApiResponse::ok(serde_json::json!({
-        "enabled": paper.is_enabled(),
-        "pending_count": paper.pending_count().await,
+        "enabled": state.paper_mode,
     }))))
 }
 
 /// POST /api/grid/paper/enable — 启用 paper 交易
+///
+/// Paper 模式由配置决定（PAPER_TRADING 环境变量），运行时不可切换。
+/// 此端点返回当前状态提示。
 pub async fn paper_enable(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)>
 {
-    match &state.paper_executor {
-        Some(paper) => {
-            paper.enable();
-            Ok(Json(ApiResponse::ok_with_message(
-                serde_json::json!({ "enabled": true }),
-                "Paper trading enabled",
-            )))
-        }
-        None => Err((
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<serde_json::Value>::err("Paper executor not available")),
-        )),
+    if state.paper_mode {
+        Ok(Json(ApiResponse::ok_with_message(
+            serde_json::json!({ "enabled": true }),
+            "Paper trading is already enabled (controlled by PAPER_TRADING config)",
+        )))
+    } else {
+        Err((
+            StatusCode::CONFLICT,
+            Json(ApiResponse::<serde_json::Value>::err(
+                "Paper mode is controlled by PAPER_TRADING environment variable. Restart with PAPER_TRADING=true to enable.",
+            )),
+        ))
     }
 }
 
 /// POST /api/grid/paper/disable — 禁用 paper 交易
+///
+/// Paper 模式由配置决定（PAPER_TRADING 环境变量），运行时不可切换。
+/// 此端点返回当前状态提示。
 pub async fn paper_disable(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiResponse<serde_json::Value>>)>
 {
-    match &state.paper_executor {
-        Some(paper) => {
-            paper.disable().await;
-            Ok(Json(ApiResponse::ok_with_message(
-                serde_json::json!({ "enabled": false }),
-                "Paper trading disabled",
-            )))
-        }
-        None => Err((
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<serde_json::Value>::err("Paper executor not available")),
-        )),
+    if !state.paper_mode {
+        Ok(Json(ApiResponse::ok_with_message(
+            serde_json::json!({ "enabled": false }),
+            "Paper trading is already disabled (real exchange mode)",
+        )))
+    } else {
+        Err((
+            StatusCode::CONFLICT,
+            Json(ApiResponse::<serde_json::Value>::err(
+                "Paper mode is controlled by PAPER_TRADING environment variable. Restart with PAPER_TRADING=false to disable.",
+            )),
+        ))
     }
 }
 

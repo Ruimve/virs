@@ -1,4 +1,4 @@
-use crate::bot::semi_automatic_grid::adapters::convert_pe_event;
+use crate::bot::common::adapters::convert_pe_event;
 use crate::bot::semi_automatic_grid::ports::{OrderSide, OrderCommand, OrderEvent, OrderExecutor};
 use crate::engine::position::types::{self, Position, PositionSide, PositionStatus, Order, OrderStatus, OrderType, Side, Trade, TradeType, EngineEvent};
 use chrono::Utc;

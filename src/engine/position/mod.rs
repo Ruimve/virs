@@ -7,6 +7,8 @@ pub mod risk;
 pub mod tracker;
 pub mod types;
 
+pub use engine::PositionEngine;
+
 #[cfg(test)]
 mod test;
 

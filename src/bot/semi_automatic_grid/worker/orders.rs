@@ -7,7 +7,7 @@ use crate::bot::semi_automatic_grid::worker::GridWorker;
 /** 挂单方向枚举
 
 用于参数化 place_order 方法，避免 buy/sell 两个方法的大面积重复 */
-enum OrderDir {
+pub enum OrderDir {
     Buy,
     Sell,
 }

@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use sqlx::PgPool;
-use tracing::warn;
+use tokio::sync::broadcast;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::config::AiConfig;
@@ -163,32 +164,54 @@ impl LlmProviderResolver for DefaultLlmResolver {
 }
 
 // ── PeOrderExecutor ──
+//
+// 交易执行器，通过 PositionEngine 执行订单：
+// - 发送 EngineCommand 到 PositionEngine
+// - 监听 PositionEngine 的 EngineEvent，转换为 OrderEvent 广播
+// - PositionEngine 内部通过 Exchange trait 与真实交易所或 Paper 交互
+// - Paper 开关在创建 PositionEngine 时决定传入哪个 Exchange 实现
 
 pub struct PeOrderExecutor {
-    pe_cmd_tx: tokio::sync::mpsc::Sender<pe_types::EngineCommand>,
-    exchange_registry: Arc<ExchangeRegistry>,
-    close_prefix: String,
+    cmd_tx: tokio::sync::mpsc::Sender<pe_types::EngineCommand>,
 }
 
 impl PeOrderExecutor {
     pub fn new(
-        pe_cmd_tx: tokio::sync::mpsc::Sender<pe_types::EngineCommand>,
-        exchange_registry: Arc<ExchangeRegistry>,
-        close_prefix: &str,
+        cmd_tx: tokio::sync::mpsc::Sender<pe_types::EngineCommand>,
+        event_tx: broadcast::Sender<OrderEvent>,
+        mut engine_event_rx: tokio::sync::broadcast::Receiver<pe_types::EngineEvent>,
     ) -> Self {
-        Self { pe_cmd_tx, exchange_registry, close_prefix: close_prefix.to_string() }
+        // 启动事件转发：EngineEvent → OrderEvent
+        tokio::spawn(async move {
+            loop {
+                match engine_event_rx.recv().await {
+                    Ok(engine_event) => {
+                        if let Some(order_event) = convert_pe_event(engine_event) {
+                            let _ = event_tx.send(order_event);
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        warn!(lagged = n, "PeOrderExecutor: EngineEvent lagged");
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        info!("PeOrderExecutor: EngineEvent channel closed");
+                        break;
+                    }
+                }
+            }
+        });
+
+        Self {
+            cmd_tx,
+        }
     }
 }
 
 #[async_trait]
 impl OrderExecutor for PeOrderExecutor {
     async fn send_command(&self, command: OrderCommand) -> anyhow::Result<()> {
-        let pe_cmd = match command {
+        let engine_cmd = match command {
             OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only, position_side, client_order_id } => {
-                let pe_position_side = position_side.map(|ps| match ps {
-                    PositionSide::Long => pe_types::PositionSide::Long,
-                    PositionSide::Short => pe_types::PositionSide::Short,
-                });
                 pe_types::EngineCommand::PlaceOrder {
                     params: pe_types::PlaceOrderParams {
                         symbol,
@@ -204,7 +227,10 @@ impl OrderExecutor for PeOrderExecutor {
                         amount,
                         price,
                         reduce_only,
-                        position_side: pe_position_side,
+                        position_side: position_side.map(|ps| match ps {
+                            PositionSide::Long => pe_types::PositionSide::Long,
+                            PositionSide::Short => pe_types::PositionSide::Short,
+                        }),
                         position_id: None,
                         client_order_id,
                     },
@@ -219,70 +245,13 @@ impl OrderExecutor for PeOrderExecutor {
                     symbol,
                 }
             }
-            OrderCommand::CloseAllPositions { symbol, exchange } => {
-                let exchange_key = format!("{}:perpetual", exchange);
-                if let Some(ex) = self.exchange_registry.get(&exchange_key) {
-                    match ex.get_positions(Some(&symbol)).await {
-                        Ok(positions) => {
-                            for pos in positions {
-                                if pos.symbol == symbol && pos.size.abs() > 0.0 {
-                                    let is_long = pos.size > 0.0;
-                                    let close_cmd = pe_types::EngineCommand::PlaceOrder {
-                                        params: pe_types::PlaceOrderParams {
-                                            symbol: symbol.clone(),
-                                            side: if is_long { pe_types::Side::Sell } else { pe_types::Side::Buy },
-                                            order_type: pe_types::OrderType::Market,
-                                            amount: pos.size.abs(),
-                                            price: None,
-                                            reduce_only: true,
-                                            position_side: Some(if is_long { pe_types::PositionSide::Long } else { pe_types::PositionSide::Short }),
-                                            position_id: None,
-                                            client_order_id: Some(format!("{}:{}", self.close_prefix, symbol)),
-                                        },
-                                    };
-                                    if let Err(e) = self.pe_cmd_tx.send(close_cmd).await {
-                                        warn!(symbol = %symbol, error = %e, "Failed to send close position order");
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            warn!(symbol = %symbol, error = %e, "Failed to get positions for CloseAllPositions");
-                        }
-                    }
-                }
-                return Ok(());
+            OrderCommand::CloseAllPositions { symbol, exchange: _ } => {
+                pe_types::EngineCommand::CloseAllPositions { symbol }
             }
         };
-        self.pe_cmd_tx.send(pe_cmd).await?;
-        Ok(())
-    }
-}
 
-// ── SwitchableOrderExecutor ──
-
-pub struct SwitchableOrderExecutor {
-    real: Arc<dyn OrderExecutor>,
-    paper: Arc<crate::trading::paper::PaperOrderExecutor>,
-}
-
-impl SwitchableOrderExecutor {
-    pub fn new(
-        real: Arc<dyn OrderExecutor>,
-        paper: Arc<crate::trading::paper::PaperOrderExecutor>,
-    ) -> Self {
-        Self { real, paper }
-    }
-}
-
-#[async_trait]
-impl OrderExecutor for SwitchableOrderExecutor {
-    async fn send_command(&self, command: OrderCommand) -> anyhow::Result<()> {
-        if self.paper.is_enabled() {
-            self.paper.send_command(command).await
-        } else {
-            self.real.send_command(command).await
-        }
+        self.cmd_tx.send(engine_cmd).await
+            .map_err(|e| anyhow::anyhow!("Failed to send command to PositionEngine: {}", e))
     }
 }
 

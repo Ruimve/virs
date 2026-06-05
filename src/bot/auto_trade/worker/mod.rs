@@ -88,10 +88,12 @@ impl AutoWorker {
         self.bot.current_side.as_ref().map_or(false, |s| !s.is_empty() && s != "none")
     }
 
+    #[cfg(test)]
     pub(crate) fn is_long(&self) -> bool {
         self.bot.current_side.as_deref() == Some("long")
     }
 
+    #[cfg(test)]
     pub(crate) fn is_short(&self) -> bool {
         self.bot.current_side.as_deref() == Some("short")
     }
@@ -100,6 +102,7 @@ impl AutoWorker {
         self.pending_open.is_some() || self.pending_close.is_some()
     }
 
+    #[cfg(test)]
     pub(crate) fn normalize_side(&self) -> Option<&str> {
         match self.bot.current_side.as_deref() {
             Some(s) if !s.is_empty() && s != "none" => Some(s),
