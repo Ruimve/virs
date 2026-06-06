@@ -1,0 +1,126 @@
+//! User management handlers.
+
+use axum::{
+    extract::State,
+    http::StatusCode,
+    Json,
+};
+
+use crate::handlers::auth::ApiResponse;
+use crate::state::AppState;
+
+pub async fn list_users(
+    State(state): State<AppState>,
+) -> Json<ApiResponse> {
+    let rows = sqlx::query_as::<_, (uuid::Uuid, String, String, Option<String>, bool, chrono::DateTime<chrono::Utc>)>(
+        r#"SELECT id, username, role, email, is_active, created_at FROM qd_users ORDER BY created_at DESC"#,
+    )
+    .fetch_all(&state.db_pool)
+    .await;
+
+    match rows {
+        Ok(users) => Json(ApiResponse::ok(serde_json::json!({
+            "users": users.iter().map(|(id, username, role, email, is_active, created_at)| {
+                serde_json::json!({
+                    "id": id.to_string(),
+                    "username": username,
+                    "role": role,
+                    "email": email,
+                    "is_active": is_active,
+                    "created_at": created_at.to_rfc3339(),
+                })
+            }).collect::<Vec<_>>()
+        }))),
+        Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
+    }
+}
+
+pub async fn create_user(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let username = body["username"].as_str().unwrap_or("");
+    let password = body["password"].as_str().unwrap_or("");
+    let role = body["role"].as_str().unwrap_or("user");
+    let email = body["email"].as_str();
+
+    if username.is_empty() || password.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::err("Username and password are required")),
+        ));
+    }
+
+    let password_hash = bcrypt::hash(password, bcrypt::DEFAULT_COST)
+        .map_err(|e| {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Hash error: {}", e))))
+        })?;
+
+    let id = uuid::Uuid::new_v4();
+    sqlx::query(
+        r#"INSERT INTO qd_users (id, username, password_hash, role, email, is_active, credits, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, true, 0, NOW(), NOW())"#,
+    )
+    .bind(id)
+    .bind(username)
+    .bind(&password_hash)
+    .bind(role)
+    .bind(email)
+    .execute(&state.db_pool)
+    .await
+    .map_err(|e| {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
+    })?;
+
+    Ok(Json(ApiResponse::ok(serde_json::json!({"id": id.to_string()}))))
+}
+
+pub async fn update_user(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let id = body["id"].as_str().unwrap_or("");
+    let uuid_id = uuid::Uuid::parse_str(id).map_err(|_| {
+        (StatusCode::BAD_REQUEST, Json(ApiResponse::err("Invalid user ID")))
+    })?;
+
+    let is_active = body["is_active"].as_bool();
+    let role = body["role"].as_str();
+    let email = body["email"].as_str();
+
+    sqlx::query(
+        r#"UPDATE qd_users SET role = COALESCE($2, role), email = COALESCE($3, email),
+           is_active = COALESCE($4, is_active), updated_at = NOW() WHERE id = $1"#,
+    )
+    .bind(uuid_id)
+    .bind(role)
+    .bind(email)
+    .bind(is_active)
+    .execute(&state.db_pool)
+    .await
+    .map_err(|e| {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
+    })?;
+
+    Ok(Json(ApiResponse::ok(serde_json::json!({"updated": true}))))
+}
+
+pub async fn delete_user(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let id = body["id"].as_str().unwrap_or("");
+    let uuid_id = uuid::Uuid::parse_str(id).map_err(|_| {
+        (StatusCode::BAD_REQUEST, Json(ApiResponse::err("Invalid user ID")))
+    })?;
+
+    sqlx::query(r#"DELETE FROM qd_users WHERE id = $1"#)
+        .bind(uuid_id)
+        .execute(&state.db_pool)
+        .await
+        .map_err(|e| {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
+        })?;
+
+    Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
+}

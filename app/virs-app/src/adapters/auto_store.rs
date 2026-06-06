@@ -1,0 +1,199 @@
+//! PgAutoStore — PostgreSQL implementation of AutoStore.
+
+use async_trait::async_trait;
+use sqlx::PgPool;
+use uuid::Uuid;
+
+use virs_bot::auto::ports::*;
+use virs_bot::auto::types::{AutoBotConfig, MarketType};
+use virs_models::AutoBot;
+
+pub struct PgAutoStore {
+    db: PgPool,
+}
+
+impl PgAutoStore {
+    pub fn new(db: PgPool) -> Self {
+        Self { db }
+    }
+}
+
+fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
+    AutoBotConfig {
+        id: bot.id,
+        user_id: bot.user_id,
+        name: bot.name.clone(),
+        symbol: bot.symbol.clone(),
+        exchange: bot.exchange.clone(),
+        market_type: MarketType::from_str_lossy(&bot.market_type),
+        leverage: bot.leverage,
+        max_position_pct: bot.max_position_pct,
+        decide_interval_secs: bot.decide_interval_secs,
+        current_side: bot.current_side.clone(),
+        entry_price: bot.entry_price,
+        position_size: bot.position_size,
+        stop_loss: bot.stop_loss,
+        take_profit: bot.take_profit,
+        unrealized_pnl: bot.unrealized_pnl,
+        liquidation_price: bot.liquidation_price,
+        market_regime: bot.market_regime.clone(),
+        ai_analysis: bot.ai_analysis.clone(),
+        system_prompt: bot.system_prompt.clone(),
+        user_prompt: bot.user_prompt.clone(),
+        total_pnl: bot.total_pnl,
+        total_trades: bot.total_trades,
+        win_trades: bot.win_trades,
+        loss_trades: bot.loss_trades,
+        last_decided_at: bot.last_decided_at,
+    }
+}
+
+#[async_trait]
+impl AutoStore for PgAutoStore {
+    async fn load_running_bots(&self) -> anyhow::Result<Vec<AutoBotConfig>> {
+        let bots: Vec<AutoBot> =
+            sqlx::query_as("SELECT * FROM qd_auto_bots WHERE status = 'running'")
+                .fetch_all(&self.db).await?;
+        Ok(bots.iter().map(bot_to_config).collect())
+    }
+
+    async fn load_bot(&self, bot_id: Uuid) -> anyhow::Result<Option<AutoBotConfig>> {
+        let bot: Option<AutoBot> =
+            sqlx::query_as("SELECT * FROM qd_auto_bots WHERE id = $1")
+                .bind(bot_id).fetch_optional(&self.db).await?;
+        Ok(bot.as_ref().map(bot_to_config))
+    }
+
+    async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> anyhow::Result<()> {
+        let sql = match status {
+            "running" => "UPDATE qd_auto_bots SET status = 'running', started_at = NOW(), updated_at = NOW() WHERE id = $1",
+            "stopped" => "UPDATE qd_auto_bots SET status = 'stopped', stopped_at = NOW(), updated_at = NOW() WHERE id = $1",
+            "paused" => "UPDATE qd_auto_bots SET status = 'paused', updated_at = NOW() WHERE id = $1",
+            _ => "UPDATE qd_auto_bots SET status = $2, updated_at = NOW() WHERE id = $1",
+        };
+        if status == "running" || status == "stopped" || status == "paused" {
+            sqlx::query(sql).bind(bot_id).execute(&self.db).await?;
+        } else {
+            sqlx::query(sql).bind(bot_id).bind(status).execute(&self.db).await?;
+        }
+        Ok(())
+    }
+
+    async fn update_last_decided(&self, bot_id: Uuid) -> anyhow::Result<()> {
+        sqlx::query("UPDATE qd_auto_bots SET last_decided_at = NOW() WHERE id = $1")
+            .bind(bot_id).execute(&self.db).await?;
+        Ok(())
+    }
+
+    async fn update_position(
+        &self, bot_id: Uuid, current_side: Option<&str>, entry_price: f64,
+        position_size: f64, stop_loss: f64, take_profit: f64, liquidation_price: Option<f64>,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"UPDATE qd_auto_bots SET
+                current_side = $2, entry_price = $3, position_size = $4,
+                stop_loss = $5, take_profit = $6,
+                liquidation_price = $7, updated_at = NOW()
+               WHERE id = $1"#,
+        )
+        .bind(bot_id).bind(current_side).bind(entry_price).bind(position_size)
+        .bind(stop_loss).bind(take_profit).bind(liquidation_price)
+        .execute(&self.db).await?;
+        Ok(())
+    }
+
+    async fn update_ai_analysis(
+        &self, bot_id: Uuid, market_regime: &str, leverage: i32, ai_analysis: &str,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"UPDATE qd_auto_bots SET
+                market_regime = $2, leverage = $3, ai_analysis = $4, updated_at = NOW()
+               WHERE id = $1"#,
+        )
+        .bind(bot_id).bind(market_regime).bind(leverage).bind(ai_analysis)
+        .execute(&self.db).await?;
+        Ok(())
+    }
+
+    async fn update_stats(
+        &self, bot_id: Uuid, total_pnl: f64, total_trades: i32, win_trades: i32, loss_trades: i32,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"UPDATE qd_auto_bots SET
+                total_pnl = $2, total_trades = $3, win_trades = $4, loss_trades = $5, updated_at = NOW()
+               WHERE id = $1"#,
+        )
+        .bind(bot_id).bind(total_pnl).bind(total_trades).bind(win_trades).bind(loss_trades)
+        .execute(&self.db).await?;
+        Ok(())
+    }
+
+    async fn record_trade(
+        &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
+        side: &str, trade_type: &str, trigger_source: &str, price: f64,
+        quantity: f64, pnl: f64, pnl_pct: f64, exchange_order_id: Option<&str>,
+    ) -> anyhow::Result<Uuid> {
+        let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
+        let row: (Uuid,) = sqlx::query_as(
+            r#"INSERT INTO qd_auto_trades (bot_id, user_id, symbol, exchange, side, trade_type, trigger_source, price, quantity, pnl, pnl_pct, exchange_order_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+               RETURNING id"#,
+        )
+        .bind(bot_id).bind(user_id).bind(symbol).bind(exchange)
+        .bind(side).bind(trade_type).bind(trigger_source).bind(price)
+        .bind(quantity).bind(pnl).bind(pnl_pct).bind(exchange_order_id)
+        .fetch_one(&self.db).await?;
+        Ok(row.0)
+    }
+
+    async fn save_analysis_log(
+        &self, bot_id: Uuid, analysis_type: &str, system_prompt: &str,
+        user_prompt: &str, result: &serde_json::Value, error: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let status = if error.is_some() { "failed" } else { "completed" };
+        sqlx::query(
+            r#"INSERT INTO qd_auto_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, error, completed_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())"#,
+        )
+        .bind(bot_id).bind(analysis_type).bind(system_prompt).bind(user_prompt)
+        .bind(status).bind(result).bind(error)
+        .execute(&self.db).await?;
+        Ok(())
+    }
+
+    async fn load_analysis_logs(&self, bot_id: Uuid) -> anyhow::Result<Vec<AutoAnalysisLogEntry>> {
+        let rows: Vec<(Uuid, Uuid, String, String, String, serde_json::Value, Option<String>, chrono::DateTime<chrono::Utc>)> =
+            sqlx::query_as(
+                r#"SELECT id, bot_id, analysis_type, system_prompt, user_prompt, result, error, created_at
+                   FROM qd_auto_analysis_logs WHERE bot_id = $1 ORDER BY created_at DESC LIMIT 50"#,
+            )
+            .bind(bot_id).fetch_all(&self.db).await?;
+
+        Ok(rows.into_iter().map(|r| AutoAnalysisLogEntry {
+            id: r.0, bot_id: r.1, analysis_type: r.2,
+            system_prompt: r.3, user_prompt: r.4, result: r.5,
+            error: r.6, created_at: r.7,
+        }).collect())
+    }
+
+    async fn load_consecutive_losses(&self, bot_id: Uuid) -> anyhow::Result<i32> {
+        let pnl_rows: Vec<(f64,)> = sqlx::query_as(
+            r#"SELECT pnl FROM qd_auto_trades
+               WHERE bot_id = $1 AND pnl != 0
+               ORDER BY created_at DESC LIMIT 20"#
+        )
+        .bind(bot_id).fetch_all(&self.db).await?;
+
+        let mut count = 0i32;
+        for (pnl,) in &pnl_rows {
+            if *pnl < 0.0 { count += 1; } else { break; }
+        }
+        Ok(count)
+    }
+
+    async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()> {
+        sqlx::query("DELETE FROM qd_auto_bots WHERE id = $1")
+            .bind(bot_id).execute(&self.db).await?;
+        Ok(())
+    }
+}

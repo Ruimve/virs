@@ -1,0 +1,22 @@
+[package]
+name = "virs-ccxt"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+virs-types = { path = "../virs-types" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+base64 = { workspace = true }
+rand = { workspace = true }
+tokio-tungstenite = { workspace = true }
+futures-util = { workspace = true }

@@ -1,0 +1,19 @@
+[package]
+name = "virs-exchange"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+virs-types = { path = "../virs-types" }
+virs-ccxt = { path = "../virs-ccxt" }
+virs-models = { path = "../virs-models" }
+serde = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+dashmap = { workspace = true }
+tokio-stream = { workspace = true }

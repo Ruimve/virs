@@ -1,0 +1,323 @@
+//! Position engine types: Position, Order, Trade, EngineCommand, EngineEvent, etc.
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::enums::*;
+
+/// Position
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Position {
+    pub id: Uuid,
+    pub engine_id: String,
+    pub strategy_id: Option<String>,
+    pub exchange: String,
+    pub symbol: String,
+    pub side: PositionSide,
+    pub status: PositionStatus,
+    pub size: f64,
+    pub entry_price: f64,
+    pub current_price: f64,
+    pub leverage: u32,
+    pub margin: f64,
+    pub unrealized_pnl: f64,
+    pub realized_pnl: f64,
+    pub stop_loss: Option<f64>,
+    pub take_profit: Option<f64>,
+    pub liquidation_price: Option<f64>,
+    pub opened_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub closed_at: Option<DateTime<Utc>>,
+    pub metadata: serde_json::Value,
+}
+
+/// Order (position engine)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PositionOrder {
+    pub id: Uuid,
+    pub position_id: Uuid,
+    pub exchange_order_id: Option<String>,
+    pub client_order_id: Option<String>,
+    pub exchange: String,
+    pub symbol: String,
+    pub side: Side,
+    pub order_type: OrderType,
+    pub request_price: Option<f64>,
+    pub fill_price: Option<f64>,
+    pub amount: f64,
+    pub filled: f64,
+    pub remaining: f64,
+    pub status: OrderStatus,
+    pub reduce_only: bool,
+    pub fee: f64,
+    pub fee_currency: String,
+    pub slippage: Option<f64>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Trade record
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Trade {
+    pub id: Uuid,
+    pub position_id: Uuid,
+    pub order_id: Uuid,
+    pub exchange: String,
+    pub symbol: String,
+    pub side: Side,
+    pub price: f64,
+    pub amount: f64,
+    pub fee: f64,
+    pub fee_currency: String,
+    pub pnl: f64,
+    pub trade_type: TradeType,
+    pub created_at: DateTime<Utc>,
+}
+
+/// WebSocket feed event
+#[derive(Debug, Clone)]
+pub enum WsFeedEvent {
+    OrderUpdate {
+        exchange_order_id: String,
+        symbol: String,
+        status: OrderStatus,
+        filled: f64,
+        remaining: f64,
+        price: f64,
+        amount: f64,
+        commission: f64,
+        timestamp: DateTime<Utc>,
+        position_side: Option<PositionSide>,
+    },
+    ConnectionChanged {
+        connected: bool,
+    },
+}
+
+/// Place order parameters
+#[derive(Debug, Clone)]
+pub struct PlaceOrderParams {
+    pub symbol: String,
+    pub side: Side,
+    pub order_type: OrderType,
+    pub amount: f64,
+    pub price: Option<f64>,
+    pub reduce_only: bool,
+    pub position_side: Option<PositionSide>,
+    pub position_id: Option<Uuid>,
+    pub client_order_id: Option<String>,
+}
+
+/// Engine command
+#[derive(Debug, Clone)]
+pub enum EngineCommand {
+    OpenPosition {
+        exchange: String,
+        symbol: String,
+        side: PositionSide,
+        order_side: Side,
+        size: f64,
+        leverage: Option<u32>,
+        order_type: OrderType,
+        price: Option<f64>,
+        stop_loss: Option<f64>,
+        take_profit: Option<f64>,
+        strategy_id: Option<String>,
+    },
+    ClosePosition {
+        position_id: Uuid,
+        order_type: OrderType,
+        price: Option<f64>,
+    },
+    ModifyPosition {
+        position_id: Uuid,
+        stop_loss: Option<f64>,
+        take_profit: Option<f64>,
+    },
+    PlaceOrder {
+        params: PlaceOrderParams,
+    },
+    CancelOrder {
+        order_id: Uuid,
+    },
+    CancelAllOrders {
+        position_id: Option<Uuid>,
+        symbol: Option<String>,
+    },
+    CloseAllPositions {
+        symbol: String,
+    },
+    SyncPositions,
+    PriceTick {
+        symbol: String,
+        price: f64,
+    },
+    Shutdown,
+}
+
+/// Engine event
+#[derive(Debug, Clone)]
+pub enum EngineEvent {
+    PositionOpened {
+        position: Position,
+    },
+    PositionClosed {
+        position: Position,
+    },
+    PositionModified {
+        position_id: Uuid,
+        stop_loss: Option<f64>,
+        take_profit: Option<f64>,
+    },
+    OrderPlaced {
+        order: PositionOrder,
+    },
+    OrderFilled {
+        order: PositionOrder,
+        trade: Trade,
+    },
+    OrderPartiallyFilled {
+        order: PositionOrder,
+        trade: Trade,
+    },
+    OrderCanceled {
+        order: PositionOrder,
+    },
+    OrderFailed {
+        order_id: Uuid,
+        reason: String,
+    },
+    RiskAlert {
+        level: String,
+        message: String,
+    },
+    PositionSynced {
+        positions: Vec<crate::market::ExchangePosition>,
+    },
+    LiquidationWarning {
+        position_id: Uuid,
+        symbol: String,
+        liquidation_price: f64,
+        current_price: f64,
+    },
+}
+
+/// Risk configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RiskConfig {
+    #[serde(default = "default_max_position_per_symbol")]
+    pub max_position_per_symbol_pct: f64,
+    #[serde(default = "default_max_total_position")]
+    pub max_total_position_pct: f64,
+    #[serde(default = "default_max_order_amount")]
+    pub max_order_amount_pct: f64,
+    #[serde(default = "default_max_drawdown")]
+    pub max_drawdown_pct: f64,
+    #[serde(default = "default_max_leverage")]
+    pub max_leverage: u32,
+    #[serde(default = "default_funding_rate_threshold")]
+    pub funding_rate_threshold: f64,
+    #[serde(default = "default_liquidation_buffer")]
+    pub liquidation_buffer_pct: f64,
+    #[serde(default = "default_max_consecutive_losses")]
+    pub max_consecutive_losses: u32,
+}
+
+fn default_max_position_per_symbol() -> f64 { 1.0 }
+fn default_max_total_position() -> f64 { 3.0 }
+fn default_max_order_amount() -> f64 { 0.3 }
+fn default_max_drawdown() -> f64 { 0.15 }
+fn default_max_leverage() -> u32 { 20 }
+fn default_funding_rate_threshold() -> f64 { 0.001 }
+fn default_liquidation_buffer() -> f64 { 0.2 }
+fn default_max_consecutive_losses() -> u32 { 5 }
+
+impl Default for RiskConfig {
+    fn default() -> Self {
+        Self {
+            max_position_per_symbol_pct: default_max_position_per_symbol(),
+            max_total_position_pct: default_max_total_position(),
+            max_order_amount_pct: default_max_order_amount(),
+            max_drawdown_pct: default_max_drawdown(),
+            max_leverage: default_max_leverage(),
+            funding_rate_threshold: default_funding_rate_threshold(),
+            liquidation_buffer_pct: default_liquidation_buffer(),
+            max_consecutive_losses: default_max_consecutive_losses(),
+        }
+    }
+}
+
+/// Engine configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EngineConfig {
+    pub engine_id: String,
+    #[serde(default = "default_sync_interval")]
+    pub sync_interval_secs: u64,
+    #[serde(default = "default_poll_interval")]
+    pub poll_interval_secs: u64,
+    #[serde(default = "default_ws_reconnect_timeout")]
+    pub ws_reconnect_timeout_secs: u64,
+    #[serde(default)]
+    pub risk: RiskConfig,
+    #[serde(default = "default_pnl_snapshot_interval")]
+    pub pnl_snapshot_interval_secs: u64,
+}
+
+fn default_sync_interval() -> u64 { 10 }
+fn default_poll_interval() -> u64 { 10 }
+fn default_ws_reconnect_timeout() -> u64 { 30 }
+fn default_pnl_snapshot_interval() -> u64 { 60 }
+
+impl Default for EngineConfig {
+    fn default() -> Self {
+        Self {
+            engine_id: "default".to_string(),
+            sync_interval_secs: default_sync_interval(),
+            poll_interval_secs: default_poll_interval(),
+            ws_reconnect_timeout_secs: default_ws_reconnect_timeout(),
+            risk: RiskConfig::default(),
+            pnl_snapshot_interval_secs: default_pnl_snapshot_interval(),
+        }
+    }
+}
+
+/// Position engine error
+#[derive(Debug, thiserror::Error)]
+pub enum PositionEngineError {
+    #[error("Exchange error: {0}")]
+    Exchange(String),
+    #[error("Order not found: {order_id}")]
+    OrderNotFound { order_id: String },
+    #[error("Position not found: {position_id}")]
+    PositionNotFound { position_id: String },
+    #[error("Position already exists: {exchange}/{symbol}/{side}")]
+    PositionAlreadyExists { exchange: String, symbol: String, side: String },
+    #[error("Invalid order amount: {amount}")]
+    InvalidAmount { amount: f64 },
+    #[error("Insufficient position size: requested={requested}, available={available}")]
+    InsufficientPosition { requested: f64, available: f64 },
+    #[error("Risk check failed: {reason}")]
+    RiskCheckFailed { reason: String },
+    #[cfg(feature = "sqlx")]
+    #[error("Database error: {0}")]
+    Database(#[from] sqlx::Error),
+    #[cfg(not(feature = "sqlx"))]
+    #[error("Database error: {0}")]
+    Database(String),
+    #[error("Engine not running")]
+    EngineNotRunning,
+    #[error("Engine already running")]
+    EngineAlreadyRunning,
+    #[error("Channel closed")]
+    ChannelClosed,
+    #[error("Configuration error: {0}")]
+    Config(String),
+    #[error("Position mode mismatch: expected={expected}, actual={actual}")]
+    PositionModeMismatch { expected: String, actual: String },
+    #[error("Position mode query failed: {0}")]
+    PositionModeQueryFailed(String),
+}
+
+/// Position engine result type
+pub type PositionResult<T> = std::result::Result<T, PositionEngineError>;

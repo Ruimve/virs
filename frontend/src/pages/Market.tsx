@@ -106,11 +106,14 @@ const Market: Component = () => {
   async function fetchKlinesFallback(version: number) {
     try {
       const params = { exchange: exchange(), symbol: symbol(), market_type: market.marketType() }
-      const k = await api.get<KlineItem[]>(`/market/klines?${new URLSearchParams({ ...params, interval: interval(), limit: '500' } as any)}`)
+      const k = await api.get<any>(`/market/klines?${new URLSearchParams({ ...params, interval: interval(), limit: '500' } as any)}`)
       if (version !== fetchVersion) return
-      if (k.success && k.data && k.data.length > 0) {
-        setKlines(k.data)
-        loadedTimeframe = interval()
+      if (k.success && k.data) {
+        const candles = Array.isArray(k.data) ? k.data : (k.data.candles || [])
+        if (candles.length > 0) {
+          setKlines(candles)
+          loadedTimeframe = interval()
+        }
       }
     } catch { /* */ }
   }

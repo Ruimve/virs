@@ -1,0 +1,33 @@
+[package]
+name = "virs-app"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "virs"
+path = "src/main.rs"
+
+[dependencies]
+virs-bot = { path = "../../crates/services/virs-bot" }
+virs-api = { path = "../../crates/services/virs-api" }
+virs-types = { path = "../../crates/libs/virs-types" }
+virs-models = { path = "../../crates/libs/virs-models" }
+virs-config = { path = "../../crates/libs/virs-config" }
+virs-utils = { path = "../../crates/libs/virs-utils" }
+virs-exchange = { path = "../../crates/libs/virs-exchange" }
+virs-ccxt = { path = "../../crates/libs/virs-ccxt" }
+virs-market = { path = "../../crates/services/virs-market" }
+virs-position = { path = "../../crates/services/virs-position" }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+sqlx = { workspace = true }
+axum = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
+bcrypt = { workspace = true }

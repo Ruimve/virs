@@ -1,0 +1,429 @@
+//! Paper Exchange Adapter
+//!
+//! Paper mode adapter implementing the Position Engine Exchange trait.
+//! Market orders fill immediately, Limit orders wait for price trigger.
+
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use async_trait::async_trait;
+use chrono::Utc;
+use dashmap::DashMap;
+use tokio::sync::{mpsc, Mutex};
+use tokio_stream::wrappers::ReceiverStream;
+use tracing::{debug, info, warn};
+use uuid::Uuid;
+
+use virs_types::enums::*;
+use virs_types::market::*;
+use virs_types::position::*;
+use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
+
+use crate::registry::ExchangeRegistry;
+
+/// Paper pending order
+#[derive(Debug, Clone)]
+struct PaperPendingOrder {
+    id: Uuid,
+    symbol: String,
+    side: Side,
+    order_type: OrderType,
+    amount: f64,
+    price: Option<f64>,
+    reduce_only: bool,
+    position_side: Option<PositionSide>,
+    client_order_id: Option<String>,
+    created_at: chrono::DateTime<Utc>,
+}
+
+/// Paper position
+#[derive(Debug, Clone)]
+struct PaperPosition {
+    symbol: String,
+    side: PositionSide,
+    size: f64,
+    entry_price: f64,
+    leverage: u32,
+    unrealized_pnl: f64,
+    liquidation_price: Option<f64>,
+}
+
+/// Paper Exchange Adapter
+pub struct PaperExchangeAdapter {
+    name: String,
+    market_type: MarketType,
+    position_mode: PositionMode,
+    pending: Arc<DashMap<Uuid, PaperPendingOrder>>,
+    positions: Arc<DashMap<String, PaperPosition>>,
+    balance: Arc<Mutex<Balance>>,
+    price_tx: Arc<Mutex<Option<mpsc::Sender<WsFeedEvent>>>>,
+    last_prices: Arc<DashMap<String, f64>>,
+    exchange_registry: Option<Arc<ExchangeRegistry>>,
+    balance_initialized: Arc<AtomicBool>,
+}
+
+impl PaperExchangeAdapter {
+    pub fn new(name: &str, market_type: MarketType, initial_balance: f64) -> Self {
+        Self::with_position_mode(name, market_type, initial_balance, PositionMode::Hedge)
+    }
+
+    pub fn with_position_mode(name: &str, market_type: MarketType, initial_balance: f64, position_mode: PositionMode) -> Self {
+        info!(
+            name, market_type = ?market_type, position_mode = ?position_mode, initial_balance,
+            "PaperExchangeAdapter created"
+        );
+        Self {
+            name: name.to_string(),
+            market_type,
+            position_mode,
+            pending: Arc::new(DashMap::new()),
+            positions: Arc::new(DashMap::new()),
+            balance: Arc::new(Mutex::new(Balance {
+                asset: "USDT".to_string(),
+                free: initial_balance,
+                used: 0.0,
+                total: initial_balance,
+            })),
+            price_tx: Arc::new(Mutex::new(None)),
+            last_prices: Arc::new(DashMap::new()),
+            exchange_registry: None,
+            balance_initialized: Arc::new(AtomicBool::new(initial_balance > 0.0)),
+        }
+    }
+
+    pub fn with_exchange_registry(mut self, registry: Arc<ExchangeRegistry>) -> Self {
+        self.exchange_registry = Some(registry);
+        self
+    }
+
+    async fn ensure_balance_initialized(&self) {
+        if self.balance_initialized.load(Ordering::Relaxed) {
+            return;
+        }
+        let registry = match &self.exchange_registry {
+            Some(r) => r.clone(),
+            None => return,
+        };
+        let exchange = registry.registered_names()
+            .iter()
+            .find(|n| n.contains("perpetual"))
+            .and_then(|key| registry.get(key));
+        if let Some(ex) = exchange {
+            match ex.get_balances().await {
+                Ok(balances) => {
+                    if let Some(usdt) = balances.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT")) {
+                        let mut balance = self.balance.lock().await;
+                        if !self.balance_initialized.load(Ordering::Relaxed) {
+                            balance.free = usdt.free;
+                            balance.used = usdt.used;
+                            balance.total = usdt.total;
+                            self.balance_initialized.store(true, Ordering::Relaxed);
+                            info!(total = usdt.total, free = usdt.free, used = usdt.used,
+                                "PaperExchangeAdapter: balance initialized from real exchange");
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(error = %e, "PaperExchangeAdapter: failed to fetch balance from real exchange");
+                }
+            }
+        }
+    }
+
+    pub async fn on_price_tick(&self, symbol: &str, current_price: f64) {
+        if current_price <= 0.0 { return; }
+        self.last_prices.insert(symbol.to_string(), current_price);
+
+        let mut triggered = Vec::new();
+        for entry in self.pending.iter() {
+            let order = entry.value();
+            if order.symbol != symbol { continue; }
+            let filled = match order.side {
+                Side::Buy => current_price <= order.price.unwrap_or(current_price),
+                Side::Sell => current_price >= order.price.unwrap_or(current_price),
+            };
+            if filled { triggered.push(order.clone()); }
+        }
+
+        for order in &triggered {
+            self.pending.remove(&order.id);
+            self.update_position_on_fill(order, current_price).await;
+            let tx = self.price_tx.lock().await;
+            if let Some(ref tx) = *tx {
+                let _ = tx.send(WsFeedEvent::OrderUpdate {
+                    exchange_order_id: order.id.to_string(),
+                    symbol: order.symbol.clone(),
+                    status: OrderStatus::Filled,
+                    filled: order.amount,
+                    remaining: 0.0,
+                    price: current_price,
+                    amount: order.amount,
+                    commission: 0.0,
+                    timestamp: Utc::now(),
+                    position_side: order.position_side,
+                }).await;
+            }
+            debug!(order_id = %order.id, symbol = %order.symbol, side = ?order.side,
+                price = ?order.price, fill_price = current_price, amount = order.amount,
+                "Paper limit order filled via price tick");
+        }
+        self.update_unrealized_pnl(symbol, current_price).await;
+    }
+
+    async fn update_position_on_fill(&self, order: &PaperPendingOrder, fill_price: f64) {
+        let key = format!("{}:{:?}", order.symbol, order.position_side.unwrap_or(PositionSide::Both));
+        let size_delta = if order.side == Side::Buy { order.amount } else { -order.amount };
+
+        match self.positions.get_mut(&key) {
+            Some(mut pos) => {
+                let old_size = pos.size;
+                let new_size = old_size + size_delta;
+                if new_size.abs() < 1e-8 {
+                    drop(pos);
+                    self.positions.remove(&key);
+                    debug!(symbol = %order.symbol, "Paper position closed");
+                } else if old_size * new_size < 0.0 {
+                    pos.size = new_size;
+                    pos.entry_price = fill_price;
+                    pos.side = if new_size > 0.0 { PositionSide::Long } else { PositionSide::Short };
+                    debug!(symbol = %order.symbol, new_size, "Paper position reversed");
+                } else {
+                    let total_cost = pos.entry_price * old_size.abs() + fill_price * size_delta.abs();
+                    pos.size = new_size;
+                    if new_size.abs() > 0.0 { pos.entry_price = total_cost / new_size.abs(); }
+                    debug!(symbol = %order.symbol, new_size, entry_price = pos.entry_price, "Paper position updated");
+                }
+            }
+            None => {
+                let side = if size_delta > 0.0 { PositionSide::Long } else { PositionSide::Short };
+                self.positions.insert(key.clone(), PaperPosition {
+                    symbol: order.symbol.clone(), side, size: size_delta,
+                    entry_price: fill_price, leverage: 20, unrealized_pnl: 0.0, liquidation_price: None,
+                });
+                debug!(symbol = %order.symbol, side = ?side, size = size_delta, "Paper position opened");
+            }
+        }
+
+        let mut balance = self.balance.lock().await;
+        let leverage = 20.0_f64;
+        let notional = fill_price * order.amount;
+        let margin = notional / leverage;
+
+        let position_side = order.position_side.unwrap_or(PositionSide::Both);
+        let is_opening = match (order.side, position_side) {
+            (Side::Buy, PositionSide::Long) | (Side::Buy, PositionSide::Both) => true,
+            (Side::Sell, PositionSide::Short) => true,
+            (Side::Sell, PositionSide::Long) | (Side::Sell, PositionSide::Both) => false,
+            (Side::Buy, PositionSide::Short) => false,
+        };
+
+        if is_opening {
+            balance.used += margin;
+            balance.free -= margin;
+        } else {
+            let realized_pnl = self.positions.get(&key).map(|pos| {
+                match pos.side {
+                    PositionSide::Long => (fill_price - pos.entry_price) * order.amount,
+                    PositionSide::Short => (pos.entry_price - fill_price) * order.amount,
+                    PositionSide::Both => 0.0,
+                }
+            }).unwrap_or(0.0);
+            let margin_release = margin.min(balance.used);
+            balance.used -= margin_release;
+            balance.free += margin_release + realized_pnl;
+        }
+    }
+
+    async fn update_unrealized_pnl(&self, symbol: &str, current_price: f64) {
+        for mut entry in self.positions.iter_mut() {
+            let pos = entry.value_mut();
+            if pos.symbol != symbol { continue; }
+            pos.unrealized_pnl = match pos.side {
+                PositionSide::Long => (current_price - pos.entry_price) * pos.size,
+                PositionSide::Short => (pos.entry_price - current_price) * pos.size.abs(),
+                PositionSide::Both => 0.0,
+            };
+        }
+    }
+}
+
+#[async_trait]
+impl ExchangePe for PaperExchangeAdapter {
+    fn name(&self) -> &str { &self.name }
+    fn market_type(&self) -> MarketType { self.market_type }
+
+    async fn get_ticker(&self, symbol: &str) -> PositionResult<Ticker> {
+        Ok(Ticker { symbol: symbol.to_string(), exchange: self.name.clone(), bid: 0.0, ask: 0.0, last: 0.0, high_24h: 0.0, low_24h: 0.0, volume_24h: 0.0, price_change_24h: 0.0, price_change_pct_24h: 0.0, timestamp: Utc::now() })
+    }
+
+    async fn get_balance(&self) -> PositionResult<Balance> {
+        self.ensure_balance_initialized().await;
+        let mut balance = self.balance.lock().await;
+        balance.total = balance.free + balance.used;
+        Ok(balance.clone())
+    }
+
+    async fn get_positions(&self, symbol: Option<&str>) -> PositionResult<Vec<ExchangePosition>> {
+        Ok(self.positions.iter()
+            .filter(|e| { let pos = e.value(); symbol.map_or(true, |s| pos.symbol == s) && pos.size.abs() > 1e-8 })
+            .map(|e| { let pos = e.value(); ExchangePosition {
+                symbol: pos.symbol.clone(), side: pos.side, size: pos.size,
+                entry_price: pos.entry_price, leverage: pos.leverage,
+                unrealized_pnl: pos.unrealized_pnl, liquidation_price: pos.liquidation_price,
+            }}).collect())
+    }
+
+    async fn get_funding_rate(&self, symbol: &str) -> PositionResult<FundingRate> {
+        Ok(FundingRate { symbol: symbol.to_string(), rate: 0.0, next_funding_time: Some(Utc::now()) })
+    }
+
+    async fn get_fee_rates(&self, symbol: &str) -> PositionResult<FeeRates> {
+        Ok(FeeRates { symbol: symbol.to_string(), maker_rate: 0.0, taker_rate: 0.0 })
+    }
+
+    async fn place_order(&self, params: PlaceOrderParams) -> PositionResult<PositionOrder> {
+        let order_id = Uuid::new_v4();
+        let now = Utc::now();
+        let is_market = params.order_type == OrderType::Market || params.price.is_none();
+
+        if is_market {
+            let fill_price = self.last_prices.get(&params.symbol).map(|r| *r).unwrap_or(0.0);
+            let pending_for_fill = PaperPendingOrder {
+                id: order_id, symbol: params.symbol.clone(), side: params.side,
+                order_type: params.order_type, amount: params.amount, price: Some(fill_price),
+                reduce_only: params.reduce_only, position_side: params.position_side,
+                client_order_id: params.client_order_id.clone(), created_at: now,
+            };
+            self.update_position_on_fill(&pending_for_fill, fill_price).await;
+
+            let order = PositionOrder {
+                id: order_id, position_id: Uuid::nil(), exchange_order_id: Some(order_id.to_string()),
+                client_order_id: params.client_order_id.clone(), exchange: self.name.clone(),
+                symbol: params.symbol.clone(), side: params.side, order_type: params.order_type,
+                request_price: params.price, fill_price: if fill_price > 0.0 { Some(fill_price) } else { None },
+                amount: params.amount, filled: params.amount, remaining: 0.0,
+                status: OrderStatus::Filled, reduce_only: params.reduce_only, fee: 0.0,
+                fee_currency: "USDT".to_string(), slippage: None, created_at: now, updated_at: now,
+            };
+
+            let tx = self.price_tx.lock().await;
+            if let Some(ref tx) = *tx {
+                let _ = tx.send(WsFeedEvent::OrderUpdate {
+                    exchange_order_id: order_id.to_string(), symbol: params.symbol.clone(),
+                    status: OrderStatus::Filled, filled: params.amount, remaining: 0.0,
+                    price: fill_price, amount: params.amount, commission: 0.0,
+                    timestamp: Utc::now(), position_side: params.position_side,
+                }).await;
+            }
+            info!(order_id = %order_id, symbol = %params.symbol, side = ?params.side,
+                amount = params.amount, fill_price, "Paper market order filled immediately");
+            Ok(order)
+        } else {
+            let pending = PaperPendingOrder {
+                id: order_id, symbol: params.symbol.clone(), side: params.side,
+                order_type: params.order_type, amount: params.amount, price: params.price,
+                reduce_only: params.reduce_only, position_side: params.position_side,
+                client_order_id: params.client_order_id.clone(), created_at: now,
+            };
+            self.pending.insert(order_id, pending);
+            let order = PositionOrder {
+                id: order_id, position_id: Uuid::nil(), exchange_order_id: Some(order_id.to_string()),
+                client_order_id: params.client_order_id, exchange: self.name.clone(),
+                symbol: params.symbol.clone(), side: params.side, order_type: params.order_type,
+                request_price: params.price, fill_price: None, amount: params.amount,
+                filled: 0.0, remaining: params.amount, status: OrderStatus::Open,
+                reduce_only: params.reduce_only, fee: 0.0, fee_currency: "USDT".to_string(),
+                slippage: None, created_at: now, updated_at: now,
+            };
+            debug!(order_id = %order_id, symbol = %params.symbol, side = ?params.side,
+                price = ?params.price, amount = params.amount, "Paper limit order placed");
+            Ok(order)
+        }
+    }
+
+    async fn cancel_order(&self, _symbol: &str, order_id: &str) -> PositionResult<PositionOrder> {
+        let uuid = Uuid::parse_str(order_id)
+            .map_err(|_| PositionEngineError::Exchange(format!("Invalid order ID: {}", order_id)))?;
+        let now = Utc::now();
+        match self.pending.remove(&uuid) {
+            Some((_, pending)) => Ok(PositionOrder {
+                id: uuid, position_id: Uuid::nil(), exchange_order_id: Some(uuid.to_string()),
+                client_order_id: pending.client_order_id, exchange: self.name.clone(),
+                symbol: pending.symbol, side: pending.side, order_type: pending.order_type,
+                request_price: pending.price, fill_price: None, amount: pending.amount,
+                filled: 0.0, remaining: pending.amount, status: OrderStatus::Canceled,
+                reduce_only: pending.reduce_only, fee: 0.0, fee_currency: "USDT".to_string(),
+                slippage: None, created_at: pending.created_at, updated_at: now,
+            }),
+            None => Err(PositionEngineError::OrderNotFound { order_id: order_id.to_string() }),
+        }
+    }
+
+    async fn cancel_all_orders(&self, symbol: Option<&str>) -> PositionResult<Vec<PositionOrder>> {
+        let now = Utc::now();
+        let keys: Vec<Uuid> = self.pending.iter()
+            .filter(|e| symbol.map_or(true, |s| e.value().symbol == s))
+            .map(|e| *e.key()).collect();
+        let mut canceled = Vec::new();
+        for key in keys {
+            if let Some((_, pending)) = self.pending.remove(&key) {
+                canceled.push(PositionOrder {
+                    id: key, position_id: Uuid::nil(), exchange_order_id: Some(key.to_string()),
+                    client_order_id: pending.client_order_id, exchange: self.name.clone(),
+                    symbol: pending.symbol, side: pending.side, order_type: pending.order_type,
+                    request_price: pending.price, fill_price: None, amount: pending.amount,
+                    filled: 0.0, remaining: pending.amount, status: OrderStatus::Canceled,
+                    reduce_only: pending.reduce_only, fee: 0.0, fee_currency: "USDT".to_string(),
+                    slippage: None, created_at: pending.created_at, updated_at: now,
+                });
+            }
+        }
+        Ok(canceled)
+    }
+
+    async fn get_open_orders(&self, symbol: Option<&str>) -> PositionResult<Vec<PositionOrder>> {
+        Ok(self.pending.iter()
+            .filter(|e| symbol.map_or(true, |s| e.value().symbol == s))
+            .map(|e| { let o = e.value(); PositionOrder {
+                id: o.id, position_id: Uuid::nil(), exchange_order_id: Some(o.id.to_string()),
+                client_order_id: o.client_order_id.clone(), exchange: self.name.clone(),
+                symbol: o.symbol.clone(), side: o.side, order_type: o.order_type,
+                request_price: o.price, fill_price: None, amount: o.amount,
+                filled: 0.0, remaining: o.amount, status: OrderStatus::Open,
+                reduce_only: o.reduce_only, fee: 0.0, fee_currency: "USDT".to_string(),
+                slippage: None, created_at: o.created_at, updated_at: o.created_at,
+            }}).collect())
+    }
+
+    async fn get_order(&self, _symbol: &str, order_id: &str) -> PositionResult<PositionOrder> {
+        let uuid = Uuid::parse_str(order_id)
+            .map_err(|_| PositionEngineError::Exchange(format!("Invalid order ID: {}", order_id)))?;
+        match self.pending.get(&uuid) {
+            Some(o) => Ok(PositionOrder {
+                id: o.id, position_id: Uuid::nil(), exchange_order_id: Some(o.id.to_string()),
+                client_order_id: o.client_order_id.clone(), exchange: self.name.clone(),
+                symbol: o.symbol.clone(), side: o.side, order_type: o.order_type,
+                request_price: o.price, fill_price: None, amount: o.amount,
+                filled: 0.0, remaining: o.amount, status: OrderStatus::Open,
+                reduce_only: o.reduce_only, fee: 0.0, fee_currency: "USDT".to_string(),
+                slippage: None, created_at: o.created_at, updated_at: o.created_at,
+            }),
+            None => Err(PositionEngineError::OrderNotFound { order_id: order_id.to_string() }),
+        }
+    }
+
+    async fn set_leverage(&self, _symbol: &str, _leverage: u32) -> PositionResult<()> { Ok(()) }
+
+    async fn get_position_mode(&self) -> PositionResult<PositionMode> { Ok(self.position_mode) }
+
+    async fn subscribe_order_updates(&self, _symbols: &[&str]) -> PositionResult<OrderUpdateStream> {
+        let (tx, rx) = mpsc::channel(256);
+        let mut price_tx = self.price_tx.lock().await;
+        *price_tx = Some(tx);
+        Ok(Box::pin(ReceiverStream::new(rx)))
+    }
+
+    async fn on_price_tick(&self, symbol: &str, price: f64) {
+        PaperExchangeAdapter::on_price_tick(self, symbol, price).await;
+    }
+}

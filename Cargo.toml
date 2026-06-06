@@ -1,37 +1,29 @@
-[package]
-name = "virs"
-version = "0.1.0"
-edition = "2021"
-description = "VIRS - Next-Gen AI Quantitative Trading Platform"
-license = "Apache-2.0"
+[workspace]
+resolver = "2"
+members = [
+    "crates/libs/virs-types",
+    "crates/libs/virs-config",
+    "crates/libs/virs-utils",
+    "crates/libs/virs-models",
+    "crates/libs/virs-ccxt",
+    "crates/libs/virs-exchange",
+    # Phase 5+:逐步添加
+    # "crates/libs/virs-ai",
+    "crates/services/virs-market",
+    "crates/services/virs-position",
+    "crates/services/virs-bot",
+    "crates/services/virs-api",
+    "app/virs-app",
+]
 
-[dependencies]
-# Async runtime
-tokio = { version = "1", features = ["full"] }
-
-# Web framework
-axum = { version = "0.8.9", features = ["macros", "ws"] }
-tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "fs"] }
-
+[workspace.dependencies]
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Database
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "json"] }
-
-# Redis (optional cache)
-redis = { version = "0.25", features = ["tokio-comp", "connection-manager"], optional = true }
-
-# HTTP client
-reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "gzip"], default-features = false }
-
-# WebSocket (real-time data push via axum::extract::ws)
-futures-util = "0.3"
-
-# WebSocket client (exchange kline streams)
-tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }
@@ -39,9 +31,31 @@ chrono = { version = "0.4", features = ["serde"] }
 # UUID
 uuid = { version = "1", features = ["v4", "serde"] }
 
+# Async utilities
+async-trait = "0.1"
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
 # Logging & Tracing
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "json"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "gzip"], default-features = false }
+
+# WebSocket client
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+
+# Futures
+futures-core = "0.3"
+futures-util = "0.3"
+
+# DashMap
+dashmap = "5"
 
 # Configuration
 dotenvy = "0.15"
@@ -49,10 +63,6 @@ dotenvy = "0.15"
 # Authentication
 jsonwebtoken = "9"
 bcrypt = "0.15"
-
-# Error handling
-anyhow = "1"
-thiserror = "1"
 
 # Cryptography
 aes-gcm = "0.10"
@@ -62,27 +72,16 @@ hex = "0.4"
 rand = "0.8"
 base64 = "0.22"
 
-# Async utilities
-async-trait = "0.1"
-dashmap = "5"
+# Web framework
+axum = { version = "0.8.9", features = ["macros", "ws"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "fs"] }
 
-# Lua scripting (P2 strategy sandbox)
-mlua = { version = "0.10", features = ["luajit52", "vendored"] }
-
-# Technical analysis (158 indicators, pure Rust, bit-exact TA-Lib compatibility)
+# Technical analysis
 talib-rs = "0.1"
 
-# Notification (optional)
-lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"], optional = true }
-
-[dev-dependencies]
-tokio-test = "0.4"
-
-[features]
-default = ["redis", "notification-email"]
-redis = ["dep:redis"]
-notification-email = ["dep:lettre"]
-full = ["redis", "notification-email"]
+# Tracing subscriber
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 [profile.release]
 opt-level = 3

@@ -1,0 +1,12 @@
+//! API handlers — re-exports all handler modules.
+
+pub mod health;
+pub mod auth;
+pub mod user;
+pub mod market;
+pub mod credentials;
+pub mod dashboard;
+pub mod ai;
+pub mod ai_credentials;
+pub mod grid;
+pub mod auto_trade;

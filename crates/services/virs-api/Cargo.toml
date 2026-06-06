@@ -1,0 +1,29 @@
+[package]
+name = "virs-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+virs-types = { path = "../../libs/virs-types" }
+virs-models = { path = "../../libs/virs-models" }
+virs-utils = { path = "../../libs/virs-utils" }
+virs-bot = { path = "../virs-bot" }
+virs-exchange = { path = "../../libs/virs-exchange" }
+virs-market = { path = "../virs-market" }
+virs-ccxt = { path = "../../libs/virs-ccxt" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+sqlx = { workspace = true }
+reqwest = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+jsonwebtoken = { workspace = true }
+bcrypt = { workspace = true }

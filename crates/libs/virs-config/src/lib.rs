@@ -1,0 +1,5 @@
+//! VIRS configuration management.
+
+mod app_config;
+
+pub use app_config::*;

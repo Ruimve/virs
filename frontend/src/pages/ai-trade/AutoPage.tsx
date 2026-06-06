@@ -47,10 +47,8 @@ export default function AutoPage() {
   const loadBots = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const res = await api.get<{ bots: AutoBot[]; total: number }>('/auto/list');
-      if (res.data) {
-        setBots(res.data.bots);
-      }
+      const res = await api.get<{ items: AutoBot[]; total: number }>('/auto/list');
+      if (res.data) setBots(res.data.items);
     } catch (e) {
       console.error('Failed to load auto bots:', e);
     } finally {
