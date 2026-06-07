@@ -13,8 +13,7 @@ use uuid::Uuid;
 
 use virs_api::{AppState, WsBroadcaster, build_router};
 use virs_bot::auto::types::AutoEvent;
-use virs_bot::grid::ports as grid_ports;
-use virs_bot::common::ports as common_ports;
+use virs_types::bot::PriceProvider;
 use virs_config::load_config;
 use virs_exchange::{ExchangeRegistry, PaperExchangeAdapter, CcxtExchangeAdapter};
 use virs_market::{KlineEngine, ExchangeKlineSource, KlineEngineConfig};
@@ -243,11 +242,11 @@ async fn main() -> Result<()> {
         grid_event_tx.clone(),
         grid_pe_event_rx,
     ));
-    let grid_credential_store: Arc<dyn common_ports::CredentialStore> = Arc::new(PgCredentialStore::new(
+    let grid_credential_store: Arc<dyn virs_types::bot::CredentialStore> = Arc::new(PgCredentialStore::new(
         db_pool.clone(),
         virs_utils::crypto::derive_key(&config.server.encryption_key),
     ));
-    let grid_llm_resolver: Arc<dyn common_ports::LlmProviderResolver> = Arc::new(DefaultLlmResolver::new(config.ai.clone()));
+    let grid_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> = Arc::new(DefaultLlmResolver::new(config.ai.clone()));
     let grid_ai_service = Arc::new(virs_bot::grid::ai::GridAiService::new(
         grid_llm_resolver,
         grid_credential_store,
@@ -264,7 +263,7 @@ async fn main() -> Result<()> {
 
     // Paper mode price tick — drive PaperExchangeAdapter Limit order matching
     if paper_mode {
-        let price_provider_for_paper: Arc<dyn grid_ports::PriceProvider> = grid_price_provider.clone();
+        let price_provider_for_paper: Arc<dyn PriceProvider> = grid_price_provider.clone();
         let kline_engine_for_paper = kline_engine.clone();
         let pe_cmd_tx_for_tick = pe_cmd_tx.clone();
         tokio::spawn(async move {
@@ -272,7 +271,7 @@ async fn main() -> Result<()> {
             loop {
                 tick.tick().await;
                 for (exchange, symbol, _market_type) in kline_engine_for_paper.subscribed_symbols() {
-                    if let Some(price) = price_provider_for_paper.get_price(&exchange, &symbol).await {
+                    if let Some(price) = price_provider_for_paper.get_price(&exchange, &symbol, "perpetual").await {
                         let _ = pe_cmd_tx_for_tick.send(EngineCommand::PriceTick {
                             symbol: symbol.clone(),
                             price,
@@ -303,11 +302,11 @@ async fn main() -> Result<()> {
         auto_order_event_tx.clone(),
         auto_pe_event_rx,
     ));
-    let auto_credential_store: Arc<dyn common_ports::CredentialStore> = Arc::new(PgCredentialStore::new(
+    let auto_credential_store: Arc<dyn virs_types::bot::CredentialStore> = Arc::new(PgCredentialStore::new(
         db_pool.clone(),
         virs_utils::crypto::derive_key(&config.server.encryption_key),
     ));
-    let auto_llm_resolver: Arc<dyn common_ports::LlmProviderResolver> = Arc::new(DefaultLlmResolver::new(config.ai.clone()));
+    let auto_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> = Arc::new(DefaultLlmResolver::new(config.ai.clone()));
     let auto_ai_service = Arc::new(virs_bot::auto::ai::AutoAiService::new(
         auto_llm_resolver,
         auto_credential_store,

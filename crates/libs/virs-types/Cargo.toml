@@ -10,6 +10,7 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
+anyhow = { workspace = true }
 futures-core = { workspace = true }
 sqlx = { workspace = true, optional = true }
 

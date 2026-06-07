@@ -10,6 +10,7 @@ use virs_exchange::ExchangeRegistry;
 use virs_market::KlineEngine;
 use virs_market::Timeframe;
 use virs_models::Kline;
+use virs_types::bot::{MarketDataProvider, MarketSnapshot, AccountBalance};
 use virs_types::exchange_pe::ExchangePe;
 
 /// Convert a virs-market Candle to virs-models Kline.
@@ -115,8 +116,8 @@ impl ExchangeMarketDataProvider {
 }
 
 #[async_trait]
-impl virs_bot::grid::ports::MarketDataProvider for ExchangeMarketDataProvider {
-    async fn get_market_snapshot(&self, exchange: &str, symbol: &str) -> virs_bot::grid::ports::MarketSnapshot {
+impl MarketDataProvider for ExchangeMarketDataProvider {
+    async fn get_market_snapshot(&self, exchange: &str, symbol: &str, market_type: &str) -> MarketSnapshot {
         let now_ms = chrono::Utc::now().timestamp_millis();
 
         let klines_1h = match self.fetch_klines(
@@ -124,7 +125,7 @@ impl virs_bot::grid::ports::MarketDataProvider for ExchangeMarketDataProvider {
             now_ms - 200 * 3600 * 1000, true,
         ).await {
             Some(k) => k,
-            None => return virs_bot::grid::ports::MarketSnapshot::default(),
+            None => return MarketSnapshot::default(),
         };
 
         let klines_4h = self.fetch_klines(
@@ -139,9 +140,11 @@ impl virs_bot::grid::ports::MarketDataProvider for ExchangeMarketDataProvider {
 
         let current_price = self.fetch_current_price(exchange, symbol, &klines_1h).await;
 
-        let exchange_key = format!("{}:perpetual", exchange);
-        let funding_rate = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
-            ex.get_funding_rate(symbol).await.map(|fr| fr.rate).unwrap_or(0.0)
+        let exchange_key = format!("{}:{}", exchange, market_type);
+        let funding_rate = if market_type == "perpetual" {
+            if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+                ex.get_funding_rate(symbol).await.map(|fr| fr.rate).unwrap_or(0.0)
+            } else { 0.0 }
         } else { 0.0 };
 
         let ind = virs_bot::common::indicators::compute_market_indicators(
@@ -150,18 +153,22 @@ impl virs_bot::grid::ports::MarketDataProvider for ExchangeMarketDataProvider {
 
         let effective_price = if current_price > 0.0 { current_price } else { ind.current_price };
 
-        virs_bot::grid::ports::MarketSnapshot {
+        MarketSnapshot {
             current_price: effective_price,
-            indicators: ind,
+            funding_rate,
+            funding_next_time: "N/A".to_string(),
+            min_qty: 0.0,
+            liquidation_price: None,
+            indicators_json: serde_json::to_value(&ind).unwrap_or_default(),
         }
     }
 
-    async fn get_account_balance(&self, exchange: &str) -> virs_types::bot::AccountBalance {
+    async fn get_account_balance(&self, exchange: &str, _market_type: &str) -> AccountBalance {
         // Paper mode: use PE exchange for simulated balance
         if let Some(ref pe_ex) = self.pe_exchange {
             match pe_ex.get_balance().await {
                 Ok(b) => {
-                    return virs_types::bot::AccountBalance { total: b.total, free: b.free, used: b.used };
+                    return AccountBalance { total: b.total, free: b.free, used: b.used };
                 }
                 Err(e) => {
                     warn!(error = %e, "PE exchange get_balance failed, falling back to registry");
@@ -173,20 +180,20 @@ impl virs_bot::grid::ports::MarketDataProvider for ExchangeMarketDataProvider {
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = match self.exchange_registry.get(&exchange_key) {
             Some(e) => e,
-            None => return virs_types::bot::AccountBalance::default(),
+            None => return AccountBalance::default(),
         };
 
         match ex.get_balances().await {
             Ok(bs) => {
                 let usdt = bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT"));
                 match usdt {
-                    Some(b) => virs_types::bot::AccountBalance { total: b.total, free: b.free, used: b.used },
-                    None => virs_types::bot::AccountBalance::default(),
+                    Some(b) => AccountBalance { total: b.total, free: b.free, used: b.used },
+                    None => AccountBalance::default(),
                 }
             }
             Err(e) => {
                 warn!(error = %e, "get_account_balance error");
-                virs_types::bot::AccountBalance::default()
+                AccountBalance::default()
             }
         }
     }
@@ -325,8 +332,8 @@ impl AutoExchangeMarketDataProvider {
 }
 
 #[async_trait]
-impl virs_bot::auto::ports::MarketDataProvider for AutoExchangeMarketDataProvider {
-    async fn get_market_snapshot(&self, exchange: &str, symbol: &str, market_type: &str) -> virs_bot::auto::ports::MarketSnapshot {
+impl MarketDataProvider for AutoExchangeMarketDataProvider {
+    async fn get_market_snapshot(&self, exchange: &str, symbol: &str, market_type: &str) -> MarketSnapshot {
         self.ensure_exchange(exchange, market_type).await;
 
         let now_ms = chrono::Utc::now().timestamp_millis();
@@ -336,7 +343,7 @@ impl virs_bot::auto::ports::MarketDataProvider for AutoExchangeMarketDataProvide
             now_ms - 200 * 3600 * 1000, market_type, true,
         ).await {
             Some(k) => k,
-            None => return virs_bot::auto::ports::MarketSnapshot::default(),
+            None => return MarketSnapshot::default(),
         };
 
         let klines_4h = self.fetch_klines(
@@ -389,22 +396,22 @@ impl virs_bot::auto::ports::MarketDataProvider for AutoExchangeMarketDataProvide
             } else { None }
         } else { None };
 
-        virs_bot::auto::ports::MarketSnapshot {
+        MarketSnapshot {
             current_price: effective_price,
             funding_rate,
             funding_next_time,
-            indicators: ind,
             min_qty,
             liquidation_price,
+            indicators_json: serde_json::to_value(&ind).unwrap_or_default(),
         }
     }
 
-    async fn get_account_balance(&self, exchange: &str, market_type: &str) -> virs_types::bot::AccountBalance {
+    async fn get_account_balance(&self, exchange: &str, market_type: &str) -> AccountBalance {
         // Paper mode: use PE exchange
         if let Some(ref pe_ex) = self.pe_exchange {
             match pe_ex.get_balance().await {
                 Ok(b) => {
-                    return virs_types::bot::AccountBalance { total: b.total, free: b.free, used: b.used };
+                    return AccountBalance { total: b.total, free: b.free, used: b.used };
                 }
                 Err(e) => {
                     warn!(error = %e, "PE exchange get_balance failed, falling back to registry");
@@ -417,20 +424,20 @@ impl virs_bot::auto::ports::MarketDataProvider for AutoExchangeMarketDataProvide
         let exchange_key = format!("{}:{}", exchange, market_type);
         let ex = match self.exchange_registry.get(&exchange_key) {
             Some(e) => e,
-            None => return virs_types::bot::AccountBalance::default(),
+            None => return AccountBalance::default(),
         };
 
         match ex.get_balances().await {
             Ok(bs) => {
                 let usdt = bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT"));
                 match usdt {
-                    Some(b) => virs_types::bot::AccountBalance { total: b.total, free: b.free, used: b.used },
-                    None => virs_types::bot::AccountBalance::default(),
+                    Some(b) => AccountBalance { total: b.total, free: b.free, used: b.used },
+                    None => AccountBalance::default(),
                 }
             }
             Err(e) => {
                 warn!(error = %e, "get_account_balance error");
-                virs_types::bot::AccountBalance::default()
+                AccountBalance::default()
             }
         }
     }

@@ -170,7 +170,7 @@ impl GridWorker {
     }
 
     pub(crate) async fn fetch_current_price(&self) -> f64 {
-        match self.price_provider.get_price(&self.bot.exchange, &self.bot.symbol).await {
+        match self.price_provider.get_price(&self.bot.exchange, &self.bot.symbol, "perpetual").await {
             Some(price) if price > 0.0 => price,
             _ => self.current_price,
         }
@@ -683,7 +683,7 @@ impl GridWorker {
     }
 
     async fn build_llm_prompt(&self) -> Option<(String, String)> {
-        let snapshot = self.market_data_provider.get_market_snapshot(&self.bot.exchange, &self.bot.symbol).await;
+        let snapshot = self.market_data_provider.get_market_snapshot(&self.bot.exchange, &self.bot.symbol, "perpetual").await;
         if snapshot.current_price <= 0.0 {
             warn!(bot_id = %self.bot.id, "Market snapshot has zero price, skipping LLM decision");
             return None;
@@ -715,10 +715,13 @@ impl GridWorker {
             self.bot.grid_count, self.bot.grid_profit_pct, self.bot.quantity_per_grid, &self.levels,
         );
 
-        let account = self.market_data_provider.get_account_balance(&self.bot.exchange).await;
+        let account = self.market_data_provider.get_account_balance(&self.bot.exchange, "perpetual").await;
+
+        let indicators: crate::common::indicators::MarketIndicators =
+            serde_json::from_value(snapshot.indicators_json.clone()).unwrap_or_default();
 
         let user_prompt = utils::prompt::render_user_prompt(
-            &snapshot.indicators,
+            &indicators,
             account.total, account.free, account.used,
             self.bot.leverage, grid_status,
             &self.bot.last_adjusted_at.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_else(|| "N/A".to_string()),

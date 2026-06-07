@@ -9,7 +9,8 @@ use tracing::{error, info, warn};
 use crate::auto::ai::{AutoAction, AutoAiService, AutoDecision};
 use crate::auto::ports::*;
 use crate::auto::strategy;
-use crate::auto::types::{AutoBotConfig, AutoEvent, MarketType};
+use crate::auto::types::{AutoBotConfig, AutoEvent};
+use virs_types::auto_port::AutoMarketType;
 
 const PENDING_ORDER_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_POSITION_DURATION: Duration = Duration::from_secs(48 * 3600);
@@ -88,7 +89,7 @@ impl AutoWorker {
     }
 
     pub(crate) fn is_spot(&self) -> bool {
-        matches!(self.bot.market_type, MarketType::Spot)
+        matches!(self.bot.market_type, AutoMarketType::Spot)
     }
 
     pub(crate) fn has_position(&self) -> bool {
@@ -403,10 +404,11 @@ impl AutoWorker {
     }
 
     async fn fetch_current_atr(&self) -> f64 {
-        let snapshot = self
-            .market_data_provider
-            .get_market_snapshot(&self.bot.exchange, &self.bot.symbol, self.bot.market_type.as_str())
-            .await;
+        let snapshot = AutoMarketSnapshot::from_base(
+            self.market_data_provider
+                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol, self.bot.market_type.as_str())
+                .await
+        );
         snapshot.indicators.atr
     }
 
@@ -470,12 +472,13 @@ impl AutoWorker {
     }
 
     async fn build_llm_prompt(&self) -> Option<(String, String)> {
-        let snapshot = self
-            .market_data_provider
-            .get_market_snapshot(&self.bot.exchange, &self.bot.symbol, self.bot.market_type.as_str())
-            .await;
+        let snapshot = AutoMarketSnapshot::from_base(
+            self.market_data_provider
+                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol, self.bot.market_type.as_str())
+                .await
+        );
 
-        if snapshot.current_price <= 0.0 {
+        if snapshot.base.current_price <= 0.0 {
             warn!(bot_id = %self.bot.id, "Market snapshot has zero price, skipping decision");
             return None;
         }
@@ -494,8 +497,8 @@ impl AutoWorker {
             self.bot.current_side.as_deref(),
             self.bot.entry_price,
             self.bot.position_size,
-            snapshot.current_price,
-            snapshot.liquidation_price,
+            snapshot.base.current_price,
+            snapshot.base.liquidation_price,
         );
 
         let stop_take_profit_info =
@@ -527,8 +530,8 @@ impl AutoWorker {
             position_info,
             position_duration,
             stop_take_profit_info,
-            funding_rate: snapshot.funding_rate,
-            funding_next_time: snapshot.funding_next_time,
+            funding_rate: snapshot.base.funding_rate,
+            funding_next_time: snapshot.base.funding_next_time,
             total_trades: self.bot.total_trades,
             win_trades: self.bot.win_trades,
             loss_trades: self.bot.loss_trades,
@@ -536,7 +539,7 @@ impl AutoWorker {
             consecutive_losses: self.consecutive_losses,
             trigger_reason: "scheduled".to_string(),
             ind: snapshot.indicators,
-            min_qty: snapshot.min_qty,
+            min_qty: snapshot.base.min_qty,
         };
 
         let template = crate::auto::types::DEFAULT_USER_PROMPT_TEMPLATE;
@@ -664,12 +667,13 @@ impl AutoWorker {
             }
         }
 
-        let snapshot = self
-            .market_data_provider
-            .get_market_snapshot(&self.bot.exchange, &self.bot.symbol, self.bot.market_type.as_str())
-            .await;
+        let snapshot = AutoMarketSnapshot::from_base(
+            self.market_data_provider
+                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol, self.bot.market_type.as_str())
+                .await
+        );
 
-        if snapshot.current_price <= 0.0 {
+        if snapshot.base.current_price <= 0.0 {
             warn!(bot_id = %self.bot.id, "Market snapshot has zero price, skipping decision execution");
             return;
         }
@@ -710,7 +714,7 @@ impl AutoWorker {
         }
     }
 
-    async fn apply_non_structural_params(&mut self, d: &AutoDecision, snapshot: &MarketSnapshot) {
+    async fn apply_non_structural_params(&mut self, d: &AutoDecision, snapshot: &AutoMarketSnapshot) {
         if let Some(ref regime) = d.market_regime {
             self.bot.market_regime = Some(regime.clone());
         }
@@ -734,7 +738,7 @@ impl AutoWorker {
         &mut self,
         side: &str,
         _decision: Option<&AutoDecision>,
-        snapshot: &MarketSnapshot,
+        snapshot: &AutoMarketSnapshot,
     ) {
         let account = self
             .market_data_provider
@@ -753,11 +757,11 @@ impl AutoWorker {
         let atr = if snapshot.indicators.atr > 0.0 {
             snapshot.indicators.atr
         } else {
-            snapshot.current_price * 0.02
+            snapshot.base.current_price * 0.02
         };
         let adx = snapshot.indicators.adx;
-        let funding_rate = snapshot.funding_rate;
-        let price = snapshot.current_price;
+        let funding_rate = snapshot.base.funding_rate;
+        let price = snapshot.base.current_price;
 
         let position_size_pct = strategy::compute_position_pct(adx, self.consecutive_losses, funding_rate)
             .min(self.bot.max_position_pct);
@@ -982,10 +986,11 @@ impl AutoWorker {
         };
 
         let (stop_loss, take_profit) = if price_deviation > 0.005 {
-            let snapshot = self
-                .market_data_provider
-                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol, self.bot.market_type.as_str())
-                .await;
+            let snapshot = AutoMarketSnapshot::from_base(
+                self.market_data_provider
+                    .get_market_snapshot(&self.bot.exchange, &self.bot.symbol, self.bot.market_type.as_str())
+                    .await
+            );
             let atr = if snapshot.indicators.atr > 0.0 {
                 snapshot.indicators.atr
             } else {

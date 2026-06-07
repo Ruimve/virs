@@ -8,6 +8,7 @@ use sqlx::PgPool;
 use virs_exchange::ExchangeRegistry;
 use virs_market::KlineEngine;
 use virs_market::Timeframe;
+use virs_types::bot::PriceProvider;
 
 // ── Grid PriceProvider ──
 
@@ -75,8 +76,8 @@ impl ExchangePriceProvider {
 }
 
 #[async_trait]
-impl virs_bot::grid::ports::PriceProvider for ExchangePriceProvider {
-    async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64> {
+impl PriceProvider for ExchangePriceProvider {
+    async fn get_price(&self, exchange: &str, symbol: &str, market_type: &str) -> Option<f64> {
         // Try kline engine first (1m candle)
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine.get_klines_async(exchange, symbol, Timeframe::M1).await {
@@ -89,21 +90,25 @@ impl virs_bot::grid::ports::PriceProvider for ExchangePriceProvider {
         }
 
         // Ensure exchange is registered
-        self.ensure_exchange(exchange, "perpetual").await;
+        self.ensure_exchange(exchange, market_type).await;
 
         // Fallback to exchange ticker
-        let exchange_key = format!("{}:perpetual", exchange);
+        let exchange_key = format!("{}:{}", exchange, market_type);
         let ex = self.exchange_registry.get(&exchange_key)?;
         match ex.get_ticker(symbol).await {
             Ok(ticker) if ticker.last > 0.0 => Some(ticker.last),
             _ => {
-                // Also try spot
-                self.ensure_exchange(exchange, "spot").await;
-                let spot_key = format!("{}:spot", exchange);
-                if let Some(ex) = self.exchange_registry.get(&spot_key) {
-                    match ex.get_ticker(symbol).await {
-                        Ok(ticker) if ticker.last > 0.0 => Some(ticker.last),
-                        _ => None,
+                // Also try spot if perpetual failed
+                if market_type != "spot" {
+                    self.ensure_exchange(exchange, "spot").await;
+                    let spot_key = format!("{}:spot", exchange);
+                    if let Some(ex) = self.exchange_registry.get(&spot_key) {
+                        match ex.get_ticker(symbol).await {
+                            Ok(ticker) if ticker.last > 0.0 => Some(ticker.last),
+                            _ => None,
+                        }
+                    } else {
+                        None
                     }
                 } else {
                     None
@@ -179,7 +184,7 @@ impl AutoExchangePriceProvider {
 }
 
 #[async_trait]
-impl virs_bot::auto::ports::PriceProvider for AutoExchangePriceProvider {
+impl PriceProvider for AutoExchangePriceProvider {
     async fn get_price(&self, exchange: &str, symbol: &str, market_type: &str) -> Option<f64> {
         // Try kline engine first
         if let Some(ref engine) = self.kline_engine {

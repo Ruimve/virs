@@ -10,6 +10,8 @@ pub mod position;
 pub mod bot;
 pub mod exchange_pe;
 pub mod config;
+pub mod grid_port;
+pub mod auto_port;
 
 // Re-export commonly used types
 pub use enums::*;

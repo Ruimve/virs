@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::common::ai_client;
 use crate::common::ports::LlmProviderResolver;
-use crate::grid::ports::CredentialStore;
+use crate::common::ports::CredentialStore;
 use crate::grid::ports::GridBotConfig;
 
 /// Grid AI 决策动作

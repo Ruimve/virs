@@ -4,8 +4,9 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use virs_bot::auto::ports::*;
-use virs_bot::auto::types::{AutoBotConfig, MarketType};
+use virs_types::auto_port::*;
+use virs_types::auto_port::AutoBotConfig;
+use virs_types::auto_port::AutoMarketType;
 use virs_models::AutoBot;
 
 pub struct PgAutoStore {
@@ -25,7 +26,7 @@ fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
         name: bot.name.clone(),
         symbol: bot.symbol.clone(),
         exchange: bot.exchange.clone(),
-        market_type: MarketType::from_str_lossy(&bot.market_type),
+        market_type: AutoMarketType::from_str_lossy(&bot.market_type),
         leverage: bot.leverage,
         max_position_pct: bot.max_position_pct,
         decide_interval_secs: bot.decide_interval_secs,

@@ -5,7 +5,7 @@ use sqlx::PgPool;
 use tracing::warn;
 use uuid::Uuid;
 
-use virs_bot::grid::ports::*;
+use virs_types::grid_port::*;
 use virs_models::GridBot;
 
 pub struct PgGridStore {

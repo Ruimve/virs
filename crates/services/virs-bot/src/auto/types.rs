@@ -4,36 +4,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// 市场类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum MarketType {
-    #[serde(rename = "perpetual")]
-    Perpetual,
-    #[serde(rename = "spot")]
-    Spot,
-}
-
-impl MarketType {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Perpetual => "perpetual",
-            Self::Spot => "spot",
-        }
-    }
-
-    pub fn from_str_lossy(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "spot" => Self::Spot,
-            _ => Self::Perpetual,
-        }
-    }
-}
-
-impl std::fmt::Display for MarketType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
+// Re-export AutoBotConfig and AutoMarketType from virs-types
+pub use virs_types::auto_port::{AutoBotConfig, AutoMarketType};
 
 /// 自动交易 Bot 数据库模型
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,36 +59,6 @@ pub struct AutoTrade {
     pub pnl_pct: f64,
     pub exchange_order_id: Option<String>,
     pub created_at: DateTime<Utc>,
-}
-
-/// 自动交易 Bot 配置
-#[derive(Debug, Clone)]
-pub struct AutoBotConfig {
-    pub id: Uuid,
-    pub user_id: Uuid,
-    pub name: String,
-    pub symbol: String,
-    pub exchange: String,
-    pub market_type: MarketType,
-    pub leverage: i32,
-    pub max_position_pct: f64,
-    pub decide_interval_secs: i32,
-    pub current_side: Option<String>,
-    pub entry_price: f64,
-    pub position_size: f64,
-    pub stop_loss: f64,
-    pub take_profit: f64,
-    pub unrealized_pnl: f64,
-    pub liquidation_price: Option<f64>,
-    pub market_regime: Option<String>,
-    pub ai_analysis: Option<String>,
-    pub system_prompt: Option<String>,
-    pub user_prompt: Option<String>,
-    pub total_pnl: f64,
-    pub total_trades: i32,
-    pub win_trades: i32,
-    pub loss_trades: i32,
-    pub last_decided_at: Option<DateTime<Utc>>,
 }
 
 /// 自动交易引擎命令
