@@ -1237,6 +1237,9 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
             }
             order.reduce_only = params.reduce_only;
             inner.orders.insert(order.id, order.clone());
+            if let Some(ref eoid) = order.exchange_order_id {
+                inner.exchange_order_id_index.insert(eoid.clone(), order.id);
+            }
             persist!(inner.persistence.insert_order(&order), "Failed to persist order in place_order");
             inner.emit_event(EngineEvent::OrderPlaced { order: order.clone() });
             info!(order_id = %order.id, symbol = %params.symbol, "Order placed");

@@ -10,9 +10,14 @@ import {
 } from 'lightweight-charts'
 import SolidChart from './SolidChart'
 import { toLocaleTime } from './SolidChart/locale/zh_CN';
-import type { OverlayLine } from '../utils/indicators'
 
-export type { OverlayLine }
+interface OverlayLine {
+  name: string
+  data: Array<{ time: number; value: number }>
+  color: string
+  lineWidth?: number
+  priceScaleId?: string
+}
 
 interface KlineChartProps {
   data: Array<{

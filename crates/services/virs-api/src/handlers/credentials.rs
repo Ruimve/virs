@@ -6,8 +6,9 @@ use axum::{
     Json,
 };
 use tracing::info;
+use virs_exchange::Exchange;
 
-use crate::handlers::auth::{extract_user_id, ApiResponse};
+use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
 pub async fn list_credentials(
@@ -78,7 +79,9 @@ pub async fn save_credential(
 
     sqlx::query(
         r#"INSERT INTO qd_exchange_credentials (id, user_id, exchange, label, encrypted_api_key, encrypted_api_secret, encrypted_passphrase, market_type, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())"#,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+           ON CONFLICT (user_id, exchange, market_type)
+           DO UPDATE SET encrypted_api_key = $5, encrypted_api_secret = $6, encrypted_passphrase = $7, label = $4, updated_at = NOW()"#,
     )
     .bind(id)
     .bind(user_id)
@@ -133,52 +136,339 @@ pub async fn delete_credential(
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
 
+/// POST /api/credentials/test — test connectivity only (ping).
+/// Uses the exchange already registered in the registry (saved by save_credential).
 pub async fn test_credential(
-    State(_state): State<AppState>,
-    Json(body): Json<serde_json::Value>,
-) -> Json<ApiResponse> {
-    let exchange = body["exchange"].as_str().unwrap_or("");
-    let api_key = body["api_key"].as_str().unwrap_or("");
-    let api_secret = body["api_secret"].as_str().unwrap_or("");
-    let passphrase = body["passphrase"].as_str();
-    let market_type = body["market_type"].as_str().unwrap_or("perpetual");
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
 
-    if exchange.is_empty() || api_key.is_empty() || api_secret.is_empty() {
-        return Json(ApiResponse::err("exchange, api_key, api_secret are required"));
-    }
+    let names = state.exchange_registry.registered_names();
+    let exchange_ref = names.first().and_then(|key| state.exchange_registry.get(key));
 
-    let mt = match market_type {
-        "spot" => virs_ccxt::MarketType::Spot,
-        _ => virs_ccxt::MarketType::Perpetual,
+    let exchange = match exchange_ref {
+        Some(e) => e,
+        None => return Ok(Json(ApiResponse::ok(serde_json::json!({
+            "connected": false,
+            "message": "No exchange registered. Please save credentials first.",
+        })))),
     };
 
-    match virs_ccxt::create_exchange(exchange, api_key, api_secret, passphrase, None, &mt) {
-        Ok(ccxt_ex) => {
-            let app_mt = match market_type {
-                "spot" => virs_models::MarketType::Spot,
-                _ => virs_models::MarketType::Perpetual,
-            };
-            let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, app_mt);
-            let exchange_ref: Box<dyn virs_exchange::Exchange> = Box::new(adapter);
+    match exchange.ping().await {
+        Ok(true) => Ok(Json(ApiResponse::ok(serde_json::json!({
+            "connected": true,
+        })))),
+        Ok(false) => Ok(Json(ApiResponse::ok(serde_json::json!({
+            "connected": false,
+            "message": "Ping returned false",
+        })))),
+        Err(e) => Ok(Json(ApiResponse::ok(serde_json::json!({
+            "connected": false,
+            "message": format!("{}", e),
+        })))),
+    }
+}
 
-            match exchange_ref.ping().await {
-                Ok(true) => Json(ApiResponse::ok(serde_json::json!({
-                    "connected": true,
-                    "message": format!("Successfully connected to {}", exchange),
-                }))),
-                Ok(false) => Json(ApiResponse::ok(serde_json::json!({
-                    "connected": false,
-                    "message": format!("Ping returned false for {}", exchange),
-                }))),
-                Err(e) => Json(ApiResponse::ok(serde_json::json!({
-                    "connected": false,
-                    "message": format!("Connection test failed: {}", e),
-                }))),
+/// POST /api/credentials/check-permissions — check API key permissions via /sapi/v1/account/apiRestrictions.
+/// Uses the exchange already registered in the registry (saved by save_credential).
+pub async fn check_permissions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
+
+    let names = state.exchange_registry.registered_names();
+    let exchange_ref = names.first().and_then(|key| state.exchange_registry.get(key));
+
+    let exchange = match exchange_ref {
+        Some(e) => e,
+        None => return Ok(Json(ApiResponse::ok(serde_json::json!({
+            "permissions": [{
+                "name": "connectivity",
+                "label": "Connectivity",
+                "status": "error",
+                "detail": "No exchange registered. Please save credentials first.",
+            }],
+        })))),
+    };
+
+    // Call apiRestrictions
+    match exchange.get_api_restrictions().await {
+        Ok(restrictions) => {
+            let mut permissions = Vec::new();
+
+            // Note: "connectivity" is NOT included here — it's already checked
+            // by the separate /test (ping) endpoint in Step 2.
+
+            permissions.push(serde_json::json!({
+                "name": "read_info",
+                "label": "Read Info",
+                "status": if restrictions.read_info { "ok" } else { "error" },
+                "detail": if restrictions.read_info { "Reading account info enabled" } else { "Reading account info disabled" }
+            }));
+
+            permissions.push(serde_json::json!({
+                "name": "spot_trading",
+                "label": "Spot & Margin Trading",
+                "status": if restrictions.enable_spot_and_margin_trading { "ok" } else { "error" },
+                "detail": if restrictions.enable_spot_and_margin_trading { "Spot and margin trading enabled" } else { "Spot and margin trading disabled" }
+            }));
+
+            permissions.push(serde_json::json!({
+                "name": "futures",
+                "label": "Futures Trading",
+                "status": if restrictions.enable_futures { "ok" } else { "error" },
+                "detail": if restrictions.enable_futures { "Futures trading enabled" } else { "Futures trading disabled" }
+            }));
+
+            permissions.push(serde_json::json!({
+                "name": "withdrawals",
+                "label": "Withdrawals",
+                "status": if restrictions.enable_withdrawals { "warn" } else { "ok" },
+                "detail": if restrictions.enable_withdrawals { "Withdrawals enabled (not required, consider disabling)" } else { "Withdrawals disabled (recommended)" }
+            }));
+
+            permissions.push(serde_json::json!({
+                "name": "internal_transfer",
+                "label": "Internal Transfer",
+                "status": if restrictions.enable_internal_transfer { "warn" } else { "ok" },
+                "detail": if restrictions.enable_internal_transfer { "Internal transfer enabled (not required, consider disabling)" } else { "Internal transfer disabled (recommended)" }
+            }));
+
+            permissions.push(serde_json::json!({
+                "name": "ip_restriction",
+                "label": "IP Restriction",
+                "status": if restrictions.ip_restrict { "ok" } else { "warn" },
+                "detail": if restrictions.ip_restrict { "IP restriction enabled" } else { "IP restriction not enabled (consider enabling)" }
+            }));
+
+            Ok(Json(ApiResponse::ok(serde_json::json!({
+                "permissions": permissions,
+            }))))
+        }
+        Err(e) => {
+            Ok(Json(ApiResponse::ok(serde_json::json!({
+                "permissions": [{
+                    "name": "connectivity",
+                    "label": "Connectivity",
+                    "status": "error",
+                    "detail": format!("Failed to verify: {}", e)
+                }],
+            }))))
+        }
+    }
+}
+
+/// POST /api/credentials/verify — verify API key permissions via apiRestrictions.
+/// Uses the exchange already registered in the registry (saved by save_credential).
+pub async fn verify_permissions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
+
+    let names = state.exchange_registry.registered_names();
+    let exchange_ref = names.first().and_then(|key| state.exchange_registry.get(key));
+
+    let exchange = match exchange_ref {
+        Some(e) => e,
+        None => return Ok(Json(ApiResponse::err("No exchange registered. Please save credentials first."))),
+    };
+
+    // Call apiRestrictions
+    match exchange.get_api_restrictions().await {
+        Ok(restrictions) => {
+            tracing::info!(
+                ip_restrict = restrictions.ip_restrict,
+                ip_not_restricted = restrictions.ip_not_restricted,
+                ip_whitelist = ?restrictions.ip_whitelist,
+                read_info = restrictions.read_info,
+                enable_spot_and_margin_trading = restrictions.enable_spot_and_margin_trading,
+                enable_futures = restrictions.enable_futures,
+                enable_withdrawals = restrictions.enable_withdrawals,
+                enable_internal_transfer = restrictions.enable_internal_transfer,
+                "apiRestrictions parsed result"
+            );
+            let mut permissions = Vec::new();
+
+            // Note: "connectivity" is NOT included here — it's already checked
+            // by the separate /test (ping) endpoint.
+
+            permissions.push(serde_json::json!({
+                "name": "read_info",
+                "label": "Read Info",
+                "status": if restrictions.read_info { "ok" } else { "error" },
+                "detail": if restrictions.read_info { "Reading account info enabled" } else { "Reading account info disabled" }
+            }));
+
+            permissions.push(serde_json::json!({
+                "name": "spot_trading",
+                "label": "Spot & Margin Trading",
+                "status": if restrictions.enable_spot_and_margin_trading { "ok" } else { "error" },
+                "detail": if restrictions.enable_spot_and_margin_trading { "Spot and margin trading enabled" } else { "Spot and margin trading disabled" }
+            }));
+
+            permissions.push(serde_json::json!({
+                "name": "futures",
+                "label": "Futures Trading",
+                "status": if restrictions.enable_futures { "ok" } else { "error" },
+                "detail": if restrictions.enable_futures { "Futures trading enabled" } else { "Futures trading disabled" }
+            }));
+
+            permissions.push(serde_json::json!({
+                "name": "withdrawals",
+                "label": "Withdrawals",
+                "status": if restrictions.enable_withdrawals { "warn" } else { "ok" },
+                "detail": if restrictions.enable_withdrawals { "Withdrawals enabled (not required, consider disabling)" } else { "Withdrawals disabled (recommended)" }
+            }));
+
+            permissions.push(serde_json::json!({
+                "name": "internal_transfer",
+                "label": "Internal Transfer",
+                "status": if restrictions.enable_internal_transfer { "warn" } else { "ok" },
+                "detail": if restrictions.enable_internal_transfer { "Internal transfer enabled (not required, consider disabling)" } else { "Internal transfer disabled (recommended)" }
+            }));
+
+            permissions.push(serde_json::json!({
+                "name": "ip_restriction",
+                "label": "IP Restriction",
+                "status": if restrictions.ip_restrict { "ok" } else { "warn" },
+                "detail": if restrictions.ip_restrict { "IP restriction enabled" } else { "IP restriction not enabled (consider enabling)" }
+            }));
+
+            Ok(Json(ApiResponse::ok(serde_json::json!({
+                "connected": true,
+                "permissions": permissions,
+            }))))
+        }
+        Err(e) => {
+            Ok(Json(ApiResponse::ok(serde_json::json!({
+                "connected": false,
+                "permissions": [{
+                    "name": "connectivity",
+                    "label": "Connectivity",
+                    "status": "error",
+                    "detail": format!("Failed to verify: {}", e)
+                }],
+            }))))
+        }
+    }
+}
+
+/// GET /api/credentials/status — check if user has exchange credentials configured
+pub async fn exchange_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let user_id = extract_user_id(&headers)?;
+
+    let row: Option<(String, String)> = sqlx::query_as(
+        r#"SELECT exchange, market_type FROM qd_exchange_credentials WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1"#,
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db_pool)
+    .await
+    .unwrap_or(None);
+
+    match row {
+        Some((exchange, market_type)) => Ok(Json(ApiResponse::ok(serde_json::json!({
+            "connected": true,
+            "exchange": format!("{} ({})", exchange, market_type),
+        })))),
+        None => Ok(Json(ApiResponse::ok(serde_json::json!({
+            "connected": false,
+        })))),
+    }
+}
+
+/// POST /api/credentials/account-info — fetch perpetual + spot USDT balances.
+/// Fixed: decrypt encrypted credentials from DB instead of querying plaintext columns.
+pub async fn account_info(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let user_id = extract_user_id(&headers)?;
+
+    // Fetch perpetual USDT balance from registry
+    let mut perpetual_usdt: Option<f64> = None;
+    let mut exchange_name = String::from("binance");
+
+    let names = state.exchange_registry.registered_names();
+    for key in &names {
+        if key.contains("perpetual") {
+            if let Some(ex) = state.exchange_registry.get(key) {
+                match ex.get_balances().await {
+                    Ok(balances) => {
+                        for b in &balances {
+                            if b.asset == "USDT" {
+                                perpetual_usdt = Some(b.total);
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to fetch perpetual balances: {}", e);
+                    }
+                }
+            }
+            if let Some(idx) = key.find(':') {
+                exchange_name = key[..idx].to_string();
+            }
+            break;
+        }
+    }
+
+    // Fetch spot USDT balance by decrypting credentials from DB and creating a temporary spot instance
+    let mut spot_usdt: Option<f64> = None;
+
+    let row: Option<(String, String, Option<String>)> = sqlx::query_as(
+        r#"SELECT encrypted_api_key, encrypted_api_secret, encrypted_passphrase
+           FROM qd_exchange_credentials
+           WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1"#,
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db_pool)
+    .await
+    .unwrap_or(None);
+
+    if let Some((enc_key, enc_secret, enc_passphrase)) = row {
+        let derived_key = virs_utils::crypto::derive_key(&state.encryption_key);
+
+        let api_key = virs_utils::crypto::decrypt(&enc_key, &derived_key).ok();
+        let api_secret = virs_utils::crypto::decrypt(&enc_secret, &derived_key).ok();
+        let passphrase = enc_passphrase
+            .and_then(|p| virs_utils::crypto::decrypt(&p, &derived_key).ok());
+
+        if let (Some(key), Some(secret)) = (api_key, api_secret) {
+            match virs_ccxt::create_exchange(
+                &exchange_name, &key, &secret, passphrase.as_deref(), None, &virs_ccxt::MarketType::Spot,
+            ) {
+                Ok(ccxt_ex) => {
+                    let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, virs_models::MarketType::Spot);
+                    match adapter.get_balances().await {
+                        Ok(balances) => {
+                            for b in &balances {
+                                if b.asset == "USDT" {
+                                    spot_usdt = Some(b.total);
+                                    break;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to fetch spot balances: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to create spot exchange: {}", e);
+                }
             }
         }
-        Err(e) => Json(ApiResponse::ok(serde_json::json!({
-            "connected": false,
-            "message": format!("Failed to create exchange: {}", e),
-        }))),
     }
+
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "perpetual_usdt": perpetual_usdt,
+        "spot_usdt": spot_usdt,
+    }))))
 }

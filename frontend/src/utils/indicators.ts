@@ -1,13 +1,3 @@
-// ── 指标叠加工具函数 ──────────────────────────────────────────────
-
-export interface OverlayLine {
-  name: string
-  data: Array<{ time: number; value: number }>
-  color: string
-  lineWidth?: number
-  priceScaleId?: string
-}
-
 /**
  * 计算简单移动平均线 (SMA)
  */

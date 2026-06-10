@@ -1,74 +1,35 @@
 import { createSignal, onCleanup } from 'solid-js'
 
-export interface GridBotEvent {
-  type: 'grid_bot'
-  data: {
-    bot_id: string
-    name: string
-    status: 'running' | 'stopped' | 'error'
-  }
+// ── Event types ────────────────────────────────────────────
+
+export interface BotStatusEvent {
+  type: 'bot_status'
+  data: { bot_id: string; name: string; status: 'running' | 'stopped' | 'error' }
 }
 
 export interface TradeEvent {
   type: 'trade'
-  data: {
-    bot_id: string
-    symbol: string
-    side: string
-    price: number
-    quantity: number
-    pnl: number
-  }
+  data: { bot_id: string; symbol: string; side: string; price: number; quantity: number; pnl: number }
 }
 
 export interface OrderEvent {
   type: 'order'
-  data: {
-    order_id: string
-    bot_id: string
-    symbol: string
-    status: string
-    error?: string
-  }
+  data: { order_id: string; bot_id: string; symbol: string; status: string; error?: string }
 }
 
 export interface PositionEvent {
   type: 'position'
-  data: {
-    bot_id: string
-    symbol: string
-    side: string
-    size: number
-    entry_price: number
-    action: 'opened' | 'closed'
-  }
+  data: { bot_id: string; symbol: string; side: string; size: number; entry_price: number; action: 'opened' | 'closed' }
 }
 
 export interface RiskEvent {
   type: 'risk'
-  data: {
-    bot_id: string
-    symbol: string
-    reason: 'stop_loss' | 'take_profit' | 'trailing_stop'
-    price: number
-  }
+  data: { bot_id: string; symbol: string; reason: 'stop_loss' | 'take_profit' | 'trailing_stop'; price: number }
 }
 
 export interface NotificationEvent {
   type: 'notification'
-  data: {
-    level: 'info' | 'warning' | 'error'
-    message: string
-  }
-}
-
-export interface BotStatusEvent {
-  type: 'bot_status'
-  data: {
-    bot_id: string
-    name: string
-    status: 'running' | 'stopped' | 'error'
-  }
+  data: { level: 'info' | 'warning' | 'error'; message: string }
 }
 
 export type WsEvent =
@@ -98,164 +59,134 @@ export interface KlineWsEvent {
   event_type: 'Update' | 'Closed' | 'Backfilled'
 }
 
-const TOKEN_KEY = 'qd_token'
+// ── WebSocket factory ──────────────────────────────────────
+
+interface WsInstance<T> {
+  ws: WebSocket | null
+  listeners: Array<(event: T) => void>
+  reconnectTimer: ReturnType<typeof setTimeout> | null
+  reconnectAttempts: number
+  connected: () => boolean
+  setConnected: (v: boolean) => void
+  reconnectCallbacks: Array<() => void>
+}
+
+function createWsInstance<T>(): WsInstance<T> {
+  const [connected, setConnected] = createSignal(false)
+  return {
+    ws: null,
+    listeners: [],
+    reconnectTimer: null,
+    reconnectAttempts: 0,
+    connected,
+    setConnected,
+    reconnectCallbacks: [],
+  }
+}
+
 const BASE_RECONNECT_MS = 1000
 const MAX_RECONNECT_MS = 30000
 
-let globalWs: WebSocket | null = null
-let globalListeners: Array<(event: WsEvent) => void> = []
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-let reconnectAttempts = 0
-const [connected, setConnected] = createSignal(false)
-
-function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
-}
-
-function getWsUrl(): string {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const token = getToken()
-  const base = `${protocol}//${window.location.host}/ws`
-  if (token) {
-    return `${base}?token=${encodeURIComponent(token)}`
-  }
-  return base
-}
-
-function connect() {
-  if (globalWs && globalWs.readyState === WebSocket.OPEN) return
-
-  const token = getToken()
-  if (!token) return
+function connectWs<T>(
+  inst: WsInstance<T>,
+  getUrl: () => string,
+  parse: (raw: string) => T | null,
+) {
+  if (inst.ws && inst.ws.readyState === WebSocket.OPEN) return
 
   try {
-    globalWs = new WebSocket(getWsUrl())
+    inst.ws = new WebSocket(getUrl())
 
-    globalWs.onopen = () => {
-      setConnected(true)
-      reconnectAttempts = 0
+    inst.ws.onopen = () => {
+      inst.setConnected(true)
+      inst.reconnectAttempts = 0
+      inst.reconnectCallbacks.forEach(cb => cb())
     }
 
-    globalWs.onmessage = (e) => {
+    inst.ws.onmessage = (e) => {
       try {
-        const event: WsEvent = JSON.parse(e.data)
-        globalListeners.forEach(listener => listener(event))
+        const event = parse(e.data)
+        if (event) inst.listeners.forEach(l => l(event))
       } catch (err) {
         console.error('[WS] Failed to parse message:', err)
       }
     }
 
-    globalWs.onclose = () => {
-      setConnected(false)
-      const delay = Math.min(BASE_RECONNECT_MS * Math.pow(2, reconnectAttempts), MAX_RECONNECT_MS)
-      reconnectAttempts++
-      reconnectTimer = setTimeout(connect, delay)
+    inst.ws.onclose = () => {
+      inst.setConnected(false)
+      const delay = Math.min(BASE_RECONNECT_MS * Math.pow(2, inst.reconnectAttempts), MAX_RECONNECT_MS)
+      inst.reconnectAttempts++
+      inst.reconnectTimer = setTimeout(() => connectWs(inst, getUrl, parse), delay)
     }
 
-    globalWs.onerror = () => {}
+    inst.ws.onerror = () => {}
   } catch (err) {
     console.error('[WS] Failed to connect:', err)
-    const delay = Math.min(BASE_RECONNECT_MS * Math.pow(2, reconnectAttempts), MAX_RECONNECT_MS)
-    reconnectAttempts++
-    reconnectTimer = setTimeout(connect, delay)
+    const delay = Math.min(BASE_RECONNECT_MS * Math.pow(2, inst.reconnectAttempts), MAX_RECONNECT_MS)
+    inst.reconnectAttempts++
+    inst.reconnectTimer = setTimeout(() => connectWs(inst, getUrl, parse), delay)
   }
 }
 
-export function useWs(onEvent: (event: WsEvent) => void): { connected: () => boolean } {
-  globalListeners.push(onEvent)
+function useWsHook<T>(
+  inst: WsInstance<T>,
+  getUrl: () => string,
+  parse: (raw: string) => T | null,
+  onEvent: (event: T) => void,
+  onReconnect?: () => void,
+): { connected: () => boolean } {
+  inst.listeners.push(onEvent)
+  if (onReconnect) inst.reconnectCallbacks.push(onReconnect)
 
-  if (!globalWs || globalWs.readyState === WebSocket.CLOSED) {
-    reconnectAttempts = 0
-    connect()
+  if (!inst.ws || inst.ws.readyState === WebSocket.CLOSED) {
+    inst.reconnectAttempts = 0
+    connectWs(inst, getUrl, parse)
   }
 
   onCleanup(() => {
-    globalListeners = globalListeners.filter(l => l !== onEvent)
-    if (globalListeners.length === 0 && globalWs) {
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      globalWs.close()
-      globalWs = null
+    inst.listeners = inst.listeners.filter(l => l !== onEvent)
+    if (onReconnect) inst.reconnectCallbacks = inst.reconnectCallbacks.filter(cb => cb !== onReconnect)
+    if (inst.listeners.length === 0 && inst.ws) {
+      if (inst.reconnectTimer) clearTimeout(inst.reconnectTimer)
+      inst.ws.close()
+      inst.ws = null
     }
   })
 
-  return { connected }
+  return { connected: inst.connected }
 }
 
-let klineWs: WebSocket | null = null
-let klineListeners: Array<(event: KlineWsEvent) => void> = []
-let klineReconnectTimer: ReturnType<typeof setTimeout> | null = null
-let klineReconnectAttempts = 0
-const [klineConnected, setKlineConnected] = createSignal(false)
-let klineReconnectCallbacks: Array<() => void> = []
+// ── Main WebSocket ─────────────────────────────────────────
+
+const mainInst = createWsInstance<WsEvent>()
+
+function getMainWsUrl(): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const token = localStorage.getItem('qd_token')
+  const base = `${protocol}//${window.location.host}/ws`
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base
+}
+
+export function useWs(onEvent: (event: WsEvent) => void): { connected: () => boolean } {
+  return useWsHook(mainInst, getMainWsUrl, (raw) => {
+    try { return JSON.parse(raw) as WsEvent } catch { return null }
+  }, onEvent)
+}
+
+// ── Kline WebSocket ────────────────────────────────────────
+
+const klineInst = createWsInstance<KlineWsEvent>()
 
 function getKlineWsUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${protocol}//${window.location.host}/ws/kline`
 }
 
-function connectKlineWs() {
-  if (klineWs && klineWs.readyState === WebSocket.OPEN) return
-
-  try {
-    klineWs = new WebSocket(getKlineWsUrl())
-
-    klineWs.onopen = () => {
-      setKlineConnected(true)
-      klineReconnectAttempts = 0
-      klineReconnectCallbacks.forEach(cb => cb())
-    }
-
-    klineWs.onmessage = (e) => {
-      try {
-        const event: KlineWsEvent = JSON.parse(e.data)
-        klineListeners.forEach(listener => listener(event))
-      } catch (err) {
-        console.error('[KlineWS] Failed to parse message:', err)
-      }
-    }
-
-    klineWs.onclose = () => {
-      setKlineConnected(false)
-      const delay = Math.min(BASE_RECONNECT_MS * Math.pow(2, klineReconnectAttempts), MAX_RECONNECT_MS)
-      klineReconnectAttempts++
-      klineReconnectTimer = setTimeout(connectKlineWs, delay)
-    }
-
-    klineWs.onerror = () => {}
-  } catch (err) {
-    console.error('[KlineWS] Failed to connect:', err)
-    const delay = Math.min(BASE_RECONNECT_MS * Math.pow(2, klineReconnectAttempts), MAX_RECONNECT_MS)
-    klineReconnectAttempts++
-    klineReconnectTimer = setTimeout(connectKlineWs, delay)
-  }
-}
-
 export function useKlineWs(
   onEvent: (event: KlineWsEvent) => void,
   onReconnect?: () => void,
 ): { connected: () => boolean } {
-  klineListeners.push(onEvent)
-
-  if (onReconnect) {
-    klineReconnectCallbacks.push(onReconnect)
-  }
-
-  if (!klineWs || klineWs.readyState === WebSocket.CLOSED) {
-    klineReconnectAttempts = 0
-    connectKlineWs()
-  }
-
-  onCleanup(() => {
-    klineListeners = klineListeners.filter(l => l !== onEvent)
-    if (onReconnect) {
-      klineReconnectCallbacks = klineReconnectCallbacks.filter(cb => cb !== onReconnect)
-    }
-    if (klineListeners.length === 0 && klineWs) {
-      if (klineReconnectTimer) clearTimeout(klineReconnectTimer)
-      klineWs.close()
-      klineWs = null
-    }
-  })
-
-  return { connected: klineConnected }
+  return useWsHook(klineInst, getKlineWsUrl, (raw) => {
+    try { return JSON.parse(raw) as KlineWsEvent } catch { return null }
+  }, onEvent, onReconnect)
 }

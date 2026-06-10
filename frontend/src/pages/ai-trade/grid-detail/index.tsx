@@ -1,6 +1,6 @@
 import { createSignal, For, Show, onMount, onCleanup } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
-import { api } from '../../lib/api';
+import { api } from '../../../lib/api';
 
 function formatSmart(value: number): string {
   if (value === 0) return '0';
@@ -143,7 +143,7 @@ export default function GridDetailPage() {
         if (!confirm('确定删除此机器人？')) return;
         await api.post(`/grid/${params.id}/stop`).catch(() => {});
         await api.del(`/grid/${params.id}/delete`);
-        navigate('/ai-trade/grid');
+        navigate('/setup/bot-type', { replace: true });
         return;
       }
       await loadBot();
@@ -193,7 +193,7 @@ export default function GridDetailPage() {
               <div class="flex items-center justify-between mb-8">
                 <div class="flex items-center gap-3">
                   <button
-                    onClick={() => navigate('/ai-trade/grid')}
+                    onClick={() => navigate('/setup/bot-type', { replace: true })}
                     class="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
                   >
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>

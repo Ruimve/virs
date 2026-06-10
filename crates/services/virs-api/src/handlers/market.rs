@@ -5,7 +5,7 @@ use axum::{
     Json,
 };
 
-use crate::handlers::auth::ApiResponse;
+use crate::handlers::response::ApiResponse;
 use crate::state::AppState;
 
 #[derive(serde::Deserialize)]
@@ -236,7 +236,8 @@ pub async fn get_balances(
         None => return Json(ApiResponse::err("exchange is required")),
     };
 
-    let exchange_key = format!("{}:perpetual", exchange);
+    let market_type = params.market_type.as_deref().unwrap_or("perpetual");
+    let exchange_key = format!("{}:{}", exchange, market_type);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_balances().await {
             Ok(balances) => {
@@ -253,7 +254,7 @@ pub async fn get_balances(
             }
             Err(e) => Json(ApiResponse::err(format!("Balances error: {}", e))),
         },
-        None => Json(ApiResponse::err(format!("Exchange '{}' not registered", exchange))),
+        None => Json(ApiResponse::err(format!("Exchange '{}' not registered for {}", exchange, market_type))),
     }
 }
 

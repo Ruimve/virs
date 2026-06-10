@@ -60,6 +60,9 @@ pub trait Exchange: Send + Sync {
     async fn get_funding_history(&self, symbol: &str, start_time: i64, end_time: i64) -> anyhow::Result<Vec<FundingHistoryEntry>>;
     async fn create_listen_key(&self) -> anyhow::Result<String>;
     async fn keepalive_listen_key(&self, listen_key: &str) -> anyhow::Result<()>;
+
+    // ---- Account ----
+    async fn get_api_restrictions(&self) -> anyhow::Result<virs_ccxt::ApiRestrictions>;
 }
 
 #[async_trait]
@@ -86,4 +89,5 @@ impl Exchange for Box<dyn Exchange> {
     async fn get_funding_history(&self, symbol: &str, start_time: i64, end_time: i64) -> anyhow::Result<Vec<FundingHistoryEntry>> { (**self).get_funding_history(symbol, start_time, end_time).await }
     async fn create_listen_key(&self) -> anyhow::Result<String> { (**self).create_listen_key().await }
     async fn keepalive_listen_key(&self, listen_key: &str) -> anyhow::Result<()> { (**self).keepalive_listen_key(listen_key).await }
+    async fn get_api_restrictions(&self) -> anyhow::Result<virs_ccxt::ApiRestrictions> { (**self).get_api_restrictions().await }
 }

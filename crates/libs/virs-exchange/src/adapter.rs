@@ -51,26 +51,10 @@ fn to_ccxt_market_type(mt: &MarketType) -> virs_ccxt::MarketType {
     }
 }
 
-fn to_models_side(side: &virs_ccxt::Side) -> Side {
-    match side {
-        virs_ccxt::Side::Buy => Side::Buy,
-        virs_ccxt::Side::Sell => Side::Sell,
-    }
-}
-
 fn to_ccxt_side(side: &Side) -> virs_ccxt::Side {
     match side {
         Side::Buy => virs_ccxt::Side::Buy,
         Side::Sell => virs_ccxt::Side::Sell,
-    }
-}
-
-fn to_models_order_type(ot: &virs_ccxt::OrderType) -> OrderType {
-    match ot {
-        virs_ccxt::OrderType::Market => OrderType::Market,
-        virs_ccxt::OrderType::Limit => OrderType::Limit,
-        virs_ccxt::OrderType::StopMarket => OrderType::StopMarket,
-        virs_ccxt::OrderType::StopLimit => OrderType::StopLimit,
     }
 }
 
@@ -80,39 +64,11 @@ fn to_ccxt_order_type(ot: &OrderType) -> virs_ccxt::OrderType {
         OrderType::Limit => virs_ccxt::OrderType::Limit,
         OrderType::StopMarket => virs_ccxt::OrderType::StopMarket,
         OrderType::StopLimit => virs_ccxt::OrderType::StopLimit,
-        OrderType::TakeProfitMarket => virs_ccxt::OrderType::StopMarket,
+        OrderType::TakeProfitMarket => virs_ccxt::OrderType::TakeProfitMarket,
     }
 }
 
-fn to_models_order_status(os: &virs_ccxt::OrderStatus) -> OrderStatus {
-    match os {
-        virs_ccxt::OrderStatus::Open => OrderStatus::Open,
-        virs_ccxt::OrderStatus::PartiallyFilled => OrderStatus::PartiallyFilled,
-        virs_ccxt::OrderStatus::Filled => OrderStatus::Filled,
-        virs_ccxt::OrderStatus::Canceled => OrderStatus::Canceled,
-        virs_ccxt::OrderStatus::Expired => OrderStatus::Canceled,
-        virs_ccxt::OrderStatus::Failed => OrderStatus::Failed,
-        virs_ccxt::OrderStatus::Rejected => OrderStatus::Failed,
-    }
-}
-
-fn to_models_ticker(ct: virs_ccxt::Ticker) -> Ticker {
-    Ticker {
-        symbol: ct.symbol,
-        exchange: ct.exchange,
-        bid: ct.bid.unwrap_or(0.0),
-        ask: ct.ask.unwrap_or(0.0),
-        last: ct.last.unwrap_or(0.0),
-        high_24h: ct.high.unwrap_or(0.0),
-        low_24h: ct.low.unwrap_or(0.0),
-        volume_24h: ct.volume.unwrap_or(0.0),
-        price_change_24h: ct.price_change.unwrap_or(0.0),
-        price_change_pct_24h: ct.price_change_pct.unwrap_or(0.0),
-        timestamp: ct.timestamp.unwrap_or_else(chrono::Utc::now),
-    }
-}
-
-fn to_models_kline(ck: virs_ccxt::Kline, symbol: &str, exchange: &str, interval: &str) -> Kline {
+fn to_models_kline(ck: virs_ccxt::CcxtKline, symbol: &str, exchange: &str, interval: &str) -> Kline {
     let interval_ms = match interval {
         "1m" => 60_000, "5m" => 300_000, "15m" => 900_000, "30m" => 1_800_000,
         "1h" => 3_600_000, "4h" => 14_400_000, "1d" => 86_400_000, "1w" => 604_800_000,
@@ -126,21 +82,17 @@ fn to_models_kline(ck: virs_ccxt::Kline, symbol: &str, exchange: &str, interval:
     }
 }
 
-fn to_models_order_book(cob: virs_ccxt::OrderBook) -> OrderBook {
-    OrderBook { symbol: cob.symbol, bids: cob.bids, asks: cob.asks, timestamp: cob.timestamp.unwrap_or_else(chrono::Utc::now) }
-}
-
 fn to_models_balance(cb: virs_ccxt::Balance) -> Balance {
     Balance { asset: cb.asset, free: cb.free, used: cb.used, total: cb.total }
 }
 
-fn to_models_order(co: virs_ccxt::Order) -> Order {
+fn to_models_order(co: virs_ccxt::CcxtOrder) -> Order {
     let fee_info = co.fee.as_ref();
     Order {
         id: co.id, client_order_id: co.client_order_id, symbol: co.symbol,
-        side: to_models_side(&co.side), order_type: to_models_order_type(&co.order_type),
+        side: co.side, order_type: co.order_type,
         price: co.price, amount: co.amount, cost: co.cost, filled: co.filled, remaining: co.remaining,
-        status: to_models_order_status(&co.status),
+        status: co.status.into(),
         fee: fee_info.map(|f| f.cost).unwrap_or(0.0),
         fee_currency: fee_info.map(|f| f.currency.clone()).unwrap_or_default(),
         created_at: co.created_at.unwrap_or_else(chrono::Utc::now),
@@ -155,7 +107,7 @@ impl Exchange for CcxtAdapter {
 
     async fn get_ticker(&self, symbol: &str) -> anyhow::Result<Ticker> {
         let ct = self.inner.fetch_ticker(symbol).await.map_err(|e| anyhow::anyhow!("ccxt ticker error: {}", e))?;
-        Ok(to_models_ticker(ct))
+        Ok(ct.into())
     }
 
     async fn get_klines(&self, symbol: &str, interval: &str, limit: u32, since: Option<i64>) -> anyhow::Result<Vec<Kline>> {
@@ -172,7 +124,7 @@ impl Exchange for CcxtAdapter {
 
     async fn get_order_book(&self, symbol: &str, depth: u32) -> anyhow::Result<OrderBook> {
         let cob = self.inner.fetch_order_book(symbol, depth).await.map_err(|e| anyhow::anyhow!("ccxt orderbook error: {}", e))?;
-        Ok(to_models_order_book(cob))
+        Ok(cob.into())
     }
 
     async fn get_balances(&self) -> anyhow::Result<Vec<Balance>> {
@@ -189,7 +141,7 @@ impl Exchange for CcxtAdapter {
         let ccxt_position_side = position_side.map(|ps| match ps {
             PositionSide::Long => virs_ccxt::PositionSide::Long,
             PositionSide::Short => virs_ccxt::PositionSide::Short,
-            PositionSide::Both => virs_ccxt::PositionSide::Long,
+            PositionSide::Both => virs_ccxt::PositionSide::Both,
         });
         let params = PlaceOrderParams {
             symbol: symbol.to_string(), side: to_ccxt_side(&side), order_type: to_ccxt_order_type(&order_type),
@@ -252,6 +204,7 @@ impl Exchange for CcxtAdapter {
             symbol: p.symbol, side: match p.side {
                 virs_ccxt::PositionSide::Long => PositionSide::Long,
                 virs_ccxt::PositionSide::Short => PositionSide::Short,
+                virs_ccxt::PositionSide::Both => PositionSide::Both,
             }, size: p.size, entry_price: p.entry_price, leverage: p.leverage,
             unrealized_pnl: p.unrealized_pnl, liquidation_price: p.liquidation_price,
         }).collect())
@@ -267,14 +220,12 @@ impl Exchange for CcxtAdapter {
 
     async fn get_funding_rate(&self, symbol: &str) -> anyhow::Result<FundingRate> {
         let fr = self.inner.fetch_funding_rate(symbol).await.map_err(|e| anyhow::anyhow!("ccxt fetch_funding_rate error: {}", e))?;
-        Ok(FundingRate { symbol: fr.symbol, rate: fr.rate, next_funding_time: fr.next_funding_time })
+        Ok(fr.into())
     }
 
     async fn get_funding_history(&self, symbol: &str, start_time: i64, end_time: i64) -> anyhow::Result<Vec<FundingHistoryEntry>> {
         let entries = self.inner.fetch_funding_history(symbol, start_time, end_time).await.map_err(|e| anyhow::anyhow!("ccxt fetch_funding_history error: {}", e))?;
-        Ok(entries.into_iter().map(|e| FundingHistoryEntry {
-            funding_time: e.funding_time, rate: e.rate,
-        }).collect())
+        Ok(entries.into_iter().map(|e| e.into()).collect())
     }
 
     async fn create_listen_key(&self) -> anyhow::Result<String> {
@@ -283,5 +234,9 @@ impl Exchange for CcxtAdapter {
 
     async fn keepalive_listen_key(&self, listen_key: &str) -> anyhow::Result<()> {
         self.inner.keepalive_listen_key(listen_key).await.map_err(|e| anyhow::anyhow!("ccxt keepalive_listen_key error: {}", e))
+    }
+
+    async fn get_api_restrictions(&self) -> anyhow::Result<virs_ccxt::ApiRestrictions> {
+        self.inner.fetch_api_restrictions().await.map_err(|e| anyhow::anyhow!("ccxt fetch_api_restrictions error: {}", e))
     }
 }

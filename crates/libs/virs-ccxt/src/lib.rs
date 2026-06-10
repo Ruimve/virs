@@ -13,24 +13,33 @@ use serde_json::Value;
 use errors::ExchangeError;
 use auth::Signer;
 
-// Re-export key types for convenience
+// Re-export shared types from virs-types (via types module)
 pub use types::{
-    Ticker, Kline, OrderBook, Balance, Order,
+    // Shared types (re-exported from virs-types)
+    Ticker, Kline, OrderBook, Balance,
     MarketInfo, MarketType, Side, OrderType, OrderStatus,
     PlaceOrderParams, ExchangeCapabilities,
     PositionSide, MarginMode, PositionMode,
     FundingRate, FundingHistoryEntry,
+    // CCXT-internal types
+    CcxtOrder, CcxtOrderStatus, CcxtTicker, CcxtKline,
+    CcxtOrderBook, CcxtFundingRate, CcxtFundingHistoryEntry,
+    ApiRestrictions,
 };
 
 /// Unified exchange trait — the core abstraction following CCXT's design.
+///
+/// Methods return CCXT-internal types (CcxtTicker, CcxtOrder, etc.) which
+/// carry raw exchange data (`info` field). The CcxtAdapter in virs-exchange
+/// converts these to application-level types via `From` impls.
 #[async_trait]
 pub trait Exchange: Send + Sync {
     fn id(&self) -> &str;
     fn name(&self) -> &str;
     fn capabilities(&self) -> &ExchangeCapabilities;
 
-    async fn fetch_ticker(&self, symbol: &str) -> Result<Ticker, ExchangeError>;
-    async fn fetch_ohlcv(&self, symbol: &str, timeframe: &str, limit: u32, since: Option<i64>) -> Result<Vec<Kline>, ExchangeError>;
+    async fn fetch_ticker(&self, symbol: &str) -> Result<CcxtTicker, ExchangeError>;
+    async fn fetch_ohlcv(&self, symbol: &str, timeframe: &str, limit: u32, since: Option<i64>) -> Result<Vec<CcxtKline>, ExchangeError>;
 
     async fn fetch_ohlcv_range(
         &self,
@@ -38,9 +47,9 @@ pub trait Exchange: Send + Sync {
         timeframe: &str,
         start_ms: i64,
         end_ms: i64,
-    ) -> Result<Vec<Kline>, ExchangeError> {
+    ) -> Result<Vec<CcxtKline>, ExchangeError> {
         let page_limit: u32 = 1000;
-        let mut all_klines: Vec<Kline> = Vec::new();
+        let mut all_klines: Vec<CcxtKline> = Vec::new();
         let mut cursor = start_ms;
 
         while cursor < end_ms {
@@ -67,20 +76,23 @@ pub trait Exchange: Send + Sync {
         Ok(all_klines)
     }
 
-    async fn fetch_order_book(&self, symbol: &str, limit: u32) -> Result<OrderBook, ExchangeError>;
+    async fn fetch_order_book(&self, symbol: &str, limit: u32) -> Result<CcxtOrderBook, ExchangeError>;
     async fn fetch_balance(&self) -> Result<Vec<Balance>, ExchangeError>;
     async fn fetch_markets(&self) -> Result<Vec<MarketInfo>, ExchangeError>;
-    async fn create_order(&self, params: PlaceOrderParams) -> Result<Order, ExchangeError>;
-    async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError>;
-    async fn fetch_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError>;
-    async fn fetch_open_orders(&self, symbol: Option<&str>) -> Result<Vec<Order>, ExchangeError>;
-    async fn set_leverage(&self, symbol: &str, leverage: u32, margin_mode: types::MarginMode) -> Result<(), ExchangeError>;
+    async fn create_order(&self, params: PlaceOrderParams) -> Result<CcxtOrder, ExchangeError>;
+    async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<CcxtOrder, ExchangeError>;
+    async fn fetch_order(&self, symbol: &str, order_id: &str) -> Result<CcxtOrder, ExchangeError>;
+    async fn fetch_open_orders(&self, symbol: Option<&str>) -> Result<Vec<CcxtOrder>, ExchangeError>;
+    async fn set_leverage(&self, symbol: &str, leverage: u32, margin_mode: MarginMode) -> Result<(), ExchangeError>;
     async fn fetch_positions(&self, symbol: Option<&str>) -> Result<Vec<types::Position>, ExchangeError>;
-    async fn get_position_mode(&self) -> Result<types::PositionMode, ExchangeError>;
-    async fn fetch_funding_rate(&self, symbol: &str) -> Result<types::FundingRate, ExchangeError>;
-    async fn fetch_funding_history(&self, symbol: &str, start_time: i64, end_time: i64) -> Result<Vec<types::FundingHistoryEntry>, ExchangeError>;
+    async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError>;
+    async fn fetch_funding_rate(&self, symbol: &str) -> Result<CcxtFundingRate, ExchangeError>;
+    async fn fetch_funding_history(&self, symbol: &str, start_time: i64, end_time: i64) -> Result<Vec<CcxtFundingHistoryEntry>, ExchangeError>;
     async fn create_listen_key(&self) -> Result<String, ExchangeError>;
     async fn keepalive_listen_key(&self, _listen_key: &str) -> Result<(), ExchangeError> { Ok(()) }
+    async fn fetch_api_restrictions(&self) -> Result<types::ApiRestrictions, ExchangeError> {
+        Err(ExchangeError::NotSupported("fetch_api_restrictions not supported".into()))
+    }
     async fn ping(&self) -> Result<bool, ExchangeError>;
     async fn load_markets(&mut self) -> Result<(), ExchangeError>;
     fn markets(&self) -> &Option<Vec<MarketInfo>>;
@@ -90,11 +102,10 @@ pub trait Exchange: Send + Sync {
 pub struct ExchangeClient {
     client: Client,
     rate_limiter: std::sync::Arc<tokio::sync::Semaphore>,
-    base_url: String,
 }
 
 impl ExchangeClient {
-    pub fn new(base_url: &str, max_concurrent: u32, proxy_url: Option<&str>) -> Result<Self, ExchangeError> {
+    pub fn new(max_concurrent: u32, proxy_url: Option<&str>) -> Result<Self, ExchangeError> {
         let mut builder = Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .connect_timeout(std::time::Duration::from_secs(10))
@@ -114,7 +125,6 @@ impl ExchangeClient {
         Ok(Self {
             client,
             rate_limiter: std::sync::Arc::new(tokio::sync::Semaphore::new(max_concurrent as usize)),
-            base_url: base_url.to_string(),
         })
     }
 
@@ -125,8 +135,7 @@ impl ExchangeClient {
     ) -> Result<Value, ExchangeError> {
         let _permit = self.rate_limiter.acquire().await
             .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
-        let url = format!("{}{}", self.base_url, path);
-        let resp = self.client.get(&url).query(params).send().await?;
+        let resp = self.client.get(path).query(params).send().await?;
         handle_response(resp).await
     }
 
@@ -139,8 +148,7 @@ impl ExchangeClient {
         let _permit = self.rate_limiter.acquire().await
             .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
         let signed = signer.sign_get(path, &mut params)?;
-        let url = format!("{}{}", self.base_url, path);
-        let mut req = self.client.get(&url);
+        let mut req = self.client.get(path);
         for (k, v) in &signed.query_params {
             req = req.query(&[(k.as_str(), v.as_str())]);
         }
@@ -161,8 +169,36 @@ impl ExchangeClient {
         let _permit = self.rate_limiter.acquire().await
             .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
         let signed = signer.sign_post(path, &mut body)?;
-        let url = format!("{}{}", self.base_url, path);
-        let mut req = self.client.post(&url);
+        let mut req = self.client.post(path);
+        for (name, value) in signed.headers {
+            if let Some(n) = name {
+                req = req.header(n, value);
+            }
+        }
+        if let Some(b) = signed.body {
+            if let Some(s) = b.as_str() {
+                req = req
+                    .header("content-type", "application/x-www-form-urlencoded")
+                    .body(s.to_string());
+            } else {
+                req = req.json(&b);
+            }
+        } else {
+            req = req.json(&body);
+        }
+        handle_response(req.send().await?).await
+    }
+
+    pub async fn signed_put(
+        &self,
+        signer: &dyn Signer,
+        path: &str,
+        mut body: Value,
+    ) -> Result<Value, ExchangeError> {
+        let _permit = self.rate_limiter.acquire().await
+            .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
+        let signed = signer.sign_put(path, &mut body)?;
+        let mut req = self.client.put(path);
         for (name, value) in signed.headers {
             if let Some(n) = name {
                 req = req.header(n, value);
@@ -239,26 +275,18 @@ pub fn create_exchange(
     id: &str,
     api_key: &str,
     api_secret: &str,
-    passphrase: Option<&str>,
+    _passphrase: Option<&str>,
     proxy_url: Option<&str>,
-    market_type: &types::MarketType,
+    market_type: &MarketType,
 ) -> Result<Box<dyn Exchange>, ExchangeError> {
     match id.to_lowercase().as_str() {
         "binance" => Ok(Box::new(adapter::binance::BinanceExchange::new(
             api_key, api_secret, proxy_url, market_type,
         )?)),
-        "okx" => {
-            let pass = passphrase
-                .ok_or_else(|| ExchangeError::InvalidRequest("OKX requires a passphrase".into()))?;
-            Ok(Box::new(adapter::okx::OkxExchange::new(
-                api_key, api_secret, pass, proxy_url, market_type,
-            )?))
-        }
-        "bybit" => Ok(Box::new(adapter::bybit::BybitExchange::new(
-            api_key, api_secret, proxy_url, market_type,
-        )?)),
+        // "okx" => { ... } // TODO: future support
+        // "bybit" => { ... } // TODO: future support
         _ => Err(ExchangeError::NotSupported(format!(
-            "Exchange '{}' is not supported. Supported: binance, okx, bybit", id
+            "Exchange '{}' is not supported. Supported: binance", id
         ))),
     }
 }

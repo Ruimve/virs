@@ -1,55 +1,54 @@
-import { type Component, ErrorBoundary } from 'solid-js'
+import { type Component, ErrorBoundary, lazy } from 'solid-js'
 import { Route, Router, Navigate } from '@solidjs/router'
 import { MarketProvider } from './lib/market-context'
 import { PaperProvider } from './lib/paper-context'
-import Login from './pages/Login'
-import Layout from './components/Layout'
-import Dashboard from './pages/Dashboard'
-import Market from './pages/Market'
-import GridPage from './pages/ai-trade/GridPage'
-import GridDetailPage from './pages/ai-trade/GridDetailPage'
-import AutoPage from './pages/ai-trade/AutoPage'
-import AutoDetailPage from './pages/ai-trade/AutoDetailPage'
-import Trades from './pages/Trades'
-import Credentials from './pages/Credentials'
-import AiCredentials from './pages/AiCredentials'
-import Users from './pages/Users'
+import Loading from './pages/loading'
+import Login from './pages/login'
+
+// Lazy-loaded pages
+const ServiceCheck = lazy(() => import('./pages/service-check'))
+const SelectBotType = lazy(() => import('./pages/setup/select-bot-type'))
+const ConfigureLlm = lazy(() => import('./pages/setup/configure-llm'))
+const SelectExchange = lazy(() => import('./pages/setup/select-exchange'))
+const ConfigureParams = lazy(() => import('./pages/setup/configure-params'))
+const ReviewLaunch = lazy(() => import('./pages/setup/review-launch'))
+const HealthCheck = lazy(() => import('./pages/setup/health-check'))
+const GridDetailPage = lazy(() => import('./pages/ai-trade/grid-detail'))
+const AutoDetailPage = lazy(() => import('./pages/ai-trade/auto-detail'))
 
 const App: Component = () => {
   return (
     <ErrorBoundary fallback={(err) => (
-      <div class="min-h-screen flex items-center justify-center bg-gray-50">
+      <div class="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
         <div class="text-center p-8">
-          <div class="text-6xl mb-4">⚠️</div>
-          <h1 class="text-xl font-semibold text-gray-800 mb-2">页面加载出错</h1>
-          <p class="text-gray-500 mb-4">{err.message}</p>
+          <h1 class="text-xl font-semibold text-white/80 mb-2">Error</h1>
+          <p class="text-white/40 mb-4">{err.message}</p>
           <button
-            class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+            class="px-4 py-2 bg-indigo-500/80 text-white rounded-lg hover:bg-indigo-500 text-sm"
             onClick={() => window.location.reload()}
           >
-            刷新页面
+            Reload
           </button>
         </div>
       </div>
     )}>
       <MarketProvider>
         <PaperProvider>
-        <Router root={Layout}>
-          <Route path="/login" component={Login} />
-          <Route path="/dashboard" component={Dashboard} />
-          <Route path="/market" component={Market} />
-          <Route path="/grid" component={() => <Navigate href="/ai-trade/grid" />} />
-          <Route path="/ai-trade/grid" component={GridPage} />
-          <Route path="/ai-trade/grid/:id" component={GridDetailPage} />
-          <Route path="/ai-trade/auto" component={AutoPage} />
-          <Route path="/ai-trade/auto/:id" component={AutoDetailPage} />
-          <Route path="/trades" component={Trades} />
-          <Route path="/credentials" component={Credentials} />
-        <Route path="/ai-credentials" component={AiCredentials} />
-        <Route path="/users" component={Users} />
-          <Route path="/" component={() => <Navigate href="/dashboard" />} />
-          <Route path="*" component={() => <Navigate href="/dashboard" />} />
-        </Router>
+          <Router>
+            <Route path="/" component={Loading} />
+            <Route path="/login" component={Login} />
+            <Route path="/check" component={ServiceCheck} />
+            <Route path="/setup/bot-type" component={SelectBotType} />
+            <Route path="/setup/llm" component={ConfigureLlm} />
+            <Route path="/setup/exchange" component={SelectExchange} />
+            <Route path="/setup/params" component={ConfigureParams} />
+            <Route path="/setup/review" component={ReviewLaunch} />
+            <Route path="/setup/health" component={HealthCheck} />
+            <Route path="/trade/grid/:id" component={GridDetailPage} />
+            <Route path="/trade/auto/:id" component={AutoDetailPage} />
+            <Route path="/trade" component={() => <Navigate href="/" />} />
+            <Route path="*" component={() => <Navigate href="/" />} />
+          </Router>
         </PaperProvider>
       </MarketProvider>
     </ErrorBoundary>

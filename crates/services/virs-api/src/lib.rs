@@ -10,4 +10,4 @@ pub mod ws;
 
 // Re-export
 pub use router::build_router;
-pub use state::{AppState, WsBroadcaster};
+pub use state::{AppState, EngineManager, WsBroadcaster};

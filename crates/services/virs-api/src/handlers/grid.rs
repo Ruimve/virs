@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 
-use crate::handlers::auth::{extract_user_id, ApiResponse};
+use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
 pub async fn create_bot(
@@ -25,11 +25,20 @@ pub async fn create_bot(
     let quantity_per_grid = body["quantity_per_grid"].as_f64().unwrap_or(10.0);
     let leverage = body["leverage"].as_i64().unwrap_or(5) as i32;
     let name = body["name"].as_str().unwrap_or("Grid Bot");
+    let paper_mode = body["paper_mode"].as_bool().unwrap_or(true);
 
     if symbol.is_empty() || exchange.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::err("symbol and exchange are required")),
+        ));
+    }
+
+    // Ensure engines are started (lazy init on first bot creation)
+    if let Err(e) = state.engine_manager.ensure_started(paper_mode).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::err(format!("Failed to start engines: {}", e))),
         ));
     }
 
@@ -213,7 +222,7 @@ pub async fn start_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
-    if let Some(ref tx) = state.grid_cmd_tx {
+    if let Some(tx) = state.engine_manager.grid_cmd_tx() {
         let _ = tx.send(virs_bot::grid::types::GridCommand::StartBot { bot_id: id }).await;
     }
     Ok(Json(ApiResponse::ok(serde_json::json!({"started": true}))))
@@ -223,7 +232,7 @@ pub async fn stop_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
-    if let Some(ref tx) = state.grid_cmd_tx {
+    if let Some(tx) = state.engine_manager.grid_cmd_tx() {
         let _ = tx.send(virs_bot::grid::types::GridCommand::StopBot { bot_id: id }).await;
     }
     Ok(Json(ApiResponse::ok(serde_json::json!({"stopped": true}))))
@@ -233,9 +242,15 @@ pub async fn delete_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
-    if let Some(ref tx) = state.grid_cmd_tx {
+    if let Some(tx) = state.engine_manager.grid_cmd_tx() {
         let _ = tx.send(virs_bot::grid::types::GridCommand::DeleteBot { bot_id: id, close_position: true }).await;
     }
+    // Delete from database
+    sqlx::query(r#"DELETE FROM qd_grid_bots WHERE id = $1"#)
+        .bind(id)
+        .execute(&state.db_pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e)))))?;
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
 
@@ -313,38 +328,4 @@ pub async fn get_analysis_logs(
         }))),
         Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
     }
-}
-
-pub async fn paper_status(
-    State(state): State<AppState>,
-) -> Json<ApiResponse> {
-    Json(ApiResponse::ok(serde_json::json!({
-        "paper_mode": state.paper_mode,
-    })))
-}
-
-pub async fn paper_enable(
-    State(state): State<AppState>,
-) -> Json<ApiResponse> {
-    state.ws_broadcaster.broadcast(serde_json::json!({
-        "type": "paper_mode",
-        "enabled": true,
-    }));
-    Json(ApiResponse::ok(serde_json::json!({
-        "paper_mode": true,
-        "message": "Paper mode is configured at startup. Restart the server with PAPER_MODE=true to enable.",
-    })))
-}
-
-pub async fn paper_disable(
-    State(state): State<AppState>,
-) -> Json<ApiResponse> {
-    state.ws_broadcaster.broadcast(serde_json::json!({
-        "type": "paper_mode",
-        "enabled": false,
-    }));
-    Json(ApiResponse::ok(serde_json::json!({
-        "paper_mode": false,
-        "message": "Paper mode is configured at startup. Restart the server with PAPER_MODE=false to disable.",
-    })))
 }

@@ -2,38 +2,47 @@
 
 use axum::{
     extract::State,
+    http::{HeaderMap, StatusCode},
     Json,
 };
 
-use crate::handlers::auth::ApiResponse;
+use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
 pub async fn ai_status(
     State(state): State<AppState>,
-) -> Json<ApiResponse> {
-    // Check if any AI credentials are configured
-    let has_keys: bool = sqlx::query_scalar::<_, i64>(
-        r#"SELECT COUNT(*) FROM qd_ai_credentials"#,
-    )
-    .fetch_one(&state.db_pool)
-    .await
-    .unwrap_or(0) > 0;
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
 
-    Json(ApiResponse::ok(serde_json::json!({
-        "available": has_keys,
-        "message": if has_keys { "AI service available" } else { "No AI credentials configured" }
-    })))
+    // Check if any AI credentials are configured
+    let rows: Vec<String> = sqlx::query_scalar(
+        r#"SELECT DISTINCT provider FROM qd_ai_credentials"#,
+    )
+    .fetch_all(&state.db_pool)
+    .await
+    .unwrap_or_default();
+
+    let configured = !rows.is_empty();
+
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "configured": configured,
+        "providers": rows,
+    }))))
 }
 
 pub async fn optimize(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> Json<ApiResponse> {
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
+
     let symbol = body["symbol"].as_str().unwrap_or("");
     let exchange = body["exchange"].as_str().unwrap_or("");
 
     if symbol.is_empty() {
-        return Json(ApiResponse::err("symbol is required"));
+        return Ok(Json(ApiResponse::err("symbol is required")));
     }
 
     // Fetch market data for context
@@ -54,20 +63,23 @@ Respond in JSON format with:
     );
 
     match call_llm_with_fallback(&state, &system_prompt, &user_prompt).await {
-        Ok(result) => Json(ApiResponse::ok(result)),
-        Err(e) => Json(ApiResponse::err(format!("AI optimization failed: {}", e))),
+        Ok(result) => Ok(Json(ApiResponse::ok(result))),
+        Err(e) => Ok(Json(ApiResponse::err(format!("AI optimization failed: {}", e)))),
     }
 }
 
 pub async fn explain(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> Json<ApiResponse> {
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
+
     let symbol = body["symbol"].as_str().unwrap_or("");
     let question = body["question"].as_str().unwrap_or("");
 
     if symbol.is_empty() || question.is_empty() {
-        return Json(ApiResponse::err("symbol and question are required"));
+        return Ok(Json(ApiResponse::err("symbol and question are required")));
     }
 
     let system_prompt = r#"You are a trading education assistant. Explain trading concepts and market conditions clearly.
@@ -84,21 +96,24 @@ Respond in JSON format with:
     );
 
     match call_llm_with_fallback(&state, &system_prompt, &user_prompt).await {
-        Ok(result) => Json(ApiResponse::ok(result)),
-        Err(e) => Json(ApiResponse::err(format!("AI explain failed: {}", e))),
+        Ok(result) => Ok(Json(ApiResponse::ok(result))),
+        Err(e) => Ok(Json(ApiResponse::err(format!("AI explain failed: {}", e)))),
     }
 }
 
 pub async fn recommend_strategy(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> Json<ApiResponse> {
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
+
     let symbol = body["symbol"].as_str().unwrap_or("");
     let exchange = body["exchange"].as_str().unwrap_or("");
     let risk_tolerance = body["risk_tolerance"].as_str().unwrap_or("medium");
 
     if symbol.is_empty() {
-        return Json(ApiResponse::err("symbol is required"));
+        return Ok(Json(ApiResponse::err("symbol is required")));
     }
 
     let current_price = fetch_price_from_kline(&state, exchange, symbol).await;
@@ -124,8 +139,8 @@ Respond in JSON format with:
     );
 
     match call_llm_with_fallback(&state, &system_prompt, &user_prompt).await {
-        Ok(result) => Json(ApiResponse::ok(result)),
-        Err(e) => Json(ApiResponse::err(format!("AI recommend failed: {}", e))),
+        Ok(result) => Ok(Json(ApiResponse::ok(result))),
+        Err(e) => Ok(Json(ApiResponse::err(format!("AI recommend failed: {}", e)))),
     }
 }
 

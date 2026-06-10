@@ -1,38 +1,31 @@
 import { createSignal } from 'solid-js'
-import type { UserInfo } from './api'
-import { getUserInfo } from './api'
-
-const TOKEN_KEY = 'qd_token'
+import type { UserInfo } from './api/types'
+import { getUserInfo } from './api/auth'
+import { getToken, removeToken } from './api/client'
 
 const [user, setUser] = createSignal<UserInfo | null>(null)
 const [loading, setLoading] = createSignal(false)
 
-// 检查 token 是否存在
 export function isLoggedIn(): boolean {
-  return !!localStorage.getItem(TOKEN_KEY)
+  return !!getToken()
 }
 
-// 获取当前用户信息
 export function getUser(): UserInfo | null {
   return user()
 }
 
-// 获取用户信号
 export function getUserSignal() {
   return user
 }
 
-// 获取加载状态
 export function getLoading() {
   return loading
 }
 
-// 检查是否管理员
 export function isAdmin(): boolean {
   return user()?.role === 'admin'
 }
 
-// 获取用户信息 (异步)
 export async function fetchUser(): Promise<boolean> {
   if (!isLoggedIn()) {
     setUser(null)
@@ -47,7 +40,7 @@ export async function fetchUser(): Promise<boolean> {
       return true
     } else {
       setUser(null)
-      localStorage.removeItem(TOKEN_KEY)
+      removeToken()
       return false
     }
   } catch {
@@ -58,7 +51,6 @@ export async function fetchUser(): Promise<boolean> {
   }
 }
 
-// 路由守卫 - 未登录跳转 /login
 export function requireAuth(): boolean {
   if (!isLoggedIn()) {
     window.location.href = '/login'
@@ -67,7 +59,6 @@ export function requireAuth(): boolean {
   return true
 }
 
-// 初始化认证状态
 export function initAuth(): void {
   if (isLoggedIn()) {
     fetchUser()

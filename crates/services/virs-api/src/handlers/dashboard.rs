@@ -2,15 +2,18 @@
 
 use axum::{
     extract::State,
+    http::{HeaderMap, StatusCode},
     Json,
 };
 
-use crate::handlers::auth::ApiResponse;
+use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
 pub async fn dashboard_summary(
     State(state): State<AppState>,
-) -> Json<ApiResponse> {
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
     let grid_total: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_grid_bots"#)
         .fetch_one(&state.db_pool)
         .await
@@ -53,7 +56,7 @@ pub async fn dashboard_summary(
     let bot_total = grid_total + auto_total;
     let bot_running = grid_running + auto_running;
 
-    Json(ApiResponse::ok(serde_json::json!({
+    Ok(Json(ApiResponse::ok(serde_json::json!({
         "bots": {
             "total": bot_total,
             "running": bot_running,
@@ -63,14 +66,16 @@ pub async fn dashboard_summary(
             "total": trade_total,
             "total_pnl": grid_pnl + auto_pnl,
         },
-        "exchanges": ["binance", "bybit", "okx"],
-        "paper_mode": state.paper_mode,
-    })))
+        "exchanges": ["binance"],
+        "paper_mode": state.engine_manager.paper_mode(),
+    }))))
 }
 
 pub async fn list_positions(
     State(state): State<AppState>,
-) -> Json<ApiResponse> {
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
     // Grid bots with open trades
     let grid_rows = sqlx::query_as::<_, (String, String, String, f64, f64, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT symbol, exchange, open_side, open_price, open_quantity, opened_at
@@ -118,12 +123,14 @@ pub async fn list_positions(
         }
     }
 
-    Json(ApiResponse::ok(serde_json::json!({ "positions": positions })))
+    Ok(Json(ApiResponse::ok(serde_json::json!({ "positions": positions }))))
 }
 
 pub async fn list_trades(
     State(state): State<AppState>,
-) -> Json<ApiResponse> {
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
     // Grid trades - split into two queries to avoid FromRow tuple limit
     let grid_open = sqlx::query_as::<_, (String, String, i32, String, f64, f64, chrono::DateTime<chrono::Utc>, f64, f64, String)>(
         r#"SELECT symbol, exchange, grid_level, open_side, open_price, open_quantity, opened_at, pnl, pnl_pct, status
@@ -223,12 +230,14 @@ pub async fn list_trades(
         b_time.cmp(a_time)
     });
 
-    Json(ApiResponse::ok(serde_json::json!({ "items": trades })))
+    Ok(Json(ApiResponse::ok(serde_json::json!({ "items": trades }))))
 }
 
 pub async fn list_pending_orders(
     State(state): State<AppState>,
-) -> Json<ApiResponse> {
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
     let rows = sqlx::query_as::<_, (String, String, String, Option<f64>, f64, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT symbol, side, order_type, price, amount, created_at
            FROM pending_orders WHERE status = 'pending' ORDER BY created_at DESC LIMIT 100"#,
@@ -237,7 +246,7 @@ pub async fn list_pending_orders(
     .await;
 
     match rows {
-        Ok(orders) => Json(ApiResponse::ok(serde_json::json!({
+        Ok(orders) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "orders": orders.iter().map(|(symbol, side, order_type, price, amount, created_at)| {
                 serde_json::json!({
                     "symbol": symbol,
@@ -248,7 +257,7 @@ pub async fn list_pending_orders(
                     "created_at": created_at.to_rfc3339(),
                 })
             }).collect::<Vec<_>>()
-        }))),
-        Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
+        })))),
+        Err(e) => Ok(Json(ApiResponse::err(format!("Database error: {}", e)))),
     }
 }

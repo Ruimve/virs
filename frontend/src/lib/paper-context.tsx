@@ -16,8 +16,8 @@ export function PaperProvider(props: { children: JSX.Element }) {
 
   const refresh = async () => {
     try {
-      const res = await api.get<{ enabled: boolean; pending_count: number }>('/paper/status')
-      if (res.success && res.data) setEnabled(res.data.enabled)
+      const res = await api.get<{ paper_mode: boolean }>('/system/paper/status')
+      if (res.success && res.data) setEnabled(res.data.paper_mode)
     } catch {
       // ignore
     }
@@ -28,10 +28,10 @@ export function PaperProvider(props: { children: JSX.Element }) {
     setLoading(true)
     try {
       if (enabled()) {
-        await api.post('/paper/disable')
+        await api.post('/system/paper/disable')
         setEnabled(false)
       } else {
-        await api.post('/paper/enable')
+        await api.post('/system/paper/enable')
         setEnabled(true)
       }
     } catch {

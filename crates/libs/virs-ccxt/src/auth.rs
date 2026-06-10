@@ -8,8 +8,8 @@
 //!
 //! Exchange-specific signers are located in their respective adapter modules:
 //! - `adapter/binance/mod.rs` — BinanceSigner
-//! - `adapter/okx/mod.rs` — OkxSigner
-//! - `adapter/bybit/mod.rs` — BybitSigner
+//! - `adapter/okx/mod.rs` — OkxSigner  (TODO: future support)
+//! - `adapter/bybit/mod.rs` — BybitSigner (TODO: future support)
 
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -56,6 +56,15 @@ pub trait Signer: Send + Sync {
         path: &str,
         body: &mut serde_json::Value,
     ) -> Result<SignedRequest, ExchangeError>;
+
+    /// Sign a PUT request (defaults to same logic as POST).
+    fn sign_put(
+        &self,
+        path: &str,
+        body: &mut serde_json::Value,
+    ) -> Result<SignedRequest, ExchangeError> {
+        self.sign_post(path, body)
+    }
 }
 
 // ============================================================

@@ -1,6 +1,6 @@
 import { createSignal, For, Show, onMount, onCleanup } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
-import { api } from '../../lib/api';
+import { api } from '../../../lib/api';
 
 interface AutoBot {
   id: string;
@@ -96,7 +96,7 @@ export default function AutoDetailPage() {
       if (action === 'delete') {
         if (!confirm('确定删除此机器人？将平仓所有持仓。')) return;
         await api.del(`/auto/${params.id}/delete`);
-        navigate('/ai-trade/auto');
+        navigate('/setup/bot-type', { replace: true });
         return;
       }
       await api.post(`/auto/${params.id}/${action}`);
@@ -171,10 +171,10 @@ export default function AutoDetailPage() {
             }>
               <div class="text-gray-400 text-sm">{error() || '机器人不存在或加载失败'}</div>
               <button
-                onClick={() => navigate('/ai-trade/auto')}
+                onClick={() => navigate('/setup/bot-type', { replace: true })}
                 class="px-4 py-2 text-xs font-medium border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors"
               >
-                返回列表
+                创建新机器人
               </button>
             </Show>
           </div>
@@ -187,7 +187,7 @@ export default function AutoDetailPage() {
                 <div class="flex items-center justify-between mb-6">
                   <div class="flex items-center gap-3">
                     <button
-                      onClick={() => navigate('/ai-trade/auto')}
+                      onClick={() => navigate('/setup/bot-type', { replace: true })}
                       class="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
                     >
                       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

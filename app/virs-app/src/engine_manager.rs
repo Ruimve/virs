@@ -1,0 +1,341 @@
+//! EngineManager — lazy initialization of trading engines.
+//!
+//! Engines (Position, Grid, Auto) are NOT started at application boot.
+//! Instead, they are started when the first bot is created after the wizard,
+//! using the exchange credentials provided by the user.
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
+
+use async_trait::async_trait;
+use tokio::sync::{mpsc, Mutex};
+use tracing::info;
+
+use virs_api::EngineManager;
+use virs_bot::auto::types::AutoCommand;
+use virs_bot::auto::types::AutoEvent;
+use virs_bot::grid::types::GridCommand;
+use virs_config::AiConfig;
+use virs_exchange::{CcxtExchangeAdapter, ExchangeRegistry, PaperExchangeAdapter};
+use virs_market::KlineEngine;
+use virs_position::{Persistence as PePersistence, PositionEngine};
+use virs_types::bot::{OrderEvent, PriceProvider};
+use virs_types::enums::MarketType;
+use virs_types::exchange_pe::ExchangePe;
+use virs_types::position::EngineCommand;
+
+use crate::adapters::*;
+
+/// Inner state — populated on first `ensure_started` call.
+struct EngineState {
+    paper_mode: bool,
+    grid_cmd_tx: mpsc::Sender<GridCommand>,
+    auto_cmd_tx: mpsc::Sender<AutoCommand>,
+}
+
+/// Application-level engine manager.
+pub struct AppEngineManager {
+    db_pool: sqlx::PgPool,
+    exchange_registry: Arc<ExchangeRegistry>,
+    kline_engine: Arc<KlineEngine>,
+    encryption_key: String,
+    ai_config: AiConfig,
+    ws_broadcaster: Arc<virs_api::WsBroadcaster>,
+    #[allow(dead_code)]
+    proxy: Option<String>,
+
+    started: AtomicBool,
+    /// Init lock — ensures only one caller runs the init logic.
+    init_lock: Mutex<()>,
+    /// Cached state — set once after init, readable without async.
+    state: OnceLock<EngineState>,
+}
+
+impl AppEngineManager {
+    pub fn new(
+        db_pool: sqlx::PgPool,
+        exchange_registry: Arc<ExchangeRegistry>,
+        kline_engine: Arc<KlineEngine>,
+        encryption_key: String,
+        ai_config: AiConfig,
+        ws_broadcaster: Arc<virs_api::WsBroadcaster>,
+        proxy: Option<String>,
+    ) -> Self {
+        Self {
+            db_pool,
+            exchange_registry,
+            kline_engine,
+            encryption_key,
+            ai_config,
+            ws_broadcaster,
+            proxy,
+            started: AtomicBool::new(false),
+            init_lock: Mutex::new(()),
+            state: OnceLock::new(),
+        }
+    }
+}
+
+#[async_trait]
+impl EngineManager for AppEngineManager {
+    async fn ensure_started(&self, paper_mode: bool) -> Result<(), String> {
+        // Fast path — already started
+        if self.started.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+
+        let _guard = self.init_lock.lock().await;
+
+        // Double-check after acquiring lock
+        if self.state.get().is_some() {
+            return Ok(());
+        }
+
+        info!("Starting trading engines (paper_mode={})...", paper_mode);
+
+        // ── Position Engine ──
+        let pe_exchange: Box<dyn ExchangePe> = if paper_mode {
+            let initial_balance = {
+                let temp_adapter = CcxtExchangeAdapter::new(self.exchange_registry.clone());
+                match temp_adapter.get_balance().await {
+                    Ok(b) => {
+                        info!(total = b.total, free = b.free, "Paper mode: fetched real balance as initial capital");
+                        b.total
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Paper mode: failed to fetch real balance, using 0");
+                        0.0
+                    }
+                }
+            };
+            Box::new(
+                PaperExchangeAdapter::new("paper", MarketType::Perpetual, initial_balance)
+                    .with_exchange_registry(self.exchange_registry.clone()),
+            )
+        } else {
+            info!("Position Engine: Real exchange mode");
+            Box::new(CcxtExchangeAdapter::new(self.exchange_registry.clone()))
+        };
+
+        let pe_persistence = Box::new(PePersistence::new(self.db_pool.clone()));
+        let pe_config = virs_types::position::EngineConfig::default();
+
+        let mut position_engine = PositionEngine::new(pe_config, pe_exchange, pe_persistence);
+        let pe_cmd_tx = position_engine.command_sender();
+        let grid_pe_event_rx = position_engine.subscribe_events();
+        let auto_pe_event_rx = position_engine.subscribe_events();
+        let pe_exchange_ref = position_engine.exchange();
+
+        tokio::spawn(async move {
+            if let Err(e) = position_engine.run().await {
+                tracing::error!(error = %e, "Position Engine run failed");
+            }
+        });
+        info!("Position Engine started (paper={})", paper_mode);
+
+        // ── Grid Engine ──
+        let (grid_event_tx, _grid_event_rx) = tokio::sync::broadcast::channel(256);
+
+        let grid_store = Arc::new(PgGridStore::new(self.db_pool.clone()));
+        let grid_price_provider = Arc::new(ExchangePriceProvider::new(self.exchange_registry.clone())
+            .with_kline_engine(self.kline_engine.clone())
+            .with_db(self.db_pool.clone(), self.encryption_key.clone()));
+        let grid_market_data_provider = Arc::new(ExchangeMarketDataProvider::new(self.exchange_registry.clone())
+            .with_kline_engine(self.kline_engine.clone())
+            .with_pe_exchange(pe_exchange_ref.clone()));
+        let grid_order_executor = Arc::new(PeOrderExecutor::new(
+            pe_cmd_tx.clone(),
+            grid_event_tx.clone(),
+            grid_pe_event_rx,
+        ));
+        let grid_credential_store: Arc<dyn virs_types::bot::CredentialStore> = Arc::new(PgCredentialStore::new(
+            self.db_pool.clone(),
+            virs_utils::crypto::derive_key(&self.encryption_key),
+        ));
+        let grid_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> = Arc::new(DefaultLlmResolver::new(self.ai_config.clone()));
+        let grid_ai_service = Arc::new(virs_bot::grid::ai::GridAiService::new(
+            grid_llm_resolver,
+            grid_credential_store,
+        ));
+
+        let (mut grid_engine, grid_cmd_tx, _grid_event_broadcast) = virs_bot::grid::GridEngine::new(
+            grid_store,
+            grid_ai_service,
+            grid_price_provider.clone(),
+            grid_order_executor,
+            grid_market_data_provider,
+            grid_event_tx.clone(),
+        );
+
+        // Paper mode price tick
+        if paper_mode {
+            let price_provider_for_paper: Arc<dyn PriceProvider> = grid_price_provider.clone();
+            let kline_engine_for_paper = self.kline_engine.clone();
+            let pe_cmd_tx_for_tick = pe_cmd_tx.clone();
+            tokio::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(3));
+                loop {
+                    tick.tick().await;
+                    for (exchange, symbol, _market_type) in kline_engine_for_paper.subscribed_symbols() {
+                        if let Some(price) = price_provider_for_paper.get_price(&exchange, &symbol, "perpetual").await {
+                            let _ = pe_cmd_tx_for_tick.send(EngineCommand::PriceTick {
+                                symbol: symbol.clone(),
+                                price,
+                            }).await;
+                        }
+                    }
+                }
+            });
+        }
+
+        tokio::spawn(async move {
+            grid_engine.run().await;
+        });
+        info!("Grid engine started");
+
+        // ── Auto Trade Engine ──
+        let auto_store = Arc::new(PgAutoStore::new(self.db_pool.clone()));
+        let auto_price_provider = Arc::new(AutoExchangePriceProvider::new(self.exchange_registry.clone())
+            .with_kline_engine(self.kline_engine.clone())
+            .with_db(self.db_pool.clone(), self.encryption_key.clone()));
+        let auto_market_data_provider = Arc::new(AutoExchangeMarketDataProvider::new(self.exchange_registry.clone())
+            .with_kline_engine(self.kline_engine.clone())
+            .with_db(self.db_pool.clone(), self.encryption_key.clone())
+            .with_pe_exchange(pe_exchange_ref.clone()));
+        let (auto_order_event_tx, _) = tokio::sync::broadcast::channel::<OrderEvent>(256);
+        let auto_order_executor = Arc::new(PeOrderExecutor::new(
+            pe_cmd_tx.clone(),
+            auto_order_event_tx.clone(),
+            auto_pe_event_rx,
+        ));
+        let auto_credential_store: Arc<dyn virs_types::bot::CredentialStore> = Arc::new(PgCredentialStore::new(
+            self.db_pool.clone(),
+            virs_utils::crypto::derive_key(&self.encryption_key),
+        ));
+        let auto_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> = Arc::new(DefaultLlmResolver::new(self.ai_config.clone()));
+        let auto_ai_service = Arc::new(virs_bot::auto::ai::AutoAiService::new(
+            auto_llm_resolver,
+            auto_credential_store,
+        ));
+
+        let (mut auto_engine, auto_cmd_tx, auto_event_broadcast) = virs_bot::auto::AutoEngine::new(
+            auto_store,
+            auto_ai_service,
+            auto_price_provider,
+            auto_order_executor,
+            auto_market_data_provider,
+            auto_order_event_tx.clone(),
+        );
+
+        // Bridge AutoEvent -> WsBroadcaster
+        {
+            let mut auto_event_rx = auto_event_broadcast.subscribe();
+            let ws_broadcaster = self.ws_broadcaster.clone();
+            tokio::spawn(async move {
+                loop {
+                    match auto_event_rx.recv().await {
+                        Ok(event) => {
+                            let ws_json = match &event {
+                                AutoEvent::PriceUpdate {
+                                    bot_id, symbol, side, entry_price, position_size,
+                                    current_price, unrealized_pnl, total_pnl, liquidation_price,
+                                } => Some(serde_json::json!({
+                                    "type": "position_pnl",
+                                    "bot_id": bot_id.to_string(),
+                                    "symbol": symbol,
+                                    "side": side,
+                                    "entry_price": entry_price,
+                                    "position_size": position_size,
+                                    "current_price": current_price,
+                                    "unrealized_pnl": unrealized_pnl,
+                                    "total_pnl": total_pnl,
+                                    "liquidation_price": liquidation_price,
+                                })),
+                                AutoEvent::PositionOpened { bot_id, side, price, quantity } => {
+                                    Some(serde_json::json!({
+                                        "type": "position",
+                                        "bot_id": bot_id.to_string(),
+                                        "side": side,
+                                        "entry_price": price,
+                                        "size": quantity,
+                                        "action": "opened",
+                                    }))
+                                }
+                                AutoEvent::PositionClosed { bot_id, side, price, pnl } => {
+                                    Some(serde_json::json!({
+                                        "type": "trade",
+                                        "bot_id": bot_id.to_string(),
+                                        "side": side,
+                                        "price": price,
+                                        "pnl": pnl,
+                                    }))
+                                }
+                                AutoEvent::BotStarted { bot_id } => {
+                                    Some(serde_json::json!({
+                                        "type": "bot_status",
+                                        "bot_id": bot_id.to_string(),
+                                        "status": "running",
+                                    }))
+                                }
+                                AutoEvent::BotStopped { bot_id, reason } => {
+                                    Some(serde_json::json!({
+                                        "type": "bot_status",
+                                        "bot_id": bot_id.to_string(),
+                                        "status": reason,
+                                    }))
+                                }
+                                AutoEvent::BotError { bot_id, error } => {
+                                    Some(serde_json::json!({
+                                        "type": "notification",
+                                        "level": "error",
+                                        "message": format!("Bot {}: {}", bot_id, error),
+                                    }))
+                                }
+                                _ => None,
+                            };
+                            if let Some(json) = ws_json {
+                                ws_broadcaster.broadcast(json);
+                            }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            tracing::warn!(lagged = n, "Auto WS event bridge lagged");
+                        }
+                    }
+                }
+            });
+        }
+
+        tokio::spawn(async move {
+            auto_engine.run().await;
+        });
+        info!("Auto trade engine started");
+
+        // Store state (OnceLock — set once, then readable synchronously)
+        let _ = self.state.set(EngineState {
+            paper_mode,
+            grid_cmd_tx,
+            auto_cmd_tx,
+        });
+        self.started.store(true, Ordering::SeqCst);
+
+        info!("All trading engines started successfully");
+        Ok(())
+    }
+
+    fn grid_cmd_tx(&self) -> Option<mpsc::Sender<GridCommand>> {
+        self.state.get().map(|s| s.grid_cmd_tx.clone())
+    }
+
+    fn auto_cmd_tx(&self) -> Option<mpsc::Sender<AutoCommand>> {
+        self.state.get().map(|s| s.auto_cmd_tx.clone())
+    }
+
+    fn is_started(&self) -> bool {
+        self.started.load(Ordering::SeqCst)
+    }
+
+    fn paper_mode(&self) -> bool {
+        self.state.get().map(|s| s.paper_mode).unwrap_or(false)
+    }
+}

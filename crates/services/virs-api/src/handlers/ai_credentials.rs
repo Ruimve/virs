@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 
-use crate::handlers::auth::{extract_user_id, ApiResponse};
+use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
 pub async fn list_credentials(
@@ -70,7 +70,9 @@ pub async fn save_credential(
 
     sqlx::query(
         r#"INSERT INTO qd_ai_credentials (id, user_id, provider, encrypted_api_key, label, is_default, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW())"#,
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())
+           ON CONFLICT (user_id, provider)
+           DO UPDATE SET encrypted_api_key = $4, label = $5, is_default = $6, updated_at = NOW()"#,
     )
     .bind(id)
     .bind(user_id)
@@ -106,59 +108,194 @@ pub async fn delete_credential(
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
 
+/// GET /api/ai-credentials/test — test LLM connectivity using saved credentials.
 pub async fn test_credential(
     State(state): State<AppState>,
-    Json(body): Json<serde_json::Value>,
-) -> Json<ApiResponse> {
-    let provider = body["provider"].as_str().unwrap_or("");
-    let api_key = body["api_key"].as_str().unwrap_or("");
-    let model = body["model"].as_str().unwrap_or("");
-    let base_url = body["base_url"].as_str().unwrap_or("");
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let user_id = extract_user_id(&headers)?;
 
-    if provider.is_empty() || api_key.is_empty() {
-        return Json(ApiResponse::err("provider and api_key are required"));
-    }
+    // Decrypt saved credential
+    let row: Option<(String, String)> = sqlx::query_as(
+        r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials WHERE user_id = $1 AND is_default = true ORDER BY created_at DESC LIMIT 1"#,
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db_pool)
+    .await
+    .unwrap_or(None);
 
-    let resolved_base_url = if base_url.is_empty() {
-        match provider {
-            "deepseek" => "https://api.deepseek.com",
-            "openai" => "https://api.openai.com/v1",
-            "openrouter" => "https://openrouter.ai/api/v1",
-            _ => return Json(ApiResponse::err(format!("Unknown provider: {}", provider))),
+    let (provider, api_key) = match row {
+        Some((p, enc_key)) => {
+            let derived_key = virs_utils::crypto::derive_key(&state.encryption_key);
+            let key = virs_utils::crypto::decrypt(&enc_key, &derived_key)
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err("Failed to decrypt API key"))))?;
+            (p, key)
         }
-    } else {
-        &base_url
+        None => return Ok(Json(ApiResponse::ok(serde_json::json!({
+            "connected": false,
+            "message": "No AI credentials saved. Please save credentials first.",
+        })))),
     };
 
-    let resolved_model = if model.is_empty() {
-        match provider {
-            "deepseek" => "deepseek-chat",
-            "openai" => "gpt-4o",
-            "openrouter" => "deepseek/deepseek-chat",
-            _ => "deepseek-chat",
-        }
-    } else {
-        &model
+    let base_url = match provider.as_str() {
+        "deepseek" => "https://api.deepseek.com",
+        "openai" => "https://api.openai.com/v1",
+        "openrouter" => "https://openrouter.ai/api/v1",
+        _ => return Ok(Json(ApiResponse::err(format!("Unknown provider: {}", provider)))),
     };
 
-    // Test by making a simple LLM API call
+    let model = match provider.as_str() {
+        "deepseek" => "deepseek-chat",
+        "openai" => "gpt-4o",
+        "openrouter" => "deepseek/deepseek-chat",
+        _ => "deepseek-chat",
+    };
+
     let http_client = &state.http_client;
     match virs_bot::common::ai_client::call_llm_api(
         http_client,
-        api_key,
-        resolved_base_url,
-        resolved_model,
-        "You are a test assistant.",
-        "Reply with: OK",
-        provider,
+        &api_key,
+        base_url,
+        model,
+        "You are a test assistant. Always respond in json format.",
+        "Return a json object with key \"status\" set to \"ok\".",
+        &provider,
     ).await {
-        Ok(_) => Json(ApiResponse::ok(serde_json::json!({
+        Ok(_) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "connected": true,
-            "message": format!("Successfully connected to {} ({})", provider, resolved_model),
-        }))),
-        Err(e) => Json(ApiResponse::ok(serde_json::json!({
+            "message": format!("Successfully connected to {} ({})", provider, model),
+        })))),
+        Err(e) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "connected": false,
             "message": format!("Connection test failed: {}", e),
-        }))),
+        })))),
+    }
+}
+
+/// GET /api/ai-credentials/models — fetch available models from LLM provider using saved credentials.
+pub async fn fetch_models(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let user_id = extract_user_id(&headers)?;
+
+    let row: Option<(String, String)> = sqlx::query_as(
+        r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials WHERE user_id = $1 AND is_default = true ORDER BY created_at DESC LIMIT 1"#,
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db_pool)
+    .await
+    .unwrap_or(None);
+
+    let (provider, api_key) = match row {
+        Some((p, enc_key)) => {
+            let derived_key = virs_utils::crypto::derive_key(&state.encryption_key);
+            let key = virs_utils::crypto::decrypt(&enc_key, &derived_key)
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err("Failed to decrypt API key"))))?;
+            (p, key)
+        }
+        None => return Ok(Json(ApiResponse::ok(serde_json::json!({
+            "models": [],
+        })))),
+    };
+
+    let base_url = match provider.as_str() {
+        "deepseek" => "https://api.deepseek.com",
+        "openai" => "https://api.openai.com/v1",
+        "openrouter" => "https://openrouter.ai/api/v1",
+        _ => return Ok(Json(ApiResponse::err(format!("Unknown provider: {}", provider)))),
+    };
+
+    let models_url = format!("{}/models", base_url);
+    let http_client = &state.http_client;
+    let resp = http_client
+        .get(&models_url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await;
+
+    match resp {
+        Ok(response) => {
+            if !response.status().is_success() {
+                return Ok(Json(ApiResponse::err(format!("Failed to fetch models: HTTP {}", response.status()))));
+            }
+            match response.json::<serde_json::Value>().await {
+                Ok(data) => {
+                    let models = data["data"].as_array()
+                        .map(|arr| arr.iter().filter_map(|m| {
+                            m["id"].as_str().map(|id| serde_json::json!({
+                                "id": id,
+                                "owned_by": m["owned_by"].as_str().unwrap_or("unknown"),
+                            }))
+                        }).collect::<Vec<_>>())
+                        .unwrap_or_default();
+                    Ok(Json(ApiResponse::ok(serde_json::json!({ "models": models }))))
+                }
+                Err(e) => Ok(Json(ApiResponse::err(format!("Failed to parse models: {}", e)))),
+            }
+        }
+        Err(e) => Ok(Json(ApiResponse::err(format!("Failed to fetch models: {}", e)))),
+    }
+}
+
+/// GET /api/ai-credentials/balance — fetch account balance from LLM provider using saved credentials.
+pub async fn fetch_balance(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let user_id = extract_user_id(&headers)?;
+
+    let row: Option<(String, String)> = sqlx::query_as(
+        r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials WHERE user_id = $1 AND is_default = true ORDER BY created_at DESC LIMIT 1"#,
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db_pool)
+    .await
+    .unwrap_or(None);
+
+    let (provider, api_key) = match row {
+        Some((p, enc_key)) => {
+            let derived_key = virs_utils::crypto::derive_key(&state.encryption_key);
+            let key = virs_utils::crypto::decrypt(&enc_key, &derived_key)
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err("Failed to decrypt API key"))))?;
+            (p, key)
+        }
+        None => return Ok(Json(ApiResponse::ok(serde_json::json!({
+            "balances": [],
+        })))),
+    };
+
+    let balance_url = match provider.as_str() {
+        "deepseek" => "https://api.deepseek.com/user/balance",
+        _ => return Ok(Json(ApiResponse::ok(serde_json::json!({ "balances": [] })))),
+    };
+
+    let http_client = &state.http_client;
+    let resp = http_client
+        .get(balance_url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await;
+
+    match resp {
+        Ok(response) => {
+            if !response.status().is_success() {
+                return Ok(Json(ApiResponse::ok(serde_json::json!({ "balances": [] }))));
+            }
+            match response.json::<serde_json::Value>().await {
+                Ok(data) => {
+                    let balances = data["balance_infos"].as_array()
+                        .or_else(|| data["data"].as_array())
+                        .map(|arr| arr.iter().map(|b| serde_json::json!({
+                            "total_balance": b["total_balance"].as_str().unwrap_or("0"),
+                            "currency": b["currency"].as_str().unwrap_or("USD"),
+                        })).collect::<Vec<_>>())
+                        .unwrap_or_default();
+                    Ok(Json(ApiResponse::ok(serde_json::json!({ "balances": balances }))))
+                }
+                Err(_) => Ok(Json(ApiResponse::ok(serde_json::json!({ "balances": [] })))),
+            }
+        }
+        Err(_) => Ok(Json(ApiResponse::ok(serde_json::json!({ "balances": [] })))),
     }
 }

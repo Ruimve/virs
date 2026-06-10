@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 
-use crate::handlers::auth::{extract_user_id, ApiResponse};
+use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
 pub async fn create_bot(
@@ -21,11 +21,20 @@ pub async fn create_bot(
     let market_type = body["market_type"].as_str().unwrap_or("perpetual");
     let leverage = body["leverage"].as_i64().unwrap_or(10) as i32;
     let name = body["name"].as_str().unwrap_or("Auto Bot");
+    let paper_mode = body["paper_mode"].as_bool().unwrap_or(true);
 
     if symbol.is_empty() || exchange.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::err("symbol and exchange are required")),
+        ));
+    }
+
+    // Ensure engines are started (lazy init on first bot creation)
+    if let Err(e) = state.engine_manager.ensure_started(paper_mode).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::err(format!("Failed to start engines: {}", e))),
         ));
     }
 
@@ -201,7 +210,7 @@ pub async fn start_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
-    if let Some(ref tx) = state.auto_cmd_tx {
+    if let Some(tx) = state.engine_manager.auto_cmd_tx() {
         let _ = tx.send(virs_bot::auto::types::AutoCommand::StartBot { bot_id: id }).await;
     }
     Ok(Json(ApiResponse::ok(serde_json::json!({"started": true}))))
@@ -211,7 +220,7 @@ pub async fn stop_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
-    if let Some(ref tx) = state.auto_cmd_tx {
+    if let Some(tx) = state.engine_manager.auto_cmd_tx() {
         let _ = tx.send(virs_bot::auto::types::AutoCommand::StopBot { bot_id: id }).await;
     }
     Ok(Json(ApiResponse::ok(serde_json::json!({"stopped": true}))))
@@ -221,9 +230,15 @@ pub async fn delete_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
-    if let Some(ref tx) = state.auto_cmd_tx {
+    if let Some(tx) = state.engine_manager.auto_cmd_tx() {
         let _ = tx.send(virs_bot::auto::types::AutoCommand::DeleteBot { bot_id: id, close_position: true }).await;
     }
+    // Delete from database
+    sqlx::query(r#"DELETE FROM qd_auto_bots WHERE id = $1"#)
+        .bind(id)
+        .execute(&state.db_pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e)))))?;
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
 

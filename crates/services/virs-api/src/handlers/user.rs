@@ -2,16 +2,19 @@
 
 use axum::{
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     Json,
 };
 
-use crate::handlers::auth::ApiResponse;
+use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
 pub async fn list_users(
     State(state): State<AppState>,
-) -> Json<ApiResponse> {
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
+
     let rows = sqlx::query_as::<_, (uuid::Uuid, String, String, Option<String>, bool, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT id, username, role, email, is_active, created_at FROM qd_users ORDER BY created_at DESC"#,
     )
@@ -19,7 +22,7 @@ pub async fn list_users(
     .await;
 
     match rows {
-        Ok(users) => Json(ApiResponse::ok(serde_json::json!({
+        Ok(users) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "users": users.iter().map(|(id, username, role, email, is_active, created_at)| {
                 serde_json::json!({
                     "id": id.to_string(),
@@ -30,15 +33,18 @@ pub async fn list_users(
                     "created_at": created_at.to_rfc3339(),
                 })
             }).collect::<Vec<_>>()
-        }))),
-        Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
+        })))),
+        Err(e) => Ok(Json(ApiResponse::err(format!("Database error: {}", e)))),
     }
 }
 
 pub async fn create_user(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
+
     let username = body["username"].as_str().unwrap_or("");
     let password = body["password"].as_str().unwrap_or("");
     let role = body["role"].as_str().unwrap_or("user");
@@ -77,8 +83,11 @@ pub async fn create_user(
 
 pub async fn update_user(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
+
     let id = body["id"].as_str().unwrap_or("");
     let uuid_id = uuid::Uuid::parse_str(id).map_err(|_| {
         (StatusCode::BAD_REQUEST, Json(ApiResponse::err("Invalid user ID")))
@@ -107,8 +116,11 @@ pub async fn update_user(
 
 pub async fn delete_user(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+    let _user_id = extract_user_id(&headers)?;
+
     let id = body["id"].as_str().unwrap_or("");
     let uuid_id = uuid::Uuid::parse_str(id).map_err(|_| {
         (StatusCode::BAD_REQUEST, Json(ApiResponse::err("Invalid user ID")))

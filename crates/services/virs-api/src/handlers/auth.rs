@@ -2,40 +2,12 @@
 
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     Json,
 };
 
+use crate::handlers::response::{ApiResponse, extract_user_id};
 use crate::state::AppState;
-
-/// Extract user_id from JWT in Authorization header.
-/// Shared by all handlers that need user identity.
-pub fn extract_user_id(headers: &HeaderMap) -> Result<uuid::Uuid, (StatusCode, Json<ApiResponse>)> {
-    let auth_header = headers.get("Authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "));
-
-    let token = match auth_header {
-        Some(t) => t,
-        None => return Err((StatusCode::UNAUTHORIZED, Json(ApiResponse::err("Missing or invalid authorization header")))),
-    };
-
-    let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "virs-secret-key".to_string());
-    let decoded = jsonwebtoken::decode::<serde_json::Value>(
-        token,
-        &jsonwebtoken::DecodingKey::from_secret(secret.as_bytes()),
-        &jsonwebtoken::Validation::default(),
-    );
-
-    match decoded {
-        Ok(data) => {
-            let user_id = data.claims["sub"].as_str().unwrap_or("");
-            uuid::Uuid::parse_str(user_id)
-                .map_err(|_| (StatusCode::UNAUTHORIZED, Json(ApiResponse::err("Invalid user ID in token"))))
-        }
-        Err(_) => Err((StatusCode::UNAUTHORIZED, Json(ApiResponse::err("Invalid token")))),
-    }
-}
 
 /// Login request
 #[derive(serde::Deserialize)]
@@ -59,24 +31,6 @@ pub struct UserInfo {
     pub role: String,
     pub email: Option<String>,
     pub is_active: bool,
-}
-
-/// API response wrapper — always uses serde_json::Value for data
-#[derive(serde::Serialize)]
-pub struct ApiResponse {
-    pub success: bool,
-    pub data: serde_json::Value,
-    pub message: Option<String>,
-}
-
-impl ApiResponse {
-    pub fn ok(data: serde_json::Value) -> Self {
-        Self { success: true, data, message: None }
-    }
-
-    pub fn err(msg: impl Into<String>) -> Self {
-        Self { success: false, data: serde_json::Value::Null, message: Some(msg.into()) }
-    }
 }
 
 pub async fn login(
@@ -161,65 +115,32 @@ pub async fn get_user_info(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
 ) -> Json<ApiResponse> {
-    // Extract token from Authorization header
-    let token = headers
-        .get("Authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .unwrap_or("");
+    let user_id = match extract_user_id(&headers) {
+        Ok(id) => id,
+        Err((_, resp)) => return resp,
+    };
 
-    if token.is_empty() {
-        return Json(ApiResponse::err("No token provided"));
-    }
+    let row = sqlx::query_as::<_, (String, String, Option<String>, bool)>(
+        r#"SELECT username, role, email, is_active FROM qd_users WHERE id = $1"#,
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db_pool)
+    .await;
 
-    let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "virs-secret-key".to_string());
-    let decoded = jsonwebtoken::decode::<serde_json::Value>(
-        token,
-        &jsonwebtoken::DecodingKey::from_secret(secret.as_bytes()),
-        &jsonwebtoken::Validation::default(),
-    );
-
-    match decoded {
-        Ok(data) => {
-            let claims = data.claims;
-            let user_id = claims["sub"].as_str().unwrap_or("");
-            let _username = claims["username"].as_str().unwrap_or("");
-            let _role = claims["role"].as_str().unwrap_or("");
-
-            if user_id.is_empty() {
-                return Json(ApiResponse::err("Invalid token"));
+    match row {
+        Ok(Some((db_username, db_role, email, is_active))) => {
+            if !is_active {
+                return Json(ApiResponse::err("Account is disabled"));
             }
-
-            // Verify user still exists and is active
-            let uuid_id = match uuid::Uuid::parse_str(user_id) {
-                Ok(id) => id,
-                Err(_) => return Json(ApiResponse::err("Invalid user ID in token")),
-            };
-
-            let row = sqlx::query_as::<_, (String, String, Option<String>, bool)>(
-                r#"SELECT username, role, email, is_active FROM qd_users WHERE id = $1"#,
-            )
-            .bind(uuid_id)
-            .fetch_optional(&state.db_pool)
-            .await;
-
-            match row {
-                Ok(Some((db_username, db_role, email, is_active))) => {
-                    if !is_active {
-                        return Json(ApiResponse::err("Account is disabled"));
-                    }
-                    Json(ApiResponse::ok(serde_json::json!({
-                        "id": user_id,
-                        "username": db_username,
-                        "role": db_role,
-                        "email": email,
-                        "is_active": is_active,
-                    })))
-                }
-                Ok(None) => Json(ApiResponse::err("User not found")),
-                Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
-            }
+            Json(ApiResponse::ok(serde_json::json!({
+                "id": user_id.to_string(),
+                "username": db_username,
+                "role": db_role,
+                "email": email,
+                "is_active": is_active,
+            })))
         }
-        Err(e) => Json(ApiResponse::err(format!("Invalid token: {}", e))),
+        Ok(None) => Json(ApiResponse::err("User not found")),
+        Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
     }
 }
