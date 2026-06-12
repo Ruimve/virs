@@ -152,22 +152,23 @@ impl AutoStore for PgAutoStore {
     async fn save_analysis_log(
         &self, bot_id: Uuid, analysis_type: &str, system_prompt: &str,
         user_prompt: &str, result: &serde_json::Value, error: Option<&str>,
+        llm_model: &str,
     ) -> anyhow::Result<()> {
         let status = if error.is_some() { "failed" } else { "completed" };
         sqlx::query(
-            r#"INSERT INTO qd_auto_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, error, completed_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())"#,
+            r#"INSERT INTO qd_auto_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, error, llm_model, completed_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())"#,
         )
         .bind(bot_id).bind(analysis_type).bind(system_prompt).bind(user_prompt)
-        .bind(status).bind(result).bind(error)
+        .bind(status).bind(result).bind(error).bind(llm_model)
         .execute(&self.db).await?;
         Ok(())
     }
 
     async fn load_analysis_logs(&self, bot_id: Uuid) -> anyhow::Result<Vec<AutoAnalysisLogEntry>> {
-        let rows: Vec<(Uuid, Uuid, String, String, String, serde_json::Value, Option<String>, chrono::DateTime<chrono::Utc>)> =
+        let rows: Vec<(Uuid, Uuid, String, String, String, serde_json::Value, Option<String>, String, chrono::DateTime<chrono::Utc>)> =
             sqlx::query_as(
-                r#"SELECT id, bot_id, analysis_type, system_prompt, user_prompt, result, error, created_at
+                r#"SELECT id, bot_id, analysis_type, system_prompt, user_prompt, result, error, llm_model, created_at
                    FROM qd_auto_analysis_logs WHERE bot_id = $1 ORDER BY created_at DESC LIMIT 50"#,
             )
             .bind(bot_id).fetch_all(&self.db).await?;
@@ -175,7 +176,7 @@ impl AutoStore for PgAutoStore {
         Ok(rows.into_iter().map(|r| AutoAnalysisLogEntry {
             id: r.0, bot_id: r.1, analysis_type: r.2,
             system_prompt: r.3, user_prompt: r.4, result: r.5,
-            error: r.6, created_at: r.7,
+            error: r.6, llm_model: r.7, created_at: r.8,
         }).collect())
     }
 

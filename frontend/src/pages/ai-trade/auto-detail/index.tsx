@@ -51,6 +51,7 @@ interface AnalysisLog {
   user_prompt: string;
   result: any;
   error: string | null;
+  llm_model: string;
   created_at: string;
 }
 
@@ -64,7 +65,6 @@ export default function AutoDetailPage() {
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal('');
   const [activeTab, setActiveTab] = createSignal<'trades' | 'analysis'>('trades');
-  const [expandedLogId, setExpandedLogId] = createSignal<string | null>(null);
 
   const loadBot = async () => {
     try {
@@ -430,89 +430,44 @@ export default function AutoDetailPage() {
                         <For each={logs().slice(0, 50)}>
                           {(log) => {
                             const decision = getDecisionFromLog(log);
-                            const rawResponse = log.result?.raw_llm_response;
+                            const action = decision?.action;
                             return (
-                              <div class="px-5 py-4">
-                                <div class="flex items-center justify-between mb-2">
-                                  <div class="flex items-center gap-2">
-                                    <Show when={decision} fallback={
-                                      <span class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-surface-2 text-on-surface-tertiary">
+                              <button
+                                onClick={() => navigate(`/trade/auto/${params.id}/log/${log.id}`)}
+                                class="w-full text-left px-5 py-3.5 hover:bg-surface-2/50 transition-colors"
+                              >
+                                <div class="flex items-center justify-between gap-3">
+                                  <div class="flex items-center gap-2.5 min-w-0">
+                                    {action ? (
+                                      <span class={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 ${
+                                        action === 'hold' ? 'bg-surface-2 text-on-surface-tertiary' :
+                                        action === 'open_long' ? 'bg-emerald-500/10 text-emerald-400' :
+                                        action === 'open_short' ? 'bg-red-500/10 text-red-400' :
+                                        'bg-blue-500/10 text-blue-400'
+                                      }`}>
+                                        {action === 'open_long' ? '开多' :
+                                         action === 'open_short' ? '开空' :
+                                         action === 'close_position' ? '平仓' :
+                                         action === 'hold' ? '持有' : action}
+                                      </span>
+                                    ) : (
+                                      <span class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-surface-2 text-on-surface-tertiary shrink-0">
                                         {log.status === 'failed' ? '失败' : '未知'}
                                       </span>
-                                    }>
-                                      {(d: any) => (
-                                        <span class={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                                          d.action === 'hold' ? 'bg-surface-2 text-on-surface-tertiary' :
-                                          d.action === 'open_long' ? 'bg-emerald-500/10 text-emerald-400' :
-                                          d.action === 'open_short' ? 'bg-red-500/10 text-red-400' :
-                                          'bg-blue-500/10 text-blue-400'
-                                        }`}>
-                                          {d.action === 'open_long' ? '开多' :
-                                           d.action === 'open_short' ? '开空' :
-                                           d.action === 'close_position' ? '平仓' :
-                                           d.action === 'hold' ? '持有' : d.action}
-                                        </span>
-                                      )}
+                                    )}
+                                    <Show when={log.llm_model}>
+                                      <span class="text-[10px] text-indigo-400 font-mono shrink-0">{log.llm_model}</span>
                                     </Show>
-                                    <Show when={decision?.confidence}>
-                                      <span class="text-[10px] text-on-surface-tertiary">
-                                        置信度 {(decision.confidence * 100).toFixed(0)}%
-                                      </span>
+                                    <Show when={decision?.confidence != null}>
+                                      <span class="text-[10px] text-on-surface-tertiary shrink-0">{(decision!.confidence * 100).toFixed(0)}%</span>
                                     </Show>
                                   </div>
-                                  <div class="flex items-center gap-2">
-                                    <button
-                                      onClick={() => setExpandedLogId(expandedLogId() === log.id ? null : log.id)}
-                                      class="text-[10px] text-on-surface-tertiary hover:text-indigo-400 transition-colors"
-                                    >
-                                      {expandedLogId() === log.id ? '收起详情' : '查看详情'}
-                                    </button>
-                                    <span class="text-[10px] text-on-surface-tertiary">
-                                      {new Date(log.created_at).toLocaleString('zh-CN')}
-                                    </span>
-                                  </div>
+                                  <span class="text-[10px] text-on-surface-tertiary shrink-0">{new Date(log.created_at).toLocaleString('zh-CN')}</span>
                                 </div>
                                 <Show when={decision?.reason}>
-                                  <p class="text-xs text-on-surface-secondary mb-1">{decision.reason}</p>
+                                  <p class="text-[11px] text-on-surface-tertiary truncate mt-1">{decision!.reason}</p>
                                 </Show>
-                                <Show when={log.result?.analysis}>
-                                  <p class="text-[11px] text-on-surface-tertiary leading-relaxed line-clamp-3">{log.result.analysis}</p>
-                                </Show>
-                                <Show when={log.error}>
-                                  <p class="text-[11px] text-red-400 mt-1">{log.error}</p>
-                                </Show>
-                                <Show when={log.result?.risk_warning && log.result.risk_warning !== 'none'}>
-                                  <p class="text-[11px] text-amber-400 mt-1">⚠ {log.result.risk_warning}</p>
-                                </Show>
-                                <Show when={expandedLogId() === log.id}>
-                                  <div class="mt-3 space-y-3 border-t border-line-subtle pt-3">
-                                    <Show when={log.system_prompt}>
-                                      <div>
-                                        <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">System Prompt</div>
-                                        <pre class="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono leading-relaxed">{log.system_prompt}</pre>
-                                      </div>
-                                    </Show>
-                                    <Show when={log.user_prompt}>
-                                      <div>
-                                        <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">User Prompt</div>
-                                        <pre class="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono leading-relaxed">{log.user_prompt}</pre>
-                                      </div>
-                                    </Show>
-                                    <Show when={rawResponse}>
-                                      <div>
-                                        <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">原始 LLM 返回</div>
-                                        <pre class="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed">{typeof rawResponse === 'string' ? rawResponse : JSON.stringify(rawResponse, null, 2)}</pre>
-                                      </div>
-                                    </Show>
-                                    <Show when={!rawResponse && log.result}>
-                                      <div>
-                                        <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">解析后结果</div>
-                                        <pre class="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono leading-relaxed">{JSON.stringify(log.result, null, 2)}</pre>
-                                      </div>
-                                    </Show>
-                                  </div>
-                                </Show>
-                              </div>
+                              </button>
                             );
                           }}
                         </For>

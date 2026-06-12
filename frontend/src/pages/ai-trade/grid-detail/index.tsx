@@ -73,6 +73,7 @@ interface AnalysisLog {
   user_prompt: string;
   result: Record<string, any>;
   error: string | null;
+  llm_model: string;
   created_at: string;
 }
 
@@ -88,12 +89,9 @@ export default function GridDetailPage() {
   const [loadingTrades, setLoadingTrades] = createSignal(false);
 
   const [analysisLogs, setAnalysisLogs] = createSignal<AnalysisLog[]>([]);
-  const [selectedAnalysis, setSelectedAnalysis] = createSignal<AnalysisLog | null>(null);
   const [loadingAnalysis, setLoadingAnalysis] = createSignal(false);
 
   const [activeTab, setActiveTab] = createSignal<'levels' | 'trades' | 'analysis'>('levels');
-  const [showSystemPrompt, setShowSystemPrompt] = createSignal(false);
-  const [showUserPrompt, setShowUserPrompt] = createSignal(false);
 
   const loadBot = async () => {
     try {
@@ -124,11 +122,9 @@ export default function GridDetailPage() {
 
   const loadAnalysis = async () => {
     setLoadingAnalysis(true);
-    setSelectedAnalysis(null);
     try {
       const res = await api.get<{ items: AnalysisLog[] }>(`/grid/analysis-logs?bot_id=${params.id}`);
       setAnalysisLogs(res.data?.items || []);
-      if (res.data?.items?.length) setSelectedAnalysis(res.data.items[0]);
     } catch (e) {
       console.error(e);
     } finally {
@@ -448,178 +444,62 @@ export default function GridDetailPage() {
                   <Show when={analysisLogs().length > 0} fallback={
                     <div class="text-center py-12 text-on-surface-tertiary text-sm">暂无分析记录</div>
                   }>
-                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
-                      <div class="lg:col-span-4 space-y-2 max-h-[70vh] overflow-auto">
-                        <For each={analysisLogs()}>
-                          {(log) => (
-                            <div
-                              class={`p-3 rounded-lg border cursor-pointer transition-all ${
-                                selectedAnalysis()?.id === log.id
-                                  ? 'border-indigo-500/20 bg-indigo-500/10'
-                                  : 'border-line-default bg-surface-1 hover:border-line-strong'
-                              }`}
-                              onClick={() => setSelectedAnalysis(log)}
+                    <div class="divide-y divide-line-subtle">
+                      <For each={analysisLogs()}>
+                        {(log) => {
+                          const decision = log.result?.decision;
+                          const action = decision?.action;
+                          return (
+                            <button
+                              onClick={() => navigate(`/trade/grid/${params.id}/log/${log.id}`)}
+                              class="w-full text-left px-5 py-3.5 hover:bg-surface-2/50 transition-colors"
                             >
-                              <div class="flex items-center gap-2 mb-1.5">
-                                <span class={`px-1.5 py-0.5 text-[10px] rounded font-medium ${
-                                  log.analysis_type === 'initial' ? 'bg-blue-500/10 text-blue-400' : 'bg-purple-500/10 text-purple-400'
-                                }`}>
-                                  {log.analysis_type === 'initial' ? '首次' : '周期'}
-                                </span>
-                                <span class={`px-1.5 py-0.5 text-[10px] rounded font-medium ${
-                                  log.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400'
-                                  : log.status === 'pending' ? 'bg-amber-500/10 text-amber-400'
-                                  : 'bg-red-500/10 text-red-400'
-                                }`}>
-                                  {log.status === 'completed' ? '完成' : log.status === 'pending' ? '处理中' : '失败'}
-                                </span>
-                                <span class="text-[10px] text-on-surface-tertiary">{new Date(log.created_at).toLocaleString('zh-CN')}</span>
-                              </div>
-                              <Show when={log.status === 'completed' && log.result?.decision?.action}>
-                                <div class="text-xs text-on-surface-tertiary truncate">
-                                  {log.result.decision.action} — {log.result.decision.reason || ''}
-                                </div>
-                              </Show>
-                            </div>
-                          )}
-                        </For>
-                      </div>
-
-                      <div class="lg:col-span-8">
-                        <Show when={selectedAnalysis()}>
-                          {(log) => (
-                            <div class="rounded-xl border border-line-default bg-surface-1 p-5 space-y-4 shadow-sm">
-                              <div class="flex items-center justify-between">
-                                <h3 class="text-sm font-medium text-on-surface">分析详情</h3>
-                                <span class="text-[10px] text-on-surface-tertiary">{new Date(log().created_at).toLocaleString('zh-CN')}</span>
-                              </div>
-                              <Show when={log().system_prompt}>
-                                <div>
-                                  <button onClick={() => setShowSystemPrompt(!showSystemPrompt())} class="flex items-center gap-1 text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1.5 hover:text-on-surface-secondary transition-colors">
-                                    <svg class={`w-3 h-3 transition-transform ${showSystemPrompt() ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
-                                    System Prompt
-                                  </button>
-                                  <Show when={showSystemPrompt()}>
-                                    <pre class="p-3 bg-base-secondary rounded-lg text-[11px] text-on-surface-secondary whitespace-pre-wrap break-words max-h-48 overflow-auto border border-line-subtle">{log().system_prompt}</pre>
-                                  </Show>
-                                </div>
-                              </Show>
-                              <Show when={log().user_prompt}>
-                                <div>
-                                  <button onClick={() => setShowUserPrompt(!showUserPrompt())} class="flex items-center gap-1 text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1.5 hover:text-on-surface-secondary transition-colors">
-                                    <svg class={`w-3 h-3 transition-transform ${showUserPrompt() ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
-                                    User Prompt
-                                  </button>
-                                  <Show when={showUserPrompt()}>
-                                    <pre class="p-3 bg-base-secondary rounded-lg text-[11px] text-on-surface-secondary whitespace-pre-wrap break-words max-h-48 overflow-auto border border-line-subtle">{log().user_prompt}</pre>
-                                  </Show>
-                                </div>
-                              </Show>
-                              <Show when={log().result?.decision}>
-                                <div>
-                                  <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1.5">决策</div>
-                                  <div class="flex items-center gap-3">
-                                    <span class={`px-2 py-0.5 text-xs rounded font-medium ${
-                                      log().result.decision.action === 'hold' ? 'bg-surface-2 text-on-surface-secondary'
-                                      : log().result.decision.action === 'pause_grid' ? 'bg-red-500/10 text-red-400'
-                                      : log().result.decision.action === 'resume_grid' ? 'bg-emerald-500/10 text-emerald-400'
-                                      : log().result.decision.action === 'adjust_grid' ? 'bg-blue-500/10 text-blue-400'
-                                      : log().result.decision.action === 'reduce_position' ? 'bg-amber-500/10 text-amber-400'
-                                      : log().result.decision.action === 'cancel_order' ? 'bg-orange-500/10 text-orange-400'
+                              <div class="flex items-center justify-between gap-3">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                  {action ? (
+                                    <span class={`px-1.5 py-0.5 text-[10px] rounded font-medium shrink-0 ${
+                                      action === 'hold' ? 'bg-surface-2 text-on-surface-tertiary'
+                                      : action === 'pause_grid' ? 'bg-red-500/10 text-red-400'
+                                      : action === 'resume_grid' ? 'bg-emerald-500/10 text-emerald-400'
+                                      : action === 'adjust_grid' ? 'bg-blue-500/10 text-blue-400'
+                                      : action === 'reduce_position' ? 'bg-amber-500/10 text-amber-400'
                                       : 'bg-surface-2 text-on-surface-secondary'
-                                    }`}>{log().result.decision.action}</span>
-                                    <Show when={log().result.decision.confidence != null}>
-                                      <span class="text-[10px] text-on-surface-tertiary">置信度 {(log().result.decision.confidence * 100).toFixed(0)}%</span>
-                                    </Show>
-                                  </div>
-                                  <Show when={log().result.decision.reason}>
-                                    <p class="text-xs text-on-surface-secondary mt-1">{log().result.decision.reason}</p>
+                                    }`}>
+                                      {action === 'hold' ? '持有' :
+                                       action === 'pause_grid' ? '暂停' :
+                                       action === 'resume_grid' ? '恢复' :
+                                       action === 'adjust_grid' ? '调整' :
+                                       action === 'reduce_position' ? '减仓' :
+                                       action === 'cancel_order' ? '取消' : action}
+                                    </span>
+                                  ) : (
+                                    <span class={`px-1.5 py-0.5 text-[10px] rounded font-medium shrink-0 ${
+                                      log.status === 'failed' ? 'bg-red-500/10 text-red-400' : 'bg-surface-2 text-on-surface-tertiary'
+                                    }`}>
+                                      {log.status === 'failed' ? '失败' : log.status === 'pending' ? '处理中' : '未知'}
+                                    </span>
+                                  )}
+                                  <Show when={log.llm_model}>
+                                    <span class="text-[10px] text-indigo-400 font-mono shrink-0">{log.llm_model}</span>
+                                  </Show>
+                                  <Show when={decision?.confidence != null}>
+                                    <span class="text-[10px] text-on-surface-tertiary shrink-0">{(decision!.confidence * 100).toFixed(0)}%</span>
                                   </Show>
                                 </div>
-                              </Show>
-                              <Show when={log().result?.grid && (log().result.grid.upper_price || log().result.grid.lower_price || log().result.grid.grid_count || log().result.grid.grid_profit_pct)}>
-                                <div>
-                                  <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1.5">网格参数</div>
-                                  <div class="flex flex-wrap gap-3 text-xs text-on-surface-secondary">
-                                    <Show when={log().result.grid.upper_price}><span>上界 {log().result.grid.upper_price}</span></Show>
-                                    <Show when={log().result.grid.lower_price}><span>下界 {log().result.grid.lower_price}</span></Show>
-                                    <Show when={log().result.grid.grid_count}><span>层数 {log().result.grid.grid_count}</span></Show>
-                                    <Show when={log().result.grid.grid_profit_pct}><span>利润率 {log().result.grid.grid_profit_pct}%</span></Show>
-                                  </div>
-                                </div>
-                              </Show>
-                              <Show when={log().result?.risk && (log().result.risk.leverage || log().result.risk.quantity_per_grid)}>
-                                <div>
-                                  <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1.5">风控参数</div>
-                                  <div class="flex flex-wrap gap-3 text-xs text-on-surface-secondary">
-                                    <Show when={log().result.risk.leverage}><span>杠杆 {log().result.risk.leverage}x</span></Show>
-                                    <Show when={log().result.risk.quantity_per_grid}><span>每格 {log().result.risk.quantity_per_grid} USDT</span></Show>
-                                  </div>
-                                </div>
-                              </Show>
-                              <Show when={log().result?.market}>
-                                <div>
-                                  <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1.5">市场状态</div>
-                                  <div class="space-y-1">
-                                    <Show when={log().result.market.market_regime}>
-                                      <span class={`px-2 py-0.5 text-xs rounded font-medium ${
-                                        log().result.market.market_regime === 'ranging' ? 'bg-blue-500/10 text-blue-400'
-                                        : log().result.market.market_regime === 'trending_up' ? 'bg-emerald-500/10 text-emerald-400'
-                                        : log().result.market.market_regime === 'trending_down' ? 'bg-red-500/10 text-red-400'
-                                        : log().result.market.market_regime === 'volatile' ? 'bg-amber-500/10 text-amber-400'
-                                        : 'bg-surface-2 text-on-surface-secondary'
-                                      }`}>{log().result.market.market_regime}</span>
-                                    </Show>
-                                    <Show when={log().result.market.funding_rate_warning}>
-                                      <p class="text-xs text-amber-400">⚠ 资金费率: {log().result.market.funding_rate_warning}</p>
-                                    </Show>
-                                    <Show when={log().result.market.event_impact}>
-                                      <p class="text-xs text-purple-400">📋 事件影响: {log().result.market.event_impact}</p>
-                                    </Show>
-                                  </div>
-                                </div>
-                              </Show>
-                              <Show when={log().result?.analysis}>
-                                <div>
-                                  <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1.5">AI 分析</div>
-                                  <p class="text-xs text-on-surface leading-relaxed whitespace-pre-wrap">{log().result.analysis}</p>
-                                </div>
-                              </Show>
-                              <Show when={log().result?.risk_warning}>
-                                <div>
-                                  <div class="text-[10px] text-amber-400 uppercase tracking-wider mb-1.5">风险提示</div>
-                                  <p class="text-xs text-amber-400">{log().result.risk_warning}</p>
-                                </div>
-                              </Show>
-                              <Show when={log().result?.raw_llm_response}>
-                                <div>
-                                  <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1.5">LLM 原始响应</div>
-                                  <pre class="p-3 bg-indigo-500/10 rounded-lg text-[11px] text-indigo-400 whitespace-pre-wrap break-words max-h-64 overflow-auto border border-indigo-500/20">{JSON.stringify(log().result.raw_llm_response, null, 2)}</pre>
-                                </div>
-                              </Show>
-                              <div>
-                                <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1.5">决策结果</div>
-                                <pre class="p-3 bg-base-secondary rounded-lg text-[11px] text-on-surface-secondary whitespace-pre-wrap break-words max-h-64 overflow-auto border border-line-subtle">{JSON.stringify(log().result, null, 2)}</pre>
+                                <span class="text-[10px] text-on-surface-tertiary shrink-0">{new Date(log.created_at).toLocaleString('zh-CN')}</span>
                               </div>
-                              <Show when={log().error}>
-                                <div>
-                                  <div class="text-[10px] text-red-400 uppercase tracking-wider mb-1.5">错误</div>
-                                  <pre class="p-3 bg-red-500/10 rounded-lg text-xs text-red-400 border border-red-500/20">{log().error}</pre>
-                                </div>
+                              <Show when={decision?.reason}>
+                                <p class="text-[11px] text-on-surface-tertiary truncate mt-1">{decision!.reason}</p>
                               </Show>
-                            </div>
-                          )}
-                        </Show>
-                        <Show when={!selectedAnalysis()}>
-                          <div class="flex items-center justify-center h-64 text-on-surface-tertiary text-sm">
-                            选择左侧记录查看详情
-                          </div>
-                        </Show>
-                      </div>
+                            </button>
+                          );
+                        }}
+                      </For>
                     </div>
                   </Show>
-            </Show>
-          </Show>
+                </Show>
+              </Show>
+
                 </div>
               </div>
             </>

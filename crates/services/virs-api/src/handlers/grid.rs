@@ -35,6 +35,26 @@ pub async fn create_bot(
         ));
     }
 
+    // Enforce 1-bot-per-user limit (across all bot types)
+    {
+        let grid_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM qd_grid_bots WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_one(&state.db_pool)
+            .await
+            .unwrap_or(0);
+        let auto_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM qd_auto_bots WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_one(&state.db_pool)
+            .await
+            .unwrap_or(0);
+        if grid_count + auto_count > 0 {
+            return Err((
+                StatusCode::CONFLICT,
+                Json(ApiResponse::err("Each account can only have one bot. Please delete your existing bot first.")),
+            ));
+        }
+    }
+
     // Ensure engines are started (lazy init on first bot creation)
     if let Err(e) = state.engine_manager.ensure_started(paper_mode).await {
         return Err((
@@ -302,8 +322,8 @@ pub async fn get_analysis_logs(
         Err((_, resp)) => return resp,
     };
 
-    let rows = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, String, String, String, serde_json::Value, Option<String>, String, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT l.id, l.bot_id, l.analysis_type, l.status, l.system_prompt, l.result, l.error, l.user_prompt, l.created_at
+    let rows = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, String, String, String, serde_json::Value, Option<String>, String, String, chrono::DateTime<chrono::Utc>)>(
+        r#"SELECT l.id, l.bot_id, l.analysis_type, l.status, l.system_prompt, l.result, l.error, l.user_prompt, l.llm_model, l.created_at
            FROM qd_grid_analysis_logs l
            JOIN qd_grid_bots b ON l.bot_id = b.id
            WHERE b.user_id = $1
@@ -315,7 +335,7 @@ pub async fn get_analysis_logs(
 
     match rows {
         Ok(logs) => Json(ApiResponse::ok(serde_json::json!({
-            "logs": logs.iter().map(|(id, bot_id, analysis_type, status, system_prompt, result, error, user_prompt, created_at)| {
+            "logs": logs.iter().map(|(id, bot_id, analysis_type, status, system_prompt, result, error, user_prompt, llm_model, created_at)| {
                 serde_json::json!({
                     "id": id.to_string(),
                     "bot_id": bot_id.to_string(),
@@ -325,6 +345,7 @@ pub async fn get_analysis_logs(
                     "user_prompt": user_prompt,
                     "result": result,
                     "error": error,
+                    "llm_model": llm_model,
                     "created_at": created_at.to_rfc3339(),
                 })
             }).collect::<Vec<_>>()

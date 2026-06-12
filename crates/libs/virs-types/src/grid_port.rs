@@ -15,6 +15,7 @@ pub struct AnalysisLogEntry {
     pub user_prompt: String,
     pub result: serde_json::Value,
     pub error: Option<String>,
+    pub llm_model: String,
     pub created_at: DateTime<Utc>,
 }
 
@@ -94,6 +95,7 @@ pub trait GridStore: Send + Sync {
     async fn save_analysis_log(
         &self, bot_id: Uuid, analysis_type: &str, system_prompt: &str,
         user_prompt: &str, result: &serde_json::Value, error: Option<&str>,
+        llm_model: &str,
     ) -> anyhow::Result<()>;
     async fn load_analysis_logs(&self, bot_id: Uuid) -> anyhow::Result<Vec<AnalysisLogEntry>>;
     async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()>;

@@ -1,7 +1,8 @@
-import { type Component, createSignal, Show } from 'solid-js'
+import { type Component, createSignal, Show, onMount } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import WizardLayout from '../../../components/WizardLayout'
 import { updateWizard, advanceStep, WizardStep, getWizardState } from '../../../lib/wizard'
+import { findActiveBot } from '../../../lib/api'
 
 const BOT_TYPES = [
   {
@@ -36,8 +37,14 @@ const SelectBotType: Component = () => {
   const navigate = useNavigate()
   const wizard = getWizardState()
   const [selected, setSelected] = createSignal<'grid' | 'auto' | ''>(wizard().bot_type || '')
+  const [existingBot, setExistingBot] = createSignal<{ id: string; bot_type: string } | null>(null)
 
-  const canContinue = () => selected().length > 0
+  onMount(async () => {
+    const bot = await findActiveBot()
+    if (bot) setExistingBot(bot)
+  })
+
+  const canContinue = () => selected().length > 0 && !existingBot()
 
   const handleContinue = () => {
     updateWizard({ bot_type: selected() })
@@ -61,49 +68,71 @@ const SelectBotType: Component = () => {
       }
     >
       {/* Bot type selection */}
-      <div class="space-y-4 mb-8">
-        {BOT_TYPES.map((bot) => {
-          const isSelected = () => selected() === bot.id
-          return (
-            <button
-              onClick={() => setSelected(bot.id)}
-              class={`group w-full p-4 md:p-5 rounded-xl border text-left transition-all duration-200 ${
-                isSelected()
-                  ? `bg-gradient-to-br ${bot.color} ${bot.border} ring-1 ring-line-emphasis`
-                  : 'bg-surface-1 border-line-default hover:bg-surface-2 hover:border-line-emphasis'
-              }`}
-            >
-              <div class="flex items-start gap-4">
-                <div class={`shrink-0 ${isSelected() ? 'text-indigo-400' : 'text-on-surface-faint'}`}>
-                  {bot.icon}
-                </div>
-                <div class="flex-1 min-w-0">
-                  <p class={`text-base font-medium ${isSelected() ? 'text-on-base' : 'text-on-surface-secondary'}`}>
-                    {bot.name}
-                  </p>
-                  <p class="text-[13px] text-on-surface-tertiary mt-1 leading-relaxed">{bot.desc}</p>
-                  <div class="flex flex-wrap gap-2 mt-3">
-                    {bot.features.map((f) => (
-                      <span class={`px-2 py-0.5 rounded-md text-[11px] ${
-                        isSelected() ? 'bg-surface-3 text-on-surface-tertiary' : 'bg-surface-1 text-on-surface-faint'
-                      }`}>
-                        {f}
-                      </span>
-                    ))}
+      <Show when={existingBot()} fallback={
+        <div class="space-y-4 mb-8">
+          {BOT_TYPES.map((bot) => {
+            const isSelected = () => selected() === bot.id
+            return (
+              <button
+                onClick={() => setSelected(bot.id)}
+                class={`group w-full p-4 md:p-5 rounded-xl border text-left transition-all duration-200 ${
+                  isSelected()
+                    ? `bg-gradient-to-br ${bot.color} ${bot.border} ring-1 ring-line-emphasis`
+                    : 'bg-surface-1 border-line-default hover:bg-surface-2 hover:border-line-emphasis'
+                }`}
+              >
+                <div class="flex items-start gap-4">
+                  <div class={`shrink-0 ${isSelected() ? 'text-indigo-400' : 'text-on-surface-faint'}`}>
+                    {bot.icon}
                   </div>
-                </div>
-                <Show when={isSelected()}>
-                  <div class="shrink-0 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
-                    <svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
+                  <div class="flex-1 min-w-0">
+                    <p class={`text-base font-medium ${isSelected() ? 'text-on-base' : 'text-on-surface-secondary'}`}>
+                      {bot.name}
+                    </p>
+                    <p class="text-[13px] text-on-surface-tertiary mt-1 leading-relaxed">{bot.desc}</p>
+                    <div class="flex flex-wrap gap-2 mt-3">
+                      {bot.features.map((f) => (
+                        <span class={`px-2 py-0.5 rounded-md text-[11px] ${
+                          isSelected() ? 'bg-surface-3 text-on-surface-tertiary' : 'bg-surface-1 text-on-surface-faint'
+                        }`}>
+                          {f}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </Show>
+                  <Show when={isSelected()}>
+                    <div class="shrink-0 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
+                      <svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  </Show>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      }>
+        {(bot) => (
+          <div class="p-5 rounded-xl border border-amber-500/20 bg-amber-500/5 mb-8">
+            <div class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p class="text-sm font-medium text-on-base mb-1">已有机器人</p>
+                <p class="text-xs text-on-surface-tertiary mb-3">每个账号只能创建一个机器人，请先删除已有机器人。</p>
+                <button
+                  onClick={() => navigate(bot().bot_type === 'auto' ? `/trade/auto/${bot().id}` : `/trade/grid/${bot().id}`, { replace: true })}
+                  class="px-4 py-2 text-xs font-medium bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-colors"
+                >
+                  查看已有机器人
+                </button>
               </div>
-            </button>
-          )
-        })}
-      </div>
+            </div>
+          </div>
+        )}
+      </Show>
     </WizardLayout>
   )
 }

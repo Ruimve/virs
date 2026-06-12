@@ -15,6 +15,7 @@ const ReviewLaunch = lazy(() => import('./pages/setup/review-launch'))
 const HealthCheck = lazy(() => import('./pages/setup/health-check'))
 const GridDetailPage = lazy(() => import('./pages/ai-trade/grid-detail'))
 const AutoDetailPage = lazy(() => import('./pages/ai-trade/auto-detail'))
+const AnalysisLogDetailPage = lazy(() => import('./pages/ai-trade/analysis-log-detail'))
 
 const App: Component = () => {
   return (
@@ -46,6 +47,7 @@ const App: Component = () => {
             <Route path="/setup/health" component={HealthCheck} />
             <Route path="/trade/grid/:id" component={GridDetailPage} />
             <Route path="/trade/auto/:id" component={AutoDetailPage} />
+            <Route path="/trade/:botType/:botId/log/:logId" component={AnalysisLogDetailPage} />
             <Route path="/trade" component={() => <Navigate href="/" />} />
             <Route path="*" component={() => <Navigate href="/" />} />
           </Router>

@@ -81,7 +81,7 @@ impl GridAiService {
         bot: &GridBotConfig,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> anyhow::Result<GridAiDecision> {
+    ) -> anyhow::Result<(GridAiDecision, String)> {
         let credentials = self.credential_store.load_credentials(bot.user_id).await?;
         let (api_key, base_url, model, _provider) = self.llm_resolver.resolve(&credentials)?;
 
@@ -91,7 +91,7 @@ impl GridAiService {
         ).await?;
 
         let decision = parse_grid_decision(&result.content)?;
-        Ok(decision)
+        Ok((decision, result.used_model))
     }
 }
 

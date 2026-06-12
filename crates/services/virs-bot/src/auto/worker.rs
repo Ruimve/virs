@@ -455,13 +455,13 @@ impl AutoWorker {
             .ai_service
             .auto_decision(self.bot.user_id, &system_prompt, &user_prompt)
             .await;
-        let (decision, raw_llm_response) = match decision_result {
-            Some((d, raw)) => (Some(d), Some(raw)),
-            None => (None, None),
+        let (decision, raw_llm_response, llm_model) = match decision_result {
+            Some((d, raw, m)) => (Some(d), Some(raw), m),
+            None => (None, None, String::new()),
         };
 
         let action = self
-            .handle_llm_result(&decision, &system_prompt, &user_prompt, raw_llm_response.as_ref())
+            .handle_llm_result(&decision, &system_prompt, &user_prompt, raw_llm_response.as_ref(), &llm_model)
             .await;
 
         self.execute_decision(&action, decision.as_ref()).await;
@@ -560,6 +560,7 @@ impl AutoWorker {
         system_prompt: &str,
         user_prompt: &str,
         raw_llm_response: Option<&serde_json::Value>,
+        llm_model: &str,
     ) -> AutoAction {
         match decision {
             Some(d) => {
@@ -594,7 +595,7 @@ impl AutoWorker {
                 }
                 let _ = self
                     .store
-                    .save_analysis_log(self.bot.id, "periodic", system_prompt, user_prompt, &result, None)
+                    .save_analysis_log(self.bot.id, "periodic", system_prompt, user_prompt, &result, None, llm_model)
                     .await;
 
                 d.action.clone()
@@ -625,6 +626,7 @@ impl AutoWorker {
                         user_prompt,
                         &result,
                         Some("LLM call failed"),
+                        llm_model,
                     )
                     .await;
 

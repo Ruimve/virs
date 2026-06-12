@@ -685,15 +685,15 @@ impl GridWorker {
         };
 
         let decision_result = self.ai_service.analyze(&self.bot, &system_prompt, &user_prompt).await;
-        let (decision, raw_llm_response) = match decision_result {
-            Ok(d) => (Some(d), None),
+        let (decision, raw_llm_response, llm_model) = match decision_result {
+            Ok((d, m)) => (Some(d), None, m),
             Err(e) => {
                 warn!(bot_id = %self.bot.id, error = %e, "LLM call failed");
-                (None, None)
+                (None, None, String::new())
             }
         };
 
-        let action = self.handle_llm_result(&decision, &system_prompt, &user_prompt, raw_llm_response.as_ref(), is_initial).await;
+        let action = self.handle_llm_result(&decision, &system_prompt, &user_prompt, raw_llm_response.as_ref(), is_initial, &llm_model).await;
         self.execute_decision(&action, decision.as_ref()).await;
         if !matches!(action, GridAction::Hold) {
             let _ = self.store.update_last_adjusted(self.bot.id).await;
@@ -758,6 +758,7 @@ impl GridWorker {
         user_prompt: &str,
         _raw_llm_response: Option<&serde_json::Value>,
         is_initial: bool,
+        llm_model: &str,
     ) -> GridAction {
         match decision {
             Some(d) => {
@@ -773,7 +774,7 @@ impl GridWorker {
                 });
                 let _ = self.store.save_analysis_log(
                     self.bot.id, if is_initial { "initial" } else { "periodic" },
-                    system_prompt, user_prompt, &result, None,
+                    system_prompt, user_prompt, &result, None, llm_model,
                 ).await;
 
                 GridAction::from_str(&d.action, d.upper_price, d.lower_price)
@@ -785,7 +786,7 @@ impl GridWorker {
                 let result = serde_json::json!({ "action": rule_action.as_str(), "reason": "LLM call failed, using rule-based fallback" });
                 let _ = self.store.save_analysis_log(
                     self.bot.id, if is_initial { "initial" } else { "periodic" },
-                    system_prompt, user_prompt, &result, Some("LLM call failed"),
+                    system_prompt, user_prompt, &result, Some("LLM call failed"), llm_model,
                 ).await;
 
                 let _ = self.grid_event_tx.send(GridEvent::BotError { bot_id: self.bot.id, error: "LLM call failed, using rule-based fallback".to_string() });

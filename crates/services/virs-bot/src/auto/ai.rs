@@ -139,11 +139,11 @@ impl AutoAiService {
         user_id: Uuid,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> anyhow::Result<serde_json::Value> {
+    ) -> anyhow::Result<ai_client::LlmCallResult> {
         let user_creds = self.credential_store.load_credentials(user_id).await?;
         let (api_key, base_url, model, _provider) = self.llm_resolver.resolve(&user_creds)?;
 
-        let result = ai_client::call_llm_api(
+        ai_client::call_llm_api(
             &self.http_client,
             &api_key,
             &base_url,
@@ -152,9 +152,7 @@ impl AutoAiService {
             user_prompt,
             "auto-ai",
         )
-        .await?;
-
-        Ok(result.content)
+        .await
     }
 
     pub async fn auto_decision(
@@ -162,11 +160,12 @@ impl AutoAiService {
         user_id: Uuid,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> Option<(AutoDecision, serde_json::Value)> {
+    ) -> Option<(AutoDecision, serde_json::Value, String)> {
         match self.call_llm(user_id, system_prompt, user_prompt).await {
-            Ok(json) => {
-                let decision = AutoDecision::from_json(&json);
-                Some((decision, json))
+            Ok(result) => {
+                let decision = AutoDecision::from_json(&result.content);
+                let used_model = result.used_model;
+                Some((decision, result.content, used_model))
             }
             Err(e) => {
                 warn!("LLM auto decision failed: {}", e);
