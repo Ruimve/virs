@@ -51,7 +51,7 @@ const HealthCheck: Component = () => {
       const check = checks().find((x) => x.key === c.key)
       return (
         <>
-          {check?.status === 'verifying' && <p class="text-[12px] text-white/20">Checking...</p>}
+          {check?.status === 'verifying' && <p class="text-[12px] text-on-surface-faint">Checking...</p>}
           {check?.status === 'error' && <p class="text-[12px] text-red-400">{check.detail}</p>}
         </>
       )
@@ -135,22 +135,22 @@ const HealthCheck: Component = () => {
       title="Health Check"
       subtitle="Verifying system components"
       actions={
-        <div class="flex gap-3">
+        <>
           <button
             onClick={() => navigate('/setup/review', { replace: true })}
-            class="px-5 py-2.5 text-sm text-white/40 hover:text-white/60 rounded-xl transition-colors duration-200"
+            class="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
           >
             Back
           </button>
           {allChecksDone() && (
             <button
               onClick={handleContinue}
-              class="px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-all duration-200"
+              class="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-all duration-200"
             >
               Continue
             </button>
           )}
-        </div>
+        </>
       }
     >
       <FlowSteps steps={steps} statuses={statuses()} summaries={summaries()} />

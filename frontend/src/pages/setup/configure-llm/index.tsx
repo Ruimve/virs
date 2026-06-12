@@ -61,8 +61,8 @@ const ConfigureLlm: Component = () => {
               value={apiKey()}
               onInput={(e) => onKeyInput(e.currentTarget.value)}
               disabled={fetchingModels()}
-              class={`w-full px-4 py-2.5 bg-white/[0.04] border rounded-lg text-sm text-white/90 placeholder-white/20 focus:outline-none transition-all duration-200 ${
-                fetchingModels() ? 'border-indigo-500/30 opacity-60' : 'border-white/[0.08] focus:border-indigo-500/40'
+              class={`w-full px-4 py-2.5 bg-surface-2 border rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none transition-all duration-200 ${
+                fetchingModels() ? 'border-indigo-500/30 opacity-60' : 'border-line-strong focus:border-indigo-500/40'
               }`}
               placeholder="sk-..."
             />
@@ -80,7 +80,7 @@ const ConfigureLlm: Component = () => {
           </Show>
           <Show when={models().length > 0}>
             <div>
-              <p class="text-[11px] tracking-[0.1em] text-white/25 uppercase mb-2">Model</p>
+              <p class="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">Model</p>
               <div class="flex flex-wrap gap-1.5">
                 <For each={models()}>
                   {(m) => {
@@ -90,8 +90,8 @@ const ConfigureLlm: Component = () => {
                         onClick={() => setModel(m.id)}
                         class={`px-2.5 py-1 rounded-md text-[11px] border transition-all duration-200 ${
                           isSelected()
-                            ? 'bg-indigo-500/15 border-indigo-500/30 text-white/80'
-                            : 'bg-white/[0.02] border-white/[0.06] text-white/30 hover:bg-white/[0.04]'
+                            ? 'bg-indigo-500/15 border-indigo-500/30 text-on-surface'
+                            : 'bg-surface-1 border-line-default text-on-surface-tertiary hover:bg-surface-2'
                         }`}
                       >
                         {m.id}
@@ -121,7 +121,7 @@ const ConfigureLlm: Component = () => {
       render: () => (
         <div class="space-y-2">
           <Show when={step2Status() === 'verifying'}>
-            <p class="text-[12px] text-white/30">Testing connection to DeepSeek API...</p>
+            <p class="text-[12px] text-on-surface-tertiary">Testing connection to DeepSeek API...</p>
           </Show>
           <Show when={step2Status() === 'error'}>
             <p class="text-[12px] text-red-400">{error() || 'Connection failed'}</p>
@@ -135,13 +135,13 @@ const ConfigureLlm: Component = () => {
       render: () => (
         <div class="space-y-3">
           <Show when={balance()}>
-            <div class="flex items-center justify-between px-3 py-2 bg-white/[0.02] border border-white/[0.06] rounded-lg">
-              <span class="text-[12px] text-white/30">Balance</span>
-              <span class="text-[12px] text-white/60 font-mono">{balance()!.total_balance} {balance()!.currency}</span>
+            <div class="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
+              <span class="text-[12px] text-on-surface-tertiary">Balance</span>
+              <span class="text-[12px] text-on-surface-secondary font-mono">{balance()!.total_balance} {balance()!.currency}</span>
             </div>
           </Show>
           <Show when={!balance() && step3Status() === 'active'}>
-            <p class="text-[12px] text-white/20">No balance info available. Ensure your account has credits.</p>
+            <p class="text-[12px] text-on-surface-faint">No balance info available. Ensure your account has credits.</p>
           </Show>
         </div>
       ),
@@ -293,21 +293,21 @@ const ConfigureLlm: Component = () => {
       title="Configure DeepSeek"
       subtitle="Connect your DeepSeek account"
       actions={
-        <div class="flex gap-3">
+        <>
           <button
             onClick={() => navigate('/setup/bot-type', { replace: true })}
-            class="px-5 py-2.5 text-sm text-white/40 hover:text-white/60 rounded-xl transition-colors duration-200"
+            class="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
           >
             Back
           </button>
           <button
             onClick={handleContinue}
             disabled={!canContinue()}
-            class="px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+            class="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
           >
             Continue
           </button>
-        </div>
+        </>
       }
     >
       <FlowSteps steps={steps} statuses={statuses()} summaries={summaries()} />

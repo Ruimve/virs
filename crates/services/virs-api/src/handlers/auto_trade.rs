@@ -20,6 +20,7 @@ pub async fn create_bot(
     let exchange = body["exchange"].as_str().unwrap_or("");
     let market_type = body["market_type"].as_str().unwrap_or("perpetual");
     let leverage = body["leverage"].as_i64().unwrap_or(10) as i32;
+    let max_position_pct = body["max_position_pct"].as_f64().unwrap_or(80.0);
     let name = body["name"].as_str().unwrap_or("Auto Bot");
     let paper_mode = body["paper_mode"].as_bool().unwrap_or(true);
 
@@ -40,8 +41,8 @@ pub async fn create_bot(
 
     let id = uuid::Uuid::new_v4();
     sqlx::query(
-        r#"INSERT INTO qd_auto_bots (id, user_id, name, symbol, exchange, market_type, leverage, status, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 'stopped', NOW(), NOW())"#,
+        r#"INSERT INTO qd_auto_bots (id, user_id, name, symbol, exchange, market_type, leverage, max_position_pct, paper_mode, status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'stopped', NOW(), NOW())"#,
     )
     .bind(id)
     .bind(user_id)
@@ -50,6 +51,8 @@ pub async fn create_bot(
     .bind(exchange)
     .bind(market_type)
     .bind(leverage)
+    .bind(max_position_pct)
+    .bind(paper_mode)
     .execute(&state.db_pool)
     .await
     .map_err(|e| {
@@ -212,6 +215,19 @@ pub async fn start_bot(
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
     if let Some(tx) = state.engine_manager.auto_cmd_tx() {
         let _ = tx.send(virs_bot::auto::types::AutoCommand::StartBot { bot_id: id }).await;
+    }
+    // Register symbol for paper mode price ticks
+    if state.engine_manager.paper_mode() {
+        // Fetch bot info to get exchange/symbol
+        let bot = sqlx::query_as::<_, (String, String)>(
+            r#"SELECT exchange, symbol FROM qd_auto_bots WHERE id = $1"#
+        )
+        .bind(id)
+        .fetch_optional(&state.db_pool)
+        .await;
+        if let Ok(Some((exchange, symbol))) = bot {
+            state.engine_manager.register_paper_symbol(exchange, symbol).await;
+        }
     }
     Ok(Json(ApiResponse::ok(serde_json::json!({"started": true}))))
 }

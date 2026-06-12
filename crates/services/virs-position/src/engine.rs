@@ -957,12 +957,46 @@ pub(crate) async fn handle_open_position(
     take_profit: Option<f64>,
     strategy_id: Option<String>,
 ) {
-    let key = (exchange.clone(), symbol.clone(), side);
+    let exchange_name = if exchange.is_empty() { inner.exchange.name().to_string() } else { exchange };
+    let key = (exchange_name.clone(), symbol.clone(), side);
 
-    if inner.positions.contains_key(&key) {
-        let msg = format!("Position already exists: {}/{}", exchange, symbol);
-        warn!(msg);
-        inner.emit_event(EngineEvent::OrderFailed { order_id: Uuid::nil(), reason: msg });
+    // If position already exists, append order to it (e.g. grid multi-level orders)
+    if let Some(existing) = inner.positions.get(&key) {
+        let position_id = existing.id;
+        drop(existing);
+
+        let resolved_side = match side {
+            PositionSide::Long => Side::Buy,
+            PositionSide::Short => Side::Sell,
+            PositionSide::Both => order_side,
+        };
+
+        let mut params = PlaceOrderParams {
+            symbol: symbol.clone(), side: resolved_side, order_type, amount: size, price,
+            reduce_only: false, position_side: Some(side), position_id: Some(position_id), client_order_id: strategy_id.clone(),
+        };
+        let mode = *inner.position_mode.read().unwrap();
+        adjust_params_for_position_mode(&mut params, mode);
+        let reduce_only = params.reduce_only;
+
+        match inner.exchange.place_order(params).await {
+            Ok(mut order) => {
+                order.reduce_only = reduce_only;
+                if let Some(ref eoid) = order.exchange_order_id {
+                    inner.exchange_order_id_index.insert(eoid.clone(), order.id);
+                }
+                inner.orders.insert(order.id, order.clone());
+                persist!(inner.persistence.insert_order(&order), "Failed to persist order in open_position (existing)");
+
+                inner.emit_event(EngineEvent::OrderPlaced { order: order.clone() });
+                info!(position_id = %position_id, symbol = %symbol, side = ?side, size = order.filled, "Order placed for existing position");
+            }
+            Err(e) => {
+                let msg = format!("Failed to place order: {}", e);
+                error!(error = %e, symbol = %symbol, "Failed to place order for existing position");
+                inner.emit_event(EngineEvent::OrderFailed { order_id: position_id, reason: msg });
+            }
+        }
         return;
     }
 
@@ -1005,7 +1039,7 @@ pub(crate) async fn handle_open_position(
         id: position_id,
         engine_id: inner.config.engine_id.clone(),
         strategy_id: strategy_id.clone(),
-        exchange: exchange.clone(),
+        exchange: exchange_name.clone(),
         symbol: symbol.clone(),
         side,
         status: PositionStatus::Opening,
@@ -1033,7 +1067,7 @@ pub(crate) async fn handle_open_position(
 
     let mut params = PlaceOrderParams {
         symbol: symbol.clone(), side: resolved_side, order_type, amount: size, price,
-        reduce_only: false, position_side: Some(side), position_id: Some(position_id), client_order_id: None,
+        reduce_only: false, position_side: Some(side), position_id: Some(position_id), client_order_id: strategy_id.clone(),
     };
     let mode = *inner.position_mode.read().unwrap();
     adjust_params_for_position_mode(&mut params, mode);
@@ -1230,11 +1264,57 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
         }
     }
 
+    // Auto-create position if not provided (e.g. from Grid bot PlaceOrder)
+    let position_id = match params.position_id {
+        Some(pid) => pid,
+        None => {
+            let pos_id = Uuid::new_v4();
+            let position_side = params.position_side.unwrap_or_else(|| match (&params.side, params.reduce_only) {
+                (Side::Buy, false) | (Side::Sell, true) => PositionSide::Long,
+                _ => PositionSide::Short,
+            });
+            let exchange_name = inner.exchange.name().to_string();
+            let key = (exchange_name.clone(), params.symbol.clone(), position_side);
+
+            // Reuse existing position if one already exists for this key
+            if let Some(existing) = inner.positions.get(&key) {
+                existing.id
+            } else {
+                let position = Position {
+                    id: pos_id,
+                    engine_id: inner.config.engine_id.clone(),
+                    strategy_id: params.client_order_id.clone(),
+                    exchange: exchange_name,
+                    symbol: params.symbol.clone(),
+                    side: position_side,
+                    status: PositionStatus::Opening,
+                    size: 0.0,
+                    entry_price: 0.0,
+                    current_price: 0.0,
+                    leverage: 1,
+                    margin: 0.0,
+                    unrealized_pnl: 0.0,
+                    realized_pnl: 0.0,
+                    stop_loss: None,
+                    take_profit: None,
+                    liquidation_price: None,
+                    opened_at: Utc::now(),
+                    updated_at: Utc::now(),
+                    closed_at: None,
+                    metadata: serde_json::json!({}),
+                };
+                inner.position_id_index.insert(pos_id, key.clone());
+                inner.positions.insert(key, position.clone());
+                persist!(inner.persistence.upsert_position(&position), "Failed to persist auto-created position");
+                pos_id
+            }
+        }
+    };
+    params.position_id = Some(position_id);
+
     match inner.exchange.place_order(params.clone()).await {
         Ok(mut order) => {
-            if let Some(pid) = params.position_id {
-                order.position_id = pid;
-            }
+            order.position_id = position_id;
             order.reduce_only = params.reduce_only;
             inner.orders.insert(order.id, order.clone());
             if let Some(ref eoid) = order.exchange_order_id {

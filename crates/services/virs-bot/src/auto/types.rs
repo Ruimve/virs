@@ -16,6 +16,7 @@ pub struct AutoBot {
     pub symbol: String,
     pub exchange: String,
     pub market_type: String,
+    pub paper_mode: bool,
     pub status: String,
     pub leverage: i32,
     pub max_position_pct: f64,

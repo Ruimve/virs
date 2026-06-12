@@ -26,6 +26,7 @@ pub async fn create_bot(
     let leverage = body["leverage"].as_i64().unwrap_or(5) as i32;
     let name = body["name"].as_str().unwrap_or("Grid Bot");
     let paper_mode = body["paper_mode"].as_bool().unwrap_or(true);
+    let market_type = body["market_type"].as_str().unwrap_or("perpetual");
 
     if symbol.is_empty() || exchange.is_empty() {
         return Err((
@@ -45,8 +46,8 @@ pub async fn create_bot(
     let id = uuid::Uuid::new_v4();
     sqlx::query(
         r#"INSERT INTO qd_grid_bots (id, user_id, name, symbol, exchange, grid_count, upper_price, lower_price,
-           grid_profit_pct, quantity_per_grid, leverage, status, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'stopped', NOW(), NOW())"#,
+           grid_profit_pct, quantity_per_grid, leverage, market_type, paper_mode, status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'stopped', NOW(), NOW())"#,
     )
     .bind(id)
     .bind(user_id)
@@ -59,6 +60,8 @@ pub async fn create_bot(
     .bind(grid_profit_pct)
     .bind(quantity_per_grid)
     .bind(leverage)
+    .bind(market_type)
+    .bind(paper_mode)
     .execute(&state.db_pool)
     .await
     .map_err(|e| {

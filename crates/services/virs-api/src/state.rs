@@ -51,6 +51,9 @@ pub trait EngineManager: Send + Sync {
 
     /// Current paper mode (meaningful only after engines started)
     fn paper_mode(&self) -> bool;
+
+    /// Register a symbol for paper mode price ticks
+    async fn register_paper_symbol(&self, exchange: String, symbol: String);
 }
 
 /// API 应用状态

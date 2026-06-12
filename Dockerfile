@@ -19,13 +19,19 @@ FROM rust:slim-bookworm AS backend-builder
 WORKDIR /build
 
 # Install build dependencies
-# - pkg-config + libssl-dev: openssl (reqwest/tokio-tungstenite)
-# - build-essential: C compiler (gcc for native deps)
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
+
+# Use crates.io mirror for faster downloads in China/Asia
+RUN mkdir -p /usr/local/cargo && \
+    echo '[source.crates-io]\n\
+replace-with = "ustc"\n\
+\n\
+[source.ustc]\n\
+registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"' > /usr/local/cargo/config.toml
 
 # Copy workspace root manifest and lock file first for dependency caching
 COPY Cargo.toml Cargo.lock ./
@@ -101,10 +107,11 @@ RUN cargo build --release -p virs-app 2>&1 || true
 COPY crates/ crates/
 COPY app/ app/
 
-# Touch ALL .rs files to invalidate the dummy build cache
-RUN find /build -name "*.rs" -exec touch {} +
+# Touch our own crate sources to ensure cargo recompiles them
+# (COPY may preserve older timestamps from the host, causing cargo to skip recompilation)
+RUN find /build/crates /build/app -name "*.rs" -exec touch {} +
 
-# Build the real binary
+# Build the real binary (incremental: only recompile changed crates)
 RUN cargo build --release -p virs-app
 
 # ---- Stage 3: Runtime ----

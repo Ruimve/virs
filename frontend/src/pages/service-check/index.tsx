@@ -150,12 +150,12 @@ const ServiceCheck: Component = () => {
           </svg>
         )
       default:
-        return <div class="w-4 h-4 rounded-full border border-white/10" />
+        return <div class="w-4 h-4 rounded-full border border-line-emphasis" />
     }
   }
 
   return (
-    <div class="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center relative overflow-hidden">
+    <div class="min-h-screen bg-base flex flex-col items-center justify-center relative overflow-hidden">
       {/* Background */}
       <div class="absolute inset-0 overflow-hidden">
         <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-500/[0.03] blur-[120px]" />
@@ -164,26 +164,26 @@ const ServiceCheck: Component = () => {
       {/* Logo */}
       <div class="relative mb-12">
         <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/20 flex items-center justify-center backdrop-blur-sm">
-          <span class="text-2xl font-extralight tracking-[0.3em] text-white/90 select-none">V</span>
+          <span class="text-2xl font-extralight tracking-[0.3em] text-on-base select-none">V</span>
         </div>
       </div>
 
-      <h1 class="text-xl font-extralight tracking-[0.4em] text-white/80 mb-8 select-none">VIRS</h1>
+      <h1 class="text-xl font-extralight tracking-[0.4em] text-on-surface mb-8 select-none">VIRS</h1>
 
       {/* Service checks list */}
       <div class="w-80 space-y-3 mb-8">
         <For each={checks()}>
           {(check) => (
-            <div class="flex items-center gap-3 px-4 py-3 bg-white/[0.02] border border-white/[0.06] rounded-xl">
+            <div class="flex items-center gap-3 px-4 py-3 bg-surface-1 border border-line-default rounded-xl">
               <div class="shrink-0">{statusIcon(check.status)}</div>
               <div class="flex-1 min-w-0">
-                <div class="text-sm text-white/70">{check.name}</div>
+                <div class="text-sm text-on-surface-secondary">{check.name}</div>
                 <Show when={check.detail}>
                   <div class={`text-xs mt-0.5 ${
                     check.status === 'ok' ? 'text-emerald-400/60' :
                     check.status === 'warn' ? 'text-amber-400/60' :
                     check.status === 'error' ? 'text-red-400/60' :
-                    'text-white/20'
+                    'text-on-surface-faint'
                   }`}>
                     {check.detail}
                   </div>
@@ -196,17 +196,17 @@ const ServiceCheck: Component = () => {
 
       {/* Progress bar */}
       <div class="w-64 relative">
-        <div class="h-[2px] bg-white/[0.06] rounded-full overflow-hidden">
+        <div class="h-[2px] bg-line-default rounded-full overflow-hidden">
           <div
             class="h-full bg-gradient-to-r from-indigo-400 to-violet-400 rounded-full transition-all duration-500 ease-out"
             style={{ width: `${progress()}%` }}
           />
         </div>
         <div class="flex justify-between items-center mt-3">
-          <span class="text-[11px] text-white/20 tracking-wider">
+          <span class="text-[11px] text-on-surface-faint tracking-wider">
             {allDone() ? (hasError() ? 'Some services unavailable' : 'All services ready') : 'Checking services...'}
           </span>
-          <span class="text-[11px] text-white/30 font-mono tabular-nums">{progress()}%</span>
+          <span class="text-[11px] text-on-surface-tertiary font-mono tabular-nums">{progress()}%</span>
         </div>
       </div>
 
@@ -214,7 +214,7 @@ const ServiceCheck: Component = () => {
       <Show when={allDone() && hasError()}>
         <div class="mt-8 flex gap-3">
           <button
-            class="px-4 py-2 bg-white/[0.06] border border-white/[0.08] text-white/60 text-sm rounded-xl hover:bg-white/[0.08] transition-all"
+            class="px-4 py-2 bg-surface-3 border border-line-strong text-on-surface-tertiary text-sm rounded-xl hover:bg-line-emphasis transition-all"
             onClick={() => window.location.reload()}
           >
             Retry

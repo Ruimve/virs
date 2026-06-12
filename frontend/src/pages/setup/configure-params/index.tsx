@@ -16,15 +16,14 @@ const GRID_PARAMS = [
   { key: 'lower_price', label: 'Lower Price', type: 'number' as const, placeholder: '60000', required: true },
   { key: 'grid_levels', label: 'Grid Levels', type: 'number' as const, placeholder: '10', required: true },
   { key: 'investment', label: 'Investment (USDT)', type: 'number' as const, placeholder: '1000', required: true },
+  { key: 'leverage', label: 'Leverage', type: 'number' as const, placeholder: '5', required: true },
 ]
 
 // Auto bot parameters
 const AUTO_PARAMS = [
   { key: 'symbol', label: 'Trading Pair', type: 'text' as const, placeholder: 'BTC/USDT', required: true },
-  { key: 'investment', label: 'Investment (USDT)', type: 'number' as const, placeholder: '1000', required: true },
-  { key: 'max_position', label: 'Max Position', type: 'number' as const, placeholder: '5', required: false },
-  { key: 'stop_loss_pct', label: 'Stop Loss %', type: 'number' as const, placeholder: '5', required: false },
-  { key: 'take_profit_pct', label: 'Take Profit %', type: 'number' as const, placeholder: '10', required: false },
+  { key: 'leverage', label: 'Leverage', type: 'number' as const, placeholder: '10', required: true },
+  { key: 'max_position', label: 'Max Position %', type: 'number' as const, placeholder: '80', required: false },
 ]
 
 const ConfigureParams: Component = () => {
@@ -59,28 +58,28 @@ const ConfigureParams: Component = () => {
       title={isGrid() ? 'Grid Parameters' : 'Auto Trading Parameters'}
       subtitle="Configure the trading parameters for your bot"
       actions={
-        <div class="flex gap-3">
+        <>
           <button
             onClick={() => navigate('/setup/exchange', { replace: true })}
-            class="px-5 py-2.5 text-sm text-white/40 hover:text-white/60 rounded-xl transition-colors duration-200"
+            class="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
           >
             Back
           </button>
           <button
             onClick={handleContinue}
             disabled={!canContinue()}
-            class="px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+            class="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
           >
             Continue
           </button>
-        </div>
+        </>
       }
     >
       <div class="space-y-4">
         {/* Market type toggle */}
         <div>
-          <p class="text-[11px] tracking-[0.15em] text-white/25 uppercase mb-3">Market Type</p>
-          <div class="flex gap-3">
+          <p class="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-3">Market Type</p>
+          <div class="grid grid-cols-2 gap-3">
             {MARKET_TYPES.map((mt) => {
               const isSelected = () => selectedMarket() === mt.id
               return (
@@ -88,12 +87,12 @@ const ConfigureParams: Component = () => {
                   onClick={() => setSelectedMarket(mt.id)}
                   class={`flex-1 p-3 rounded-xl border text-center transition-all duration-200 ${
                     isSelected()
-                      ? 'bg-indigo-500/10 border-indigo-500/30 text-white/90'
-                      : 'bg-white/[0.02] border-white/[0.06] text-white/40 hover:bg-white/[0.04]'
+                      ? 'bg-indigo-500/10 border-indigo-500/30 text-on-base'
+                      : 'bg-surface-1 border-line-default text-on-surface-tertiary hover:bg-surface-2'
                   }`}
                 >
                   <p class="text-sm font-medium">{mt.label}</p>
-                  <p class="text-[11px] text-white/25 mt-0.5">{mt.desc}</p>
+                  <p class="text-[11px] text-on-surface-muted mt-0.5">{mt.desc}</p>
                 </button>
               )
             })}
@@ -103,7 +102,7 @@ const ConfigureParams: Component = () => {
         <For each={params()}>
           {(param) => (
             <div>
-              <label class="block text-[11px] tracking-[0.15em] text-white/25 uppercase mb-2">
+              <label class="block text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">
                 {param.label}
                 <Show when={param.required}>
                   <span class="text-indigo-400/60 ml-1">*</span>
@@ -113,7 +112,7 @@ const ConfigureParams: Component = () => {
                 type={param.type}
                 value={values()[param.key] || ''}
                 onInput={(e) => setValue(param.key, e.currentTarget.value)}
-                class="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-sm text-white/90 placeholder-white/20 focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
+                class="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
                 placeholder={param.placeholder}
               />
             </div>

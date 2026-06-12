@@ -69,7 +69,7 @@ const SelectExchange: Component = () => {
               if (step1Status() === 'error') setStep1Status('active')
               resetDownstream()
             }}
-            class="w-full px-4 py-2.5 bg-white/[0.04] border border-white/[0.08] rounded-lg text-sm text-white/90 placeholder-white/20 focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
+            class="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
             placeholder="API Key"
           />
           <input
@@ -81,7 +81,7 @@ const SelectExchange: Component = () => {
               if (step1Status() === 'error') setStep1Status('active')
               resetDownstream()
             }}
-            class="w-full px-4 py-2.5 bg-white/[0.04] border border-white/[0.08] rounded-lg text-sm text-white/90 placeholder-white/20 focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
+            class="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
             placeholder="API Secret"
           />
           <Show when={error()}>
@@ -106,7 +106,7 @@ const SelectExchange: Component = () => {
       render: () => (
         <div class="space-y-2">
           <Show when={step2Status() === 'verifying'}>
-            <p class="text-[12px] text-white/30">Testing connection to Binance...</p>
+            <p class="text-[12px] text-on-surface-tertiary">Testing connection to Binance...</p>
           </Show>
           <Show when={step2Status() === 'error'}>
             <p class="text-[12px] text-red-400">{error() || 'Connection failed'}</p>
@@ -122,13 +122,13 @@ const SelectExchange: Component = () => {
         <div class="space-y-1.5">
           <For each={permissions()}>
             {(p) => (
-              <div class="flex items-center justify-between px-3 py-1.5 bg-white/[0.02] border border-white/[0.06] rounded-lg">
+              <div class="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
                 <div class="flex items-center gap-2">
                   <span class="text-[12px]">{statusIcon(p.status)}</span>
-                  <span class="text-[12px] text-white/50">{p.label}</span>
+                  <span class="text-[12px] text-on-surface-tertiary">{p.label}</span>
                 </div>
                 <span class={`text-[11px] ${
-                  p.status === 'ok' ? 'text-white/25' :
+                  p.status === 'ok' ? 'text-on-surface-muted' :
                   p.status === 'warn' ? 'text-amber-400/60' :
                   'text-red-400/60'
                 }`}>
@@ -147,16 +147,16 @@ const SelectExchange: Component = () => {
       render: () => (
         <div class="space-y-1.5">
           <Show when={step4Status() === 'verifying'}>
-            <p class="text-[12px] text-white/30">Fetching account balances...</p>
+            <p class="text-[12px] text-on-surface-tertiary">Fetching account balances...</p>
           </Show>
           <Show when={accountInfo()}>
-            <div class="flex items-center justify-between px-3 py-2 bg-white/[0.02] border border-white/[0.06] rounded-lg">
-              <span class="text-[12px] text-white/40">Perpetual (USDT)</span>
-              <span class="text-[12px] text-white/70 font-mono">{accountInfo()!.perpetual_usdt != null ? accountInfo()!.perpetual_usdt!.toFixed(4) : '—'}</span>
+            <div class="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
+              <span class="text-[12px] text-on-surface-tertiary">Perpetual (USDT)</span>
+              <span class="text-[12px] text-on-surface-secondary font-mono">{accountInfo()!.perpetual_usdt != null ? accountInfo()!.perpetual_usdt!.toFixed(4) : '—'}</span>
             </div>
-            <div class="flex items-center justify-between px-3 py-2 bg-white/[0.02] border border-white/[0.06] rounded-lg">
-              <span class="text-[12px] text-white/40">Spot (USDT)</span>
-              <span class="text-[12px] text-white/70 font-mono">{accountInfo()!.spot_usdt != null ? accountInfo()!.spot_usdt!.toFixed(4) : '—'}</span>
+            <div class="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
+              <span class="text-[12px] text-on-surface-tertiary">Spot (USDT)</span>
+              <span class="text-[12px] text-on-surface-secondary font-mono">{accountInfo()!.spot_usdt != null ? accountInfo()!.spot_usdt!.toFixed(4) : '—'}</span>
             </div>
           </Show>
           <Show when={step4Status() === 'error'}>
@@ -268,21 +268,21 @@ const SelectExchange: Component = () => {
       title="Connect Binance"
       subtitle="Provide your API credentials"
       actions={
-        <div class="flex gap-3">
+        <>
           <button
             onClick={() => navigate('/setup/llm', { replace: true })}
-            class="px-5 py-2.5 text-sm text-white/40 hover:text-white/60 rounded-xl transition-colors duration-200"
+            class="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
           >
             Back
           </button>
           <button
             onClick={handleContinue}
             disabled={!canContinue()}
-            class="px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+            class="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
           >
             Continue
           </button>
-        </div>
+        </>
       }
     >
       <FlowSteps steps={steps} statuses={statuses()} summaries={summaries()} />

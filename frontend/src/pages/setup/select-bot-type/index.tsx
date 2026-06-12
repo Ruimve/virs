@@ -54,7 +54,7 @@ const SelectBotType: Component = () => {
         <button
           onClick={handleContinue}
           disabled={!canContinue()}
-          class="px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+          class="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
         >
           Continue
         </button>
@@ -67,25 +67,25 @@ const SelectBotType: Component = () => {
           return (
             <button
               onClick={() => setSelected(bot.id)}
-              class={`group w-full p-5 rounded-xl border text-left transition-all duration-200 ${
+              class={`group w-full p-4 md:p-5 rounded-xl border text-left transition-all duration-200 ${
                 isSelected()
-                  ? `bg-gradient-to-br ${bot.color} ${bot.border} ring-1 ring-white/10`
-                  : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.04] hover:border-white/[0.1]'
+                  ? `bg-gradient-to-br ${bot.color} ${bot.border} ring-1 ring-line-emphasis`
+                  : 'bg-surface-1 border-line-default hover:bg-surface-2 hover:border-line-emphasis'
               }`}
             >
               <div class="flex items-start gap-4">
-                <div class={`shrink-0 ${isSelected() ? 'text-indigo-400' : 'text-white/20'}`}>
+                <div class={`shrink-0 ${isSelected() ? 'text-indigo-400' : 'text-on-surface-faint'}`}>
                   {bot.icon}
                 </div>
                 <div class="flex-1 min-w-0">
-                  <p class={`text-base font-medium ${isSelected() ? 'text-white/90' : 'text-white/60'}`}>
+                  <p class={`text-base font-medium ${isSelected() ? 'text-on-base' : 'text-on-surface-secondary'}`}>
                     {bot.name}
                   </p>
-                  <p class="text-[13px] text-white/30 mt-1 leading-relaxed">{bot.desc}</p>
-                  <div class="flex gap-2 mt-3">
+                  <p class="text-[13px] text-on-surface-tertiary mt-1 leading-relaxed">{bot.desc}</p>
+                  <div class="flex flex-wrap gap-2 mt-3">
                     {bot.features.map((f) => (
                       <span class={`px-2 py-0.5 rounded-md text-[11px] ${
-                        isSelected() ? 'bg-white/10 text-white/50' : 'bg-white/[0.03] text-white/20'
+                        isSelected() ? 'bg-surface-3 text-on-surface-tertiary' : 'bg-surface-1 text-on-surface-faint'
                       }`}>
                         {f}
                       </span>

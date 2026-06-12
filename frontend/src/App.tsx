@@ -19,10 +19,10 @@ const AutoDetailPage = lazy(() => import('./pages/ai-trade/auto-detail'))
 const App: Component = () => {
   return (
     <ErrorBoundary fallback={(err) => (
-      <div class="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
+      <div class="min-h-screen flex items-center justify-center bg-base">
         <div class="text-center p-8">
-          <h1 class="text-xl font-semibold text-white/80 mb-2">Error</h1>
-          <p class="text-white/40 mb-4">{err.message}</p>
+          <h1 class="text-xl font-semibold text-on-surface mb-2">Error</h1>
+          <p class="text-on-surface-tertiary mb-4">{err.message}</p>
           <button
             class="px-4 py-2 bg-indigo-500/80 text-white rounded-lg hover:bg-indigo-500 text-sm"
             onClick={() => window.location.reload()}

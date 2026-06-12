@@ -804,13 +804,15 @@ impl AutoWorker {
 
         let result = self
             .order_executor
-            .send_command(OrderCommand::PlaceOrder {
+            .send_command(OrderCommand::OpenPosition {
                 symbol: self.bot.symbol.clone(),
-                side: order_side,
+                side: position_side.unwrap_or(BotPositionSide::Long),
+                order_side,
                 amount: quantity,
+                leverage: Some(self.bot.leverage.max(1) as u32),
                 price: None,
-                reduce_only: false,
-                position_side,
+                stop_loss: Some(stop_loss),
+                take_profit: Some(take_profit),
                 client_order_id: Some(client_order_id.clone()),
             })
             .await;
@@ -850,56 +852,101 @@ impl AutoWorker {
         }
 
         let side = self.bot.current_side.clone().unwrap_or_default();
-        let (order_side, position_side) = match side.as_str() {
-            "long" => (OrderSide::Sell, Some(BotPositionSide::Long)),
-            "short" => (OrderSide::Buy, Some(BotPositionSide::Short)),
-            _ => {
-                warn!(bot_id = %self.bot.id, side = %side, "Unknown position side, cannot close");
-                return;
+
+        // Use ClosePosition if we have position_id, otherwise fall back to PlaceOrder
+        if let Some(position_id) = self.bot.position_id {
+            let client_order_id = format!("auto:close:{}:{}", reason, self.bot.id);
+
+            let result = self
+                .order_executor
+                .send_command(OrderCommand::ClosePosition {
+                    position_id,
+                    price: None,
+                })
+                .await;
+
+            match result {
+                Ok(()) => {
+                    info!(
+                        bot_id = %self.bot.id, side = %side,
+                        entry_price = self.bot.entry_price,
+                        close_price = self.current_price,
+                        reason = %reason,
+                        "Position closing order sent via ClosePosition, awaiting confirmation"
+                    );
+
+                    self.pending_close = Some(PendingClose {
+                        side: side.clone(),
+                        reason: reason.to_string(),
+                        entry_price: self.bot.entry_price,
+                        position_size: self.bot.position_size,
+                        unrealized_pnl: self.bot.unrealized_pnl,
+                        client_order_id,
+                        sent_at: tokio::time::Instant::now(),
+                    });
+                }
+                Err(e) => {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to send close position order");
+                    let _ = self.auto_event_tx.send(AutoEvent::BotError {
+                        bot_id: self.bot.id,
+                        error: format!("Failed to send close order ({}): {}", reason, e),
+                    });
+                }
             }
-        };
+        } else {
+            // Fallback: use PlaceOrder with reduce_only when position_id is not available
+            let (order_side, position_side) = match side.as_str() {
+                "long" => (OrderSide::Sell, Some(BotPositionSide::Long)),
+                "short" => (OrderSide::Buy, Some(BotPositionSide::Short)),
+                _ => {
+                    warn!(bot_id = %self.bot.id, side = %side, "Unknown position side, cannot close");
+                    return;
+                }
+            };
 
-        let client_order_id = format!("auto:close:{}:{}", reason, self.bot.id);
+            let client_order_id = format!("auto:close:{}:{}", reason, self.bot.id);
 
-        let result = self
-            .order_executor
-            .send_command(OrderCommand::PlaceOrder {
-                symbol: self.bot.symbol.clone(),
-                side: order_side,
-                amount: self.bot.position_size,
-                price: None,
-                reduce_only: true,
-                position_side,
-                client_order_id: Some(client_order_id.clone()),
-            })
-            .await;
+            let result = self
+                .order_executor
+                .send_command(OrderCommand::PlaceOrder {
+                    symbol: self.bot.symbol.clone(),
+                    side: order_side,
+                    amount: self.bot.position_size,
+                    price: None,
+                    reduce_only: true,
+                    position_side,
+                    position_id: None,
+                    client_order_id: Some(client_order_id.clone()),
+                })
+                .await;
 
-        match result {
-            Ok(()) => {
-                info!(
-                    bot_id = %self.bot.id, side = %side,
-                    entry_price = self.bot.entry_price,
-                    close_price = self.current_price,
-                    reason = %reason,
-                    "Position closing order sent, awaiting confirmation"
-                );
+            match result {
+                Ok(()) => {
+                    info!(
+                        bot_id = %self.bot.id, side = %side,
+                        entry_price = self.bot.entry_price,
+                        close_price = self.current_price,
+                        reason = %reason,
+                        "Position closing order sent via PlaceOrder, awaiting confirmation"
+                    );
 
-                self.pending_close = Some(PendingClose {
-                    side: side.clone(),
-                    reason: reason.to_string(),
-                    entry_price: self.bot.entry_price,
-                    position_size: self.bot.position_size,
-                    unrealized_pnl: self.bot.unrealized_pnl,
-                    client_order_id,
-                    sent_at: tokio::time::Instant::now(),
-                });
-            }
-            Err(e) => {
-                warn!(bot_id = %self.bot.id, error = %e, "Failed to send close position order");
-                let _ = self.auto_event_tx.send(AutoEvent::BotError {
-                    bot_id: self.bot.id,
-                    error: format!("Failed to send close order ({}): {}", reason, e),
-                });
+                    self.pending_close = Some(PendingClose {
+                        side: side.clone(),
+                        reason: reason.to_string(),
+                        entry_price: self.bot.entry_price,
+                        position_size: self.bot.position_size,
+                        unrealized_pnl: self.bot.unrealized_pnl,
+                        client_order_id,
+                        sent_at: tokio::time::Instant::now(),
+                    });
+                }
+                Err(e) => {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to send close position order");
+                    let _ = self.auto_event_tx.send(AutoEvent::BotError {
+                        bot_id: self.bot.id,
+                        error: format!("Failed to send close order ({}): {}", reason, e),
+                    });
+                }
             }
         }
     }
@@ -911,6 +958,11 @@ impl AutoWorker {
             OrderEvent::OrderFilled { order } => {
                 if !self.matches_pending_order(order.client_order_id.as_deref()) {
                     return;
+                }
+
+                // Track position_id from order events
+                if order.position_id.is_some() && self.bot.position_id.is_none() {
+                    self.bot.position_id = order.position_id;
                 }
 
                 let fill_price = order
@@ -1117,6 +1169,7 @@ impl AutoWorker {
         self.bot.current_side = Some("none".to_string());
         self.bot.entry_price = 0.0;
         self.bot.position_size = 0.0;
+        self.bot.position_id = None;
         self.bot.stop_loss = 0.0;
         self.bot.take_profit = 0.0;
         self.bot.unrealized_pnl = 0.0;

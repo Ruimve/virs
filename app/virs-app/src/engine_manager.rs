@@ -31,6 +31,8 @@ struct EngineState {
     paper_mode: bool,
     grid_cmd_tx: mpsc::Sender<GridCommand>,
     auto_cmd_tx: mpsc::Sender<AutoCommand>,
+    /// Symbols that need price ticks in paper mode (exchange, symbol)
+    paper_symbols: Arc<Mutex<Vec<(String, String)>>>,
 }
 
 /// Application-level engine manager.
@@ -168,15 +170,23 @@ impl EngineManager for AppEngineManager {
         );
 
         // Paper mode price tick
+        let paper_symbols: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
         if paper_mode {
             let price_provider_for_paper: Arc<dyn PriceProvider> = grid_price_provider.clone();
             let kline_engine_for_paper = self.kline_engine.clone();
             let pe_cmd_tx_for_tick = pe_cmd_tx.clone();
+            let paper_symbols_for_tick = paper_symbols.clone();
             tokio::spawn(async move {
                 let mut tick = tokio::time::interval(std::time::Duration::from_secs(3));
                 loop {
                     tick.tick().await;
-                    for (exchange, symbol, _market_type) in kline_engine_for_paper.subscribed_symbols() {
+                    let kline_symbols = kline_engine_for_paper.subscribed_symbols();
+                    let symbols: Vec<(String, String)> = if kline_symbols.is_empty() {
+                        paper_symbols_for_tick.lock().await.clone()
+                    } else {
+                        kline_symbols.into_iter().map(|(e, s, _)| (e, s)).collect()
+                    };
+                    for (exchange, symbol) in symbols {
                         if let Some(price) = price_provider_for_paper.get_price(&exchange, &symbol, "perpetual").await {
                             let _ = pe_cmd_tx_for_tick.send(EngineCommand::PriceTick {
                                 symbol: symbol.clone(),
@@ -311,11 +321,32 @@ impl EngineManager for AppEngineManager {
         });
         info!("Auto trade engine started");
 
+        // Register existing running auto bot symbols for paper mode price ticks
+        if paper_mode {
+            let db = self.db_pool.clone();
+            let ps = paper_symbols.clone();
+            tokio::spawn(async move {
+                let bots: Vec<(String, String)> = sqlx::query_as(
+                    r#"SELECT DISTINCT exchange, symbol FROM qd_auto_bots WHERE status = 'running'"#
+                )
+                .fetch_all(&db)
+                .await
+                .unwrap_or_default();
+                let mut symbols = ps.lock().await;
+                for (exchange, symbol) in bots {
+                    if !symbols.contains(&(exchange.clone(), symbol.clone())) {
+                        symbols.push((exchange, symbol));
+                    }
+                }
+            });
+        }
+
         // Store state (OnceLock — set once, then readable synchronously)
         let _ = self.state.set(EngineState {
             paper_mode,
             grid_cmd_tx,
             auto_cmd_tx,
+            paper_symbols: paper_symbols.clone(),
         });
         self.started.store(true, Ordering::SeqCst);
 
@@ -337,5 +368,14 @@ impl EngineManager for AppEngineManager {
 
     fn paper_mode(&self) -> bool {
         self.state.get().map(|s| s.paper_mode).unwrap_or(false)
+    }
+
+    async fn register_paper_symbol(&self, exchange: String, symbol: String) {
+        if let Some(state) = self.state.get() {
+            let mut symbols = state.paper_symbols.lock().await;
+            if !symbols.contains(&(exchange.clone(), symbol.clone())) {
+                symbols.push((exchange, symbol));
+            }
+        }
     }
 }

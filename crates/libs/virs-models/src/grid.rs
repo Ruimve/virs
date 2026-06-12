@@ -12,6 +12,8 @@ pub struct GridBot {
     pub name: String,
     pub symbol: String,
     pub exchange: String,
+    pub market_type: String,
+    pub paper_mode: bool,
     pub status: StrategyStatus,
     pub upper_price: f64,
     pub lower_price: f64,

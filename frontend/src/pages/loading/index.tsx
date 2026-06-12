@@ -53,7 +53,7 @@ const Loading: Component = () => {
   })
 
   return (
-    <div class="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center relative overflow-hidden">
+    <div class="min-h-screen bg-base flex flex-col items-center justify-center relative overflow-hidden">
       {/* Ambient glow */}
       <div class="absolute inset-0 overflow-hidden">
         <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-500/[0.03] blur-[120px]" />
@@ -62,25 +62,25 @@ const Loading: Component = () => {
       {/* Logo */}
       <div class="relative mb-16">
         <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/20 flex items-center justify-center backdrop-blur-sm">
-          <span class="text-3xl font-extralight tracking-[0.3em] text-white/90 select-none">V</span>
+          <span class="text-3xl font-extralight tracking-[0.3em] text-on-base select-none">V</span>
         </div>
       </div>
 
-      <h1 class="text-2xl font-extralight tracking-[0.4em] text-white/80 mb-2 select-none">VIRS</h1>
-      <p class="text-[11px] tracking-[0.25em] text-white/25 mb-16 select-none">QUANTITATIVE TRADING</p>
+      <h1 class="text-2xl font-extralight tracking-[0.4em] text-on-surface mb-2 select-none">VIRS</h1>
+      <p class="text-[11px] tracking-[0.25em] text-on-surface-muted mb-16 select-none">QUANTITATIVE TRADING</p>
 
       {/* Progress */}
       <Show when={progress() > 0}>
         <div class="w-64 relative">
-          <div class="h-[2px] bg-white/[0.06] rounded-full overflow-hidden">
+          <div class="h-[2px] bg-line-default rounded-full overflow-hidden">
             <div
               class="h-full bg-gradient-to-r from-indigo-400 to-violet-400 rounded-full transition-all duration-500 ease-out"
               style={{ width: `${progress()}%` }}
             />
           </div>
           <div class="flex justify-between items-center mt-4">
-            <span class="text-[11px] text-white/20 tracking-wider">{statusText()}</span>
-            <span class="text-[11px] text-white/30 font-mono tabular-nums">{progress()}%</span>
+            <span class="text-[11px] text-on-surface-faint tracking-wider">{statusText()}</span>
+            <span class="text-[11px] text-on-surface-tertiary font-mono tabular-nums">{progress()}%</span>
           </div>
         </div>
       </Show>

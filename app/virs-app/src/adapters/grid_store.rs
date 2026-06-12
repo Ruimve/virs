@@ -25,6 +25,8 @@ fn bot_to_config(b: &GridBot) -> GridBotConfig {
         name: b.name.clone(),
         symbol: b.symbol.clone(),
         exchange: b.exchange.clone(),
+        market_type: b.market_type.clone(),
+        paper_mode: b.paper_mode,
         grid_count: b.grid_count,
         upper_price: b.upper_price,
         lower_price: b.lower_price,

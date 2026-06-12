@@ -1,19 +1,96 @@
 @import "tailwindcss";
 
-/* ===== 颜色系统 ===== */
+/* ===== 语义色 Token ===== */
+@theme {
+  /* Surface */
+  --color-base: var(--bg-base);
+  --color-base-secondary: var(--bg-base-secondary);
+  --color-surface-1: var(--bg-surface-1);
+  --color-surface-2: var(--bg-surface-2);
+  --color-surface-3: var(--bg-surface-3);
+
+  /* Text */
+  --color-on-base: var(--text-on-base);
+  --color-on-surface: var(--text-on-surface);
+  --color-on-surface-secondary: var(--text-on-surface-secondary);
+  --color-on-surface-tertiary: var(--text-on-surface-tertiary);
+  --color-on-surface-muted: var(--text-on-surface-muted);
+  --color-on-surface-faint: var(--text-on-surface-faint);
+  --color-placeholder: var(--text-placeholder);
+
+  /* Border */
+  --color-line-subtle: var(--border-subtle);
+  --color-line-default: var(--border-default);
+  --color-line-strong: var(--border-strong);
+  --color-line-emphasis: var(--border-emphasis);
+
+  /* Accent (indigo) */
+  --color-accent: var(--color-accent-val);
+  --color-accent-hover: var(--color-accent-hover-val);
+  --color-accent-light: var(--color-accent-light-val);
+  --color-accent-muted: var(--color-accent-muted-val);
+}
+
+/* ===== 亮色主题 (默认) ===== */
 :root {
-  --color-bg-primary: #ffffff;
-  --color-bg-secondary: #f8fafc;
-  --color-bg-tertiary: #f1f5f9;
-  --color-border: #e2e8f0;
-  --color-border-light: #f1f5f9;
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #475569;
-  --color-text-tertiary: #94a3b8;
-  --color-accent: #4f46e5;
-  --color-accent-hover: #4338ca;
-  --color-accent-light: #eef2ff;
-  --color-accent-muted: #c7d2fe;
+  /* Surface */
+  --bg-base: #ffffff;
+  --bg-base-secondary: #f8fafc;
+  --bg-surface-1: #f8fafc;
+  --bg-surface-2: #f1f5f9;
+  --bg-surface-3: #e2e8f0;
+
+  /* Text */
+  --text-on-base: #0f172a;
+  --text-on-surface: #1e293b;
+  --text-on-surface-secondary: #475569;
+  --text-on-surface-tertiary: #64748b;
+  --text-on-surface-muted: #94a3b8;
+  --text-on-surface-faint: #cbd5e1;
+  --text-placeholder: #94a3b8;
+
+  /* Border */
+  --border-subtle: #f1f5f9;
+  --border-default: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --border-emphasis: #94a3b8;
+
+  /* Accent */
+  --color-accent-val: #4f46e5;
+  --color-accent-hover-val: #4338ca;
+  --color-accent-light-val: #eef2ff;
+  --color-accent-muted-val: #c7d2fe;
+}
+
+/* ===== 暗色主题 ===== */
+.dark {
+  /* Surface */
+  --bg-base: #0a0a0f;
+  --bg-base-secondary: #0d0d14;
+  --bg-surface-1: #16161e;
+  --bg-surface-2: #1e1e2a;
+  --bg-surface-3: #2a2a3a;
+
+  /* Text */
+  --text-on-base: rgba(255, 255, 255, 0.92);
+  --text-on-surface: rgba(255, 255, 255, 0.82);
+  --text-on-surface-secondary: rgba(255, 255, 255, 0.62);
+  --text-on-surface-tertiary: rgba(255, 255, 255, 0.48);
+  --text-on-surface-muted: rgba(255, 255, 255, 0.32);
+  --text-on-surface-faint: rgba(255, 255, 255, 0.22);
+  --text-placeholder: rgba(255, 255, 255, 0.32);
+
+  /* Border */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-emphasis: rgba(255, 255, 255, 0.2);
+
+  /* Accent */
+  --color-accent-val: #6366f1;
+  --color-accent-hover-val: #818cf8;
+  --color-accent-light-val: rgba(99, 102, 241, 0.15);
+  --color-accent-muted-val: rgba(99, 102, 241, 0.3);
 }
 
 /* ===== 全局字体 ===== */
@@ -21,8 +98,8 @@ body {
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color: var(--color-text-primary);
-  background-color: var(--color-bg-secondary);
+  color: var(--text-on-base);
+  background-color: var(--bg-base-secondary);
 }
 
 code, pre, .font-mono {
@@ -71,18 +148,18 @@ code, pre, .font-mono {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--border-strong);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--border-emphasis);
 }
 
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 /* ===== 输入框聚焦过渡 ===== */
@@ -95,8 +172,8 @@ select {
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.08);
+  border-color: var(--color-accent-val);
+  box-shadow: 0 0 0 3px var(--color-accent-light-val);
 }
 
 /* ===== 表格行 hover ===== */
@@ -105,13 +182,13 @@ tbody tr {
 }
 
 tbody tr:hover {
-  background-color: var(--color-bg-tertiary);
+  background-color: var(--bg-surface-1);
 }
 
 /* ===== 选中文字颜色 ===== */
 ::selection {
-  background-color: var(--color-accent-muted);
-  color: var(--color-text-primary);
+  background-color: var(--color-accent-muted-val);
+  color: var(--text-on-base);
 }
 
 /* ===== Loading 页面动画 ===== */

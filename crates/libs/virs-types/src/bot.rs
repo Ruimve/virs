@@ -47,6 +47,7 @@ pub enum BotPositionSide {
 #[derive(Debug, Clone)]
 pub struct OrderInfo {
     pub id: Uuid,
+    pub position_id: Option<Uuid>,
     pub symbol: String,
     pub side: OrderSide,
     pub fill_price: Option<f64>,
@@ -58,6 +59,21 @@ pub struct OrderInfo {
 /// Order command (bot-layer)
 #[derive(Debug, Clone)]
 pub enum OrderCommand {
+    OpenPosition {
+        symbol: String,
+        side: BotPositionSide,
+        order_side: OrderSide,
+        amount: f64,
+        leverage: Option<u32>,
+        price: Option<f64>,
+        stop_loss: Option<f64>,
+        take_profit: Option<f64>,
+        client_order_id: Option<String>,
+    },
+    ClosePosition {
+        position_id: Uuid,
+        price: Option<f64>,
+    },
     PlaceOrder {
         symbol: String,
         side: OrderSide,
@@ -65,6 +81,7 @@ pub enum OrderCommand {
         price: Option<f64>,
         reduce_only: bool,
         position_side: Option<BotPositionSide>,
+        position_id: Option<Uuid>,
         client_order_id: Option<String>,
     },
     CancelOrder {

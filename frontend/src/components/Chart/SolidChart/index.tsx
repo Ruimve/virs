@@ -24,24 +24,31 @@ const SolidChart: Component<SolidChartProps> = (props) => {
   let chart: IChartApi | undefined
 
   const containerRef = (el: HTMLDivElement) => {
+    // Read theme-aware CSS variables for chart colors
+    const cs = getComputedStyle(el)
+    const bgBase = cs.getPropertyValue('--bg-base').trim() || '#ffffff'
+    const textOnSurfaceTertiary = cs.getPropertyValue('--text-on-surface-tertiary').trim() || '#94a3b8'
+    const borderDefault = cs.getPropertyValue('--border-default').trim() || '#e2e8f0'
+    const borderSubtle = cs.getPropertyValue('--border-subtle').trim() || '#f1f5f9'
+
     chart = createChart(el, {
       layout: {
-        background: { type: ColorType.Solid, color: '#ffffff' },
-        textColor: '#6b7280',
+        background: { type: ColorType.Solid, color: bgBase },
+        textColor: textOnSurfaceTertiary,
         fontSize: 12,
       },
       grid: {
-        vertLines: { color: '#f3f4f6' },
-        horzLines: { color: '#f3f4f6' },
+        vertLines: { color: borderSubtle },
+        horzLines: { color: borderSubtle },
       },
       crosshair: {
         mode: 0,
       },
       rightPriceScale: {
-        borderColor: '#e5e7eb',
+        borderColor: borderDefault,
       },
       timeScale: {
-        borderColor: '#e5e7eb',
+        borderColor: borderDefault,
         timeVisible: props.timeVisible ?? true,
         secondsVisible: props.secondsVisible ?? false,
       },
@@ -73,7 +80,7 @@ const SolidChart: Component<SolidChartProps> = (props) => {
   return (
     <div
       ref={containerRef}
-      class="w-full rounded-lg border border-gray-200/60 overflow-hidden"
+      class="w-full rounded-lg border border-line-default overflow-hidden"
       style={{ height: `${props.height || 400}px` }}
     />
   )

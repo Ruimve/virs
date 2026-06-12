@@ -46,7 +46,35 @@ impl PeOrderExecutor {
 impl OrderExecutor for PeOrderExecutor {
     async fn send_command(&self, command: OrderCommand) -> BotResult<()> {
         let engine_cmd = match command {
-            OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only, position_side, client_order_id } => {
+            OrderCommand::OpenPosition { symbol, side, order_side, amount, leverage, price, stop_loss, take_profit, client_order_id } => {
+                EngineCommand::OpenPosition {
+                    exchange: String::new(), // will be resolved by engine
+                    symbol,
+                    side: match side {
+                        BotPositionSide::Long => PositionSide::Long,
+                        BotPositionSide::Short => PositionSide::Short,
+                    },
+                    order_side: match order_side {
+                        OrderSide::Buy => Side::Buy,
+                        OrderSide::Sell => Side::Sell,
+                    },
+                    size: amount,
+                    leverage,
+                    order_type: if price.is_some() { OrderType::Limit } else { OrderType::Market },
+                    price,
+                    stop_loss,
+                    take_profit,
+                    strategy_id: client_order_id,
+                }
+            }
+            OrderCommand::ClosePosition { position_id, price } => {
+                EngineCommand::ClosePosition {
+                    position_id,
+                    order_type: if price.is_some() { OrderType::Limit } else { OrderType::Market },
+                    price,
+                }
+            }
+            OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only, position_side, position_id, client_order_id } => {
                 EngineCommand::PlaceOrder {
                     params: PlaceOrderParams {
                         symbol,
@@ -62,7 +90,7 @@ impl OrderExecutor for PeOrderExecutor {
                             BotPositionSide::Long => PositionSide::Long,
                             BotPositionSide::Short => PositionSide::Short,
                         }),
-                        position_id: None,
+                        position_id,
                         client_order_id,
                     },
                 }
@@ -89,6 +117,7 @@ fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
         EngineEvent::OrderPlaced { order } => Some(OrderEvent::OrderPlaced {
             order: OrderInfo {
                 id: order.id,
+                position_id: Some(order.position_id),
                 symbol: order.symbol.clone(),
                 side: match order.side {
                     Side::Buy => OrderSide::Buy,
@@ -103,6 +132,7 @@ fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
         EngineEvent::OrderFilled { order, .. } => Some(OrderEvent::OrderFilled {
             order: OrderInfo {
                 id: order.id,
+                position_id: Some(order.position_id),
                 symbol: order.symbol.clone(),
                 side: match order.side {
                     Side::Buy => OrderSide::Buy,

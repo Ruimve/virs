@@ -69,7 +69,7 @@ const FlowStep: Component<FlowStepProps> = (props) => {
     switch (props.status) {
       case 'pending':
         return (
-          <div class="w-7 h-7 rounded-full border border-white/[0.08] bg-white/[0.02] flex items-center justify-center text-white/20">
+          <div class="w-7 h-7 rounded-full border border-line-strong bg-surface-1 flex items-center justify-center text-on-surface-faint">
             {stepContent}
           </div>
         )
@@ -109,9 +109,9 @@ const FlowStep: Component<FlowStepProps> = (props) => {
 
   const titleColor = () => {
     switch (props.status) {
-      case 'pending': return 'text-white/20'
-      case 'done': return 'text-white/50'
-      default: return 'text-white/80'
+      case 'pending': return 'text-on-surface-faint'
+      case 'done': return 'text-on-surface-tertiary'
+      default: return 'text-on-surface'
     }
   }
 
@@ -126,7 +126,7 @@ const FlowStep: Component<FlowStepProps> = (props) => {
           {props.indicator ?? defaultIndicator()}
         </div>
         <Show when={shouldShowLine()}>
-          <div class="w-px flex-1 min-h-[16px] bg-white/[0.06] mt-1" />
+          <div class="w-px flex-1 min-h-[16px] bg-line-default mt-1" />
         </Show>
       </div>
 
@@ -140,7 +140,7 @@ const FlowStep: Component<FlowStepProps> = (props) => {
             {props.title}
           </p>
           <Show when={isEditable()}>
-            <span class="text-[10px] text-white/15 group-hover:text-white/30 transition-colors">
+            <span class="text-[10px] text-on-surface-muted group-hover:text-on-surface-tertiary transition-colors">
               {expanded() ? 'collapse' : 'edit'}
             </span>
           </Show>
@@ -148,12 +148,12 @@ const FlowStep: Component<FlowStepProps> = (props) => {
 
         {/* Description */}
         <Show when={props.description && (props.status !== 'done' || expanded())}>
-          <p class="text-[12px] text-white/25 -mt-1 mb-1">{props.description}</p>
+          <p class="text-[12px] text-on-surface-muted -mt-1 mb-1">{props.description}</p>
         </Show>
 
         {/* Collapsed summary */}
         <Show when={isCollapsed() && props.summary}>
-          <div class="text-[12px] text-white/25 -mt-1">
+          <div class="text-[12px] text-on-surface-muted -mt-1">
             {typeof props.summary === 'string' ? props.summary : props.summary}
           </div>
         </Show>

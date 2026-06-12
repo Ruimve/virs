@@ -170,7 +170,7 @@ impl GridWorker {
     }
 
     pub(crate) async fn fetch_current_price(&self) -> f64 {
-        match self.price_provider.get_price(&self.bot.exchange, &self.bot.symbol, "perpetual").await {
+        match self.price_provider.get_price(&self.bot.exchange, &self.bot.symbol, &self.bot.market_type).await {
             Some(price) if price > 0.0 => price,
             _ => self.current_price,
         }
@@ -284,14 +284,32 @@ impl GridWorker {
         };
 
         let client_order_id = Some(format!("grid:{}:{}:{}", self.bot.id, level.level, key_side));
-        let cmd = OrderCommand::PlaceOrder {
-            symbol: self.bot.symbol.clone(),
-            side,
-            amount,
-            price: Some(price),
-            reduce_only,
-            position_side,
-            client_order_id,
+
+        let cmd = if reduce_only {
+            // Close order: use PlaceOrder with reduce_only
+            OrderCommand::PlaceOrder {
+                symbol: self.bot.symbol.clone(),
+                side,
+                amount,
+                price: Some(price),
+                reduce_only: true,
+                position_side,
+                position_id: None,
+                client_order_id,
+            }
+        } else {
+            // Open order: use OpenPosition
+            OrderCommand::OpenPosition {
+                symbol: self.bot.symbol.clone(),
+                side: position_side.unwrap_or(BotPositionSide::Long),
+                order_side: side,
+                amount,
+                leverage: Some(self.bot.leverage.max(1) as u32),
+                price: Some(price),
+                stop_loss: None,
+                take_profit: None,
+                client_order_id,
+            }
         };
 
         if let Err(e) = self.order_executor.send_command(cmd).await {
@@ -683,7 +701,7 @@ impl GridWorker {
     }
 
     async fn build_llm_prompt(&self) -> Option<(String, String)> {
-        let snapshot = self.market_data_provider.get_market_snapshot(&self.bot.exchange, &self.bot.symbol, "perpetual").await;
+        let snapshot = self.market_data_provider.get_market_snapshot(&self.bot.exchange, &self.bot.symbol, &self.bot.market_type).await;
         if snapshot.current_price <= 0.0 {
             warn!(bot_id = %self.bot.id, "Market snapshot has zero price, skipping LLM decision");
             return None;
@@ -715,7 +733,7 @@ impl GridWorker {
             self.bot.grid_count, self.bot.grid_profit_pct, self.bot.quantity_per_grid, &self.levels,
         );
 
-        let account = self.market_data_provider.get_account_balance(&self.bot.exchange, "perpetual").await;
+        let account = self.market_data_provider.get_account_balance(&self.bot.exchange, &self.bot.market_type).await;
 
         let indicators: crate::common::indicators::MarketIndicators =
             serde_json::from_value(snapshot.indicators_json.clone()).unwrap_or_default();

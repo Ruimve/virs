@@ -1,6 +1,7 @@
 import { createSignal, For, Show, onMount, onCleanup } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { api } from '../../../lib/api';
+import { isDark, toggleTheme } from '../../../lib/theme';
 
 interface AutoBot {
   id: string;
@@ -108,13 +109,13 @@ export default function AutoDetailPage() {
 
   const statusConfig = (status: string) => {
     const map: Record<string, { text: string; dot: string; bg: string }> = {
-      running: { text: '运行中', dot: 'bg-emerald-500', bg: 'bg-emerald-50 text-emerald-700' },
-      paused: { text: '已暂停', dot: 'bg-amber-500', bg: 'bg-amber-50 text-amber-700' },
-      stopped: { text: '已停止', dot: 'bg-gray-400', bg: 'bg-gray-100 text-gray-500' },
-      draft: { text: '草稿', dot: 'bg-gray-300', bg: 'bg-gray-100 text-gray-400' },
-      error: { text: '错误', dot: 'bg-red-500', bg: 'bg-red-50 text-red-700' },
+      running: { text: '运行中', dot: 'bg-emerald-500', bg: 'bg-emerald-500/10 text-emerald-400' },
+      paused: { text: '已暂停', dot: 'bg-amber-500', bg: 'bg-amber-500/10 text-amber-400' },
+      stopped: { text: '已停止', dot: 'bg-on-surface-muted', bg: 'bg-surface-2 text-on-surface-tertiary' },
+      draft: { text: '草稿', dot: 'bg-on-surface-faint', bg: 'bg-surface-2 text-on-surface-tertiary' },
+      error: { text: '错误', dot: 'bg-red-500', bg: 'bg-red-500/10 text-red-400' },
     };
-    return map[status] || { text: status, dot: 'bg-gray-400', bg: 'bg-gray-100 text-gray-500' };
+    return map[status] || { text: status, dot: 'bg-on-surface-muted', bg: 'bg-surface-2 text-on-surface-tertiary' };
   };
 
   const tradeTypeLabel = (t: string) => {
@@ -127,17 +128,17 @@ export default function AutoDetailPage() {
   };
 
   const tradeTypeColor = (t: string) => {
-    if (t.startsWith('open_long') || t === 'close_short') return 'text-emerald-600';
-    if (t.startsWith('open_short') || t === 'close_long') return 'text-red-600';
-    if (t === 'stop_loss') return 'text-red-500';
-    if (t === 'take_profit') return 'text-emerald-500';
-    return 'text-gray-500';
+    if (t.startsWith('open_long') || t === 'close_short') return 'text-emerald-400';
+    if (t.startsWith('open_short') || t === 'close_long') return 'text-red-400';
+    if (t === 'stop_loss') return 'text-red-400';
+    if (t === 'take_profit') return 'text-emerald-400';
+    return 'text-on-surface-tertiary';
   };
 
   const formatPnl = (pnl: number) => {
-    if (pnl > 0) return <span class="text-emerald-600 font-semibold">+{pnl.toFixed(4)}</span>;
-    if (pnl < 0) return <span class="text-red-600 font-semibold">{pnl.toFixed(4)}</span>;
-    return <span class="text-gray-400">0.00</span>;
+    if (pnl > 0) return <span class="text-emerald-400 font-semibold">+{pnl.toFixed(4)}</span>;
+    if (pnl < 0) return <span class="text-red-400 font-semibold">{pnl.toFixed(4)}</span>;
+    return <span class="text-on-surface-tertiary">0.00</span>;
   };
 
   const getDecisionFromLog = (log: AnalysisLog) => {
@@ -159,180 +160,195 @@ export default function AutoDetailPage() {
   });
 
   return (
-    <div class="min-h-screen bg-gray-50 text-gray-900">
-      <div class="max-w-7xl mx-auto px-6 py-8">
-        <Show when={!loading() && bot()} fallback={
-          <div class="flex flex-col items-center justify-center py-20 gap-4">
-            <Show when={!loading() && !bot()} fallback={
-              <svg class="animate-spin h-6 w-6 text-gray-400" viewBox="0 0 24 24" fill="none">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            }>
-              <div class="text-gray-400 text-sm">{error() || '机器人不存在或加载失败'}</div>
-              <button
-                onClick={() => navigate('/setup/bot-type', { replace: true })}
-                class="px-4 py-2 text-xs font-medium border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors"
-              >
-                创建新机器人
-              </button>
-            </Show>
-          </div>
-        }>
-          {(() => {
-            const b = bot()!;
-            const sc = statusConfig(b.status);
-            return (
-              <>
-                <div class="flex items-center justify-between mb-6">
-                  <div class="flex items-center gap-3">
-                    <button
-                      onClick={() => navigate('/setup/bot-type', { replace: true })}
-                      class="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <div>
-                      <div class="flex items-center gap-2">
-                        <h1 class="text-lg font-semibold text-gray-900">{b.name}</h1>
-                        <span class={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${sc.bg}`}>
-                          <span class={`w-1 h-1 rounded-full ${sc.dot}`} />
-                          {sc.text}
-                        </span>
-                      </div>
-                      <div class="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
-                        <span class="font-medium text-gray-700">{b.symbol}</span>
-                        <span class="text-gray-300">·</span>
-                        <span>{b.exchange.toUpperCase()}</span>
-                        <span class="text-gray-300">·</span>
-                        <span>{b.market_type === 'perpetual' ? '合约' : '现货'}</span>
-                        <span class="text-gray-300">·</span>
-                        <span>{b.leverage}x</span>
-                      </div>
-                    </div>
-                  </div>
+    <div class="h-screen bg-base flex flex-col relative overflow-hidden">
+      {/* Background glow */}
+      <div class="absolute inset-0 overflow-hidden">
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-500/[0.03] blur-[120px]" />
+      </div>
+
+      <Show when={!loading() && bot()} fallback={
+        <div class="flex-1 flex flex-col items-center justify-center relative z-10 gap-4">
+          <Show when={!loading() && !bot()} fallback={
+            <svg class="animate-spin h-6 w-6 text-on-surface-tertiary" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          }>
+            <div class="text-on-surface-tertiary text-sm">{error() || '机器人不存在或加载失败'}</div>
+            <button
+              onClick={() => navigate('/setup/bot-type', { replace: true })}
+              class="px-4 py-2 text-xs font-medium border border-line-default rounded-lg text-on-surface-tertiary hover:bg-surface-2 transition-colors"
+            >
+              创建新机器人
+            </button>
+          </Show>
+        </div>
+      }>
+        {(() => {
+          const b = bot()!;
+          const sc = statusConfig(b.status);
+          return (
+            <>
+              {/* Top bar */}
+              <div class="relative z-10 flex items-center justify-between px-4 md:px-8 h-14 md:h-16 border-b border-line-subtle">
+                <div class="flex items-center gap-2 md:gap-3">
+                  <button
+                    onClick={() => navigate('/setup/bot-type', { replace: true })}
+                    class="p-1.5 rounded-lg hover:bg-surface-2 text-on-surface-tertiary hover:text-on-surface-secondary transition-colors"
+                  >
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
                   <div class="flex items-center gap-2">
-                    <Show when={b.status === 'running'}>
-                      <button
-                        onClick={() => handleAction('stop')}
-                        class="px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        停止
-                      </button>
-                    </Show>
-                    <Show when={b.status !== 'running'}>
-                      <button
-                        onClick={() => handleAction('start')}
-                        class="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition-colors"
-                      >
-                        启动
-                      </button>
-                    </Show>
-                    <button
-                      onClick={() => handleAction('delete')}
-                      class="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
-                    >
-                      删除
-                    </button>
+                    <div class="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/20 flex items-center justify-center">
+                      <span class="text-xs md:text-sm font-extralight tracking-[0.2em] text-on-base">V</span>
+                    </div>
+                    <h1 class="text-sm md:text-lg font-extralight tracking-wide text-on-base">{b.name}</h1>
+                    <span class={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${sc.bg}`}>
+                      <span class={`w-1 h-1 rounded-full ${sc.dot}`} />
+                      {sc.text}
+                    </span>
                   </div>
                 </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-on-surface-tertiary hidden sm:inline">
+                    {b.symbol} · {b.exchange.toUpperCase()} · {b.market_type === 'perpetual' ? '合约' : '现货'} · {b.leverage}x
+                  </span>
+                  <Show when={b.status === 'running'}>
+                    <button
+                      onClick={() => handleAction('stop')}
+                      class="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors"
+                    >
+                      停止
+                    </button>
+                  </Show>
+                  <Show when={b.status !== 'running'}>
+                    <button
+                      onClick={() => handleAction('start')}
+                      class="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                    >
+                      启动
+                    </button>
+                  </Show>
+                  <button
+                    onClick={() => handleAction('delete')}
+                    class="px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-1 border border-line-default text-on-surface-tertiary hover:text-red-400 hover:border-red-500/20 transition-colors"
+                  >
+                    删除
+                  </button>
+                  <button
+                    onClick={toggleTheme}
+                    class="p-2 rounded-lg text-on-surface-tertiary hover:text-on-surface-secondary hover:bg-surface-2 transition-colors"
+                    title={isDark() ? 'Switch to light mode' : 'Switch to dark mode'}
+                  >
+                    <Show when={isDark()} fallback={
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+                    }>
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                    </Show>
+                  </button>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div class="flex-1 overflow-y-auto relative z-10">
+                <div class="max-w-7xl mx-auto px-4 md:px-8 py-6">
 
                 <Show when={error()}>
-                  <div class="mb-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  <div class="mb-4 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
                     {error()}
                   </div>
                 </Show>
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-                  <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-                    <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-3">仓位信息</div>
+                  <div class="bg-surface-1 rounded-xl border border-line-default p-5 shadow-sm">
+                    <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-3">仓位信息</div>
                     <Show when={b.current_side && b.current_side !== 'none'} fallback={
-                      <div class="text-sm text-gray-400">无持仓</div>
+                      <div class="text-sm text-on-surface-tertiary">无持仓</div>
                     }>
                       <div class="space-y-2">
                         <div class="flex justify-between text-xs">
-                          <span class="text-gray-500">方向</span>
-                          <span class={b.current_side === 'long' ? 'text-emerald-600 font-medium' : 'text-red-600 font-medium'}>
+                          <span class="text-on-surface-tertiary">方向</span>
+                          <span class={b.current_side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
                             {b.current_side === 'long' ? '做多' : '做空'}
                           </span>
                         </div>
                         <div class="flex justify-between text-xs">
-                          <span class="text-gray-500">入场价</span>
-                          <span class="text-gray-700 font-mono">{b.entry_price.toFixed(2)}</span>
+                          <span class="text-on-surface-tertiary">入场价</span>
+                          <span class="text-on-surface font-mono">{b.entry_price.toFixed(2)}</span>
                         </div>
                         <div class="flex justify-between text-xs">
-                          <span class="text-gray-500">持仓量</span>
-                          <span class="text-gray-700 font-mono">{b.position_size.toFixed(6)}</span>
+                          <span class="text-on-surface-tertiary">持仓量</span>
+                          <span class="text-on-surface font-mono">{b.position_size.toFixed(6)}</span>
                         </div>
                         <div class="flex justify-between text-xs">
-                          <span class="text-gray-500">止损</span>
-                          <span class="text-red-500 font-mono">{b.stop_loss > 0 ? b.stop_loss.toFixed(2) : '-'}</span>
+                          <span class="text-on-surface-tertiary">止损</span>
+                          <span class="text-red-400 font-mono">{b.stop_loss > 0 ? b.stop_loss.toFixed(2) : '-'}</span>
                         </div>
                         <div class="flex justify-between text-xs">
-                          <span class="text-gray-500">止盈</span>
-                          <span class="text-emerald-500 font-mono">{b.take_profit > 0 ? b.take_profit.toFixed(2) : '-'}</span>
+                          <span class="text-on-surface-tertiary">止盈</span>
+                          <span class="text-emerald-400 font-mono">{b.take_profit > 0 ? b.take_profit.toFixed(2) : '-'}</span>
                         </div>
-                        <div class="flex justify-between text-xs pt-2 border-t border-gray-100">
-                          <span class="text-gray-500">未实现盈亏</span>
+                        <div class="flex justify-between text-xs pt-2 border-t border-line-subtle">
+                          <span class="text-on-surface-tertiary">未实现盈亏</span>
                           {formatPnl(b.unrealized_pnl)}
                         </div>
                       </div>
                     </Show>
                   </div>
 
-                  <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-                    <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-3">统计数据</div>
+                  <div class="bg-surface-1 rounded-xl border border-line-default p-5 shadow-sm">
+                    <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-3">统计数据</div>
                     <div class="space-y-2">
                       <div class="flex justify-between text-xs">
-                        <span class="text-gray-500">累计盈亏</span>
+                        <span class="text-on-surface-tertiary">累计盈亏</span>
                         {formatPnl(b.total_pnl)}
                       </div>
                       <div class="flex justify-between text-xs">
-                        <span class="text-gray-500">总交易次数</span>
-                        <span class="text-gray-700 font-mono">{b.total_trades}</span>
+                        <span class="text-on-surface-tertiary">总交易次数</span>
+                        <span class="text-on-surface font-mono">{b.total_trades}</span>
                       </div>
                       <div class="flex justify-between text-xs">
-                        <span class="text-gray-500">盈利 / 亏损</span>
+                        <span class="text-on-surface-tertiary">盈利 / 亏损</span>
                         <span>
-                          <span class="text-emerald-600 font-mono">{b.win_trades}</span>
-                          <span class="text-gray-300 mx-1">/</span>
-                          <span class="text-red-600 font-mono">{b.loss_trades}</span>
+                          <span class="text-emerald-400 font-mono">{b.win_trades}</span>
+                          <span class="text-on-surface-muted mx-1">/</span>
+                          <span class="text-red-400 font-mono">{b.loss_trades}</span>
                         </span>
                       </div>
                       <div class="flex justify-between text-xs">
-                        <span class="text-gray-500">胜率</span>
-                        <span class="text-gray-700 font-mono">
+                        <span class="text-on-surface-tertiary">胜率</span>
+                        <span class="text-on-surface font-mono">
                           {b.total_trades > 0 ? ((b.win_trades / b.total_trades) * 100).toFixed(1) + '%' : '-'}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-                    <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-3">配置</div>
+                  <div class="bg-surface-1 rounded-xl border border-line-default p-5 shadow-sm">
+                    <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-3">配置</div>
                     <div class="space-y-2">
                       <div class="flex justify-between text-xs">
-                        <span class="text-gray-500">市场类型</span>
-                        <span class="text-gray-700">{b.market_type === 'perpetual' ? '合约' : '现货'}</span>
+                        <span class="text-on-surface-tertiary">市场类型</span>
+                        <span class="text-on-surface">{b.market_type === 'perpetual' ? '合约' : '现货'}</span>
                       </div>
                       <div class="flex justify-between text-xs">
-                        <span class="text-gray-500">杠杆</span>
-                        <span class="text-gray-700 font-mono">{b.leverage}x</span>
+                        <span class="text-on-surface-tertiary">杠杆</span>
+                        <span class="text-on-surface font-mono">{b.leverage}x</span>
                       </div>
                       <div class="flex justify-between text-xs">
-                        <span class="text-gray-500">仓位占比</span>
-                        <span class="text-gray-700 font-mono">{b.max_position_pct}%</span>
+                        <span class="text-on-surface-tertiary">仓位占比</span>
+                        <span class="text-on-surface font-mono">{b.max_position_pct}%</span>
                       </div>
                       <div class="flex justify-between text-xs">
-                        <span class="text-gray-500">决策周期</span>
-                        <span class="text-gray-700 font-mono">{b.decide_interval_secs}s</span>
+                        <span class="text-on-surface-tertiary">决策周期</span>
+                        <span class="text-on-surface font-mono">{b.decide_interval_secs}s</span>
                       </div>
                       <Show when={b.market_regime}>
                         <div class="flex justify-between text-xs">
-                          <span class="text-gray-500">市场状态</span>
-                          <span class="text-indigo-500">{b.market_regime}</span>
+                          <span class="text-on-surface-tertiary">市场状态</span>
+                          <span class="text-indigo-400">{b.market_regime}</span>
                         </div>
                       </Show>
                     </div>
@@ -340,20 +356,20 @@ export default function AutoDetailPage() {
                 </div>
 
                 <Show when={b.ai_analysis}>
-                  <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm mb-6">
-                    <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-2">AI 分析</div>
-                    <p class="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap">{b.ai_analysis}</p>
+                  <div class="bg-surface-1 rounded-xl border border-line-default p-5 shadow-sm mb-6">
+                    <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-2">AI 分析</div>
+                    <p class="text-xs text-on-surface-secondary leading-relaxed whitespace-pre-wrap">{b.ai_analysis}</p>
                   </div>
                 </Show>
 
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                  <div class="flex border-b border-gray-100">
+                <div class="bg-surface-1 rounded-xl border border-line-default shadow-sm overflow-hidden">
+                  <div class="flex border-b border-line-subtle">
                     <button
                       onClick={() => setActiveTab('trades')}
                       class={`px-5 py-3 text-xs font-medium transition-colors ${
                         activeTab() === 'trades'
-                          ? 'text-indigo-600 border-b-2 border-indigo-600'
-                          : 'text-gray-500 hover:text-gray-700'
+                          ? 'text-indigo-400 border-b-2 border-indigo-400'
+                          : 'text-on-surface-tertiary hover:text-on-surface'
                       }`}
                     >
                       交易记录 ({trades().length})
@@ -362,8 +378,8 @@ export default function AutoDetailPage() {
                       onClick={() => setActiveTab('analysis')}
                       class={`px-5 py-3 text-xs font-medium transition-colors ${
                         activeTab() === 'analysis'
-                          ? 'text-indigo-600 border-b-2 border-indigo-600'
-                          : 'text-gray-500 hover:text-gray-700'
+                          ? 'text-indigo-400 border-b-2 border-indigo-400'
+                          : 'text-on-surface-tertiary hover:text-on-surface'
                       }`}
                     >
                       AI 决策日志 ({logs().length})
@@ -372,21 +388,21 @@ export default function AutoDetailPage() {
 
                   <Show when={activeTab() === 'trades'}>
                     <Show when={trades().length > 0} fallback={
-                      <div class="text-center py-12 text-gray-400 text-xs">暂无交易记录</div>
+                      <div class="text-center py-12 text-on-surface-tertiary text-xs">暂无交易记录</div>
                     }>
-                      <div class="divide-y divide-gray-50">
+                      <div class="divide-y divide-line-subtle">
                         <For each={trades().slice(0, 50)}>
                           {(t) => (
-                            <div class="flex items-center justify-between px-5 py-3 hover:bg-gray-50/50">
+                            <div class="flex items-center justify-between px-5 py-3 hover:bg-surface-2/50">
                               <div class="flex items-center gap-3">
-                                <span class={`text-[10px] font-medium px-1.5 py-0.5 rounded ${tradeTypeColor(t.trade_type)} bg-gray-50`}>
+                                <span class={`text-[10px] font-medium px-1.5 py-0.5 rounded ${tradeTypeColor(t.trade_type)} bg-surface-2`}>
                                   {tradeTypeLabel(t.trade_type)}
                                 </span>
                                 <div>
-                                  <div class="text-xs text-gray-700 font-mono">
+                                  <div class="text-xs text-on-surface font-mono">
                                     {t.side === 'buy' ? '买入' : '卖出'} {t.quantity.toFixed(6)} @ {t.price.toFixed(2)}
                                   </div>
-                                  <div class="text-[10px] text-gray-400 mt-0.5">
+                                  <div class="text-[10px] text-on-surface-tertiary mt-0.5">
                                     {new Date(t.created_at).toLocaleString('zh-CN')}
                                   </div>
                                 </div>
@@ -395,7 +411,7 @@ export default function AutoDetailPage() {
                                 <div class="text-right">
                                   {formatPnl(t.pnl)}
                                   <Show when={t.pnl_pct !== 0}>
-                                    <div class="text-[10px] text-gray-400">{t.pnl_pct.toFixed(2)}%</div>
+                                    <div class="text-[10px] text-on-surface-tertiary">{t.pnl_pct.toFixed(2)}%</div>
                                   </Show>
                                 </div>
                               </Show>
@@ -408,9 +424,9 @@ export default function AutoDetailPage() {
 
                   <Show when={activeTab() === 'analysis'}>
                     <Show when={logs().length > 0} fallback={
-                      <div class="text-center py-12 text-gray-400 text-xs">暂无 AI 决策日志</div>
+                      <div class="text-center py-12 text-on-surface-tertiary text-xs">暂无 AI 决策日志</div>
                     }>
-                      <div class="divide-y divide-gray-50">
+                      <div class="divide-y divide-line-subtle">
                         <For each={logs().slice(0, 50)}>
                           {(log) => {
                             const decision = getDecisionFromLog(log);
@@ -420,16 +436,16 @@ export default function AutoDetailPage() {
                                 <div class="flex items-center justify-between mb-2">
                                   <div class="flex items-center gap-2">
                                     <Show when={decision} fallback={
-                                      <span class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                                      <span class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-surface-2 text-on-surface-tertiary">
                                         {log.status === 'failed' ? '失败' : '未知'}
                                       </span>
                                     }>
                                       {(d: any) => (
                                         <span class={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                                          d.action === 'hold' ? 'bg-gray-100 text-gray-500' :
-                                          d.action === 'open_long' ? 'bg-emerald-50 text-emerald-600' :
-                                          d.action === 'open_short' ? 'bg-red-50 text-red-600' :
-                                          'bg-blue-50 text-blue-600'
+                                          d.action === 'hold' ? 'bg-surface-2 text-on-surface-tertiary' :
+                                          d.action === 'open_long' ? 'bg-emerald-500/10 text-emerald-400' :
+                                          d.action === 'open_short' ? 'bg-red-500/10 text-red-400' :
+                                          'bg-blue-500/10 text-blue-400'
                                         }`}>
                                           {d.action === 'open_long' ? '开多' :
                                            d.action === 'open_short' ? '开空' :
@@ -439,7 +455,7 @@ export default function AutoDetailPage() {
                                       )}
                                     </Show>
                                     <Show when={decision?.confidence}>
-                                      <span class="text-[10px] text-gray-400">
+                                      <span class="text-[10px] text-on-surface-tertiary">
                                         置信度 {(decision.confidence * 100).toFixed(0)}%
                                       </span>
                                     </Show>
@@ -447,51 +463,51 @@ export default function AutoDetailPage() {
                                   <div class="flex items-center gap-2">
                                     <button
                                       onClick={() => setExpandedLogId(expandedLogId() === log.id ? null : log.id)}
-                                      class="text-[10px] text-gray-400 hover:text-indigo-500 transition-colors"
+                                      class="text-[10px] text-on-surface-tertiary hover:text-indigo-400 transition-colors"
                                     >
                                       {expandedLogId() === log.id ? '收起详情' : '查看详情'}
                                     </button>
-                                    <span class="text-[10px] text-gray-400">
+                                    <span class="text-[10px] text-on-surface-tertiary">
                                       {new Date(log.created_at).toLocaleString('zh-CN')}
                                     </span>
                                   </div>
                                 </div>
                                 <Show when={decision?.reason}>
-                                  <p class="text-xs text-gray-600 mb-1">{decision.reason}</p>
+                                  <p class="text-xs text-on-surface-secondary mb-1">{decision.reason}</p>
                                 </Show>
                                 <Show when={log.result?.analysis}>
-                                  <p class="text-[11px] text-gray-500 leading-relaxed line-clamp-3">{log.result.analysis}</p>
+                                  <p class="text-[11px] text-on-surface-tertiary leading-relaxed line-clamp-3">{log.result.analysis}</p>
                                 </Show>
                                 <Show when={log.error}>
-                                  <p class="text-[11px] text-red-500 mt-1">{log.error}</p>
+                                  <p class="text-[11px] text-red-400 mt-1">{log.error}</p>
                                 </Show>
                                 <Show when={log.result?.risk_warning && log.result.risk_warning !== 'none'}>
-                                  <p class="text-[11px] text-amber-600 mt-1">⚠ {log.result.risk_warning}</p>
+                                  <p class="text-[11px] text-amber-400 mt-1">⚠ {log.result.risk_warning}</p>
                                 </Show>
                                 <Show when={expandedLogId() === log.id}>
-                                  <div class="mt-3 space-y-3 border-t border-gray-100 pt-3">
+                                  <div class="mt-3 space-y-3 border-t border-line-subtle pt-3">
                                     <Show when={log.system_prompt}>
                                       <div>
-                                        <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1">System Prompt</div>
-                                        <pre class="text-[11px] text-gray-600 bg-gray-50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono leading-relaxed">{log.system_prompt}</pre>
+                                        <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">System Prompt</div>
+                                        <pre class="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono leading-relaxed">{log.system_prompt}</pre>
                                       </div>
                                     </Show>
                                     <Show when={log.user_prompt}>
                                       <div>
-                                        <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1">User Prompt</div>
-                                        <pre class="text-[11px] text-gray-600 bg-gray-50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono leading-relaxed">{log.user_prompt}</pre>
+                                        <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">User Prompt</div>
+                                        <pre class="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono leading-relaxed">{log.user_prompt}</pre>
                                       </div>
                                     </Show>
                                     <Show when={rawResponse}>
                                       <div>
-                                        <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1">原始 LLM 返回</div>
-                                        <pre class="text-[11px] text-gray-600 bg-gray-50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed">{typeof rawResponse === 'string' ? rawResponse : JSON.stringify(rawResponse, null, 2)}</pre>
+                                        <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">原始 LLM 返回</div>
+                                        <pre class="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed">{typeof rawResponse === 'string' ? rawResponse : JSON.stringify(rawResponse, null, 2)}</pre>
                                       </div>
                                     </Show>
                                     <Show when={!rawResponse && log.result}>
                                       <div>
-                                        <div class="text-[10px] text-gray-400 uppercase tracking-wider mb-1">解析后结果</div>
-                                        <pre class="text-[11px] text-gray-600 bg-gray-50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono leading-relaxed">{JSON.stringify(log.result, null, 2)}</pre>
+                                        <div class="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">解析后结果</div>
+                                        <pre class="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono leading-relaxed">{JSON.stringify(log.result, null, 2)}</pre>
                                       </div>
                                     </Show>
                                   </div>
@@ -504,11 +520,12 @@ export default function AutoDetailPage() {
                     </Show>
                   </Show>
                 </div>
-              </>
-            );
-          })()}
-        </Show>
-      </div>
+                </div>
+              </div>
+            </>
+          );
+        })()}
+      </Show>
     </div>
   );
 }

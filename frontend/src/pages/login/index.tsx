@@ -44,7 +44,7 @@ const Login: Component = () => {
   }
 
   return (
-    <div class="min-h-screen bg-[#0a0a0f] flex items-center justify-center relative overflow-hidden">
+    <div class="min-h-screen bg-base flex items-center justify-center relative overflow-hidden">
       {/* Background */}
       <div class="absolute inset-0 overflow-hidden">
         <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-500/[0.03] blur-[120px]" />
@@ -54,10 +54,10 @@ const Login: Component = () => {
         {/* Logo */}
         <div class="text-center mb-12">
           <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/20 mb-6">
-            <span class="text-2xl font-extralight tracking-[0.3em] text-white/90">V</span>
+            <span class="text-2xl font-extralight tracking-[0.3em] text-on-base">V</span>
           </div>
-          <h1 class="text-2xl font-extralight tracking-[0.4em] text-white/80 mb-1">VIRS</h1>
-          <p class="text-[11px] tracking-[0.25em] text-white/25">QUANTITATIVE TRADING</p>
+          <h1 class="text-2xl font-extralight tracking-[0.4em] text-on-surface mb-1">VIRS</h1>
+          <p class="text-[11px] tracking-[0.25em] text-on-surface-muted">QUANTITATIVE TRADING</p>
         </div>
 
         {/* Form */}
@@ -78,7 +78,7 @@ const Login: Component = () => {
               type="text"
               value={username()}
               onInput={(e) => setUsername(e.currentTarget.value)}
-              class="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-sm text-white/90 placeholder-white/20 focus:outline-none focus:border-indigo-500/40 focus:bg-white/[0.06] transition-all duration-200"
+              class="w-full px-4 py-3 bg-surface-2 border border-line-strong rounded-xl text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 focus:bg-surface-3 transition-all duration-200"
               placeholder="Username"
               autocomplete="username"
               disabled={loading()}
@@ -90,7 +90,7 @@ const Login: Component = () => {
               type="password"
               value={password()}
               onInput={(e) => setPassword(e.currentTarget.value)}
-              class="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-sm text-white/90 placeholder-white/20 focus:outline-none focus:border-indigo-500/40 focus:bg-white/[0.06] transition-all duration-200"
+              class="w-full px-4 py-3 bg-surface-2 border border-line-strong rounded-xl text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 focus:bg-surface-3 transition-all duration-200"
               placeholder="Password"
               autocomplete="current-password"
               disabled={loading()}
@@ -100,7 +100,7 @@ const Login: Component = () => {
           <button
             type="submit"
             disabled={loading()}
-            class="w-full py-3 px-4 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:ring-offset-2 focus:ring-offset-[#0a0a0f] disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+            class="w-full py-3 px-4 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:ring-offset-2 focus:ring-offset-base disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
           >
             <Show when={loading()} fallback="Sign in">
               <span class="flex items-center justify-center gap-2">
