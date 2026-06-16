@@ -63,6 +63,32 @@ pub async fn create_bot(
         ));
     }
 
+    // Verify exchange is registered in registry (must be done via /api/credentials/save first)
+    let exchange_key = format!("{}:{}", exchange, market_type);
+    if state.exchange_registry.get(&exchange_key).is_none() {
+        return Err((
+            StatusCode::PRECONDITION_FAILED,
+            Json(ApiResponse::err("Exchange not registered. Please save API credentials first.")),
+        ));
+    }
+
+    // Subscribe kline engine for this symbol (backfill + WS push)
+    let mt = match market_type {
+        "spot" => virs_models::MarketType::Spot,
+        _ => virs_models::MarketType::Perpetual,
+    };
+    if let Err(e) = state.kline_engine.subscribe(exchange, symbol, mt).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::err(format!("Failed to subscribe kline: {}", e))),
+        ));
+    }
+
+    // Register symbol for paper mode price ticks
+    if paper_mode {
+        state.engine_manager.register_paper_symbol(exchange.to_string(), symbol.to_string()).await;
+    }
+
     let id = uuid::Uuid::new_v4();
     sqlx::query(
         r#"INSERT INTO qd_grid_bots (id, user_id, name, symbol, exchange, grid_count, upper_price, lower_price,

@@ -1,106 +1,86 @@
-import { type Component, type JSX, Show, createSignal, createEffect } from 'solid-js'
+import { useState, useEffect, type ReactNode } from 'react'
 
 export type FlowStepStatus = 'pending' | 'active' | 'verifying' | 'done' | 'error'
 
 export interface FlowStepProps {
-  /** Step indicator: number or custom JSX (icon etc.) */
-  step: number | JSX.Element
-  /** Step title */
+  step: number | ReactNode
   title: string
-  /** Optional subtitle / description */
   description?: string
-  /** Current status */
   status: FlowStepStatus
-  /** Summary shown when collapsed. Supports string or rich JSX */
-  summary?: string | JSX.Element
-  /** Whether done step can be expanded/collapsed by clicking. Default: true */
+  summary?: string | ReactNode
   editable?: boolean
-  /** Override connector line visibility. Default: auto (hide when collapsed) */
   showLine?: boolean
-  /** Custom indicator, overrides default */
-  indicator?: JSX.Element
-  /** Called when user toggles expand/collapse on a done step */
+  indicator?: ReactNode
   onToggle?: (expanded: boolean) => void
-  /** Step content */
-  children?: JSX.Element
+  children?: ReactNode
 }
 
-const FlowStep: Component<FlowStepProps> = (props) => {
-  const [expanded, setExpanded] = createSignal(false)
+function FlowStep({ step, title, description, status, summary, editable, showLine, indicator, onToggle, children }: FlowStepProps) {
+  const [expanded, setExpanded] = useState(false)
 
-  // Auto-expand when status becomes active/verifying/error
-  createEffect(() => {
-    if (props.status === 'active' || props.status === 'verifying' || props.status === 'error') {
+  // Auto-expand when status becomes active/verifying/error, auto-collapse when done
+  useEffect(() => {
+    if (status === 'active' || status === 'verifying' || status === 'error') {
       setExpanded(true)
     }
-    // Auto-collapse when status becomes done
-    if (props.status === 'done') {
+    if (status === 'done') {
       setExpanded(false)
     }
-  })
+  }, [status])
 
-  const isEditable = () => props.editable !== false && props.status === 'done'
-  const isCollapsed = () => props.status === 'done' && !expanded()
-  const showContent = () =>
-    props.status === 'active' ||
-    props.status === 'verifying' ||
-    props.status === 'error' ||
-    (props.status === 'done' && expanded())
+  const isEditable = editable !== false && status === 'done'
+  const isCollapsed = status === 'done' && !expanded
+  const showContent = status === 'active' || status === 'verifying' || status === 'error' || (status === 'done' && expanded)
 
   const handleHeaderClick = () => {
-    if (!isEditable()) return
-    const next = !expanded()
+    if (!isEditable) return
+    const next = !expanded
     setExpanded(next)
-    props.onToggle?.(next)
+    onToggle?.(next)
   }
 
-  // Connector line: auto or override
-  const shouldShowLine = () => {
-    if (props.showLine !== undefined) return props.showLine
-    return !isCollapsed()
-  }
+  const shouldShowLine = showLine !== undefined ? showLine : !isCollapsed
 
-  // Default indicator based on status
-  const defaultIndicator = (): JSX.Element => {
-    const stepContent = typeof props.step === 'number'
-      ? <span class="text-[11px]">{props.step}</span>
-      : props.step
+  const defaultIndicator = (): ReactNode => {
+    const stepContent = typeof step === 'number'
+      ? <span className="text-[11px]">{step}</span>
+      : step
 
-    switch (props.status) {
+    switch (status) {
       case 'pending':
         return (
-          <div class="w-7 h-7 rounded-full border border-line-strong bg-surface-1 flex items-center justify-center text-on-surface-faint">
+          <div className="w-7 h-7 rounded-full border border-line-strong bg-surface-1 flex items-center justify-center text-on-surface-faint">
             {stepContent}
           </div>
         )
       case 'active':
         return (
-          <div class="w-7 h-7 rounded-full bg-indigo-500/80 flex items-center justify-center text-white font-medium">
+          <div className="w-7 h-7 rounded-full bg-indigo-500/80 flex items-center justify-center text-white font-medium">
             {stepContent}
           </div>
         )
       case 'verifying':
         return (
-          <div class="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
-            <svg class="animate-spin w-3.5 h-3.5 text-indigo-400" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
+            <svg className="animate-spin w-3.5 h-3.5 text-indigo-400" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
           </div>
         )
       case 'done':
         return (
-          <div class="w-7 h-7 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
-            <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          <div className="w-7 h-7 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+            <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
         )
       case 'error':
         return (
-          <div class="w-7 h-7 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center">
-            <svg class="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          <div className="w-7 h-7 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center">
+            <svg className="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </div>
         )
@@ -108,7 +88,7 @@ const FlowStep: Component<FlowStepProps> = (props) => {
   }
 
   const titleColor = () => {
-    switch (props.status) {
+    switch (status) {
       case 'pending': return 'text-on-surface-faint'
       case 'done': return 'text-on-surface-tertiary'
       default: return 'text-on-surface'
@@ -116,54 +96,49 @@ const FlowStep: Component<FlowStepProps> = (props) => {
   }
 
   return (
-    <div class="flex gap-3">
-      {/* Left: indicator + connector line */}
-      <div class="flex flex-col items-center">
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center">
         <div
-          class={isEditable() ? 'cursor-pointer' : ''}
+          className={isEditable ? 'cursor-pointer' : ''}
           onClick={handleHeaderClick}
         >
-          {props.indicator ?? defaultIndicator()}
+          {indicator ?? defaultIndicator()}
         </div>
-        <Show when={shouldShowLine()}>
-          <div class="w-px flex-1 min-h-[16px] bg-line-default mt-1" />
-        </Show>
+        {shouldShowLine && (
+          <div className="w-px flex-1 min-h-[16px] bg-line-default mt-1" />
+        )}
       </div>
 
-      {/* Right: title + description + content/summary */}
-      <div class="flex-1 pb-4">
+      <div className="flex-1 pb-4">
         <div
-          class={`flex items-center gap-2 ${isEditable() ? 'cursor-pointer group' : ''}`}
+          className={`flex items-center gap-2 ${isEditable ? 'cursor-pointer group' : ''}`}
           onClick={handleHeaderClick}
         >
-          <p class={`text-sm font-medium leading-7 ${titleColor()}`}>
-            {props.title}
+          <p className={`text-sm font-medium leading-7 ${titleColor()}`}>
+            {title}
           </p>
-          <Show when={isEditable()}>
-            <span class="text-[10px] text-on-surface-muted group-hover:text-on-surface-tertiary transition-colors">
-              {expanded() ? 'collapse' : 'edit'}
+          {isEditable && (
+            <span className="text-[10px] text-on-surface-muted group-hover:text-on-surface-tertiary transition-colors">
+              {expanded ? 'collapse' : 'edit'}
             </span>
-          </Show>
+          )}
         </div>
 
-        {/* Description */}
-        <Show when={props.description && (props.status !== 'done' || expanded())}>
-          <p class="text-[12px] text-on-surface-muted -mt-1 mb-1">{props.description}</p>
-        </Show>
+        {description && (status !== 'done' || expanded) && (
+          <p className="text-[12px] text-on-surface-muted -mt-1 mb-1">{description}</p>
+        )}
 
-        {/* Collapsed summary */}
-        <Show when={isCollapsed() && props.summary}>
-          <div class="text-[12px] text-on-surface-muted -mt-1">
-            {typeof props.summary === 'string' ? props.summary : props.summary}
+        {isCollapsed && summary && (
+          <div className="text-[12px] text-on-surface-muted -mt-1">
+            {summary}
           </div>
-        </Show>
+        )}
 
-        {/* Expanded content */}
-        <Show when={showContent()}>
-          <div class="mt-2">
-            {props.children}
+        {showContent && (
+          <div className="mt-2">
+            {children}
           </div>
-        </Show>
+        )}
       </div>
     </div>
   )

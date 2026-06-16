@@ -1,174 +1,52 @@
-import { type Component, createSignal, Show, For } from 'solid-js'
-import { useNavigate } from '@solidjs/router'
+import { useState, useCallback, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import WizardLayout from '../../../components/WizardLayout'
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
 import { updateWizard, advanceStep, WizardStep } from '../../../lib/wizard'
-import { saveCredential, testCredential, checkPermissions, fetchAccountInfo } from '../../../lib/api'
-import type { PermissionItem, AccountInfo } from '../../../lib/api'
+import { saveCredential, testCredential, checkPermissions } from '../../../service'
+import type { PermissionItem } from '../../../service'
 
-const SelectExchange: Component = () => {
+function SelectExchange() {
   const navigate = useNavigate()
 
   // Step 1: API credentials
-  // Credentials are no longer held in memory (wizardCredentials). They're saved to backend DB.
-  // On mount, we check if backend already has saved credentials.
-  const [apiKey, setApiKey] = createSignal('')
-  const [apiSecret, setApiSecret] = createSignal('')
-  const [step1Status, setStep1Status] = createSignal<FlowStepStatus>('active')
-  const [error, setError] = createSignal('')
+  const [apiKey, setApiKey] = useState('')
+  const [apiSecret, setApiSecret] = useState('')
+  const [step1Status, setStep1Status] = useState<FlowStepStatus>('active')
+  const [error, setError] = useState('')
 
-  // Step 2: Connectivity + Permissions (merged — testCredential returns both)
-  const [step2Status, setStep2Status] = createSignal<FlowStepStatus>('pending')
+  // Step 2: Connectivity + Permissions
+  const [step2Status, setStep2Status] = useState<FlowStepStatus>('pending')
 
-  // Step 3: Permissions (via verify — uses saved credentials)
-  const [permissions, setPermissions] = createSignal<PermissionItem[]>([])
-  const [step3Status, setStep3Status] = createSignal<FlowStepStatus>('pending')
+  // Step 3: Permissions
+  const [permissions, setPermissions] = useState<PermissionItem[]>([])
+  const [step3Status, setStep3Status] = useState<FlowStepStatus>('pending')
 
-  // Step 4: Account Info
-  const [accountInfo, setAccountInfo] = createSignal<AccountInfo | null>(null)
-  const [step4Status, setStep4Status] = createSignal<FlowStepStatus>('pending')
+  const statuses = {
+    credentials: step1Status,
+    connectivity: step2Status,
+    permissions: step3Status,
+  }
 
-  const statuses = () => ({
-    credentials: step1Status(),
-    connectivity: step2Status(),
-    permissions: step3Status(),
-    account: step4Status(),
-  })
-
-  const summaries = () => ({
-    credentials: step1Status() === 'done' ? `${apiKey().slice(0, 6)}...${apiKey().slice(-4)}` : undefined,
-    connectivity: step2Status() === 'done' ? 'Connected to Binance' : step2Status() === 'error' ? 'Connection failed' : undefined,
-    permissions: step3Status() === 'done' ? 'All checks passed' : undefined,
-    account: step4Status() === 'done' ? `Perpetual: ${accountInfo()?.perpetual_usdt?.toFixed(2) ?? '—'} USDT` : undefined,
-  })
+  const summaries: Record<string, string | ReactNode> = {}
+  if (step1Status === 'done') summaries.credentials = `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`
+  if (step2Status === 'done') summaries.connectivity = 'Connected to Binance'
+  else if (step2Status === 'error') summaries.connectivity = 'Connection failed'
+  if (step3Status === 'done') summaries.permissions = 'All checks passed'
 
   const statusIcon = (status: string) => {
-    if (status === 'ok') return <span class="text-emerald-400">&#10003;</span>
-    if (status === 'warn') return <span class="text-amber-400">&#9888;</span>
-    return <span class="text-red-400">&#10007;</span>
+    if (status === 'ok') return <span className="text-emerald-400">&#10003;</span>
+    if (status === 'warn') return <span className="text-amber-400">&#9888;</span>
+    return <span className="text-red-400">&#10007;</span>
   }
 
   const resetDownstream = () => {
-    if (step2Status() !== 'pending') setStep2Status('pending')
-    if (step3Status() !== 'pending') setStep3Status('pending')
-    if (step4Status() !== 'pending') setStep4Status('pending')
+    if (step2Status !== 'pending') setStep2Status('pending')
+    if (step3Status !== 'pending') setStep3Status('pending')
   }
 
-  const steps: FlowStepConfig[] = [
-    {
-      key: 'credentials',
-      title: 'API Credentials',
-      render: () => (
-        <div class="space-y-3">
-          <input
-            type="text"
-            value={apiKey()}
-            onInput={(e) => {
-              setApiKey(e.currentTarget.value)
-              setError('')
-              if (step1Status() === 'error') setStep1Status('active')
-              resetDownstream()
-            }}
-            class="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
-            placeholder="API Key"
-          />
-          <input
-            type="password"
-            value={apiSecret()}
-            onInput={(e) => {
-              setApiSecret(e.currentTarget.value)
-              setError('')
-              if (step1Status() === 'error') setStep1Status('active')
-              resetDownstream()
-            }}
-            class="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
-            placeholder="API Secret"
-          />
-          <Show when={error()}>
-            <p class="text-[12px] text-red-400">{error()}</p>
-          </Show>
-          <button
-            onClick={verifyCredentials}
-            disabled={!apiKey().trim() || !apiSecret().trim() || step1Status() === 'verifying'}
-            class="px-4 py-2 text-[12px] bg-indigo-500/20 border border-indigo-500/30 rounded-lg text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-30 transition-all duration-200"
-          >
-            <Show when={step1Status() !== 'verifying'} fallback="Verifying...">
-              Verify
-            </Show>
-          </button>
-        </div>
-      ),
-    },
-    {
-      key: 'connectivity',
-      title: 'Connectivity',
-      description: 'Ping exchange server to verify reachability',
-      render: () => (
-        <div class="space-y-2">
-          <Show when={step2Status() === 'verifying'}>
-            <p class="text-[12px] text-on-surface-tertiary">Testing connection to Binance...</p>
-          </Show>
-          <Show when={step2Status() === 'error'}>
-            <p class="text-[12px] text-red-400">{error() || 'Connection failed'}</p>
-          </Show>
-        </div>
-      ),
-    },
-    {
-      key: 'permissions',
-      title: 'Permissions',
-      description: 'Check API key permissions and restrictions',
-      render: () => (
-        <div class="space-y-1.5">
-          <For each={permissions()}>
-            {(p) => (
-              <div class="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-                <div class="flex items-center gap-2">
-                  <span class="text-[12px]">{statusIcon(p.status)}</span>
-                  <span class="text-[12px] text-on-surface-tertiary">{p.label}</span>
-                </div>
-                <span class={`text-[11px] ${
-                  p.status === 'ok' ? 'text-on-surface-muted' :
-                  p.status === 'warn' ? 'text-amber-400/60' :
-                  'text-red-400/60'
-                }`}>
-                  {p.detail}
-                </span>
-              </div>
-            )}
-          </For>
-        </div>
-      ),
-    },
-    {
-      key: 'account',
-      title: 'Account Info',
-      description: 'USDT balances across accounts',
-      render: () => (
-        <div class="space-y-1.5">
-          <Show when={step4Status() === 'verifying'}>
-            <p class="text-[12px] text-on-surface-tertiary">Fetching account balances...</p>
-          </Show>
-          <Show when={accountInfo()}>
-            <div class="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-              <span class="text-[12px] text-on-surface-tertiary">Perpetual (USDT)</span>
-              <span class="text-[12px] text-on-surface-secondary font-mono">{accountInfo()!.perpetual_usdt != null ? accountInfo()!.perpetual_usdt!.toFixed(4) : '—'}</span>
-            </div>
-            <div class="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-              <span class="text-[12px] text-on-surface-tertiary">Spot (USDT)</span>
-              <span class="text-[12px] text-on-surface-secondary font-mono">{accountInfo()!.spot_usdt != null ? accountInfo()!.spot_usdt!.toFixed(4) : '—'}</span>
-            </div>
-          </Show>
-          <Show when={step4Status() === 'error'}>
-            <p class="text-[12px] text-red-400">{error() || 'Failed to fetch balances'}</p>
-          </Show>
-        </div>
-      ),
-    },
-  ]
-
   // Test connectivity only (ping) — uses saved credentials from registry
-  const doTestConnectivity = async () => {
+  const doTestConnectivity = useCallback(async () => {
     setStep2Status('verifying')
     try {
       const result = await testCredential()
@@ -178,16 +56,15 @@ const SelectExchange: Component = () => {
         return
       }
       setStep2Status('done')
-      // Auto-advance to permissions check
       doCheckPermissions()
     } catch {
       setError('Connection test failed')
       setStep2Status('error')
     }
-  }
+  }, [])
 
-  // Check permissions via apiRestrictions — uses saved credentials from registry
-  const doCheckPermissions = async () => {
+  // Check permissions via apiRestrictions
+  const doCheckPermissions = useCallback(async () => {
     setStep3Status('verifying')
     try {
       const result = await checkPermissions()
@@ -199,35 +76,98 @@ const SelectExchange: Component = () => {
       setPermissions(result.data.permissions)
       const allOk = result.data.permissions.every((p) => p.status === 'ok' || p.status === 'warn')
       setStep3Status(allOk ? 'done' : 'active')
-      if (allOk) doFetchAccountInfo()
     } catch {
       setError('Permission check failed')
       setStep3Status('error')
     }
-  }
+  }, [])
 
-  // Fetch account info
-  const doFetchAccountInfo = async () => {
-    setStep4Status('verifying')
-    try {
-      const result = await fetchAccountInfo()
-      if (!result.success) {
-        setError(result.error || 'Failed to fetch account info')
-        setStep4Status('error')
-        return
-      }
-      setAccountInfo(result.data!)
-      setStep4Status('done')
-    } catch {
-      setError('Failed to fetch account info')
-      setStep4Status('error')
-    }
-  }
+  const steps: FlowStepConfig[] = [
+    {
+      key: 'credentials',
+      title: 'API Credentials',
+      render: () => (
+        <div className="space-y-3">
+          <input
+            type="text"
+            value={apiKey}
+            onInput={(e) => {
+              setApiKey(e.currentTarget.value)
+              setError('')
+              if (step1Status === 'error') setStep1Status('active')
+              resetDownstream()
+            }}
+            className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
+            placeholder="API Key"
+          />
+          <input
+            type="password"
+            value={apiSecret}
+            onInput={(e) => {
+              setApiSecret(e.currentTarget.value)
+              setError('')
+              if (step1Status === 'error') setStep1Status('active')
+              resetDownstream()
+            }}
+            className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
+            placeholder="API Secret"
+          />
+          {error && <p className="text-[12px] text-red-400">{error}</p>}
+          <button
+            onClick={verifyCredentials}
+            disabled={!apiKey.trim() || !apiSecret.trim() || step1Status === 'verifying'}
+            className="px-4 py-2 text-[12px] bg-indigo-500/20 border border-indigo-500/30 rounded-lg text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-30 transition-all duration-200"
+          >
+            {step1Status === 'verifying' ? 'Verifying...' : 'Verify'}
+          </button>
+        </div>
+      ),
+    },
+    {
+      key: 'connectivity',
+      title: 'Connectivity',
+      description: 'Ping exchange server to verify reachability',
+      render: () => (
+        <div className="space-y-2">
+          {step2Status === 'verifying' && (
+            <p className="text-[12px] text-on-surface-tertiary">Testing connection to Binance...</p>
+          )}
+          {step2Status === 'error' && (
+            <p className="text-[12px] text-red-400">{error || 'Connection failed'}</p>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'permissions',
+      title: 'Permissions',
+      description: 'Check API key permissions and restrictions',
+      render: () => (
+        <div className="space-y-1.5">
+          {permissions.map((p, i) => (
+            <div key={i} className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-[12px]">{statusIcon(p.status)}</span>
+                <span className="text-[12px] text-on-surface-tertiary">{p.label}</span>
+              </div>
+              <span className={`text-[11px] ${
+                p.status === 'ok' ? 'text-on-surface-muted' :
+                p.status === 'warn' ? 'text-amber-400/60' :
+                'text-red-400/60'
+              }`}>
+                {p.detail}
+              </span>
+            </div>
+          ))}
+        </div>
+      ),
+    },
+  ]
 
   // Verify: Step 1 save → done, then auto-start Step 2
   const verifyCredentials = async () => {
-    const key = apiKey().trim()
-    const secret = apiSecret().trim()
+    const key = apiKey.trim()
+    const secret = apiSecret.trim()
     if (!key || !secret) return
 
     setStep1Status('verifying')
@@ -254,13 +194,11 @@ const SelectExchange: Component = () => {
 
   const handleContinue = () => {
     updateWizard({ exchange: 'binance' })
-    // No longer store exchange_api_key/secret in memory — already saved to backend DB.
-    // All subsequent exchange operations use the saved credential via backend.
     advanceStep(WizardStep.ConfigureParams)
     navigate('/setup/params', { replace: true })
   }
 
-  const canContinue = () => step2Status() === 'done' && step3Status() === 'done' && step4Status() === 'done'
+  const canContinue = step2Status === 'done' && step3Status === 'done'
 
   return (
     <WizardLayout
@@ -271,21 +209,21 @@ const SelectExchange: Component = () => {
         <>
           <button
             onClick={() => navigate('/setup/llm', { replace: true })}
-            class="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
+            className="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
           >
             Back
           </button>
           <button
             onClick={handleContinue}
-            disabled={!canContinue()}
-            class="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+            disabled={!canContinue}
+            className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
           >
             Continue
           </button>
         </>
       }
     >
-      <FlowSteps steps={steps} statuses={statuses()} summaries={summaries()} />
+      <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
     </WizardLayout>
   )
 }

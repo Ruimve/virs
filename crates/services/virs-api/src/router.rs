@@ -41,7 +41,6 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/credentials/test", get(handlers::credentials::test_credential))
         .route("/api/credentials/check-permissions", get(handlers::credentials::check_permissions))
         .route("/api/credentials/verify", post(handlers::credentials::verify_permissions))
-        .route("/api/credentials/account-info", post(handlers::credentials::account_info))
         .route("/api/credentials/status", get(handlers::credentials::exchange_status))
         // Dashboard (authenticated)
         .route("/api/dashboard/summary", get(handlers::dashboard::dashboard_summary))

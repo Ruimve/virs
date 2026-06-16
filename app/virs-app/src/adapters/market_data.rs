@@ -3,10 +3,9 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use sqlx::PgPool;
 use tracing::{debug, warn};
 
-use virs_exchange::ExchangeRegistry;
+use virs_exchange::Exchanges;
 use virs_market::KlineEngine;
 use virs_market::Timeframe;
 use virs_models::Kline;
@@ -34,13 +33,13 @@ fn candle_to_kline(c: &virs_market::Candle) -> Kline {
 // ── Grid MarketDataProvider ──
 
 pub struct ExchangeMarketDataProvider {
-    exchange_registry: Arc<ExchangeRegistry>,
+    exchange_registry: Arc<Exchanges>,
     kline_engine: Option<Arc<KlineEngine>>,
     pe_exchange: Option<Arc<dyn ExchangePe>>,
 }
 
 impl ExchangeMarketDataProvider {
-    pub fn new(exchange_registry: Arc<ExchangeRegistry>) -> Self {
+    pub fn new(exchange_registry: Arc<Exchanges>) -> Self {
         Self { exchange_registry, kline_engine: None, pe_exchange: None }
     }
 
@@ -176,7 +175,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             }
         }
 
-        // Real mode: use ExchangeRegistry
+        // Real mode: use Exchanges
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = match self.exchange_registry.get(&exchange_key) {
             Some(e) => e,
@@ -202,16 +201,14 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
 // ── Auto MarketDataProvider ──
 
 pub struct AutoExchangeMarketDataProvider {
-    exchange_registry: Arc<ExchangeRegistry>,
+    exchange_registry: Arc<Exchanges>,
     kline_engine: Option<Arc<KlineEngine>>,
-    db: Option<PgPool>,
-    encryption_key: Option<String>,
     pe_exchange: Option<Arc<dyn ExchangePe>>,
 }
 
 impl AutoExchangeMarketDataProvider {
-    pub fn new(exchange_registry: Arc<ExchangeRegistry>) -> Self {
-        Self { exchange_registry, kline_engine: None, db: None, encryption_key: None, pe_exchange: None }
+    pub fn new(exchange_registry: Arc<Exchanges>) -> Self {
+        Self { exchange_registry, kline_engine: None, pe_exchange: None }
     }
 
     pub fn with_kline_engine(mut self, engine: Arc<KlineEngine>) -> Self {
@@ -219,55 +216,9 @@ impl AutoExchangeMarketDataProvider {
         self
     }
 
-    pub fn with_db(mut self, db: PgPool, encryption_key: String) -> Self {
-        self.db = Some(db);
-        self.encryption_key = Some(encryption_key);
-        self
-    }
-
     pub fn with_pe_exchange(mut self, pe_exchange: Arc<dyn ExchangePe>) -> Self {
         self.pe_exchange = Some(pe_exchange);
         self
-    }
-
-    async fn ensure_exchange(&self, exchange: &str, market_type: &str) {
-        let exchange_key = format!("{}:{}", exchange, market_type);
-        if self.exchange_registry.get(&exchange_key).is_some() { return; }
-
-        let db = match self.db { Some(ref db) => db, None => return };
-        let ek = match self.encryption_key { Some(ref ek) => ek, None => return };
-
-        let row: Option<(String, String, Option<String>)> = sqlx::query_as(
-            r#"SELECT encrypted_api_key, encrypted_api_secret, encrypted_passphrase
-               FROM qd_exchange_credentials
-               WHERE exchange = $1 AND market_type = $2 LIMIT 1"#,
-        )
-        .bind(exchange).bind(market_type)
-        .fetch_optional(db).await.unwrap_or(None);
-
-        if let Some((enc_key, enc_secret, enc_passphrase)) = row {
-            let derived_key = virs_utils::crypto::derive_key(ek);
-            let api_key = match virs_utils::crypto::decrypt(&enc_key, &derived_key) { Ok(k) => k, Err(_) => return };
-            let api_secret = match virs_utils::crypto::decrypt(&enc_secret, &derived_key) { Ok(s) => s, Err(_) => return };
-            let passphrase = enc_passphrase.and_then(|p| virs_utils::crypto::decrypt(&p, &derived_key).ok());
-
-            let mt = match market_type {
-                "spot" => virs_ccxt::MarketType::Spot,
-                _ => virs_ccxt::MarketType::Perpetual,
-            };
-
-            if let Ok(ccxt_ex) = virs_ccxt::create_exchange(
-                exchange, &api_key, &api_secret, passphrase.as_deref(), None, &mt,
-            ) {
-                let app_mt = match market_type {
-                    "spot" => virs_models::MarketType::Spot,
-                    _ => virs_models::MarketType::Perpetual,
-                };
-                let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, app_mt);
-                self.exchange_registry.register(Box::new(adapter));
-                tracing::info!(exchange, market_type, "Auto-registered exchange for market data provider");
-            }
-        }
     }
 
     async fn fetch_klines(
@@ -334,8 +285,6 @@ impl AutoExchangeMarketDataProvider {
 #[async_trait]
 impl MarketDataProvider for AutoExchangeMarketDataProvider {
     async fn get_market_snapshot(&self, exchange: &str, symbol: &str, market_type: &str) -> MarketSnapshot {
-        self.ensure_exchange(exchange, market_type).await;
-
         let now_ms = chrono::Utc::now().timestamp_millis();
 
         let klines_1h = match self.fetch_klines(
@@ -420,7 +369,6 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
         }
 
         // Real mode
-        self.ensure_exchange(exchange, market_type).await;
         let exchange_key = format!("{}:{}", exchange, market_type);
         let ex = match self.exchange_registry.get(&exchange_key) {
             Some(e) => e,

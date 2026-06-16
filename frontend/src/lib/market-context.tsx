@@ -1,30 +1,30 @@
-import { createContext, useContext, createSignal, type JSX } from 'solid-js'
+import { createContext, useContext, useState, type ReactNode } from 'react'
 
 export type MarketType = 'perpetual' | 'spot'
 
 interface MarketContextType {
-  marketType: () => MarketType
+  marketType: MarketType
   setMarketType: (t: MarketType) => void
-  label: () => string
+  label: string
 }
 
-const MarketContext = createContext<MarketContextType>()
+const MarketContext = createContext<MarketContextType | null>(null)
 
-export function MarketProvider(props: { children: JSX.Element }) {
-  const [marketType, setMarketType] = createSignal<MarketType>(
+export function MarketProvider({ children }: { children: ReactNode }) {
+  const [marketType, setMarketTypeState] = useState<MarketType>(
     (localStorage.getItem('virs_market_type') as MarketType) || 'perpetual'
   )
 
-  const handleSet = (t: MarketType) => {
-    setMarketType(t)
+  const setMarketType = (t: MarketType) => {
+    setMarketTypeState(t)
     localStorage.setItem('virs_market_type', t)
   }
 
-  const label = () => marketType() === 'perpetual' ? '永续合约' : '现货'
+  const label = marketType === 'perpetual' ? '永续合约' : '现货'
 
   return (
-    <MarketContext.Provider value={{ marketType, setMarketType: handleSet, label }}>
-      {props.children}
+    <MarketContext.Provider value={{ marketType, setMarketType, label }}>
+      {children}
     </MarketContext.Provider>
   )
 }

@@ -52,6 +52,7 @@ pub async fn save_credential(
     let provider = body["provider"].as_str().unwrap_or("");
     let label = body["label"].as_str().unwrap_or("");
     let api_key = body["api_key"].as_str().unwrap_or("");
+    let model = body["model"].as_str().unwrap_or("");
     let is_default = body["is_default"].as_bool().unwrap_or(false);
 
     if provider.is_empty() || api_key.is_empty() {
@@ -69,15 +70,16 @@ pub async fn save_credential(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Encryption error: {}", e)))))?;
 
     sqlx::query(
-        r#"INSERT INTO qd_ai_credentials (id, user_id, provider, encrypted_api_key, label, is_default, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        r#"INSERT INTO qd_ai_credentials (id, user_id, provider, encrypted_api_key, model, label, is_default, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
            ON CONFLICT (user_id, provider)
-           DO UPDATE SET encrypted_api_key = $4, label = $5, is_default = $6, updated_at = NOW()"#,
+           DO UPDATE SET encrypted_api_key = $4, model = $5, label = $6, is_default = $7, updated_at = NOW()"#,
     )
     .bind(id)
     .bind(user_id)
     .bind(provider)
     .bind(&encrypted_key)
+    .bind(if model.is_empty() { None as Option<&str> } else { Some(model) })
     .bind(label)
     .bind(is_default)
     .execute(&state.db_pool)

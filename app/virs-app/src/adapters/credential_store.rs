@@ -19,15 +19,16 @@ impl PgCredentialStore {
 
 #[async_trait]
 impl CredentialStore for PgCredentialStore {
-    async fn load_credentials(&self, user_id: Uuid) -> BotResult<Vec<(String, String)>> {
+    async fn load_credentials(&self, user_id: Uuid) -> BotResult<Vec<(String, String, Option<String>)>> {
         #[derive(Debug, sqlx::FromRow)]
         struct Row {
             provider: String,
             encrypted_api_key: String,
+            model: Option<String>,
         }
 
         let rows = sqlx::query_as::<_, Row>(
-            r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials WHERE user_id = $1"#,
+            r#"SELECT provider, encrypted_api_key, model FROM qd_ai_credentials WHERE user_id = $1"#,
         )
         .bind(user_id)
         .fetch_all(&self.db)
@@ -38,7 +39,7 @@ impl CredentialStore for PgCredentialStore {
         for row in rows {
             let decrypted = virs_utils::crypto::decrypt(&row.encrypted_api_key, &self.encryption_key)
                 .map_err(|e| BotError::Credential(format!("Decryption failed: {}", e)))?;
-            result.push((row.provider, decrypted));
+            result.push((row.provider, decrypted, row.model));
         }
         Ok(result)
     }

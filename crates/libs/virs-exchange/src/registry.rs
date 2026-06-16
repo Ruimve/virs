@@ -1,15 +1,15 @@
-//! Exchange Registry — manages named exchange instances.
+//! Exchanges — manages named exchange instances.
 
 use crate::Exchange;
 use dashmap::DashMap;
 use std::sync::Arc;
 use tracing::info;
 
-pub struct ExchangeRegistry {
+pub struct Exchanges {
     exchanges: Arc<DashMap<String, Box<dyn Exchange>>>,
 }
 
-impl ExchangeRegistry {
+impl Exchanges {
     pub fn new() -> Self {
         Self {
             exchanges: Arc::new(DashMap::new()),

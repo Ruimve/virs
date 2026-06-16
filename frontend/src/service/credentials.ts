@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { ApiResponse, PermissionItem, AccountInfo } from './types'
+import type { ApiResponse, PermissionItem } from './types'
 
 export async function saveCredential(params: {
   exchange: string
@@ -15,6 +15,7 @@ export async function saveCredential(params: {
 export async function saveAiCredential(params: {
   provider: string
   api_key: string
+  model?: string
   label?: string
   is_default?: boolean
 }): Promise<ApiResponse<{ id: string }>> {
@@ -36,10 +37,6 @@ export async function checkPermissions(): Promise<ApiResponse<{ permissions: Per
 /// POST /credentials/verify — verify saved credentials via apiRestrictions.
 export async function verifyPermissions(): Promise<ApiResponse<{ connected: boolean; permissions: PermissionItem[] }>> {
   return api.post('/credentials/verify')
-}
-
-export async function fetchAccountInfo(): Promise<ApiResponse<AccountInfo>> {
-  return api.post('/credentials/account-info')
 }
 
 /// GET /credentials/status — check if user has exchange credentials configured

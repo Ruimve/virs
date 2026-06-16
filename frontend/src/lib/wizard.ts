@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js'
+import { useState, useEffect } from 'react'
 import type { MarketType } from './market-context'
 
 // ── 向导步骤定义 ──
@@ -17,8 +17,6 @@ export const WizardStep = {
 export type WizardStepValue = (typeof WizardStep)[keyof typeof WizardStep]
 
 // ── 向导状态 ──
-// Note: API keys/secrets are NOT persisted to localStorage for security.
-// They are held in memory only and must be re-entered after page refresh.
 export interface WizardState {
   current_step: WizardStepValue
   exchange: string
@@ -60,19 +58,20 @@ const DEFAULT_CREDENTIALS: WizardCredentials = {
   llm_api_key: '',
 }
 
-const [wizardState, setWizardState] = createSignal<WizardState>(loadFromStorage())
-const [wizardCredentials, setWizardCredentials] = createSignal<WizardCredentials>({ ...DEFAULT_CREDENTIALS })
+// ── Module-level state with subscriber pattern ──
+let _wizardState: WizardState = loadFromStorage()
+let _wizardCredentials: WizardCredentials = { ...DEFAULT_CREDENTIALS }
+const _listeners = new Set<() => void>()
 
-export function getWizardState() {
-  return wizardState
+function notify() {
+  _listeners.forEach(l => l())
 }
 
-export function getWizardCredentials() {
-  return wizardCredentials
-}
-
-export function getCurrentStep(): WizardStepValue {
-  return wizardState().current_step
+export function subscribe(listener: () => void) {
+  _listeners.add(listener)
+  return () => {
+    _listeners.delete(listener)
+  }
 }
 
 // ── localStorage 持久化 (non-sensitive data only) ──
@@ -91,55 +90,71 @@ function loadFromStorage(): WizardState {
 
 function saveToStorage() {
   try {
-    // Only persist non-sensitive state
-    const state = wizardState()
-    localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(state))
+    localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(_wizardState))
   } catch {
     // ignore
   }
 }
 
+// ── Getters ──
+export function getWizardState(): WizardState {
+  return _wizardState
+}
+
+export function getWizardCredentials(): WizardCredentials {
+  return _wizardCredentials
+}
+
+export function getCurrentStep(): WizardStepValue {
+  return _wizardState.current_step
+}
+
 // ── 更新向导状态 ──
 export function updateWizard(partial: Partial<WizardState>) {
-  setWizardState((prev) => ({ ...prev, ...partial }))
+  _wizardState = { ..._wizardState, ...partial }
   saveToStorage()
+  notify()
 }
 
 // ── 更新凭证（仅内存） ──
 export function updateCredentials(partial: Partial<WizardCredentials>) {
-  setWizardCredentials((prev) => ({ ...prev, ...partial }))
+  _wizardCredentials = { ..._wizardCredentials, ...partial }
+  notify()
 }
 
 // ── 推进到下一步 ──
 export function advanceStep(step?: WizardStepValue) {
-  setWizardState((prev) => ({
-    ...prev,
-    current_step: step ?? (prev.current_step + 1) as WizardStepValue,
-  }))
+  _wizardState = {
+    ..._wizardState,
+    current_step: step ?? ((_wizardState.current_step + 1) as WizardStepValue),
+  }
   saveToStorage()
+  notify()
 }
 
 // ── 从存储恢复向导状态 ──
 export function loadWizardState(): boolean {
   const stored = loadFromStorage()
-  setWizardState(stored)
+  _wizardState = stored
+  notify()
   return stored.current_step > WizardStep.Loading
 }
 
 // ── 重置向导 ──
 export function resetWizard() {
-  setWizardState({ ...DEFAULT_STATE })
-  setWizardCredentials({ ...DEFAULT_CREDENTIALS })
+  _wizardState = { ...DEFAULT_STATE }
+  _wizardCredentials = { ...DEFAULT_CREDENTIALS }
   try {
     localStorage.removeItem(WIZARD_STORAGE_KEY)
   } catch {
     // ignore
   }
+  notify()
 }
 
 // ── 根据向导状态决定初始路由 ──
 export function resolveInitialRoute(): string {
-  const step = wizardState().current_step
+  const step = _wizardState.current_step
 
   if (step === WizardStep.Trading) return '/check'
 
@@ -158,5 +173,23 @@ export function resolveInitialRoute(): string {
       return '/setup/health'
     default:
       return '/setup/bot-type'
+  }
+}
+
+// React hook
+export function useWizardState() {
+  const [, forceUpdate] = useState(0)
+  useEffect(() => {
+    return subscribe(() => forceUpdate(v => v + 1))
+  }, [])
+  return {
+    wizardState: getWizardState(),
+    wizardCredentials: getWizardCredentials(),
+    currentStep: getCurrentStep(),
+    updateWizard,
+    updateCredentials,
+    advanceStep,
+    loadWizardState,
+    resetWizard,
   }
 }

@@ -291,6 +291,11 @@ impl KlineEngine {
         symbol: &str,
         market_type: MarketType,
     ) -> anyhow::Result<()> {
+        // Lazy start: auto-start the engine on first subscription
+        if !self.started.load(std::sync::atomic::Ordering::Relaxed) {
+            self.start().await;
+        }
+
         let key = subscription_key(exchange, symbol);
 
         if self.subscriptions.contains_key(&key) {
@@ -315,16 +320,9 @@ impl KlineEngine {
         }
 
         if self.config.backfill_on_start {
-            match GapDetector::detect_and_backfill(
+            GapDetector::detect_and_backfill(
                 exchange, symbol, &cache, &self.source, &self.event_tx, market_type,
-            ).await {
-                Ok(count) => {
-                    tracing::info!("[KlineEngine] Initial load: {} candles for {}/{}", count, exchange, symbol);
-                }
-                Err(e) => {
-                    tracing::error!("[KlineEngine] Initial load failed for {}/{}: {}", exchange, symbol, e);
-                }
-            }
+            ).await?;
         }
 
         tracing::info!("[KlineEngine] Subscribed to {}/{} ({})", exchange, symbol, market_type);

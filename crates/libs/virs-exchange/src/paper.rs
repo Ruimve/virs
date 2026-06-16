@@ -19,7 +19,7 @@ use virs_types::market::*;
 use virs_types::position::*;
 use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 
-use crate::registry::ExchangeRegistry;
+use crate::registry::Exchanges;
 
 /// Paper pending order
 #[derive(Debug, Clone)]
@@ -58,7 +58,7 @@ pub struct PaperExchangeAdapter {
     balance: Arc<Mutex<Balance>>,
     price_tx: Arc<Mutex<Option<mpsc::Sender<WsFeedEvent>>>>,
     last_prices: Arc<DashMap<String, f64>>,
-    exchange_registry: Option<Arc<ExchangeRegistry>>,
+    exchange_registry: Option<Arc<Exchanges>>,
     balance_initialized: Arc<AtomicBool>,
 }
 
@@ -91,7 +91,7 @@ impl PaperExchangeAdapter {
         }
     }
 
-    pub fn with_exchange_registry(mut self, registry: Arc<ExchangeRegistry>) -> Self {
+    pub fn with_exchange_registry(mut self, registry: Arc<Exchanges>) -> Self {
         self.exchange_registry = Some(registry);
         self
     }

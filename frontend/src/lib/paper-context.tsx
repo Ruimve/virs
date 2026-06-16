@@ -1,37 +1,37 @@
-import { createContext, useContext, createSignal, type JSX } from 'solid-js'
-import { api } from './api'
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { getPaperStatus, enablePaperMode, disablePaperMode } from '../service'
 
 interface PaperContextType {
-  enabled: () => boolean
-  loading: () => boolean
+  enabled: boolean
+  loading: boolean
   toggle: () => Promise<void>
   refresh: () => Promise<void>
 }
 
-const PaperContext = createContext<PaperContextType>()
+const PaperContext = createContext<PaperContextType | null>(null)
 
-export function PaperProvider(props: { children: JSX.Element }) {
-  const [enabled, setEnabled] = createSignal(false)
-  const [loading, setLoading] = createSignal(false)
+export function PaperProvider({ children }: { children: ReactNode }) {
+  const [enabled, setEnabled] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
-      const res = await api.get<{ paper_mode: boolean }>('/system/paper/status')
+      const res = await getPaperStatus()
       if (res.success && res.data) setEnabled(res.data.paper_mode)
     } catch {
       // ignore
     }
-  }
+  }, [])
 
-  const toggle = async () => {
-    if (loading()) return
+  const toggle = useCallback(async () => {
+    if (loading) return
     setLoading(true)
     try {
-      if (enabled()) {
-        await api.post('/system/paper/disable')
+      if (enabled) {
+        await disablePaperMode()
         setEnabled(false)
       } else {
-        await api.post('/system/paper/enable')
+        await enablePaperMode()
         setEnabled(true)
       }
     } catch {
@@ -39,14 +39,15 @@ export function PaperProvider(props: { children: JSX.Element }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [enabled, loading])
 
-  // init
-  refresh()
+  useEffect(() => {
+    refresh()
+  }, [refresh])
 
   return (
     <PaperContext.Provider value={{ enabled, loading, toggle, refresh }}>
-      {props.children}
+      {children}
     </PaperContext.Provider>
   )
 }

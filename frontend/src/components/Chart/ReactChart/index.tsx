@@ -1,11 +1,11 @@
-import { type Component, onCleanup } from 'solid-js'
+import { useRef, useEffect } from 'react'
 import {
   createChart,
   type IChartApi,
   ColorType,
 } from 'lightweight-charts'
 
-export interface SolidChartProps {
+export interface ReactChartProps {
   onLoad: (chart: IChartApi | undefined) => void
   height?: number
   timeVisible?: boolean
@@ -14,16 +14,17 @@ export interface SolidChartProps {
 
 /**
  * Base chart container — handles chart creation, resize, and cleanup.
- * Passes the IChartApi instance back via `ref` callback so the parent
+ * Passes the IChartApi instance back via `onLoad` callback so the parent
  * can create series and set data.
- *
- * Chart is created synchronously via the div ref callback so that
- * the parent's onMount sees a valid chart instance.
  */
-const SolidChart: Component<SolidChartProps> = (props) => {
-  let chart: IChartApi | undefined
+function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<IChartApi | undefined>(undefined)
 
-  const containerRef = (el: HTMLDivElement) => {
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
     // Read theme-aware CSS variables for chart colors
     const cs = getComputedStyle(el)
     const bgBase = cs.getPropertyValue('--bg-base').trim() || '#ffffff'
@@ -31,7 +32,7 @@ const SolidChart: Component<SolidChartProps> = (props) => {
     const borderDefault = cs.getPropertyValue('--border-default').trim() || '#e2e8f0'
     const borderSubtle = cs.getPropertyValue('--border-subtle').trim() || '#f1f5f9'
 
-    chart = createChart(el, {
+    const chart = createChart(el, {
       layout: {
         background: { type: ColorType.Solid, color: bgBase },
         textColor: textOnSurfaceTertiary,
@@ -49,13 +50,14 @@ const SolidChart: Component<SolidChartProps> = (props) => {
       },
       timeScale: {
         borderColor: borderDefault,
-        timeVisible: props.timeVisible ?? true,
-        secondsVisible: props.secondsVisible ?? false,
+        timeVisible: timeVisible ?? true,
+        secondsVisible: secondsVisible ?? false,
       },
       handleScroll: { vertTouchDrag: false },
     })
 
-    props.onLoad(chart)
+    chartRef.current = chart
+    onLoad(chart)
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -67,23 +69,21 @@ const SolidChart: Component<SolidChartProps> = (props) => {
     })
     resizeObserver.observe(el)
 
-    onCleanup(() => {
+    return () => {
       resizeObserver.disconnect()
-      if (chart) {
-        chart.remove()
-        chart = undefined
-        props.onLoad(undefined)
-      }
-    })
-  }
+      chart.remove()
+      chartRef.current = undefined
+      onLoad(undefined)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div
       ref={containerRef}
-      class="w-full rounded-lg border border-line-default overflow-hidden"
-      style={{ height: `${props.height || 400}px` }}
+      className="w-full rounded-lg border border-line-default overflow-hidden"
+      style={{ height: `${height || 400}px` }}
     />
   )
 }
 
-export default SolidChart
+export default ReactChart

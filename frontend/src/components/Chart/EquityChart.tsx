@@ -1,12 +1,12 @@
-import { type Component, createEffect, onMount } from 'solid-js'
+import { useRef, useEffect } from 'react'
 import {
   type IChartApi,
   type ISeriesApi,
   type LineData,
   LineSeries,
 } from 'lightweight-charts'
-import SolidChart from './SolidChart'
-import { toLocaleTime } from './SolidChart/locale/zh_CN';
+import ReactChart from './ReactChart'
+import { toLocaleTime } from './ReactChart/locale/zh_CN'
 
 interface EquityChartProps {
   data: Array<[string, number]>
@@ -14,34 +14,38 @@ interface EquityChartProps {
   initialBalance?: number
 }
 
-const EquityChart: Component<EquityChartProps> = (props) => {
-  let chart: IChartApi | undefined
-  let lineSeries: ISeriesApi<'Line'> | undefined
+function EquityChart({ data, height, initialBalance }: EquityChartProps) {
+  const chartRef = useRef<IChartApi | undefined>(undefined)
+  const lineSeriesRef = useRef<ISeriesApi<'Line'> | undefined>(undefined)
+  const initializedRef = useRef(false)
 
   const setChart = (c: IChartApi | undefined) => {
-    chart = c
+    chartRef.current = c
   }
 
-  onMount(() => {
-    if (!chart) return
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart || initializedRef.current) return
+    initializedRef.current = true
 
-    lineSeries = chart.addSeries(LineSeries, {
+    const lineSeries = chart.addSeries(LineSeries, {
       color: '#6366f1',
       lineWidth: 2,
       priceLineVisible: true,
       lastValueVisible: true,
     })
+    lineSeriesRef.current = lineSeries
 
-    const chartData: LineData[] = props.data.map((item) => ({
+    const chartData: LineData[] = data.map((item) => ({
       time: toLocaleTime(new Date(item[0]).getTime() / 1000),
       value: item[1],
     }))
 
     lineSeries.setData(chartData)
 
-    if (props.initialBalance && props.data.length > 0) {
+    if (initialBalance && data.length > 0) {
       lineSeries.createPriceLine({
-        price: props.initialBalance,
+        price: initialBalance,
         color: '#9ca3af',
         lineWidth: 1,
         lineStyle: 2,
@@ -51,21 +55,22 @@ const EquityChart: Component<EquityChartProps> = (props) => {
     }
 
     chart.timeScale().fitContent()
-  })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  createEffect(() => {
-    if (!lineSeries || props.data.length === 0) return
+  useEffect(() => {
+    const lineSeries = lineSeriesRef.current
+    if (!lineSeries || data.length === 0) return
 
-    const chartData: LineData[] = props.data.map((item) => ({
+    const chartData: LineData[] = data.map((item) => ({
       time: toLocaleTime(new Date(item[0]).getTime() / 1000),
       value: item[1],
     }))
 
     lineSeries.setData(chartData)
-    chart?.timeScale().fitContent()
-  })
+    chartRef.current?.timeScale().fitContent()
+  }, [data])
 
-  return <SolidChart onLoad={setChart} height={props.height} />
+  return <ReactChart onLoad={setChart} height={height} />
 }
 
 export default EquityChart

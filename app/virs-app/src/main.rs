@@ -13,10 +13,11 @@ use std::sync::Arc;
 use anyhow::Result;
 use tracing::info;
 use uuid::Uuid;
+use virs_api::EngineManager;
 
 use virs_api::{AppState, WsBroadcaster, build_router};
 use virs_config::load_config;
-use virs_exchange::ExchangeRegistry;
+use virs_exchange::Exchanges;
 use virs_market::{KlineEngine, ExchangeKlineSource, KlineEngineConfig};
 
 use engine_manager::AppEngineManager;
@@ -103,7 +104,7 @@ async fn main() -> Result<()> {
     config.admin.id = Some(admin_id);
 
     // Create exchange registry (empty — populated when user saves credentials)
-    let exchange_registry = Arc::new(ExchangeRegistry::new());
+    let exchange_registry = Arc::new(Exchanges::new());
     info!("Exchange registry initialized (empty — will be populated on first credential save)");
 
     // WebSocket broadcaster
@@ -123,8 +124,7 @@ async fn main() -> Result<()> {
         virs_ccxt::adapter::binance::kline_ws::BinanceKlineWs::new_perpetual(config.proxy.as_deref()),
     ));
     let kline_engine = Arc::new(KlineEngine::new(kline_config, kline_source, spot_ws, perpetual_ws));
-    kline_engine.start().await;
-    info!("Kline engine started (idle — no subscriptions yet)");
+    info!("Kline engine created (lazy — will start on first subscribe)");
 
     // ── Engine Manager (lazy) ──
     // Position/Grid/Auto engines are NOT started here.
@@ -144,12 +144,15 @@ async fn main() -> Result<()> {
     let app_state = AppState {
         db_pool: db_pool.clone(),
         ws_broadcaster,
-        engine_manager,
+        engine_manager: engine_manager.clone(),
         http_client: reqwest::Client::new(),
         exchange_registry: exchange_registry.clone(),
         kline_engine: kline_engine.clone(),
         encryption_key: config.server.encryption_key.clone(),
     };
+
+    // Restore services if bots exist from previous session
+    engine_manager.restore_if_needed().await;
 
     // Build router
     let app = build_router(app_state);

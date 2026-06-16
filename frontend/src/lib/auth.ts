@@ -1,53 +1,68 @@
-import { createSignal } from 'solid-js'
-import type { UserInfo } from './api/types'
-import { getUserInfo } from './api/auth'
-import { getToken, removeToken } from './api/client'
+import { useState, useEffect } from 'react'
+import type { UserInfo } from '../service/types'
+import { getUserInfo } from '../service/auth'
+import { getToken, removeToken } from '../service/client'
 
-const [user, setUser] = createSignal<UserInfo | null>(null)
-const [loading, setLoading] = createSignal(false)
+// Module-level state with subscriber pattern for React
+let _user: UserInfo | null = null
+let _loading = false
+const _listeners = new Set<() => void>()
+
+function notify() {
+  _listeners.forEach(l => l())
+}
+
+export function subscribe(listener: () => void) {
+  _listeners.add(listener)
+  return () => {
+    _listeners.delete(listener)
+  }
+}
 
 export function isLoggedIn(): boolean {
   return !!getToken()
 }
 
 export function getUser(): UserInfo | null {
-  return user()
+  return _user
 }
 
-export function getUserSignal() {
-  return user
-}
-
-export function getLoading() {
-  return loading
+export function getLoading(): boolean {
+  return _loading
 }
 
 export function isAdmin(): boolean {
-  return user()?.role === 'admin'
+  return _user?.role === 'admin'
 }
 
 export async function fetchUser(): Promise<boolean> {
   if (!isLoggedIn()) {
-    setUser(null)
+    _user = null
+    notify()
     return false
   }
 
-  setLoading(true)
+  _loading = true
+  notify()
   try {
     const result = await getUserInfo()
     if (result.success && result.data) {
-      setUser(result.data)
+      _user = result.data
+      notify()
       return true
     } else {
-      setUser(null)
+      _user = null
       removeToken()
+      notify()
       return false
     }
   } catch {
-    setUser(null)
+    _user = null
+    notify()
     return false
   } finally {
-    setLoading(false)
+    _loading = false
+    notify()
   }
 }
 
@@ -63,4 +78,13 @@ export function initAuth(): void {
   if (isLoggedIn()) {
     fetchUser()
   }
+}
+
+// React hook to subscribe to auth state changes
+export function useAuthState() {
+  const [, forceUpdate] = useState(0)
+  useEffect(() => {
+    return subscribe(() => forceUpdate(v => v + 1))
+  }, [])
+  return { user: getUser(), loading: getLoading() }
 }

@@ -1,66 +1,51 @@
-import { type Component, type JSX, For, Show } from 'solid-js'
+import type { ReactNode } from 'react'
 import FlowStep, { type FlowStepStatus } from './Step'
 
 export type { FlowStepStatus }
 
 export interface FlowStepConfig {
-  /** Unique key for this step */
   key: string
-  /** Step title */
   title: string
-  /** Optional subtitle / description */
   description?: string
-  /** Whether done step can be expanded/collapsed. Default: true */
   editable?: boolean
-  /** Override connector line visibility */
   showLine?: boolean
-  /** Custom indicator */
-  indicator?: JSX.Element
-  /** Step number override (default: auto-increment) */
+  indicator?: ReactNode
   step?: number
-  /** Render step content */
-  render?: () => JSX.Element
+  render?: () => ReactNode
 }
 
 export interface FlowStepsProps {
-  /** Step configurations */
   steps: FlowStepConfig[]
-  /** Status map: key → status */
   statuses: Record<string, FlowStepStatus>
-  /** Summary map: key → summary (string or JSX) */
-  summaries?: Record<string, string | JSX.Element>
-  /** Toggle callback map: key → onToggle */
+  summaries?: Record<string, string | ReactNode>
   onToggles?: Record<string, (expanded: boolean) => void>
 }
 
-const FlowSteps: Component<FlowStepsProps> = (props) => {
+function FlowSteps({ steps, statuses, summaries, onToggles }: FlowStepsProps) {
   return (
-    <div class="space-y-1">
-      <For each={props.steps}>
-        {(config, index) => {
-          const status = () => props.statuses[config.key] ?? 'pending'
-          const summary = () => props.summaries?.[config.key]
-          const onToggle = () => props.onToggles?.[config.key]
+    <div className="space-y-1">
+      {steps.map((config, index) => {
+        const status = statuses[config.key] ?? 'pending'
+        const summary = summaries?.[config.key]
+        const onToggle = onToggles?.[config.key]
 
-          return (
-            <FlowStep
-              step={config.step ?? index() + 1}
-              title={config.title}
-              description={config.description}
-              status={status()}
-              summary={summary()}
-              editable={config.editable}
-              showLine={config.showLine}
-              indicator={config.indicator}
-              onToggle={onToggle()}
-            >
-              <Show when={config.render}>
-                {config.render!()}
-              </Show>
-            </FlowStep>
-          )
-        }}
-      </For>
+        return (
+          <FlowStep
+            key={config.key}
+            step={config.step ?? index + 1}
+            title={config.title}
+            description={config.description}
+            status={status}
+            summary={summary}
+            editable={config.editable}
+            showLine={config.showLine}
+            indicator={config.indicator}
+            onToggle={onToggle}
+          >
+            {config.render?.()}
+          </FlowStep>
+        )
+      })}
     </div>
   )
 }

@@ -248,6 +248,7 @@ CREATE TABLE IF NOT EXISTS qd_ai_credentials (
     user_id UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
     provider TEXT NOT NULL,
     encrypted_api_key TEXT NOT NULL,
+    model TEXT,
     label TEXT,
     is_default BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -405,6 +406,11 @@ END $$;
 
 DO $$ BEGIN
     ALTER TABLE qd_auto_trades ADD COLUMN IF NOT EXISTS trigger_source TEXT NOT NULL DEFAULT 'llm';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE qd_ai_credentials ADD COLUMN IF NOT EXISTS model TEXT;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 

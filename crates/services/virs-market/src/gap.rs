@@ -136,11 +136,9 @@ impl GapDetector {
         let candles_1m = match result_1m {
             Ok(c) if !c.is_empty() => c,
             Ok(_) => {
-                tracing::warn!("[GapDetector] No 1m candles for {}/{}", exchange, symbol);
-                return Ok(0);
+                return Err(anyhow::anyhow!("No 1m candles returned for {}/{}", exchange, symbol));
             }
             Err(e) => {
-                tracing::error!("[GapDetector] Failed to load 1m candles for {}/{}: {}", exchange, symbol, e);
                 return Err(e);
             }
         };

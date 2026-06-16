@@ -16,7 +16,7 @@ use virs_bot::auto::types::AutoCommand;
 use virs_bot::auto::types::AutoEvent;
 use virs_bot::grid::types::GridCommand;
 use virs_config::AiConfig;
-use virs_exchange::{CcxtExchangeAdapter, ExchangeRegistry, PaperExchangeAdapter};
+use virs_exchange::{CcxtExchangeAdapter, Exchanges, PaperExchangeAdapter};
 use virs_market::KlineEngine;
 use virs_position::{Persistence as PePersistence, PositionEngine};
 use virs_types::bot::{OrderEvent, PriceProvider};
@@ -38,7 +38,7 @@ struct EngineState {
 /// Application-level engine manager.
 pub struct AppEngineManager {
     db_pool: sqlx::PgPool,
-    exchange_registry: Arc<ExchangeRegistry>,
+    exchange_registry: Arc<Exchanges>,
     kline_engine: Arc<KlineEngine>,
     encryption_key: String,
     ai_config: AiConfig,
@@ -56,7 +56,7 @@ pub struct AppEngineManager {
 impl AppEngineManager {
     pub fn new(
         db_pool: sqlx::PgPool,
-        exchange_registry: Arc<ExchangeRegistry>,
+        exchange_registry: Arc<Exchanges>,
         kline_engine: Arc<KlineEngine>,
         encryption_key: String,
         ai_config: AiConfig,
@@ -140,8 +140,7 @@ impl EngineManager for AppEngineManager {
 
         let grid_store = Arc::new(PgGridStore::new(self.db_pool.clone()));
         let grid_price_provider = Arc::new(ExchangePriceProvider::new(self.exchange_registry.clone())
-            .with_kline_engine(self.kline_engine.clone())
-            .with_db(self.db_pool.clone(), self.encryption_key.clone()));
+            .with_kline_engine(self.kline_engine.clone()));
         let grid_market_data_provider = Arc::new(ExchangeMarketDataProvider::new(self.exchange_registry.clone())
             .with_kline_engine(self.kline_engine.clone())
             .with_pe_exchange(pe_exchange_ref.clone()));
@@ -206,11 +205,9 @@ impl EngineManager for AppEngineManager {
         // ── Auto Trade Engine ──
         let auto_store = Arc::new(PgAutoStore::new(self.db_pool.clone()));
         let auto_price_provider = Arc::new(AutoExchangePriceProvider::new(self.exchange_registry.clone())
-            .with_kline_engine(self.kline_engine.clone())
-            .with_db(self.db_pool.clone(), self.encryption_key.clone()));
+            .with_kline_engine(self.kline_engine.clone()));
         let auto_market_data_provider = Arc::new(AutoExchangeMarketDataProvider::new(self.exchange_registry.clone())
             .with_kline_engine(self.kline_engine.clone())
-            .with_db(self.db_pool.clone(), self.encryption_key.clone())
             .with_pe_exchange(pe_exchange_ref.clone()));
         let (auto_order_event_tx, _) = tokio::sync::broadcast::channel::<OrderEvent>(256);
         let auto_order_executor = Arc::new(PeOrderExecutor::new(
@@ -376,6 +373,128 @@ impl EngineManager for AppEngineManager {
             if !symbols.contains(&(exchange.clone(), symbol.clone())) {
                 symbols.push((exchange, symbol));
             }
+        }
+    }
+
+    async fn restore_if_needed(&self) {
+        // Already started — nothing to do
+        if self.started.load(Ordering::SeqCst) {
+            return;
+        }
+
+        // Check if any bots exist in DB
+        let has_bots: bool = {
+            let grid_count: i64 = sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM qd_grid_bots"#,
+            )
+            .fetch_one(&self.db_pool)
+            .await
+            .unwrap_or(0);
+
+            let auto_count: i64 = sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM qd_auto_bots"#,
+            )
+            .fetch_one(&self.db_pool)
+            .await
+            .unwrap_or(0);
+
+            grid_count + auto_count > 0
+        };
+
+        if !has_bots {
+            info!("No bots found in DB — skip restore");
+            return;
+        }
+
+        info!("Bots found in DB — restoring services...");
+
+        // 1. Restore Exchanges from DB credentials
+        let rows: Vec<(String, String, String, Option<String>)> = sqlx::query_as(
+            r#"SELECT exchange, encrypted_api_key, encrypted_api_secret, encrypted_passphrase
+               FROM qd_exchange_credentials"#,
+        )
+        .fetch_all(&self.db_pool)
+        .await
+        .unwrap_or_default();
+
+        let derived_key = virs_utils::crypto::derive_key(&self.encryption_key);
+        for (exchange, enc_key, enc_secret, enc_passphrase) in &rows {
+            let api_key = match virs_utils::crypto::decrypt(enc_key, &derived_key) {
+                Ok(k) => k,
+                Err(e) => {
+                    tracing::warn!(exchange, "Failed to decrypt API key: {}", e);
+                    continue;
+                }
+            };
+            let api_secret = match virs_utils::crypto::decrypt(enc_secret, &derived_key) {
+                Ok(k) => k,
+                Err(e) => {
+                    tracing::warn!(exchange, "Failed to decrypt API secret: {}", e);
+                    continue;
+                }
+            };
+            let passphrase = enc_passphrase.as_ref().and_then(|p| virs_utils::crypto::decrypt(p, &derived_key).ok());
+
+            // Try both market types (perpetual first, then spot)
+            for mt_str in &["perpetual", "spot"] {
+                let exchange_key = format!("{}:{}", exchange, mt_str);
+                if self.exchange_registry.get(&exchange_key).is_some() {
+                    continue; // Already registered
+                }
+
+                let ccxt_mt = match *mt_str {
+                    "spot" => virs_ccxt::MarketType::Spot,
+                    _ => virs_ccxt::MarketType::Perpetual,
+                };
+
+                if let Ok(ccxt_ex) = virs_ccxt::create_exchange(
+                    exchange, &api_key, &api_secret, passphrase.as_deref(), None, &ccxt_mt,
+                ) {
+                    let app_mt = match *mt_str {
+                        "spot" => MarketType::Spot,
+                        _ => MarketType::Perpetual,
+                    };
+                    let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, app_mt);
+                    self.exchange_registry.register(Box::new(adapter));
+                    info!(exchange, market_type = mt_str, "Restored exchange from DB");
+                }
+            }
+        }
+
+        // 2. Restore Kline subscriptions for running bot symbols
+        let bot_symbols: Vec<(String, String, String)> = sqlx::query_as(
+            r#"
+            SELECT exchange, symbol, market_type FROM qd_auto_bots WHERE status = 'running'
+            UNION
+            SELECT exchange, symbol, market_type FROM qd_grid_bots WHERE status = 'running'
+            "#,
+        )
+        .fetch_all(&self.db_pool)
+        .await
+        .unwrap_or_default();
+
+        for (exchange, symbol, market_type) in &bot_symbols {
+            let mt = match market_type.as_str() {
+                "spot" => virs_models::MarketType::Spot,
+                _ => virs_models::MarketType::Perpetual,
+            };
+            if let Err(e) = self.kline_engine.subscribe(exchange, symbol, mt).await {
+                tracing::warn!(exchange, symbol, "Failed to restore kline subscription: {}", e);
+            } else {
+                info!(exchange, symbol, market_type, "Restored kline subscription");
+            }
+        }
+
+        // 3. Determine paper mode from DB (check if any bot uses paper mode)
+        let paper_mode = std::env::var("PAPER_TRADING")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(true);
+
+        // 4. Start engines (which will call restore_running_bots internally)
+        if let Err(e) = self.ensure_started(paper_mode).await {
+            tracing::error!("Failed to restore engines: {}", e);
+        } else {
+            info!("Services restored successfully ({} bot symbols subscribed)", bot_symbols.len());
         }
     }
 }

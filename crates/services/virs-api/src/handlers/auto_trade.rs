@@ -59,6 +59,33 @@ pub async fn create_bot(
         ));
     }
 
+    // Verify exchange is registered in registry (must be done via /api/credentials/save first)
+    let market_type_str = market_type;
+    let exchange_key = format!("{}:{}", exchange, market_type_str);
+    if state.exchange_registry.get(&exchange_key).is_none() {
+        return Err((
+            StatusCode::PRECONDITION_FAILED,
+            Json(ApiResponse::err("Exchange not registered. Please save API credentials first.")),
+        ));
+    }
+
+    // Subscribe kline engine for this symbol (backfill + WS push)
+    let mt = match market_type_str {
+        "spot" => virs_models::MarketType::Spot,
+        _ => virs_models::MarketType::Perpetual,
+    };
+    if let Err(e) = state.kline_engine.subscribe(exchange, symbol, mt).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::err(format!("Failed to subscribe kline: {}", e))),
+        ));
+    }
+
+    // Register symbol for paper mode price ticks
+    if paper_mode {
+        state.engine_manager.register_paper_symbol(exchange.to_string(), symbol.to_string()).await;
+    }
+
     let id = uuid::Uuid::new_v4();
     sqlx::query(
         r#"INSERT INTO qd_auto_bots (id, user_id, name, symbol, exchange, market_type, leverage, max_position_pct, paper_mode, status, created_at, updated_at)
@@ -235,19 +262,6 @@ pub async fn start_bot(
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
     if let Some(tx) = state.engine_manager.auto_cmd_tx() {
         let _ = tx.send(virs_bot::auto::types::AutoCommand::StartBot { bot_id: id }).await;
-    }
-    // Register symbol for paper mode price ticks
-    if state.engine_manager.paper_mode() {
-        // Fetch bot info to get exchange/symbol
-        let bot = sqlx::query_as::<_, (String, String)>(
-            r#"SELECT exchange, symbol FROM qd_auto_bots WHERE id = $1"#
-        )
-        .bind(id)
-        .fetch_optional(&state.db_pool)
-        .await;
-        if let Ok(Some((exchange, symbol))) = bot {
-            state.engine_manager.register_paper_symbol(exchange, symbol).await;
-        }
     }
     Ok(Json(ApiResponse::ok(serde_json::json!({"started": true}))))
 }

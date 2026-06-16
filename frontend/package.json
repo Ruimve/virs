@@ -9,16 +9,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@solidjs/router": "^0.16.1",
     "lightweight-charts": "^5.2.0",
-    "solid-js": "^1.9.12"
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",
     "@types/node": "^24.12.2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^6.0.0",
     "tailwindcss": "^4.2.2",
     "typescript": "~6.0.2",
-    "vite": "^8.0.4",
-    "vite-plugin-solid": "^2.11.12"
+    "vite": "^8.0.4"
   }
 }

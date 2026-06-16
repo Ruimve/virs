@@ -13,6 +13,7 @@ pub struct SymbolQuery {
     pub exchange: Option<String>,
     pub symbol: Option<String>,
     pub market_type: Option<String>,
+    pub timeframe: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -34,10 +35,18 @@ pub async fn kline_subscribe(
     State(state): State<AppState>,
     Json(body): Json<KlineSubscribeRequest>,
 ) -> Json<ApiResponse> {
-    let market_type = match body.market_type.as_deref() {
-        Some("spot") => virs_models::MarketType::Spot,
+    let market_type_str = body.market_type.as_deref().unwrap_or("perpetual");
+    let market_type = match market_type_str {
+        "spot" => virs_models::MarketType::Spot,
         _ => virs_models::MarketType::Perpetual,
     };
+
+    // Check exchange is registered before subscribing
+    let exchange_key = format!("{}:{}", body.exchange, market_type_str);
+    if state.exchange_registry.get(&exchange_key).is_none() {
+        return Json(ApiResponse::err(format!("Exchange '{}' not registered. Please create a bot first.", exchange_key)));
+    }
+
     match state.kline_engine.subscribe(&body.exchange, &body.symbol, market_type).await {
         Ok(_) => Json(ApiResponse::ok(serde_json::json!({
             "subscribed": true,
@@ -94,6 +103,7 @@ pub async fn get_ticker(
         Some(ref s) => s,
         None => return Json(ApiResponse::err("symbol is required")),
     };
+    let market_type = params.market_type.as_deref().unwrap_or("perpetual");
 
     // Try kline engine first for latest price
     if let Some(candles) = state.kline_engine.get_klines_async(exchange, symbol, virs_market::Timeframe::M1).await {
@@ -113,7 +123,7 @@ pub async fn get_ticker(
     }
 
     // Fallback to exchange ticker
-    let exchange_key = format!("{}:perpetual", exchange);
+    let exchange_key = format!("{}:{}", exchange, market_type);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_ticker(symbol).await {
             Ok(ticker) => Json(ApiResponse::ok(serde_json::json!({
@@ -146,55 +156,67 @@ pub async fn get_klines(
         Some(ref s) => s,
         None => return Json(ApiResponse::err("symbol is required")),
     };
+    let market_type = params.market_type.as_deref().unwrap_or("perpetual");
 
-    // Auto-subscribe to kline engine for WS push
-    let market_type = match params.market_type.as_deref() {
-        Some("spot") => virs_models::MarketType::Spot,
-        _ => virs_models::MarketType::Perpetual,
+    // Parse requested timeframe (default 15m)
+    let requested_tf = match params.timeframe.as_deref() {
+        Some("1m") => virs_market::Timeframe::M1,
+        Some("5m") => virs_market::Timeframe::M5,
+        Some("15m") => virs_market::Timeframe::M15,
+        Some("1h") => virs_market::Timeframe::H1,
+        Some("4h") => virs_market::Timeframe::H4,
+        Some("1d") => virs_market::Timeframe::D1,
+        _ => virs_market::Timeframe::M15,
     };
-    let _ = state.kline_engine.subscribe(exchange, symbol, market_type).await;
 
-    // Try kline engine cache
-    for tf in &[virs_market::Timeframe::M1, virs_market::Timeframe::M5, virs_market::Timeframe::M15,
-                virs_market::Timeframe::H1, virs_market::Timeframe::H4, virs_market::Timeframe::D1] {
-        if let Some(candles) = state.kline_engine.get_klines_async(exchange, symbol, *tf).await {
-            if !candles.is_empty() {
-                return Json(ApiResponse::ok(serde_json::json!({
-                    "symbol": symbol,
-                    "exchange": exchange,
-                    "timeframe": tf.as_str(),
-                    "candles": candles.iter().map(|c| serde_json::json!({
-                        "open_time": c.open_time,
-                        "open": c.open,
-                        "high": c.high,
-                        "low": c.low,
-                        "close": c.close,
-                        "volume": c.volume,
-                    })).collect::<Vec<_>>(),
-                })));
-            }
+    // Try kline engine cache — prefer requested timeframe
+    if let Some(candles) = state.kline_engine.get_klines_async(exchange, symbol, requested_tf).await {
+        if !candles.is_empty() {
+            return Json(ApiResponse::ok(serde_json::json!({
+                "symbol": symbol,
+                "exchange": exchange,
+                "timeframe": requested_tf.as_str(),
+                "candles": candles.iter().map(|c| serde_json::json!({
+                    "open_time": c.open_time,
+                    "open": c.open,
+                    "high": c.high,
+                    "low": c.low,
+                    "close": c.close,
+                    "volume": c.volume,
+                })).collect::<Vec<_>>(),
+            })));
         }
     }
 
-    // Fallback to exchange REST API
-    let exchange_key = format!("{}:perpetual", exchange);
+    // Fallback to exchange REST API (exchange already registered above)
+    let exchange_key = format!("{}:{}", exchange, market_type);
     match state.exchange_registry.get(&exchange_key) {
-        Some(ex) => match ex.get_klines(symbol, "1h", 100, None).await {
-            Ok(klines) => Json(ApiResponse::ok(serde_json::json!({
-                "symbol": symbol,
-                "exchange": exchange,
-                "timeframe": "1h",
-                "candles": klines.iter().map(|k| serde_json::json!({
-                    "open_time": k.open_time,
-                    "open": k.open,
-                    "high": k.high,
-                    "low": k.low,
-                    "close": k.close,
-                    "volume": k.volume,
-                })).collect::<Vec<_>>(),
-            }))),
-            Err(e) => Json(ApiResponse::err(format!("Klines error: {}", e))),
-        },
+        Some(ex) => {
+            let tf_str = match requested_tf {
+                virs_market::Timeframe::M1 => "1m",
+                virs_market::Timeframe::M5 => "5m",
+                virs_market::Timeframe::M15 => "15m",
+                virs_market::Timeframe::H1 => "1h",
+                virs_market::Timeframe::H4 => "4h",
+                virs_market::Timeframe::D1 => "1d",
+            };
+            match ex.get_klines(symbol, tf_str, 500, None).await {
+                Ok(klines) => Json(ApiResponse::ok(serde_json::json!({
+                    "symbol": symbol,
+                    "exchange": exchange,
+                    "timeframe": tf_str,
+                    "candles": klines.iter().map(|k| serde_json::json!({
+                        "open_time": k.open_time,
+                        "open": k.open,
+                        "high": k.high,
+                        "low": k.low,
+                        "close": k.close,
+                        "volume": k.volume,
+                    })).collect::<Vec<_>>(),
+                }))),
+                Err(e) => Json(ApiResponse::err(format!("Klines error: {}", e))),
+            }
+        }
         None => Json(ApiResponse::err(format!("Exchange '{}' not registered", exchange))),
     }
 }
@@ -211,8 +233,9 @@ pub async fn get_order_book(
         Some(ref s) => s,
         None => return Json(ApiResponse::err("symbol is required")),
     };
+    let market_type = params.market_type.as_deref().unwrap_or("perpetual");
 
-    let exchange_key = format!("{}:perpetual", exchange);
+    let exchange_key = format!("{}:{}", exchange, market_type);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_order_book(symbol, 20).await {
             Ok(ob) => Json(ApiResponse::ok(serde_json::json!({
@@ -237,6 +260,7 @@ pub async fn get_balances(
     };
 
     let market_type = params.market_type.as_deref().unwrap_or("perpetual");
+
     let exchange_key = format!("{}:{}", exchange, market_type);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_balances().await {
@@ -267,7 +291,9 @@ pub async fn get_symbols(
         None => return Json(ApiResponse::err("exchange is required")),
     };
 
-    let exchange_key = format!("{}:perpetual", exchange);
+    let market_type = params.market_type.as_deref().unwrap_or("perpetual");
+
+    let exchange_key = format!("{}:{}", exchange, market_type);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_symbols().await {
             Ok(symbols) => Json(ApiResponse::ok(serde_json::json!({

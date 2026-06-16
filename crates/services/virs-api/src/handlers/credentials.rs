@@ -6,7 +6,6 @@ use axum::{
     Json,
 };
 use tracing::info;
-use virs_exchange::Exchange;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -377,98 +376,7 @@ pub async fn exchange_status(
             "exchange": format!("{} ({})", exchange, market_type),
         })))),
         None => Ok(Json(ApiResponse::ok(serde_json::json!({
-            "connected": false,
-        })))),
+        "connected": false,
+    })))),
     }
-}
-
-/// POST /api/credentials/account-info — fetch perpetual + spot USDT balances.
-/// Fixed: decrypt encrypted credentials from DB instead of querying plaintext columns.
-pub async fn account_info(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
-    let user_id = extract_user_id(&headers)?;
-
-    // Fetch perpetual USDT balance from registry
-    let mut perpetual_usdt: Option<f64> = None;
-    let mut exchange_name = String::from("binance");
-
-    let names = state.exchange_registry.registered_names();
-    for key in &names {
-        if key.contains("perpetual") {
-            if let Some(ex) = state.exchange_registry.get(key) {
-                match ex.get_balances().await {
-                    Ok(balances) => {
-                        for b in &balances {
-                            if b.asset == "USDT" {
-                                perpetual_usdt = Some(b.total);
-                                break;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to fetch perpetual balances: {}", e);
-                    }
-                }
-            }
-            if let Some(idx) = key.find(':') {
-                exchange_name = key[..idx].to_string();
-            }
-            break;
-        }
-    }
-
-    // Fetch spot USDT balance by decrypting credentials from DB and creating a temporary spot instance
-    let mut spot_usdt: Option<f64> = None;
-
-    let row: Option<(String, String, Option<String>)> = sqlx::query_as(
-        r#"SELECT encrypted_api_key, encrypted_api_secret, encrypted_passphrase
-           FROM qd_exchange_credentials
-           WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1"#,
-    )
-    .bind(user_id)
-    .fetch_optional(&state.db_pool)
-    .await
-    .unwrap_or(None);
-
-    if let Some((enc_key, enc_secret, enc_passphrase)) = row {
-        let derived_key = virs_utils::crypto::derive_key(&state.encryption_key);
-
-        let api_key = virs_utils::crypto::decrypt(&enc_key, &derived_key).ok();
-        let api_secret = virs_utils::crypto::decrypt(&enc_secret, &derived_key).ok();
-        let passphrase = enc_passphrase
-            .and_then(|p| virs_utils::crypto::decrypt(&p, &derived_key).ok());
-
-        if let (Some(key), Some(secret)) = (api_key, api_secret) {
-            match virs_ccxt::create_exchange(
-                &exchange_name, &key, &secret, passphrase.as_deref(), None, &virs_ccxt::MarketType::Spot,
-            ) {
-                Ok(ccxt_ex) => {
-                    let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, virs_models::MarketType::Spot);
-                    match adapter.get_balances().await {
-                        Ok(balances) => {
-                            for b in &balances {
-                                if b.asset == "USDT" {
-                                    spot_usdt = Some(b.total);
-                                    break;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            tracing::warn!("Failed to fetch spot balances: {}", e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to create spot exchange: {}", e);
-                }
-            }
-        }
-    }
-
-    Ok(Json(ApiResponse::ok(serde_json::json!({
-        "perpetual_usdt": perpetual_usdt,
-        "spot_usdt": spot_usdt,
-    }))))
 }

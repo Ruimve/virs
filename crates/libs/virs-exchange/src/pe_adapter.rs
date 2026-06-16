@@ -1,4 +1,4 @@
-//! CcxtExchangeAdapter — adapts ExchangeRegistry to Position Engine's ExchangePe trait.
+//! CcxtExchangeAdapter — adapts Exchanges to Position Engine's ExchangePe trait.
 
 use std::sync::Arc;
 
@@ -14,17 +14,17 @@ use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_models as models;
 
 use crate::Exchange;
-use crate::registry::ExchangeRegistry;
+use crate::registry::Exchanges;
 
-/// Adapter: ExchangeRegistry → Position Engine ExchangePe trait
+/// Adapter: Exchanges → Position Engine ExchangePe trait
 pub struct CcxtExchangeAdapter {
-    registry: Arc<ExchangeRegistry>,
+    registry: Arc<Exchanges>,
     cached_name: String,
     listen_key: Option<String>,
 }
 
 impl CcxtExchangeAdapter {
-    pub fn new(registry: Arc<ExchangeRegistry>) -> Self {
+    pub fn new(registry: Arc<Exchanges>) -> Self {
         Self { registry, cached_name: "binance".to_string(), listen_key: None }
     }
 
@@ -156,7 +156,7 @@ fn to_pe_error(e: anyhow::Error) -> PositionEngineError {
 }
 
 fn no_exchange_error() -> PositionEngineError {
-    PositionEngineError::Exchange("No perpetual exchange registered in ExchangeRegistry".to_string())
+    PositionEngineError::Exchange("No perpetual exchange registered in Exchanges".to_string())
 }
 
 /// Convert ccxt WsFeedEvent to virs_types WsFeedEvent

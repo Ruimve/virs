@@ -129,7 +129,7 @@ pub struct AccountBalance {
 /// Credential store trait
 #[async_trait]
 pub trait CredentialStore: Send + Sync {
-    async fn load_credentials(&self, user_id: Uuid) -> BotResult<Vec<(String, String)>>;
+    async fn load_credentials(&self, user_id: Uuid) -> BotResult<Vec<(String, String, Option<String>)>>;
 }
 
 /// Price provider trait (unified — market_type defaults to "perpetual" for grid)
@@ -162,6 +162,6 @@ pub trait LlmProviderResolver: Send + Sync {
     fn is_available(&self) -> bool;
     fn resolve(
         &self,
-        user_credentials: &[(String, String)],
+        user_credentials: &[(String, String, Option<String>)],
     ) -> BotResult<(String, String, String, String)>;
 }

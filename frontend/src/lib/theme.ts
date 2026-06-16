@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js'
+import { useState, useEffect } from 'react'
 
 type Theme = 'light' | 'dark'
 
@@ -10,7 +10,8 @@ function getInitialTheme(): Theme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-const [theme, setTheme] = createSignal<Theme>(getInitialTheme())
+let _theme: Theme = getInitialTheme()
+const _listeners = new Set<() => void>()
 
 function applyTheme(t: Theme) {
   document.documentElement.classList.toggle('dark', t === 'dark')
@@ -18,18 +19,38 @@ function applyTheme(t: Theme) {
 }
 
 // Apply on load
-applyTheme(theme())
+applyTheme(_theme)
 
-export function getTheme() {
-  return theme()
+function notify() {
+  _listeners.forEach(l => l())
+}
+
+export function subscribe(listener: () => void) {
+  _listeners.add(listener)
+  return () => {
+    _listeners.delete(listener)
+  }
+}
+
+export function getTheme(): Theme {
+  return _theme
 }
 
 export function toggleTheme() {
-  const next = theme() === 'dark' ? 'light' : 'dark'
-  setTheme(next)
-  applyTheme(next)
+  _theme = _theme === 'dark' ? 'light' : 'dark'
+  applyTheme(_theme)
+  notify()
 }
 
-export function isDark() {
-  return theme() === 'dark'
+export function isDark(): boolean {
+  return _theme === 'dark'
+}
+
+// React hook
+export function useTheme() {
+  const [, forceUpdate] = useState(0)
+  useEffect(() => {
+    return subscribe(() => forceUpdate(v => v + 1))
+  }, [])
+  return { theme: getTheme(), isDark: isDark(), toggleTheme }
 }

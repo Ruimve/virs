@@ -3,7 +3,7 @@
 //! This crate provides:
 //! - Application-level `Exchange` trait (wrapping ccxt)
 //! - `CcxtAdapter` — adapts ccxt Exchange to application Exchange trait
-//! - `ExchangeRegistry` — registry for named exchange instances
+//! - `Exchanges` — registry for named exchange instances
 //! - `PaperExchangeAdapter` — paper trading adapter for Position Engine
 //! - `CcxtExchangeAdapter` — real exchange adapter for Position Engine
 
@@ -13,7 +13,7 @@ pub mod paper;
 pub mod pe_adapter;
 
 // Re-export key types
-pub use registry::ExchangeRegistry;
+pub use registry::Exchanges;
 pub use adapter::CcxtAdapter;
 pub use paper::PaperExchangeAdapter;
 pub use pe_adapter::CcxtExchangeAdapter;

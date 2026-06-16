@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 
 use virs_bot::grid::types::GridCommand;
 use virs_bot::auto::types::AutoCommand;
-use virs_exchange::ExchangeRegistry;
+use virs_exchange::Exchanges;
 use virs_market::KlineEngine;
 
 /// WebSocket 广播器
@@ -54,6 +54,10 @@ pub trait EngineManager: Send + Sync {
 
     /// Register a symbol for paper mode price ticks
     async fn register_paper_symbol(&self, exchange: String, symbol: String);
+
+    /// Restore services if bots exist in DB but engines are not started.
+    /// Called once at server startup. No-op if engines already started or no bots exist.
+    async fn restore_if_needed(&self);
 }
 
 /// API 应用状态
@@ -63,7 +67,7 @@ pub struct AppState {
     pub ws_broadcaster: Arc<WsBroadcaster>,
     pub engine_manager: Arc<dyn EngineManager>,
     pub http_client: reqwest::Client,
-    pub exchange_registry: Arc<ExchangeRegistry>,
+    pub exchange_registry: Arc<Exchanges>,
     pub kline_engine: Arc<KlineEngine>,
     pub encryption_key: String,
 }

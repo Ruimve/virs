@@ -1,5 +1,12 @@
 import { api } from './client'
-import type { ApiResponse, BotSummary } from './types'
+import type {
+  ApiResponse,
+  BotSummary,
+  AutoBotDetail,
+  GridBotDetail,
+  GridTradesResponse,
+  AnalysisLog,
+} from './types'
 
 // ── Grid Bot ──────────────────────────────────────────────
 
@@ -23,6 +30,26 @@ export async function startGridBot(id: string): Promise<ApiResponse<{ started: b
   return api.post(`/grid/${id}/start`)
 }
 
+export async function stopGridBot(id: string): Promise<ApiResponse<{ stopped: boolean }>> {
+  return api.post(`/grid/${id}/stop`)
+}
+
+export async function deleteGridBot(id: string): Promise<ApiResponse<null>> {
+  return api.del(`/grid/${id}/delete`)
+}
+
+export async function getGridBotDetail(id: string): Promise<ApiResponse<GridBotDetail>> {
+  return api.get<GridBotDetail>(`/grid/${id}`)
+}
+
+export async function getGridTrades(id: string): Promise<ApiResponse<GridTradesResponse>> {
+  return api.get<GridTradesResponse>(`/grid/${id}/trades`)
+}
+
+export async function getGridAnalysisLogs(botId: string): Promise<ApiResponse<{ items: AnalysisLog[] }>> {
+  return api.get<{ items: AnalysisLog[] }>(`/grid/analysis-logs?bot_id=${botId}`)
+}
+
 // ── Auto Bot ──────────────────────────────────────────────
 
 export async function createAutoBot(params: {
@@ -39,6 +66,22 @@ export async function createAutoBot(params: {
 
 export async function startAutoBot(id: string): Promise<ApiResponse<{ started: boolean }>> {
   return api.post(`/auto/${id}/start`)
+}
+
+export async function stopAutoBot(id: string): Promise<ApiResponse<{ stopped: boolean }>> {
+  return api.post(`/auto/${id}/stop`)
+}
+
+export async function deleteAutoBot(id: string): Promise<ApiResponse<null>> {
+  return api.del(`/auto/${id}/delete`)
+}
+
+export async function getAutoBotDetail(id: string): Promise<ApiResponse<AutoBotDetail>> {
+  return api.get<AutoBotDetail>(`/auto/${id}`)
+}
+
+export async function getAutoAnalysisLogs(botId: string): Promise<ApiResponse<{ logs: AnalysisLog[] }>> {
+  return api.get<{ logs: AnalysisLog[] }>(`/auto/analysis-logs?bot_id=${botId}`)
 }
 
 // ── Bot discovery ─────────────────────────────────────────

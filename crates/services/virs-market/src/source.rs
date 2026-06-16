@@ -4,16 +4,16 @@
 
 use async_trait::async_trait;
 use virs_types::enums::MarketType;
-use virs_exchange::ExchangeRegistry;
+use virs_exchange::Exchanges;
 
 use crate::types::{Candle, KlineSource};
 
 pub struct ExchangeKlineSource {
-    registry: std::sync::Arc<ExchangeRegistry>,
+    registry: std::sync::Arc<Exchanges>,
 }
 
 impl ExchangeKlineSource {
-    pub fn new(registry: std::sync::Arc<ExchangeRegistry>) -> Self {
+    pub fn new(registry: std::sync::Arc<Exchanges>) -> Self {
         Self { registry }
     }
 }
