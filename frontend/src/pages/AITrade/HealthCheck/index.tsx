@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import BotDetailHeader from '../components/BotDetailHeader'
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { getAiStatus, fetchCredentialStatus, checkHealth } from '../../../service'
+import { getAiStatus, fetchCredentialStatus, checkHealth, getAutoBotDetail, getGridBotDetail } from '../../../service'
+import type { BotHeaderInfo } from '../../../service/types'
 import type { TabConfig } from '../components/shared'
 
 interface CheckItem {
@@ -21,6 +22,8 @@ export default function HealthCheckPage() {
   const navigate = useNavigate()
   const botType = params.botType || 'auto'
   const botId = params.botId || ''
+
+  const [botInfo, setBotInfo] = useState<BotHeaderInfo | null>(null)
 
   const [checks, setChecks] = useState<CheckItem[]>([
     { key: 'llm', label: 'LLM Connectivity', status: 'pending', detail: '' },
@@ -108,6 +111,35 @@ export default function HealthCheckPage() {
   }
 
   useEffect(() => {
+    // Load bot info from backend
+    const loadBot = async () => {
+      try {
+        if (botType === 'grid') {
+          const res = await getGridBotDetail(botId)
+          if (res.data?.bot) {
+            const b = res.data.bot
+            setBotInfo({
+              id: b.id, name: b.name, symbol: b.symbol,
+              exchange: b.exchange, market_type: b.market_type,
+              status: b.status, leverage: b.leverage,
+            })
+          }
+        } else {
+          const res = await getAutoBotDetail(botId)
+          if (res.data?.bot) {
+            const b = res.data.bot
+            setBotInfo({
+              id: b.id, name: b.name, symbol: b.symbol,
+              exchange: b.exchange, market_type: b.market_type,
+              status: b.status, leverage: b.leverage,
+            })
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load bot:', e)
+      }
+    }
+    loadBot()
     runChecks()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -117,20 +149,10 @@ export default function HealthCheckPage() {
 
   const allChecksDone = checks.every((c) => c.status === 'done' || c.status === 'error')
 
-  const botInfo = {
-    id: botId,
-    name: 'Health Check',
-    symbol: '',
-    exchange: '',
-    market_type: 'perpetual',
-    status: 'running' as const,
-    leverage: 0,
-  }
-
   return (
     <div className="h-screen flex flex-col bg-base">
       <BotDetailHeader
-        bot={botInfo}
+        bot={botInfo || { id: botId, name: '', symbol: '', exchange: '', market_type: 'perpetual', status: 'stopped', leverage: 0 }}
         tabs={tabs}
         activeTab="health"
         onTabChange={(key) => {
