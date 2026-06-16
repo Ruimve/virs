@@ -55,7 +55,7 @@ const parseKlineWs = (raw: string): KlineWsEvent | null => {
         high: json?.candle?.high,
         low: json?.candle?.low,
         open: json?.candle?.open,
-        time: json?.candle?.open_time,
+        time: json?.candle?.open_time / 1000,
         volume: json?.candle?.volume
       }
     }

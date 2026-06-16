@@ -20,7 +20,7 @@ export async function fetchKlines(params: {
           high: c.high,
           low: c.low,
           open: c.open,
-          time: c.open_time,
+          time: c.open_time / 1000,
           volume: c.volume
         }
       }),
