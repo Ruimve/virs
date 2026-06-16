@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import WizardLayout from '../../../components/WizardLayout'
-import { updateWizard, advanceStep, WizardStep, getWizardState } from '../../../lib/wizard'
+import { Wizard } from '../components/Wizard'
+import { updateWizard, WizardStep, getWizardState } from '../components/Wizard/wizard'
 import { createGridBot, createAutoBot, startGridBot, startAutoBot } from '../../../service'
 
 function ReviewLaunch() {
@@ -77,8 +77,7 @@ function ReviewLaunch() {
 
       // Step 3: Navigate to health check
       updateWizard({ paper_mode: paper, bot_id: botId })
-      advanceStep(WizardStep.HealthCheck)
-      navigate('/setup/health', { replace: true })
+      navigate(`/trade/health/${isGrid ? 'grid' : 'auto'}/${botId}`, { replace: true })
     } catch (err) {
       setLaunchError(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
@@ -87,7 +86,7 @@ function ReviewLaunch() {
   }
 
   return (
-    <WizardLayout
+    <Wizard
       step={WizardStep.ReviewLaunch}
       title="Review & Launch"
       subtitle="Confirm your configuration and launch the bot"
@@ -230,7 +229,7 @@ function ReviewLaunch() {
           </div>
         )}
       </div>
-    </WizardLayout>
+    </Wizard>
   )
 }
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import WizardLayout from '../../../components/WizardLayout'
-import { updateWizard, advanceStep, WizardStep, getWizardState } from '../../../lib/wizard'
+import { Wizard } from '../components/Wizard'
+import { updateWizard, advanceStep, WizardStep, getWizardState } from '../components/Wizard/wizard'
 import { findActiveBot } from '../../../service'
 
 const BOT_TYPES = [
@@ -42,7 +42,7 @@ function SelectBotType() {
   }
 
   return (
-    <WizardLayout
+    <Wizard
       step={WizardStep.SelectBotType}
       title="Choose Strategy"
       subtitle="Select the trading strategy that fits your goals"
@@ -128,7 +128,7 @@ function SelectBotType() {
           })}
         </div>
       )}
-    </WizardLayout>
+    </Wizard>
   )
 }
 

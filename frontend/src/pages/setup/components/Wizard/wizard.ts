@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { MarketType } from './market-context'
+import type { MarketType } from '@/lib/market-context'
 
 // ── 向导步骤定义 ──
 export const WizardStep = {
@@ -10,8 +10,7 @@ export const WizardStep = {
   SelectExchange: 4,
   ConfigureParams: 5,
   ReviewLaunch: 6,
-  HealthCheck: 7,
-  Trading: 8,
+  Trading: 7,
 } as const
 
 export type WizardStepValue = (typeof WizardStep)[keyof typeof WizardStep]
@@ -29,15 +28,13 @@ export interface WizardState {
   bot_id: string
 }
 
-// ── Sensitive credentials (memory only, not persisted) ──
+// ── Sensitive credentials (memory only) ──
 export interface WizardCredentials {
   exchange_api_key: string
   exchange_api_secret: string
   exchange_passphrase: string
   llm_api_key: string
 }
-
-const WIZARD_STORAGE_KEY = 'virs_wizard_state'
 
 const DEFAULT_STATE: WizardState = {
   current_step: WizardStep.Loading,
@@ -59,7 +56,7 @@ const DEFAULT_CREDENTIALS: WizardCredentials = {
 }
 
 // ── Module-level state with subscriber pattern ──
-let _wizardState: WizardState = loadFromStorage()
+let _wizardState: WizardState = { ...DEFAULT_STATE }
 let _wizardCredentials: WizardCredentials = { ...DEFAULT_CREDENTIALS }
 const _listeners = new Set<() => void>()
 
@@ -71,28 +68,6 @@ export function subscribe(listener: () => void) {
   _listeners.add(listener)
   return () => {
     _listeners.delete(listener)
-  }
-}
-
-// ── localStorage 持久化 (non-sensitive data only) ──
-function loadFromStorage(): WizardState {
-  try {
-    const raw = localStorage.getItem(WIZARD_STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<WizardState>
-      return { ...DEFAULT_STATE, ...parsed }
-    }
-  } catch {
-    // ignore
-  }
-  return { ...DEFAULT_STATE }
-}
-
-function saveToStorage() {
-  try {
-    localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(_wizardState))
-  } catch {
-    // ignore
   }
 }
 
@@ -112,7 +87,6 @@ export function getCurrentStep(): WizardStepValue {
 // ── 更新向导状态 ──
 export function updateWizard(partial: Partial<WizardState>) {
   _wizardState = { ..._wizardState, ...partial }
-  saveToStorage()
   notify()
 }
 
@@ -128,52 +102,14 @@ export function advanceStep(step?: WizardStepValue) {
     ..._wizardState,
     current_step: step ?? ((_wizardState.current_step + 1) as WizardStepValue),
   }
-  saveToStorage()
   notify()
-}
-
-// ── 从存储恢复向导状态 ──
-export function loadWizardState(): boolean {
-  const stored = loadFromStorage()
-  _wizardState = stored
-  notify()
-  return stored.current_step > WizardStep.Loading
 }
 
 // ── 重置向导 ──
 export function resetWizard() {
   _wizardState = { ...DEFAULT_STATE }
   _wizardCredentials = { ...DEFAULT_CREDENTIALS }
-  try {
-    localStorage.removeItem(WIZARD_STORAGE_KEY)
-  } catch {
-    // ignore
-  }
   notify()
-}
-
-// ── 根据向导状态决定初始路由 ──
-export function resolveInitialRoute(): string {
-  const step = _wizardState.current_step
-
-  if (step === WizardStep.Trading) return '/check'
-
-  switch (step) {
-    case WizardStep.SelectBotType:
-      return '/setup/bot-type'
-    case WizardStep.ConfigureLlm:
-      return '/setup/llm'
-    case WizardStep.SelectExchange:
-      return '/setup/exchange'
-    case WizardStep.ConfigureParams:
-      return '/setup/params'
-    case WizardStep.ReviewLaunch:
-      return '/setup/review'
-    case WizardStep.HealthCheck:
-      return '/setup/health'
-    default:
-      return '/setup/bot-type'
-  }
 }
 
 // React hook
@@ -189,7 +125,6 @@ export function useWizardState() {
     updateWizard,
     updateCredentials,
     advanceStep,
-    loadWizardState,
     resetWizard,
   }
 }

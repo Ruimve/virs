@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import WizardLayout from '../../../components/WizardLayout'
+import { useParams, useNavigate } from 'react-router-dom'
+import BotDetailHeader from '../components/BotDetailHeader'
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { WizardStep, getWizardState } from '../../../lib/wizard'
 import { getAiStatus, fetchCredentialStatus, checkHealth } from '../../../service'
+import type { TabConfig } from '../components/shared'
 
 interface CheckItem {
   key: string
@@ -12,10 +12,15 @@ interface CheckItem {
   detail: string
 }
 
-function HealthCheck() {
+const tabs: TabConfig[] = [
+  { key: 'health', label: 'Health Check' },
+]
+
+export default function HealthCheckPage() {
+  const params = useParams()
   const navigate = useNavigate()
-  const wizard = getWizardState()
-  const isGrid = wizard.bot_type === 'grid'
+  const botType = params.botType || 'auto'
+  const botId = params.botId || ''
 
   const [checks, setChecks] = useState<CheckItem[]>([
     { key: 'llm', label: 'LLM Connectivity', status: 'pending', detail: '' },
@@ -53,7 +58,6 @@ function HealthCheck() {
   }))
 
   const runChecks = async () => {
-    // 1. LLM connectivity
     updateCheck('llm', 'verifying', '')
     try {
       const res = await getAiStatus()
@@ -66,7 +70,6 @@ function HealthCheck() {
       updateCheck('llm', 'error', 'Connection failed')
     }
 
-    // 2. Exchange connectivity
     updateCheck('exchange', 'verifying', '')
     try {
       const res = await fetchCredentialStatus()
@@ -79,7 +82,6 @@ function HealthCheck() {
       updateCheck('exchange', 'error', 'Connection failed')
     }
 
-    // 3. Kline engine
     updateCheck('kline', 'verifying', '')
     try {
       const res = await checkHealth()
@@ -92,17 +94,14 @@ function HealthCheck() {
       updateCheck('kline', 'error', 'Connection failed')
     }
 
-    // 4. Position engine
     updateCheck('position', 'verifying', '')
     await new Promise((r) => setTimeout(r, 500))
     updateCheck('position', 'done', 'Running')
 
-    // 5. Workers
     updateCheck('workers', 'verifying', '')
     await new Promise((r) => setTimeout(r, 500))
     updateCheck('workers', 'done', 'Running')
 
-    // 6. Periodic tasks
     updateCheck('cron', 'verifying', '')
     await new Promise((r) => setTimeout(r, 500))
     updateCheck('cron', 'done', 'Running')
@@ -113,43 +112,53 @@ function HealthCheck() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleContinue = () => {
-    const botId = wizard.bot_id
-    if (isGrid) {
-      navigate(`/trade/grid/${botId}`, { replace: true })
-    } else {
-      navigate(`/trade/auto/${botId}`, { replace: true })
-    }
+    navigate(`/trade/${botType}/${botId}`, { replace: true })
   }
 
   const allChecksDone = checks.every((c) => c.status === 'done' || c.status === 'error')
 
+  const botInfo = {
+    id: botId,
+    name: 'Health Check',
+    symbol: '',
+    exchange: '',
+    market_type: 'perpetual',
+    status: 'running' as const,
+    leverage: 0,
+  }
+
   return (
-    <WizardLayout
-      step={WizardStep.HealthCheck}
-      title="Health Check"
-      subtitle="Verifying system components"
-      actions={
-        <>
-          <button
-            onClick={() => navigate('/setup/review', { replace: true })}
-            className="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
-          >
-            Back
-          </button>
+    <div className="h-screen flex flex-col bg-base">
+      <BotDetailHeader
+        bot={botInfo}
+        tabs={tabs}
+        activeTab="health"
+        onTabChange={(key) => {
+          if (key === 'health') return
+          navigate(`/trade/${botType}/${botId}/${key}`)
+        }}
+      />
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-lg mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-6">
+          <div className="mb-8">
+            <h2 className="text-xl md:text-2xl font-extralight tracking-wide text-on-base">Health Check</h2>
+            <p className="mt-1.5 text-sm text-on-surface-tertiary">Verifying system components</p>
+          </div>
+
+          <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
+
           {allChecksDone && (
-            <button
-              onClick={handleContinue}
-              className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-all duration-200"
-            >
-              Continue
-            </button>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={handleContinue}
+                className="px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-all duration-200"
+              >
+                Continue
+              </button>
+            </div>
           )}
-        </>
-      }
-    >
-      <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
-    </WizardLayout>
+        </div>
+      </div>
+    </div>
   )
 }
-
-export default HealthCheck

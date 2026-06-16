@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import WizardLayout from '../../../components/WizardLayout'
+import { Wizard } from '../components/Wizard';
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { updateWizard, advanceStep, WizardStep, getWizardState } from '../../../lib/wizard'
+import { updateWizard, advanceStep, WizardStep, getWizardState } from '../components/Wizard/wizard'
 import { api, saveAiCredential } from '../../../service'
 
 interface DeepSeekModel {
@@ -281,7 +281,7 @@ function ConfigureLlm() {
   ]
 
   return (
-    <WizardLayout
+    <Wizard
       step={WizardStep.ConfigureLlm}
       title="Configure DeepSeek"
       subtitle="Connect your DeepSeek account"
@@ -304,7 +304,7 @@ function ConfigureLlm() {
       }
     >
       <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
-    </WizardLayout>
+    </Wizard>
   )
 }
 

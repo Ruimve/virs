@@ -1,8 +1,8 @@
 import { useState, useCallback, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import WizardLayout from '../../../components/WizardLayout'
+import { Wizard } from '../components/Wizard'
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { updateWizard, advanceStep, WizardStep } from '../../../lib/wizard'
+import { updateWizard, advanceStep, WizardStep } from '../components/Wizard/wizard'
 import { saveCredential, testCredential, checkPermissions } from '../../../service'
 import type { PermissionItem } from '../../../service'
 
@@ -201,7 +201,7 @@ function SelectExchange() {
   const canContinue = step2Status === 'done' && step3Status === 'done'
 
   return (
-    <WizardLayout
+    <Wizard
       step={WizardStep.SelectExchange}
       title="Connect Binance"
       subtitle="Provide your API credentials"
@@ -224,7 +224,7 @@ function SelectExchange() {
       }
     >
       <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
-    </WizardLayout>
+    </Wizard>
   )
 }
 

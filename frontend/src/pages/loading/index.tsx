@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchUser, isLoggedIn } from '../../lib/auth'
 import { findActiveBot } from '../../service'
-import { loadWizardState } from '../../lib/wizard'
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -30,8 +29,6 @@ function Loading() {
 
       setProgress(50)
       setStatusText('Loading settings...')
-
-      loadWizardState()
 
       setProgress(70)
       setStatusText('Finding bot...')

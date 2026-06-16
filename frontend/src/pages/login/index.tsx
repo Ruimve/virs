@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { login } from '../../service'
-import { advanceStep, loadWizardState, getCurrentStep, WizardStep } from '../../lib/wizard'
 
 function Login() {
   const navigate = useNavigate()
@@ -23,13 +22,7 @@ function Login() {
     try {
       const result = await login(username.trim(), password)
       if (result.success) {
-        loadWizardState()
-        if (getCurrentStep() === WizardStep.Trading) {
-          navigate('/check', { replace: true })
-        } else {
-          advanceStep(WizardStep.SelectExchange)
-          navigate('/setup/exchange', { replace: true })
-        }
+        navigate('/setup/bot-type', { replace: true })
       } else {
         setError(result.error || 'Login failed')
       }

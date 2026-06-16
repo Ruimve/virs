@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import WizardLayout from '../../../components/WizardLayout'
-import { updateWizard, advanceStep, WizardStep, getWizardState } from '../../../lib/wizard'
+import { Wizard } from '../components/Wizard'
+import { updateWizard, advanceStep, WizardStep, getWizardState } from '../components/Wizard/wizard';
 import type { MarketType } from '../../../lib/market-context'
 
 const MARKET_TYPES: Array<{ id: MarketType; label: string; desc: string }> = [
@@ -50,7 +50,7 @@ function ConfigureParams() {
   }
 
   return (
-    <WizardLayout
+    <Wizard
       step={WizardStep.ConfigureParams}
       title={isGrid ? 'Grid Parameters' : 'Auto Trading Parameters'}
       subtitle="Configure the trading parameters for your bot"
@@ -110,7 +110,7 @@ function ConfigureParams() {
           </div>
         ))}
       </div>
-    </WizardLayout>
+    </Wizard>
   )
 }
 
