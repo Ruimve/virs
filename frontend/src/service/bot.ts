@@ -57,7 +57,7 @@ export async function createAutoBot(params: {
   exchange: string
   market_type?: string
   leverage?: number
-  max_position_pct?: number
+  decide_interval_secs?: number
   name?: string
   paper_mode?: boolean
 }): Promise<ApiResponse<{ id: string }>> {

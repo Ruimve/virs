@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { useState, useCallback, useRef, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Wizard } from '../components/Wizard';
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { updateWizard, advanceStep, WizardStep, getWizardState } from '../components/Wizard/wizard'
+import { updateWizard, advanceStep, WizardStep, getWizardState, useWizardGuard } from '../components/Wizard/wizard'
 import { api, saveAiCredential } from '../../../service'
 
 interface DeepSeekModel {
@@ -16,6 +16,7 @@ interface BalanceInfo {
 }
 
 function ConfigureLlm() {
+  useWizardGuard(WizardStep.ConfigureLlm)
   const navigate = useNavigate()
   const wizard = getWizardState()
 
@@ -112,20 +113,6 @@ function ConfigureLlm() {
     }
   }, [])
 
-  useEffect(() => {
-    // Check if backend already has a saved AI credential.
-    const checkSaved = async () => {
-      try {
-        const result = await api.get<{ items: Array<{ provider: string; is_default: boolean }> }>('/ai-credentials/list')
-        if (result.success && result.data?.items?.length) {
-          fetchModels()
-        }
-      } catch {
-        // ignore — user will enter key manually
-      }
-    }
-    checkSaved()
-  }, [fetchModels])
 
   const onKeyInput = (key: string) => {
     setApiKey(key)
@@ -204,7 +191,7 @@ function ConfigureLlm() {
               className={`w-full px-4 py-2.5 bg-surface-2 border rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none transition-all duration-200 ${
                 fetchingModels ? 'border-indigo-500/30 opacity-60' : 'border-line-strong focus:border-indigo-500/40'
               }`}
-              placeholder="sk-..."
+              placeholder="API Key"
             />
             {fetchingModels && (
               <div className="absolute right-3 top-1/2 -translate-y-1/2">

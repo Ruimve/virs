@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { MarketType } from '@/lib/market-context'
 
 // ── 向导步骤定义 ──
@@ -110,6 +111,16 @@ export function resetWizard() {
   _wizardState = { ...DEFAULT_STATE }
   _wizardCredentials = { ...DEFAULT_CREDENTIALS }
   notify()
+}
+
+// ── 向导步骤守卫：直接访问非首页时跳转首页 ──
+export function useWizardGuard(requiredStep: WizardStepValue) {
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (_wizardState.current_step < requiredStep) {
+      navigate('/setup/bot-type', { replace: true })
+    }
+  }, [requiredStep, navigate])
 }
 
 // React hook

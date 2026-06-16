@@ -43,9 +43,7 @@ export default function BotDetailHeader({
       <div className="relative z-10 flex items-center h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
         {/* Left: logo (clickable on mobile to open drawer) + bot info */}
         <div className="flex items-center gap-2 pl-4 md:pl-8 shrink-0">
-          <button onClick={() => setDrawerOpen(true)} className="md:hidden">
-            <Logo />
-          </button>
+          <Logo onClick={() => setDrawerOpen(true)} className="md:hidden" />
           <Logo className="hidden md:block" />
           <div className="flex items-center gap-2">
             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${sc.bg}`}>

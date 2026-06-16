@@ -2,7 +2,7 @@
  * VIRS Logo — flowing gradient text that shifts continuously.
  * Matches the global indigo/violet accent palette.
  */
-export function Logo({ className = '' }: { className?: string }) {
+export function Logo({ className = '', onClick = () => {} }: { className?: string; onClick?: () => void }) {
   return (
     <span
       className={`text-sm md:text-base font-extralight tracking-[0.25em] ${className}`}
@@ -13,6 +13,7 @@ export function Logo({ className = '' }: { className?: string }) {
         WebkitTextFillColor: 'transparent',
         animation: 'virs-flow 6s linear infinite',
       }}
+      onClick={onClick}
     >
       VIRS
     </span>

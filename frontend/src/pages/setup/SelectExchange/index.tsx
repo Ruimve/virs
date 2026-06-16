@@ -2,16 +2,25 @@ import { useState, useCallback, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Wizard } from '../components/Wizard'
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { updateWizard, advanceStep, WizardStep } from '../components/Wizard/wizard'
+import { updateWizard, advanceStep, WizardStep, getWizardState, useWizardGuard } from '../components/Wizard/wizard'
 import { saveCredential, testCredential, checkPermissions } from '../../../service'
 import type { PermissionItem } from '../../../service'
+import type { MarketType } from '../../../lib/market-context'
+
+const MARKET_TYPES: Array<{ id: MarketType; label: string; desc: string }> = [
+  { id: 'perpetual', label: 'Perpetual', desc: 'USDT-M futures' },
+  { id: 'spot', label: 'Spot', desc: 'Spot trading' },
+]
 
 function SelectExchange() {
+  useWizardGuard(WizardStep.SelectExchange)
   const navigate = useNavigate()
+  const wizard = getWizardState()
 
   // Step 1: API credentials
   const [apiKey, setApiKey] = useState('')
   const [apiSecret, setApiSecret] = useState('')
+  const [selectedMarket, setSelectedMarket] = useState<MarketType>(wizard.market_type || 'perpetual')
   const [step1Status, setStep1Status] = useState<FlowStepStatus>('active')
   const [error, setError] = useState('')
 
@@ -112,6 +121,28 @@ function SelectExchange() {
             className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
             placeholder="API Secret"
           />
+          <div>
+            <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">Market Type</p>
+            <div className="grid grid-cols-2 gap-2">
+              {MARKET_TYPES.map((mt) => (
+                <button
+                  key={mt.id}
+                  onClick={() => {
+                    setSelectedMarket(mt.id)
+                    resetDownstream()
+                  }}
+                  className={`p-2.5 rounded-lg border text-center transition-all duration-200 ${
+                    selectedMarket === mt.id
+                      ? 'bg-indigo-500/10 border-indigo-500/30 text-on-base'
+                      : 'bg-surface-1 border-line-default text-on-surface-tertiary hover:bg-surface-2'
+                  }`}
+                >
+                  <p className="text-xs font-medium">{mt.label}</p>
+                  <p className="text-[10px] text-on-surface-muted mt-0.5">{mt.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
           {error && <p className="text-[12px] text-red-400">{error}</p>}
           <button
             onClick={verifyCredentials}
@@ -178,7 +209,7 @@ function SelectExchange() {
         exchange: 'binance',
         api_key: key,
         api_secret: secret,
-        market_type: 'perpetual',
+        market_type: selectedMarket,
         label: 'binance verification',
       })
       if (!result.success) {
@@ -193,7 +224,7 @@ function SelectExchange() {
   }
 
   const handleContinue = () => {
-    updateWizard({ exchange: 'binance' })
+    updateWizard({ exchange: 'binance', market_type: selectedMarket })
     advanceStep(WizardStep.ConfigureParams)
     navigate('/setup/params', { replace: true })
   }

@@ -12,7 +12,6 @@ interface AutoBot {
   win_trades: number;
   loss_trades: number;
   leverage: number;
-  max_position_pct: number;
   decide_interval_secs: number;
 }
 
@@ -82,10 +81,6 @@ export default function PositionStats({ bot }: PositionStatsProps) {
           <div className="flex justify-between text-xs">
             <span className="text-on-surface-tertiary">杠杆</span>
             <span className="text-on-surface font-mono">{b.leverage}x</span>
-          </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-on-surface-tertiary">仓位占比</span>
-            <span className="text-on-surface font-mono">{b.max_position_pct}%</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-on-surface-tertiary">决策周期</span>

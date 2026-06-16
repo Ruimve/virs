@@ -1,13 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Wizard } from '../components/Wizard'
-import { updateWizard, advanceStep, WizardStep, getWizardState } from '../components/Wizard/wizard';
-import type { MarketType } from '../../../lib/market-context'
-
-const MARKET_TYPES: Array<{ id: MarketType; label: string; desc: string }> = [
-  { id: 'perpetual', label: 'Perpetual', desc: 'USDT-M futures' },
-  { id: 'spot', label: 'Spot', desc: 'Spot trading' },
-]
+import { updateWizard, advanceStep, WizardStep, getWizardState, useWizardGuard } from '../components/Wizard/wizard';
 
 // Grid bot parameters
 const GRID_PARAMS = [
@@ -23,10 +17,11 @@ const GRID_PARAMS = [
 const AUTO_PARAMS = [
   { key: 'symbol', label: 'Trading Pair', type: 'text' as const, placeholder: 'BTC/USDT', required: true },
   { key: 'leverage', label: 'Leverage', type: 'number' as const, placeholder: '10', required: true },
-  { key: 'max_position', label: 'Max Position %', type: 'number' as const, placeholder: '80', required: false },
+  { key: 'decision_interval', label: 'Decision Interval (seconds)', type: 'number' as const, placeholder: '300', required: true },
 ]
 
 function ConfigureParams() {
+  useWizardGuard(WizardStep.ConfigureParams)
   const navigate = useNavigate()
   const wizard = getWizardState()
   const isGrid = wizard.bot_type === 'grid'
@@ -35,7 +30,6 @@ function ConfigureParams() {
   const [values, setValues] = useState<Record<string, string>>(
     (wizard.bot_params as Record<string, string>) || {}
   )
-  const [selectedMarket, setSelectedMarket] = useState<MarketType>(wizard.market_type || 'perpetual')
 
   const setValue = (key: string, val: string) => {
     setValues((prev) => ({ ...prev, [key]: val }))
@@ -44,7 +38,7 @@ function ConfigureParams() {
   const canContinue = params.filter((p) => p.required).every((p) => values[p.key]?.trim())
 
   const handleContinue = () => {
-    updateWizard({ bot_params: values, market_type: selectedMarket })
+    updateWizard({ bot_params: values })
     advanceStep(WizardStep.ReviewLaunch)
     navigate('/setup/review', { replace: true })
   }
@@ -73,27 +67,6 @@ function ConfigureParams() {
       }
     >
       <div className="space-y-4">
-        {/* Market type toggle */}
-        <div>
-          <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-3">Market Type</p>
-          <div className="grid grid-cols-2 gap-3">
-            {MARKET_TYPES.map((mt) => (
-              <button
-                key={mt.id}
-                onClick={() => setSelectedMarket(mt.id)}
-                className={`flex-1 p-3 rounded-xl border text-center transition-all duration-200 ${
-                  selectedMarket === mt.id
-                    ? 'bg-indigo-500/10 border-indigo-500/30 text-on-base'
-                    : 'bg-surface-1 border-line-default text-on-surface-tertiary hover:bg-surface-2'
-                }`}
-              >
-                <p className="text-sm font-medium">{mt.label}</p>
-                <p className="text-[11px] text-on-surface-muted mt-0.5">{mt.desc}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-
         {params.map((param) => (
           <div key={param.key}>
             <label className="block text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">

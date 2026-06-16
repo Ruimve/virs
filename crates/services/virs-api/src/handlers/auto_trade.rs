@@ -21,6 +21,7 @@ pub async fn create_bot(
     let market_type = body["market_type"].as_str().unwrap_or("perpetual");
     let leverage = body["leverage"].as_i64().unwrap_or(10) as i32;
     let max_position_pct = body["max_position_pct"].as_f64().unwrap_or(80.0);
+    let decide_interval_secs = body["decide_interval_secs"].as_i64().unwrap_or(300) as i32;
     let name = body["name"].as_str().unwrap_or("Auto Bot");
     let paper_mode = body["paper_mode"].as_bool().unwrap_or(true);
 
@@ -88,8 +89,8 @@ pub async fn create_bot(
 
     let id = uuid::Uuid::new_v4();
     sqlx::query(
-        r#"INSERT INTO qd_auto_bots (id, user_id, name, symbol, exchange, market_type, leverage, max_position_pct, paper_mode, status, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'stopped', NOW(), NOW())"#,
+        r#"INSERT INTO qd_auto_bots (id, user_id, name, symbol, exchange, market_type, leverage, max_position_pct, decide_interval_secs, paper_mode, status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'stopped', NOW(), NOW())"#,
     )
     .bind(id)
     .bind(user_id)
@@ -99,6 +100,7 @@ pub async fn create_bot(
     .bind(market_type)
     .bind(leverage)
     .bind(max_position_pct)
+    .bind(decide_interval_secs)
     .bind(paper_mode)
     .execute(&state.db_pool)
     .await

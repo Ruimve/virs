@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Wizard } from '../components/Wizard'
-import { updateWizard, WizardStep, getWizardState } from '../components/Wizard/wizard'
+import { updateWizard, WizardStep, getWizardState, useWizardGuard } from '../components/Wizard/wizard'
 import { createGridBot, createAutoBot, startGridBot, startAutoBot } from '../../../service'
 
 function ReviewLaunch() {
+  useWizardGuard(WizardStep.ReviewLaunch)
   const navigate = useNavigate()
   const wizard = getWizardState()
   const isGrid = wizard.bot_type === 'grid'
@@ -49,7 +50,7 @@ function ReviewLaunch() {
           exchange: w.exchange,
           market_type: marketType,
           leverage: parseInt(v.leverage || '10'),
-          max_position_pct: parseFloat(v.max_position || '80'),
+          decide_interval_secs: parseInt(v.decision_interval || '300'),
           name: `Auto ${v.symbol || 'Bot'}`,
           paper_mode: paper,
         })
@@ -215,6 +216,12 @@ function ReviewLaunch() {
               <span className="text-[12px] text-on-surface-tertiary">Leverage</span>
               <span className="text-[12px] text-on-surface-secondary font-mono">{v.leverage || '-'}x</span>
             </div>
+            {!isGrid && (
+              <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
+                <span className="text-[12px] text-on-surface-tertiary">Decision Interval</span>
+                <span className="text-[12px] text-on-surface-secondary font-mono">{v.decision_interval || '300'}s</span>
+              </div>
+            )}
             <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
               <span className="text-[12px] text-on-surface-tertiary">Mode</span>
               <span className={`text-[12px] font-mono font-medium ${paperMode ? 'text-indigo-400' : 'text-amber-400'}`}>{paperMode ? 'Paper' : 'Real'}</span>
