@@ -249,6 +249,45 @@ tbody tr:hover {
   animation: slideIn 0.3s ease-out both;
 }
 
+.animate-drawer-in {
+  animation: drawerSlideIn 0.25s ease-out both;
+}
+
+.animate-drawer-out {
+  animation: drawerSlideOut 0.2s ease-in both;
+}
+
+@keyframes drawerSlideIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes drawerSlideOut {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-fade-out {
+  animation: fadeOut 0.2s ease-in both;
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 /* ===== VIRS Logo animations ===== */
 @keyframes virs-flow {
   0% {

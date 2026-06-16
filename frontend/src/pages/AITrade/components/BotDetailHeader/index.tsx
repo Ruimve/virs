@@ -31,7 +31,19 @@ export default function BotDetailHeader({
   pulseOnRunning = false,
 }: BotDetailHeaderProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerClosing, setDrawerClosing] = useState(false);
   const sc: StatusStyle = statusConfig(bot.status);
+
+  const closeDrawer = () => {
+    setDrawerClosing(true);
+  };
+
+  const handleDrawerAnimEnd = () => {
+    if (drawerClosing) {
+      setDrawerOpen(false);
+      setDrawerClosing(false);
+    }
+  };
 
   const canStart = showStartWhenStopped
     ? bot.status !== 'running'
@@ -50,8 +62,8 @@ export default function BotDetailHeader({
               <span className={`w-1 h-1 rounded-full ${sc.dot} ${bot.status === 'running' && pulseOnRunning ? 'animate-pulse' : ''}`} />
               {sc.text}
             </span>
-            <span className="text-xs text-on-surface-tertiary hidden sm:inline">
-              {bot.symbol} · {bot.exchange.toUpperCase()} · {bot.leverage}x
+            <span className="text-xs text-on-surface-tertiary">
+              {bot.symbol} · {bot.leverage}x
             </span>
           </div>
         </div>
@@ -111,26 +123,29 @@ export default function BotDetailHeader({
       {/* Mobile drawer overlay */}
       {drawerOpen && (
         <>
-          <div className="fixed inset-0 z-40 md:hidden" onClick={() => setDrawerOpen(false)}>
+          <div className={`fixed inset-0 z-40 md:hidden ${drawerClosing ? 'animate-fade-out' : ''}`} onClick={closeDrawer}>
             <div className="absolute inset-0 bg-black/50" />
           </div>
-          <div className="fixed inset-y-0 left-0 z-50 w-64 bg-base border-r border-line-default shadow-xl md:hidden animate-fade-in">
+          <div
+            onAnimationEnd={handleDrawerAnimEnd}
+            className={`fixed inset-y-0 left-0 z-50 w-64 bg-base border-r border-line-default shadow-xl md:hidden flex flex-col ${drawerClosing ? 'animate-drawer-out' : 'animate-drawer-in'}`}
+          >
             <div className="flex items-center justify-between px-4 h-14 border-b border-line-subtle">
               <div className="flex items-center gap-2">
                 <Logo />
               </div>
-              <button onClick={() => setDrawerOpen(false)} className="p-1.5 rounded-lg hover:bg-surface-2 text-on-surface-tertiary">
+              <button onClick={closeDrawer} className="p-1.5 rounded-lg hover:bg-surface-2 text-on-surface-tertiary">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <div className="py-2">
+            <div className="flex-1 py-2">
               {tabs.map((tab) => (
                 <button
                   key={tab.key}
-                  onClick={() => { onTabChange(tab.key); setDrawerOpen(false); }}
+                  onClick={() => { onTabChange(tab.key); closeDrawer(); }}
                   className={`w-full text-left px-4 py-3 text-sm transition-colors ${
                     activeTab === tab.key
                       ? 'text-accent bg-accent-light'
@@ -144,17 +159,17 @@ export default function BotDetailHeader({
 
             <div className="border-t border-line-subtle py-3 px-4 space-y-2">
               {actions && bot.status === 'running' && actions.onStop && (
-                <button onClick={() => { actions.onStop!(); setDrawerOpen(false); }} className="w-full px-3 py-2 rounded-lg text-xs font-medium bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors">
+                <button onClick={() => { actions.onStop!(); closeDrawer(); }} className="w-full px-3 py-2 rounded-lg text-xs font-medium bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors">
                   停止机器人
                 </button>
               )}
               {actions && canStart && actions.onStart && (
-                <button onClick={() => { actions.onStart!(); setDrawerOpen(false); }} className="w-full px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors">
+                <button onClick={() => { actions.onStart!(); closeDrawer(); }} className="w-full px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors">
                   启动机器人
                 </button>
               )}
               {actions?.onDelete && (
-                <button onClick={() => { actions.onDelete!(); setDrawerOpen(false); }} className="w-full px-3 py-2 rounded-lg text-xs font-medium bg-surface-1 border border-line-default text-on-surface-tertiary hover:text-red-400 hover:border-red-500/20 transition-colors">
+                <button onClick={() => { actions.onDelete!(); closeDrawer(); }} className="w-full px-3 py-2 rounded-lg text-xs font-medium bg-surface-1 border border-line-default text-on-surface-tertiary hover:text-red-400 hover:border-red-500/20 transition-colors">
                   删除机器人
                 </button>
               )}
