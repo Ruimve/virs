@@ -18,7 +18,10 @@ use virs_api::EngineManager;
 use virs_api::{AppState, WsBroadcaster, build_router};
 use virs_config::load_config;
 use virs_exchange::Exchanges;
-use virs_market::{KlineEngine, ExchangeKlineSource, KlineEngineConfig};
+use virs_market::{
+    KlineEngine, ExchangeKlineSource, KlineEngineConfig,
+    OrderBookEngine, OrderBookEngineConfig,
+};
 
 use engine_manager::AppEngineManager;
 
@@ -126,6 +129,21 @@ async fn main() -> Result<()> {
     let kline_engine = Arc::new(KlineEngine::new(kline_config, kline_source, spot_ws, perpetual_ws));
     info!("Kline engine created (lazy — will start on first subscribe)");
 
+    // ── OrderBook Engine ──
+    // Created at boot but only subscribes when bots need data
+    let ob_spot_ws = Arc::new(tokio::sync::Mutex::new(
+        virs_ccxt::adapter::binance::orderbook_ws::BinanceOrderBookWs::new_spot(config.proxy.as_deref()),
+    ));
+    let ob_perpetual_ws = Arc::new(tokio::sync::Mutex::new(
+        virs_ccxt::adapter::binance::orderbook_ws::BinanceOrderBookWs::new_perpetual(config.proxy.as_deref()),
+    ));
+    let orderbook_engine = Arc::new(OrderBookEngine::new(
+        OrderBookEngineConfig::default(),
+        ob_spot_ws,
+        ob_perpetual_ws,
+    ));
+    info!("OrderBook engine created (lazy — will start on first subscribe)");
+
     // ── Engine Manager (lazy) ──
     // Position/Grid/Auto engines are NOT started here.
     // They will be started when the first bot is created via API.
@@ -133,6 +151,7 @@ async fn main() -> Result<()> {
         db_pool.clone(),
         exchange_registry.clone(),
         kline_engine.clone(),
+        orderbook_engine.clone(),
         config.server.encryption_key.clone(),
         config.ai.clone(),
         ws_broadcaster.clone(),
@@ -148,6 +167,7 @@ async fn main() -> Result<()> {
         http_client: reqwest::Client::new(),
         exchange_registry: exchange_registry.clone(),
         kline_engine: kline_engine.clone(),
+        orderbook_engine: orderbook_engine.clone(),
         encryption_key: config.server.encryption_key.clone(),
     };
 

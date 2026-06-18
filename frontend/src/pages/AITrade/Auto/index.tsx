@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getAutoBotDetail, getAutoAnalysisLogs, startAutoBot, stopAutoBot, deleteAutoBot } from '../../../service/bot';
-import { fetchKlines, fetchOrderBook } from '../../../service/market';
+import { fetchKlines, fetchOrderBook, subscribeOrderBook } from '../../../service/market';
 import type { AutoBot, AutoTrade, AnalysisLog, KlineCandle, OrderBookData } from '../../../service/types';
-import { useKlineWs, type KlineWsEvent } from '../../../service/ws';
+import { useKlineWs, useOrderBookWs, type KlineWsEvent, type OrderBookWsEvent } from '../../../service/ws';
 import BotDetailHeader from '../components/BotDetailHeader';
 import ChartPanel from '../components/ChartPanel';
 import type { KlineChartHandle } from '../../../components/Chart/KlineChart';
 import OrderBookPanel from '../components/OrderBookPanel';
 import AnalysisList from '../components/AnalysisList';
 import PositionStats from './PositionStats';
+import MobileOrderBook from '../components/MobileOrderBook';
+import MarketIndicators from '../components/MarketIndicators';
 import type { TabConfig } from '../components/shared';
 import { formatPnl } from '../components/shared';
 
@@ -108,7 +110,10 @@ export default function AutoDetailPage() {
     const b = botRef.current;
     if (!b) return;
     try {
-      const res = await fetchOrderBook({ exchange: b.exchange, symbol: b.symbol, market_type: b.market_type || 'perpetual' });
+      const mt = b.market_type || 'perpetual';
+      // 确保后端订阅了该 symbol 的订单簿流（后端重启后订阅会丢失）
+      await subscribeOrderBook({ exchange: b.exchange, symbol: b.symbol, market_type: mt });
+      const res = await fetchOrderBook({ exchange: b.exchange, symbol: b.symbol, market_type: mt });
       if (res.data) setOrderBook(res.data);
     } catch (e) {
       console.error('Failed to load orderbook:', e);
@@ -151,6 +156,15 @@ export default function AutoDetailPage() {
   useEffect(() => {
     if (bot) { loadKlines(); loadOrderBook(); }
   }, [bot, klineTimeframe]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Real-time orderbook via WebSocket (replaces 2s polling)
+  useOrderBookWs(
+    (event: OrderBookWsEvent) => {
+      const b = botRef.current;
+      if (!b || event.symbol !== b.symbol || event.exchange !== b.exchange) return;
+      setOrderBook(event.orderBook);
+    },
+  );
 
   useKlineWs(
     (event: KlineWsEvent) => {
@@ -223,14 +237,39 @@ export default function AutoDetailPage() {
         {/* Market tab */}
         {activeTab === 'market' && (
           <div className="h-full flex flex-col lg:flex-row">
-            <div className="flex-1 min-h-0">
-              <ChartPanel
-                klineData={klineData}
-                klineTimeframe={klineTimeframe}
-                onTimeframeChange={setKlineTimeframe}
-                chartRef={chartRef}
-              />
+            <div className="flex flex-col h-full lg:flex-1 lg:min-h-0">
               <PositionStats bot={b} />
+              <div className="h-[260px] shrink-0 lg:h-auto lg:flex-1 lg:min-h-0 lg:shrink">
+                <ChartPanel
+                  klineData={klineData}
+                  klineTimeframe={klineTimeframe}
+                  onTimeframeChange={setKlineTimeframe}
+                  chartRef={chartRef}
+                />
+              </div>
+              {/* Mobile: market indicators + recent trades (scrollable) */}
+              <div className="flex-1 overflow-y-auto lg:hidden border-t border-line-subtle">
+                <MarketIndicators klineData={klineData} orderBook={orderBook} />
+                {trades.length > 0 && (
+                  <div className="px-4 py-2">
+                    <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1.5">最近成交</div>
+                    {trades.slice(0, 8).map((t) => (
+                      <div key={t.id} className="flex items-center justify-between py-1 text-xs">
+                        <span className={t.side === 'buy' ? 'text-emerald-400' : 'text-red-400'}>
+                          {t.side === 'buy' ? '买' : '卖'} {t.quantity.toFixed(4)} @ {t.price.toFixed(2)}
+                        </span>
+                        <span className="text-on-surface-tertiary text-[10px]">
+                          {new Date(t.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* Mobile orderbook — pinned at bottom */}
+              <div className="shrink-0 lg:hidden border-t border-line-subtle">
+                <MobileOrderBook orderBook={orderBook} />
+              </div>
             </div>
             <div className="hidden lg:flex w-72 xl:w-80 border-l border-line-subtle flex-col">
               <OrderBookPanel orderBook={orderBook} />

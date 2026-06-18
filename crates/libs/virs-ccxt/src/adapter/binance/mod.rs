@@ -14,6 +14,7 @@ pub mod fapi;
 pub mod sapi;
 pub mod kline_ws;
 pub mod order_ws;
+pub mod orderbook_ws;
 
 use async_trait::async_trait;
 use tracing::info;

@@ -19,37 +19,33 @@ export default function GridStats({ bot }: GridStatsProps) {
   const b = bot;
 
   return (
-    <div className="px-4 pt-4 pb-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-      <div className="rounded-xl border border-line-default bg-surface-1 p-3 shadow-sm">
-        <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">已实现盈亏</div>
-        <div className="text-sm font-mono">{formatPnlShort(b.total_pnl)}</div>
-      </div>
-      <div className="rounded-xl border border-line-default bg-surface-1 p-3 shadow-sm">
-        <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">未实现盈亏</div>
-        <div className="text-sm font-mono">{formatPnlShort(b.unrealized_pnl)}</div>
-      </div>
-      <div className="rounded-xl border border-line-default bg-surface-1 p-3 shadow-sm">
-        <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">成交次数</div>
-        <div className="text-sm font-mono text-on-surface">{b.total_trades}</div>
-      </div>
-      <div className="rounded-xl border border-line-default bg-surface-1 p-3 shadow-sm">
-        <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">已填充</div>
-        <div className="text-sm font-mono text-on-surface">
-          {Math.min(b.grid_filled_count, b.grid_count)}<span className="text-on-surface-tertiary text-xs">/{b.grid_count}</span>
-        </div>
-      </div>
-      <div className="rounded-xl border border-line-default bg-surface-1 p-3 shadow-sm">
-        <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">利润率</div>
-        <div className="text-sm font-mono text-on-surface">{b.grid_profit_pct}<span className="text-on-surface-tertiary text-xs">%</span></div>
-      </div>
-      <div className="rounded-xl border border-line-default bg-surface-1 p-3 shadow-sm">
-        <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1">价格区间</div>
-        <div className="text-xs font-mono text-on-surface">
-          {b.upper_price > 0 ? (
-            <>{b.lower_price.toFixed(0)}<span className="text-on-surface-tertiary"> — </span>{b.upper_price.toFixed(0)}</>
-          ) : '-'}
-        </div>
-      </div>
+    <div className="px-3 py-2 flex items-center gap-3 overflow-x-auto text-xs scrollbar-none">
+      <span className="shrink-0">
+        已实现 {formatPnlShort(b.total_pnl)}
+      </span>
+      <span className="shrink-0">
+        未实现 {formatPnlShort(b.unrealized_pnl)}
+      </span>
+
+      <span className="w-px h-3 bg-line-subtle shrink-0" />
+
+      <span className="text-on-surface-tertiary shrink-0">
+        {b.total_trades}笔
+      </span>
+      <span className="text-on-surface-tertiary shrink-0">
+        填充 <span className="text-on-surface font-mono">{Math.min(b.grid_filled_count, b.grid_count)}/{b.grid_count}</span>
+      </span>
+
+      <span className="w-px h-3 bg-line-subtle shrink-0" />
+
+      <span className="text-on-surface-tertiary shrink-0">
+        利润率 <span className="text-on-surface font-mono">{b.grid_profit_pct}%</span>
+      </span>
+      {b.upper_price > 0 && (
+        <span className="text-on-surface-tertiary shrink-0">
+          区间 <span className="text-on-surface font-mono">{b.lower_price.toFixed(0)}—{b.upper_price.toFixed(0)}</span>
+        </span>
+      )}
     </div>
   );
 }

@@ -80,8 +80,8 @@ function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartP
   return (
     <div
       ref={containerRef}
-      className="w-full rounded-lg border border-line-default overflow-hidden"
-      style={{ height: `${height || 400}px` }}
+      className={`w-full rounded-lg border border-line-default overflow-hidden ${!height ? 'h-full' : ''}`}
+      style={height ? { height: `${height}px` } : undefined}
     />
   )
 }

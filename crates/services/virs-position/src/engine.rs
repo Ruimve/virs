@@ -988,8 +988,30 @@ pub(crate) async fn handle_open_position(
                 inner.orders.insert(order.id, order.clone());
                 persist!(inner.persistence.insert_order(&order), "Failed to persist order in open_position (existing)");
 
-                inner.emit_event(EngineEvent::OrderPlaced { order: order.clone() });
-                info!(position_id = %position_id, symbol = %symbol, side = ?side, size = order.filled, "Order placed for existing position");
+                // 如果订单已成交，发出 OrderFilled 事件
+                if order.filled > 0.0 {
+                    let trade = Trade {
+                        id: Uuid::new_v4(),
+                        position_id,
+                        order_id: order.id,
+                        exchange: exchange_name.clone(),
+                        symbol: symbol.clone(),
+                        side: resolved_side,
+                        price: order.fill_price.unwrap_or(0.0),
+                        amount: order.filled,
+                        fee: order.fee,
+                        fee_currency: order.fee_currency.clone(),
+                        pnl: 0.0,
+                        trade_type: TradeType::Open,
+                        created_at: Utc::now(),
+                    };
+                    persist!(inner.persistence.insert_trade(&trade), "Failed to persist trade in open_position (existing)");
+                    inner.emit_event(EngineEvent::OrderFilled { order: order.clone(), trade });
+                    info!(position_id = %position_id, symbol = %symbol, side = ?side, size = order.filled, "Order filled for existing position");
+                } else {
+                    inner.emit_event(EngineEvent::OrderPlaced { order: order.clone() });
+                    info!(position_id = %position_id, symbol = %symbol, side = ?side, "Order placed for existing position");
+                }
             }
             Err(e) => {
                 let msg = format!("Failed to place order: {}", e);
@@ -1093,9 +1115,32 @@ pub(crate) async fn handle_open_position(
             persist!(inner.persistence.insert_order(&order), "Failed to persist order in open_position");
 
             inner.emit_event(EngineEvent::PositionOpened { position: position.clone() });
-            inner.emit_event(EngineEvent::OrderPlaced { order: order.clone() });
 
-            info!(position_id = %position.id, symbol = %symbol, side = ?side, size = order.filled, "Position opened");
+            // 如果订单已成交（市价单立即成交），发出 OrderFilled 事件
+            // 这是 AutoWorker 等待的事件，用于确认开仓并记录交易
+            if order.filled > 0.0 {
+                let trade = Trade {
+                    id: Uuid::new_v4(),
+                    position_id,
+                    order_id: order.id,
+                    exchange: exchange_name.clone(),
+                    symbol: symbol.clone(),
+                    side: resolved_side,
+                    price: order.fill_price.unwrap_or(0.0),
+                    amount: order.filled,
+                    fee: order.fee,
+                    fee_currency: order.fee_currency.clone(),
+                    pnl: 0.0,
+                    trade_type: TradeType::Open,
+                    created_at: Utc::now(),
+                };
+                persist!(inner.persistence.insert_trade(&trade), "Failed to persist trade in open_position");
+                inner.emit_event(EngineEvent::OrderFilled { order: order.clone(), trade });
+                info!(position_id = %position.id, symbol = %symbol, side = ?side, size = order.filled, "Position opened and filled");
+            } else {
+                inner.emit_event(EngineEvent::OrderPlaced { order: order.clone() });
+                info!(position_id = %position.id, symbol = %symbol, side = ?side, "Position opened, order pending");
+            }
         }
         Err(e) => {
             let msg = format!("Failed to place order: {}", e);
@@ -1156,15 +1201,37 @@ pub(crate) async fn handle_close_position(
             }
             inner.orders.insert(order.id, order.clone());
             persist!(inner.persistence.insert_order(&order), "Failed to persist order in close_position");
-            inner.emit_event(EngineEvent::OrderPlaced { order });
+
+            // 如果订单已成交，发出 OrderFilled 事件
+            if order.filled > 0.0 {
+                let trade = Trade {
+                    id: Uuid::new_v4(),
+                    position_id,
+                    order_id: order.id,
+                    exchange: position.exchange.clone(),
+                    symbol: position.symbol.clone(),
+                    side: close_side,
+                    price: order.fill_price.unwrap_or(0.0),
+                    amount: order.filled,
+                    fee: order.fee,
+                    fee_currency: order.fee_currency.clone(),
+                    pnl: 0.0,
+                    trade_type: TradeType::Close,
+                    created_at: Utc::now(),
+                };
+                persist!(inner.persistence.insert_trade(&trade), "Failed to persist trade in close_position");
+                inner.emit_event(EngineEvent::OrderFilled { order: order.clone(), trade });
+                info!(position_id = %position_id, symbol = %position.symbol, "Close order filled");
+            } else {
+                inner.emit_event(EngineEvent::OrderPlaced { order });
+                info!(position_id = %position_id, symbol = %position.symbol, "Close order placed");
+            }
 
             let key = (position.exchange.clone(), position.symbol.clone(), position.side);
             if let Some(mut pos) = inner.positions.get_mut(&key) {
                 pos.status = PositionStatus::Closing;
                 pos.updated_at = Utc::now();
             }
-
-            info!(position_id = %position_id, symbol = %position.symbol, "Close order placed");
         }
         Err(e) => {
             let msg = format!("Failed to place close order: {}", e);

@@ -57,6 +57,26 @@ pub async fn kline_subscribe(
     }
 }
 
+pub async fn orderbook_subscribe(
+    State(state): State<AppState>,
+    Json(body): Json<KlineSubscribeRequest>,
+) -> Json<ApiResponse> {
+    let market_type_str = body.market_type.as_deref().unwrap_or("perpetual");
+    let market_type = match market_type_str {
+        "spot" => virs_models::MarketType::Spot,
+        _ => virs_models::MarketType::Perpetual,
+    };
+
+    match state.orderbook_engine.subscribe(&body.exchange, &body.symbol, market_type).await {
+        Ok(_) => Json(ApiResponse::ok(serde_json::json!({
+            "subscribed": true,
+            "exchange": body.exchange,
+            "symbol": body.symbol,
+        }))),
+        Err(e) => Json(ApiResponse::err(format!("OrderBook subscribe failed: {}", e))),
+    }
+}
+
 pub async fn kline_data(
     State(state): State<AppState>,
     Query(params): Query<KlineDataQuery>,

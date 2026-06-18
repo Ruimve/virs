@@ -101,3 +101,49 @@ async fn handle_kline_ws(mut socket: WebSocket, kline_engine: Arc<virs_market::K
         }
     }
 }
+
+/// WebSocket handler for real-time order book data from OrderBookEngine.
+pub async fn orderbook_ws_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_orderbook_ws(socket, state.orderbook_engine))
+}
+
+async fn handle_orderbook_ws(
+    mut socket: WebSocket,
+    orderbook_engine: Arc<virs_market::OrderBookEngine>,
+) {
+    let mut rx = orderbook_engine.subscribe_events();
+
+    loop {
+        tokio::select! {
+            msg = rx.recv() => {
+                match msg {
+                    Ok(event) => {
+                        let json = serde_json::json!({
+                            "exchange": event.exchange,
+                            "symbol": event.symbol,
+                            "bids": event.bids.iter().map(|l| serde_json::json!([l.price, l.amount])).collect::<Vec<_>>(),
+                            "asks": event.asks.iter().map(|l| serde_json::json!([l.price, l.amount])).collect::<Vec<_>>(),
+                            "timestamp": event.timestamp,
+                        });
+                        if let Ok(text) = serde_json::to_string(&json) {
+                            if socket.send(Message::Text(text.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(_) => break,
+                }
+            }
+            msg = socket.recv() => {
+                match msg {
+                    Some(Ok(Message::Close(_))) | None => break,
+                    _ => continue,
+                }
+            }
+        }
+    }
+}

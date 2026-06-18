@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use virs_bot::grid::types::GridCommand;
 use virs_bot::auto::types::AutoCommand;
 use virs_exchange::Exchanges;
-use virs_market::KlineEngine;
+use virs_market::{KlineEngine, OrderBookEngine};
 
 /// WebSocket 广播器
 pub struct WsBroadcaster {
@@ -69,6 +69,7 @@ pub struct AppState {
     pub http_client: reqwest::Client,
     pub exchange_registry: Arc<Exchanges>,
     pub kline_engine: Arc<KlineEngine>,
+    pub orderbook_engine: Arc<OrderBookEngine>,
     pub encryption_key: String,
 }
 

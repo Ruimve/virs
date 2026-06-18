@@ -34,6 +34,8 @@ pub fn build_router(state: AppState) -> Router {
         // Kline Engine (public)
         .route("/api/kline/subscribe", post(handlers::market::kline_subscribe))
         .route("/api/kline/data", get(handlers::market::kline_data))
+        // OrderBook Engine (public)
+        .route("/api/orderbook/subscribe", post(handlers::market::orderbook_subscribe))
         // Credentials (authenticated)
         .route("/api/credentials/list", get(handlers::credentials::list_credentials))
         .route("/api/credentials/save", post(handlers::credentials::save_credential))
@@ -84,6 +86,7 @@ pub fn build_router(state: AppState) -> Router {
         // WebSocket (public)
         .route("/ws", get(crate::ws::ws_handler))
         .route("/ws/kline", get(crate::ws::kline_ws_handler))
+        .route("/ws/orderbook", get(crate::ws::orderbook_ws_handler))
         .with_state(state)
         .layer(
             CorsLayer::new()

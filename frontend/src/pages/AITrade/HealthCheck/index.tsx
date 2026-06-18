@@ -150,7 +150,11 @@ export default function HealthCheckPage() {
   const allChecksDone = checks.every((c) => c.status === 'done' || c.status === 'error')
 
   return (
-    <div className="h-screen flex flex-col bg-base">
+    <div className="h-screen flex flex-col bg-base relative overflow-hidden">
+      {/* Background glow */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-500/3 blur-[120px]" />
+      </div>
       <BotDetailHeader
         bot={botInfo || { id: botId, name: '', symbol: '', exchange: '', market_type: 'perpetual', status: 'stopped', leverage: 0 }}
         tabs={tabs}

@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
-import { WizardStep } from './wizard'
-import { Logo } from '@/components/Logo'
-import { Theme } from '@/components/Theme';
+import { WizardStep } from './consts'
+import { STEP_LABELS, TOTAL_SETUP_STEPS } from './consts';
 
 interface WizardLayoutProps {
   step: number
@@ -11,75 +10,11 @@ interface WizardLayoutProps {
   actions?: ReactNode
 }
 
-const STEP_LABELS: Record<number, string> = {
-  [WizardStep.SelectBotType]: 'Strategy',
-  [WizardStep.ConfigureLlm]: 'AI Model',
-  [WizardStep.SelectExchange]: 'Exchange',
-  [WizardStep.ConfigureParams]: 'Parameters',
-  [WizardStep.ReviewLaunch]: 'Review',
-}
-
-const TOTAL_SETUP_STEPS = 5
-
 export function Wizard({ step, title, subtitle, children, actions }: WizardLayoutProps) {
-  const stepIndex = step - WizardStep.SelectBotType + 1
+  const stepIndex = step - WizardStep.SelectBotType + 1;
 
-  return (
-    <div className="h-screen bg-base flex flex-col relative overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-500/[0.03] blur-[120px]" />
-      </div>
-
-      {/* Top bar */}
-      <div className="relative z-10 flex items-center justify-between px-4 md:px-8 h-14 md:h-16 border-b border-line-subtle">
-        <Logo />
-
-        {/* Step indicator */}
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-on-surface-tertiary md:hidden">
-            Step {stepIndex}/{TOTAL_SETUP_STEPS}
-          </span>
-          <div className="hidden md:flex items-center gap-2">
-            {Array.from({ length: TOTAL_SETUP_STEPS }, (_, i) => {
-              const stepNum = i + 1
-              const isActive = stepNum === stepIndex
-              const isCompleted = stepNum < stepIndex
-              return (
-                <div key={i} className="flex items-center gap-2">
-                  <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-medium transition-all duration-300 ${
-                      isActive
-                        ? 'bg-indigo-500/80 text-white'
-                        : isCompleted
-                        ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
-                        : 'bg-surface-1 text-on-surface-faint border border-line-default'
-                    }`}
-                  >
-                    {isCompleted ? (
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      stepNum
-                    )}
-                  </div>
-                  {i < TOTAL_SETUP_STEPS - 1 && (
-                    <div className={`w-6 h-[1px] ${isCompleted ? 'bg-indigo-500/40' : 'bg-line-default'}`} />
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <Theme />
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 flex justify-center relative z-10 overflow-y-auto">
+  return <div className=" h-full flex flex-col justify-between">
+        <div className="flex-1 flex justify-center relative z-10 overflow-y-auto">
         <div className="w-full max-w-lg px-4 md:px-8 pt-8 md:pt-16 pb-6">
           <div className="mb-8 md:mb-10">
             <p className="text-[11px] tracking-[0.2em] text-indigo-400/60 mb-2 md:mb-3 uppercase">
@@ -103,6 +38,5 @@ export function Wizard({ step, title, subtitle, children, actions }: WizardLayou
           </div>
         </div>
       )}
-    </div>
-  )
+  </div>
 }

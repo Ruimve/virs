@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Wizard } from '../components/Wizard'
-import { updateWizard, advanceStep, WizardStep, getWizardState } from '../components/Wizard/wizard'
+import { useWizard } from '../components/Wizard/useWizard';
 import { findActiveBot } from '../../../service'
+import { WizardStep } from '../components/Wizard/consts'
 
 const BOT_TYPES = [
   {
@@ -25,38 +26,39 @@ const BOT_TYPES = [
 
 function SelectBotType() {
   const navigate = useNavigate()
-  const wizard = getWizardState()
+  const { wizard, updateWizard, advanceStep } = useWizard();
   const [selected, setSelected] = useState<'grid' | 'auto' | ''>(wizard.bot_type || '')
   const [existingBot, setExistingBot] = useState<{ id: string; bot_type: string } | null>(null)
 
   useEffect(() => {
+    updateWizard({ current_step: WizardStep.SelectBotType })
     findActiveBot().then(bot => { if (bot) setExistingBot(bot) })
   }, [])
 
-  const canContinue = selected.length > 0 && !existingBot
+   const canContinue = selected.length > 0 && !existingBot
 
-  const handleContinue = () => {
-    updateWizard({ bot_type: selected })
-    advanceStep(WizardStep.ConfigureLlm)
-    navigate('/setup/llm', { replace: true })
-  }
+   const handleContinue = () => {
+     updateWizard({ bot_type: selected })
+     advanceStep(WizardStep.ConfigureLlm)
+     navigate('/setup/llm', { replace: true })
+   }
 
   return (
-    <Wizard
-      step={WizardStep.SelectBotType}
-      title="Choose Strategy"
-      subtitle="Select the trading strategy that fits your goals"
-      actions={
-        <button
-          onClick={handleContinue}
-          disabled={!canContinue}
-          className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
-        >
-          Continue
-        </button>
-      }
-    >
-      {existingBot ? (
+     <Wizard
+       step={WizardStep.SelectBotType}
+       title="Choose Strategy"
+       subtitle="Select the trading strategy that fits your goals"
+       actions={
+         <button
+           onClick={handleContinue}
+           disabled={!canContinue}
+           className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+         >
+         Continue
+         </button>
+       }
+     >
+    {existingBot ? (
         <div className="p-5 rounded-xl border border-amber-500/20 bg-amber-500/5 mb-8">
           <div className="flex items-start gap-3">
             <svg className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -128,7 +130,7 @@ function SelectBotType() {
           })}
         </div>
       )}
-    </Wizard>
+     </Wizard>
   )
 }
 

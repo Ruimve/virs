@@ -66,3 +66,43 @@ pub enum WsFeedEvent {
         connected: bool,
     },
 }
+
+// ---- OrderBook WS types ----
+
+/// A single price level in the order book.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct OrderBookLevel {
+    pub price: f64,
+    pub amount: f64,
+}
+
+/// Order book snapshot pushed by the exchange WS.
+#[derive(Debug, Clone)]
+pub struct WsOrderBookUpdate {
+    pub symbol: String,
+    /// Top N bid levels (sorted descending by price)
+    pub bids: Vec<OrderBookLevel>,
+    /// Top N ask levels (sorted ascending by price)
+    pub asks: Vec<OrderBookLevel>,
+    /// Exchange timestamp (ms)
+    pub timestamp: i64,
+}
+
+/// Events emitted by an OrderBook WS client.
+/// Mirrors `WsEvent` (kline) but for order book snapshots.
+#[derive(Debug, Clone)]
+pub enum WsOrderBookEvent {
+    OrderBook(WsOrderBookUpdate),
+    Reconnected,
+}
+
+/// Trait for exchange order book WebSocket clients.
+/// Mirrors `KlineWsClient` but pushes top-N order book snapshots.
+#[async_trait]
+pub trait OrderBookWsClient: Send + Sync {
+    async fn start(&mut self, update_tx: broadcast::Sender<WsOrderBookEvent>);
+    async fn stop(&mut self);
+    async fn subscribe(&self, symbol: &str);
+    async fn unsubscribe(&self, symbol: &str);
+    fn is_running(&self) -> bool;
+}

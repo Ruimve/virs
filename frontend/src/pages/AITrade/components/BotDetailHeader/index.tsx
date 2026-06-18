@@ -3,6 +3,7 @@ import { Logo } from '../../../../components/Logo';
 import { Theme } from "@/components/Theme";
 import type { BotInfo, TabConfig, StatusStyle } from '../shared';
 import { statusConfig } from '../shared';
+import { usePaper } from '../../../../lib/paper-context';
 
 
 interface BotDetailHeaderProps {
@@ -33,6 +34,7 @@ export default function BotDetailHeader({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerClosing, setDrawerClosing] = useState(false);
   const sc: StatusStyle = statusConfig(bot.status);
+  const { enabled: paperMode } = usePaper();
 
   const closeDrawer = () => {
     setDrawerClosing(true);
@@ -62,8 +64,14 @@ export default function BotDetailHeader({
               <span className={`w-1 h-1 rounded-full ${sc.dot} ${bot.status === 'running' && pulseOnRunning ? 'animate-pulse' : ''}`} />
               {sc.text}
             </span>
-            <span className="text-xs text-on-surface-tertiary">
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${paperMode ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+              {paperMode ? 'Paper' : '实盘'}
+            </span>
+            <span className="text-xs text-on-surface-tertiary md:hidden">
               {bot.symbol} · {bot.leverage}x
+            </span>
+            <span className="text-xs text-on-surface-tertiary hidden md:block">
+              {bot.symbol} · {bot.exchange.toUpperCase()} · {bot.leverage}x
             </span>
           </div>
         </div>

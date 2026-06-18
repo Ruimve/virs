@@ -2,8 +2,9 @@ import { useState, useCallback, useRef, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Wizard } from '../components/Wizard';
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { updateWizard, advanceStep, WizardStep, getWizardState, useWizardGuard } from '../components/Wizard/wizard'
+import { useWizard, useWizardGuard } from '../components/Wizard/useWizard'
 import { api, saveAiCredential } from '../../../service'
+import { WizardStep } from '../components/Wizard/consts';
 
 interface DeepSeekModel {
   id: string
@@ -16,9 +17,9 @@ interface BalanceInfo {
 }
 
 function ConfigureLlm() {
-  useWizardGuard(WizardStep.ConfigureLlm)
   const navigate = useNavigate()
-  const wizard = getWizardState()
+  const {wizard, updateWizard, advanceStep} = useWizard()
+  useWizardGuard(wizard.current_step, WizardStep.ConfigureLlm)
 
   // Step 1: API Key + Model
   const [apiKey, setApiKey] = useState('')

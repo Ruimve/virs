@@ -8,6 +8,9 @@ use std::fmt;
 // Re-export kline types from ccxt
 pub use virs_ccxt::ws_types::{Candle, WsCandleUpdate, WsEvent, KlineWsClient};
 
+// Re-export order book types from ccxt
+pub use virs_ccxt::ws_types::{OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate};
+
 // Re-export MarketType from virs-types
 pub use virs_types::enums::MarketType;
 
@@ -239,4 +242,33 @@ pub fn subscription_key(exchange: &str, symbol: &str) -> String {
 
 pub fn align_open_time(open_time: i64, timeframe: Timeframe) -> i64 {
     (open_time / timeframe.ms()) * timeframe.ms()
+}
+
+// ============================================================
+// OrderBook engine types
+// ============================================================
+
+/// OrderBook event emitted by OrderBookEngine.
+/// Mirrors KlineEvent structure but for order book snapshots.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrderBookEvent {
+    pub exchange: String,
+    pub symbol: String,
+    pub bids: Vec<OrderBookLevel>,
+    pub asks: Vec<OrderBookLevel>,
+    pub timestamp: i64,
+}
+
+/// OrderBookEngine configuration.
+#[derive(Debug, Clone)]
+pub struct OrderBookEngineConfig {
+    pub event_channel_capacity: usize,
+}
+
+impl Default for OrderBookEngineConfig {
+    fn default() -> Self {
+        Self {
+            event_channel_capacity: 1024,
+        }
+    }
 }

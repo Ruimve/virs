@@ -198,11 +198,18 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       }
     }
 
-    // Show the last 100 candles by default
+    // Show the last 100 candles with 1/8 right padding for future candles
     if (data.length > 100) {
+      const rangeWidth = 100
       chart.timeScale().setVisibleLogicalRange({
-        from: data.length - 100,
-        to: data.length - 1,
+        from: data.length - rangeWidth,
+        to: data.length - 1 + rangeWidth / 8,
+      })
+    } else if (data.length > 1) {
+      const rangeWidth = data.length - 1
+      chart.timeScale().setVisibleLogicalRange({
+        from: 0,
+        to: rangeWidth + rangeWidth / 8,
       })
     } else {
       chart.timeScale().fitContent()
@@ -250,11 +257,18 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       )
     }
 
-    // Fit to last 100 candles
+    // Fit to last 100 candles with 1/8 right padding
     if (data.length > 100) {
+      const rangeWidth = 100
       chartRef.current?.timeScale().setVisibleLogicalRange({
-        from: data.length - 100,
-        to: data.length - 1,
+        from: data.length - rangeWidth,
+        to: data.length - 1 + rangeWidth / 8,
+      })
+    } else if (data.length > 1) {
+      const rangeWidth = data.length - 1
+      chartRef.current?.timeScale().setVisibleLogicalRange({
+        from: 0,
+        to: rangeWidth + rangeWidth / 8,
       })
     }
   }, [data, markers])

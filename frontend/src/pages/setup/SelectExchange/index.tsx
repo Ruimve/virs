@@ -2,10 +2,11 @@ import { useState, useCallback, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Wizard } from '../components/Wizard'
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { updateWizard, advanceStep, WizardStep, getWizardState, useWizardGuard } from '../components/Wizard/wizard'
+import { useWizard, useWizardGuard } from '../components/Wizard/useWizard'
 import { saveCredential, testCredential, checkPermissions } from '../../../service'
 import type { PermissionItem } from '../../../service'
 import type { MarketType } from '../../../lib/market-context'
+import { WizardStep } from '../components/Wizard/consts'
 
 const MARKET_TYPES: Array<{ id: MarketType; label: string; desc: string }> = [
   { id: 'perpetual', label: 'Perpetual', desc: 'USDT-M futures' },
@@ -13,9 +14,9 @@ const MARKET_TYPES: Array<{ id: MarketType; label: string; desc: string }> = [
 ]
 
 function SelectExchange() {
-  useWizardGuard(WizardStep.SelectExchange)
-  const navigate = useNavigate()
-  const wizard = getWizardState()
+  const navigate = useNavigate();
+  const { wizard, updateWizard, advanceStep } = useWizard();
+  useWizardGuard(wizard.current_step, WizardStep.SelectExchange)
 
   // Step 1: API credentials
   const [apiKey, setApiKey] = useState('')

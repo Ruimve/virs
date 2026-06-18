@@ -17,7 +17,7 @@ use virs_bot::auto::types::AutoEvent;
 use virs_bot::grid::types::GridCommand;
 use virs_config::AiConfig;
 use virs_exchange::{CcxtExchangeAdapter, Exchanges, PaperExchangeAdapter};
-use virs_market::KlineEngine;
+use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
 use virs_types::bot::{OrderEvent, PriceProvider};
 use virs_types::enums::MarketType;
@@ -40,6 +40,7 @@ pub struct AppEngineManager {
     db_pool: sqlx::PgPool,
     exchange_registry: Arc<Exchanges>,
     kline_engine: Arc<KlineEngine>,
+    orderbook_engine: Arc<OrderBookEngine>,
     encryption_key: String,
     ai_config: AiConfig,
     ws_broadcaster: Arc<virs_api::WsBroadcaster>,
@@ -58,6 +59,7 @@ impl AppEngineManager {
         db_pool: sqlx::PgPool,
         exchange_registry: Arc<Exchanges>,
         kline_engine: Arc<KlineEngine>,
+        orderbook_engine: Arc<OrderBookEngine>,
         encryption_key: String,
         ai_config: AiConfig,
         ws_broadcaster: Arc<virs_api::WsBroadcaster>,
@@ -67,6 +69,7 @@ impl AppEngineManager {
             db_pool,
             exchange_registry,
             kline_engine,
+            orderbook_engine,
             encryption_key,
             ai_config,
             ws_broadcaster,
@@ -482,6 +485,11 @@ impl EngineManager for AppEngineManager {
                 tracing::warn!(exchange, symbol, "Failed to restore kline subscription: {}", e);
             } else {
                 info!(exchange, symbol, market_type, "Restored kline subscription");
+            }
+            if let Err(e) = self.orderbook_engine.subscribe(exchange, symbol, mt).await {
+                tracing::warn!(exchange, symbol, "Failed to restore orderbook subscription: {}", e);
+            } else {
+                info!(exchange, symbol, market_type, "Restored orderbook subscription");
             }
         }
 

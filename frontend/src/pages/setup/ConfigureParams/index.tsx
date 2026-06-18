@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Wizard } from '../components/Wizard'
-import { updateWizard, advanceStep, WizardStep, getWizardState, useWizardGuard } from '../components/Wizard/wizard';
+import { useWizardGuard, useWizard } from '../components/Wizard/useWizard';
+import { WizardStep } from '../components/Wizard/consts';
 
 // Grid bot parameters
 const GRID_PARAMS = [
@@ -21,9 +22,9 @@ const AUTO_PARAMS = [
 ]
 
 function ConfigureParams() {
-  useWizardGuard(WizardStep.ConfigureParams)
   const navigate = useNavigate()
-  const wizard = getWizardState()
+  const { wizard, updateWizard, advanceStep } = useWizard()
+  useWizardGuard(wizard.current_step, WizardStep.ConfigureParams)
   const isGrid = wizard.bot_type === 'grid'
   const params = isGrid ? GRID_PARAMS : AUTO_PARAMS
 

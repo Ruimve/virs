@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Wizard } from '../components/Wizard'
-import { updateWizard, WizardStep, getWizardState, useWizardGuard } from '../components/Wizard/wizard'
+import { useWizard, useWizardGuard } from '../components/Wizard/useWizard'
 import { createGridBot, createAutoBot, startGridBot, startAutoBot } from '../../../service'
+import { WizardStep } from '../components/Wizard/consts'
 
 function ReviewLaunch() {
-  useWizardGuard(WizardStep.ReviewLaunch)
   const navigate = useNavigate()
-  const wizard = getWizardState()
+  const { wizard, updateWizard } = useWizard();
+  useWizardGuard(wizard.current_step, WizardStep.ReviewLaunch)
   const isGrid = wizard.bot_type === 'grid'
   const v = (wizard.bot_params as Record<string, string>) || {}
 
