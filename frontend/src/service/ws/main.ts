@@ -69,7 +69,11 @@ function getMainWsUrl(): string {
 }
 
 const parseMainWs = (raw: string): WsEvent | null => {
-  try { return JSON.parse(raw) as WsEvent } catch { return null }
+  try {
+    return JSON.parse(raw) as WsEvent
+  } catch {
+    return null
+  }
 }
 
 export function useWs(onEvent: (event: WsEvent) => void): { connected: boolean } {

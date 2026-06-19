@@ -1,5 +1,3 @@
-import type { MarketType } from '@/lib/market-context'
-
 export const WizardStep = {
   Loading: 0,
   Login: 1,
@@ -9,7 +7,7 @@ export const WizardStep = {
   ConfigureParams: 5,
   ReviewLaunch: 6,
   Trading: 7,
-};
+}
 
 export type WizardStepValue = (typeof WizardStep)[keyof typeof WizardStep]
 
@@ -17,7 +15,7 @@ export type WizardStepValue = (typeof WizardStep)[keyof typeof WizardStep]
 export interface WizardState {
   current_step: WizardStepValue
   exchange: string
-  market_type: MarketType
+  market_type: 'perpetual' | 'spot'
   bot_type: 'grid' | 'auto' | ''
   paper_mode: boolean
   llm_provider: string
@@ -33,7 +31,6 @@ export const STEP_LABELS: Record<number, string> = {
   [WizardStep.ConfigureParams]: 'Parameters',
   [WizardStep.ReviewLaunch]: 'Review',
 }
-
 export const TOTAL_SETUP_STEPS = 5
 
 export const DEFAULT_STATE: WizardState = {

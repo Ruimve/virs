@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import BotDetailHeader from '../components/BotDetailHeader'
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { getAiStatus, fetchCredentialStatus, checkHealth, getAutoBotDetail, getGridBotDetail } from '../../../service'
-import type { BotHeaderInfo } from '../../../service/types'
-import type { TabConfig } from '../components/shared'
+import { getAiStatus, fetchCredentialStatus, checkHealth } from '../../../service'
+import { useBot } from '../context/BotContext'
+import { useHeader } from '../components/Header/context'
 
 interface CheckItem {
   key: string
@@ -13,17 +12,11 @@ interface CheckItem {
   detail: string
 }
 
-const tabs: TabConfig[] = [
-  { key: 'health', label: 'Health Check' },
-]
-
 export default function HealthCheckPage() {
-  const params = useParams()
   const navigate = useNavigate()
-  const botType = params.botType || 'auto'
-  const botId = params.botId || ''
-
-  const [botInfo, setBotInfo] = useState<BotHeaderInfo | null>(null)
+  const param = useParams()
+  const { updateTabs } = useHeader()
+  const { bot } = useBot()
 
   const [checks, setChecks] = useState<CheckItem[]>([
     { key: 'llm', label: 'LLM Connectivity', status: 'pending', detail: '' },
@@ -35,7 +28,7 @@ export default function HealthCheckPage() {
   ])
 
   const updateCheck = (key: string, status: FlowStepStatus, detail: string) => {
-    setChecks((prev) => prev.map((c) => c.key === key ? { ...c, status, detail } : c))
+    setChecks((prev) => prev.map((c) => (c.key === key ? { ...c, status, detail } : c)))
   }
 
   const statuses: Record<string, FlowStepStatus> = {}
@@ -53,7 +46,9 @@ export default function HealthCheckPage() {
       const check = checks.find((x) => x.key === c.key)
       return (
         <>
-          {check?.status === 'verifying' && <p className="text-[12px] text-on-surface-faint">Checking...</p>}
+          {check?.status === 'verifying' && (
+            <p className="text-[12px] text-on-surface-faint">Checking...</p>
+          )}
           {check?.status === 'error' && <p className="text-[12px] text-red-400">{check.detail}</p>}
         </>
       )
@@ -111,80 +106,40 @@ export default function HealthCheckPage() {
   }
 
   useEffect(() => {
-    // Load bot info from backend
-    const loadBot = async () => {
-      try {
-        if (botType === 'grid') {
-          const res = await getGridBotDetail(botId)
-          if (res.data?.bot) {
-            const b = res.data.bot
-            setBotInfo({
-              id: b.id, name: b.name, symbol: b.symbol,
-              exchange: b.exchange, market_type: b.market_type,
-              status: b.status, leverage: b.leverage,
-            })
-          }
-        } else {
-          const res = await getAutoBotDetail(botId)
-          if (res.data?.bot) {
-            const b = res.data.bot
-            setBotInfo({
-              id: b.id, name: b.name, symbol: b.symbol,
-              exchange: b.exchange, market_type: b.market_type,
-              status: b.status, leverage: b.leverage,
-            })
-          }
-        }
-      } catch (e) {
-        console.error('Failed to load bot:', e)
-      }
-    }
-    loadBot()
+    updateTabs([{ key: 'health', label: 'Health Check', onClick: () => {} }])
+  }, [])
+
+  useEffect(() => {
     runChecks()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleContinue = () => {
-    navigate(`/trade/${botType}/${botId}`, { replace: true })
+    navigate(`/trade/${param.botType}/${bot?.id}`, { replace: true })
   }
 
   const allChecksDone = checks.every((c) => c.status === 'done' || c.status === 'error')
 
   return (
-    <div className="h-screen flex flex-col bg-base relative overflow-hidden">
-      {/* Background glow */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-500/3 blur-[120px]" />
+    <div className="max-w-lg mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-6">
+      <div className="mb-8">
+        <h2 className="text-xl md:text-2xl font-extralight tracking-wide text-on-base">
+          Health Check
+        </h2>
+        <p className="mt-1.5 text-sm text-on-surface-tertiary">Verifying system components</p>
       </div>
-      <BotDetailHeader
-        bot={botInfo || { id: botId, name: '', symbol: '', exchange: '', market_type: 'perpetual', status: 'stopped', leverage: 0 }}
-        tabs={tabs}
-        activeTab="health"
-        onTabChange={(key) => {
-          if (key === 'health') return
-          navigate(`/trade/${botType}/${botId}/${key}`)
-        }}
-      />
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-lg mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-6">
-          <div className="mb-8">
-            <h2 className="text-xl md:text-2xl font-extralight tracking-wide text-on-base">Health Check</h2>
-            <p className="mt-1.5 text-sm text-on-surface-tertiary">Verifying system components</p>
-          </div>
 
-          <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
+      <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
 
-          {allChecksDone && (
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={handleContinue}
-                className="px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-all duration-200"
-              >
-                Continue
-              </button>
-            </div>
-          )}
+      {allChecksDone && (
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={handleContinue}
+            className="px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-all duration-200"
+          >
+            Continue
+          </button>
         </div>
-      </div>
+      )}
     </div>
   )
 }

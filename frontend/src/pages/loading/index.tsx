@@ -21,7 +21,7 @@ function Loading() {
     setProgress(20)
     setStatusText('Checking authentication...')
 
-    fetchUser().then(loggedIn => {
+    fetchUser().then((loggedIn) => {
       if (!loggedIn) {
         navigate('/login', { replace: true })
         return
@@ -33,7 +33,7 @@ function Loading() {
       setProgress(70)
       setStatusText('Finding bot...')
 
-      findActiveBot().then(bot => {
+      findActiveBot().then((bot) => {
         setProgress(90)
         setStatusText('Routing...')
         delay(200).then(() => {
@@ -59,12 +59,18 @@ function Loading() {
 
       <div className="relative mb-16">
         <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/20 flex items-center justify-center backdrop-blur-sm">
-          <span className="text-3xl font-extralight tracking-[0.3em] text-on-base select-none">V</span>
+          <span className="text-3xl font-extralight tracking-[0.3em] text-on-base select-none">
+            V
+          </span>
         </div>
       </div>
 
-      <h1 className="text-2xl font-extralight tracking-[0.4em] text-on-surface mb-2 select-none">VIRS</h1>
-      <p className="text-[11px] tracking-[0.25em] text-on-surface-muted mb-16 select-none">QUANTITATIVE TRADING</p>
+      <h1 className="text-2xl font-extralight tracking-[0.4em] text-on-surface mb-2 select-none">
+        VIRS
+      </h1>
+      <p className="text-[11px] tracking-[0.25em] text-on-surface-muted mb-16 select-none">
+        QUANTITATIVE TRADING
+      </p>
 
       {progress > 0 && (
         <div className="w-64 relative">
@@ -76,7 +82,9 @@ function Loading() {
           </div>
           <div className="flex justify-between items-center mt-4">
             <span className="text-[11px] text-on-surface-faint tracking-wider">{statusText}</span>
-            <span className="text-[11px] text-on-surface-tertiary font-mono tabular-nums">{progress}%</span>
+            <span className="text-[11px] text-on-surface-tertiary font-mono tabular-nums">
+              {progress}%
+            </span>
           </div>
         </div>
       )}

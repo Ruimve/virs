@@ -2,7 +2,6 @@ import { createWsInstance, useWsHook } from '../../lib/ws'
 import type { OrderBookData } from '../types'
 
 // ── OrderBook WebSocket event (aligned with backend OrderBookEngine) ───
-
 export interface OrderBookWsEventRaw {
   exchange: string
   symbol: string
@@ -19,7 +18,6 @@ export interface OrderBookWsEvent {
 }
 
 // ── OrderBook WebSocket ────────────────────────────────────
-
 const orderbookInst = createWsInstance<OrderBookWsEvent>()
 
 function getOrderBookWsUrl(): string {

@@ -9,7 +9,7 @@ let _loading = false
 const _listeners = new Set<() => void>()
 
 function notify() {
-  _listeners.forEach(l => l())
+  _listeners.forEach((l) => l())
 }
 
 export function subscribe(listener: () => void) {
@@ -84,7 +84,7 @@ export function initAuth(): void {
 export function useAuthState() {
   const [, forceUpdate] = useState(0)
   useEffect(() => {
-    return subscribe(() => forceUpdate(v => v + 1))
+    return subscribe(() => forceUpdate((v) => v + 1))
   }, [])
   return { user: getUser(), loading: getLoading() }
 }

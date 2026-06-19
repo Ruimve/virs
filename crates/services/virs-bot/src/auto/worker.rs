@@ -864,6 +864,7 @@ impl AutoWorker {
                 .send_command(OrderCommand::ClosePosition {
                     position_id,
                     price: None,
+                    client_order_id: Some(client_order_id.clone()),
                 })
                 .await;
 

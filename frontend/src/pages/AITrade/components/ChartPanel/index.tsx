@@ -1,15 +1,20 @@
 import { useRef } from 'react'
-import KlineChart, { type KlineChartHandle } from '../../../../components/Chart/KlineChart';
-import type { KlineCandle } from '../shared';
+import KlineChart, { type KlineChartHandle } from '../../../../components/Chart/KlineChart'
+import type { KlineCandle } from '../shared'
 
 interface ChartPanelProps {
-  klineData: KlineCandle[];
-  klineTimeframe: string;
-  onTimeframeChange: (tf: string) => void;
-  chartRef?: React.RefObject<KlineChartHandle | null>;
+  klineData: KlineCandle[]
+  klineTimeframe: string
+  onTimeframeChange: (tf: string) => void
+  chartRef?: React.RefObject<KlineChartHandle | null>
 }
 
-export default function ChartPanel({ klineData, klineTimeframe, onTimeframeChange, chartRef }: ChartPanelProps) {
+export default function ChartPanel({
+  klineData,
+  klineTimeframe,
+  onTimeframeChange,
+  chartRef,
+}: ChartPanelProps) {
   const localRef = useRef<KlineChartHandle>(null)
   const ref = chartRef ?? localRef
 
@@ -36,13 +41,24 @@ export default function ChartPanel({ klineData, klineTimeframe, onTimeframeChang
         ) : (
           <div className="flex items-center justify-center h-full min-h-[200px] text-on-surface-tertiary text-xs">
             <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
             </svg>
             加载K线...
           </div>
         )}
       </div>
     </div>
-  );
+  )
 }

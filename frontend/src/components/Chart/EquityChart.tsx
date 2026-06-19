@@ -1,10 +1,5 @@
 import { useRef, useEffect } from 'react'
-import {
-  type IChartApi,
-  type ISeriesApi,
-  type LineData,
-  LineSeries,
-} from 'lightweight-charts'
+import { type IChartApi, type ISeriesApi, type LineData, LineSeries } from 'lightweight-charts'
 import ReactChart from './ReactChart'
 import { toLocaleTime } from './ReactChart/locale/zh_CN'
 

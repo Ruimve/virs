@@ -46,7 +46,7 @@ export function computeEMA(data: number[], period: number): (number | null)[] {
 export function computeBBands(
   data: number[],
   period: number,
-  mult: number
+  mult: number,
 ): { upper: (number | null)[]; lower: (number | null)[]; middle: (number | null)[] } {
   const sma = computeSMA(data, period)
   const upper: (number | null)[] = []

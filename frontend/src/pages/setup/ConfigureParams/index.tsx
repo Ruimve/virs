@@ -1,24 +1,72 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Wizard } from '../components/Wizard'
-import { useWizardGuard, useWizard } from '../components/Wizard/useWizard';
-import { WizardStep } from '../components/Wizard/consts';
+import { Wizard } from '../context/WizardContext/Wizard'
+import { useWizardGuard, useWizard } from '../context/WizardContext'
+import { WizardStep } from '../context/WizardContext/consts'
 
 // Grid bot parameters
 const GRID_PARAMS = [
-  { key: 'symbol', label: 'Trading Pair', type: 'text' as const, placeholder: 'BTC/USDT', required: true },
-  { key: 'upper_price', label: 'Upper Price', type: 'number' as const, placeholder: '70000', required: true },
-  { key: 'lower_price', label: 'Lower Price', type: 'number' as const, placeholder: '60000', required: true },
-  { key: 'grid_levels', label: 'Grid Levels', type: 'number' as const, placeholder: '10', required: true },
-  { key: 'investment', label: 'Investment (USDT)', type: 'number' as const, placeholder: '1000', required: true },
+  {
+    key: 'symbol',
+    label: 'Trading Pair',
+    type: 'text' as const,
+    placeholder: 'BTC/USDT',
+    required: true,
+  },
+  {
+    key: 'upper_price',
+    label: 'Upper Price',
+    type: 'number' as const,
+    placeholder: '70000',
+    required: true,
+  },
+  {
+    key: 'lower_price',
+    label: 'Lower Price',
+    type: 'number' as const,
+    placeholder: '60000',
+    required: true,
+  },
+  {
+    key: 'grid_levels',
+    label: 'Grid Levels',
+    type: 'number' as const,
+    placeholder: '10',
+    required: true,
+  },
+  {
+    key: 'investment',
+    label: 'Investment (USDT)',
+    type: 'number' as const,
+    placeholder: '1000',
+    required: true,
+  },
   { key: 'leverage', label: 'Leverage', type: 'number' as const, placeholder: '5', required: true },
 ]
 
 // Auto bot parameters
 const AUTO_PARAMS = [
-  { key: 'symbol', label: 'Trading Pair', type: 'text' as const, placeholder: 'BTC/USDT', required: true },
-  { key: 'leverage', label: 'Leverage', type: 'number' as const, placeholder: '10', required: true },
-  { key: 'decision_interval', label: 'Decision Interval (seconds)', type: 'number' as const, placeholder: '300', required: true },
+  {
+    key: 'symbol',
+    label: 'Trading Pair',
+    type: 'text' as const,
+    placeholder: 'BTC/USDT',
+    required: true,
+  },
+  {
+    key: 'leverage',
+    label: 'Leverage',
+    type: 'number' as const,
+    placeholder: '10',
+    required: true,
+  },
+  {
+    key: 'decision_interval',
+    label: 'Decision Interval (seconds)',
+    type: 'number' as const,
+    placeholder: '300',
+    required: true,
+  },
 ]
 
 function ConfigureParams() {
@@ -29,7 +77,7 @@ function ConfigureParams() {
   const params = isGrid ? GRID_PARAMS : AUTO_PARAMS
 
   const [values, setValues] = useState<Record<string, string>>(
-    (wizard.bot_params as Record<string, string>) || {}
+    (wizard.bot_params as Record<string, string>) || {},
   )
 
   const setValue = (key: string, val: string) => {

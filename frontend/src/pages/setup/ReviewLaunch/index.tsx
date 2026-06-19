@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Wizard } from '../components/Wizard'
-import { useWizard, useWizardGuard } from '../components/Wizard/useWizard'
+import { Wizard } from '../context/WizardContext/Wizard'
+import { useWizard, useWizardGuard } from '../context/WizardContext'
 import { createGridBot, createAutoBot, startGridBot, startAutoBot } from '../../../service'
-import { WizardStep } from '../components/Wizard/consts'
+import { WizardStep } from '../context/WizardContext/consts'
 
 function ReviewLaunch() {
   const navigate = useNavigate()
-  const { wizard, updateWizard } = useWizard();
+  const { wizard, updateWizard } = useWizard()
   useWizardGuard(wizard.current_step, WizardStep.ReviewLaunch)
   const isGrid = wizard.bot_type === 'grid'
   const v = (wizard.bot_params as Record<string, string>) || {}
@@ -109,8 +109,19 @@ function ReviewLaunch() {
             {launching ? (
               <span className="flex items-center justify-center gap-2">
                 <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
                 </svg>
                 Launching...
               </span>
@@ -124,7 +135,9 @@ function ReviewLaunch() {
       <div className="space-y-6">
         {/* Trading Mode */}
         <div className="p-4 rounded-xl border border-line-default bg-surface-1">
-          <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-3">Trading Mode</p>
+          <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-3">
+            Trading Mode
+          </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <button
               onClick={() => setPaperMode(true)}
@@ -135,16 +148,36 @@ function ReviewLaunch() {
               }`}
             >
               <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  paperMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-surface-2 text-on-surface-faint'
-                }`}>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    paperMode
+                      ? 'bg-indigo-500/20 text-indigo-400'
+                      : 'bg-surface-2 text-on-surface-faint'
+                  }`}
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
                   </svg>
                 </div>
                 <div>
-                  <p className={`text-sm font-medium ${paperMode ? 'text-on-base' : 'text-on-surface-tertiary'}`}>Paper Trading</p>
-                  <p className="text-xs text-on-surface-muted mt-0.5">Simulated orders, no real funds at risk</p>
+                  <p
+                    className={`text-sm font-medium ${paperMode ? 'text-on-base' : 'text-on-surface-tertiary'}`}
+                  >
+                    Paper Trading
+                  </p>
+                  <p className="text-xs text-on-surface-muted mt-0.5">
+                    Simulated orders, no real funds at risk
+                  </p>
                 </div>
               </div>
             </button>
@@ -157,16 +190,36 @@ function ReviewLaunch() {
               }`}
             >
               <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  !paperMode ? 'bg-amber-500/20 text-amber-400' : 'bg-surface-2 text-on-surface-faint'
-                }`}>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    !paperMode
+                      ? 'bg-amber-500/20 text-amber-400'
+                      : 'bg-surface-2 text-on-surface-faint'
+                  }`}
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    />
                   </svg>
                 </div>
                 <div>
-                  <p className={`text-sm font-medium ${!paperMode ? 'text-on-base' : 'text-on-surface-tertiary'}`}>Real Trading</p>
-                  <p className="text-xs text-on-surface-muted mt-0.5">Live orders with real funds</p>
+                  <p
+                    className={`text-sm font-medium ${!paperMode ? 'text-on-base' : 'text-on-surface-tertiary'}`}
+                  >
+                    Real Trading
+                  </p>
+                  <p className="text-xs text-on-surface-muted mt-0.5">
+                    Live orders with real funds
+                  </p>
                 </div>
               </div>
             </button>
@@ -175,57 +228,83 @@ function ReviewLaunch() {
 
         {/* Summary */}
         <div className="p-4 rounded-xl bg-surface-1 border border-line-default">
-          <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-3">Summary</p>
+          <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-3">
+            Summary
+          </p>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
               <span className="text-[12px] text-on-surface-tertiary">Exchange</span>
-              <span className="text-[12px] text-on-surface-secondary font-mono">{wizard.exchange}</span>
+              <span className="text-[12px] text-on-surface-secondary font-mono">
+                {wizard.exchange}
+              </span>
             </div>
             <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
               <span className="text-[12px] text-on-surface-tertiary">Strategy</span>
-              <span className="text-[12px] text-on-surface-secondary font-mono">{isGrid ? 'Grid Bot' : 'Auto Bot'}</span>
+              <span className="text-[12px] text-on-surface-secondary font-mono">
+                {isGrid ? 'Grid Bot' : 'Auto Bot'}
+              </span>
             </div>
             <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
               <span className="text-[12px] text-on-surface-tertiary">Market</span>
-              <span className="text-[12px] text-on-surface-secondary font-mono">{wizard.market_type}</span>
+              <span className="text-[12px] text-on-surface-secondary font-mono">
+                {wizard.market_type}
+              </span>
             </div>
             <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
               <span className="text-[12px] text-on-surface-tertiary">Symbol</span>
-              <span className="text-[12px] text-on-surface-secondary font-mono">{v.symbol || '-'}</span>
+              <span className="text-[12px] text-on-surface-secondary font-mono">
+                {v.symbol || '-'}
+              </span>
             </div>
             <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
               <span className="text-[12px] text-on-surface-tertiary">AI Model</span>
-              <span className="text-[12px] text-on-surface-secondary font-mono">{wizard.llm_model}</span>
+              <span className="text-[12px] text-on-surface-secondary font-mono">
+                {wizard.llm_model}
+              </span>
             </div>
             {isGrid && (
               <>
                 <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
                   <span className="text-[12px] text-on-surface-tertiary">Grid Levels</span>
-                  <span className="text-[12px] text-on-surface-secondary font-mono">{v.grid_levels || '-'}</span>
+                  <span className="text-[12px] text-on-surface-secondary font-mono">
+                    {v.grid_levels || '-'}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
                   <span className="text-[12px] text-on-surface-tertiary">Price Range</span>
-                  <span className="text-[12px] text-on-surface-secondary font-mono">{v.lower_price || '-'} ~ {v.upper_price || '-'}</span>
+                  <span className="text-[12px] text-on-surface-secondary font-mono">
+                    {v.lower_price || '-'} ~ {v.upper_price || '-'}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
                   <span className="text-[12px] text-on-surface-tertiary">Investment</span>
-                  <span className="text-[12px] text-on-surface-secondary font-mono">{v.investment || '-'} USDT</span>
+                  <span className="text-[12px] text-on-surface-secondary font-mono">
+                    {v.investment || '-'} USDT
+                  </span>
                 </div>
               </>
             )}
             <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
               <span className="text-[12px] text-on-surface-tertiary">Leverage</span>
-              <span className="text-[12px] text-on-surface-secondary font-mono">{v.leverage || '-'}x</span>
+              <span className="text-[12px] text-on-surface-secondary font-mono">
+                {v.leverage || '-'}x
+              </span>
             </div>
             {!isGrid && (
               <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
                 <span className="text-[12px] text-on-surface-tertiary">Decision Interval</span>
-                <span className="text-[12px] text-on-surface-secondary font-mono">{v.decision_interval || '300'}s</span>
+                <span className="text-[12px] text-on-surface-secondary font-mono">
+                  {v.decision_interval || '300'}s
+                </span>
               </div>
             )}
             <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
               <span className="text-[12px] text-on-surface-tertiary">Mode</span>
-              <span className={`text-[12px] font-mono font-medium ${paperMode ? 'text-indigo-400' : 'text-amber-400'}`}>{paperMode ? 'Paper' : 'Real'}</span>
+              <span
+                className={`text-[12px] font-mono font-medium ${paperMode ? 'text-indigo-400' : 'text-amber-400'}`}
+              >
+                {paperMode ? 'Paper' : 'Real'}
+              </span>
             </div>
           </div>
         </div>

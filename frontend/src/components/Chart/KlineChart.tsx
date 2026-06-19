@@ -15,7 +15,14 @@ import { toLocaleTime } from './ReactChart/locale/zh_CN'
 
 export interface KlineChartHandle {
   /** Update the last candle (or append a new one) via series.update() — no re-render */
-  update: (candle: { time: number; open: number; high: number; low: number; close: number; volume?: number }) => void
+  update: (candle: {
+    time: number
+    open: number
+    high: number
+    low: number
+    close: number
+    volume?: number
+  }) => void
 }
 
 // ── Props ─────────────────────────────────────────────────
@@ -50,7 +57,10 @@ interface KlineChartProps {
 
 // ── Component ─────────────────────────────────────────────
 
-const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineChart({ data, height, markers, overlays }, ref) {
+const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineChart(
+  { data, height, markers, overlays },
+  ref,
+) {
   const chartRef = useRef<IChartApi | undefined>(undefined)
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | undefined>(undefined)
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | undefined>(undefined)
@@ -58,31 +68,36 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
 
   // ── Expose imperative API ──────────────────────────────
 
-  useImperativeHandle(ref, () => ({
-    update(candle) {
-      const candleSeries = candleSeriesRef.current
-      if (!candleSeries) return
+  useImperativeHandle(
+    ref,
+    () => ({
+      update(candle) {
+        const candleSeries = candleSeriesRef.current
+        if (!candleSeries) return
 
-      const bar: CandlestickData = {
-        time: toLocaleTime(candle.time),
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-      }
-      candleSeries.update(bar)
-
-      // Also update volume series if present
-      const volumeSeries = volumeSeriesRef.current
-      if (volumeSeries && candle.volume !== undefined) {
-        volumeSeries.update({
+        const bar: CandlestickData = {
           time: toLocaleTime(candle.time),
-          value: candle.volume,
-          color: candle.close >= candle.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
-        })
-      }
-    },
-  }), [])
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+        }
+        candleSeries.update(bar)
+
+        // Also update volume series if present
+        const volumeSeries = volumeSeriesRef.current
+        if (volumeSeries && candle.volume !== undefined) {
+          volumeSeries.update({
+            time: toLocaleTime(candle.time),
+            value: candle.volume,
+            color:
+              candle.close >= candle.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+          })
+        }
+      },
+    }),
+    [],
+  )
 
   const setChart = (c: IChartApi | undefined) => {
     chartRef.current = c
@@ -160,21 +175,22 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
           time: toLocaleTime(item.time),
           value: item.volume || 0,
           color: item.close >= item.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
-        }))
+        })),
       )
 
       volumeSeriesRef.current = volumeSeries
     }
 
     if (markers && markers.length > 0) {
-      createSeriesMarkers(candleSeries,
+      createSeriesMarkers(
+        candleSeries,
         markers.map((m) => ({
           time: toLocaleTime(m.time),
           position: m.position,
           color: m.color,
           shape: m.shape,
           text: m.text,
-        }))
+        })),
       )
     }
 
@@ -190,10 +206,10 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
         })
 
         lineSeries.setData(
-          overlay.data.map(d => ({
+          overlay.data.map((d) => ({
             time: toLocaleTime(d.time),
             value: d.value,
-          }))
+          })),
         )
       }
     }
@@ -241,19 +257,20 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
           time: toLocaleTime(item.time),
           value: item.volume || 0,
           color: item.close >= item.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
-        }))
+        })),
       )
     }
 
     if (markers && markers.length > 0) {
-      createSeriesMarkers(candleSeries,
+      createSeriesMarkers(
+        candleSeries,
         markers.map((m) => ({
           time: toLocaleTime(m.time),
           position: m.position,
           color: m.color,
           shape: m.shape,
           text: m.text,
-        }))
+        })),
       )
     }
 

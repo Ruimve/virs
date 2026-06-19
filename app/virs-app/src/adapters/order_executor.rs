@@ -67,11 +67,12 @@ impl OrderExecutor for PeOrderExecutor {
                     strategy_id: client_order_id,
                 }
             }
-            OrderCommand::ClosePosition { position_id, price } => {
+            OrderCommand::ClosePosition { position_id, price, client_order_id } => {
                 EngineCommand::ClosePosition {
                     position_id,
                     order_type: if price.is_some() { OrderType::Limit } else { OrderType::Market },
                     price,
+                    strategy_id: client_order_id,
                 }
             }
             OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only, position_side, position_id, client_order_id } => {

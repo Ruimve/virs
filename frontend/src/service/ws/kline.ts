@@ -47,7 +47,7 @@ function getKlineWsUrl(): string {
 
 const parseKlineWs = (raw: string): KlineWsEvent | null => {
   try {
-    const json = JSON.parse(raw) as KlineWsEventRaw;
+    const json = JSON.parse(raw) as KlineWsEventRaw
     return {
       ...json,
       candle: {
@@ -56,8 +56,8 @@ const parseKlineWs = (raw: string): KlineWsEvent | null => {
         low: json?.candle?.low,
         open: json?.candle?.open,
         time: json?.candle?.open_time / 1000,
-        volume: json?.candle?.volume
-      }
+        volume: json?.candle?.volume,
+      },
     }
   } catch {
     return null

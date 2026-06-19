@@ -14,11 +14,7 @@ export function removeToken(): void {
   localStorage.removeItem(TOKEN_KEY)
 }
 
-async function request<T>(
-  method: string,
-  url: string,
-  data?: unknown
-): Promise<ApiResponse<T>> {
+async function request<T>(method: string, url: string, data?: unknown): Promise<ApiResponse<T>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   }

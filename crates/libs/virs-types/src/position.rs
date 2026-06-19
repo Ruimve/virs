@@ -129,6 +129,7 @@ pub enum EngineCommand {
         position_id: Uuid,
         order_type: OrderType,
         price: Option<f64>,
+        strategy_id: Option<String>,
     },
     ModifyPosition {
         position_id: Uuid,

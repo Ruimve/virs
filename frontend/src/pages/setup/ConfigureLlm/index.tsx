@@ -1,10 +1,10 @@
 import { useState, useCallback, useRef, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Wizard } from '../components/Wizard';
+import { Wizard } from '../context/WizardContext/Wizard'
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { useWizard, useWizardGuard } from '../components/Wizard/useWizard'
+import { useWizard, useWizardGuard } from '../context/WizardContext'
 import { api, saveAiCredential } from '../../../service'
-import { WizardStep } from '../components/Wizard/consts';
+import { WizardStep } from '../context/WizardContext/consts'
 
 interface DeepSeekModel {
   id: string
@@ -18,7 +18,7 @@ interface BalanceInfo {
 
 function ConfigureLlm() {
   const navigate = useNavigate()
-  const {wizard, updateWizard, advanceStep} = useWizard()
+  const { wizard, updateWizard, advanceStep } = useWizard()
   useWizardGuard(wizard.current_step, WizardStep.ConfigureLlm)
 
   // Step 1: API Key + Model
@@ -45,10 +45,12 @@ function ConfigureLlm() {
   }
 
   const summaries: Record<string, string | ReactNode> = {}
-  if (step1Status === 'done') summaries.apiKey = `${apiKey.slice(0, 6)}...${apiKey.slice(-4)} · ${model}`
+  if (step1Status === 'done')
+    summaries.apiKey = `${apiKey.slice(0, 6)}...${apiKey.slice(-4)} · ${model}`
   if (step2Status === 'done') summaries.connectivity = 'Connected to DeepSeek API'
   else if (step2Status === 'error') summaries.connectivity = 'Connection failed'
-  if (step3Status === 'done' && balance) summaries.account = `Balance: ${balance.total_balance} ${balance.currency}`
+  if (step3Status === 'done' && balance)
+    summaries.account = `Balance: ${balance.total_balance} ${balance.currency}`
 
   // Fetch models via backend proxy (after save)
   const fetchModels = useCallback(async () => {
@@ -59,7 +61,7 @@ function ConfigureLlm() {
         const list = result.data.models
         setModels(list)
         if (list.length > 0) {
-          setModel(prev => {
+          setModel((prev) => {
             if (!list.some((m) => m.id === prev)) {
               return list[0].id
             }
@@ -113,7 +115,6 @@ function ConfigureLlm() {
       setStep3Status('active')
     }
   }, [])
-
 
   const onKeyInput = (key: string) => {
     setApiKey(key)
@@ -190,15 +191,32 @@ function ConfigureLlm() {
               onInput={(e) => onKeyInput(e.currentTarget.value)}
               disabled={fetchingModels}
               className={`w-full px-4 py-2.5 bg-surface-2 border rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none transition-all duration-200 ${
-                fetchingModels ? 'border-indigo-500/30 opacity-60' : 'border-line-strong focus:border-indigo-500/40'
+                fetchingModels
+                  ? 'border-indigo-500/30 opacity-60'
+                  : 'border-line-strong focus:border-indigo-500/40'
               }`}
               placeholder="API Key"
             />
             {fetchingModels && (
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                <svg className="animate-spin w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                <svg
+                  className="animate-spin w-4 h-4 text-indigo-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
                 </svg>
               </div>
             )}
@@ -206,7 +224,9 @@ function ConfigureLlm() {
           {error && <p className="text-[12px] text-red-400">{error}</p>}
           {models.length > 0 && (
             <div>
-              <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">Model</p>
+              <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">
+                Model
+              </p>
               <div className="flex flex-wrap gap-1.5">
                 {models.map((m) => (
                   <button
@@ -226,7 +246,9 @@ function ConfigureLlm() {
           )}
           <button
             onClick={verifyApiKey}
-            disabled={!apiKey.trim() || !model.trim() || step1Status === 'verifying' || fetchingModels}
+            disabled={
+              !apiKey.trim() || !model.trim() || step1Status === 'verifying' || fetchingModels
+            }
             className="px-4 py-2 text-[12px] bg-indigo-500/20 border border-indigo-500/30 rounded-lg text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-30 transition-all duration-200"
           >
             {step1Status === 'verifying' ? 'Verifying...' : 'Verify'}
@@ -241,7 +263,9 @@ function ConfigureLlm() {
       render: () => (
         <div className="space-y-2">
           {step2Status === 'verifying' && (
-            <p className="text-[12px] text-on-surface-tertiary">Testing connection to DeepSeek API...</p>
+            <p className="text-[12px] text-on-surface-tertiary">
+              Testing connection to DeepSeek API...
+            </p>
           )}
           {step2Status === 'error' && (
             <p className="text-[12px] text-red-400">{error || 'Connection failed'}</p>
@@ -257,11 +281,15 @@ function ConfigureLlm() {
           {balance && (
             <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
               <span className="text-[12px] text-on-surface-tertiary">Balance</span>
-              <span className="text-[12px] text-on-surface-secondary font-mono">{balance.total_balance} {balance.currency}</span>
+              <span className="text-[12px] text-on-surface-secondary font-mono">
+                {balance.total_balance} {balance.currency}
+              </span>
             </div>
           )}
           {!balance && step3Status === 'active' && (
-            <p className="text-[12px] text-on-surface-faint">No balance info available. Ensure your account has credits.</p>
+            <p className="text-[12px] text-on-surface-faint">
+              No balance info available. Ensure your account has credits.
+            </p>
           )}
         </div>
       ),

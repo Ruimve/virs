@@ -1,9 +1,5 @@
 import { useRef, useEffect } from 'react'
-import {
-  createChart,
-  type IChartApi,
-  ColorType,
-} from 'lightweight-charts'
+import { createChart, type IChartApi, ColorType } from 'lightweight-charts'
 
 export interface ReactChartProps {
   onLoad: (chart: IChartApi | undefined) => void
@@ -28,7 +24,8 @@ function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartP
     // Read theme-aware CSS variables for chart colors
     const cs = getComputedStyle(el)
     const bgBase = cs.getPropertyValue('--bg-base').trim() || '#ffffff'
-    const textOnSurfaceTertiary = cs.getPropertyValue('--text-on-surface-tertiary').trim() || '#94a3b8'
+    const textOnSurfaceTertiary =
+      cs.getPropertyValue('--text-on-surface-tertiary').trim() || '#94a3b8'
     const borderDefault = cs.getPropertyValue('--border-default').trim() || '#e2e8f0'
     const borderSubtle = cs.getPropertyValue('--border-subtle').trim() || '#f1f5f9'
 

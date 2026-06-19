@@ -73,6 +73,7 @@ pub enum OrderCommand {
     ClosePosition {
         position_id: Uuid,
         price: Option<f64>,
+        client_order_id: Option<String>,
     },
     PlaceOrder {
         symbol: String,

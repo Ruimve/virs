@@ -9,7 +9,7 @@ export async function fetchKlines(params: {
 }): Promise<ApiResponse<KlineCandle[]>> {
   const { exchange, symbol, market_type, timeframe } = params
   const res = await api.get<{ candles: KlineCandle[] }>(
-    `/market/klines?exchange=${exchange}&symbol=${symbol}&market_type=${market_type}&timeframe=${timeframe}`
+    `/market/klines?exchange=${exchange}&symbol=${symbol}&market_type=${market_type}&timeframe=${timeframe}`,
   )
   if (res.success && res.data?.candles) {
     return {
@@ -21,7 +21,7 @@ export async function fetchKlines(params: {
           low: c.low,
           open: c.open,
           time: c.open_time / 1000,
-          volume: c.volume
+          volume: c.volume,
         }
       }),
     }
@@ -36,7 +36,7 @@ export async function fetchOrderBook(params: {
 }): Promise<ApiResponse<OrderBookData>> {
   const { exchange, symbol, market_type } = params
   const res = await api.get<{ bids: number[][]; asks: number[][] }>(
-    `/market/orderbook?exchange=${exchange}&symbol=${symbol}&market_type=${market_type}`
+    `/market/orderbook?exchange=${exchange}&symbol=${symbol}&market_type=${market_type}`,
   )
   if (res.success && res.data) {
     return {

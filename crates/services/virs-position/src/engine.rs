@@ -326,8 +326,8 @@ pub(crate) async fn command_loop(inner: Arc<EngineInner>, mut cmd_rx: mpsc::Rece
             EngineCommand::OpenPosition { exchange, symbol, side, order_side, size, leverage, order_type, price, stop_loss, take_profit, strategy_id } => {
                 handle_open_position(&inner, exchange, symbol, side, order_side, size, leverage, order_type, price, stop_loss, take_profit, strategy_id).await;
             }
-            EngineCommand::ClosePosition { position_id, order_type, price } => {
-                handle_close_position(&inner, position_id, order_type, price).await;
+            EngineCommand::ClosePosition { position_id, order_type, price, strategy_id } => {
+                handle_close_position(&inner, position_id, order_type, price, strategy_id).await;
             }
             EngineCommand::ModifyPosition { position_id, stop_loss, take_profit } => {
                 handle_modify_position(&inner, position_id, stop_loss, take_profit).await;
@@ -1155,6 +1155,7 @@ pub(crate) async fn handle_close_position(
     position_id: Uuid,
     order_type: OrderType,
     price: Option<f64>,
+    strategy_id: Option<String>,
 ) {
     let position = {
         let pos_key = inner.position_id_index.get(&position_id).map(|r| r.value().clone());
@@ -1187,7 +1188,7 @@ pub(crate) async fn handle_close_position(
 
     let mut params = PlaceOrderParams {
         symbol: position.symbol.clone(), side: close_side, order_type, amount: position.size, price,
-        reduce_only: true, position_side: Some(position.side), position_id: Some(position.id), client_order_id: None,
+        reduce_only: true, position_side: Some(position.side), position_id: Some(position.id), client_order_id: strategy_id.clone(),
     };
     let mode = *inner.position_mode.read().unwrap();
     adjust_params_for_position_mode(&mut params, mode);
@@ -1257,7 +1258,7 @@ pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol:
     info!(symbol = %symbol, count = positions_to_close.len(), "Closing all positions");
 
     for (position_id, _, _) in positions_to_close {
-        handle_close_position(inner, position_id, OrderType::Market, None).await;
+        handle_close_position(inner, position_id, OrderType::Market, None, None).await;
     }
 }
 

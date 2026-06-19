@@ -46,7 +46,9 @@ export async function getGridTrades(id: string): Promise<ApiResponse<GridTradesR
   return api.get<GridTradesResponse>(`/grid/${id}/trades`)
 }
 
-export async function getGridAnalysisLogs(botId: string): Promise<ApiResponse<{ items: AnalysisLog[] }>> {
+export async function getGridAnalysisLogs(
+  botId: string,
+): Promise<ApiResponse<{ items: AnalysisLog[] }>> {
   return api.get<{ items: AnalysisLog[] }>(`/grid/analysis-logs?bot_id=${botId}`)
 }
 
@@ -80,7 +82,9 @@ export async function getAutoBotDetail(id: string): Promise<ApiResponse<AutoBotD
   return api.get<AutoBotDetail>(`/auto/${id}`)
 }
 
-export async function getAutoAnalysisLogs(botId: string): Promise<ApiResponse<{ logs: AnalysisLog[] }>> {
+export async function getAutoAnalysisLogs(
+  botId: string,
+): Promise<ApiResponse<{ logs: AnalysisLog[] }>> {
   return api.get<{ logs: AnalysisLog[] }>(`/auto/analysis-logs?bot_id=${botId}`)
 }
 
@@ -93,11 +97,11 @@ export async function findActiveBot(): Promise<BotSummary | null> {
       api.get<{ items: Array<{ id: string; status: string }>; total: number }>('/auto/list'),
     ])
     if (autoRes.success && autoRes.data?.items?.length) {
-      const bot = autoRes.data.items.find(b => b.status === 'running') || autoRes.data.items[0]
+      const bot = autoRes.data.items.find((b) => b.status === 'running') || autoRes.data.items[0]
       return { id: bot.id, bot_type: 'auto' }
     }
     if (gridRes.success && gridRes.data?.items?.length) {
-      const bot = gridRes.data.items.find(b => b.status === 'running') || gridRes.data.items[0]
+      const bot = gridRes.data.items.find((b) => b.status === 'running') || gridRes.data.items[0]
       return { id: bot.id, bot_type: 'grid' }
     }
   } catch {

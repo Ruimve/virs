@@ -40,13 +40,13 @@ export function connectWs<T>(
     ws.onopen = () => {
       inst.reconnectAttempts = 0
       onStateChange()
-      inst.reconnectCallbacks.forEach(cb => cb())
+      inst.reconnectCallbacks.forEach((cb) => cb())
     }
 
     ws.onmessage = (e) => {
       try {
-        const event = parse(e.data);
-        if (event) inst.listeners.forEach(l => l(event))
+        const event = parse(e.data)
+        if (event) inst.listeners.forEach((l) => l(event))
       } catch (err) {
         console.error('[WS] Failed to parse message:', err)
       }
@@ -57,7 +57,10 @@ export function connectWs<T>(
       onStateChange()
       // Only auto-reconnect if there are still active consumers
       if (inst.refCount > 0) {
-        const delay = Math.min(BASE_RECONNECT_MS * Math.pow(2, inst.reconnectAttempts), MAX_RECONNECT_MS)
+        const delay = Math.min(
+          BASE_RECONNECT_MS * Math.pow(2, inst.reconnectAttempts),
+          MAX_RECONNECT_MS,
+        )
         inst.reconnectAttempts++
         inst.reconnectTimer = setTimeout(() => connectWs(inst, getUrl, parse, onStateChange), delay)
       }
@@ -69,7 +72,10 @@ export function connectWs<T>(
   } catch (err) {
     console.error('[WS] Failed to connect:', err)
     if (inst.refCount > 0) {
-      const delay = Math.min(BASE_RECONNECT_MS * Math.pow(2, inst.reconnectAttempts), MAX_RECONNECT_MS)
+      const delay = Math.min(
+        BASE_RECONNECT_MS * Math.pow(2, inst.reconnectAttempts),
+        MAX_RECONNECT_MS,
+      )
       inst.reconnectAttempts++
       inst.reconnectTimer = setTimeout(() => connectWs(inst, getUrl, parse, onStateChange), delay)
     }

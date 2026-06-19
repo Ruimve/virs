@@ -1,12 +1,13 @@
 import { useState, useCallback, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Wizard } from '../components/Wizard'
+import { Wizard } from '../context/WizardContext/Wizard'
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { useWizard, useWizardGuard } from '../components/Wizard/useWizard'
+import { useWizard, useWizardGuard } from '../context/WizardContext'
 import { saveCredential, testCredential, checkPermissions } from '../../../service'
 import type { PermissionItem } from '../../../service'
-import type { MarketType } from '../../../lib/market-context'
-import { WizardStep } from '../components/Wizard/consts'
+import { WizardStep } from '../context/WizardContext/consts'
+
+export type MarketType = 'perpetual' | 'spot'
 
 const MARKET_TYPES: Array<{ id: MarketType; label: string; desc: string }> = [
   { id: 'perpetual', label: 'Perpetual', desc: 'USDT-M futures' },
@@ -14,14 +15,16 @@ const MARKET_TYPES: Array<{ id: MarketType; label: string; desc: string }> = [
 ]
 
 function SelectExchange() {
-  const navigate = useNavigate();
-  const { wizard, updateWizard, advanceStep } = useWizard();
+  const navigate = useNavigate()
+  const { wizard, updateWizard, advanceStep } = useWizard()
   useWizardGuard(wizard.current_step, WizardStep.SelectExchange)
 
   // Step 1: API credentials
   const [apiKey, setApiKey] = useState('')
   const [apiSecret, setApiSecret] = useState('')
-  const [selectedMarket, setSelectedMarket] = useState<MarketType>(wizard.market_type || 'perpetual')
+  const [selectedMarket, setSelectedMarket] = useState<MarketType>(
+    wizard.market_type || 'perpetual',
+  )
   const [step1Status, setStep1Status] = useState<FlowStepStatus>('active')
   const [error, setError] = useState('')
 
@@ -123,7 +126,9 @@ function SelectExchange() {
             placeholder="API Secret"
           />
           <div>
-            <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">Market Type</p>
+            <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">
+              Market Type
+            </p>
             <div className="grid grid-cols-2 gap-2">
               {MARKET_TYPES.map((mt) => (
                 <button
@@ -177,16 +182,23 @@ function SelectExchange() {
       render: () => (
         <div className="space-y-1.5">
           {permissions.map((p, i) => (
-            <div key={i} className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
+            <div
+              key={i}
+              className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg"
+            >
               <div className="flex items-center gap-2">
                 <span className="text-[12px]">{statusIcon(p.status)}</span>
                 <span className="text-[12px] text-on-surface-tertiary">{p.label}</span>
               </div>
-              <span className={`text-[11px] ${
-                p.status === 'ok' ? 'text-on-surface-muted' :
-                p.status === 'warn' ? 'text-amber-400/60' :
-                'text-red-400/60'
-              }`}>
+              <span
+                className={`text-[11px] ${
+                  p.status === 'ok'
+                    ? 'text-on-surface-muted'
+                    : p.status === 'warn'
+                      ? 'text-amber-400/60'
+                      : 'text-red-400/60'
+                }`}
+              >
                 {p.detail}
               </span>
             </div>

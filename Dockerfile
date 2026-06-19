@@ -11,6 +11,8 @@ WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+# 代码质量检查：ESLint（错误阻断）+ Prettier 格式检查（不一致阻断）
+RUN npm run lint && npm run format:check
 RUN npm run build
 
 # ---- Stage 2: Build Rust Backend ----

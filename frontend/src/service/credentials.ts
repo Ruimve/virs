@@ -24,7 +24,9 @@ export async function saveAiCredential(params: {
 
 /// GET /credentials/test — test connectivity only (ping).
 /// Uses the exchange already saved via saveCredential.
-export async function testCredential(): Promise<ApiResponse<{ connected: boolean; message?: string }>> {
+export async function testCredential(): Promise<
+  ApiResponse<{ connected: boolean; message?: string }>
+> {
   return api.get('/credentials/test')
 }
 
@@ -35,11 +37,15 @@ export async function checkPermissions(): Promise<ApiResponse<{ permissions: Per
 }
 
 /// POST /credentials/verify — verify saved credentials via apiRestrictions.
-export async function verifyPermissions(): Promise<ApiResponse<{ connected: boolean; permissions: PermissionItem[] }>> {
+export async function verifyPermissions(): Promise<
+  ApiResponse<{ connected: boolean; permissions: PermissionItem[] }>
+> {
   return api.post('/credentials/verify')
 }
 
 /// GET /credentials/status — check if user has exchange credentials configured
-export async function fetchCredentialStatus(): Promise<ApiResponse<{ connected: boolean; exchange?: string }>> {
+export async function fetchCredentialStatus(): Promise<
+  ApiResponse<{ connected: boolean; exchange?: string }>
+> {
   return api.get('/credentials/status')
 }

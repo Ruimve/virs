@@ -22,7 +22,7 @@ function applyTheme(t: Theme) {
 applyTheme(_theme)
 
 function notify() {
-  _listeners.forEach(l => l())
+  _listeners.forEach((l) => l())
 }
 
 export function subscribe(listener: () => void) {
@@ -50,7 +50,7 @@ export function isDark(): boolean {
 export function useTheme() {
   const [, forceUpdate] = useState(0)
   useEffect(() => {
-    return subscribe(() => forceUpdate(v => v + 1))
+    return subscribe(() => forceUpdate((v) => v + 1))
   }, [])
   return { theme: getTheme(), isDark: isDark(), toggleTheme }
 }

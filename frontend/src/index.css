@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /* ===== 语义色 Token ===== */
 @theme {
@@ -95,14 +95,21 @@
 
 /* ===== 全局字体 ===== */
 body {
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family:
+    'Plus Jakarta Sans',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: var(--text-on-base);
   background-color: var(--bg-base-secondary);
 }
 
-code, pre, .font-mono {
+code,
+pre,
+.font-mono {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
@@ -166,7 +173,9 @@ code, pre, .font-mono {
 input,
 textarea,
 select {
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 input:focus,
@@ -193,7 +202,8 @@ tbody tr:hover {
 
 /* ===== Loading 页面动画 ===== */
 @keyframes pulse-ring {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.3;
     transform: scale(1);
   }
@@ -204,7 +214,8 @@ tbody tr:hover {
 }
 
 @keyframes float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0);
     opacity: 0.2;
   }
@@ -215,7 +226,8 @@ tbody tr:hover {
 }
 
 @keyframes float-delayed {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0);
     opacity: 0.15;
   }
@@ -299,7 +311,8 @@ tbody tr:hover {
 }
 
 @keyframes virs-shimmer {
-  0%, 100% {
+  0%,
+  100% {
     background-position: 0% 50%;
   }
   50% {

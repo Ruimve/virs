@@ -15,7 +15,18 @@ export interface FlowStepProps {
   children?: ReactNode
 }
 
-function FlowStep({ step, title, description, status, summary, editable, showLine, indicator, onToggle, children }: FlowStepProps) {
+function FlowStep({
+  step,
+  title,
+  description,
+  status,
+  summary,
+  editable,
+  showLine,
+  indicator,
+  onToggle,
+  children,
+}: FlowStepProps) {
   const [expanded, setExpanded] = useState(false)
 
   // Auto-expand when status becomes active/verifying/error, auto-collapse when done
@@ -30,7 +41,11 @@ function FlowStep({ step, title, description, status, summary, editable, showLin
 
   const isEditable = editable !== false && status === 'done'
   const isCollapsed = status === 'done' && !expanded
-  const showContent = status === 'active' || status === 'verifying' || status === 'error' || (status === 'done' && expanded)
+  const showContent =
+    status === 'active' ||
+    status === 'verifying' ||
+    status === 'error' ||
+    (status === 'done' && expanded)
 
   const handleHeaderClick = () => {
     if (!isEditable) return
@@ -42,9 +57,8 @@ function FlowStep({ step, title, description, status, summary, editable, showLin
   const shouldShowLine = showLine !== undefined ? showLine : !isCollapsed
 
   const defaultIndicator = (): ReactNode => {
-    const stepContent = typeof step === 'number'
-      ? <span className="text-[11px]">{step}</span>
-      : step
+    const stepContent =
+      typeof step === 'number' ? <span className="text-[11px]">{step}</span> : step
 
     switch (status) {
       case 'pending':
@@ -62,16 +76,37 @@ function FlowStep({ step, title, description, status, summary, editable, showLin
       case 'verifying':
         return (
           <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
-            <svg className="animate-spin w-3.5 h-3.5 text-indigo-400" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            <svg
+              className="animate-spin w-3.5 h-3.5 text-indigo-400"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
             </svg>
           </div>
         )
       case 'done':
         return (
           <div className="w-7 h-7 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
-            <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+            <svg
+              className="w-3.5 h-3.5 text-emerald-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
@@ -79,7 +114,13 @@ function FlowStep({ step, title, description, status, summary, editable, showLin
       case 'error':
         return (
           <div className="w-7 h-7 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center">
-            <svg className="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+            <svg
+              className="w-3.5 h-3.5 text-red-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </div>
@@ -89,24 +130,22 @@ function FlowStep({ step, title, description, status, summary, editable, showLin
 
   const titleColor = () => {
     switch (status) {
-      case 'pending': return 'text-on-surface-faint'
-      case 'done': return 'text-on-surface-tertiary'
-      default: return 'text-on-surface'
+      case 'pending':
+        return 'text-on-surface-faint'
+      case 'done':
+        return 'text-on-surface-tertiary'
+      default:
+        return 'text-on-surface'
     }
   }
 
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center">
-        <div
-          className={isEditable ? 'cursor-pointer' : ''}
-          onClick={handleHeaderClick}
-        >
+        <div className={isEditable ? 'cursor-pointer' : ''} onClick={handleHeaderClick}>
           {indicator ?? defaultIndicator()}
         </div>
-        {shouldShowLine && (
-          <div className="w-px flex-1 min-h-[16px] bg-line-default mt-1" />
-        )}
+        {shouldShowLine && <div className="w-px flex-1 min-h-[16px] bg-line-default mt-1" />}
       </div>
 
       <div className="flex-1 pb-4">
@@ -114,9 +153,7 @@ function FlowStep({ step, title, description, status, summary, editable, showLin
           className={`flex items-center gap-2 ${isEditable ? 'cursor-pointer group' : ''}`}
           onClick={handleHeaderClick}
         >
-          <p className={`text-sm font-medium leading-7 ${titleColor()}`}>
-            {title}
-          </p>
+          <p className={`text-sm font-medium leading-7 ${titleColor()}`}>{title}</p>
           {isEditable && (
             <span className="text-[10px] text-on-surface-muted group-hover:text-on-surface-tertiary transition-colors">
               {expanded ? 'collapse' : 'edit'}
@@ -129,16 +166,10 @@ function FlowStep({ step, title, description, status, summary, editable, showLin
         )}
 
         {isCollapsed && summary && (
-          <div className="text-[12px] text-on-surface-muted -mt-1">
-            {summary}
-          </div>
+          <div className="text-[12px] text-on-surface-muted -mt-1">{summary}</div>
         )}
 
-        {showContent && (
-          <div className="mt-2">
-            {children}
-          </div>
-        )}
+        {showContent && <div className="mt-2">{children}</div>}
       </div>
     </div>
   )

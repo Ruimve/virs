@@ -3,7 +3,7 @@ import type { ApiResponse, LoginResponse, UserInfo } from './types'
 
 export async function login(
   username: string,
-  password: string
+  password: string,
 ): Promise<ApiResponse<LoginResponse>> {
   const result = await api.post<LoginResponse>('/user/login', { username, password })
   if (result.success && result.data) {
