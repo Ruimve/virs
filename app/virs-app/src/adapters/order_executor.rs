@@ -47,6 +47,10 @@ impl OrderExecutor for PeOrderExecutor {
     async fn send_command(&self, command: OrderCommand) -> BotResult<()> {
         let engine_cmd = match command {
             OrderCommand::OpenPosition { symbol, side, order_side, amount, leverage, price, stop_loss, take_profit, client_order_id } => {
+                // 注意：bot 层的 client_order_id 映射到引擎层的 strategy_id。
+                // 引擎内部会把它同时保存到 Position.strategy_id（仓位归属）
+                // 和作为 client_order_id 传给交易所（订单追踪）。
+                // bot 层的 client_order_id 格式如 "auto:long:{bot_id}" 包含策略信息，可同时承担两个角色。
                 EngineCommand::OpenPosition {
                     exchange: String::new(), // will be resolved by engine
                     symbol,
@@ -128,6 +132,7 @@ fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
                 request_price: order.request_price,
                 filled: order.filled,
                 client_order_id: order.client_order_id.clone(),
+                fee: order.fee,
             },
         }),
         EngineEvent::OrderFilled { order, .. } => Some(OrderEvent::OrderFilled {
@@ -143,6 +148,7 @@ fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
                 request_price: order.request_price,
                 filled: order.filled,
                 client_order_id: order.client_order_id.clone(),
+                fee: order.fee,
             },
         }),
         EngineEvent::OrderCanceled { order } => Some(OrderEvent::OrderCanceled {

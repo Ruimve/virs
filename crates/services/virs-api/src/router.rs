@@ -83,6 +83,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/system/paper/status", get(handlers::system::paper_status))
         .route("/api/system/paper/enable", post(handlers::system::paper_enable))
         .route("/api/system/paper/disable", post(handlers::system::paper_disable))
+        .route("/api/system/info", get(handlers::system::system_info))
         // WebSocket (public)
         .route("/ws", get(crate::ws::ws_handler))
         .route("/ws/kline", get(crate::ws::kline_ws_handler))

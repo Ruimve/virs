@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { createWsInstance, useWsHook } from '../../lib/ws'
 
 export interface KlineWsEventRaw {
@@ -64,9 +65,30 @@ const parseKlineWs = (raw: string): KlineWsEvent | null => {
   }
 }
 
+/**
+ * 订阅 Kline WebSocket。
+ * 支持传入 timeframe，后端将只推送该周期的数据，节省约 83% 带宽。
+ * 切换 timeframe 时会自动发送新的订阅消息，无需重连。
+ */
 export function useKlineWs(
   onEvent: (event: KlineWsEvent) => void,
   onReconnect?: () => void,
+  timeframe?: string,
 ): { connected: boolean } {
-  return useWsHook(klineInst, getKlineWsUrl, parseKlineWs, onEvent, onReconnect)
+  const { connected } = useWsHook(klineInst, getKlineWsUrl, parseKlineWs, onEvent, onReconnect)
+
+  // 当 timeframe 变化时，发送订阅消息给后端
+  useEffect(() => {
+    if (!connected) return
+    const ws = klineInst.ws
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+
+    if (timeframe) {
+      ws.send(JSON.stringify({ action: 'subscribe', timeframe }))
+    } else {
+      ws.send(JSON.stringify({ action: 'unsubscribe' }))
+    }
+  }, [timeframe, connected])
+
+  return { connected }
 }

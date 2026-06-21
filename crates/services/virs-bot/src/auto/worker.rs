@@ -126,6 +126,7 @@ impl AutoWorker {
                 self.bot.stop_loss,
                 self.bot.take_profit,
                 self.bot.liquidation_price,
+                self.bot.position_id,
             )
             .await;
     }
@@ -162,7 +163,18 @@ impl AutoWorker {
     pub(crate) fn matches_pending_order(&self, client_order_id: Option<&str>) -> bool {
         let bot_id_str = self.bot.id.to_string();
         match client_order_id {
-            Some(cid) => cid.contains(&bot_id_str),
+            Some(cid) => {
+                // 必须包含 bot_id，且前缀匹配 pending 状态
+                // open: "auto:{long|short}:{bot_id}"
+                // close: "auto:close:{reason}:{bot_id}"
+                if !cid.contains(&bot_id_str) {
+                    return false;
+                }
+                let is_open_cid = cid.starts_with("auto:long:") || cid.starts_with("auto:short:");
+                let is_close_cid = cid.starts_with("auto:close:");
+                (self.pending_open.is_some() && is_open_cid)
+                    || (self.pending_close.is_some() && is_close_cid)
+            }
             None => false,
         }
     }
@@ -290,7 +302,8 @@ impl AutoWorker {
 
         self.check_pending_timeout();
 
-        if self.pending_close.is_some() {
+        // 有 pending 订单时，跳过止损止盈检查，避免在订单未确认时重复触发
+        if self.pending_open.is_some() || self.pending_close.is_some() {
             return;
         }
 
@@ -787,6 +800,31 @@ impl AutoWorker {
             invest_amount * self.bot.leverage as f64 / price
         };
 
+        // 校验最小下单量，并按 min_qty 精度向下取整
+        let min_qty = snapshot.base.min_qty;
+        let quantity = if min_qty > 0.0 {
+            // 向下取整到 min_qty 的倍数，避免交易所拒绝
+            let rounded = (quantity / min_qty).floor() * min_qty;
+            if rounded < min_qty {
+                warn!(
+                    bot_id = %self.bot.id,
+                    quantity, min_qty, invest_amount, price,
+                    "Quantity below min_qty after rounding, skipping open"
+                );
+                let _ = self.auto_event_tx.send(AutoEvent::BotError {
+                    bot_id: self.bot.id,
+                    error: format!(
+                        "Quantity {:.6} below min_qty {:.6} (invest {:.2} USDT at price {:.2}). Increase balance or leverage.",
+                        quantity, min_qty, invest_amount, price
+                    ),
+                });
+                return;
+            }
+            rounded
+        } else {
+            quantity
+        };
+
         let stop_loss = strategy::compute_stop_loss(price, side, atr);
         let take_profit = strategy::compute_take_profit(price, side, atr);
 
@@ -981,9 +1019,10 @@ impl AutoWorker {
                         side = ?order.side,
                         fill_price,
                         filled_qty,
+                        fee = order.fee,
                         "Open order filled, confirming position"
                     );
-                    self.apply_pending_open(fill_price, filled_qty).await;
+                    self.apply_pending_open(fill_price, filled_qty, order.fee).await;
                 } else if self.pending_close.is_some() {
                     info!(
                         bot_id = %self.bot.id,
@@ -991,9 +1030,10 @@ impl AutoWorker {
                         side = ?order.side,
                         fill_price,
                         filled_qty,
+                        fee = order.fee,
                         "Close order filled, confirming close"
                     );
-                    self.apply_pending_close(fill_price, filled_qty).await;
+                    self.apply_pending_close(fill_price, filled_qty, order.fee).await;
                 }
             }
             OrderEvent::OrderFailed { order_id: _, reason } => {
@@ -1022,7 +1062,7 @@ impl AutoWorker {
         }
     }
 
-    pub(crate) async fn apply_pending_open(&mut self, fill_price: f64, filled_qty: f64) {
+    pub(crate) async fn apply_pending_open(&mut self, fill_price: f64, filled_qty: f64, fee: f64) {
         let pending = match self.pending_open.take() {
             Some(p) => p,
             None => return,
@@ -1093,6 +1133,9 @@ impl AutoWorker {
             "short" => "sell",
             _ => "buy",
         };
+        // 开仓即亏损手续费：pnl = -fee
+        let open_pnl = -fee;
+        self.bot.total_pnl += open_pnl;
         let _ = self
             .store
             .record_trade(
@@ -1105,8 +1148,9 @@ impl AutoWorker {
                 "llm",
                 fill_price,
                 actual_qty,
+                open_pnl,
                 0.0,
-                0.0,
+                fee,
                 None,
             )
             .await;
@@ -1128,7 +1172,7 @@ impl AutoWorker {
         }
     }
 
-    pub(crate) async fn apply_pending_close(&mut self, fill_price: f64, filled_qty: f64) {
+    pub(crate) async fn apply_pending_close(&mut self, fill_price: f64, filled_qty: f64, fee: f64) {
         let pending = match self.pending_close.take() {
             Some(p) => p,
             None => return,
@@ -1140,11 +1184,13 @@ impl AutoWorker {
             pending.position_size
         };
 
-        let realized_pnl = match pending.side.as_str() {
+        // 平仓 PnL = 价格差收益 - 平仓手续费
+        let gross_pnl = match pending.side.as_str() {
             "long" => (fill_price - pending.entry_price) * actual_qty,
             "short" => (pending.entry_price - fill_price) * actual_qty,
             _ => 0.0,
         };
+        let realized_pnl = gross_pnl - fee;
 
         let pnl_pct = if pending.entry_price > 0.0 && actual_qty > 0.0 {
             realized_pnl / (pending.entry_price * actual_qty) * 100.0
@@ -1202,6 +1248,7 @@ impl AutoWorker {
                 actual_qty,
                 realized_pnl,
                 pnl_pct,
+                fee,
                 None,
             )
             .await;

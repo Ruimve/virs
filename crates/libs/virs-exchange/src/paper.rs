@@ -148,6 +148,8 @@ impl PaperExchangeAdapter {
         for order in &triggered {
             self.pending.remove(&order.id);
             self.update_position_on_fill(order, current_price).await;
+            // Paper 模式按 maker 费率计算手续费（限价单）
+            let fee = current_price * order.amount * 0.0002;
             let tx = self.price_tx.lock().await;
             if let Some(ref tx) = *tx {
                 let _ = tx.send(WsFeedEvent::OrderUpdate {
@@ -158,7 +160,7 @@ impl PaperExchangeAdapter {
                     remaining: 0.0,
                     price: current_price,
                     amount: order.amount,
-                    commission: 0.0,
+                    commission: fee,
                     timestamp: Utc::now(),
                     position_side: order.position_side,
                 }).await;
@@ -277,8 +279,9 @@ impl ExchangePe for PaperExchangeAdapter {
         Ok(FundingRate { symbol: symbol.to_string(), rate: 0.0, next_funding_time: Some(Utc::now()) })
     }
 
-    async fn get_fee_rates(&self, symbol: &str) -> PositionResult<FeeRates> {
-        Ok(FeeRates { symbol: symbol.to_string(), maker_rate: 0.0, taker_rate: 0.0 })
+    async fn get_fee_rates(&self, _symbol: &str) -> PositionResult<FeeRates> {
+        // Paper 模式模拟币币合约手续费：taker 0.05%, maker 0.02%
+        Ok(FeeRates { symbol: _symbol.to_string(), maker_rate: 0.0002, taker_rate: 0.0005 })
     }
 
     async fn place_order(&self, params: PlaceOrderParams) -> PositionResult<PositionOrder> {
@@ -296,13 +299,16 @@ impl ExchangePe for PaperExchangeAdapter {
             };
             self.update_position_on_fill(&pending_for_fill, fill_price).await;
 
+            // Paper 模式按 taker 费率计算手续费（计价货币 USDT）
+            let fee = fill_price * params.amount * 0.0005;
+
             let order = PositionOrder {
                 id: order_id, position_id: Uuid::nil(), exchange_order_id: Some(order_id.to_string()),
                 client_order_id: params.client_order_id.clone(), exchange: self.name.clone(),
                 symbol: params.symbol.clone(), side: params.side, order_type: params.order_type,
                 request_price: params.price, fill_price: if fill_price > 0.0 { Some(fill_price) } else { None },
                 amount: params.amount, filled: params.amount, remaining: 0.0,
-                status: OrderStatus::Filled, reduce_only: params.reduce_only, fee: 0.0,
+                status: OrderStatus::Filled, reduce_only: params.reduce_only, fee,
                 fee_currency: "USDT".to_string(), slippage: None, created_at: now, updated_at: now,
             };
 
@@ -311,7 +317,7 @@ impl ExchangePe for PaperExchangeAdapter {
                 let _ = tx.send(WsFeedEvent::OrderUpdate {
                     exchange_order_id: order_id.to_string(), symbol: params.symbol.clone(),
                     status: OrderStatus::Filled, filled: params.amount, remaining: 0.0,
-                    price: fill_price, amount: params.amount, commission: 0.0,
+                    price: fill_price, amount: params.amount, commission: fee,
                     timestamp: Utc::now(), position_side: params.position_side,
                 }).await;
             }

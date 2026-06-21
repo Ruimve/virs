@@ -19,6 +19,7 @@ pub struct AutoBot {
     pub current_side: Option<String>,
     pub entry_price: f64,
     pub position_size: f64,
+    pub position_id: Option<Uuid>,
     pub stop_loss: f64,
     pub take_profit: f64,
     pub unrealized_pnl: f64,

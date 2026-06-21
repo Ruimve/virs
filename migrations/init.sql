@@ -472,6 +472,7 @@ CREATE TABLE IF NOT EXISTS qd_auto_trades (
     quantity DOUBLE PRECISION NOT NULL,
     pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
     pnl_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
+    fee DOUBLE PRECISION NOT NULL DEFAULT 0,
     exchange_order_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -510,6 +511,12 @@ END $$;
 
 DO $$ BEGIN
     ALTER TABLE qd_auto_bots ADD COLUMN IF NOT EXISTS paper_mode BOOLEAN NOT NULL DEFAULT true;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- Add position_id to auto bots for tracking exchange position
+DO $$ BEGIN
+    ALTER TABLE qd_auto_bots ADD COLUMN IF NOT EXISTS position_id UUID;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 

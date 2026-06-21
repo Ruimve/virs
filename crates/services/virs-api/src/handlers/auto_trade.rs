@@ -202,8 +202,8 @@ pub async fn get_bot(
          total_pnl, total_trades, win_trades, loss_trades) = pos;
 
     // Query 3: recent trades
-    let trades_rows = sqlx::query_as::<_, (String, String, f64, f64, f64, f64, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT side, trade_type, price, quantity, pnl, pnl_pct, created_at
+    let trades_rows = sqlx::query_as::<_, (String, String, f64, f64, f64, f64, f64, chrono::DateTime<chrono::Utc>)>(
+        r#"SELECT side, trade_type, price, quantity, pnl, pnl_pct, fee, created_at
            FROM qd_auto_trades WHERE bot_id = $1 ORDER BY created_at DESC LIMIT 50"#,
     )
     .bind(id)
@@ -211,7 +211,7 @@ pub async fn get_bot(
     .await
     .unwrap_or_default();
 
-    let trades: Vec<serde_json::Value> = trades_rows.iter().map(|(side, trade_type, price, quantity, pnl, pnl_pct, t_created_at)| {
+    let trades: Vec<serde_json::Value> = trades_rows.iter().map(|(side, trade_type, price, quantity, pnl, pnl_pct, fee, t_created_at)| {
         serde_json::json!({
             "id": uuid::Uuid::new_v4().to_string(),
             "bot_id": id.to_string(),
@@ -223,6 +223,7 @@ pub async fn get_bot(
             "quantity": quantity,
             "pnl": pnl,
             "pnl_pct": pnl_pct,
+            "fee": fee,
             "created_at": t_created_at.to_rfc3339(),
         })
     }).collect();
@@ -304,8 +305,8 @@ pub async fn get_trades(
         Err((_, resp)) => return resp,
     };
 
-    let rows = sqlx::query_as::<_, (String, String, f64, f64, f64, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT side, trade_type, price, quantity, pnl, created_at
+    let rows = sqlx::query_as::<_, (String, String, f64, f64, f64, f64, chrono::DateTime<chrono::Utc>)>(
+        r#"SELECT side, trade_type, price, quantity, pnl, fee, created_at
            FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 100"#,
     )
     .bind(id)
@@ -315,13 +316,14 @@ pub async fn get_trades(
 
     match rows {
         Ok(trades) => Json(ApiResponse::ok(serde_json::json!({
-            "trades": trades.iter().map(|(side, trade_type, price, quantity, pnl, created_at)| {
+            "trades": trades.iter().map(|(side, trade_type, price, quantity, pnl, fee, created_at)| {
                 serde_json::json!({
                     "side": side,
                     "type": trade_type,
                     "price": price,
                     "quantity": quantity,
                     "pnl": pnl,
+                    "fee": fee,
                     "created_at": created_at.to_rfc3339(),
                 })
             }).collect::<Vec<_>>()

@@ -54,12 +54,21 @@ pub async fn kline_ws_handler(
 async fn handle_kline_ws(mut socket: WebSocket, kline_engine: Arc<virs_market::KlineEngine>) {
     let mut rx = kline_engine.subscribe_events();
 
+    // 客户端可订阅指定 timeframe，未指定时推送全部（向后兼容）
+    let mut timeframe_filter: Option<String> = None;
+
     loop {
         tokio::select! {
             msg = rx.recv() => {
                 match msg {
                     Ok(event) => {
-                        // Convert KlineEvent to the JSON format expected by frontend
+                        // 按 timeframe 过滤
+                        if let Some(ref tf) = timeframe_filter {
+                            if format!("{}", event.timeframe) != *tf {
+                                continue;
+                            }
+                        }
+
                         let json = serde_json::json!({
                             "exchange": event.exchange,
                             "symbol": event.symbol,
@@ -94,6 +103,20 @@ async fn handle_kline_ws(mut socket: WebSocket, kline_engine: Arc<virs_market::K
             }
             msg = socket.recv() => {
                 match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        // 解析客户端订阅消息：{"action":"subscribe","timeframe":"15m"}
+                        if let Ok(req) = serde_json::from_str::<serde_json::Value>(&text) {
+                            if req.get("action").and_then(|v| v.as_str()) == Some("subscribe") {
+                                if let Some(tf) = req.get("timeframe").and_then(|v| v.as_str()) {
+                                    timeframe_filter = Some(tf.to_string());
+                                    tracing::debug!("[kline_ws] client subscribed to timeframe: {}", tf);
+                                }
+                            } else if req.get("action").and_then(|v| v.as_str()) == Some("unsubscribe") {
+                                timeframe_filter = None;
+                                tracing::debug!("[kline_ws] client unsubscribed timeframe filter");
+                            }
+                        }
+                    }
                     Some(Ok(Message::Close(_))) | None => break,
                     _ => continue,
                 }

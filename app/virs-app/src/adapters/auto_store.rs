@@ -34,7 +34,7 @@ fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
         current_side: bot.current_side.clone(),
         entry_price: bot.entry_price,
         position_size: bot.position_size,
-        position_id: None,
+        position_id: bot.position_id,
         stop_loss: bot.stop_loss,
         take_profit: bot.take_profit,
         unrealized_pnl: bot.unrealized_pnl,
@@ -91,16 +91,17 @@ impl AutoStore for PgAutoStore {
     async fn update_position(
         &self, bot_id: Uuid, current_side: Option<&str>, entry_price: f64,
         position_size: f64, stop_loss: f64, take_profit: f64, liquidation_price: Option<f64>,
+        position_id: Option<Uuid>,
     ) -> anyhow::Result<()> {
         sqlx::query(
             r#"UPDATE qd_auto_bots SET
                 current_side = $2, entry_price = $3, position_size = $4,
                 stop_loss = $5, take_profit = $6,
-                liquidation_price = $7, updated_at = NOW()
+                liquidation_price = $7, position_id = $8, updated_at = NOW()
                WHERE id = $1"#,
         )
         .bind(bot_id).bind(current_side).bind(entry_price).bind(position_size)
-        .bind(stop_loss).bind(take_profit).bind(liquidation_price)
+        .bind(stop_loss).bind(take_profit).bind(liquidation_price).bind(position_id)
         .execute(&self.db).await?;
         Ok(())
     }
@@ -134,17 +135,18 @@ impl AutoStore for PgAutoStore {
     async fn record_trade(
         &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
         side: &str, trade_type: &str, trigger_source: &str, price: f64,
-        quantity: f64, pnl: f64, pnl_pct: f64, exchange_order_id: Option<&str>,
+        quantity: f64, pnl: f64, pnl_pct: f64, fee: f64,
+        exchange_order_id: Option<&str>,
     ) -> anyhow::Result<Uuid> {
         let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
         let row: (Uuid,) = sqlx::query_as(
-            r#"INSERT INTO qd_auto_trades (bot_id, user_id, symbol, exchange, side, trade_type, trigger_source, price, quantity, pnl, pnl_pct, exchange_order_id)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            r#"INSERT INTO qd_auto_trades (bot_id, user_id, symbol, exchange, side, trade_type, trigger_source, price, quantity, pnl, pnl_pct, fee, exchange_order_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                RETURNING id"#,
         )
         .bind(bot_id).bind(user_id).bind(symbol).bind(exchange)
         .bind(side).bind(trade_type).bind(trigger_source).bind(price)
-        .bind(quantity).bind(pnl).bind(pnl_pct).bind(exchange_order_id)
+        .bind(quantity).bind(pnl).bind(pnl_pct).bind(fee).bind(exchange_order_id)
         .fetch_one(&self.db).await?;
         Ok(row.0)
     }

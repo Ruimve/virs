@@ -133,6 +133,7 @@ export interface AutoTrade {
   quantity: number
   pnl: number
   pnl_pct: number
+  fee: number
   created_at: string
 }
 
@@ -268,4 +269,58 @@ export interface HealthStatus {
 
 export interface PaperModeStatus {
   paper_mode: boolean
+}
+
+// ── System Metrics types ───────────────────────────────────
+
+export interface CpuInfo {
+  usage_pct: number
+  core_count: number
+  brand: string
+  frequency_mhz: number
+}
+
+export interface MemoryInfo {
+  total_bytes: number
+  used_bytes: number
+  usage_pct: number
+}
+
+export interface SwapInfo {
+  total_bytes: number
+  used_bytes: number
+}
+
+export interface LoadAverage {
+  one: number
+  five: number
+  fifteen: number
+}
+
+export interface DiskInfo {
+  mount_point: string
+  total_bytes: number
+  used_bytes: number
+  usage_pct: number
+}
+
+export interface NetworkInfo {
+  name: string
+  total_rx_bytes: number
+  total_tx_bytes: number
+  ips: string[]
+}
+
+export interface SystemInfo {
+  cpu: CpuInfo
+  memory: MemoryInfo
+  swap: SwapInfo
+  load_average: LoadAverage
+  process_count: number
+  disks: DiskInfo[]
+  network: NetworkInfo[]
+  uptime_secs: number
+  host_name: string
+  os_name: string
+  os_version: string
 }

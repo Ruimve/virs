@@ -29,7 +29,7 @@ pub trait AutoStore: Send + Sync {
     async fn update_position(
         &self, bot_id: Uuid, current_side: Option<&str>, entry_price: f64,
         position_size: f64, stop_loss: f64, take_profit: f64,
-        liquidation_price: Option<f64>,
+        liquidation_price: Option<f64>, position_id: Option<Uuid>,
     ) -> anyhow::Result<()>;
     async fn update_ai_analysis(
         &self, bot_id: Uuid, market_regime: &str, leverage: i32, ai_analysis: &str,
@@ -41,7 +41,8 @@ pub trait AutoStore: Send + Sync {
     async fn record_trade(
         &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
         side: &str, trade_type: &str, trigger_source: &str, price: f64,
-        quantity: f64, pnl: f64, pnl_pct: f64, exchange_order_id: Option<&str>,
+        quantity: f64, pnl: f64, pnl_pct: f64, fee: f64,
+        exchange_order_id: Option<&str>,
     ) -> anyhow::Result<Uuid>;
     async fn save_analysis_log(
         &self, bot_id: Uuid, analysis_type: &str, system_prompt: &str,

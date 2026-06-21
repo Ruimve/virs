@@ -54,6 +54,8 @@ pub struct OrderInfo {
     pub request_price: Option<f64>,
     pub filled: f64,
     pub client_order_id: Option<String>,
+    /// 本次成交手续费（计价货币）
+    pub fee: f64,
 }
 
 /// Order command (bot-layer)

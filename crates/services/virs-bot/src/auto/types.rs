@@ -58,6 +58,8 @@ pub struct AutoTrade {
     pub quantity: f64,
     pub pnl: f64,
     pub pnl_pct: f64,
+    /// 本次成交手续费（计价货币）。开仓即亏损手续费。
+    pub fee: f64,
     pub exchange_order_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }

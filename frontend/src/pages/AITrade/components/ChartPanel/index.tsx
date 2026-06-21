@@ -2,11 +2,20 @@ import { useRef } from 'react'
 import KlineChart, { type KlineChartHandle } from '../../../../components/Chart/KlineChart'
 import type { KlineCandle } from '../shared'
 
+interface ChartMarker {
+  time: number
+  position: 'aboveBar' | 'belowBar' | 'inBar'
+  color: string
+  shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown'
+  text?: string
+}
+
 interface ChartPanelProps {
   klineData: KlineCandle[]
   klineTimeframe: string
   onTimeframeChange: (tf: string) => void
   chartRef?: React.RefObject<KlineChartHandle | null>
+  markers?: ChartMarker[]
 }
 
 export default function ChartPanel({
@@ -14,6 +23,7 @@ export default function ChartPanel({
   klineTimeframe,
   onTimeframeChange,
   chartRef,
+  markers,
 }: ChartPanelProps) {
   const localRef = useRef<KlineChartHandle>(null)
   const ref = chartRef ?? localRef
@@ -37,7 +47,7 @@ export default function ChartPanel({
       </div>
       <div className="flex-1 min-h-0 px-2 pb-2">
         {klineData.length > 0 ? (
-          <KlineChart ref={ref} data={klineData} />
+          <KlineChart ref={ref} data={klineData} markers={markers} />
         ) : (
           <div className="flex items-center justify-center h-full min-h-[200px] text-on-surface-tertiary text-xs">
             <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none">

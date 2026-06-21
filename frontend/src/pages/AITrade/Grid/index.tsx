@@ -19,20 +19,21 @@ import ChartPanel from '../components/ChartPanel'
 import type { KlineChartHandle } from '../../../components/Chart/KlineChart'
 import OrderBookPanel from '../components/OrderBookPanel'
 import AnalysisList from '../components/AnalysisList'
+import SystemInfo from '../components/SystemInfo'
 import GridStats from './GridStats'
 import MobileOrderBook from '../components/MobileOrderBook'
 import MarketIndicators from '../components/MarketIndicators'
 import GridLevelsTab from './GridLevelsTab'
 import { formatPnlShort } from '../components/shared'
 import { useBot } from '../context/BotContext'
-import { useHeader } from '../components/Header/context'
+import { useHeader, type ItemConfig } from '../components/Header/context'
 
 // ── Page ──────────────────────────────────────────────────
 
 export default function GridDetailPage() {
   const navigate = useNavigate()
   const params = useParams()
-  const { activeTab, updateTabs, updateActions } = useHeader()
+  const { activeTab, updateActiveTab, updateTabs, updateActions } = useHeader()
   const { bot, trades, gridLevels, loading } = useBot()
 
   const [analysisLogs, setAnalysisLogs] = useState<AnalysisLog[]>([])
@@ -115,35 +116,51 @@ export default function GridDetailPage() {
           navigate(`/trade/grid/${bot?.id}/analysis`, { replace: true })
         },
       },
+      {
+        key: 'system',
+        label: '系统',
+        onClick: () => {
+          navigate(`/trade/grid/${bot?.id}/system`, { replace: true })
+        },
+      },
     ])
 
-    updateActions([
-      {
-        key: 'delete',
-        label: '删除',
-        onClick: async () => {
-          if (!confirm('确定删除此机器人？')) return
-          await stopGridBot(bot?.id).catch(() => {})
-          await deleteGridBot(bot?.id)
-          navigate('/setup/bot-type', { replace: true })
-        },
+    updateActiveTab('market')
+  }, [bot?.id])
+
+  useEffect(() => {
+    if (!bot?.id || !bot?.status) return
+    const actions: ItemConfig[] = []
+    actions.push({
+      key: 'delete',
+      label: '删除',
+      onClick: async () => {
+        if (!confirm('确定删除此机器人？')) return
+        await stopGridBot(bot?.id).catch(() => {})
+        await deleteGridBot(bot?.id)
+        navigate('/setup/bot-type', { replace: true })
       },
-      {
-        key: 'start',
-        label: '运行',
-        onClick: async () => {
-          await startGridBot(bot?.id)
-        },
-      },
-      {
+    })
+    if (bot?.status === 'running') {
+      actions.push({
         key: 'stop',
         label: '暂停',
         onClick: async () => {
           await stopGridBot(bot?.id)
         },
-      },
-    ])
-  }, [bot?.id])
+      })
+    }
+    if (bot?.status === 'stopped') {
+      actions.push({
+        key: 'start',
+        label: '运行',
+        onClick: async () => {
+          await startGridBot(bot?.id)
+        },
+      })
+    }
+    updateActions(actions)
+  }, [bot?.id, bot?.status])
 
   useEffect(() => {
     if (!bot?.exchange || !bot?.symbol || !bot?.market_type || !klineTimeframe) return
@@ -164,15 +181,19 @@ export default function GridDetailPage() {
     setOrderBook(event.orderBook)
   })
 
-  useKlineWs((event: KlineWsEvent) => {
-    if (!bot) return
-    if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return
+  useKlineWs(
+    (event: KlineWsEvent) => {
+      if (!bot) return
+      if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return
 
-    const c = event.candle
-    if (!c) return
-    // Update chart directly via series.update() — no re-render
-    chartRef.current?.update(c)
-  }, loadKlineStable)
+      const c = event.candle
+      if (!c) return
+      // Update chart directly via series.update() — no re-render
+      chartRef.current?.update(c)
+    },
+    loadKlineStable,
+    klineTimeframe,
+  )
 
   if (!bot) {
     return (
@@ -365,6 +386,9 @@ export default function GridDetailPage() {
           botId={params.botId!}
         />
       )}
+
+      {/* System tab */}
+      {activeTab === 'system' && <SystemInfo />}
     </>
   )
 }

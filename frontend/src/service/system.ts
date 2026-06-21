@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { ApiResponse, HealthStatus, PaperModeStatus } from './types'
+import type { ApiResponse, HealthStatus, PaperModeStatus, SystemInfo } from './types'
 
 export function checkHealth(): Promise<ApiResponse<HealthStatus>> {
   return api.get<HealthStatus>('/health')
@@ -15,4 +15,8 @@ export function enablePaperMode(): Promise<ApiResponse<null>> {
 
 export function disablePaperMode(): Promise<ApiResponse<null>> {
   return api.post<null>('/system/paper/disable')
+}
+
+export function getSystemInfo(): Promise<ApiResponse<SystemInfo>> {
+  return api.get<SystemInfo>('/system/info')
 }

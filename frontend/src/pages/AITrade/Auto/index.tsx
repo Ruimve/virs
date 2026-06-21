@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, memo } from 'react'
+import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getAutoAnalysisLogs, startAutoBot, stopAutoBot, deleteAutoBot } from '../../../service/bot'
 import { fetchKlines, fetchOrderBook } from '../../../service/market'
@@ -15,13 +15,14 @@ import {
   type KlineWsEvent,
   type OrderBookWsEvent,
 } from '../../../service/ws'
-import ChartPanel from '../components/ChartPanel'
 import type { KlineChartHandle } from '../../../components/Chart/KlineChart'
-import OrderBookPanel from '../components/OrderBookPanel'
 import AnalysisList from '../components/AnalysisList'
+import SystemInfo from '../components/SystemInfo'
+import BotSidebar from '../components/BotSidebar'
+import AIDecisionCard from '../components/AIDecisionCard'
+import TradeStats from '../components/TradeStats'
+import CollapsibleMarketPanel from '../components/CollapsibleMarketPanel'
 import PositionStats from './PositionStats'
-import MobileOrderBook from '../components/MobileOrderBook'
-import MarketIndicators from '../components/MarketIndicators'
 import { formatPnl } from '../components/shared'
 import { useBot } from '../context/BotContext'
 import { useHeader, type ItemConfig } from '../components/Header/context'
@@ -47,9 +48,29 @@ const tradeTypeColor = (t: string) => {
   return 'text-on-surface-tertiary'
 }
 
+/**
+ * 把交易记录转换为 K线图 markers。
+ * 买入（side=buy）→ 绿色向上箭头，位于 K线下方
+ * 卖出（side=sell）→ 红色向下箭头，位于 K线上方
+ */
+function tradesToMarkers(trades: AutoTrade[]) {
+  return trades
+    .map((t) => {
+      const time = Math.floor(new Date(t.created_at).getTime() / 1000)
+      const isBuy = t.side === 'buy'
+      return {
+        time,
+        position: isBuy ? ('belowBar' as const) : ('aboveBar' as const),
+        color: isBuy ? '#10b981' : '#ef4444',
+        shape: isBuy ? ('arrowUp' as const) : ('arrowDown' as const),
+        text: `${isBuy ? '买' : '卖'} ${t.price.toFixed(2)}`,
+      }
+    })
+    .sort((a, b) => a.time - b.time)
+}
+
 // ── Page ──────────────────────────────────────────────────
 const AutoDetailPage = () => {
-  console.log('进入页面')
   const navigate = useNavigate()
   const { activeTab, updateActiveTab, updateTabs, updateActions } = useHeader()
   const { bot, trades, loading } = useBot()
@@ -59,8 +80,15 @@ const AutoDetailPage = () => {
   const [klineData, setKlineData] = useState<KlineCandle[]>([])
   const [klineTimeframe, setKlineTimeframe] = useState('15m')
   const [orderBook, setOrderBook] = useState<OrderBookData>({ bids: [], asks: [] })
+  const [latestPrice, setLatestPrice] = useState(0)
 
   const chartRef = useRef<KlineChartHandle>(null)
+
+  // 把交易记录转换为 K线图 markers
+  const markers = useMemo(() => tradesToMarkers(trades as AutoTrade[]), [trades])
+
+  // 最近一次 AI 决策
+  const latestDecision = logs[0] || null
 
   const loadLogs = useCallback(async (botId: string) => {
     try {
@@ -114,10 +142,10 @@ const AutoDetailPage = () => {
 
     updateTabs([
       {
-        key: 'market',
-        label: '行情',
+        key: 'bot',
+        label: '机器人',
         onClick: () => {
-          updateActiveTab('market')
+          updateActiveTab('bot')
           navigate(`/trade/auto/${bot?.id}`, { replace: true })
         },
       },
@@ -137,9 +165,17 @@ const AutoDetailPage = () => {
           navigate(`/trade/auto/${bot?.id}/analysis`, { replace: true })
         },
       },
+      {
+        key: 'system',
+        label: '系统',
+        onClick: () => {
+          updateActiveTab('system')
+          navigate(`/trade/auto/${bot?.id}/system`, { replace: true })
+        },
+      },
     ])
 
-    updateActiveTab('market')
+    updateActiveTab('bot')
   }, [bot?.id])
 
   useEffect(() => {
@@ -183,8 +219,7 @@ const AutoDetailPage = () => {
     }
 
     updateActions(actions)
-    loadKlineStable()
-  }, [bot?.id])
+  }, [bot?.id, bot?.status])
 
   useEffect(() => {
     if (!bot?.id) return
@@ -208,19 +243,20 @@ const AutoDetailPage = () => {
     setOrderBook(event.orderBook)
   })
 
-  useKlineWs((event: KlineWsEvent) => {
-    if (!bot) return
-    if (
-      event.symbol !== bot?.symbol ||
-      event.exchange !== bot?.exchange ||
-      klineTimeframe !== event.timeframe
-    )
-      return
-    const c = event.candle
-    if (!c) return
-    // Update chart directly via series.update() — no re-render
-    chartRef.current?.update(c)
-  }, loadKlineStable)
+  useKlineWs(
+    (event: KlineWsEvent) => {
+      if (!bot) return
+      if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return
+      const c = event.candle
+      if (!c) return
+      // 更新最新价
+      setLatestPrice(c.close)
+      // Update chart directly via series.update() — no re-render
+      chartRef.current?.update(c)
+    },
+    loadKlineStable,
+    klineTimeframe,
+  )
 
   if (loading || !bot) {
     return (
@@ -260,52 +296,44 @@ const AutoDetailPage = () => {
     )
   }
 
+  const autoBot = bot as AutoBot
+
   return (
     <>
-      {activeTab === 'market' && (
+      {activeTab === 'bot' && (
         <div className="h-full flex flex-col lg:flex-row">
-          <div className="flex flex-col h-full lg:flex-1 lg:min-h-0">
-            <PositionStats bot={bot as AutoBot} />
-            <div className="h-[260px] shrink-0 lg:h-auto lg:flex-1 lg:min-h-0 lg:shrink">
-              <ChartPanel
+          {/* 主区域：状态栏 + AI决策 + 交易统计 + 底部行情折叠 */}
+          <div className="flex flex-col h-full lg:flex-1 lg:min-h-0 overflow-y-auto">
+            <PositionStats bot={autoBot} latestPrice={latestPrice} trades={trades as AutoTrade[]} />
+
+            {/* AI 决策卡片 */}
+            <AIDecisionCard log={latestDecision} botId={bot?.id} botType="auto" />
+
+            {/* 历史交易统计 */}
+            <TradeStats
+              trades={trades as AutoTrade[]}
+              totalTrades={autoBot.total_trades}
+              winTrades={autoBot.win_trades}
+              lossTrades={autoBot.loss_trades}
+            />
+
+            {/* 底部行情折叠面板（K线图 + 订单簿） */}
+            <div className="mt-auto">
+              <CollapsibleMarketPanel
                 klineData={klineData}
                 klineTimeframe={klineTimeframe}
                 onTimeframeChange={setKlineTimeframe}
                 chartRef={chartRef}
+                markers={markers}
+                orderBook={orderBook}
+                latestPrice={latestPrice}
               />
             </div>
-            {/* Mobile: market indicators + recent trades (scrollable) */}
-            <div className="flex-1 overflow-y-auto lg:hidden border-t border-line-subtle">
-              <MarketIndicators klineData={klineData} orderBook={orderBook} />
-              {(trades as AutoTrade[]).length > 0 && (
-                <div className="px-4 py-2">
-                  <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1.5">
-                    最近成交
-                  </div>
-                  {(trades as AutoTrade[]).slice(0, 8).map((t) => (
-                    <div key={t.id} className="flex items-center justify-between py-1 text-xs">
-                      <span className={t.side === 'buy' ? 'text-emerald-400' : 'text-red-400'}>
-                        {t.side === 'buy' ? '买' : '卖'} {t.quantity.toFixed(4)} @{' '}
-                        {t.price.toFixed(2)}
-                      </span>
-                      <span className="text-on-surface-tertiary text-[10px]">
-                        {new Date(t.created_at).toLocaleTimeString('zh-CN', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            {/* Mobile orderbook — pinned at bottom */}
-            <div className="shrink-0 lg:hidden border-t border-line-subtle">
-              <MobileOrderBook orderBook={orderBook} />
-            </div>
           </div>
+
+          {/* 右侧侧边栏：最近决策 + 最近成交 */}
           <div className="hidden lg:flex w-72 xl:w-80 border-l border-line-subtle flex-col">
-            <OrderBookPanel orderBook={orderBook} />
+            <BotSidebar logs={logs} trades={trades as AutoTrade[]} botId={bot?.id} botType="auto" />
           </div>
         </div>
       )}
@@ -334,6 +362,9 @@ const AutoDetailPage = () => {
                         </div>
                         <div className="text-[10px] text-on-surface-tertiary mt-0.5">
                           {new Date(t.created_at).toLocaleString('zh-CN')}
+                          {t.fee > 0 && (
+                            <span className="text-amber-400 ml-2">手续费 {t.fee.toFixed(4)}</span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -361,6 +392,9 @@ const AutoDetailPage = () => {
       {activeTab === 'analysis' && (
         <AnalysisList logs={logs} loading={false} botType="auto" botId={bot?.id} />
       )}
+
+      {/* System tab */}
+      {activeTab === 'system' && <SystemInfo />}
     </>
   )
 }
