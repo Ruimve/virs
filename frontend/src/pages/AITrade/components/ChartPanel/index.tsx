@@ -1,6 +1,6 @@
 import { useRef } from 'react'
-import KlineChart, { type KlineChartHandle } from '../../../../components/Chart/KlineChart'
-import type { KlineCandle } from '../shared'
+import type { KlineCandle } from '@/service'
+import KlineChart, { type KlineChartHandle } from '@/components/Chart/KlineChart'
 
 interface ChartMarker {
   time: number

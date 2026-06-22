@@ -1,22 +1,37 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { PaperProvider } from './lib/paper-context'
 import Loading from './pages/loading'
 import Login from './pages/login'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
-// Lazy-loaded pages
+/** 向导 */
 const SetupLayout = lazy(() => import('./pages/setup/Layout'))
 const SelectBotType = lazy(() => import('./pages/setup/SelectBotType'))
 const ConfigureLlm = lazy(() => import('./pages/setup/ConfigureLlm'))
 const SelectExchange = lazy(() => import('./pages/setup/SelectExchange'))
 const ConfigureParams = lazy(() => import('./pages/setup/ConfigureParams'))
 const ReviewLaunch = lazy(() => import('./pages/setup/ReviewLaunch'))
+
+/** 交易 */
 const AITradeLayout = lazy(() => import('./pages/AITrade/Layout'))
-const HealthCheckPage = lazy(() => import('./pages/AITrade/HealthCheck'))
-const GridDetailPage = lazy(() => import('./pages/AITrade/Grid'))
-const AutoDetailPage = lazy(() => import('./pages/AITrade/Auto'))
-const AnalysisLogDetailPage = lazy(() => import('./pages/AITrade/LlmLog'))
+/** 交易 - 自动交易 */
+const AutoBot = lazy(() => import('./pages/AITrade/AutoBot'))
+const AutoBotMain = lazy(() => import('./pages/AITrade/AutoBot/Bot'))
+const AutoBotAILog = lazy(() => import('./pages/AITrade/AutoBot/AILog'))
+const AutoBotAILogDetail = lazy(() => import('./pages/AITrade/AutoBot/AILog/Detail'))
+const AutoBotTrades = lazy(() => import('./pages/AITrade/AutoBot/Trades'))
+/** 交易 - 网格交易 */
+const GridBot = lazy(() => import('./pages/AITrade/GridBot'))
+const GridBotMain = lazy(() => import('./pages/AITrade/GridBot/Bot'))
+const GridBotAILog = lazy(() => import('./pages/AITrade/GridBot/AILog'))
+const GridBotAILogDetail = lazy(() => import('./pages/AITrade/GridBot/AILog/Detail'))
+const GridBotTrades = lazy(() => import('./pages/AITrade/GridBot/Trades'))
+const GridBotLevels = lazy(() => import('./pages/AITrade/GridBot/Levels'))
+
+/** 交易 - 健康检查 */
+const HealthCheck = lazy(() => import('./pages/AITrade/HealthCheck'))
+/** 交易 -系统信息 */
+const System = lazy(() => import('./pages/AITrade/System'))
 
 function SuspenseWrap({ children }: { children: React.ReactNode }) {
   return (
@@ -35,35 +50,39 @@ function SuspenseWrap({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <ErrorBoundary>
-      <PaperProvider>
-        <BrowserRouter>
-          <SuspenseWrap>
-            <Routes>
-              <Route path="/" element={<Loading />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/setup" element={<SetupLayout />}>
-                <Route path="/setup/bot-type" element={<SelectBotType />} />
-                <Route path="/setup/llm" element={<ConfigureLlm />} />
-                <Route path="/setup/exchange" element={<SelectExchange />} />
-                <Route path="/setup/params" element={<ConfigureParams />} />
-                <Route path="/setup/review" element={<ReviewLaunch />} />
+      <BrowserRouter>
+        <SuspenseWrap>
+          <Routes>
+            <Route path="/" element={<Loading />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/setup" element={<SetupLayout />}>
+              <Route path="/setup/bot-type" element={<SelectBotType />} />
+              <Route path="/setup/llm" element={<ConfigureLlm />} />
+              <Route path="/setup/exchange" element={<SelectExchange />} />
+              <Route path="/setup/params" element={<ConfigureParams />} />
+              <Route path="/setup/review" element={<ReviewLaunch />} />
+            </Route>
+            <Route path="/trade" element={<AITradeLayout />}>
+              <Route path="/trade/auto/:botId" element={<AutoBot />}>
+                <Route path="/trade/auto/:botId/bot" element={<AutoBotMain />} />
+                <Route path="/trade/auto/:botId/log" element={<AutoBotAILog />} />
+                <Route path="/trade/auto/:botId/log/:logId" element={<AutoBotAILogDetail />} />
+                <Route path="/trade/auto/:botId/trades" element={<AutoBotTrades />} />
               </Route>
-              <Route path="/trade" element={<AITradeLayout />}>
-                <Route path="/trade/health/:botType/:botId" element={<HealthCheckPage />} />
-                <Route path="/trade/grid/:botId" element={<GridDetailPage />} />
-                <Route path="/trade/grid/:botId/:tab" element={<GridDetailPage />} />
-                <Route path="/trade/auto/:botId" element={<AutoDetailPage />} />
-                <Route path="/trade/auto/:botId/:tab" element={<AutoDetailPage />} />
-                <Route
-                  path="/trade/:botType/:botId/log/:logId"
-                  element={<AnalysisLogDetailPage />}
-                />
+              <Route path="/trade/grid/:botId" element={<GridBot />}>
+                <Route path="/trade/grid/:botId/bot" element={<GridBotMain />} />
+                <Route path="/trade/grid/:botId/log" element={<GridBotAILog />} />
+                <Route path="/trade/grid/:botId/log/:logId" element={<GridBotAILogDetail />} />
+                <Route path="/trade/grid/:botId/trades" element={<GridBotTrades />} />
+                <Route path="/trade/grid/:botId/levels" element={<GridBotLevels />} />
               </Route>
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </SuspenseWrap>
-        </BrowserRouter>
-      </PaperProvider>
+              <Route path="/trade/health/:botType/:botId" element={<HealthCheck />} />
+              <Route path="/trade/system" element={<System />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </SuspenseWrap>
+      </BrowserRouter>
     </ErrorBoundary>
   )
 }

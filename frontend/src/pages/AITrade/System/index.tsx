@@ -1,6 +1,6 @@
 import { memo, useEffect, useState, useCallback, useRef } from 'react'
-import { getSystemInfo } from '../../../../service/system'
-import type { SystemInfo as SystemInfoData } from '../../../../service/types'
+import { getSystemInfo } from '@/service/system'
+import type { SystemInfo as SystemInfoData } from '@/service/types'
 
 // ── 工具函数 ────────────────────────────────────────────────
 
@@ -39,8 +39,6 @@ function barColor(pct: number): string {
   return 'bg-emerald-500'
 }
 
-// ── 进度条组件 ──────────────────────────────────────────────
-
 interface ProgressBarProps {
   pct: number
 }
@@ -77,7 +75,7 @@ interface NetSample {
   ts: number
 }
 
-const SystemInfo = () => {
+const System = () => {
   const [info, setInfo] = useState<SystemInfoData | null>(null)
   const [error, setError] = useState<string | null>(null)
   // 网络速率：name → bytes/s
@@ -342,4 +340,4 @@ const SystemInfo = () => {
   )
 }
 
-export default memo(SystemInfo)
+export default memo(System)

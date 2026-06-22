@@ -1,92 +1,22 @@
-import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { getAutoAnalysisLogs, getGridAnalysisLogs } from '../../../service/bot'
-import type { AnalysisLog } from '../../../service/types'
+import { useState, memo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import type { AnalysisLog } from '@/service/types'
+import { actionColor, actionLabel } from '../utils/utils'
 
-export default function AnalysisLogDetailPage() {
-  const params = useParams()
+interface Props {
+  log: AnalysisLog
+  loading: boolean
+}
+
+const AILogDetail = ({ log, loading }: Props) => {
   const navigate = useNavigate()
 
-  const [log, setLog] = useState<AnalysisLog | null>(null)
-  const [loading, setLoading] = useState(true)
   const [showSystemPrompt, setShowSystemPrompt] = useState(false)
   const [showUserPrompt, setShowUserPrompt] = useState(false)
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const botType = params.botType
-        const res =
-          botType === 'auto'
-            ? await getAutoAnalysisLogs(params.botId!)
-            : await getGridAnalysisLogs(params.botId!)
-
-        const logs =
-          botType === 'auto'
-            ? (res.data as { logs: AnalysisLog[] } | undefined)?.logs
-            : (res.data as { items: AnalysisLog[] } | undefined)?.items
-        const found = (logs || []).find((l: AnalysisLog) => l.id === params.logId)
-        setLog(found || null)
-      } catch (e) {
-        console.error('Failed to load analysis log:', e)
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [params.botType, params.botId, params.logId])
 
   const getDecision = (log: AnalysisLog) => {
     if (log.result?.decision) return log.result.decision
     return null
-  }
-
-  const getActionLabel = (action: string) => {
-    switch (action) {
-      case 'open_long':
-        return '开多'
-      case 'open_short':
-        return '开空'
-      case 'close_position':
-        return '平仓'
-      case 'hold':
-        return '持有'
-      case 'adjust_grid':
-        return '调整网格'
-      case 'pause_grid':
-        return '暂停网格'
-      case 'resume_grid':
-        return '恢复网格'
-      case 'reduce_position':
-        return '减仓'
-      case 'cancel_order':
-        return '取消订单'
-      default:
-        return action
-    }
-  }
-
-  const getActionColor = (action: string) => {
-    switch (action) {
-      case 'open_long':
-        return 'bg-emerald-500/10 text-emerald-400'
-      case 'open_short':
-        return 'bg-red-500/10 text-red-400'
-      case 'close_position':
-        return 'bg-blue-500/10 text-blue-400'
-      case 'hold':
-        return 'bg-surface-2 text-on-surface-tertiary'
-      case 'adjust_grid':
-        return 'bg-blue-500/10 text-blue-400'
-      case 'pause_grid':
-        return 'bg-red-500/10 text-red-400'
-      case 'resume_grid':
-        return 'bg-emerald-500/10 text-emerald-400'
-      case 'reduce_position':
-        return 'bg-amber-500/10 text-amber-400'
-      default:
-        return 'bg-surface-2 text-on-surface-tertiary'
-    }
   }
 
   if (loading) {
@@ -176,9 +106,9 @@ export default function AnalysisLogDetailPage() {
               <div className="flex items-center gap-2">
                 {decision && (
                   <span
-                    className={`text-xs font-medium px-2 py-0.5 rounded ${getActionColor(decision.action)}`}
+                    className={`text-xs font-medium px-2 py-0.5 rounded ${actionColor(decision.action)}`}
                   >
-                    {getActionLabel(decision.action)}
+                    {actionLabel(decision.action)}
                   </span>
                 )}
                 {log.status === 'failed' && (
@@ -199,7 +129,7 @@ export default function AnalysisLogDetailPage() {
             {decision?.confidence != null && (
               <div className="text-[11px] text-on-surface-tertiary">
                 置信度:{' '}
-                <span className="text-on-surface-secondary">
+                <span className="text-on-surface-secondary font-mono">
                   {(decision.confidence * 100).toFixed(0)}%
                 </span>
               </div>
@@ -406,3 +336,5 @@ export default function AnalysisLogDetailPage() {
     </div>
   )
 }
+
+export default memo(AILogDetail)

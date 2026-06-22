@@ -1,7 +1,9 @@
+import { memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { AnalysisLog } from '../shared'
+import type { AnalysisLog } from '@/service'
+import { actionColor, actionLabel } from '../utils/utils'
 
-interface AnalysisListProps {
+interface Props {
   logs: AnalysisLog[]
   loading: boolean
   onLoadMore?: () => void
@@ -9,43 +11,8 @@ interface AnalysisListProps {
   botId: string
 }
 
-export default function AnalysisList({
-  logs,
-  loading,
-  onLoadMore,
-  botType,
-  botId,
-}: AnalysisListProps) {
+const AILogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
   const navigate = useNavigate()
-
-  const getActionLabel = (action: string) => {
-    const map: Record<string, string> = {
-      open_long: '开多',
-      open_short: '开空',
-      close_position: '平仓',
-      hold: '持有',
-      adjust_grid: '调整网格',
-      pause_grid: '暂停网格',
-      resume_grid: '恢复网格',
-      reduce_position: '减仓',
-      cancel_order: '取消订单',
-    }
-    return map[action] || action
-  }
-
-  const getActionColor = (action: string) => {
-    const map: Record<string, string> = {
-      open_long: 'bg-emerald-500/10 text-emerald-400',
-      open_short: 'bg-red-500/10 text-red-400',
-      close_position: 'bg-blue-500/10 text-blue-400',
-      hold: 'bg-surface-2 text-on-surface-tertiary',
-      adjust_grid: 'bg-blue-500/10 text-blue-400',
-      pause_grid: 'bg-red-500/10 text-red-400',
-      resume_grid: 'bg-emerald-500/10 text-emerald-400',
-      reduce_position: 'bg-amber-500/10 text-amber-400',
-    }
-    return map[action] || 'bg-surface-2 text-on-surface-tertiary'
-  }
 
   const getDecision = (log: AnalysisLog) => {
     if (log.result?.action) return log.result
@@ -97,9 +64,9 @@ export default function AnalysisList({
               <div className="flex items-center gap-2">
                 {decision && (
                   <span
-                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${getActionColor(decision.action!)}`}
+                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${actionColor(decision.action!)}`}
                   >
-                    {getActionLabel(decision.action!)}
+                    {actionLabel(decision.action!)}
                   </span>
                 )}
                 {log.status === 'failed' && (
@@ -139,3 +106,5 @@ export default function AnalysisList({
     </div>
   )
 }
+
+export default memo(AILogList)

@@ -303,7 +303,7 @@ impl ExchangePe for PaperExchangeAdapter {
             let fee = fill_price * params.amount * 0.0005;
 
             let order = PositionOrder {
-                id: order_id, position_id: Uuid::nil(), exchange_order_id: Some(order_id.to_string()),
+                id: order_id, position_id: params.position_id.unwrap_or(Uuid::nil()), exchange_order_id: Some(order_id.to_string()),
                 client_order_id: params.client_order_id.clone(), exchange: self.name.clone(),
                 symbol: params.symbol.clone(), side: params.side, order_type: params.order_type,
                 request_price: params.price, fill_price: if fill_price > 0.0 { Some(fill_price) } else { None },
@@ -333,7 +333,7 @@ impl ExchangePe for PaperExchangeAdapter {
             };
             self.pending.insert(order_id, pending);
             let order = PositionOrder {
-                id: order_id, position_id: Uuid::nil(), exchange_order_id: Some(order_id.to_string()),
+                id: order_id, position_id: params.position_id.unwrap_or(Uuid::nil()), exchange_order_id: Some(order_id.to_string()),
                 client_order_id: params.client_order_id, exchange: self.name.clone(),
                 symbol: params.symbol.clone(), side: params.side, order_type: params.order_type,
                 request_price: params.price, fill_price: None, amount: params.amount,

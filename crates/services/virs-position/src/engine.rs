@@ -1098,6 +1098,8 @@ pub(crate) async fn handle_open_position(
     match inner.exchange.place_order(params).await {
         Ok(mut order) => {
             order.reduce_only = reduce_only;
+            // 确保订单关联正确的 position_id（交易所 REST 可能不返回此字段）
+            order.position_id = position_id;
             position.status = PositionStatus::Open;
             position.size = order.filled;
             position.entry_price = order.fill_price.unwrap_or(0.0);
@@ -1197,6 +1199,8 @@ pub(crate) async fn handle_close_position(
     match inner.exchange.place_order(params).await {
         Ok(mut order) => {
             order.reduce_only = reduce_only;
+            // 确保订单关联正确的 position_id（交易所 REST 可能不返回此字段）
+            order.position_id = position_id;
             if let Some(ref eoid) = order.exchange_order_id {
                 inner.exchange_order_id_index.insert(eoid.clone(), order.id);
             }

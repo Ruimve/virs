@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
+use uuid::Uuid;
 
 use crate::auto::ai::{AutoAction, AutoAiService, AutoDecision};
 use crate::auto::ports::*;
@@ -893,8 +894,9 @@ impl AutoWorker {
 
         let side = self.bot.current_side.clone().unwrap_or_default();
 
-        // Use ClosePosition if we have position_id, otherwise fall back to PlaceOrder
-        if let Some(position_id) = self.bot.position_id {
+        // Use ClosePosition if we have a valid position_id, otherwise fall back to PlaceOrder
+        // 注意：Uuid::nil() 视为无效（历史 bug 可能导致 nil UUID 被保存）
+        if let Some(position_id) = self.bot.position_id.filter(|id| *id != Uuid::nil()) {
             let client_order_id = format!("auto:close:{}:{}", reason, self.bot.id);
 
             let result = self
@@ -1126,7 +1128,10 @@ impl AutoWorker {
         let trade_type = match pending.side.as_str() {
             "long" => "open_long",
             "short" => "open_short",
-            _ => "open",
+            _ => {
+                warn!(bot_id = %self.bot.id, side = %pending.side, "Unexpected side, defaulting to open_long");
+                "open_long"
+            }
         };
         let trade_side = match pending.side.as_str() {
             "long" => "buy",
@@ -1136,7 +1141,7 @@ impl AutoWorker {
         // 开仓即亏损手续费：pnl = -fee
         let open_pnl = -fee;
         self.bot.total_pnl += open_pnl;
-        let _ = self
+        if let Err(e) = self
             .store
             .record_trade(
                 self.bot.id,
@@ -1153,7 +1158,10 @@ impl AutoWorker {
                 fee,
                 None,
             )
-            .await;
+            .await
+        {
+            error!(bot_id = %self.bot.id, error = %e, "Failed to record open trade");
+        }
 
         let _ = self.auto_event_tx.send(AutoEvent::PositionOpened {
             bot_id: self.bot.id,
@@ -1234,7 +1242,13 @@ impl AutoWorker {
             _ => "sell",
         };
         let trade_type = format!("close_{}", pending.side);
-        let _ = self
+        // trigger_source 必须满足 DB CHECK 约束 ('llm', 'risk_control')
+        // 将 reason 映射为合法的 trigger_source
+        let trigger_source = match pending.reason.as_str() {
+            "stop_loss" | "take_profit" | "position_timeout" => "risk_control",
+            _ => "llm",
+        };
+        if let Err(e) = self
             .store
             .record_trade(
                 self.bot.id,
@@ -1243,7 +1257,7 @@ impl AutoWorker {
                 &self.bot.exchange,
                 trade_side,
                 &trade_type,
-                &pending.reason,
+                trigger_source,
                 fill_price,
                 actual_qty,
                 realized_pnl,
@@ -1251,7 +1265,10 @@ impl AutoWorker {
                 fee,
                 None,
             )
-            .await;
+            .await
+        {
+            error!(bot_id = %self.bot.id, error = %e, "Failed to record close trade");
+        }
 
         let _ = self.auto_event_tx.send(AutoEvent::PositionClosed {
             bot_id: self.bot.id,

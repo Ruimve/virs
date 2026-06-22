@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
 
 export type ItemConfig = {
   key: string
@@ -15,7 +16,6 @@ export interface HeaderContextType {
   updateLeft: (tabs: ItemConfig[]) => void
   updateTabs: (tabs: ItemConfig[]) => void
   updateActions: (tabs: ItemConfig[]) => void
-  updateActiveTab: (tab: string) => void
 }
 
 export const DEFAULT_HEADER: HeaderContextType = {
@@ -25,16 +25,20 @@ export const DEFAULT_HEADER: HeaderContextType = {
   updateLeft: () => void 0,
   updateTabs: () => void 0,
   updateActions: () => void 0,
-  updateActiveTab: () => void 0,
 }
 
 export const HeaderContext = createContext<HeaderContextType>(DEFAULT_HEADER)
 
 export const HeaderProvider = ({ children }: { children: ReactNode }) => {
+  const location = useLocation()
   const [left, setLeft] = useState<ItemConfig[]>([])
   const [tabs, setTabs] = useState<ItemConfig[]>([])
   const [actions, setActions] = useState<ItemConfig[]>([])
-  const [activeTab, setActiveTab] = useState<string>()
+
+  const activeTab = useMemo(() => {
+    const paths = location.pathname.split('/') || []
+    return paths[paths.length - 1]
+  }, [location.pathname])
 
   return (
     <HeaderContext.Provider
@@ -46,7 +50,6 @@ export const HeaderProvider = ({ children }: { children: ReactNode }) => {
         updateLeft: setLeft,
         updateTabs: setTabs,
         updateActions: setActions,
-        updateActiveTab: setActiveTab,
       }}
     >
       {children}

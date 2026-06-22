@@ -103,14 +103,23 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   color: var(--text-on-base);
   background-color: var(--bg-base-secondary);
+  /* 全局启用斜线数字（lining nums），与 .font-mono 的 tabular-nums 配合 */
+  font-variant-numeric: lining-nums;
+  font-feature-settings: 'lnum' 1;
 }
 
 code,
 pre,
 .font-mono {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: 'Roboto Mono', 'JetBrains Mono', 'Fira Code', monospace;
+  /* 启用表格数字（tabular figures），确保数字等宽对齐，避免金融数字重排 */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings:
+    'tnum' 1,
+    'lnum' 1;
 }
 
 /* ===== 淡入动画 ===== */

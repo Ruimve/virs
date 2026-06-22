@@ -1,4 +1,4 @@
-import { formatSmart } from '../components/shared'
+import { formatSmart } from '../../components/utils/utils'
 
 interface GridLevelInfo {
   level: number

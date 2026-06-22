@@ -1,13 +1,42 @@
-import { useState } from 'react'
-import { Logo } from '../../../../components/Logo'
-import { Theme } from '@/components/Theme'
-import type { StatusStyle } from '../shared'
-import { statusConfig } from '../shared'
-import { usePaper } from '../../../../lib/paper-context'
-import { useBot } from '../../context/BotContext'
+import { memo, useCallback, useState } from 'react'
+import Logo from '@/components/Logo'
+import Theme from '@/components/Theme'
 import { useHeader } from './context'
+import { usePaper } from '../../context/PaperContext'
+import { useBot } from '../../context/BotContext'
 
-export default function Header() {
+interface StatusStyle {
+  text: string
+  dot: string
+  bg: string
+}
+
+const statusConfig = (status: string): StatusStyle => {
+  const map: Record<string, StatusStyle> = {
+    running: { text: '运行中', dot: 'bg-emerald-500', bg: 'bg-emerald-500/10 text-emerald-400' },
+    paused: { text: '已暂停', dot: 'bg-amber-500', bg: 'bg-amber-500/10 text-amber-400' },
+    stopped: {
+      text: '已停止',
+      dot: 'bg-on-surface-muted',
+      bg: 'bg-surface-2 text-on-surface-tertiary',
+    },
+    draft: {
+      text: '草稿',
+      dot: 'bg-on-surface-faint',
+      bg: 'bg-surface-2 text-on-surface-tertiary',
+    },
+    error: { text: '错误', dot: 'bg-red-500', bg: 'bg-red-500/10 text-red-400' },
+  }
+  return (
+    map[status] || {
+      text: status,
+      dot: 'bg-on-surface-muted',
+      bg: 'bg-surface-2 text-on-surface-tertiary',
+    }
+  )
+}
+
+const Header = () => {
   const { bot } = useBot()
   const { tabs, activeTab, actions } = useHeader()
   const { enabled: paperMode } = usePaper()
@@ -18,6 +47,10 @@ export default function Header() {
   const closeDrawer = () => {
     setDrawerClosing(true)
   }
+
+  const openDrawer = useCallback(() => {
+    setDrawerOpen(true)
+  }, [])
 
   const handleDrawerAnimEnd = () => {
     if (drawerClosing) {
@@ -32,7 +65,7 @@ export default function Header() {
       <div className="relative z-10 flex items-center h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
         {/* Left: logo (clickable on mobile to open drawer) + bot info */}
         <div className="flex items-center gap-2 pl-4 md:pl-8 shrink-0">
-          <Logo onClick={() => setDrawerOpen(true)} className="md:hidden" />
+          <Logo onClick={openDrawer} className="md:hidden" />
           <Logo className="hidden md:block" />
           <div className="flex items-center gap-2">
             <span
@@ -166,3 +199,5 @@ export default function Header() {
     </>
   )
 }
+
+export default memo(Header)

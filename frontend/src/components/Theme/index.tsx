@@ -1,5 +1,6 @@
+import { memo } from 'react'
 import { useTheme } from './useTheme'
-export function Theme() {
+const Theme = () => {
   const { isDark, toggleTheme } = useTheme()
   return (
     <button
@@ -38,3 +39,5 @@ export function Theme() {
     </button>
   )
 }
+
+export default memo(Theme)

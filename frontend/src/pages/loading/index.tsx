@@ -39,9 +39,9 @@ function Loading() {
         delay(200).then(() => {
           if (bot) {
             if (bot.bot_type === 'auto') {
-              navigate(`/trade/auto/${bot.id}`, { replace: true })
+              navigate(`/trade/auto/${bot.id}/bot`, { replace: true })
             } else {
-              navigate(`/trade/grid/${bot.id}`, { replace: true })
+              navigate(`/trade/grid/${bot.id}/bot`, { replace: true })
             }
           } else {
             navigate('/setup/bot-type', { replace: true })

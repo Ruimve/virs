@@ -1,5 +1,5 @@
-import type { OrderBookEntry } from '../shared'
-import { formatSmart } from '../shared'
+import type { OrderBookEntry } from '@/service'
+import { formatSmart } from '../utils/utils'
 
 const MAX_ROWS = 8
 
@@ -52,7 +52,7 @@ export default function OrderBookPanel({ orderBook }: OrderBookPanelProps) {
       {/* Spread */}
       {asks.length > 0 && bids.length > 0 && (
         <div className="px-4 py-1 text-center text-[10px] text-on-surface-muted border-y border-line-subtle shrink-0">
-          价差 {(asks[0].price - bids[0].price).toFixed(2)}
+          价差 <span className="font-mono">{(asks[0].price - bids[0].price).toFixed(2)}</span>
         </div>
       )}
 

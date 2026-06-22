@@ -1,7 +1,6 @@
 import { memo, useState, type RefObject } from 'react'
-import KlineChart, { type KlineChartHandle } from '../../../../components/Chart/KlineChart'
-import type { KlineCandle } from '../shared'
-import type { OrderBookData } from '../../../../service/types'
+import type { KlineCandle, OrderBookData } from '@/service'
+import KlineChart, { type KlineChartHandle } from '@/components/Chart/KlineChart'
 
 interface ChartMarker {
   time: number

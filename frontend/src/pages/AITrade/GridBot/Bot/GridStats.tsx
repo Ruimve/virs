@@ -1,4 +1,4 @@
-import { formatPnlShort } from '../components/shared'
+import { formatPnlShort } from '../../components/utils/utils'
 
 interface GridBot {
   total_pnl: number

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { KlineCandle, OrderBookData } from '../../../../service/types'
+import type { KlineCandle, OrderBookData } from '@/service/types'
 
 interface MarketIndicatorsProps {
   klineData: KlineCandle[]

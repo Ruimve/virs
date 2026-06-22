@@ -1,6 +1,6 @@
 import { Outlet } from 'react-router-dom'
-import { Logo } from '@/components/Logo'
-import { Theme } from '@/components/Theme'
+import Logo from '@/components/Logo'
+import Theme from '@/components/Theme'
 import { useWizard } from '../context/WizardContext'
 import { TOTAL_SETUP_STEPS } from '../context/WizardContext/consts'
 import { useMemo } from 'react'

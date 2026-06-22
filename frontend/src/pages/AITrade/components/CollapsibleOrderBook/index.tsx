@@ -1,5 +1,5 @@
 import { memo, useState } from 'react'
-import type { OrderBookData } from '../../../../service/types'
+import type { OrderBookData } from '@/service/types'
 
 interface CollapsibleOrderBookProps {
   orderBook: OrderBookData
@@ -28,7 +28,7 @@ const CollapsibleOrderBook = ({
           {bestBid && bestAsk && (
             <>
               <span className="text-emerald-400 font-mono">{bestBid.toFixed(2)}</span>
-              <span className="text-on-surface-muted text-[10px]">spread {spread}</span>
+              <span className="text-on-surface-muted text-[10px] font-mono">spread {spread}</span>
               <span className="text-red-400 font-mono">{bestAsk.toFixed(2)}</span>
             </>
           )}

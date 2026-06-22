@@ -1,14 +1,11 @@
+import { fn } from '@/utils/default'
+import { memo } from 'react'
+
 /**
  * VIRS Logo — flowing gradient text that shifts continuously.
  * Matches the global indigo/violet accent palette.
  */
-export function Logo({
-  className = '',
-  onClick = () => {},
-}: {
-  className?: string
-  onClick?: () => void
-}) {
+const Logo = ({ className = '', onClick = fn }: { className?: string; onClick?: typeof fn }) => {
   return (
     <span
       className={`text-sm md:text-base font-extralight tracking-[0.25em] ${className}`}
@@ -25,3 +22,5 @@ export function Logo({
     </span>
   )
 }
+
+export default memo(Logo)

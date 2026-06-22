@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
-import { getPaperStatus, enablePaperMode, disablePaperMode } from '../service'
+import { getPaperStatus, enablePaperMode, disablePaperMode } from '@/service'
 
 interface PaperContextType {
   enabled: boolean

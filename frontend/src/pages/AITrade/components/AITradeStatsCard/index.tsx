@@ -115,7 +115,7 @@ function formatDuration(ms: number): string {
   return `${seconds}s`
 }
 
-const TradeStats = ({ trades, totalTrades, winTrades, lossTrades }: TradeStatsProps) => {
+const AITradeStatsCard = ({ trades, totalTrades, winTrades, lossTrades }: TradeStatsProps) => {
   const stats = useMemo(
     () => computeStats(trades, totalTrades, winTrades),
     [trades, totalTrades, winTrades],
@@ -188,4 +188,4 @@ const TradeStats = ({ trades, totalTrades, winTrades, lossTrades }: TradeStatsPr
   )
 }
 
-export default memo(TradeStats)
+export default memo(AITradeStatsCard)

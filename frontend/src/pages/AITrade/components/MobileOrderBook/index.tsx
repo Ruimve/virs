@@ -1,6 +1,6 @@
 import { useState } from 'react'
+import type { OrderBookData } from '@/service/types'
 import OrderBookPanel from '../OrderBookPanel'
-import type { OrderBookData } from '../../../../service/types'
 
 interface MobileOrderBookProps {
   orderBook: OrderBookData

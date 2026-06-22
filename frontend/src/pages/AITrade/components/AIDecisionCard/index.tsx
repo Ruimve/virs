@@ -1,45 +1,39 @@
-import { memo } from 'react'
+import { memo, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { AnalysisLog } from '../../../../service/types'
+import type { AnalysisLog } from '@/service/types'
+import { actionColor, actionLabel, confidenceColor } from '../utils/utils'
 
-interface AIDecisionCardProps {
+interface Props {
   log: AnalysisLog | null
   botId: string
   botType?: 'auto' | 'grid'
 }
 
-const actionLabel = (action: string) => {
-  const map: Record<string, string> = {
-    open_long: '开多',
-    open_short: '开空',
-    close_position: '平仓',
-    hold: '持有',
-    reduce_position: '减仓',
-    cancel_order: '取消',
-  }
-  return map[action] || action
-}
-
-const actionColor = (action: string) => {
-  const map: Record<string, string> = {
-    open_long: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    open_short: 'bg-red-500/10 text-red-400 border-red-500/20',
-    close_position: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-    hold: 'bg-surface-2 text-on-surface-tertiary border-line-default',
-    reduce_position: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    cancel_order: 'bg-surface-2 text-on-surface-tertiary border-line-default',
-  }
-  return map[action] || 'bg-surface-2 text-on-surface-tertiary border-line-default'
-}
-
-const confidenceColor = (conf: number) => {
-  if (conf >= 0.7) return 'text-emerald-400'
-  if (conf >= 0.4) return 'text-amber-400'
-  return 'text-red-400'
-}
-
-const AIDecisionCard = ({ log, botId, botType = 'auto' }: AIDecisionCardProps) => {
+const AIDecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
   const navigate = useNavigate()
+
+  const handleClick = useCallback(() => {
+    navigate(`/trade/${botType}/${botId}/log/${log?.id}`)
+  }, [botType, botId, log?.id])
+
+  const decision = log?.result?.decision
+  const market = log?.result?.market
+  const riskWarning = log?.result?.risk_warning
+
+  const confidence = useMemo(() => {
+    const confidence = log?.result?.decision?.confidence
+    if (typeof confidence === 'number' && !isNaN(confidence)) return confidence
+    return null
+  }, [log?.result?.decision])
+
+  const createdAt = useMemo(() => {
+    if (!log?.created_at) return '-'
+
+    return new Date(log?.created_at).toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }, [log?.created_at])
 
   if (!log) {
     return (
@@ -49,16 +43,9 @@ const AIDecisionCard = ({ log, botId, botType = 'auto' }: AIDecisionCardProps) =
     )
   }
 
-  const decision = log.result?.decision || log.result
-  const action = decision?.action || 'unknown'
-  const reason = decision?.reason
-  const confidence = decision?.confidence
-  const riskWarning = log.result?.risk_warning
-  const marketRegime = log.result?.market?.regime
-
   return (
     <div
-      onClick={() => navigate(`/trade/${botType}/${botId}/log/${log.id}`)}
+      onClick={handleClick}
       className="px-4 py-3 border-b border-line-subtle cursor-pointer hover:bg-surface-2/30 transition-colors"
     >
       {/* 标题行 */}
@@ -66,20 +53,17 @@ const AIDecisionCard = ({ log, botId, botType = 'auto' }: AIDecisionCardProps) =
         <span className="text-[10px] text-on-surface-tertiary uppercase tracking-wider">
           AI 决策
         </span>
-        <span className="text-[10px] text-on-surface-muted">
-          {new Date(log.created_at).toLocaleTimeString('zh-CN', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </span>
+        <span className="text-[10px] text-on-surface-muted">{createdAt}</span>
       </div>
 
       {/* Action + Confidence */}
       <div className="flex items-center gap-2 mb-2">
-        <span className={`text-xs font-medium px-2 py-0.5 rounded border ${actionColor(action)}`}>
-          {actionLabel(action)}
+        <span
+          className={`text-xs font-medium px-2 py-0.5 rounded border ${actionColor(decision?.action)}`}
+        >
+          {actionLabel(decision?.action)}
         </span>
-        {confidence !== undefined && confidence !== null && (
+        {confidence && (
           <span className={`text-[11px] font-mono ${confidenceColor(confidence)}`}>
             {(confidence * 100).toFixed(0)}%
           </span>
@@ -89,17 +73,17 @@ const AIDecisionCard = ({ log, botId, botType = 'auto' }: AIDecisionCardProps) =
             失败
           </span>
         )}
-        {marketRegime && (
+        {market?.regime && (
           <span className="text-[10px] text-on-surface-tertiary ml-auto">
-            市况 <span className="text-on-surface font-mono">{marketRegime}</span>
+            市况 <span className="text-on-surface font-mono">{market?.regime}</span>
           </span>
         )}
       </div>
 
       {/* Reason */}
-      {reason && (
+      {decision?.reason && (
         <p className="text-[11px] text-on-surface-secondary leading-relaxed line-clamp-3">
-          {reason}
+          {decision?.reason}
         </p>
       )}
 

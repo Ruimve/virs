@@ -1,24 +1,30 @@
-import { memo } from 'react'
-import { formatPnl } from '../components/shared'
-import type { AutoBot, AutoTrade } from '../../../service/types'
+import { memo, useMemo } from 'react'
+import type { AutoBot, AutoTrade } from '@/service/types'
+import { formatPnl } from '../../components/utils/utils'
 
-interface PositionStatsProps {
+interface Props {
   bot: AutoBot
   latestPrice: number
   trades: AutoTrade[]
 }
 
-const PositionStats = ({ bot, latestPrice, trades }: PositionStatsProps) => {
-  const hasPosition = bot.current_side && bot.current_side !== 'none'
-  const totalFee = trades.reduce((sum, t) => sum + (t.fee || 0), 0)
+const PositionStats = ({ bot, latestPrice, trades }: Props) => {
+  const hasPosition = useMemo(
+    () => bot.current_side && bot.current_side !== 'none',
+    [bot.current_side],
+  )
+  const totalFee = useMemo(() => trades.reduce((sum, t) => sum + (t.fee || 0), 0), [trades])
 
   // 根据最新价实时计算未实现 PnL（不依赖后端持久化）
-  const unrealizedPnl =
-    hasPosition && latestPrice > 0 && bot.entry_price > 0
-      ? bot.current_side === 'long'
-        ? (latestPrice - bot.entry_price) * bot.position_size
-        : (bot.entry_price - latestPrice) * bot.position_size
-      : 0
+  const unrealizedPnl = useMemo(
+    () =>
+      hasPosition && latestPrice > 0 && bot.entry_price > 0
+        ? bot.current_side === 'long'
+          ? (latestPrice - bot.entry_price) * bot.position_size
+          : (bot.entry_price - latestPrice) * bot.position_size
+        : 0,
+    [hasPosition, latestPrice, bot.entry_price, bot.current_side, bot.position_size],
+  )
 
   return (
     <div className="px-4 py-2.5 border-b border-line-subtle">
