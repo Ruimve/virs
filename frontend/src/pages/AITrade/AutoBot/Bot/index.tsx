@@ -1,24 +1,22 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchKlines,
-  fetchOrderBook,
   getAutoAnalysisLogs,
+  getAutoTrades,
   type AnalysisLog,
   type AutoBot,
   type AutoTrade,
   type KlineCandle,
-  type OrderBookData,
 } from '@/service'
-import { useKlineWs, useOrderBookWs, type KlineWsEvent, type OrderBookWsEvent } from '@/service/ws'
+import { useKlineWs, type KlineWsEvent } from '@/service/ws'
 import type { KlineChartHandle } from '@/components/Chart/KlineChart'
-
-import AIDecisionCard from '../../components/AIDecisionCard'
-import AITradeStatsCard from '../../components/AITradeStatsCard'
-import CollapsibleMarketPanel from '../../components/CollapsibleMarketPanel'
 import { useBot } from '../../context/BotContext'
+import AIDecisionCard from '../../components/AIDecisionCard'
+import TradeStats from './TradeStats'
+import StickyMarket from '../../components/StickyMarket'
 import PositionStats from './PositionStats'
-import AIRecentDecisionsCard from '../../components/AIRecentDecisionsCard'
-import AIRecentTradesCard from '../../components/AIRecentTradesCard'
+import RecentDecisions from './RecentDecisions'
+import RecentTrades from './RecentTrades'
 
 /**
  * 把交易记录转换为 K线图 markers。
@@ -42,13 +40,13 @@ function tradesToMarkers(trades: AutoTrade[]) {
 }
 
 const Bot = () => {
-  const { bot, trades } = useBot()
+  const { bot } = useBot()
 
   const [klineTimeframe, setKlineTimeframe] = useState('15m')
   const [klineData, setKlineData] = useState<KlineCandle[]>([])
   const [latestPrice, setLatestPrice] = useState(0)
-  const [orderBook, setOrderBook] = useState<OrderBookData>({ bids: [], asks: [] })
   const [logs, setLogs] = useState<AnalysisLog[]>([])
+  const [autoTrades, setAutoTrades] = useState<AutoTrade[]>([])
 
   const chartRef = useRef<KlineChartHandle>(null)
 
@@ -58,6 +56,16 @@ const Bot = () => {
       if (res.data?.logs) setLogs(res.data.logs)
     } catch (e) {
       console.error('Failed to load analysis logs:', e)
+    }
+  }, [])
+
+  const loadTrades = useCallback(async (botId: string) => {
+    try {
+      // 获取最近 50 条用于 K 线 markers
+      const res = await getAutoTrades(botId, 1, 50)
+      if (res.data?.trades) setAutoTrades(res.data.trades)
+    } catch (e) {
+      console.error('Failed to load trades:', e)
     }
   }, [])
 
@@ -83,43 +91,16 @@ const Bot = () => {
     loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe)
   }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines])
 
-  const loadOrderBook = useCallback(
-    async (exchange: string, symbol: string, market_type: string) => {
-      try {
-        const res = await fetchOrderBook({
-          exchange,
-          symbol,
-          market_type,
-        })
-        if (res.data) setOrderBook(res.data)
-      } catch (e) {
-        console.error('Failed to load orderbook:', e)
-      }
-    },
-    [],
-  )
-
   useEffect(() => {
     if (!bot?.id) return
     loadLogs(bot?.id)
-  }, [bot?.id, loadLogs])
-
-  useEffect(() => {
-    if (!bot?.symbol || !bot?.exchange || !bot?.market_type) return
-    loadOrderBook(bot?.exchange, bot?.symbol, bot?.market_type)
-  }, [bot?.exchange, bot?.symbol, bot?.market_type, loadOrderBook])
+    loadTrades(bot?.id)
+  }, [bot?.id, loadLogs, loadTrades])
 
   useEffect(() => {
     if (!bot?.exchange || !bot?.symbol || !bot?.market_type || !klineTimeframe) return
     loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe)
   }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines])
-
-  useOrderBookWs((event: OrderBookWsEvent) => {
-    if (!bot) return
-    if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return
-
-    setOrderBook(event.orderBook)
-  })
 
   useKlineWs(
     (event: KlineWsEvent) => {
@@ -137,7 +118,6 @@ const Bot = () => {
   )
 
   const autoBot = useMemo(() => bot as AutoBot, [bot])
-  const autoTrades = useMemo(() => trades as AutoTrade[], [trades])
 
   const markers = useMemo(() => tradesToMarkers(autoTrades), [autoTrades])
   const latestDecision = useMemo(() => logs[0] || null, [logs])
@@ -145,30 +125,24 @@ const Bot = () => {
   return (
     <div className="h-full flex flex-col lg:flex-row">
       {/* 主区域：状态栏 + AI决策 + 交易统计 + 底部行情折叠 */}
-      <div className="flex flex-col h-full lg:flex-1 lg:min-h-0 overflow-y-auto">
+      <div className="flex flex-col h-full lg:flex-1 lg:min-h-0 overflow-y-auto relative mb-9">
         {/* 仓位状态 */}
-        <PositionStats bot={autoBot} latestPrice={latestPrice} trades={autoTrades} />
+        <PositionStats bot={autoBot} latestPrice={latestPrice} />
 
         {/* AI 决策卡片 */}
         <AIDecisionCard log={latestDecision} botId={autoBot?.id} botType="auto" />
 
         {/* 历史交易统计 */}
-        <AITradeStatsCard
-          trades={autoTrades}
-          totalTrades={autoBot.total_trades}
-          winTrades={autoBot.win_trades}
-          lossTrades={autoBot.loss_trades}
-        />
+        <TradeStats botId={autoBot?.id} />
 
-        {/* 底部行情折叠面板（K线图 + 订单簿） */}
-        <div className="mt-auto">
-          <CollapsibleMarketPanel
+        {/* 底部行情折叠面板（K线图） */}
+        <div className="fixed bottom-0 left-0 right-0">
+          <StickyMarket
             klineData={klineData}
             klineTimeframe={klineTimeframe}
             onTimeframeChange={setKlineTimeframe}
             chartRef={chartRef}
             markers={markers}
-            orderBook={orderBook}
             latestPrice={latestPrice}
           />
         </div>
@@ -178,10 +152,10 @@ const Bot = () => {
       <div className="hidden lg:flex w-72 xl:w-80 border-l border-line-subtle flex-col">
         <div className="flex flex-col h-full divide-y divide-line-subtle">
           <div className="flex-1 min-h-0">
-            <AIRecentDecisionsCard logs={logs} botId={autoBot?.id} botType={'auto'} />
+            <RecentDecisions logs={logs} botId={autoBot?.id} botType={'auto'} />
           </div>
           <div className="flex-1 min-h-0">
-            <AIRecentTradesCard trades={autoTrades} />
+            <RecentTrades trades={autoTrades} />
           </div>
         </div>
       </div>

@@ -17,12 +17,15 @@ export {
   deleteGridBot,
   getGridBotDetail,
   getGridTrades,
+  getGridStats,
   getGridAnalysisLogs,
   createAutoBot,
   startAutoBot,
   stopAutoBot,
   deleteAutoBot,
   getAutoBotDetail,
+  getAutoTrades,
+  getAutoStats,
   getAutoAnalysisLogs,
   findActiveBot,
 } from './bot'
@@ -35,7 +38,6 @@ export type {
   BotStatusEvent,
   PositionEvent,
   TradeEvent,
-  PositionPnlEvent,
   NotificationEvent,
   PaperModeEvent,
 } from './ws'

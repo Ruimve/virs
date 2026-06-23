@@ -93,6 +93,18 @@ pub struct PositionEngine {
     cmd_rx: Option<mpsc::Receiver<EngineCommand>>,
 }
 
+impl Clone for PositionEngine {
+    /// 手动实现 Clone：cmd_rx 不可克隆，clone 时置为 None。
+    /// cmd_rx 仅在 run() 中 take() 一次使用，clone 出的实例仅用于查询，不需要 cmd_rx。
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            cmd_tx: self.cmd_tx.clone(),
+            cmd_rx: None,
+        }
+    }
+}
+
 impl PositionEngine {
     /// 创建新的 PositionEngine 实例。
     pub fn new(config: EngineConfig, exchange: Box<dyn ExchangePe>, persistence: Box<dyn PositionPersistence>) -> Self {
@@ -131,6 +143,11 @@ impl PositionEngine {
     /// 订阅引擎事件。
     pub fn subscribe_events(&self) -> broadcast::Receiver<EngineEvent> {
         self.inner.event_tx.subscribe()
+    }
+
+    /// 获取事件广播器的 sender（用于 EngineManager 暴露给 API 层订阅）
+    pub fn event_sender(&self) -> broadcast::Sender<EngineEvent> {
+        self.inner.event_tx.clone()
     }
 
     /// 获取指定仓位。
@@ -389,13 +406,21 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                                 warn!(symbol = %ep.symbol, local_size, exchange_size = ep.size, "Position size mismatch detected");
                             }
                             let mut pos = local.value().clone();
+                            // 检测关键字段是否变化（用于决定是否推送 PositionUpdated 事件）
+                            let price_changed = (pos.current_price - ep.entry_price).abs() > 1e-8;
+                            let pnl_changed = (pos.unrealized_pnl - ep.unrealized_pnl).abs() > 1e-8;
+                            let liq_changed = pos.liquidation_price != ep.liquidation_price;
                             pos.current_price = ep.entry_price;
                             pos.unrealized_pnl = ep.unrealized_pnl;
                             pos.liquidation_price = ep.liquidation_price;
                             pos.updated_at = Utc::now();
                             drop(local);
                             persist!(inner.persistence.upsert_position(&pos), "Failed to persist position in sync_loop");
-                            inner.positions.insert(key, pos);
+                            inner.positions.insert(key, pos.clone());
+                            // 仓位状态变化时推送事件
+                            if price_changed || pnl_changed || liq_changed {
+                                inner.emit_event(EngineEvent::PositionUpdated { position: pos });
+                            }
                         }
                         None => {
                             info!(symbol = %ep.symbol, "New position detected from exchange");
@@ -426,7 +451,10 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                             let new_key = (position.exchange.clone(), position.symbol.clone(), position.side);
                             inner.position_id_index.insert(position.id, new_key.clone());
                             persist!(inner.persistence.upsert_position(&position), "Failed to persist new position in sync_loop");
-                            inner.positions.insert(new_key, position);
+                            inner.positions.insert(new_key, position.clone());
+                            // 同步发现的新仓位也需要发出事件，让 worker 和前端感知
+                            inner.emit_event(EngineEvent::PositionOpened { position: position.clone() });
+                            inner.emit_event(EngineEvent::PositionUpdated { position });
                         }
                     }
                 }
@@ -470,7 +498,8 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                             inner.position_id_index.remove(&closed_pos.id);
                             inner.positions.remove(lk);
                             persist!(inner.persistence.upsert_position(&closed_pos), "Failed to persist closed position in sync_loop");
-                            inner.emit_event(EngineEvent::PositionClosed { position: closed_pos });
+                            inner.emit_event(EngineEvent::PositionClosed { position: closed_pos.clone() });
+                            inner.emit_event(EngineEvent::PositionUpdated { position: closed_pos });
                         }
                     }
                 }
@@ -856,8 +885,10 @@ pub(crate) async fn handle_ws_order_update(
                         position.status = PositionStatus::Closed;
                         position.closed_at = Some(timestamp);
                         inner.emit_event(EngineEvent::PositionClosed { position: position.clone() });
+                        inner.emit_event(EngineEvent::PositionUpdated { position: position.clone() });
                     } else {
                         position.status = PositionStatus::Open;
+                        inner.emit_event(EngineEvent::PositionUpdated { position: position.clone() });
                     }
                 } else {
                     let old_size = position.size;
@@ -1117,6 +1148,7 @@ pub(crate) async fn handle_open_position(
             persist!(inner.persistence.insert_order(&order), "Failed to persist order in open_position");
 
             inner.emit_event(EngineEvent::PositionOpened { position: position.clone() });
+            inner.emit_event(EngineEvent::PositionUpdated { position: position.clone() });
 
             // 如果订单已成交（市价单立即成交），发出 OrderFilled 事件
             // 这是 AutoWorker 等待的事件，用于确认开仓并记录交易
@@ -1227,6 +1259,23 @@ pub(crate) async fn handle_close_position(
                 persist!(inner.persistence.insert_trade(&trade), "Failed to persist trade in close_position");
                 inner.emit_event(EngineEvent::OrderFilled { order: order.clone(), trade });
                 info!(position_id = %position_id, symbol = %position.symbol, "Close order filled");
+
+                // 市价单立即成交时，直接更新仓位状态为 Closed 并发出事件
+                // 避免等待 sync_loop 检测仓位消失（最多 10 秒延迟）
+                let key = (position.exchange.clone(), position.symbol.clone(), position.side);
+                if let Some(mut pos) = inner.positions.get_mut(&key) {
+                    pos.size = 0.0;
+                    pos.status = PositionStatus::Closed;
+                    pos.closed_at = Some(Utc::now());
+                    pos.updated_at = Utc::now();
+                    let closed_pos = pos.clone();
+                    drop(pos);
+                    inner.position_id_index.remove(&closed_pos.id);
+                    inner.positions.remove(&key);
+                    persist!(inner.persistence.upsert_position(&closed_pos), "Failed to persist closed position in close_position");
+                    inner.emit_event(EngineEvent::PositionClosed { position: closed_pos.clone() });
+                    inner.emit_event(EngineEvent::PositionUpdated { position: closed_pos });
+                }
             } else {
                 inner.emit_event(EngineEvent::OrderPlaced { order });
                 info!(position_id = %position_id, symbol = %position.symbol, "Close order placed");

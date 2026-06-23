@@ -1,12 +1,29 @@
-import { memo } from 'react'
-import type { AutoTrade } from '@/service'
-import { formatPnl, tradeTypeColor, tradeTypeLabel } from '../utils/utils'
+import { memo, useEffect, useState } from 'react'
+import { getGridTrades, type GridTrade } from '@/service'
+import { formatPnlShort } from '../../../components/utils/utils'
 
 interface Props {
-  trades: AutoTrade[]
+  botId: string
 }
 
-const AIRecentTradesCard = ({ trades }: Props) => {
+/** 网格机器人最近成交卡片（右侧栏） */
+const RecentTrades = ({ botId }: Props) => {
+  const [trades, setTrades] = useState<GridTrade[]>([])
+
+  useEffect(() => {
+    if (!botId) return
+    let cancelled = false
+    getGridTrades(botId, 1, 5)
+      .then((res) => {
+        if (cancelled) return
+        if (res.success && res.data) setTrades(res.data.trades || [])
+      })
+      .catch((e) => console.error('Failed to load grid trades:', e))
+    return () => {
+      cancelled = true
+    }
+  }, [botId])
+
   const recent = trades.slice(0, 5)
 
   return (
@@ -26,12 +43,12 @@ const AIRecentTradesCard = ({ trades }: Props) => {
               <div key={t.id} className="px-3 py-2">
                 <div className="flex items-center justify-between mb-0.5">
                   <span
-                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${tradeTypeColor(t.trade_type)} bg-surface-2`}
+                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${t.open_side === 'buy' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}
                   >
-                    {tradeTypeLabel(t.trade_type)}
+                    {t.open_side === 'buy' ? '买入' : '卖出'} L{t.grid_level}
                   </span>
                   <span className="text-[10px] text-on-surface-tertiary">
-                    {new Date(t.created_at).toLocaleTimeString('zh-CN', {
+                    {new Date(t.opened_at).toLocaleTimeString('zh-CN', {
                       hour: '2-digit',
                       minute: '2-digit',
                     })}
@@ -39,9 +56,11 @@ const AIRecentTradesCard = ({ trades }: Props) => {
                 </div>
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-on-surface font-mono">
-                    {t.side === 'buy' ? '买' : '卖'} {t.quantity.toFixed(4)} @ {t.price.toFixed(2)}
+                    {t.open_quantity.toFixed(4)} @ {t.open_price.toFixed(2)}
                   </span>
-                  {t.pnl !== 0 && <span className="font-mono">{formatPnl(t.pnl)}</span>}
+                  {t.status === 'closed' && (
+                    <span className="font-mono">{formatPnlShort(t.pnl)}</span>
+                  )}
                 </div>
               </div>
             ))}
@@ -52,4 +71,4 @@ const AIRecentTradesCard = ({ trades }: Props) => {
   )
 }
 
-export default memo(AIRecentTradesCard)
+export default memo(RecentTrades)

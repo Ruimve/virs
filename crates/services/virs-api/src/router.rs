@@ -70,6 +70,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/grid/{id}/stop", post(handlers::grid::stop_bot))
         .route("/api/grid/{id}/delete", delete(handlers::grid::delete_bot))
         .route("/api/grid/{id}/trades", get(handlers::grid::get_trades))
+        .route("/api/grid/{id}/stats", get(handlers::grid::get_stats))
         // Auto Bot (authenticated)
         .route("/api/auto/create", post(handlers::auto_trade::create_bot))
         .route("/api/auto/list", get(handlers::auto_trade::list_bots))
@@ -79,6 +80,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/auto/{id}/stop", post(handlers::auto_trade::stop_bot))
         .route("/api/auto/{id}/delete", delete(handlers::auto_trade::delete_bot))
         .route("/api/auto/{id}/trades", get(handlers::auto_trade::get_trades))
+        .route("/api/auto/{id}/stats", get(handlers::auto_trade::get_stats))
         // System (authenticated)
         .route("/api/system/paper/status", get(handlers::system::paper_status))
         .route("/api/system/paper/enable", post(handlers::system::paper_enable))
@@ -88,6 +90,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/ws", get(crate::ws::ws_handler))
         .route("/ws/kline", get(crate::ws::kline_ws_handler))
         .route("/ws/orderbook", get(crate::ws::orderbook_ws_handler))
+        .route("/ws/position", get(crate::ws::position_ws_handler))
         .with_state(state)
         .layer(
             CorsLayer::new()

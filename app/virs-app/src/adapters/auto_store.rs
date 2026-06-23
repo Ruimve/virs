@@ -31,14 +31,9 @@ fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
         leverage: bot.leverage,
         max_position_pct: bot.max_position_pct,
         decide_interval_secs: bot.decide_interval_secs,
-        current_side: bot.current_side.clone(),
-        entry_price: bot.entry_price,
-        position_size: bot.position_size,
         position_id: bot.position_id,
         stop_loss: bot.stop_loss,
         take_profit: bot.take_profit,
-        unrealized_pnl: bot.unrealized_pnl,
-        liquidation_price: bot.liquidation_price,
         market_regime: bot.market_regime.clone(),
         ai_analysis: bot.ai_analysis.clone(),
         system_prompt: bot.system_prompt.clone(),
@@ -89,19 +84,15 @@ impl AutoStore for PgAutoStore {
     }
 
     async fn update_position(
-        &self, bot_id: Uuid, current_side: Option<&str>, entry_price: f64,
-        position_size: f64, stop_loss: f64, take_profit: f64, liquidation_price: Option<f64>,
-        position_id: Option<Uuid>,
+        &self, bot_id: Uuid, position_id: Option<Uuid>,
+        stop_loss: f64, take_profit: f64,
     ) -> anyhow::Result<()> {
         sqlx::query(
             r#"UPDATE qd_auto_bots SET
-                current_side = $2, entry_price = $3, position_size = $4,
-                stop_loss = $5, take_profit = $6,
-                liquidation_price = $7, position_id = $8, updated_at = NOW()
+                position_id = $2, stop_loss = $3, take_profit = $4, updated_at = NOW()
                WHERE id = $1"#,
         )
-        .bind(bot_id).bind(current_side).bind(entry_price).bind(position_size)
-        .bind(stop_loss).bind(take_profit).bind(liquidation_price).bind(position_id)
+        .bind(bot_id).bind(position_id).bind(stop_loss).bind(take_profit)
         .execute(&self.db).await?;
         Ok(())
     }

@@ -11,6 +11,7 @@ use crate::auto::ai::AutoAiService;
 use crate::auto::ports::*;
 use crate::auto::types::{AutoCommand, AutoEvent};
 use crate::auto::worker::AutoWorker;
+use virs_types::position::EngineEvent;
 
 /// 全自动交易引擎
 pub struct AutoEngine {
@@ -21,6 +22,7 @@ pub struct AutoEngine {
     market_data_provider: Arc<dyn MarketDataProvider>,
     event_tx: broadcast::Sender<OrderEvent>,
     auto_event_tx: broadcast::Sender<AutoEvent>,
+    pe_event_tx: broadcast::Sender<EngineEvent>,
     cmd_rx: Option<mpsc::Receiver<AutoCommand>>,
     workers: HashMap<Uuid, tokio::task::JoinHandle<()>>,
     shutdown_txs: HashMap<Uuid, mpsc::Sender<()>>,
@@ -35,6 +37,7 @@ impl AutoEngine {
         order_executor: Arc<dyn OrderExecutor>,
         market_data_provider: Arc<dyn MarketDataProvider>,
         event_tx: broadcast::Sender<OrderEvent>,
+        pe_event_tx: broadcast::Sender<EngineEvent>,
     ) -> (Self, mpsc::Sender<AutoCommand>, broadcast::Sender<AutoEvent>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
         let (auto_event_tx, _) = broadcast::channel(256);
@@ -47,6 +50,7 @@ impl AutoEngine {
             market_data_provider,
             event_tx,
             auto_event_tx: auto_event_tx.clone(),
+            pe_event_tx,
             cmd_rx: Some(cmd_rx),
             workers: HashMap::new(),
             shutdown_txs: HashMap::new(),
@@ -103,6 +107,7 @@ impl AutoEngine {
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>(1);
         let event_rx = self.event_tx.subscribe();
+        let pe_event_rx = self.pe_event_tx.subscribe();
         let auto_event_tx = self.auto_event_tx.clone();
         let store = self.store.clone();
         let price_provider = self.price_provider.clone();
@@ -114,7 +119,7 @@ impl AutoEngine {
         let handle = tokio::spawn(async move {
             let mut worker = AutoWorker::new(
                 bot, price_provider, order_executor, ai_service, store,
-                market_data_provider, event_rx, auto_event_tx,
+                market_data_provider, event_rx, pe_event_rx, auto_event_tx,
             );
             worker.run(shutdown_rx).await;
         });

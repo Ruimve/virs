@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{broadcast, mpsc, Mutex};
 use tracing::info;
 
 use virs_api::EngineManager;
@@ -22,7 +22,7 @@ use virs_position::{Persistence as PePersistence, PositionEngine};
 use virs_types::bot::{OrderEvent, PriceProvider};
 use virs_types::enums::MarketType;
 use virs_types::exchange_pe::ExchangePe;
-use virs_types::position::EngineCommand;
+use virs_types::position::{EngineCommand, EngineEvent};
 
 use crate::adapters::*;
 
@@ -31,6 +31,10 @@ struct EngineState {
     paper_mode: bool,
     grid_cmd_tx: mpsc::Sender<GridCommand>,
     auto_cmd_tx: mpsc::Sender<AutoCommand>,
+    /// Position Engine 事件广播器（用于 /ws/position 推送）
+    pe_event_tx: broadcast::Sender<EngineEvent>,
+    /// Position Engine 共享引用（用于查询当前仓位快照）
+    position_engine: PositionEngine,
     /// Symbols that need price ticks in paper mode (exchange, symbol)
     paper_symbols: Arc<Mutex<Vec<(String, String)>>>,
 }
@@ -127,9 +131,12 @@ impl EngineManager for AppEngineManager {
 
         let mut position_engine = PositionEngine::new(pe_config, pe_exchange, pe_persistence);
         let pe_cmd_tx = position_engine.command_sender();
+        let pe_event_sender = position_engine.event_sender();
         let grid_pe_event_rx = position_engine.subscribe_events();
         let auto_pe_event_rx = position_engine.subscribe_events();
         let pe_exchange_ref = position_engine.exchange();
+        // 保存 clone 用于后续查询当前仓位快照（/ws/position subscribe 时推送）
+        let position_engine_clone = position_engine.clone();
 
         tokio::spawn(async move {
             if let Err(e) = position_engine.run().await {
@@ -235,6 +242,7 @@ impl EngineManager for AppEngineManager {
             auto_order_executor,
             auto_market_data_provider,
             auto_order_event_tx.clone(),
+            pe_event_sender.clone(),
         );
 
         // Bridge AutoEvent -> WsBroadcaster
@@ -246,21 +254,6 @@ impl EngineManager for AppEngineManager {
                     match auto_event_rx.recv().await {
                         Ok(event) => {
                             let ws_json = match &event {
-                                AutoEvent::PriceUpdate {
-                                    bot_id, symbol, side, entry_price, position_size,
-                                    current_price, unrealized_pnl, total_pnl, liquidation_price,
-                                } => Some(serde_json::json!({
-                                    "type": "position_pnl",
-                                    "bot_id": bot_id.to_string(),
-                                    "symbol": symbol,
-                                    "side": side,
-                                    "entry_price": entry_price,
-                                    "position_size": position_size,
-                                    "current_price": current_price,
-                                    "unrealized_pnl": unrealized_pnl,
-                                    "total_pnl": total_pnl,
-                                    "liquidation_price": liquidation_price,
-                                })),
                                 AutoEvent::PositionOpened { bot_id, side, price, quantity } => {
                                     Some(serde_json::json!({
                                         "type": "position",
@@ -346,6 +339,8 @@ impl EngineManager for AppEngineManager {
             paper_mode,
             grid_cmd_tx,
             auto_cmd_tx,
+            pe_event_tx: pe_event_sender,
+            position_engine: position_engine_clone,
             paper_symbols: paper_symbols.clone(),
         });
         self.started.store(true, Ordering::SeqCst);
@@ -376,6 +371,21 @@ impl EngineManager for AppEngineManager {
             if !symbols.contains(&(exchange.clone(), symbol.clone())) {
                 symbols.push((exchange, symbol));
             }
+        }
+    }
+
+    fn pe_event_subscribe(&self) -> Option<broadcast::Receiver<EngineEvent>> {
+        self.state.get().map(|s| s.pe_event_tx.subscribe())
+    }
+
+    fn get_positions_by_symbol(&self, symbol: &str) -> Vec<virs_types::position::Position> {
+        match self.state.get() {
+            Some(s) => s.position_engine
+                .get_all_positions()
+                .into_iter()
+                .filter(|p| p.symbol == symbol)
+                .collect(),
+            None => Vec::new(),
         }
     }
 

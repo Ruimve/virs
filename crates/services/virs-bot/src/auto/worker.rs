@@ -12,6 +12,8 @@ use crate::auto::ports::*;
 use crate::auto::strategy;
 use crate::auto::types::{AutoBotConfig, AutoEvent};
 use virs_types::auto_port::AutoMarketType;
+use virs_types::enums::{PositionSide, PositionStatus};
+use virs_types::position::{EngineEvent, Position};
 
 const PENDING_ORDER_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_POSITION_DURATION: Duration = Duration::from_secs(48 * 3600);
@@ -49,6 +51,7 @@ pub struct AutoWorker {
     store: Arc<dyn AutoStore>,
     market_data_provider: Arc<dyn MarketDataProvider>,
     event_rx: broadcast::Receiver<OrderEvent>,
+    pe_event_rx: broadcast::Receiver<EngineEvent>,
     auto_event_tx: broadcast::Sender<AutoEvent>,
     pub(crate) current_price: f64,
     pub(crate) consecutive_losses: i32,
@@ -57,6 +60,8 @@ pub struct AutoWorker {
     pub(crate) pending_close: Option<PendingClose>,
     pub(crate) position_opened_at: Option<tokio::time::Instant>,
     pub(crate) trailing_stop_dirty: bool,
+    /// 当前仓位缓存，从 PE 事件更新
+    pub(crate) current_position: Option<Position>,
 }
 
 impl AutoWorker {
@@ -68,6 +73,7 @@ impl AutoWorker {
         store: Arc<dyn AutoStore>,
         market_data_provider: Arc<dyn MarketDataProvider>,
         event_rx: broadcast::Receiver<OrderEvent>,
+        pe_event_rx: broadcast::Receiver<EngineEvent>,
         auto_event_tx: broadcast::Sender<AutoEvent>,
     ) -> Self {
         Self {
@@ -78,6 +84,7 @@ impl AutoWorker {
             store,
             market_data_provider,
             event_rx,
+            pe_event_rx,
             auto_event_tx,
             current_price: 0.0,
             consecutive_losses: 0,
@@ -86,6 +93,19 @@ impl AutoWorker {
             pending_close: None,
             position_opened_at: None,
             trailing_stop_dirty: false,
+            current_position: None,
+        }
+    }
+
+    /// 当前仓位方向（"long"/"short"/"none"）
+    pub(crate) fn current_side_str(&self) -> String {
+        match &self.current_position {
+            Some(p) if p.status == PositionStatus::Open => match p.side {
+                PositionSide::Long => "long".to_string(),
+                PositionSide::Short => "short".to_string(),
+                PositionSide::Both => "none".to_string(),
+            },
+            _ => "none".to_string(),
         }
     }
 
@@ -94,10 +114,10 @@ impl AutoWorker {
     }
 
     pub(crate) fn has_position(&self) -> bool {
-        self.bot
-            .current_side
-            .as_ref()
-            .map_or(false, |s| !s.is_empty() && s != "none")
+        match &self.current_position {
+            Some(p) if p.status == PositionStatus::Open => p.size.abs() > 1e-8,
+            _ => false,
+        }
     }
 
     pub(crate) fn is_pending(&self) -> bool {
@@ -116,18 +136,13 @@ impl AutoWorker {
     }
 
     pub(crate) async fn save_position(&self) {
-        let side_str = self.bot.current_side.as_deref().unwrap_or("none");
         let _ = self
             .store
             .update_position(
                 self.bot.id,
-                Some(side_str),
-                self.bot.entry_price,
-                self.bot.position_size,
+                self.bot.position_id,
                 self.bot.stop_loss,
                 self.bot.take_profit,
-                self.bot.liquidation_price,
-                self.bot.position_id,
             )
             .await;
     }
@@ -221,8 +236,49 @@ impl AutoWorker {
             }
         }
 
-        if self.bot.current_side.is_none() {
-            self.bot.current_side = Some("none".to_string());
+        // 如果 bot 有 position_id，等待 PE 推送仓位事件以恢复 current_position
+        // 这确保重启后能立即获取仓位状态，不会错过止损止盈检查
+        if self.bot.position_id.filter(|id| *id != Uuid::nil()).is_some() {
+            info!(
+                bot_id = %self.bot.id,
+                position_id = ?self.bot.position_id,
+                "Waiting for PE to restore current_position"
+            );
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+            loop {
+                if self.current_position.is_some() {
+                    info!(bot_id = %self.bot.id, "current_position restored from PE event");
+                    break;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    warn!(
+                        bot_id = %self.bot.id,
+                        "Timeout waiting for PE position event, clearing stale position_id"
+                    );
+                    self.bot.position_id = None;
+                    self.save_position().await;
+                    break;
+                }
+                tokio::select! {
+                    ev = self.pe_event_rx.recv() => {
+                        match ev {
+                            Ok(ev) => self.on_pe_event(ev).await,
+                            Err(broadcast::error::RecvError::Lagged(n)) => {
+                                warn!(bot_id = %self.bot.id, lagged = n, "PE event lagged during startup restore");
+                            }
+                            Err(broadcast::error::RecvError::Closed) => {
+                                warn!(bot_id = %self.bot.id, "PE event channel closed during startup restore");
+                                break;
+                            }
+                        }
+                    }
+                    _ = shutdown_rx.recv() => {
+                        info!(bot_id = %self.bot.id, "Shutdown during PE position restore");
+                        return;
+                    }
+                    _ = tokio::time::sleep(Duration::from_millis(200)) => {}
+                }
+            }
         }
 
         // 初始 LLM 分析
@@ -287,6 +343,17 @@ impl AutoWorker {
                         }
                     }
                 }
+                event = self.pe_event_rx.recv() => {
+                    match event {
+                        Ok(ev) => self.on_pe_event(ev).await,
+                        Err(broadcast::error::RecvError::Lagged(n)) => {
+                            warn!(bot_id = %self.bot.id, lagged = n, "PE event lagged");
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            warn!(bot_id = %self.bot.id, "PE event channel closed");
+                        }
+                    }
+                }
             }
         }
 
@@ -309,8 +376,6 @@ impl AutoWorker {
         }
 
         if self.has_position() {
-            self.update_unrealized_pnl();
-
             let atr = self.fetch_current_atr().await;
             self.update_trailing_stop(atr);
 
@@ -327,39 +392,19 @@ impl AutoWorker {
             self.save_position().await;
             self.trailing_stop_dirty = false;
         }
-
-        let _ = self.auto_event_tx.send(AutoEvent::PriceUpdate {
-            bot_id: self.bot.id,
-            symbol: self.bot.symbol.clone(),
-            side: self.bot.current_side.clone().unwrap_or_default(),
-            entry_price: self.bot.entry_price,
-            position_size: self.bot.position_size,
-            current_price: self.current_price,
-            unrealized_pnl: self.bot.unrealized_pnl,
-            total_pnl: self.bot.total_pnl,
-            liquidation_price: self.bot.liquidation_price,
-        });
-    }
-
-    fn update_unrealized_pnl(&mut self) {
-        if !self.has_position() || self.bot.entry_price <= 0.0 {
-            return;
-        }
-        let side = self.bot.current_side.as_deref().unwrap_or("none");
-        self.bot.unrealized_pnl = match side {
-            "long" => (self.current_price - self.bot.entry_price) * self.bot.position_size,
-            "short" => (self.bot.entry_price - self.current_price) * self.bot.position_size,
-            _ => 0.0,
-        };
     }
 
     async fn check_stop_take_profit(&mut self) -> bool {
-        if !self.has_position() || self.bot.entry_price <= 0.0 {
+        let entry_price = match &self.current_position {
+            Some(p) if p.status == PositionStatus::Open => p.entry_price,
+            _ => return false,
+        };
+        if entry_price <= 0.0 {
             return false;
         }
 
-        let side = self.bot.current_side.as_deref().unwrap_or("none");
-        let should_close = match side {
+        let side = self.current_side_str();
+        let should_close = match side.as_str() {
             "long" => {
                 (self.bot.stop_loss > 0.0 && self.current_price <= self.bot.stop_loss)
                     || (self.bot.take_profit > 0.0 && self.current_price >= self.bot.take_profit)
@@ -388,7 +433,11 @@ impl AutoWorker {
     }
 
     fn update_trailing_stop(&mut self, atr: f64) {
-        if !self.has_position() || self.bot.entry_price <= 0.0 || self.bot.stop_loss <= 0.0 {
+        let entry_price = match &self.current_position {
+            Some(p) if p.status == PositionStatus::Open => p.entry_price,
+            _ => return,
+        };
+        if entry_price <= 0.0 || self.bot.stop_loss <= 0.0 {
             return;
         }
 
@@ -396,12 +445,12 @@ impl AutoWorker {
             return;
         }
 
-        let side = self.bot.current_side.as_deref().unwrap_or("none");
+        let side = self.current_side_str();
 
         let new_stop = strategy::compute_trailing_stop(
-            self.bot.entry_price,
+            entry_price,
             self.current_price,
-            side,
+            &side,
             atr,
             self.bot.stop_loss,
         );
@@ -507,12 +556,21 @@ impl AutoWorker {
             0.0
         };
 
+        let (pos_side, pos_entry, pos_size, pos_liq) = match &self.current_position {
+            Some(p) if p.status == PositionStatus::Open => (
+                Some(self.current_side_str()),
+                p.entry_price,
+                p.size,
+                p.liquidation_price,
+            ),
+            _ => (None, 0.0, 0.0, None),
+        };
         let position_info = strategy::format_position_info(
-            self.bot.current_side.as_deref(),
-            self.bot.entry_price,
-            self.bot.position_size,
+            pos_side.as_deref(),
+            pos_entry,
+            pos_size,
             snapshot.base.current_price,
-            snapshot.base.liquidation_price,
+            pos_liq,
         );
 
         let stop_take_profit_info =
@@ -801,27 +859,19 @@ impl AutoWorker {
             invest_amount * self.bot.leverage as f64 / price
         };
 
-        // 校验最小下单量，并按 min_qty 精度向下取整
+        // 校验最小下单量，并按 min_qty 精度处理
         let min_qty = snapshot.base.min_qty;
-        let quantity = if min_qty > 0.0 {
+        let quantity = if min_qty > 0.0 && quantity < min_qty {
+            // 如果计算出的数量小于最小下单量，直接使用 min_qty 开单
+            warn!(
+                bot_id = %self.bot.id,
+                quantity, min_qty, invest_amount, price,
+                "Quantity below min_qty, using min_qty instead"
+            );
+            min_qty
+        } else if min_qty > 0.0 {
             // 向下取整到 min_qty 的倍数，避免交易所拒绝
-            let rounded = (quantity / min_qty).floor() * min_qty;
-            if rounded < min_qty {
-                warn!(
-                    bot_id = %self.bot.id,
-                    quantity, min_qty, invest_amount, price,
-                    "Quantity below min_qty after rounding, skipping open"
-                );
-                let _ = self.auto_event_tx.send(AutoEvent::BotError {
-                    bot_id: self.bot.id,
-                    error: format!(
-                        "Quantity {:.6} below min_qty {:.6} (invest {:.2} USDT at price {:.2}). Increase balance or leverage.",
-                        quantity, min_qty, invest_amount, price
-                    ),
-                });
-                return;
-            }
-            rounded
+            (quantity / min_qty).floor() * min_qty
         } else {
             quantity
         };
@@ -892,7 +942,11 @@ impl AutoWorker {
             return;
         }
 
-        let side = self.bot.current_side.clone().unwrap_or_default();
+        let side = self.current_side_str();
+        let (entry_price, position_size, unrealized_pnl) = match &self.current_position {
+            Some(p) => (p.entry_price, p.size, p.unrealized_pnl),
+            None => (0.0, 0.0, 0.0),
+        };
 
         // Use ClosePosition if we have a valid position_id, otherwise fall back to PlaceOrder
         // 注意：Uuid::nil() 视为无效（历史 bug 可能导致 nil UUID 被保存）
@@ -912,7 +966,7 @@ impl AutoWorker {
                 Ok(()) => {
                     info!(
                         bot_id = %self.bot.id, side = %side,
-                        entry_price = self.bot.entry_price,
+                        entry_price = entry_price,
                         close_price = self.current_price,
                         reason = %reason,
                         "Position closing order sent via ClosePosition, awaiting confirmation"
@@ -921,9 +975,9 @@ impl AutoWorker {
                     self.pending_close = Some(PendingClose {
                         side: side.clone(),
                         reason: reason.to_string(),
-                        entry_price: self.bot.entry_price,
-                        position_size: self.bot.position_size,
-                        unrealized_pnl: self.bot.unrealized_pnl,
+                        entry_price,
+                        position_size,
+                        unrealized_pnl,
                         client_order_id,
                         sent_at: tokio::time::Instant::now(),
                     });
@@ -954,7 +1008,7 @@ impl AutoWorker {
                 .send_command(OrderCommand::PlaceOrder {
                     symbol: self.bot.symbol.clone(),
                     side: order_side,
-                    amount: self.bot.position_size,
+                    amount: position_size,
                     price: None,
                     reduce_only: true,
                     position_side,
@@ -967,7 +1021,7 @@ impl AutoWorker {
                 Ok(()) => {
                     info!(
                         bot_id = %self.bot.id, side = %side,
-                        entry_price = self.bot.entry_price,
+                        entry_price = entry_price,
                         close_price = self.current_price,
                         reason = %reason,
                         "Position closing order sent via PlaceOrder, awaiting confirmation"
@@ -976,9 +1030,9 @@ impl AutoWorker {
                     self.pending_close = Some(PendingClose {
                         side: side.clone(),
                         reason: reason.to_string(),
-                        entry_price: self.bot.entry_price,
-                        position_size: self.bot.position_size,
-                        unrealized_pnl: self.bot.unrealized_pnl,
+                        entry_price,
+                        position_size,
+                        unrealized_pnl,
                         client_order_id,
                         sent_at: tokio::time::Instant::now(),
                     });
@@ -995,6 +1049,92 @@ impl AutoWorker {
     }
 
     // ── 订单事件处理 ────────────────────────────────────────
+
+    /// 处理 PositionEngine 事件，维护 current_position 缓存
+    pub(crate) async fn on_pe_event(&mut self, event: EngineEvent) {
+        match event {
+            EngineEvent::PositionUpdated { position } => {
+                // 只关心本 bot 的 symbol 且 position_id 匹配
+                if position.symbol != self.bot.symbol {
+                    return;
+                }
+                let is_ours = match self.bot.position_id {
+                    Some(pid) if pid != Uuid::nil() => pid == position.id,
+                    // position_id 还没建立时，按 symbol + Open 状态匹配
+                    _ => position.status == PositionStatus::Open,
+                };
+                if !is_ours {
+                    return;
+                }
+                // 如果 position_id 还没建立，从 PositionUpdated 事件中恢复
+                // 这可以处理 PositionOpened 事件丢失（broadcast lag）的场景
+                if self.bot.position_id.is_none() || self.bot.position_id == Some(Uuid::nil()) {
+                    self.bot.position_id = Some(position.id);
+                    let _ = self
+                        .store
+                        .update_position(
+                            self.bot.id,
+                            self.bot.position_id,
+                            self.bot.stop_loss,
+                            self.bot.take_profit,
+                        )
+                        .await;
+                    info!(
+                        bot_id = %self.bot.id,
+                        position_id = %position.id,
+                        "Recovered bot.position_id from PositionUpdated event"
+                    );
+                }
+                self.current_position = Some(position);
+            }
+            EngineEvent::PositionClosed { position } => {
+                if position.symbol != self.bot.symbol {
+                    return;
+                }
+                if let Some(pid) = self.bot.position_id {
+                    if pid == position.id {
+                        self.current_position = None;
+                        // 清空 position_id 并持久化，避免重启后尝试恢复已关闭的仓位
+                        self.bot.position_id = None;
+                        let _ = self
+                            .store
+                            .update_position(
+                                self.bot.id,
+                                self.bot.position_id,
+                                self.bot.stop_loss,
+                                self.bot.take_profit,
+                            )
+                            .await;
+                        info!(
+                            bot_id = %self.bot.id,
+                            position_id = %pid,
+                            "Position closed event received, cleared bot.position_id"
+                        );
+                    }
+                }
+            }
+            EngineEvent::PositionOpened { position } => {
+                if position.symbol != self.bot.symbol {
+                    return;
+                }
+                // 开仓事件到达后，记录 position_id 并缓存
+                if self.bot.position_id.is_none() || self.bot.position_id == Some(Uuid::nil()) {
+                    self.bot.position_id = Some(position.id);
+                    let _ = self
+                        .store
+                        .update_position(
+                            self.bot.id,
+                            self.bot.position_id,
+                            self.bot.stop_loss,
+                            self.bot.take_profit,
+                        )
+                        .await;
+                }
+                self.current_position = Some(position);
+            }
+            _ => {}
+        }
+    }
 
     pub(crate) async fn on_order_event(&mut self, event: OrderEvent) {
         match event {
@@ -1115,12 +1255,9 @@ impl AutoWorker {
             "Open order confirmed, applying position state"
         );
 
-        self.bot.current_side = Some(pending.side.clone());
-        self.bot.entry_price = fill_price;
-        self.bot.position_size = actual_qty;
+        // 仓位实时状态由 PE 通过 PositionUpdated 事件维护，这里只更新 bot 的风控参数
         self.bot.stop_loss = stop_loss;
         self.bot.take_profit = take_profit;
-        self.bot.unrealized_pnl = 0.0;
         self.position_opened_at = Some(tokio::time::Instant::now());
 
         self.save_position().await;
@@ -1223,14 +1360,10 @@ impl AutoWorker {
             self.consecutive_losses += 1;
         }
 
-        self.bot.current_side = Some("none".to_string());
-        self.bot.entry_price = 0.0;
-        self.bot.position_size = 0.0;
         self.bot.position_id = None;
         self.bot.stop_loss = 0.0;
         self.bot.take_profit = 0.0;
-        self.bot.unrealized_pnl = 0.0;
-        self.bot.liquidation_price = None;
+        self.current_position = None;
         self.position_opened_at = None;
 
         self.save_position().await;

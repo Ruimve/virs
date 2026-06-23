@@ -107,12 +107,8 @@ export interface AutoBot {
   leverage: number
   max_position_pct: number
   decide_interval_secs: number
-  current_side: string | null
-  entry_price: number
-  position_size: number
   stop_loss: number
   take_profit: number
-  unrealized_pnl: number
   market_regime: string | null
   ai_analysis: string | null
   total_pnl: number
@@ -128,7 +124,7 @@ export interface AutoTrade {
   symbol: string
   exchange: string
   side: string
-  trade_type: string
+  type: string
   price: number
   quantity: number
   pnl: number
@@ -139,7 +135,32 @@ export interface AutoTrade {
 
 export interface AutoBotDetail {
   bot: AutoBot
+}
+
+export interface AutoTradesPage {
   trades: AutoTrade[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface AutoBotStats {
+  win_rate: number
+  profit_loss_ratio: number
+  max_drawdown: number
+  avg_hold_time: string
+  max_win_streak: number
+  max_loss_streak: number
+  total_fee: number
+  net_pnl: number
+  total_trades: number
+  win_trades: number
+  loss_trades: number
+  total_volume: number
+  avg_pnl: number
+  max_profit: number
+  max_loss: number
+  net_pnl_after_fee: number
 }
 
 // ── Grid Bot types ──────────────────────────────────────────
@@ -207,6 +228,34 @@ export interface GridBotDetail {
 export interface GridTradesResponse {
   items: GridTrade[]
   grid_levels: GridLevelInfo[]
+}
+
+export interface GridTradesPage {
+  trades: GridTrade[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface GridBotStats {
+  win_rate: number
+  profit_loss_ratio: number
+  max_drawdown: number
+  avg_hold_time: string
+  max_win_streak: number
+  max_loss_streak: number
+  net_pnl: number
+  realized_pnl: number
+  unrealized_pnl: number
+  total_pnl: number
+  total_trades: number
+  closed_trades: number
+  win_trades: number
+  loss_trades: number
+  grid_filled_count: number
+  avg_pnl: number
+  max_profit: number
+  max_loss: number
 }
 
 // ── Analysis types ──────────────────────────────────────────

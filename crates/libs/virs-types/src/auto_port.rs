@@ -27,9 +27,8 @@ pub trait AutoStore: Send + Sync {
     async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> anyhow::Result<()>;
     async fn update_last_decided(&self, bot_id: Uuid) -> anyhow::Result<()>;
     async fn update_position(
-        &self, bot_id: Uuid, current_side: Option<&str>, entry_price: f64,
-        position_size: f64, stop_loss: f64, take_profit: f64,
-        liquidation_price: Option<f64>, position_id: Option<Uuid>,
+        &self, bot_id: Uuid, position_id: Option<Uuid>,
+        stop_loss: f64, take_profit: f64,
     ) -> anyhow::Result<()>;
     async fn update_ai_analysis(
         &self, bot_id: Uuid, market_regime: &str, leverage: i32, ai_analysis: &str,
@@ -98,14 +97,9 @@ pub struct AutoBotConfig {
     pub leverage: i32,
     pub max_position_pct: f64,
     pub decide_interval_secs: i32,
-    pub current_side: Option<String>,
-    pub entry_price: f64,
-    pub position_size: f64,
     pub position_id: Option<Uuid>,
     pub stop_loss: f64,
     pub take_profit: f64,
-    pub unrealized_pnl: f64,
-    pub liquidation_price: Option<f64>,
     pub market_regime: Option<String>,
     pub ai_analysis: Option<String>,
     pub system_prompt: Option<String>,

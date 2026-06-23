@@ -3,8 +3,11 @@ import type {
   ApiResponse,
   BotSummary,
   AutoBotDetail,
+  AutoTradesPage,
+  AutoBotStats,
   GridBotDetail,
-  GridTradesResponse,
+  GridTradesPage,
+  GridBotStats,
   AnalysisLog,
 } from './types'
 
@@ -42,8 +45,16 @@ export async function getGridBotDetail(id: string): Promise<ApiResponse<GridBotD
   return api.get<GridBotDetail>(`/grid/${id}`)
 }
 
-export async function getGridTrades(id: string): Promise<ApiResponse<GridTradesResponse>> {
-  return api.get<GridTradesResponse>(`/grid/${id}/trades`)
+export async function getGridTrades(
+  id: string,
+  page: number = 1,
+  pageSize: number = 20,
+): Promise<ApiResponse<GridTradesPage>> {
+  return api.get<GridTradesPage>(`/grid/${id}/trades?page=${page}&page_size=${pageSize}`)
+}
+
+export async function getGridStats(botId: string): Promise<ApiResponse<GridBotStats>> {
+  return api.get<GridBotStats>(`/grid/${botId}/stats`)
 }
 
 export async function getGridAnalysisLogs(
@@ -80,6 +91,18 @@ export async function deleteAutoBot(id: string): Promise<ApiResponse<null>> {
 
 export async function getAutoBotDetail(id: string): Promise<ApiResponse<AutoBotDetail>> {
   return api.get<AutoBotDetail>(`/auto/${id}`)
+}
+
+export async function getAutoTrades(
+  botId: string,
+  page: number = 1,
+  pageSize: number = 20,
+): Promise<ApiResponse<AutoTradesPage>> {
+  return api.get<AutoTradesPage>(`/auto/${botId}/trades?page=${page}&page_size=${pageSize}`)
+}
+
+export async function getAutoStats(botId: string): Promise<ApiResponse<AutoBotStats>> {
+  return api.get<AutoBotStats>(`/auto/${botId}/stats`)
 }
 
 export async function getAutoAnalysisLogs(

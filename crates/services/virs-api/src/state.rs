@@ -4,12 +4,13 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use axum::extract::FromRef;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 
 use virs_bot::grid::types::GridCommand;
 use virs_bot::auto::types::AutoCommand;
 use virs_exchange::Exchanges;
 use virs_market::{KlineEngine, OrderBookEngine};
+use virs_types::position::EngineEvent;
 
 /// WebSocket 广播器
 pub struct WsBroadcaster {
@@ -54,6 +55,12 @@ pub trait EngineManager: Send + Sync {
 
     /// Register a symbol for paper mode price ticks
     async fn register_paper_symbol(&self, exchange: String, symbol: String);
+
+    /// 订阅 Position Engine 事件（用于 /ws/position 推送）
+    fn pe_event_subscribe(&self) -> Option<broadcast::Receiver<EngineEvent>>;
+
+    /// 查询 PE 中指定 symbol 的当前仓位快照（用于 /ws/position subscribe 时推送）
+    fn get_positions_by_symbol(&self, symbol: &str) -> Vec<virs_types::position::Position>;
 
     /// Restore services if bots exist in DB but engines are not started.
     /// Called once at server startup. No-op if engines already started or no bots exist.

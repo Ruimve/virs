@@ -1,11 +1,10 @@
-import { useEffect } from 'react'
-import { useNavigate, Outlet } from 'react-router-dom'
+import { useEffect, memo } from 'react'
+import { Outlet, useNavigate } from 'react-router-dom'
 import { startGridBot, stopGridBot, deleteGridBot } from '@/service/bot'
-import type { GridBot } from '@/service/types'
 import { useBot } from '../context/BotContext'
 import { useHeader, type ItemConfig } from '../components/Header/context'
 
-export default function GridBot() {
+const GridBot = () => {
   const navigate = useNavigate()
   const { updateTabs, updateActions } = useHeader()
   const { bot, loading } = useBot()
@@ -15,8 +14,8 @@ export default function GridBot() {
 
     updateTabs([
       {
-        key: 'market',
-        label: '行情',
+        key: 'bot',
+        label: '机器人',
         onClick: () => {
           navigate(`/trade/grid/${bot?.id}/bot`, { replace: true })
         },
@@ -47,43 +46,52 @@ export default function GridBot() {
 
   useEffect(() => {
     if (!bot?.id || !bot?.status) return
+
     const actions: ItemConfig[] = []
     actions.push({
       key: 'delete',
       label: '删除',
+      className:
+        'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors',
       onClick: async () => {
-        if (!confirm('确定删除此机器人？')) return
-        await stopGridBot(bot?.id).catch(() => {})
+        if (!confirm('确定删除此机器人？将平仓所有持仓。')) return
         await deleteGridBot(bot?.id)
         navigate('/setup/bot-type', { replace: true })
       },
     })
+
     if (bot?.status === 'running') {
       actions.push({
         key: 'stop',
         label: '暂停',
+        className:
+          'bg-surface-1 border-line-default text-on-surface-tertiary hover:text-red-400 hover:border-red-500/20 transition-colors',
         onClick: async () => {
           await stopGridBot(bot?.id)
         },
       })
     }
+
     if (bot?.status === 'stopped') {
       actions.push({
         key: 'start',
         label: '运行',
+        className:
+          'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors',
         onClick: async () => {
           await startGridBot(bot?.id)
         },
       })
     }
+
     updateActions(actions)
   }, [bot?.id, bot?.status])
 
-  if (loading || !bot) {
+  if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center relative z-10 h-screen bg-base">
+      <div className="h-screen bg-base flex flex-col items-center justify-center relative gap-4">
         <svg
-          className="animate-spin h-5 w-5 text-on-surface-tertiary"
+          className="animate-spin h-6 w-6 text-on-surface-tertiary"
           viewBox="0 0 24 24"
           fill="none"
         >
@@ -105,5 +113,21 @@ export default function GridBot() {
     )
   }
 
+  if (!bot?.id) {
+    return (
+      <div className="h-screen bg-base flex flex-col items-center justify-center relative gap-4">
+        <div className="text-on-surface-tertiary text-sm">{'机器人不存在或加载失败'}</div>
+        <button
+          onClick={() => navigate('/setup/bot-type', { replace: true })}
+          className="px-4 py-2 text-xs font-medium border border-line-default rounded-lg text-on-surface-tertiary hover:bg-surface-2 transition-colors"
+        >
+          创建新机器人
+        </button>
+      </div>
+    )
+  }
+
   return <Outlet />
 }
+
+export default memo(GridBot)

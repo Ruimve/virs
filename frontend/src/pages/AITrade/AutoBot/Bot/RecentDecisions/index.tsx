@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import type { AnalysisLog } from '@/service'
 import { useNavigate } from 'react-router-dom'
-import { actionColor, actionLabel } from '../utils/utils'
+import { actionColor, actionLabel } from '../../../components/utils/utils'
 
 interface Props {
   logs: AnalysisLog[]

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useImperativeHandle, forwardRef } from 'react'
+import { useRef, useEffect, useImperativeHandle, forwardRef, memo, useCallback } from 'react'
 import {
   type IChartApi,
   type ISeriesApi,
@@ -99,9 +99,9 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     [],
   )
 
-  const setChart = (c: IChartApi | undefined) => {
+  const setChart = useCallback((c: IChartApi | undefined) => {
     chartRef.current = c
-  }
+  }, [])
 
   // ── Initial setup on mount ─────────────────────────────
 
@@ -293,4 +293,4 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
   return <ReactChart onLoad={setChart} height={height} />
 })
 
-export default KlineChart
+export default memo(KlineChart)

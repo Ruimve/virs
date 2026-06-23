@@ -1,36 +1,84 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useBot } from '../../context/BotContext'
-import GridStats from './GridStats'
 import {
   fetchKlines,
-  fetchOrderBook,
-  useKlineWs,
+  getGridAnalysisLogs,
+  getGridTrades,
+  type AnalysisLog,
   type GridBot,
   type GridTrade,
   type KlineCandle,
   type KlineWsEvent,
-  type OrderBookData,
 } from '@/service'
-import ChartPanel from '../../components/ChartPanel'
-import MarketIndicators from '../../components/MarketIndicators'
-import MobileOrderBook from '../../components/MobileOrderBook'
-import OrderBookPanel from '../../components/OrderBookPanel'
+import { useKlineWs } from '@/service/ws'
 import type { KlineChartHandle } from '@/components/Chart/KlineChart'
-import { useOrderBookWs, type OrderBookWsEvent } from '@/service/ws'
+import { useBot } from '../../context/BotContext'
+import AIDecisionCard from '../../components/AIDecisionCard'
+import StickyMarket from '../../components/StickyMarket'
+import TradeStats from './TradeStats'
+import LevelsOverview from './LevelsOverview'
+import RecentTrades from './RecentTrades'
+import PositionStats from './PositionStats'
+
+/**
+ * 把网格交易记录转换为 K线图 markers。
+ * 买入（open_side=buy）→ 绿色向上箭头，位于 K线下方
+ * 卖出（open_side=sell）→ 红色向下箭头，位于 K线上方
+ */
+function tradesToMarkers(trades: GridTrade[]) {
+  return trades
+    .map((t) => {
+      const time = Math.floor(new Date(t.opened_at).getTime() / 1000)
+      const isBuy = t.open_side === 'buy'
+      return {
+        time,
+        position: isBuy ? ('belowBar' as const) : ('aboveBar' as const),
+        color: isBuy ? '#10b981' : '#ef4444',
+        shape: isBuy ? ('arrowUp' as const) : ('arrowDown' as const),
+        text: `${isBuy ? '买' : '卖'} L${t.grid_level}`,
+      }
+    })
+    .sort((a, b) => a.time - b.time)
+}
 
 const Bot = () => {
-  const { bot, trades } = useBot()
+  const { bot, gridLevels } = useBot()
 
-  const [klineData, setKlineData] = useState<KlineCandle[]>([])
   const [klineTimeframe, setKlineTimeframe] = useState('15m')
-  const [orderBook, setOrderBook] = useState<OrderBookData>({ bids: [], asks: [] })
+  const [klineData, setKlineData] = useState<KlineCandle[]>([])
+  const [latestPrice, setLatestPrice] = useState(0)
+  const [logs, setLogs] = useState<AnalysisLog[]>([])
+  const [gridTrades, setGridTrades] = useState<GridTrade[]>([])
 
   const chartRef = useRef<KlineChartHandle>(null)
+
+  const loadLogs = useCallback(async (botId: string) => {
+    try {
+      const res = await getGridAnalysisLogs(botId)
+      if (res.data?.items) setLogs(res.data.items)
+    } catch (e) {
+      console.error('Failed to load analysis logs:', e)
+    }
+  }, [])
+
+  const loadTrades = useCallback(async (botId: string) => {
+    try {
+      // 获取最近 50 条用于 K 线 markers
+      const res = await getGridTrades(botId, 1, 50)
+      if (res.data?.trades) setGridTrades(res.data.trades)
+    } catch (e) {
+      console.error('Failed to load trades:', e)
+    }
+  }, [])
 
   const loadKlines = useCallback(
     async (exchange: string, symbol: string, market_type: string, tf: string) => {
       try {
-        const res = await fetchKlines({ exchange, symbol, market_type, timeframe: tf })
+        const res = await fetchKlines({
+          exchange,
+          symbol,
+          market_type,
+          timeframe: tf,
+        })
         if (res.data) setKlineData(res.data)
       } catch (e) {
         console.error('Failed to load kline:', e)
@@ -44,45 +92,25 @@ const Bot = () => {
     loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe)
   }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines])
 
-  const loadOrderBook = useCallback(
-    async (exchange: string, symbol: string, market_type: string) => {
-      try {
-        // 确保后端订阅了该 symbol 的订单簿流（后端重启后订阅会丢失）
-        const res = await fetchOrderBook({ exchange, symbol, market_type })
-        if (res.data) setOrderBook(res.data)
-      } catch (e) {
-        console.error('Failed to load orderbook:', e)
-      }
-    },
-    [],
-  )
+  useEffect(() => {
+    if (!bot?.id) return
+    loadLogs(bot?.id)
+    loadTrades(bot?.id)
+  }, [bot?.id, loadLogs, loadTrades])
 
   useEffect(() => {
     if (!bot?.exchange || !bot?.symbol || !bot?.market_type || !klineTimeframe) return
     loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe)
-  }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe])
-
-  useEffect(() => {
-    if (!bot?.exchange || !bot?.symbol || !bot?.market_type) return
-    loadOrderBook(bot?.exchange, bot?.symbol, bot?.market_type)
-  }, [bot?.exchange, bot?.symbol, bot?.market_type])
-
-  // Real-time orderbook via WebSocket (replaces 2s polling)
-  useOrderBookWs((event: OrderBookWsEvent) => {
-    if (!bot) return
-
-    if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return
-
-    setOrderBook(event.orderBook)
-  })
+  }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines])
 
   useKlineWs(
     (event: KlineWsEvent) => {
       if (!bot) return
       if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return
-
       const c = event.candle
       if (!c) return
+      // 更新最新价
+      setLatestPrice(c.close)
       // Update chart directly via series.update() — no re-render
       chartRef.current?.update(c)
     },
@@ -91,54 +119,45 @@ const Bot = () => {
   )
 
   const gridBot = useMemo(() => bot as GridBot, [bot])
-  const gridTrades = useMemo(() => trades as GridTrade[], [trades])
+  const markers = useMemo(() => tradesToMarkers(gridTrades), [gridTrades])
+  const latestDecision = useMemo(() => logs[0] || null, [logs])
 
   return (
     <div className="h-full flex flex-col lg:flex-row">
-      <div className="flex flex-col h-full lg:flex-1 lg:min-h-0">
-        <GridStats bot={gridBot} />
-        <div className="h-[260px] shrink-0 lg:h-auto lg:flex-1 lg:min-h-0 lg:shrink">
-          <ChartPanel
+      {/* 主区域：状态栏 + AI决策 + 交易统计 + 底部行情折叠 */}
+      <div className="flex flex-col h-full lg:flex-1 lg:min-h-0 overflow-y-auto relative mb-9">
+        {/* 网格状态 */}
+        <PositionStats bot={gridBot} latestPrice={latestPrice} />
+
+        {/* AI 决策卡片 */}
+        <AIDecisionCard log={latestDecision} botId={gridBot?.id} botType="grid" />
+
+        {/* 历史交易统计 */}
+        <TradeStats botId={gridBot?.id} />
+
+        {/* 底部行情折叠面板（K线图） */}
+        <div className="fixed bottom-0 left-0 right-0">
+          <StickyMarket
             klineData={klineData}
             klineTimeframe={klineTimeframe}
             onTimeframeChange={setKlineTimeframe}
             chartRef={chartRef}
+            markers={markers}
+            latestPrice={latestPrice}
           />
         </div>
-        {/* Mobile: market indicators + recent trades (scrollable) */}
-        <div className="flex-1 overflow-y-auto lg:hidden border-t border-line-subtle">
-          <MarketIndicators klineData={klineData} orderBook={orderBook} />
-          {gridTrades.length > 0 && (
-            <div className="px-4 py-2">
-              <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-1.5">
-                最近成交
-              </div>
-              {gridTrades.slice(0, 5).map((t, i) => (
-                <div key={i} className="flex items-center justify-between py-1 text-xs">
-                  <span
-                    className={`font-mono ${t.open_side === 'buy' ? 'text-emerald-400' : 'text-red-400'}`}
-                  >
-                    {t.open_side === 'buy' ? '买' : '卖'} {t.open_quantity?.toFixed(4) || '-'} @{' '}
-                    {t.open_price?.toFixed(2) || '-'}
-                  </span>
-                  <span className="text-on-surface-tertiary text-[10px]">
-                    {new Date(t.opened_at).toLocaleTimeString('zh-CN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        {/* Mobile orderbook — pinned at bottom */}
-        <div className="shrink-0 lg:hidden border-t border-line-subtle">
-          <MobileOrderBook orderBook={orderBook} />
-        </div>
       </div>
+
+      {/* 右侧侧边栏：网格层级概览 + 最近成交 */}
       <div className="hidden lg:flex w-72 xl:w-80 border-l border-line-subtle flex-col">
-        <OrderBookPanel orderBook={orderBook} />
+        <div className="flex flex-col h-full divide-y divide-line-subtle">
+          <div className="flex-1 min-h-0">
+            <LevelsOverview gridLevels={gridLevels} />
+          </div>
+          <div className="flex-1 min-h-0">
+            <RecentTrades botId={gridBot?.id} />
+          </div>
+        </div>
       </div>
     </div>
   )

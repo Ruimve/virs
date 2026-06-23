@@ -5,9 +5,17 @@ use axum::{
     http::{HeaderMap, StatusCode},
     Json,
 };
+use serde::Deserialize;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
+
+/// 分页查询参数
+#[derive(Debug, Deserialize)]
+pub struct TradesQuery {
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+}
 
 pub async fn create_bot(
     State(state): State<AppState>,
@@ -179,13 +187,13 @@ pub async fn get_bot(
         None => return Err((StatusCode::NOT_FOUND, Json(ApiResponse::err("Bot not found")))),
     };
 
-    // Query 2: position & stats
+    // Query 2: stats & risk-control params (position 实时状态由 /ws/position 推送)
     let pos = sqlx::query_as::<_, (
-        Option<String>, f64, f64, f64, f64, f64, Option<f64>,
+        f64, f64,
         Option<String>, Option<String>,
         f64, i32, i32, i32,
     )>(
-        r#"SELECT current_side, entry_price, position_size, stop_loss, take_profit, unrealized_pnl, liquidation_price,
+        r#"SELECT stop_loss, take_profit,
            market_regime, ai_analysis,
            total_pnl, total_trades, win_trades, loss_trades
            FROM qd_auto_bots WHERE id = $1"#,
@@ -197,36 +205,9 @@ pub async fn get_bot(
         (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
     })?;
 
-    let (current_side, entry_price, position_size, stop_loss, take_profit, unrealized_pnl, liquidation_price,
+    let (stop_loss, take_profit,
          market_regime, ai_analysis,
          total_pnl, total_trades, win_trades, loss_trades) = pos;
-
-    // Query 3: recent trades
-    let trades_rows = sqlx::query_as::<_, (String, String, f64, f64, f64, f64, f64, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT side, trade_type, price, quantity, pnl, pnl_pct, fee, created_at
-           FROM qd_auto_trades WHERE bot_id = $1 ORDER BY created_at DESC LIMIT 50"#,
-    )
-    .bind(id)
-    .fetch_all(&state.db_pool)
-    .await
-    .unwrap_or_default();
-
-    let trades: Vec<serde_json::Value> = trades_rows.iter().map(|(side, trade_type, price, quantity, pnl, pnl_pct, fee, t_created_at)| {
-        serde_json::json!({
-            "id": uuid::Uuid::new_v4().to_string(),
-            "bot_id": id.to_string(),
-            "symbol": &symbol,
-            "exchange": &exchange,
-            "side": side,
-            "trade_type": trade_type,
-            "price": price,
-            "quantity": quantity,
-            "pnl": pnl,
-            "pnl_pct": pnl_pct,
-            "fee": fee,
-            "created_at": t_created_at.to_rfc3339(),
-        })
-    }).collect();
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "bot": {
@@ -239,13 +220,8 @@ pub async fn get_bot(
             "leverage": leverage,
             "max_position_pct": max_position_pct,
             "decide_interval_secs": decide_interval_secs,
-            "current_side": current_side,
-            "entry_price": entry_price,
-            "position_size": position_size,
             "stop_loss": stop_loss,
             "take_profit": take_profit,
-            "unrealized_pnl": unrealized_pnl,
-            "liquidation_price": liquidation_price,
             "market_regime": market_regime,
             "ai_analysis": ai_analysis,
             "total_pnl": total_pnl,
@@ -255,7 +231,6 @@ pub async fn get_bot(
             "created_at": created_at.to_rfc3339(),
             "updated_at": updated_at.to_rfc3339(),
         },
-        "trades": trades,
     }))))
 }
 
@@ -299,36 +274,229 @@ pub async fn get_trades(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<uuid::Uuid>,
+    axum::extract::Query(params): axum::extract::Query<TradesQuery>,
 ) -> Json<ApiResponse> {
     let user_id = match extract_user_id(&headers) {
         Ok(id) => id,
         Err((_, resp)) => return resp,
     };
 
-    let rows = sqlx::query_as::<_, (String, String, f64, f64, f64, f64, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT side, trade_type, price, quantity, pnl, fee, created_at
-           FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 100"#,
+    let page = params.page.unwrap_or(1).max(1);
+    let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
+    let offset = (page - 1) * page_size;
+
+    // 查询总数
+    let total: i64 = match sqlx::query_scalar::<_, i64>(
+        r#"SELECT COUNT(*) FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2"#,
     )
     .bind(id)
     .bind(user_id)
+    .fetch_one(&state.db_pool)
+    .await
+    {
+        Ok(n) => n,
+        Err(e) => return Json(ApiResponse::err(format!("Database error: {}", e))),
+    };
+
+    // 查询分页数据
+    let rows = sqlx::query_as::<_, (String, String, f64, f64, f64, f64, f64, chrono::DateTime<chrono::Utc>)>(
+        r#"SELECT side, trade_type, price, quantity, pnl, pnl_pct, fee, created_at
+           FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2
+           ORDER BY created_at DESC LIMIT $3 OFFSET $4"#,
+    )
+    .bind(id)
+    .bind(user_id)
+    .bind(page_size as i64)
+    .bind(offset as i64)
     .fetch_all(&state.db_pool)
     .await;
 
     match rows {
         Ok(trades) => Json(ApiResponse::ok(serde_json::json!({
-            "trades": trades.iter().map(|(side, trade_type, price, quantity, pnl, fee, created_at)| {
+            "trades": trades.iter().map(|(side, trade_type, price, quantity, pnl, pnl_pct, fee, created_at)| {
                 serde_json::json!({
                     "side": side,
                     "type": trade_type,
                     "price": price,
                     "quantity": quantity,
                     "pnl": pnl,
+                    "pnl_pct": pnl_pct,
                     "fee": fee,
                     "created_at": created_at.to_rfc3339(),
                 })
-            }).collect::<Vec<_>>()
+            }).collect::<Vec<_>>(),
+            "total": total,
+            "page": page,
+            "page_size": page_size,
         }))),
         Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
+    }
+}
+
+pub async fn get_stats(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<uuid::Uuid>,
+) -> Json<ApiResponse> {
+    let user_id = match extract_user_id(&headers) {
+        Ok(id) => id,
+        Err((_, resp)) => return resp,
+    };
+
+    // 拉取全量 trades（按时间正序），用于计算统计指标
+    let rows = sqlx::query_as::<_, (String, String, f64, f64, f64, f64, f64, chrono::DateTime<chrono::Utc>)>(
+        r#"SELECT side, trade_type, price, quantity, pnl, pnl_pct, fee, created_at
+           FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2
+           ORDER BY created_at ASC"#,
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_all(&state.db_pool)
+    .await;
+
+    let trades = match rows {
+        Ok(t) => t,
+        Err(e) => return Json(ApiResponse::err(format!("Database error: {}", e))),
+    };
+
+    // 读取 bot 汇总字段
+    let bot_stats = sqlx::query_as::<_, (i32, i32, i32)>(
+        r#"SELECT total_trades, win_trades, loss_trades FROM qd_auto_bots WHERE id = $1"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.db_pool)
+    .await;
+
+    let (total_trades, win_trades, loss_trades) = match bot_stats {
+        Ok(Some((t, w, l))) => (t, w, l),
+        Ok(None) => (0i32, 0i32, 0i32),
+        Err(e) => return Json(ApiResponse::err(format!("Database error: {}", e))),
+    };
+
+    // 胜率
+    let win_rate = if total_trades > 0 {
+        (win_trades as f64 / total_trades as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    // 盈亏比 = 平均盈利 / 平均亏损
+    let profits: Vec<f64> = trades.iter().filter(|t| t.4 > 0.0).map(|t| t.4).collect();
+    let losses: Vec<f64> = trades.iter().filter(|t| t.4 < 0.0).map(|t| t.4).collect();
+    let avg_profit = if !profits.is_empty() { profits.iter().sum::<f64>() / profits.len() as f64 } else { 0.0 };
+    let avg_loss = if !losses.is_empty() { losses.iter().sum::<f64>() / losses.len() as f64 } else { 0.0 };
+    let profit_loss_ratio = if avg_loss.abs() > 0.0 {
+        avg_profit / avg_loss.abs()
+    } else if avg_profit > 0.0 {
+        f64::INFINITY
+    } else {
+        0.0
+    };
+
+    // 最大回撤（基于累计 PnL 峰值）
+    let mut cumulative = 0.0f64;
+    let mut peak = 0.0f64;
+    let mut max_drawdown = 0.0f64;
+    for t in &trades {
+        cumulative += t.4;
+        if cumulative > peak {
+            peak = cumulative;
+        }
+        let drawdown = peak - cumulative;
+        if drawdown > max_drawdown {
+            max_drawdown = drawdown;
+        }
+    }
+
+    // 平均持仓时间（开仓到平仓的时间差）
+    let open_trades: Vec<_> = trades.iter().filter(|t| t.1.starts_with("open_")).collect();
+    let close_trades: Vec<_> = trades.iter().filter(|t| t.1.starts_with("close_")).collect();
+    let mut total_hold_ms = 0i64;
+    let mut pair_count = 0i64;
+    for close in &close_trades {
+        let close_time = close.7.timestamp_millis();
+        let side_key = close.1.replace("close_", "");
+        // 找到最近的同方向开仓
+        if let Some(open) = open_trades.iter().rev().find(|o| {
+            o.7.timestamp_millis() <= close_time && o.1.contains(&side_key)
+        }) {
+            total_hold_ms += close_time - open.7.timestamp_millis();
+            pair_count += 1;
+        }
+    }
+    let avg_hold_ms = if pair_count > 0 { total_hold_ms / pair_count } else { 0 };
+    let avg_hold_time = format_duration(avg_hold_ms);
+
+    // 连胜/连亏
+    let mut max_win_streak = 0i32;
+    let mut max_loss_streak = 0i32;
+    let mut current_win = 0i32;
+    let mut current_loss = 0i32;
+    for t in &trades {
+        if t.4 > 0.0 {
+            current_win += 1;
+            current_loss = 0;
+            if current_win > max_win_streak {
+                max_win_streak = current_win;
+            }
+        } else if t.4 < 0.0 {
+            current_loss += 1;
+            current_win = 0;
+            if current_loss > max_loss_streak {
+                max_loss_streak = current_loss;
+            }
+        }
+    }
+
+    let total_fee: f64 = trades.iter().map(|t| t.6).sum();
+    let net_pnl: f64 = trades.iter().map(|t| t.4).sum();
+
+    // 累计交易额 = sum(price * quantity)
+    let total_volume: f64 = trades.iter().map(|t| t.2 * t.3).sum();
+
+    // 平均盈亏（每笔交易）
+    let avg_pnl = if !trades.is_empty() { net_pnl / trades.len() as f64 } else { 0.0 };
+
+    // 最大单笔盈利 / 亏损
+    let max_profit: f64 = trades.iter().map(|t| t.4).fold(0.0f64, |a, b| a.max(b));
+    let max_loss: f64 = trades.iter().map(|t| t.4).fold(0.0f64, |a, b| a.min(b));
+
+    // 净盈亏（扣手续费）= 累计 PnL - 总手续费
+    let net_pnl_after_fee = net_pnl - total_fee;
+
+    Json(ApiResponse::ok(serde_json::json!({
+        "win_rate": win_rate,
+        "profit_loss_ratio": profit_loss_ratio,
+        "max_drawdown": max_drawdown,
+        "avg_hold_time": avg_hold_time,
+        "max_win_streak": max_win_streak,
+        "max_loss_streak": max_loss_streak,
+        "total_fee": total_fee,
+        "net_pnl": net_pnl,
+        "total_trades": total_trades,
+        "win_trades": win_trades,
+        "loss_trades": loss_trades,
+        "total_volume": total_volume,
+        "avg_pnl": avg_pnl,
+        "max_profit": max_profit,
+        "max_loss": max_loss,
+        "net_pnl_after_fee": net_pnl_after_fee,
+    })))
+}
+
+fn format_duration(ms: i64) -> String {
+    if ms <= 0 {
+        return "-".to_string();
+    }
+    let seconds = ms / 1000;
+    let minutes = seconds / 60;
+    let hours = minutes / 60;
+    if hours > 0 {
+        format!("{}h{}m", hours, minutes % 60)
+    } else if minutes > 0 {
+        format!("{}m{}s", minutes, seconds % 60)
+    } else {
+        format!("{}s", seconds)
     }
 }
 

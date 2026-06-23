@@ -1,39 +1,45 @@
-import { memo, useMemo } from 'react'
-import { useBot } from '../../context/BotContext'
-import type { GridTrade } from '@/service'
+import { getGridTrades, type GridTrade } from '@/service'
+import { memo, useCallback, useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { formatPnlShort } from '../../components/utils/utils'
 
-const Trades = () => {
-  const { trades, loading } = useBot()
+const PAGE_SIZE = 20
 
-  const gridTrades = useMemo(() => trades as GridTrade[], [trades])
+const Trades = () => {
+  const { botId } = useParams<{ botId: string }>()
+  const [trades, setTrades] = useState<GridTrade[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(false)
+
+  const loadTrades = useCallback(
+    async (p: number) => {
+      if (!botId) return
+      setLoading(true)
+      try {
+        const res = await getGridTrades(botId, p, PAGE_SIZE)
+        if (res.success && res.data) {
+          setTrades(res.data.trades || [])
+          setTotal(res.data.total || 0)
+          setPage(p)
+        }
+      } finally {
+        setLoading(false)
+      }
+    },
+    [botId],
+  )
+
+  useEffect(() => {
+    loadTrades(1)
+  }, [loadTrades])
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-8 py-6">
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <svg
-            className="animate-spin h-5 w-5 text-on-surface-tertiary"
-            viewBox="0 0 24 24"
-            fill="none"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            />
-          </svg>
-        </div>
-      ) : gridTrades.length > 0 ? (
-        <div className="rounded-xl border border-line-default bg-surface-1 overflow-hidden shadow-sm">
+      {trades.length > 0 ? (
+        <div className="bg-surface-1 rounded-xl border border-line-default shadow-sm overflow-hidden">
           <table className="w-full text-xs">
             <thead>
               <tr className="text-on-surface-tertiary border-b border-line-subtle bg-base-secondary">
@@ -49,7 +55,7 @@ const Trades = () => {
               </tr>
             </thead>
             <tbody>
-              {gridTrades.map((t) => (
+              {trades.map((t) => (
                 <tr key={t.id} className="border-b border-line-subtle">
                   <td className="px-4 py-2 text-on-surface-secondary font-mono text-right">
                     {t.grid_level}
@@ -102,9 +108,36 @@ const Trades = () => {
               ))}
             </tbody>
           </table>
+
+          {/* 分页 */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-line-subtle text-xs">
+              <span className="text-on-surface-tertiary">
+                共 {total} 条 · 第 {page}/{totalPages} 页
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => loadTrades(page - 1)}
+                  disabled={page <= 1 || loading}
+                  className="px-2 py-1 rounded border border-line-default text-on-surface-secondary disabled:opacity-40 hover:bg-surface-2"
+                >
+                  上一页
+                </button>
+                <button
+                  onClick={() => loadTrades(page + 1)}
+                  disabled={page >= totalPages || loading}
+                  className="px-2 py-1 rounded border border-line-default text-on-surface-secondary disabled:opacity-40 hover:bg-surface-2"
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
-        <div className="text-center py-12 text-on-surface-tertiary text-sm">暂无交易记录</div>
+        <div className="text-center py-12 text-on-surface-tertiary text-xs">
+          {loading ? '加载中...' : '暂无交易记录'}
+        </div>
       )}
     </div>
   )

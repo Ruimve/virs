@@ -410,6 +410,11 @@ EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
 DO $$ BEGIN
+    ALTER TABLE qd_auto_trades ADD COLUMN IF NOT EXISTS fee DOUBLE PRECISION NOT NULL DEFAULT 0;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
     ALTER TABLE qd_ai_credentials ADD COLUMN IF NOT EXISTS model TEXT;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
@@ -431,13 +436,8 @@ CREATE TABLE IF NOT EXISTS qd_auto_bots (
     max_position_pct DOUBLE PRECISION NOT NULL DEFAULT 80.0,
     decide_interval_secs INT NOT NULL DEFAULT 300,
 
-    current_side TEXT CHECK (current_side IN ('long', 'short', 'none')),
-    entry_price DOUBLE PRECISION NOT NULL DEFAULT 0,
-    position_size DOUBLE PRECISION NOT NULL DEFAULT 0,
     stop_loss DOUBLE PRECISION NOT NULL DEFAULT 0,
     take_profit DOUBLE PRECISION NOT NULL DEFAULT 0,
-    unrealized_pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
-    liquidation_price DOUBLE PRECISION,
 
     market_regime TEXT,
     ai_analysis TEXT,
@@ -528,5 +528,33 @@ END $$;
 
 DO $$ BEGIN
     ALTER TABLE qd_auto_analysis_logs ADD COLUMN IF NOT EXISTS llm_model TEXT NOT NULL DEFAULT '';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- Remove real-time position state fields from qd_auto_bots.
+-- These are now sourced from PositionEngine (via /ws/position) instead of being stored on the bot.
+-- stop_loss/take_profit are kept as they are risk-control parameters managed by the worker.
+DO $$ BEGIN
+    ALTER TABLE qd_auto_bots DROP COLUMN IF EXISTS current_side;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE qd_auto_bots DROP COLUMN IF EXISTS entry_price;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE qd_auto_bots DROP COLUMN IF EXISTS position_size;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE qd_auto_bots DROP COLUMN IF EXISTS unrealized_pnl;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE qd_auto_bots DROP COLUMN IF EXISTS liquidation_price;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;

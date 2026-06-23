@@ -60,6 +60,23 @@ pub struct PaperExchangeAdapter {
     last_prices: Arc<DashMap<String, f64>>,
     exchange_registry: Option<Arc<Exchanges>>,
     balance_initialized: Arc<AtomicBool>,
+    /// 每个 symbol 配置的杠杆（由 set_leverage 设置，供 update_position_on_fill 使用）
+    configured_leverage: Arc<DashMap<String, u32>>,
+}
+
+/// Paper 模式简化强平价计算（忽略维持保证金率）：
+/// - 多头：entry_price * (1 - 1/leverage)
+/// - 空头：entry_price * (1 + 1/leverage)
+fn compute_paper_liquidation_price(entry_price: f64, side: PositionSide, leverage: u32) -> Option<f64> {
+    if leverage == 0 || entry_price <= 0.0 {
+        return None;
+    }
+    let ratio = 1.0 / leverage as f64;
+    Some(match side {
+        PositionSide::Long => entry_price * (1.0 - ratio),
+        PositionSide::Short => entry_price * (1.0 + ratio),
+        PositionSide::Both => return None,
+    })
 }
 
 impl PaperExchangeAdapter {
@@ -88,6 +105,7 @@ impl PaperExchangeAdapter {
             last_prices: Arc::new(DashMap::new()),
             exchange_registry: None,
             balance_initialized: Arc::new(AtomicBool::new(initial_balance > 0.0)),
+            configured_leverage: Arc::new(DashMap::new()),
         }
     }
 
@@ -175,6 +193,8 @@ impl PaperExchangeAdapter {
     async fn update_position_on_fill(&self, order: &PaperPendingOrder, fill_price: f64) {
         let key = format!("{}:{:?}", order.symbol, order.position_side.unwrap_or(PositionSide::Both));
         let size_delta = if order.side == Side::Buy { order.amount } else { -order.amount };
+        // 使用 set_leverage 配置的值，默认 20
+        let leverage: u32 = self.configured_leverage.get(&order.symbol).map(|v| *v).unwrap_or(20);
 
         match self.positions.get_mut(&key) {
             Some(mut pos) => {
@@ -188,28 +208,33 @@ impl PaperExchangeAdapter {
                     pos.size = new_size;
                     pos.entry_price = fill_price;
                     pos.side = if new_size > 0.0 { PositionSide::Long } else { PositionSide::Short };
+                    pos.leverage = leverage;
+                    pos.liquidation_price = compute_paper_liquidation_price(pos.entry_price, pos.side, leverage);
                     debug!(symbol = %order.symbol, new_size, "Paper position reversed");
                 } else {
                     let total_cost = pos.entry_price * old_size.abs() + fill_price * size_delta.abs();
                     pos.size = new_size;
                     if new_size.abs() > 0.0 { pos.entry_price = total_cost / new_size.abs(); }
+                    pos.leverage = leverage;
+                    pos.liquidation_price = compute_paper_liquidation_price(pos.entry_price, pos.side, leverage);
                     debug!(symbol = %order.symbol, new_size, entry_price = pos.entry_price, "Paper position updated");
                 }
             }
             None => {
                 let side = if size_delta > 0.0 { PositionSide::Long } else { PositionSide::Short };
+                let liq_price = compute_paper_liquidation_price(fill_price, side, leverage);
                 self.positions.insert(key.clone(), PaperPosition {
                     symbol: order.symbol.clone(), side, size: size_delta,
-                    entry_price: fill_price, leverage: 20, unrealized_pnl: 0.0, liquidation_price: None,
+                    entry_price: fill_price, leverage, unrealized_pnl: 0.0, liquidation_price: liq_price,
                 });
                 debug!(symbol = %order.symbol, side = ?side, size = size_delta, "Paper position opened");
             }
         }
 
         let mut balance = self.balance.lock().await;
-        let leverage = 20.0_f64;
+        let leverage_f64 = leverage as f64;
         let notional = fill_price * order.amount;
-        let margin = notional / leverage;
+        let margin = notional / leverage_f64;
 
         let position_side = order.position_side.unwrap_or(PositionSide::Both);
         let is_opening = match (order.side, position_side) {
@@ -418,7 +443,11 @@ impl ExchangePe for PaperExchangeAdapter {
         }
     }
 
-    async fn set_leverage(&self, _symbol: &str, _leverage: u32) -> PositionResult<()> { Ok(()) }
+    async fn set_leverage(&self, symbol: &str, leverage: u32) -> PositionResult<()> {
+        // 保存 symbol 对应的 leverage，供 update_position_on_fill 使用
+        self.configured_leverage.insert(symbol.to_string(), leverage);
+        Ok(())
+    }
 
     async fn get_position_mode(&self) -> PositionResult<PositionMode> { Ok(self.position_mode) }
 

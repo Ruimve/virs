@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, memo } from 'react'
 import { createChart, type IChartApi, ColorType } from 'lightweight-charts'
 
 export interface ReactChartProps {
@@ -83,4 +83,4 @@ function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartP
   )
 }
 
-export default ReactChart
+export default memo(ReactChart)

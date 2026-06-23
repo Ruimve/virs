@@ -25,19 +25,6 @@ export interface TradeEvent {
   pnl: number
 }
 
-export interface PositionPnlEvent {
-  type: 'position_pnl'
-  bot_id: string
-  symbol: string
-  side: string
-  entry_price: number
-  position_size: number
-  current_price: number
-  unrealized_pnl: number
-  total_pnl: number
-  liquidation_price: number
-}
-
 export interface NotificationEvent {
   type: 'notification'
   level: 'info' | 'warning' | 'error'
@@ -53,7 +40,6 @@ export type WsEvent =
   | BotStatusEvent
   | PositionEvent
   | TradeEvent
-  | PositionPnlEvent
   | NotificationEvent
   | PaperModeEvent
 

@@ -42,7 +42,7 @@ export const BotProvider = ({ children }: { children: ReactNode }) => {
       getAutoBotDetail(botId)
         .then((bot) => {
           setBot(bot?.data?.bot || null)
-          setTrades(bot?.data?.trades || [])
+          setTrades([])
         })
         .finally(() => {
           setLoading(false)

@@ -171,6 +171,11 @@ pub enum EngineEvent {
         stop_loss: Option<f64>,
         take_profit: Option<f64>,
     },
+    /// 仓位实时状态更新（来自 sync_loop 或 WS ACCOUNT_UPDATE）
+    /// 推送给前端订阅 /ws/position 的客户端
+    PositionUpdated {
+        position: Position,
+    },
     OrderPlaced {
         order: PositionOrder,
     },
