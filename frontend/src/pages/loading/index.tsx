@@ -1,55 +1,55 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { fetchUser, isLoggedIn } from '../../lib/auth'
-import { findActiveBot } from '../../service'
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { fetchUser, isLoggedIn } from '../../lib/auth';
+import { findActiveBot } from '../../service';
 
 function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function Loading() {
-  const navigate = useNavigate()
-  const [progress, setProgress] = useState(0)
-  const [statusText, setStatusText] = useState('Initializing...')
+  const navigate = useNavigate();
+  const [progress, setProgress] = useState(0);
+  const [statusText, setStatusText] = useState('Initializing...');
 
   useEffect(() => {
     if (!isLoggedIn()) {
-      navigate('/login', { replace: true })
-      return
+      navigate('/login', { replace: true });
+      return;
     }
 
-    setProgress(20)
-    setStatusText('Checking authentication...')
+    setProgress(20);
+    setStatusText('Checking authentication...');
 
     fetchUser().then((loggedIn) => {
       if (!loggedIn) {
-        navigate('/login', { replace: true })
-        return
+        navigate('/login', { replace: true });
+        return;
       }
 
-      setProgress(50)
-      setStatusText('Loading settings...')
+      setProgress(50);
+      setStatusText('Loading settings...');
 
-      setProgress(70)
-      setStatusText('Finding bot...')
+      setProgress(70);
+      setStatusText('Finding bot...');
 
       findActiveBot().then((bot) => {
-        setProgress(90)
-        setStatusText('Routing...')
+        setProgress(90);
+        setStatusText('Routing...');
         delay(200).then(() => {
           if (bot) {
             if (bot.bot_type === 'auto') {
-              navigate(`/trade/auto/${bot.id}/bot`, { replace: true })
+              navigate(`/trade/auto/${bot.id}/bot`, { replace: true });
             } else {
-              navigate(`/trade/grid/${bot.id}/bot`, { replace: true })
+              navigate(`/trade/grid/${bot.id}/bot`, { replace: true });
             }
           } else {
-            navigate('/setup/bot-type', { replace: true })
+            navigate('/setup/bot-type', { replace: true });
           }
-        })
-      })
-    })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+        });
+      });
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen bg-base flex flex-col items-center justify-center relative overflow-hidden">
@@ -89,7 +89,7 @@ function Loading() {
         </div>
       )}
     </div>
-  )
+  );
 }
 
-export default Loading
+export default Loading;

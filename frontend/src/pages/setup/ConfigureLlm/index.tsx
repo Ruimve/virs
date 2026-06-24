@@ -1,153 +1,153 @@
-import { useState, useCallback, useRef, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Wizard } from '../context/WizardContext/Wizard'
-import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { useWizard, useWizardGuard } from '../context/WizardContext'
-import { api, saveAiCredential } from '../../../service'
-import { WizardStep } from '../context/WizardContext/consts'
+import { useState, useCallback, useRef, type ReactNode, memo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Wizard } from '../context/WizardContext/Wizard';
+import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep';
+import { useWizard, useWizardGuard } from '../context/WizardContext';
+import { api, saveAiCredential } from '../../../service';
+import { WizardStep } from '../context/WizardContext/consts';
 
 interface DeepSeekModel {
-  id: string
-  owned_by: string
+  id: string;
+  owned_by: string;
 }
 
 interface BalanceInfo {
-  total_balance: string
-  currency: string
+  total_balance: string;
+  currency: string;
 }
 
-function ConfigureLlm() {
-  const navigate = useNavigate()
-  const { wizard, updateWizard, advanceStep } = useWizard()
-  useWizardGuard(wizard.current_step, WizardStep.ConfigureLlm)
+const ConfigureLlm = () => {
+  const navigate = useNavigate();
+  const { wizard, updateWizard, advanceStep } = useWizard();
+  useWizardGuard(wizard.current_step, WizardStep.ConfigureLlm);
 
   // Step 1: API Key + Model
-  const [apiKey, setApiKey] = useState('')
-  const [model, setModel] = useState(wizard.llm_model || '')
-  const [models, setModels] = useState<DeepSeekModel[]>([])
-  const [fetchingModels, setFetchingModels] = useState(false)
-  const [step1Status, setStep1Status] = useState<FlowStepStatus>('active')
-  const [error, setError] = useState('')
+  const [apiKey, setApiKey] = useState('');
+  const [model, setModel] = useState(wizard.llm_model || '');
+  const [models, setModels] = useState<DeepSeekModel[]>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [step1Status, setStep1Status] = useState<FlowStepStatus>('active');
+  const [error, setError] = useState('');
 
   // Step 2: Connectivity
-  const [step2Status, setStep2Status] = useState<FlowStepStatus>('pending')
+  const [step2Status, setStep2Status] = useState<FlowStepStatus>('pending');
 
   // Step 3: Account Info (balance)
-  const [balance, setBalance] = useState<BalanceInfo | null>(null)
-  const [step3Status, setStep3Status] = useState<FlowStepStatus>('pending')
+  const [balance, setBalance] = useState<BalanceInfo | null>(null);
+  const [step3Status, setStep3Status] = useState<FlowStepStatus>('pending');
 
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const statuses = {
     apiKey: step1Status,
     connectivity: step2Status,
     account: step3Status,
-  }
+  };
 
-  const summaries: Record<string, string | ReactNode> = {}
+  const summaries: Record<string, string | ReactNode> = {};
   if (step1Status === 'done')
-    summaries.apiKey = `${apiKey.slice(0, 6)}...${apiKey.slice(-4)} · ${model}`
-  if (step2Status === 'done') summaries.connectivity = 'Connected to DeepSeek API'
-  else if (step2Status === 'error') summaries.connectivity = 'Connection failed'
+    summaries.apiKey = `${apiKey.slice(0, 6)}...${apiKey.slice(-4)} · ${model}`;
+  if (step2Status === 'done') summaries.connectivity = 'Connected to DeepSeek API';
+  else if (step2Status === 'error') summaries.connectivity = 'Connection failed';
   if (step3Status === 'done' && balance)
-    summaries.account = `Balance: ${balance.total_balance} ${balance.currency}`
+    summaries.account = `Balance: ${balance.total_balance} ${balance.currency}`;
 
   // Fetch models via backend proxy (after save)
   const fetchModels = useCallback(async () => {
-    setFetchingModels(true)
+    setFetchingModels(true);
     try {
-      const result = await api.get<{ models: DeepSeekModel[] }>('/ai-credentials/models')
+      const result = await api.get<{ models: DeepSeekModel[] }>('/ai-credentials/models');
       if (result.success && result.data?.models) {
-        const list = result.data.models
-        setModels(list)
+        const list = result.data.models;
+        setModels(list);
         if (list.length > 0) {
           setModel((prev) => {
             if (!list.some((m) => m.id === prev)) {
-              return list[0].id
+              return list[0].id;
             }
-            return prev
-          })
+            return prev;
+          });
         }
       } else {
-        setError(result.error || 'Failed to fetch models')
-        setStep1Status('error')
+        setError(result.error || 'Failed to fetch models');
+        setStep1Status('error');
       }
     } catch {
-      setError('Network error')
-      setStep1Status('error')
+      setError('Network error');
+      setStep1Status('error');
     } finally {
-      setFetchingModels(false)
+      setFetchingModels(false);
     }
-  }, [])
-
-  // Test connectivity via backend (uses saved credentials)
-  const testConnectivity = useCallback(async () => {
-    setStep2Status('verifying')
-    try {
-      const result = await api.get<{ connected: boolean; message: string }>('/ai-credentials/test')
-      if (!result.success || !result.data?.connected) {
-        setError(result.data?.message || result.error || 'Connection failed')
-        setStep2Status('error')
-        return
-      }
-      setStep2Status('done')
-      fetchBalance()
-    } catch {
-      setError('Network error')
-      setStep2Status('error')
-    }
-  }, [])
+  }, []);
 
   // Fetch balance via backend proxy (uses saved credentials)
   const fetchBalance = useCallback(async () => {
-    setStep3Status('verifying')
+    setStep3Status('verifying');
     try {
-      const result = await api.get<{ balances: BalanceInfo[] }>('/ai-credentials/balance')
+      const result = await api.get<{ balances: BalanceInfo[] }>('/ai-credentials/balance');
       if (result.success && result.data?.balances && result.data.balances.length > 0) {
-        const bal = result.data.balances[0]
-        setBalance(bal)
-        const total = parseFloat(bal.total_balance || '0')
-        setStep3Status(total > 0 ? 'done' : 'active')
+        const bal = result.data.balances[0];
+        setBalance(bal);
+        const total = parseFloat(bal.total_balance || '0');
+        setStep3Status(total > 0 ? 'done' : 'active');
       } else {
-        setStep3Status('active')
+        setStep3Status('active');
       }
     } catch {
-      setStep3Status('active')
+      setStep3Status('active');
     }
-  }, [])
+  }, []);
+
+  // Test connectivity via backend (uses saved credentials)
+  const testConnectivity = useCallback(async () => {
+    setStep2Status('verifying');
+    try {
+      const result = await api.get<{ connected: boolean; message: string }>('/ai-credentials/test');
+      if (!result.success || !result.data?.connected) {
+        setError(result.data?.message || result.error || 'Connection failed');
+        setStep2Status('error');
+        return;
+      }
+      setStep2Status('done');
+      fetchBalance();
+    } catch {
+      setError('Network error');
+      setStep2Status('error');
+    }
+  }, [fetchBalance]);
 
   const onKeyInput = (key: string) => {
-    setApiKey(key)
-    setError('')
-    setModels([])
-    setModel('')
-    if (step1Status === 'error') setStep1Status('active')
-    if (step2Status !== 'pending') setStep2Status('pending')
-    if (step3Status !== 'pending') setStep3Status('pending')
+    setApiKey(key);
+    setError('');
+    setModels([]);
+    setModel('');
+    if (step1Status === 'error') setStep1Status('active');
+    if (step2Status !== 'pending') setStep2Status('pending');
+    if (step3Status !== 'pending') setStep3Status('pending');
     // Debounce: save then fetch models
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
-    if (!key.trim()) return
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    if (!key.trim()) return;
     debounceTimerRef.current = setTimeout(async () => {
       const saveResult = await saveAiCredential({
         provider: 'deepseek',
         api_key: key.trim(),
         model: model || undefined,
         is_default: true,
-      })
+      });
       if (saveResult.success) {
-        fetchModels()
+        fetchModels();
       } else {
-        setError(saveResult.error || 'Failed to save API key')
-        setStep1Status('error')
+        setError(saveResult.error || 'Failed to save API key');
+        setStep1Status('error');
       }
-    }, 600)
-  }
+    }, 600);
+  };
 
   const verifyApiKey = async () => {
-    const key = apiKey.trim()
-    if (!key || !model.trim()) return
-    setStep1Status('verifying')
-    setError('')
+    const key = apiKey.trim();
+    if (!key || !model.trim()) return;
+    setStep1Status('verifying');
+    setError('');
 
     // Save credential to backend first
     const saveResult = await saveAiCredential({
@@ -155,27 +155,27 @@ function ConfigureLlm() {
       api_key: key,
       model: model,
       is_default: true,
-    })
+    });
     if (!saveResult.success) {
-      setError(saveResult.error || 'Failed to save API key')
-      setStep1Status('error')
-      return
+      setError(saveResult.error || 'Failed to save API key');
+      setStep1Status('error');
+      return;
     }
 
-    setStep1Status('done')
-    testConnectivity()
-  }
+    setStep1Status('done');
+    testConnectivity();
+  };
 
   const handleContinue = () => {
     updateWizard({
       llm_provider: 'deepseek',
       llm_model: model,
-    })
-    advanceStep(WizardStep.SelectExchange)
-    navigate('/setup/exchange', { replace: true })
-  }
+    });
+    advanceStep(WizardStep.SelectExchange);
+    navigate('/setup/exchange', { replace: true });
+  };
 
-  const canContinue = step2Status === 'done' && step3Status === 'done'
+  const canContinue = step2Status === 'done' && step3Status === 'done';
 
   const steps: FlowStepConfig[] = [
     {
@@ -294,7 +294,7 @@ function ConfigureLlm() {
         </div>
       ),
     },
-  ]
+  ];
 
   return (
     <Wizard
@@ -321,7 +321,7 @@ function ConfigureLlm() {
     >
       <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
     </Wizard>
-  )
-}
+  );
+};
 
-export default ConfigureLlm
+export default memo(ConfigureLlm);

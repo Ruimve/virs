@@ -1,54 +1,54 @@
-import { useEffect } from 'react'
-import { createWsInstance, useWsHook } from '../../lib/ws'
+import { useEffect } from 'react';
+import { createWsInstance, useWsHook } from '../../lib/ws';
 
 export interface KlineWsEventRaw {
-  exchange: string
-  symbol: string
-  timeframe: string
+  exchange: string;
+  symbol: string;
+  timeframe: string;
   candle: {
-    open_time: number
-    close_time: number
-    open: number
-    high: number
-    low: number
-    close: number
-    volume: number
-    quote_volume: number
-    trades: number
-    closed: boolean
-  }
-  event_type: 'Update' | 'Closed' | 'Backfilled'
+    open_time: number;
+    close_time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    quote_volume: number;
+    trades: number;
+    closed: boolean;
+  };
+  event_type: 'Update' | 'Closed' | 'Backfilled';
 }
 
 // ── Kline event type (aligned with backend KlineEngine) ───
 
 export interface KlineWsEvent {
-  exchange: string
-  symbol: string
-  timeframe: string
+  exchange: string;
+  symbol: string;
+  timeframe: string;
   candle: {
-    close: number
-    high: number
-    low: number
-    open: number
-    volume: number
-    time: number
-  }
-  event_type: 'Update' | 'Closed' | 'Backfilled'
+    close: number;
+    high: number;
+    low: number;
+    open: number;
+    volume: number;
+    time: number;
+  };
+  event_type: 'Update' | 'Closed' | 'Backfilled';
 }
 
 // ── Kline WebSocket ────────────────────────────────────────
 
-const klineInst = createWsInstance<KlineWsEvent>()
+const klineInst = createWsInstance<KlineWsEvent>();
 
 function getKlineWsUrl(): string {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws/kline`
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/ws/kline`;
 }
 
 const parseKlineWs = (raw: string): KlineWsEvent | null => {
   try {
-    const json = JSON.parse(raw) as KlineWsEventRaw
+    const json = JSON.parse(raw) as KlineWsEventRaw;
     return {
       ...json,
       candle: {
@@ -59,11 +59,11 @@ const parseKlineWs = (raw: string): KlineWsEvent | null => {
         time: json?.candle?.open_time / 1000,
         volume: json?.candle?.volume,
       },
-    }
+    };
   } catch {
-    return null
+    return null;
   }
-}
+};
 
 /**
  * 订阅 Kline WebSocket。
@@ -75,20 +75,20 @@ export function useKlineWs(
   onReconnect?: () => void,
   timeframe?: string,
 ): { connected: boolean } {
-  const { connected } = useWsHook(klineInst, getKlineWsUrl, parseKlineWs, onEvent, onReconnect)
+  const { connected } = useWsHook(klineInst, getKlineWsUrl, parseKlineWs, onEvent, onReconnect);
 
   // 当 timeframe 变化时，发送订阅消息给后端
   useEffect(() => {
-    if (!connected) return
-    const ws = klineInst.ws
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    if (!connected) return;
+    const ws = klineInst.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
     if (timeframe) {
-      ws.send(JSON.stringify({ action: 'subscribe', timeframe }))
+      ws.send(JSON.stringify({ action: 'subscribe', timeframe }));
     } else {
-      ws.send(JSON.stringify({ action: 'unsubscribe' }))
+      ws.send(JSON.stringify({ action: 'unsubscribe' }));
     }
-  }, [timeframe, connected])
+  }, [timeframe, connected]);
 
-  return { connected }
+  return { connected };
 }

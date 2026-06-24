@@ -1,32 +1,32 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Wizard } from '../context/WizardContext/Wizard'
-import { useWizard, useWizardGuard } from '../context/WizardContext'
-import { createGridBot, createAutoBot, startGridBot, startAutoBot } from '../../../service'
-import { WizardStep } from '../context/WizardContext/consts'
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Wizard } from '../context/WizardContext/Wizard';
+import { useWizard, useWizardGuard } from '../context/WizardContext';
+import { createGridBot, createAutoBot, startGridBot, startAutoBot } from '../../../service';
+import { WizardStep } from '../context/WizardContext/consts';
 
 function ReviewLaunch() {
-  const navigate = useNavigate()
-  const { wizard, updateWizard } = useWizard()
-  useWizardGuard(wizard.current_step, WizardStep.ReviewLaunch)
-  const isGrid = wizard.bot_type === 'grid'
-  const v = (wizard.bot_params as Record<string, string>) || {}
+  const navigate = useNavigate();
+  const { wizard, updateWizard } = useWizard();
+  useWizardGuard(wizard.current_step, WizardStep.ReviewLaunch);
+  const isGrid = wizard.bot_type === 'grid';
+  const v = (wizard.bot_params as Record<string, string>) || {};
 
-  const [paperMode, setPaperMode] = useState(wizard.paper_mode)
-  const [launching, setLaunching] = useState(false)
-  const [launchError, setLaunchError] = useState('')
+  const [paperMode, setPaperMode] = useState(wizard.paper_mode);
+  const [launching, setLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState('');
 
   const handleLaunch = async () => {
-    setLaunching(true)
-    setLaunchError('')
+    setLaunching(true);
+    setLaunchError('');
 
-    const w = wizard
-    const paper = paperMode
-    const marketType = w.market_type
+    const w = wizard;
+    const paper = paperMode;
+    const marketType = w.market_type;
 
     try {
       // Step 1: Create bot
-      let botId: string
+      let botId: string;
       if (isGrid) {
         const result = await createGridBot({
           symbol: v.symbol || '',
@@ -39,12 +39,12 @@ function ReviewLaunch() {
           name: `Grid ${v.symbol || 'Bot'}`,
           paper_mode: paper,
           market_type: marketType,
-        })
+        });
         if (!result.success || !result.data?.id) {
-          setLaunchError(`Failed to create grid bot: ${result.error || 'Unknown error'}`)
-          return
+          setLaunchError(`Failed to create grid bot: ${result.error || 'Unknown error'}`);
+          return;
         }
-        botId = result.data.id
+        botId = result.data.id;
       } else {
         const result = await createAutoBot({
           symbol: v.symbol || '',
@@ -54,38 +54,38 @@ function ReviewLaunch() {
           decide_interval_secs: parseInt(v.decision_interval || '300'),
           name: `Auto ${v.symbol || 'Bot'}`,
           paper_mode: paper,
-        })
+        });
         if (!result.success || !result.data?.id) {
-          setLaunchError(`Failed to create auto bot: ${result.error || 'Unknown error'}`)
-          return
+          setLaunchError(`Failed to create auto bot: ${result.error || 'Unknown error'}`);
+          return;
         }
-        botId = result.data.id
+        botId = result.data.id;
       }
 
       // Step 2: Start bot
       if (isGrid) {
-        const result = await startGridBot(botId)
+        const result = await startGridBot(botId);
         if (!result.success) {
-          setLaunchError(`Bot created but failed to start: ${result.error || 'Unknown error'}`)
-          return
+          setLaunchError(`Bot created but failed to start: ${result.error || 'Unknown error'}`);
+          return;
         }
       } else {
-        const result = await startAutoBot(botId)
+        const result = await startAutoBot(botId);
         if (!result.success) {
-          setLaunchError(`Bot created but failed to start: ${result.error || 'Unknown error'}`)
-          return
+          setLaunchError(`Bot created but failed to start: ${result.error || 'Unknown error'}`);
+          return;
         }
       }
 
       // Step 3: Navigate to health check
-      updateWizard({ paper_mode: paper, bot_id: botId })
-      navigate(`/trade/health/${isGrid ? 'grid' : 'auto'}/${botId}`, { replace: true })
+      updateWizard({ paper_mode: paper, bot_id: botId });
+      navigate(`/trade/health/${isGrid ? 'grid' : 'auto'}/${botId}`, { replace: true });
     } catch (err) {
-      setLaunchError(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`)
+      setLaunchError(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
-      setLaunching(false)
+      setLaunching(false);
     }
-  }
+  };
 
   return (
     <Wizard
@@ -317,7 +317,7 @@ function ReviewLaunch() {
         )}
       </div>
     </Wizard>
-  )
+  );
 }
 
-export default ReviewLaunch
+export default ReviewLaunch;

@@ -1,7 +1,7 @@
 // Service layer — unified exports
-export { api, getToken, setToken, removeToken } from './client'
-export { login, logout, getUserInfo } from './auth'
-export { fetchPlugins, validateScript, getAiStatus, generateStrategy } from './ai'
+export { api, getToken, setToken, removeToken } from './client';
+export { login, logout, getUserInfo } from './auth';
+export { fetchPlugins, validateScript, getAiStatus, generateStrategy } from './ai';
 export {
   saveCredential,
   saveAiCredential,
@@ -9,7 +9,7 @@ export {
   checkPermissions,
   verifyPermissions,
   fetchCredentialStatus,
-} from './credentials'
+} from './credentials';
 export {
   createGridBot,
   startGridBot,
@@ -28,10 +28,10 @@ export {
   getAutoStats,
   getAutoAnalysisLogs,
   findActiveBot,
-} from './bot'
-export { fetchKlines, fetchOrderBook } from './market'
-export { checkHealth, getPaperStatus, enablePaperMode, disablePaperMode } from './system'
-export { useWs, useKlineWs } from './ws'
+} from './bot';
+export { fetchKlines, fetchOrderBook } from './market';
+export { checkHealth, getPaperStatus, enablePaperMode, disablePaperMode } from './system';
+export { useWs, useKlineWs } from './ws';
 export type {
   WsEvent,
   KlineWsEvent,
@@ -40,5 +40,5 @@ export type {
   TradeEvent,
   NotificationEvent,
   PaperModeEvent,
-} from './ws'
-export type * from './types'
+} from './ws';
+export type * from './types';

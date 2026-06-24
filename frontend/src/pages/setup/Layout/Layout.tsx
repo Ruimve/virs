@@ -1,13 +1,12 @@
-import { Outlet } from 'react-router-dom'
-import Logo from '@/components/Logo'
-import Theme from '@/components/Theme'
-import { useWizard } from '../context/WizardContext'
-import { TOTAL_SETUP_STEPS } from '../context/WizardContext/consts'
-import { useMemo } from 'react'
+import { Outlet } from 'react-router-dom';
+import Logo from '@/components/Logo';
+import Theme from '@/components/Theme';
+import { useWizard } from '../context/WizardContext';
+import { TOTAL_SETUP_STEPS } from '../context/WizardContext/consts';
 
 export const Layout = () => {
-  const { wizard } = useWizard()
-  const currentStep = useMemo(() => wizard.current_step, [wizard])
+  const { wizard } = useWizard();
+
   return (
     <div className="h-dvh bg-base flex flex-col relative overflow-hidden">
       {/* Background */}
@@ -22,13 +21,13 @@ export const Layout = () => {
         {/* Step indicator */}
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-on-surface-tertiary md:hidden">
-            Step {currentStep - 1}/{TOTAL_SETUP_STEPS}
+            Step {wizard.current_step - 1}/{TOTAL_SETUP_STEPS}
           </span>
           <div className="hidden md:flex items-center gap-2">
             {Array.from({ length: TOTAL_SETUP_STEPS }, (_, i) => {
-              const stepNum = i + 1
-              const isActive = stepNum === currentStep - 1
-              const isCompleted = stepNum < currentStep - 1
+              const stepNum = i + 1;
+              const isActive = stepNum === wizard.current_step - 1;
+              const isCompleted = stepNum < wizard.current_step - 1;
               return (
                 <div key={i} className="flex items-center gap-2">
                   <div
@@ -60,7 +59,7 @@ export const Layout = () => {
                     />
                   )}
                 </div>
-              )
+              );
             })}
           </div>
         </div>
@@ -75,7 +74,7 @@ export const Layout = () => {
         <Outlet />
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default Layout
+export default Layout;

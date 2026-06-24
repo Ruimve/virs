@@ -1,22 +1,22 @@
-import { formatSmart } from '../../components/utils/utils'
+import { formatSmart } from '../../components/utils/utils';
 
 interface GridLevelInfo {
-  level: number
-  price: number
-  side: string
-  buy_price: number
-  sell_price: number
-  quantity: number
-  buy_filled: boolean
-  sell_filled: boolean
-  hold_quantity: number
-  avg_buy_price: number
-  last_fill_price: number
+  level: number;
+  price: number;
+  side: string;
+  buy_price: number;
+  sell_price: number;
+  quantity: number;
+  buy_filled: boolean;
+  sell_filled: boolean;
+  hold_quantity: number;
+  avg_buy_price: number;
+  last_fill_price: number;
 }
 
 interface GridLevelsTabProps {
-  gridLevels: GridLevelInfo[]
-  loading: boolean
+  gridLevels: GridLevelInfo[];
+  loading: boolean;
 }
 
 export default function GridLevelsTab({ gridLevels, loading }: GridLevelsTabProps) {
@@ -43,11 +43,11 @@ export default function GridLevelsTab({ gridLevels, loading }: GridLevelsTabProp
           />
         </svg>
       </div>
-    )
+    );
   }
 
   if (gridLevels.length === 0) {
-    return <div className="text-center py-12 text-on-surface-tertiary text-sm">暂无网格数据</div>
+    return <div className="text-center py-12 text-on-surface-tertiary text-sm">暂无网格数据</div>;
   }
 
   return (
@@ -67,9 +67,9 @@ export default function GridLevelsTab({ gridLevels, loading }: GridLevelsTabProp
           </thead>
           <tbody>
             {gridLevels.map((level) => {
-              const isHolding = Math.abs(level.hold_quantity) > 0
+              const isHolding = Math.abs(level.hold_quantity) > 0;
               const isClosed =
-                level.buy_filled && level.sell_filled && Math.abs(level.hold_quantity) === 0
+                level.buy_filled && level.sell_filled && Math.abs(level.hold_quantity) === 0;
               return (
                 <tr
                   key={level.level}
@@ -116,11 +116,11 @@ export default function GridLevelsTab({ gridLevels, loading }: GridLevelsTabProp
                     )}
                   </td>
                 </tr>
-              )
+              );
             })}
           </tbody>
         </table>
       </div>
     </div>
-  )
+  );
 }

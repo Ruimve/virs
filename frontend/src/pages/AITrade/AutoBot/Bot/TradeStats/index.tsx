@@ -1,32 +1,32 @@
-import { memo, useEffect, useState } from 'react'
-import { getAutoStats, type AutoBotStats } from '@/service'
+import { memo, useEffect, useState } from 'react';
+import { getAutoStats, type AutoBotStats } from '@/service';
 
 interface Props {
-  botId: string
+  botId: string;
 }
 
 function formatVolume(v: number): string {
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`
-  if (v >= 1_000) return `${(v / 1_000).toFixed(2)}K`
-  return v.toFixed(2)
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(2)}K`;
+  return v.toFixed(2);
 }
 
 const TradeStats = ({ botId }: Props) => {
-  const [stats, setStats] = useState<AutoBotStats | null>(null)
+  const [stats, setStats] = useState<AutoBotStats | null>(null);
 
   useEffect(() => {
-    if (!botId) return
-    let cancelled = false
+    if (!botId) return;
+    let cancelled = false;
     getAutoStats(botId)
       .then((res) => {
-        if (cancelled) return
-        if (res.success && res.data) setStats(res.data)
+        if (cancelled) return;
+        if (res.success && res.data) setStats(res.data);
       })
-      .catch((e) => console.error('Failed to load stats:', e))
+      .catch((e) => console.error('Failed to load stats:', e));
     return () => {
-      cancelled = true
-    }
-  }, [botId])
+      cancelled = true;
+    };
+  }, [botId]);
 
   const items = [
     {
@@ -102,7 +102,7 @@ const TradeStats = ({ botId }: Props) => {
       value: stats && stats.total_fee > 0 ? `-${stats.total_fee.toFixed(4)}` : '-',
       color: 'text-amber-400',
     },
-  ]
+  ];
 
   return (
     <div className="px-4 py-3 border-b border-line-subtle">
@@ -123,7 +123,7 @@ const TradeStats = ({ botId }: Props) => {
         ))}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default memo(TradeStats)
+export default memo(TradeStats);

@@ -1,33 +1,33 @@
-import { createWsInstance, useWsHook } from '../../lib/ws'
-import type { OrderBookData } from '../types'
+import { createWsInstance, useWsHook } from '../../lib/ws';
+import type { OrderBookData } from '../types';
 
 // ── OrderBook WebSocket event (aligned with backend OrderBookEngine) ───
 export interface OrderBookWsEventRaw {
-  exchange: string
-  symbol: string
-  bids: [number, number][]
-  asks: [number, number][]
-  timestamp: number
+  exchange: string;
+  symbol: string;
+  bids: [number, number][];
+  asks: [number, number][];
+  timestamp: number;
 }
 
 export interface OrderBookWsEvent {
-  exchange: string
-  symbol: string
-  orderBook: OrderBookData
-  timestamp: number
+  exchange: string;
+  symbol: string;
+  orderBook: OrderBookData;
+  timestamp: number;
 }
 
 // ── OrderBook WebSocket ────────────────────────────────────
-const orderbookInst = createWsInstance<OrderBookWsEvent>()
+const orderbookInst = createWsInstance<OrderBookWsEvent>();
 
 function getOrderBookWsUrl(): string {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws/orderbook`
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/ws/orderbook`;
 }
 
 const parseOrderBookWs = (raw: string): OrderBookWsEvent | null => {
   try {
-    const json = JSON.parse(raw) as OrderBookWsEventRaw
+    const json = JSON.parse(raw) as OrderBookWsEventRaw;
     return {
       exchange: json.exchange,
       symbol: json.symbol,
@@ -36,15 +36,15 @@ const parseOrderBookWs = (raw: string): OrderBookWsEvent | null => {
         asks: (json.asks || []).map(([price, amount]) => ({ price, amount })),
       },
       timestamp: json.timestamp,
-    }
+    };
   } catch {
-    return null
+    return null;
   }
-}
+};
 
 export function useOrderBookWs(
   onEvent: (event: OrderBookWsEvent) => void,
   onReconnect?: () => void,
 ): { connected: boolean } {
-  return useWsHook(orderbookInst, getOrderBookWsUrl, parseOrderBookWs, onEvent, onReconnect)
+  return useWsHook(orderbookInst, getOrderBookWsUrl, parseOrderBookWs, onEvent, onReconnect);
 }

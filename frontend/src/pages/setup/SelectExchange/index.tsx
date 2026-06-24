@@ -1,99 +1,99 @@
-import { useState, useCallback, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Wizard } from '../context/WizardContext/Wizard'
-import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { useWizard, useWizardGuard } from '../context/WizardContext'
-import { saveCredential, testCredential, checkPermissions } from '../../../service'
-import type { PermissionItem } from '../../../service'
-import { WizardStep } from '../context/WizardContext/consts'
+import { useState, useCallback, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Wizard } from '../context/WizardContext/Wizard';
+import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep';
+import { useWizard, useWizardGuard } from '../context/WizardContext';
+import { saveCredential, testCredential, checkPermissions } from '../../../service';
+import type { PermissionItem } from '../../../service';
+import { WizardStep } from '../context/WizardContext/consts';
 
-export type MarketType = 'perpetual' | 'spot'
+export type MarketType = 'perpetual' | 'spot';
 
 const MARKET_TYPES: Array<{ id: MarketType; label: string; desc: string }> = [
   { id: 'perpetual', label: 'Perpetual', desc: 'USDT-M futures' },
   { id: 'spot', label: 'Spot', desc: 'Spot trading' },
-]
+];
 
 function SelectExchange() {
-  const navigate = useNavigate()
-  const { wizard, updateWizard, advanceStep } = useWizard()
-  useWizardGuard(wizard.current_step, WizardStep.SelectExchange)
+  const navigate = useNavigate();
+  const { wizard, updateWizard, advanceStep } = useWizard();
+  useWizardGuard(wizard.current_step, WizardStep.SelectExchange);
 
   // Step 1: API credentials
-  const [apiKey, setApiKey] = useState('')
-  const [apiSecret, setApiSecret] = useState('')
+  const [apiKey, setApiKey] = useState('');
+  const [apiSecret, setApiSecret] = useState('');
   const [selectedMarket, setSelectedMarket] = useState<MarketType>(
     wizard.market_type || 'perpetual',
-  )
-  const [step1Status, setStep1Status] = useState<FlowStepStatus>('active')
-  const [error, setError] = useState('')
+  );
+  const [step1Status, setStep1Status] = useState<FlowStepStatus>('active');
+  const [error, setError] = useState('');
 
   // Step 2: Connectivity + Permissions
-  const [step2Status, setStep2Status] = useState<FlowStepStatus>('pending')
+  const [step2Status, setStep2Status] = useState<FlowStepStatus>('pending');
 
   // Step 3: Permissions
-  const [permissions, setPermissions] = useState<PermissionItem[]>([])
-  const [step3Status, setStep3Status] = useState<FlowStepStatus>('pending')
+  const [permissions, setPermissions] = useState<PermissionItem[]>([]);
+  const [step3Status, setStep3Status] = useState<FlowStepStatus>('pending');
 
   const statuses = {
     credentials: step1Status,
     connectivity: step2Status,
     permissions: step3Status,
-  }
+  };
 
-  const summaries: Record<string, string | ReactNode> = {}
-  if (step1Status === 'done') summaries.credentials = `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`
-  if (step2Status === 'done') summaries.connectivity = 'Connected to Binance'
-  else if (step2Status === 'error') summaries.connectivity = 'Connection failed'
-  if (step3Status === 'done') summaries.permissions = 'All checks passed'
+  const summaries: Record<string, string | ReactNode> = {};
+  if (step1Status === 'done') summaries.credentials = `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`;
+  if (step2Status === 'done') summaries.connectivity = 'Connected to Binance';
+  else if (step2Status === 'error') summaries.connectivity = 'Connection failed';
+  if (step3Status === 'done') summaries.permissions = 'All checks passed';
 
   const statusIcon = (status: string) => {
-    if (status === 'ok') return <span className="text-emerald-400">&#10003;</span>
-    if (status === 'warn') return <span className="text-amber-400">&#9888;</span>
-    return <span className="text-red-400">&#10007;</span>
-  }
+    if (status === 'ok') return <span className="text-emerald-400">&#10003;</span>;
+    if (status === 'warn') return <span className="text-amber-400">&#9888;</span>;
+    return <span className="text-red-400">&#10007;</span>;
+  };
 
   const resetDownstream = () => {
-    if (step2Status !== 'pending') setStep2Status('pending')
-    if (step3Status !== 'pending') setStep3Status('pending')
-  }
-
-  // Test connectivity only (ping) — uses saved credentials from registry
-  const doTestConnectivity = useCallback(async () => {
-    setStep2Status('verifying')
-    try {
-      const result = await testCredential()
-      if (!result.success || !result.data?.connected) {
-        setError(result.data?.message || result.error || 'Connection failed')
-        setStep2Status('error')
-        return
-      }
-      setStep2Status('done')
-      doCheckPermissions()
-    } catch {
-      setError('Connection test failed')
-      setStep2Status('error')
-    }
-  }, [])
+    if (step2Status !== 'pending') setStep2Status('pending');
+    if (step3Status !== 'pending') setStep3Status('pending');
+  };
 
   // Check permissions via apiRestrictions
   const doCheckPermissions = useCallback(async () => {
-    setStep3Status('verifying')
+    setStep3Status('verifying');
     try {
-      const result = await checkPermissions()
+      const result = await checkPermissions();
       if (!result.success || !result.data?.permissions) {
-        setError(result.error || 'Permission check failed')
-        setStep3Status('error')
-        return
+        setError(result.error || 'Permission check failed');
+        setStep3Status('error');
+        return;
       }
-      setPermissions(result.data.permissions)
-      const allOk = result.data.permissions.every((p) => p.status === 'ok' || p.status === 'warn')
-      setStep3Status(allOk ? 'done' : 'active')
+      setPermissions(result.data.permissions);
+      const allOk = result.data.permissions.every((p) => p.status === 'ok' || p.status === 'warn');
+      setStep3Status(allOk ? 'done' : 'active');
     } catch {
-      setError('Permission check failed')
-      setStep3Status('error')
+      setError('Permission check failed');
+      setStep3Status('error');
     }
-  }, [])
+  }, []);
+
+  // Test connectivity only (ping) — uses saved credentials from registry
+  const doTestConnectivity = useCallback(async () => {
+    setStep2Status('verifying');
+    try {
+      const result = await testCredential();
+      if (!result.success || !result.data?.connected) {
+        setError(result.data?.message || result.error || 'Connection failed');
+        setStep2Status('error');
+        return;
+      }
+      setStep2Status('done');
+      doCheckPermissions();
+    } catch {
+      setError('Connection test failed');
+      setStep2Status('error');
+    }
+  }, [doCheckPermissions]);
 
   const steps: FlowStepConfig[] = [
     {
@@ -105,10 +105,10 @@ function SelectExchange() {
             type="text"
             value={apiKey}
             onInput={(e) => {
-              setApiKey(e.currentTarget.value)
-              setError('')
-              if (step1Status === 'error') setStep1Status('active')
-              resetDownstream()
+              setApiKey(e.currentTarget.value);
+              setError('');
+              if (step1Status === 'error') setStep1Status('active');
+              resetDownstream();
             }}
             className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
             placeholder="API Key"
@@ -117,10 +117,10 @@ function SelectExchange() {
             type="password"
             value={apiSecret}
             onInput={(e) => {
-              setApiSecret(e.currentTarget.value)
-              setError('')
-              if (step1Status === 'error') setStep1Status('active')
-              resetDownstream()
+              setApiSecret(e.currentTarget.value);
+              setError('');
+              if (step1Status === 'error') setStep1Status('active');
+              resetDownstream();
             }}
             className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
             placeholder="API Secret"
@@ -134,8 +134,8 @@ function SelectExchange() {
                 <button
                   key={mt.id}
                   onClick={() => {
-                    setSelectedMarket(mt.id)
-                    resetDownstream()
+                    setSelectedMarket(mt.id);
+                    resetDownstream();
                   }}
                   className={`p-2.5 rounded-lg border text-center transition-all duration-200 ${
                     selectedMarket === mt.id
@@ -206,16 +206,16 @@ function SelectExchange() {
         </div>
       ),
     },
-  ]
+  ];
 
   // Verify: Step 1 save → done, then auto-start Step 2
   const verifyCredentials = async () => {
-    const key = apiKey.trim()
-    const secret = apiSecret.trim()
-    if (!key || !secret) return
+    const key = apiKey.trim();
+    const secret = apiSecret.trim();
+    if (!key || !secret) return;
 
-    setStep1Status('verifying')
-    setError('')
+    setStep1Status('verifying');
+    setError('');
 
     try {
       const result = await saveCredential({
@@ -224,25 +224,25 @@ function SelectExchange() {
         api_secret: secret,
         market_type: selectedMarket,
         label: 'binance verification',
-      })
+      });
       if (!result.success) {
-        throw new Error(result.error || 'Failed to save credentials')
+        throw new Error(result.error || 'Failed to save credentials');
       }
-      setStep1Status('done')
-      doTestConnectivity()
+      setStep1Status('done');
+      doTestConnectivity();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save credentials')
-      setStep1Status('error')
+      setError(err instanceof Error ? err.message : 'Failed to save credentials');
+      setStep1Status('error');
     }
-  }
+  };
 
   const handleContinue = () => {
-    updateWizard({ exchange: 'binance', market_type: selectedMarket })
-    advanceStep(WizardStep.ConfigureParams)
-    navigate('/setup/params', { replace: true })
-  }
+    updateWizard({ exchange: 'binance', market_type: selectedMarket });
+    advanceStep(WizardStep.ConfigureParams);
+    navigate('/setup/params', { replace: true });
+  };
 
-  const canContinue = step2Status === 'done' && step3Status === 'done'
+  const canContinue = step2Status === 'done' && step3Status === 'done';
 
   return (
     <Wizard
@@ -269,7 +269,7 @@ function SelectExchange() {
     >
       <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
     </Wizard>
-  )
+  );
 }
 
-export default SelectExchange
+export default SelectExchange;

@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Wizard } from '../context/WizardContext/Wizard'
-import { useWizard } from '../context/WizardContext'
-import { findActiveBot } from '../../../service'
-import { WizardStep } from '../context/WizardContext/consts'
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Wizard } from '../context/WizardContext/Wizard';
+import { useWizard } from '../context/WizardContext';
+import { findActiveBot } from '../../../service';
+import { WizardStep } from '../context/WizardContext/consts';
 
 const BOT_TYPES = [
   {
@@ -22,28 +22,28 @@ const BOT_TYPES = [
     color: 'from-violet-500/20 to-purple-500/20',
     border: 'border-violet-500/30',
   },
-]
+];
 
 function SelectBotType() {
-  const navigate = useNavigate()
-  const { wizard, updateWizard, advanceStep } = useWizard()
-  const [selected, setSelected] = useState<'grid' | 'auto' | ''>(wizard.bot_type || '')
-  const [existingBot, setExistingBot] = useState<{ id: string; bot_type: string } | null>(null)
+  const navigate = useNavigate();
+  const { wizard, updateWizard, advanceStep } = useWizard();
+  const [selected, setSelected] = useState<'grid' | 'auto' | ''>(wizard.bot_type || '');
+  const [existingBot, setExistingBot] = useState<{ id: string; bot_type: string } | null>(null);
 
   useEffect(() => {
-    updateWizard({ current_step: WizardStep.SelectBotType })
+    updateWizard({ current_step: WizardStep.SelectBotType });
     findActiveBot().then((bot) => {
-      if (bot) setExistingBot(bot)
-    })
-  }, [])
+      if (bot) setExistingBot(bot);
+    });
+  }, [updateWizard]);
 
-  const canContinue = selected.length > 0 && !existingBot
+  const canContinue = selected.length > 0 && !existingBot;
 
   const handleContinue = () => {
-    updateWizard({ bot_type: selected })
-    advanceStep(WizardStep.ConfigureLlm)
-    navigate('/setup/llm', { replace: true })
-  }
+    updateWizard({ bot_type: selected });
+    advanceStep(WizardStep.ConfigureLlm);
+    navigate('/setup/llm', { replace: true });
+  };
 
   return (
     <Wizard
@@ -100,7 +100,7 @@ function SelectBotType() {
       ) : (
         <div className="space-y-4 mb-8">
           {BOT_TYPES.map((bot) => {
-            const isSelected = selected === bot.id
+            const isSelected = selected === bot.id;
             return (
               <button
                 key={bot.id}
@@ -184,12 +184,12 @@ function SelectBotType() {
                   )}
                 </div>
               </button>
-            )
+            );
           })}
         </div>
       )}
     </Wizard>
-  )
+  );
 }
 
-export default SelectBotType
+export default SelectBotType;

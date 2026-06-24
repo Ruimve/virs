@@ -1,1 +1,1 @@
-export const fn = () => {}
+export const fn = () => {};

@@ -1,24 +1,24 @@
-import { memo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import type { AnalysisLog } from '@/service'
-import { actionColor, actionLabel } from '../utils/utils'
+import { memo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import type { AnalysisLog } from '@/service';
+import { actionColor, actionLabel } from '../utils/utils';
 
 interface Props {
-  logs: AnalysisLog[]
-  loading: boolean
-  onLoadMore?: () => void
-  botType: 'auto' | 'grid'
-  botId: string
+  logs: AnalysisLog[];
+  loading: boolean;
+  onLoadMore?: () => void;
+  botType: 'auto' | 'grid';
+  botId: string;
 }
 
 const AILogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   const getDecision = (log: AnalysisLog) => {
-    if (log.result?.action) return log.result
-    if (log.result?.decision) return log.result.decision
-    return null
-  }
+    if (log.result?.action) return log.result;
+    if (log.result?.decision) return log.result.decision;
+    return null;
+  };
 
   if (loading && logs.length === 0) {
     return (
@@ -40,19 +40,19 @@ const AILogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
         </svg>
         加载中...
       </div>
-    )
+    );
   }
 
   if (logs.length === 0) {
     return (
       <div className="text-center py-20 text-on-surface-tertiary text-xs">暂无 AI 决策记录</div>
-    )
+    );
   }
 
   return (
     <div className="px-4 md:px-8 py-4 space-y-3">
       {logs.map((log) => {
-        const decision = getDecision(log)
+        const decision = getDecision(log);
 
         return (
           <div
@@ -89,7 +89,7 @@ const AILogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
               </svg>
             </div>
           </div>
-        )
+        );
       })}
 
       {onLoadMore && (
@@ -104,7 +104,7 @@ const AILogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
-export default memo(AILogList)
+export default memo(AILogList);

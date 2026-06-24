@@ -1,13 +1,13 @@
-import { Component as ReactComponent } from 'react'
+import { Component as ReactComponent } from 'react';
 
 export class ErrorBoundary extends ReactComponent<
   { children: React.ReactNode },
   { hasError: boolean; error: Error | null }
 > {
-  state = { hasError: false, error: null as Error | null }
+  state = { hasError: false, error: null as Error | null };
 
   static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error }
+    return { hasError: true, error };
   }
 
   render() {
@@ -25,8 +25,8 @@ export class ErrorBoundary extends ReactComponent<
             </button>
           </div>
         </div>
-      )
+      );
     }
-    return this.props.children
+    return this.props.children;
   }
 }

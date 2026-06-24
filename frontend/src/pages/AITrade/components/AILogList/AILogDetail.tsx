@@ -1,23 +1,23 @@
-import { useState, memo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import type { AnalysisLog } from '@/service/types'
-import { actionColor, actionLabel } from '../utils/utils'
+import { useState, memo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import type { AnalysisLog } from '@/service/types';
+import { actionColor, actionLabel } from '../utils/utils';
 
 interface Props {
-  log: AnalysisLog
-  loading: boolean
+  log: AnalysisLog;
+  loading: boolean;
 }
 
 const AILogDetail = ({ log, loading }: Props) => {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
-  const [showSystemPrompt, setShowSystemPrompt] = useState(false)
-  const [showUserPrompt, setShowUserPrompt] = useState(false)
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
+  const [showUserPrompt, setShowUserPrompt] = useState(false);
 
   const getDecision = (log: AnalysisLog) => {
-    if (log.result?.decision) return log.result.decision
-    return null
-  }
+    if (log.result?.decision) return log.result.decision;
+    return null;
+  };
 
   if (loading) {
     return (
@@ -43,7 +43,7 @@ const AILogDetail = ({ log, loading }: Props) => {
         </div>
         <div className="text-center py-20 text-on-surface-tertiary text-sm">加载中...</div>
       </div>
-    )
+    );
   }
 
   if (!log) {
@@ -70,10 +70,10 @@ const AILogDetail = ({ log, loading }: Props) => {
         </div>
         <div className="text-center py-20 text-on-surface-tertiary text-sm">未找到该记录</div>
       </div>
-    )
+    );
   }
 
-  const decision = getDecision(log)
+  const decision = getDecision(log);
 
   return (
     <div className="min-h-screen bg-base">
@@ -334,7 +334,7 @@ const AILogDetail = ({ log, loading }: Props) => {
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default memo(AILogDetail)
+export default memo(AILogDetail);

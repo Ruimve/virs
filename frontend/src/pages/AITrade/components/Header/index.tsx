@@ -1,14 +1,14 @@
-import { memo, useCallback, useState } from 'react'
-import Logo from '@/components/Logo'
-import Theme from '@/components/Theme'
-import { useHeader } from './context'
-import { usePaper } from '../../context/PaperContext'
-import { useBot } from '../../context/BotContext'
+import { memo, useCallback, useState } from 'react';
+import Logo from '@/components/Logo';
+import Theme from '@/components/Theme';
+import { useHeader } from './HeaderContext';
+import { usePaper } from '../../context/PaperContext';
+import { useBot } from '../../context/BotContext';
 
 interface StatusStyle {
-  text: string
-  dot: string
-  bg: string
+  text: string;
+  dot: string;
+  bg: string;
 }
 
 const statusConfig = (status: string): StatusStyle => {
@@ -26,38 +26,38 @@ const statusConfig = (status: string): StatusStyle => {
       bg: 'bg-surface-2 text-on-surface-tertiary',
     },
     error: { text: '错误', dot: 'bg-red-500', bg: 'bg-red-500/10 text-red-400' },
-  }
+  };
   return (
     map[status] || {
       text: status,
       dot: 'bg-on-surface-muted',
       bg: 'bg-surface-2 text-on-surface-tertiary',
     }
-  )
-}
+  );
+};
 
 const Header = () => {
-  const { bot } = useBot()
-  const { tabs, activeTab, actions } = useHeader()
-  const { enabled: paperMode } = usePaper()
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [drawerClosing, setDrawerClosing] = useState(false)
-  const sc: StatusStyle = statusConfig(bot?.status || '')
+  const { bot } = useBot();
+  const { tabs, activeTab, actions } = useHeader();
+  const { enabled: paperMode } = usePaper();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerClosing, setDrawerClosing] = useState(false);
+  const sc: StatusStyle = statusConfig(bot?.status || '');
 
   const closeDrawer = () => {
-    setDrawerClosing(true)
-  }
+    setDrawerClosing(true);
+  };
 
   const openDrawer = useCallback(() => {
-    setDrawerOpen(true)
-  }, [])
+    setDrawerOpen(true);
+  }, []);
 
   const handleDrawerAnimEnd = () => {
     if (drawerClosing) {
-      setDrawerOpen(false)
-      setDrawerClosing(false)
+      setDrawerOpen(false);
+      setDrawerClosing(false);
     }
-  }
+  };
 
   return (
     <>
@@ -115,7 +115,7 @@ const Header = () => {
               >
                 {action.label}
               </button>
-            )
+            );
           })}
           <Theme />
         </div>
@@ -164,8 +164,8 @@ const Header = () => {
                 <button
                   key={tab.key}
                   onClick={() => {
-                    tab.onClick(tab.key)
-                    closeDrawer()
+                    tab.onClick(tab.key);
+                    closeDrawer();
                   }}
                   className={`w-full text-left px-4 py-3 text-sm transition-colors ${
                     activeTab === tab.key
@@ -183,21 +183,21 @@ const Header = () => {
                 return (
                   <button
                     onClick={() => {
-                      action.onClick!(action.key)
-                      closeDrawer()
+                      action.onClick!(action.key);
+                      closeDrawer();
                     }}
                     className={`w-full px-3 py-2 rounded-lg text-xs font-medium ${action.className || ''}`}
                   >
                     {action.label}
                   </button>
-                )
+                );
               })}
             </div>
           </div>
         </>
       )}
     </>
-  )
-}
+  );
+};
 
-export default memo(Header)
+export default memo(Header);

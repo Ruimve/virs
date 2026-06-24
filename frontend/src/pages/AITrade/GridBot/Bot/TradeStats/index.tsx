@@ -1,26 +1,26 @@
-import { memo, useEffect, useState } from 'react'
-import { getGridStats, type GridBotStats } from '@/service'
+import { memo, useEffect, useState } from 'react';
+import { getGridStats, type GridBotStats } from '@/service';
 
 interface Props {
-  botId: string
+  botId: string;
 }
 
 const TradeStats = ({ botId }: Props) => {
-  const [stats, setStats] = useState<GridBotStats | null>(null)
+  const [stats, setStats] = useState<GridBotStats | null>(null);
 
   useEffect(() => {
-    if (!botId) return
-    let cancelled = false
+    if (!botId) return;
+    let cancelled = false;
     getGridStats(botId)
       .then((res) => {
-        if (cancelled) return
-        if (res.success && res.data) setStats(res.data)
+        if (cancelled) return;
+        if (res.success && res.data) setStats(res.data);
       })
-      .catch((e) => console.error('Failed to load grid stats:', e))
+      .catch((e) => console.error('Failed to load grid stats:', e));
     return () => {
-      cancelled = true
-    }
-  }, [botId])
+      cancelled = true;
+    };
+  }, [botId]);
 
   const items = [
     {
@@ -97,7 +97,7 @@ const TradeStats = ({ botId }: Props) => {
       value: stats?.avg_hold_time ?? '-',
       color: 'text-on-surface',
     },
-  ]
+  ];
 
   return (
     <div className="px-4 py-3 border-b border-line-subtle">
@@ -118,7 +118,7 @@ const TradeStats = ({ botId }: Props) => {
         ))}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default memo(TradeStats)
+export default memo(TradeStats);

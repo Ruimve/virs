@@ -1,53 +1,53 @@
-import { useEffect, memo } from 'react'
-import { Outlet, useNavigate } from 'react-router-dom'
-import { startGridBot, stopGridBot, deleteGridBot } from '@/service/bot'
-import { useBot } from '../context/BotContext'
-import { useHeader, type ItemConfig } from '../components/Header/context'
+import { useEffect, memo } from 'react';
+import { Outlet, useNavigate } from 'react-router-dom';
+import { startGridBot, stopGridBot, deleteGridBot } from '@/service/bot';
+import { useBot } from '../context/BotContext';
+import { useHeader, type ItemConfig } from '../components/Header/HeaderContext';
 
 const GridBot = () => {
-  const navigate = useNavigate()
-  const { updateTabs, updateActions } = useHeader()
-  const { bot, loading } = useBot()
+  const navigate = useNavigate();
+  const { updateTabs, updateActions } = useHeader();
+  const { bot, loading } = useBot();
 
   useEffect(() => {
-    if (!bot?.id) return
+    if (!bot?.id) return;
 
     updateTabs([
       {
         key: 'bot',
         label: '机器人',
         onClick: () => {
-          navigate(`/trade/grid/${bot?.id}/bot`, { replace: true })
+          navigate(`/trade/grid/${bot?.id}/bot`, { replace: true });
         },
       },
       {
         key: 'trades',
         label: '交易记录',
         onClick: () => {
-          navigate(`/trade/grid/${bot?.id}/trades`, { replace: true })
+          navigate(`/trade/grid/${bot?.id}/trades`, { replace: true });
         },
       },
       {
         key: 'log',
         label: 'AI 决策日志',
         onClick: () => {
-          navigate(`/trade/grid/${bot?.id}/log`, { replace: true })
+          navigate(`/trade/grid/${bot?.id}/log`, { replace: true });
         },
       },
       {
         key: 'system',
         label: '系统',
         onClick: () => {
-          navigate(`/trade/system`, { replace: true })
+          navigate(`/trade/system`, { replace: true });
         },
       },
-    ])
-  }, [bot?.id])
+    ]);
+  }, [bot?.id, navigate, updateTabs]);
 
   useEffect(() => {
-    if (!bot?.id || !bot?.status) return
+    if (!bot?.id || !bot?.status) return;
 
-    const actions: ItemConfig[] = []
+    const actions: ItemConfig[] = [];
 
     if (bot?.status === 'running') {
       actions.push({
@@ -56,9 +56,9 @@ const GridBot = () => {
         className:
           'bg-surface-1 border-line-default text-on-surface-tertiary hover:text-red-400 hover:border-red-500/20 transition-colors',
         onClick: async () => {
-          await stopGridBot(bot?.id)
+          await stopGridBot(bot?.id);
         },
-      })
+      });
     }
 
     if (bot?.status === 'stopped') {
@@ -68,9 +68,9 @@ const GridBot = () => {
         className:
           'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors',
         onClick: async () => {
-          await startGridBot(bot?.id)
+          await startGridBot(bot?.id);
         },
-      })
+      });
     }
 
     actions.push({
@@ -79,14 +79,14 @@ const GridBot = () => {
       className:
         'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors',
       onClick: async () => {
-        if (!confirm('确定删除此机器人？将平仓所有持仓。')) return
-        await deleteGridBot(bot?.id)
-        navigate('/setup/bot-type', { replace: true })
+        if (!confirm('确定删除此机器人？将平仓所有持仓。')) return;
+        await deleteGridBot(bot?.id);
+        navigate('/setup/bot-type', { replace: true });
       },
-    })
+    });
 
-    updateActions(actions)
-  }, [bot?.id, bot?.status])
+    updateActions(actions);
+  }, [bot?.id, bot?.status, navigate, updateActions]);
 
   if (loading) {
     return (
@@ -111,7 +111,7 @@ const GridBot = () => {
           />
         </svg>
       </div>
-    )
+    );
   }
 
   if (!bot?.id) {
@@ -125,10 +125,10 @@ const GridBot = () => {
           创建新机器人
         </button>
       </div>
-    )
+    );
   }
 
-  return <Outlet />
-}
+  return <Outlet />;
+};
 
-export default memo(GridBot)
+export default memo(GridBot);

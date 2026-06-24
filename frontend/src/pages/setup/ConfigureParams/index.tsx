@@ -1,8 +1,8 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Wizard } from '../context/WizardContext/Wizard'
-import { useWizardGuard, useWizard } from '../context/WizardContext'
-import { WizardStep } from '../context/WizardContext/consts'
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Wizard } from '../context/WizardContext/Wizard';
+import { useWizardGuard, useWizard } from '../context/WizardContext';
+import { WizardStep } from '../context/WizardContext/consts';
 
 // Grid bot parameters
 const GRID_PARAMS = [
@@ -42,7 +42,7 @@ const GRID_PARAMS = [
     required: true,
   },
   { key: 'leverage', label: 'Leverage', type: 'number' as const, placeholder: '5', required: true },
-]
+];
 
 // Auto bot parameters
 const AUTO_PARAMS = [
@@ -67,30 +67,30 @@ const AUTO_PARAMS = [
     placeholder: '300',
     required: true,
   },
-]
+];
 
 function ConfigureParams() {
-  const navigate = useNavigate()
-  const { wizard, updateWizard, advanceStep } = useWizard()
-  useWizardGuard(wizard.current_step, WizardStep.ConfigureParams)
-  const isGrid = wizard.bot_type === 'grid'
-  const params = isGrid ? GRID_PARAMS : AUTO_PARAMS
+  const navigate = useNavigate();
+  const { wizard, updateWizard, advanceStep } = useWizard();
+  useWizardGuard(wizard.current_step, WizardStep.ConfigureParams);
+  const isGrid = wizard.bot_type === 'grid';
+  const params = isGrid ? GRID_PARAMS : AUTO_PARAMS;
 
   const [values, setValues] = useState<Record<string, string>>(
     (wizard.bot_params as Record<string, string>) || {},
-  )
+  );
 
   const setValue = (key: string, val: string) => {
-    setValues((prev) => ({ ...prev, [key]: val }))
-  }
+    setValues((prev) => ({ ...prev, [key]: val }));
+  };
 
-  const canContinue = params.filter((p) => p.required).every((p) => values[p.key]?.trim())
+  const canContinue = params.filter((p) => p.required).every((p) => values[p.key]?.trim());
 
   const handleContinue = () => {
-    updateWizard({ bot_params: values })
-    advanceStep(WizardStep.ReviewLaunch)
-    navigate('/setup/review', { replace: true })
-  }
+    updateWizard({ bot_params: values });
+    advanceStep(WizardStep.ReviewLaunch);
+    navigate('/setup/review', { replace: true });
+  };
 
   return (
     <Wizard
@@ -133,7 +133,7 @@ function ConfigureParams() {
         ))}
       </div>
     </Wizard>
-  )
+  );
 }
 
-export default ConfigureParams
+export default ConfigureParams;

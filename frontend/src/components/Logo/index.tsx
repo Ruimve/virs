@@ -1,5 +1,5 @@
-import { fn } from '@/utils/default'
-import { memo } from 'react'
+import { fn } from '@/utils/default';
+import { memo } from 'react';
 
 /**
  * VIRS Logo — flowing gradient text that shifts continuously.
@@ -20,7 +20,7 @@ const Logo = ({ className = '', onClick = fn }: { className?: string; onClick?: 
     >
       VIRS
     </span>
-  )
-}
+  );
+};
 
-export default memo(Logo)
+export default memo(Logo);

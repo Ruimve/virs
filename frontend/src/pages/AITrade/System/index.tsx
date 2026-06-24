@@ -1,46 +1,46 @@
-import { memo, useEffect, useState, useCallback, useRef } from 'react'
-import { getSystemInfo } from '@/service/system'
-import type { SystemInfo as SystemInfoData } from '@/service/types'
+import { memo, useEffect, useState, useCallback, useRef } from 'react';
+import { getSystemInfo } from '@/service/system';
+import type { SystemInfo as SystemInfoData } from '@/service/types';
 
 // ── 工具函数 ────────────────────────────────────────────────
 
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  const val = bytes / Math.pow(1024, i)
-  return `${val.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const val = bytes / Math.pow(1024, i);
+  return `${val.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
 function formatRate(bytesPerSec: number): string {
-  return formatBytes(bytesPerSec) + '/s'
+  return formatBytes(bytesPerSec) + '/s';
 }
 
 function formatUptime(secs: number): string {
-  const days = Math.floor(secs / 86400)
-  const hours = Math.floor((secs % 86400) / 3600)
-  const mins = Math.floor((secs % 3600) / 60)
-  const parts: string[] = []
-  if (days > 0) parts.push(`${days}天`)
-  if (hours > 0) parts.push(`${hours}小时`)
-  parts.push(`${mins}分钟`)
-  return parts.join(' ')
+  const days = Math.floor(secs / 86400);
+  const hours = Math.floor((secs % 86400) / 3600);
+  const mins = Math.floor((secs % 3600) / 60);
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}天`);
+  if (hours > 0) parts.push(`${hours}小时`);
+  parts.push(`${mins}分钟`);
+  return parts.join(' ');
 }
 
 function usageColor(pct: number): string {
-  if (pct >= 90) return 'text-red-400'
-  if (pct >= 70) return 'text-amber-400'
-  return 'text-emerald-400'
+  if (pct >= 90) return 'text-red-400';
+  if (pct >= 70) return 'text-amber-400';
+  return 'text-emerald-400';
 }
 
 function barColor(pct: number): string {
-  if (pct >= 90) return 'bg-red-500'
-  if (pct >= 70) return 'bg-amber-500'
-  return 'bg-emerald-500'
+  if (pct >= 90) return 'bg-red-500';
+  if (pct >= 70) return 'bg-amber-500';
+  return 'bg-emerald-500';
 }
 
 interface ProgressBarProps {
-  pct: number
+  pct: number;
 }
 
 const ProgressBar = ({ pct }: ProgressBarProps) => (
@@ -50,13 +50,13 @@ const ProgressBar = ({ pct }: ProgressBarProps) => (
       style={{ width: `${Math.min(pct, 100)}%` }}
     />
   </div>
-)
+);
 
 // ── 卡片组件 ────────────────────────────────────────────────
 
 interface CardProps {
-  title: string
-  children: React.ReactNode
+  title: string;
+  children: React.ReactNode;
 }
 
 const Card = ({ title, children }: CardProps) => (
@@ -64,72 +64,72 @@ const Card = ({ title, children }: CardProps) => (
     <h3 className="text-xs font-medium text-on-surface-tertiary mb-3">{title}</h3>
     {children}
   </div>
-)
+);
 
 // ── 主组件 ──────────────────────────────────────────────────
 
 // 保存上次网络采样，用于计算速率
 interface NetSample {
-  total_rx: number
-  total_tx: number
-  ts: number
+  total_rx: number;
+  total_tx: number;
+  ts: number;
 }
 
 const System = () => {
-  const [info, setInfo] = useState<SystemInfoData | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<SystemInfoData | null>(null);
+  const [error, setError] = useState<string | null>(null);
   // 网络速率：name → bytes/s
-  const [netRates, setNetRates] = useState<Record<string, { rx: number; tx: number }>>({})
-  const lastNetSample = useRef<Record<string, NetSample>>({})
+  const [netRates, setNetRates] = useState<Record<string, { rx: number; tx: number }>>({});
+  const lastNetSample = useRef<Record<string, NetSample>>({});
 
   const loadInfo = useCallback(async () => {
     try {
-      const res = await getSystemInfo()
+      const res = await getSystemInfo();
       if (res.success && res.data) {
-        setInfo(res.data)
-        setError(null)
+        setInfo(res.data);
+        setError(null);
 
         // 计算网络速率
-        const now = Date.now()
-        const newRates: Record<string, { rx: number; tx: number }> = {}
-        const newSample: Record<string, NetSample> = {}
+        const now = Date.now();
+        const newRates: Record<string, { rx: number; tx: number }> = {};
+        const newSample: Record<string, NetSample> = {};
         for (const net of res.data.network) {
-          const prev = lastNetSample.current[net.name]
+          const prev = lastNetSample.current[net.name];
           if (prev) {
-            const dt = (now - prev.ts) / 1000
+            const dt = (now - prev.ts) / 1000;
             if (dt > 0) {
               newRates[net.name] = {
                 rx: Math.max(0, (net.total_rx_bytes - prev.total_rx) / dt),
                 tx: Math.max(0, (net.total_tx_bytes - prev.total_tx) / dt),
-              }
+              };
             }
           }
           newSample[net.name] = {
             total_rx: net.total_rx_bytes,
             total_tx: net.total_tx_bytes,
             ts: now,
-          }
+          };
         }
-        lastNetSample.current = newSample
-        setNetRates(newRates)
+        lastNetSample.current = newSample;
+        setNetRates(newRates);
       } else {
-        setError(res.error || '获取系统信息失败')
+        setError(res.error || '获取系统信息失败');
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : '网络错误')
+      setError(e instanceof Error ? e.message : '网络错误');
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    loadInfo()
-    const id = setInterval(loadInfo, 5000)
-    return () => clearInterval(id)
-  }, [loadInfo])
+    loadInfo();
+    const id = setInterval(loadInfo, 5000);
+    return () => clearInterval(id);
+  }, [loadInfo]);
 
   if (error) {
     return (
       <div className="flex-1 flex items-center justify-center text-red-400 text-sm">{error}</div>
-    )
+    );
   }
 
   if (!info) {
@@ -155,11 +155,11 @@ const System = () => {
           />
         </svg>
       </div>
-    )
+    );
   }
 
-  const cpuPct = info.cpu.usage_pct
-  const memPct = info.memory.usage_pct
+  const cpuPct = info.cpu.usage_pct;
+  const memPct = info.memory.usage_pct;
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -257,7 +257,7 @@ const System = () => {
             { label: '15 分钟', value: info.load_average.fifteen },
           ].map(({ label, value }) => {
             // 负载相对核心数的百分比：>100% 表示过载
-            const loadPct = info.cpu.core_count > 0 ? (value / info.cpu.core_count) * 100 : 0
+            const loadPct = info.cpu.core_count > 0 ? (value / info.cpu.core_count) * 100 : 0;
             return (
               <div key={label}>
                 <div className="flex items-baseline justify-between mb-1">
@@ -271,7 +271,7 @@ const System = () => {
                   {loadPct.toFixed(0)}% 核心
                 </div>
               </div>
-            )
+            );
           })}
         </div>
       </Card>
@@ -305,7 +305,7 @@ const System = () => {
             <div className="text-xs text-on-surface-tertiary">无网络接口</div>
           ) : (
             info.network.map((net, i) => {
-              const rate = netRates[net.name]
+              const rate = netRates[net.name];
               return (
                 <div key={i} className="py-1">
                   <div className="flex items-center justify-between text-xs">
@@ -331,13 +331,13 @@ const System = () => {
                     </div>
                   )}
                 </div>
-              )
+              );
             })
           )}
         </div>
       </Card>
     </div>
-  )
-}
+  );
+};
 
-export default memo(System)
+export default memo(System);

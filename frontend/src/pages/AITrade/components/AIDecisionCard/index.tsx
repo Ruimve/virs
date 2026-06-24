@@ -1,45 +1,45 @@
-import { memo, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import type { AnalysisLog } from '@/service/types'
-import { actionColor, actionLabel, confidenceColor } from '../utils/utils'
+import { memo, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import type { AnalysisLog } from '@/service/types';
+import { actionColor, actionLabel, confidenceColor } from '../utils/utils';
 
 interface Props {
-  log: AnalysisLog | null
-  botId: string
-  botType?: 'auto' | 'grid'
+  log: AnalysisLog | null;
+  botId: string;
+  botType?: 'auto' | 'grid';
 }
 
 const AIDecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   const handleClick = useCallback(() => {
-    navigate(`/trade/${botType}/${botId}/log/${log?.id}`)
-  }, [botType, botId, log?.id])
+    navigate(`/trade/${botType}/${botId}/log/${log?.id}`);
+  }, [botType, botId, log?.id, navigate]);
 
-  const decision = log?.result?.decision
-  const market = log?.result?.market
-  const riskWarning = log?.result?.risk_warning
+  const decision = log?.result?.decision;
+  const market = log?.result?.market;
+  const riskWarning = log?.result?.risk_warning;
 
   const confidence = useMemo(() => {
-    const confidence = log?.result?.decision?.confidence
-    if (typeof confidence === 'number' && !isNaN(confidence)) return confidence
-    return null
-  }, [log?.result?.decision])
+    const confidence = log?.result?.decision?.confidence;
+    if (typeof confidence === 'number' && !isNaN(confidence)) return confidence;
+    return null;
+  }, [log?.result?.decision]);
 
   const createdAt = useMemo(() => {
-    if (!log?.created_at) return '-'
+    if (!log?.created_at) return '-';
     return new Date(log?.created_at).toLocaleTimeString('zh-CN', {
       hour: '2-digit',
       minute: '2-digit',
-    })
-  }, [log?.created_at])
+    });
+  }, [log?.created_at]);
 
   if (!log) {
     return (
       <div className="px-4 py-6 text-center text-sm text-on-surface-tertiary">
         等待 AI 首次决策...
       </div>
-    )
+    );
   }
 
   return (
@@ -115,7 +115,7 @@ const AIDecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
-export default memo(AIDecisionCard)
+export default memo(AIDecisionCard);

@@ -1,11 +1,11 @@
-import { useRef, useEffect, memo } from 'react'
-import { createChart, type IChartApi, ColorType } from 'lightweight-charts'
+import { useRef, useEffect, memo } from 'react';
+import { createChart, type IChartApi, ColorType } from 'lightweight-charts';
 
 export interface ReactChartProps {
-  onLoad: (chart: IChartApi | undefined) => void
-  height?: number
-  timeVisible?: boolean
-  secondsVisible?: boolean
+  onLoad: (chart: IChartApi | undefined) => void;
+  height?: number;
+  timeVisible?: boolean;
+  secondsVisible?: boolean;
 }
 
 /**
@@ -14,20 +14,20 @@ export interface ReactChartProps {
  * can create series and set data.
  */
 function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<IChartApi | undefined>(undefined)
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | undefined>(undefined);
 
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
+    const el = containerRef.current;
+    if (!el) return;
 
     // Read theme-aware CSS variables for chart colors
-    const cs = getComputedStyle(el)
-    const bgBase = cs.getPropertyValue('--bg-base').trim() || '#ffffff'
+    const cs = getComputedStyle(el);
+    const bgBase = cs.getPropertyValue('--bg-base').trim() || '#ffffff';
     const textOnSurfaceTertiary =
-      cs.getPropertyValue('--text-on-surface-tertiary').trim() || '#94a3b8'
-    const borderDefault = cs.getPropertyValue('--border-default').trim() || '#e2e8f0'
-    const borderSubtle = cs.getPropertyValue('--border-subtle').trim() || '#f1f5f9'
+      cs.getPropertyValue('--text-on-surface-tertiary').trim() || '#94a3b8';
+    const borderDefault = cs.getPropertyValue('--border-default').trim() || '#e2e8f0';
+    const borderSubtle = cs.getPropertyValue('--border-subtle').trim() || '#f1f5f9';
 
     const chart = createChart(el, {
       layout: {
@@ -51,28 +51,28 @@ function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartP
         secondsVisible: secondsVisible ?? false,
       },
       handleScroll: { vertTouchDrag: false },
-    })
+    });
 
-    chartRef.current = chart
-    onLoad(chart)
+    chartRef.current = chart;
+    onLoad(chart);
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const { width, height } = entry.contentRect
+        const { width, height } = entry.contentRect;
         if (chart && width > 0 && height > 0) {
-          chart.applyOptions({ width, height })
+          chart.applyOptions({ width, height });
         }
       }
-    })
-    resizeObserver.observe(el)
+    });
+    resizeObserver.observe(el);
 
     return () => {
-      resizeObserver.disconnect()
-      chart.remove()
-      chartRef.current = undefined
-      onLoad(undefined)
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+      resizeObserver.disconnect();
+      chart.remove();
+      chartRef.current = undefined;
+      onLoad(undefined);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div
@@ -80,7 +80,7 @@ function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartP
       className={`w-full rounded-lg border border-line-default overflow-hidden ${!height ? 'h-full' : ''}`}
       style={height ? { height: `${height}px` } : undefined}
     />
-  )
+  );
 }
 
-export default memo(ReactChart)
+export default memo(ReactChart);

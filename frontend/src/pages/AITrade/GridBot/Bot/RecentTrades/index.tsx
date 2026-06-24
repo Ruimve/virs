@@ -1,33 +1,33 @@
-import { memo, useEffect, useState } from 'react'
-import { getGridTrades, type GridTrade } from '@/service'
-import { formatPnlShort } from '../../../components/utils/utils'
+import { memo, useEffect, useState } from 'react';
+import { getGridTrades, type GridTrade } from '@/service';
+import { formatPnlShort } from '../../../components/utils/utils';
 
 interface Props {
-  botId: string
+  botId: string;
 }
 
 const pnlColor = (v: number) =>
-  v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-on-surface'
+  v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-on-surface';
 
 /** 网格机器人最近成交卡片（右侧栏） */
 const RecentTrades = ({ botId }: Props) => {
-  const [trades, setTrades] = useState<GridTrade[]>([])
+  const [trades, setTrades] = useState<GridTrade[]>([]);
 
   useEffect(() => {
-    if (!botId) return
-    let cancelled = false
+    if (!botId) return;
+    let cancelled = false;
     getGridTrades(botId, 1, 5)
       .then((res) => {
-        if (cancelled) return
-        if (res.success && res.data) setTrades(res.data.trades || [])
+        if (cancelled) return;
+        if (res.success && res.data) setTrades(res.data.trades || []);
       })
-      .catch((e) => console.error('Failed to load grid trades:', e))
+      .catch((e) => console.error('Failed to load grid trades:', e));
     return () => {
-      cancelled = true
-    }
-  }, [botId])
+      cancelled = true;
+    };
+  }, [botId]);
 
-  const recent = trades.slice(0, 5)
+  const recent = trades.slice(0, 5);
 
   return (
     <div className="flex flex-col min-h-0">
@@ -75,7 +75,7 @@ const RecentTrades = ({ botId }: Props) => {
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default memo(RecentTrades)
+export default memo(RecentTrades);

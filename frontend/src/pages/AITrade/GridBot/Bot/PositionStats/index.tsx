@@ -1,10 +1,10 @@
-import { memo, useMemo } from 'react'
-import type { GridBot } from '@/service/types'
-import { useBot } from '../../../context/BotContext'
+import { memo, useMemo } from 'react';
+import type { GridBot } from '@/service/types';
+import { useBot } from '../../../context/BotContext';
 
 interface Props {
-  bot: GridBot
-  latestPrice: number
+  bot: GridBot;
+  latestPrice: number;
 }
 
 // ── 字体规范（全页面统一） ──────────────────────────────
@@ -15,36 +15,36 @@ interface Props {
 // ────────────────────────────────────────────────────────
 
 const pnlColor = (v: number) =>
-  v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-on-surface'
+  v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-on-surface';
 
 const PositionStats = ({ bot, latestPrice }: Props) => {
-  const { gridLevels } = useBot()
-  const b = bot
-  const filledCount = Math.min(b.grid_filled_count, b.grid_count)
+  const { gridLevels } = useBot();
+  const b = bot;
+  const filledCount = Math.min(b.grid_filled_count, b.grid_count);
 
   // ── 前端实时计算未实现盈亏（基于 grid levels + 最新价） ──
   const { unrealizedPnl, usedMargin } = useMemo(() => {
     if (!gridLevels || gridLevels.length === 0 || latestPrice <= 0) {
-      return { unrealizedPnl: 0, usedMargin: 0 }
+      return { unrealizedPnl: 0, usedMargin: 0 };
     }
-    let pnl = 0
-    let margin = 0
+    let pnl = 0;
+    let margin = 0;
     for (const level of gridLevels) {
-      const qty = Math.abs(level.hold_quantity)
-      if (qty <= 0) continue
+      const qty = Math.abs(level.hold_quantity);
+      if (qty <= 0) continue;
       // 持仓方向：buy=多，sell=空
-      const dir = level.side === 'buy' ? 1 : -1
-      const avgPrice = level.avg_buy_price > 0 ? level.avg_buy_price : level.buy_price
-      pnl += (latestPrice - avgPrice) * qty * dir
+      const dir = level.side === 'buy' ? 1 : -1;
+      const avgPrice = level.avg_buy_price > 0 ? level.avg_buy_price : level.buy_price;
+      pnl += (latestPrice - avgPrice) * qty * dir;
       // 保证金 = 持仓价值 / 杠杆
-      margin += (qty * avgPrice) / b.leverage
+      margin += (qty * avgPrice) / b.leverage;
     }
-    return { unrealizedPnl: pnl, usedMargin: margin }
-  }, [gridLevels, latestPrice, b.leverage])
+    return { unrealizedPnl: pnl, usedMargin: margin };
+  }, [gridLevels, latestPrice, b.leverage]);
 
-  const accountBalance = b.initial_capital + b.total_pnl + unrealizedPnl
-  const freeMargin = accountBalance - usedMargin
-  const totalPnl = b.total_pnl + unrealizedPnl
+  const accountBalance = b.initial_capital + b.total_pnl + unrealizedPnl;
+  const freeMargin = accountBalance - usedMargin;
+  const totalPnl = b.total_pnl + unrealizedPnl;
 
   return (
     <div className="border-b border-line-subtle">
@@ -158,8 +158,8 @@ const PositionStats = ({ bot, latestPrice }: Props) => {
         </Stat>
       </div>
     </div>
-  )
-}
+  );
+};
 
 /** 统一字段组件：label + value */
 const Stat = ({ label, children }: { label: string; children: React.ReactNode }) => (
@@ -169,6 +169,6 @@ const Stat = ({ label, children }: { label: string; children: React.ReactNode })
     </div>
     <div className="text-sm font-mono tabular-nums truncate">{children}</div>
   </div>
-)
+);
 
-export default memo(PositionStats)
+export default memo(PositionStats);

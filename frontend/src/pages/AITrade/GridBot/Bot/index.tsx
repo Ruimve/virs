@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchKlines,
   getGridAnalysisLogs,
@@ -8,16 +8,16 @@ import {
   type GridTrade,
   type KlineCandle,
   type KlineWsEvent,
-} from '@/service'
-import { useKlineWs } from '@/service/ws'
-import type { KlineChartHandle } from '@/components/Chart/KlineChart'
-import { useBot } from '../../context/BotContext'
-import AIDecisionCard from '../../components/AIDecisionCard'
-import StickyMarket from '../../components/StickyMarket'
-import TradeStats from './TradeStats'
-import LevelsOverview from './LevelsOverview'
-import RecentTrades from './RecentTrades'
-import PositionStats from './PositionStats'
+} from '@/service';
+import { useKlineWs } from '@/service/ws';
+import type { KlineChartHandle } from '@/components/Chart/KlineChart';
+import { useBot } from '../../context/BotContext';
+import AIDecisionCard from '../../components/AIDecisionCard';
+import StickyMarket from '../../components/StickyMarket';
+import TradeStats from './TradeStats';
+import LevelsOverview from './LevelsOverview';
+import RecentTrades from './RecentTrades';
+import PositionStats from './PositionStats';
 
 /**
  * 把网格交易记录转换为 K线图 markers。
@@ -27,48 +27,48 @@ import PositionStats from './PositionStats'
 function tradesToMarkers(trades: GridTrade[]) {
   return trades
     .map((t) => {
-      const time = Math.floor(new Date(t.opened_at).getTime() / 1000)
-      const isBuy = t.open_side === 'buy'
+      const time = Math.floor(new Date(t.opened_at).getTime() / 1000);
+      const isBuy = t.open_side === 'buy';
       return {
         time,
         position: isBuy ? ('belowBar' as const) : ('aboveBar' as const),
         color: isBuy ? '#10b981' : '#ef4444',
         shape: isBuy ? ('arrowUp' as const) : ('arrowDown' as const),
         text: `${isBuy ? '买' : '卖'} L${t.grid_level}`,
-      }
+      };
     })
-    .sort((a, b) => a.time - b.time)
+    .sort((a, b) => a.time - b.time);
 }
 
 const Bot = () => {
-  const { bot, gridLevels } = useBot()
+  const { bot, gridLevels } = useBot();
 
-  const [klineTimeframe, setKlineTimeframe] = useState('15m')
-  const [klineData, setKlineData] = useState<KlineCandle[]>([])
-  const [latestPrice, setLatestPrice] = useState(0)
-  const [logs, setLogs] = useState<AnalysisLog[]>([])
-  const [gridTrades, setGridTrades] = useState<GridTrade[]>([])
+  const [klineTimeframe, setKlineTimeframe] = useState('15m');
+  const [klineData, setKlineData] = useState<KlineCandle[]>([]);
+  const [latestPrice, setLatestPrice] = useState(0);
+  const [logs, setLogs] = useState<AnalysisLog[]>([]);
+  const [gridTrades, setGridTrades] = useState<GridTrade[]>([]);
 
-  const chartRef = useRef<KlineChartHandle>(null)
+  const chartRef = useRef<KlineChartHandle>(null);
 
   const loadLogs = useCallback(async (botId: string) => {
     try {
-      const res = await getGridAnalysisLogs(botId)
-      if (res.data?.items) setLogs(res.data.items)
+      const res = await getGridAnalysisLogs(botId);
+      if (res.data?.items) setLogs(res.data.items);
     } catch (e) {
-      console.error('Failed to load analysis logs:', e)
+      console.error('Failed to load analysis logs:', e);
     }
-  }, [])
+  }, []);
 
   const loadTrades = useCallback(async (botId: string) => {
     try {
       // 获取最近 50 条用于 K 线 markers
-      const res = await getGridTrades(botId, 1, 50)
-      if (res.data?.trades) setGridTrades(res.data.trades)
+      const res = await getGridTrades(botId, 1, 50);
+      if (res.data?.trades) setGridTrades(res.data.trades);
     } catch (e) {
-      console.error('Failed to load trades:', e)
+      console.error('Failed to load trades:', e);
     }
-  }, [])
+  }, []);
 
   const loadKlines = useCallback(
     async (exchange: string, symbol: string, market_type: string, tf: string) => {
@@ -78,49 +78,49 @@ const Bot = () => {
           symbol,
           market_type,
           timeframe: tf,
-        })
-        if (res.data) setKlineData(res.data)
+        });
+        if (res.data) setKlineData(res.data);
       } catch (e) {
-        console.error('Failed to load kline:', e)
+        console.error('Failed to load kline:', e);
       }
     },
     [],
-  )
+  );
 
   const loadKlineStable = useCallback(() => {
-    if (!bot?.exchange || !bot?.symbol || !bot?.market_type || !klineTimeframe) return
-    loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe)
-  }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines])
+    if (!bot?.exchange || !bot?.symbol || !bot?.market_type || !klineTimeframe) return;
+    loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe);
+  }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines]);
 
   useEffect(() => {
-    if (!bot?.id) return
-    loadLogs(bot?.id)
-    loadTrades(bot?.id)
-  }, [bot?.id, loadLogs, loadTrades])
+    if (!bot?.id) return;
+    loadLogs(bot?.id);
+    loadTrades(bot?.id);
+  }, [bot?.id, loadLogs, loadTrades]);
 
   useEffect(() => {
-    if (!bot?.exchange || !bot?.symbol || !bot?.market_type || !klineTimeframe) return
-    loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe)
-  }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines])
+    if (!bot?.exchange || !bot?.symbol || !bot?.market_type || !klineTimeframe) return;
+    loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe);
+  }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines]);
 
   useKlineWs(
     (event: KlineWsEvent) => {
-      if (!bot) return
-      if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return
-      const c = event.candle
-      if (!c) return
+      if (!bot) return;
+      if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return;
+      const c = event.candle;
+      if (!c) return;
       // 更新最新价
-      setLatestPrice(c.close)
+      setLatestPrice(c.close);
       // Update chart directly via series.update() — no re-render
-      chartRef.current?.update(c)
+      chartRef.current?.update(c);
     },
     loadKlineStable,
     klineTimeframe,
-  )
+  );
 
-  const gridBot = useMemo(() => bot as GridBot, [bot])
-  const markers = useMemo(() => tradesToMarkers(gridTrades), [gridTrades])
-  const latestDecision = useMemo(() => logs[0] || null, [logs])
+  const gridBot = useMemo(() => bot as GridBot, [bot]);
+  const markers = useMemo(() => tradesToMarkers(gridTrades), [gridTrades]);
+  const latestDecision = useMemo(() => logs[0] || null, [logs]);
 
   return (
     <div className="h-full flex flex-col lg:flex-row">
@@ -160,7 +160,7 @@ const Bot = () => {
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default memo(Bot)
+export default memo(Bot);

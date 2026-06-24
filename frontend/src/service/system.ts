@@ -1,22 +1,22 @@
-import { api } from './client'
-import type { ApiResponse, HealthStatus, PaperModeStatus, SystemInfo } from './types'
+import { api } from './client';
+import type { ApiResponse, HealthStatus, PaperModeStatus, SystemInfo } from './types';
 
 export function checkHealth(): Promise<ApiResponse<HealthStatus>> {
-  return api.get<HealthStatus>('/health')
+  return api.get<HealthStatus>('/health');
 }
 
 export function getPaperStatus(): Promise<ApiResponse<PaperModeStatus>> {
-  return api.get<PaperModeStatus>('/system/paper/status')
+  return api.get<PaperModeStatus>('/system/paper/status');
 }
 
 export function enablePaperMode(): Promise<ApiResponse<null>> {
-  return api.post<null>('/system/paper/enable')
+  return api.post<null>('/system/paper/enable');
 }
 
 export function disablePaperMode(): Promise<ApiResponse<null>> {
-  return api.post<null>('/system/paper/disable')
+  return api.post<null>('/system/paper/disable');
 }
 
 export function getSystemInfo(): Promise<ApiResponse<SystemInfo>> {
-  return api.get<SystemInfo>('/system/info')
+  return api.get<SystemInfo>('/system/info');
 }

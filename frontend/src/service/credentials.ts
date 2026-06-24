@@ -1,25 +1,25 @@
-import { api } from './client'
-import type { ApiResponse, PermissionItem } from './types'
+import { api } from './client';
+import type { ApiResponse, PermissionItem } from './types';
 
 export async function saveCredential(params: {
-  exchange: string
-  api_key: string
-  api_secret: string
-  passphrase?: string
-  market_type?: string
-  label?: string
+  exchange: string;
+  api_key: string;
+  api_secret: string;
+  passphrase?: string;
+  market_type?: string;
+  label?: string;
 }): Promise<ApiResponse<{ id: string }>> {
-  return api.post('/credentials/save', params)
+  return api.post('/credentials/save', params);
 }
 
 export async function saveAiCredential(params: {
-  provider: string
-  api_key: string
-  model?: string
-  label?: string
-  is_default?: boolean
+  provider: string;
+  api_key: string;
+  model?: string;
+  label?: string;
+  is_default?: boolean;
 }): Promise<ApiResponse<{ id: string }>> {
-  return api.post('/ai-credentials/save', params)
+  return api.post('/ai-credentials/save', params);
 }
 
 /// GET /credentials/test — test connectivity only (ping).
@@ -27,25 +27,25 @@ export async function saveAiCredential(params: {
 export async function testCredential(): Promise<
   ApiResponse<{ connected: boolean; message?: string }>
 > {
-  return api.get('/credentials/test')
+  return api.get('/credentials/test');
 }
 
 /// GET /credentials/check-permissions — check API key permissions via apiRestrictions.
 /// Uses the exchange already saved via saveCredential.
 export async function checkPermissions(): Promise<ApiResponse<{ permissions: PermissionItem[] }>> {
-  return api.get('/credentials/check-permissions')
+  return api.get('/credentials/check-permissions');
 }
 
 /// POST /credentials/verify — verify saved credentials via apiRestrictions.
 export async function verifyPermissions(): Promise<
   ApiResponse<{ connected: boolean; permissions: PermissionItem[] }>
 > {
-  return api.post('/credentials/verify')
+  return api.post('/credentials/verify');
 }
 
 /// GET /credentials/status — check if user has exchange credentials configured
 export async function fetchCredentialStatus(): Promise<
   ApiResponse<{ connected: boolean; exchange?: string }>
 > {
-  return api.get('/credentials/status')
+  return api.get('/credentials/status');
 }

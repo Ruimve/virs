@@ -1,40 +1,40 @@
-import { getGridTrades, type GridTrade } from '@/service'
-import { memo, useCallback, useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { formatPnlShort } from '../../components/utils/utils'
+import { getGridTrades, type GridTrade } from '@/service';
+import { memo, useCallback, useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { formatPnlShort } from '../../components/utils/utils';
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 20;
 
 const Trades = () => {
-  const { botId } = useParams<{ botId: string }>()
-  const [trades, setTrades] = useState<GridTrade[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(false)
+  const { botId } = useParams<{ botId: string }>();
+  const [trades, setTrades] = useState<GridTrade[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
 
   const loadTrades = useCallback(
     async (p: number) => {
-      if (!botId) return
-      setLoading(true)
+      if (!botId) return;
+      setLoading(true);
       try {
-        const res = await getGridTrades(botId, p, PAGE_SIZE)
+        const res = await getGridTrades(botId, p, PAGE_SIZE);
         if (res.success && res.data) {
-          setTrades(res.data.trades || [])
-          setTotal(res.data.total || 0)
-          setPage(p)
+          setTrades(res.data.trades || []);
+          setTotal(res.data.total || 0);
+          setPage(p);
         }
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     },
     [botId],
-  )
+  );
 
   useEffect(() => {
-    loadTrades(1)
-  }, [loadTrades])
+    loadTrades(1);
+  }, [loadTrades]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-8 py-6">
@@ -140,7 +140,7 @@ const Trades = () => {
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
-export default memo(Trades)
+export default memo(Trades);

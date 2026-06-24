@@ -1,18 +1,18 @@
-import { useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect, type ReactNode } from 'react';
 
-export type FlowStepStatus = 'pending' | 'active' | 'verifying' | 'done' | 'error'
+export type FlowStepStatus = 'pending' | 'active' | 'verifying' | 'done' | 'error';
 
 export interface FlowStepProps {
-  step: number | ReactNode
-  title: string
-  description?: string
-  status: FlowStepStatus
-  summary?: string | ReactNode
-  editable?: boolean
-  showLine?: boolean
-  indicator?: ReactNode
-  onToggle?: (expanded: boolean) => void
-  children?: ReactNode
+  step: number | ReactNode;
+  title: string;
+  description?: string;
+  status: FlowStepStatus;
+  summary?: string | ReactNode;
+  editable?: boolean;
+  showLine?: boolean;
+  indicator?: ReactNode;
+  onToggle?: (expanded: boolean) => void;
+  children?: ReactNode;
 }
 
 function FlowStep({
@@ -27,38 +27,38 @@ function FlowStep({
   onToggle,
   children,
 }: FlowStepProps) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(false);
 
   // Auto-expand when status becomes active/verifying/error, auto-collapse when done
   useEffect(() => {
     if (status === 'active' || status === 'verifying' || status === 'error') {
-      setExpanded(true)
+      setExpanded(true);
     }
     if (status === 'done') {
-      setExpanded(false)
+      setExpanded(false);
     }
-  }, [status])
+  }, [status]);
 
-  const isEditable = editable !== false && status === 'done'
-  const isCollapsed = status === 'done' && !expanded
+  const isEditable = editable !== false && status === 'done';
+  const isCollapsed = status === 'done' && !expanded;
   const showContent =
     status === 'active' ||
     status === 'verifying' ||
     status === 'error' ||
-    (status === 'done' && expanded)
+    (status === 'done' && expanded);
 
   const handleHeaderClick = () => {
-    if (!isEditable) return
-    const next = !expanded
-    setExpanded(next)
-    onToggle?.(next)
-  }
+    if (!isEditable) return;
+    const next = !expanded;
+    setExpanded(next);
+    onToggle?.(next);
+  };
 
-  const shouldShowLine = showLine !== undefined ? showLine : !isCollapsed
+  const shouldShowLine = showLine !== undefined ? showLine : !isCollapsed;
 
   const defaultIndicator = (): ReactNode => {
     const stepContent =
-      typeof step === 'number' ? <span className="text-[11px]">{step}</span> : step
+      typeof step === 'number' ? <span className="text-[11px]">{step}</span> : step;
 
     switch (status) {
       case 'pending':
@@ -66,13 +66,13 @@ function FlowStep({
           <div className="w-7 h-7 rounded-full border border-line-strong bg-surface-1 flex items-center justify-center text-on-surface-faint">
             {stepContent}
           </div>
-        )
+        );
       case 'active':
         return (
           <div className="w-7 h-7 rounded-full bg-indigo-500/80 flex items-center justify-center text-white font-medium">
             {stepContent}
           </div>
-        )
+        );
       case 'verifying':
         return (
           <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
@@ -96,7 +96,7 @@ function FlowStep({
               />
             </svg>
           </div>
-        )
+        );
       case 'done':
         return (
           <div className="w-7 h-7 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
@@ -110,7 +110,7 @@ function FlowStep({
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-        )
+        );
       case 'error':
         return (
           <div className="w-7 h-7 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center">
@@ -124,20 +124,20 @@ function FlowStep({
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </div>
-        )
+        );
     }
-  }
+  };
 
   const titleColor = () => {
     switch (status) {
       case 'pending':
-        return 'text-on-surface-faint'
+        return 'text-on-surface-faint';
       case 'done':
-        return 'text-on-surface-tertiary'
+        return 'text-on-surface-tertiary';
       default:
-        return 'text-on-surface'
+        return 'text-on-surface';
     }
-  }
+  };
 
   return (
     <div className="flex gap-3">
@@ -172,7 +172,7 @@ function FlowStep({
         {showContent && <div className="mt-2">{children}</div>}
       </div>
     </div>
-  )
+  );
 }
 
-export default FlowStep
+export default FlowStep;

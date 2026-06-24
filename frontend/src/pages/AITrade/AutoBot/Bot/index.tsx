@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchKlines,
   getAutoAnalysisLogs,
@@ -7,16 +7,16 @@ import {
   type AutoBot,
   type AutoTrade,
   type KlineCandle,
-} from '@/service'
-import { useKlineWs, type KlineWsEvent } from '@/service/ws'
-import type { KlineChartHandle } from '@/components/Chart/KlineChart'
-import { useBot } from '../../context/BotContext'
-import AIDecisionCard from '../../components/AIDecisionCard'
-import TradeStats from './TradeStats'
-import StickyMarket from '../../components/StickyMarket'
-import PositionStats from './PositionStats'
-import RecentDecisions from './RecentDecisions'
-import RecentTrades from './RecentTrades'
+} from '@/service';
+import { useKlineWs, type KlineWsEvent } from '@/service/ws';
+import type { KlineChartHandle } from '@/components/Chart/KlineChart';
+import { useBot } from '../../context/BotContext';
+import AIDecisionCard from '../../components/AIDecisionCard';
+import TradeStats from './TradeStats';
+import StickyMarket from '../../components/StickyMarket';
+import PositionStats from './PositionStats';
+import RecentDecisions from './RecentDecisions';
+import RecentTrades from './RecentTrades';
 
 /**
  * 把交易记录转换为 K线图 markers。
@@ -27,71 +27,71 @@ import RecentTrades from './RecentTrades'
  */
 function tradesToMarkers(trades: AutoTrade[]) {
   const markers: Array<{
-    time: number
-    position: 'belowBar' | 'aboveBar'
-    color: string
-    shape: 'arrowUp' | 'arrowDown'
-    text: string
-  }> = []
+    time: number;
+    position: 'belowBar' | 'aboveBar';
+    color: string;
+    shape: 'arrowUp' | 'arrowDown';
+    text: string;
+  }> = [];
 
   for (const t of trades) {
     // 开仓 marker
-    const openTime = Math.floor(new Date(t.opened_at).getTime() / 1000)
-    const openIsBuy = t.open_side === 'buy'
+    const openTime = Math.floor(new Date(t.opened_at).getTime() / 1000);
+    const openIsBuy = t.open_side === 'buy';
     markers.push({
       time: openTime,
       position: openIsBuy ? 'belowBar' : 'aboveBar',
       color: openIsBuy ? '#10b981' : '#ef4444',
       shape: openIsBuy ? 'arrowUp' : 'arrowDown',
       text: `${openIsBuy ? '开多' : '开空'} ${t.open_price.toFixed(2)}`,
-    })
+    });
 
     // 平仓 marker（仅已平仓记录）
     if (t.status === 'closed' && t.closed_at && t.close_side) {
-      const closeTime = Math.floor(new Date(t.closed_at).getTime() / 1000)
-      const closeIsBuy = t.close_side === 'buy'
+      const closeTime = Math.floor(new Date(t.closed_at).getTime() / 1000);
+      const closeIsBuy = t.close_side === 'buy';
       markers.push({
         time: closeTime,
         position: closeIsBuy ? 'belowBar' : 'aboveBar',
         color: closeIsBuy ? '#10b981' : '#ef4444',
         shape: closeIsBuy ? 'arrowUp' : 'arrowDown',
         text: `${closeIsBuy ? '平空' : '平多'} ${t.close_price?.toFixed(2)}`,
-      })
+      });
     }
   }
 
-  return markers.sort((a, b) => a.time - b.time)
+  return markers.sort((a, b) => a.time - b.time);
 }
 
 const Bot = () => {
-  const { bot } = useBot()
+  const { bot } = useBot();
 
-  const [klineTimeframe, setKlineTimeframe] = useState('15m')
-  const [klineData, setKlineData] = useState<KlineCandle[]>([])
-  const [latestPrice, setLatestPrice] = useState(0)
-  const [logs, setLogs] = useState<AnalysisLog[]>([])
-  const [autoTrades, setAutoTrades] = useState<AutoTrade[]>([])
+  const [klineTimeframe, setKlineTimeframe] = useState('15m');
+  const [klineData, setKlineData] = useState<KlineCandle[]>([]);
+  const [latestPrice, setLatestPrice] = useState(0);
+  const [logs, setLogs] = useState<AnalysisLog[]>([]);
+  const [autoTrades, setAutoTrades] = useState<AutoTrade[]>([]);
 
-  const chartRef = useRef<KlineChartHandle>(null)
+  const chartRef = useRef<KlineChartHandle>(null);
 
   const loadLogs = useCallback(async (botId: string) => {
     try {
-      const res = await getAutoAnalysisLogs(botId)
-      if (res.data?.logs) setLogs(res.data.logs)
+      const res = await getAutoAnalysisLogs(botId);
+      if (res.data?.logs) setLogs(res.data.logs);
     } catch (e) {
-      console.error('Failed to load analysis logs:', e)
+      console.error('Failed to load analysis logs:', e);
     }
-  }, [])
+  }, []);
 
   const loadTrades = useCallback(async (botId: string) => {
     try {
       // 获取最近 50 条用于 K 线 markers
-      const res = await getAutoTrades(botId, 1, 50)
-      if (res.data?.trades) setAutoTrades(res.data.trades)
+      const res = await getAutoTrades(botId, 1, 50);
+      if (res.data?.trades) setAutoTrades(res.data.trades);
     } catch (e) {
-      console.error('Failed to load trades:', e)
+      console.error('Failed to load trades:', e);
     }
-  }, [])
+  }, []);
 
   const loadKlines = useCallback(
     async (exchange: string, symbol: string, market_type: string, tf: string) => {
@@ -101,50 +101,50 @@ const Bot = () => {
           symbol,
           market_type,
           timeframe: tf,
-        })
-        if (res.data) setKlineData(res.data)
+        });
+        if (res.data) setKlineData(res.data);
       } catch (e) {
-        console.error('Failed to load kline:', e)
+        console.error('Failed to load kline:', e);
       }
     },
     [],
-  )
+  );
 
   const loadKlineStable = useCallback(() => {
-    if (!bot?.exchange || !bot?.symbol || !bot?.market_type || !klineTimeframe) return
-    loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe)
-  }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines])
+    if (!bot?.exchange || !bot?.symbol || !bot?.market_type || !klineTimeframe) return;
+    loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe);
+  }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines]);
 
   useEffect(() => {
-    if (!bot?.id) return
-    loadLogs(bot?.id)
-    loadTrades(bot?.id)
-  }, [bot?.id, loadLogs, loadTrades])
+    if (!bot?.id) return;
+    loadLogs(bot?.id);
+    loadTrades(bot?.id);
+  }, [bot?.id, loadLogs, loadTrades]);
 
   useEffect(() => {
-    if (!bot?.exchange || !bot?.symbol || !bot?.market_type || !klineTimeframe) return
-    loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe)
-  }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines])
+    if (!bot?.exchange || !bot?.symbol || !bot?.market_type || !klineTimeframe) return;
+    loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe);
+  }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines]);
 
   useKlineWs(
     (event: KlineWsEvent) => {
-      if (!bot) return
-      if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return
-      const c = event.candle
-      if (!c) return
+      if (!bot) return;
+      if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return;
+      const c = event.candle;
+      if (!c) return;
       // 更新最新价
-      setLatestPrice(c.close)
+      setLatestPrice(c.close);
       // Update chart directly via series.update() — no re-render
-      chartRef.current?.update(c)
+      chartRef.current?.update(c);
     },
     loadKlineStable,
     klineTimeframe,
-  )
+  );
 
-  const autoBot = useMemo(() => bot as AutoBot, [bot])
+  const autoBot = useMemo(() => bot as AutoBot, [bot]);
 
-  const markers = useMemo(() => tradesToMarkers(autoTrades), [autoTrades])
-  const latestDecision = useMemo(() => logs[0] || null, [logs])
+  const markers = useMemo(() => tradesToMarkers(autoTrades), [autoTrades]);
+  const latestDecision = useMemo(() => logs[0] || null, [logs]);
 
   return (
     <div className="h-full flex flex-col lg:flex-row">
@@ -184,7 +184,7 @@ const Bot = () => {
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default memo(Bot)
+export default memo(Bot);

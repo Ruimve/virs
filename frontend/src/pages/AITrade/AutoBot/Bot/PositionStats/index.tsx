@@ -1,10 +1,10 @@
-import { memo, useMemo } from 'react'
-import type { AutoBot } from '@/service/types'
-import { usePositionContext } from '../../../context/PositionContext'
+import { memo, useMemo } from 'react';
+import type { AutoBot } from '@/service/types';
+import { usePositionContext } from '../../../context/PositionContext';
 
 interface Props {
-  bot: AutoBot
-  latestPrice: number
+  bot: AutoBot;
+  latestPrice: number;
 }
 
 // ── 字体规范（全页面统一） ──────────────────────────────
@@ -15,30 +15,30 @@ interface Props {
 // ────────────────────────────────────────────────────────
 
 const pnlColor = (v: number) =>
-  v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-on-surface'
+  v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-on-surface';
 
 const PositionStats = ({ bot, latestPrice }: Props) => {
-  const { position } = usePositionContext()
+  const { position } = usePositionContext();
 
   const hasPosition = useMemo(
     () => !!position && position.status === 'open' && position.size > 0,
     [position],
-  )
+  );
 
   // ── 前端实时计算（不依赖 position WS 的 pnl 字段） ──
   const unrealizedPnl = useMemo(() => {
-    if (!hasPosition || latestPrice <= 0) return 0
-    const dir = position!.side === 'long' ? 1 : -1
-    return (latestPrice - position!.entryPrice) * position!.size * dir
-  }, [hasPosition, position, latestPrice])
+    if (!hasPosition || latestPrice <= 0) return 0;
+    const dir = position!.side === 'long' ? 1 : -1;
+    return (latestPrice - position!.entryPrice) * position!.size * dir;
+  }, [hasPosition, position, latestPrice]);
 
-  const usedMargin = hasPosition ? position!.margin : 0
-  const accountBalance = bot.initial_capital + bot.total_pnl + unrealizedPnl
-  const freeMargin = accountBalance - usedMargin
+  const usedMargin = hasPosition ? position!.margin : 0;
+  const accountBalance = bot.initial_capital + bot.total_pnl + unrealizedPnl;
+  const freeMargin = accountBalance - usedMargin;
   const unrealizedPct = useMemo(() => {
-    if (!hasPosition || position!.margin <= 0) return 0
-    return (unrealizedPnl / position!.margin) * 100
-  }, [hasPosition, position, unrealizedPnl])
+    if (!hasPosition || position!.margin <= 0) return 0;
+    return (unrealizedPnl / position!.margin) * 100;
+  }, [hasPosition, position, unrealizedPnl]);
 
   return (
     <div className="border-b border-line-subtle">
@@ -157,8 +157,8 @@ const PositionStats = ({ bot, latestPrice }: Props) => {
         </Stat>
       </div>
     </div>
-  )
-}
+  );
+};
 
 /** 统一字段组件：label + value */
 const Stat = ({ label, children }: { label: string; children: React.ReactNode }) => (
@@ -168,6 +168,6 @@ const Stat = ({ label, children }: { label: string; children: React.ReactNode })
     </div>
     <div className="text-sm font-mono tabular-nums truncate">{children}</div>
   </div>
-)
+);
 
-export default memo(PositionStats)
+export default memo(PositionStats);

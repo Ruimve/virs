@@ -1,23 +1,23 @@
-import { memo } from 'react'
-import type { AnalysisLog } from '@/service'
-import { useNavigate } from 'react-router-dom'
-import { actionColor, actionLabel } from '../../../components/utils/utils'
+import { memo } from 'react';
+import type { AnalysisLog } from '@/service';
+import { useNavigate } from 'react-router-dom';
+import { actionColor, actionLabel } from '../../../components/utils/utils';
 
 interface Props {
-  logs: AnalysisLog[]
-  botId: string
-  botType?: 'auto' | 'grid'
+  logs: AnalysisLog[];
+  botId: string;
+  botType?: 'auto' | 'grid';
 }
 
 const RecentDecisions = ({ logs, botId, botType = 'auto' }: Props) => {
-  const navigate = useNavigate()
-  const recent = logs.slice(0, 5)
+  const navigate = useNavigate();
+  const recent = logs.slice(0, 5);
 
   const getDecision = (log: AnalysisLog) => {
-    if (log.result?.action) return log.result
-    if (log.result?.decision) return log.result.decision
-    return null
-  }
+    if (log.result?.action) return log.result;
+    if (log.result?.decision) return log.result.decision;
+    return null;
+  };
 
   return (
     <div className="flex flex-col min-h-0">
@@ -35,7 +35,7 @@ const RecentDecisions = ({ logs, botId, botType = 'auto' }: Props) => {
         ) : (
           <div className="divide-y divide-line-subtle">
             {recent.map((log) => {
-              const decision = getDecision(log)
+              const decision = getDecision(log);
               return (
                 <div
                   key={log.id}
@@ -63,13 +63,13 @@ const RecentDecisions = ({ logs, botId, botType = 'auto' }: Props) => {
                     </span>
                   </div>
                 </div>
-              )
+              );
             })}
           </div>
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default memo(RecentDecisions)
+export default memo(RecentDecisions);

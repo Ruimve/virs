@@ -1,22 +1,22 @@
-import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep'
-import { getAiStatus, fetchCredentialStatus, checkHealth } from '../../../service'
-import { useBot } from '../context/BotContext'
-import { useHeader } from '../components/Header/context'
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep';
+import { getAiStatus, fetchCredentialStatus, checkHealth } from '../../../service';
+import { useBot } from '../context/BotContext';
+import { useHeader } from '../components/Header/HeaderContext';
 
 interface CheckItem {
-  key: string
-  label: string
-  status: FlowStepStatus
-  detail: string
+  key: string;
+  label: string;
+  status: FlowStepStatus;
+  detail: string;
 }
 
 export default function HealthCheckPage() {
-  const navigate = useNavigate()
-  const param = useParams()
-  const { updateTabs } = useHeader()
-  const { bot } = useBot()
+  const navigate = useNavigate();
+  const param = useParams();
+  const { updateTabs } = useHeader();
+  const { bot } = useBot();
 
   const [checks, setChecks] = useState<CheckItem[]>([
     { key: 'llm', label: 'LLM Connectivity', status: 'pending', detail: '' },
@@ -25,25 +25,25 @@ export default function HealthCheckPage() {
     { key: 'position', label: 'Position Engine', status: 'pending', detail: '' },
     { key: 'workers', label: 'Workers', status: 'pending', detail: '' },
     { key: 'cron', label: 'Periodic Tasks', status: 'pending', detail: '' },
-  ])
+  ]);
 
   const updateCheck = (key: string, status: FlowStepStatus, detail: string) => {
-    setChecks((prev) => prev.map((c) => (c.key === key ? { ...c, status, detail } : c)))
-  }
+    setChecks((prev) => prev.map((c) => (c.key === key ? { ...c, status, detail } : c)));
+  };
 
-  const statuses: Record<string, FlowStepStatus> = {}
-  for (const c of checks) statuses[c.key] = c.status
+  const statuses: Record<string, FlowStepStatus> = {};
+  for (const c of checks) statuses[c.key] = c.status;
 
-  const summaries: Record<string, string> = {}
+  const summaries: Record<string, string> = {};
   for (const c of checks) {
-    if (c.status === 'done' && c.detail) summaries[c.key] = c.detail
+    if (c.status === 'done' && c.detail) summaries[c.key] = c.detail;
   }
 
   const steps: FlowStepConfig[] = checks.map((c) => ({
     key: c.key,
     title: c.label,
     render: () => {
-      const check = checks.find((x) => x.key === c.key)
+      const check = checks.find((x) => x.key === c.key);
       return (
         <>
           {check?.status === 'verifying' && (
@@ -51,73 +51,73 @@ export default function HealthCheckPage() {
           )}
           {check?.status === 'error' && <p className="text-[12px] text-red-400">{check.detail}</p>}
         </>
-      )
+      );
     },
-  }))
+  }));
 
   const runChecks = async () => {
-    updateCheck('llm', 'verifying', '')
+    updateCheck('llm', 'verifying', '');
     try {
-      const res = await getAiStatus()
+      const res = await getAiStatus();
       if (res.success && res.data?.configured) {
-        updateCheck('llm', 'done', `Provider: ${res.data.providers?.join(', ') || 'ok'}`)
+        updateCheck('llm', 'done', `Provider: ${res.data.providers?.join(', ') || 'ok'}`);
       } else {
-        updateCheck('llm', 'error', res.error || 'Not configured')
+        updateCheck('llm', 'error', res.error || 'Not configured');
       }
     } catch {
-      updateCheck('llm', 'error', 'Connection failed')
+      updateCheck('llm', 'error', 'Connection failed');
     }
 
-    updateCheck('exchange', 'verifying', '')
+    updateCheck('exchange', 'verifying', '');
     try {
-      const res = await fetchCredentialStatus()
+      const res = await fetchCredentialStatus();
       if (res.success && res.data?.connected) {
-        updateCheck('exchange', 'done', 'Connected')
+        updateCheck('exchange', 'done', 'Connected');
       } else {
-        updateCheck('exchange', 'error', res.error || 'Not connected')
+        updateCheck('exchange', 'error', res.error || 'Not connected');
       }
     } catch {
-      updateCheck('exchange', 'error', 'Connection failed')
+      updateCheck('exchange', 'error', 'Connection failed');
     }
 
-    updateCheck('kline', 'verifying', '')
+    updateCheck('kline', 'verifying', '');
     try {
-      const res = await checkHealth()
+      const res = await checkHealth();
       if (res.success) {
-        updateCheck('kline', 'done', 'Running')
+        updateCheck('kline', 'done', 'Running');
       } else {
-        updateCheck('kline', 'error', 'Not available')
+        updateCheck('kline', 'error', 'Not available');
       }
     } catch {
-      updateCheck('kline', 'error', 'Connection failed')
+      updateCheck('kline', 'error', 'Connection failed');
     }
 
-    updateCheck('position', 'verifying', '')
-    await new Promise((r) => setTimeout(r, 500))
-    updateCheck('position', 'done', 'Running')
+    updateCheck('position', 'verifying', '');
+    await new Promise((r) => setTimeout(r, 500));
+    updateCheck('position', 'done', 'Running');
 
-    updateCheck('workers', 'verifying', '')
-    await new Promise((r) => setTimeout(r, 500))
-    updateCheck('workers', 'done', 'Running')
+    updateCheck('workers', 'verifying', '');
+    await new Promise((r) => setTimeout(r, 500));
+    updateCheck('workers', 'done', 'Running');
 
-    updateCheck('cron', 'verifying', '')
-    await new Promise((r) => setTimeout(r, 500))
-    updateCheck('cron', 'done', 'Running')
-  }
-
-  useEffect(() => {
-    updateTabs([{ key: 'health', label: 'Health Check', onClick: () => {} }])
-  }, [])
+    updateCheck('cron', 'verifying', '');
+    await new Promise((r) => setTimeout(r, 500));
+    updateCheck('cron', 'done', 'Running');
+  };
 
   useEffect(() => {
-    runChecks()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    updateTabs([{ key: 'health', label: 'Health Check', onClick: () => {} }]);
+  }, [updateTabs]);
+
+  useEffect(() => {
+    runChecks();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleContinue = () => {
-    navigate(`/trade/${param.botType}/${bot?.id}`, { replace: true })
-  }
+    navigate(`/trade/${param.botType}/${bot?.id}`, { replace: true });
+  };
 
-  const allChecksDone = checks.every((c) => c.status === 'done' || c.status === 'error')
+  const allChecksDone = checks.every((c) => c.status === 'done' || c.status === 'error');
 
   return (
     <div className="max-w-lg mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-6">
@@ -141,5 +141,5 @@ export default function HealthCheckPage() {
         </div>
       )}
     </div>
-  )
+  );
 }

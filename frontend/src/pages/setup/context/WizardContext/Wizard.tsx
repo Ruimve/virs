@@ -1,17 +1,17 @@
-import type { ReactNode } from 'react'
-import { WizardStep } from './consts'
-import { STEP_LABELS, TOTAL_SETUP_STEPS } from './consts'
+import type { ReactNode } from 'react';
+import { WizardStep } from './consts';
+import { STEP_LABELS, TOTAL_SETUP_STEPS } from './consts';
 
 interface WizardLayoutProps {
-  step: number
-  title: string
-  subtitle?: string
-  children: ReactNode
-  actions?: ReactNode
+  step: number;
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+  actions?: ReactNode;
 }
 
 export function Wizard({ step, title, subtitle, children, actions }: WizardLayoutProps) {
-  const stepIndex = step - WizardStep.SelectBotType + 1
+  const stepIndex = step - WizardStep.SelectBotType + 1;
 
   return (
     <div className=" h-full flex flex-col justify-between">
@@ -42,5 +42,5 @@ export function Wizard({ step, title, subtitle, children, actions }: WizardLayou
         </div>
       )}
     </div>
-  )
+  );
 }

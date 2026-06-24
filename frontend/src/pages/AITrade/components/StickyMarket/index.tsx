@@ -1,30 +1,30 @@
-import { memo, useMemo, useState, type RefObject } from 'react'
-import type { KlineCandle } from '@/service'
-import KlineChart, { type KlineChartHandle } from '@/components/Chart/KlineChart'
+import { memo, useMemo, useState, type RefObject } from 'react';
+import type { KlineCandle } from '@/service';
+import KlineChart, { type KlineChartHandle } from '@/components/Chart/KlineChart';
 
 interface ChartMarker {
-  time: number
-  position: 'aboveBar' | 'belowBar' | 'inBar'
-  color: string
-  shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown'
-  text?: string
+  time: number;
+  position: 'aboveBar' | 'belowBar' | 'inBar';
+  color: string;
+  shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown';
+  text?: string;
 }
 
 interface CollapsibleMarketPanelProps {
-  klineData: KlineCandle[]
-  klineTimeframe: string
-  onTimeframeChange: (tf: string) => void
-  chartRef: RefObject<KlineChartHandle | null>
-  markers?: ChartMarker[]
-  latestPrice: number
+  klineData: KlineCandle[];
+  klineTimeframe: string;
+  onTimeframeChange: (tf: string) => void;
+  chartRef: RefObject<KlineChartHandle | null>;
+  markers?: ChartMarker[];
+  latestPrice: number;
 }
 
 /** 格式化成交量：大数缩写 */
 function formatVolume(v: number): string {
-  if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(2)}B`
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`
-  if (v >= 1_000) return `${(v / 1_000).toFixed(2)}K`
-  return v.toFixed(2)
+  if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(2)}B`;
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(2)}K`;
+  return v.toFixed(2);
 }
 
 /**
@@ -35,7 +35,7 @@ function formatVolume(v: number): string {
 function useMarketSummary(klineData: KlineCandle[], timeframe: string) {
   return useMemo(() => {
     if (klineData.length === 0) {
-      return { changePct: 0, high: 0, low: 0, volume: 0 }
+      return { changePct: 0, high: 0, low: 0, volume: 0 };
     }
 
     // 根据 timeframe 估算 24h 内的 K线条数
@@ -46,20 +46,20 @@ function useMarketSummary(klineData: KlineCandle[], timeframe: string) {
       '1h': 1,
       '4h': 4,
       '1d': 24,
-    }
-    const hoursPerCandle = tfHours[timeframe] ?? 1
-    const candlesIn24h = Math.min(Math.ceil(24 / hoursPerCandle), klineData.length)
+    };
+    const hoursPerCandle = tfHours[timeframe] ?? 1;
+    const candlesIn24h = Math.min(Math.ceil(24 / hoursPerCandle), klineData.length);
 
-    const recent = klineData.slice(-candlesIn24h)
-    const firstClose = recent[0].close
-    const lastClose = recent[recent.length - 1].close
-    const changePct = firstClose > 0 ? ((lastClose - firstClose) / firstClose) * 100 : 0
-    const high = Math.max(...recent.map((k) => k.high))
-    const low = Math.min(...recent.map((k) => k.low))
-    const volume = recent.reduce((sum, k) => sum + (k.volume || 0), 0)
+    const recent = klineData.slice(-candlesIn24h);
+    const firstClose = recent[0].close;
+    const lastClose = recent[recent.length - 1].close;
+    const changePct = firstClose > 0 ? ((lastClose - firstClose) / firstClose) * 100 : 0;
+    const high = Math.max(...recent.map((k) => k.high));
+    const low = Math.min(...recent.map((k) => k.low));
+    const volume = recent.reduce((sum, k) => sum + (k.volume || 0), 0);
 
-    return { changePct, high, low, volume }
-  }, [klineData, timeframe])
+    return { changePct, high, low, volume };
+  }, [klineData, timeframe]);
 }
 
 const StickyMarket = ({
@@ -70,17 +70,17 @@ const StickyMarket = ({
   markers,
   latestPrice,
 }: CollapsibleMarketPanelProps) => {
-  const [expanded, setExpanded] = useState(false)
-  const summary = useMarketSummary(klineData, klineTimeframe)
+  const [expanded, setExpanded] = useState(false);
+  const summary = useMarketSummary(klineData, klineTimeframe);
 
   const changeColor =
     summary.changePct > 0
       ? 'text-emerald-400'
       : summary.changePct < 0
         ? 'text-red-400'
-        : 'text-on-surface-tertiary'
+        : 'text-on-surface-tertiary';
 
-  const changeSign = summary.changePct > 0 ? '+' : ''
+  const changeSign = summary.changePct > 0 ? '+' : '';
 
   const Chart = useMemo(() => {
     return klineData.length > 0 ? (
@@ -104,8 +104,8 @@ const StickyMarket = ({
         </svg>
         加载K线...
       </div>
-    )
-  }, [klineData])
+    );
+  }, [klineData, markers, chartRef]);
 
   return (
     <div className="border-t border-line-subtle shrink-0">
@@ -181,7 +181,7 @@ const StickyMarket = ({
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
-export default memo(StickyMarket)
+export default memo(StickyMarket);

@@ -1,17 +1,17 @@
-import { memo } from 'react'
-import type { GridLevelInfo } from '@/service'
-import { formatSmart } from '../../../components/utils/utils'
+import { memo } from 'react';
+import type { GridLevelInfo } from '@/service';
+import { formatSmart } from '../../../components/utils/utils';
 
 interface Props {
-  gridLevels: GridLevelInfo[]
+  gridLevels: GridLevelInfo[];
 }
 
 const LevelsOverview = ({ gridLevels }: Props) => {
-  const holding = gridLevels.filter((l) => Math.abs(l.hold_quantity) > 0)
+  const holding = gridLevels.filter((l) => Math.abs(l.hold_quantity) > 0);
   const closed = gridLevels.filter(
     (l) => l.buy_filled && l.sell_filled && Math.abs(l.hold_quantity) === 0,
-  )
-  const waiting = gridLevels.length - holding.length - closed.length
+  );
+  const waiting = gridLevels.length - holding.length - closed.length;
 
   return (
     <div className="flex flex-col min-h-0">
@@ -52,9 +52,9 @@ const LevelsOverview = ({ gridLevels }: Props) => {
             {/* 层级列表 */}
             <div className="divide-y divide-line-subtle">
               {gridLevels.slice(0, 20).map((level) => {
-                const isHolding = Math.abs(level.hold_quantity) > 0
+                const isHolding = Math.abs(level.hold_quantity) > 0;
                 const isClosed =
-                  level.buy_filled && level.sell_filled && Math.abs(level.hold_quantity) === 0
+                  level.buy_filled && level.sell_filled && Math.abs(level.hold_quantity) === 0;
                 return (
                   <div key={level.level} className="px-3 py-1.5 flex items-center gap-2 text-sm">
                     <span className="text-on-surface-tertiary font-mono tabular-nums w-6 shrink-0">
@@ -80,14 +80,14 @@ const LevelsOverview = ({ gridLevels }: Props) => {
                       <span className="w-1.5 h-1.5 rounded-full bg-on-surface-faint shrink-0" />
                     )}
                   </div>
-                )
+                );
               })}
             </div>
           </>
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default memo(LevelsOverview)
+export default memo(LevelsOverview);

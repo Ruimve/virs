@@ -1,7 +1,7 @@
-import { memo } from 'react'
-import { useTheme } from './useTheme'
+import { memo } from 'react';
+import { useTheme } from './useTheme';
 const Theme = () => {
-  const { isDark, toggleTheme } = useTheme()
+  const { isDark, toggleTheme } = useTheme();
   return (
     <button
       onClick={toggleTheme}
@@ -37,7 +37,7 @@ const Theme = () => {
         </svg>
       )}
     </button>
-  )
-}
+  );
+};
 
-export default memo(Theme)
+export default memo(Theme);

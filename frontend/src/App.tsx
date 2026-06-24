@@ -1,37 +1,37 @@
-import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import Loading from './pages/loading'
-import Login from './pages/login'
-import { ErrorBoundary } from './components/ErrorBoundary'
+import { lazy, Suspense } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Loading from './pages/loading';
+import Login from './pages/login';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 /** 向导 */
-const SetupLayout = lazy(() => import('./pages/setup/Layout'))
-const SelectBotType = lazy(() => import('./pages/setup/SelectBotType'))
-const ConfigureLlm = lazy(() => import('./pages/setup/ConfigureLlm'))
-const SelectExchange = lazy(() => import('./pages/setup/SelectExchange'))
-const ConfigureParams = lazy(() => import('./pages/setup/ConfigureParams'))
-const ReviewLaunch = lazy(() => import('./pages/setup/ReviewLaunch'))
+const SetupLayout = lazy(() => import('./pages/setup/Layout'));
+const SelectBotType = lazy(() => import('./pages/setup/SelectBotType'));
+const ConfigureLlm = lazy(() => import('./pages/setup/ConfigureLlm'));
+const SelectExchange = lazy(() => import('./pages/setup/SelectExchange'));
+const ConfigureParams = lazy(() => import('./pages/setup/ConfigureParams'));
+const ReviewLaunch = lazy(() => import('./pages/setup/ReviewLaunch'));
 
 /** 交易 */
-const AITradeLayout = lazy(() => import('./pages/AITrade/Layout'))
+const AITradeLayout = lazy(() => import('./pages/AITrade/Layout'));
 /** 交易 - 自动交易 */
-const AutoBot = lazy(() => import('./pages/AITrade/AutoBot'))
-const AutoBotMain = lazy(() => import('./pages/AITrade/AutoBot/Bot'))
-const AutoBotAILog = lazy(() => import('./pages/AITrade/AutoBot/AILog'))
-const AutoBotAILogDetail = lazy(() => import('./pages/AITrade/AutoBot/AILog/Detail'))
-const AutoBotTrades = lazy(() => import('./pages/AITrade/AutoBot/Trades'))
+const AutoBot = lazy(() => import('./pages/AITrade/AutoBot'));
+const AutoBotMain = lazy(() => import('./pages/AITrade/AutoBot/Bot'));
+const AutoBotAILog = lazy(() => import('./pages/AITrade/AutoBot/AILog'));
+const AutoBotAILogDetail = lazy(() => import('./pages/AITrade/AutoBot/AILog/Detail'));
+const AutoBotTrades = lazy(() => import('./pages/AITrade/AutoBot/Trades'));
 /** 交易 - 网格交易 */
-const GridBot = lazy(() => import('./pages/AITrade/GridBot'))
-const GridBotMain = lazy(() => import('./pages/AITrade/GridBot/Bot'))
-const GridBotAILog = lazy(() => import('./pages/AITrade/GridBot/AILog'))
-const GridBotAILogDetail = lazy(() => import('./pages/AITrade/GridBot/AILog/Detail'))
-const GridBotTrades = lazy(() => import('./pages/AITrade/GridBot/Trades'))
-const GridBotLevels = lazy(() => import('./pages/AITrade/GridBot/Levels'))
+const GridBot = lazy(() => import('./pages/AITrade/GridBot'));
+const GridBotMain = lazy(() => import('./pages/AITrade/GridBot/Bot'));
+const GridBotAILog = lazy(() => import('./pages/AITrade/GridBot/AILog'));
+const GridBotAILogDetail = lazy(() => import('./pages/AITrade/GridBot/AILog/Detail'));
+const GridBotTrades = lazy(() => import('./pages/AITrade/GridBot/Trades'));
+const GridBotLevels = lazy(() => import('./pages/AITrade/GridBot/Levels'));
 
 /** 交易 - 健康检查 */
-const HealthCheck = lazy(() => import('./pages/AITrade/HealthCheck'))
+const HealthCheck = lazy(() => import('./pages/AITrade/HealthCheck'));
 /** 交易 -系统信息 */
-const System = lazy(() => import('./pages/AITrade/System'))
+const System = lazy(() => import('./pages/AITrade/System'));
 
 function SuspenseWrap({ children }: { children: React.ReactNode }) {
   return (
@@ -44,7 +44,7 @@ function SuspenseWrap({ children }: { children: React.ReactNode }) {
     >
       {children}
     </Suspense>
-  )
+  );
 }
 
 function App() {
@@ -84,7 +84,7 @@ function App() {
         </SuspenseWrap>
       </BrowserRouter>
     </ErrorBoundary>
-  )
+  );
 }
 
-export default App
+export default App;

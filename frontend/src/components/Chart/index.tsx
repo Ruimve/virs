@@ -1,4 +1,4 @@
-import KlineChart from './KlineChart'
-import EquityChart from './EquityChart'
+import KlineChart from './KlineChart';
+import EquityChart from './EquityChart';
 
-export { KlineChart, EquityChart }
+export { KlineChart, EquityChart };

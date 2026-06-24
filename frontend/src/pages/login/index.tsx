@@ -1,37 +1,37 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { login } from '../../service'
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { login } from '../../service';
 
 function Login() {
-  const navigate = useNavigate()
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
+    e.preventDefault();
+    setError('');
 
     if (!username.trim() || !password.trim()) {
-      setError('Please enter username and password')
-      return
+      setError('Please enter username and password');
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
     try {
-      const result = await login(username.trim(), password)
+      const result = await login(username.trim(), password);
       if (result.success) {
-        navigate('/setup/bot-type', { replace: true })
+        navigate('/setup/bot-type', { replace: true });
       } else {
-        setError(result.error || 'Login failed')
+        setError(result.error || 'Login failed');
       }
     } catch {
-      setError('Network error, please try again')
+      setError('Network error, please try again');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-base flex items-center justify-center relative overflow-hidden">
@@ -125,7 +125,7 @@ function Login() {
         </form>
       </div>
     </div>
-  )
+  );
 }
 
-export default Login
+export default Login;

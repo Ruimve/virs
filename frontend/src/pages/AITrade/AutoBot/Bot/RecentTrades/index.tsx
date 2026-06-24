@@ -1,16 +1,16 @@
-import { memo } from 'react'
-import type { AutoTrade } from '@/service'
-import { formatTime, formatSmart } from '../../../components/utils/utils'
+import { memo } from 'react';
+import type { AutoTrade } from '@/service';
+import { formatTime, formatSmart } from '../../../components/utils/utils';
 
 interface Props {
-  trades: AutoTrade[]
+  trades: AutoTrade[];
 }
 
 const pnlColor = (v: number) =>
-  v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-on-surface'
+  v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-on-surface';
 
 const RecentTrades = ({ trades }: Props) => {
-  const recent = trades.slice(0, 10)
+  const recent = trades.slice(0, 10);
 
   return (
     <div className="flex flex-col min-h-0">
@@ -72,7 +72,7 @@ const RecentTrades = ({ trades }: Props) => {
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default memo(RecentTrades)
+export default memo(RecentTrades);
