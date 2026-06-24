@@ -47,6 +47,8 @@ pub struct AppEngineManager {
     orderbook_engine: Arc<OrderBookEngine>,
     encryption_key: String,
     ai_config: AiConfig,
+    /// Paper trading mode from AppConfig (unified config consumption)
+    paper_mode: Option<bool>,
     ws_broadcaster: Arc<virs_api::WsBroadcaster>,
     #[allow(dead_code)]
     proxy: Option<String>,
@@ -66,6 +68,7 @@ impl AppEngineManager {
         orderbook_engine: Arc<OrderBookEngine>,
         encryption_key: String,
         ai_config: AiConfig,
+        paper_mode: Option<bool>,
         ws_broadcaster: Arc<virs_api::WsBroadcaster>,
         proxy: Option<String>,
     ) -> Self {
@@ -76,6 +79,7 @@ impl AppEngineManager {
             orderbook_engine,
             encryption_key,
             ai_config,
+            paper_mode,
             ws_broadcaster,
             proxy,
             started: AtomicBool::new(false),
@@ -505,10 +509,8 @@ impl EngineManager for AppEngineManager {
             }
         }
 
-        // 3. Determine paper mode from DB (check if any bot uses paper mode)
-        let paper_mode = std::env::var("PAPER_TRADING")
-            .map(|v| v == "true" || v == "1")
-            .unwrap_or(true);
+        // 3. Determine paper mode from AppConfig (unified config consumption)
+        let paper_mode = self.paper_mode.unwrap_or(true);
 
         // 4. Start engines (which will call restore_running_bots internally)
         if let Err(e) = self.ensure_started(paper_mode).await {

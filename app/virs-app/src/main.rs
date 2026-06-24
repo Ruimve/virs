@@ -154,6 +154,7 @@ async fn main() -> Result<()> {
         orderbook_engine.clone(),
         config.server.encryption_key.clone(),
         config.ai.clone(),
+        config.paper,
         ws_broadcaster.clone(),
         config.proxy.clone(),
     ));

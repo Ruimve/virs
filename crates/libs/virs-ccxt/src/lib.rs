@@ -271,6 +271,27 @@ fn extract_error_message(json: &Value) -> String {
 }
 
 /// Create an exchange instance by name and market type.
+///
+/// # Adding a New Exchange
+///
+/// To add support for a new exchange (e.g., Bybit, OKX), follow these steps:
+///
+/// 1. Create a new module under `adapter/` (e.g., `adapter/bybit/mod.rs`)
+/// 2. Implement the `Exchange` trait for your exchange struct
+/// 3. Add the module to `adapter/mod.rs`
+/// 4. Add a match arm in this function
+///
+/// The adapter pattern ensures each exchange implementation is fully isolated.
+/// All exchange-specific logic (REST signing, WS parsing, error mapping) lives
+/// in its own module, sharing only the unified `Exchange` trait interface.
+///
+/// # Current Support
+///
+/// | Exchange | Status |
+/// |----------|--------|
+/// | Binance  | Implemented (spot + perpetual) |
+/// | Bybit    | Planned — architecture ready for quick implementation |
+/// | OKX      | Planned — architecture ready for quick implementation |
 pub fn create_exchange(
     id: &str,
     api_key: &str,
@@ -283,10 +304,15 @@ pub fn create_exchange(
         "binance" => Ok(Box::new(adapter::binance::BinanceExchange::new(
             api_key, api_secret, proxy_url, market_type,
         )?)),
-        // "okx" => { ... } // TODO: future support
-        // "bybit" => { ... } // TODO: future support
+        // To add Bybit/OKX, implement adapter::bybit::BybitExchange / adapter::okx::OkxExchange
+        // and add the corresponding match arm here. See "Adding a New Exchange" above.
+        // "bybit" => Ok(Box::new(adapter::bybit::BybitExchange::new(...)?)),
+        // "okx" => Ok(Box::new(adapter::okx::OkxExchange::new(...)?)),
         _ => Err(ExchangeError::NotSupported(format!(
-            "Exchange '{}' is not supported. Supported: binance", id
+            "Exchange '{}' is not supported. Currently implemented: binance. \
+             Planned (architecture ready): bybit, okx. \
+             See create_exchange documentation for adding new exchanges.",
+            id
         ))),
     }
 }

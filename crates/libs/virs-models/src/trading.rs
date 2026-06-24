@@ -28,15 +28,3 @@ pub struct Order {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
-
-/// Exchange position info (API-level).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExchangePosition {
-    pub symbol: String,
-    pub side: PositionSide,
-    pub size: f64,
-    pub entry_price: f64,
-    pub leverage: u32,
-    pub unrealized_pnl: f64,
-    pub liquidation_price: Option<f64>,
-}

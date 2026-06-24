@@ -48,17 +48,6 @@ const GridBot = () => {
     if (!bot?.id || !bot?.status) return
 
     const actions: ItemConfig[] = []
-    actions.push({
-      key: 'delete',
-      label: '删除',
-      className:
-        'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors',
-      onClick: async () => {
-        if (!confirm('确定删除此机器人？将平仓所有持仓。')) return
-        await deleteGridBot(bot?.id)
-        navigate('/setup/bot-type', { replace: true })
-      },
-    })
 
     if (bot?.status === 'running') {
       actions.push({
@@ -83,6 +72,18 @@ const GridBot = () => {
         },
       })
     }
+
+    actions.push({
+      key: 'delete',
+      label: '删除',
+      className:
+        'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors',
+      onClick: async () => {
+        if (!confirm('确定删除此机器人？将平仓所有持仓。')) return
+        await deleteGridBot(bot?.id)
+        navigate('/setup/bot-type', { replace: true })
+      },
+    })
 
     updateActions(actions)
   }, [bot?.id, bot?.status])
