@@ -11,4 +11,4 @@ pub mod persistence;
 pub use engine::PositionEngine;
 pub use risk::{RiskChecker, RiskAlertInfo, DrawdownAction};
 pub use tracker::{PnlTracker, PnlSnapshot};
-pub use persistence::{PositionPersistence, PnlSnapshotRow, Persistence};
+pub use persistence::{PositionPersistence, Persistence};

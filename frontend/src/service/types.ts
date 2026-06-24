@@ -239,7 +239,6 @@ export interface GridTrade {
 
 export interface GridBotDetail {
   bot: GridBot;
-  trades: GridTrade[];
   grid_levels: GridLevelInfo[];
 }
 

@@ -6,10 +6,18 @@ function Login() {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleChangeUsername = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUsername(e.target.value);
+  };
+
+  const handleChangePassword = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(e.target.value);
+  };
+
+  const handleSubmit = async (e: React.SubmitEvent) => {
     e.preventDefault();
     setError('');
 
@@ -20,7 +28,7 @@ function Login() {
 
     setLoading(true);
     try {
-      const result = await login(username.trim(), password);
+      const result = await login(username.trim(), password.trim());
       if (result.success) {
         navigate('/setup/bot-type', { replace: true });
       } else {
@@ -74,7 +82,7 @@ function Login() {
             <input
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={handleChangeUsername}
               className="w-full px-4 py-3 bg-surface-2 border border-line-strong rounded-xl text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 focus:bg-surface-3 transition-all duration-200"
               placeholder="Username"
               autoComplete="username"
@@ -86,7 +94,7 @@ function Login() {
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={handleChangePassword}
               className="w-full px-4 py-3 bg-surface-2 border border-line-strong rounded-xl text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 focus:bg-surface-3 transition-all duration-200"
               placeholder="Password"
               autoComplete="current-password"

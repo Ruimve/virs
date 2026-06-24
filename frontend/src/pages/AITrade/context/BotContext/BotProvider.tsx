@@ -1,56 +1,63 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { type ReactNode, Suspense, use } from 'react';
 import {
   getAutoBotDetail,
   getGridBotDetail,
   type AutoBot,
-  type AutoTrade,
   type GridBot,
   type GridLevelInfo,
-  type GridTrade,
 } from '@/service';
 import { BotContext } from '.';
 
+type Bot = {
+  bot: AutoBot | GridBot | null;
+  gridLevels: GridLevelInfo[];
+};
+
+// 数据获取函数，返回 Promise<{ bot, gridLevels? }>
+const fetchBot = (botType: string, botId: string): Promise<Bot> => {
+  if (!botId) {
+    // 没有 botId 时，返回一个空数据（或抛出错误，视业务而定）
+    return Promise.resolve({ bot: null, gridLevels: [] });
+  }
+
+  if (botType === 'auto') {
+    return getAutoBotDetail(botId).then((res) => ({
+      bot: res?.data?.bot || null,
+      gridLevels: [], // auto 类型没有 gridLevels
+    }));
+  } else if (botType === 'grid') {
+    return getGridBotDetail(botId).then((res) => ({
+      bot: res?.data?.bot || null,
+      gridLevels: res?.data?.grid_levels || [],
+    }));
+  } else {
+    // 未知类型，返回空数据
+    return Promise.resolve({ bot: null, gridLevels: [] });
+  }
+};
+
+const promiseBot = (() => {
+  const botType = location.pathname?.split('/')[2];
+  const botId = location.pathname?.split('/')[3];
+  return fetchBot(botType, botId);
+})();
+
+export const BotProviderMain = ({ children }: { children: ReactNode }) => {
+  const { bot, gridLevels } = use(promiseBot);
+
+  return <BotContext.Provider value={{ bot, gridLevels }}>{children}</BotContext.Provider>;
+};
+
 export const BotProvider = ({ children }: { children: ReactNode }) => {
-  const location = useLocation();
-  const params = useParams();
-  const [bot, setBot] = useState<AutoBot | GridBot | null>(null);
-  const [trades, setTrades] = useState<AutoTrade[] | GridTrade[]>([]);
-  const [gridLevels, setGridLevels] = useState<GridLevelInfo[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const botType = location.pathname.split('/')[2];
-    const botId = params?.botId;
-    if (!botId) return;
-
-    if (botType === 'auto') {
-      setLoading(true);
-      getAutoBotDetail(botId)
-        .then((bot) => {
-          setBot(bot?.data?.bot || null);
-          setTrades([]);
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    } else if (botType === 'grid') {
-      setLoading(true);
-      getGridBotDetail(botId)
-        .then((bot) => {
-          setBot(bot?.data?.bot || null);
-          setTrades(bot?.data?.trades || []);
-          setGridLevels(bot?.data?.grid_levels || []);
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    }
-  }, [location.pathname, params?.botId]);
-
   return (
-    <BotContext.Provider value={{ bot, trades, gridLevels, loading }}>
-      {children}
-    </BotContext.Provider>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-base flex items-center justify-center">
+          <div className="text-on-surface-tertiary text-sm">Bot Loading...</div>
+        </div>
+      }
+    >
+      <BotProviderMain>{children}</BotProviderMain>
+    </Suspense>
   );
 };

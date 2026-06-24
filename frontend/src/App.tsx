@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, memo, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Loading from './pages/loading';
 import Login from './pages/login';
@@ -33,7 +33,7 @@ const HealthCheck = lazy(() => import('./pages/AITrade/HealthCheck'));
 /** 交易 -系统信息 */
 const System = lazy(() => import('./pages/AITrade/System'));
 
-function SuspenseWrap({ children }: { children: React.ReactNode }) {
+const SuspenseWrap = ({ children }: { children: React.ReactNode }) => {
   return (
     <Suspense
       fallback={
@@ -45,9 +45,9 @@ function SuspenseWrap({ children }: { children: React.ReactNode }) {
       {children}
     </Suspense>
   );
-}
+};
 
-function App() {
+const App = () => {
   return (
     <ErrorBoundary>
       <BrowserRouter>
@@ -85,6 +85,6 @@ function App() {
       </BrowserRouter>
     </ErrorBoundary>
   );
-}
+};
 
-export default App;
+export default memo(App);

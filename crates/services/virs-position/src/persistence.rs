@@ -1,35 +1,15 @@
 //! Position persistence layer — PostgreSQL implementation.
+//!
+//! 仅保留 `pe_positions` 表用于引擎重启后快速恢复内存仓位状态。
+//! 订单（pe_orders）、成交（pe_trades）、PnL 快照（pe_pnl_snapshots）、事件（pe_events）
+//! 已删除：业务数据由 `qd_auto_trades`/`qd_grid_trades` 承载，引擎运行时状态在内存中维护。
 
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use virs_types::enums::*;
-use virs_types::position::{Position, PositionOrder, Trade, PositionResult};
-
-// ============================================================================
-// PnlSnapshotRow
-// ============================================================================
-
-/// PnL 快照行记录（数据库读写用）
-#[derive(Debug, Clone, sqlx::FromRow)]
-pub struct PnlSnapshotRow {
-    pub id: Uuid,
-    pub engine_id: String,
-    pub timestamp: DateTime<Utc>,
-    pub total_unrealized_pnl: f64,
-    pub total_realized_pnl: f64,
-    pub total_pnl: f64,
-    pub position_count: i32,
-    pub open_position_count: i32,
-    pub total_margin: f64,
-    pub drawdown_pct: f64,
-    pub peak_equity: f64,
-    pub total_trades: i32,
-    pub profit_trades: i32,
-    pub total_cost: f64,
-    pub consecutive_losses: i32,
-}
+use virs_types::enums::{PositionSide, PositionStatus};
+use virs_types::position::{Position, PositionResult};
 
 // ============================================================================
 // PositionPersistence trait
@@ -37,18 +17,14 @@ pub struct PnlSnapshotRow {
 
 #[async_trait::async_trait]
 pub trait PositionPersistence: Send + Sync {
+    /// 初始化表结构（幂等）。
     async fn init_tables(&self) -> PositionResult<()>;
+    /// 写入/更新仓位。
     async fn upsert_position(&self, pos: &Position) -> PositionResult<()>;
+    /// 获取引擎下所有未平仓仓位（用于重启恢复）。
     async fn get_open_positions(&self, engine_id: &str) -> PositionResult<Vec<Position>>;
+    /// 按 ID 获取仓位。
     async fn get_position(&self, id: &Uuid) -> PositionResult<Option<Position>>;
-    async fn insert_order(&self, order: &PositionOrder) -> PositionResult<()>;
-    async fn update_order(&self, order: &PositionOrder) -> PositionResult<()>;
-    async fn get_active_orders(&self, engine_id: &str) -> PositionResult<Vec<PositionOrder>>;
-    async fn insert_trade(&self, trade: &Trade) -> PositionResult<()>;
-    async fn get_trades_by_position(&self, position_id: &Uuid) -> PositionResult<Vec<Trade>>;
-    async fn insert_pnl_snapshot(&self, engine_id: &str, snapshot: &PnlSnapshotRow) -> PositionResult<()>;
-    async fn get_latest_snapshot(&self, engine_id: &str) -> PositionResult<Option<PnlSnapshotRow>>;
-    async fn insert_event(&self, engine_id: &str, event_type: &str, symbol: Option<&str>, message: &str, severity: &str) -> PositionResult<()>;
 }
 
 // ============================================================================
@@ -81,38 +57,6 @@ impl PositionPersistence for Persistence {
 
     async fn get_position(&self, id: &Uuid) -> PositionResult<Option<Position>> {
         self.get_position_impl(id).await
-    }
-
-    async fn insert_order(&self, order: &PositionOrder) -> PositionResult<()> {
-        self.insert_order_impl(order).await
-    }
-
-    async fn update_order(&self, order: &PositionOrder) -> PositionResult<()> {
-        self.update_order_impl(order).await
-    }
-
-    async fn get_active_orders(&self, engine_id: &str) -> PositionResult<Vec<PositionOrder>> {
-        self.get_active_orders_impl(engine_id).await
-    }
-
-    async fn insert_trade(&self, trade: &Trade) -> PositionResult<()> {
-        self.insert_trade_impl(trade).await
-    }
-
-    async fn get_trades_by_position(&self, position_id: &Uuid) -> PositionResult<Vec<Trade>> {
-        self.get_trades_by_position_impl(position_id).await
-    }
-
-    async fn insert_pnl_snapshot(&self, engine_id: &str, snapshot: &PnlSnapshotRow) -> PositionResult<()> {
-        self.insert_pnl_snapshot_impl(engine_id, snapshot).await
-    }
-
-    async fn get_latest_snapshot(&self, engine_id: &str) -> PositionResult<Option<PnlSnapshotRow>> {
-        self.get_latest_snapshot_impl(engine_id).await
-    }
-
-    async fn insert_event(&self, engine_id: &str, event_type: &str, symbol: Option<&str>, message: &str, severity: &str) -> PositionResult<()> {
-        self.insert_event_impl(engine_id, event_type, symbol, message, severity).await
     }
 }
 
@@ -150,113 +94,10 @@ impl Persistence {
         .execute(&self.db)
         .await?;
 
-        // pe_orders
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS pe_orders (
-                id                  UUID PRIMARY KEY,
-                position_id         UUID NOT NULL REFERENCES pe_positions(id),
-                exchange_order_id   TEXT,
-                client_order_id     TEXT,
-                exchange            TEXT NOT NULL,
-                symbol              TEXT NOT NULL,
-                side                TEXT NOT NULL,
-                order_type          TEXT NOT NULL,
-                request_price       DOUBLE PRECISION,
-                fill_price          DOUBLE PRECISION,
-                amount              DOUBLE PRECISION NOT NULL,
-                filled              DOUBLE PRECISION NOT NULL,
-                remaining           DOUBLE PRECISION NOT NULL,
-                status              TEXT NOT NULL,
-                reduce_only         BOOLEAN NOT NULL DEFAULT FALSE,
-                fee                 DOUBLE PRECISION NOT NULL DEFAULT 0,
-                fee_currency        TEXT NOT NULL DEFAULT '',
-                slippage            DOUBLE PRECISION,
-                created_at          TIMESTAMPTZ NOT NULL,
-                updated_at          TIMESTAMPTZ NOT NULL
-            )
-            "#,
-        )
-        .execute(&self.db)
-        .await?;
-
-        // pe_trades
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS pe_trades (
-                id              UUID PRIMARY KEY,
-                position_id     UUID NOT NULL REFERENCES pe_positions(id),
-                order_id        UUID NOT NULL REFERENCES pe_orders(id),
-                exchange        TEXT NOT NULL,
-                symbol          TEXT NOT NULL,
-                side            TEXT NOT NULL,
-                price           DOUBLE PRECISION NOT NULL,
-                amount          DOUBLE PRECISION NOT NULL,
-                fee             DOUBLE PRECISION NOT NULL DEFAULT 0,
-                fee_currency    TEXT NOT NULL DEFAULT '',
-                pnl             DOUBLE PRECISION NOT NULL DEFAULT 0,
-                trade_type      TEXT NOT NULL,
-                created_at      TIMESTAMPTZ NOT NULL
-            )
-            "#,
-        )
-        .execute(&self.db)
-        .await?;
-
-        // pe_pnl_snapshots
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS pe_pnl_snapshots (
-                id                      UUID PRIMARY KEY,
-                engine_id               TEXT NOT NULL,
-                timestamp               TIMESTAMPTZ NOT NULL,
-                total_unrealized_pnl    DOUBLE PRECISION NOT NULL,
-                total_realized_pnl      DOUBLE PRECISION NOT NULL,
-                total_pnl               DOUBLE PRECISION NOT NULL,
-                position_count          INT NOT NULL,
-                open_position_count     INT NOT NULL,
-                total_margin            DOUBLE PRECISION NOT NULL,
-                drawdown_pct            DOUBLE PRECISION NOT NULL DEFAULT 0,
-                peak_equity             DOUBLE PRECISION NOT NULL DEFAULT 0,
-                total_trades            INT NOT NULL DEFAULT 0,
-                profit_trades           INT NOT NULL DEFAULT 0,
-                total_cost              DOUBLE PRECISION NOT NULL DEFAULT 0,
-                consecutive_losses      INT NOT NULL DEFAULT 0
-            )
-            "#,
-        )
-        .execute(&self.db)
-        .await?;
-
-        // pe_events
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS pe_events (
-                id          UUID PRIMARY KEY,
-                engine_id   TEXT NOT NULL,
-                event_type  TEXT NOT NULL,
-                symbol      TEXT,
-                message     TEXT NOT NULL,
-                severity    TEXT NOT NULL DEFAULT 'info',
-                created_at  TIMESTAMPTZ NOT NULL
-            )
-            "#,
-        )
-        .execute(&self.db)
-        .await?;
-
         // Indexes
         let indexes = [
             "CREATE INDEX IF NOT EXISTS idx_pe_positions_engine_id ON pe_positions (engine_id)",
             "CREATE INDEX IF NOT EXISTS idx_pe_positions_status ON pe_positions (status)",
-            "CREATE INDEX IF NOT EXISTS idx_pe_orders_position_id ON pe_orders (position_id)",
-            "CREATE INDEX IF NOT EXISTS idx_pe_orders_status ON pe_orders (status)",
-            "CREATE INDEX IF NOT EXISTS idx_pe_trades_position_id ON pe_trades (position_id)",
-            "CREATE INDEX IF NOT EXISTS idx_pe_trades_order_id ON pe_trades (order_id)",
-            "CREATE INDEX IF NOT EXISTS idx_pe_pnl_snapshots_engine_ts ON pe_pnl_snapshots (engine_id, timestamp DESC)",
-            "CREATE INDEX IF NOT EXISTS idx_pe_events_engine_id ON pe_events (engine_id)",
-            "CREATE INDEX IF NOT EXISTS idx_pe_events_created_at ON pe_events (created_at DESC)",
-            "CREATE INDEX IF NOT EXISTS idx_pe_orders_exchange_order_id ON pe_orders (exchange_order_id)",
         ];
 
         for idx in &indexes {
@@ -354,244 +195,6 @@ impl Persistence {
 
         Ok(row.and_then(|r| r.into_position()))
     }
-
-    // ===================================================================
-    // Order CRUD
-    // ===================================================================
-
-    async fn insert_order_impl(&self, order: &PositionOrder) -> PositionResult<()> {
-        let side_str = format!("{:?}", order.side);
-        let order_type_str = format!("{:?}", order.order_type);
-        let status_str = format!("{:?}", order.status);
-
-        sqlx::query(
-            r#"
-            INSERT INTO pe_orders (
-                id, position_id, exchange_order_id, client_order_id,
-                exchange, symbol, side, order_type, request_price, fill_price,
-                amount, filled, remaining, status, reduce_only,
-                fee, fee_currency, slippage, created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-            "#,
-        )
-        .bind(order.id)
-        .bind(order.position_id)
-        .bind(&order.exchange_order_id)
-        .bind(&order.client_order_id)
-        .bind(&order.exchange)
-        .bind(&order.symbol)
-        .bind(&side_str)
-        .bind(&order_type_str)
-        .bind(order.request_price)
-        .bind(order.fill_price)
-        .bind(order.amount)
-        .bind(order.filled)
-        .bind(order.remaining)
-        .bind(&status_str)
-        .bind(order.reduce_only)
-        .bind(order.fee)
-        .bind(&order.fee_currency)
-        .bind(order.slippage)
-        .bind(order.created_at)
-        .bind(order.updated_at)
-        .execute(&self.db)
-        .await?;
-
-        Ok(())
-    }
-
-    async fn update_order_impl(&self, order: &PositionOrder) -> PositionResult<()> {
-        let status_str = format!("{:?}", order.status);
-
-        sqlx::query(
-            r#"
-            UPDATE pe_orders SET
-                exchange_order_id = $1,
-                filled          = $2,
-                remaining       = $3,
-                status          = $4,
-                fee             = $5,
-                fee_currency    = $6,
-                slippage        = $7,
-                fill_price      = $8,
-                updated_at      = $9
-            WHERE id = $10
-            "#,
-        )
-        .bind(&order.exchange_order_id)
-        .bind(order.filled)
-        .bind(order.remaining)
-        .bind(&status_str)
-        .bind(order.fee)
-        .bind(&order.fee_currency)
-        .bind(order.slippage)
-        .bind(order.fill_price)
-        .bind(order.updated_at)
-        .bind(order.id)
-        .execute(&self.db)
-        .await?;
-
-        Ok(())
-    }
-
-    async fn get_active_orders_impl(&self, engine_id: &str) -> PositionResult<Vec<PositionOrder>> {
-        let rows = sqlx::query_as::<_, OrderRow>(
-            r#"
-            SELECT o.* FROM pe_orders o
-            INNER JOIN pe_positions p ON o.position_id = p.id
-            WHERE p.engine_id = $1 AND o.status IN ('Open', 'PartiallyFilled')
-            ORDER BY o.created_at
-            "#,
-        )
-        .bind(engine_id)
-        .fetch_all(&self.db)
-        .await?;
-
-        Ok(rows.into_iter().filter_map(|r| r.into_order()).collect())
-    }
-
-    // ===================================================================
-    // Trade
-    // ===================================================================
-
-    async fn insert_trade_impl(&self, trade: &Trade) -> PositionResult<()> {
-        let side_str = format!("{:?}", trade.side);
-        let trade_type_str = format!("{:?}", trade.trade_type).to_lowercase();
-
-        sqlx::query(
-            r#"
-            INSERT INTO pe_trades (
-                id, position_id, order_id, exchange, symbol, side,
-                price, amount, fee, fee_currency, pnl, trade_type, created_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            "#,
-        )
-        .bind(trade.id)
-        .bind(trade.position_id)
-        .bind(trade.order_id)
-        .bind(&trade.exchange)
-        .bind(&trade.symbol)
-        .bind(&side_str)
-        .bind(trade.price)
-        .bind(trade.amount)
-        .bind(trade.fee)
-        .bind(&trade.fee_currency)
-        .bind(trade.pnl)
-        .bind(&trade_type_str)
-        .bind(trade.created_at)
-        .execute(&self.db)
-        .await?;
-
-        Ok(())
-    }
-
-    async fn get_trades_by_position_impl(&self, position_id: &Uuid) -> PositionResult<Vec<Trade>> {
-        let rows = sqlx::query_as::<_, TradeRow>(
-            r#"
-            SELECT * FROM pe_trades
-            WHERE position_id = $1
-            ORDER BY created_at
-            "#,
-        )
-        .bind(position_id)
-        .fetch_all(&self.db)
-        .await?;
-
-        Ok(rows.into_iter().filter_map(|r| r.into_trade()).collect())
-    }
-
-    // ===================================================================
-    // PnL Snapshot
-    // ===================================================================
-
-    async fn insert_pnl_snapshot_impl(
-        &self,
-        engine_id: &str,
-        snapshot: &PnlSnapshotRow,
-    ) -> PositionResult<()> {
-        sqlx::query(
-            r#"
-            INSERT INTO pe_pnl_snapshots (
-                id, engine_id, timestamp,
-                total_unrealized_pnl, total_realized_pnl, total_pnl,
-                position_count, open_position_count, total_margin, drawdown_pct,
-                peak_equity, total_trades, profit_trades, total_cost, consecutive_losses
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-            "#,
-        )
-        .bind(snapshot.id)
-        .bind(engine_id)
-        .bind(snapshot.timestamp)
-        .bind(snapshot.total_unrealized_pnl)
-        .bind(snapshot.total_realized_pnl)
-        .bind(snapshot.total_pnl)
-        .bind(snapshot.position_count)
-        .bind(snapshot.open_position_count)
-        .bind(snapshot.total_margin)
-        .bind(snapshot.drawdown_pct)
-        .bind(snapshot.peak_equity)
-        .bind(snapshot.total_trades)
-        .bind(snapshot.profit_trades)
-        .bind(snapshot.total_cost)
-        .bind(snapshot.consecutive_losses)
-        .execute(&self.db)
-        .await?;
-
-        Ok(())
-    }
-
-    async fn get_latest_snapshot_impl(&self, engine_id: &str) -> PositionResult<Option<PnlSnapshotRow>> {
-        let row = sqlx::query_as::<_, PnlSnapshotRow>(
-            r#"
-            SELECT * FROM pe_pnl_snapshots
-            WHERE engine_id = $1
-            ORDER BY timestamp DESC
-            LIMIT 1
-            "#,
-        )
-        .bind(engine_id)
-        .fetch_optional(&self.db)
-        .await?;
-
-        Ok(row)
-    }
-
-    // ===================================================================
-    // Events
-    // ===================================================================
-
-    async fn insert_event_impl(
-        &self,
-        engine_id: &str,
-        event_type: &str,
-        symbol: Option<&str>,
-        message: &str,
-        severity: &str,
-    ) -> PositionResult<()> {
-        let id = Uuid::new_v4();
-        let now = Utc::now();
-
-        sqlx::query(
-            r#"
-            INSERT INTO pe_events (id, engine_id, event_type, symbol, message, severity, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            "#,
-        )
-        .bind(id)
-        .bind(engine_id)
-        .bind(event_type)
-        .bind(symbol)
-        .bind(message)
-        .bind(severity)
-        .bind(now)
-        .execute(&self.db)
-        .await?;
-
-        Ok(())
-    }
 }
 
 // ============================================================================
@@ -661,124 +264,6 @@ impl PositionRow {
             updated_at: self.updated_at,
             closed_at: self.closed_at,
             metadata: self.metadata.0,
-        })
-    }
-}
-
-#[derive(Debug, sqlx::FromRow)]
-struct OrderRow {
-    id: Uuid,
-    position_id: Uuid,
-    exchange_order_id: Option<String>,
-    client_order_id: Option<String>,
-    exchange: String,
-    symbol: String,
-    side: String,
-    order_type: String,
-    request_price: Option<f64>,
-    fill_price: Option<f64>,
-    amount: f64,
-    filled: f64,
-    remaining: f64,
-    status: String,
-    reduce_only: bool,
-    fee: f64,
-    fee_currency: String,
-    slippage: Option<f64>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-}
-
-impl OrderRow {
-    fn into_order(self) -> Option<PositionOrder> {
-        let side = match self.side.as_str() {
-            "Buy" => Side::Buy,
-            "Sell" => Side::Sell,
-            _ => return None,
-        };
-        let order_type = match self.order_type.as_str() {
-            "Limit" => OrderType::Limit,
-            "Market" => OrderType::Market,
-            "StopMarket" => OrderType::StopMarket,
-            "TakeProfitMarket" => OrderType::TakeProfitMarket,
-            _ => return None,
-        };
-        let status = match self.status.as_str() {
-            "Pending" => OrderStatus::Pending,
-            "Open" => OrderStatus::Open,
-            "PartiallyFilled" => OrderStatus::PartiallyFilled,
-            "Filled" => OrderStatus::Filled,
-            "Canceled" => OrderStatus::Canceled,
-            "Failed" => OrderStatus::Failed,
-            _ => return None,
-        };
-        Some(PositionOrder {
-            id: self.id,
-            position_id: self.position_id,
-            exchange_order_id: self.exchange_order_id,
-            client_order_id: self.client_order_id,
-            exchange: self.exchange,
-            symbol: self.symbol,
-            side,
-            order_type,
-            request_price: self.request_price,
-            fill_price: self.fill_price,
-            amount: self.amount,
-            filled: self.filled,
-            remaining: self.remaining,
-            status,
-            reduce_only: self.reduce_only,
-            fee: self.fee,
-            fee_currency: self.fee_currency,
-            slippage: self.slippage,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        })
-    }
-}
-
-#[derive(Debug, sqlx::FromRow)]
-struct TradeRow {
-    id: Uuid,
-    position_id: Uuid,
-    order_id: Uuid,
-    exchange: String,
-    symbol: String,
-    side: String,
-    price: f64,
-    amount: f64,
-    fee: f64,
-    fee_currency: String,
-    pnl: f64,
-    trade_type: String,
-    created_at: DateTime<Utc>,
-}
-
-impl TradeRow {
-    fn into_trade(self) -> Option<Trade> {
-        let side = match self.side.as_str() {
-            "Buy" => Side::Buy,
-            "Sell" => Side::Sell,
-            _ => return None,
-        };
-        let trade_type = match self.trade_type.to_lowercase().as_str() {
-            "open" => TradeType::Open,
-            _ => TradeType::Close,
-        };
-        Some(Trade {
-            id: self.id,
-            position_id: self.position_id,
-            order_id: self.order_id,
-            exchange: self.exchange,
-            symbol: self.symbol,
-            side,
-            price: self.price,
-            amount: self.amount,
-            fee: self.fee,
-            fee_currency: self.fee_currency,
-            pnl: self.pnl,
-            trade_type,
-            created_at: self.created_at,
         })
     }
 }

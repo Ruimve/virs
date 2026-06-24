@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchUser, isLoggedIn } from '../../lib/auth';
 import { findActiveBot } from '../../service';
 
-function delay(ms: number): Promise<void> {
+const delay = (ms: number): Promise<void> => {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
+};
 
-function Loading() {
+const Loading = () => {
   const navigate = useNavigate();
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('Initializing...');
@@ -90,6 +90,6 @@ function Loading() {
       )}
     </div>
   );
-}
+};
 
-export default Loading;
+export default memo(Loading);

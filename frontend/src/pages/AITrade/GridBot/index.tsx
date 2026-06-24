@@ -7,7 +7,7 @@ import { useHeader, type ItemConfig } from '../components/Header/HeaderContext';
 const GridBot = () => {
   const navigate = useNavigate();
   const { updateTabs, updateActions } = useHeader();
-  const { bot, loading } = useBot();
+  const { bot } = useBot();
 
   useEffect(() => {
     if (!bot?.id) return;
@@ -87,32 +87,6 @@ const GridBot = () => {
 
     updateActions(actions);
   }, [bot?.id, bot?.status, navigate, updateActions]);
-
-  if (loading) {
-    return (
-      <div className="h-screen bg-base flex flex-col items-center justify-center relative gap-4">
-        <svg
-          className="animate-spin h-6 w-6 text-on-surface-tertiary"
-          viewBox="0 0 24 24"
-          fill="none"
-        >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-          />
-        </svg>
-      </div>
-    );
-  }
 
   if (!bot?.id) {
     return (

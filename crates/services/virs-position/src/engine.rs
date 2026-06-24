@@ -21,7 +21,7 @@ use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_types::market::Balance;
 use virs_types::position::*;
 
-use crate::persistence::{PositionPersistence, PnlSnapshotRow};
+use crate::persistence::PositionPersistence;
 use crate::risk::{DrawdownAction, RiskChecker};
 use crate::tracker::PnlTracker;
 
@@ -214,9 +214,6 @@ impl PositionEngine {
 
         // 4. 设置状态为 Running
         self.inner.set_state(EngineState::Running);
-        self.inner.persistence.insert_event(
-            &self.inner.config.engine_id, "engine_started", None, "Engine started", "info",
-        ).await?;
         info!(engine_id = %self.inner.config.engine_id, "Position engine started");
 
         // 5. 启动 4 个并行循环
@@ -254,28 +251,6 @@ impl PositionEngine {
             self.inner.positions.insert(key, pos);
         }
         info!(engine_id = %engine_id, count = self.inner.positions.len(), "Recovered positions from database");
-
-        let active_orders = self.inner.persistence.get_active_orders(engine_id).await?;
-        for order in active_orders {
-            if let Some(ref eoid) = order.exchange_order_id {
-                self.inner.exchange_order_id_index.insert(eoid.clone(), order.id);
-            }
-            self.inner.orders.insert(order.id, order);
-        }
-        info!(engine_id = %engine_id, count = self.inner.orders.len(), "Recovered orders from database");
-
-        if let Some(snapshot) = self.inner.persistence.get_latest_snapshot(engine_id).await? {
-            let mut tracker = self.inner.tracker.lock().unwrap();
-            tracker.restore_from_snapshot(
-                snapshot.peak_equity,
-                snapshot.total_realized_pnl,
-                snapshot.total_trades as u32,
-                snapshot.profit_trades as u32,
-                snapshot.total_cost,
-                snapshot.consecutive_losses as u32,
-            );
-            info!(engine_id = %engine_id, realized_pnl = snapshot.total_realized_pnl, peak_equity = snapshot.peak_equity, "Restored PnlTracker from snapshot");
-        }
 
         self.full_sync().await;
         Ok(())
@@ -378,7 +353,6 @@ pub(crate) async fn command_loop(inner: Arc<EngineInner>, mut cmd_rx: mpsc::Rece
             EngineCommand::Shutdown => {
                 info!("Shutdown command received");
                 inner.set_state(EngineState::ShuttingDown);
-                persist!(inner.persistence.insert_event(&inner.config.engine_id, "engine_shutting_down", None, "Engine shutting down", "info"), "Failed to persist shutdown event");
                 break;
             }
         }
@@ -559,7 +533,7 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
             }
         }
 
-        // 4. 更新未实现盈亏并写入 PnL 快照
+        // 4. 更新未实现盈亏
         {
             let positions: Vec<Position> = inner.positions.iter().map(|r| r.value().clone()).collect();
             let position_refs: Vec<&Position> = positions.iter().collect();
@@ -567,28 +541,9 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
 
             let snapshot = { inner.tracker.lock().unwrap().update_unrealized(&position_refs, &current_prices) };
 
-            let pnl_row = PnlSnapshotRow {
-                id: Uuid::new_v4(),
-                engine_id: inner.config.engine_id.clone(),
-                timestamp: snapshot.timestamp,
-                total_unrealized_pnl: snapshot.unrealized_pnl,
-                total_realized_pnl: snapshot.realized_pnl,
-                total_pnl: snapshot.total_pnl,
-                position_count: positions.len() as i32,
-                open_position_count: snapshot.open_positions_count as i32,
-                total_margin: positions.iter().map(|p| p.margin).sum(),
-                drawdown_pct: snapshot.max_drawdown,
-                peak_equity: { inner.tracker.lock().unwrap().peak_equity() },
-                total_trades: { inner.tracker.lock().unwrap().total_trades() as i32 },
-                profit_trades: { inner.tracker.lock().unwrap().profit_trades() as i32 },
-                total_cost: { inner.tracker.lock().unwrap().total_cost() },
-                consecutive_losses: { inner.tracker.lock().unwrap().consecutive_losses() as i32 },
-            };
-
-            persist!(inner.persistence.insert_pnl_snapshot(&inner.config.engine_id, &pnl_row), "Failed to persist PnL snapshot");
-
             // 5. 回撤检查
-            let drawdown_action = { inner.risk_checker.lock().unwrap().check_drawdown(pnl_row.peak_equity, snapshot.equity) };
+            let peak_equity = { inner.tracker.lock().unwrap().peak_equity() };
+            let drawdown_action = { inner.risk_checker.lock().unwrap().check_drawdown(peak_equity, snapshot.equity) };
             match drawdown_action {
                 Some(DrawdownAction::Warning) => {
                     inner.emit_event(EngineEvent::RiskAlert {
@@ -664,7 +619,6 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                                             inner.exchange_order_id_index.insert(eoid.clone(), order.id);
                                         }
                                         inner.orders.insert(order.id, order.clone());
-                                        persist!(inner.persistence.insert_order(&order), "Failed to persist emergency close order");
                                         warn!(position_id = %pid, symbol = %sym, "Emergency close order placed due to max drawdown");
                                         return;
                                     }
@@ -704,12 +658,6 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
             }
             WsFeedEvent::ConnectionChanged { connected } => {
                 info!(connected, "WebSocket connection changed");
-                let (event_type, severity, message) = if connected {
-                    ("ws_reconnected", "info", "WebSocket reconnected")
-                } else {
-                    ("ws_disconnected", "warning", "WebSocket disconnected")
-                };
-                persist!(inner.persistence.insert_event(&inner.config.engine_id, event_type, None, message, severity), "Failed to persist ws connection event");
             }
         }
     }
@@ -772,9 +720,7 @@ pub(crate) async fn handle_ws_order_update(
             order.fee = commission;
             order.status = status;
             order.updated_at = timestamp;
-            let updated_order = order.clone();
             drop(order);
-            persist!(inner.persistence.update_order(&updated_order), "Failed to persist order update in ws_feed");
         }
     }
 
@@ -842,8 +788,6 @@ pub(crate) async fn handle_ws_order_update(
                 trade_type: if is_reduce_only { TradeType::Close } else { TradeType::Open },
                 created_at: timestamp,
             };
-
-            persist!(inner.persistence.insert_trade(&trade), "Failed to persist trade");
 
             { inner.tracker.lock().unwrap().record_trade(&trade); }
             { inner.risk_checker.lock().unwrap().record_trade_result(pnl); }
@@ -968,7 +912,6 @@ pub(crate) async fn poll_loop(inner: Arc<EngineInner>) {
                         updated.updated_at = Utc::now();
                         drop(local);
                         inner.orders.insert(updated.id, updated.clone());
-                        persist!(inner.persistence.update_order(&updated), "Failed to persist order update in poll");
                     }
                 }
             }
@@ -1032,7 +975,6 @@ pub(crate) async fn handle_open_position(
                     inner.exchange_order_id_index.insert(eoid.clone(), order.id);
                 }
                 inner.orders.insert(order.id, order.clone());
-                persist!(inner.persistence.insert_order(&order), "Failed to persist order in open_position (existing)");
 
                 // 如果订单已成交，发出 OrderFilled 事件
                 if order.filled > 0.0 {
@@ -1051,7 +993,6 @@ pub(crate) async fn handle_open_position(
                         trade_type: TradeType::Open,
                         created_at: Utc::now(),
                     };
-                    persist!(inner.persistence.insert_trade(&trade), "Failed to persist trade in open_position (existing)");
                     inner.emit_event(EngineEvent::OrderFilled { order: order.clone(), trade });
                     info!(position_id = %position_id, symbol = %symbol, side = ?side, size = order.filled, "Order filled for existing position");
                 } else {
@@ -1160,7 +1101,6 @@ pub(crate) async fn handle_open_position(
             inner.orders.insert(order.id, order.clone());
 
             persist!(inner.persistence.upsert_position(&position), "Failed to persist position in open_position");
-            persist!(inner.persistence.insert_order(&order), "Failed to persist order in open_position");
 
             inner.emit_event(EngineEvent::PositionOpened { position: position.clone() });
             inner.emit_event(EngineEvent::PositionUpdated { position: position.clone() });
@@ -1183,7 +1123,6 @@ pub(crate) async fn handle_open_position(
                     trade_type: TradeType::Open,
                     created_at: Utc::now(),
                 };
-                persist!(inner.persistence.insert_trade(&trade), "Failed to persist trade in open_position");
                 inner.emit_event(EngineEvent::OrderFilled { order: order.clone(), trade });
                 info!(position_id = %position.id, symbol = %symbol, side = ?side, size = order.filled, "Position opened and filled");
             } else {
@@ -1252,7 +1191,6 @@ pub(crate) async fn handle_close_position(
                 inner.exchange_order_id_index.insert(eoid.clone(), order.id);
             }
             inner.orders.insert(order.id, order.clone());
-            persist!(inner.persistence.insert_order(&order), "Failed to persist order in close_position");
 
             // 如果订单已成交，发出 OrderFilled 事件
             if order.filled > 0.0 {
@@ -1271,7 +1209,6 @@ pub(crate) async fn handle_close_position(
                     trade_type: TradeType::Close,
                     created_at: Utc::now(),
                 };
-                persist!(inner.persistence.insert_trade(&trade), "Failed to persist trade in close_position");
                 inner.emit_event(EngineEvent::OrderFilled { order: order.clone(), trade });
                 info!(position_id = %position_id, symbol = %position.symbol, "Close order filled");
 
@@ -1456,7 +1393,6 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
             if let Some(ref eoid) = order.exchange_order_id {
                 inner.exchange_order_id_index.insert(eoid.clone(), order.id);
             }
-            persist!(inner.persistence.insert_order(&order), "Failed to persist order in place_order");
             inner.emit_event(EngineEvent::OrderPlaced { order: order.clone() });
             info!(order_id = %order.id, symbol = %params.symbol, "Order placed");
         }
@@ -1491,7 +1427,6 @@ pub(crate) async fn handle_cancel_order(inner: &Arc<EngineInner>, order_id: Uuid
     match inner.exchange.cancel_order(&order.symbol, &exchange_order_id).await {
         Ok(cancelled_order) => {
             inner.orders.insert(cancelled_order.id, cancelled_order.clone());
-            persist!(inner.persistence.update_order(&cancelled_order), "Failed to persist cancelled order");
             inner.emit_event(EngineEvent::OrderCanceled { order: cancelled_order });
             info!(order_id = %order_id, "Order canceled");
         }
@@ -1520,7 +1455,6 @@ pub(crate) async fn handle_cancel_all_orders(
         Ok(cancelled_orders) => {
             for order in &cancelled_orders {
                 inner.orders.insert(order.id, order.clone());
-                persist!(inner.persistence.update_order(order), "Failed to persist cancelled order");
                 inner.emit_event(EngineEvent::OrderCanceled { order: order.clone() });
             }
             info!(count = cancelled_orders.len(), "Orders canceled");
