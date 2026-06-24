@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use sqlx::PgPool;
+use tracing::warn;
 use uuid::Uuid;
 
 use virs_types::auto_port::*;
@@ -123,21 +124,85 @@ impl AutoStore for PgAutoStore {
         Ok(())
     }
 
-    async fn record_trade(
+    async fn record_open_trade(
         &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
-        side: &str, trade_type: &str, trigger_source: &str, price: f64,
-        quantity: f64, pnl: f64, pnl_pct: f64, fee: f64,
-        exchange_order_id: Option<&str>,
+        open_side: &str, open_price: f64, open_quantity: f64,
+        open_fee: f64, open_order_id: Option<&str>,
     ) -> anyhow::Result<Uuid> {
-        let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
         let row: (Uuid,) = sqlx::query_as(
-            r#"INSERT INTO qd_auto_trades (bot_id, user_id, symbol, exchange, side, trade_type, trigger_source, price, quantity, pnl, pnl_pct, fee, exchange_order_id)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            r#"INSERT INTO qd_auto_trades
+               (bot_id, user_id, symbol, exchange, open_side, open_price, open_quantity,
+                open_order_id, open_fee, trigger_source, status)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'llm', 'open')
                RETURNING id"#,
         )
         .bind(bot_id).bind(user_id).bind(symbol).bind(exchange)
-        .bind(side).bind(trade_type).bind(trigger_source).bind(price)
-        .bind(quantity).bind(pnl).bind(pnl_pct).bind(fee).bind(exchange_order_id)
+        .bind(open_side).bind(open_price).bind(open_quantity)
+        .bind(open_order_id).bind(open_fee)
+        .fetch_one(&self.db).await?;
+        Ok(row.0)
+    }
+
+    async fn close_trade(
+        &self, trade_id: Uuid, close_side: &str, close_price: f64,
+        close_quantity: f64, close_order_id: Option<&str>,
+        close_fee: f64, pnl: f64, pnl_pct: f64,
+        trigger_source: &str, close_reason: &str,
+    ) -> anyhow::Result<()> {
+        let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
+        let result = sqlx::query(
+            r#"UPDATE qd_auto_trades SET
+               close_side = $2, close_price = $3, close_quantity = $4,
+               close_order_id = $5, close_fee = $6, closed_at = NOW(),
+               pnl = $7, pnl_pct = $8,
+               trigger_source = $9, close_reason = $10,
+               status = 'closed'
+               WHERE id = $1 AND status = 'open'"#,
+        )
+        .bind(trade_id).bind(close_side).bind(close_price).bind(close_quantity)
+        .bind(close_order_id).bind(close_fee).bind(pnl).bind(pnl_pct)
+        .bind(trigger_source).bind(close_reason)
+        .execute(&self.db).await?;
+
+        if result.rows_affected() == 0 {
+            warn!(trade_id = %trade_id, "close_trade: no open trade found");
+        }
+        Ok(())
+    }
+
+    async fn find_open_trade(&self, bot_id: Uuid) -> anyhow::Result<Option<Uuid>> {
+        let row: Option<(Uuid,)> = sqlx::query_as(
+            "SELECT id FROM qd_auto_trades WHERE bot_id = $1 AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
+        )
+        .bind(bot_id)
+        .fetch_optional(&self.db).await?;
+        Ok(row.map(|r| r.0))
+    }
+
+    async fn record_orphaned_close_trade(
+        &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
+        close_side: &str, close_price: f64, close_quantity: f64,
+        close_order_id: Option<&str>, close_fee: f64,
+        pnl: f64, pnl_pct: f64, trigger_source: &str, close_reason: &str,
+    ) -> anyhow::Result<Uuid> {
+        let open_side = if close_side == "buy" { "sell" } else { "buy" };
+        let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
+        let row: (Uuid,) = sqlx::query_as(
+            r#"INSERT INTO qd_auto_trades
+               (bot_id, user_id, symbol, exchange,
+                open_side, open_price, open_quantity, open_fee,
+                close_side, close_price, close_quantity, close_order_id, close_fee, closed_at,
+                pnl, pnl_pct, trigger_source, close_reason, status)
+               VALUES ($1, $2, $3, $4,
+                       $5, 0, $6, 0,
+                       $7, $8, $9, $10, $11, NOW(),
+                       $12, $13, $14, $15, 'orphaned')
+               RETURNING id"#,
+        )
+        .bind(bot_id).bind(user_id).bind(symbol).bind(exchange)
+        .bind(open_side).bind(close_quantity)
+        .bind(close_side).bind(close_price).bind(close_quantity).bind(close_order_id)
+        .bind(close_fee).bind(pnl).bind(pnl_pct).bind(trigger_source).bind(close_reason)
         .fetch_one(&self.db).await?;
         Ok(row.0)
     }
@@ -176,8 +241,8 @@ impl AutoStore for PgAutoStore {
     async fn load_consecutive_losses(&self, bot_id: Uuid) -> anyhow::Result<i32> {
         let pnl_rows: Vec<(f64,)> = sqlx::query_as(
             r#"SELECT pnl FROM qd_auto_trades
-               WHERE bot_id = $1 AND pnl != 0
-               ORDER BY created_at DESC LIMIT 20"#
+               WHERE bot_id = $1 AND status = 'closed'
+               ORDER BY closed_at DESC LIMIT 20"#
         )
         .bind(bot_id).fetch_all(&self.db).await?;
 

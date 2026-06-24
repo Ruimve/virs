@@ -161,6 +161,14 @@ impl PositionEngine {
         self.inner.positions.iter().map(|r| r.value().clone()).collect()
     }
 
+    /// 按 symbol 查询当前 Open 状态的仓位（用于 bot 决策前直接查询，避免事件缓存失效）。
+    pub fn get_open_position_by_symbol(&self, symbol: &str) -> Option<Position> {
+        self.inner.positions.iter()
+            .filter(|r| r.value().symbol == symbol && r.value().status == PositionStatus::Open)
+            .map(|r| r.value().clone())
+            .next()
+    }
+
     /// 获取引擎当前状态。
     pub fn state(&self) -> EngineState {
         self.inner.get_state()
@@ -994,7 +1002,14 @@ pub(crate) async fn handle_open_position(
     // If position already exists, append order to it (e.g. grid multi-level orders)
     if let Some(existing) = inner.positions.get(&key) {
         let position_id = existing.id;
+        let existing_size = existing.size;
+        let existing_status = existing.status.clone();
         drop(existing);
+        info!(
+            symbol = %symbol, side = ?side, position_id = %position_id,
+            existing_size, existing_status = ?existing_status,
+            "OpenPosition: merging into existing position (prevents duplicate)"
+        );
 
         let resolved_side = match side {
             PositionSide::Long => Side::Buy,

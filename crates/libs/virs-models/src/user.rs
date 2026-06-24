@@ -13,7 +13,6 @@ pub struct User {
     pub role: UserRole,
     pub email: Option<String>,
     pub is_active: bool,
-    pub credits: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -25,7 +24,6 @@ pub struct UserResponse {
     pub role: UserRole,
     pub email: Option<String>,
     pub is_active: bool,
-    pub credits: i64,
     pub created_at: DateTime<Utc>,
 }
 

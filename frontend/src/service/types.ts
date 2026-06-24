@@ -116,6 +116,7 @@ export interface AutoBot {
   win_trades: number
   loss_trades: number
   created_at: string
+  updated_at: string
 }
 
 export interface AutoTrade {
@@ -123,14 +124,28 @@ export interface AutoTrade {
   bot_id: string
   symbol: string
   exchange: string
-  side: string
-  type: string
-  price: number
-  quantity: number
+  // 开仓
+  open_side: string
+  open_price: number
+  open_quantity: number
+  open_order_id: string | null
+  open_fee: number
+  opened_at: string
+  // 平仓（未平仓时为 null）
+  close_side: string | null
+  close_price: number | null
+  close_quantity: number | null
+  close_order_id: string | null
+  close_fee: number
+  closed_at: string | null
+  // 盈亏
   pnl: number
   pnl_pct: number
-  fee: number
-  created_at: string
+  // 触发源与平仓原因
+  trigger_source: string
+  close_reason: string | null
+  // 状态
+  status: string
 }
 
 export interface AutoBotDetail {
@@ -186,6 +201,7 @@ export interface GridBot {
   dynamic_adjust: boolean
   ai_analysis: string | null
   created_at: string
+  updated_at: string
 }
 
 export interface GridLevelInfo {
@@ -222,11 +238,6 @@ export interface GridTrade {
 export interface GridBotDetail {
   bot: GridBot
   trades: GridTrade[]
-  grid_levels: GridLevelInfo[]
-}
-
-export interface GridTradesResponse {
-  items: GridTrade[]
   grid_levels: GridLevelInfo[]
 }
 

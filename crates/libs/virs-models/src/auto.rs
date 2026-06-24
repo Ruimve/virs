@@ -41,13 +41,27 @@ pub struct AutoTrade {
     pub user_id: Uuid,
     pub symbol: String,
     pub exchange: String,
-    pub side: String,
-    pub trade_type: String,
-    pub trigger_source: String,
-    pub price: f64,
-    pub quantity: f64,
+    // 开仓
+    pub open_side: String,
+    pub open_price: f64,
+    pub open_quantity: f64,
+    pub open_order_id: Option<String>,
+    pub open_fee: f64,
+    pub opened_at: DateTime<Utc>,
+    // 平仓（未平仓时为 NULL）
+    pub close_side: Option<String>,
+    pub close_price: Option<f64>,
+    pub close_quantity: Option<f64>,
+    pub close_order_id: Option<String>,
+    pub close_fee: f64,
+    pub closed_at: Option<DateTime<Utc>>,
+    // 盈亏
     pub pnl: f64,
     pub pnl_pct: f64,
-    pub exchange_order_id: Option<String>,
+    // 触发源与平仓原因
+    pub trigger_source: String,
+    pub close_reason: Option<String>,
+    // 状态
+    pub status: String,
     pub created_at: DateTime<Utc>,
 }

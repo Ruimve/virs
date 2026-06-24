@@ -6,6 +6,7 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
+use sqlx::FromRow;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -15,6 +16,32 @@ use crate::state::AppState;
 pub struct TradesQuery {
     pub page: Option<u32>,
     pub page_size: Option<u32>,
+}
+
+/// Auto trade 查询行（字段超过 16 个，无法用 tuple，需用 struct + FromRow）
+#[derive(Debug, FromRow)]
+struct AutoTradeRow {
+    id: uuid::Uuid,
+    bot_id: uuid::Uuid,
+    symbol: String,
+    exchange: String,
+    open_side: String,
+    open_price: f64,
+    open_quantity: f64,
+    open_order_id: Option<String>,
+    open_fee: f64,
+    opened_at: chrono::DateTime<chrono::Utc>,
+    close_side: Option<String>,
+    close_price: Option<f64>,
+    close_quantity: Option<f64>,
+    close_order_id: Option<String>,
+    close_fee: f64,
+    closed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pnl: f64,
+    pnl_pct: f64,
+    trigger_source: String,
+    close_reason: Option<String>,
+    status: String,
 }
 
 pub async fn create_bot(
@@ -128,8 +155,13 @@ pub async fn list_bots(
         Err((_, resp)) => return resp,
     };
 
-    let rows = sqlx::query_as::<_, (uuid::Uuid, String, String, String, String, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT id, name, symbol, exchange, status, created_at FROM qd_auto_bots WHERE user_id = $1 ORDER BY created_at DESC"#,
+    let rows = sqlx::query_as::<_, (
+        uuid::Uuid, String, String, String, String, String, i32, f64, i32,
+        chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>,
+    )>(
+        r#"SELECT id, name, symbol, exchange, status, market_type, leverage, max_position_pct, decide_interval_secs,
+           created_at, updated_at
+           FROM qd_auto_bots WHERE user_id = $1 ORDER BY created_at DESC"#,
     )
     .bind(user_id)
     .fetch_all(&state.db_pool)
@@ -137,14 +169,19 @@ pub async fn list_bots(
 
     match rows {
         Ok(bots) => {
-            let items: Vec<_> = bots.iter().map(|(id, name, symbol, exchange, status, created_at)| {
+            let items: Vec<_> = bots.iter().map(|(id, name, symbol, exchange, status, market_type, leverage, max_position_pct, decide_interval_secs, created_at, updated_at)| {
                 serde_json::json!({
                     "id": id.to_string(),
                     "name": name,
                     "symbol": symbol,
                     "exchange": exchange,
                     "status": status,
+                    "market_type": market_type,
+                    "leverage": leverage,
+                    "max_position_pct": max_position_pct,
+                    "decide_interval_secs": decide_interval_secs,
                     "created_at": created_at.to_rfc3339(),
+                    "updated_at": updated_at.to_rfc3339(),
                 })
             }).collect();
             let total = items.len();
@@ -298,11 +335,14 @@ pub async fn get_trades(
         Err(e) => return Json(ApiResponse::err(format!("Database error: {}", e))),
     };
 
-    // 查询分页数据
-    let rows = sqlx::query_as::<_, (String, String, f64, f64, f64, f64, f64, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT side, trade_type, price, quantity, pnl, pnl_pct, fee, created_at
+    // 查询分页数据（字段较多，使用 struct + FromRow 避免 tuple 16 字段限制）
+    let rows = sqlx::query_as::<_, AutoTradeRow>(
+        r#"SELECT id, bot_id, symbol, exchange,
+                  open_side, open_price, open_quantity, open_order_id, open_fee, opened_at,
+                  close_side, close_price, close_quantity, close_order_id, close_fee, closed_at,
+                  pnl, pnl_pct, trigger_source, close_reason, status
            FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2
-           ORDER BY created_at DESC LIMIT $3 OFFSET $4"#,
+           ORDER BY opened_at DESC LIMIT $3 OFFSET $4"#,
     )
     .bind(id)
     .bind(user_id)
@@ -313,16 +353,29 @@ pub async fn get_trades(
 
     match rows {
         Ok(trades) => Json(ApiResponse::ok(serde_json::json!({
-            "trades": trades.iter().map(|(side, trade_type, price, quantity, pnl, pnl_pct, fee, created_at)| {
+            "trades": trades.iter().map(|t| {
                 serde_json::json!({
-                    "side": side,
-                    "type": trade_type,
-                    "price": price,
-                    "quantity": quantity,
-                    "pnl": pnl,
-                    "pnl_pct": pnl_pct,
-                    "fee": fee,
-                    "created_at": created_at.to_rfc3339(),
+                    "id": t.id.to_string(),
+                    "bot_id": t.bot_id.to_string(),
+                    "symbol": t.symbol,
+                    "exchange": t.exchange,
+                    "open_side": t.open_side,
+                    "open_price": t.open_price,
+                    "open_quantity": t.open_quantity,
+                    "open_order_id": t.open_order_id,
+                    "open_fee": t.open_fee,
+                    "opened_at": t.opened_at.to_rfc3339(),
+                    "close_side": t.close_side,
+                    "close_price": t.close_price,
+                    "close_quantity": t.close_quantity,
+                    "close_order_id": t.close_order_id,
+                    "close_fee": t.close_fee,
+                    "closed_at": t.closed_at.map(|t| t.to_rfc3339()),
+                    "pnl": t.pnl,
+                    "pnl_pct": t.pnl_pct,
+                    "trigger_source": t.trigger_source,
+                    "close_reason": t.close_reason,
+                    "status": t.status,
                 })
             }).collect::<Vec<_>>(),
             "total": total,
@@ -343,11 +396,11 @@ pub async fn get_stats(
         Err((_, resp)) => return resp,
     };
 
-    // 拉取全量 trades（按时间正序），用于计算统计指标
-    let rows = sqlx::query_as::<_, (String, String, f64, f64, f64, f64, f64, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT side, trade_type, price, quantity, pnl, pnl_pct, fee, created_at
-           FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2
-           ORDER BY created_at ASC"#,
+    // 拉取全量已平仓 trades（按平仓时间正序），用于计算统计指标
+    let rows = sqlx::query_as::<_, (f64, f64, f64, f64, f64, f64, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(
+        r#"SELECT open_price, open_quantity, open_fee, close_fee, pnl, pnl_pct, opened_at, closed_at
+           FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2 AND status = 'closed'
+           ORDER BY closed_at ASC"#,
     )
     .bind(id)
     .bind(user_id)
@@ -408,19 +461,13 @@ pub async fn get_stats(
         }
     }
 
-    // 平均持仓时间（开仓到平仓的时间差）
-    let open_trades: Vec<_> = trades.iter().filter(|t| t.1.starts_with("open_")).collect();
-    let close_trades: Vec<_> = trades.iter().filter(|t| t.1.starts_with("close_")).collect();
+    // 平均持仓时间（opened_at 到 closed_at 的时间差）
     let mut total_hold_ms = 0i64;
     let mut pair_count = 0i64;
-    for close in &close_trades {
-        let close_time = close.7.timestamp_millis();
-        let side_key = close.1.replace("close_", "");
-        // 找到最近的同方向开仓
-        if let Some(open) = open_trades.iter().rev().find(|o| {
-            o.7.timestamp_millis() <= close_time && o.1.contains(&side_key)
-        }) {
-            total_hold_ms += close_time - open.7.timestamp_millis();
+    for t in &trades {
+        let hold_ms = t.7.timestamp_millis() - t.6.timestamp_millis();
+        if hold_ms > 0 {
+            total_hold_ms += hold_ms;
             pair_count += 1;
         }
     }
@@ -448,11 +495,12 @@ pub async fn get_stats(
         }
     }
 
-    let total_fee: f64 = trades.iter().map(|t| t.6).sum();
+    // 总手续费 = open_fee + close_fee
+    let total_fee: f64 = trades.iter().map(|t| t.2 + t.3).sum();
     let net_pnl: f64 = trades.iter().map(|t| t.4).sum();
 
-    // 累计交易额 = sum(price * quantity)
-    let total_volume: f64 = trades.iter().map(|t| t.2 * t.3).sum();
+    // 累计交易额 = sum(open_price * open_quantity)
+    let total_volume: f64 = trades.iter().map(|t| t.0 * t.1).sum();
 
     // 平均盈亏（每笔交易）
     let avg_pnl = if !trades.is_empty() { net_pnl / trades.len() as f64 } else { 0.0 };
@@ -461,8 +509,8 @@ pub async fn get_stats(
     let max_profit: f64 = trades.iter().map(|t| t.4).fold(0.0f64, |a, b| a.max(b));
     let max_loss: f64 = trades.iter().map(|t| t.4).fold(0.0f64, |a, b| a.min(b));
 
-    // 净盈亏（扣手续费）= 累计 PnL - 总手续费
-    let net_pnl_after_fee = net_pnl - total_fee;
+    // net_pnl 已扣除手续费（pnl = gross_pnl - open_fee - close_fee）
+    let net_pnl_after_fee = net_pnl;
 
     Json(ApiResponse::ok(serde_json::json!({
         "win_rate": win_rate,

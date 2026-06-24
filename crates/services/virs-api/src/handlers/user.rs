@@ -64,8 +64,8 @@ pub async fn create_user(
 
     let id = uuid::Uuid::new_v4();
     sqlx::query(
-        r#"INSERT INTO qd_users (id, username, password_hash, role, email, is_active, credits, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, true, 0, NOW(), NOW())"#,
+        r#"INSERT INTO qd_users (id, username, password_hash, role, email, is_active, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())"#,
     )
     .bind(id)
     .bind(username)

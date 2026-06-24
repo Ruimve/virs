@@ -195,29 +195,78 @@ impl PaperExchangeAdapter {
         let size_delta = if order.side == Side::Buy { order.amount } else { -order.amount };
         // 使用 set_leverage 配置的值，默认 20
         let leverage: u32 = self.configured_leverage.get(&order.symbol).map(|v| *v).unwrap_or(20);
+        let leverage_f64 = leverage as f64;
+        let notional = fill_price * order.amount;
+        let margin = notional / leverage_f64;
 
+        let position_side = order.position_side.unwrap_or(PositionSide::Both);
+        let is_opening = match (order.side, position_side) {
+            (Side::Buy, PositionSide::Long) | (Side::Buy, PositionSide::Both) => true,
+            (Side::Sell, PositionSide::Short) => true,
+            (Side::Sell, PositionSide::Long) | (Side::Sell, PositionSide::Both) => false,
+            (Side::Buy, PositionSide::Short) => false,
+        };
+
+        // ── 1. 保存旧仓位状态（用于计算 realized_pnl，必须在更新前读取） ──
+        let old_pos_info = self.positions.get(&key).map(|p| (p.side, p.entry_price, p.size));
+
+        // ── 2. 计算 realized_pnl（平仓/部分平仓/反转时） ──
+        // 对于平仓单：closed_amount = order.amount
+        // 对于开仓单但发生反转（one-way 模式）：closed_amount = min(order.amount, |old_size|)
+        let realized_pnl: f64 = match (&old_pos_info, is_opening) {
+            (Some((side, entry, old_size)), false) => {
+                // 平仓单：按 order.amount 计算已实现盈亏
+                let closed = order.amount.min(old_size.abs());
+                match side {
+                    PositionSide::Long => (fill_price - entry) * closed,
+                    PositionSide::Short => (entry - fill_price) * closed,
+                    PositionSide::Both => 0.0,
+                }
+            }
+            (Some((side, entry, old_size)), true) if old_size.signum() != size_delta.signum() && old_size.abs() > 1e-8 => {
+                // 开仓单但方向相反 → 反转：旧仓位被平掉的部分有已实现盈亏
+                let closed = order.amount.min(old_size.abs());
+                match side {
+                    PositionSide::Long => (fill_price - entry) * closed,
+                    PositionSide::Short => (entry - fill_price) * closed,
+                    PositionSide::Both => 0.0,
+                }
+            }
+            _ => 0.0,
+        };
+
+        // ── 3. 更新仓位 ──
         match self.positions.get_mut(&key) {
             Some(mut pos) => {
                 let old_size = pos.size;
                 let new_size = old_size + size_delta;
                 if new_size.abs() < 1e-8 {
+                    // 全部平仓
                     drop(pos);
                     self.positions.remove(&key);
-                    debug!(symbol = %order.symbol, "Paper position closed");
+                    debug!(symbol = %order.symbol, realized_pnl, "Paper position fully closed");
                 } else if old_size * new_size < 0.0 {
+                    // 反转：旧方向平掉，新方向开仓
                     pos.size = new_size;
                     pos.entry_price = fill_price;
                     pos.side = if new_size > 0.0 { PositionSide::Long } else { PositionSide::Short };
                     pos.leverage = leverage;
                     pos.liquidation_price = compute_paper_liquidation_price(pos.entry_price, pos.side, leverage);
-                    debug!(symbol = %order.symbol, new_size, "Paper position reversed");
-                } else {
+                    debug!(symbol = %order.symbol, new_size, realized_pnl, "Paper position reversed");
+                } else if old_size.signum() == size_delta.signum() {
+                    // 加仓：加权平均入场价
                     let total_cost = pos.entry_price * old_size.abs() + fill_price * size_delta.abs();
                     pos.size = new_size;
-                    if new_size.abs() > 0.0 { pos.entry_price = total_cost / new_size.abs(); }
+                    pos.entry_price = total_cost / new_size.abs();
                     pos.leverage = leverage;
                     pos.liquidation_price = compute_paper_liquidation_price(pos.entry_price, pos.side, leverage);
-                    debug!(symbol = %order.symbol, new_size, entry_price = pos.entry_price, "Paper position updated");
+                    debug!(symbol = %order.symbol, new_size, entry_price = pos.entry_price, "Paper position added");
+                } else {
+                    // 部分平仓：入场价不变，仅减少 size
+                    pos.size = new_size;
+                    pos.leverage = leverage;
+                    pos.liquidation_price = compute_paper_liquidation_price(pos.entry_price, pos.side, leverage);
+                    debug!(symbol = %order.symbol, new_size, realized_pnl, "Paper position partially closed");
                 }
             }
             None => {
@@ -231,30 +280,29 @@ impl PaperExchangeAdapter {
             }
         }
 
+        // ── 4. 更新余额 ──
         let mut balance = self.balance.lock().await;
-        let leverage_f64 = leverage as f64;
-        let notional = fill_price * order.amount;
-        let margin = notional / leverage_f64;
 
-        let position_side = order.position_side.unwrap_or(PositionSide::Both);
-        let is_opening = match (order.side, position_side) {
-            (Side::Buy, PositionSide::Long) | (Side::Buy, PositionSide::Both) => true,
-            (Side::Sell, PositionSide::Short) => true,
-            (Side::Sell, PositionSide::Long) | (Side::Sell, PositionSide::Both) => false,
-            (Side::Buy, PositionSide::Short) => false,
-        };
+        // 判断是否发生反转（开仓单但方向与旧仓位相反）
+        let is_reversal = old_pos_info
+            .map(|(_, _, old_size)| old_size.signum() != size_delta.signum() && old_size.abs() > 1e-8)
+            .unwrap_or(false);
 
-        if is_opening {
+        if is_reversal {
+            // 反转：先释放旧仓位保证金，再锁定新仓位保证金，加上已实现盈亏
+            if let Some((_, entry, old_size)) = old_pos_info {
+                let old_margin = (entry * old_size.abs()) / leverage_f64;
+                let release = old_margin.min(balance.used);
+                balance.used -= release;
+                balance.free += release + realized_pnl;
+            }
+            balance.used += margin;
+            balance.free -= margin;
+        } else if is_opening {
             balance.used += margin;
             balance.free -= margin;
         } else {
-            let realized_pnl = self.positions.get(&key).map(|pos| {
-                match pos.side {
-                    PositionSide::Long => (fill_price - pos.entry_price) * order.amount,
-                    PositionSide::Short => (pos.entry_price - fill_price) * order.amount,
-                    PositionSide::Both => 0.0,
-                }
-            }).unwrap_or(0.0);
+            // 平仓：释放保证金 + 已实现盈亏
             let margin_release = margin.min(balance.used);
             balance.used -= margin_release;
             balance.free += margin_release + realized_pnl;

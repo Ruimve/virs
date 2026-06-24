@@ -158,6 +158,7 @@ impl EngineManager for AppEngineManager {
             pe_cmd_tx.clone(),
             grid_event_tx.clone(),
             grid_pe_event_rx,
+            position_engine_clone.clone(),
         ));
         let grid_credential_store: Arc<dyn virs_types::bot::CredentialStore> = Arc::new(PgCredentialStore::new(
             self.db_pool.clone(),
@@ -224,6 +225,7 @@ impl EngineManager for AppEngineManager {
             pe_cmd_tx.clone(),
             auto_order_event_tx.clone(),
             auto_pe_event_rx,
+            position_engine_clone.clone(),
         ));
         let auto_credential_store: Arc<dyn virs_types::bot::CredentialStore> = Arc::new(PgCredentialStore::new(
             self.db_pool.clone(),

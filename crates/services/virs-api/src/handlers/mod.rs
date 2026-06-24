@@ -7,7 +7,6 @@ pub mod user;
 pub mod market;
 pub mod credentials;
 pub mod ai_credentials;
-pub mod dashboard;
 pub mod ai;
 pub mod grid;
 pub mod auto_trade;

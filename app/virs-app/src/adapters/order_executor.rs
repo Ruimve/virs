@@ -7,9 +7,11 @@ use tracing::{info, warn};
 use virs_types::bot::{OrderCommand, OrderEvent, OrderExecutor, OrderInfo, OrderSide, BotPositionSide, BotError, BotResult};
 use virs_types::position::*;
 use virs_types::enums::{Side, OrderType, PositionSide};
+use virs_position::PositionEngine;
 
 pub struct PeOrderExecutor {
     cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,
+    engine: PositionEngine,
 }
 
 impl PeOrderExecutor {
@@ -17,6 +19,7 @@ impl PeOrderExecutor {
         cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,
         event_tx: broadcast::Sender<OrderEvent>,
         mut engine_event_rx: broadcast::Receiver<EngineEvent>,
+        engine: PositionEngine,
     ) -> Self {
         // Bridge: EngineEvent → OrderEvent
         tokio::spawn(async move {
@@ -38,7 +41,7 @@ impl PeOrderExecutor {
             }
         });
 
-        Self { cmd_tx }
+        Self { cmd_tx, engine }
     }
 }
 
@@ -113,6 +116,10 @@ impl OrderExecutor for PeOrderExecutor {
 
         self.cmd_tx.send(engine_cmd).await
             .map_err(|e| BotError::OrderExecution(format!("Failed to send command to PositionEngine: {}", e)))
+    }
+
+    async fn query_open_position(&self, symbol: &str) -> BotResult<Option<Position>> {
+        Ok(self.engine.get_open_position_by_symbol(symbol))
     }
 }
 

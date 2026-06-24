@@ -62,6 +62,10 @@ pub struct AutoWorker {
     pub(crate) trailing_stop_dirty: bool,
     /// 当前仓位缓存，从 PE 事件更新
     pub(crate) current_position: Option<Position>,
+    /// 当前开仓 trade 记录 ID（开仓时 INSERT 返回，平仓时 UPDATE 用）
+    pub(crate) current_trade_id: Option<Uuid>,
+    /// 当前开仓手续费（平仓时计算总手续费用）
+    pub(crate) current_open_fee: f64,
 }
 
 impl AutoWorker {
@@ -94,6 +98,8 @@ impl AutoWorker {
             position_opened_at: None,
             trailing_stop_dirty: false,
             current_position: None,
+            current_trade_id: None,
+            current_open_fee: 0.0,
         }
     }
 
@@ -122,6 +128,52 @@ impl AutoWorker {
 
     pub(crate) fn is_pending(&self) -> bool {
         self.pending_open.is_some() || self.pending_close.is_some()
+    }
+
+    /// 直接查询 PositionEngine 当前 Open 仓位，刷新 current_position 缓存。
+    /// 防止 PE broadcast 事件丢失导致缓存失效 → 重复开仓。
+    pub(crate) async fn refresh_position_from_pe(&mut self) {
+        match self.order_executor.query_open_position(&self.bot.symbol).await {
+            Ok(Some(pe_pos)) if pe_pos.status == PositionStatus::Open && pe_pos.size.abs() > 1e-8 => {
+                // PE 有开仓但本地缓存为空 → 恢复
+                let was_empty = !self.has_position();
+                if was_empty {
+                    warn!(
+                        bot_id = %self.bot.id,
+                        position_id = %pe_pos.id,
+                        side = ?pe_pos.side,
+                        size = pe_pos.size,
+                        "Position cache was empty but PE has open position — recovered to prevent duplicate open"
+                    );
+                }
+                // 恢复 position_id（如果丢失）
+                if self.bot.position_id.is_none() || self.bot.position_id == Some(Uuid::nil()) {
+                    self.bot.position_id = Some(pe_pos.id);
+                    let _ = self
+                        .store
+                        .update_position(self.bot.id, self.bot.position_id, self.bot.stop_loss, self.bot.take_profit)
+                        .await;
+                    info!(bot_id = %self.bot.id, position_id = %pe_pos.id, "Recovered bot.position_id from PE direct query");
+                }
+                self.current_position = Some(pe_pos);
+            }
+            Ok(Some(_)) => {
+                // PE 有仓位但非 Open（Opening/Closing）→ 不更新缓存，保持现状
+            }
+            Ok(None) => {
+                // PE 确认无开仓 → 清空缓存（防止幽灵仓位）
+                if self.has_position() {
+                    warn!(
+                        bot_id = %self.bot.id,
+                        "Position cache has open position but PE confirms none — clearing stale cache"
+                    );
+                    self.current_position = None;
+                }
+            }
+            Err(e) => {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to query PE for position, relying on cached state");
+            }
+        }
     }
 
     pub(crate) async fn fetch_current_price(&self) -> f64 {
@@ -244,6 +296,19 @@ impl AutoWorker {
                 position_id = ?self.bot.position_id,
                 "Waiting for PE to restore current_position"
             );
+            // 同时从 DB 恢复 current_trade_id（用于平仓时 UPDATE 对应的开仓记录）
+            match self.store.find_open_trade(self.bot.id).await {
+                Ok(Some(trade_id)) => {
+                    self.current_trade_id = Some(trade_id);
+                    info!(bot_id = %self.bot.id, trade_id = %trade_id, "Restored current_trade_id from DB");
+                }
+                Ok(None) => {
+                    warn!(bot_id = %self.bot.id, "No open trade record found for active position");
+                }
+                Err(e) => {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to load open trade record");
+                }
+            }
             let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
             loop {
                 if self.current_position.is_some() {
@@ -499,6 +564,10 @@ impl AutoWorker {
             warn!(bot_id = %self.bot.id, "Pending order in progress, skipping LLM decision");
             return;
         }
+
+        // 决策前直接查询 PE 仓位，刷新 current_position 缓存。
+        // 防止 PE 事件丢失（broadcast lag）导致缓存为空 → 误判"无仓位" → 重复开仓。
+        self.refresh_position_from_pe().await;
 
         if !self.ai_service.is_available_for_user(self.bot.user_id).await {
             warn!(bot_id = %self.bot.id, "AI service not available, skipping decision");
@@ -1275,29 +1344,30 @@ impl AutoWorker {
             "short" => "sell",
             _ => "buy",
         };
-        // 开仓即亏损手续费：pnl = -fee
-        let open_pnl = -fee;
-        self.bot.total_pnl += open_pnl;
-        if let Err(e) = self
+        // 开仓时 INSERT 一条 status='open' 的 trade 记录，保存 trade_id 和 open_fee
+        self.current_open_fee = fee;
+        match self
             .store
-            .record_trade(
+            .record_open_trade(
                 self.bot.id,
                 self.bot.user_id,
                 &self.bot.symbol,
                 &self.bot.exchange,
                 trade_side,
-                trade_type,
-                "llm",
                 fill_price,
                 actual_qty,
-                open_pnl,
-                0.0,
                 fee,
                 None,
             )
             .await
         {
-            error!(bot_id = %self.bot.id, error = %e, "Failed to record open trade");
+            Ok(trade_id) => {
+                self.current_trade_id = Some(trade_id);
+                info!(bot_id = %self.bot.id, trade_id = %trade_id, trade_type, "Open trade recorded");
+            }
+            Err(e) => {
+                error!(bot_id = %self.bot.id, error = %e, "Failed to record open trade");
+            }
         }
 
         let _ = self.auto_event_tx.send(AutoEvent::PositionOpened {
@@ -1329,13 +1399,14 @@ impl AutoWorker {
             pending.position_size
         };
 
-        // 平仓 PnL = 价格差收益 - 平仓手续费
+        // 平仓 PnL = 价格差收益 - 开仓手续费 - 平仓手续费
         let gross_pnl = match pending.side.as_str() {
             "long" => (fill_price - pending.entry_price) * actual_qty,
             "short" => (pending.entry_price - fill_price) * actual_qty,
             _ => 0.0,
         };
-        let realized_pnl = gross_pnl - fee;
+        let total_fee = self.current_open_fee + fee;
+        let realized_pnl = gross_pnl - total_fee;
 
         let pnl_pct = if pending.entry_price > 0.0 && actual_qty > 0.0 {
             realized_pnl / (pending.entry_price * actual_qty) * 100.0
@@ -1347,6 +1418,7 @@ impl AutoWorker {
             bot_id = %self.bot.id, side = %pending.side,
             entry_price = pending.entry_price, close_price = fill_price,
             quantity = actual_qty, realized_pnl, reason = %pending.reason,
+            open_fee = self.current_open_fee, close_fee = fee, total_fee,
             "Position closed"
         );
 
@@ -1369,39 +1441,99 @@ impl AutoWorker {
         self.save_position().await;
         self.save_stats().await;
 
-        let trade_side = match pending.side.as_str() {
+        let close_side = match pending.side.as_str() {
             "long" => "sell",
             "short" => "buy",
             _ => "sell",
         };
-        let trade_type = format!("close_{}", pending.side);
         // trigger_source 必须满足 DB CHECK 约束 ('llm', 'risk_control')
         // 将 reason 映射为合法的 trigger_source
         let trigger_source = match pending.reason.as_str() {
             "stop_loss" | "take_profit" | "position_timeout" => "risk_control",
             _ => "llm",
         };
-        if let Err(e) = self
-            .store
-            .record_trade(
-                self.bot.id,
-                self.bot.user_id,
-                &self.bot.symbol,
-                &self.bot.exchange,
-                trade_side,
-                &trade_type,
-                trigger_source,
-                fill_price,
-                actual_qty,
-                realized_pnl,
-                pnl_pct,
-                fee,
-                None,
-            )
-            .await
-        {
-            error!(bot_id = %self.bot.id, error = %e, "Failed to record close trade");
+        let close_reason = &pending.reason;
+
+        // 平仓时 UPDATE 对应的开仓 trade 记录
+        let trade_id = self.current_trade_id.take();
+        match trade_id {
+            Some(tid) => {
+                if let Err(e) = self
+                    .store
+                    .close_trade(
+                        tid,
+                        close_side,
+                        fill_price,
+                        actual_qty,
+                        None,
+                        fee,
+                        realized_pnl,
+                        pnl_pct,
+                        trigger_source,
+                        close_reason,
+                    )
+                    .await
+                {
+                    error!(bot_id = %self.bot.id, trade_id = %tid, error = %e, "Failed to close trade record");
+                } else {
+                    info!(bot_id = %self.bot.id, trade_id = %tid, realized_pnl, "Close trade recorded");
+                }
+            }
+            None => {
+                // 内存中无 trade_id，尝试从 DB 查找
+                match self.store.find_open_trade(self.bot.id).await {
+                    Ok(Some(tid)) => {
+                        if let Err(e) = self
+                            .store
+                            .close_trade(
+                                tid,
+                                close_side,
+                                fill_price,
+                                actual_qty,
+                                None,
+                                fee,
+                                realized_pnl,
+                                pnl_pct,
+                                trigger_source,
+                                close_reason,
+                            )
+                            .await
+                        {
+                            error!(bot_id = %self.bot.id, trade_id = %tid, error = %e, "Failed to close trade record (recovered)");
+                        } else {
+                            info!(bot_id = %self.bot.id, trade_id = %tid, "Close trade recorded (recovered from DB)");
+                        }
+                    }
+                    Ok(None) => {
+                        warn!(bot_id = %self.bot.id, "No open trade found for close, recording as orphaned");
+                        let _ = self
+                            .store
+                            .record_orphaned_close_trade(
+                                self.bot.id,
+                                self.bot.user_id,
+                                &self.bot.symbol,
+                                &self.bot.exchange,
+                                close_side,
+                                fill_price,
+                                actual_qty,
+                                None,
+                                fee,
+                                realized_pnl,
+                                pnl_pct,
+                                trigger_source,
+                                close_reason,
+                            )
+                            .await;
+                    }
+                    Err(e) => {
+                        error!(bot_id = %self.bot.id, error = %e, "Failed to find open trade for close");
+                    }
+                }
+            }
         }
+
+        // 重置开仓手续费缓存
+        self.current_open_fee = 0.0;
 
         let _ = self.auto_event_tx.send(AutoEvent::PositionClosed {
             bot_id: self.bot.id,

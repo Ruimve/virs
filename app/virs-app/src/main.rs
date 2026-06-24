@@ -87,7 +87,7 @@ async fn main() -> Result<()> {
     let admin_id: Uuid = if !admin_exists {
         let password_hash = bcrypt::hash(&config.admin.password, bcrypt::DEFAULT_COST)?;
         let row: (Uuid,) = sqlx::query_as(
-            "INSERT INTO qd_users (username, password_hash, role, is_active, credits) VALUES ($1, $2, 'admin', true, 999999) RETURNING id",
+            "INSERT INTO qd_users (username, password_hash, role, is_active) VALUES ($1, $2, 'admin', true) RETURNING id",
         )
         .bind(&config.admin.username)
         .bind(password_hash)

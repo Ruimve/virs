@@ -20,23 +20,47 @@ import RecentTrades from './RecentTrades'
 
 /**
  * 把交易记录转换为 K线图 markers。
- * 买入（side=buy）→ 绿色向上箭头，位于 K线下方
- * 卖出（side=sell）→ 红色向下箭头，位于 K线上方
+ * 开仓（open_side=buy）→ 绿色向上箭头，位于 K线下方
+ * 开仓（open_side=sell）→ 红色向下箭头，位于 K线上方
+ * 平仓（close_side=buy）→ 绿色向上箭头
+ * 平仓（close_side=sell）→ 红色向下箭头
  */
 function tradesToMarkers(trades: AutoTrade[]) {
-  return trades
-    .map((t) => {
-      const time = Math.floor(new Date(t.created_at).getTime() / 1000)
-      const isBuy = t.side === 'buy'
-      return {
-        time,
-        position: isBuy ? ('belowBar' as const) : ('aboveBar' as const),
-        color: isBuy ? '#10b981' : '#ef4444',
-        shape: isBuy ? ('arrowUp' as const) : ('arrowDown' as const),
-        text: `${isBuy ? '买' : '卖'} ${t.price.toFixed(2)}`,
-      }
+  const markers: Array<{
+    time: number
+    position: 'belowBar' | 'aboveBar'
+    color: string
+    shape: 'arrowUp' | 'arrowDown'
+    text: string
+  }> = []
+
+  for (const t of trades) {
+    // 开仓 marker
+    const openTime = Math.floor(new Date(t.opened_at).getTime() / 1000)
+    const openIsBuy = t.open_side === 'buy'
+    markers.push({
+      time: openTime,
+      position: openIsBuy ? 'belowBar' : 'aboveBar',
+      color: openIsBuy ? '#10b981' : '#ef4444',
+      shape: openIsBuy ? 'arrowUp' : 'arrowDown',
+      text: `${openIsBuy ? '开多' : '开空'} ${t.open_price.toFixed(2)}`,
     })
-    .sort((a, b) => a.time - b.time)
+
+    // 平仓 marker（仅已平仓记录）
+    if (t.status === 'closed' && t.closed_at && t.close_side) {
+      const closeTime = Math.floor(new Date(t.closed_at).getTime() / 1000)
+      const closeIsBuy = t.close_side === 'buy'
+      markers.push({
+        time: closeTime,
+        position: closeIsBuy ? 'belowBar' : 'aboveBar',
+        color: closeIsBuy ? '#10b981' : '#ef4444',
+        shape: closeIsBuy ? 'arrowUp' : 'arrowDown',
+        text: `${closeIsBuy ? '平空' : '平多'} ${t.close_price?.toFixed(2)}`,
+      })
+    }
+  }
+
+  return markers.sort((a, b) => a.time - b.time)
 }
 
 const Bot = () => {

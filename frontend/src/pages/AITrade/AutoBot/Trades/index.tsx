@@ -1,7 +1,7 @@
 import { getAutoTrades, type AutoTrade } from '@/service'
 import { memo, useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { formatPnl, tradeTypeColor, tradeTypeLabel } from '../../components/utils/utils'
+import { formatPnl } from '../../components/utils/utils'
 
 const PAGE_SIZE = 20
 
@@ -41,44 +41,76 @@ const Trades = () => {
       {trades.length > 0 ? (
         <div className="bg-surface-1 rounded-xl border border-line-default shadow-sm overflow-hidden">
           <div className="divide-y divide-line-subtle">
-            {trades.map((t, idx) => (
-              <div
-                key={`${t.id}-${idx}`}
-                className="flex items-center justify-between px-5 py-3 hover:bg-surface-2/50"
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${tradeTypeColor(t.type)} bg-surface-2`}
-                  >
-                    {tradeTypeLabel(t.type)}
-                  </span>
-                  <div>
-                    <div className="text-xs text-on-surface font-mono">
-                      {t.side === 'buy' ? '买入' : '卖出'} {t.quantity.toFixed(6)} @{' '}
-                      {t.price.toFixed(2)}
+            {trades.map((t, idx) => {
+              const isClosed = t.status === 'closed'
+              const totalFee = t.open_fee + t.close_fee
+              return (
+                <div
+                  key={`${t.id}-${idx}`}
+                  className="flex items-center justify-between px-5 py-3 hover:bg-surface-2/50"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                        t.status === 'open'
+                          ? 'text-amber-400'
+                          : t.close_reason === 'stop_loss'
+                            ? 'text-red-400'
+                            : t.close_reason === 'take_profit'
+                              ? 'text-emerald-400'
+                              : 'text-on-surface-tertiary'
+                      } bg-surface-2`}
+                    >
+                      {t.status === 'open'
+                        ? '持仓中'
+                        : t.close_reason === 'stop_loss'
+                          ? '止损'
+                          : t.close_reason === 'take_profit'
+                            ? '止盈'
+                            : t.close_reason === 'position_timeout'
+                              ? '超时'
+                              : '已平仓'}
+                    </span>
+                    <div>
+                      <div className="text-xs text-on-surface font-mono">
+                        {t.open_side === 'buy' ? '开多' : '开空'} {t.open_quantity.toFixed(6)} @{' '}
+                        {t.open_price.toFixed(2)}
+                        {isClosed && t.close_side && (
+                          <span className="text-on-surface-secondary ml-2">
+                            → {t.close_side === 'buy' ? '平空' : '平多'}{' '}
+                            {t.close_quantity?.toFixed(6)} @ {t.close_price?.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-on-surface-tertiary mt-0.5">
+                        {new Date(t.opened_at).toLocaleString('zh-CN')}
+                        {isClosed && t.closed_at && (
+                          <span className="ml-1">
+                            {' '}
+                            → {new Date(t.closed_at).toLocaleString('zh-CN')}
+                          </span>
+                        )}
+                        {totalFee > 0 && (
+                          <span className="text-amber-400 ml-2 font-mono">
+                            手续费 {totalFee.toFixed(4)}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-[10px] text-on-surface-tertiary mt-0.5">
-                      {new Date(t.created_at).toLocaleString('zh-CN')}
-                      {t.fee > 0 && (
-                        <span className="text-amber-400 ml-2 font-mono">
-                          手续费 {t.fee.toFixed(4)}
-                        </span>
+                  </div>
+                  {isClosed && t.pnl !== 0 && (
+                    <div className="text-right">
+                      {formatPnl(t.pnl)}
+                      {t.pnl_pct !== 0 && (
+                        <div className="text-[10px] text-on-surface-tertiary font-mono">
+                          {t.pnl_pct.toFixed(2)} %
+                        </div>
                       )}
                     </div>
-                  </div>
+                  )}
                 </div>
-                {t.pnl !== 0 && (
-                  <div className="text-right">
-                    {formatPnl(t.pnl)}
-                    {t.pnl_pct !== 0 && (
-                      <div className="text-[10px] text-on-surface-tertiary font-mono">
-                        {t.pnl_pct.toFixed(2)} %
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* 分页 */}

@@ -134,8 +134,13 @@ pub async fn list_bots(
         Err((_, resp)) => return resp,
     };
 
-    let rows = sqlx::query_as::<_, (uuid::Uuid, String, String, String, String, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT id, name, symbol, exchange, status, created_at FROM qd_grid_bots WHERE user_id = $1 ORDER BY created_at DESC"#,
+    let rows = sqlx::query_as::<_, (
+        uuid::Uuid, String, String, String, String, String, i32,
+        chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>,
+    )>(
+        r#"SELECT id, name, symbol, exchange, status, market_type, leverage,
+           created_at, updated_at
+           FROM qd_grid_bots WHERE user_id = $1 ORDER BY created_at DESC"#,
     )
     .bind(user_id)
     .fetch_all(&state.db_pool)
@@ -143,14 +148,17 @@ pub async fn list_bots(
 
     match rows {
         Ok(bots) => {
-            let items: Vec<_> = bots.iter().map(|(id, name, symbol, exchange, status, created_at)| {
+            let items: Vec<_> = bots.iter().map(|(id, name, symbol, exchange, status, market_type, leverage, created_at, updated_at)| {
                 serde_json::json!({
                     "id": id.to_string(),
                     "name": name,
                     "symbol": symbol,
                     "exchange": exchange,
                     "status": status,
+                    "market_type": market_type,
+                    "leverage": leverage,
                     "created_at": created_at.to_rfc3339(),
+                    "updated_at": updated_at.to_rfc3339(),
                 })
             }).collect();
             let total = items.len();
@@ -172,11 +180,11 @@ pub async fn get_bot(
 
     // Query 1: basic info
     let basic = sqlx::query_as::<_, (
-        String, String, String, String, f64, f64, i32, f64, f64, i32,
-        chrono::DateTime<chrono::Utc>,
+        String, String, String, String, String, f64, f64, i32, f64, f64, i32,
+        chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>,
     )>(
-        r#"SELECT name, symbol, exchange, status, upper_price, lower_price,
-           grid_count, grid_profit_pct, quantity_per_grid, leverage, created_at
+        r#"SELECT name, symbol, exchange, status, market_type, upper_price, lower_price,
+           grid_count, grid_profit_pct, quantity_per_grid, leverage, created_at, updated_at
            FROM qd_grid_bots WHERE id = $1 AND user_id = $2"#,
     )
     .bind(id)
@@ -187,8 +195,8 @@ pub async fn get_bot(
         (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
     })?;
 
-    let (name, symbol, exchange, status, upper_price, lower_price,
-         grid_count, grid_profit_pct, quantity_per_grid, leverage, created_at) = match basic {
+    let (name, symbol, exchange, status, market_type, upper_price, lower_price,
+         grid_count, grid_profit_pct, quantity_per_grid, leverage, created_at, updated_at) = match basic {
         Some(b) => b,
         None => return Err((StatusCode::NOT_FOUND, Json(ApiResponse::err("Bot not found")))),
     };
@@ -219,10 +227,10 @@ pub async fn get_bot(
 
     // Query 3: recent trades
     let trades_rows = sqlx::query_as::<_, (
-        i32, String, f64, f64, Option<String>, Option<f64>, Option<f64>, f64, f64, String, chrono::DateTime<chrono::Utc>,
+        uuid::Uuid, i32, String, f64, f64, Option<String>, Option<f64>, Option<f64>, f64, f64, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>,
     )>(
-        r#"SELECT grid_level, open_side, open_price, open_quantity,
-           close_side, close_price, close_quantity, pnl, pnl_pct, status, opened_at
+        r#"SELECT id, grid_level, open_side, open_price, open_quantity,
+           close_side, close_price, close_quantity, pnl, pnl_pct, status, opened_at, closed_at
            FROM qd_grid_trades WHERE bot_id = $1 ORDER BY opened_at DESC LIMIT 50"#,
     )
     .bind(id)
@@ -230,9 +238,9 @@ pub async fn get_bot(
     .await
     .unwrap_or_default();
 
-    let trades: Vec<serde_json::Value> = trades_rows.iter().map(|(level, side, open_p, open_qty, close_side, close_p, close_qty, pnl, pnl_pct, t_status, opened_at)| {
+    let trades: Vec<serde_json::Value> = trades_rows.iter().map(|(tid, level, side, open_p, open_qty, close_side, close_p, close_qty, pnl, pnl_pct, t_status, opened_at, closed_at)| {
         serde_json::json!({
-            "id": uuid::Uuid::new_v4().to_string(),
+            "id": tid.to_string(),
             "bot_id": id.to_string(),
             "grid_level": level,
             "open_side": side,
@@ -245,6 +253,7 @@ pub async fn get_bot(
             "pnl_pct": pnl_pct,
             "status": t_status,
             "opened_at": opened_at.to_rfc3339(),
+            "closed_at": closed_at.map(|t| t.to_rfc3339()),
         })
     }).collect();
 
@@ -254,6 +263,7 @@ pub async fn get_bot(
             "name": name,
             "symbol": symbol,
             "exchange": exchange,
+            "market_type": market_type,
             "status": status,
             "leverage": leverage,
             "grid_count": grid_count,
@@ -269,6 +279,7 @@ pub async fn get_bot(
             "market_regime": market_regime,
             "ai_analysis": ai_analysis,
             "created_at": created_at.to_rfc3339(),
+            "updated_at": updated_at.to_rfc3339(),
         },
         "trades": trades,
         "grid_levels": grid_levels,
@@ -341,10 +352,10 @@ pub async fn get_trades(
 
     // 查询分页数据（完整字段）
     let rows = sqlx::query_as::<_, (
-        i32, String, f64, f64, Option<String>, Option<f64>, Option<f64>, f64, f64, String, chrono::DateTime<chrono::Utc>,
+        uuid::Uuid, i32, String, f64, f64, Option<String>, Option<f64>, Option<f64>, f64, f64, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>,
     )>(
-        r#"SELECT grid_level, open_side, open_price, open_quantity,
-           close_side, close_price, close_quantity, pnl, pnl_pct, status, opened_at
+        r#"SELECT id, grid_level, open_side, open_price, open_quantity,
+           close_side, close_price, close_quantity, pnl, pnl_pct, status, opened_at, closed_at
            FROM qd_grid_trades WHERE bot_id = $1 AND user_id = $2
            ORDER BY opened_at DESC LIMIT $3 OFFSET $4"#,
     )
@@ -357,9 +368,9 @@ pub async fn get_trades(
 
     match rows {
         Ok(trades) => Json(ApiResponse::ok(serde_json::json!({
-            "trades": trades.iter().map(|(level, open_side, open_p, open_qty, close_side, close_p, close_qty, pnl, pnl_pct, status, opened_at)| {
+            "trades": trades.iter().map(|(tid, level, open_side, open_p, open_qty, close_side, close_p, close_qty, pnl, pnl_pct, status, opened_at, closed_at)| {
                 serde_json::json!({
-                    "id": uuid::Uuid::new_v4().to_string(),
+                    "id": tid.to_string(),
                     "bot_id": id.to_string(),
                     "grid_level": level,
                     "open_side": open_side,
@@ -372,6 +383,7 @@ pub async fn get_trades(
                     "pnl_pct": pnl_pct,
                     "status": status,
                     "opened_at": opened_at.to_rfc3339(),
+                    "closed_at": closed_at.map(|t| t.to_rfc3339()),
                 })
             }).collect::<Vec<_>>(),
             "total": total,

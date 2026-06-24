@@ -4,6 +4,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::position::Position;
+
 /// Bot-layer error type
 #[derive(Debug, thiserror::Error)]
 pub enum BotError {
@@ -119,6 +121,9 @@ pub enum OrderEvent {
 #[async_trait]
 pub trait OrderExecutor: Send + Sync {
     async fn send_command(&self, command: OrderCommand) -> BotResult<()>;
+
+    /// 直接查询 PE 当前 Open 仓位（按 symbol），用于 LLM 决策前刷新缓存，防止事件丢失导致重复开仓。
+    async fn query_open_position(&self, symbol: &str) -> BotResult<Option<Position>>;
 }
 
 /// Account balance (bot-layer)

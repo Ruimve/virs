@@ -37,11 +37,27 @@ pub trait AutoStore: Send + Sync {
         &self, bot_id: Uuid, total_pnl: f64, total_trades: i32,
         win_trades: i32, loss_trades: i32,
     ) -> anyhow::Result<()>;
-    async fn record_trade(
+    /// 开仓时 INSERT 一条 status='open' 的 trade 记录，返回 trade_id
+    async fn record_open_trade(
         &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
-        side: &str, trade_type: &str, trigger_source: &str, price: f64,
-        quantity: f64, pnl: f64, pnl_pct: f64, fee: f64,
-        exchange_order_id: Option<&str>,
+        open_side: &str, open_price: f64, open_quantity: f64,
+        open_fee: f64, open_order_id: Option<&str>,
+    ) -> anyhow::Result<Uuid>;
+    /// 平仓时 UPDATE 对应的 trade 记录为 status='closed'
+    async fn close_trade(
+        &self, trade_id: Uuid, close_side: &str, close_price: f64,
+        close_quantity: f64, close_order_id: Option<&str>,
+        close_fee: f64, pnl: f64, pnl_pct: f64,
+        trigger_source: &str, close_reason: &str,
+    ) -> anyhow::Result<()>;
+    /// 查找当前未平仓的 trade 记录（重启恢复用）
+    async fn find_open_trade(&self, bot_id: Uuid) -> anyhow::Result<Option<Uuid>>;
+    /// 孤儿平仓：找不到对应开仓记录时，直接 INSERT 一条 status='orphaned' 的记录
+    async fn record_orphaned_close_trade(
+        &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
+        close_side: &str, close_price: f64, close_quantity: f64,
+        close_order_id: Option<&str>, close_fee: f64,
+        pnl: f64, pnl_pct: f64, trigger_source: &str, close_reason: &str,
     ) -> anyhow::Result<Uuid>;
     async fn save_analysis_log(
         &self, bot_id: Uuid, analysis_type: &str, system_prompt: &str,
