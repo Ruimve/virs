@@ -16,6 +16,7 @@ pub struct AutoBot {
     pub leverage: i32,
     pub max_position_pct: f64,
     pub decide_interval_secs: i32,
+    pub initial_capital: f64,
     pub position_id: Option<Uuid>,
     pub stop_loss: f64,
     pub take_profit: f64,

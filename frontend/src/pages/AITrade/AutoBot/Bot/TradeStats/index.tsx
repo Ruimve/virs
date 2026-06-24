@@ -5,7 +5,6 @@ interface Props {
   botId: string
 }
 
-/** 格式化交易额：大数缩写 */
 function formatVolume(v: number): string {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`
   if (v >= 1_000) return `${(v / 1_000).toFixed(2)}K`
@@ -107,19 +106,19 @@ const TradeStats = ({ botId }: Props) => {
 
   return (
     <div className="px-4 py-3 border-b border-line-subtle">
-      <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-2">
+      <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary font-medium mb-2">
         历史交易统计
       </div>
       <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-3">
         {items.map((item) => (
           <div key={item.label}>
-            <div className="text-[10px] text-on-surface-tertiary mb-0.5">{item.label}</div>
+            <div className="text-[11px] text-on-surface-tertiary mb-0.5">{item.label}</div>
             <div
-              className={`font-mono font-medium ${item.highlight ? 'text-base' : 'text-sm'} ${item.color}`}
+              className={`font-mono tabular-nums ${item.highlight ? 'text-base font-semibold' : 'text-sm'} ${item.color}`}
             >
               {item.value}
             </div>
-            {item.sub && <div className="text-[9px] text-on-surface-muted mt-0.5">{item.sub}</div>}
+            {item.sub && <div className="text-[10px] text-on-surface-muted mt-0.5">{item.sub}</div>}
           </div>
         ))}
       </div>

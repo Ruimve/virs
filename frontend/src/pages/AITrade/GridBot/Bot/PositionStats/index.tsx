@@ -1,104 +1,174 @@
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import type { GridBot } from '@/service/types'
-import { formatPnlShort } from '../../../components/utils/utils'
+import { useBot } from '../../../context/BotContext'
 
 interface Props {
   bot: GridBot
   latestPrice: number
 }
 
-interface FieldProps {
-  label: string
-  children: React.ReactNode
-  className?: string
-}
+// ── 字体规范（全页面统一） ──────────────────────────────
+// Hero value:   text-xl font-mono font-semibold tabular-nums (20px)
+// Primary value: text-sm font-mono tabular-nums (14px)
+// Label:        text-[11px] uppercase tracking-wider text-on-surface-tertiary
+// Sub text:     text-[10px] text-on-surface-muted
+// ────────────────────────────────────────────────────────
 
-/** 单个字段：label + value 紧凑排列（对齐 PositionStats） */
-const Field = ({ label, children, className = '' }: FieldProps) => (
-  <div className={`flex items-baseline gap-1.5 min-w-0 ${className}`}>
-    <span className="text-on-surface-tertiary text-[10px] uppercase tracking-wide shrink-0">
-      {label}
-    </span>
-    <span className="font-mono text-xs truncate">{children}</span>
-  </div>
-)
+const pnlColor = (v: number) =>
+  v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-on-surface'
 
 const PositionStats = ({ bot, latestPrice }: Props) => {
+  const { gridLevels } = useBot()
   const b = bot
   const filledCount = Math.min(b.grid_filled_count, b.grid_count)
 
+  // ── 前端实时计算未实现盈亏（基于 grid levels + 最新价） ──
+  const { unrealizedPnl, usedMargin } = useMemo(() => {
+    if (!gridLevels || gridLevels.length === 0 || latestPrice <= 0) {
+      return { unrealizedPnl: 0, usedMargin: 0 }
+    }
+    let pnl = 0
+    let margin = 0
+    for (const level of gridLevels) {
+      const qty = Math.abs(level.hold_quantity)
+      if (qty <= 0) continue
+      // 持仓方向：buy=多，sell=空
+      const dir = level.side === 'buy' ? 1 : -1
+      const avgPrice = level.avg_buy_price > 0 ? level.avg_buy_price : level.buy_price
+      pnl += (latestPrice - avgPrice) * qty * dir
+      // 保证金 = 持仓价值 / 杠杆
+      margin += (qty * avgPrice) / b.leverage
+    }
+    return { unrealizedPnl: pnl, usedMargin: margin }
+  }, [gridLevels, latestPrice, b.leverage])
+
+  const accountBalance = b.initial_capital + b.total_pnl + unrealizedPnl
+  const freeMargin = accountBalance - usedMargin
+  const totalPnl = b.total_pnl + unrealizedPnl
+
   return (
-    <div className="px-4 py-2.5 border-b border-line-subtle space-y-2">
-      {/* 第一区：实时行情 + 网格状态（大屏一行，小屏两行网格） */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-1.5">
-        <Field label="最新">
-          <span className="text-on-surface font-medium">
-            {latestPrice > 0 ? latestPrice.toFixed(2) : '-'}
-          </span>
-        </Field>
+    <div className="border-b border-line-subtle">
+      {/* ── 第一区：账户概览（Hero） ── */}
+      <div className="px-4 py-3 flex items-center gap-6">
+        {/* 账户余额 - Hero number */}
+        <div className="shrink-0">
+          <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary mb-0.5">
+            账户余额
+          </div>
+          <div className="text-xl font-mono font-semibold tabular-nums text-on-surface">
+            {accountBalance.toFixed(2)}
+          </div>
+        </div>
 
-        <Field label="已实现">
-          <span className={b.total_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-            {formatPnlShort(b.total_pnl)}
-          </span>
-        </Field>
+        {/* 分隔线 */}
+        <div className="h-10 w-px bg-line-subtle shrink-0" />
 
-        <Field label="未实现">
-          <span className={b.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-            {formatPnlShort(b.unrealized_pnl)}
-          </span>
-        </Field>
+        {/* 保证金三列 */}
+        <div className="flex items-center gap-5 flex-1 min-w-0">
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary mb-0.5">
+              已用保证金
+            </div>
+            <div className="text-sm font-mono tabular-nums text-on-surface">
+              {usedMargin > 0 ? usedMargin.toFixed(2) : '-'}
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary mb-0.5">
+              剩余保证金
+            </div>
+            <div className="text-sm font-mono tabular-nums text-on-surface">
+              {freeMargin.toFixed(2)}
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary mb-0.5">
+              未实现盈亏
+            </div>
+            <div className={`text-sm font-mono tabular-nums ${pnlColor(unrealizedPnl)}`}>
+              {unrealizedPnl !== 0
+                ? `${unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)}`
+                : '-'}
+            </div>
+          </div>
+        </div>
+      </div>
 
-        <Field label="总交易">
+      {/* ── 第二区：网格 + 行情 ── */}
+      <div className="px-4 py-2 border-t border-line-subtle/50 grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-1.5">
+        <Stat label="最新价">
+          <span className="text-on-surface">{latestPrice > 0 ? latestPrice.toFixed(2) : '-'}</span>
+        </Stat>
+        <Stat label="累计盈亏">
+          <span className={pnlColor(totalPnl)}>
+            {totalPnl >= 0 ? '+' : ''}
+            {totalPnl.toFixed(2)}
+          </span>
+        </Stat>
+        <Stat label="已实现">
+          <span className={pnlColor(b.total_pnl)}>
+            {b.total_pnl >= 0 ? '+' : ''}
+            {b.total_pnl.toFixed(2)}
+          </span>
+        </Stat>
+        <Stat label="总交易">
           <span className="text-on-surface">{b.total_trades} 笔</span>
-        </Field>
-
-        <Field label="网格填充">
+        </Stat>
+        <Stat label="网格填充">
           <span className="text-on-surface">
             {filledCount}/{b.grid_count}
           </span>
-        </Field>
-
-        <Field label="利润率">
+        </Stat>
+        <Stat label="利润率">
           <span className={b.grid_profit_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}>
             {b.grid_profit_pct}%
           </span>
-        </Field>
+        </Stat>
       </div>
 
-      {/* 第二区：bot 配置参数（大屏一行，小屏两行网格） */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-1.5 pt-1.5 border-t border-line-subtle/50">
-        <Field label="杠杆">
+      {/* ── 第三区：Bot 配置 ── */}
+      <div className="px-4 py-2 border-t border-line-subtle/50 grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-1.5">
+        <Stat label="杠杆">
           <span className="text-on-surface">{b.leverage}x</span>
-        </Field>
-        <Field label="网格数">
+        </Stat>
+        <Stat label="网格数">
           <span className="text-on-surface">{b.grid_count}</span>
-        </Field>
+        </Stat>
         {b.upper_price > 0 ? (
-          <Field label="区间">
+          <Stat label="区间">
             <span className="text-on-surface">
               {b.lower_price.toFixed(0)}—{b.upper_price.toFixed(0)}
             </span>
-          </Field>
+          </Stat>
         ) : (
-          <Field label="区间">
-            <span className="text-on-surface-tertiary">-</span>
-          </Field>
+          <Stat label="区间">
+            <span className="text-on-surface-muted">-</span>
+          </Stat>
         )}
-        <Field label="每格量">
+        <Stat label="每格量">
           <span className="text-on-surface">{b.quantity_per_grid}</span>
-        </Field>
-        <Field label="动态调整">
-          <span className={b.dynamic_adjust ? 'text-emerald-400' : 'text-on-surface-tertiary'}>
+        </Stat>
+        <Stat label="动态调整">
+          <span className={b.dynamic_adjust ? 'text-emerald-400' : 'text-on-surface-muted'}>
             {b.dynamic_adjust ? '开启' : '关闭'}
           </span>
-        </Field>
-        <Field label="市况">
+        </Stat>
+        <Stat label="市况">
           <span className="text-on-surface">{b.market_regime || '-'}</span>
-        </Field>
+        </Stat>
       </div>
     </div>
   )
 }
+
+/** 统一字段组件：label + value */
+const Stat = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div className="min-w-0">
+    <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary mb-0.5">
+      {label}
+    </div>
+    <div className="text-sm font-mono tabular-nums truncate">{children}</div>
+  </div>
+)
 
 export default memo(PositionStats)

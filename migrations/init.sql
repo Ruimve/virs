@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS qd_grid_bots (
     grid_profit_pct DOUBLE PRECISION NOT NULL DEFAULT 0.5,
     quantity_per_grid DOUBLE PRECISION NOT NULL,
     leverage INT NOT NULL DEFAULT 1,
+    initial_capital DOUBLE PRECISION NOT NULL DEFAULT 10000,
 
     -- AI 分析相关（内部字段，API 不返回）
     market_regime TEXT,
@@ -183,6 +184,7 @@ CREATE TABLE IF NOT EXISTS qd_auto_bots (
     leverage INT NOT NULL DEFAULT 1,
     max_position_pct DOUBLE PRECISION NOT NULL DEFAULT 80.0,
     decide_interval_secs INT NOT NULL DEFAULT 300,
+    initial_capital DOUBLE PRECISION NOT NULL DEFAULT 10000,
 
     -- 风控参数
     stop_loss DOUBLE PRECISION NOT NULL DEFAULT 0,

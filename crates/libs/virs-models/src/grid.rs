@@ -21,6 +21,7 @@ pub struct GridBot {
     pub grid_profit_pct: f64,
     pub quantity_per_grid: f64,
     pub leverage: i32,
+    pub initial_capital: f64,
     pub market_regime: Option<String>,
     pub ai_analysis: Option<String>,
     pub grid_levels_json: Option<serde_json::Value>,

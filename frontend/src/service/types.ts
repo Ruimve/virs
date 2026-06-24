@@ -107,6 +107,7 @@ export interface AutoBot {
   leverage: number
   max_position_pct: number
   decide_interval_secs: number
+  initial_capital: number
   stop_loss: number
   take_profit: number
   market_regime: string | null
@@ -188,6 +189,7 @@ export interface GridBot {
   market_type: string
   status: string
   leverage: number
+  initial_capital: number
   grid_count: number
   upper_price: number
   lower_price: number

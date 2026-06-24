@@ -22,6 +22,14 @@ export const formatSmart = (value: number): string => {
   return value.toExponential(2)
 }
 
+export const formatTime = (date: string | Date | undefined | null): string => {
+  if (!date) return '-'
+  return new Date(date).toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 export const actionLabel = (action: string | undefined) => {
   if (!action) return undefined
 
