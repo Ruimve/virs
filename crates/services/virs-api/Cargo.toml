@@ -28,3 +28,6 @@ tower-http = { workspace = true }
 jsonwebtoken = { workspace = true }
 bcrypt = { workspace = true }
 sysinfo = { workspace = true }
+
+[lints]
+workspace = true

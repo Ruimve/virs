@@ -10,3 +10,6 @@ serde_json = { workspace = true }
 dotenvy = { workspace = true }
 uuid = { workspace = true }
 anyhow = { workspace = true }
+
+[lints]
+workspace = true

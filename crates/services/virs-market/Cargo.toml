@@ -15,3 +15,6 @@ tokio = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 dashmap = { workspace = true }
+
+[lints]
+workspace = true

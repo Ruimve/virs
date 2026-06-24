@@ -95,3 +95,45 @@ panic = "abort"
 
 [profile.dev]
 opt-level = 0
+
+# ============================================================================
+# Workspace Lints (Clippy)
+# 所有子 crate 通过 [lints] workspace = true 继承此配置
+# 文档: https://doc.rust-lang.org/clippy/
+# ============================================================================
+[workspace.lints.rust]
+# Rust 编译器内置 lint
+unsafe_code = "warn"          # 标记 unsafe 代码使用
+unused_must_use = "warn"      # 必须使用返回值的情况未处理
+
+[workspace.lints.clippy]
+# ---- 允许的 lint（本项目场景下不适用或噪音过大）----
+too_many_arguments = "allow"          # 交易系统参数较多，放宽限制
+type_complexity = "allow"             # 复杂类型在金融数据处理中常见
+module_name_repetitions = "allow"     # 允许模块名重复（如 virs_types::types）
+must_use_candidate = "allow"          # 过于激进，产生大量噪音
+missing_errors_doc = "allow"          # 文档缺失不强制
+missing_panics_doc = "allow"          # 文档缺失不强制
+
+# ---- 警告级别 lint（默认即为 warn，显式声明以示重视）----
+clone_on_copy = "warn"                # 对 Copy 类型调用 clone
+needless_return = "warn"              # 不必要的 return
+needless_borrow = "warn"              # 不必要的借用
+manual_strip = "warn"                 # 手动字符串剥离，应使用 strip_suffix/strip_prefix
+manual_unwrap_or = "warn"             # 手动 unwrap_or，应直接使用 unwrap_or
+unnecessary_lazy_evaluations = "warn" # 不必要的惰性求值
+unnecessary_map_or = "warn"           # 可用 is_none_or 简化
+unnecessary_cast = "warn"             # 不必要的类型转换
+collapsible_str_replace = "warn"      # 可合并的连续 replace 调用
+collapsible_match = "warn"            # 可折叠的 match
+match_like_matches_macro = "warn"     # 应使用 matches! 宏
+question_mark = "warn"                # 应使用 ? 操作符
+new_without_default = "warn"          # new() 方法应实现 Default
+should_implement_trait = "warn"       # 方法名与标准 trait 冲突
+doc_overindented_list_items = "warn"  # 文档列表缩进过多
+
+# ---- 错误级别 lint（严重问题，必须修复）----
+dbg_macro = "deny"                    # 禁止提交 dbg! 宏
+todo = "deny"                         # 禁止提交 todo! 宏
+unimplemented = "deny"                # 禁止提交 unimplemented! 宏
+print_stdout = "deny"                 # 禁止直接 println! 到 stdout（应使用 tracing）

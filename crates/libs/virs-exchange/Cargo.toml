@@ -17,3 +17,6 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 dashmap = { workspace = true }
 tokio-stream = { workspace = true }
+
+[lints]
+workspace = true
