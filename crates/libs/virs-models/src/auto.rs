@@ -18,8 +18,6 @@ pub struct AutoBot {
     pub decide_interval_secs: i32,
     pub initial_capital: f64,
     pub position_id: Option<Uuid>,
-    pub stop_loss: f64,
-    pub take_profit: f64,
     pub market_regime: Option<String>,
     pub ai_analysis: Option<String>,
     pub system_prompt: Option<String>,

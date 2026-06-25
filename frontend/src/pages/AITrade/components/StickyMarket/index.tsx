@@ -108,34 +108,36 @@ const StickyMarket = ({
   }, [klineData, markers, chartRef]);
 
   return (
-    <div className="border-t border-line-subtle shrink-0">
+    <div className="bg-base border-t border-line-default shadow-[0_-4px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_12px_rgba(0,0,0,0.4)] shrink-0">
       {/* 折叠头部：行情摘要（最新价 + 24h涨跌 + 高/低/量） */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-2 hover:bg-surface-2/50 transition-colors"
+        className="w-full flex items-center justify-between gap-2 px-4 py-2 hover:bg-surface-2/50 transition-colors"
       >
-        <div className="flex items-center gap-3 text-xs flex-wrap">
-          <span className="text-on-surface-tertiary">行情</span>
+        <div className="flex items-center gap-2 sm:gap-3 text-xs flex-nowrap min-w-0 overflow-hidden">
+          <span className="hidden sm:inline text-on-surface-tertiary shrink-0">行情</span>
           {latestPrice > 0 && (
-            <span className="text-on-surface font-mono font-medium">{latestPrice.toFixed(2)}</span>
+            <span className="text-on-surface font-mono font-medium shrink-0">
+              {latestPrice.toFixed(2)}
+            </span>
           )}
           {summary.changePct !== 0 && (
-            <span className={`font-mono text-[11px] ${changeColor}`}>
+            <span className={`font-mono text-[11px] shrink-0 ${changeColor}`}>
               {changeSign}
               {summary.changePct.toFixed(2)}%
             </span>
           )}
           {summary.high > 0 && (
             <>
-              <span className="w-px h-3 bg-line-subtle" />
-              <span className="text-on-surface-tertiary text-[11px]">
+              <span className="hidden md:block w-px h-3 bg-line-subtle shrink-0" />
+              <span className="hidden md:flex items-center gap-1 text-on-surface-tertiary text-[11px] shrink-0">
                 24H 高 <span className="text-on-surface font-mono">{summary.high.toFixed(2)}</span>
               </span>
-              <span className="text-on-surface-tertiary text-[11px]">
+              <span className="hidden md:flex items-center gap-1 text-on-surface-tertiary text-[11px] shrink-0">
                 低 <span className="text-on-surface font-mono">{summary.low.toFixed(2)}</span>
               </span>
               {summary.volume > 0 && (
-                <span className="text-on-surface-tertiary text-[11px]">
+                <span className="hidden lg:flex items-center gap-1 text-on-surface-tertiary text-[11px] shrink-0">
                   量{' '}
                   <span className="text-on-surface font-mono">{formatVolume(summary.volume)}</span>
                 </span>
@@ -143,8 +145,10 @@ const StickyMarket = ({
             </>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-[10px] text-on-surface-muted">{expanded ? '收起' : '展开'}</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="hidden sm:inline text-[10px] text-on-surface-muted">
+            {expanded ? '收起' : '展开'}
+          </span>
           <svg
             className={`w-3.5 h-3.5 text-on-surface-muted transition-transform ${expanded ? 'rotate-180' : ''}`}
             fill="none"

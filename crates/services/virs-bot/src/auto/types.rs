@@ -145,7 +145,7 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位加密货币交易方向�
     "action": "open_long|open_short|close_position|hold",
     "reason": "决策依据(80字内，引用具体指标数值)",
     "confidence": 0.0-1.0,
-    "close_reason": "trend_reversal|risk_management|timeout|other(仅close_position时填写，其他填none)"
+    "close_reason": "stop_loss|take_profit|position_timeout|trend_reversal|risk_management|llm_decision|other(仅close_position时填写，其他填none)"
   },
   "market": {
     "market_regime": "ranging|trending_up|trending_down|volatile",

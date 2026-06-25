@@ -39,6 +39,8 @@ struct AutoTradeRow {
     closed_at: Option<chrono::DateTime<chrono::Utc>>,
     pnl: f64,
     pnl_pct: f64,
+    stop_loss: f64,
+    take_profit: f64,
     trigger_source: String,
     close_reason: Option<String>,
     status: String,
@@ -122,10 +124,34 @@ pub async fn create_bot(
         state.engine_manager.register_paper_symbol(exchange.to_string(), symbol.to_string()).await;
     }
 
+    // 从交易所获取真实账户余额，初始化 initial_capital
+    // paper 模式 fallback 10000，真实交易 fallback 0（避免误判可用资金导致超额下单）
+    let fallback = if paper_mode { 10000.0 } else { 0.0 };
+    let initial_capital = match state.exchange_registry.get(&exchange_key) {
+        Some(ex) => {
+            let quote_asset = extract_quote_asset(symbol);
+            match ex.get_balances().await {
+                Ok(balances) => balances
+                    .iter()
+                    .find(|b| b.asset.eq_ignore_ascii_case(&quote_asset))
+                    .map(|b| b.total)
+                    .unwrap_or_else(|| {
+                        tracing::warn!(asset = %quote_asset, paper_mode, fallback, "quote asset not found in balances");
+                        fallback
+                    }),
+                Err(e) => {
+                    tracing::warn!(error = %e, paper_mode, fallback, "failed to fetch balances");
+                    fallback
+                }
+            }
+        }
+        None => fallback,
+    };
+
     let id = uuid::Uuid::new_v4();
     sqlx::query(
-        r#"INSERT INTO qd_auto_bots (id, user_id, name, symbol, exchange, market_type, leverage, max_position_pct, decide_interval_secs, paper_mode, status, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'stopped', NOW(), NOW())"#,
+        r#"INSERT INTO qd_auto_bots (id, user_id, name, symbol, exchange, market_type, leverage, max_position_pct, decide_interval_secs, paper_mode, initial_capital, status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'stopped', NOW(), NOW())"#,
     )
     .bind(id)
     .bind(user_id)
@@ -137,11 +163,14 @@ pub async fn create_bot(
     .bind(max_position_pct)
     .bind(decide_interval_secs)
     .bind(paper_mode)
+    .bind(initial_capital)
     .execute(&state.db_pool)
     .await
     .map_err(|e| {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
     })?;
+
+    tracing::info!(bot_id = %id, initial_capital, "Auto bot created with initial_capital from exchange");
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"id": id.to_string()}))))
 }
@@ -225,12 +254,13 @@ pub async fn get_bot(
     };
 
     // Query 2: stats & risk-control params (position 实时状态由 /ws/position 推送)
+    // 注意：bot 级别已无 stop_loss/take_profit（移至 trade 级），实时风控边界由 ws/position 推送
     let pos = sqlx::query_as::<_, (
-        f64, f64,
+        f64,
         Option<String>, Option<String>,
         f64, i32, i32, i32,
     )>(
-        r#"SELECT stop_loss, take_profit,
+        r#"SELECT initial_capital,
            market_regime, ai_analysis,
            total_pnl, total_trades, win_trades, loss_trades
            FROM qd_auto_bots WHERE id = $1"#,
@@ -242,7 +272,7 @@ pub async fn get_bot(
         (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
     })?;
 
-    let (stop_loss, take_profit,
+    let (initial_capital,
          market_regime, ai_analysis,
          total_pnl, total_trades, win_trades, loss_trades) = pos;
 
@@ -257,8 +287,7 @@ pub async fn get_bot(
             "leverage": leverage,
             "max_position_pct": max_position_pct,
             "decide_interval_secs": decide_interval_secs,
-            "stop_loss": stop_loss,
-            "take_profit": take_profit,
+            "initial_capital": initial_capital,
             "market_regime": market_regime,
             "ai_analysis": ai_analysis,
             "total_pnl": total_pnl,
@@ -279,6 +308,21 @@ pub async fn start_bot(
         let _ = tx.send(virs_bot::auto::types::AutoCommand::StartBot { bot_id: id }).await;
     }
     Ok(Json(ApiResponse::ok(serde_json::json!({"started": true}))))
+}
+
+/// 从交易对符号中提取计价货币（如 "BTC/USDT" → "USDT"，"BTCUSDT" → "USDT"）
+fn extract_quote_asset(symbol: &str) -> String {
+    if let Some(idx) = symbol.find('/') {
+        return symbol[idx + 1..].to_uppercase();
+    }
+    // 无分隔符，尝试常见计价货币后缀
+    let upper = symbol.to_uppercase();
+    for quote in &["USDT", "USDC", "FDUSD", "BUSD", "TUSD", "BTC", "ETH", "BNB"] {
+        if upper.ends_with(quote) {
+            return quote.to_string();
+        }
+    }
+    "USDT".to_string()
 }
 
 pub async fn stop_bot(
@@ -340,7 +384,8 @@ pub async fn get_trades(
         r#"SELECT id, bot_id, symbol, exchange,
                   open_side, open_price, open_quantity, open_order_id, open_fee, opened_at,
                   close_side, close_price, close_quantity, close_order_id, close_fee, closed_at,
-                  pnl, pnl_pct, trigger_source, close_reason, status
+                  pnl, pnl_pct, stop_loss, take_profit,
+                  trigger_source, close_reason, status
            FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2
            ORDER BY opened_at DESC LIMIT $3 OFFSET $4"#,
     )
@@ -373,6 +418,8 @@ pub async fn get_trades(
                     "closed_at": t.closed_at.map(|t| t.to_rfc3339()),
                     "pnl": t.pnl,
                     "pnl_pct": t.pnl_pct,
+                    "stop_loss": t.stop_loss,
+                    "take_profit": t.take_profit,
                     "trigger_source": t.trigger_source,
                     "close_reason": t.close_reason,
                     "status": t.status,

@@ -66,6 +66,10 @@ pub struct AutoWorker {
     pub(crate) current_trade_id: Option<Uuid>,
     /// 当前开仓手续费（平仓时计算总手续费用）
     pub(crate) current_open_fee: f64,
+    /// 当前仓位的风控边界（内存态，开仓时由 LLM 决策写入，trailing stop 更新 stop_loss；
+    /// 重启时从 qd_auto_trades 表的 open 记录恢复；平仓后清零）
+    pub(crate) stop_loss: f64,
+    pub(crate) take_profit: f64,
 }
 
 impl AutoWorker {
@@ -100,6 +104,8 @@ impl AutoWorker {
             current_position: None,
             current_trade_id: None,
             current_open_fee: 0.0,
+            stop_loss: 0.0,
+            take_profit: 0.0,
         }
     }
 
@@ -151,7 +157,7 @@ impl AutoWorker {
                     self.bot.position_id = Some(pe_pos.id);
                     let _ = self
                         .store
-                        .update_position(self.bot.id, self.bot.position_id, self.bot.stop_loss, self.bot.take_profit)
+                        .update_position(self.bot.id, self.bot.position_id)
                         .await;
                     info!(bot_id = %self.bot.id, position_id = %pe_pos.id, "Recovered bot.position_id from PE direct query");
                 }
@@ -193,8 +199,6 @@ impl AutoWorker {
             .update_position(
                 self.bot.id,
                 self.bot.position_id,
-                self.bot.stop_loss,
-                self.bot.take_profit,
             )
             .await;
     }
@@ -297,10 +301,19 @@ impl AutoWorker {
                 "Waiting for PE to restore current_position"
             );
             // 同时从 DB 恢复 current_trade_id（用于平仓时 UPDATE 对应的开仓记录）
+            // 以及 stop_loss/take_profit（用于恢复内存中的风控边界）
             match self.store.find_open_trade(self.bot.id).await {
-                Ok(Some(trade_id)) => {
+                Ok(Some((trade_id, sl, tp))) => {
                     self.current_trade_id = Some(trade_id);
-                    info!(bot_id = %self.bot.id, trade_id = %trade_id, "Restored current_trade_id from DB");
+                    self.stop_loss = sl;
+                    self.take_profit = tp;
+                    info!(
+                        bot_id = %self.bot.id,
+                        trade_id = %trade_id,
+                        stop_loss = sl,
+                        take_profit = tp,
+                        "Restored current_trade_id and risk boundaries from DB"
+                    );
                 }
                 Ok(None) => {
                     warn!(bot_id = %self.bot.id, "No open trade record found for active position");
@@ -471,20 +484,20 @@ impl AutoWorker {
         let side = self.current_side_str();
         let should_close = match side.as_str() {
             "long" => {
-                (self.bot.stop_loss > 0.0 && self.current_price <= self.bot.stop_loss)
-                    || (self.bot.take_profit > 0.0 && self.current_price >= self.bot.take_profit)
+                (self.stop_loss > 0.0 && self.current_price <= self.stop_loss)
+                    || (self.take_profit > 0.0 && self.current_price >= self.take_profit)
             }
             "short" => {
-                (self.bot.stop_loss > 0.0 && self.current_price >= self.bot.stop_loss)
-                    || (self.bot.take_profit > 0.0 && self.current_price <= self.bot.take_profit)
+                (self.stop_loss > 0.0 && self.current_price >= self.stop_loss)
+                    || (self.take_profit > 0.0 && self.current_price <= self.take_profit)
             }
             _ => false,
         };
 
         if should_close {
-            let reason = if self.bot.stop_loss > 0.0
-                && ((side == "long" && self.current_price <= self.bot.stop_loss)
-                    || (side == "short" && self.current_price >= self.bot.stop_loss))
+            let reason = if self.stop_loss > 0.0
+                && ((side == "long" && self.current_price <= self.stop_loss)
+                    || (side == "short" && self.current_price >= self.stop_loss))
             {
                 "stop_loss"
             } else {
@@ -502,7 +515,7 @@ impl AutoWorker {
             Some(p) if p.status == PositionStatus::Open => p.entry_price,
             _ => return,
         };
-        if entry_price <= 0.0 || self.bot.stop_loss <= 0.0 {
+        if entry_price <= 0.0 || self.stop_loss <= 0.0 {
             return;
         }
 
@@ -517,17 +530,28 @@ impl AutoWorker {
             self.current_price,
             &side,
             atr,
-            self.bot.stop_loss,
+            self.stop_loss,
         );
 
-        if new_stop != self.bot.stop_loss {
+        if new_stop != self.stop_loss {
             info!(
                 bot_id = %self.bot.id, side = %side,
-                old_stop = self.bot.stop_loss, new_stop,
+                old_stop = self.stop_loss, new_stop,
                 "Trailing stop updated"
             );
-            self.bot.stop_loss = new_stop;
+            self.stop_loss = new_stop;
             self.trailing_stop_dirty = true;
+            // 同步更新 trade 维度的 stop_loss（异步执行，失败仅记录日志）
+            if let Some(trade_id) = self.current_trade_id {
+                let store = self.store.clone();
+                let trade_id = trade_id;
+                let new_stop = new_stop;
+                tokio::spawn(async move {
+                    if let Err(e) = store.update_trade_stop_loss(trade_id, new_stop).await {
+                        warn!(trade_id = %trade_id, error = %e, "Failed to update trade stop_loss");
+                    }
+                });
+            }
         }
     }
 
@@ -643,7 +667,7 @@ impl AutoWorker {
         );
 
         let stop_take_profit_info =
-            strategy::format_stop_take_profit(self.bot.stop_loss, self.bot.take_profit);
+            strategy::format_stop_take_profit(self.stop_loss, self.take_profit);
 
         let position_duration = if self.has_position() {
             if let Some(opened_at) = self.position_opened_at {
@@ -1141,12 +1165,7 @@ impl AutoWorker {
                     self.bot.position_id = Some(position.id);
                     let _ = self
                         .store
-                        .update_position(
-                            self.bot.id,
-                            self.bot.position_id,
-                            self.bot.stop_loss,
-                            self.bot.take_profit,
-                        )
+                        .update_position(self.bot.id, self.bot.position_id)
                         .await;
                     info!(
                         bot_id = %self.bot.id,
@@ -1167,12 +1186,7 @@ impl AutoWorker {
                         self.bot.position_id = None;
                         let _ = self
                             .store
-                            .update_position(
-                                self.bot.id,
-                                self.bot.position_id,
-                                self.bot.stop_loss,
-                                self.bot.take_profit,
-                            )
+                            .update_position(self.bot.id, self.bot.position_id)
                             .await;
                         info!(
                             bot_id = %self.bot.id,
@@ -1191,12 +1205,7 @@ impl AutoWorker {
                     self.bot.position_id = Some(position.id);
                     let _ = self
                         .store
-                        .update_position(
-                            self.bot.id,
-                            self.bot.position_id,
-                            self.bot.stop_loss,
-                            self.bot.take_profit,
-                        )
+                        .update_position(self.bot.id, self.bot.position_id)
                         .await;
                 }
                 self.current_position = Some(position);
@@ -1324,9 +1333,9 @@ impl AutoWorker {
             "Open order confirmed, applying position state"
         );
 
-        // 仓位实时状态由 PE 通过 PositionUpdated 事件维护，这里只更新 bot 的风控参数
-        self.bot.stop_loss = stop_loss;
-        self.bot.take_profit = take_profit;
+        // 仓位实时状态由 PE 通过 PositionUpdated 事件维护，这里只更新内存中的风控参数
+        self.stop_loss = stop_loss;
+        self.take_profit = take_profit;
         self.position_opened_at = Some(tokio::time::Instant::now());
 
         self.save_position().await;
@@ -1345,6 +1354,7 @@ impl AutoWorker {
             _ => "buy",
         };
         // 开仓时 INSERT 一条 status='open' 的 trade 记录，保存 trade_id 和 open_fee
+        // 同时记录本次交易的风控边界（SL/TP）到 trade 维度，便于审计与前端展示
         self.current_open_fee = fee;
         match self
             .store
@@ -1358,12 +1368,14 @@ impl AutoWorker {
                 actual_qty,
                 fee,
                 None,
+                stop_loss,
+                take_profit,
             )
             .await
         {
             Ok(trade_id) => {
                 self.current_trade_id = Some(trade_id);
-                info!(bot_id = %self.bot.id, trade_id = %trade_id, trade_type, "Open trade recorded");
+                info!(bot_id = %self.bot.id, trade_id = %trade_id, trade_type, stop_loss, take_profit, "Open trade recorded");
             }
             Err(e) => {
                 error!(bot_id = %self.bot.id, error = %e, "Failed to record open trade");
@@ -1433,8 +1445,8 @@ impl AutoWorker {
         }
 
         self.bot.position_id = None;
-        self.bot.stop_loss = 0.0;
-        self.bot.take_profit = 0.0;
+        self.stop_loss = 0.0;
+        self.take_profit = 0.0;
         self.current_position = None;
         self.position_opened_at = None;
 
@@ -1482,7 +1494,7 @@ impl AutoWorker {
             None => {
                 // 内存中无 trade_id，尝试从 DB 查找
                 match self.store.find_open_trade(self.bot.id).await {
-                    Ok(Some(tid)) => {
+                    Ok(Some((tid, _sl, _tp))) => {
                         if let Err(e) = self
                             .store
                             .close_trade(

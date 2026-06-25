@@ -97,11 +97,35 @@ pub async fn create_bot(
         state.engine_manager.register_paper_symbol(exchange.to_string(), symbol.to_string()).await;
     }
 
+    // 从交易所获取真实账户余额，初始化 initial_capital
+    // paper 模式 fallback 10000，真实交易 fallback 0（避免误判可用资金导致超额下单）
+    let fallback = if paper_mode { 10000.0 } else { 0.0 };
+    let initial_capital = match state.exchange_registry.get(&exchange_key) {
+        Some(ex) => {
+            let quote_asset = extract_quote_asset(symbol);
+            match ex.get_balances().await {
+                Ok(balances) => balances
+                    .iter()
+                    .find(|b| b.asset.eq_ignore_ascii_case(&quote_asset))
+                    .map(|b| b.total)
+                    .unwrap_or_else(|| {
+                        tracing::warn!(asset = %quote_asset, paper_mode, fallback, "quote asset not found in balances");
+                        fallback
+                    }),
+                Err(e) => {
+                    tracing::warn!(error = %e, paper_mode, fallback, "failed to fetch balances");
+                    fallback
+                }
+            }
+        }
+        None => fallback,
+    };
+
     let id = uuid::Uuid::new_v4();
     sqlx::query(
         r#"INSERT INTO qd_grid_bots (id, user_id, name, symbol, exchange, grid_count, upper_price, lower_price,
-           grid_profit_pct, quantity_per_grid, leverage, market_type, paper_mode, status, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'stopped', NOW(), NOW())"#,
+           grid_profit_pct, quantity_per_grid, leverage, market_type, paper_mode, initial_capital, status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'stopped', NOW(), NOW())"#,
     )
     .bind(id)
     .bind(user_id)
@@ -116,11 +140,14 @@ pub async fn create_bot(
     .bind(leverage)
     .bind(market_type)
     .bind(paper_mode)
+    .bind(initial_capital)
     .execute(&state.db_pool)
     .await
     .map_err(|e| {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
     })?;
+
+    tracing::info!(bot_id = %id, initial_capital, "Grid bot created with initial_capital from exchange");
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"id": id.to_string()}))))
 }
@@ -203,10 +230,10 @@ pub async fn get_bot(
 
     // Query 2: stats & ai
     let stats = sqlx::query_as::<_, (
-        f64, f64, i32, i32, bool,
+        f64, f64, f64, i32, i32, bool,
         Option<String>, Option<String>, Option<serde_json::Value>,
     )>(
-        r#"SELECT total_pnl, unrealized_pnl, total_trades, grid_filled_count, dynamic_adjust,
+        r#"SELECT total_pnl, unrealized_pnl, initial_capital, total_trades, grid_filled_count, dynamic_adjust,
            market_regime, ai_analysis, grid_levels_json
            FROM qd_grid_bots WHERE id = $1"#,
     )
@@ -217,7 +244,7 @@ pub async fn get_bot(
         (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
     })?;
 
-    let (total_pnl, unrealized_pnl, total_trades, grid_filled_count, dynamic_adjust,
+    let (total_pnl, unrealized_pnl, initial_capital, total_trades, grid_filled_count, dynamic_adjust,
          market_regime, ai_analysis, grid_levels_json) = stats;
 
     // Parse grid levels from JSON
@@ -271,6 +298,7 @@ pub async fn get_bot(
             "lower_price": lower_price,
             "grid_profit_pct": grid_profit_pct,
             "quantity_per_grid": quantity_per_grid,
+            "initial_capital": initial_capital,
             "total_pnl": total_pnl,
             "unrealized_pnl": unrealized_pnl,
             "total_trades": total_trades,
@@ -294,6 +322,20 @@ pub async fn start_bot(
         let _ = tx.send(virs_bot::grid::types::GridCommand::StartBot { bot_id: id }).await;
     }
     Ok(Json(ApiResponse::ok(serde_json::json!({"started": true}))))
+}
+
+/// 从交易对符号中提取计价货币（如 "BTC/USDT" → "USDT"，"BTCUSDT" → "USDT"）
+fn extract_quote_asset(symbol: &str) -> String {
+    if let Some(idx) = symbol.find('/') {
+        return symbol[idx + 1..].to_uppercase();
+    }
+    let upper = symbol.to_uppercase();
+    for quote in &["USDT", "USDC", "FDUSD", "BUSD", "TUSD", "BTC", "ETH", "BNB"] {
+        if upper.ends_with(quote) {
+            return quote.to_string();
+        }
+    }
+    "USDT".to_string()
 }
 
 pub async fn stop_bot(

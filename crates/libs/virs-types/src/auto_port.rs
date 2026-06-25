@@ -28,7 +28,6 @@ pub trait AutoStore: Send + Sync {
     async fn update_last_decided(&self, bot_id: Uuid) -> anyhow::Result<()>;
     async fn update_position(
         &self, bot_id: Uuid, position_id: Option<Uuid>,
-        stop_loss: f64, take_profit: f64,
     ) -> anyhow::Result<()>;
     async fn update_ai_analysis(
         &self, bot_id: Uuid, market_regime: &str, leverage: i32, ai_analysis: &str,
@@ -38,10 +37,12 @@ pub trait AutoStore: Send + Sync {
         win_trades: i32, loss_trades: i32,
     ) -> anyhow::Result<()>;
     /// 开仓时 INSERT 一条 status='open' 的 trade 记录，返回 trade_id
+    /// stop_loss/take_profit 为本次交易的风控边界（来自 LLM 决策）
     async fn record_open_trade(
         &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
         open_side: &str, open_price: f64, open_quantity: f64,
         open_fee: f64, open_order_id: Option<&str>,
+        stop_loss: f64, take_profit: f64,
     ) -> anyhow::Result<Uuid>;
     /// 平仓时 UPDATE 对应的 trade 记录为 status='closed'
     async fn close_trade(
@@ -50,8 +51,13 @@ pub trait AutoStore: Send + Sync {
         close_fee: f64, pnl: f64, pnl_pct: f64,
         trigger_source: &str, close_reason: &str,
     ) -> anyhow::Result<()>;
+    /// 更新 trade 的 stop_loss（trailing stop 调整时调用）
+    async fn update_trade_stop_loss(
+        &self, trade_id: Uuid, stop_loss: f64,
+    ) -> anyhow::Result<()>;
     /// 查找当前未平仓的 trade 记录（重启恢复用）
-    async fn find_open_trade(&self, bot_id: Uuid) -> anyhow::Result<Option<Uuid>>;
+    /// 返回 (trade_id, stop_loss, take_profit) — 用于恢复内存中的风控边界
+    async fn find_open_trade(&self, bot_id: Uuid) -> anyhow::Result<Option<(Uuid, f64, f64)>>;
     /// 孤儿平仓：找不到对应开仓记录时，直接 INSERT 一条 status='orphaned' 的记录
     async fn record_orphaned_close_trade(
         &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
@@ -114,8 +120,6 @@ pub struct AutoBotConfig {
     pub max_position_pct: f64,
     pub decide_interval_secs: i32,
     pub position_id: Option<Uuid>,
-    pub stop_loss: f64,
-    pub take_profit: f64,
     pub market_regime: Option<String>,
     pub ai_analysis: Option<String>,
     pub system_prompt: Option<String>,

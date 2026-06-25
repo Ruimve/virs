@@ -33,8 +33,6 @@ fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
         max_position_pct: bot.max_position_pct,
         decide_interval_secs: bot.decide_interval_secs,
         position_id: bot.position_id,
-        stop_loss: bot.stop_loss,
-        take_profit: bot.take_profit,
         market_regime: bot.market_regime.clone(),
         ai_analysis: bot.ai_analysis.clone(),
         system_prompt: bot.system_prompt.clone(),
@@ -86,14 +84,13 @@ impl AutoStore for PgAutoStore {
 
     async fn update_position(
         &self, bot_id: Uuid, position_id: Option<Uuid>,
-        stop_loss: f64, take_profit: f64,
     ) -> anyhow::Result<()> {
         sqlx::query(
             r#"UPDATE qd_auto_bots SET
-                position_id = $2, stop_loss = $3, take_profit = $4, updated_at = NOW()
+                position_id = $2, updated_at = NOW()
                WHERE id = $1"#,
         )
-        .bind(bot_id).bind(position_id).bind(stop_loss).bind(take_profit)
+        .bind(bot_id).bind(position_id)
         .execute(&self.db).await?;
         Ok(())
     }
@@ -128,17 +125,20 @@ impl AutoStore for PgAutoStore {
         &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
         open_side: &str, open_price: f64, open_quantity: f64,
         open_fee: f64, open_order_id: Option<&str>,
+        stop_loss: f64, take_profit: f64,
     ) -> anyhow::Result<Uuid> {
         let row: (Uuid,) = sqlx::query_as(
             r#"INSERT INTO qd_auto_trades
                (bot_id, user_id, symbol, exchange, open_side, open_price, open_quantity,
-                open_order_id, open_fee, trigger_source, status)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'llm', 'open')
+                open_order_id, open_fee, stop_loss, take_profit,
+                trigger_source, status)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'llm', 'open')
                RETURNING id"#,
         )
         .bind(bot_id).bind(user_id).bind(symbol).bind(exchange)
         .bind(open_side).bind(open_price).bind(open_quantity)
         .bind(open_order_id).bind(open_fee)
+        .bind(stop_loss).bind(take_profit)
         .fetch_one(&self.db).await?;
         Ok(row.0)
     }
@@ -170,15 +170,25 @@ impl AutoStore for PgAutoStore {
         Ok(())
     }
 
-    async fn find_open_trade(&self, bot_id: Uuid) -> anyhow::Result<Option<Uuid>> {
-        let row: Option<(Uuid,)> = sqlx::query_as(
-            "SELECT id FROM qd_auto_trades WHERE bot_id = $1 AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
+    async fn find_open_trade(&self, bot_id: Uuid) -> anyhow::Result<Option<(Uuid, f64, f64)>> {
+        let row: Option<(Uuid, f64, f64)> = sqlx::query_as(
+            "SELECT id, stop_loss, take_profit FROM qd_auto_trades WHERE bot_id = $1 AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
         )
         .bind(bot_id)
         .fetch_optional(&self.db).await?;
-        Ok(row.map(|r| r.0))
+        Ok(row)
     }
 
+    async fn update_trade_stop_loss(
+        &self, trade_id: Uuid, stop_loss: f64,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"UPDATE qd_auto_trades SET stop_loss = $2 WHERE id = $1 AND status = 'open'"#,
+        )
+        .bind(trade_id).bind(stop_loss)
+        .execute(&self.db).await?;
+        Ok(())
+    }
     async fn record_orphaned_close_trade(
         &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
         close_side: &str, close_price: f64, close_quantity: f64,

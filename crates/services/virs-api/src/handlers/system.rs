@@ -119,9 +119,13 @@ pub async fn system_info() -> Json<ApiResponse> {
         .collect();
 
     // 网络：返回累计字节数和 IP 地址，速率由前端两次采样差值计算
+    // 过滤规则：① 排除已知虚拟接口前缀 ② 必须有可用 IP（排除 IPv4 link-local 169.254/16 和 IPv6 fe80::/10）
+    //           这样无网线连接的雷雳桥接 enX、无 IP 的 ap1/vmenet0 等都会被过滤掉
     let net_interfaces: Vec<serde_json::Value> = networks
         .list()
         .iter()
+        .filter(|(name, _)| is_physical_interface(name))
+        .filter(|(_, data)| has_usable_ip(data))
         .map(|(name, data)| {
             let ips: Vec<String> = data
                 .ip_networks()
@@ -174,4 +178,56 @@ pub async fn system_info() -> Json<ApiResponse> {
         "os_name": os_name,
         "os_version": os_version,
     })))
+}
+
+/// 判断是否为物理网卡或容器主接口。
+/// 排除回环、Docker 网桥、veth 虚拟网卡、CNI/flannel 等容器网络虚拟接口，
+/// 以及 macOS 上的 AP/vmenet/vlan 等虚拟接口。
+fn is_physical_interface(name: &str) -> bool {
+    // 排除回环
+    if name == "lo" {
+        return false;
+    }
+    // 排除 Docker 相关虚拟接口
+    let docker_prefixes = [
+        "docker",      // docker0
+        "br-",         // br-xxx (docker custom bridge)
+        "veth",        // vethxxx (container veth pair)
+        "cni",         // cni0, cni-xxx (Kubernetes CNI)
+        "flannel",     // flannel.1
+        "calico",      // calico
+        "tunl",        // tunl0 (calico)
+        "kube",        // kube-ipvs0
+        "virbr",       // libvirt bridge
+        "utun",        // macOS utun
+        "awdl",        // macOS awdl
+        "llw",         // macOS llw
+        "anpi",        // macOS anpi
+        "bridge",      // bridge0
+        "p2p",         // p2p0
+        "gif",         // gif0
+        "stf",         // stf0
+        "ap",          // ap1 (macOS WiFi AP 虚拟接口)
+        "vmenet",      // vmenet0 (Parallels/VirtualBox 虚拟机网络)
+        "vlan",        // vlan1 (VLAN 虚拟接口)
+    ];
+    if docker_prefixes.iter().any(|p| name.starts_with(p)) {
+        return false;
+    }
+    true
+}
+
+/// 判断接口是否有可用 IP 地址（排除 IPv4 link-local 169.254/16 和 IPv6 fe80::/10）。
+/// 用于过滤掉无网线连接的雷雳桥接 enX 等无实际网络的接口。
+fn has_usable_ip(data: &sysinfo::NetworkData) -> bool {
+    data.ip_networks().iter().any(|ip_net| {
+        match ip_net.addr {
+            std::net::IpAddr::V4(v4) => {
+                let octets = v4.octets();
+                // 排除 169.254.0.0/16 (IPv4 link-local)
+                !(octets[0] == 169 && octets[1] == 254)
+            }
+            std::net::IpAddr::V6(v6) => !v6.is_unicast_link_local(),
+        }
+    })
 }

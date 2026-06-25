@@ -108,8 +108,6 @@ export interface AutoBot {
   max_position_pct: number;
   decide_interval_secs: number;
   initial_capital: number;
-  stop_loss: number;
-  take_profit: number;
   market_regime: string | null;
   ai_analysis: string | null;
   total_pnl: number;
@@ -142,6 +140,9 @@ export interface AutoTrade {
   // 盈亏
   pnl: number;
   pnl_pct: number;
+  // 风控边界（开仓时记录，trailing stop 更新时覆盖 stop_loss）
+  stop_loss: number;
+  take_profit: number;
   // 触发源与平仓原因
   trigger_source: string;
   close_reason: string | null;

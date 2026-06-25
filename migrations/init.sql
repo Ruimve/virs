@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS qd_grid_bots (
     grid_profit_pct DOUBLE PRECISION NOT NULL DEFAULT 0.5,
     quantity_per_grid DOUBLE PRECISION NOT NULL,
     leverage INT NOT NULL DEFAULT 1,
-    initial_capital DOUBLE PRECISION NOT NULL DEFAULT 10000,
+    initial_capital DOUBLE PRECISION NOT NULL DEFAULT 0,
 
     -- AI 分析相关（内部字段，API 不返回）
     market_regime TEXT,
@@ -184,11 +184,7 @@ CREATE TABLE IF NOT EXISTS qd_auto_bots (
     leverage INT NOT NULL DEFAULT 1,
     max_position_pct DOUBLE PRECISION NOT NULL DEFAULT 80.0,
     decide_interval_secs INT NOT NULL DEFAULT 300,
-    initial_capital DOUBLE PRECISION NOT NULL DEFAULT 10000,
-
-    -- 风控参数
-    stop_loss DOUBLE PRECISION NOT NULL DEFAULT 0,
-    take_profit DOUBLE PRECISION NOT NULL DEFAULT 0,
+    initial_capital DOUBLE PRECISION NOT NULL DEFAULT 0,
 
     -- AI 分析相关（内部字段，API 不返回）
     market_regime TEXT,
@@ -244,9 +240,13 @@ CREATE TABLE IF NOT EXISTS qd_auto_trades (
     pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
     pnl_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
 
+    -- 风控边界（开仓时记录，trailing stop 更新时覆盖，用于审计与前端展示）
+    stop_loss DOUBLE PRECISION NOT NULL DEFAULT 0,
+    take_profit DOUBLE PRECISION NOT NULL DEFAULT 0,
+
     -- 触发源与平仓原因
     trigger_source TEXT NOT NULL DEFAULT 'llm' CHECK (trigger_source IN ('llm', 'risk_control')),
-    close_reason TEXT CHECK (close_reason IN ('stop_loss', 'take_profit', 'position_timeout', 'llm_decision')),
+    close_reason TEXT CHECK (close_reason IN ('stop_loss', 'take_profit', 'position_timeout', 'trend_reversal', 'risk_management', 'llm_decision', 'other')),
 
     -- 状态：open=持仓中, closed=已平仓, orphaned=孤儿记录（无对应开仓）
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'orphaned')),

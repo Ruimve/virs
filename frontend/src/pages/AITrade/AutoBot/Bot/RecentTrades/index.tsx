@@ -47,16 +47,28 @@ const RecentTrades = ({ trades }: Props) => {
                     {formatTime(trade.closed_at || trade.opened_at)}
                   </span>
                 </div>
-                {/* 第二行：数量 + 盈亏 */}
-                <div className="flex items-center gap-3 text-[11px]">
+                {/* 第二行：数量 + SL/TP + 盈亏 */}
+                <div className="flex items-center gap-3 text-[11px] flex-wrap">
                   <span className="text-on-surface-tertiary">
                     量{' '}
                     <span className="font-mono tabular-nums text-on-surface">
                       {formatSmart(trade.open_quantity)}
                     </span>
                   </span>
+                  {trade.stop_loss > 0 && (
+                    <span className="text-red-400/80">
+                      SL{' '}
+                      <span className="font-mono tabular-nums">{trade.stop_loss.toFixed(2)}</span>
+                    </span>
+                  )}
+                  {trade.take_profit > 0 && (
+                    <span className="text-emerald-400/80">
+                      TP{' '}
+                      <span className="font-mono tabular-nums">{trade.take_profit.toFixed(2)}</span>
+                    </span>
+                  )}
                   {trade.status === 'closed' && (
-                    <span className={pnlColor(trade.pnl)}>
+                    <span className={`ml-auto ${pnlColor(trade.pnl)}`}>
                       盈亏{' '}
                       <span className="font-mono tabular-nums">
                         {trade.pnl >= 0 ? '+' : ''}
@@ -64,7 +76,9 @@ const RecentTrades = ({ trades }: Props) => {
                       </span>
                     </span>
                   )}
-                  {trade.status === 'open' && <span className="text-amber-400">持仓中</span>}
+                  {trade.status === 'open' && (
+                    <span className="text-amber-400 ml-auto">持仓中</span>
+                  )}
                 </div>
               </div>
             ))}

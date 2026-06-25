@@ -139,11 +139,17 @@ const PositionStats = ({ bot, latestPrice }: Props) => {
           <span className="text-on-surface">{bot.leverage}x</span>
         </Stat>
         <Stat label="止损">
-          <span className="text-red-400">{bot.stop_loss > 0 ? bot.stop_loss.toFixed(2) : '-'}</span>
+          <span className="text-red-400">
+            {hasPosition && position!.stopLoss != null && position!.stopLoss > 0
+              ? position!.stopLoss.toFixed(2)
+              : '-'}
+          </span>
         </Stat>
         <Stat label="止盈">
           <span className="text-emerald-400">
-            {bot.take_profit > 0 ? bot.take_profit.toFixed(2) : '-'}
+            {hasPosition && position!.takeProfit != null && position!.takeProfit > 0
+              ? position!.takeProfit.toFixed(2)
+              : '-'}
           </span>
         </Stat>
         <Stat label="仓位上限">
