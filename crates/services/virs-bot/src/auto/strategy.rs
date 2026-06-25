@@ -287,20 +287,6 @@ pub fn compute_trailing_stop(
     }
 }
 
-/// Compute leverage based on ADX and market type.
-pub fn compute_leverage(adx: f64, is_spot: bool) -> i32 {
-    if is_spot {
-        return 1;
-    }
-    if adx >= 30.0 {
-        5
-    } else if adx >= 20.0 {
-        3
-    } else {
-        2
-    }
-}
-
 /// Compute position percentage based on ADX, consecutive losses, and funding rate.
 pub fn compute_position_pct(adx: f64, consecutive_losses: i32, funding_rate: f64) -> f64 {
     let base: f64 = if adx >= 25.0 {

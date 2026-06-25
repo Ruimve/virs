@@ -1066,7 +1066,7 @@ impl AutoWorker {
         match action {
             AutoAction::OpenLong | AutoAction::OpenShort => {
                 if let Some(d) = decision {
-                    self.apply_non_structural_params(d, &snapshot).await;
+                    self.apply_non_structural_params(d).await;
                 }
 
                 let side = match action {
@@ -1134,15 +1134,12 @@ impl AutoWorker {
         }
     }
 
-    async fn apply_non_structural_params(&mut self, d: &AutoDecision, snapshot: &AutoMarketSnapshot) {
+    async fn apply_non_structural_params(&mut self, d: &AutoDecision) {
         if let Some(ref regime) = d.market_regime {
             self.bot.market_regime = Some(regime.clone());
         }
 
-        let adx = snapshot.indicators.adx;
-        let new_leverage = strategy::compute_leverage(adx, self.is_spot());
-        self.bot.leverage = new_leverage;
-
+        // 杠杆由用户配置决定（create 接口），不在运行时动态调整
         let _ = self
             .store
             .update_ai_analysis(
