@@ -904,7 +904,7 @@ impl AutoWorker {
     async fn open_position(
         &mut self,
         side: &str,
-        _decision: Option<&AutoDecision>,
+        decision: Option<&AutoDecision>,
         snapshot: &AutoMarketSnapshot,
     ) {
         let account = self
@@ -969,8 +969,58 @@ impl AutoWorker {
             quantity
         };
 
-        let stop_loss = strategy::compute_stop_loss(price, side, atr);
-        let take_profit = strategy::compute_take_profit(price, side, atr);
+        // 止损止盈价格来源策略：
+        //   ① 优先采用 LLM 在决策中返回的 SL/TP（基于市场结构判断）
+        //   ② LLM 未返回或方向不合法（多头 sl>=price / tp<=price，空头反之）时回退到代码公式
+        //   ③ 公式兜底：1.5×ATR 止损，3.0×ATR 止盈
+        let formula_sl = strategy::compute_stop_loss(price, side, atr);
+        let formula_tp = strategy::compute_take_profit(price, side, atr);
+
+        let llm_sl = decision.and_then(|d| d.stop_loss);
+        let llm_tp = decision.and_then(|d| d.take_profit);
+
+        let (stop_loss, stop_loss_source) = match (llm_sl, side) {
+            (Some(sl), "long") if sl > 0.0 && sl < price => (sl, "llm"),
+            (Some(sl), "short") if sl > 0.0 && sl > price => (sl, "llm"),
+            (Some(sl), _) => {
+                warn!(
+                    bot_id = %self.bot.id, side, llm_sl = sl, price,
+                    "LLM stop_loss invalid (direction mismatch or non-positive), fallback to formula"
+                );
+                (formula_sl, "formula")
+            }
+            (None, _) => (formula_sl, "formula"),
+        };
+
+        let (take_profit, take_profit_source) = match (llm_tp, side) {
+            (Some(tp), "long") if tp > 0.0 && tp > price => (tp, "llm"),
+            (Some(tp), "short") if tp > 0.0 && tp < price => (tp, "llm"),
+            (Some(tp), _) => {
+                warn!(
+                    bot_id = %self.bot.id, side, llm_tp = tp, price,
+                    "LLM take_profit invalid (direction mismatch or non-positive), fallback to formula"
+                );
+                (formula_tp, "formula")
+            }
+            (None, _) => (formula_tp, "formula"),
+        };
+
+        // 盈亏比校验：若 < 1.0 则使用公式兜底（防止 LLM 给出不合理 SL/TP）
+        let rr_ratio = match side {
+            "long" => (take_profit - price) / (price - stop_loss).max(1e-9),
+            "short" => (price - take_profit) / (stop_loss - price).max(1e-9),
+            _ => 1.5,
+        };
+        let (stop_loss, take_profit, sl_source, tp_source) = if rr_ratio < 1.0 {
+            warn!(
+                bot_id = %self.bot.id, side,
+                entry = price, llm_sl = stop_loss, llm_tp = take_profit, rr_ratio,
+                "Risk-reward ratio < 1.0, fallback to formula"
+            );
+            (formula_sl, formula_tp, "formula", "formula")
+        } else {
+            (stop_loss, take_profit, stop_loss_source, take_profit_source)
+        };
 
         let position_side = match side {
             "long" => Some(BotPositionSide::Long),
@@ -1007,6 +1057,7 @@ impl AutoWorker {
                     bot_id = %self.bot.id, side = %side,
                     price, quantity,
                     stop_loss, take_profit,
+                    sl_source, tp_source,
                     "Position opening order sent, awaiting confirmation"
                 );
 
