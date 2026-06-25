@@ -70,6 +70,10 @@ pub struct AutoWorker {
     /// 重启时从 qd_auto_trades 表的 open 记录恢复；平仓后清零）
     pub(crate) stop_loss: f64,
     pub(crate) take_profit: f64,
+    /// 最近一次平仓事件（用于冷却期判断和 LLM 上下文反思）
+    /// 字段：(平仓方向 long/short, 平仓原因, 平仓时间)
+    /// 重启时从 qd_auto_trades 表最近一条 closed 记录恢复
+    pub(crate) last_close_event: Option<(String, String, chrono::DateTime<chrono::Utc>)>,
 }
 
 impl AutoWorker {
@@ -106,6 +110,7 @@ impl AutoWorker {
             current_open_fee: 0.0,
             stop_loss: 0.0,
             take_profit: 0.0,
+            last_close_event: None,
         }
     }
 
@@ -134,6 +139,49 @@ impl AutoWorker {
 
     pub(crate) fn is_pending(&self) -> bool {
         self.pending_open.is_some() || self.pending_close.is_some()
+    }
+
+    /// 检查开仓冷却期。
+    /// 规则（按平仓原因分级，绝对时间，不受 decide_interval_secs 影响）：
+    ///   - stop_loss：同方向冷却 30 分钟（防止趋势初期反复扫损）
+    ///   - take_profit：同方向冷却 15 分钟（防止追高/追低）
+    ///   - trend_reversal：反方向冷却 15 分钟（等待新趋势结构形成）
+    ///   - 其他（position_timeout/risk_management/llm_decision）：双向冷却 15 分钟
+    /// 返回 Some(剩余秒数) 表示仍在冷却中，None 表示可以开仓。
+    pub(crate) fn cooldown_remaining_secs(&self, new_side: &str) -> Option<i64> {
+        let (closed_side, reason, closed_at) = self.last_close_event.as_ref()?;
+        let elapsed = chrono::Utc::now().signed_duration_since(*closed_at);
+        let elapsed_secs = elapsed.num_seconds().max(0);
+
+        // 根据平仓原因和新开仓方向，确定冷却时长
+        // 说明：closed_side 是上一次开仓方向（long/short），new_side 是即将开仓的方向
+        let cooldown_secs: i64 = match reason.as_str() {
+            "stop_loss" => {
+                // 止损说明入场点差，同方向立即重入大概率再次扫损
+                // 反方向可能是趋势反转，允许 LLM 判断后进入
+                if closed_side == new_side { 30 * 60 } else { 0 }
+            }
+            "take_profit" => {
+                // 止盈后同方向可能到顶/底，追高/追低风险
+                // 反方向允许进入
+                if closed_side == new_side { 15 * 60 } else { 0 }
+            }
+            "trend_reversal" => {
+                // 趋势反转：原趋势已结束，同方向（继续原方向）不应立即再开
+                // 反方向（新趋势方向）允许进入
+                if closed_side == new_side { 15 * 60 } else { 0 }
+            }
+            _ => {
+                // 其他原因（position_timeout/risk_management/llm_decision/unknown）：双向保守冷却
+                15 * 60
+            }
+        };
+
+        if cooldown_secs > 0 && elapsed_secs < cooldown_secs {
+            Some(cooldown_secs - elapsed_secs)
+        } else {
+            None
+        }
     }
 
     /// 直接查询 PositionEngine 当前 Open 仓位，刷新 current_position 缓存。
@@ -289,6 +337,38 @@ impl AutoWorker {
             }
             Err(e) => {
                 warn!(bot_id = %self.bot.id, error = %e, "Failed to load consecutive losses, starting from 0");
+            }
+        }
+
+        // 恢复最近平仓事件（用于冷却期判断；即使当前无仓位也需要恢复，防止重启后立即重入）
+        match self.store.find_last_closed_trade(self.bot.id).await {
+            Ok(Some((side, reason, closed_at)) ) => {
+                self.last_close_event = Some((side.clone(), reason.clone(), closed_at));
+                // 检查是否仍在冷却期，便于运维观察
+                if let Some(remaining) = self.cooldown_remaining_secs(&side) {
+                    info!(
+                        bot_id = %self.bot.id,
+                        last_close_side = %side,
+                        last_close_reason = %reason,
+                        last_close_at = %closed_at,
+                        remaining_secs = remaining,
+                        "Restored last_close_event, still in cooldown"
+                    );
+                } else {
+                    info!(
+                        bot_id = %self.bot.id,
+                        last_close_side = %side,
+                        last_close_reason = %reason,
+                        last_close_at = %closed_at,
+                        "Restored last_close_event, cooldown expired"
+                    );
+                }
+            }
+            Ok(None) => {
+                info!(bot_id = %self.bot.id, "No previous closed trade found, no cooldown");
+            }
+            Err(e) => {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to load last closed trade");
             }
         }
 
@@ -682,6 +762,40 @@ impl AutoWorker {
             "无持仓".to_string()
         };
 
+        // 构造最近平仓事件描述（用于 LLM 反思，避免反复扫损）
+        let recent_close_info = match &self.last_close_event {
+            Some((side, reason, closed_at)) => {
+                let side_cn = match side.as_str() {
+                    "long" => "多",
+                    "short" => "空",
+                    _ => "未知",
+                };
+                let reason_cn = match reason.as_str() {
+                    "stop_loss" => "止损",
+                    "take_profit" => "止盈",
+                    "trend_reversal" => "趋势反转",
+                    "position_timeout" => "超时",
+                    "risk_management" => "风控",
+                    "llm_decision" => "LLM决策",
+                    _ => reason.as_str(),
+                };
+                let elapsed = chrono::Utc::now().signed_duration_since(*closed_at);
+                let elapsed_str = {
+                    let mins = elapsed.num_minutes();
+                    if mins < 60 {
+                        format!("{} 分钟前", mins)
+                    } else {
+                        format!("{} 小时 {} 分钟前", mins / 60, mins % 60)
+                    }
+                };
+                format!(
+                    "{}平{}，原因：{}（{}）",
+                    elapsed_str, side_cn, reason_cn, closed_at.format("%Y-%m-%d %H:%M:%S")
+                )
+            }
+            None => "无".to_string(),
+        };
+
         let ctx = strategy::PromptContext {
             timestamp: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             symbol: self.bot.symbol.clone(),
@@ -695,6 +809,7 @@ impl AutoWorker {
             position_info,
             position_duration,
             stop_take_profit_info,
+            recent_close_info,
             funding_rate: snapshot.base.funding_rate,
             funding_next_time: snapshot.base.funding_next_time,
             total_trades: self.bot.total_trades,
@@ -863,6 +978,27 @@ impl AutoWorker {
                 }
                 if self.has_position() {
                     warn!(bot_id = %self.bot.id, side = %side, "Already has position, cannot open");
+                    return;
+                }
+                // 冷却期检查：防止止损/止盈后立即同方向重入被反弹扫损
+                if let Some(remaining) = self.cooldown_remaining_secs(side) {
+                    let (closed_side, reason, closed_at) = self.last_close_event.as_ref().unwrap();
+                    warn!(
+                        bot_id = %self.bot.id,
+                        new_side = %side,
+                        last_close_side = %closed_side,
+                        last_close_reason = %reason,
+                        last_close_at = %closed_at,
+                        remaining_secs = remaining,
+                        "In cooldown period, skipping open"
+                    );
+                    let _ = self.auto_event_tx.send(AutoEvent::BotError {
+                        bot_id: self.bot.id,
+                        error: format!(
+                            "冷却期 {}s 内不允许 {} 仓（上次：{} {}）",
+                            remaining, side, closed_side, reason
+                        ),
+                    });
                     return;
                 }
                 self.open_position(side, decision, &snapshot).await;
@@ -1500,6 +1636,14 @@ impl AutoWorker {
         self.take_profit = 0.0;
         self.current_position = None;
         self.position_opened_at = None;
+
+        // 记录最近平仓事件（用于冷却期判断和 LLM 上下文反思）
+        // pending.side 是开仓方向（long/short），pending.reason 是平仓原因
+        self.last_close_event = Some((
+            pending.side.clone(),
+            pending.reason.clone(),
+            chrono::Utc::now(),
+        ));
 
         self.save_position().await;
         self.save_stats().await;

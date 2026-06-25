@@ -16,6 +16,10 @@ pub struct PromptContext {
     pub position_info: String,
     pub position_duration: String,
     pub stop_take_profit_info: String,
+    /// 最近平仓事件描述（用于 LLM 反思，避免反复扫损）
+    /// 形如："5 分钟前平多，原因：stop_loss @ 65000.00"
+    /// 为空时填充"无"
+    pub recent_close_info: String,
     pub funding_rate: f64,
     pub funding_next_time: String,
     pub total_trades: i32,
@@ -67,6 +71,7 @@ pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
         .replace("{position_info}", &ctx.position_info)
         .replace("{position_duration}", &ctx.position_duration)
         .replace("{stop_take_profit_info}", &ctx.stop_take_profit_info)
+        .replace("{recent_close_info}", &ctx.recent_close_info)
         .replace(
             "{funding_rate}",
             &format!("{:.4}%", ctx.funding_rate * 100.0),

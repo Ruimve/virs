@@ -1,6 +1,7 @@
 //! PgAutoStore — PostgreSQL implementation of AutoStore.
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use tracing::warn;
 use uuid::Uuid;
@@ -177,6 +178,24 @@ impl AutoStore for PgAutoStore {
         .bind(bot_id)
         .fetch_optional(&self.db).await?;
         Ok(row)
+    }
+
+    async fn find_last_closed_trade(
+        &self, bot_id: Uuid,
+    ) -> anyhow::Result<Option<(String, String, DateTime<Utc>)>> {
+        // close_reason 可能为 NULL（历史数据或未平仓），用 COALESCE 转为 'unknown'
+        // 只查 status='closed' 的记录，过滤 orphaned
+        let row: Option<(String, Option<String>, DateTime<Utc>)> = sqlx::query_as(
+            r#"SELECT open_side, close_reason, closed_at
+               FROM qd_auto_trades
+               WHERE bot_id = $1 AND status = 'closed'
+               ORDER BY closed_at DESC LIMIT 1"#,
+        )
+        .bind(bot_id)
+        .fetch_optional(&self.db).await?;
+        Ok(row.map(|(side, reason, closed_at)| {
+            (side, reason.unwrap_or_else(|| "unknown".to_string()), closed_at)
+        }))
     }
 
     async fn update_trade_stop_loss(
