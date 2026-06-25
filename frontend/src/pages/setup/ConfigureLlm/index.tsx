@@ -148,18 +148,18 @@ const ConfigureLlm = () => {
 
   const handleKeyInput = useCallback(
     (e: React.InputEvent<HTMLInputElement>) => {
-      const apiKey = e.currentTarget.value?.trim();
-      if (!apiKey) return;
+      const inputValue = e.currentTarget.value?.trim();
+      setApiKey(inputValue);
+      if (!inputValue) return;
 
       resetSteps();
-      setApiKey(apiKey);
 
       // Debounce: save then fetch models
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(async () => {
         const saveResult = await saveAiCredential({
           provider: 'deepseek',
-          api_key: apiKey,
+          api_key: inputValue,
           is_default: true,
         });
         if (saveResult.success) {
