@@ -10,7 +10,7 @@ interface WizardLayoutProps {
   actions?: ReactNode;
 }
 
-export function Wizard({ step, title, subtitle, children, actions }: WizardLayoutProps) {
+export const Wizard = ({ step, title, subtitle, children, actions }: WizardLayoutProps) => {
   const stepIndex = step - WizardStep.SelectBotType + 1;
 
   return (
@@ -43,4 +43,4 @@ export function Wizard({ step, title, subtitle, children, actions }: WizardLayou
       )}
     </div>
   );
-}
+};

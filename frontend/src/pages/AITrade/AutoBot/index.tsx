@@ -1,4 +1,4 @@
-import { useEffect, memo } from 'react';
+import { useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { startAutoBot, stopAutoBot, deleteAutoBot } from '@/service/bot';
 import { useBot } from '../context/BotContext';
@@ -104,4 +104,4 @@ const AutoBot = () => {
   return <Outlet />;
 };
 
-export default memo(AutoBot);
+export default AutoBot;

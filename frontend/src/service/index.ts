@@ -9,6 +9,9 @@ export {
   checkPermissions,
   verifyPermissions,
   fetchCredentialStatus,
+  fetchAiModels,
+  fetchAiBalance,
+  testAiCredential,
 } from './credentials';
 export {
   createGridBot,

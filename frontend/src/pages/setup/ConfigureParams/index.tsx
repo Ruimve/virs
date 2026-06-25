@@ -69,7 +69,7 @@ const AUTO_PARAMS = [
   },
 ];
 
-function ConfigureParams() {
+const ConfigureParams = () => {
   const navigate = useNavigate();
   const { wizard, updateWizard, advanceStep } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.ConfigureParams);
@@ -134,6 +134,6 @@ function ConfigureParams() {
       </div>
     </Wizard>
   );
-}
+};
 
 export default ConfigureParams;

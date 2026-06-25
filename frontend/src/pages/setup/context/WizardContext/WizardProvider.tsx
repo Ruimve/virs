@@ -2,7 +2,7 @@ import { useCallback, useState, type ReactNode } from 'react';
 import { DEFAULT_STATE, type WizardState, type WizardStepValue } from './consts';
 import { WizardContext } from '.';
 
-export function WizardProvider({ children }: { children: ReactNode }) {
+export const WizardProvider = ({ children }: { children: ReactNode }) => {
   const [wizard, setWizard] = useState(DEFAULT_STATE);
 
   const updateWizard = useCallback((partial: Partial<WizardState>) => {
@@ -32,4 +32,4 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       {children}
     </WizardContext.Provider>
   );
-}
+};

@@ -12,7 +12,7 @@ interface CheckItem {
   detail: string;
 }
 
-export default function HealthCheckPage() {
+const HealthCheck = () => {
   const navigate = useNavigate();
   const param = useParams();
   const { updateTabs } = useHeader();
@@ -142,4 +142,6 @@ export default function HealthCheckPage() {
       )}
     </div>
   );
-}
+};
+
+export default HealthCheck;

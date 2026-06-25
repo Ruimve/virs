@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse, PermissionItem } from './types';
+import type { ApiResponse, BalanceInfo, DeepSeekModel, PermissionItem } from './types';
 
 export async function saveCredential(params: {
   exchange: string;
@@ -48,4 +48,18 @@ export async function fetchCredentialStatus(): Promise<
   ApiResponse<{ connected: boolean; exchange?: string }>
 > {
   return api.get('/credentials/status');
+}
+
+export async function fetchAiModels(): Promise<ApiResponse<{ models: DeepSeekModel[] }>> {
+  return api.get('/ai-credentials/models');
+}
+
+export async function fetchAiBalance(): Promise<ApiResponse<{ balances: BalanceInfo[] }>> {
+  return api.get('/ai-credentials/balance');
+}
+
+export async function testAiCredential(): Promise<
+  ApiResponse<{ connected: boolean; message: string }>
+> {
+  return api.get('/ai-credentials/test');
 }

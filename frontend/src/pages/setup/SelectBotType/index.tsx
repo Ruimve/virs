@@ -24,7 +24,7 @@ const BOT_TYPES = [
   },
 ];
 
-function SelectBotType() {
+const SelectBotType = () => {
   const navigate = useNavigate();
   const { wizard, updateWizard, advanceStep } = useWizard();
   const [selected, setSelected] = useState<'grid' | 'auto' | ''>(wizard.bot_type || '');
@@ -190,6 +190,6 @@ function SelectBotType() {
       )}
     </Wizard>
   );
-}
+};
 
 export default SelectBotType;

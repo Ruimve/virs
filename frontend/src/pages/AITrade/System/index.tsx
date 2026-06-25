@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { getSystemInfo } from '@/service/system';
 import type { SystemInfo as SystemInfoData } from '@/service/types';
 
@@ -340,4 +340,4 @@ const System = () => {
   );
 };
 
-export default memo(System);
+export default System;

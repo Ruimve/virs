@@ -5,7 +5,7 @@ import { useWizard, useWizardGuard } from '../context/WizardContext';
 import { createGridBot, createAutoBot, startGridBot, startAutoBot } from '../../../service';
 import { WizardStep } from '../context/WizardContext/consts';
 
-function ReviewLaunch() {
+const ReviewLaunch = () => {
   const navigate = useNavigate();
   const { wizard, updateWizard } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.ReviewLaunch);
@@ -318,6 +318,6 @@ function ReviewLaunch() {
       </div>
     </Wizard>
   );
-}
+};
 
 export default ReviewLaunch;

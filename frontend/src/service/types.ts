@@ -386,3 +386,13 @@ export interface SystemInfo {
   os_name: string;
   os_version: string;
 }
+
+export interface DeepSeekModel {
+  id: string;
+  owned_by: string;
+}
+
+export interface BalanceInfo {
+  total_balance: string;
+  currency: string;
+}

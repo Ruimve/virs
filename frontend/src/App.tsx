@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Loading from './pages/loading';
 import Login from './pages/login';
@@ -87,4 +87,4 @@ const App = () => {
   );
 };
 
-export default memo(App);
+export default App;

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect } from 'react';
-import { type WizardState, type WizardStepValue } from './consts';
 import { useNavigate } from 'react-router-dom';
+import { DEFAULT_STATE, type WizardState, type WizardStepValue } from './consts';
 
 export interface WizardContextType {
   wizard: WizardState;
@@ -9,22 +9,27 @@ export interface WizardContextType {
   resetWizard: () => void;
 }
 
-export const WizardContext = createContext<WizardContextType | null>(null);
+export const WizardContext = createContext<WizardContextType>({
+  wizard: DEFAULT_STATE,
+  updateWizard: () => {},
+  advanceStep: () => {},
+  resetWizard: () => {},
+});
 
 // ── 向导步骤守卫：直接访问非首页时跳转首页 ──
-export function useWizardGuard(currentStep: WizardStepValue, requiredStep: WizardStepValue) {
+export const useWizardGuard = (currentStep: WizardStepValue, requiredStep: WizardStepValue) => {
   const navigate = useNavigate();
   useEffect(() => {
     if (currentStep < requiredStep) {
       navigate('/setup/bot-type', { replace: true });
     }
   }, [currentStep, requiredStep, navigate]);
-}
+};
 
-export function useWizard() {
+export const useWizard = () => {
   const context = useContext(WizardContext);
   if (!context) {
     throw new Error('useWizard 必须在 WizardProvider 内部使用');
   }
   return context;
-}
+};
