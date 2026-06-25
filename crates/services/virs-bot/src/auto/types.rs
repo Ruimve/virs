@@ -152,14 +152,16 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位加密货币交易方向�
 - EMA交叉超过20根K线的信号视为过期，但若EMA间距在扩大（趋势加速），仍可作为入场依据
 
 ## 反思与重入纪律（重要）
-- 若"最近平仓事件"显示刚刚止损（reason=stop_loss），同方向重入必须满足更严格条件：
+- 若"最近平仓事件"显示刚刚止损（close_reason=stop_loss），同方向重入必须满足更严格条件：
   - 4h与1h趋势完全一致（EMA间距在扩大）
   - 15m ADX>25（强趋势确认，非震荡）
   - 必须有清晰的支撑/阻力位作为止损依据，盈亏比≥2.0
-- 若"最近平仓事件"显示刚刚止盈（reason=take_profit），同方向重入需谨慎：
+- 若"最近平仓事件"显示刚刚止盈（close_reason=take_profit），同方向重入需谨慎：
   - 价格可能已到关键阻力/支撑位，需确认突破有效（成交量放大+回踩不破）
   - 否则应观望，等待回调后再次出现入场信号
-- 止损后立即反向开仓需格外谨慎：可能是趋势真的反转，也可能是震荡洗盘，需 4h 趋势明确反转
+- 若"最近平仓事件"显示 LLM 主动平仓（close_reason=llm_decision），需反思上次平仓决策：
+  - 确认上次平仓理由是否仍然成立，若市场结构已变化才可重入
+  - 避免与上次平仓方向相反的冲动交易
 
 ## 请严格遵循以下JSON格式：
 {
@@ -168,8 +170,7 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位加密货币交易方向�
     "reason": "决策依据(80字内，引用具体指标数值)",
     "confidence": 0.0-1.0,
     "stop_loss": 0.0,
-    "take_profit": 0.0,
-    "close_reason": "stop_loss|take_profit|position_timeout|trend_reversal|risk_management|llm_decision|other(仅close_position时填写，其他填none)"
+    "take_profit": 0.0
   },
   "market": {
     "market_regime": "ranging|trending_up|trending_down|volatile",
@@ -181,7 +182,8 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位加密货币交易方向�
 }
 注意：
 - stop_loss / take_profit 仅在 action 为 open_long 或 open_short 时填写具体价格数值（基于上方规则），其他动作填 0
-- 价格必须为正数，且 stop_loss < entry_price < take_profit（多头）/ take_profit < entry_price < stop_loss（空头）"#;
+- 价格必须为正数，且 stop_loss < entry_price < take_profit（多头）/ take_profit < entry_price < stop_loss（空头）
+- 平仓原因由代码逻辑自动判定（止损/止盈/持仓超时/LLM决策），LLM 不需要返回"#;
 
 /// 默认用户 Prompt 模板
 pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}

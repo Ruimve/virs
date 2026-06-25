@@ -131,9 +131,8 @@ impl AutoStore for PgAutoStore {
         let row: (Uuid,) = sqlx::query_as(
             r#"INSERT INTO qd_auto_trades
                (bot_id, user_id, symbol, exchange, open_side, open_price, open_quantity,
-                open_order_id, open_fee, stop_loss, take_profit,
-                trigger_source, status)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'llm', 'open')
+                open_order_id, open_fee, stop_loss, take_profit, status)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'open')
                RETURNING id"#,
         )
         .bind(bot_id).bind(user_id).bind(symbol).bind(exchange)
@@ -148,7 +147,7 @@ impl AutoStore for PgAutoStore {
         &self, trade_id: Uuid, close_side: &str, close_price: f64,
         close_quantity: f64, close_order_id: Option<&str>,
         close_fee: f64, pnl: f64, pnl_pct: f64,
-        trigger_source: &str, close_reason: &str,
+        close_reason: &str,
     ) -> anyhow::Result<()> {
         let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
         let result = sqlx::query(
@@ -156,13 +155,13 @@ impl AutoStore for PgAutoStore {
                close_side = $2, close_price = $3, close_quantity = $4,
                close_order_id = $5, close_fee = $6, closed_at = NOW(),
                pnl = $7, pnl_pct = $8,
-               trigger_source = $9, close_reason = $10,
+               close_reason = $9,
                status = 'closed'
                WHERE id = $1 AND status = 'open'"#,
         )
         .bind(trade_id).bind(close_side).bind(close_price).bind(close_quantity)
         .bind(close_order_id).bind(close_fee).bind(pnl).bind(pnl_pct)
-        .bind(trigger_source).bind(close_reason)
+        .bind(close_reason)
         .execute(&self.db).await?;
 
         if result.rows_affected() == 0 {
@@ -183,9 +182,9 @@ impl AutoStore for PgAutoStore {
     async fn find_last_closed_trade(
         &self, bot_id: Uuid,
     ) -> anyhow::Result<Option<(String, String, DateTime<Utc>)>> {
-        // close_reason 可能为 NULL（历史数据或未平仓），用 COALESCE 转为 'unknown'
-        // 只查 status='closed' 的记录，过滤 orphaned
-        let row: Option<(String, Option<String>, DateTime<Utc>)> = sqlx::query_as(
+        // close_reason：stop_loss/take_profit/position_timeout/llm_decision
+        // 用于冷却期判断
+        let row: Option<(String, String, DateTime<Utc>)> = sqlx::query_as(
             r#"SELECT open_side, close_reason, closed_at
                FROM qd_auto_trades
                WHERE bot_id = $1 AND status = 'closed'
@@ -193,9 +192,7 @@ impl AutoStore for PgAutoStore {
         )
         .bind(bot_id)
         .fetch_optional(&self.db).await?;
-        Ok(row.map(|(side, reason, closed_at)| {
-            (side, reason.unwrap_or_else(|| "unknown".to_string()), closed_at)
-        }))
+        Ok(row)
     }
 
     async fn update_trade_stop_loss(
@@ -212,7 +209,7 @@ impl AutoStore for PgAutoStore {
         &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
         close_side: &str, close_price: f64, close_quantity: f64,
         close_order_id: Option<&str>, close_fee: f64,
-        pnl: f64, pnl_pct: f64, trigger_source: &str, close_reason: &str,
+        pnl: f64, pnl_pct: f64, close_reason: &str,
     ) -> anyhow::Result<Uuid> {
         let open_side = if close_side == "buy" { "sell" } else { "buy" };
         let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
@@ -221,17 +218,17 @@ impl AutoStore for PgAutoStore {
                (bot_id, user_id, symbol, exchange,
                 open_side, open_price, open_quantity, open_fee,
                 close_side, close_price, close_quantity, close_order_id, close_fee, closed_at,
-                pnl, pnl_pct, trigger_source, close_reason, status)
+                pnl, pnl_pct, close_reason, status)
                VALUES ($1, $2, $3, $4,
                        $5, 0, $6, 0,
                        $7, $8, $9, $10, $11, NOW(),
-                       $12, $13, $14, $15, 'orphaned')
+                       $12, $13, $14, 'orphaned')
                RETURNING id"#,
         )
         .bind(bot_id).bind(user_id).bind(symbol).bind(exchange)
         .bind(open_side).bind(close_quantity)
         .bind(close_side).bind(close_price).bind(close_quantity).bind(close_order_id)
-        .bind(close_fee).bind(pnl).bind(pnl_pct).bind(trigger_source).bind(close_reason)
+        .bind(close_fee).bind(pnl).bind(pnl_pct).bind(close_reason)
         .fetch_one(&self.db).await?;
         Ok(row.0)
     }
@@ -240,14 +237,35 @@ impl AutoStore for PgAutoStore {
         &self, bot_id: Uuid, analysis_type: &str, system_prompt: &str,
         user_prompt: &str, result: &serde_json::Value, error: Option<&str>,
         llm_model: &str,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Uuid> {
         let status = if error.is_some() { "failed" } else { "completed" };
-        sqlx::query(
+        let row: (Uuid,) = sqlx::query_as(
             r#"INSERT INTO qd_auto_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, error, llm_model, completed_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())"#,
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+               RETURNING id"#,
         )
         .bind(bot_id).bind(analysis_type).bind(system_prompt).bind(user_prompt)
         .bind(status).bind(result).bind(error).bind(llm_model)
+        .fetch_one(&self.db).await?;
+        Ok(row.0)
+    }
+
+    async fn update_analysis_log_execution(
+        &self, log_id: Uuid, execution_status: &str,
+        intercept_reason: Option<&str>, close_reason: Option<&str>,
+    ) -> anyhow::Result<()> {
+        // 拦截时同步更新 status='intercepted'，便于前端按状态筛选
+        let status = if intercept_reason.is_some() { "intercepted" } else { "completed" };
+        sqlx::query(
+            r#"UPDATE qd_auto_analysis_logs SET
+               execution_status = $2,
+               intercept_reason = $3,
+               close_reason = $4,
+               status = $5
+               WHERE id = $1"#,
+        )
+        .bind(log_id).bind(execution_status)
+        .bind(intercept_reason).bind(close_reason).bind(status)
         .execute(&self.db).await?;
         Ok(())
     }

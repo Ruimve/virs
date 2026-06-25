@@ -244,9 +244,9 @@ CREATE TABLE IF NOT EXISTS qd_auto_trades (
     stop_loss DOUBLE PRECISION NOT NULL DEFAULT 0,
     take_profit DOUBLE PRECISION NOT NULL DEFAULT 0,
 
-    -- 触发源与平仓原因
-    trigger_source TEXT NOT NULL DEFAULT 'llm' CHECK (trigger_source IN ('llm', 'risk_control')),
-    close_reason TEXT CHECK (close_reason IN ('stop_loss', 'take_profit', 'position_timeout', 'trend_reversal', 'risk_management', 'llm_decision', 'other')),
+    -- 平仓原因：stop_loss/take_profit/position_timeout/llm_decision
+    -- 由代码逻辑决定（不由 LLM 决定），用于冷却期判断和前端展示
+    close_reason TEXT CHECK (close_reason IS NULL OR close_reason IN ('stop_loss', 'take_profit', 'position_timeout', 'llm_decision')),
 
     -- 状态：open=持仓中, closed=已平仓, orphaned=孤儿记录（无对应开仓）
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'orphaned')),
@@ -262,12 +262,20 @@ CREATE TABLE IF NOT EXISTS qd_auto_analysis_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bot_id UUID NOT NULL REFERENCES qd_auto_bots(id) ON DELETE CASCADE,
     analysis_type TEXT NOT NULL DEFAULT 'periodic',
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
+    -- 执行状态：pending=待执行, completed=已执行, failed=执行失败, intercepted=被代码拦截
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed', 'intercepted')),
     system_prompt TEXT NOT NULL DEFAULT '',
     user_prompt TEXT NOT NULL DEFAULT '',
     result JSONB NOT NULL DEFAULT '{}',
     error TEXT,
     llm_model TEXT NOT NULL DEFAULT '',
+    -- 执行回填字段（在订单成交/拦截发生时回填，与拦截/平仓事件解耦）
+    -- intercept_reason: LLM 决策开仓但被代码拦截时的原因（如冷却期/置信度不足）
+    -- close_reason: 平仓订单成交后回填的平仓原因（stop_loss/take_profit/position_timeout/llm_decision）
+    -- execution_status: open=开仓成功, open_failed=开仓失败, close=平仓成功, close_failed=平仓失败, hold=观望
+    intercept_reason TEXT,
+    close_reason TEXT,
+    execution_status TEXT CHECK (execution_status IS NULL OR execution_status IN ('open', 'open_failed', 'close', 'close_failed', 'hold')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at TIMESTAMPTZ
 );

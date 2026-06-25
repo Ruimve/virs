@@ -51,7 +51,6 @@ pub struct AutoDecision {
     pub stop_loss: Option<f64>,
     /// LLM 返回的止盈价（仅 open_long/open_short 时有效，其他动作为 None 或 0）
     pub take_profit: Option<f64>,
-    pub close_reason: Option<String>,
     pub market_regime: Option<String>,
     pub funding_rate_warning: Option<String>,
     pub event_impact: Option<String>,
@@ -92,11 +91,6 @@ impl AutoDecision {
             .filter(|s| !s.eq_ignore_ascii_case("none"))
             .map(|s| s.to_string());
 
-        let close_reason = decision["close_reason"]
-            .as_str()
-            .filter(|s| !s.eq_ignore_ascii_case("none"))
-            .map(|s| s.to_string());
-
         let action = AutoAction::from_str(action_str);
 
         AutoDecision {
@@ -105,7 +99,6 @@ impl AutoDecision {
             confidence,
             stop_loss,
             take_profit,
-            close_reason,
             market_regime,
             funding_rate_warning,
             event_impact,

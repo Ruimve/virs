@@ -34,7 +34,9 @@ pub(crate) struct PendingOpen {
 #[allow(dead_code)]
 pub(crate) struct PendingClose {
     pub side: String,
-    pub reason: String,
+    /// 平仓原因：stop_loss/take_profit/position_timeout/llm_decision
+    /// 由代码逻辑决定（不由 LLM 决定），用于冷却期判断和 DB 记录
+    pub close_reason: String,
     pub entry_price: f64,
     pub position_size: f64,
     pub unrealized_pnl: f64,
@@ -64,6 +66,11 @@ pub struct AutoWorker {
     pub(crate) current_position: Option<Position>,
     /// 当前开仓 trade 记录 ID（开仓时 INSERT 返回，平仓时 UPDATE 用）
     pub(crate) current_trade_id: Option<Uuid>,
+    /// 当前 LLM 决策日志 ID（handle_llm_result 创建 log 时返回，执行回填时 UPDATE 用）
+    /// - 拦截时：UPDATE 设置 intercept_reason + status='intercepted'
+    /// - 开仓订单成交：UPDATE 设置 execution_status='open'
+    /// - 平仓订单成交：UPDATE 设置 execution_status='close' + close_reason
+    pub(crate) current_log_id: Option<Uuid>,
     /// 当前开仓手续费（平仓时计算总手续费用）
     pub(crate) current_open_fee: f64,
     /// 当前仓位的风控边界（内存态，开仓时由 LLM 决策写入，trailing stop 更新 stop_loss；
@@ -107,6 +114,7 @@ impl AutoWorker {
             trailing_stop_dirty: false,
             current_position: None,
             current_trade_id: None,
+            current_log_id: None,
             current_open_fee: 0.0,
             stop_loss: 0.0,
             take_profit: 0.0,
@@ -155,6 +163,7 @@ impl AutoWorker {
 
         // 根据平仓原因和新开仓方向，确定冷却时长
         // 说明：closed_side 是上一次开仓方向（long/short），new_side 是即将开仓的方向
+        // close_reason 取值：stop_loss/take_profit/position_timeout/llm_decision
         let cooldown_secs: i64 = match reason.as_str() {
             "stop_loss" => {
                 // 止损说明入场点差，同方向立即重入大概率再次扫损
@@ -166,13 +175,17 @@ impl AutoWorker {
                 // 反方向允许进入
                 if closed_side == new_side { 15 * 60 } else { 0 }
             }
-            "trend_reversal" => {
-                // 趋势反转：原趋势已结束，同方向（继续原方向）不应立即再开
-                // 反方向（新趋势方向）允许进入
-                if closed_side == new_side { 15 * 60 } else { 0 }
+            "llm_decision" => {
+                // LLM 主动平仓（含趋势反转/风控/LLM决策）：双向保守冷却 15 分钟
+                // LLM 主动平仓意味着市场结构可能变化，新方向也需等待
+                15 * 60
+            }
+            "position_timeout" => {
+                // 持仓超时：双向保守冷却 15 分钟
+                15 * 60
             }
             _ => {
-                // 其他原因（position_timeout/risk_management/llm_decision/unknown）：双向保守冷却
+                // 未知原因：双向保守冷却 15 分钟
                 15 * 60
             }
         };
@@ -264,18 +277,37 @@ impl AutoWorker {
             .await;
     }
 
-    pub(crate) fn check_pending_timeout(&mut self) {
+    pub(crate) async fn check_pending_timeout(&mut self) {
         let now = tokio::time::Instant::now();
+        let mut timed_out_open = false;
+        let mut timed_out_close = false;
+
         if let Some(ref pending) = self.pending_open {
             if now.duration_since(pending.sent_at) > PENDING_ORDER_TIMEOUT {
                 warn!(bot_id = %self.bot.id, "Pending open order timed out, clearing");
                 self.pending_open = None;
+                timed_out_open = true;
             }
         }
         if let Some(ref pending) = self.pending_close {
             if now.duration_since(pending.sent_at) > PENDING_ORDER_TIMEOUT {
                 warn!(bot_id = %self.bot.id, "Pending close order timed out, clearing");
                 self.pending_close = None;
+                timed_out_close = true;
+            }
+        }
+
+        // 回填 LLM log 执行状态（仅 LLM 决策触发的订单才有 log_id）
+        if timed_out_open || timed_out_close {
+            if let Some(log_id) = self.current_log_id.take() {
+                let exec_status = if timed_out_open { "open_failed" } else { "close_failed" };
+                if let Err(e) = self
+                    .store
+                    .update_analysis_log_execution(log_id, exec_status, Some("订单超时未成交"), None)
+                    .await
+                {
+                    error!(bot_id = %self.bot.id, error = %e, "Failed to update log on pending timeout");
+                }
             }
         }
     }
@@ -342,14 +374,14 @@ impl AutoWorker {
 
         // 恢复最近平仓事件（用于冷却期判断；即使当前无仓位也需要恢复，防止重启后立即重入）
         match self.store.find_last_closed_trade(self.bot.id).await {
-            Ok(Some((side, reason, closed_at)) ) => {
-                self.last_close_event = Some((side.clone(), reason.clone(), closed_at));
+            Ok(Some((side, close_reason, closed_at))) => {
+                self.last_close_event = Some((side.clone(), close_reason.clone(), closed_at));
                 // 检查是否仍在冷却期，便于运维观察
                 if let Some(remaining) = self.cooldown_remaining_secs(&side) {
                     info!(
                         bot_id = %self.bot.id,
                         last_close_side = %side,
-                        last_close_reason = %reason,
+                        last_close_reason = %close_reason,
                         last_close_at = %closed_at,
                         remaining_secs = remaining,
                         "Restored last_close_event, still in cooldown"
@@ -358,7 +390,7 @@ impl AutoWorker {
                     info!(
                         bot_id = %self.bot.id,
                         last_close_side = %side,
-                        last_close_reason = %reason,
+                        last_close_reason = %close_reason,
                         last_close_at = %closed_at,
                         "Restored last_close_event, cooldown expired"
                     );
@@ -526,7 +558,7 @@ impl AutoWorker {
             return;
         }
 
-        self.check_pending_timeout();
+        self.check_pending_timeout().await;
 
         // 有 pending 订单时，跳过止损止盈检查，避免在订单未确认时重复触发
         if self.pending_open.is_some() || self.pending_close.is_some() {
@@ -575,16 +607,30 @@ impl AutoWorker {
         };
 
         if should_close {
-            let reason = if self.stop_loss > 0.0
+            // 分别判断止损和止盈是否触发
+            let stop_triggered = self.stop_loss > 0.0
                 && ((side == "long" && self.current_price <= self.stop_loss)
-                    || (side == "short" && self.current_price >= self.stop_loss))
-            {
+                    || (side == "short" && self.current_price >= self.stop_loss));
+            let take_triggered = self.take_profit > 0.0
+                && ((side == "long" && self.current_price >= self.take_profit)
+                    || (side == "short" && self.current_price <= self.take_profit));
+
+            // 同时触发时优先止盈（盈利出场优先，对策略和心理影响更小）
+            let close_reason = if take_triggered {
+                "take_profit"
+            } else if stop_triggered {
                 "stop_loss"
             } else {
-                "take_profit"
+                // 理论上不会走到这里（should_close=true 但两者都没触发）
+                "stop_loss"
             };
-            info!(bot_id = %self.bot.id, side = %side, reason = %reason, price = self.current_price, "Stop/take profit triggered");
-            self.close_position(reason).await;
+            info!(
+                bot_id = %self.bot.id, side = %side,
+                close_reason, price = self.current_price,
+                stop_loss = self.stop_loss, take_profit = self.take_profit,
+                "Stop/take profit triggered"
+            );
+            self.close_position(close_reason).await;
             return true;
         }
         false
@@ -696,11 +742,50 @@ impl AutoWorker {
             None => (None, None, String::new()),
         };
 
-        let action = self
+        let (action, log_id) = self
             .handle_llm_result(&decision, &system_prompt, &user_prompt, raw_llm_response.as_ref(), &llm_model)
             .await;
 
-        self.execute_decision(&action, decision.as_ref()).await;
+        // 保存 log_id 供后续 apply_pending_open/apply_pending_close 回填 execution_status / close_reason
+        self.current_log_id = log_id;
+
+        // 执行决策，若被拦截则 UPDATE LLM log 设置 intercept_reason + execution_status
+        // 解决拦截感知不到的 bug：每条 LLM 日志分两字段记录
+        // - intercept_reason: 拦截时回填（如冷却期/置信度不足）
+        // - close_reason: 平仓订单成交后回填（在 apply_pending_close 中处理）
+        let intercept_reason = self.execute_decision(&action, decision.as_ref()).await;
+        if let Some(reason) = intercept_reason {
+            warn!(bot_id = %self.bot.id, action = %action.as_str(), intercept_reason = %reason, "Decision intercepted");
+            if let Some(log_id) = self.current_log_id {
+                // 拦截时根据 action 类型设置 execution_status
+                let exec_status = match action {
+                    AutoAction::OpenLong | AutoAction::OpenShort => "open_failed",
+                    AutoAction::ClosePosition => "close_failed",
+                    AutoAction::Hold => "hold",
+                };
+                if let Err(e) = self
+                    .store
+                    .update_analysis_log_execution(log_id, exec_status, Some(&reason), None)
+                    .await
+                {
+                    error!(bot_id = %self.bot.id, error = %e, "Failed to update intercept log");
+                }
+            }
+            // 拦截后清空 log_id，避免被后续操作误更新
+            self.current_log_id = None;
+        } else if matches!(action, AutoAction::Hold) {
+            // Hold 决策：回填 execution_status='hold'
+            if let Some(log_id) = self.current_log_id {
+                if let Err(e) = self
+                    .store
+                    .update_analysis_log_execution(log_id, "hold", None, None)
+                    .await
+                {
+                    error!(bot_id = %self.bot.id, error = %e, "Failed to update hold log");
+                }
+                self.current_log_id = None;
+            }
+        }
 
         if !matches!(action, AutoAction::Hold) {
             let _ = self.store.update_last_decided(self.bot.id).await;
@@ -763,21 +848,20 @@ impl AutoWorker {
         };
 
         // 构造最近平仓事件描述（用于 LLM 反思，避免反复扫损）
+        // 基于 close_reason（代码逻辑字段）：stop_loss/take_profit/position_timeout/llm_decision
         let recent_close_info = match &self.last_close_event {
-            Some((side, reason, closed_at)) => {
+            Some((side, close_reason, closed_at)) => {
                 let side_cn = match side.as_str() {
                     "long" => "多",
                     "short" => "空",
                     _ => "未知",
                 };
-                let reason_cn = match reason.as_str() {
+                let reason_cn = match close_reason.as_str() {
                     "stop_loss" => "止损",
                     "take_profit" => "止盈",
-                    "trend_reversal" => "趋势反转",
-                    "position_timeout" => "超时",
-                    "risk_management" => "风控",
-                    "llm_decision" => "LLM决策",
-                    _ => reason.as_str(),
+                    "position_timeout" => "持仓超时",
+                    "llm_decision" => "LLM主动平仓",
+                    _ => "其他",
                 };
                 let elapsed = chrono::Utc::now().signed_duration_since(*closed_at);
                 let elapsed_str = {
@@ -841,7 +925,7 @@ impl AutoWorker {
         user_prompt: &str,
         raw_llm_response: Option<&serde_json::Value>,
         llm_model: &str,
-    ) -> AutoAction {
+    ) -> (AutoAction, Option<Uuid>) {
         match decision {
             Some(d) => {
                 info!(bot_id = %self.bot.id, action = d.action.as_str(), reason = %d.reason, confidence = d.confidence, "LLM decision");
@@ -873,12 +957,13 @@ impl AutoWorker {
                         .unwrap()
                         .insert("raw_llm_response".to_string(), raw.clone());
                 }
-                let _ = self
+                let log_id = self
                     .store
                     .save_analysis_log(self.bot.id, "periodic", system_prompt, user_prompt, &result, None, llm_model)
-                    .await;
+                    .await
+                    .ok();
 
-                d.action.clone()
+                (d.action.clone(), log_id)
             }
             None => {
                 warn!(bot_id = %self.bot.id, "LLM call failed, holding position");
@@ -897,7 +982,7 @@ impl AutoWorker {
                     "analysis": null,
                     "risk_warning": null,
                 });
-                let _ = self
+                let log_id = self
                     .store
                     .save_analysis_log(
                         self.bot.id,
@@ -908,31 +993,47 @@ impl AutoWorker {
                         Some("LLM call failed"),
                         llm_model,
                     )
-                    .await;
+                    .await
+                    .ok();
 
                 let _ = self.auto_event_tx.send(AutoEvent::BotError {
                     bot_id: self.bot.id,
                     error: "LLM call failed, holding".to_string(),
                 });
 
-                AutoAction::Hold
+                (AutoAction::Hold, log_id)
             }
         }
     }
 
+    /// 执行 LLM 决策。
+    /// 返回 `Some(拦截原因)` 表示决策被代码拦截（未执行），`None` 表示已执行或无需执行。
+    /// 拦截原因会被记录到 LLM log 的 intercept_reason 字段供前端展示。
+    ///
+    /// ## 拦截顺序（从早到晚，前序拦截后不再检查后续）
+    /// 1. **Hold 决策**：LLM 决策为观望，直接返回（非拦截，无日志）
+    /// 2. **pending 订单**：有待确认的订单在途，避免重复下单
+    /// 3. **置信度不足**（仅开仓）：confidence < 0.6，降级为观望
+    /// 4. **市场快照无效**：current_price <= 0，无法计算下单参数
+    /// 5. **现货做空**：spot 市场不支持 short
+    /// 6. **已有仓位**：避免重复开仓
+    /// 7. **冷却期**（仅开仓）：止损/止盈/LLM平仓后同方向重入限制
+    /// 8. **无仓位可平**（仅平仓）：ClosePosition 时无持仓
+    ///
+    /// 拦截 2-8 会返回 `Some(reason)`，由调用方记录到 LLM log 的 intercept_reason
     pub(crate) async fn execute_decision(
         &mut self,
         action: &AutoAction,
         decision: Option<&AutoDecision>,
-    ) {
+    ) -> Option<String> {
         if matches!(action, AutoAction::Hold) {
             info!(bot_id = %self.bot.id, "Hold: no action taken, no params applied");
-            return;
+            return None;
         }
 
         if self.is_pending() {
             warn!(bot_id = %self.bot.id, "Pending order in progress, skipping decision execution");
-            return;
+            return Some("有待确认订单，跳过本次决策".to_string());
         }
 
         if matches!(action, AutoAction::OpenLong | AutoAction::OpenShort) {
@@ -944,7 +1045,9 @@ impl AutoWorker {
                         confidence = d.confidence,
                         "Confidence below 0.6 threshold for opening position, downgrading to Hold"
                     );
-                    return;
+                    return Some(format!(
+                        "置信度 {:.2} 低于 0.6 阈值，降级为观望", d.confidence
+                    ));
                 }
             }
         }
@@ -957,7 +1060,7 @@ impl AutoWorker {
 
         if snapshot.base.current_price <= 0.0 {
             warn!(bot_id = %self.bot.id, "Market snapshot has zero price, skipping decision execution");
-            return;
+            return Some("市场快照价格为 0，跳过决策".to_string());
         }
 
         match action {
@@ -974,44 +1077,58 @@ impl AutoWorker {
 
                 if side == "short" && self.is_spot() {
                     warn!(bot_id = %self.bot.id, "Cannot open short on spot market");
-                    return;
+                    return Some("现货市场不支持做空".to_string());
                 }
                 if self.has_position() {
                     warn!(bot_id = %self.bot.id, side = %side, "Already has position, cannot open");
-                    return;
+                    return Some("已有仓位，无法开仓".to_string());
                 }
                 // 冷却期检查：防止止损/止盈后立即同方向重入被反弹扫损
                 if let Some(remaining) = self.cooldown_remaining_secs(side) {
-                    let (closed_side, reason, closed_at) = self.last_close_event.as_ref().unwrap();
+                    let (closed_side, close_reason, closed_at) = self.last_close_event.as_ref().unwrap();
                     warn!(
                         bot_id = %self.bot.id,
                         new_side = %side,
                         last_close_side = %closed_side,
-                        last_close_reason = %reason,
+                        last_close_reason = %close_reason,
                         last_close_at = %closed_at,
                         remaining_secs = remaining,
                         "In cooldown period, skipping open"
                     );
-                    let _ = self.auto_event_tx.send(AutoEvent::BotError {
-                        bot_id: self.bot.id,
-                        error: format!(
-                            "冷却期 {}s 内不允许 {} 仓（上次：{} {}）",
-                            remaining, side, closed_side, reason
-                        ),
-                    });
-                    return;
+                    let reason_cn = match close_reason.as_str() {
+                        "stop_loss" => "止损",
+                        "take_profit" => "止盈",
+                        "position_timeout" => "持仓超时",
+                        "llm_decision" => "LLM平仓",
+                        _ => "其他",
+                    };
+                    let side_cn = if side == "long" { "多" } else { "空" };
+                    let closed_side_cn = if closed_side == "long" { "多" } else { "空" };
+                    return Some(format!(
+                        "冷却期剩 {}s，不允许开{}（上次：{}{}）",
+                        remaining, side_cn, closed_side_cn, reason_cn
+                    ));
                 }
                 self.open_position(side, decision, &snapshot).await;
+                // 订单发送失败检测：open_position 成功会设置 pending_open
+                // 失败时回填 intercept_reason + execution_status='open_failed'（在 on_llm_decision 中处理）
+                if self.pending_open.is_none() {
+                    return Some("开仓订单发送失败".to_string());
+                }
+                None
             }
             AutoAction::ClosePosition => {
                 if !self.has_position() {
                     warn!(bot_id = %self.bot.id, "No position to close");
-                    return;
+                    return Some("无仓位可平".to_string());
                 }
-                let reason = decision
-                    .and_then(|d| d.close_reason.as_deref())
-                    .unwrap_or("llm_decision");
-                self.close_position(reason).await;
+                // LLM 决策平仓：close_reason 固定为 llm_decision（不由 LLM 决定原因文本）
+                self.close_position("llm_decision").await;
+                // 订单发送失败检测：close_position 成功会设置 pending_close
+                if self.pending_close.is_none() {
+                    return Some("平仓订单发送失败".to_string());
+                }
+                None
             }
             AutoAction::Hold => unreachable!(),
         }
@@ -1217,7 +1334,13 @@ impl AutoWorker {
         }
     }
 
-    pub(crate) async fn close_position(&mut self, reason: &str) {
+    /// 平仓入口。
+    /// - `close_reason`: 平仓原因（stop_loss/take_profit/position_timeout/llm_decision）
+    ///   由代码逻辑决定（不由 LLM 决定），用于冷却期判断和 DB 记录
+    pub(crate) async fn close_position(
+        &mut self,
+        close_reason: &str,
+    ) {
         if !self.has_position() {
             return;
         }
@@ -1231,7 +1354,7 @@ impl AutoWorker {
         // Use ClosePosition if we have a valid position_id, otherwise fall back to PlaceOrder
         // 注意：Uuid::nil() 视为无效（历史 bug 可能导致 nil UUID 被保存）
         if let Some(position_id) = self.bot.position_id.filter(|id| *id != Uuid::nil()) {
-            let client_order_id = format!("auto:close:{}:{}", reason, self.bot.id);
+            let client_order_id = format!("auto:close:{}:{}", close_reason, self.bot.id);
 
             let result = self
                 .order_executor
@@ -1248,13 +1371,13 @@ impl AutoWorker {
                         bot_id = %self.bot.id, side = %side,
                         entry_price = entry_price,
                         close_price = self.current_price,
-                        reason = %reason,
+                        close_reason = %close_reason,
                         "Position closing order sent via ClosePosition, awaiting confirmation"
                     );
 
                     self.pending_close = Some(PendingClose {
                         side: side.clone(),
-                        reason: reason.to_string(),
+                        close_reason: close_reason.to_string(),
                         entry_price,
                         position_size,
                         unrealized_pnl,
@@ -1266,7 +1389,7 @@ impl AutoWorker {
                     warn!(bot_id = %self.bot.id, error = %e, "Failed to send close position order");
                     let _ = self.auto_event_tx.send(AutoEvent::BotError {
                         bot_id: self.bot.id,
-                        error: format!("Failed to send close order ({}): {}", reason, e),
+                        error: format!("Failed to send close order ({}): {}", close_reason, e),
                     });
                 }
             }
@@ -1281,7 +1404,7 @@ impl AutoWorker {
                 }
             };
 
-            let client_order_id = format!("auto:close:{}:{}", reason, self.bot.id);
+            let client_order_id = format!("auto:close:{}:{}", close_reason, self.bot.id);
 
             let result = self
                 .order_executor
@@ -1303,13 +1426,13 @@ impl AutoWorker {
                         bot_id = %self.bot.id, side = %side,
                         entry_price = entry_price,
                         close_price = self.current_price,
-                        reason = %reason,
+                        close_reason = %close_reason,
                         "Position closing order sent via PlaceOrder, awaiting confirmation"
                     );
 
                     self.pending_close = Some(PendingClose {
                         side: side.clone(),
-                        reason: reason.to_string(),
+                        close_reason: close_reason.to_string(),
                         entry_price,
                         position_size,
                         unrealized_pnl,
@@ -1321,7 +1444,7 @@ impl AutoWorker {
                     warn!(bot_id = %self.bot.id, error = %e, "Failed to send close position order");
                     let _ = self.auto_event_tx.send(AutoEvent::BotError {
                         bot_id: self.bot.id,
-                        error: format!("Failed to send close order ({}): {}", reason, e),
+                        error: format!("Failed to send close order ({}): {}", close_reason, e),
                     });
                 }
             }
@@ -1445,13 +1568,28 @@ impl AutoWorker {
             }
             OrderEvent::OrderFailed { order_id: _, reason } => {
                 if self.pending_open.is_some() || self.pending_close.is_some() {
+                    // 记录是开仓还是平仓失败（rollback 前判断）
+                    let was_open = self.pending_open.is_some();
                     warn!(
                         bot_id = %self.bot.id,
                         reason = %reason,
+                        was_open,
                         "Order failed, rolling back pending state"
                     );
                     self.rollback_pending_open();
                     self.rollback_pending_close();
+                    // 回填 LLM log 执行状态（仅 LLM 决策触发的订单才有 log_id）
+                    // 止盈止损/超时触发的平仓 current_log_id 为 None，不会误回填
+                    if let Some(log_id) = self.current_log_id.take() {
+                        let exec_status = if was_open { "open_failed" } else { "close_failed" };
+                        if let Err(e) = self
+                            .store
+                            .update_analysis_log_execution(log_id, exec_status, Some(&reason), None)
+                            .await
+                        {
+                            error!(bot_id = %self.bot.id, error = %e, "Failed to update log on order failed");
+                        }
+                    }
                 }
             }
             OrderEvent::LiquidationWarning {
@@ -1584,6 +1722,17 @@ impl AutoWorker {
                 "Partial open: position opened with less than requested quantity"
             );
         }
+
+        // 回填 LLM 日志执行状态：开仓成功
+        if let Some(log_id) = self.current_log_id.take() {
+            if let Err(e) = self
+                .store
+                .update_analysis_log_execution(log_id, "open", None, None)
+                .await
+            {
+                error!(bot_id = %self.bot.id, error = %e, "Failed to update open execution status");
+            }
+        }
     }
 
     pub(crate) async fn apply_pending_close(&mut self, fill_price: f64, filled_qty: f64, fee: f64) {
@@ -1616,7 +1765,8 @@ impl AutoWorker {
         info!(
             bot_id = %self.bot.id, side = %pending.side,
             entry_price = pending.entry_price, close_price = fill_price,
-            quantity = actual_qty, realized_pnl, reason = %pending.reason,
+            quantity = actual_qty, realized_pnl,
+            close_reason = %pending.close_reason,
             open_fee = self.current_open_fee, close_fee = fee, total_fee,
             "Position closed"
         );
@@ -1638,10 +1788,10 @@ impl AutoWorker {
         self.position_opened_at = None;
 
         // 记录最近平仓事件（用于冷却期判断和 LLM 上下文反思）
-        // pending.side 是开仓方向（long/short），pending.reason 是平仓原因
+        // 字段：(开仓方向, 平仓原因 close_reason, 平仓时间)
         self.last_close_event = Some((
             pending.side.clone(),
-            pending.reason.clone(),
+            pending.close_reason.clone(),
             chrono::Utc::now(),
         ));
 
@@ -1653,13 +1803,8 @@ impl AutoWorker {
             "short" => "buy",
             _ => "sell",
         };
-        // trigger_source 必须满足 DB CHECK 约束 ('llm', 'risk_control')
-        // 将 reason 映射为合法的 trigger_source
-        let trigger_source = match pending.reason.as_str() {
-            "stop_loss" | "take_profit" | "position_timeout" => "risk_control",
-            _ => "llm",
-        };
-        let close_reason = &pending.reason;
+        // close_reason 直接使用 pending.close_reason（已为合法值）
+        let close_reason = &pending.close_reason;
 
         // 平仓时 UPDATE 对应的开仓 trade 记录
         let trade_id = self.current_trade_id.take();
@@ -1676,7 +1821,6 @@ impl AutoWorker {
                         fee,
                         realized_pnl,
                         pnl_pct,
-                        trigger_source,
                         close_reason,
                     )
                     .await
@@ -1701,7 +1845,6 @@ impl AutoWorker {
                                 fee,
                                 realized_pnl,
                                 pnl_pct,
-                                trigger_source,
                                 close_reason,
                             )
                             .await
@@ -1727,7 +1870,6 @@ impl AutoWorker {
                                 fee,
                                 realized_pnl,
                                 pnl_pct,
-                                trigger_source,
                                 close_reason,
                             )
                             .await;
@@ -1748,6 +1890,19 @@ impl AutoWorker {
             price: fill_price,
             pnl: realized_pnl,
         });
+
+        // 回填 LLM 日志执行状态：平仓成功 + close_reason（平仓订单成交后回填）
+        // 注意：close_reason 是平仓事件本身的原因（stop_loss/take_profit/position_timeout/llm_decision）
+        // 与拦截原因（intercept_reason）是两个不同概念
+        if let Some(log_id) = self.current_log_id.take() {
+            if let Err(e) = self
+                .store
+                .update_analysis_log_execution(log_id, "close", None, Some(close_reason))
+                .await
+            {
+                error!(bot_id = %self.bot.id, error = %e, "Failed to update close execution status");
+            }
+        }
     }
 
     fn rollback_pending_open(&mut self) {

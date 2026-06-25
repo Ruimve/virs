@@ -41,7 +41,6 @@ struct AutoTradeRow {
     pnl_pct: f64,
     stop_loss: f64,
     take_profit: f64,
-    trigger_source: String,
     close_reason: Option<String>,
     status: String,
 }
@@ -385,7 +384,7 @@ pub async fn get_trades(
                   open_side, open_price, open_quantity, open_order_id, open_fee, opened_at,
                   close_side, close_price, close_quantity, close_order_id, close_fee, closed_at,
                   pnl, pnl_pct, stop_loss, take_profit,
-                  trigger_source, close_reason, status
+                  close_reason, status
            FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2
            ORDER BY opened_at DESC LIMIT $3 OFFSET $4"#,
     )
@@ -420,7 +419,6 @@ pub async fn get_trades(
                     "pnl_pct": t.pnl_pct,
                     "stop_loss": t.stop_loss,
                     "take_profit": t.take_profit,
-                    "trigger_source": t.trigger_source,
                     "close_reason": t.close_reason,
                     "status": t.status,
                 })

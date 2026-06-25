@@ -69,7 +69,9 @@ const Trades = () => {
                             ? '止盈'
                             : t.close_reason === 'position_timeout'
                               ? '超时'
-                              : '已平仓'}
+                              : t.close_reason === 'llm_decision'
+                                ? 'LLM平仓'
+                                : '已平仓'}
                     </span>
                     <div>
                       <div className="text-xs text-on-surface font-mono">
