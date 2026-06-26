@@ -22,8 +22,6 @@ pub async fn fetch_api_restrictions(
         .signed_get(signer, &url("/sapi/v1/account/apiRestrictions"), vec![])
         .await?;
 
-    tracing::info!("apiRestrictions raw response: {}", serde_json::to_string_pretty(&data).unwrap_or_default());
-
     let ip_restrict = data.get("ipRestrict").and_then(|v| v.as_bool()).unwrap_or(false);
 
     Ok(ApiRestrictions {

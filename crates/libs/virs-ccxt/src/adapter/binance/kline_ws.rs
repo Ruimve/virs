@@ -203,7 +203,7 @@ impl KlineWsClient for BinanceKlineWs {
 
                 match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
-                        tracing::info!("[BinanceKlineWs] Connected to {} successfully", ws_url);
+                        tracing::debug!("[BinanceKlineWs] Connected to {} successfully", ws_url);
                         reconnect_delay = reconnect_delay_secs;
 
                         if !is_first_connect {
@@ -218,7 +218,7 @@ impl KlineWsClient for BinanceKlineWs {
                             if !subs.is_empty() {
                                 let id = request_id.fetch_add(1, Ordering::Relaxed);
                                 let subs_vec: Vec<&String> = subs.iter().collect();
-                                tracing::info!("[BinanceKlineWs] Connected to {} (subscribing {} streams)", ws_url, subs.len());
+                                tracing::debug!("[BinanceKlineWs] Connected to {} (subscribing {} streams)", ws_url, subs.len());
                                 let msg = serde_json::json!({
                                     "method": "SUBSCRIBE",
                                     "params": subs_vec,
@@ -245,7 +245,7 @@ impl KlineWsClient for BinanceKlineWs {
                             }
 
                             if connect_start.elapsed() > max_lifetime {
-                                tracing::info!("[BinanceKlineWs] Max lifetime reached, reconnecting...");
+                                tracing::debug!("[BinanceKlineWs] Max lifetime reached, reconnecting...");
                                 break;
                             }
 
@@ -320,7 +320,7 @@ impl KlineWsClient for BinanceKlineWs {
                                                     tracing::warn!("[BinanceKlineWs] Failed to send dynamic subscribe");
                                                     break;
                                                 }
-                                                tracing::info!("[BinanceKlineWs] Dynamically subscribed to stream {}", stream_name);
+                                                tracing::debug!("[BinanceKlineWs] Dynamically subscribed to stream {}", stream_name);
                                             }
                                         }
                                         Some(WsCommand::Unsubscribe(stream_name)) => {

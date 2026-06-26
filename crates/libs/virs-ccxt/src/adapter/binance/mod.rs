@@ -17,7 +17,6 @@ pub mod order_ws;
 pub mod orderbook_ws;
 
 use async_trait::async_trait;
-use tracing::info;
 
 use crate::types::*;
 use crate::errors::ExchangeError;
@@ -312,7 +311,6 @@ impl Exchange for BinanceExchange {
     }
 
     async fn fetch_balance(&self) -> Result<Vec<Balance>, ExchangeError> {
-        tracing::info!("[BinanceExchange::fetch_balance] is_perpetual={}", self.is_perpetual());
         if self.is_perpetual() {
             fapi::fetch_balance(&self.client, &self.signer).await
         } else {
@@ -461,9 +459,9 @@ impl Exchange for BinanceExchange {
     }
 
     async fn load_markets(&mut self) -> Result<(), ExchangeError> {
-        info!("Loading Binance markets (type={:?})...", self.market_type);
+        tracing::debug!("Loading Binance markets (type={:?})...", self.market_type);
         self.markets = Some(self.fetch_markets().await?);
-        info!("Loaded {} Binance markets", self.markets.as_ref().unwrap().len());
+        tracing::debug!("Loaded {} Binance markets", self.markets.as_ref().unwrap().len());
         Ok(())
     }
 

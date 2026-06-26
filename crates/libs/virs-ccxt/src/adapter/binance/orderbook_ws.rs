@@ -265,7 +265,7 @@ impl OrderBookWsClient for BinanceOrderBookWs {
 
                 match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
-                        tracing::info!("[BinanceOrderBookWs] Connected to {}", ws_url);
+                        tracing::debug!("[BinanceOrderBookWs] Connected to {}", ws_url);
                         reconnect_delay = reconnect_delay_secs;
 
                         if !is_first_connect {
@@ -281,7 +281,7 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                             if !subs.is_empty() {
                                 let id = request_id.fetch_add(1, Ordering::Relaxed);
                                 let subs_vec: Vec<&String> = subs.iter().collect();
-                                tracing::info!(
+                                tracing::debug!(
                                     "[BinanceOrderBookWs] Resubscribing {} streams",
                                     subs.len()
                                 );
@@ -313,7 +313,7 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                             }
 
                             if connect_start.elapsed() > max_lifetime {
-                                tracing::info!(
+                                tracing::debug!(
                                     "[BinanceOrderBookWs] Max lifetime reached, reconnecting"
                                 );
                                 break;
@@ -401,7 +401,7 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                                                     tracing::warn!("[BinanceOrderBookWs] Subscribe send failed");
                                                     break;
                                                 }
-                                                tracing::info!(
+                                                tracing::debug!(
                                                     "[BinanceOrderBookWs] Subscribed to {}",
                                                     stream_name
                                                 );

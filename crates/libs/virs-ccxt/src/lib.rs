@@ -135,8 +135,9 @@ impl ExchangeClient {
     ) -> Result<Value, ExchangeError> {
         let _permit = self.rate_limiter.acquire().await
             .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
+        let display_url = build_display_url(path, params.iter().map(|(k, v)| (*k, *v)));
         let resp = self.client.get(path).query(params).send().await?;
-        handle_response(resp).await
+        handle_response(resp, &display_url, None).await
     }
 
     pub async fn signed_get(
@@ -148,6 +149,10 @@ impl ExchangeClient {
         let _permit = self.rate_limiter.acquire().await
             .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
         let signed = signer.sign_get(path, &mut params)?;
+        let display_url = build_display_url(
+            path,
+            signed.query_params.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+        );
         let mut req = self.client.get(path);
         for (k, v) in &signed.query_params {
             req = req.query(&[(k.as_str(), v.as_str())]);
@@ -157,7 +162,7 @@ impl ExchangeClient {
                 req = req.header(n, value);
             }
         }
-        handle_response(req.send().await?).await
+        handle_response(req.send().await?, &display_url, None).await
     }
 
     pub async fn signed_post(
@@ -169,6 +174,11 @@ impl ExchangeClient {
         let _permit = self.rate_limiter.acquire().await
             .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
         let signed = signer.sign_post(path, &mut body)?;
+        let display_body = signed
+            .body
+            .as_ref()
+            .and_then(|b| b.as_str())
+            .map(mask_signature);
         let mut req = self.client.post(path);
         for (name, value) in signed.headers {
             if let Some(n) = name {
@@ -186,7 +196,7 @@ impl ExchangeClient {
         } else {
             req = req.json(&body);
         }
-        handle_response(req.send().await?).await
+        handle_response(req.send().await?, path, display_body.as_deref()).await
     }
 
     pub async fn signed_put(
@@ -198,6 +208,11 @@ impl ExchangeClient {
         let _permit = self.rate_limiter.acquire().await
             .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
         let signed = signer.sign_put(path, &mut body)?;
+        let display_body = signed
+            .body
+            .as_ref()
+            .and_then(|b| b.as_str())
+            .map(mask_signature);
         let mut req = self.client.put(path);
         for (name, value) in signed.headers {
             if let Some(n) = name {
@@ -215,15 +230,64 @@ impl ExchangeClient {
         } else {
             req = req.json(&body);
         }
-        handle_response(req.send().await?).await
+        handle_response(req.send().await?, path, display_body.as_deref()).await
     }
 }
 
-async fn handle_response(resp: reqwest::Response) -> Result<Value, ExchangeError> {
+/// Build a display URL from path and query params, masking `signature` for safe logging.
+fn build_display_url<'a>(
+    path: &str,
+    params: impl Iterator<Item = (&'a str, &'a str)>,
+) -> String {
+    let mut url = path.to_string();
+    let mut param_strs: Vec<String> = Vec::new();
+    let mut has_params = false;
+    for (k, v) in params {
+        has_params = true;
+        let v = if k == "signature" { "***MASKED***" } else { v };
+        param_strs.push(format!("{}={}", k, v));
+    }
+    if has_params {
+        url.push('?');
+        url.push_str(&param_strs.join("&"));
+    }
+    url
+}
+
+/// Mask `signature=XXX` in a URL-encoded body string for safe logging.
+fn mask_signature(s: &str) -> String {
+    if let Some(idx) = s.find("signature=") {
+        let before = &s[..idx];
+        let after = if let Some(amp_idx) = s[idx..].find('&') {
+            &s[idx + amp_idx..]
+        } else {
+            ""
+        };
+        format!("{}signature=***MASKED***{}", before, after)
+    } else {
+        s.to_string()
+    }
+}
+
+async fn handle_response(
+    resp: reqwest::Response,
+    display_url: &str,
+    display_body: Option<&str>,
+) -> Result<Value, ExchangeError> {
     let status = resp.status();
-    let url = resp.url().to_string();
     let text = resp.text().await
         .map_err(|e| ExchangeError::Network(format!("Failed to read response body: {}", e)))?;
+
+    // Print the RAW response body from Binance as-is (no transformation).
+    // This is the native return value before any field mapping/conversion.
+    tracing::info!(
+        target: "binance_api",
+        url = %display_url,
+        request_body = ?display_body,
+        http_status = %status.as_u16(),
+        response = %text,
+        "Binance API call"
+    );
 
     if !status.is_success() {
         if let Ok(json) = serde_json::from_str::<Value>(&text) {
@@ -241,7 +305,7 @@ async fn handle_response(resp: reqwest::Response) -> Result<Value, ExchangeError
     serde_json::from_str::<Value>(&text)
         .map_err(|e| ExchangeError::Internal(format!(
             "Failed to parse response from {}: {} (body: {})",
-            url, e, &text[..text.len().min(200)]
+            display_url, e, &text[..text.len().min(200)]
         )))
 }
 

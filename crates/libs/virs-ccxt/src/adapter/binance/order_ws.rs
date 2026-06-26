@@ -276,7 +276,7 @@ impl BinanceOrderWs {
 
                 match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
-                        tracing::info!("[BinanceOrderWs] Connected to {}", ws_url);
+                        tracing::debug!("[BinanceOrderWs] Connected to {}", ws_url);
                         reconnect_delay = reconnect_delay_secs;
 
                         // 发送连接恢复事件
@@ -294,7 +294,7 @@ impl BinanceOrderWs {
                             }
 
                             if connect_start.elapsed() > max_lifetime {
-                                tracing::info!("[BinanceOrderWs] Max lifetime reached, reconnecting...");
+                                tracing::debug!("[BinanceOrderWs] Max lifetime reached, reconnecting...");
                                 break;
                             }
 

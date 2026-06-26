@@ -42,6 +42,10 @@ services:
       HOST: 0.0.0.0
       PORT: "8080"
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Tracing filter: controls which logs are shown.
+      # binance_api=info enables Binance REST API call logging (full URL + response).
+      # Override in .env if you need to debug other modules (e.g. RUST_LOG=debug).
+      RUST_LOG: ${RUST_LOG:-virs_app=info,virs_bot=info,virs_position=info,virs_market=info,virs_api=info,binance_api=info}
       FRONTEND_DIR: /app/frontend/dist
       # Security (MUST change in production)
       SECRET_KEY: ${SECRET_KEY:-change-me-to-a-random-64-char-string-in-production}

@@ -675,7 +675,7 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
                 handle_ws_order_update(&inner, &exchange_order_id, &symbol, status, filled, remaining, price, amount, commission, timestamp, position_side).await;
             }
             WsFeedEvent::ConnectionChanged { connected } => {
-                info!(connected, "WebSocket connection changed");
+                debug!(connected, "WebSocket connection changed");
             }
         }
     }

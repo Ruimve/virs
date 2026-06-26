@@ -32,7 +32,7 @@ impl GapDetector {
         let expected_next = match last_closed_1m {
             Some(c) => c.open_time + 60_000,
             None => {
-                tracing::info!("[GapDetector] No 1m candles in cache for {}/{}, loading initial data", exchange, symbol);
+                tracing::debug!("[GapDetector] No 1m candles in cache for {}/{}, loading initial data", exchange, symbol);
                 return Self::initial_load(exchange, symbol, cache, source, event_tx, market_type).await;
             }
         };
@@ -47,7 +47,7 @@ impl GapDetector {
         let gap_end = current_1m_open;
         let gap_minutes = ((gap_end - gap_start) / 60_000) as u32;
 
-        tracing::info!("[GapDetector] Gap detected for {}/{}: {} minutes", exchange, symbol, gap_minutes);
+        tracing::debug!("[GapDetector] Gap detected for {}/{}: {} minutes", exchange, symbol, gap_minutes);
 
         let limit = gap_minutes.min(1000);
         let fetched = source.fetch_klines(exchange, symbol, "1m", limit, Some(gap_start), Some(market_type)).await?;
@@ -102,7 +102,7 @@ impl GapDetector {
             });
         }
 
-        tracing::info!("[GapDetector] Backfilled {} candles for {}/{}", backfilled_count, exchange, symbol);
+        tracing::debug!("[GapDetector] Backfilled {} candles for {}/{}", backfilled_count, exchange, symbol);
         Ok(backfilled_count)
     }
 
@@ -114,7 +114,7 @@ impl GapDetector {
         event_tx: &tokio::sync::broadcast::Sender<KlineEvent>,
         market_type: MarketType,
     ) -> anyhow::Result<usize> {
-        tracing::info!("[GapDetector] Initial load for {}/{}", exchange, symbol);
+        tracing::debug!("[GapDetector] Initial load for {}/{}", exchange, symbol);
 
         let (result_1m, results_high): (anyhow::Result<Vec<Candle>>, Vec<(Timeframe, anyhow::Result<Vec<Candle>>)>) = {
             let fetch_1m = source.fetch_klines(exchange, symbol, "1m", INITIAL_1M_LIMIT, None, Some(market_type.clone()));
@@ -143,7 +143,7 @@ impl GapDetector {
             }
         };
 
-        tracing::info!("[GapDetector] Loaded {} 1m candles for {}/{}", candles_1m.len(), exchange, symbol);
+        tracing::debug!("[GapDetector] Loaded {} 1m candles for {}/{}", candles_1m.len(), exchange, symbol);
 
         let now_ms = chrono::Utc::now().timestamp_millis();
         let current_1m_open = (now_ms / 60_000) * 60_000;
@@ -191,7 +191,7 @@ impl GapDetector {
                             }
                         }
 
-                        tracing::info!(
+                        tracing::debug!(
                             "[GapDetector] Loaded {} {} candles for {}/{}",
                             final_candles.len(), tf.as_str(), exchange, symbol
                         );

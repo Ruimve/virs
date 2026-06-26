@@ -95,7 +95,7 @@ impl OrderBookEngine {
             return;
         }
 
-        tracing::info!("[OrderBookEngine] Starting...");
+        tracing::debug!("[OrderBookEngine] Starting...");
 
         let (ws_update_tx, mut ws_update_rx) = broadcast::channel::<WsOrderBookEvent>(4096);
 
@@ -109,12 +109,12 @@ impl OrderBookEngine {
 
         // WS update processor
         tokio::spawn(async move {
-            tracing::info!("[OrderBookEngine] WS update processor started");
+            tracing::debug!("[OrderBookEngine] WS update processor started");
 
             while started.load(std::sync::atomic::Ordering::Relaxed) {
                 match ws_update_rx.recv().await {
                     Ok(WsOrderBookEvent::Reconnected) => {
-                        tracing::info!(
+                        tracing::debug!(
                             "[OrderBookEngine] WS reconnected — snapshots will resume automatically"
                         );
                     }
@@ -147,26 +147,26 @@ impl OrderBookEngine {
                         );
                     }
                     Err(broadcast::error::RecvError::Closed) => {
-                        tracing::info!("[OrderBookEngine] WS update channel closed");
+                        tracing::debug!("[OrderBookEngine] WS update channel closed");
                         break;
                     }
                 }
             }
 
-            tracing::info!("[OrderBookEngine] WS update processor stopped");
+            tracing::debug!("[OrderBookEngine] WS update processor stopped");
         });
 
-        tracing::info!("[OrderBookEngine] Started successfully");
+        tracing::debug!("[OrderBookEngine] Started successfully");
     }
 
     pub async fn stop(&self) {
         if !self.started.swap(false, std::sync::atomic::Ordering::Relaxed) {
             return;
         }
-        tracing::info!("[OrderBookEngine] Stopping...");
+        tracing::debug!("[OrderBookEngine] Stopping...");
         self.spot_handler.stop().await;
         self.perpetual_handler.stop().await;
-        tracing::info!("[OrderBookEngine] Stopped");
+        tracing::debug!("[OrderBookEngine] Stopped");
     }
 
     pub async fn subscribe(
@@ -183,7 +183,7 @@ impl OrderBookEngine {
         let key = subscription_key(exchange, symbol);
 
         if self.subscriptions.contains_key(&key) {
-            tracing::info!(
+            tracing::debug!(
                 "[OrderBookEngine] Already subscribed to {}/{}",
                 exchange,
                 symbol
@@ -209,7 +209,7 @@ impl OrderBookEngine {
             }
         }
 
-        tracing::info!(
+        tracing::debug!(
             "[OrderBookEngine] Subscribed to {}/{} ({})",
             exchange,
             symbol,
@@ -238,7 +238,7 @@ impl OrderBookEngine {
         self.subscriptions.remove(&key);
         self.symbol_index.remove(symbol);
 
-        tracing::info!(
+        tracing::debug!(
             "[OrderBookEngine] Unsubscribed from {}/{}",
             exchange,
             symbol

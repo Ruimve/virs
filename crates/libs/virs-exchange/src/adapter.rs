@@ -29,13 +29,11 @@ impl CcxtAdapter {
                 return Ok(cache.as_ref().unwrap().clone());
             }
         }
-        tracing::info!(exchange = %self.inner.name(), "Fetching markets from exchange API...");
         let markets = self.inner.fetch_markets().await
             .map_err(|e| {
                 tracing::error!(error = %e, "fetch_markets failed");
                 anyhow::anyhow!("ccxt fetch_markets error: {}", e)
             })?;
-        tracing::info!(exchange = %self.inner.name(), count = markets.len(), "Fetched markets successfully");
         let mut cache = self.markets_cache.write().await;
         *cache = Some(markets.clone());
         Ok(markets)
@@ -128,9 +126,7 @@ impl Exchange for CcxtAdapter {
     }
 
     async fn get_balances(&self) -> anyhow::Result<Vec<Balance>> {
-        tracing::info!("[CcxtAdapter::get_balances] Calling inner.fetch_balance()...");
         let cbs = self.inner.fetch_balance().await.map_err(|e| anyhow::anyhow!("ccxt balance error: {}", e))?;
-        tracing::info!("[CcxtAdapter::get_balances] fetch_balance returned {} balances", cbs.len());
         Ok(cbs.into_iter().map(to_models_balance).collect())
     }
 
@@ -178,11 +174,7 @@ impl Exchange for CcxtAdapter {
         let markets = self.get_markets_cached().await?;
         let found = markets.iter().find(|m| m.symbol == symbol || m.id == symbol);
         match found {
-            Some(m) => {
-                let min = m.min_amount.unwrap_or(0.0);
-                tracing::info!(symbol = %symbol, min_amount = min, "get_min_qty result");
-                Ok(min)
-            }
+            Some(m) => Ok(m.min_amount.unwrap_or(0.0)),
             None => {
                 tracing::warn!(symbol = %symbol, total_markets = markets.len(), "Symbol not found in markets, returning 0.0 for min_qty");
                 Ok(0.0)

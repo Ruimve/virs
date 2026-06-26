@@ -281,3 +281,13 @@ CREATE TABLE IF NOT EXISTS qd_auto_analysis_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_auto_analysis_logs_bot ON qd_auto_analysis_logs(bot_id, created_at DESC);
+
+-- ============================================================
+-- 增量字段补齐（兼容旧版本数据库升级）
+-- 旧版本 qd_auto_analysis_logs 表缺少 intercept_reason/close_reason/execution_status 字段，
+-- 代码在 UPDATE 这些字段时会报 "column ... does not exist" 错误。
+-- 此处使用 ADD COLUMN IF NOT EXISTS 做幂等升级，PostgreSQL 9.6+ 支持。
+-- ============================================================
+ALTER TABLE qd_auto_analysis_logs ADD COLUMN IF NOT EXISTS intercept_reason TEXT;
+ALTER TABLE qd_auto_analysis_logs ADD COLUMN IF NOT EXISTS close_reason TEXT;
+ALTER TABLE qd_auto_analysis_logs ADD COLUMN IF NOT EXISTS execution_status TEXT;
