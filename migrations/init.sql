@@ -269,12 +269,11 @@ CREATE TABLE IF NOT EXISTS qd_auto_analysis_logs (
     result JSONB NOT NULL DEFAULT '{}',
     error TEXT,
     llm_model TEXT NOT NULL DEFAULT '',
-    -- 执行回填字段（在订单成交/拦截发生时回填，与拦截/平仓事件解耦）
-    -- intercept_reason: LLM 决策开仓但被代码拦截时的原因（如冷却期/置信度不足）
-    -- close_reason: 平仓订单成交后回填的平仓原因（stop_loss/take_profit/position_timeout/llm_decision）
+    -- 执行回填字段（在订单成交/拦截发生时回填）
+    -- intercept_reason: LLM 决策被代码拦截时的原因（如冷却期/置信度不足）
     -- execution_status: open=开仓成功, open_failed=开仓失败, close=平仓成功, close_failed=平仓失败, hold=观望
+    -- 注：close_reason 不在此表，已记录在 qd_auto_trades.close_reason
     intercept_reason TEXT,
-    close_reason TEXT,
     execution_status TEXT CHECK (execution_status IS NULL OR execution_status IN ('open', 'open_failed', 'close', 'close_failed', 'hold')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at TIMESTAMPTZ

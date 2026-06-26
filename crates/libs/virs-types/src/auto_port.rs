@@ -76,19 +76,19 @@ pub trait AutoStore: Send + Sync {
         close_order_id: Option<&str>, close_fee: f64,
         pnl: f64, pnl_pct: f64, close_reason: &str,
     ) -> anyhow::Result<Uuid>;
-    /// 保存 LLM 分析日志，返回日志 ID（用于后续 UPDATE 回填执行状态/拦截原因/平仓原因）
+    /// 保存 LLM 分析日志，返回日志 ID（用于后续 UPDATE 回填执行状态/拦截原因）
     async fn save_analysis_log(
         &self, bot_id: Uuid, analysis_type: &str, system_prompt: &str,
         user_prompt: &str, result: &serde_json::Value, error: Option<&str>,
         llm_model: &str,
     ) -> anyhow::Result<Uuid>;
-    /// 回填 LLM 日志的执行状态（开仓/平仓成功与否）、拦截原因、平仓原因
+    /// 回填 LLM 日志的执行状态、拦截原因
     /// - execution_status: open/open_failed/close/close_failed/hold
     /// - intercept_reason: 被代码拦截时的原因（如冷却期/置信度不足）
-    /// - close_reason: 平仓订单成交后回填（stop_loss/take_profit/position_timeout/llm_decision）
+    /// 注：close_reason 不回填到此表，已记录在 qd_auto_trades.close_reason
     async fn update_analysis_log_execution(
         &self, log_id: Uuid, execution_status: &str,
-        intercept_reason: Option<&str>, close_reason: Option<&str>,
+        intercept_reason: Option<&str>,
     ) -> anyhow::Result<()>;
     async fn load_analysis_logs(&self, bot_id: Uuid) -> anyhow::Result<Vec<AutoAnalysisLogEntry>>;
     async fn load_consecutive_losses(&self, bot_id: Uuid) -> anyhow::Result<i32>;

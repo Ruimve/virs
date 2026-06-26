@@ -69,7 +69,7 @@ pub struct AutoWorker {
     /// 当前 LLM 决策日志 ID（handle_llm_result 创建 log 时返回，执行回填时 UPDATE 用）
     /// - 拦截时：UPDATE 设置 intercept_reason + status='intercepted'
     /// - 开仓订单成交：UPDATE 设置 execution_status='open'
-    /// - 平仓订单成交：UPDATE 设置 execution_status='close' + close_reason
+    /// - 平仓订单成交：UPDATE 设置 execution_status='close'
     pub(crate) current_log_id: Option<Uuid>,
     /// 当前开仓手续费（平仓时计算总手续费用）
     pub(crate) current_open_fee: f64,
@@ -303,7 +303,7 @@ impl AutoWorker {
                 let exec_status = if timed_out_open { "open_failed" } else { "close_failed" };
                 if let Err(e) = self
                     .store
-                    .update_analysis_log_execution(log_id, exec_status, Some("订单超时未成交"), None)
+                    .update_analysis_log_execution(log_id, exec_status, Some("订单超时未成交"))
                     .await
                 {
                     error!(bot_id = %self.bot.id, error = %e, "Failed to update log on pending timeout");
@@ -778,13 +778,10 @@ impl AutoWorker {
             .handle_llm_result(&decision, &system_prompt, &user_prompt, raw_llm_response.as_ref(), &llm_model)
             .await;
 
-        // 保存 log_id 供后续 apply_pending_open/apply_pending_close 回填 execution_status / close_reason
+        // 保存 log_id 供后续 apply_pending_open/apply_pending_close 回填 execution_status / intercept_reason
         self.current_log_id = log_id;
 
         // 执行决策，若被拦截则 UPDATE LLM log 设置 intercept_reason + execution_status
-        // 解决拦截感知不到的 bug：每条 LLM 日志分两字段记录
-        // - intercept_reason: 拦截时回填（如冷却期/置信度不足）
-        // - close_reason: 平仓订单成交后回填（在 apply_pending_close 中处理）
         let intercept_reason = self.execute_decision(&action, decision.as_ref()).await;
         if let Some(reason) = intercept_reason {
             warn!(bot_id = %self.bot.id, action = %action.as_str(), intercept_reason = %reason, "Decision intercepted");
@@ -797,7 +794,7 @@ impl AutoWorker {
                 };
                 if let Err(e) = self
                     .store
-                    .update_analysis_log_execution(log_id, exec_status, Some(&reason), None)
+                    .update_analysis_log_execution(log_id, exec_status, Some(&reason))
                     .await
                 {
                     error!(bot_id = %self.bot.id, error = %e, "Failed to update intercept log");
@@ -810,7 +807,7 @@ impl AutoWorker {
             if let Some(log_id) = self.current_log_id {
                 if let Err(e) = self
                     .store
-                    .update_analysis_log_execution(log_id, "hold", None, None)
+                    .update_analysis_log_execution(log_id, "hold", None)
                     .await
                 {
                     error!(bot_id = %self.bot.id, error = %e, "Failed to update hold log");
@@ -1613,7 +1610,7 @@ impl AutoWorker {
                         let exec_status = if was_open { "open_failed" } else { "close_failed" };
                         if let Err(e) = self
                             .store
-                            .update_analysis_log_execution(log_id, exec_status, Some(&reason), None)
+                            .update_analysis_log_execution(log_id, exec_status, Some(&reason))
                             .await
                         {
                             error!(bot_id = %self.bot.id, error = %e, "Failed to update log on order failed");
@@ -1756,7 +1753,7 @@ impl AutoWorker {
         if let Some(log_id) = self.current_log_id.take() {
             if let Err(e) = self
                 .store
-                .update_analysis_log_execution(log_id, "open", None, None)
+                .update_analysis_log_execution(log_id, "open", None)
                 .await
             {
                 error!(bot_id = %self.bot.id, error = %e, "Failed to update open execution status");
@@ -1920,13 +1917,12 @@ impl AutoWorker {
             pnl: realized_pnl,
         });
 
-        // 回填 LLM 日志执行状态：平仓成功 + close_reason（平仓订单成交后回填）
-        // 注意：close_reason 是平仓事件本身的原因（stop_loss/take_profit/position_timeout/llm_decision）
-        // 与拦截原因（intercept_reason）是两个不同概念
+        // 回填 LLM 日志执行状态：平仓成功
+        // 注：close_reason 不回填到此表，已记录在 qd_auto_trades.close_reason
         if let Some(log_id) = self.current_log_id.take() {
             if let Err(e) = self
                 .store
-                .update_analysis_log_execution(log_id, "close", None, Some(close_reason))
+                .update_analysis_log_execution(log_id, "close", None)
                 .await
             {
                 error!(bot_id = %self.bot.id, error = %e, "Failed to update close execution status");

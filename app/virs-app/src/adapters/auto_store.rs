@@ -261,7 +261,7 @@ impl AutoStore for PgAutoStore {
 
     async fn update_analysis_log_execution(
         &self, log_id: Uuid, execution_status: &str,
-        intercept_reason: Option<&str>, close_reason: Option<&str>,
+        intercept_reason: Option<&str>,
     ) -> anyhow::Result<()> {
         // 拦截时同步更新 status='intercepted'，便于前端按状态筛选
         let status = if intercept_reason.is_some() { "intercepted" } else { "completed" };
@@ -269,12 +269,11 @@ impl AutoStore for PgAutoStore {
             r#"UPDATE qd_auto_analysis_logs SET
                execution_status = $2,
                intercept_reason = $3,
-               close_reason = $4,
-               status = $5
+               status = $4
                WHERE id = $1"#,
         )
         .bind(log_id).bind(execution_status)
-        .bind(intercept_reason).bind(close_reason).bind(status)
+        .bind(intercept_reason).bind(status)
         .execute(&self.db).await?;
         Ok(())
     }
