@@ -37,6 +37,15 @@ const ConfigureLlm = () => {
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const handleContinue = () => {
+    updateWizard({
+      llm_provider: 'deepseek',
+      llm_model: model,
+    });
+    advanceStep(WizardStep.SelectExchange);
+    navigate('/setup/exchange', { replace: true });
+  };
+
   // 重置步骤状态
   const resetSteps = useCallback(() => {
     setStep1Status('active');
@@ -47,18 +56,8 @@ const ConfigureLlm = () => {
     setStep3Error(null);
   }, []);
 
-  // 下一步
-  const handleContinue = () => {
-    updateWizard({
-      llm_provider: 'deepseek',
-      llm_model: model,
-    });
-    advanceStep(WizardStep.SelectExchange);
-    navigate('/setup/exchange', { replace: true });
-  };
-
   // Fetch balance via backend proxy (uses saved credentials)
-  const fetchBalance = useCallback(async () => {
+  const startStep3 = useCallback(async () => {
     setStep3Status('verifying');
     try {
       const result = await fetchAiBalance();
@@ -67,10 +66,11 @@ const ConfigureLlm = () => {
         setBalance(bal);
         const total = parseFloat(bal.total_balance || '0');
         setStep3Status(total > 0 ? 'done' : 'active');
-      } else {
-        setStep3Error('No balance info available. Ensure your account has credits.');
-        setStep3Status('error');
+        return;
       }
+
+      setStep3Status('error');
+      setStep3Error('No balance info available. Ensure your account has credits.');
     } catch {
       setStep3Error('Network error');
       setStep3Status('error');
@@ -78,53 +78,54 @@ const ConfigureLlm = () => {
   }, []);
 
   // Test connectivity via backend (uses saved credentials)
-  const testConnectivity = useCallback(async () => {
+  const startStep2 = useCallback(async () => {
     setStep2Status('verifying');
     try {
-      const result = await testAiCredential();
-      if (!result.success || !result.data?.connected) {
-        setStep2Error(result.data?.message || result.error || 'Connection failed');
-        setStep2Status('error');
+      const res = await testAiCredential();
+      if (res.success && res.data?.connected) {
+        setStep2Status('done');
+        startStep3();
         return;
       }
-      setStep2Status('done');
-      fetchBalance();
-    } catch {
-      setStep2Error('Network error');
+      setStep2Error(res.error || res.data?.message || 'Connection failed');
       setStep2Status('error');
+    } catch {
+      setStep2Status('error');
+      setStep2Error('Network error');
     }
-  }, [fetchBalance]);
+  }, [startStep3]);
 
-  const verify = useCallback(async () => {
-    if (!apiKey) return;
-
+  const startStep1 = useCallback(async () => {
     setStep1Status('verifying');
     setStep1Error(null);
+    try {
+      const res = await saveAiCredential({
+        provider: 'deepseek',
+        api_key: apiKey,
+        model: model,
+        is_default: true,
+      });
+      if (res.success) {
+        setStep1Status('done');
+        startStep2();
+        return;
+      }
 
-    // Save credential to backend first
-    const saveResult = await saveAiCredential({
-      provider: 'deepseek',
-      api_key: apiKey,
-      model: model,
-      is_default: true,
-    });
-    if (!saveResult.success) {
-      setStep1Error(saveResult.error || 'Failed to save API key');
       setStep1Status('error');
-      return;
+      setStep1Error(res.error || 'Failed to save API key');
+    } catch {
+      setStep1Status('error');
+      setStep1Error('Network error');
     }
-
-    setStep1Status('done');
-    testConnectivity();
-  }, [apiKey, model, testConnectivity]);
+  }, [apiKey, model, startStep2]);
 
   // Fetch models via backend proxy (after save)
   const fetchModels = useCallback(async () => {
     setModelsLoading(true);
     try {
       const result = await fetchAiModels();
-      if (result.success && result.data?.models) {
-        const list = result.data.models;
+      if (result.success) {
+        const list = result.data?.models || [];
         setModels(list);
         if (list.length > 0) {
           setModel((prev) => {
@@ -233,7 +234,7 @@ const ConfigureLlm = () => {
           </div>
         )}
         <button
-          onClick={verify}
+          onClick={startStep1}
           disabled={!apiKey.trim() || !model.trim() || step1Status === 'verifying' || modelsLoading}
           className="px-4 py-2 text-[12px] bg-indigo-500/20 border border-indigo-500/30 rounded-lg text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-30 transition-all duration-200"
         >
@@ -241,7 +242,7 @@ const ConfigureLlm = () => {
         </button>
       </div>
     );
-  }, [apiKey, modelsLoading, step1Error, step1Status, model, models, handleKeyInput, verify]);
+  }, [apiKey, modelsLoading, step1Error, step1Status, model, models, handleKeyInput, startStep1]);
 
   const renderStep2 = useCallback(() => {
     return (
@@ -293,6 +294,7 @@ const ConfigureLlm = () => {
       {
         key: 'account',
         title: 'Account Info',
+        description: 'Balance',
         render: renderStep3,
       },
     ],
@@ -312,11 +314,15 @@ const ConfigureLlm = () => {
     const summaryMap: Record<string, string | ReactNode> = {};
     if (step1Status === 'done') {
       summaryMap.apiKey = `${apiKey.slice(0, 6)}...${apiKey.slice(-4)} · ${model}`;
-    } else if (step2Status === 'done') {
+    }
+
+    if (step2Status === 'done') {
       summaryMap.connectivity = 'Connected to DeepSeek API';
     } else if (step2Status === 'error') {
       summaryMap.connectivity = 'Connection failed';
-    } else if (step3Status === 'done') {
+    }
+
+    if (step3Status === 'done') {
       if (balance) {
         summaryMap.account = `Balance: ${balance.total_balance} ${balance.currency}`;
       }

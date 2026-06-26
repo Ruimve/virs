@@ -14,7 +14,7 @@ const MARKET_TYPES: Array<{ id: MarketType; label: string; desc: string }> = [
   { id: 'spot', label: 'Spot', desc: 'Spot trading' },
 ];
 
-const SelectExchange = () => {
+const ConfigureExchange = () => {
   const navigate = useNavigate();
   const { wizard, updateWizard, advanceStep } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.SelectExchange);
@@ -272,4 +272,4 @@ const SelectExchange = () => {
   );
 };
 
-export default SelectExchange;
+export default ConfigureExchange;

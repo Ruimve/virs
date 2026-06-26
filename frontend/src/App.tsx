@@ -8,7 +8,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 const SetupLayout = lazy(() => import('./pages/setup/Layout'));
 const SelectBotType = lazy(() => import('./pages/setup/SelectBotType'));
 const ConfigureLlm = lazy(() => import('./pages/setup/ConfigureLlm'));
-const SelectExchange = lazy(() => import('./pages/setup/SelectExchange'));
+const ConfigureExchange = lazy(() => import('./pages/setup/ConfigureExchange'));
 const ConfigureParams = lazy(() => import('./pages/setup/ConfigureParams'));
 const ReviewLaunch = lazy(() => import('./pages/setup/ReviewLaunch'));
 
@@ -58,7 +58,7 @@ const App = () => {
             <Route path="/setup" element={<SetupLayout />}>
               <Route path="/setup/bot-type" element={<SelectBotType />} />
               <Route path="/setup/llm" element={<ConfigureLlm />} />
-              <Route path="/setup/exchange" element={<SelectExchange />} />
+              <Route path="/setup/exchange" element={<ConfigureExchange />} />
               <Route path="/setup/params" element={<ConfigureParams />} />
               <Route path="/setup/review" element={<ReviewLaunch />} />
             </Route>

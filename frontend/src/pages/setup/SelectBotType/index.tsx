@@ -27,7 +27,7 @@ const BOT_TYPES = [
 const SelectBotType = () => {
   const navigate = useNavigate();
   const { wizard, updateWizard, advanceStep } = useWizard();
-  const [selected, setSelected] = useState<'grid' | 'auto' | ''>(wizard.bot_type || '');
+  const [botType, setBotType] = useState<'grid' | 'auto' | ''>(wizard.bot_type || '');
   const [existingBot, setExistingBot] = useState<{ id: string; bot_type: string } | null>(null);
 
   useEffect(() => {
@@ -37,13 +37,23 @@ const SelectBotType = () => {
     });
   }, [updateWizard]);
 
-  const canContinue = selected.length > 0 && !existingBot;
+  const handleGotoExistedBot = () => {
+    if (!existingBot) return;
+
+    if (existingBot?.bot_type === 'auto') {
+      navigate(`/trade/auto/${existingBot?.id}`, { replace: true });
+    } else if (existingBot?.bot_type === 'grid') {
+      navigate(`/trade/grid/${existingBot?.id}`, { replace: true });
+    }
+  };
 
   const handleContinue = () => {
-    updateWizard({ bot_type: selected });
+    updateWizard({ bot_type: botType });
     advanceStep(WizardStep.ConfigureLlm);
     navigate('/setup/llm', { replace: true });
   };
+
+  const canContinue = botType && !existingBot;
 
   return (
     <Wizard
@@ -82,14 +92,7 @@ const SelectBotType = () => {
                 每个账号只能创建一个机器人，请先删除已有机器人。
               </p>
               <button
-                onClick={() =>
-                  navigate(
-                    existingBot.bot_type === 'auto'
-                      ? `/trade/auto/${existingBot.id}`
-                      : `/trade/grid/${existingBot.id}`,
-                    { replace: true },
-                  )
-                }
+                onClick={handleGotoExistedBot}
                 className="px-4 py-2 text-xs font-medium bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-colors"
               >
                 查看已有机器人
@@ -100,11 +103,11 @@ const SelectBotType = () => {
       ) : (
         <div className="space-y-4 mb-8">
           {BOT_TYPES.map((bot) => {
-            const isSelected = selected === bot.id;
+            const isSelected = botType === bot.id;
             return (
               <button
                 key={bot.id}
-                onClick={() => setSelected(bot.id)}
+                onClick={() => setBotType(bot.id)}
                 className={`group w-full p-4 md:p-5 rounded-xl border text-left transition-all duration-200 ${
                   isSelected
                     ? `bg-gradient-to-br ${bot.color} ${bot.border} ring-1 ring-line-emphasis`
