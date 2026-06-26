@@ -45,20 +45,24 @@ pub async fn create_bot(
 
     // Enforce 1-bot-per-user limit (across all bot types)
     {
-        let grid_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM qd_grid_bots WHERE user_id = $1")
-            .bind(user_id)
-            .fetch_one(&state.db_pool)
-            .await
-            .unwrap_or(0);
-        let auto_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM qd_auto_bots WHERE user_id = $1")
-            .bind(user_id)
-            .fetch_one(&state.db_pool)
-            .await
-            .unwrap_or(0);
+        let grid_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM qd_grid_bots WHERE user_id = $1")
+                .bind(user_id)
+                .fetch_one(&state.db_pool)
+                .await
+                .unwrap_or(0);
+        let auto_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM qd_auto_bots WHERE user_id = $1")
+                .bind(user_id)
+                .fetch_one(&state.db_pool)
+                .await
+                .unwrap_or(0);
         if grid_count + auto_count > 0 {
             return Err((
                 StatusCode::CONFLICT,
-                Json(ApiResponse::err("Each account can only have one bot. Please delete your existing bot first.")),
+                Json(ApiResponse::err(
+                    "Each account can only have one bot. Please delete your existing bot first.",
+                )),
             ));
         }
     }
@@ -76,7 +80,9 @@ pub async fn create_bot(
     if state.exchange_registry.get(&exchange_key).is_none() {
         return Err((
             StatusCode::PRECONDITION_FAILED,
-            Json(ApiResponse::err("Exchange not registered. Please save API credentials first.")),
+            Json(ApiResponse::err(
+                "Exchange not registered. Please save API credentials first.",
+            )),
         ));
     }
 
@@ -88,13 +94,19 @@ pub async fn create_bot(
     if let Err(e) = state.kline_engine.subscribe(exchange, symbol, mt).await {
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::err(format!("Failed to subscribe kline: {}", e))),
+            Json(ApiResponse::err(format!(
+                "Failed to subscribe kline: {}",
+                e
+            ))),
         ));
     }
 
     // Register symbol for paper mode price ticks
     if paper_mode {
-        state.engine_manager.register_paper_symbol(exchange.to_string(), symbol.to_string()).await;
+        state
+            .engine_manager
+            .register_paper_symbol(exchange.to_string(), symbol.to_string())
+            .await;
     }
 
     // 从交易所获取真实账户余额，初始化 initial_capital
@@ -149,22 +161,31 @@ pub async fn create_bot(
 
     tracing::info!(bot_id = %id, initial_capital, "Grid bot created with initial_capital from exchange");
 
-    Ok(Json(ApiResponse::ok(serde_json::json!({"id": id.to_string()}))))
+    Ok(Json(ApiResponse::ok(
+        serde_json::json!({"id": id.to_string()}),
+    )))
 }
 
-pub async fn list_bots(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Json<ApiResponse> {
+pub async fn list_bots(State(state): State<AppState>, headers: HeaderMap) -> Json<ApiResponse> {
     let user_id = match extract_user_id(&headers) {
         Ok(id) => id,
         Err((_, resp)) => return resp,
     };
 
-    let rows = sqlx::query_as::<_, (
-        uuid::Uuid, String, String, String, String, String, i32,
-        chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>,
-    )>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            uuid::Uuid,
+            String,
+            String,
+            String,
+            String,
+            String,
+            i32,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
         r#"SELECT id, name, symbol, exchange, status, market_type, leverage,
            created_at, updated_at
            FROM qd_grid_bots WHERE user_id = $1 ORDER BY created_at DESC"#,
@@ -175,19 +196,34 @@ pub async fn list_bots(
 
     match rows {
         Ok(bots) => {
-            let items: Vec<_> = bots.iter().map(|(id, name, symbol, exchange, status, market_type, leverage, created_at, updated_at)| {
-                serde_json::json!({
-                    "id": id.to_string(),
-                    "name": name,
-                    "symbol": symbol,
-                    "exchange": exchange,
-                    "status": status,
-                    "market_type": market_type,
-                    "leverage": leverage,
-                    "created_at": created_at.to_rfc3339(),
-                    "updated_at": updated_at.to_rfc3339(),
-                })
-            }).collect();
+            let items: Vec<_> = bots
+                .iter()
+                .map(
+                    |(
+                        id,
+                        name,
+                        symbol,
+                        exchange,
+                        status,
+                        market_type,
+                        leverage,
+                        created_at,
+                        updated_at,
+                    )| {
+                        serde_json::json!({
+                            "id": id.to_string(),
+                            "name": name,
+                            "symbol": symbol,
+                            "exchange": exchange,
+                            "status": status,
+                            "market_type": market_type,
+                            "leverage": leverage,
+                            "created_at": created_at.to_rfc3339(),
+                            "updated_at": updated_at.to_rfc3339(),
+                        })
+                    },
+                )
+                .collect();
             let total = items.len();
             Json(ApiResponse::ok(serde_json::json!({
                 "items": items,
@@ -206,10 +242,24 @@ pub async fn get_bot(
     let user_id = extract_user_id(&headers)?;
 
     // Query 1: basic info
-    let basic = sqlx::query_as::<_, (
-        String, String, String, String, String, f64, f64, i32, f64, f64, i32,
-        chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>,
-    )>(
+    let basic = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            String,
+            String,
+            f64,
+            f64,
+            i32,
+            f64,
+            f64,
+            i32,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
         r#"SELECT name, symbol, exchange, status, market_type, upper_price, lower_price,
            grid_count, grid_profit_pct, quantity_per_grid, leverage, created_at, updated_at
            FROM qd_grid_bots WHERE id = $1 AND user_id = $2"#,
@@ -219,13 +269,34 @@ pub async fn get_bot(
     .fetch_optional(&state.db_pool)
     .await
     .map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::err(format!("Database error: {}", e))),
+        )
     })?;
 
-    let (name, symbol, exchange, status, market_type, upper_price, lower_price,
-         grid_count, grid_profit_pct, quantity_per_grid, leverage, created_at, updated_at) = match basic {
+    let (
+        name,
+        symbol,
+        exchange,
+        status,
+        market_type,
+        upper_price,
+        lower_price,
+        grid_count,
+        grid_profit_pct,
+        quantity_per_grid,
+        leverage,
+        created_at,
+        updated_at,
+    ) = match basic {
         Some(b) => b,
-        None => return Err((StatusCode::NOT_FOUND, Json(ApiResponse::err("Bot not found")))),
+        None => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::err("Bot not found")),
+            ))
+        }
     };
 
     // Query 2: stats & ai
@@ -244,8 +315,17 @@ pub async fn get_bot(
         (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
     })?;
 
-    let (total_pnl, unrealized_pnl, initial_capital, total_trades, grid_filled_count, dynamic_adjust,
-         market_regime, ai_analysis, grid_levels_json) = stats;
+    let (
+        total_pnl,
+        unrealized_pnl,
+        initial_capital,
+        total_trades,
+        grid_filled_count,
+        dynamic_adjust,
+        market_regime,
+        ai_analysis,
+        grid_levels_json,
+    ) = stats;
 
     // Parse grid levels from JSON
     let grid_levels: Vec<serde_json::Value> = grid_levels_json
@@ -253,9 +333,24 @@ pub async fn get_bot(
         .unwrap_or_default();
 
     // Query 3: recent trades
-    let trades_rows = sqlx::query_as::<_, (
-        uuid::Uuid, i32, String, f64, f64, Option<String>, Option<f64>, Option<f64>, f64, f64, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>,
-    )>(
+    let trades_rows = sqlx::query_as::<
+        _,
+        (
+            uuid::Uuid,
+            i32,
+            String,
+            f64,
+            f64,
+            Option<String>,
+            Option<f64>,
+            Option<f64>,
+            f64,
+            f64,
+            String,
+            chrono::DateTime<chrono::Utc>,
+            Option<chrono::DateTime<chrono::Utc>>,
+        ),
+    >(
         r#"SELECT id, grid_level, open_side, open_price, open_quantity,
            close_side, close_price, close_quantity, pnl, pnl_pct, status, opened_at, closed_at
            FROM qd_grid_trades WHERE bot_id = $1 ORDER BY opened_at DESC LIMIT 50"#,
@@ -265,24 +360,43 @@ pub async fn get_bot(
     .await
     .unwrap_or_default();
 
-    let trades: Vec<serde_json::Value> = trades_rows.iter().map(|(tid, level, side, open_p, open_qty, close_side, close_p, close_qty, pnl, pnl_pct, t_status, opened_at, closed_at)| {
-        serde_json::json!({
-            "id": tid.to_string(),
-            "bot_id": id.to_string(),
-            "grid_level": level,
-            "open_side": side,
-            "open_price": open_p,
-            "open_quantity": open_qty,
-            "close_side": close_side,
-            "close_price": close_p,
-            "close_quantity": close_qty,
-            "pnl": pnl,
-            "pnl_pct": pnl_pct,
-            "status": t_status,
-            "opened_at": opened_at.to_rfc3339(),
-            "closed_at": closed_at.map(|t| t.to_rfc3339()),
-        })
-    }).collect();
+    let trades: Vec<serde_json::Value> = trades_rows
+        .iter()
+        .map(
+            |(
+                tid,
+                level,
+                side,
+                open_p,
+                open_qty,
+                close_side,
+                close_p,
+                close_qty,
+                pnl,
+                pnl_pct,
+                t_status,
+                opened_at,
+                closed_at,
+            )| {
+                serde_json::json!({
+                    "id": tid.to_string(),
+                    "bot_id": id.to_string(),
+                    "grid_level": level,
+                    "open_side": side,
+                    "open_price": open_p,
+                    "open_quantity": open_qty,
+                    "close_side": close_side,
+                    "close_price": close_p,
+                    "close_quantity": close_qty,
+                    "pnl": pnl,
+                    "pnl_pct": pnl_pct,
+                    "status": t_status,
+                    "opened_at": opened_at.to_rfc3339(),
+                    "closed_at": closed_at.map(|t| t.to_rfc3339()),
+                })
+            },
+        )
+        .collect();
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "bot": {
@@ -319,7 +433,9 @@ pub async fn start_bot(
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
     if let Some(tx) = state.engine_manager.grid_cmd_tx() {
-        let _ = tx.send(virs_bot::grid::types::GridCommand::StartBot { bot_id: id }).await;
+        let _ = tx
+            .send(virs_bot::grid::types::GridCommand::StartBot { bot_id: id })
+            .await;
     }
     Ok(Json(ApiResponse::ok(serde_json::json!({"started": true}))))
 }
@@ -343,7 +459,9 @@ pub async fn stop_bot(
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
     if let Some(tx) = state.engine_manager.grid_cmd_tx() {
-        let _ = tx.send(virs_bot::grid::types::GridCommand::StopBot { bot_id: id }).await;
+        let _ = tx
+            .send(virs_bot::grid::types::GridCommand::StopBot { bot_id: id })
+            .await;
     }
     Ok(Json(ApiResponse::ok(serde_json::json!({"stopped": true}))))
 }
@@ -353,14 +471,24 @@ pub async fn delete_bot(
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
     if let Some(tx) = state.engine_manager.grid_cmd_tx() {
-        let _ = tx.send(virs_bot::grid::types::GridCommand::DeleteBot { bot_id: id, close_position: true }).await;
+        let _ = tx
+            .send(virs_bot::grid::types::GridCommand::DeleteBot {
+                bot_id: id,
+                close_position: true,
+            })
+            .await;
     }
     // Delete from database
     sqlx::query(r#"DELETE FROM qd_grid_bots WHERE id = $1"#)
         .bind(id)
         .execute(&state.db_pool)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e)))))?;
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::err(format!("Database error: {}", e))),
+            )
+        })?;
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
 
@@ -393,9 +521,24 @@ pub async fn get_trades(
     };
 
     // 查询分页数据（完整字段）
-    let rows = sqlx::query_as::<_, (
-        uuid::Uuid, i32, String, f64, f64, Option<String>, Option<f64>, Option<f64>, f64, f64, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>,
-    )>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            uuid::Uuid,
+            i32,
+            String,
+            f64,
+            f64,
+            Option<String>,
+            Option<f64>,
+            Option<f64>,
+            f64,
+            f64,
+            String,
+            chrono::DateTime<chrono::Utc>,
+            Option<chrono::DateTime<chrono::Utc>>,
+        ),
+    >(
         r#"SELECT id, grid_level, open_side, open_price, open_quantity,
            close_side, close_price, close_quantity, pnl, pnl_pct, status, opened_at, closed_at
            FROM qd_grid_trades WHERE bot_id = $1 AND user_id = $2
@@ -494,8 +637,16 @@ pub async fn get_stats(
     // 盈亏比 = 平均盈利 / 平均亏损
     let profits: Vec<f64> = trades.iter().filter(|t| t.0 > 0.0).map(|t| t.0).collect();
     let losses: Vec<f64> = trades.iter().filter(|t| t.0 < 0.0).map(|t| t.0).collect();
-    let avg_profit = if !profits.is_empty() { profits.iter().sum::<f64>() / profits.len() as f64 } else { 0.0 };
-    let avg_loss = if !losses.is_empty() { losses.iter().sum::<f64>() / losses.len() as f64 } else { 0.0 };
+    let avg_profit = if !profits.is_empty() {
+        profits.iter().sum::<f64>() / profits.len() as f64
+    } else {
+        0.0
+    };
+    let avg_loss = if !losses.is_empty() {
+        losses.iter().sum::<f64>() / losses.len() as f64
+    } else {
+        0.0
+    };
     let profit_loss_ratio = if avg_loss.abs() > 0.0 {
         avg_profit / avg_loss.abs()
     } else if avg_profit > 0.0 {
@@ -561,7 +712,11 @@ pub async fn get_stats(
     }
 
     // 平均盈亏（每笔交易）
-    let avg_pnl = if !trades.is_empty() { realized_pnl / trades.len() as f64 } else { 0.0 };
+    let avg_pnl = if !trades.is_empty() {
+        realized_pnl / trades.len() as f64
+    } else {
+        0.0
+    };
 
     // 最大单笔盈利 / 亏损
     let max_profit: f64 = trades.iter().map(|t| t.0).fold(0.0f64, |a, b| a.max(b));

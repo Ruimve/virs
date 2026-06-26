@@ -61,7 +61,10 @@ pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
         .replace("{exchange}", &ctx.exchange)
         .replace("{market_type}", &ctx.market_type)
         .replace("{total_balance}", &format!("{:.2}", ctx.total_balance))
-        .replace("{available_balance}", &format!("{:.2}", ctx.available_balance))
+        .replace(
+            "{available_balance}",
+            &format!("{:.2}", ctx.available_balance),
+        )
         .replace("{used_margin}", &format!("{:.2}", ctx.used_margin))
         .replace(
             "{margin_usage_rate}",
@@ -100,10 +103,7 @@ pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
         .replace("{h1_ema_gap_trend}", &ctx.ind.h1_ema_gap_trend)
         .replace("{h1_rsi}", &format!("{:.2}", ctx.ind.rsi))
         .replace("{h1_macd}", &format!("{:.4}", ctx.ind.macd))
-        .replace(
-            "{h1_macd_signal}",
-            &format!("{:.4}", ctx.ind.macd_signal),
-        )
+        .replace("{h1_macd_signal}", &format!("{:.4}", ctx.ind.macd_signal))
         .replace(
             "{h1_macd_histogram}",
             &format!("{:.4}", ctx.ind.macd_histogram),
@@ -150,19 +150,13 @@ pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
             "{m15_volume_sma20}",
             &format!("{:.2}", ctx.ind.m15_volume_sma20),
         )
-        .replace(
-            "{m15_high_50}",
-            &format!("{:.2}", ctx.ind.m15_high_50),
-        )
+        .replace("{m15_high_50}", &format!("{:.2}", ctx.ind.m15_high_50))
         .replace("{m15_low_50}", &format!("{:.2}", ctx.ind.m15_low_50))
         .replace("{total_trades}", &ctx.total_trades.to_string())
         .replace("{win_trades}", &ctx.win_trades.to_string())
         .replace("{loss_trades}", &ctx.loss_trades.to_string())
         .replace("{total_pnl}", &format!("{:.2}", ctx.total_pnl))
-        .replace(
-            "{consecutive_losses}",
-            &ctx.consecutive_losses.to_string(),
-        )
+        .replace("{consecutive_losses}", &ctx.consecutive_losses.to_string())
         .replace("{trigger_reason}", &ctx.trigger_reason)
         .replace("{min_qty}", &format!("{:.6}", ctx.min_qty))
 }

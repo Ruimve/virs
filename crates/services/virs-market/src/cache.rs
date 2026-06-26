@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use super::types::{Candle, Timeframe, AllTimeframesData};
+use super::types::{AllTimeframesData, Candle, Timeframe};
 
 struct TimeframeBuffer {
     candles: VecDeque<Candle>,
@@ -11,7 +11,10 @@ struct TimeframeBuffer {
 
 impl TimeframeBuffer {
     fn new(max_size: usize) -> Self {
-        Self { candles: VecDeque::with_capacity(max_size), max_size }
+        Self {
+            candles: VecDeque::with_capacity(max_size),
+            max_size,
+        }
     }
 
     fn push_or_update(&mut self, candle: Candle) {
@@ -21,7 +24,11 @@ impl TimeframeBuffer {
                 return;
             }
             if candle.open_time < last.open_time {
-                if let Some(existing) = self.candles.iter_mut().find(|c| c.open_time == candle.open_time) {
+                if let Some(existing) = self
+                    .candles
+                    .iter_mut()
+                    .find(|c| c.open_time == candle.open_time)
+                {
                     *existing = candle;
                     return;
                 }
@@ -75,7 +82,9 @@ impl TimeframeBuffer {
         for c in candles {
             if c.open_time > last_existing_time {
                 self.candles.push_back(c);
-            } else if let Some(existing) = self.candles.iter_mut().find(|e| e.open_time == c.open_time) {
+            } else if let Some(existing) =
+                self.candles.iter_mut().find(|e| e.open_time == c.open_time)
+            {
                 if c.closed && !existing.closed {
                     *existing = c;
                 }
@@ -113,7 +122,10 @@ impl SymbolCache {
     }
 
     pub fn get_klines(&self, timeframe: Timeframe) -> Vec<Candle> {
-        self.timeframes.get(&timeframe).map(|buf| buf.get_all()).unwrap_or_default()
+        self.timeframes
+            .get(&timeframe)
+            .map(|buf| buf.get_all())
+            .unwrap_or_default()
     }
 
     pub fn get_all_timeframes(&self) -> AllTimeframesData {
@@ -128,11 +140,17 @@ impl SymbolCache {
     }
 
     pub fn last_closed_1m(&self) -> Option<Candle> {
-        self.timeframes.get(&Timeframe::M1).and_then(|buf| buf.last_closed()).cloned()
+        self.timeframes
+            .get(&Timeframe::M1)
+            .and_then(|buf| buf.last_closed())
+            .cloned()
     }
 
     pub fn last_1m(&self) -> Option<Candle> {
-        self.timeframes.get(&Timeframe::M1).and_then(|buf| buf.last()).cloned()
+        self.timeframes
+            .get(&Timeframe::M1)
+            .and_then(|buf| buf.last())
+            .cloned()
     }
 
     pub fn replace_timeframe(&mut self, timeframe: Timeframe, candles: Vec<Candle>) {
@@ -148,7 +166,10 @@ impl SymbolCache {
     }
 
     pub fn candle_count(&self, timeframe: Timeframe) -> usize {
-        self.timeframes.get(&timeframe).map(|buf| buf.len()).unwrap_or(0)
+        self.timeframes
+            .get(&timeframe)
+            .map(|buf| buf.len())
+            .unwrap_or(0)
     }
 
     pub fn is_empty(&self) -> bool {

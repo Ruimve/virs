@@ -1,31 +1,49 @@
 //! CCXT-style unified exchange API layer.
 
-pub mod types;
-pub mod errors;
-pub mod auth;
 pub mod adapter;
+pub mod auth;
+pub mod errors;
+pub mod types;
 pub mod ws_types;
 
 use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::Value;
+use tokio::sync::mpsc;
 
-use errors::ExchangeError;
 use auth::Signer;
+use errors::ExchangeError;
 
 // Re-export shared types from virs-types (via types module)
 pub use types::{
-    // Shared types (re-exported from virs-types)
-    Ticker, Kline, OrderBook, Balance,
-    MarketInfo, MarketType, Side, OrderType, OrderStatus,
-    PlaceOrderParams, ExchangeCapabilities,
-    PositionSide, MarginMode, PositionMode,
-    FundingRate, FundingHistoryEntry,
-    // CCXT-internal types
-    CcxtOrder, CcxtOrderStatus, CcxtTicker, CcxtKline,
-    CcxtOrderBook, CcxtFundingRate, CcxtFundingHistoryEntry,
     ApiRestrictions,
+    Balance,
+    CcxtFundingHistoryEntry,
+    CcxtFundingRate,
+    CcxtKline,
+    // CCXT-internal types
+    CcxtOrder,
+    CcxtOrderBook,
+    CcxtOrderStatus,
+    CcxtTicker,
+    ExchangeCapabilities,
+    FundingHistoryEntry,
+    FundingRate,
+    Kline,
+    MarginMode,
+    MarketInfo,
+    MarketType,
+    OrderBook,
+    OrderStatus,
+    OrderType,
+    PlaceOrderParams,
+    PositionMode,
+    PositionSide,
+    Side,
+    // Shared types (re-exported from virs-types)
+    Ticker,
 };
+pub use ws_types::WsFeedEvent;
 
 /// Unified exchange trait — the core abstraction following CCXT's design.
 ///
@@ -39,7 +57,13 @@ pub trait Exchange: Send + Sync {
     fn capabilities(&self) -> &ExchangeCapabilities;
 
     async fn fetch_ticker(&self, symbol: &str) -> Result<CcxtTicker, ExchangeError>;
-    async fn fetch_ohlcv(&self, symbol: &str, timeframe: &str, limit: u32, since: Option<i64>) -> Result<Vec<CcxtKline>, ExchangeError>;
+    async fn fetch_ohlcv(
+        &self,
+        symbol: &str,
+        timeframe: &str,
+        limit: u32,
+        since: Option<i64>,
+    ) -> Result<Vec<CcxtKline>, ExchangeError>;
 
     async fn fetch_ohlcv_range(
         &self,
@@ -53,7 +77,9 @@ pub trait Exchange: Send + Sync {
         let mut cursor = start_ms;
 
         while cursor < end_ms {
-            let batch = self.fetch_ohlcv(symbol, timeframe, page_limit, Some(cursor)).await?;
+            let batch = self
+                .fetch_ohlcv(symbol, timeframe, page_limit, Some(cursor))
+                .await?;
             if batch.is_empty() {
                 break;
             }
@@ -76,22 +102,74 @@ pub trait Exchange: Send + Sync {
         Ok(all_klines)
     }
 
-    async fn fetch_order_book(&self, symbol: &str, limit: u32) -> Result<CcxtOrderBook, ExchangeError>;
+    async fn fetch_order_book(
+        &self,
+        symbol: &str,
+        limit: u32,
+    ) -> Result<CcxtOrderBook, ExchangeError>;
     async fn fetch_balance(&self) -> Result<Vec<Balance>, ExchangeError>;
     async fn fetch_markets(&self) -> Result<Vec<MarketInfo>, ExchangeError>;
     async fn create_order(&self, params: PlaceOrderParams) -> Result<CcxtOrder, ExchangeError>;
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<CcxtOrder, ExchangeError>;
     async fn fetch_order(&self, symbol: &str, order_id: &str) -> Result<CcxtOrder, ExchangeError>;
-    async fn fetch_open_orders(&self, symbol: Option<&str>) -> Result<Vec<CcxtOrder>, ExchangeError>;
-    async fn set_leverage(&self, symbol: &str, leverage: u32, margin_mode: MarginMode) -> Result<(), ExchangeError>;
-    async fn fetch_positions(&self, symbol: Option<&str>) -> Result<Vec<types::Position>, ExchangeError>;
+    async fn fetch_open_orders(
+        &self,
+        symbol: Option<&str>,
+    ) -> Result<Vec<CcxtOrder>, ExchangeError>;
+    async fn set_leverage(
+        &self,
+        symbol: &str,
+        leverage: u32,
+        margin_mode: MarginMode,
+    ) -> Result<(), ExchangeError>;
+    async fn fetch_positions(
+        &self,
+        symbol: Option<&str>,
+    ) -> Result<Vec<types::Position>, ExchangeError>;
     async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError>;
     async fn fetch_funding_rate(&self, symbol: &str) -> Result<CcxtFundingRate, ExchangeError>;
-    async fn fetch_funding_history(&self, symbol: &str, start_time: i64, end_time: i64) -> Result<Vec<CcxtFundingHistoryEntry>, ExchangeError>;
+    async fn fetch_funding_history(
+        &self,
+        symbol: &str,
+        start_time: i64,
+        end_time: i64,
+    ) -> Result<Vec<CcxtFundingHistoryEntry>, ExchangeError>;
     async fn create_listen_key(&self) -> Result<String, ExchangeError>;
-    async fn keepalive_listen_key(&self, _listen_key: &str) -> Result<(), ExchangeError> { Ok(()) }
+    async fn keepalive_listen_key(&self, _listen_key: &str) -> Result<(), ExchangeError> {
+        Ok(())
+    }
     async fn fetch_api_restrictions(&self) -> Result<types::ApiRestrictions, ExchangeError> {
-        Err(ExchangeError::NotSupported("fetch_api_restrictions not supported".into()))
+        Err(ExchangeError::NotSupported(
+            "fetch_api_restrictions not supported".into(),
+        ))
+    }
+    /// 启动现货用户数据流 WebSocket API（基于 Ed25519 认证，替代废弃的 listenKey 方案）。
+    ///
+    /// 返回 `mpsc::Receiver<WsFeedEvent>`，调用方通过该 receiver 接收订单事件。
+    /// 仅当交易所支持 Ed25519 签名时可用（如 Binance 现货 + Ed25519 API Key）。
+    /// 不支持的交易所返回 `ExchangeError::NotSupported`。
+    async fn start_spot_order_ws_api(&self) -> Result<mpsc::Receiver<WsFeedEvent>, ExchangeError> {
+        Err(ExchangeError::NotSupported(
+            "start_spot_order_ws_api not supported".into(),
+        ))
+    }
+
+    /// 启动基于 listenKey 的订单 WebSocket（合约用户数据流，或现货 HMAC 降级路径）。
+    ///
+    /// 实现负责：
+    /// 1. 调用 `create_listen_key` 获取 listenKey（若调用方未提供）
+    /// 2. 构造并启动对应交易所/市场类型的 BinanceOrderWs
+    /// 3. 返回事件 receiver
+    ///
+    /// 调用方可通过 `listen_key_hint` 传入已缓存的 listenKey 以避免重复创建。
+    /// 不支持的交易所返回 `ExchangeError::NotSupported`。
+    async fn start_listenkey_order_ws(
+        &self,
+        _listen_key_hint: Option<&str>,
+    ) -> Result<mpsc::Receiver<WsFeedEvent>, ExchangeError> {
+        Err(ExchangeError::NotSupported(
+            "start_listenkey_order_ws not supported".into(),
+        ))
     }
     async fn ping(&self) -> Result<bool, ExchangeError>;
     async fn load_markets(&mut self) -> Result<(), ExchangeError>;
@@ -99,6 +177,9 @@ pub trait Exchange: Send + Sync {
 }
 
 /// Base HTTP client for exchange REST API calls.
+///
+/// `Clone` 是廉价操作（内部全为 `Arc`），允许在后台 keepalive task 中持有副本。
+#[derive(Clone)]
 pub struct ExchangeClient {
     client: Client,
     rate_limiter: std::sync::Arc<tokio::sync::Semaphore>,
@@ -133,7 +214,10 @@ impl ExchangeClient {
         path: &str,
         params: &[(&str, &str)],
     ) -> Result<Value, ExchangeError> {
-        let _permit = self.rate_limiter.acquire().await
+        let _permit = self
+            .rate_limiter
+            .acquire()
+            .await
             .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
         let display_url = build_display_url(path, params.iter().map(|(k, v)| (*k, *v)));
         let resp = self.client.get(path).query(params).send().await?;
@@ -146,12 +230,18 @@ impl ExchangeClient {
         path: &str,
         mut params: Vec<(String, String)>,
     ) -> Result<Value, ExchangeError> {
-        let _permit = self.rate_limiter.acquire().await
+        let _permit = self
+            .rate_limiter
+            .acquire()
+            .await
             .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
         let signed = signer.sign_get(path, &mut params)?;
         let display_url = build_display_url(
             path,
-            signed.query_params.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+            signed
+                .query_params
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str())),
         );
         let mut req = self.client.get(path);
         for (k, v) in &signed.query_params {
@@ -171,7 +261,10 @@ impl ExchangeClient {
         path: &str,
         mut body: Value,
     ) -> Result<Value, ExchangeError> {
-        let _permit = self.rate_limiter.acquire().await
+        let _permit = self
+            .rate_limiter
+            .acquire()
+            .await
             .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
         let signed = signer.sign_post(path, &mut body)?;
         let display_body = signed
@@ -205,7 +298,10 @@ impl ExchangeClient {
         path: &str,
         mut body: Value,
     ) -> Result<Value, ExchangeError> {
-        let _permit = self.rate_limiter.acquire().await
+        let _permit = self
+            .rate_limiter
+            .acquire()
+            .await
             .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
         let signed = signer.sign_put(path, &mut body)?;
         let display_body = signed
@@ -235,10 +331,7 @@ impl ExchangeClient {
 }
 
 /// Build a display URL from path and query params, masking `signature` for safe logging.
-fn build_display_url<'a>(
-    path: &str,
-    params: impl Iterator<Item = (&'a str, &'a str)>,
-) -> String {
+fn build_display_url<'a>(path: &str, params: impl Iterator<Item = (&'a str, &'a str)>) -> String {
     let mut url = path.to_string();
     let mut param_strs: Vec<String> = Vec::new();
     let mut has_params = false;
@@ -275,7 +368,9 @@ async fn handle_response(
     display_body: Option<&str>,
 ) -> Result<Value, ExchangeError> {
     let status = resp.status();
-    let text = resp.text().await
+    let text = resp
+        .text()
+        .await
         .map_err(|e| ExchangeError::Network(format!("Failed to read response body: {}", e)))?;
 
     // Print the RAW response body from Binance as-is (no transformation).
@@ -296,17 +391,26 @@ async fn handle_response(
                 401 | 403 => ExchangeError::Authentication(msg),
                 429 => ExchangeError::RateLimited(msg),
                 400 | 422 => ExchangeError::InvalidRequest(msg),
-                _ => ExchangeError::Http { status: status.as_u16(), body: msg },
+                _ => ExchangeError::Http {
+                    status: status.as_u16(),
+                    body: msg,
+                },
             });
         }
-        return Err(ExchangeError::Http { status: status.as_u16(), body: text });
+        return Err(ExchangeError::Http {
+            status: status.as_u16(),
+            body: text,
+        });
     }
 
-    serde_json::from_str::<Value>(&text)
-        .map_err(|e| ExchangeError::Internal(format!(
+    serde_json::from_str::<Value>(&text).map_err(|e| {
+        ExchangeError::Internal(format!(
             "Failed to parse response from {}: {} (body: {})",
-            display_url, e, &text[..text.len().min(200)]
-        )))
+            display_url,
+            e,
+            &text[..text.len().min(200)]
+        ))
+    })
 }
 
 fn extract_error_message(json: &Value) -> String {
@@ -366,7 +470,10 @@ pub fn create_exchange(
 ) -> Result<Box<dyn Exchange>, ExchangeError> {
     match id.to_lowercase().as_str() {
         "binance" => Ok(Box::new(adapter::binance::BinanceExchange::new(
-            api_key, api_secret, proxy_url, market_type,
+            api_key,
+            api_secret,
+            proxy_url,
+            market_type,
         )?)),
         // To add Bybit/OKX, implement adapter::bybit::BybitExchange / adapter::okx::OkxExchange
         // and add the corresponding match arm here. See "Adding a New Exchange" above.
@@ -382,23 +489,33 @@ pub fn create_exchange(
 }
 
 pub fn parse_f64(v: &Value, field: &str) -> Option<f64> {
-    v.get(field).and_then(|f| f.as_f64().or_else(|| f.as_str().and_then(|s| s.parse().ok())))
+    v.get(field).and_then(|f| {
+        f.as_f64()
+            .or_else(|| f.as_str().and_then(|s| s.parse().ok()))
+    })
 }
 
 pub fn parse_str(v: &Value, field: &str) -> Option<String> {
     v.get(field).and_then(|f| {
-        f.as_str().map(String::from)
+        f.as_str()
+            .map(String::from)
             .or_else(|| f.as_i64().map(|n| n.to_string()))
             .or_else(|| f.as_f64().map(|n| n.to_string()))
     })
 }
 
 pub fn parse_i64(v: &Value, field: &str) -> Option<i64> {
-    v.get(field).and_then(|f| f.as_i64().or_else(|| f.as_str().and_then(|s| s.parse().ok())))
+    v.get(field).and_then(|f| {
+        f.as_i64()
+            .or_else(|| f.as_str().and_then(|s| s.parse().ok()))
+    })
 }
 
 pub fn parse_u32(v: &Value, field: &str) -> Option<u32> {
     v.get(field)
-        .and_then(|f| f.as_u64().or_else(|| f.as_str().and_then(|s| s.parse().ok())))
+        .and_then(|f| {
+            f.as_u64()
+                .or_else(|| f.as_str().and_then(|s| s.parse().ok()))
+        })
         .map(|v| v as u32)
 }

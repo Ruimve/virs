@@ -66,8 +66,12 @@ pub async fn save_credential(
 
     // Encrypt API key with AES-256-GCM
     let derived_key = virs_utils::crypto::derive_key(&state.encryption_key);
-    let encrypted_key = virs_utils::crypto::encrypt(api_key, &derived_key)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Encryption error: {}", e)))))?;
+    let encrypted_key = virs_utils::crypto::encrypt(api_key, &derived_key).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::err(format!("Encryption error: {}", e))),
+        )
+    })?;
 
     sqlx::query(
         r#"INSERT INTO qd_ai_credentials (id, user_id, provider, encrypted_api_key, model, label, is_default, created_at)
@@ -88,7 +92,9 @@ pub async fn save_credential(
         (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
     })?;
 
-    Ok(Json(ApiResponse::ok(serde_json::json!({"id": id.to_string()}))))
+    Ok(Json(ApiResponse::ok(
+        serde_json::json!({"id": id.to_string()}),
+    )))
 }
 
 pub async fn delete_credential(
@@ -104,7 +110,10 @@ pub async fn delete_credential(
         .execute(&state.db_pool)
         .await
         .map_err(|e| {
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::err(format!("Database error: {}", e))),
+            )
         })?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
@@ -129,21 +138,32 @@ pub async fn test_credential(
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
             let derived_key = virs_utils::crypto::derive_key(&state.encryption_key);
-            let key = virs_utils::crypto::decrypt(&enc_key, &derived_key)
-                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err("Failed to decrypt API key"))))?;
+            let key = virs_utils::crypto::decrypt(&enc_key, &derived_key).map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::err("Failed to decrypt API key")),
+                )
+            })?;
             (p, key)
         }
-        None => return Ok(Json(ApiResponse::ok(serde_json::json!({
-            "connected": false,
-            "message": "No AI credentials saved. Please save credentials first.",
-        })))),
+        None => {
+            return Ok(Json(ApiResponse::ok(serde_json::json!({
+                "connected": false,
+                "message": "No AI credentials saved. Please save credentials first.",
+            }))))
+        }
     };
 
     let base_url = match provider.as_str() {
         "deepseek" => "https://api.deepseek.com",
         "openai" => "https://api.openai.com/v1",
         "openrouter" => "https://openrouter.ai/api/v1",
-        _ => return Ok(Json(ApiResponse::err(format!("Unknown provider: {}", provider)))),
+        _ => {
+            return Ok(Json(ApiResponse::err(format!(
+                "Unknown provider: {}",
+                provider
+            ))))
+        }
     };
 
     let model = match provider.as_str() {
@@ -162,7 +182,9 @@ pub async fn test_credential(
         "You are a test assistant. Always respond in json format.",
         "Return a json object with key \"status\" set to \"ok\".",
         &provider,
-    ).await {
+    )
+    .await
+    {
         Ok(_) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "connected": true,
             "message": format!("Successfully connected to {} ({})", provider, model),
@@ -192,20 +214,31 @@ pub async fn fetch_models(
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
             let derived_key = virs_utils::crypto::derive_key(&state.encryption_key);
-            let key = virs_utils::crypto::decrypt(&enc_key, &derived_key)
-                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err("Failed to decrypt API key"))))?;
+            let key = virs_utils::crypto::decrypt(&enc_key, &derived_key).map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::err("Failed to decrypt API key")),
+                )
+            })?;
             (p, key)
         }
-        None => return Ok(Json(ApiResponse::ok(serde_json::json!({
-            "models": [],
-        })))),
+        None => {
+            return Ok(Json(ApiResponse::ok(serde_json::json!({
+                "models": [],
+            }))))
+        }
     };
 
     let base_url = match provider.as_str() {
         "deepseek" => "https://api.deepseek.com",
         "openai" => "https://api.openai.com/v1",
         "openrouter" => "https://openrouter.ai/api/v1",
-        _ => return Ok(Json(ApiResponse::err(format!("Unknown provider: {}", provider)))),
+        _ => {
+            return Ok(Json(ApiResponse::err(format!(
+                "Unknown provider: {}",
+                provider
+            ))))
+        }
     };
 
     let models_url = format!("{}/models", base_url);
@@ -219,24 +252,41 @@ pub async fn fetch_models(
     match resp {
         Ok(response) => {
             if !response.status().is_success() {
-                return Ok(Json(ApiResponse::err(format!("Failed to fetch models: HTTP {}", response.status()))));
+                return Ok(Json(ApiResponse::err(format!(
+                    "Failed to fetch models: HTTP {}",
+                    response.status()
+                ))));
             }
             match response.json::<serde_json::Value>().await {
                 Ok(data) => {
-                    let models = data["data"].as_array()
-                        .map(|arr| arr.iter().filter_map(|m| {
-                            m["id"].as_str().map(|id| serde_json::json!({
+                    let models =
+                        data["data"]
+                            .as_array()
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|m| {
+                                        m["id"].as_str().map(|id| serde_json::json!({
                                 "id": id,
                                 "owned_by": m["owned_by"].as_str().unwrap_or("unknown"),
                             }))
-                        }).collect::<Vec<_>>())
-                        .unwrap_or_default();
-                    Ok(Json(ApiResponse::ok(serde_json::json!({ "models": models }))))
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+                    Ok(Json(ApiResponse::ok(
+                        serde_json::json!({ "models": models }),
+                    )))
                 }
-                Err(e) => Ok(Json(ApiResponse::err(format!("Failed to parse models: {}", e)))),
+                Err(e) => Ok(Json(ApiResponse::err(format!(
+                    "Failed to parse models: {}",
+                    e
+                )))),
             }
         }
-        Err(e) => Ok(Json(ApiResponse::err(format!("Failed to fetch models: {}", e)))),
+        Err(e) => Ok(Json(ApiResponse::err(format!(
+            "Failed to fetch models: {}",
+            e
+        )))),
     }
 }
 
@@ -258,13 +308,19 @@ pub async fn fetch_balance(
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
             let derived_key = virs_utils::crypto::derive_key(&state.encryption_key);
-            let key = virs_utils::crypto::decrypt(&enc_key, &derived_key)
-                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err("Failed to decrypt API key"))))?;
+            let key = virs_utils::crypto::decrypt(&enc_key, &derived_key).map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::err("Failed to decrypt API key")),
+                )
+            })?;
             (p, key)
         }
-        None => return Ok(Json(ApiResponse::ok(serde_json::json!({
-            "balances": [],
-        })))),
+        None => {
+            return Ok(Json(ApiResponse::ok(serde_json::json!({
+                "balances": [],
+            }))))
+        }
     };
 
     let balance_url = match provider.as_str() {
@@ -286,14 +342,20 @@ pub async fn fetch_balance(
             }
             match response.json::<serde_json::Value>().await {
                 Ok(data) => {
-                    let balances = data["balance_infos"].as_array()
-                        .or_else(|| data["data"].as_array())
-                        .map(|arr| arr.iter().map(|b| serde_json::json!({
+                    let balances =
+                        data["balance_infos"]
+                            .as_array()
+                            .or_else(|| data["data"].as_array())
+                            .map(|arr| {
+                                arr.iter().map(|b| serde_json::json!({
                             "total_balance": b["total_balance"].as_str().unwrap_or("0"),
                             "currency": b["currency"].as_str().unwrap_or("USD"),
-                        })).collect::<Vec<_>>())
-                        .unwrap_or_default();
-                    Ok(Json(ApiResponse::ok(serde_json::json!({ "balances": balances }))))
+                        })).collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+                    Ok(Json(ApiResponse::ok(
+                        serde_json::json!({ "balances": balances }),
+                    )))
                 }
                 Err(_) => Ok(Json(ApiResponse::ok(serde_json::json!({ "balances": [] })))),
             }

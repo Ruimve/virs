@@ -28,38 +28,92 @@ pub fn build_router(state: AppState) -> Router {
         // Market (public — market data is read-only)
         .route("/api/market/ticker", get(handlers::market::get_ticker))
         .route("/api/market/klines", get(handlers::market::get_klines))
-        .route("/api/market/orderbook", get(handlers::market::get_order_book))
+        .route(
+            "/api/market/orderbook",
+            get(handlers::market::get_order_book),
+        )
         .route("/api/market/balances", get(handlers::market::get_balances))
         .route("/api/market/symbols", get(handlers::market::get_symbols))
         // Kline Engine (public)
-        .route("/api/kline/subscribe", post(handlers::market::kline_subscribe))
+        .route(
+            "/api/kline/subscribe",
+            post(handlers::market::kline_subscribe),
+        )
         .route("/api/kline/data", get(handlers::market::kline_data))
         // OrderBook Engine (public)
-        .route("/api/orderbook/subscribe", post(handlers::market::orderbook_subscribe))
+        .route(
+            "/api/orderbook/subscribe",
+            post(handlers::market::orderbook_subscribe),
+        )
         // Credentials (authenticated)
-        .route("/api/credentials/list", get(handlers::credentials::list_credentials))
-        .route("/api/credentials/save", post(handlers::credentials::save_credential))
-        .route("/api/credentials/delete/{id}", delete(handlers::credentials::delete_credential))
-        .route("/api/credentials/test", get(handlers::credentials::test_credential))
-        .route("/api/credentials/check-permissions", get(handlers::credentials::check_permissions))
-        .route("/api/credentials/verify", post(handlers::credentials::verify_permissions))
-        .route("/api/credentials/status", get(handlers::credentials::exchange_status))
+        .route(
+            "/api/credentials/list",
+            get(handlers::credentials::list_credentials),
+        )
+        .route(
+            "/api/credentials/save",
+            post(handlers::credentials::save_credential),
+        )
+        .route(
+            "/api/credentials/delete/{id}",
+            delete(handlers::credentials::delete_credential),
+        )
+        .route(
+            "/api/credentials/test",
+            get(handlers::credentials::test_credential),
+        )
+        .route(
+            "/api/credentials/check-permissions",
+            get(handlers::credentials::check_permissions),
+        )
+        .route(
+            "/api/credentials/verify",
+            post(handlers::credentials::verify_permissions),
+        )
+        .route(
+            "/api/credentials/status",
+            get(handlers::credentials::exchange_status),
+        )
         // AI (authenticated)
         .route("/api/ai/status", get(handlers::ai::ai_status))
         .route("/api/ai/optimize", post(handlers::ai::optimize))
         .route("/api/ai/explain", post(handlers::ai::explain))
-        .route("/api/ai/recommend-strategy", post(handlers::ai::recommend_strategy))
+        .route(
+            "/api/ai/recommend-strategy",
+            post(handlers::ai::recommend_strategy),
+        )
         // AI Credentials (authenticated)
-        .route("/api/ai-credentials/list", get(handlers::ai_credentials::list_credentials))
-        .route("/api/ai-credentials/save", post(handlers::ai_credentials::save_credential))
-        .route("/api/ai-credentials/delete/{id}", delete(handlers::ai_credentials::delete_credential))
-        .route("/api/ai-credentials/test", get(handlers::ai_credentials::test_credential))
-        .route("/api/ai-credentials/models", get(handlers::ai_credentials::fetch_models))
-        .route("/api/ai-credentials/balance", get(handlers::ai_credentials::fetch_balance))
+        .route(
+            "/api/ai-credentials/list",
+            get(handlers::ai_credentials::list_credentials),
+        )
+        .route(
+            "/api/ai-credentials/save",
+            post(handlers::ai_credentials::save_credential),
+        )
+        .route(
+            "/api/ai-credentials/delete/{id}",
+            delete(handlers::ai_credentials::delete_credential),
+        )
+        .route(
+            "/api/ai-credentials/test",
+            get(handlers::ai_credentials::test_credential),
+        )
+        .route(
+            "/api/ai-credentials/models",
+            get(handlers::ai_credentials::fetch_models),
+        )
+        .route(
+            "/api/ai-credentials/balance",
+            get(handlers::ai_credentials::fetch_balance),
+        )
         // Grid Bot (authenticated)
         .route("/api/grid/create", post(handlers::grid::create_bot))
         .route("/api/grid/list", get(handlers::grid::list_bots))
-        .route("/api/grid/analysis-logs", get(handlers::grid::get_analysis_logs))
+        .route(
+            "/api/grid/analysis-logs",
+            get(handlers::grid::get_analysis_logs),
+        )
         .route("/api/grid/{id}", get(handlers::grid::get_bot))
         .route("/api/grid/{id}/start", post(handlers::grid::start_bot))
         .route("/api/grid/{id}/stop", post(handlers::grid::stop_bot))
@@ -69,17 +123,38 @@ pub fn build_router(state: AppState) -> Router {
         // Auto Bot (authenticated)
         .route("/api/auto/create", post(handlers::auto_trade::create_bot))
         .route("/api/auto/list", get(handlers::auto_trade::list_bots))
-        .route("/api/auto/analysis-logs", get(handlers::auto_trade::get_analysis_logs))
+        .route(
+            "/api/auto/analysis-logs",
+            get(handlers::auto_trade::get_analysis_logs),
+        )
         .route("/api/auto/{id}", get(handlers::auto_trade::get_bot))
-        .route("/api/auto/{id}/start", post(handlers::auto_trade::start_bot))
+        .route(
+            "/api/auto/{id}/start",
+            post(handlers::auto_trade::start_bot),
+        )
         .route("/api/auto/{id}/stop", post(handlers::auto_trade::stop_bot))
-        .route("/api/auto/{id}/delete", delete(handlers::auto_trade::delete_bot))
-        .route("/api/auto/{id}/trades", get(handlers::auto_trade::get_trades))
+        .route(
+            "/api/auto/{id}/delete",
+            delete(handlers::auto_trade::delete_bot),
+        )
+        .route(
+            "/api/auto/{id}/trades",
+            get(handlers::auto_trade::get_trades),
+        )
         .route("/api/auto/{id}/stats", get(handlers::auto_trade::get_stats))
         // System (authenticated)
-        .route("/api/system/paper/status", get(handlers::system::paper_status))
-        .route("/api/system/paper/enable", post(handlers::system::paper_enable))
-        .route("/api/system/paper/disable", post(handlers::system::paper_disable))
+        .route(
+            "/api/system/paper/status",
+            get(handlers::system::paper_status),
+        )
+        .route(
+            "/api/system/paper/enable",
+            post(handlers::system::paper_enable),
+        )
+        .route(
+            "/api/system/paper/disable",
+            post(handlers::system::paper_disable),
+        )
         .route("/api/system/info", get(handlers::system::system_info))
         // WebSocket (public)
         .route("/ws", get(crate::ws::ws_handler))
@@ -97,8 +172,8 @@ pub fn build_router(state: AppState) -> Router {
 }
 
 async fn spa_fallback(uri: Uri) -> Response {
-    let frontend_dir = std::env::var("FRONTEND_DIR")
-        .unwrap_or_else(|_| "./frontend/dist".to_string());
+    let frontend_dir =
+        std::env::var("FRONTEND_DIR").unwrap_or_else(|_| "./frontend/dist".to_string());
 
     let path = uri.path().trim_start_matches('/');
 
@@ -111,7 +186,9 @@ async fn spa_fallback(uri: Uri) -> Response {
     if candidate.is_file() && candidate.starts_with(&frontend_dir) {
         match std::fs::read(&candidate) {
             Ok(content) => {
-                let mime = mime_guess_from_ext(candidate.extension().and_then(|e| e.to_str()).unwrap_or(""));
+                let mime = mime_guess_from_ext(
+                    candidate.extension().and_then(|e| e.to_str()).unwrap_or(""),
+                );
                 Response::builder()
                     .status(StatusCode::OK)
                     .header(header::CONTENT_TYPE, mime)

@@ -15,8 +15,8 @@ use dashmap::DashMap;
 use tokio::sync::{broadcast, Mutex};
 
 use crate::types::{
-    MarketType, OrderBookEngineConfig, OrderBookEvent, OrderBookWsClient, WsOrderBookEvent,
-    subscription_key,
+    subscription_key, MarketType, OrderBookEngineConfig, OrderBookEvent, OrderBookWsClient,
+    WsOrderBookEvent,
 };
 
 struct SubscriptionEntry {
@@ -91,7 +91,10 @@ impl OrderBookEngine {
     }
 
     pub async fn start(&self) {
-        if self.started.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        if self
+            .started
+            .swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
             return;
         }
 
@@ -141,10 +144,7 @@ impl OrderBookEngine {
                         let _ = event_tx.send(event);
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {
-                        tracing::warn!(
-                            "[OrderBookEngine] WS update lagged by {} messages",
-                            n
-                        );
+                        tracing::warn!("[OrderBookEngine] WS update lagged by {} messages", n);
                     }
                     Err(broadcast::error::RecvError::Closed) => {
                         tracing::debug!("[OrderBookEngine] WS update channel closed");
@@ -160,7 +160,10 @@ impl OrderBookEngine {
     }
 
     pub async fn stop(&self) {
-        if !self.started.swap(false, std::sync::atomic::Ordering::Relaxed) {
+        if !self
+            .started
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+        {
             return;
         }
         tracing::debug!("[OrderBookEngine] Stopping...");

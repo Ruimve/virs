@@ -87,15 +87,46 @@ pub struct AnalysisLog {
 /// 网格引擎事件
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GridEvent {
-    BotStarted { bot_id: Uuid },
-    BotStopped { bot_id: Uuid, reason: String },
-    BotError { bot_id: Uuid, error: String },
-    GridAdjusted { bot_id: Uuid, upper_price: f64, lower_price: f64, level_count: usize },
-    GridFilled { bot_id: Uuid, level: i32, side: String, price: f64, quantity: f64 },
-    GridTradeClosed { bot_id: Uuid, level: i32, pnl: f64 },
-    PriceUpdate { bot_id: Uuid, price: f64 },
-    StatusUpdate { bot_id: Uuid, state: GridState },
-    AnalysisLog { log: AnalysisLog },
+    BotStarted {
+        bot_id: Uuid,
+    },
+    BotStopped {
+        bot_id: Uuid,
+        reason: String,
+    },
+    BotError {
+        bot_id: Uuid,
+        error: String,
+    },
+    GridAdjusted {
+        bot_id: Uuid,
+        upper_price: f64,
+        lower_price: f64,
+        level_count: usize,
+    },
+    GridFilled {
+        bot_id: Uuid,
+        level: i32,
+        side: String,
+        price: f64,
+        quantity: f64,
+    },
+    GridTradeClosed {
+        bot_id: Uuid,
+        level: i32,
+        pnl: f64,
+    },
+    PriceUpdate {
+        bot_id: Uuid,
+        price: f64,
+    },
+    StatusUpdate {
+        bot_id: Uuid,
+        state: GridState,
+    },
+    AnalysisLog {
+        log: AnalysisLog,
+    },
 }
 
 /// 默认系统 Prompt

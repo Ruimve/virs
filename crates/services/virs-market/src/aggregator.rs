@@ -1,7 +1,7 @@
 //! Kline aggregator — aggregates 1m candles into higher timeframes.
 
-use super::types::{Candle, Timeframe, align_open_time};
 use super::cache::SymbolCache;
+use super::types::{align_open_time, Candle, Timeframe};
 
 pub struct Aggregator;
 
@@ -11,7 +11,13 @@ impl Aggregator {
         cache: &mut SymbolCache,
     ) -> Vec<(Timeframe, Candle)> {
         let mut updated = Vec::new();
-        for &tf in &[Timeframe::M5, Timeframe::M15, Timeframe::H1, Timeframe::H4, Timeframe::D1] {
+        for &tf in &[
+            Timeframe::M5,
+            Timeframe::M15,
+            Timeframe::H1,
+            Timeframe::H4,
+            Timeframe::D1,
+        ] {
             if let Some(merged) = Self::merge_into_timeframe(candle_1m, tf, cache) {
                 updated.push((tf, merged));
             }
@@ -36,12 +42,17 @@ impl Aggregator {
         match last {
             Some(last_candle) if last_candle.open_time == aligned_open => {
                 let mut merged = last_candle.clone();
-                if candle_1m.high > merged.high { merged.high = candle_1m.high; }
-                if candle_1m.low < merged.low { merged.low = candle_1m.low; }
+                if candle_1m.high > merged.high {
+                    merged.high = candle_1m.high;
+                }
+                if candle_1m.low < merged.low {
+                    merged.low = candle_1m.low;
+                }
                 merged.close = candle_1m.close;
 
                 let m1_candles = cache.get_klines(Timeframe::M1);
-                let (group_volume, group_quote_volume, group_trades) = m1_candles.iter()
+                let (group_volume, group_quote_volume, group_trades) = m1_candles
+                    .iter()
                     .filter(|c| c.open_time >= aligned_open && c.open_time < aligned_open + tf_ms)
                     .fold((0.0_f64, 0.0_f64, 0_i64), |(vol, qvol, trd), c| {
                         (vol + c.volume, qvol + c.quote_volume, trd + c.trades)
@@ -89,7 +100,9 @@ impl Aggregator {
     }
 
     pub fn aggregate_1m_to_timeframe(candles_1m: &[Candle], tf: Timeframe) -> Vec<Candle> {
-        if candles_1m.is_empty() { return Vec::new(); }
+        if candles_1m.is_empty() {
+            return Vec::new();
+        }
 
         let tf_ms = tf.ms();
         let mut result: Vec<Candle> = Vec::new();
@@ -102,14 +115,20 @@ impl Aggregator {
 
             match &mut current {
                 Some(curr) if curr.open_time == aligned_open => {
-                    if c.high > curr.high { curr.high = c.high; }
-                    if c.low < curr.low { curr.low = c.low; }
+                    if c.high > curr.high {
+                        curr.high = c.high;
+                    }
+                    if c.low < curr.low {
+                        curr.low = c.low;
+                    }
                     curr.close = c.close;
                     curr.volume += c.volume;
                     curr.quote_volume += c.quote_volume;
                     curr.trades += c.trades;
                     curr.close_time = close_time;
-                    if is_closing && c.closed { curr.closed = true; }
+                    if is_closing && c.closed {
+                        curr.closed = true;
+                    }
                 }
                 Some(curr) => {
                     result.push(curr.clone());
@@ -127,7 +146,9 @@ impl Aggregator {
             }
         }
 
-        if let Some(c) = current { result.push(c); }
+        if let Some(c) = current {
+            result.push(c);
+        }
         result
     }
 }

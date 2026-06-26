@@ -1,6 +1,6 @@
 //! Risk checker for position engine.
 
-use virs_types::position::{Position, PositionEngineError, RiskConfig, PositionResult};
+use virs_types::position::{Position, PositionEngineError, PositionResult, RiskConfig};
 
 // ============================================================================
 // RiskAlertInfo
@@ -171,7 +171,9 @@ impl RiskChecker {
                 severity: severity.to_string(),
                 message: format!(
                     "品种 {} 资金费率 {:.4}% 超过阈值 {:.4}%",
-                    symbol, rate * 100.0, self.config.funding_rate_threshold * 100.0
+                    symbol,
+                    rate * 100.0,
+                    self.config.funding_rate_threshold * 100.0
                 ),
             })
         } else {

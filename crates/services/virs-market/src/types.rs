@@ -6,10 +6,12 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 // Re-export kline types from ccxt
-pub use virs_ccxt::ws_types::{Candle, WsCandleUpdate, WsEvent, KlineWsClient};
+pub use virs_ccxt::ws_types::{Candle, KlineWsClient, WsCandleUpdate, WsEvent};
 
 // Re-export order book types from ccxt
-pub use virs_ccxt::ws_types::{OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate};
+pub use virs_ccxt::ws_types::{
+    OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate,
+};
 
 // Re-export MarketType from virs-types
 pub use virs_types::enums::MarketType;
@@ -33,7 +35,14 @@ pub enum Timeframe {
 
 impl Timeframe {
     pub fn all() -> &'static [Timeframe] {
-        &[Timeframe::M1, Timeframe::M5, Timeframe::M15, Timeframe::H1, Timeframe::H4, Timeframe::D1]
+        &[
+            Timeframe::M1,
+            Timeframe::M5,
+            Timeframe::M15,
+            Timeframe::H1,
+            Timeframe::H4,
+            Timeframe::D1,
+        ]
     }
 
     pub fn as_str(&self) -> &'static str {
@@ -153,34 +162,55 @@ impl BacktestRangeLimit {
     pub fn for_timeframe(tf: Timeframe) -> Self {
         match tf {
             Timeframe::M1 => BacktestRangeLimit {
-                timeframe: tf, max_days: 7, recommended_days: 3,
-                estimated_candles: 7 * 24 * 60, estimated_1m_required: 7 * 24 * 60,
+                timeframe: tf,
+                max_days: 7,
+                recommended_days: 3,
+                estimated_candles: 7 * 24 * 60,
+                estimated_1m_required: 7 * 24 * 60,
             },
             Timeframe::M5 => BacktestRangeLimit {
-                timeframe: tf, max_days: 30, recommended_days: 14,
-                estimated_candles: 30 * 24 * 12, estimated_1m_required: 30 * 24 * 60,
+                timeframe: tf,
+                max_days: 30,
+                recommended_days: 14,
+                estimated_candles: 30 * 24 * 12,
+                estimated_1m_required: 30 * 24 * 60,
             },
             Timeframe::M15 => BacktestRangeLimit {
-                timeframe: tf, max_days: 90, recommended_days: 30,
-                estimated_candles: 90 * 24 * 4, estimated_1m_required: 90 * 24 * 60,
+                timeframe: tf,
+                max_days: 90,
+                recommended_days: 30,
+                estimated_candles: 90 * 24 * 4,
+                estimated_1m_required: 90 * 24 * 60,
             },
             Timeframe::H1 => BacktestRangeLimit {
-                timeframe: tf, max_days: 365, recommended_days: 90,
-                estimated_candles: 365 * 24, estimated_1m_required: 365 * 24 * 60,
+                timeframe: tf,
+                max_days: 365,
+                recommended_days: 90,
+                estimated_candles: 365 * 24,
+                estimated_1m_required: 365 * 24 * 60,
             },
             Timeframe::H4 => BacktestRangeLimit {
-                timeframe: tf, max_days: 730, recommended_days: 180,
-                estimated_candles: 730 * 6, estimated_1m_required: 730 * 24 * 60,
+                timeframe: tf,
+                max_days: 730,
+                recommended_days: 180,
+                estimated_candles: 730 * 6,
+                estimated_1m_required: 730 * 24 * 60,
             },
             Timeframe::D1 => BacktestRangeLimit {
-                timeframe: tf, max_days: 1825, recommended_days: 365,
-                estimated_candles: 1825, estimated_1m_required: 1825 * 24 * 60,
+                timeframe: tf,
+                max_days: 1825,
+                recommended_days: 365,
+                estimated_candles: 1825,
+                estimated_1m_required: 1825 * 24 * 60,
             },
         }
     }
 
     pub fn all_limits() -> Vec<BacktestRangeLimit> {
-        Timeframe::all().iter().map(|tf| Self::for_timeframe(*tf)).collect()
+        Timeframe::all()
+            .iter()
+            .map(|tf| Self::for_timeframe(*tf))
+            .collect()
     }
 }
 

@@ -14,6 +14,46 @@ const MARKET_TYPES: Array<{ id: MarketType; label: string; desc: string }> = [
   { id: 'spot', label: 'Spot', desc: 'Spot trading' },
 ];
 
+/**
+ * 规范化 PEM 格式的 API Secret。
+ *
+ * 用户从文本编辑器或浏览器复制 PEM 时，换行符 `\n` 经常会被替换成空格，
+ * 导致后端 `from_pkcs8_pem` 解析失败。此函数检测 PEM 格式并还原换行符。
+ *
+ * 处理逻辑：
+ * - 检测 `-----BEGIN ... PRIVATE KEY-----` 和 `-----END ... PRIVATE KEY-----` 标记
+ * - header / base64 内容 / footer 之间的空格替换为 `\n`
+ * - base64 内容内部如果是单行（无空格），保持原样（合法的单行 PEM）
+ * - 非 PEM 格式（HMAC secret、base64 seed）原样返回
+ */
+function normalizePemSecret(raw: string): string {
+  const value = raw.trim();
+  // 必须同时包含 BEGIN 和 END 标记才视为 PEM
+  const beginIdx = value.search(/-----BEGIN [A-Z ]*PRIVATE KEY-----/);
+  const endIdx = value.search(/-----END [A-Z ]*PRIVATE KEY-----/);
+  if (beginIdx === -1 || endIdx === -1 || beginIdx >= endIdx) {
+    return value;
+  }
+
+  const header = value.slice(beginIdx, value.indexOf('-----', beginIdx + 10) + 5);
+  const footer = value.slice(endIdx, value.indexOf('-----', endIdx + 8) + 5);
+  // header 和 footer 之间的内容（base64 体）
+  const bodyStart = value.indexOf(header) + header.length;
+  const bodyEnd = value.indexOf(footer);
+  const body = value.slice(bodyStart, bodyEnd).trim();
+
+  // 如果 body 本身包含换行，保留原样
+  if (body.includes('\n')) {
+    return `${header}\n${body}\n${footer}`;
+  }
+  // 单行 body：尝试按 64 字符宽度重新分行（OpenSSL 默认输出格式）
+  const lines: string[] = [];
+  for (let i = 0; i < body.length; i += 64) {
+    lines.push(body.slice(i, i + 64));
+  }
+  return `${header}\n${lines.join('\n')}\n${footer}`;
+}
+
 const ConfigureExchange = () => {
   const navigate = useNavigate();
   const { wizard, updateWizard, advanceStep } = useWizard();
@@ -128,7 +168,7 @@ const ConfigureExchange = () => {
 
   const handleApiSecretInput = useCallback(
     (e: React.InputEvent<HTMLInputElement>) => {
-      setApiSecret(e.currentTarget.value);
+      setApiSecret(normalizePemSecret(e.currentTarget.value));
       resetSteps();
     },
     [resetSteps],

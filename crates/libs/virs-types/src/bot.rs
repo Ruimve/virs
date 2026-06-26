@@ -105,11 +105,24 @@ pub enum OrderCommand {
 /// Order event (bot-layer)
 #[derive(Debug, Clone)]
 pub enum OrderEvent {
-    OrderPlaced { order: OrderInfo },
-    OrderFilled { order: OrderInfo },
-    OrderCanceled { order_id: Uuid, symbol: Option<String> },
-    OrderFailed { order_id: Uuid, reason: String },
-    RiskAlert { level: String, message: String },
+    OrderPlaced {
+        order: OrderInfo,
+    },
+    OrderFilled {
+        order: OrderInfo,
+    },
+    OrderCanceled {
+        order_id: Uuid,
+        symbol: Option<String>,
+    },
+    OrderFailed {
+        order_id: Uuid,
+        reason: String,
+    },
+    RiskAlert {
+        level: String,
+        message: String,
+    },
     LiquidationWarning {
         symbol: String,
         liquidation_price: f64,
@@ -137,7 +150,10 @@ pub struct AccountBalance {
 /// Credential store trait
 #[async_trait]
 pub trait CredentialStore: Send + Sync {
-    async fn load_credentials(&self, user_id: Uuid) -> BotResult<Vec<(String, String, Option<String>)>>;
+    async fn load_credentials(
+        &self,
+        user_id: Uuid,
+    ) -> BotResult<Vec<(String, String, Option<String>)>>;
 }
 
 /// Price provider trait (unified — market_type defaults to "perpetual" for grid)
@@ -161,7 +177,12 @@ pub struct MarketSnapshot {
 /// Market data provider trait (unified — market_type parameter for auto, grid passes "perpetual")
 #[async_trait]
 pub trait MarketDataProvider: Send + Sync {
-    async fn get_market_snapshot(&self, exchange: &str, symbol: &str, market_type: &str) -> MarketSnapshot;
+    async fn get_market_snapshot(
+        &self,
+        exchange: &str,
+        symbol: &str,
+        market_type: &str,
+    ) -> MarketSnapshot;
     async fn get_account_balance(&self, exchange: &str, market_type: &str) -> AccountBalance;
 }
 

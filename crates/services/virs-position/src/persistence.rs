@@ -186,12 +186,10 @@ impl Persistence {
     }
 
     async fn get_position_impl(&self, id: &Uuid) -> PositionResult<Option<Position>> {
-        let row = sqlx::query_as::<_, PositionRow>(
-            "SELECT * FROM pe_positions WHERE id = $1",
-        )
-        .bind(id)
-        .fetch_optional(&self.db)
-        .await?;
+        let row = sqlx::query_as::<_, PositionRow>("SELECT * FROM pe_positions WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.db)
+            .await?;
 
         Ok(row.and_then(|r| r.into_position()))
     }

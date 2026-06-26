@@ -1,7 +1,7 @@
 //! DefaultLlmResolver — resolves LLM provider, API key, base URL, and model.
 
 use virs_config::AiConfig;
-use virs_types::bot::{LlmProviderResolver, BotError, BotResult};
+use virs_types::bot::{BotError, BotResult, LlmProviderResolver};
 
 pub struct DefaultLlmResolver {
     ai_config: AiConfig,
@@ -39,7 +39,9 @@ impl LlmProviderResolver for DefaultLlmResolver {
         }
 
         // Priority: deepseek > openai > openrouter
-        if let Some((key, model)) = user_deepseek.or(self.ai_config.deepseek_api_key.clone().map(|k| (k, None))) {
+        if let Some((key, model)) =
+            user_deepseek.or(self.ai_config.deepseek_api_key.clone().map(|k| (k, None)))
+        {
             let model = model.unwrap_or_else(|| "deepseek-chat".to_string());
             return Ok((
                 key,
@@ -49,7 +51,9 @@ impl LlmProviderResolver for DefaultLlmResolver {
             ));
         }
 
-        if let Some((key, model)) = user_openai.or(self.ai_config.openai_api_key.clone().map(|k| (k, None))) {
+        if let Some((key, model)) =
+            user_openai.or(self.ai_config.openai_api_key.clone().map(|k| (k, None)))
+        {
             let model = model.unwrap_or_else(|| "gpt-4o".to_string());
             return Ok((
                 key,
@@ -59,7 +63,9 @@ impl LlmProviderResolver for DefaultLlmResolver {
             ));
         }
 
-        if let Some((key, model)) = user_openrouter.or(self.ai_config.openrouter_api_key.clone().map(|k| (k, None))) {
+        if let Some((key, model)) =
+            user_openrouter.or(self.ai_config.openrouter_api_key.clone().map(|k| (k, None)))
+        {
             let model = model.unwrap_or_else(|| "deepseek/deepseek-chat".to_string());
             return Ok((
                 key,

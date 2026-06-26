@@ -57,10 +57,12 @@ pub async fn create_user(
         ));
     }
 
-    let password_hash = bcrypt::hash(password, bcrypt::DEFAULT_COST)
-        .map_err(|e| {
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Hash error: {}", e))))
-        })?;
+    let password_hash = bcrypt::hash(password, bcrypt::DEFAULT_COST).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::err(format!("Hash error: {}", e))),
+        )
+    })?;
 
     let id = uuid::Uuid::new_v4();
     sqlx::query(
@@ -78,7 +80,9 @@ pub async fn create_user(
         (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
     })?;
 
-    Ok(Json(ApiResponse::ok(serde_json::json!({"id": id.to_string()}))))
+    Ok(Json(ApiResponse::ok(
+        serde_json::json!({"id": id.to_string()}),
+    )))
 }
 
 pub async fn update_user(
@@ -90,7 +94,10 @@ pub async fn update_user(
 
     let id = body["id"].as_str().unwrap_or("");
     let uuid_id = uuid::Uuid::parse_str(id).map_err(|_| {
-        (StatusCode::BAD_REQUEST, Json(ApiResponse::err("Invalid user ID")))
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::err("Invalid user ID")),
+        )
     })?;
 
     let is_active = body["is_active"].as_bool();
@@ -108,7 +115,10 @@ pub async fn update_user(
     .execute(&state.db_pool)
     .await
     .map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::err(format!("Database error: {}", e))),
+        )
     })?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"updated": true}))))
@@ -123,7 +133,10 @@ pub async fn delete_user(
 
     let id = body["id"].as_str().unwrap_or("");
     let uuid_id = uuid::Uuid::parse_str(id).map_err(|_| {
-        (StatusCode::BAD_REQUEST, Json(ApiResponse::err("Invalid user ID")))
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::err("Invalid user ID")),
+        )
     })?;
 
     sqlx::query(r#"DELETE FROM qd_users WHERE id = $1"#)
@@ -131,7 +144,10 @@ pub async fn delete_user(
         .execute(&state.db_pool)
         .await
         .map_err(|e| {
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::err(format!("Database error: {}", e))),
+            )
         })?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))

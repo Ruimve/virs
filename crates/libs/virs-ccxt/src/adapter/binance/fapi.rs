@@ -21,9 +21,10 @@
 
 use chrono::Utc;
 
+use crate::auth::Signer;
 use crate::errors::ExchangeError;
-use crate::ExchangeClient;
 use crate::types::*;
+use crate::ExchangeClient;
 use crate::{parse_f64, parse_str, parse_u32};
 
 const BASE_URL: &str = "https://fapi.binance.com";
@@ -40,10 +41,7 @@ fn parse_order_book_side(data: &serde_json::Value, side: &str) -> Vec<(f64, f64)
             arr.iter()
                 .filter_map(|b| {
                     let a = b.as_array()?;
-                    Some((
-                        a[0].as_str()?.parse().ok()?,
-                        a[1].as_str()?.parse().ok()?,
-                    ))
+                    Some((a[0].as_str()?.parse().ok()?, a[1].as_str()?.parse().ok()?))
                 })
                 .collect()
         })
@@ -59,7 +57,10 @@ pub async fn ping(client: &ExchangeClient) -> Result<bool, ExchangeError> {
 }
 
 /// GET /fapi/v1/ticker/24hr
-pub async fn fetch_ticker(client: &ExchangeClient, symbol: &str) -> Result<CcxtTicker, ExchangeError> {
+pub async fn fetch_ticker(
+    client: &ExchangeClient,
+    symbol: &str,
+) -> Result<CcxtTicker, ExchangeError> {
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let data = client
         .public_get(&url("/fapi/v1/ticker/24hr"), &[("symbol", native.as_str())])
@@ -68,7 +69,8 @@ pub async fn fetch_ticker(client: &ExchangeClient, symbol: &str) -> Result<CcxtT
     let last = parse_f64(&data, "lastPrice");
     if last.is_none() || last == Some(0.0) {
         return Err(ExchangeError::no_data(format!(
-            "No ticker data available for {} on Binance Futures", symbol
+            "No ticker data available for {} on Binance Futures",
+            symbol
         )));
     }
 
@@ -111,40 +113,62 @@ pub async fn fetch_ohlcv(
     }
 
     let data = client
-        .public_get(&url("/fapi/v1/klines"), &params.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>())
+        .public_get(
+            &url("/fapi/v1/klines"),
+            &params
+                .iter()
+                .map(|(k, v)| (*k, v.as_str()))
+                .collect::<Vec<_>>(),
+        )
         .await?;
 
     let arr = data.as_array().ok_or_else(|| {
-        ExchangeError::no_data(format!("Invalid kline response for {} on Binance Futures", symbol))
+        ExchangeError::no_data(format!(
+            "Invalid kline response for {} on Binance Futures",
+            symbol
+        ))
     })?;
 
     if arr.is_empty() {
         return Err(ExchangeError::no_data(format!(
-            "No OHLCV data available for {} ({}) on Binance Futures", symbol, timeframe
+            "No OHLCV data available for {} ({}) on Binance Futures",
+            symbol, timeframe
         )));
     }
 
-    let klines: Vec<CcxtKline> = arr.iter().filter_map(|k| {
-        let a = match k.as_array() {
-            Some(a) if a.len() >= 6 => a,
-            _ => return None,
-        };
-        let timestamp = a[0].as_i64()?;
-        let open = a[1].as_str().and_then(|s| s.parse().ok())?;
-        let high = a[2].as_str().and_then(|s| s.parse().ok())?;
-        let low = a[3].as_str().and_then(|s| s.parse().ok())?;
-        let close = a[4].as_str().and_then(|s| s.parse().ok())?;
-        let volume = a[5].as_str().and_then(|s| s.parse().ok())?;
-        Some(CcxtKline {
-            timestamp, open, high, low, close, volume,
-            quote_volume: a.get(7).and_then(|v| v.as_str()).and_then(|s| s.parse().ok()),
-            trades: a.get(8).and_then(|v| v.as_i64()),
+    let klines: Vec<CcxtKline> = arr
+        .iter()
+        .filter_map(|k| {
+            let a = match k.as_array() {
+                Some(a) if a.len() >= 6 => a,
+                _ => return None,
+            };
+            let timestamp = a[0].as_i64()?;
+            let open = a[1].as_str().and_then(|s| s.parse().ok())?;
+            let high = a[2].as_str().and_then(|s| s.parse().ok())?;
+            let low = a[3].as_str().and_then(|s| s.parse().ok())?;
+            let close = a[4].as_str().and_then(|s| s.parse().ok())?;
+            let volume = a[5].as_str().and_then(|s| s.parse().ok())?;
+            Some(CcxtKline {
+                timestamp,
+                open,
+                high,
+                low,
+                close,
+                volume,
+                quote_volume: a
+                    .get(7)
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| s.parse().ok()),
+                trades: a.get(8).and_then(|v| v.as_i64()),
+            })
         })
-    }).collect();
+        .collect();
 
     if klines.is_empty() {
         return Err(ExchangeError::no_data(format!(
-            "All kline entries invalid for {} ({}) on Binance Futures", symbol, timeframe
+            "All kline entries invalid for {} ({}) on Binance Futures",
+            symbol, timeframe
         )));
     }
 
@@ -152,10 +176,17 @@ pub async fn fetch_ohlcv(
 }
 
 /// GET /fapi/v1/depth
-pub async fn fetch_order_book(client: &ExchangeClient, symbol: &str, limit: u32) -> Result<CcxtOrderBook, ExchangeError> {
+pub async fn fetch_order_book(
+    client: &ExchangeClient,
+    symbol: &str,
+    limit: u32,
+) -> Result<CcxtOrderBook, ExchangeError> {
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let data = client
-        .public_get(&url("/fapi/v1/depth"), &[("symbol", native.as_str()), ("limit", &limit.to_string())])
+        .public_get(
+            &url("/fapi/v1/depth"),
+            &[("symbol", native.as_str()), ("limit", &limit.to_string())],
+        )
         .await?;
 
     let bids = parse_order_book_side(&data, "bids");
@@ -163,7 +194,8 @@ pub async fn fetch_order_book(client: &ExchangeClient, symbol: &str, limit: u32)
 
     if bids.is_empty() && asks.is_empty() {
         return Err(ExchangeError::no_data(format!(
-            "No order book data for {} on Binance Futures", symbol
+            "No order book data for {} on Binance Futures",
+            symbol
         )));
     }
 
@@ -178,18 +210,27 @@ pub async fn fetch_order_book(client: &ExchangeClient, symbol: &str, limit: u32)
 
 /// GET /fapi/v1/exchangeInfo
 pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, ExchangeError> {
-    let data = client.public_get(&url("/fapi/v1/exchangeInfo"), &[]).await?;
+    let data = client
+        .public_get(&url("/fapi/v1/exchangeInfo"), &[])
+        .await?;
 
-    let symbols = data.get("symbols").and_then(|s| s.as_array())
+    let symbols = data
+        .get("symbols")
+        .and_then(|s| s.as_array())
         .ok_or_else(|| ExchangeError::Internal("Invalid exchangeInfo response".into()))?;
 
-    let markets: Vec<MarketInfo> = symbols.iter()
+    let markets: Vec<MarketInfo> = symbols
+        .iter()
         .filter_map(|s| {
             let status = parse_str(s, "status")?;
-            if status != "TRADING" { return None; }
+            if status != "TRADING" {
+                return None;
+            }
 
             let contract_type = parse_str(s, "contractType")?;
-            if contract_type != "PERPETUAL" { return None; }
+            if contract_type != "PERPETUAL" {
+                return None;
+            }
 
             let base = parse_str(s, "baseAsset")?;
             let quote = parse_str(s, "quoteAsset")?;
@@ -198,20 +239,31 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
             let filters = s.get("filters").and_then(|f| f.as_array());
             let (min_amount, max_amount) = filters
                 .map(|arr| {
-                    let lot = arr.iter().find(|f| f.get("filterType").and_then(|v| v.as_str()) == Some("LOT_SIZE"));
-                    (lot.and_then(|f| parse_f64(f, "minQty")), lot.and_then(|f| parse_f64(f, "maxQty")))
+                    let lot = arr
+                        .iter()
+                        .find(|f| f.get("filterType").and_then(|v| v.as_str()) == Some("LOT_SIZE"));
+                    (
+                        lot.and_then(|f| parse_f64(f, "minQty")),
+                        lot.and_then(|f| parse_f64(f, "maxQty")),
+                    )
                 })
                 .unwrap_or((None, None));
             let (min_price, max_price) = filters
                 .map(|arr| {
-                    let pf = arr.iter().find(|f| f.get("filterType").and_then(|v| v.as_str()) == Some("PRICE_FILTER"));
-                    (pf.and_then(|f| parse_f64(f, "minPrice")), pf.and_then(|f| parse_f64(f, "maxPrice")))
+                    let pf = arr.iter().find(|f| {
+                        f.get("filterType").and_then(|v| v.as_str()) == Some("PRICE_FILTER")
+                    });
+                    (
+                        pf.and_then(|f| parse_f64(f, "minPrice")),
+                        pf.and_then(|f| parse_f64(f, "maxPrice")),
+                    )
                 })
                 .unwrap_or((None, None));
             let min_cost = filters
                 .and_then(|arr| {
                     arr.iter().find(|f| {
-                        f.get("filterType").and_then(|v| v.as_str())
+                        f.get("filterType")
+                            .and_then(|v| v.as_str())
                             .map(|t| t == "MIN_NOTIONAL")
                             .unwrap_or(false)
                     })
@@ -241,14 +293,21 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
 }
 
 /// GET /fapi/v1/premiumIndex — funding rate
-pub async fn fetch_funding_rate(client: &ExchangeClient, symbol: &str) -> Result<CcxtFundingRate, ExchangeError> {
+pub async fn fetch_funding_rate(
+    client: &ExchangeClient,
+    symbol: &str,
+) -> Result<CcxtFundingRate, ExchangeError> {
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let data = client
-        .public_get(&url("/fapi/v1/premiumIndex"), &[("symbol", native.as_str())])
+        .public_get(
+            &url("/fapi/v1/premiumIndex"),
+            &[("symbol", native.as_str())],
+        )
         .await?;
 
     let rate = parse_f64(&data, "lastFundingRate").unwrap_or(0.0);
-    let next_funding_time = data.get("nextFundingTime")
+    let next_funding_time = data
+        .get("nextFundingTime")
         .and_then(|t| t.as_i64())
         .map(|ts| chrono::DateTime::from_timestamp_millis(ts).unwrap_or_else(Utc::now));
 
@@ -273,31 +332,44 @@ pub async fn fetch_funding_history(
 
     loop {
         let data = client
-            .public_get(&url("/fapi/v1/fundingRate"), &[
-                ("symbol", native.as_str()),
-                ("startTime", &current_start.to_string()),
-                ("endTime", &end_time.to_string()),
-                ("limit", "1000"),
-            ])
+            .public_get(
+                &url("/fapi/v1/fundingRate"),
+                &[
+                    ("symbol", native.as_str()),
+                    ("startTime", &current_start.to_string()),
+                    ("endTime", &end_time.to_string()),
+                    ("limit", "1000"),
+                ],
+            )
             .await?;
 
-        let arr = data.as_array()
-            .ok_or_else(|| ExchangeError::Internal("Invalid fundingRate history response".into()))?;
+        let arr = data.as_array().ok_or_else(|| {
+            ExchangeError::Internal("Invalid fundingRate history response".into())
+        })?;
 
-        if arr.is_empty() { break; }
+        if arr.is_empty() {
+            break;
+        }
 
         for item in arr {
-            let funding_time = item.get("fundingTime").and_then(|t| t.as_i64()).unwrap_or(0);
+            let funding_time = item
+                .get("fundingTime")
+                .and_then(|t| t.as_i64())
+                .unwrap_or(0);
             let rate = parse_f64(item, "fundingRate").unwrap_or(0.0);
             all_entries.push(CcxtFundingHistoryEntry { funding_time, rate });
         }
 
-        if arr.len() < 1000 { break; }
+        if arr.len() < 1000 {
+            break;
+        }
 
         if let Some(last) = arr.last() {
-            current_start = last.get("fundingTime")
+            current_start = last
+                .get("fundingTime")
                 .and_then(|t| t.as_i64())
-                .unwrap_or(end_time) + 1;
+                .unwrap_or(end_time)
+                + 1;
         } else {
             break;
         }
@@ -311,21 +383,25 @@ pub async fn fetch_funding_history(
 /// GET /fapi/v3/balance — futures account balances
 pub async fn fetch_balance(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
 ) -> Result<Vec<Balance>, ExchangeError> {
     let data = client
         .signed_get(signer, &url("/fapi/v3/balance"), vec![])
         .await?;
 
-    let balances = data.as_array()
-        .ok_or_else(|| ExchangeError::Internal("Invalid futures balance response from Binance".into()))?;
+    let balances = data.as_array().ok_or_else(|| {
+        ExchangeError::Internal("Invalid futures balance response from Binance".into())
+    })?;
 
-    let result: Vec<Balance> = balances.iter()
+    let result: Vec<Balance> = balances
+        .iter()
         .filter_map(|b| {
             let free = parse_f64(b, "availableBalance").unwrap_or(0.0);
             let total = parse_f64(b, "balance").unwrap_or(0.0);
             let used = total - free;
-            if free == 0.0 && used == 0.0 { return None; }
+            if free == 0.0 && used == 0.0 {
+                return None;
+            }
             Some(Balance {
                 asset: parse_str(b, "asset").unwrap_or_default(),
                 free,
@@ -341,7 +417,7 @@ pub async fn fetch_balance(
 /// POST /fapi/v1/order — create futures order
 pub async fn create_order(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
     params: PlaceOrderParams,
 ) -> Result<CcxtOrder, ExchangeError> {
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(&params.symbol);
@@ -354,16 +430,16 @@ pub async fn create_order(
 
     if let Some(price) = params.price {
         body["price"] = serde_json::json!(price);
-        body["timeInForce"] = serde_json::json!(
-            params.time_in_force.as_ref()
-                .map(|tif| match tif {
-                    TimeInForce::Gtc => "GTC",
-                    TimeInForce::Ioc => "IOC",
-                    TimeInForce::Fok => "FOK",
-                    TimeInForce::Poc => "GTC",
-                })
-                .unwrap_or("GTC")
-        );
+        body["timeInForce"] = serde_json::json!(params
+            .time_in_force
+            .as_ref()
+            .map(|tif| match tif {
+                TimeInForce::Gtc => "GTC",
+                TimeInForce::Ioc => "IOC",
+                TimeInForce::Fok => "FOK",
+                TimeInForce::Poc => "GTC",
+            })
+            .unwrap_or("GTC"));
     }
 
     if let Some(stop_price) = params.stop_price {
@@ -398,7 +474,8 @@ pub async fn create_order(
         .await?;
 
     Ok(CcxtOrder {
-        id: parse_str(&data, "orderId").ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
+        id: parse_str(&data, "orderId")
+            .ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
         client_order_id: parse_str(&data, "clientOrderId"),
         symbol: params.symbol,
         side: params.side,
@@ -410,7 +487,8 @@ pub async fn create_order(
         remaining: parse_f64(&data, "origQty").unwrap_or(params.amount)
             - parse_f64(&data, "executedQty").unwrap_or(0.0),
         status: crate::adapter::binance::BinanceExchange::parse_order_status(
-            &parse_str(&data, "status").ok_or_else(|| ExchangeError::no_data("status missing".into()))?
+            &parse_str(&data, "status")
+                .ok_or_else(|| ExchangeError::no_data("status missing".into()))?,
         ),
         fee: None,
         created_at: Some(Utc::now()),
@@ -422,7 +500,7 @@ pub async fn create_order(
 /// POST /fapi/v1/order — cancel futures order
 pub async fn cancel_order(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
     symbol: &str,
     order_id: &str,
 ) -> Result<CcxtOrder, ExchangeError> {
@@ -436,13 +514,20 @@ pub async fn cancel_order(
         .signed_post(signer, &url("/fapi/v1/order"), body)
         .await?;
 
-    let side_str = parse_str(&data, "side").ok_or_else(|| ExchangeError::no_data("side missing".into()))?;
-    let type_str = parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data("type missing".into()))?;
+    let side_str =
+        parse_str(&data, "side").ok_or_else(|| ExchangeError::no_data("side missing".into()))?;
+    let type_str =
+        parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data("type missing".into()))?;
     Ok(CcxtOrder {
-        id: parse_str(&data, "orderId").ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
+        id: parse_str(&data, "orderId")
+            .ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
         client_order_id: parse_str(&data, "clientOrderId"),
         symbol: symbol.to_string(),
-        side: if side_str == "BUY" { Side::Buy } else { Side::Sell },
+        side: if side_str == "BUY" {
+            Side::Buy
+        } else {
+            Side::Sell
+        },
         order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
         price: parse_f64(&data, "price"),
         amount: parse_f64(&data, "origQty").unwrap_or(0.0),
@@ -460,7 +545,7 @@ pub async fn cancel_order(
 /// GET /fapi/v1/order — fetch futures order
 pub async fn fetch_order(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
     symbol: &str,
     order_id: &str,
 ) -> Result<CcxtOrder, ExchangeError> {
@@ -474,14 +559,22 @@ pub async fn fetch_order(
         .signed_get(signer, &url("/fapi/v1/order"), params)
         .await?;
 
-    let side_str = parse_str(&data, "side").ok_or_else(|| ExchangeError::no_data("side missing".into()))?;
-    let type_str = parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data("type missing".into()))?;
-    let status_str = parse_str(&data, "status").ok_or_else(|| ExchangeError::no_data("status missing".into()))?;
+    let side_str =
+        parse_str(&data, "side").ok_or_else(|| ExchangeError::no_data("side missing".into()))?;
+    let type_str =
+        parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data("type missing".into()))?;
+    let status_str = parse_str(&data, "status")
+        .ok_or_else(|| ExchangeError::no_data("status missing".into()))?;
     Ok(CcxtOrder {
-        id: parse_str(&data, "orderId").ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
+        id: parse_str(&data, "orderId")
+            .ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
         client_order_id: parse_str(&data, "clientOrderId"),
         symbol: symbol.to_string(),
-        side: if side_str == "BUY" { Side::Buy } else { Side::Sell },
+        side: if side_str == "BUY" {
+            Side::Buy
+        } else {
+            Side::Sell
+        },
         order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
         price: parse_f64(&data, "price"),
         amount: parse_f64(&data, "origQty").unwrap_or(0.0),
@@ -500,11 +593,14 @@ pub async fn fetch_order(
 /// GET /fapi/v1/openOrders — fetch open futures orders
 pub async fn fetch_open_orders(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
     symbol: Option<&str>,
 ) -> Result<Vec<CcxtOrder>, ExchangeError> {
     let params: Vec<(String, String)> = if let Some(sym) = symbol {
-        vec![("symbol".into(), crate::adapter::binance::BinanceExchange::to_native_symbol(sym))]
+        vec![(
+            "symbol".into(),
+            crate::adapter::binance::BinanceExchange::to_native_symbol(sym),
+        )]
     } else {
         vec![]
     };
@@ -514,30 +610,37 @@ pub async fn fetch_open_orders(
         .await?;
 
     let arr = data.as_array().cloned().unwrap_or_default();
-    let orders: Vec<CcxtOrder> = arr.iter().filter_map(|o| {
-        let side_str = parse_str(o, "side")?;
-        let type_str = parse_str(o, "type")?;
-        let status_str = parse_str(o, "status")?;
-        let symbol_str = parse_str(o, "symbol")?;
-        Some(CcxtOrder {
-            id: parse_str(o, "orderId")?,
-            client_order_id: parse_str(o, "clientOrderId"),
-            symbol: crate::adapter::binance::BinanceExchange::to_unified_symbol(&symbol_str),
-            side: if side_str == "BUY" { Side::Buy } else { Side::Sell },
-            order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
-            price: parse_f64(o, "price"),
-            amount: parse_f64(o, "origQty").unwrap_or(0.0),
-            cost: None,
-            filled: parse_f64(o, "executedQty").unwrap_or(0.0),
-            remaining: parse_f64(o, "origQty").unwrap_or(0.0)
-                - parse_f64(o, "executedQty").unwrap_or(0.0),
-            status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
-            fee: None,
-            created_at: None,
-            updated_at: None,
-            info: o.clone(),
+    let orders: Vec<CcxtOrder> = arr
+        .iter()
+        .filter_map(|o| {
+            let side_str = parse_str(o, "side")?;
+            let type_str = parse_str(o, "type")?;
+            let status_str = parse_str(o, "status")?;
+            let symbol_str = parse_str(o, "symbol")?;
+            Some(CcxtOrder {
+                id: parse_str(o, "orderId")?,
+                client_order_id: parse_str(o, "clientOrderId"),
+                symbol: crate::adapter::binance::BinanceExchange::to_unified_symbol(&symbol_str),
+                side: if side_str == "BUY" {
+                    Side::Buy
+                } else {
+                    Side::Sell
+                },
+                order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
+                price: parse_f64(o, "price"),
+                amount: parse_f64(o, "origQty").unwrap_or(0.0),
+                cost: None,
+                filled: parse_f64(o, "executedQty").unwrap_or(0.0),
+                remaining: parse_f64(o, "origQty").unwrap_or(0.0)
+                    - parse_f64(o, "executedQty").unwrap_or(0.0),
+                status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
+                fee: None,
+                created_at: None,
+                updated_at: None,
+                info: o.clone(),
+            })
         })
-    }).collect();
+        .collect();
 
     Ok(orders)
 }
@@ -545,7 +648,7 @@ pub async fn fetch_open_orders(
 /// POST /fapi/v1/marginType — set margin type (CROSSED / ISOLATED)
 pub async fn set_margin_type(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
     symbol: &str,
     margin_mode: MarginMode,
 ) -> Result<(), ExchangeError> {
@@ -559,14 +662,16 @@ pub async fn set_margin_type(
         "marginType": margin_type_str,
     });
     // Ignore errors — may return "No need to change" if already set
-    let _ = client.signed_post(signer, &url("/fapi/v1/marginType"), body).await;
+    let _ = client
+        .signed_post(signer, &url("/fapi/v1/marginType"), body)
+        .await;
     Ok(())
 }
 
 /// POST /fapi/v1/leverage — set leverage
 pub async fn set_leverage(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
     symbol: &str,
     leverage: u32,
 ) -> Result<(), ExchangeError> {
@@ -584,27 +689,38 @@ pub async fn set_leverage(
 /// GET /fapi/v2/positionRisk — fetch open positions
 pub async fn fetch_positions(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
     symbol: Option<&str>,
 ) -> Result<Vec<Position>, ExchangeError> {
     let mut params: Vec<(String, String)> = vec![];
     if let Some(sym) = symbol {
-        params.push(("symbol".into(), crate::adapter::binance::BinanceExchange::to_native_symbol(sym)));
+        params.push((
+            "symbol".into(),
+            crate::adapter::binance::BinanceExchange::to_native_symbol(sym),
+        ));
     }
 
     let data = client
         .signed_get(signer, &url("/fapi/v2/positionRisk"), params)
         .await?;
 
-    let arr = data.as_array()
-        .ok_or_else(|| ExchangeError::Internal("Invalid positionRisk response from Binance".into()))?;
+    let arr = data.as_array().ok_or_else(|| {
+        ExchangeError::Internal("Invalid positionRisk response from Binance".into())
+    })?;
 
-    let positions: Vec<Position> = arr.iter()
+    let positions: Vec<Position> = arr
+        .iter()
         .filter_map(|p| {
             let pos_amt = parse_f64(p, "positionAmt").unwrap_or(0.0);
-            if pos_amt == 0.0 { return None; }
+            if pos_amt == 0.0 {
+                return None;
+            }
 
-            let side = if pos_amt > 0.0 { PositionSide::Long } else { PositionSide::Short };
+            let side = if pos_amt > 0.0 {
+                PositionSide::Long
+            } else {
+                PositionSide::Short
+            };
             let size = pos_amt.abs();
 
             let margin_type_str = parse_str(p, "marginType").unwrap_or_default();
@@ -635,22 +751,27 @@ pub async fn fetch_positions(
 /// GET /fapi/v1/positionSide/dual — get position mode
 pub async fn get_position_mode(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
 ) -> Result<PositionMode, ExchangeError> {
     let data = client
         .signed_get(signer, &url("/fapi/v1/positionSide/dual"), vec![])
         .await?;
 
-    let dual_side = data.get("dualSidePosition")
+    let dual_side = data
+        .get("dualSidePosition")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    Ok(if dual_side { PositionMode::Hedge } else { PositionMode::OneWay })
+    Ok(if dual_side {
+        PositionMode::Hedge
+    } else {
+        PositionMode::OneWay
+    })
 }
 
 /// POST /fapi/v1/listenKey — create listen key for futures user data stream
 pub async fn create_listen_key(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
 ) -> Result<String, ExchangeError> {
     let body = serde_json::json!({});
     let data = client
@@ -665,7 +786,7 @@ pub async fn create_listen_key(
 /// PUT /fapi/v1/listenKey — keepalive listen key
 pub async fn keepalive_listen_key(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
     listen_key: &str,
 ) -> Result<(), ExchangeError> {
     let body = serde_json::json!({ "listenKey": listen_key });

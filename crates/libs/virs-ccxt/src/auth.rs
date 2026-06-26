@@ -11,10 +11,10 @@
 //! - `adapter/okx/mod.rs` — OkxSigner  (TODO: future support)
 //! - `adapter/bybit/mod.rs` — BybitSigner (TODO: future support)
 
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use hmac::{Hmac, Mac};
-use sha2::Sha256;
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use sha2::Sha256;
 
 use super::errors::ExchangeError;
 
@@ -73,8 +73,8 @@ pub trait Signer: Send + Sync {
 
 /// Compute HMAC-SHA256 and return hex-encoded signature.
 pub fn hmac_sha256_hex(secret: &str, message: &str) -> String {
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .expect("HMAC can take key of any size");
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
     mac.update(message.as_bytes());
     let result = mac.finalize();
     hex::encode(result.into_bytes())
@@ -82,8 +82,8 @@ pub fn hmac_sha256_hex(secret: &str, message: &str) -> String {
 
 /// Compute HMAC-SHA256 and return Base64-encoded signature.
 pub fn hmac_sha256_base64(secret: &str, message: &str) -> String {
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .expect("HMAC can take key of any size");
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
     mac.update(message.as_bytes());
     let result = mac.finalize();
     BASE64.encode(result.into_bytes())
@@ -96,10 +96,11 @@ pub fn make_header(name: &'static str, value: &str) -> Result<HeaderValue, Excha
 }
 
 /// Helper to insert a header into HeaderMap.
-pub fn insert_header(headers: &mut HeaderMap, name: &'static str, value: &str) -> Result<(), ExchangeError> {
-    headers.insert(
-        HeaderName::from_static(name),
-        make_header(name, value)?,
-    );
+pub fn insert_header(
+    headers: &mut HeaderMap,
+    name: &'static str,
+    value: &str,
+) -> Result<(), ExchangeError> {
+    headers.insert(HeaderName::from_static(name), make_header(name, value)?);
     Ok(())
 }

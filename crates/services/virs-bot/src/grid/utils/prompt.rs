@@ -44,32 +44,68 @@ pub fn render_user_prompt(
     prompt = prompt.replace("{event_description}", event_description);
 
     // 1h indicators
-    prompt = prompt.replace("{h1_current_price}", &format!("{:.2}", indicators.current_price));
+    prompt = prompt.replace(
+        "{h1_current_price}",
+        &format!("{:.2}", indicators.current_price),
+    );
     prompt = prompt.replace("{h1_bb_upper}", &format!("{:.2}", indicators.bb_upper));
     prompt = prompt.replace("{h1_bb_middle}", &format!("{:.2}", indicators.bb_middle));
     prompt = prompt.replace("{h1_bb_lower}", &format!("{:.2}", indicators.bb_lower));
-    prompt = prompt.replace("{h1_bb_width_pct}", &format!("{:.2}", indicators.bb_width * 100.0));
+    prompt = prompt.replace(
+        "{h1_bb_width_pct}",
+        &format!("{:.2}", indicators.bb_width * 100.0),
+    );
     prompt = prompt.replace("{h1_ema20}", &format!("{:.2}", indicators.ema20));
     prompt = prompt.replace("{h1_ema50}", &format!("{:.2}", indicators.ema50));
-    prompt = prompt.replace("{h1_ema_distance_pct}", &format!("{:.2}", indicators.h1_ema_gap_pct));
+    prompt = prompt.replace(
+        "{h1_ema_distance_pct}",
+        &format!("{:.2}", indicators.h1_ema_gap_pct),
+    );
     prompt = prompt.replace("{h1_adx}", &format!("{:.1}", indicators.adx));
     prompt = prompt.replace("{h1_atr}", &format!("{:.4}", indicators.atr));
     prompt = prompt.replace("{h1_atr_sma20}", &format!("{:.4}", indicators.h1_atr_sma20));
-    prompt = prompt.replace("{h1_candle_body}", &format!("{:.4}", indicators.h1_candle_body));
-    prompt = prompt.replace("{h1_bars_outside_band}", &format_bars_outside(indicators.h1_bars_outside_band));
-    prompt = prompt.replace("{h1_bandwidth_5bars_ago}", &format!("{:.2}", indicators.h1_bandwidth_5bars_ago * 100.0));
+    prompt = prompt.replace(
+        "{h1_candle_body}",
+        &format!("{:.4}", indicators.h1_candle_body),
+    );
+    prompt = prompt.replace(
+        "{h1_bars_outside_band}",
+        &format_bars_outside(indicators.h1_bars_outside_band),
+    );
+    prompt = prompt.replace(
+        "{h1_bandwidth_5bars_ago}",
+        &format!("{:.2}", indicators.h1_bandwidth_5bars_ago * 100.0),
+    );
     prompt = prompt.replace("{h1_high_20}", &format!("{:.2}", indicators.h1_high_20));
     prompt = prompt.replace("{h1_low_20}", &format!("{:.2}", indicators.h1_low_20));
-    prompt = prompt.replace("{nearest_round_up}", &format!("{:.2}", indicators.nearest_round_up));
-    prompt = prompt.replace("{nearest_round_down}", &format!("{:.2}", indicators.nearest_round_down));
+    prompt = prompt.replace(
+        "{nearest_round_up}",
+        &format!("{:.2}", indicators.nearest_round_up),
+    );
+    prompt = prompt.replace(
+        "{nearest_round_down}",
+        &format!("{:.2}", indicators.nearest_round_down),
+    );
 
     // 15m indicators
-    prompt = prompt.replace("{m15_current_price}", &format!("{:.2}", indicators.m15_current_price));
-    prompt = prompt.replace("{m15_bb_width_pct}", &format!("{:.2}", indicators.m15_bb_width_pct * 100.0));
+    prompt = prompt.replace(
+        "{m15_current_price}",
+        &format!("{:.2}", indicators.m15_current_price),
+    );
+    prompt = prompt.replace(
+        "{m15_bb_width_pct}",
+        &format!("{:.2}", indicators.m15_bb_width_pct * 100.0),
+    );
     prompt = prompt.replace("{m15_atr}", &format!("{:.4}", indicators.m15_atr));
-    prompt = prompt.replace("{m15_atr_sma20}", &format!("{:.4}", indicators.m15_atr_sma20));
+    prompt = prompt.replace(
+        "{m15_atr_sma20}",
+        &format!("{:.4}", indicators.m15_atr_sma20),
+    );
     prompt = prompt.replace("{m15_adx}", &format!("{:.1}", indicators.m15_adx));
-    prompt = prompt.replace("{m15_bars_outside_band}", &format_bars_outside(indicators.m15_bars_outside_band));
+    prompt = prompt.replace(
+        "{m15_bars_outside_band}",
+        &format_bars_outside(indicators.m15_bars_outside_band),
+    );
     prompt = prompt.replace("{m15_ema20}", &format!("{:.2}", indicators.m15_ema20));
     prompt = prompt.replace("{m15_ema50}", &format!("{:.2}", indicators.m15_ema50));
 
@@ -77,7 +113,10 @@ pub fn render_user_prompt(
     prompt = prompt.replace("{h4_ema20}", &format!("{:.2}", indicators.h4_ema20));
     prompt = prompt.replace("{h4_ema50}", &format!("{:.2}", indicators.h4_ema50));
     prompt = prompt.replace("{h4_adx}", &format!("{:.1}", indicators.h4_adx));
-    prompt = prompt.replace("{h4_bb_width_pct}", &format!("{:.2}", indicators.h4_bb_width_pct * 100.0));
+    prompt = prompt.replace(
+        "{h4_bb_width_pct}",
+        &format!("{:.2}", indicators.h4_bb_width_pct * 100.0),
+    );
 
     prompt = prompt.replace("{trigger_reason}", trigger_reason);
 

@@ -65,36 +65,80 @@ pub trait GridStore: Send + Sync {
     async fn load_bot(&self, bot_id: Uuid) -> anyhow::Result<Option<GridBotConfig>>;
     async fn load_trades(&self, bot_id: Uuid) -> anyhow::Result<Vec<GridTradeRecord>>;
     async fn record_open_trade(
-        &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
-        grid_level: i32, open_side: &str, open_price: f64, open_quantity: f64,
+        &self,
+        bot_id: Uuid,
+        user_id: Uuid,
+        symbol: &str,
+        exchange: &str,
+        grid_level: i32,
+        open_side: &str,
+        open_price: f64,
+        open_quantity: f64,
         open_order_id: Option<&str>,
     ) -> anyhow::Result<Uuid>;
     async fn close_trade(
-        &self, trade_id: Uuid, close_side: &str, close_price: f64,
-        close_quantity: f64, close_order_id: Option<&str>, pnl: f64, pnl_pct: f64,
+        &self,
+        trade_id: Uuid,
+        close_side: &str,
+        close_price: f64,
+        close_quantity: f64,
+        close_order_id: Option<&str>,
+        pnl: f64,
+        pnl_pct: f64,
     ) -> anyhow::Result<()>;
     async fn find_open_trade(&self, bot_id: Uuid, grid_level: i32) -> anyhow::Result<Option<Uuid>>;
     async fn record_orphaned_close_trade(
-        &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
-        grid_level: i32, close_side: &str, close_price: f64, close_quantity: f64,
-        close_order_id: Option<&str>, pnl: f64, pnl_pct: f64,
+        &self,
+        bot_id: Uuid,
+        user_id: Uuid,
+        symbol: &str,
+        exchange: &str,
+        grid_level: i32,
+        close_side: &str,
+        close_price: f64,
+        close_quantity: f64,
+        close_order_id: Option<&str>,
+        pnl: f64,
+        pnl_pct: f64,
     ) -> anyhow::Result<Uuid>;
     async fn save_stats(
-        &self, bot_id: Uuid, total_pnl: f64, unrealized_pnl: f64,
-        total_trades: i32, grid_filled_count: i32, levels_json: Option<&serde_json::Value>,
+        &self,
+        bot_id: Uuid,
+        total_pnl: f64,
+        unrealized_pnl: f64,
+        total_trades: i32,
+        grid_filled_count: i32,
+        levels_json: Option<&serde_json::Value>,
     ) -> anyhow::Result<()>;
     async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> anyhow::Result<()>;
     async fn update_last_adjusted(&self, bot_id: Uuid) -> anyhow::Result<()>;
-    async fn update_grid_params(&self, bot_id: Uuid, upper_price: f64, lower_price: f64) -> anyhow::Result<()>;
+    async fn update_grid_params(
+        &self,
+        bot_id: Uuid,
+        upper_price: f64,
+        lower_price: f64,
+    ) -> anyhow::Result<()>;
     async fn update_quantity_per_grid(&self, bot_id: Uuid, quantity: f64) -> anyhow::Result<()>;
     async fn update_ai_analysis(
-        &self, bot_id: Uuid, market_regime: &str, upper_price: f64, lower_price: f64,
-        grid_count: i32, grid_profit_pct: f64, quantity_per_grid: f64, leverage: i32,
+        &self,
+        bot_id: Uuid,
+        market_regime: &str,
+        upper_price: f64,
+        lower_price: f64,
+        grid_count: i32,
+        grid_profit_pct: f64,
+        quantity_per_grid: f64,
+        leverage: i32,
         ai_analysis: &str,
     ) -> anyhow::Result<()>;
     async fn save_analysis_log(
-        &self, bot_id: Uuid, analysis_type: &str, system_prompt: &str,
-        user_prompt: &str, result: &serde_json::Value, error: Option<&str>,
+        &self,
+        bot_id: Uuid,
+        analysis_type: &str,
+        system_prompt: &str,
+        user_prompt: &str,
+        result: &serde_json::Value,
+        error: Option<&str>,
         llm_model: &str,
     ) -> anyhow::Result<()>;
     async fn load_analysis_logs(&self, bot_id: Uuid) -> anyhow::Result<Vec<AnalysisLogEntry>>;

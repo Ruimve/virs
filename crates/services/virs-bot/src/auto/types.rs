@@ -24,13 +24,36 @@ pub enum AutoCommand {
 /// 自动交易引擎事件
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AutoEvent {
-    BotStarted { bot_id: Uuid },
-    BotStopped { bot_id: Uuid, reason: String },
-    BotError { bot_id: Uuid, error: String },
-    PositionOpened { bot_id: Uuid, side: String, price: f64, quantity: f64 },
-    PositionClosed { bot_id: Uuid, side: String, price: f64, pnl: f64 },
-    StatusUpdate { bot_id: Uuid, state: AutoBotState },
-    AnalysisLog { log: AutoAnalysisLog },
+    BotStarted {
+        bot_id: Uuid,
+    },
+    BotStopped {
+        bot_id: Uuid,
+        reason: String,
+    },
+    BotError {
+        bot_id: Uuid,
+        error: String,
+    },
+    PositionOpened {
+        bot_id: Uuid,
+        side: String,
+        price: f64,
+        quantity: f64,
+    },
+    PositionClosed {
+        bot_id: Uuid,
+        side: String,
+        price: f64,
+        pnl: f64,
+    },
+    StatusUpdate {
+        bot_id: Uuid,
+        state: AutoBotState,
+    },
+    AnalysisLog {
+        log: AutoAnalysisLog,
+    },
 }
 
 /// 自动交易 Bot 运行状态

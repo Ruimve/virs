@@ -24,18 +24,24 @@ pub fn calc_holdings_summary(
 
 /// Calculate margin usage rate.
 pub fn calc_margin_usage(used_margin: f64, total_balance: f64) -> f64 {
-    if total_balance <= 0.0 { return 0.0; }
+    if total_balance <= 0.0 {
+        return 0.0;
+    }
     used_margin / total_balance * 100.0
 }
 
 /// Check if total position exceeds safety threshold (30% of investment).
 pub fn is_position_over_limit(total_hold_value: f64, total_investment: f64) -> bool {
-    if total_investment <= 0.0 { return false; }
+    if total_investment <= 0.0 {
+        return false;
+    }
     total_hold_value > total_investment * 0.3
 }
 
 /// Check if unrealized loss exceeds safety threshold (15% of investment).
 pub fn is_unrealized_loss_over_limit(unrealized_pnl: f64, total_investment: f64) -> bool {
-    if total_investment <= 0.0 { return false; }
+    if total_investment <= 0.0 {
+        return false;
+    }
     unrealized_pnl < -total_investment * 0.15
 }

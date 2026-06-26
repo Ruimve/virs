@@ -168,12 +168,20 @@ impl AutoWorker {
             "stop_loss" => {
                 // 止损说明入场点差，同方向立即重入大概率再次扫损
                 // 反方向可能是趋势反转，允许 LLM 判断后进入
-                if closed_side == new_side { 30 * 60 } else { 0 }
+                if closed_side == new_side {
+                    30 * 60
+                } else {
+                    0
+                }
             }
             "take_profit" => {
                 // 止盈后同方向可能到顶/底，追高/追低风险
                 // 反方向允许进入
-                if closed_side == new_side { 15 * 60 } else { 0 }
+                if closed_side == new_side {
+                    15 * 60
+                } else {
+                    0
+                }
             }
             "llm_decision" => {
                 // LLM 主动平仓（含趋势反转/风控/LLM决策）：双向保守冷却 15 分钟
@@ -200,8 +208,14 @@ impl AutoWorker {
     /// 直接查询 PositionEngine 当前 Open 仓位，刷新 current_position 缓存。
     /// 防止 PE broadcast 事件丢失导致缓存失效 → 重复开仓。
     pub(crate) async fn refresh_position_from_pe(&mut self) {
-        match self.order_executor.query_open_position(&self.bot.symbol).await {
-            Ok(Some(pe_pos)) if pe_pos.status == PositionStatus::Open && pe_pos.size.abs() > 1e-8 => {
+        match self
+            .order_executor
+            .query_open_position(&self.bot.symbol)
+            .await
+        {
+            Ok(Some(pe_pos))
+                if pe_pos.status == PositionStatus::Open && pe_pos.size.abs() > 1e-8 =>
+            {
                 // PE 有开仓但本地缓存为空 → 恢复
                 let was_empty = !self.has_position();
                 if was_empty {
@@ -246,7 +260,11 @@ impl AutoWorker {
     pub(crate) async fn fetch_current_price(&self) -> f64 {
         match self
             .price_provider
-            .get_price(&self.bot.exchange, &self.bot.symbol, self.bot.market_type.as_str())
+            .get_price(
+                &self.bot.exchange,
+                &self.bot.symbol,
+                self.bot.market_type.as_str(),
+            )
             .await
         {
             Some(price) if price > 0.0 => price,
@@ -257,10 +275,7 @@ impl AutoWorker {
     pub(crate) async fn save_position(&self) {
         let _ = self
             .store
-            .update_position(
-                self.bot.id,
-                self.bot.position_id,
-            )
+            .update_position(self.bot.id, self.bot.position_id)
             .await;
     }
 
@@ -300,7 +315,11 @@ impl AutoWorker {
         // 回填 LLM log 执行状态（仅 LLM 决策触发的订单才有 log_id）
         if timed_out_open || timed_out_close {
             if let Some(log_id) = self.current_log_id.take() {
-                let exec_status = if timed_out_open { "open_failed" } else { "close_failed" };
+                let exec_status = if timed_out_open {
+                    "open_failed"
+                } else {
+                    "close_failed"
+                };
                 if let Err(e) = self
                     .store
                     .update_analysis_log_execution(log_id, exec_status, Some("订单超时未成交"))
@@ -406,7 +425,12 @@ impl AutoWorker {
 
         // 孤儿 trade 检测：bot.position_id 为空但 qd_auto_trades 仍有 open 记录
         // 这种情况通常由 PE 仓位丢失/重启超时导致，标记为 orphaned（保留开仓数据用于回溯）
-        if self.bot.position_id.filter(|id| *id != Uuid::nil()).is_none() {
+        if self
+            .bot
+            .position_id
+            .filter(|id| *id != Uuid::nil())
+            .is_none()
+        {
             match self.store.find_open_trade(self.bot.id).await {
                 Ok(Some((trade_id, _sl, _tp))) => {
                     warn!(
@@ -427,7 +451,12 @@ impl AutoWorker {
 
         // 如果 bot 有 position_id，等待 PE 推送仓位事件以恢复 current_position
         // 这确保重启后能立即获取仓位状态，不会错过止损止盈检查
-        if self.bot.position_id.filter(|id| *id != Uuid::nil()).is_some() {
+        if self
+            .bot
+            .position_id
+            .filter(|id| *id != Uuid::nil())
+            .is_some()
+        {
             info!(
                 bot_id = %self.bot.id,
                 position_id = ?self.bot.position_id,
@@ -716,8 +745,12 @@ impl AutoWorker {
     async fn fetch_current_atr(&self) -> f64 {
         let snapshot = AutoMarketSnapshot::from_base(
             self.market_data_provider
-                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol, self.bot.market_type.as_str())
-                .await
+                .get_market_snapshot(
+                    &self.bot.exchange,
+                    &self.bot.symbol,
+                    self.bot.market_type.as_str(),
+                )
+                .await,
         );
         snapshot.indicators.atr
     }
@@ -751,7 +784,11 @@ impl AutoWorker {
         // 防止 PE 事件丢失（broadcast lag）导致缓存为空 → 误判"无仓位" → 重复开仓。
         self.refresh_position_from_pe().await;
 
-        if !self.ai_service.is_available_for_user(self.bot.user_id).await {
+        if !self
+            .ai_service
+            .is_available_for_user(self.bot.user_id)
+            .await
+        {
             warn!(bot_id = %self.bot.id, "AI service not available, skipping decision");
             let _ = self.auto_event_tx.send(AutoEvent::BotError {
                 bot_id: self.bot.id,
@@ -775,7 +812,13 @@ impl AutoWorker {
         };
 
         let (action, log_id) = self
-            .handle_llm_result(&decision, &system_prompt, &user_prompt, raw_llm_response.as_ref(), &llm_model)
+            .handle_llm_result(
+                &decision,
+                &system_prompt,
+                &user_prompt,
+                raw_llm_response.as_ref(),
+                &llm_model,
+            )
             .await;
 
         // 保存 log_id 供后续 apply_pending_open/apply_pending_close 回填 execution_status / intercept_reason
@@ -824,8 +867,12 @@ impl AutoWorker {
     async fn build_llm_prompt(&self) -> Option<(String, String)> {
         let snapshot = AutoMarketSnapshot::from_base(
             self.market_data_provider
-                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol, self.bot.market_type.as_str())
-                .await
+                .get_market_snapshot(
+                    &self.bot.exchange,
+                    &self.bot.symbol,
+                    self.bot.market_type.as_str(),
+                )
+                .await,
         );
 
         if snapshot.base.current_price <= 0.0 {
@@ -903,7 +950,10 @@ impl AutoWorker {
                 };
                 format!(
                     "{}平{}，原因：{}（{}）",
-                    elapsed_str, side_cn, reason_cn, closed_at.format("%Y-%m-%d %H:%M:%S")
+                    elapsed_str,
+                    side_cn,
+                    reason_cn,
+                    closed_at.format("%Y-%m-%d %H:%M:%S")
                 )
             }
             None => "无".to_string(),
@@ -988,7 +1038,15 @@ impl AutoWorker {
                 }
                 let log_id = self
                     .store
-                    .save_analysis_log(self.bot.id, "periodic", system_prompt, user_prompt, &result, None, llm_model)
+                    .save_analysis_log(
+                        self.bot.id,
+                        "periodic",
+                        system_prompt,
+                        user_prompt,
+                        &result,
+                        None,
+                        llm_model,
+                    )
                     .await
                     .ok();
 
@@ -1075,7 +1133,8 @@ impl AutoWorker {
                         "Confidence below 0.6 threshold for opening position, downgrading to Hold"
                     );
                     return Some(format!(
-                        "置信度 {:.2} 低于 0.6 阈值，降级为观望", d.confidence
+                        "置信度 {:.2} 低于 0.6 阈值，降级为观望",
+                        d.confidence
                     ));
                 }
             }
@@ -1083,8 +1142,12 @@ impl AutoWorker {
 
         let snapshot = AutoMarketSnapshot::from_base(
             self.market_data_provider
-                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol, self.bot.market_type.as_str())
-                .await
+                .get_market_snapshot(
+                    &self.bot.exchange,
+                    &self.bot.symbol,
+                    self.bot.market_type.as_str(),
+                )
+                .await,
         );
 
         if snapshot.base.current_price <= 0.0 {
@@ -1114,7 +1177,8 @@ impl AutoWorker {
                 }
                 // 冷却期检查：防止止损/止盈后立即同方向重入被反弹扫损
                 if let Some(remaining) = self.cooldown_remaining_secs(side) {
-                    let (closed_side, close_reason, closed_at) = self.last_close_event.as_ref().unwrap();
+                    let (closed_side, close_reason, closed_at) =
+                        self.last_close_event.as_ref().unwrap();
                     warn!(
                         bot_id = %self.bot.id,
                         new_side = %side,
@@ -1195,7 +1259,10 @@ impl AutoWorker {
             warn!(bot_id = %self.bot.id, "Cannot retrieve account balance, skipping open");
             let _ = self.auto_event_tx.send(AutoEvent::BotError {
                 bot_id: self.bot.id,
-                error: format!("Cannot retrieve account balance for opening {} position", side),
+                error: format!(
+                    "Cannot retrieve account balance for opening {} position",
+                    side
+                ),
             });
             return;
         }
@@ -1209,8 +1276,9 @@ impl AutoWorker {
         let funding_rate = snapshot.base.funding_rate;
         let price = snapshot.base.current_price;
 
-        let position_size_pct = strategy::compute_position_pct(adx, self.consecutive_losses, funding_rate)
-            .min(self.bot.max_position_pct);
+        let position_size_pct =
+            strategy::compute_position_pct(adx, self.consecutive_losses, funding_rate)
+                .min(self.bot.max_position_pct);
 
         let invest_amount = account.free * 0.95 * position_size_pct / 100.0;
         if invest_amount < 1.0 {
@@ -1363,10 +1431,7 @@ impl AutoWorker {
     /// 平仓入口。
     /// - `close_reason`: 平仓原因（stop_loss/take_profit/position_timeout/llm_decision）
     ///   由代码逻辑决定（不由 LLM 决定），用于冷却期判断和 DB 记录
-    pub(crate) async fn close_position(
-        &mut self,
-        close_reason: &str,
-    ) {
+    pub(crate) async fn close_position(&mut self, close_reason: &str) {
         if !self.has_position() {
             return;
         }
@@ -1566,7 +1631,11 @@ impl AutoWorker {
                     .fill_price
                     .or(order.request_price)
                     .unwrap_or(self.current_price);
-                let filled_qty = if order.filled > 0.0 { order.filled } else { 0.0 };
+                let filled_qty = if order.filled > 0.0 {
+                    order.filled
+                } else {
+                    0.0
+                };
 
                 if self.pending_open.is_some() {
                     info!(
@@ -1578,7 +1647,8 @@ impl AutoWorker {
                         fee = order.fee,
                         "Open order filled, confirming position"
                     );
-                    self.apply_pending_open(fill_price, filled_qty, order.fee).await;
+                    self.apply_pending_open(fill_price, filled_qty, order.fee)
+                        .await;
                 } else if self.pending_close.is_some() {
                     info!(
                         bot_id = %self.bot.id,
@@ -1589,10 +1659,14 @@ impl AutoWorker {
                         fee = order.fee,
                         "Close order filled, confirming close"
                     );
-                    self.apply_pending_close(fill_price, filled_qty, order.fee).await;
+                    self.apply_pending_close(fill_price, filled_qty, order.fee)
+                        .await;
                 }
             }
-            OrderEvent::OrderFailed { order_id: _, reason } => {
+            OrderEvent::OrderFailed {
+                order_id: _,
+                reason,
+            } => {
                 if self.pending_open.is_some() || self.pending_close.is_some() {
                     // 记录是开仓还是平仓失败（rollback 前判断）
                     let was_open = self.pending_open.is_some();
@@ -1607,7 +1681,11 @@ impl AutoWorker {
                     // 回填 LLM log 执行状态（仅 LLM 决策触发的订单才有 log_id）
                     // 止盈止损/超时触发的平仓 current_log_id 为 None，不会误回填
                     if let Some(log_id) = self.current_log_id.take() {
-                        let exec_status = if was_open { "open_failed" } else { "close_failed" };
+                        let exec_status = if was_open {
+                            "open_failed"
+                        } else {
+                            "close_failed"
+                        };
                         if let Err(e) = self
                             .store
                             .update_analysis_log_execution(log_id, exec_status, Some(&reason))
@@ -1654,8 +1732,12 @@ impl AutoWorker {
         let (stop_loss, take_profit) = if price_deviation > 0.005 {
             let snapshot = AutoMarketSnapshot::from_base(
                 self.market_data_provider
-                    .get_market_snapshot(&self.bot.exchange, &self.bot.symbol, self.bot.market_type.as_str())
-                    .await
+                    .get_market_snapshot(
+                        &self.bot.exchange,
+                        &self.bot.symbol,
+                        self.bot.market_type.as_str(),
+                    )
+                    .await,
             );
             let atr = if snapshot.indicators.atr > 0.0 {
                 snapshot.indicators.atr

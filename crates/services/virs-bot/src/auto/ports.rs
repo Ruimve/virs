@@ -8,8 +8,8 @@ pub use virs_types::auto_port::*;
 
 // Re-export unified bot-layer traits and types
 pub use virs_types::bot::{
-    PriceProvider, MarketDataProvider, MarketSnapshot, AccountBalance,
-    OrderExecutor, OrderEvent, OrderSide, BotPositionSide, OrderInfo, OrderCommand,
+    AccountBalance, BotPositionSide, MarketDataProvider, MarketSnapshot, OrderCommand, OrderEvent,
+    OrderExecutor, OrderInfo, OrderSide, PriceProvider,
 };
 
 /// 市场快照（auto 专用扩展，包含指标）
@@ -24,6 +24,9 @@ impl AutoMarketSnapshot {
     pub fn from_base(snapshot: virs_types::bot::MarketSnapshot) -> Self {
         let indicators: crate::common::indicators::MarketIndicators =
             serde_json::from_value(snapshot.indicators_json.clone()).unwrap_or_default();
-        Self { base: snapshot, indicators }
+        Self {
+            base: snapshot,
+            indicators,
+        }
     }
 }

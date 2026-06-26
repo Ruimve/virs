@@ -15,12 +15,11 @@ use tracing::info;
 use uuid::Uuid;
 use virs_api::EngineManager;
 
-use virs_api::{AppState, WsBroadcaster, build_router};
+use virs_api::{build_router, AppState, WsBroadcaster};
 use virs_config::load_config;
 use virs_exchange::Exchanges;
 use virs_market::{
-    KlineEngine, ExchangeKlineSource, KlineEngineConfig,
-    OrderBookEngine, OrderBookEngineConfig,
+    ExchangeKlineSource, KlineEngine, KlineEngineConfig, OrderBookEngine, OrderBookEngineConfig,
 };
 
 use engine_manager::AppEngineManager;
@@ -33,7 +32,9 @@ async fn main() -> Result<()> {
     if config.server.secret_key == "change-me-to-a-random-64-char-string-in-production" {
         tracing::warn!("WARNING: Using default SECRET_KEY. Change this in production!");
     }
-    if config.server.encryption_key == "change-me-to-another-random-64-char-string-must-differ-from-secret-key" {
+    if config.server.encryption_key
+        == "change-me-to-another-random-64-char-string-must-differ-from-secret-key"
+    {
         tracing::warn!("WARNING: Using default ENCRYPTION_KEY. Change this in production!");
     }
     if config.server.secret_key == config.server.encryption_key {
@@ -44,8 +45,10 @@ async fn main() -> Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "virs_app=info,virs_market=info,virs_position=info,virs_bot=info,virs_api=info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                "virs_app=info,virs_market=info,virs_position=info,virs_bot=info,virs_api=info"
+                    .into()
+            }),
         )
         .init();
 
@@ -77,12 +80,11 @@ async fn main() -> Result<()> {
     info!("Database migrations applied");
 
     // Create admin user if not exists
-    let admin_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM qd_users WHERE username = $1)",
-    )
-    .bind(&config.admin.username)
-    .fetch_one(&db_pool)
-    .await?;
+    let admin_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM qd_users WHERE username = $1)")
+            .bind(&config.admin.username)
+            .fetch_one(&db_pool)
+            .await?;
 
     let admin_id: Uuid = if !admin_exists {
         let password_hash = bcrypt::hash(&config.admin.password, bcrypt::DEFAULT_COST)?;
@@ -93,7 +95,10 @@ async fn main() -> Result<()> {
         .bind(password_hash)
         .fetch_one(&db_pool)
         .await?;
-        info!("Admin user '{}' created (id={})", config.admin.username, row.0);
+        info!(
+            "Admin user '{}' created (id={})",
+            config.admin.username, row.0
+        );
         row.0
     } else {
         let row: (Uuid,) = sqlx::query_as(
@@ -124,18 +129,29 @@ async fn main() -> Result<()> {
         virs_ccxt::adapter::binance::kline_ws::BinanceKlineWs::new_spot(config.proxy.as_deref()),
     ));
     let perpetual_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::kline_ws::BinanceKlineWs::new_perpetual(config.proxy.as_deref()),
+        virs_ccxt::adapter::binance::kline_ws::BinanceKlineWs::new_perpetual(
+            config.proxy.as_deref(),
+        ),
     ));
-    let kline_engine = Arc::new(KlineEngine::new(kline_config, kline_source, spot_ws, perpetual_ws));
+    let kline_engine = Arc::new(KlineEngine::new(
+        kline_config,
+        kline_source,
+        spot_ws,
+        perpetual_ws,
+    ));
     info!("Kline engine created (lazy — will start on first subscribe)");
 
     // ── OrderBook Engine ──
     // Created at boot but only subscribes when bots need data
     let ob_spot_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::orderbook_ws::BinanceOrderBookWs::new_spot(config.proxy.as_deref()),
+        virs_ccxt::adapter::binance::orderbook_ws::BinanceOrderBookWs::new_spot(
+            config.proxy.as_deref(),
+        ),
     ));
     let ob_perpetual_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::orderbook_ws::BinanceOrderBookWs::new_perpetual(config.proxy.as_deref()),
+        virs_ccxt::adapter::binance::orderbook_ws::BinanceOrderBookWs::new_perpetual(
+            config.proxy.as_deref(),
+        ),
     ));
     let orderbook_engine = Arc::new(OrderBookEngine::new(
         OrderBookEngineConfig::default(),
@@ -183,9 +199,12 @@ async fn main() -> Result<()> {
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     info!("API server listening on http://{}", addr);
 
-    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
 
     info!("VIRS shut down gracefully");
     Ok(())

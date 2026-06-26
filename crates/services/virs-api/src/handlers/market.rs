@@ -44,10 +44,17 @@ pub async fn kline_subscribe(
     // Check exchange is registered before subscribing
     let exchange_key = format!("{}:{}", body.exchange, market_type_str);
     if state.exchange_registry.get(&exchange_key).is_none() {
-        return Json(ApiResponse::err(format!("Exchange '{}' not registered. Please create a bot first.", exchange_key)));
+        return Json(ApiResponse::err(format!(
+            "Exchange '{}' not registered. Please create a bot first.",
+            exchange_key
+        )));
     }
 
-    match state.kline_engine.subscribe(&body.exchange, &body.symbol, market_type).await {
+    match state
+        .kline_engine
+        .subscribe(&body.exchange, &body.symbol, market_type)
+        .await
+    {
         Ok(_) => Json(ApiResponse::ok(serde_json::json!({
             "subscribed": true,
             "exchange": body.exchange,
@@ -67,13 +74,20 @@ pub async fn orderbook_subscribe(
         _ => virs_models::MarketType::Perpetual,
     };
 
-    match state.orderbook_engine.subscribe(&body.exchange, &body.symbol, market_type).await {
+    match state
+        .orderbook_engine
+        .subscribe(&body.exchange, &body.symbol, market_type)
+        .await
+    {
         Ok(_) => Json(ApiResponse::ok(serde_json::json!({
             "subscribed": true,
             "exchange": body.exchange,
             "symbol": body.symbol,
         }))),
-        Err(e) => Json(ApiResponse::err(format!("OrderBook subscribe failed: {}", e))),
+        Err(e) => Json(ApiResponse::err(format!(
+            "OrderBook subscribe failed: {}",
+            e
+        ))),
     }
 }
 
@@ -91,7 +105,11 @@ pub async fn kline_data(
         _ => virs_market::Timeframe::M1,
     };
 
-    if let Some(candles) = state.kline_engine.get_klines_async(&params.exchange, &params.symbol, tf).await {
+    if let Some(candles) = state
+        .kline_engine
+        .get_klines_async(&params.exchange, &params.symbol, tf)
+        .await
+    {
         if !candles.is_empty() {
             return Json(ApiResponse::ok(serde_json::json!({
                 "SingleTimeframe": candles.iter().map(|c| serde_json::json!({
@@ -126,7 +144,11 @@ pub async fn get_ticker(
     let market_type = params.market_type.as_deref().unwrap_or("perpetual");
 
     // Try kline engine first for latest price
-    if let Some(candles) = state.kline_engine.get_klines_async(exchange, symbol, virs_market::Timeframe::M1).await {
+    if let Some(candles) = state
+        .kline_engine
+        .get_klines_async(exchange, symbol, virs_market::Timeframe::M1)
+        .await
+    {
         if let Some(last) = candles.last() {
             if last.close > 0.0 {
                 return Json(ApiResponse::ok(serde_json::json!({
@@ -160,7 +182,10 @@ pub async fn get_ticker(
             }))),
             Err(e) => Json(ApiResponse::err(format!("Ticker error: {}", e))),
         },
-        None => Json(ApiResponse::err(format!("Exchange '{}' not registered", exchange))),
+        None => Json(ApiResponse::err(format!(
+            "Exchange '{}' not registered",
+            exchange
+        ))),
     }
 }
 
@@ -190,7 +215,11 @@ pub async fn get_klines(
     };
 
     // Try kline engine cache — prefer requested timeframe
-    if let Some(candles) = state.kline_engine.get_klines_async(exchange, symbol, requested_tf).await {
+    if let Some(candles) = state
+        .kline_engine
+        .get_klines_async(exchange, symbol, requested_tf)
+        .await
+    {
         if !candles.is_empty() {
             return Json(ApiResponse::ok(serde_json::json!({
                 "symbol": symbol,
@@ -237,7 +266,10 @@ pub async fn get_klines(
                 Err(e) => Json(ApiResponse::err(format!("Klines error: {}", e))),
             }
         }
-        None => Json(ApiResponse::err(format!("Exchange '{}' not registered", exchange))),
+        None => Json(ApiResponse::err(format!(
+            "Exchange '{}' not registered",
+            exchange
+        ))),
     }
 }
 
@@ -266,7 +298,10 @@ pub async fn get_order_book(
             }))),
             Err(e) => Json(ApiResponse::err(format!("OrderBook error: {}", e))),
         },
-        None => Json(ApiResponse::err(format!("Exchange '{}' not registered", exchange))),
+        None => Json(ApiResponse::err(format!(
+            "Exchange '{}' not registered",
+            exchange
+        ))),
     }
 }
 
@@ -285,20 +320,26 @@ pub async fn get_balances(
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_balances().await {
             Ok(balances) => {
-                let filtered: Vec<_> = balances.into_iter()
+                let filtered: Vec<_> = balances
+                    .into_iter()
                     .filter(|b| b.total > 0.0)
-                    .map(|b| serde_json::json!({
-                        "asset": b.asset,
-                        "total": b.total,
-                        "free": b.free,
-                        "used": b.used,
-                    }))
+                    .map(|b| {
+                        serde_json::json!({
+                            "asset": b.asset,
+                            "total": b.total,
+                            "free": b.free,
+                            "used": b.used,
+                        })
+                    })
                     .collect();
                 Json(ApiResponse::ok(serde_json::json!({ "balances": filtered })))
             }
             Err(e) => Json(ApiResponse::err(format!("Balances error: {}", e))),
         },
-        None => Json(ApiResponse::err(format!("Exchange '{}' not registered for {}", exchange, market_type))),
+        None => Json(ApiResponse::err(format!(
+            "Exchange '{}' not registered for {}",
+            exchange, market_type
+        ))),
     }
 }
 
@@ -322,6 +363,9 @@ pub async fn get_symbols(
             }))),
             Err(e) => Json(ApiResponse::err(format!("Symbols error: {}", e))),
         },
-        None => Json(ApiResponse::err(format!("Exchange '{}' not registered", exchange))),
+        None => Json(ApiResponse::err(format!(
+            "Exchange '{}' not registered",
+            exchange
+        ))),
     }
 }

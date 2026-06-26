@@ -1,7 +1,7 @@
 //! Technical indicators using talib-rs.
 
-use virs_models::Kline;
 use talib_rs::{ma_type::MaType, math_operator, momentum, overlap, volatility};
+use virs_models::Kline;
 
 pub fn closes(klines: &[Kline]) -> Vec<f64> {
     klines.iter().map(|k| k.close).collect()
@@ -26,14 +26,22 @@ pub fn sma_at_from(series: &[f64], idx: usize, period: usize) -> f64 {
     let nan_count = series.iter().take(idx + 1).filter(|v| v.is_nan()).count();
     let valid: Vec<f64> = series.iter().filter(|v| !v.is_nan()).copied().collect();
     if valid.len() < period {
-        if valid.is_empty() { return 0.0; }
-        return valid.iter().rev().take(period.min(valid.len())).sum::<f64>() / period.min(valid.len()) as f64;
+        if valid.is_empty() {
+            return 0.0;
+        }
+        return valid
+            .iter()
+            .rev()
+            .take(period.min(valid.len()))
+            .sum::<f64>()
+            / period.min(valid.len()) as f64;
     }
     let mapped_idx = idx.saturating_sub(nan_count);
     let result = overlap::sma(&valid, period).unwrap_or_default();
-    result.get(mapped_idx).copied().unwrap_or_else(|| {
-        result.last().copied().unwrap_or(0.0)
-    })
+    result
+        .get(mapped_idx)
+        .copied()
+        .unwrap_or_else(|| result.last().copied().unwrap_or(0.0))
 }
 
 #[inline(always)]
@@ -79,12 +87,7 @@ pub fn macd_signal_at(
 }
 
 #[inline(always)]
-pub fn bbands_at(
-    klines: &[Kline],
-    idx: usize,
-    period: usize,
-    std_dev: f64,
-) -> (f64, f64, f64) {
+pub fn bbands_at(klines: &[Kline], idx: usize, period: usize, std_dev: f64) -> (f64, f64, f64) {
     if klines.is_empty() || idx < period - 1 {
         return (0.0, 0.0, 0.0);
     }
@@ -112,13 +115,18 @@ pub fn adx_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     if klines.is_empty() || idx < period * 2 {
         return 0.0;
     }
-    let result = momentum::adx(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_default();
+    let result =
+        momentum::adx(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_default();
     result.get(idx).copied().unwrap_or(0.0)
 }
 
 #[inline(always)]
 pub fn macd_histogram_at(
-    klines: &[Kline], idx: usize, fast: usize, slow: usize, signal: usize,
+    klines: &[Kline],
+    idx: usize,
+    fast: usize,
+    slow: usize,
+    signal: usize,
 ) -> f64 {
     if klines.is_empty() || idx < slow + signal - 2 {
         return 0.0;
@@ -130,11 +138,11 @@ pub fn macd_histogram_at(
 }
 
 #[inline(always)]
-pub fn bbands_width_at(
-    klines: &[Kline], idx: usize, period: usize, std_dev: f64,
-) -> f64 {
+pub fn bbands_width_at(klines: &[Kline], idx: usize, period: usize, std_dev: f64) -> f64 {
     let (upper, middle, lower) = bbands_at(klines, idx, period, std_dev);
-    if middle == 0.0 { return 0.0; }
+    if middle == 0.0 {
+        return 0.0;
+    }
     (upper - lower) / middle
 }
 
@@ -182,9 +190,21 @@ pub fn compute_bars_outside_band(klines: &[Kline], bb_upper: f64, bb_lower: f64)
 
 /// Find nearest round number (support/resistance level).
 pub fn find_round_number(price: f64, upward: bool) -> f64 {
-    if price <= 0.0 { return 0.0; }
+    if price <= 0.0 {
+        return 0.0;
+    }
     let magnitude = 10_f64.powf(price.log10().floor());
-    let step = if magnitude >= 10000.0 { 1000.0 } else if magnitude >= 1000.0 { 100.0 } else if magnitude >= 100.0 { 10.0 } else if magnitude >= 10.0 { 5.0 } else { 1.0 };
+    let step = if magnitude >= 10000.0 {
+        1000.0
+    } else if magnitude >= 1000.0 {
+        100.0
+    } else if magnitude >= 100.0 {
+        10.0
+    } else if magnitude >= 10.0 {
+        5.0
+    } else {
+        1.0
+    };
     if upward {
         (price / step).ceil() * step
     } else {
@@ -273,19 +293,30 @@ pub fn compute_market_indicators(
 
     let rsi = rsi_at(klines_1h, last_idx, 14);
     let atr_val = atr_at(klines_1h, last_idx, 14);
-    let atr_pct = if current_price > 0.0 { atr_val / current_price * 100.0 } else { 0.0 };
+    let atr_pct = if current_price > 0.0 {
+        atr_val / current_price * 100.0
+    } else {
+        0.0
+    };
     let bb_width = bbands_width_at(klines_1h, last_idx, 20, 2.0);
     let (bb_upper, bb_middle, bb_lower) = bbands_at(klines_1h, last_idx, 20, 2.0);
 
     let ema12 = ema_at(klines_1h, last_idx, 12);
     let ema20 = ema_at(klines_1h, last_idx, 20);
     let ema26 = ema_at(klines_1h, last_idx, 26);
-    let ema50 = if klines_1h.len() >= 50 { ema_at(klines_1h, last_idx, 50) } else { 0.0 };
+    let ema50 = if klines_1h.len() >= 50 {
+        ema_at(klines_1h, last_idx, 50)
+    } else {
+        0.0
+    };
 
     let change_1h = if last_idx >= 1 && klines_1h[last_idx.saturating_sub(1)].close > 0.0 {
         (current_price - klines_1h[last_idx.saturating_sub(1)].close)
-            / klines_1h[last_idx.saturating_sub(1)].close * 100.0
-    } else { 0.0 };
+            / klines_1h[last_idx.saturating_sub(1)].close
+            * 100.0
+    } else {
+        0.0
+    };
 
     let macd = macd_at(klines_1h, last_idx, 12, 26);
     let macd_signal = macd_signal_at(klines_1h, last_idx, 12, 26, 9);
@@ -295,92 +326,264 @@ pub fn compute_market_indicators(
     let h1_atr_sma20 = if klines_1h.len() >= 20 {
         let atr_series = atr(klines_1h, 14);
         sma_at_from(&atr_series, last_idx, 20)
-    } else { 0.0 };
+    } else {
+        0.0
+    };
 
     let h1_candle_body = klines_1h.last().map(|k| k.close - k.open).unwrap_or(0.0);
     let h1_bars_outside_band = compute_bars_outside_band(klines_1h, bb_upper, bb_lower);
-    let h1_bandwidth_5bars_ago = if last_idx >= 5 { bbands_width_at(klines_1h, last_idx.saturating_sub(5), 20, 2.0) } else { 0.0 };
+    let h1_bandwidth_5bars_ago = if last_idx >= 5 {
+        bbands_width_at(klines_1h, last_idx.saturating_sub(5), 20, 2.0)
+    } else {
+        0.0
+    };
     let h1_high_20 = highest_at(klines_1h, last_idx, 20);
     let h1_low_20 = lowest_at(klines_1h, last_idx, 20);
     let nearest_round_up = find_round_number(current_price, true);
     let nearest_round_down = find_round_number(current_price, false);
 
     let h1_last_completed = klines_1h.len().saturating_sub(2);
-    let h1_volume = klines_1h.get(h1_last_completed).map(|k| k.volume).unwrap_or(0.0);
-    let h1_volume_sma20 = if h1_last_completed >= 19 { volume_sma_at(klines_1h, h1_last_completed, 20) } else { 0.0 };
+    let h1_volume = klines_1h
+        .get(h1_last_completed)
+        .map(|k| k.volume)
+        .unwrap_or(0.0);
+    let h1_volume_sma20 = if h1_last_completed >= 19 {
+        volume_sma_at(klines_1h, h1_last_completed, 20)
+    } else {
+        0.0
+    };
     let h1_high_50 = highest_at(klines_1h, last_idx, 50);
     let h1_low_50 = lowest_at(klines_1h, last_idx, 50);
     let h1_ema_cross_bars_ago = compute_ema_cross_bars_ago(klines_1h, 20, 50, last_idx);
-    let h1_ema_gap_pct = if ema50 != 0.0 { (ema20 - ema50) / ema50 * 100.0 } else { 0.0 };
+    let h1_ema_gap_pct = if ema50 != 0.0 {
+        (ema20 - ema50) / ema50 * 100.0
+    } else {
+        0.0
+    };
 
     let lookback = 5.min(last_idx);
     let ema20_prev = ema_at(klines_1h, last_idx.saturating_sub(lookback), 20);
-    let ema50_prev = if klines_1h.len() >= 50 + lookback { ema_at(klines_1h, last_idx.saturating_sub(lookback), 50) } else { ema50 };
+    let ema50_prev = if klines_1h.len() >= 50 + lookback {
+        ema_at(klines_1h, last_idx.saturating_sub(lookback), 50)
+    } else {
+        ema50
+    };
     let h1_ema_gap_trend = {
         let curr_gap_abs = (ema20 - ema50).abs();
         let prev_gap_abs = (ema20_prev - ema50_prev).abs();
-        if curr_gap_abs > prev_gap_abs * 1.01 { "扩大" } else if curr_gap_abs < prev_gap_abs * 0.99 { "缩小" } else { "持平" }
-    }.to_string();
+        if curr_gap_abs > prev_gap_abs * 1.01 {
+            "扩大"
+        } else if curr_gap_abs < prev_gap_abs * 0.99 {
+            "缩小"
+        } else {
+            "持平"
+        }
+    }
+    .to_string();
 
     // 4h
     let h4_last = klines_4h.len().saturating_sub(1);
-    let h4_ema20 = if !klines_4h.is_empty() { ema_at(klines_4h, h4_last, 20) } else { 0.0 };
-    let h4_ema50 = if klines_4h.len() >= 50 { ema_at(klines_4h, h4_last, 50) } else { 0.0 };
-    let h4_adx = if !klines_4h.is_empty() { adx_at(klines_4h, h4_last, 14) } else { 0.0 };
-    let h4_bb_width_pct = if !klines_4h.is_empty() { bbands_width_at(klines_4h, h4_last, 20, 2.0) } else { 0.0 };
-    let h4_rsi = if !klines_4h.is_empty() { rsi_at(klines_4h, h4_last, 14) } else { 0.0 };
-    let h4_macd = if !klines_4h.is_empty() { macd_at(klines_4h, h4_last, 12, 26) } else { 0.0 };
-    let h4_macd_signal = if !klines_4h.is_empty() { macd_signal_at(klines_4h, h4_last, 12, 26, 9) } else { 0.0 };
-    let h4_macd_histogram = if !klines_4h.is_empty() { macd_histogram_at(klines_4h, h4_last, 12, 26, 9) } else { 0.0 };
+    let h4_ema20 = if !klines_4h.is_empty() {
+        ema_at(klines_4h, h4_last, 20)
+    } else {
+        0.0
+    };
+    let h4_ema50 = if klines_4h.len() >= 50 {
+        ema_at(klines_4h, h4_last, 50)
+    } else {
+        0.0
+    };
+    let h4_adx = if !klines_4h.is_empty() {
+        adx_at(klines_4h, h4_last, 14)
+    } else {
+        0.0
+    };
+    let h4_bb_width_pct = if !klines_4h.is_empty() {
+        bbands_width_at(klines_4h, h4_last, 20, 2.0)
+    } else {
+        0.0
+    };
+    let h4_rsi = if !klines_4h.is_empty() {
+        rsi_at(klines_4h, h4_last, 14)
+    } else {
+        0.0
+    };
+    let h4_macd = if !klines_4h.is_empty() {
+        macd_at(klines_4h, h4_last, 12, 26)
+    } else {
+        0.0
+    };
+    let h4_macd_signal = if !klines_4h.is_empty() {
+        macd_signal_at(klines_4h, h4_last, 12, 26, 9)
+    } else {
+        0.0
+    };
+    let h4_macd_histogram = if !klines_4h.is_empty() {
+        macd_histogram_at(klines_4h, h4_last, 12, 26, 9)
+    } else {
+        0.0
+    };
 
     // 15m
     let m15_last = klines_15m.len().saturating_sub(1);
     let m15_current_price = klines_15m.last().map(|k| k.close).unwrap_or(current_price);
-    let m15_rsi = if !klines_15m.is_empty() { rsi_at(klines_15m, m15_last, 14) } else { 0.0 };
-    let m15_macd = if !klines_15m.is_empty() { macd_at(klines_15m, m15_last, 12, 26) } else { 0.0 };
-    let m15_macd_signal = if !klines_15m.is_empty() { macd_signal_at(klines_15m, m15_last, 12, 26, 9) } else { 0.0 };
-    let m15_macd_histogram = if !klines_15m.is_empty() { macd_histogram_at(klines_15m, m15_last, 12, 26, 9) } else { 0.0 };
-    let m15_bb_width_pct = if !klines_15m.is_empty() { bbands_width_at(klines_15m, m15_last, 20, 2.0) } else { 0.0 };
-    let m15_atr = if !klines_15m.is_empty() { atr_at(klines_15m, m15_last, 14) } else { 0.0 };
+    let m15_rsi = if !klines_15m.is_empty() {
+        rsi_at(klines_15m, m15_last, 14)
+    } else {
+        0.0
+    };
+    let m15_macd = if !klines_15m.is_empty() {
+        macd_at(klines_15m, m15_last, 12, 26)
+    } else {
+        0.0
+    };
+    let m15_macd_signal = if !klines_15m.is_empty() {
+        macd_signal_at(klines_15m, m15_last, 12, 26, 9)
+    } else {
+        0.0
+    };
+    let m15_macd_histogram = if !klines_15m.is_empty() {
+        macd_histogram_at(klines_15m, m15_last, 12, 26, 9)
+    } else {
+        0.0
+    };
+    let m15_bb_width_pct = if !klines_15m.is_empty() {
+        bbands_width_at(klines_15m, m15_last, 20, 2.0)
+    } else {
+        0.0
+    };
+    let m15_atr = if !klines_15m.is_empty() {
+        atr_at(klines_15m, m15_last, 14)
+    } else {
+        0.0
+    };
     let m15_atr_sma20 = if klines_15m.len() >= 20 {
         let atr_series = atr(klines_15m, 14);
         sma_at_from(&atr_series, m15_last, 20)
-    } else { 0.0 };
-    let m15_adx = if !klines_15m.is_empty() { adx_at(klines_15m, m15_last, 14) } else { 0.0 };
-    let (m15_bb_upper, _, m15_bb_lower) = if !klines_15m.is_empty() { bbands_at(klines_15m, m15_last, 20, 2.0) } else { (0.0, 0.0, 0.0) };
+    } else {
+        0.0
+    };
+    let m15_adx = if !klines_15m.is_empty() {
+        adx_at(klines_15m, m15_last, 14)
+    } else {
+        0.0
+    };
+    let (m15_bb_upper, _, m15_bb_lower) = if !klines_15m.is_empty() {
+        bbands_at(klines_15m, m15_last, 20, 2.0)
+    } else {
+        (0.0, 0.0, 0.0)
+    };
     let m15_bars_outside_band = compute_bars_outside_band(klines_15m, m15_bb_upper, m15_bb_lower);
-    let m15_ema20 = if !klines_15m.is_empty() { ema_at(klines_15m, m15_last, 20) } else { 0.0 };
-    let m15_ema50 = if klines_15m.len() >= 50 { ema_at(klines_15m, m15_last, 50) } else { 0.0 };
+    let m15_ema20 = if !klines_15m.is_empty() {
+        ema_at(klines_15m, m15_last, 20)
+    } else {
+        0.0
+    };
+    let m15_ema50 = if klines_15m.len() >= 50 {
+        ema_at(klines_15m, m15_last, 50)
+    } else {
+        0.0
+    };
     let m15_last_completed = klines_15m.len().saturating_sub(2);
-    let m15_volume = klines_15m.get(m15_last_completed).map(|k| k.volume).unwrap_or(0.0);
-    let m15_volume_sma20 = if m15_last_completed >= 19 { volume_sma_at(klines_15m, m15_last_completed, 20) } else { 0.0 };
-    let m15_high_50 = if !klines_15m.is_empty() { highest_at(klines_15m, m15_last, 50) } else { 0.0 };
-    let m15_low_50 = if !klines_15m.is_empty() { lowest_at(klines_15m, m15_last, 50) } else { 0.0 };
+    let m15_volume = klines_15m
+        .get(m15_last_completed)
+        .map(|k| k.volume)
+        .unwrap_or(0.0);
+    let m15_volume_sma20 = if m15_last_completed >= 19 {
+        volume_sma_at(klines_15m, m15_last_completed, 20)
+    } else {
+        0.0
+    };
+    let m15_high_50 = if !klines_15m.is_empty() {
+        highest_at(klines_15m, m15_last, 50)
+    } else {
+        0.0
+    };
+    let m15_low_50 = if !klines_15m.is_empty() {
+        lowest_at(klines_15m, m15_last, 50)
+    } else {
+        0.0
+    };
     let m15_ema_cross_bars_ago = compute_ema_cross_bars_ago(klines_15m, 20, 50, m15_last);
 
     MarketIndicators {
-        current_price, rsi, atr: atr_val, atr_pct, bb_width, bb_upper, bb_middle, bb_lower,
-        ema12, ema20, ema26, ema50, macd, macd_signal, macd_histogram, adx,
-        change_1h, h1_atr_sma20, h1_candle_body, h1_bars_outside_band,
-        h1_bandwidth_5bars_ago, h1_high_20, h1_low_20, nearest_round_up, nearest_round_down,
-        h1_volume, h1_volume_sma20, h1_ema_cross_bars_ago, h1_ema_gap_pct,
-        h1_ema_gap_trend, h1_high_50, h1_low_50,
-        m15_current_price, m15_rsi, m15_macd, m15_macd_signal, m15_macd_histogram,
-        m15_bb_width_pct, m15_atr, m15_atr_sma20, m15_adx, m15_bars_outside_band,
-        m15_ema20, m15_ema50, m15_volume, m15_volume_sma20, m15_ema_cross_bars_ago,
-        m15_high_50, m15_low_50,
-        h4_ema20, h4_ema50, h4_adx, h4_bb_width_pct, h4_rsi,
-        h4_macd, h4_macd_signal, h4_macd_histogram,
-        funding_rate, funding_next_time,
+        current_price,
+        rsi,
+        atr: atr_val,
+        atr_pct,
+        bb_width,
+        bb_upper,
+        bb_middle,
+        bb_lower,
+        ema12,
+        ema20,
+        ema26,
+        ema50,
+        macd,
+        macd_signal,
+        macd_histogram,
+        adx,
+        change_1h,
+        h1_atr_sma20,
+        h1_candle_body,
+        h1_bars_outside_band,
+        h1_bandwidth_5bars_ago,
+        h1_high_20,
+        h1_low_20,
+        nearest_round_up,
+        nearest_round_down,
+        h1_volume,
+        h1_volume_sma20,
+        h1_ema_cross_bars_ago,
+        h1_ema_gap_pct,
+        h1_ema_gap_trend,
+        h1_high_50,
+        h1_low_50,
+        m15_current_price,
+        m15_rsi,
+        m15_macd,
+        m15_macd_signal,
+        m15_macd_histogram,
+        m15_bb_width_pct,
+        m15_atr,
+        m15_atr_sma20,
+        m15_adx,
+        m15_bars_outside_band,
+        m15_ema20,
+        m15_ema50,
+        m15_volume,
+        m15_volume_sma20,
+        m15_ema_cross_bars_ago,
+        m15_high_50,
+        m15_low_50,
+        h4_ema20,
+        h4_ema50,
+        h4_adx,
+        h4_bb_width_pct,
+        h4_rsi,
+        h4_macd,
+        h4_macd_signal,
+        h4_macd_histogram,
+        funding_rate,
+        funding_next_time,
     }
 }
 
-fn compute_ema_cross_bars_ago(klines: &[Kline], fast_period: usize, slow_period: usize, last_idx: usize) -> i32 {
-    if klines.len() < slow_period + 5 { return -1; }
+fn compute_ema_cross_bars_ago(
+    klines: &[Kline],
+    fast_period: usize,
+    slow_period: usize,
+    last_idx: usize,
+) -> i32 {
+    if klines.len() < slow_period + 5 {
+        return -1;
+    }
     let lookback = 20.min(last_idx);
     for i in 0..lookback {
         let idx = last_idx - i;
-        if idx < 1 { break; }
+        if idx < 1 {
+            break;
+        }
         let fast_curr = ema_at(klines, idx, fast_period);
         let slow_curr = ema_at(klines, idx, slow_period);
         let fast_prev = ema_at(klines, idx - 1, fast_period);

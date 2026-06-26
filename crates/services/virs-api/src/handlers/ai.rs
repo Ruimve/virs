@@ -16,12 +16,11 @@ pub async fn ai_status(
     let _user_id = extract_user_id(&headers)?;
 
     // Check if any AI credentials are configured
-    let rows: Vec<String> = sqlx::query_scalar(
-        r#"SELECT DISTINCT provider FROM qd_ai_credentials"#,
-    )
-    .fetch_all(&state.db_pool)
-    .await
-    .unwrap_or_default();
+    let rows: Vec<String> =
+        sqlx::query_scalar(r#"SELECT DISTINCT provider FROM qd_ai_credentials"#)
+            .fetch_all(&state.db_pool)
+            .await
+            .unwrap_or_default();
 
     let configured = !rows.is_empty();
 
@@ -64,7 +63,10 @@ Respond in JSON format with:
 
     match call_llm_with_fallback(&state, &system_prompt, &user_prompt).await {
         Ok(result) => Ok(Json(ApiResponse::ok(result))),
-        Err(e) => Ok(Json(ApiResponse::err(format!("AI optimization failed: {}", e)))),
+        Err(e) => Ok(Json(ApiResponse::err(format!(
+            "AI optimization failed: {}",
+            e
+        )))),
     }
 }
 
@@ -90,10 +92,7 @@ Respond in JSON format with:
   "risk_warning": "..."
 }"#;
 
-    let user_prompt = format!(
-        "Symbol: {}\nQuestion: {}",
-        symbol, question,
-    );
+    let user_prompt = format!("Symbol: {}\nQuestion: {}", symbol, question,);
 
     match call_llm_with_fallback(&state, &system_prompt, &user_prompt).await {
         Ok(result) => Ok(Json(ApiResponse::ok(result))),
@@ -140,12 +139,19 @@ Respond in JSON format with:
 
     match call_llm_with_fallback(&state, &system_prompt, &user_prompt).await {
         Ok(result) => Ok(Json(ApiResponse::ok(result))),
-        Err(e) => Ok(Json(ApiResponse::err(format!("AI recommend failed: {}", e)))),
+        Err(e) => Ok(Json(ApiResponse::err(format!(
+            "AI recommend failed: {}",
+            e
+        )))),
     }
 }
 
 async fn fetch_price_from_kline(state: &AppState, exchange: &str, symbol: &str) -> f64 {
-    if let Some(candles) = state.kline_engine.get_klines_async(exchange, symbol, virs_market::Timeframe::M1).await {
+    if let Some(candles) = state
+        .kline_engine
+        .get_klines_async(exchange, symbol, virs_market::Timeframe::M1)
+        .await
+    {
         if let Some(last) = candles.last() {
             if last.close > 0.0 {
                 return last.close;
@@ -199,11 +205,20 @@ async fn call_llm_with_fallback(
                 .map_err(|_| anyhow::anyhow!("No AI API key configured"))?;
 
             let (base_url, model) = if std::env::var("DEEPSEEK_API_KEY").is_ok() {
-                ("https://api.deepseek.com".to_string(), "deepseek-chat".to_string())
+                (
+                    "https://api.deepseek.com".to_string(),
+                    "deepseek-chat".to_string(),
+                )
             } else if std::env::var("OPENAI_API_KEY").is_ok() {
-                ("https://api.openai.com/v1".to_string(), "gpt-4o".to_string())
+                (
+                    "https://api.openai.com/v1".to_string(),
+                    "gpt-4o".to_string(),
+                )
             } else {
-                ("https://openrouter.ai/api/v1".to_string(), "deepseek/deepseek-chat".to_string())
+                (
+                    "https://openrouter.ai/api/v1".to_string(),
+                    "deepseek/deepseek-chat".to_string(),
+                )
             };
 
             (api_key, base_url, model)
@@ -212,9 +227,15 @@ async fn call_llm_with_fallback(
 
     let http_client = &state.http_client;
     let result = virs_bot::common::ai_client::call_llm_api(
-        http_client, &api_key, &base_url, &model,
-        system_prompt, user_prompt, "virs-api",
-    ).await?;
+        http_client,
+        &api_key,
+        &base_url,
+        &model,
+        system_prompt,
+        user_prompt,
+        "virs-api",
+    )
+    .await?;
 
     Ok(result.content)
 }

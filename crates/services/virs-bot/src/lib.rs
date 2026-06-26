@@ -5,10 +5,10 @@
 //! - `auto`: Fully automatic trading bot
 //! - `common`: Shared ports, types, AI client, indicators
 
+pub mod auto;
 pub mod common;
 pub mod grid;
-pub mod auto;
 
 // Re-export key types
-pub use grid::GridEngine;
 pub use auto::AutoEngine;
+pub use grid::GridEngine;

@@ -230,14 +230,30 @@ pub struct RiskConfig {
     pub max_consecutive_losses: u32,
 }
 
-fn default_max_position_per_symbol() -> f64 { 1.0 }
-fn default_max_total_position() -> f64 { 3.0 }
-fn default_max_order_amount() -> f64 { 0.3 }
-fn default_max_drawdown() -> f64 { 0.15 }
-fn default_max_leverage() -> u32 { 20 }
-fn default_funding_rate_threshold() -> f64 { 0.001 }
-fn default_liquidation_buffer() -> f64 { 0.2 }
-fn default_max_consecutive_losses() -> u32 { 5 }
+fn default_max_position_per_symbol() -> f64 {
+    1.0
+}
+fn default_max_total_position() -> f64 {
+    3.0
+}
+fn default_max_order_amount() -> f64 {
+    0.3
+}
+fn default_max_drawdown() -> f64 {
+    0.15
+}
+fn default_max_leverage() -> u32 {
+    20
+}
+fn default_funding_rate_threshold() -> f64 {
+    0.001
+}
+fn default_liquidation_buffer() -> f64 {
+    0.2
+}
+fn default_max_consecutive_losses() -> u32 {
+    5
+}
 
 impl Default for RiskConfig {
     fn default() -> Self {
@@ -270,10 +286,18 @@ pub struct EngineConfig {
     pub pnl_snapshot_interval_secs: u64,
 }
 
-fn default_sync_interval() -> u64 { 10 }
-fn default_poll_interval() -> u64 { 10 }
-fn default_ws_reconnect_timeout() -> u64 { 30 }
-fn default_pnl_snapshot_interval() -> u64 { 60 }
+fn default_sync_interval() -> u64 {
+    10
+}
+fn default_poll_interval() -> u64 {
+    10
+}
+fn default_ws_reconnect_timeout() -> u64 {
+    30
+}
+fn default_pnl_snapshot_interval() -> u64 {
+    60
+}
 
 impl Default for EngineConfig {
     fn default() -> Self {
@@ -298,7 +322,11 @@ pub enum PositionEngineError {
     #[error("Position not found: {position_id}")]
     PositionNotFound { position_id: String },
     #[error("Position already exists: {exchange}/{symbol}/{side}")]
-    PositionAlreadyExists { exchange: String, symbol: String, side: String },
+    PositionAlreadyExists {
+        exchange: String,
+        symbol: String,
+        side: String,
+    },
     #[error("Invalid order amount: {amount}")]
     InvalidAmount { amount: f64 },
     #[error("Insufficient position size: requested={requested}, available={available}")]

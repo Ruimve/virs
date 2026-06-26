@@ -5,8 +5,8 @@ use sqlx::PgPool;
 use tracing::warn;
 use uuid::Uuid;
 
-use virs_types::grid_port::*;
 use virs_models::GridBot;
+use virs_types::grid_port::*;
 
 pub struct PgGridStore {
     db: PgPool,
@@ -53,21 +53,19 @@ impl GridStore for PgGridStore {
     }
 
     async fn load_bot(&self, bot_id: Uuid) -> anyhow::Result<Option<GridBotConfig>> {
-        let bot: Option<GridBot> =
-            sqlx::query_as("SELECT * FROM qd_grid_bots WHERE id = $1")
-                .bind(bot_id)
-                .fetch_optional(&self.db)
-                .await?;
+        let bot: Option<GridBot> = sqlx::query_as("SELECT * FROM qd_grid_bots WHERE id = $1")
+            .bind(bot_id)
+            .fetch_optional(&self.db)
+            .await?;
         Ok(bot.as_ref().map(bot_to_config))
     }
 
     async fn load_trades(&self, bot_id: Uuid) -> anyhow::Result<Vec<GridTradeRecord>> {
-        let trades: Vec<virs_models::GridTrade> = sqlx::query_as(
-            "SELECT * FROM qd_grid_trades WHERE bot_id = $1 ORDER BY opened_at ASC",
-        )
-        .bind(bot_id)
-        .fetch_all(&self.db)
-        .await?;
+        let trades: Vec<virs_models::GridTrade> =
+            sqlx::query_as("SELECT * FROM qd_grid_trades WHERE bot_id = $1 ORDER BY opened_at ASC")
+                .bind(bot_id)
+                .fetch_all(&self.db)
+                .await?;
 
         Ok(trades
             .into_iter()
@@ -87,8 +85,15 @@ impl GridStore for PgGridStore {
     }
 
     async fn record_open_trade(
-        &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
-        grid_level: i32, open_side: &str, open_price: f64, open_quantity: f64,
+        &self,
+        bot_id: Uuid,
+        user_id: Uuid,
+        symbol: &str,
+        exchange: &str,
+        grid_level: i32,
+        open_side: &str,
+        open_price: f64,
+        open_quantity: f64,
         open_order_id: Option<&str>,
     ) -> anyhow::Result<Uuid> {
         let row: (Uuid,) = sqlx::query_as(
@@ -104,8 +109,14 @@ impl GridStore for PgGridStore {
     }
 
     async fn close_trade(
-        &self, trade_id: Uuid, close_side: &str, close_price: f64,
-        close_quantity: f64, close_order_id: Option<&str>, pnl: f64, pnl_pct: f64,
+        &self,
+        trade_id: Uuid,
+        close_side: &str,
+        close_price: f64,
+        close_quantity: f64,
+        close_order_id: Option<&str>,
+        pnl: f64,
+        pnl_pct: f64,
     ) -> anyhow::Result<()> {
         let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
         let result = sqlx::query(
@@ -115,9 +126,15 @@ impl GridStore for PgGridStore {
                pnl = $6, pnl_pct = $7, status = 'closed'
                WHERE id = $1 AND status = 'open'"#,
         )
-        .bind(trade_id).bind(close_side).bind(close_price).bind(close_quantity)
-        .bind(close_order_id).bind(pnl).bind(pnl_pct)
-        .execute(&self.db).await?;
+        .bind(trade_id)
+        .bind(close_side)
+        .bind(close_price)
+        .bind(close_quantity)
+        .bind(close_order_id)
+        .bind(pnl)
+        .bind(pnl_pct)
+        .execute(&self.db)
+        .await?;
 
         if result.rows_affected() == 0 {
             warn!(trade_id = %trade_id, "close_trade: no open trade found");
@@ -135,9 +152,18 @@ impl GridStore for PgGridStore {
     }
 
     async fn record_orphaned_close_trade(
-        &self, bot_id: Uuid, user_id: Uuid, symbol: &str, exchange: &str,
-        grid_level: i32, close_side: &str, close_price: f64, close_quantity: f64,
-        close_order_id: Option<&str>, pnl: f64, pnl_pct: f64,
+        &self,
+        bot_id: Uuid,
+        user_id: Uuid,
+        symbol: &str,
+        exchange: &str,
+        grid_level: i32,
+        close_side: &str,
+        close_price: f64,
+        close_quantity: f64,
+        close_order_id: Option<&str>,
+        pnl: f64,
+        pnl_pct: f64,
     ) -> anyhow::Result<Uuid> {
         let open_side = if close_side == "buy" { "sell" } else { "buy" };
         let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
@@ -154,8 +180,13 @@ impl GridStore for PgGridStore {
     }
 
     async fn save_stats(
-        &self, bot_id: Uuid, total_pnl: f64, unrealized_pnl: f64,
-        total_trades: i32, grid_filled_count: i32, levels_json: Option<&serde_json::Value>,
+        &self,
+        bot_id: Uuid,
+        total_pnl: f64,
+        unrealized_pnl: f64,
+        total_trades: i32,
+        grid_filled_count: i32,
+        levels_json: Option<&serde_json::Value>,
     ) -> anyhow::Result<()> {
         sqlx::query(
             "UPDATE qd_grid_bots SET total_pnl = $2, unrealized_pnl = $3, total_trades = $4, grid_filled_count = $5, grid_levels_json = $6::jsonb, updated_at = NOW() WHERE id = $1",
@@ -176,18 +207,29 @@ impl GridStore for PgGridStore {
         if status == "running" || status == "stopped" || status == "paused" {
             sqlx::query(sql).bind(bot_id).execute(&self.db).await?;
         } else {
-            sqlx::query(sql).bind(bot_id).bind(status).execute(&self.db).await?;
+            sqlx::query(sql)
+                .bind(bot_id)
+                .bind(status)
+                .execute(&self.db)
+                .await?;
         }
         Ok(())
     }
 
     async fn update_last_adjusted(&self, bot_id: Uuid) -> anyhow::Result<()> {
         sqlx::query("UPDATE qd_grid_bots SET last_adjusted_at = NOW() WHERE id = $1")
-            .bind(bot_id).execute(&self.db).await?;
+            .bind(bot_id)
+            .execute(&self.db)
+            .await?;
         Ok(())
     }
 
-    async fn update_grid_params(&self, bot_id: Uuid, upper_price: f64, lower_price: f64) -> anyhow::Result<()> {
+    async fn update_grid_params(
+        &self,
+        bot_id: Uuid,
+        upper_price: f64,
+        lower_price: f64,
+    ) -> anyhow::Result<()> {
         sqlx::query("UPDATE qd_grid_bots SET upper_price = $2, lower_price = $3, updated_at = NOW() WHERE id = $1")
             .bind(bot_id).bind(upper_price).bind(lower_price)
             .execute(&self.db).await?;
@@ -195,15 +237,27 @@ impl GridStore for PgGridStore {
     }
 
     async fn update_quantity_per_grid(&self, bot_id: Uuid, quantity: f64) -> anyhow::Result<()> {
-        sqlx::query("UPDATE qd_grid_bots SET quantity_per_grid = $2, updated_at = NOW() WHERE id = $1")
-            .bind(bot_id).bind(quantity)
-            .execute(&self.db).await?;
+        sqlx::query(
+            "UPDATE qd_grid_bots SET quantity_per_grid = $2, updated_at = NOW() WHERE id = $1",
+        )
+        .bind(bot_id)
+        .bind(quantity)
+        .execute(&self.db)
+        .await?;
         Ok(())
     }
 
     async fn update_ai_analysis(
-        &self, bot_id: Uuid, market_regime: &str, upper_price: f64, lower_price: f64,
-        grid_count: i32, grid_profit_pct: f64, quantity_per_grid: f64, leverage: i32, ai_analysis: &str,
+        &self,
+        bot_id: Uuid,
+        market_regime: &str,
+        upper_price: f64,
+        lower_price: f64,
+        grid_count: i32,
+        grid_profit_pct: f64,
+        quantity_per_grid: f64,
+        leverage: i32,
+        ai_analysis: &str,
     ) -> anyhow::Result<()> {
         sqlx::query(
             r#"UPDATE qd_grid_bots SET
@@ -213,19 +267,35 @@ impl GridStore for PgGridStore {
                 last_adjusted_at = NOW(), updated_at = NOW()
                WHERE id = $9"#,
         )
-        .bind(market_regime).bind(upper_price).bind(lower_price).bind(grid_count)
-        .bind(grid_profit_pct).bind(quantity_per_grid).bind(leverage)
-        .bind(ai_analysis).bind(bot_id)
-        .execute(&self.db).await?;
+        .bind(market_regime)
+        .bind(upper_price)
+        .bind(lower_price)
+        .bind(grid_count)
+        .bind(grid_profit_pct)
+        .bind(quantity_per_grid)
+        .bind(leverage)
+        .bind(ai_analysis)
+        .bind(bot_id)
+        .execute(&self.db)
+        .await?;
         Ok(())
     }
 
     async fn save_analysis_log(
-        &self, bot_id: Uuid, analysis_type: &str, system_prompt: &str,
-        user_prompt: &str, result: &serde_json::Value, error: Option<&str>,
+        &self,
+        bot_id: Uuid,
+        analysis_type: &str,
+        system_prompt: &str,
+        user_prompt: &str,
+        result: &serde_json::Value,
+        error: Option<&str>,
         llm_model: &str,
     ) -> anyhow::Result<()> {
-        let status = if error.is_some() { "failed" } else { "completed" };
+        let status = if error.is_some() {
+            "failed"
+        } else {
+            "completed"
+        };
         sqlx::query(
             r#"INSERT INTO qd_grid_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, error, llm_model, completed_at)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())"#,
@@ -245,16 +315,27 @@ impl GridStore for PgGridStore {
             .bind(bot_id)
             .fetch_all(&self.db).await?;
 
-        Ok(rows.into_iter().map(|r| AnalysisLogEntry {
-            id: r.0, bot_id: r.1, analysis_type: r.2,
-            system_prompt: r.3, user_prompt: r.4, result: r.5,
-            error: r.6, llm_model: r.7, created_at: r.8,
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| AnalysisLogEntry {
+                id: r.0,
+                bot_id: r.1,
+                analysis_type: r.2,
+                system_prompt: r.3,
+                user_prompt: r.4,
+                result: r.5,
+                error: r.6,
+                llm_model: r.7,
+                created_at: r.8,
+            })
+            .collect())
     }
 
     async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()> {
         sqlx::query("DELETE FROM qd_grid_bots WHERE id = $1")
-            .bind(bot_id).execute(&self.db).await?;
+            .bind(bot_id)
+            .execute(&self.db)
+            .await?;
         Ok(())
     }
 }

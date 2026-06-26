@@ -24,7 +24,10 @@ impl Exchanges {
         self.exchanges.insert(key, exchange);
     }
 
-    pub fn get(&self, name: &str) -> Option<dashmap::mapref::one::Ref<'_, String, Box<dyn Exchange>>> {
+    pub fn get(
+        &self,
+        name: &str,
+    ) -> Option<dashmap::mapref::one::Ref<'_, String, Box<dyn Exchange>>> {
         self.exchanges.get(name)
     }
 

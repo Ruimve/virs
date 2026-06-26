@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -10,8 +10,8 @@ use tokio::sync::{broadcast, mpsc, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite};
 
 // Re-export for convenience
-pub use crate::ws_types::{Candle, WsCandleUpdate, WsEvent};
 use crate::ws_types::KlineWsClient;
+pub use crate::ws_types::{Candle, WsCandleUpdate, WsEvent};
 
 fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
@@ -137,7 +137,13 @@ pub struct BinanceKlineWs {
 }
 
 impl BinanceKlineWs {
-    pub fn new(ws_url: String, reconnect_delay_secs: u64, max_reconnect_delay_secs: u64, ws_ping_interval_secs: u64, ws_max_lifetime_secs: u64) -> Self {
+    pub fn new(
+        ws_url: String,
+        reconnect_delay_secs: u64,
+        max_reconnect_delay_secs: u64,
+        ws_ping_interval_secs: u64,
+        ws_max_lifetime_secs: u64,
+    ) -> Self {
         Self {
             ws_url,
             reconnect_delay_secs,
@@ -156,14 +162,20 @@ impl BinanceKlineWs {
     pub fn new_spot(_proxy_url: Option<&str>) -> Self {
         Self::new(
             "wss://stream.binance.com/ws".to_string(),
-            1, 60, 30, 23 * 3600,
+            1,
+            60,
+            30,
+            23 * 3600,
         )
     }
 
     pub fn new_perpetual(_proxy_url: Option<&str>) -> Self {
         Self::new(
             "wss://fstream.binance.com/market/ws".to_string(),
-            1, 60, 30, 23 * 3600,
+            1,
+            60,
+            30,
+            23 * 3600,
         )
     }
 }
@@ -218,15 +230,25 @@ impl KlineWsClient for BinanceKlineWs {
                             if !subs.is_empty() {
                                 let id = request_id.fetch_add(1, Ordering::Relaxed);
                                 let subs_vec: Vec<&String> = subs.iter().collect();
-                                tracing::debug!("[BinanceKlineWs] Connected to {} (subscribing {} streams)", ws_url, subs.len());
+                                tracing::debug!(
+                                    "[BinanceKlineWs] Connected to {} (subscribing {} streams)",
+                                    ws_url,
+                                    subs.len()
+                                );
                                 let msg = serde_json::json!({
                                     "method": "SUBSCRIBE",
                                     "params": subs_vec,
                                     "id": id
                                 });
                                 if let Ok(text) = serde_json::to_string(&msg) {
-                                    if write.send(tungstenite::Message::Text(text.into())).await.is_err() {
-                                        tracing::error!("[BinanceKlineWs] Failed to send subscription message");
+                                    if write
+                                        .send(tungstenite::Message::Text(text.into()))
+                                        .await
+                                        .is_err()
+                                    {
+                                        tracing::error!(
+                                            "[BinanceKlineWs] Failed to send subscription message"
+                                        );
                                         continue;
                                     }
                                 }
@@ -245,7 +267,9 @@ impl KlineWsClient for BinanceKlineWs {
                             }
 
                             if connect_start.elapsed() > max_lifetime {
-                                tracing::debug!("[BinanceKlineWs] Max lifetime reached, reconnecting...");
+                                tracing::debug!(
+                                    "[BinanceKlineWs] Max lifetime reached, reconnecting..."
+                                );
                                 break;
                             }
 
@@ -528,7 +552,6 @@ mod tests {
         assert!(data_flat.kline.closed);
     }
 
-
     #[test]
     fn test_parse_binance_kline_message_without_stream() {
         let json = r#"{
@@ -648,7 +671,6 @@ mod tests {
         assert!(candle_closed.closed);
     }
 
-
     #[test]
     fn test_to_candle_invalid_numbers() {
         let data = BinanceKlineData {
@@ -714,7 +736,6 @@ mod tests {
         // Already lowercase (merged from test_binance_ws_symbol_lowercase)
         assert_eq!(binance_ws_symbol("btcusdt"), "btcusdt");
     }
-
 
     // ========== 构造函数和状态（3个） ==========
 

@@ -14,9 +14,10 @@
 
 use chrono::Utc;
 
+use crate::auth::Signer;
 use crate::errors::ExchangeError;
-use crate::ExchangeClient;
 use crate::types::*;
+use crate::ExchangeClient;
 use crate::{parse_f64, parse_str, parse_u32};
 
 const BASE_URL: &str = "https://api.binance.com";
@@ -33,10 +34,7 @@ fn parse_order_book_side(data: &serde_json::Value, side: &str) -> Vec<(f64, f64)
             arr.iter()
                 .filter_map(|b| {
                     let a = b.as_array()?;
-                    Some((
-                        a[0].as_str()?.parse().ok()?,
-                        a[1].as_str()?.parse().ok()?,
-                    ))
+                    Some((a[0].as_str()?.parse().ok()?, a[1].as_str()?.parse().ok()?))
                 })
                 .collect()
         })
@@ -52,7 +50,10 @@ pub async fn ping(client: &ExchangeClient) -> Result<bool, ExchangeError> {
 }
 
 /// GET /api/v3/ticker/24hr
-pub async fn fetch_ticker(client: &ExchangeClient, symbol: &str) -> Result<CcxtTicker, ExchangeError> {
+pub async fn fetch_ticker(
+    client: &ExchangeClient,
+    symbol: &str,
+) -> Result<CcxtTicker, ExchangeError> {
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let data = client
         .public_get(&url("/api/v3/ticker/24hr"), &[("symbol", native.as_str())])
@@ -61,7 +62,8 @@ pub async fn fetch_ticker(client: &ExchangeClient, symbol: &str) -> Result<CcxtT
     let last = parse_f64(&data, "lastPrice");
     if last.is_none() || last == Some(0.0) {
         return Err(ExchangeError::no_data(format!(
-            "No ticker data available for {} on Binance", symbol
+            "No ticker data available for {} on Binance",
+            symbol
         )));
     }
 
@@ -104,7 +106,13 @@ pub async fn fetch_ohlcv(
     }
 
     let data = client
-        .public_get(&url("/api/v3/klines"), &params.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>())
+        .public_get(
+            &url("/api/v3/klines"),
+            &params
+                .iter()
+                .map(|(k, v)| (*k, v.as_str()))
+                .collect::<Vec<_>>(),
+        )
         .await?;
 
     let arr = data.as_array().ok_or_else(|| {
@@ -113,31 +121,44 @@ pub async fn fetch_ohlcv(
 
     if arr.is_empty() {
         return Err(ExchangeError::no_data(format!(
-            "No OHLCV data available for {} ({}) on Binance", symbol, timeframe
+            "No OHLCV data available for {} ({}) on Binance",
+            symbol, timeframe
         )));
     }
 
-    let klines: Vec<CcxtKline> = arr.iter().filter_map(|k| {
-        let a = match k.as_array() {
-            Some(a) if a.len() >= 6 => a,
-            _ => return None,
-        };
-        let timestamp = a[0].as_i64()?;
-        let open = a[1].as_str().and_then(|s| s.parse().ok())?;
-        let high = a[2].as_str().and_then(|s| s.parse().ok())?;
-        let low = a[3].as_str().and_then(|s| s.parse().ok())?;
-        let close = a[4].as_str().and_then(|s| s.parse().ok())?;
-        let volume = a[5].as_str().and_then(|s| s.parse().ok())?;
-        Some(CcxtKline {
-            timestamp, open, high, low, close, volume,
-            quote_volume: a.get(7).and_then(|v| v.as_str()).and_then(|s| s.parse().ok()),
-            trades: a.get(8).and_then(|v| v.as_i64()),
+    let klines: Vec<CcxtKline> = arr
+        .iter()
+        .filter_map(|k| {
+            let a = match k.as_array() {
+                Some(a) if a.len() >= 6 => a,
+                _ => return None,
+            };
+            let timestamp = a[0].as_i64()?;
+            let open = a[1].as_str().and_then(|s| s.parse().ok())?;
+            let high = a[2].as_str().and_then(|s| s.parse().ok())?;
+            let low = a[3].as_str().and_then(|s| s.parse().ok())?;
+            let close = a[4].as_str().and_then(|s| s.parse().ok())?;
+            let volume = a[5].as_str().and_then(|s| s.parse().ok())?;
+            Some(CcxtKline {
+                timestamp,
+                open,
+                high,
+                low,
+                close,
+                volume,
+                quote_volume: a
+                    .get(7)
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| s.parse().ok()),
+                trades: a.get(8).and_then(|v| v.as_i64()),
+            })
         })
-    }).collect();
+        .collect();
 
     if klines.is_empty() {
         return Err(ExchangeError::no_data(format!(
-            "All kline entries invalid for {} ({}) on Binance", symbol, timeframe
+            "All kline entries invalid for {} ({}) on Binance",
+            symbol, timeframe
         )));
     }
 
@@ -145,10 +166,17 @@ pub async fn fetch_ohlcv(
 }
 
 /// GET /api/v3/depth
-pub async fn fetch_order_book(client: &ExchangeClient, symbol: &str, limit: u32) -> Result<CcxtOrderBook, ExchangeError> {
+pub async fn fetch_order_book(
+    client: &ExchangeClient,
+    symbol: &str,
+    limit: u32,
+) -> Result<CcxtOrderBook, ExchangeError> {
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let data = client
-        .public_get(&url("/api/v3/depth"), &[("symbol", native.as_str()), ("limit", &limit.to_string())])
+        .public_get(
+            &url("/api/v3/depth"),
+            &[("symbol", native.as_str()), ("limit", &limit.to_string())],
+        )
         .await?;
 
     let bids = parse_order_book_side(&data, "bids");
@@ -156,7 +184,8 @@ pub async fn fetch_order_book(client: &ExchangeClient, symbol: &str, limit: u32)
 
     if bids.is_empty() && asks.is_empty() {
         return Err(ExchangeError::no_data(format!(
-            "No order book data for {} on Binance", symbol
+            "No order book data for {} on Binance",
+            symbol
         )));
     }
 
@@ -173,13 +202,18 @@ pub async fn fetch_order_book(client: &ExchangeClient, symbol: &str, limit: u32)
 pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, ExchangeError> {
     let data = client.public_get(&url("/api/v3/exchangeInfo"), &[]).await?;
 
-    let symbols = data.get("symbols").and_then(|s| s.as_array())
+    let symbols = data
+        .get("symbols")
+        .and_then(|s| s.as_array())
         .ok_or_else(|| ExchangeError::Internal("Invalid exchangeInfo response".into()))?;
 
-    let markets: Vec<MarketInfo> = symbols.iter()
+    let markets: Vec<MarketInfo> = symbols
+        .iter()
         .filter_map(|s| {
             let status = parse_str(s, "status")?;
-            if status != "TRADING" { return None; }
+            if status != "TRADING" {
+                return None;
+            }
 
             let base = parse_str(s, "baseAsset")?;
             let quote = parse_str(s, "quoteAsset")?;
@@ -188,20 +222,31 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
             let filters = s.get("filters").and_then(|f| f.as_array());
             let (min_amount, max_amount) = filters
                 .map(|arr| {
-                    let lot = arr.iter().find(|f| f.get("filterType").and_then(|v| v.as_str()) == Some("LOT_SIZE"));
-                    (lot.and_then(|f| parse_f64(f, "minQty")), lot.and_then(|f| parse_f64(f, "maxQty")))
+                    let lot = arr
+                        .iter()
+                        .find(|f| f.get("filterType").and_then(|v| v.as_str()) == Some("LOT_SIZE"));
+                    (
+                        lot.and_then(|f| parse_f64(f, "minQty")),
+                        lot.and_then(|f| parse_f64(f, "maxQty")),
+                    )
                 })
                 .unwrap_or((None, None));
             let (min_price, max_price) = filters
                 .map(|arr| {
-                    let pf = arr.iter().find(|f| f.get("filterType").and_then(|v| v.as_str()) == Some("PRICE_FILTER"));
-                    (pf.and_then(|f| parse_f64(f, "minPrice")), pf.and_then(|f| parse_f64(f, "maxPrice")))
+                    let pf = arr.iter().find(|f| {
+                        f.get("filterType").and_then(|v| v.as_str()) == Some("PRICE_FILTER")
+                    });
+                    (
+                        pf.and_then(|f| parse_f64(f, "minPrice")),
+                        pf.and_then(|f| parse_f64(f, "maxPrice")),
+                    )
                 })
                 .unwrap_or((None, None));
             let min_cost = filters
                 .and_then(|arr| {
                     arr.iter().find(|f| {
-                        f.get("filterType").and_then(|v| v.as_str())
+                        f.get("filterType")
+                            .and_then(|v| v.as_str())
                             .map(|t| t == "NOTIONAL")
                             .unwrap_or(false)
                     })
@@ -235,20 +280,25 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
 /// GET /api/v3/account — spot balances
 pub async fn fetch_balance(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
 ) -> Result<Vec<Balance>, ExchangeError> {
     let data = client
         .signed_get(signer, &url("/api/v3/account"), vec![])
         .await?;
 
-    let balances = data.get("balances").and_then(|b| b.as_array())
+    let balances = data
+        .get("balances")
+        .and_then(|b| b.as_array())
         .ok_or_else(|| ExchangeError::Internal("Invalid balance response from Binance".into()))?;
 
-    let result: Vec<Balance> = balances.iter()
+    let result: Vec<Balance> = balances
+        .iter()
         .filter_map(|b| {
             let free = parse_f64(b, "free").unwrap_or(0.0);
             let used = parse_f64(b, "locked").unwrap_or(0.0);
-            if free == 0.0 && used == 0.0 { return None; }
+            if free == 0.0 && used == 0.0 {
+                return None;
+            }
             Some(Balance {
                 asset: parse_str(b, "asset").unwrap_or_default(),
                 free,
@@ -264,7 +314,7 @@ pub async fn fetch_balance(
 /// POST /api/v3/order — create spot order
 pub async fn create_order(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
     params: PlaceOrderParams,
 ) -> Result<CcxtOrder, ExchangeError> {
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(&params.symbol);
@@ -277,16 +327,16 @@ pub async fn create_order(
 
     if let Some(price) = params.price {
         body["price"] = serde_json::json!(price);
-        body["timeInForce"] = serde_json::json!(
-            params.time_in_force.as_ref()
-                .map(|tif| match tif {
-                    TimeInForce::Gtc => "GTC",
-                    TimeInForce::Ioc => "IOC",
-                    TimeInForce::Fok => "FOK",
-                    TimeInForce::Poc => "GTC",
-                })
-                .unwrap_or("GTC")
-        );
+        body["timeInForce"] = serde_json::json!(params
+            .time_in_force
+            .as_ref()
+            .map(|tif| match tif {
+                TimeInForce::Gtc => "GTC",
+                TimeInForce::Ioc => "IOC",
+                TimeInForce::Fok => "FOK",
+                TimeInForce::Poc => "GTC",
+            })
+            .unwrap_or("GTC"));
     }
 
     if let Some(stop_price) = params.stop_price {
@@ -302,7 +352,8 @@ pub async fn create_order(
         .await?;
 
     Ok(CcxtOrder {
-        id: parse_str(&data, "orderId").ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
+        id: parse_str(&data, "orderId")
+            .ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
         client_order_id: parse_str(&data, "clientOrderId"),
         symbol: params.symbol,
         side: params.side,
@@ -314,7 +365,8 @@ pub async fn create_order(
         remaining: parse_f64(&data, "origQty").unwrap_or(params.amount)
             - parse_f64(&data, "executedQty").unwrap_or(0.0),
         status: crate::adapter::binance::BinanceExchange::parse_order_status(
-            &parse_str(&data, "status").ok_or_else(|| ExchangeError::no_data("status missing".into()))?
+            &parse_str(&data, "status")
+                .ok_or_else(|| ExchangeError::no_data("status missing".into()))?,
         ),
         fee: None,
         created_at: Some(Utc::now()),
@@ -326,7 +378,7 @@ pub async fn create_order(
 /// POST /api/v3/order — cancel spot order
 pub async fn cancel_order(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
     symbol: &str,
     order_id: &str,
 ) -> Result<CcxtOrder, ExchangeError> {
@@ -340,13 +392,20 @@ pub async fn cancel_order(
         .signed_post(signer, &url("/api/v3/order"), body)
         .await?;
 
-    let side_str = parse_str(&data, "side").ok_or_else(|| ExchangeError::no_data("side missing".into()))?;
-    let type_str = parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data("type missing".into()))?;
+    let side_str =
+        parse_str(&data, "side").ok_or_else(|| ExchangeError::no_data("side missing".into()))?;
+    let type_str =
+        parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data("type missing".into()))?;
     Ok(CcxtOrder {
-        id: parse_str(&data, "orderId").ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
+        id: parse_str(&data, "orderId")
+            .ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
         client_order_id: parse_str(&data, "clientOrderId"),
         symbol: symbol.to_string(),
-        side: if side_str == "BUY" { Side::Buy } else { Side::Sell },
+        side: if side_str == "BUY" {
+            Side::Buy
+        } else {
+            Side::Sell
+        },
         order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
         price: parse_f64(&data, "price"),
         amount: parse_f64(&data, "origQty").unwrap_or(0.0),
@@ -364,7 +423,7 @@ pub async fn cancel_order(
 /// GET /api/v3/order — fetch spot order
 pub async fn fetch_order(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
     symbol: &str,
     order_id: &str,
 ) -> Result<CcxtOrder, ExchangeError> {
@@ -378,14 +437,22 @@ pub async fn fetch_order(
         .signed_get(signer, &url("/api/v3/order"), params)
         .await?;
 
-    let side_str = parse_str(&data, "side").ok_or_else(|| ExchangeError::no_data("side missing".into()))?;
-    let type_str = parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data("type missing".into()))?;
-    let status_str = parse_str(&data, "status").ok_or_else(|| ExchangeError::no_data("status missing".into()))?;
+    let side_str =
+        parse_str(&data, "side").ok_or_else(|| ExchangeError::no_data("side missing".into()))?;
+    let type_str =
+        parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data("type missing".into()))?;
+    let status_str = parse_str(&data, "status")
+        .ok_or_else(|| ExchangeError::no_data("status missing".into()))?;
     Ok(CcxtOrder {
-        id: parse_str(&data, "orderId").ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
+        id: parse_str(&data, "orderId")
+            .ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
         client_order_id: parse_str(&data, "clientOrderId"),
         symbol: symbol.to_string(),
-        side: if side_str == "BUY" { Side::Buy } else { Side::Sell },
+        side: if side_str == "BUY" {
+            Side::Buy
+        } else {
+            Side::Sell
+        },
         order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
         price: parse_f64(&data, "price"),
         amount: parse_f64(&data, "origQty").unwrap_or(0.0),
@@ -404,11 +471,14 @@ pub async fn fetch_order(
 /// GET /api/v3/openOrders — fetch open spot orders
 pub async fn fetch_open_orders(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
     symbol: Option<&str>,
 ) -> Result<Vec<CcxtOrder>, ExchangeError> {
     let params: Vec<(String, String)> = if let Some(sym) = symbol {
-        vec![("symbol".into(), crate::adapter::binance::BinanceExchange::to_native_symbol(sym))]
+        vec![(
+            "symbol".into(),
+            crate::adapter::binance::BinanceExchange::to_native_symbol(sym),
+        )]
     } else {
         vec![]
     };
@@ -418,39 +488,55 @@ pub async fn fetch_open_orders(
         .await?;
 
     let arr = data.as_array().cloned().unwrap_or_default();
-    let orders: Vec<CcxtOrder> = arr.iter().filter_map(|o| {
-        let side_str = parse_str(o, "side")?;
-        let type_str = parse_str(o, "type")?;
-        let status_str = parse_str(o, "status")?;
-        let symbol_str = parse_str(o, "symbol")?;
-        Some(CcxtOrder {
-            id: parse_str(o, "orderId")?,
-            client_order_id: parse_str(o, "clientOrderId"),
-            symbol: crate::adapter::binance::BinanceExchange::to_unified_symbol(&symbol_str),
-            side: if side_str == "BUY" { Side::Buy } else { Side::Sell },
-            order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
-            price: parse_f64(o, "price"),
-            amount: parse_f64(o, "origQty").unwrap_or(0.0),
-            cost: None,
-            filled: parse_f64(o, "executedQty").unwrap_or(0.0),
-            remaining: parse_f64(o, "origQty").unwrap_or(0.0)
-                - parse_f64(o, "executedQty").unwrap_or(0.0),
-            status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
-            fee: None,
-            created_at: None,
-            updated_at: None,
-            info: o.clone(),
+    let orders: Vec<CcxtOrder> = arr
+        .iter()
+        .filter_map(|o| {
+            let side_str = parse_str(o, "side")?;
+            let type_str = parse_str(o, "type")?;
+            let status_str = parse_str(o, "status")?;
+            let symbol_str = parse_str(o, "symbol")?;
+            Some(CcxtOrder {
+                id: parse_str(o, "orderId")?,
+                client_order_id: parse_str(o, "clientOrderId"),
+                symbol: crate::adapter::binance::BinanceExchange::to_unified_symbol(&symbol_str),
+                side: if side_str == "BUY" {
+                    Side::Buy
+                } else {
+                    Side::Sell
+                },
+                order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
+                price: parse_f64(o, "price"),
+                amount: parse_f64(o, "origQty").unwrap_or(0.0),
+                cost: None,
+                filled: parse_f64(o, "executedQty").unwrap_or(0.0),
+                remaining: parse_f64(o, "origQty").unwrap_or(0.0)
+                    - parse_f64(o, "executedQty").unwrap_or(0.0),
+                status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
+                fee: None,
+                created_at: None,
+                updated_at: None,
+                info: o.clone(),
+            })
         })
-    }).collect();
+        .collect();
 
     Ok(orders)
 }
 
 /// POST /api/v3/userDataStream — create listen key for spot user data stream
+///
+/// ⚠️ 已废弃（2025-04-25 Spot API Changelog）：币安推荐迁移到 WebSocket API 的
+/// `userDataStream.subscribe` 方法（需 Ed25519 API Key）。当前端点仍可工作，
+/// 但将在未来被移除。本实现保留作为 HMAC 密钥的兼容路径；若币安返回 410 Gone
+/// 或 -2013 类错误，调用方应降级为 REST 轮询或迁移到 Ed25519。
 pub async fn create_listen_key(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
 ) -> Result<String, ExchangeError> {
+    tracing::warn!(
+        target: "binance_api",
+        "POST /api/v3/userDataStream is deprecated by Binance; migrate to WebSocket API (Ed25519) when possible"
+    );
     let body = serde_json::json!({});
     let data = client
         .signed_post(signer, &url("/api/v3/userDataStream"), body)
@@ -462,11 +548,17 @@ pub async fn create_listen_key(
 }
 
 /// PUT /api/v3/userDataStream — keepalive listen key
+///
+/// ⚠️ 已废弃（同上）。建议迁移到 WebSocket API 后通过 `userDataStream.ping` 保活。
 pub async fn keepalive_listen_key(
     client: &ExchangeClient,
-    signer: &super::BinanceSigner,
+    signer: &dyn Signer,
     listen_key: &str,
 ) -> Result<(), ExchangeError> {
+    tracing::warn!(
+        target: "binance_api",
+        "PUT /api/v3/userDataStream is deprecated by Binance; migrate to WebSocket API (Ed25519) when possible"
+    );
     let body = serde_json::json!({ "listenKey": listen_key });
     client
         .signed_put(signer, &url("/api/v3/userDataStream"), body)

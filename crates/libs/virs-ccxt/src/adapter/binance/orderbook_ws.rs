@@ -13,8 +13,8 @@
 //! - Combined stream wrapper:    { "stream": "<name>", "data": <payload> }
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -102,7 +102,9 @@ impl BinanceDepthMessage {
 }
 
 /// 解析 payload（组合流的 data 字段或单流的顶层）
-fn parse_payload(v: &serde_json::Value) -> Option<(Vec<[String; 2]>, Vec<[String; 2]>, Option<String>, i64)> {
+fn parse_payload(
+    v: &serde_json::Value,
+) -> Option<(Vec<[String; 2]>, Vec<[String; 2]>, Option<String>, i64)> {
     // Spot format: bids/asks
     if let (Some(bids), Some(asks)) = (v.get("bids"), v.get("asks")) {
         let bids = parse_levels(bids)?;
@@ -218,10 +220,11 @@ impl BinanceOrderBookWs {
     }
 
     pub fn new_perpetual(_proxy_url: Option<&str>) -> Self {
-        // Use /stream endpoint for consistency — perpetual payloads include `s` field,
+        // Use /public/stream endpoint for consistency — perpetual payloads include `s` field,
         // but using /stream simplifies symbol resolution for both market types.
+        // 2026-04-23 起币安将公共高频流量切流至 /public 路由（depth/aggTrade/trade）
         Self::new(
-            "wss://fstream.binance.com/stream".to_string(),
+            "wss://fstream.binance.com/public/stream".to_string(),
             1,
             60,
             30,
@@ -296,7 +299,9 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                                         .await
                                         .is_err()
                                     {
-                                        tracing::error!("[BinanceOrderBookWs] Failed to send resubscribe");
+                                        tracing::error!(
+                                            "[BinanceOrderBookWs] Failed to send resubscribe"
+                                        );
                                         continue;
                                     }
                                 }

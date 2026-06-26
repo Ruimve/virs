@@ -28,10 +28,7 @@ pub enum ExchangeError {
     InvalidRequest(String),
 
     #[error("Exchange error [{code}]: {message}")]
-    ExchangeError {
-        code: String,
-        message: String,
-    },
+    ExchangeError { code: String, message: String },
 
     #[error("Insufficient funds: {0}")]
     InsufficientFunds(String),
@@ -46,10 +43,7 @@ pub enum ExchangeError {
     NoData(String),
 
     #[error("HTTP error {status}: {body}")]
-    Http {
-        status: u16,
-        body: String,
-    },
+    Http { status: u16, body: String },
 
     #[error("Internal error: {0}")]
     Internal(String),
@@ -77,7 +71,10 @@ impl ExchangeError {
             ExchangeError::Network(_)
                 | ExchangeError::RateLimited(_)
                 | ExchangeError::Internal(_)
-                | ExchangeError::Http { status: 429 | 500 | 502 | 503 | 504, .. }
+                | ExchangeError::Http {
+                    status: 429 | 500 | 502 | 503 | 504,
+                    ..
+                }
         )
     }
 }

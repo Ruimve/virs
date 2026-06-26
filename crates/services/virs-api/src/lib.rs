@@ -2,10 +2,10 @@
 //!
 //! HTTP/WebSocket API layer, routing, middleware, and SPA fallback.
 
-pub mod router;
-pub mod state;
 pub mod handlers;
 pub mod middleware;
+pub mod router;
+pub mod state;
 pub mod ws;
 
 // Re-export

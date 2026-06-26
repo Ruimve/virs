@@ -18,7 +18,10 @@ pub struct ExchangePriceProvider {
 
 impl ExchangePriceProvider {
     pub fn new(exchange_registry: Arc<Exchanges>) -> Self {
-        Self { exchange_registry, kline_engine: None }
+        Self {
+            exchange_registry,
+            kline_engine: None,
+        }
     }
 
     pub fn with_kline_engine(mut self, engine: Arc<KlineEngine>) -> Self {
@@ -32,7 +35,10 @@ impl PriceProvider for ExchangePriceProvider {
     async fn get_price(&self, exchange: &str, symbol: &str, market_type: &str) -> Option<f64> {
         // Try kline engine first (1m candle)
         if let Some(ref engine) = self.kline_engine {
-            if let Some(candles) = engine.get_klines_async(exchange, symbol, Timeframe::M1).await {
+            if let Some(candles) = engine
+                .get_klines_async(exchange, symbol, Timeframe::M1)
+                .await
+            {
                 if let Some(last) = candles.last() {
                     if last.close > 0.0 {
                         return Some(last.close);
@@ -75,7 +81,10 @@ pub struct AutoExchangePriceProvider {
 
 impl AutoExchangePriceProvider {
     pub fn new(exchange_registry: Arc<Exchanges>) -> Self {
-        Self { exchange_registry, kline_engine: None }
+        Self {
+            exchange_registry,
+            kline_engine: None,
+        }
     }
 
     pub fn with_kline_engine(mut self, engine: Arc<KlineEngine>) -> Self {
@@ -89,7 +98,10 @@ impl PriceProvider for AutoExchangePriceProvider {
     async fn get_price(&self, exchange: &str, symbol: &str, market_type: &str) -> Option<f64> {
         // Try kline engine first
         if let Some(ref engine) = self.kline_engine {
-            if let Some(candles) = engine.get_klines_async(exchange, symbol, Timeframe::M1).await {
+            if let Some(candles) = engine
+                .get_klines_async(exchange, symbol, Timeframe::M1)
+                .await
+            {
                 if let Some(last) = candles.last() {
                     if last.close > 0.0 {
                         return Some(last.close);

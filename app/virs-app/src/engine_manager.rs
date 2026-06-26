@@ -112,7 +112,11 @@ impl EngineManager for AppEngineManager {
                 let temp_adapter = CcxtExchangeAdapter::new(self.exchange_registry.clone());
                 match temp_adapter.get_balance().await {
                     Ok(b) => {
-                        info!(total = b.total, free = b.free, "Paper mode: fetched real balance as initial capital");
+                        info!(
+                            total = b.total,
+                            free = b.free,
+                            "Paper mode: fetched real balance as initial capital"
+                        );
                         b.total
                     }
                     Err(e) => {
@@ -153,22 +157,28 @@ impl EngineManager for AppEngineManager {
         let (grid_event_tx, _grid_event_rx) = tokio::sync::broadcast::channel(256);
 
         let grid_store = Arc::new(PgGridStore::new(self.db_pool.clone()));
-        let grid_price_provider = Arc::new(ExchangePriceProvider::new(self.exchange_registry.clone())
-            .with_kline_engine(self.kline_engine.clone()));
-        let grid_market_data_provider = Arc::new(ExchangeMarketDataProvider::new(self.exchange_registry.clone())
-            .with_kline_engine(self.kline_engine.clone())
-            .with_pe_exchange(pe_exchange_ref.clone()));
+        let grid_price_provider = Arc::new(
+            ExchangePriceProvider::new(self.exchange_registry.clone())
+                .with_kline_engine(self.kline_engine.clone()),
+        );
+        let grid_market_data_provider = Arc::new(
+            ExchangeMarketDataProvider::new(self.exchange_registry.clone())
+                .with_kline_engine(self.kline_engine.clone())
+                .with_pe_exchange(pe_exchange_ref.clone()),
+        );
         let grid_order_executor = Arc::new(PeOrderExecutor::new(
             pe_cmd_tx.clone(),
             grid_event_tx.clone(),
             grid_pe_event_rx,
             position_engine_clone.clone(),
         ));
-        let grid_credential_store: Arc<dyn virs_types::bot::CredentialStore> = Arc::new(PgCredentialStore::new(
-            self.db_pool.clone(),
-            virs_utils::crypto::derive_key(&self.encryption_key),
-        ));
-        let grid_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> = Arc::new(DefaultLlmResolver::new(self.ai_config.clone()));
+        let grid_credential_store: Arc<dyn virs_types::bot::CredentialStore> =
+            Arc::new(PgCredentialStore::new(
+                self.db_pool.clone(),
+                virs_utils::crypto::derive_key(&self.encryption_key),
+            ));
+        let grid_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> =
+            Arc::new(DefaultLlmResolver::new(self.ai_config.clone()));
         let grid_ai_service = Arc::new(virs_bot::grid::ai::GridAiService::new(
             grid_llm_resolver,
             grid_credential_store,
@@ -201,11 +211,16 @@ impl EngineManager for AppEngineManager {
                         kline_symbols.into_iter().map(|(e, s, _)| (e, s)).collect()
                     };
                     for (exchange, symbol) in symbols {
-                        if let Some(price) = price_provider_for_paper.get_price(&exchange, &symbol, "perpetual").await {
-                            let _ = pe_cmd_tx_for_tick.send(EngineCommand::PriceTick {
-                                symbol: symbol.clone(),
-                                price,
-                            }).await;
+                        if let Some(price) = price_provider_for_paper
+                            .get_price(&exchange, &symbol, "perpetual")
+                            .await
+                        {
+                            let _ = pe_cmd_tx_for_tick
+                                .send(EngineCommand::PriceTick {
+                                    symbol: symbol.clone(),
+                                    price,
+                                })
+                                .await;
                         }
                     }
                 }
@@ -219,11 +234,15 @@ impl EngineManager for AppEngineManager {
 
         // ── Auto Trade Engine ──
         let auto_store = Arc::new(PgAutoStore::new(self.db_pool.clone()));
-        let auto_price_provider = Arc::new(AutoExchangePriceProvider::new(self.exchange_registry.clone())
-            .with_kline_engine(self.kline_engine.clone()));
-        let auto_market_data_provider = Arc::new(AutoExchangeMarketDataProvider::new(self.exchange_registry.clone())
-            .with_kline_engine(self.kline_engine.clone())
-            .with_pe_exchange(pe_exchange_ref.clone()));
+        let auto_price_provider = Arc::new(
+            AutoExchangePriceProvider::new(self.exchange_registry.clone())
+                .with_kline_engine(self.kline_engine.clone()),
+        );
+        let auto_market_data_provider = Arc::new(
+            AutoExchangeMarketDataProvider::new(self.exchange_registry.clone())
+                .with_kline_engine(self.kline_engine.clone())
+                .with_pe_exchange(pe_exchange_ref.clone()),
+        );
         let (auto_order_event_tx, _) = tokio::sync::broadcast::channel::<OrderEvent>(256);
         let auto_order_executor = Arc::new(PeOrderExecutor::new(
             pe_cmd_tx.clone(),
@@ -231,11 +250,13 @@ impl EngineManager for AppEngineManager {
             auto_pe_event_rx,
             position_engine_clone.clone(),
         ));
-        let auto_credential_store: Arc<dyn virs_types::bot::CredentialStore> = Arc::new(PgCredentialStore::new(
-            self.db_pool.clone(),
-            virs_utils::crypto::derive_key(&self.encryption_key),
-        ));
-        let auto_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> = Arc::new(DefaultLlmResolver::new(self.ai_config.clone()));
+        let auto_credential_store: Arc<dyn virs_types::bot::CredentialStore> =
+            Arc::new(PgCredentialStore::new(
+                self.db_pool.clone(),
+                virs_utils::crypto::derive_key(&self.encryption_key),
+            ));
+        let auto_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> =
+            Arc::new(DefaultLlmResolver::new(self.ai_config.clone()));
         let auto_ai_service = Arc::new(virs_bot::auto::ai::AutoAiService::new(
             auto_llm_resolver,
             auto_credential_store,
@@ -260,32 +281,36 @@ impl EngineManager for AppEngineManager {
                     match auto_event_rx.recv().await {
                         Ok(event) => {
                             let ws_json = match &event {
-                                AutoEvent::PositionOpened { bot_id, side, price, quantity } => {
-                                    Some(serde_json::json!({
-                                        "type": "position",
-                                        "bot_id": bot_id.to_string(),
-                                        "side": side,
-                                        "entry_price": price,
-                                        "size": quantity,
-                                        "action": "opened",
-                                    }))
-                                }
-                                AutoEvent::PositionClosed { bot_id, side, price, pnl } => {
-                                    Some(serde_json::json!({
-                                        "type": "trade",
-                                        "bot_id": bot_id.to_string(),
-                                        "side": side,
-                                        "price": price,
-                                        "pnl": pnl,
-                                    }))
-                                }
-                                AutoEvent::BotStarted { bot_id } => {
-                                    Some(serde_json::json!({
-                                        "type": "bot_status",
-                                        "bot_id": bot_id.to_string(),
-                                        "status": "running",
-                                    }))
-                                }
+                                AutoEvent::PositionOpened {
+                                    bot_id,
+                                    side,
+                                    price,
+                                    quantity,
+                                } => Some(serde_json::json!({
+                                    "type": "position",
+                                    "bot_id": bot_id.to_string(),
+                                    "side": side,
+                                    "entry_price": price,
+                                    "size": quantity,
+                                    "action": "opened",
+                                })),
+                                AutoEvent::PositionClosed {
+                                    bot_id,
+                                    side,
+                                    price,
+                                    pnl,
+                                } => Some(serde_json::json!({
+                                    "type": "trade",
+                                    "bot_id": bot_id.to_string(),
+                                    "side": side,
+                                    "price": price,
+                                    "pnl": pnl,
+                                })),
+                                AutoEvent::BotStarted { bot_id } => Some(serde_json::json!({
+                                    "type": "bot_status",
+                                    "bot_id": bot_id.to_string(),
+                                    "status": "running",
+                                })),
                                 AutoEvent::BotStopped { bot_id, reason } => {
                                     Some(serde_json::json!({
                                         "type": "bot_status",
@@ -293,13 +318,11 @@ impl EngineManager for AppEngineManager {
                                         "status": reason,
                                     }))
                                 }
-                                AutoEvent::BotError { bot_id, error } => {
-                                    Some(serde_json::json!({
-                                        "type": "notification",
-                                        "level": "error",
-                                        "message": format!("Bot {}: {}", bot_id, error),
-                                    }))
-                                }
+                                AutoEvent::BotError { bot_id, error } => Some(serde_json::json!({
+                                    "type": "notification",
+                                    "level": "error",
+                                    "message": format!("Bot {}: {}", bot_id, error),
+                                })),
                                 _ => None,
                             };
                             if let Some(json) = ws_json {
@@ -386,7 +409,8 @@ impl EngineManager for AppEngineManager {
 
     fn get_positions_by_symbol(&self, symbol: &str) -> Vec<virs_types::position::Position> {
         match self.state.get() {
-            Some(s) => s.position_engine
+            Some(s) => s
+                .position_engine
                 .get_all_positions()
                 .into_iter()
                 .filter(|p| p.symbol == symbol)
@@ -403,19 +427,15 @@ impl EngineManager for AppEngineManager {
 
         // Check if any bots exist in DB
         let has_bots: bool = {
-            let grid_count: i64 = sqlx::query_scalar(
-                r#"SELECT COUNT(*) FROM qd_grid_bots"#,
-            )
-            .fetch_one(&self.db_pool)
-            .await
-            .unwrap_or(0);
+            let grid_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_grid_bots"#)
+                .fetch_one(&self.db_pool)
+                .await
+                .unwrap_or(0);
 
-            let auto_count: i64 = sqlx::query_scalar(
-                r#"SELECT COUNT(*) FROM qd_auto_bots"#,
-            )
-            .fetch_one(&self.db_pool)
-            .await
-            .unwrap_or(0);
+            let auto_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_auto_bots"#)
+                .fetch_one(&self.db_pool)
+                .await
+                .unwrap_or(0);
 
             grid_count + auto_count > 0
         };
@@ -452,7 +472,9 @@ impl EngineManager for AppEngineManager {
                     continue;
                 }
             };
-            let passphrase = enc_passphrase.as_ref().and_then(|p| virs_utils::crypto::decrypt(p, &derived_key).ok());
+            let passphrase = enc_passphrase
+                .as_ref()
+                .and_then(|p| virs_utils::crypto::decrypt(p, &derived_key).ok());
 
             // Try both market types (perpetual first, then spot)
             for mt_str in &["perpetual", "spot"] {
@@ -467,7 +489,12 @@ impl EngineManager for AppEngineManager {
                 };
 
                 if let Ok(ccxt_ex) = virs_ccxt::create_exchange(
-                    exchange, &api_key, &api_secret, passphrase.as_deref(), None, &ccxt_mt,
+                    exchange,
+                    &api_key,
+                    &api_secret,
+                    passphrase.as_deref(),
+                    None,
+                    &ccxt_mt,
                 ) {
                     let app_mt = match *mt_str {
                         "spot" => MarketType::Spot,
@@ -498,14 +525,27 @@ impl EngineManager for AppEngineManager {
                 _ => virs_models::MarketType::Perpetual,
             };
             if let Err(e) = self.kline_engine.subscribe(exchange, symbol, mt).await {
-                tracing::warn!(exchange, symbol, "Failed to restore kline subscription: {}", e);
+                tracing::warn!(
+                    exchange,
+                    symbol,
+                    "Failed to restore kline subscription: {}",
+                    e
+                );
             } else {
                 info!(exchange, symbol, market_type, "Restored kline subscription");
             }
             if let Err(e) = self.orderbook_engine.subscribe(exchange, symbol, mt).await {
-                tracing::warn!(exchange, symbol, "Failed to restore orderbook subscription: {}", e);
+                tracing::warn!(
+                    exchange,
+                    symbol,
+                    "Failed to restore orderbook subscription: {}",
+                    e
+                );
             } else {
-                info!(exchange, symbol, market_type, "Restored orderbook subscription");
+                info!(
+                    exchange,
+                    symbol, market_type, "Restored orderbook subscription"
+                );
             }
         }
 
@@ -516,7 +556,10 @@ impl EngineManager for AppEngineManager {
         if let Err(e) = self.ensure_started(paper_mode).await {
             tracing::error!("Failed to restore engines: {}", e);
         } else {
-            info!("Services restored successfully ({} bot symbols subscribed)", bot_symbols.len());
+            info!(
+                "Services restored successfully ({} bot symbols subscribed)",
+                bot_symbols.len()
+            );
         }
     }
 }

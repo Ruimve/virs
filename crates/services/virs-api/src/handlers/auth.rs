@@ -1,12 +1,8 @@
 //! Auth handlers — login, logout, user info.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
 
-use crate::handlers::response::{ApiResponse, extract_user_id};
+use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
 /// Login request
@@ -93,22 +89,37 @@ pub async fn login(
     });
 
     let header = jsonwebtoken::Header::default();
-    let token = jsonwebtoken::encode(&header, &claims, &jsonwebtoken::EncodingKey::from_secret(secret.as_bytes()))
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::err(format!("JWT error: {}", e))),
-            )
-        })?;
+    let token = jsonwebtoken::encode(
+        &header,
+        &claims,
+        &jsonwebtoken::EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::err(format!("JWT error: {}", e))),
+        )
+    })?;
 
-    Ok(Json(ApiResponse::ok(serde_json::to_value(LoginResponse {
-        token,
-        user: UserInfo { id, username, role, email, is_active },
-    }).unwrap_or_default())))
+    Ok(Json(ApiResponse::ok(
+        serde_json::to_value(LoginResponse {
+            token,
+            user: UserInfo {
+                id,
+                username,
+                role,
+                email,
+                is_active,
+            },
+        })
+        .unwrap_or_default(),
+    )))
 }
 
 pub async fn logout() -> Json<ApiResponse> {
-    Json(ApiResponse::ok(serde_json::json!({"message": "Logged out"})))
+    Json(ApiResponse::ok(
+        serde_json::json!({"message": "Logged out"}),
+    ))
 }
 
 pub async fn get_user_info(

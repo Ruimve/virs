@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use virs_types::bot::{CredentialStore, BotError, BotResult};
+use virs_types::bot::{BotError, BotResult, CredentialStore};
 
 pub struct PgCredentialStore {
     db: PgPool,
@@ -19,7 +19,10 @@ impl PgCredentialStore {
 
 #[async_trait]
 impl CredentialStore for PgCredentialStore {
-    async fn load_credentials(&self, user_id: Uuid) -> BotResult<Vec<(String, String, Option<String>)>> {
+    async fn load_credentials(
+        &self,
+        user_id: Uuid,
+    ) -> BotResult<Vec<(String, String, Option<String>)>> {
         #[derive(Debug, sqlx::FromRow)]
         struct Row {
             provider: String,
@@ -37,8 +40,9 @@ impl CredentialStore for PgCredentialStore {
 
         let mut result = Vec::new();
         for row in rows {
-            let decrypted = virs_utils::crypto::decrypt(&row.encrypted_api_key, &self.encryption_key)
-                .map_err(|e| BotError::Credential(format!("Decryption failed: {}", e)))?;
+            let decrypted =
+                virs_utils::crypto::decrypt(&row.encrypted_api_key, &self.encryption_key)
+                    .map_err(|e| BotError::Credential(format!("Decryption failed: {}", e)))?;
             result.push((row.provider, decrypted, row.model));
         }
         Ok(result)

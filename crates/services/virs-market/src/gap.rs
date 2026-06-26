@@ -5,9 +5,11 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing;
 
-use super::cache::SymbolCache;
-use super::types::{Candle, Timeframe, KlineEvent, KlineEventType, MarketType, KlineSource, align_open_time};
 use super::aggregator::Aggregator;
+use super::cache::SymbolCache;
+use super::types::{
+    align_open_time, Candle, KlineEvent, KlineEventType, KlineSource, MarketType, Timeframe,
+};
 
 pub struct GapDetector;
 
@@ -32,8 +34,13 @@ impl GapDetector {
         let expected_next = match last_closed_1m {
             Some(c) => c.open_time + 60_000,
             None => {
-                tracing::debug!("[GapDetector] No 1m candles in cache for {}/{}, loading initial data", exchange, symbol);
-                return Self::initial_load(exchange, symbol, cache, source, event_tx, market_type).await;
+                tracing::debug!(
+                    "[GapDetector] No 1m candles in cache for {}/{}, loading initial data",
+                    exchange,
+                    symbol
+                );
+                return Self::initial_load(exchange, symbol, cache, source, event_tx, market_type)
+                    .await;
             }
         };
 
@@ -47,13 +54,31 @@ impl GapDetector {
         let gap_end = current_1m_open;
         let gap_minutes = ((gap_end - gap_start) / 60_000) as u32;
 
-        tracing::debug!("[GapDetector] Gap detected for {}/{}: {} minutes", exchange, symbol, gap_minutes);
+        tracing::debug!(
+            "[GapDetector] Gap detected for {}/{}: {} minutes",
+            exchange,
+            symbol,
+            gap_minutes
+        );
 
         let limit = gap_minutes.min(1000);
-        let fetched = source.fetch_klines(exchange, symbol, "1m", limit, Some(gap_start), Some(market_type)).await?;
+        let fetched = source
+            .fetch_klines(
+                exchange,
+                symbol,
+                "1m",
+                limit,
+                Some(gap_start),
+                Some(market_type),
+            )
+            .await?;
 
         if fetched.is_empty() {
-            tracing::warn!("[GapDetector] No data returned for gap backfill: {}/{}", exchange, symbol);
+            tracing::warn!(
+                "[GapDetector] No data returned for gap backfill: {}/{}",
+                exchange,
+                symbol
+            );
             return Ok(0);
         }
 
@@ -70,13 +95,23 @@ impl GapDetector {
 
             if backfilled_count > 0 {
                 let all_1m = guard.get_klines(Timeframe::M1);
-                [Timeframe::M5, Timeframe::M15, Timeframe::H1, Timeframe::H4, Timeframe::D1]
-                    .iter()
-                    .filter_map(|&tf| {
-                        let aggregated = Aggregator::aggregate_1m_to_timeframe(&all_1m, tf);
-                        if aggregated.is_empty() { None } else { Some((tf, aggregated)) }
-                    })
-                    .collect()
+                [
+                    Timeframe::M5,
+                    Timeframe::M15,
+                    Timeframe::H1,
+                    Timeframe::H4,
+                    Timeframe::D1,
+                ]
+                .iter()
+                .filter_map(|&tf| {
+                    let aggregated = Aggregator::aggregate_1m_to_timeframe(&all_1m, tf);
+                    if aggregated.is_empty() {
+                        None
+                    } else {
+                        Some((tf, aggregated))
+                    }
+                })
+                .collect()
             } else {
                 Vec::new()
             }
@@ -95,14 +130,27 @@ impl GapDetector {
                 symbol: symbol.to_string(),
                 timeframe: Timeframe::M1,
                 candle: fetched.last().cloned().unwrap_or_else(|| Candle {
-                    open_time: 0, close_time: 0, open: 0.0, high: 0.0, low: 0.0,
-                    close: 0.0, volume: 0.0, quote_volume: 0.0, trades: 0, closed: false,
+                    open_time: 0,
+                    close_time: 0,
+                    open: 0.0,
+                    high: 0.0,
+                    low: 0.0,
+                    close: 0.0,
+                    volume: 0.0,
+                    quote_volume: 0.0,
+                    trades: 0,
+                    closed: false,
                 }),
                 event_type: KlineEventType::Backfilled,
             });
         }
 
-        tracing::debug!("[GapDetector] Backfilled {} candles for {}/{}", backfilled_count, exchange, symbol);
+        tracing::debug!(
+            "[GapDetector] Backfilled {} candles for {}/{}",
+            backfilled_count,
+            exchange,
+            symbol
+        );
         Ok(backfilled_count)
     }
 
@@ -116,19 +164,68 @@ impl GapDetector {
     ) -> anyhow::Result<usize> {
         tracing::debug!("[GapDetector] Initial load for {}/{}", exchange, symbol);
 
-        let (result_1m, results_high): (anyhow::Result<Vec<Candle>>, Vec<(Timeframe, anyhow::Result<Vec<Candle>>)>) = {
-            let fetch_1m = source.fetch_klines(exchange, symbol, "1m", INITIAL_1M_LIMIT, None, Some(market_type.clone()));
-            let fetch_m5 = source.fetch_klines(exchange, symbol, "5m", INITIAL_HIGH_TF_LIMIT, None, Some(market_type.clone()));
-            let fetch_m15 = source.fetch_klines(exchange, symbol, "15m", INITIAL_HIGH_TF_LIMIT, None, Some(market_type.clone()));
-            let fetch_h1 = source.fetch_klines(exchange, symbol, "1h", INITIAL_HIGH_TF_LIMIT, None, Some(market_type.clone()));
-            let fetch_h4 = source.fetch_klines(exchange, symbol, "4h", INITIAL_HIGH_TF_LIMIT, None, Some(market_type.clone()));
-            let fetch_d1 = source.fetch_klines(exchange, symbol, "1d", INITIAL_HIGH_TF_LIMIT, None, Some(market_type.clone()));
+        let (result_1m, results_high): (
+            anyhow::Result<Vec<Candle>>,
+            Vec<(Timeframe, anyhow::Result<Vec<Candle>>)>,
+        ) = {
+            let fetch_1m = source.fetch_klines(
+                exchange,
+                symbol,
+                "1m",
+                INITIAL_1M_LIMIT,
+                None,
+                Some(market_type.clone()),
+            );
+            let fetch_m5 = source.fetch_klines(
+                exchange,
+                symbol,
+                "5m",
+                INITIAL_HIGH_TF_LIMIT,
+                None,
+                Some(market_type.clone()),
+            );
+            let fetch_m15 = source.fetch_klines(
+                exchange,
+                symbol,
+                "15m",
+                INITIAL_HIGH_TF_LIMIT,
+                None,
+                Some(market_type.clone()),
+            );
+            let fetch_h1 = source.fetch_klines(
+                exchange,
+                symbol,
+                "1h",
+                INITIAL_HIGH_TF_LIMIT,
+                None,
+                Some(market_type.clone()),
+            );
+            let fetch_h4 = source.fetch_klines(
+                exchange,
+                symbol,
+                "4h",
+                INITIAL_HIGH_TF_LIMIT,
+                None,
+                Some(market_type.clone()),
+            );
+            let fetch_d1 = source.fetch_klines(
+                exchange,
+                symbol,
+                "1d",
+                INITIAL_HIGH_TF_LIMIT,
+                None,
+                Some(market_type.clone()),
+            );
 
-            let (r_1m, r_m5, r_m15, r_h1, r_h4, r_d1) = tokio::join!(fetch_1m, fetch_m5, fetch_m15, fetch_h1, fetch_h4, fetch_d1);
+            let (r_1m, r_m5, r_m15, r_h1, r_h4, r_d1) =
+                tokio::join!(fetch_1m, fetch_m5, fetch_m15, fetch_h1, fetch_h4, fetch_d1);
 
             let high = vec![
-                (Timeframe::M5, r_m5), (Timeframe::M15, r_m15),
-                (Timeframe::H1, r_h1), (Timeframe::H4, r_h4), (Timeframe::D1, r_d1),
+                (Timeframe::M5, r_m5),
+                (Timeframe::M15, r_m15),
+                (Timeframe::H1, r_h1),
+                (Timeframe::H4, r_h4),
+                (Timeframe::D1, r_d1),
             ];
             (r_1m, high)
         };
@@ -136,32 +233,52 @@ impl GapDetector {
         let candles_1m = match result_1m {
             Ok(c) if !c.is_empty() => c,
             Ok(_) => {
-                return Err(anyhow::anyhow!("No 1m candles returned for {}/{}", exchange, symbol));
+                return Err(anyhow::anyhow!(
+                    "No 1m candles returned for {}/{}",
+                    exchange,
+                    symbol
+                ));
             }
             Err(e) => {
                 return Err(e);
             }
         };
 
-        tracing::debug!("[GapDetector] Loaded {} 1m candles for {}/{}", candles_1m.len(), exchange, symbol);
+        tracing::debug!(
+            "[GapDetector] Loaded {} 1m candles for {}/{}",
+            candles_1m.len(),
+            exchange,
+            symbol
+        );
 
         let now_ms = chrono::Utc::now().timestamp_millis();
         let current_1m_open = (now_ms / 60_000) * 60_000;
 
-        let unclosed_high: Vec<(Timeframe, Candle)> = [Timeframe::M5, Timeframe::M15, Timeframe::H1, Timeframe::H4, Timeframe::D1]
-            .iter()
-            .filter_map(|&tf| {
-                let current_tf_open = align_open_time(current_1m_open, tf);
-                let relevant: Vec<Candle> = candles_1m.iter()
-                    .filter(|c| c.open_time >= current_tf_open)
-                    .cloned()
-                    .collect();
-                if relevant.is_empty() { return None; }
-                let mut agg = Aggregator::aggregate_1m_to_timeframe(&relevant, tf);
-                if let Some(last) = agg.last_mut() { last.closed = false; }
-                agg.last().cloned().map(|c| (tf, c))
-            })
-            .collect();
+        let unclosed_high: Vec<(Timeframe, Candle)> = [
+            Timeframe::M5,
+            Timeframe::M15,
+            Timeframe::H1,
+            Timeframe::H4,
+            Timeframe::D1,
+        ]
+        .iter()
+        .filter_map(|&tf| {
+            let current_tf_open = align_open_time(current_1m_open, tf);
+            let relevant: Vec<Candle> = candles_1m
+                .iter()
+                .filter(|c| c.open_time >= current_tf_open)
+                .cloned()
+                .collect();
+            if relevant.is_empty() {
+                return None;
+            }
+            let mut agg = Aggregator::aggregate_1m_to_timeframe(&relevant, tf);
+            if let Some(last) = agg.last_mut() {
+                last.closed = false;
+            }
+            agg.last().cloned().map(|c| (tf, c))
+        })
+        .collect();
 
         let mut total = 0;
         {
@@ -193,20 +310,34 @@ impl GapDetector {
 
                         tracing::debug!(
                             "[GapDetector] Loaded {} {} candles for {}/{}",
-                            final_candles.len(), tf.as_str(), exchange, symbol
+                            final_candles.len(),
+                            tf.as_str(),
+                            exchange,
+                            symbol
                         );
                         guard.replace_timeframe(*tf, final_candles);
                         total += guard.get_klines(*tf).len();
                     }
                     Ok(_) => {
-                        tracing::warn!("[GapDetector] No {} candles for {}/{}", tf.as_str(), exchange, symbol);
+                        tracing::warn!(
+                            "[GapDetector] No {} candles for {}/{}",
+                            tf.as_str(),
+                            exchange,
+                            symbol
+                        );
                         if let Some(unclosed) = unclosed_high.iter().find(|(t, _)| *t == *tf) {
                             guard.replace_timeframe(*tf, vec![unclosed.1.clone()]);
                             total += 1;
                         }
                     }
                     Err(e) => {
-                        tracing::error!("[GapDetector] Failed to load {} candles for {}/{}: {}", tf.as_str(), exchange, symbol, e);
+                        tracing::error!(
+                            "[GapDetector] Failed to load {} candles for {}/{}: {}",
+                            tf.as_str(),
+                            exchange,
+                            symbol,
+                            e
+                        );
                         if let Some(unclosed) = unclosed_high.iter().find(|(t, _)| *t == *tf) {
                             guard.replace_timeframe(*tf, vec![unclosed.1.clone()]);
                             total += 1;
@@ -222,8 +353,16 @@ impl GapDetector {
                 symbol: symbol.to_string(),
                 timeframe: Timeframe::M1,
                 candle: candles_1m.last().cloned().unwrap_or_else(|| Candle {
-                    open_time: 0, close_time: 0, open: 0.0, high: 0.0, low: 0.0,
-                    close: 0.0, volume: 0.0, quote_volume: 0.0, trades: 0, closed: false,
+                    open_time: 0,
+                    close_time: 0,
+                    open: 0.0,
+                    high: 0.0,
+                    low: 0.0,
+                    close: 0.0,
+                    volume: 0.0,
+                    quote_volume: 0.0,
+                    trades: 0,
+                    closed: false,
                 }),
                 event_type: KlineEventType::Backfilled,
             });

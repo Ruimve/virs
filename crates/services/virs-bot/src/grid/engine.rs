@@ -39,7 +39,11 @@ impl GridEngine {
         order_executor: Arc<dyn OrderExecutor>,
         market_data_provider: Arc<dyn MarketDataProvider>,
         event_tx: broadcast::Sender<OrderEvent>,
-    ) -> (Self, mpsc::Sender<GridCommand>, broadcast::Sender<GridEvent>) {
+    ) -> (
+        Self,
+        mpsc::Sender<GridCommand>,
+        broadcast::Sender<GridEvent>,
+    ) {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
         let (grid_event_tx, _) = broadcast::channel(256);
 
@@ -77,7 +81,10 @@ impl GridEngine {
                 GridCommand::StopBot { bot_id } => self.stop_bot(bot_id, "user requested").await,
                 GridCommand::PauseBot { bot_id } => self.pause_bot(bot_id).await,
                 GridCommand::ResumeBot { bot_id } => self.resume_bot(bot_id).await,
-                GridCommand::DeleteBot { bot_id, close_position } => self.delete_bot(bot_id, close_position).await,
+                GridCommand::DeleteBot {
+                    bot_id,
+                    close_position,
+                } => self.delete_bot(bot_id, close_position).await,
                 GridCommand::AdjustGrid { bot_id } => self.adjust_grid(bot_id).await,
                 GridCommand::Shutdown => {
                     self.shutdown_all().await;
@@ -105,8 +112,14 @@ impl GridEngine {
 
         let bot = match self.store.load_bot(bot_id).await {
             Ok(Some(b)) => b,
-            Ok(None) => { warn!(bot_id = %bot_id, "Bot not found"); return; }
-            Err(e) => { warn!(bot_id = %bot_id, error = %e, "Failed to load bot"); return; }
+            Ok(None) => {
+                warn!(bot_id = %bot_id, "Bot not found");
+                return;
+            }
+            Err(e) => {
+                warn!(bot_id = %bot_id, error = %e, "Failed to load bot");
+                return;
+            }
         };
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>(1);
@@ -122,8 +135,14 @@ impl GridEngine {
 
         let handle = tokio::spawn(async move {
             let mut worker = GridWorker::new(
-                bot, price_provider, order_executor, ai_service, store,
-                market_data_provider, event_rx, grid_event_tx,
+                bot,
+                price_provider,
+                order_executor,
+                ai_service,
+                store,
+                market_data_provider,
+                event_rx,
+                grid_event_tx,
             );
             worker.run(shutdown_rx, adjust_rx).await;
         });
@@ -148,13 +167,19 @@ impl GridEngine {
 
     async fn stop_or_pause_bot(&mut self, bot_id: Uuid, reason: &str, target_status: &str) {
         let cancel_symbol = self.bot_symbols.get(&bot_id).cloned();
-        let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
-            symbol: cancel_symbol,
-        }).await;
+        let _ = self
+            .order_executor
+            .send_command(OrderCommand::CancelAllOrders {
+                symbol: cancel_symbol,
+            })
+            .await;
 
         self.graceful_shutdown_worker(bot_id).await;
         let _ = self.store.update_bot_status(bot_id, target_status).await;
-        let _ = self.grid_event_tx.send(GridEvent::BotStopped { bot_id, reason: reason.to_string() });
+        let _ = self.grid_event_tx.send(GridEvent::BotStopped {
+            bot_id,
+            reason: reason.to_string(),
+        });
         info!(bot_id = %bot_id, "Grid bot {}: {}", target_status, reason);
     }
 
@@ -167,9 +192,16 @@ impl GridEngine {
         if let Some(handle) = self.workers.remove(&bot_id) {
             let abort_handle = handle.abort_handle();
             match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
-                Ok(Ok(())) => { info!(bot_id = %bot_id, "Grid worker exited gracefully"); }
-                Ok(Err(e)) => { warn!(bot_id = %bot_id, error = %e, "Grid worker exited with error"); }
-                Err(_) => { abort_handle.abort(); warn!(bot_id = %bot_id, "Grid worker shutdown timed out, aborted"); }
+                Ok(Ok(())) => {
+                    info!(bot_id = %bot_id, "Grid worker exited gracefully");
+                }
+                Ok(Err(e)) => {
+                    warn!(bot_id = %bot_id, error = %e, "Grid worker exited with error");
+                }
+                Err(_) => {
+                    abort_handle.abort();
+                    warn!(bot_id = %bot_id, "Grid worker shutdown timed out, aborted");
+                }
             }
         }
     }
@@ -186,12 +218,19 @@ impl GridEngine {
 
         if close_position {
             if let (Some(ref sym), Some(ref ex)) = (&symbol, &exchange) {
-                let _ = self.order_executor.send_command(OrderCommand::CancelAllOrders {
-                    symbol: Some(sym.clone()),
-                }).await;
-                let _ = self.order_executor.send_command(OrderCommand::CloseAllPositions {
-                    symbol: sym.clone(), exchange: ex.clone(),
-                }).await;
+                let _ = self
+                    .order_executor
+                    .send_command(OrderCommand::CancelAllOrders {
+                        symbol: Some(sym.clone()),
+                    })
+                    .await;
+                let _ = self
+                    .order_executor
+                    .send_command(OrderCommand::CloseAllPositions {
+                        symbol: sym.clone(),
+                        exchange: ex.clone(),
+                    })
+                    .await;
             }
         }
 

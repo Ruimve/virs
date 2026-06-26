@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use axum::extract::FromRef;
 use tokio::sync::{broadcast, mpsc};
 
-use virs_bot::grid::types::GridCommand;
 use virs_bot::auto::types::AutoCommand;
+use virs_bot::grid::types::GridCommand;
 use virs_exchange::Exchanges;
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_types::position::EngineEvent;

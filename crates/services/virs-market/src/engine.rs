@@ -13,21 +13,32 @@ use tracing;
 use crate::aggregator::Aggregator;
 use crate::cache::SymbolCache;
 use crate::gap::GapDetector;
-use crate::types::{
-    Candle, KlineEngineConfig, KlineEvent, KlineEventType, MarketType, Timeframe,
-    AllTimeframesData, BacktestRangeInfo, BacktestRangeLimit, KlineWsClient, KlineSource,
-    KlinePersistence, WsEvent, subscription_key,
-};
 pub use crate::source::ExchangeKlineSource;
+use crate::types::{
+    subscription_key, AllTimeframesData, BacktestRangeInfo, BacktestRangeLimit, Candle,
+    KlineEngineConfig, KlineEvent, KlineEventType, KlinePersistence, KlineSource, KlineWsClient,
+    MarketType, Timeframe, WsEvent,
+};
 
 struct NoOpPersistence;
 
 #[async_trait]
 impl KlinePersistence for NoOpPersistence {
-    async fn save_candles(&self, _exchange: &str, _symbol: &str, _timeframe: &str, _candles: &[Candle]) -> anyhow::Result<()> {
+    async fn save_candles(
+        &self,
+        _exchange: &str,
+        _symbol: &str,
+        _timeframe: &str,
+        _candles: &[Candle],
+    ) -> anyhow::Result<()> {
         Ok(())
     }
-    async fn load_candles(&self, _exchange: &str, _symbol: &str, _timeframe: &str) -> anyhow::Result<Vec<Candle>> {
+    async fn load_candles(
+        &self,
+        _exchange: &str,
+        _symbol: &str,
+        _timeframe: &str,
+    ) -> anyhow::Result<Vec<Candle>> {
         Ok(Vec::new())
     }
 }
@@ -118,7 +129,10 @@ impl KlineEngine {
     }
 
     pub async fn start(&self) {
-        if self.started.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        if self
+            .started
+            .swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
             return;
         }
 
@@ -148,12 +162,21 @@ impl KlineEngine {
             while started.load(std::sync::atomic::Ordering::Relaxed) {
                 match ws_update_rx.recv().await {
                     Ok(WsEvent::Reconnected) => {
-                        tracing::debug!("[KlineEngine] WS reconnected, triggering continuity check");
+                        tracing::debug!(
+                            "[KlineEngine] WS reconnected, triggering continuity check"
+                        );
                         for entry in subscriptions.iter() {
                             let sub = entry.value();
                             match GapDetector::detect_and_backfill(
-                                &sub.exchange, &sub.symbol, &sub.cache, &source, &event_tx, sub.market_type,
-                            ).await {
+                                &sub.exchange,
+                                &sub.symbol,
+                                &sub.cache,
+                                &source,
+                                &event_tx,
+                                sub.market_type,
+                            )
+                            .await
+                            {
                                 Ok(count) if count > 0 => {
                                     tracing::debug!("[KlineEngine] Post-reconnect backfill: {} candles for {}/{}", count, sub.exchange, sub.symbol);
                                 }
@@ -181,7 +204,10 @@ impl KlineEngine {
 
                         tracing::debug!(
                             "[KlineEngine] WS 1m candle: {} open_time={} close={:.2} closed={}",
-                            symbol, candle_1m.open_time, candle_1m.close, is_closed
+                            symbol,
+                            candle_1m.open_time,
+                            candle_1m.close,
+                            is_closed
                         );
 
                         let (exchange, persist_data, higher_updates) = {
@@ -190,7 +216,8 @@ impl KlineEngine {
                             if is_closed {
                                 guard.close_candle(Timeframe::M1, candle_1m.open_time);
                             }
-                            let higher_updates = Aggregator::update_higher_timeframes(&candle_1m, &mut guard);
+                            let higher_updates =
+                                Aggregator::update_higher_timeframes(&candle_1m, &mut guard);
                             let exchange = match subscriptions.get(&sub_key) {
                                 Some(e) => e.exchange.clone(),
                                 None => continue,
@@ -203,7 +230,11 @@ impl KlineEngine {
                             (exchange, persist_data, higher_updates)
                         };
 
-                        let event_type = if is_closed { KlineEventType::Closed } else { KlineEventType::Update };
+                        let event_type = if is_closed {
+                            KlineEventType::Closed
+                        } else {
+                            KlineEventType::Update
+                        };
 
                         let _ = event_tx.send(KlineEvent {
                             exchange: exchange.clone(),
@@ -214,7 +245,11 @@ impl KlineEngine {
                         });
 
                         for (tf, candle) in higher_updates {
-                            let ht_event_type = if candle.closed { KlineEventType::Closed } else { KlineEventType::Update };
+                            let ht_event_type = if candle.closed {
+                                KlineEventType::Closed
+                            } else {
+                                KlineEventType::Update
+                            };
                             let _ = event_tx.send(KlineEvent {
                                 exchange: exchange.clone(),
                                 symbol: symbol.clone(),
@@ -225,7 +260,9 @@ impl KlineEngine {
                         }
 
                         if let Some(data) = persist_data {
-                            let _ = persistence.save_candles(&exchange, &symbol, "1m", data.as_slice()).await;
+                            let _ = persistence
+                                .save_candles(&exchange, &symbol, "1m", data.as_slice())
+                                .await;
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {
@@ -251,18 +288,41 @@ impl KlineEngine {
 
                 for entry in gap_check_subscriptions.iter() {
                     let sub = entry.value();
-                    let report = GapDetector::check_continuity(&sub.exchange, &sub.symbol, &sub.cache).await;
+                    let report =
+                        GapDetector::check_continuity(&sub.exchange, &sub.symbol, &sub.cache).await;
 
                     if !report.is_continuous {
-                        tracing::debug!("[KlineEngine] Gap detected for {}/{}: {} minutes", sub.exchange, sub.symbol, report.missing_minutes);
+                        tracing::debug!(
+                            "[KlineEngine] Gap detected for {}/{}: {} minutes",
+                            sub.exchange,
+                            sub.symbol,
+                            report.missing_minutes
+                        );
                         match GapDetector::detect_and_backfill(
-                            &sub.exchange, &sub.symbol, &sub.cache, &gap_check_source, &gap_check_event_tx, sub.market_type,
-                        ).await {
+                            &sub.exchange,
+                            &sub.symbol,
+                            &sub.cache,
+                            &gap_check_source,
+                            &gap_check_event_tx,
+                            sub.market_type,
+                        )
+                        .await
+                        {
                             Ok(count) => {
-                                tracing::debug!("[KlineEngine] Backfilled {} candles for {}/{}", count, sub.exchange, sub.symbol);
+                                tracing::debug!(
+                                    "[KlineEngine] Backfilled {} candles for {}/{}",
+                                    count,
+                                    sub.exchange,
+                                    sub.symbol
+                                );
                             }
                             Err(e) => {
-                                tracing::error!("[KlineEngine] Backfill failed for {}/{}: {}", sub.exchange, sub.symbol, e);
+                                tracing::error!(
+                                    "[KlineEngine] Backfill failed for {}/{}: {}",
+                                    sub.exchange,
+                                    sub.symbol,
+                                    e
+                                );
                             }
                         }
                     }
@@ -276,7 +336,10 @@ impl KlineEngine {
     }
 
     pub async fn stop(&self) {
-        if !self.started.swap(false, std::sync::atomic::Ordering::Relaxed) {
+        if !self
+            .started
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+        {
             return;
         }
         tracing::debug!("[KlineEngine] Stopping...");
@@ -299,7 +362,11 @@ impl KlineEngine {
         let key = subscription_key(exchange, symbol);
 
         if self.subscriptions.contains_key(&key) {
-            tracing::debug!("[KlineEngine] Already subscribed to {}/{}", exchange, symbol);
+            tracing::debug!(
+                "[KlineEngine] Already subscribed to {}/{}",
+                exchange,
+                symbol
+            );
             return Ok(());
         }
 
@@ -315,17 +382,32 @@ impl KlineEngine {
         self.symbol_index.insert(symbol.to_string(), key);
 
         match market_type {
-            MarketType::Spot => { self.spot_handler.subscribe(symbol).await; }
-            MarketType::Perpetual => { self.perpetual_handler.subscribe(symbol).await; }
+            MarketType::Spot => {
+                self.spot_handler.subscribe(symbol).await;
+            }
+            MarketType::Perpetual => {
+                self.perpetual_handler.subscribe(symbol).await;
+            }
         }
 
         if self.config.backfill_on_start {
             GapDetector::detect_and_backfill(
-                exchange, symbol, &cache, &self.source, &self.event_tx, market_type,
-            ).await?;
+                exchange,
+                symbol,
+                &cache,
+                &self.source,
+                &self.event_tx,
+                market_type,
+            )
+            .await?;
         }
 
-        tracing::debug!("[KlineEngine] Subscribed to {}/{} ({})", exchange, symbol, market_type);
+        tracing::debug!(
+            "[KlineEngine] Subscribed to {}/{} ({})",
+            exchange,
+            symbol,
+            market_type
+        );
         Ok(())
     }
 
@@ -338,20 +420,34 @@ impl KlineEngine {
         };
 
         match market_type {
-            MarketType::Spot => { self.spot_handler.unsubscribe(symbol).await; }
-            MarketType::Perpetual => { self.perpetual_handler.unsubscribe(symbol).await; }
+            MarketType::Spot => {
+                self.spot_handler.unsubscribe(symbol).await;
+            }
+            MarketType::Perpetual => {
+                self.perpetual_handler.unsubscribe(symbol).await;
+            }
         }
 
         let persist_data: Vec<(Timeframe, Vec<Candle>)> = {
             let guard = cache.lock().await;
-            Timeframe::all().iter().filter_map(|&tf| {
-                let candles = guard.get_klines(tf);
-                if candles.is_empty() { None } else { Some((tf, candles)) }
-            }).collect()
+            Timeframe::all()
+                .iter()
+                .filter_map(|&tf| {
+                    let candles = guard.get_klines(tf);
+                    if candles.is_empty() {
+                        None
+                    } else {
+                        Some((tf, candles))
+                    }
+                })
+                .collect()
         };
 
         for (tf, candles) in &persist_data {
-            let _ = self.persistence.save_candles(exchange, symbol, tf.as_str(), candles).await;
+            let _ = self
+                .persistence
+                .save_candles(exchange, symbol, tf.as_str(), candles)
+                .await;
         }
 
         self.subscriptions.remove(&key);
@@ -361,12 +457,24 @@ impl KlineEngine {
         Ok(())
     }
 
-    pub fn get_klines(&self, exchange: &str, symbol: &str, timeframe: Timeframe) -> Option<Vec<Candle>> {
+    pub fn get_klines(
+        &self,
+        exchange: &str,
+        symbol: &str,
+        timeframe: Timeframe,
+    ) -> Option<Vec<Candle>> {
         let key = subscription_key(exchange, symbol);
-        self.subscriptions.get(&key).map(|entry| entry.cache.blocking_lock().get_klines(timeframe))
+        self.subscriptions
+            .get(&key)
+            .map(|entry| entry.cache.blocking_lock().get_klines(timeframe))
     }
 
-    pub async fn get_klines_async(&self, exchange: &str, symbol: &str, timeframe: Timeframe) -> Option<Vec<Candle>> {
+    pub async fn get_klines_async(
+        &self,
+        exchange: &str,
+        symbol: &str,
+        timeframe: Timeframe,
+    ) -> Option<Vec<Candle>> {
         let key = subscription_key(exchange, symbol);
         match self.subscriptions.get(&key) {
             Some(entry) => {
@@ -377,7 +485,11 @@ impl KlineEngine {
         }
     }
 
-    pub async fn get_all_timeframes(&self, exchange: &str, symbol: &str) -> Option<AllTimeframesData> {
+    pub async fn get_all_timeframes(
+        &self,
+        exchange: &str,
+        symbol: &str,
+    ) -> Option<AllTimeframesData> {
         let key = subscription_key(exchange, symbol);
         match self.subscriptions.get(&key) {
             Some(entry) => {
@@ -394,9 +506,16 @@ impl KlineEngine {
     }
 
     pub fn subscribed_symbols(&self) -> Vec<(String, String, MarketType)> {
-        self.subscriptions.iter().map(|entry| {
-            (entry.exchange.clone(), entry.symbol.clone(), entry.market_type)
-        }).collect()
+        self.subscriptions
+            .iter()
+            .map(|entry| {
+                (
+                    entry.exchange.clone(),
+                    entry.symbol.clone(),
+                    entry.market_type,
+                )
+            })
+            .collect()
     }
 
     pub async fn force_backfill(&self, exchange: &str, symbol: &str) -> anyhow::Result<usize> {
@@ -405,19 +524,36 @@ impl KlineEngine {
             Some(entry) => (entry.cache.clone(), entry.market_type),
             None => return Err(anyhow::anyhow!("Not subscribed to {}/{}", exchange, symbol)),
         };
-        GapDetector::detect_and_backfill(exchange, symbol, &cache, &self.source, &self.event_tx, market_type).await
+        GapDetector::detect_and_backfill(
+            exchange,
+            symbol,
+            &cache,
+            &self.source,
+            &self.event_tx,
+            market_type,
+        )
+        .await
     }
 
-    pub async fn continuity_check(&self, exchange: &str, symbol: &str) -> Option<crate::gap::ContinuityReport> {
+    pub async fn continuity_check(
+        &self,
+        exchange: &str,
+        symbol: &str,
+    ) -> Option<crate::gap::ContinuityReport> {
         let key = subscription_key(exchange, symbol);
         match self.subscriptions.get(&key) {
-            Some(entry) => Some(GapDetector::check_continuity(exchange, symbol, &entry.cache).await),
+            Some(entry) => {
+                Some(GapDetector::check_continuity(exchange, symbol, &entry.cache).await)
+            }
             None => None,
         }
     }
 
     pub fn backtest_range_limits() -> Vec<BacktestRangeInfo> {
-        BacktestRangeLimit::all_limits().into_iter().map(|l| l.into()).collect()
+        BacktestRangeLimit::all_limits()
+            .into_iter()
+            .map(|l| l.into())
+            .collect()
     }
 
     pub fn validate_backtest_range(timeframe: Timeframe, days: u32) -> Result<(), anyhow::Error> {
@@ -425,13 +561,17 @@ impl KlineEngine {
         if days > limit.max_days {
             return Err(anyhow::anyhow!(
                 "Backtest range {} days exceeds maximum {} days for {} timeframe",
-                days, limit.max_days, timeframe
+                days,
+                limit.max_days,
+                timeframe
             ));
         }
         if days > limit.recommended_days {
             tracing::warn!(
                 "[KlineEngine] Backtest range {} days exceeds recommended {} days for {} timeframe",
-                days, limit.recommended_days, timeframe
+                days,
+                limit.recommended_days,
+                timeframe
             );
         }
         Ok(())
@@ -448,35 +588,52 @@ impl KlineEngine {
         let days = ((end_ms - start_ms) / 86_400_000) as u32;
         Self::validate_backtest_range(timeframe, days)?;
 
-        let market_type = self.subscriptions.get(&subscription_key(exchange, symbol))
+        let market_type = self
+            .subscriptions
+            .get(&subscription_key(exchange, symbol))
             .map(|e| e.market_type);
 
         let cache_data = self.get_klines_async(exchange, symbol, timeframe).await;
-        let cache_start = cache_data.as_ref().and_then(|c| c.first().map(|f| f.open_time));
-        let cache_end = cache_data.as_ref().and_then(|c| c.last().map(|f| f.open_time));
+        let cache_start = cache_data
+            .as_ref()
+            .and_then(|c| c.first().map(|f| f.open_time));
+        let cache_end = cache_data
+            .as_ref()
+            .and_then(|c| c.last().map(|f| f.open_time));
 
         if let (Some(cs), Some(ce)) = (cache_start, cache_end) {
             if cs <= start_ms && ce >= end_ms {
                 if let Some(candles) = cache_data {
-                    let filtered: Vec<Candle> = candles.into_iter()
+                    let filtered: Vec<Candle> = candles
+                        .into_iter()
                         .filter(|c| c.open_time >= start_ms && c.open_time <= end_ms)
                         .collect();
-                    if !filtered.is_empty() { return Ok(filtered); }
+                    if !filtered.is_empty() {
+                        return Ok(filtered);
+                    }
                 }
             }
         }
 
-        let all_1m = self.source.fetch_klines(
-            exchange, symbol, "1m",
-            ((days as u32) * 1440 + 100).min(1000),
-            Some(start_ms),
-            market_type,
-        ).await?;
+        let all_1m = self
+            .source
+            .fetch_klines(
+                exchange,
+                symbol,
+                "1m",
+                ((days as u32) * 1440 + 100).min(1000),
+                Some(start_ms),
+                market_type,
+            )
+            .await?;
 
-        if timeframe == Timeframe::M1 { return Ok(all_1m); }
+        if timeframe == Timeframe::M1 {
+            return Ok(all_1m);
+        }
 
         let aggregated = Aggregator::aggregate_1m_to_timeframe(&all_1m, timeframe);
-        Ok(aggregated.into_iter()
+        Ok(aggregated
+            .into_iter()
             .filter(|c| c.open_time >= start_ms && c.open_time <= end_ms)
             .collect())
     }

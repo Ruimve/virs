@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use crate::common::ai_client;
-use crate::common::ports::LlmProviderResolver;
 use crate::common::ports::CredentialStore;
+use crate::common::ports::LlmProviderResolver;
 use crate::grid::ports::GridBotConfig;
 
 /// Grid AI 决策动作
@@ -20,7 +20,10 @@ pub enum GridAction {
 impl GridAction {
     pub fn from_str(action: &str, upper_price: f64, lower_price: f64) -> Self {
         match action {
-            "adjust_grid" => GridAction::AdjustGrid { upper_price, lower_price },
+            "adjust_grid" => GridAction::AdjustGrid {
+                upper_price,
+                lower_price,
+            },
             "pause_grid" => GridAction::PauseGrid,
             "run_grid" => GridAction::RunGrid,
             "reduce_position" => GridAction::ReducePosition,
@@ -86,9 +89,15 @@ impl GridAiService {
         let (api_key, base_url, model, _provider) = self.llm_resolver.resolve(&credentials)?;
 
         let result = ai_client::call_llm_api(
-            &self.http_client, &api_key, &base_url, &model,
-            system_prompt, user_prompt, "grid-ai",
-        ).await?;
+            &self.http_client,
+            &api_key,
+            &base_url,
+            &model,
+            system_prompt,
+            user_prompt,
+            "grid-ai",
+        )
+        .await?;
 
         let decision = parse_grid_decision(&result.content)?;
         Ok((decision, result.used_model))
@@ -111,7 +120,10 @@ fn parse_grid_decision(json: &serde_json::Value) -> anyhow::Result<GridAiDecisio
         grid_profit_pct: grid["grid_profit_pct"].as_f64().unwrap_or(0.5),
         leverage: risk["leverage"].as_i64().unwrap_or(5) as i32,
         quantity_per_grid: risk["quantity_per_grid"].as_f64().unwrap_or(10.0),
-        market_regime: market["market_regime"].as_str().unwrap_or("ranging").to_string(),
+        market_regime: market["market_regime"]
+            .as_str()
+            .unwrap_or("ranging")
+            .to_string(),
         analysis: json["analysis"].as_str().unwrap_or("").to_string(),
         risk_warning: json["risk_warning"].as_str().unwrap_or("").to_string(),
     })

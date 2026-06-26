@@ -68,6 +68,7 @@ bcrypt = "0.15"
 aes-gcm = "0.10"
 sha2 = "0.10"
 hmac = "0.12"
+ed25519-dalek = { version = "2.1", features = ["pkcs8", "pem", "rand_core"] }
 hex = "0.4"
 rand = "0.8"
 base64 = "0.22"

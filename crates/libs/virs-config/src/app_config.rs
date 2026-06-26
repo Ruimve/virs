@@ -101,8 +101,11 @@ pub fn load_config() -> Result<AppConfig, anyhow::Error> {
         log_level: std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".into()),
         secret_key: std::env::var("SECRET_KEY")
             .map_err(|_| anyhow::anyhow!("SECRET_KEY environment variable is required"))?,
-        encryption_key: std::env::var("ENCRYPTION_KEY")
-            .map_err(|_| anyhow::anyhow!("ENCRYPTION_KEY environment variable is required (must differ from SECRET_KEY)"))?,
+        encryption_key: std::env::var("ENCRYPTION_KEY").map_err(|_| {
+            anyhow::anyhow!(
+                "ENCRYPTION_KEY environment variable is required (must differ from SECRET_KEY)"
+            )
+        })?,
         jwt_expiration_hours: std::env::var("JWT_EXPIRATION_HOURS")
             .unwrap_or_else(|_| "24".into())
             .parse()?,
@@ -137,10 +140,12 @@ pub fn load_config() -> Result<AppConfig, anyhow::Error> {
     };
 
     let notification = NotificationConfig {
-        telegram: std::env::var("TELEGRAM_BOT_TOKEN").ok()
+        telegram: std::env::var("TELEGRAM_BOT_TOKEN")
+            .ok()
             .zip(std::env::var("TELEGRAM_CHAT_ID").ok())
             .map(|(bot_token, chat_id)| TelegramConfig { bot_token, chat_id }),
-        email: std::env::var("SMTP_HOST").ok()
+        email: std::env::var("SMTP_HOST")
+            .ok()
             .zip(std::env::var("SMTP_USERNAME").ok())
             .zip(std::env::var("SMTP_PASSWORD").ok())
             .map(|((host, username), password)| EmailConfig {
@@ -151,8 +156,7 @@ pub fn load_config() -> Result<AppConfig, anyhow::Error> {
                     .unwrap_or(587),
                 username,
                 password,
-                from: std::env::var("SMTP_FROM")
-                    .unwrap_or_else(|_| "noreply@virs.com".into()),
+                from: std::env::var("SMTP_FROM").unwrap_or_else(|_| "noreply@virs.com".into()),
             }),
     };
 

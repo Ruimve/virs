@@ -59,7 +59,9 @@ pub async fn save_credential(
     if exchange.is_empty() || api_key.is_empty() || api_secret.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::err("exchange, api_key, api_secret are required")),
+            Json(ApiResponse::err(
+                "exchange, api_key, api_secret are required",
+            )),
         ));
     }
 
@@ -67,14 +69,27 @@ pub async fn save_credential(
 
     // Encrypt sensitive fields with AES-256-GCM
     let derived_key = virs_utils::crypto::derive_key(&state.encryption_key);
-    let encrypted_api_key = virs_utils::crypto::encrypt(api_key, &derived_key)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Encryption error: {}", e)))))?;
-    let encrypted_secret = virs_utils::crypto::encrypt(api_secret, &derived_key)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Encryption error: {}", e)))))?;
+    let encrypted_api_key = virs_utils::crypto::encrypt(api_key, &derived_key).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::err(format!("Encryption error: {}", e))),
+        )
+    })?;
+    let encrypted_secret = virs_utils::crypto::encrypt(api_secret, &derived_key).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::err(format!("Encryption error: {}", e))),
+        )
+    })?;
     let encrypted_passphrase = passphrase
         .map(|p| virs_utils::crypto::encrypt(p, &derived_key))
         .transpose()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Encryption error: {}", e)))))?;
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::err(format!("Encryption error: {}", e))),
+            )
+        })?;
 
     sqlx::query(
         r#"INSERT INTO qd_exchange_credentials (id, user_id, exchange, label, encrypted_api_key, encrypted_api_secret, encrypted_passphrase, market_type, created_at)
@@ -101,19 +116,24 @@ pub async fn save_credential(
         "spot" => virs_ccxt::MarketType::Spot,
         _ => virs_ccxt::MarketType::Perpetual,
     };
-    if let Ok(ccxt_ex) = virs_ccxt::create_exchange(
-        exchange, api_key, api_secret, passphrase, None, &mt,
-    ) {
+    if let Ok(ccxt_ex) =
+        virs_ccxt::create_exchange(exchange, api_key, api_secret, passphrase, None, &mt)
+    {
         let app_mt = match market_type {
             "spot" => virs_models::MarketType::Spot,
             _ => virs_models::MarketType::Perpetual,
         };
         let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, app_mt);
         state.exchange_registry.register(Box::new(adapter));
-        info!(exchange, market_type, "Auto-registered exchange after credential save");
+        info!(
+            exchange,
+            market_type, "Auto-registered exchange after credential save"
+        );
     }
 
-    Ok(Json(ApiResponse::ok(serde_json::json!({"id": id.to_string()}))))
+    Ok(Json(ApiResponse::ok(
+        serde_json::json!({"id": id.to_string()}),
+    )))
 }
 
 pub async fn delete_credential(
@@ -129,7 +149,10 @@ pub async fn delete_credential(
         .execute(&state.db_pool)
         .await
         .map_err(|e| {
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::err(format!("Database error: {}", e))),
+            )
         })?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
@@ -144,14 +167,18 @@ pub async fn test_credential(
     let _user_id = extract_user_id(&headers)?;
 
     let names = state.exchange_registry.registered_names();
-    let exchange_ref = names.first().and_then(|key| state.exchange_registry.get(key));
+    let exchange_ref = names
+        .first()
+        .and_then(|key| state.exchange_registry.get(key));
 
     let exchange = match exchange_ref {
         Some(e) => e,
-        None => return Ok(Json(ApiResponse::ok(serde_json::json!({
-            "connected": false,
-            "message": "No exchange registered. Please save credentials first.",
-        })))),
+        None => {
+            return Ok(Json(ApiResponse::ok(serde_json::json!({
+                "connected": false,
+                "message": "No exchange registered. Please save credentials first.",
+            }))))
+        }
     };
 
     match exchange.ping().await {
@@ -178,18 +205,22 @@ pub async fn check_permissions(
     let _user_id = extract_user_id(&headers)?;
 
     let names = state.exchange_registry.registered_names();
-    let exchange_ref = names.first().and_then(|key| state.exchange_registry.get(key));
+    let exchange_ref = names
+        .first()
+        .and_then(|key| state.exchange_registry.get(key));
 
     let exchange = match exchange_ref {
         Some(e) => e,
-        None => return Ok(Json(ApiResponse::ok(serde_json::json!({
-            "permissions": [{
-                "name": "connectivity",
-                "label": "Connectivity",
-                "status": "error",
-                "detail": "No exchange registered. Please save credentials first.",
-            }],
-        })))),
+        None => {
+            return Ok(Json(ApiResponse::ok(serde_json::json!({
+                "permissions": [{
+                    "name": "connectivity",
+                    "label": "Connectivity",
+                    "status": "error",
+                    "detail": "No exchange registered. Please save credentials first.",
+                }],
+            }))))
+        }
     };
 
     // Call apiRestrictions
@@ -246,16 +277,14 @@ pub async fn check_permissions(
                 "permissions": permissions,
             }))))
         }
-        Err(e) => {
-            Ok(Json(ApiResponse::ok(serde_json::json!({
-                "permissions": [{
-                    "name": "connectivity",
-                    "label": "Connectivity",
-                    "status": "error",
-                    "detail": format!("Failed to verify: {}", e)
-                }],
-            }))))
-        }
+        Err(e) => Ok(Json(ApiResponse::ok(serde_json::json!({
+            "permissions": [{
+                "name": "connectivity",
+                "label": "Connectivity",
+                "status": "error",
+                "detail": format!("Failed to verify: {}", e)
+            }],
+        })))),
     }
 }
 
@@ -268,11 +297,17 @@ pub async fn verify_permissions(
     let _user_id = extract_user_id(&headers)?;
 
     let names = state.exchange_registry.registered_names();
-    let exchange_ref = names.first().and_then(|key| state.exchange_registry.get(key));
+    let exchange_ref = names
+        .first()
+        .and_then(|key| state.exchange_registry.get(key));
 
     let exchange = match exchange_ref {
         Some(e) => e,
-        None => return Ok(Json(ApiResponse::err("No exchange registered. Please save credentials first."))),
+        None => {
+            return Ok(Json(ApiResponse::err(
+                "No exchange registered. Please save credentials first.",
+            )))
+        }
     };
 
     // Call apiRestrictions
@@ -341,17 +376,15 @@ pub async fn verify_permissions(
                 "permissions": permissions,
             }))))
         }
-        Err(e) => {
-            Ok(Json(ApiResponse::ok(serde_json::json!({
-                "connected": false,
-                "permissions": [{
-                    "name": "connectivity",
-                    "label": "Connectivity",
-                    "status": "error",
-                    "detail": format!("Failed to verify: {}", e)
-                }],
-            }))))
-        }
+        Err(e) => Ok(Json(ApiResponse::ok(serde_json::json!({
+            "connected": false,
+            "permissions": [{
+                "name": "connectivity",
+                "label": "Connectivity",
+                "status": "error",
+                "detail": format!("Failed to verify: {}", e)
+            }],
+        })))),
     }
 }
 
@@ -376,7 +409,7 @@ pub async fn exchange_status(
             "exchange": format!("{} ({})", exchange, market_type),
         })))),
         None => Ok(Json(ApiResponse::ok(serde_json::json!({
-        "connected": false,
-    })))),
+            "connected": false,
+        })))),
     }
 }

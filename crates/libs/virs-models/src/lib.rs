@@ -6,14 +6,14 @@
 //! Shared domain types (Kline, ApiResponse, PaginationParams, ExchangePosition, etc.)
 //! are also re-exported from virs-types::market.
 
-pub mod user;
-pub mod grid;
 pub mod auto;
+pub mod grid;
 pub mod trading;
+pub mod user;
 
 // Re-export unified types from virs-types
+pub use auto::{AutoBot, AutoTrade};
+pub use grid::{GridBot, GridTrade};
+pub use trading::Order;
 pub use virs_types::enums::*;
 pub use virs_types::market::*;
-pub use trading::Order;
-pub use grid::{GridBot, GridTrade};
-pub use auto::{AutoBot, AutoTrade};

@@ -4,10 +4,13 @@ use async_trait::async_trait;
 use tokio::sync::broadcast;
 use tracing::{info, warn};
 
-use virs_types::bot::{OrderCommand, OrderEvent, OrderExecutor, OrderInfo, OrderSide, BotPositionSide, BotError, BotResult};
-use virs_types::position::*;
-use virs_types::enums::{Side, OrderType, PositionSide};
 use virs_position::PositionEngine;
+use virs_types::bot::{
+    BotError, BotPositionSide, BotResult, OrderCommand, OrderEvent, OrderExecutor, OrderInfo,
+    OrderSide,
+};
+use virs_types::enums::{OrderType, PositionSide, Side};
+use virs_types::position::*;
 
 pub struct PeOrderExecutor {
     cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,
@@ -49,7 +52,17 @@ impl PeOrderExecutor {
 impl OrderExecutor for PeOrderExecutor {
     async fn send_command(&self, command: OrderCommand) -> BotResult<()> {
         let engine_cmd = match command {
-            OrderCommand::OpenPosition { symbol, side, order_side, amount, leverage, price, stop_loss, take_profit, client_order_id } => {
+            OrderCommand::OpenPosition {
+                symbol,
+                side,
+                order_side,
+                amount,
+                leverage,
+                price,
+                stop_loss,
+                take_profit,
+                client_order_id,
+            } => {
                 // 注意：bot 层的 client_order_id 映射到引擎层的 strategy_id。
                 // 引擎内部会把它同时保存到 Position.strategy_id（仓位归属）
                 // 和作为 client_order_id 传给交易所（订单追踪）。
@@ -67,55 +80,80 @@ impl OrderExecutor for PeOrderExecutor {
                     },
                     size: amount,
                     leverage,
-                    order_type: if price.is_some() { OrderType::Limit } else { OrderType::Market },
+                    order_type: if price.is_some() {
+                        OrderType::Limit
+                    } else {
+                        OrderType::Market
+                    },
                     price,
                     stop_loss,
                     take_profit,
                     strategy_id: client_order_id,
                 }
             }
-            OrderCommand::ClosePosition { position_id, price, client_order_id } => {
-                EngineCommand::ClosePosition {
-                    position_id,
-                    order_type: if price.is_some() { OrderType::Limit } else { OrderType::Market },
-                    price,
-                    strategy_id: client_order_id,
-                }
-            }
-            OrderCommand::PlaceOrder { symbol, side, amount, price, reduce_only, position_side, position_id, client_order_id } => {
-                EngineCommand::PlaceOrder {
-                    params: PlaceOrderParams {
-                        symbol,
-                        side: match side {
-                            OrderSide::Buy => Side::Buy,
-                            OrderSide::Sell => Side::Sell,
-                        },
-                        order_type: if price.is_some() { OrderType::Limit } else { OrderType::Market },
-                        amount,
-                        price,
-                        reduce_only,
-                        position_side: position_side.map(|ps| match ps {
-                            BotPositionSide::Long => PositionSide::Long,
-                            BotPositionSide::Short => PositionSide::Short,
-                        }),
-                        position_id,
-                        client_order_id,
+            OrderCommand::ClosePosition {
+                position_id,
+                price,
+                client_order_id,
+            } => EngineCommand::ClosePosition {
+                position_id,
+                order_type: if price.is_some() {
+                    OrderType::Limit
+                } else {
+                    OrderType::Market
+                },
+                price,
+                strategy_id: client_order_id,
+            },
+            OrderCommand::PlaceOrder {
+                symbol,
+                side,
+                amount,
+                price,
+                reduce_only,
+                position_side,
+                position_id,
+                client_order_id,
+            } => EngineCommand::PlaceOrder {
+                params: PlaceOrderParams {
+                    symbol,
+                    side: match side {
+                        OrderSide::Buy => Side::Buy,
+                        OrderSide::Sell => Side::Sell,
                     },
-                }
-            }
-            OrderCommand::CancelOrder { order_id, symbol: _ } => {
-                EngineCommand::CancelOrder { order_id }
-            }
-            OrderCommand::CancelAllOrders { symbol } => {
-                EngineCommand::CancelAllOrders { position_id: None, symbol }
-            }
-            OrderCommand::CloseAllPositions { symbol, exchange: _ } => {
-                EngineCommand::CloseAllPositions { symbol }
-            }
+                    order_type: if price.is_some() {
+                        OrderType::Limit
+                    } else {
+                        OrderType::Market
+                    },
+                    amount,
+                    price,
+                    reduce_only,
+                    position_side: position_side.map(|ps| match ps {
+                        BotPositionSide::Long => PositionSide::Long,
+                        BotPositionSide::Short => PositionSide::Short,
+                    }),
+                    position_id,
+                    client_order_id,
+                },
+            },
+            OrderCommand::CancelOrder {
+                order_id,
+                symbol: _,
+            } => EngineCommand::CancelOrder { order_id },
+            OrderCommand::CancelAllOrders { symbol } => EngineCommand::CancelAllOrders {
+                position_id: None,
+                symbol,
+            },
+            OrderCommand::CloseAllPositions {
+                symbol,
+                exchange: _,
+            } => EngineCommand::CloseAllPositions { symbol },
         };
 
-        self.cmd_tx.send(engine_cmd).await
-            .map_err(|e| BotError::OrderExecution(format!("Failed to send command to PositionEngine: {}", e)))
+        self.cmd_tx.send(engine_cmd).await.map_err(|e| {
+            BotError::OrderExecution(format!("Failed to send command to PositionEngine: {}", e))
+        })
     }
 
     async fn query_open_position(&self, symbol: &str) -> BotResult<Option<Position>> {
@@ -162,11 +200,20 @@ fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
             order_id: order.id,
             symbol: Some(order.symbol.clone()),
         }),
-        EngineEvent::OrderFailed { order_id, reason } => Some(OrderEvent::OrderFailed { order_id, reason }),
-        EngineEvent::RiskAlert { level, message } => Some(OrderEvent::RiskAlert { level, message }),
-        EngineEvent::LiquidationWarning { symbol, liquidation_price, current_price, .. } => {
-            Some(OrderEvent::LiquidationWarning { symbol, liquidation_price, current_price })
+        EngineEvent::OrderFailed { order_id, reason } => {
+            Some(OrderEvent::OrderFailed { order_id, reason })
         }
+        EngineEvent::RiskAlert { level, message } => Some(OrderEvent::RiskAlert { level, message }),
+        EngineEvent::LiquidationWarning {
+            symbol,
+            liquidation_price,
+            current_price,
+            ..
+        } => Some(OrderEvent::LiquidationWarning {
+            symbol,
+            liquidation_price,
+            current_price,
+        }),
         _ => None,
     }
 }

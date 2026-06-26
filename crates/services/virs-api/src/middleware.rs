@@ -8,10 +8,7 @@ use axum::{
 };
 
 /// JWT 认证中间件
-pub async fn auth_middleware(
-    request: Request,
-    next: Next,
-) -> Response {
+pub async fn auth_middleware(request: Request, next: Next) -> Response {
     let auth_header = request.headers().get("Authorization");
     if auth_header.is_none() {
         return (StatusCode::UNAUTHORIZED, "Missing authorization header").into_response();

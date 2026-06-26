@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -20,7 +20,7 @@ use virs_types::{OrderStatus, PositionSide};
 /// 1. 单流格式: {"e":"executionReport", ...}
 /// 2. 组合流格式: {"stream":"<listenKey>@executionReport", "data":{...}}
 #[derive(Debug, Clone, Deserialize)]
-struct BinanceOrderMessage {
+pub struct BinanceOrderMessage {
     #[allow(dead_code)]
     stream: Option<String>,
     /// 组合流格式
@@ -36,7 +36,10 @@ struct BinanceOrderMessage {
 }
 
 impl BinanceOrderMessage {
-    fn into_execution_report(self) -> Option<BinanceExecutionReport> {
+    /// 解析单流或组合流格式的 executionReport
+    ///
+    /// 对外暴露为 pub，供 ws_api.rs（WebSocket API 客户端）复用
+    pub fn into_execution_report(self) -> Option<BinanceExecutionReport> {
         if let Some(data) = self.data {
             Some(data)
         } else if self.event_type_flat.as_deref() == Some("executionReport") {
@@ -49,24 +52,49 @@ impl BinanceOrderMessage {
             None
         }
     }
+
+    /// 返回事件类型（用于判断 executionReport / ORDER_TRADE_UPDATE / ACCOUNT_UPDATE）
+    pub fn event_type(&self) -> Option<&str> {
+        self.event_type_flat
+            .as_deref()
+            .or_else(|| self.data.as_ref().map(|d| d.event_type.as_str()))
+    }
+
+    /// 转换为 WsFeedEvent（消耗 self）
+    pub fn to_ws_feed_event(self) -> Option<WsFeedEvent> {
+        // 优先处理 ORDER_TRADE_UPDATE（合约）
+        if let Some(et) = self.event_type_flat.as_deref() {
+            if et == "ORDER_TRADE_UPDATE" {
+                // ORDER_TRADE_UPDATE 的订单数据在 "o" 字段
+                if let Some(order) = self.order_flat {
+                    return order.to_ws_feed_event();
+                }
+            }
+        }
+        // 处理 executionReport（现货）
+        if let Some(report) = self.into_execution_report() {
+            return report.order.to_ws_feed_event();
+        }
+        None
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
-struct BinanceExecutionReport {
+pub struct BinanceExecutionReport {
     #[serde(rename = "e")]
-    event_type: String,
+    pub event_type: String,
     #[serde(rename = "E")]
-    event_time: i64,
+    pub event_time: i64,
     #[serde(rename = "o")]
-    order: ExecutionReportInner,
+    pub order: ExecutionReportInner,
 }
 
 /// Binance executionReport 中的订单数据
 /// 文档: https://binance-docs.github.io/apidocs/futures/en/#event-order-update
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
-struct ExecutionReportInner {
+pub struct ExecutionReportInner {
     /// 订单符号
     #[serde(rename = "s")]
     symbol: String,
@@ -138,21 +166,25 @@ impl ExecutionReportInner {
     }
 
     /// 转换为 WsFeedEvent::OrderUpdate
-    fn to_ws_feed_event(&self) -> Option<WsFeedEvent> {
+    pub fn to_ws_feed_event(&self) -> Option<WsFeedEvent> {
         let status = self.to_order_status()?;
 
-        let position_side = self.position_side.as_ref().and_then(|ps| match ps.as_str() {
-            "LONG" => Some(PositionSide::Long),
-            "SHORT" => Some(PositionSide::Short),
-            _ => None,
-        });
+        let position_side = self
+            .position_side
+            .as_ref()
+            .and_then(|ps| match ps.as_str() {
+                "LONG" => Some(PositionSide::Long),
+                "SHORT" => Some(PositionSide::Short),
+                _ => None,
+            });
 
         Some(WsFeedEvent::OrderUpdate {
             exchange_order_id: self.order_id.to_string(),
             symbol: self.symbol.clone(),
             status,
             filled: self.filled_qty.parse().unwrap_or(0.0),
-            remaining: self.remaining_qty
+            remaining: self
+                .remaining_qty
                 .as_ref()
                 .and_then(|q| q.parse().ok())
                 .unwrap_or_else(|| {
@@ -160,15 +192,15 @@ impl ExecutionReportInner {
                     let filled = self.filled_qty.parse::<f64>().unwrap_or(0.0);
                     (orig - filled).max(0.0)
                 }),
-            price: self.avg_fill_price
+            price: self
+                .avg_fill_price
                 .as_ref()
                 .and_then(|s| s.parse::<f64>().ok())
                 .filter(|&p| p > 0.0)
                 .unwrap_or_else(|| self.last_fill_price.parse().unwrap_or(0.0)),
             amount: self.orig_qty.parse().unwrap_or(0.0),
             commission: self.commission.parse().unwrap_or(0.0),
-            timestamp: DateTime::from_timestamp_millis(self.trade_time)
-                .unwrap_or_else(Utc::now),
+            timestamp: DateTime::from_timestamp_millis(self.trade_time).unwrap_or_else(Utc::now),
             position_side,
         })
     }
@@ -221,19 +253,20 @@ impl BinanceOrderWs {
     }
 
     /// 创建永续合约订单 WS 客户端
+    ///
+    /// 2026-04-23 起币安将用户数据流切流至 /private 路由。
+    /// 旧 URL `wss://fstream.binance.com/ws/<listenKey>` 已无法连接，
+    /// 新 URL `wss://fstream.binance.com/private/ws/<listenKey>`（单流模式，协议不变）。
     pub fn new_perpetual(listen_key: String) -> Self {
         Self::new(
-            "wss://fstream.binance.com/ws".to_string(),
+            "wss://fstream.binance.com/private/ws".to_string(),
             listen_key,
         )
     }
 
     /// 创建现货订单 WS 客户端
     pub fn new_spot(listen_key: String) -> Self {
-        Self::new(
-            "wss://stream.binance.com/ws".to_string(),
-            listen_key,
-        )
+        Self::new("wss://stream.binance.com/ws".to_string(), listen_key)
     }
 
     /// 更新 listenKey（重连时使用）
@@ -243,6 +276,13 @@ impl BinanceOrderWs {
 
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::Relaxed)
+    }
+
+    /// 返回 running flag 的引用，供外部 keepalive task 检测 WS 生命周期。
+    ///
+    /// WS 后台 task 退出时会将此 flag 设为 false，keepalive task 应定期检测并退出。
+    pub fn running_handle(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.running)
     }
 
     /// 启动 WS 连接，将订单事件发送到 event_tx
@@ -280,7 +320,9 @@ impl BinanceOrderWs {
                         reconnect_delay = reconnect_delay_secs;
 
                         // 发送连接恢复事件
-                        let _ = event_tx.send(WsFeedEvent::ConnectionChanged { connected: true }).await;
+                        let _ = event_tx
+                            .send(WsFeedEvent::ConnectionChanged { connected: true })
+                            .await;
 
                         let (mut write, mut read) = ws_stream.split();
 
@@ -294,7 +336,9 @@ impl BinanceOrderWs {
                             }
 
                             if connect_start.elapsed() > max_lifetime {
-                                tracing::debug!("[BinanceOrderWs] Max lifetime reached, reconnecting...");
+                                tracing::debug!(
+                                    "[BinanceOrderWs] Max lifetime reached, reconnecting..."
+                                );
                                 break;
                             }
 
@@ -385,7 +429,9 @@ impl BinanceOrderWs {
                         }
 
                         // 连接断开，发送断连事件
-                        let _ = event_tx.send(WsFeedEvent::ConnectionChanged { connected: false }).await;
+                        let _ = event_tx
+                            .send(WsFeedEvent::ConnectionChanged { connected: false })
+                            .await;
                     }
                     Err(e) => {
                         tracing::error!("[BinanceOrderWs] Connection failed: {}", e);
@@ -579,7 +625,8 @@ mod tests {
                 inner.to_order_status(),
                 expected,
                 "Binance status '{}' should map to {:?}",
-                binance_status, expected
+                binance_status,
+                expected
             );
         }
     }
@@ -589,12 +636,33 @@ mod tests {
     // ============================================================
 
     /// 辅助函数：从 WsFeedEvent 中提取 OrderUpdate 字段
-    fn unwrap_order_update(event: WsFeedEvent) -> (String, String, OrderStatus, f64, f64, f64, f64, f64) {
+    fn unwrap_order_update(
+        event: WsFeedEvent,
+    ) -> (String, String, OrderStatus, f64, f64, f64, f64, f64) {
         match event {
-            WsFeedEvent::OrderUpdate { exchange_order_id, symbol, status, filled, remaining, price, amount, commission, .. } => {
-                (exchange_order_id, symbol, status, filled, remaining, price, amount, commission)
+            WsFeedEvent::OrderUpdate {
+                exchange_order_id,
+                symbol,
+                status,
+                filled,
+                remaining,
+                price,
+                amount,
+                commission,
+                ..
+            } => (
+                exchange_order_id,
+                symbol,
+                status,
+                filled,
+                remaining,
+                price,
+                amount,
+                commission,
+            ),
+            WsFeedEvent::ConnectionChanged { .. } => {
+                panic!("Expected OrderUpdate, got ConnectionChanged")
             }
-            WsFeedEvent::ConnectionChanged { .. } => panic!("Expected OrderUpdate, got ConnectionChanged"),
         }
     }
 
@@ -602,7 +670,8 @@ mod tests {
     fn test_to_ws_feed_event_filled() {
         let inner = make_test_inner("FILLED", "1.0", "1.0", "0.0", "65000.00", "1.0", "0.065");
         let event = inner.to_ws_feed_event().unwrap();
-        let (exchange_order_id, symbol, status, filled, remaining, price, amount, commission) = unwrap_order_update(event);
+        let (exchange_order_id, symbol, status, filled, remaining, price, amount, commission) =
+            unwrap_order_update(event);
 
         assert_eq!(exchange_order_id, "123456789");
         assert_eq!(symbol, "BTCUSDT");
@@ -616,7 +685,15 @@ mod tests {
 
     #[test]
     fn test_to_ws_feed_event_partially_filled() {
-        let inner = make_test_inner("PARTIALLY_FILLED", "10.0", "5.0", "5.0", "3500.00", "5.0", "0.175");
+        let inner = make_test_inner(
+            "PARTIALLY_FILLED",
+            "10.0",
+            "5.0",
+            "5.0",
+            "3500.00",
+            "5.0",
+            "0.175",
+        );
         let event = inner.to_ws_feed_event().unwrap();
         let (_, _, status, filled, remaining, _, _, _) = unwrap_order_update(event);
 

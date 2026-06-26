@@ -8,9 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // Re-export all shared types from virs-types
-pub use virs_types::enums::{
-    MarketType, OrderType, OrderStatus, PositionMode, PositionSide, Side,
-};
+pub use virs_types::enums::{MarketType, OrderStatus, OrderType, PositionMode, PositionSide, Side};
 pub use virs_types::market::{
     Balance, ExchangePosition, FundingHistoryEntry, FundingRate, Kline, OrderBook, Ticker,
 };
@@ -20,10 +18,10 @@ pub use virs_types::market::{
 /// Market info / trading rules (exchange-specific, not in virs-types).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MarketInfo {
-    pub id: String,           // exchange-native symbol, e.g. "BTCUSDT"
-    pub symbol: String,       // unified symbol, e.g. "BTC/USDT"
-    pub base: String,         // base asset, e.g. "BTC"
-    pub quote: String,        // quote asset, e.g. "USDT"
+    pub id: String,     // exchange-native symbol, e.g. "BTCUSDT"
+    pub symbol: String, // unified symbol, e.g. "BTC/USDT"
+    pub base: String,   // base asset, e.g. "BTC"
+    pub quote: String,  // quote asset, e.g. "USDT"
     pub active: bool,
     pub market_type: MarketType,
     pub min_amount: Option<f64>,

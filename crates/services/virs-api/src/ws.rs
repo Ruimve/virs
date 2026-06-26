@@ -1,17 +1,17 @@
 //! WebSocket handlers for real-time data push.
 
 use axum::{
-    extract::{State, WebSocketUpgrade, ws::{Message, WebSocket}},
+    extract::{
+        ws::{Message, WebSocket},
+        State, WebSocketUpgrade,
+    },
     response::IntoResponse,
 };
 use std::sync::Arc;
 
 use crate::state::{AppState, WsBroadcaster};
 
-pub async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_ws(socket, state.ws_broadcaster))
 }
 
@@ -185,16 +185,21 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
     let mut pe_rx = match state.engine_manager.pe_event_subscribe() {
         Some(rx) => rx,
         None => {
-            let _ = socket.send(Message::Text(
-                serde_json::json!({"type":"error","message":"engines not started"}).to_string().into()
-            )).await;
+            let _ = socket
+                .send(Message::Text(
+                    serde_json::json!({"type":"error","message":"engines not started"})
+                        .to_string()
+                        .into(),
+                ))
+                .await;
             return;
         }
     };
 
     // 客户端订阅的 symbol 集合
     // select! 不会并发执行两个分支，所以直接用局部变量即可，无需 Mutex
-    let mut subscribed_symbols: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut subscribed_symbols: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
 
     // 主循环：select! 同时处理 PE 事件和客户端消息
     loop {

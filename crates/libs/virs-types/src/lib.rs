@@ -4,16 +4,16 @@
 //! used across the VIRS platform. All other crates depend on this
 //! crate for type definitions, eliminating duplicate type definitions.
 
-pub mod enums;
-pub mod market;
-pub mod position;
+pub mod auto_port;
 pub mod bot;
+pub mod enums;
 pub mod exchange_pe;
 pub mod grid_port;
-pub mod auto_port;
+pub mod market;
+pub mod position;
 
 // Re-export commonly used types
+pub use bot::*;
 pub use enums::*;
 pub use market::*;
 pub use position::*;
-pub use bot::*;

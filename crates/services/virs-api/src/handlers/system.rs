@@ -1,18 +1,12 @@
 //! System-level handlers — paper mode, engine status, system metrics.
 
-use axum::{
-    extract::State,
-    http::HeaderMap,
-    Json,
-};
+use axum::{extract::State, http::HeaderMap, Json};
 use sysinfo::{Disks, Networks, System};
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
-pub async fn paper_status(
-    State(state): State<AppState>,
-) -> Json<ApiResponse> {
+pub async fn paper_status(State(state): State<AppState>) -> Json<ApiResponse> {
     Json(ApiResponse::ok(serde_json::json!({
         "paper_mode": state.engine_manager.paper_mode(),
     })))
@@ -75,11 +69,7 @@ pub async fn system_info() -> Json<ApiResponse> {
         .map(|c| c.brand().to_string())
         .unwrap_or_default();
     // CPU 主频（MHz）
-    let cpu_frequency_mhz = sys
-        .cpus()
-        .first()
-        .map(|c| c.frequency())
-        .unwrap_or(0);
+    let cpu_frequency_mhz = sys.cpus().first().map(|c| c.frequency()).unwrap_or(0);
 
     // 内存
     let total_memory = sys.total_memory();
@@ -127,11 +117,7 @@ pub async fn system_info() -> Json<ApiResponse> {
         .filter(|(name, _)| is_physical_interface(name))
         .filter(|(_, data)| has_usable_ip(data))
         .map(|(name, data)| {
-            let ips: Vec<String> = data
-                .ip_networks()
-                .iter()
-                .map(|ip| ip.to_string())
-                .collect();
+            let ips: Vec<String> = data.ip_networks().iter().map(|ip| ip.to_string()).collect();
             serde_json::json!({
                 "name": name,
                 "total_rx_bytes": data.total_received(),
@@ -190,26 +176,26 @@ fn is_physical_interface(name: &str) -> bool {
     }
     // 排除 Docker 相关虚拟接口
     let docker_prefixes = [
-        "docker",      // docker0
-        "br-",         // br-xxx (docker custom bridge)
-        "veth",        // vethxxx (container veth pair)
-        "cni",         // cni0, cni-xxx (Kubernetes CNI)
-        "flannel",     // flannel.1
-        "calico",      // calico
-        "tunl",        // tunl0 (calico)
-        "kube",        // kube-ipvs0
-        "virbr",       // libvirt bridge
-        "utun",        // macOS utun
-        "awdl",        // macOS awdl
-        "llw",         // macOS llw
-        "anpi",        // macOS anpi
-        "bridge",      // bridge0
-        "p2p",         // p2p0
-        "gif",         // gif0
-        "stf",         // stf0
-        "ap",          // ap1 (macOS WiFi AP 虚拟接口)
-        "vmenet",      // vmenet0 (Parallels/VirtualBox 虚拟机网络)
-        "vlan",        // vlan1 (VLAN 虚拟接口)
+        "docker",  // docker0
+        "br-",     // br-xxx (docker custom bridge)
+        "veth",    // vethxxx (container veth pair)
+        "cni",     // cni0, cni-xxx (Kubernetes CNI)
+        "flannel", // flannel.1
+        "calico",  // calico
+        "tunl",    // tunl0 (calico)
+        "kube",    // kube-ipvs0
+        "virbr",   // libvirt bridge
+        "utun",    // macOS utun
+        "awdl",    // macOS awdl
+        "llw",     // macOS llw
+        "anpi",    // macOS anpi
+        "bridge",  // bridge0
+        "p2p",     // p2p0
+        "gif",     // gif0
+        "stf",     // stf0
+        "ap",      // ap1 (macOS WiFi AP 虚拟接口)
+        "vmenet",  // vmenet0 (Parallels/VirtualBox 虚拟机网络)
+        "vlan",    // vlan1 (VLAN 虚拟接口)
     ];
     if docker_prefixes.iter().any(|p| name.starts_with(p)) {
         return false;

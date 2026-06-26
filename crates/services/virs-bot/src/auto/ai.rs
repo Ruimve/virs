@@ -34,7 +34,10 @@ impl AutoAction {
             "close_position" => Self::ClosePosition,
             "hold" => Self::Hold,
             _ => {
-                warn!(action = s, "Unknown auto trade action, falling back to Hold");
+                warn!(
+                    action = s,
+                    "Unknown auto trade action, falling back to Hold"
+                );
                 Self::Hold
             }
         }
@@ -64,16 +67,18 @@ impl AutoDecision {
         let market = &json["market"];
 
         let action_str = decision["action"].as_str().unwrap_or("hold");
-        let reason = decision["reason"].as_str().unwrap_or("No reason provided").to_string();
-        let confidence = decision["confidence"].as_f64().unwrap_or(0.5).clamp(0.0, 1.0);
+        let reason = decision["reason"]
+            .as_str()
+            .unwrap_or("No reason provided")
+            .to_string();
+        let confidence = decision["confidence"]
+            .as_f64()
+            .unwrap_or(0.5)
+            .clamp(0.0, 1.0);
 
         // 解析 SL/TP：LLM 应在 open_long/open_short 时返回正数价格；其他动作或异常时为 None
-        let stop_loss = decision["stop_loss"]
-            .as_f64()
-            .filter(|v| *v > 0.0);
-        let take_profit = decision["take_profit"]
-            .as_f64()
-            .filter(|v| *v > 0.0);
+        let stop_loss = decision["stop_loss"].as_f64().filter(|v| *v > 0.0);
+        let take_profit = decision["take_profit"].as_f64().filter(|v| *v > 0.0);
 
         let market_regime = market["market_regime"].as_str().map(|s| s.to_string());
         let funding_rate_warning = market["funding_rate_warning"]

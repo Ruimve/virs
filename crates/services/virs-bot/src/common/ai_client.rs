@@ -56,11 +56,17 @@ pub async fn call_llm_api(
     let used_model = json["model"].as_str().unwrap_or(model).to_string();
 
     let content: serde_json::Value = serde_json::from_str(&content_str).map_err(|e| {
-        warn!("Failed to parse AI JSON response: {}, raw: {}", e, content_str);
+        warn!(
+            "Failed to parse AI JSON response: {}, raw: {}",
+            e, content_str
+        );
         e
     })?;
 
-    Ok(LlmCallResult { content, used_model })
+    Ok(LlmCallResult {
+        content,
+        used_model,
+    })
 }
 
 pub fn create_llm_http_client() -> reqwest::Client {

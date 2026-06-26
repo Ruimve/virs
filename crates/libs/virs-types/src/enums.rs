@@ -144,7 +144,10 @@ mod sqlx_impls {
     }
 
     impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Side {
-        fn encode_by_ref(&self, buf: &mut sqlx::postgres::PgArgumentBuffer) -> sqlx::encode::IsNull {
+        fn encode_by_ref(
+            &self,
+            buf: &mut sqlx::postgres::PgArgumentBuffer,
+        ) -> sqlx::encode::IsNull {
             let s = match self {
                 Side::Buy => "buy",
                 Side::Sell => "sell",
@@ -171,7 +174,10 @@ mod sqlx_impls {
     }
 
     impl<'q> sqlx::Encode<'q, sqlx::Postgres> for PositionSide {
-        fn encode_by_ref(&self, buf: &mut sqlx::postgres::PgArgumentBuffer) -> sqlx::encode::IsNull {
+        fn encode_by_ref(
+            &self,
+            buf: &mut sqlx::postgres::PgArgumentBuffer,
+        ) -> sqlx::encode::IsNull {
             let s = match self {
                 PositionSide::Long => "long",
                 PositionSide::Short => "short",
@@ -199,7 +205,10 @@ mod sqlx_impls {
     }
 
     impl<'q> sqlx::Encode<'q, sqlx::Postgres> for MarketType {
-        fn encode_by_ref(&self, buf: &mut sqlx::postgres::PgArgumentBuffer) -> sqlx::encode::IsNull {
+        fn encode_by_ref(
+            &self,
+            buf: &mut sqlx::postgres::PgArgumentBuffer,
+        ) -> sqlx::encode::IsNull {
             let s = match self {
                 MarketType::Spot => "spot",
                 MarketType::Perpetual => "perpetual",
