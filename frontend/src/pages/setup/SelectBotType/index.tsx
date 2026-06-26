@@ -27,7 +27,7 @@ const BOT_TYPES = [
 const SelectBotType = () => {
   const navigate = useNavigate();
   const { wizard, updateWizard, advanceStep } = useWizard();
-  const [botType, setBotType] = useState<'grid' | 'auto' | ''>(wizard.bot_type || '');
+  const [botType, setBotType] = useState<'grid' | 'auto'>(wizard.bot_type);
   const [existingBot, setExistingBot] = useState<{ id: string; bot_type: string } | null>(null);
 
   useEffect(() => {

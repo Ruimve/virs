@@ -1,4 +1,4 @@
-import { useState, useCallback, type ReactNode } from 'react';
+import { useState, useCallback, type ReactNode, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep';
@@ -20,227 +20,285 @@ const ConfigureExchange = () => {
   useWizardGuard(wizard.current_step, WizardStep.SelectExchange);
 
   // Step 1: API credentials
+  const [step1Status, setStep1Status] = useState<FlowStepStatus>('active');
+  const [step1Error, setStep1Error] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
-  const [selectedMarket, setSelectedMarket] = useState<MarketType>(
-    wizard.market_type || 'perpetual',
-  );
-  const [step1Status, setStep1Status] = useState<FlowStepStatus>('active');
-  const [error, setError] = useState('');
+  const [marketType, setMarketType] = useState<MarketType>(wizard.market_type);
 
   // Step 2: Connectivity + Permissions
   const [step2Status, setStep2Status] = useState<FlowStepStatus>('pending');
+  const [step2Error, setStep2Error] = useState<string | null>(null);
 
   // Step 3: Permissions
-  const [permissions, setPermissions] = useState<PermissionItem[]>([]);
   const [step3Status, setStep3Status] = useState<FlowStepStatus>('pending');
+  const [step3Error, setStep3Error] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<PermissionItem[]>([]);
 
-  const statuses = {
-    credentials: step1Status,
-    connectivity: step2Status,
-    permissions: step3Status,
-  };
+  const resetSteps = useCallback(() => {
+    setStep1Status('active');
+    setStep1Error(null);
+    setStep2Status('pending');
+    setStep2Error(null);
+    setStep3Status('pending');
+    setStep2Error(null);
+  }, []);
 
-  const summaries: Record<string, string | ReactNode> = {};
-  if (step1Status === 'done') summaries.credentials = `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`;
-  if (step2Status === 'done') summaries.connectivity = 'Connected to Binance';
-  else if (step2Status === 'error') summaries.connectivity = 'Connection failed';
-  if (step3Status === 'done') summaries.permissions = 'All checks passed';
-
-  const statusIcon = (status: string) => {
-    if (status === 'ok') return <span className="text-emerald-400">&#10003;</span>;
-    if (status === 'warn') return <span className="text-amber-400">&#9888;</span>;
-    return <span className="text-red-400">&#10007;</span>;
-  };
-
-  const resetDownstream = () => {
-    if (step2Status !== 'pending') setStep2Status('pending');
-    if (step3Status !== 'pending') setStep3Status('pending');
+  const handleContinue = () => {
+    updateWizard({ exchange: 'binance', market_type: marketType });
+    advanceStep(WizardStep.ConfigureParams);
+    navigate('/setup/params', { replace: true });
   };
 
   // Check permissions via apiRestrictions
-  const doCheckPermissions = useCallback(async () => {
+  const startStep3 = useCallback(async () => {
     setStep3Status('verifying');
     try {
       const result = await checkPermissions();
-      if (!result.success || !result.data?.permissions) {
-        setError(result.error || 'Permission check failed');
-        setStep3Status('error');
+      if (result.success && result.data?.permissions) {
+        setPermissions(result.data.permissions);
+        const allOk = result.data.permissions.every(
+          (p) => p.status === 'ok' || p.status === 'warn',
+        );
+        setStep3Status(allOk ? 'done' : 'active');
         return;
       }
-      setPermissions(result.data.permissions);
-      const allOk = result.data.permissions.every((p) => p.status === 'ok' || p.status === 'warn');
-      setStep3Status(allOk ? 'done' : 'active');
-    } catch {
-      setError('Permission check failed');
+
       setStep3Status('error');
+      setStep3Error(result.error || 'Permission check failed');
+    } catch {
+      setStep2Status('error');
+      setStep2Error('Network error');
     }
   }, []);
 
   // Test connectivity only (ping) — uses saved credentials from registry
-  const doTestConnectivity = useCallback(async () => {
+  const startStep2 = useCallback(async () => {
     setStep2Status('verifying');
     try {
       const result = await testCredential();
-      if (!result.success || !result.data?.connected) {
-        setError(result.data?.message || result.error || 'Connection failed');
-        setStep2Status('error');
+      if (result.success && result.data?.connected) {
+        setStep2Status('done');
+        startStep3();
         return;
       }
-      setStep2Status('done');
-      doCheckPermissions();
-    } catch {
-      setError('Connection test failed');
-      setStep2Status('error');
-    }
-  }, [doCheckPermissions]);
 
-  const steps: FlowStepConfig[] = [
-    {
-      key: 'credentials',
-      title: 'API Credentials',
-      render: () => (
-        <div className="space-y-3">
-          <input
-            type="text"
-            value={apiKey}
-            onInput={(e) => {
-              setApiKey(e.currentTarget.value);
-              setError('');
-              if (step1Status === 'error') setStep1Status('active');
-              resetDownstream();
-            }}
-            className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
-            placeholder="API Key"
-          />
-          <input
-            type="password"
-            value={apiSecret}
-            onInput={(e) => {
-              setApiSecret(e.currentTarget.value);
-              setError('');
-              if (step1Status === 'error') setStep1Status('active');
-              resetDownstream();
-            }}
-            className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
-            placeholder="API Secret"
-          />
-          <div>
-            <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">
-              Market Type
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {MARKET_TYPES.map((mt) => (
-                <button
-                  key={mt.id}
-                  onClick={() => {
-                    setSelectedMarket(mt.id);
-                    resetDownstream();
-                  }}
-                  className={`p-2.5 rounded-lg border text-center transition-all duration-200 ${
-                    selectedMarket === mt.id
-                      ? 'bg-indigo-500/10 border-indigo-500/30 text-on-base'
-                      : 'bg-surface-1 border-line-default text-on-surface-tertiary hover:bg-surface-2'
-                  }`}
-                >
-                  <p className="text-xs font-medium">{mt.label}</p>
-                  <p className="text-[10px] text-on-surface-muted mt-0.5">{mt.desc}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-          {error && <p className="text-[12px] text-red-400">{error}</p>}
-          <button
-            onClick={verifyCredentials}
-            disabled={!apiKey.trim() || !apiSecret.trim() || step1Status === 'verifying'}
-            className="px-4 py-2 text-[12px] bg-indigo-500/20 border border-indigo-500/30 rounded-lg text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-30 transition-all duration-200"
-          >
-            {step1Status === 'verifying' ? 'Verifying...' : 'Verify'}
-          </button>
-        </div>
-      ),
-    },
-    {
-      key: 'connectivity',
-      title: 'Connectivity',
-      description: 'Ping exchange server to verify reachability',
-      render: () => (
-        <div className="space-y-2">
-          {step2Status === 'verifying' && (
-            <p className="text-[12px] text-on-surface-tertiary">Testing connection to Binance...</p>
-          )}
-          {step2Status === 'error' && (
-            <p className="text-[12px] text-red-400">{error || 'Connection failed'}</p>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'permissions',
-      title: 'Permissions',
-      description: 'Check API key permissions and restrictions',
-      render: () => (
-        <div className="space-y-1.5">
-          {permissions.map((p, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-[12px]">{statusIcon(p.status)}</span>
-                <span className="text-[12px] text-on-surface-tertiary">{p.label}</span>
-              </div>
-              <span
-                className={`text-[11px] ${
-                  p.status === 'ok'
-                    ? 'text-on-surface-muted'
-                    : p.status === 'warn'
-                      ? 'text-amber-400/60'
-                      : 'text-red-400/60'
-                }`}
-              >
-                {p.detail}
-              </span>
-            </div>
-          ))}
-        </div>
-      ),
-    },
-  ];
+      setStep2Status('error');
+      setStep2Error(result.error || result.data?.message || 'Connection failed');
+    } catch {
+      setStep2Status('error');
+      setStep2Error('Network error');
+    }
+  }, [startStep3]);
 
   // Verify: Step 1 save → done, then auto-start Step 2
-  const verifyCredentials = async () => {
-    const key = apiKey.trim();
-    const secret = apiSecret.trim();
-    if (!key || !secret) return;
-
+  const startStep1 = useCallback(async () => {
     setStep1Status('verifying');
-    setError('');
+    setStep1Error('');
 
     try {
-      const result = await saveCredential({
+      const res = await saveCredential({
         exchange: 'binance',
-        api_key: key,
-        api_secret: secret,
-        market_type: selectedMarket,
+        api_key: apiKey,
+        api_secret: apiSecret,
+        market_type: marketType,
         label: 'binance verification',
       });
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to save credentials');
+      if (res.success) {
+        setStep1Status('done');
+        startStep2();
+        return;
       }
-      setStep1Status('done');
-      doTestConnectivity();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save credentials');
-      setStep1Status('error');
-    }
-  };
 
-  const handleContinue = () => {
-    updateWizard({ exchange: 'binance', market_type: selectedMarket });
-    advanceStep(WizardStep.ConfigureParams);
-    navigate('/setup/params', { replace: true });
-  };
+      setStep1Status('error');
+      setStep1Error('Failed to save credentials');
+    } catch {
+      setStep1Status('error');
+      setStep1Error('Network error');
+    }
+  }, [apiKey, apiSecret, marketType, startStep2]);
+
+  const handleApiKeyInput = useCallback(
+    (e: React.InputEvent<HTMLInputElement>) => {
+      setApiKey(e.currentTarget.value);
+      resetSteps();
+    },
+    [resetSteps],
+  );
+
+  const handleApiSecretInput = useCallback(
+    (e: React.InputEvent<HTMLInputElement>) => {
+      setApiSecret(e.currentTarget.value);
+      resetSteps();
+    },
+    [resetSteps],
+  );
+
+  const handleSelectMarketType = useCallback((mt: MarketType) => {
+    setMarketType(mt);
+  }, []);
+
+  const renderStep1 = useCallback(() => {
+    const disabled = !apiKey || !apiSecret || step1Status === 'verifying';
+    return (
+      <div className="space-y-3">
+        <input
+          type="text"
+          value={apiKey}
+          onInput={handleApiKeyInput}
+          className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
+          placeholder="API Key"
+        />
+        <input
+          type="password"
+          value={apiSecret}
+          onInput={handleApiSecretInput}
+          className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
+          placeholder="API Secret"
+        />
+        <div>
+          <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">
+            Market Type
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {MARKET_TYPES.map((mt) => (
+              <button
+                key={mt.id}
+                onClick={() => handleSelectMarketType(mt.id)}
+                className={`p-2.5 rounded-lg border text-center transition-all duration-200 ${
+                  marketType === mt.id
+                    ? 'bg-indigo-500/10 border-indigo-500/30 text-on-base'
+                    : 'bg-surface-1 border-line-default text-on-surface-tertiary hover:bg-surface-2'
+                }`}
+              >
+                <p className="text-xs font-medium">{mt.label}</p>
+                <p className="text-[10px] text-on-surface-muted mt-0.5">{mt.desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+        {step1Status === 'error' && <p className="text-[12px] text-red-400">{step1Error}</p>}
+        <button
+          onClick={startStep1}
+          disabled={disabled}
+          className="px-4 py-2 text-[12px] bg-indigo-500/20 border border-indigo-500/30 rounded-lg text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-30 transition-all duration-200"
+        >
+          {step1Status === 'verifying' ? 'Verifying...' : 'Verify'}
+        </button>
+      </div>
+    );
+  }, [
+    apiKey,
+    apiSecret,
+    marketType,
+    step1Status,
+    step1Error,
+    handleApiKeyInput,
+    handleApiSecretInput,
+    handleSelectMarketType,
+    startStep1,
+  ]);
+
+  const renderStep2 = useCallback(() => {
+    return (
+      <div className="space-y-2">
+        {step2Status === 'verifying' && (
+          <p className="text-[12px] text-on-surface-tertiary">Testing connection to Binance...</p>
+        )}
+        {step2Status === 'error' && (
+          <p className="text-[12px] text-red-400">{step2Error || 'Connection failed'}</p>
+        )}
+      </div>
+    );
+  }, [step2Status, step2Error]);
+
+  const renderStatusIcon = useCallback((status: string) => {
+    if (status === 'ok') return <span className="text-emerald-400">&#10003;</span>;
+    if (status === 'warn') return <span className="text-amber-400">&#9888;</span>;
+    return <span className="text-red-400">&#10007;</span>;
+  }, []);
+
+  const renderStep3 = useCallback(() => {
+    return (
+      <div className="space-y-1.5">
+        {permissions.map((p, i) => (
+          <div
+            key={i}
+            className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-[12px]">{renderStatusIcon(p.status)}</span>
+              <span className="text-[12px] text-on-surface-tertiary">{p.label}</span>
+            </div>
+            <span
+              className={`text-[11px] ${
+                p.status === 'ok'
+                  ? 'text-on-surface-muted'
+                  : p.status === 'warn'
+                    ? 'text-amber-400/60'
+                    : 'text-red-400/60'
+              }`}
+            >
+              {p.detail}
+            </span>
+          </div>
+        ))}
+        {step3Status === 'error' && (
+          <p className="text-[12px] text-red-400">{step3Error || 'Connection failed'}</p>
+        )}
+      </div>
+    );
+  }, [permissions, step3Status, step3Error, renderStatusIcon]);
+
+  const steps: FlowStepConfig[] = useMemo(
+    () => [
+      {
+        key: 'credentials',
+        title: 'API Credentials',
+        render: renderStep1,
+      },
+      {
+        key: 'connectivity',
+        title: 'Connectivity',
+        description: 'Ping exchange server to verify reachability',
+        render: renderStep2,
+      },
+      {
+        key: 'permissions',
+        title: 'Permissions',
+        description: 'Check API key permissions and restrictions',
+        render: renderStep3,
+      },
+    ],
+    [renderStep1, renderStep2, renderStep3],
+  );
+
+  const statuses = useMemo(() => {
+    return {
+      credentials: step1Status,
+      connectivity: step2Status,
+      permissions: step3Status,
+    };
+  }, [step1Status, step2Status, step3Status]);
+
+  const summaries = useMemo(() => {
+    const summaryMap: Record<string, string | ReactNode> = {};
+    if (step1Status === 'done') {
+      summaryMap.credentials = `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`;
+    }
+
+    if (step2Status === 'done') {
+      summaryMap.connectivity = 'Connected to Binance';
+    } else if (step2Status === 'error') {
+      summaryMap.connectivity = 'Connection failed';
+    }
+
+    if (step3Status === 'done') {
+      summaryMap.permissions = 'All checks passed';
+    }
+
+    return summaryMap;
+  }, [apiKey, step1Status, step2Status, step3Status]);
 
   const canContinue = step2Status === 'done' && step3Status === 'done';
 

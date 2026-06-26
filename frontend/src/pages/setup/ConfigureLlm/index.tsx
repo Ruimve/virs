@@ -174,7 +174,12 @@ const ConfigureLlm = () => {
     [resetSteps, fetchModels],
   );
 
+  const handleSelectModel = useCallback((m: string) => {
+    setModel(m);
+  }, []);
+
   const renderStep1 = useCallback(() => {
+    const disabled = !apiKey || !model || step1Status === 'verifying' || modelsLoading;
     return (
       <div className="space-y-3">
         <div className="relative">
@@ -210,7 +215,6 @@ const ConfigureLlm = () => {
             </div>
           )}
         </div>
-        {step1Error && <p className="text-[12px] text-red-400">{step1Error}</p>}
         {models.length > 0 && (
           <div>
             <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">
@@ -220,7 +224,7 @@ const ConfigureLlm = () => {
               {models.map((m) => (
                 <button
                   key={m.id}
-                  onClick={() => setModel(m.id)}
+                  onClick={() => handleSelectModel(m.id)}
                   className={`px-2.5 py-1 rounded-md text-[11px] border transition-all duration-200 ${
                     model === m.id
                       ? 'bg-indigo-500/15 border-indigo-500/30 text-on-surface'
@@ -233,16 +237,27 @@ const ConfigureLlm = () => {
             </div>
           </div>
         )}
+        {step1Error && <p className="text-[12px] text-red-400">{step1Error}</p>}
         <button
           onClick={startStep1}
-          disabled={!apiKey.trim() || !model.trim() || step1Status === 'verifying' || modelsLoading}
+          disabled={disabled}
           className="px-4 py-2 text-[12px] bg-indigo-500/20 border border-indigo-500/30 rounded-lg text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-30 transition-all duration-200"
         >
           {step1Status === 'verifying' ? 'Verifying...' : 'Verify'}
         </button>
       </div>
     );
-  }, [apiKey, modelsLoading, step1Error, step1Status, model, models, handleKeyInput, startStep1]);
+  }, [
+    apiKey,
+    modelsLoading,
+    step1Error,
+    step1Status,
+    model,
+    models,
+    handleKeyInput,
+    handleSelectModel,
+    startStep1,
+  ]);
 
   const renderStep2 = useCallback(() => {
     return (

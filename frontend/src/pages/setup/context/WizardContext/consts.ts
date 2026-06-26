@@ -16,7 +16,7 @@ export interface WizardState {
   current_step: WizardStepValue;
   exchange: string;
   market_type: 'perpetual' | 'spot';
-  bot_type: 'grid' | 'auto' | '';
+  bot_type: 'grid' | 'auto';
   paper_mode: boolean;
   llm_provider: string;
   llm_model: string;
@@ -37,7 +37,7 @@ export const DEFAULT_STATE: WizardState = {
   current_step: WizardStep.Loading,
   exchange: '',
   market_type: 'perpetual',
-  bot_type: '',
+  bot_type: 'auto',
   paper_mode: true,
   llm_provider: '',
   llm_model: '',
