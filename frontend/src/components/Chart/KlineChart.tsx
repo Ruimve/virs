@@ -55,6 +55,16 @@ interface KlineChartProps {
   overlays?: OverlayLine[];
 }
 
+// 移动端断点（与 Tailwind md 一致）
+const MOBILE_BREAKPOINT = 768;
+// 可视区域 K 线根数：电脑端 100，手机端 50
+function getVisibleRangeWidth() {
+  if (typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT) {
+    return 50;
+  }
+  return 100;
+}
+
 // ── Component ─────────────────────────────────────────────
 
 const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineChart(
@@ -214,9 +224,10 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       }
     }
 
-    // Show the last 100 candles with 1/8 right padding for future candles
-    if (data.length > 100) {
-      const rangeWidth = 100;
+    // Show the last N candles with 1/8 right padding for future candles
+    // 电脑端 100 根，手机端 50 根
+    const rangeWidth = getVisibleRangeWidth();
+    if (data.length > rangeWidth) {
       chart.timeScale().setVisibleLogicalRange({
         from: data.length - rangeWidth,
         to: data.length - 1 + rangeWidth / 8,
@@ -274,9 +285,10 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       );
     }
 
-    // Fit to last 100 candles with 1/8 right padding
-    if (data.length > 100) {
-      const rangeWidth = 100;
+    // Fit to last N candles with 1/8 right padding
+    // 电脑端 100 根，手机端 50 根
+    const rangeWidth = getVisibleRangeWidth();
+    if (data.length > rangeWidth) {
       chartRef.current?.timeScale().setVisibleLogicalRange({
         from: data.length - rangeWidth,
         to: data.length - 1 + rangeWidth / 8,

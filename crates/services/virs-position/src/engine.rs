@@ -18,7 +18,7 @@ use futures_util::StreamExt;
 
 use virs_types::enums::*;
 use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
-use virs_types::market::Balance;
+use virs_types::market::{Balance, ExchangePosition};
 use virs_types::position::*;
 
 use crate::persistence::PositionPersistence;
@@ -245,12 +245,25 @@ impl PositionEngine {
         let engine_id = &self.inner.config.engine_id;
 
         let open_positions = self.inner.persistence.get_open_positions(engine_id).await?;
-        for pos in open_positions {
+        for pos in &open_positions {
             let key = (pos.exchange.clone(), pos.symbol.clone(), pos.side);
             self.inner.position_id_index.insert(pos.id, key.clone());
-            self.inner.positions.insert(key, pos);
+            self.inner.positions.insert(key, pos.clone());
         }
         info!(engine_id = %engine_id, count = self.inner.positions.len(), "Recovered positions from database");
+
+        // 同步恢复的仓位到交易所内存状态（仅 Paper 模式需要，真实交易所空实现）
+        // 避免 sync_loop 误判"本地有但交易所没有" → 强制关闭本地仓位
+        let exchange_positions: Vec<ExchangePosition> = open_positions.iter().map(|p| ExchangePosition {
+            symbol: p.symbol.clone(),
+            side: p.side,
+            size: p.size,
+            entry_price: p.entry_price,
+            leverage: p.leverage,
+            unrealized_pnl: p.unrealized_pnl,
+            liquidation_price: p.liquidation_price,
+        }).collect();
+        self.inner.exchange.restore_positions(exchange_positions).await;
 
         self.full_sync().await;
         Ok(())
@@ -272,7 +285,9 @@ impl PositionEngine {
                             pos.updated_at = Utc::now();
                             drop(local);
                             persist!(self.inner.persistence.upsert_position(&pos), "Failed to persist position in full_sync");
-                            self.inner.positions.insert(key, pos);
+                            self.inner.positions.insert(key, pos.clone());
+                            // 发出 PositionUpdated 事件，让前端 WS 和 AutoWorker 感知仓位已恢复
+                            self.inner.emit_event(EngineEvent::PositionUpdated { position: pos });
                         }
                         None => {
                             let now = Utc::now();
@@ -302,8 +317,11 @@ impl PositionEngine {
                             let new_key = (position.exchange.clone(), position.symbol.clone(), position.side);
                             self.inner.position_id_index.insert(position.id, new_key.clone());
                             persist!(self.inner.persistence.upsert_position(&position), "Failed to persist new position in full_sync");
-                            self.inner.positions.insert(new_key, position);
+                            self.inner.positions.insert(new_key, position.clone());
                             info!(symbol = %ep.symbol, "Recovered external position");
+                            // 外部发现的仓位也发出事件
+                            self.inner.emit_event(EngineEvent::PositionOpened { position: position.clone() });
+                            self.inner.emit_event(EngineEvent::PositionUpdated { position });
                         }
                     }
                 }

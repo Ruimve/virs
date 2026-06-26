@@ -34,6 +34,12 @@ function tradesToMarkers(trades: AutoTrade[]) {
     text: string;
   }> = [];
 
+  // 价格简化为 k 单位（如 59000 → 59.0k），减少 marker text 宽度避免重叠
+  const fmtPrice = (p: number) => {
+    if (!p) return '';
+    return p >= 1000 ? `${(p / 1000).toFixed(1)}k` : p.toFixed(2);
+  };
+
   for (const t of trades) {
     // 开仓 marker
     const openTime = Math.floor(new Date(t.opened_at).getTime() / 1000);
@@ -43,7 +49,7 @@ function tradesToMarkers(trades: AutoTrade[]) {
       position: openIsBuy ? 'belowBar' : 'aboveBar',
       color: openIsBuy ? '#10b981' : '#ef4444',
       shape: openIsBuy ? 'arrowUp' : 'arrowDown',
-      text: `${openIsBuy ? '开多' : '开空'} ${t.open_price.toFixed(2)}`,
+      text: fmtPrice(t.open_price),
     });
 
     // 平仓 marker（仅已平仓记录）
@@ -55,7 +61,7 @@ function tradesToMarkers(trades: AutoTrade[]) {
         position: closeIsBuy ? 'belowBar' : 'aboveBar',
         color: closeIsBuy ? '#10b981' : '#ef4444',
         shape: closeIsBuy ? 'arrowUp' : 'arrowDown',
-        text: `${closeIsBuy ? '平空' : '平多'} ${t.close_price?.toFixed(2)}`,
+        text: fmtPrice(t.close_price ?? 0),
       });
     }
   }

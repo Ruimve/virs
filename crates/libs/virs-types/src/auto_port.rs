@@ -59,6 +59,10 @@ pub trait AutoStore: Send + Sync {
     /// 返回 (trade_id, stop_loss, take_profit) — 用于恢复内存中的风控边界
     async fn find_open_trade(&self, bot_id: Uuid) -> anyhow::Result<Option<(Uuid, f64, f64)>>;
 
+    /// 标记 trade 为孤儿状态（仅更新 status，保留开仓数据用于回溯）
+    /// 用于 PE 仓位丢失但 trade 仍为 open 的场景
+    async fn mark_trade_orphaned(&self, trade_id: Uuid) -> anyhow::Result<()>;
+
     /// 查找最近一次已平仓的 trade 记录（重启恢复冷却期用）
     /// 返回 (open_side, close_reason, closed_at) — 用于恢复内存中的 last_close_event
     async fn find_last_closed_trade(

@@ -179,6 +179,15 @@ impl AutoStore for PgAutoStore {
         Ok(row)
     }
 
+    async fn mark_trade_orphaned(&self, trade_id: Uuid) -> anyhow::Result<()> {
+        sqlx::query(
+            "UPDATE qd_auto_trades SET status = 'orphaned', closed_at = NOW() WHERE id = $1 AND status = 'open'",
+        )
+        .bind(trade_id)
+        .execute(&self.db).await?;
+        Ok(())
+    }
+
     async fn find_last_closed_trade(
         &self, bot_id: Uuid,
     ) -> anyhow::Result<Option<(String, String, DateTime<Utc>)>> {

@@ -404,6 +404,27 @@ impl AutoWorker {
             }
         }
 
+        // 孤儿 trade 检测：bot.position_id 为空但 qd_auto_trades 仍有 open 记录
+        // 这种情况通常由 PE 仓位丢失/重启超时导致，标记为 orphaned（保留开仓数据用于回溯）
+        if self.bot.position_id.filter(|id| *id != Uuid::nil()).is_none() {
+            match self.store.find_open_trade(self.bot.id).await {
+                Ok(Some((trade_id, _sl, _tp))) => {
+                    warn!(
+                        bot_id = %self.bot.id,
+                        trade_id = %trade_id,
+                        "Orphaned trade detected: open trade exists but bot.position_id is empty, marking as orphaned"
+                    );
+                    let _ = self.store.mark_trade_orphaned(trade_id).await;
+                }
+                Ok(None) => {
+                    // 无 open trade，正常状态
+                }
+                Err(e) => {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to check orphaned trade");
+                }
+            }
+        }
+
         // 如果 bot 有 position_id，等待 PE 推送仓位事件以恢复 current_position
         // 这确保重启后能立即获取仓位状态，不会错过止损止盈检查
         if self.bot.position_id.filter(|id| *id != Uuid::nil()).is_some() {
@@ -434,39 +455,50 @@ impl AutoWorker {
                     warn!(bot_id = %self.bot.id, error = %e, "Failed to load open trade record");
                 }
             }
-            let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
-            loop {
-                if self.current_position.is_some() {
-                    info!(bot_id = %self.bot.id, "current_position restored from PE event");
-                    break;
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    warn!(
-                        bot_id = %self.bot.id,
-                        "Timeout waiting for PE position event, clearing stale position_id"
-                    );
-                    self.bot.position_id = None;
-                    self.save_position().await;
-                    break;
-                }
-                tokio::select! {
-                    ev = self.pe_event_rx.recv() => {
-                        match ev {
-                            Ok(ev) => self.on_pe_event(ev).await,
-                            Err(broadcast::error::RecvError::Lagged(n)) => {
-                                warn!(bot_id = %self.bot.id, lagged = n, "PE event lagged during startup restore");
-                            }
-                            Err(broadcast::error::RecvError::Closed) => {
-                                warn!(bot_id = %self.bot.id, "PE event channel closed during startup restore");
-                                break;
+            // 主动从 PE 查询仓位状态（不依赖事件推送，避免 full_sync 只发出 PositionSynced 导致超时）
+            self.refresh_position_from_pe().await;
+            // 如果主动查询已恢复，跳过事件等待循环
+            if self.current_position.is_some() {
+                info!(
+                    bot_id = %self.bot.id,
+                    "current_position restored via direct PE query"
+                );
+            } else {
+                // 主动查询未恢复，等待 PE 事件推送（最多 15 秒）
+                let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+                loop {
+                    if self.current_position.is_some() {
+                        info!(bot_id = %self.bot.id, "current_position restored from PE event");
+                        break;
+                    }
+                    if tokio::time::Instant::now() >= deadline {
+                        warn!(
+                            bot_id = %self.bot.id,
+                            "Timeout waiting for PE position event, clearing stale position_id"
+                        );
+                        self.bot.position_id = None;
+                        self.save_position().await;
+                        break;
+                    }
+                    tokio::select! {
+                        ev = self.pe_event_rx.recv() => {
+                            match ev {
+                                Ok(ev) => self.on_pe_event(ev).await,
+                                Err(broadcast::error::RecvError::Lagged(n)) => {
+                                    warn!(bot_id = %self.bot.id, lagged = n, "PE event lagged during startup restore");
+                                }
+                                Err(broadcast::error::RecvError::Closed) => {
+                                    warn!(bot_id = %self.bot.id, "PE event channel closed during startup restore");
+                                    break;
+                                }
                             }
                         }
+                        _ = shutdown_rx.recv() => {
+                            info!(bot_id = %self.bot.id, "Shutdown during PE position restore");
+                            return;
+                        }
+                        _ = tokio::time::sleep(Duration::from_millis(200)) => {}
                     }
-                    _ = shutdown_rx.recv() => {
-                        info!(bot_id = %self.bot.id, "Shutdown during PE position restore");
-                        return;
-                    }
-                    _ = tokio::time::sleep(Duration::from_millis(200)) => {}
                 }
             }
         }

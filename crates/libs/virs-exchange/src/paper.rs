@@ -509,4 +509,26 @@ impl ExchangePe for PaperExchangeAdapter {
     async fn on_price_tick(&self, symbol: &str, price: f64) {
         PaperExchangeAdapter::on_price_tick(self, symbol, price).await;
     }
+
+    /// Paper 模式从 DB 恢复仓位到内存。
+    /// 进程重启后 Paper 的 `positions` 内存丢失，需由 PE 在 recover_state 时调用此方法恢复。
+    async fn restore_positions(&self, positions: Vec<ExchangePosition>) {
+        for pos in positions {
+            // 跳过 size 为 0 的无效仓位
+            if pos.size.abs() < 1e-8 { continue; }
+            let key = format!("{}:{:?}", pos.symbol, pos.side);
+            self.positions.insert(key.clone(), PaperPosition {
+                symbol: pos.symbol.clone(),
+                side: pos.side,
+                size: pos.size,
+                entry_price: pos.entry_price,
+                leverage: pos.leverage,
+                unrealized_pnl: pos.unrealized_pnl,
+                liquidation_price: pos.liquidation_price,
+            });
+            // 同步 entry_price 作为 last_price（避免后续下单 fill_price=0）
+            self.last_prices.insert(pos.symbol.clone(), pos.entry_price);
+            info!(symbol = %pos.symbol, side = ?pos.side, size = pos.size, "Paper position restored from DB");
+        }
+    }
 }

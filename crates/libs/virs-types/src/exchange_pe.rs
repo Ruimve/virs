@@ -46,4 +46,9 @@ pub trait ExchangePe: Send + Sync {
     /// Price tick — Paper mode drives Limit order matching.
     /// Real exchange implementations should be no-op (WebSocket pushes order updates).
     async fn on_price_tick(&self, _symbol: &str, _price: f64) {}
+
+    /// 从 DB 恢复仓位到交易所内存状态（仅 Paper 模式需要）。
+    /// 真实交易所无需实现（仓位状态由交易所维护，重启不丢失）。
+    /// PE 在 recover_state 时调用，避免 sync_loop 误判"本地有但交易所没有"。
+    async fn restore_positions(&self, _positions: Vec<ExchangePosition>) {}
 }
