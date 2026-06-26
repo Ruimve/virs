@@ -73,18 +73,10 @@ const ConfigureParams = () => {
   const navigate = useNavigate();
   const { wizard, updateWizard, advanceStep } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.ConfigureParams);
-  const isGrid = wizard.bot_type === 'grid';
-  const params = isGrid ? GRID_PARAMS : AUTO_PARAMS;
 
   const [values, setValues] = useState<Record<string, string>>(
     (wizard.bot_params as Record<string, string>) || {},
   );
-
-  const setValue = (key: string, val: string) => {
-    setValues((prev) => ({ ...prev, [key]: val }));
-  };
-
-  const canContinue = params.filter((p) => p.required).every((p) => values[p.key]?.trim());
 
   const handleContinue = () => {
     updateWizard({ bot_params: values });
@@ -92,10 +84,18 @@ const ConfigureParams = () => {
     navigate('/setup/review', { replace: true });
   };
 
+  const handleInput = (key: string, val: string) => {
+    setValues((prev) => ({ ...prev, [key]: val }));
+  };
+
+  const isGrid = wizard.bot_type === 'grid';
+  const params = isGrid ? GRID_PARAMS : AUTO_PARAMS;
+  const canContinue = params.filter((p) => p.required).every((p) => values[p.key]);
+
   return (
     <Wizard
       step={WizardStep.ConfigureParams}
-      title={isGrid ? 'Grid Parameters' : 'Auto Trading Parameters'}
+      title={isGrid ? 'Grid Trading Parameters' : 'Auto Trading Parameters'}
       subtitle="Configure the trading parameters for your bot"
       actions={
         <>
@@ -124,8 +124,8 @@ const ConfigureParams = () => {
             </label>
             <input
               type={param.type}
-              value={values[param.key] || ''}
-              onInput={(e) => setValue(param.key, e.currentTarget.value)}
+              value={values[param.key]}
+              onInput={(e) => handleInput(param.key, e.currentTarget.value)}
               className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
               placeholder={param.placeholder}
             />

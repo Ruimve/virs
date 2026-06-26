@@ -9,6 +9,7 @@ const ReviewLaunch = () => {
   const navigate = useNavigate();
   const { wizard, updateWizard } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.ReviewLaunch);
+
   const isGrid = wizard.bot_type === 'grid';
   const v = (wizard.bot_params as Record<string, string>) || {};
 
@@ -47,7 +48,7 @@ const ReviewLaunch = () => {
         botId = result.data.id;
       } else {
         const result = await createAutoBot({
-          symbol: v.symbol || '',
+          symbol: v.symbol,
           exchange: w.exchange,
           market_type: marketType,
           leverage: parseInt(v.leverage || '10'),
