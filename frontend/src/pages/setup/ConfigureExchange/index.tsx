@@ -26,7 +26,7 @@ const MARKET_TYPES: Array<{ id: MarketType; label: string; desc: string }> = [
  * - base64 内容内部如果是单行（无空格），保持原样（合法的单行 PEM）
  * - 非 PEM 格式（HMAC secret、base64 seed）原样返回
  */
-function normalizePemSecret(raw: string): string {
+const normalizePemSecret = (raw: string): string => {
   const value = raw.trim();
   // 必须同时包含 BEGIN 和 END 标记才视为 PEM
   const beginIdx = value.search(/-----BEGIN [A-Z ]*PRIVATE KEY-----/);
@@ -52,7 +52,7 @@ function normalizePemSecret(raw: string): string {
     lines.push(body.slice(i, i + 64));
   }
   return `${header}\n${lines.join('\n')}\n${footer}`;
-}
+};
 
 const ConfigureExchange = () => {
   const navigate = useNavigate();
