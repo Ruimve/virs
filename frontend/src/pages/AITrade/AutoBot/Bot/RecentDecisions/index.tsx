@@ -1,6 +1,6 @@
 import { memo } from 'react';
-import type { AnalysisLog } from '@/service';
 import { useNavigate } from 'react-router-dom';
+import type { AnalysisLog } from '@/service';
 import { actionColor, actionLabel } from '../../../components/utils/utils';
 
 interface Props {

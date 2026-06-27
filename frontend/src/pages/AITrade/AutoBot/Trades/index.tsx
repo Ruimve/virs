@@ -1,6 +1,6 @@
-import { getAutoTrades, type AutoTrade } from '@/service';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { getAutoTrades, type AutoTrade } from '@/service';
 import { formatPnl } from '../../components/utils/utils';
 
 const PAGE_SIZE = 20;
