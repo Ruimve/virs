@@ -7,4 +7,4 @@ const Levels = () => {
   return <GridLevelsTab gridLevels={gridLevels} />;
 };
 
-export default memo(Levels);
+export default Levels;

@@ -73,14 +73,15 @@ const StickyMarket = ({
   const [expanded, setExpanded] = useState(false);
   const summary = useMarketSummary(klineData, klineTimeframe);
 
-  const changeColor =
-    summary.changePct > 0
+  const changeColor = useMemo(() => {
+    return summary.changePct > 0
       ? 'text-emerald-400'
       : summary.changePct < 0
         ? 'text-red-400'
         : 'text-on-surface-tertiary';
+  }, [summary.changePct]);
 
-  const changeSign = summary.changePct > 0 ? '+' : '';
+  const changeSign = useMemo(() => summary.changePct > 0 ? '+' : '', [summary.changePct]);
 
   const Chart = useMemo(() => {
     return klineData.length > 0 ? (

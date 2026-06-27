@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode, memo } from 'react';
 
 export type FlowStepStatus = 'pending' | 'active' | 'verifying' | 'done' | 'error';
 
@@ -175,4 +175,4 @@ function FlowStep({
   );
 }
 
-export default FlowStep;
+export default memo(FlowStep);

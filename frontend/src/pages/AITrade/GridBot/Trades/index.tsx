@@ -143,4 +143,4 @@ const Trades = () => {
   );
 };
 
-export default memo(Trades);
+export default Trades;

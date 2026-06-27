@@ -39,4 +39,4 @@ const Detail = () => {
   return <AILogDetail log={log} loading={loading} />;
 };
 
-export default memo(Detail);
+export default Detail;

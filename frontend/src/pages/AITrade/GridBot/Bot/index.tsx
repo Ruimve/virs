@@ -163,4 +163,4 @@ const Bot = () => {
   );
 };
 
-export default memo(Bot);
+export default Bot;

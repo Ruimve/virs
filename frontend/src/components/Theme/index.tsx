@@ -1,4 +1,3 @@
-import { memo } from 'react';
 import { useTheme } from './useTheme';
 const Theme = () => {
   const { isDark, toggleTheme } = useTheme();
@@ -40,4 +39,4 @@ const Theme = () => {
   );
 };
 
-export default memo(Theme);
+export default Theme;

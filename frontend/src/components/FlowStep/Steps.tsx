@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import FlowStep, { type FlowStepStatus } from './Step';
 
 export type { FlowStepStatus };
@@ -50,4 +50,4 @@ function FlowSteps({ steps, statuses, summaries, onToggles }: FlowStepsProps) {
   );
 }
 
-export default FlowSteps;
+export default memo(FlowSteps);

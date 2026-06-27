@@ -31,4 +31,4 @@ const AILog = () => {
   return <AILogList logs={logs} loading={loading} botType="grid" botId={bot?.id} />;
 };
 
-export default memo(AILog);
+export default AILog;

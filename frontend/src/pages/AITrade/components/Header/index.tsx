@@ -42,7 +42,6 @@ const Header = () => {
   const { enabled: paperMode } = usePaper();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerClosing, setDrawerClosing] = useState(false);
-  const sc: StatusStyle = statusConfig(bot?.status || '');
 
   const closeDrawer = () => {
     setDrawerClosing(true);
@@ -58,6 +57,8 @@ const Header = () => {
       setDrawerClosing(false);
     }
   };
+
+  const sc = statusConfig(bot?.status || '');
 
   return (
     <>
@@ -200,4 +201,4 @@ const Header = () => {
   );
 };
 
-export default memo(Header);
+export default Header;

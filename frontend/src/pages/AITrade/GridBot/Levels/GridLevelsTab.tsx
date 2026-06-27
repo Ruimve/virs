@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { formatSmart } from '../../components/utils/utils';
 
 interface GridLevelInfo {
@@ -18,7 +19,7 @@ interface GridLevelsTabProps {
   gridLevels: GridLevelInfo[];
 }
 
-export default function GridLevelsTab({ gridLevels }: GridLevelsTabProps) {
+const GridLevelsTab = ({ gridLevels }: GridLevelsTabProps) => {
   if (gridLevels.length === 0) {
     return <div className="text-center py-12 text-on-surface-tertiary text-sm">暂无网格数据</div>;
   }
@@ -97,3 +98,5 @@ export default function GridLevelsTab({ gridLevels }: GridLevelsTabProps) {
     </div>
   );
 }
+
+export default memo(GridLevelsTab);
