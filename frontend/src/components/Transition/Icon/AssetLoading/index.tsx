@@ -1,5 +1,5 @@
 /**
- * LoadAssets —— 过渡状态图标。
+ * LoadAssets —— 全局过渡状态图标。
  *
  * 视觉：SVG 极简线条构成的加载态——外圈旋转弧（主动律动）+ 内圈点状环
  * （次级反向慢转）+ 中央 V 字标（呼吸式 opacity）。三层视觉层级清晰，
@@ -8,11 +8,23 @@
 
 import './style.css';
 
-export type IconName = 'loadingAssets';
+export type IconName = 'AssetLoading';
 
-const Icon = () => {
+interface Props {
+  /** 图标尺寸（px），默认 56。inline 场景可传 16-20。 */
+  size?: number;
+}
+
+const Icon = ({ size = 56 }: Props) => {
   return (
-    <svg className="load-assets-icon" viewBox="0 0 80 80" role="img" aria-label="Loading assets">
+    <svg
+      className="load-assets-icon"
+      viewBox="0 0 80 80"
+      width={size}
+      height={size}
+      role="img"
+      aria-label="Loading assets"
+    >
       <title>Loading assets</title>
       <desc>Minimalist VIRS mark with rotating arcs</desc>
 

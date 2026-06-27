@@ -1,0 +1,92 @@
+/**
+ * TradeLoading 局部样式 —— 交易记录加载图标。
+ *
+ * 设计：单一 indigo 主色，三层视觉层级——
+ *  1. 外圈旋转弧（1.8s 线性，主动律动）
+ *  2. 三根蜡烛 K 线（左/中/右，看跌/看涨/看涨）
+ *  3. 中央蜡烛实体底部锚定呼吸缩放（2.4s，暗示价格波动）
+ * 影线 1px 淡描边，实体 1.25px 描边（不填充，保持线条简约）。
+ * 全部使用项目主题变量，自动适配亮/暗主题。
+ */
+
+.trade-loading-icon {
+  display: block;
+  overflow: visible;
+}
+
+.trade-loading-icon circle,
+.trade-loading-icon line,
+.trade-loading-icon rect {
+  fill: none;
+  stroke: var(--color-accent-val);
+}
+
+/* 外圈轨道（静态、淡） */
+.ring-track {
+  stroke-width: 1;
+  opacity: 0.12;
+}
+
+/* 外圈旋转弧 */
+.ring-arc {
+  stroke-width: 1.5;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: trade-loading-spin 1.8s linear infinite;
+}
+
+/* 蜡烛影线 */
+.candle-wick {
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+/* 蜡烛实体 */
+.candle-body {
+  stroke-width: 1.25;
+}
+
+/* 左蜡烛（静态，淡） */
+.candle-body-left {
+  opacity: 0.55;
+}
+
+/* 中央蜡烛（底部锚定呼吸缩放） */
+.candle-body-center {
+  transform-origin: center bottom;
+  transform-box: fill-box;
+  animation: trade-loading-breathe 2.4s ease-in-out infinite;
+}
+
+/* 右蜡烛（静态，中） */
+.candle-body-right {
+  opacity: 0.75;
+}
+
+@keyframes trade-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes trade-loading-breathe {
+  0%,
+  100% {
+    transform: scaleY(0.85);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scaleY(1.08);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-arc,
+  .candle-body-center {
+    animation: none;
+  }
+  .candle-body-center {
+    opacity: 0.9;
+  }
+}

@@ -1,6 +1,7 @@
 import { memo, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service/types';
+import Skeleton from '@/components/Skeleton';
 import { actionColor, actionLabel, confidenceColor } from '../utils/utils';
 
 interface Props {
@@ -36,8 +37,24 @@ const AIDecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
 
   if (!log) {
     return (
-      <div className="px-4 py-6 text-center text-sm text-on-surface-tertiary">
-        等待 AI 首次决策...
+      <div className="px-4 py-3 border-b border-line-subtle">
+        {/* 标题行 */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] uppercase tracking-wider text-on-surface-tertiary font-medium">
+            AI 决策
+          </span>
+          <Skeleton className="h-3 w-10" />
+        </div>
+        {/* Action + Confidence 占位 */}
+        <div className="flex items-center gap-2 mb-2">
+          <Skeleton className="h-5 w-14" />
+          <Skeleton className="h-4 w-8" />
+        </div>
+        {/* Reason 占位（2 行） */}
+        <div className="space-y-1.5">
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-3/4" />
+        </div>
       </div>
     );
   }

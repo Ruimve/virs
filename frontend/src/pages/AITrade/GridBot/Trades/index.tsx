@@ -1,6 +1,7 @@
 import { getGridTrades, type GridTrade } from '@/service';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { Icon as TradeLoadingIcon } from '@/components/Transition/Icon/TradeLoading';
 import { formatPnlShort } from '../../components/utils/utils';
 
 const PAGE_SIZE = 20;
@@ -134,10 +135,13 @@ const Trades = () => {
             </div>
           )}
         </div>
-      ) : (
-        <div className="text-center py-12 text-on-surface-tertiary text-xs">
-          {loading ? '加载中...' : '暂无交易记录'}
+      ) : loading ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-4 text-on-surface-tertiary text-xs">
+          <TradeLoadingIcon size={40} />
+          <span className="tracking-wider">交易记录加载中</span>
         </div>
+      ) : (
+        <div className="text-center py-12 text-on-surface-tertiary text-xs">暂无交易记录</div>
       )}
     </div>
   );

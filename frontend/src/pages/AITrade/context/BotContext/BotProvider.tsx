@@ -6,6 +6,7 @@ import {
   type GridBot,
   type GridLevelInfo,
 } from '@/service';
+import { Icon } from '@/components/Transition/Icon/BotLoading';
 import { BotContext } from '.';
 
 type Bot = {
@@ -53,7 +54,7 @@ export const BotProvider = ({ children }: { children: ReactNode }) => {
     <Suspense
       fallback={
         <div className="min-h-screen bg-base flex items-center justify-center">
-          <div className="text-on-surface-tertiary text-sm">Bot Loading...</div>
+          <Icon />
         </div>
       }
     >

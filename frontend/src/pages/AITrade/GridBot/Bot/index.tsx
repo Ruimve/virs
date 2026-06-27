@@ -20,6 +20,35 @@ import RecentTrades from './RecentTrades';
 import PositionStats from './PositionStats';
 
 /**
+ * WS 价格更新 rAF 节流 + 价格变化检查。
+ *
+ * 合并同一动画帧内的多次价格推送为一次 setState，且仅当价格真正变化时
+ * 才触发重渲染。避免高频 WS 心跳导致的 Bot 整树 reconciliation。
+ */
+const useRafThrottledPrice = () => {
+  const [latestPrice, setLatestPrice] = useState(0);
+  const rafRef = useRef<number | undefined>(undefined);
+  const pendingRef = useRef(0);
+
+  const update = useCallback((price: number) => {
+    pendingRef.current = price;
+    if (rafRef.current != null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = undefined;
+      setLatestPrice((prev) => (pendingRef.current === prev ? prev : pendingRef.current));
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  return { latestPrice, update };
+};
+
+/**
  * 把网格交易记录转换为 K线图 markers。
  * 买入（open_side=buy）→ 绿色向上箭头，位于 K线下方
  * 卖出（open_side=sell）→ 红色向下箭头，位于 K线上方
@@ -45,7 +74,7 @@ const Bot = () => {
 
   const [klineTimeframe, setKlineTimeframe] = useState('15m');
   const [klineData, setKlineData] = useState<KlineCandle[]>([]);
-  const [latestPrice, setLatestPrice] = useState(0);
+  const { latestPrice, update: updateLatestPrice } = useRafThrottledPrice();
   const [logs, setLogs] = useState<AnalysisLog[]>([]);
   const [gridTrades, setGridTrades] = useState<GridTrade[]>([]);
 
@@ -109,8 +138,8 @@ const Bot = () => {
       if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return;
       const c = event.candle;
       if (!c) return;
-      // 更新最新价
-      setLatestPrice(c.close);
+      // 更新最新价（rAF 节流）
+      updateLatestPrice(c.close);
       // Update chart directly via series.update() — no re-render
       chartRef.current?.update(c);
     },

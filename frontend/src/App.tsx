@@ -35,7 +35,7 @@ const HealthCheck = lazy(() => import('./pages/AITrade/HealthCheck'));
 const System = lazy(() => import('./pages/AITrade/System'));
 
 const SuspenseWrap = ({ children }: { children: React.ReactNode }) => {
-  return <Suspense fallback={<Transition icon="loadingAssets" />}>{children}</Suspense>;
+  return <Suspense fallback={<Transition icon="AssetLoading" />}>{children}</Suspense>;
 };
 
 const App = () => {

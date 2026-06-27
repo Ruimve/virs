@@ -1,6 +1,7 @@
 import { memo, useMemo, useState, type RefObject } from 'react';
 import type { KlineCandle } from '@/service';
 import KlineChart, { type KlineChartHandle } from '@/components/Chart/KlineChart';
+import { Icon as TradeLoadingIcon } from '@/components/Transition/Icon/TradeLoading';
 
 interface ChartMarker {
   time: number;
@@ -87,23 +88,9 @@ const StickyMarket = ({
     return klineData.length > 0 ? (
       <KlineChart ref={chartRef} data={klineData} markers={markers} height={300} />
     ) : (
-      <div className="flex items-center justify-center h-[440px] text-on-surface-tertiary text-xs">
-        <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none">
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-          />
-        </svg>
-        加载K线...
+      <div className="flex flex-col items-center justify-center h-[440px] gap-3 text-on-surface-tertiary text-xs">
+        <TradeLoadingIcon size={36} />
+        <span className="tracking-wider">加载 K 线</span>
       </div>
     );
   }, [klineData, markers, chartRef]);
