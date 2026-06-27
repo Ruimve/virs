@@ -81,7 +81,7 @@ const StickyMarket = ({
         : 'text-on-surface-tertiary';
   }, [summary.changePct]);
 
-  const changeSign = useMemo(() => summary.changePct > 0 ? '+' : '', [summary.changePct]);
+  const changeSign = useMemo(() => (summary.changePct > 0 ? '+' : ''), [summary.changePct]);
 
   const Chart = useMemo(() => {
     return klineData.length > 0 ? (

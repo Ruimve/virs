@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getAutoAnalysisLogs, type AnalysisLog } from '@/service';
 import AILogDetail from '../../../components/AILogList/AILogDetail';
 import { useBot } from '../../../context/BotContext';

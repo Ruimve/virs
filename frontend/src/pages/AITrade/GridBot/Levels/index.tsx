@@ -1,4 +1,3 @@
-import { memo } from 'react';
 import GridLevelsTab from './GridLevelsTab';
 import { useBot } from '../../context/BotContext';
 

@@ -1,5 +1,5 @@
 import { getAutoTrades, type AutoTrade } from '@/service';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { formatPnl } from '../../components/utils/utils';
 

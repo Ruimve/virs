@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getGridAnalysisLogs, type AnalysisLog } from '@/service';
 import AILogDetail from '../../../components/AILogList/AILogDetail';

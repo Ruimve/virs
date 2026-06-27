@@ -97,6 +97,6 @@ const GridLevelsTab = ({ gridLevels }: GridLevelsTabProps) => {
       </div>
     </div>
   );
-}
+};
 
 export default memo(GridLevelsTab);

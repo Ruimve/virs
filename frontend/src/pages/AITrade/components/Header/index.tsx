@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import Logo from '@/components/Logo';
 import Theme from '@/components/Theme';
 import { useHeader } from './HeaderContext';

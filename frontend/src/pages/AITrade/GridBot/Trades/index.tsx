@@ -1,5 +1,5 @@
 import { getGridTrades, type GridTrade } from '@/service';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { formatPnlShort } from '../../components/utils/utils';
 
