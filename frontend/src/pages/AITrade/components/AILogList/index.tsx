@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service';
 import { Icon as AiThinkingIcon } from '@/components/Transition/Icon/AiThinking';
+import { ChevronRight } from '@/components/Icon';
 import { actionColor, actionLabel } from '../utils/utils';
 
 interface Props {
@@ -65,15 +66,7 @@ const AILogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
                   {new Date(log.created_at).toLocaleString('zh-CN')}
                 </span>
               </div>
-              <svg
-                className="w-3.5 h-3.5 text-on-surface-muted"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
+              <ChevronRight className="w-3.5 h-3.5 text-on-surface-muted" strokeWidth={2} />
             </div>
           </div>
         );

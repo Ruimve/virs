@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import Logo from '@/components/Logo';
 import Theme from '@/components/Theme';
+import { Close } from '@/components/Icon';
 import { useHeader } from './HeaderContext';
 import { usePaper } from '../../context/PaperContext';
 import { useBot } from '../../context/BotContext';
@@ -148,15 +149,7 @@ const Header = () => {
                 onClick={closeDrawer}
                 className="p-1.5 rounded-lg hover:bg-surface-2 text-on-surface-tertiary"
               >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <Close className="w-4 h-4" strokeWidth={2} />
               </button>
             </div>
 

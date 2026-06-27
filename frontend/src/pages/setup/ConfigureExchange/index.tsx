@@ -84,12 +84,6 @@ const ConfigureExchange = () => {
     setStep2Error(null);
   }, []);
 
-  const handleContinue = () => {
-    updateWizard({ exchange: 'binance', market_type: marketType });
-    advanceStep(WizardStep.ConfigureParams);
-    navigate('/setup/params', { replace: true });
-  };
-
   // Check permissions via apiRestrictions
   const startStep3 = useCallback(async () => {
     setStep3Status('verifying');
@@ -158,17 +152,17 @@ const ConfigureExchange = () => {
     }
   }, [apiKey, apiSecret, marketType, startStep2]);
 
-  const handleApiKeyInput = useCallback(
-    (e: React.InputEvent<HTMLInputElement>) => {
-      setApiKey(e.currentTarget.value);
+  const handleApiKeyChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setApiKey(e.target.value);
       resetSteps();
     },
     [resetSteps],
   );
 
-  const handleApiSecretInput = useCallback(
-    (e: React.InputEvent<HTMLInputElement>) => {
-      setApiSecret(normalizePemSecret(e.currentTarget.value));
+  const handleApiSecretChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setApiSecret(normalizePemSecret(e.target.value));
       resetSteps();
     },
     [resetSteps],
@@ -185,14 +179,14 @@ const ConfigureExchange = () => {
         <input
           type="text"
           value={apiKey}
-          onInput={handleApiKeyInput}
+          onChange={handleApiKeyChange}
           className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
           placeholder="API Key"
         />
         <input
           type="password"
           value={apiSecret}
-          onInput={handleApiSecretInput}
+          onChange={handleApiSecretChange}
           className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
           placeholder="API Secret"
         />
@@ -233,8 +227,8 @@ const ConfigureExchange = () => {
     marketType,
     step1Status,
     step1Error,
-    handleApiKeyInput,
-    handleApiSecretInput,
+    handleApiKeyChange,
+    handleApiSecretChange,
     handleSelectMarketType,
     startStep1,
   ]);
@@ -313,6 +307,31 @@ const ConfigureExchange = () => {
     [renderStep1, renderStep2, renderStep3],
   );
 
+  const actions = useMemo(() => {
+    const disabled = step1Status !== 'done' || step2Status !== 'done' || step3Status !== 'done';
+    return (
+      <>
+        <button
+          onClick={() => navigate('/setup/llm', { replace: true })}
+          className="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
+        >
+          Back
+        </button>
+        <button
+          onClick={() => {
+            updateWizard({ exchange: 'binance', market_type: marketType });
+            advanceStep(WizardStep.ConfigureParams);
+            navigate('/setup/params', { replace: true });
+          }}
+          disabled={disabled}
+          className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+        >
+          Continue
+        </button>
+      </>
+    );
+  }, [step1Status, step2Status, step3Status, marketType, updateWizard, advanceStep, navigate]);
+
   const statuses = useMemo(() => {
     return {
       credentials: step1Status,
@@ -340,30 +359,12 @@ const ConfigureExchange = () => {
     return summaryMap;
   }, [apiKey, step1Status, step2Status, step3Status]);
 
-  const canContinue = step2Status === 'done' && step3Status === 'done';
-
   return (
     <Wizard
       step={WizardStep.SelectExchange}
       title="Connect Binance"
       subtitle="Provide your API credentials"
-      actions={
-        <>
-          <button
-            onClick={() => navigate('/setup/llm', { replace: true })}
-            className="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
-          >
-            Back
-          </button>
-          <button
-            onClick={handleContinue}
-            disabled={!canContinue}
-            className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
-          >
-            Continue
-          </button>
-        </>
-      }
+      actions={actions}
     >
       <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
     </Wizard>

@@ -38,15 +38,6 @@ const ConfigureLlm = () => {
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleContinue = () => {
-    updateWizard({
-      llm_provider: 'deepseek',
-      llm_model: model,
-    });
-    advanceStep(WizardStep.SelectExchange);
-    navigate('/setup/exchange', { replace: true });
-  };
-
   // 重置步骤状态
   const resetSteps = useCallback(() => {
     setStep1Status('active');
@@ -148,9 +139,9 @@ const ConfigureLlm = () => {
     }
   }, []);
 
-  const handleKeyInput = useCallback(
-    (e: React.InputEvent<HTMLInputElement>) => {
-      const inputValue = e.currentTarget.value?.trim();
+  const handleKeyChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const inputValue = e.target.value?.trim();
       setApiKey(inputValue);
       if (!inputValue) return;
 
@@ -187,7 +178,7 @@ const ConfigureLlm = () => {
           <input
             type="password"
             value={apiKey}
-            onInput={handleKeyInput}
+            onChange={handleKeyChange}
             disabled={modelsLoading}
             className={`w-full px-4 py-2.5 bg-surface-2 border rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none transition-all duration-200 ${
               modelsLoading
@@ -241,7 +232,7 @@ const ConfigureLlm = () => {
     step1Status,
     model,
     models,
-    handleKeyInput,
+    handleKeyChange,
     handleSelectModel,
     startStep1,
   ]);
@@ -303,6 +294,34 @@ const ConfigureLlm = () => {
     [renderStep1, renderStep2, renderStep3],
   );
 
+  const actions = useMemo(() => {
+    const disabled = step1Status !== 'done' || step2Status !== 'done' || step3Status !== 'done';
+    return (
+      <>
+        <button
+          onClick={() => navigate('/setup/bot-type', { replace: true })}
+          className="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
+        >
+          Back
+        </button>
+        <button
+          onClick={() => {
+            updateWizard({
+              llm_provider: 'deepseek',
+              llm_model: model,
+            });
+            advanceStep(WizardStep.SelectExchange);
+            navigate('/setup/exchange', { replace: true });
+          }}
+          disabled={disabled}
+          className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+        >
+          Continue
+        </button>
+      </>
+    );
+  }, [step1Status, step2Status, step3Status, model, updateWizard, advanceStep, navigate]);
+
   const statuses = useMemo(
     () => ({
       apiKey: step1Status,
@@ -332,30 +351,12 @@ const ConfigureLlm = () => {
     return summaryMap;
   }, [step1Status, step2Status, step3Status, balance, apiKey, model]);
 
-  const canContinue = step2Status === 'done' && step3Status === 'done';
-
   return (
     <Wizard
       step={WizardStep.ConfigureLlm}
       title="Configure DeepSeek"
       subtitle="Connect your DeepSeek account"
-      actions={
-        <>
-          <button
-            onClick={() => navigate('/setup/bot-type', { replace: true })}
-            className="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
-          >
-            Back
-          </button>
-          <button
-            onClick={handleContinue}
-            disabled={!canContinue}
-            className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
-          >
-            Continue
-          </button>
-        </>
-      }
+      actions={actions}
     >
       <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
     </Wizard>

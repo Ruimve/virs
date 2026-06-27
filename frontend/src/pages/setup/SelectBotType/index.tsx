@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Check, InfoCircle } from '@/components/Icon';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard } from '../context/WizardContext';
 import { findActiveBot } from '../../../service';
@@ -37,39 +38,11 @@ const SelectBotType = () => {
     });
   }, [updateWizard]);
 
-  const actions = useMemo(() => {
-    return (
-      <button
-        onClick={() => {
-          updateWizard({ bot_type: botType });
-          advanceStep(WizardStep.ConfigureLlm);
-          navigate('/setup/llm', { replace: true });
-        }}
-        disabled={!!existingBot}
-        className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
-      >
-        Continue
-      </button>
-    );
-  }, [botType, existingBot, updateWizard, advanceStep, navigate]);
-
   const renderExistedBot = useCallback(() => {
     return (
       <div className="p-5 rounded-xl border border-amber-500/20 bg-amber-500/5 mb-8">
         <div className="flex items-start gap-3">
-          <svg
-            className="w-5 h-5 text-amber-400 shrink-0 mt-0.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+          <InfoCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" strokeWidth={2} />
           <div>
             <p className="text-sm font-medium text-on-base mb-1">已有机器人</p>
             <p className="text-xs text-on-surface-tertiary mb-3">
@@ -168,15 +141,7 @@ const SelectBotType = () => {
                 </div>
                 {isSelected && (
                   <div className="shrink-0 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
-                    <svg
-                      className="w-3 h-3 text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
+                    <Check className="w-3 h-3 text-white" strokeWidth={3} />
                   </div>
                 )}
               </div>
@@ -186,6 +151,22 @@ const SelectBotType = () => {
       </div>
     );
   }, [botType]);
+
+  const actions = useMemo(() => {
+    return (
+      <button
+        onClick={() => {
+          updateWizard({ bot_type: botType });
+          advanceStep(WizardStep.ConfigureLlm);
+          navigate('/setup/llm', { replace: true });
+        }}
+        disabled={!!existingBot}
+        className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+      >
+        Continue
+      </button>
+    );
+  }, [botType, existingBot, updateWizard, advanceStep, navigate]);
 
   return (
     <Wizard

@@ -2,6 +2,7 @@ import { useState, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service/types';
 import { Icon as AiThinkingIcon } from '@/components/Transition/Icon/AiThinking';
+import { ChevronLeft, ChevronRight } from '@/components/Icon';
 import { actionColor, actionLabel } from '../utils/utils';
 
 interface Props {
@@ -29,15 +30,7 @@ const AILogDetail = ({ log, loading }: Props) => {
               onClick={() => navigate(-1)}
               className="p-1.5 rounded-lg hover:bg-surface-2 transition-colors text-on-surface-tertiary hover:text-on-surface"
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
+              <ChevronLeft className="w-5 h-5" strokeWidth={2} />
             </button>
             <h1 className="text-sm font-medium text-on-surface">AI 决策详情</h1>
           </div>
@@ -59,15 +52,7 @@ const AILogDetail = ({ log, loading }: Props) => {
               onClick={() => navigate(-1)}
               className="p-1.5 rounded-lg hover:bg-surface-2 transition-colors text-on-surface-tertiary hover:text-on-surface"
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
+              <ChevronLeft className="w-5 h-5" strokeWidth={2} />
             </button>
             <h1 className="text-sm font-medium text-on-surface">AI 决策详情</h1>
           </div>
@@ -88,15 +73,7 @@ const AILogDetail = ({ log, loading }: Props) => {
             onClick={() => navigate(-1)}
             className="p-1.5 rounded-lg hover:bg-surface-2 transition-colors text-on-surface-tertiary hover:text-on-surface"
           >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
+            <ChevronLeft className="w-5 h-5" strokeWidth={2} />
           </button>
           <h1 className="text-sm font-medium text-on-surface">AI 决策详情</h1>
         </div>
@@ -261,15 +238,10 @@ const AILogDetail = ({ log, loading }: Props) => {
                 onClick={() => setShowSystemPrompt(!showSystemPrompt)}
                 className="w-full flex items-center gap-2 px-5 py-3 text-[10px] text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors"
               >
-                <svg
+                <ChevronRight
                   className={`w-3 h-3 transition-transform ${showSystemPrompt ? 'rotate-90' : ''}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
+                  strokeWidth={2}
+                />
                 System Prompt
               </button>
               {showSystemPrompt && (
@@ -289,15 +261,10 @@ const AILogDetail = ({ log, loading }: Props) => {
                 onClick={() => setShowUserPrompt(!showUserPrompt)}
                 className="w-full flex items-center gap-2 px-5 py-3 text-[10px] text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors"
               >
-                <svg
+                <ChevronRight
                   className={`w-3 h-3 transition-transform ${showUserPrompt ? 'rotate-90' : ''}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
+                  strokeWidth={2}
+                />
                 User Prompt
               </button>
               {showUserPrompt && (

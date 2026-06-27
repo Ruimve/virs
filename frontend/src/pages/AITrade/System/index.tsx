@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { getSystemInfo } from '@/service/system';
 import type { SystemInfo as SystemInfoData } from '@/service/types';
+import { Spinner } from '@/components/Icon';
 
 // ── 工具函数 ────────────────────────────────────────────────
 
@@ -135,25 +136,7 @@ const System = () => {
   if (!info) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <svg
-          className="animate-spin h-6 w-6 text-on-surface-tertiary"
-          viewBox="0 0 24 24"
-          fill="none"
-        >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-          />
-        </svg>
+        <Spinner className="h-6 w-6 text-on-surface-tertiary" />
       </div>
     );
   }

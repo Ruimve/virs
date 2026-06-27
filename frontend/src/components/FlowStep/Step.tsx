@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode, memo } from 'react';
+import { Spinner, Check, Close } from '@/components/Icon';
 
 export type FlowStepStatus = 'pending' | 'active' | 'verifying' | 'done' | 'error';
 
@@ -76,53 +77,19 @@ function FlowStep({
       case 'verifying':
         return (
           <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
-            <svg
-              className="animate-spin w-3.5 h-3.5 text-indigo-400"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-              />
-            </svg>
+            <Spinner className="w-3.5 h-3.5 text-indigo-400" />
           </div>
         );
       case 'done':
         return (
           <div className="w-7 h-7 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
-            <svg
-              className="w-3.5 h-3.5 text-emerald-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2.5"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
+            <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2.5} />
           </div>
         );
       case 'error':
         return (
           <div className="w-7 h-7 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center">
-            <svg
-              className="w-3.5 h-3.5 text-red-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2.5"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <Close className="w-3.5 h-3.5 text-red-400" strokeWidth={2.5} />
           </div>
         );
     }

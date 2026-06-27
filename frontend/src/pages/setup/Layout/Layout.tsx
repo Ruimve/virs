@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import Logo from '@/components/Logo';
 import Theme from '@/components/Theme';
+import { Check } from '@/components/Icon';
 import { useWizard } from '../context/WizardContext';
 import { TOTAL_SETUP_STEPS } from '../context/WizardContext/consts';
 
@@ -39,19 +40,7 @@ export const Layout = () => {
                           : 'bg-surface-1 text-on-surface-faint border border-line-default'
                     }`}
                   >
-                    {isCompleted ? (
-                      <svg
-                        className="w-3.5 h-3.5"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      stepNum
-                    )}
+                    {isCompleted ? <Check className="w-3.5 h-3.5" strokeWidth={2.5} /> : stepNum}
                   </div>
                   {i < TOTAL_SETUP_STEPS - 1 && (
                     <div

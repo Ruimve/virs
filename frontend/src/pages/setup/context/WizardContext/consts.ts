@@ -20,7 +20,7 @@ export interface WizardState {
   paper_mode: boolean;
   llm_provider: string;
   llm_model: string;
-  bot_params: Record<string, unknown>;
+  bot_params: Record<string, string>;
   bot_id: string;
 }
 

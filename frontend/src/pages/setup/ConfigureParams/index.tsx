@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizardGuard, useWizard } from '../context/WizardContext';
@@ -10,7 +10,7 @@ const GRID_PARAMS = [
     key: 'symbol',
     label: 'Trading Pair',
     type: 'text' as const,
-    placeholder: 'BTC/USDT',
+    placeholder: 'BTCUSDT',
     required: true,
   },
   {
@@ -50,7 +50,7 @@ const AUTO_PARAMS = [
     key: 'symbol',
     label: 'Trading Pair',
     type: 'text' as const,
-    placeholder: 'BTC/USDT',
+    placeholder: 'BTCUSDT',
     required: true,
   },
   {
@@ -74,46 +74,45 @@ const ConfigureParams = () => {
   const { wizard, updateWizard, advanceStep } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.ConfigureParams);
 
-  const [values, setValues] = useState<Record<string, string>>(
-    (wizard.bot_params as Record<string, string>) || {},
-  );
+  const [values, setValues] = useState<Record<string, string>>(wizard.bot_params);
 
-  const handleContinue = () => {
-    updateWizard({ bot_params: values });
-    advanceStep(WizardStep.ReviewLaunch);
-    navigate('/setup/review', { replace: true });
-  };
+  const params = useMemo(() => {
+    const isGrid = wizard.bot_type === 'grid';
+    return isGrid ? GRID_PARAMS : AUTO_PARAMS;
+  }, [wizard.bot_type]);
 
-  const handleInput = (key: string, val: string) => {
-    setValues((prev) => ({ ...prev, [key]: val }));
-  };
+  const actions = useMemo(() => {
+    const disabled = params.filter((p) => p.required).some((p) => !values[p.key]);
 
-  const isGrid = wizard.bot_type === 'grid';
-  const params = isGrid ? GRID_PARAMS : AUTO_PARAMS;
-  const canContinue = params.filter((p) => p.required).every((p) => values[p.key]);
+    return (
+      <>
+        <button
+          onClick={() => navigate('/setup/exchange', { replace: true })}
+          className="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
+        >
+          Back
+        </button>
+        <button
+          onClick={() => {
+            updateWizard({ bot_params: values });
+            advanceStep(WizardStep.ReviewLaunch);
+            navigate('/setup/review', { replace: true });
+          }}
+          disabled={disabled}
+          className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+        >
+          Continue
+        </button>
+      </>
+    );
+  }, [params, values, updateWizard, advanceStep, navigate]);
 
   return (
     <Wizard
       step={WizardStep.ConfigureParams}
-      title={isGrid ? 'Grid Trading Parameters' : 'Auto Trading Parameters'}
+      title={'Trading Parameters'}
       subtitle="Configure the trading parameters for your bot"
-      actions={
-        <>
-          <button
-            onClick={() => navigate('/setup/exchange', { replace: true })}
-            className="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
-          >
-            Back
-          </button>
-          <button
-            onClick={handleContinue}
-            disabled={!canContinue}
-            className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
-          >
-            Continue
-          </button>
-        </>
-      }
+      actions={actions}
     >
       <div className="space-y-4">
         {params.map((param) => (
@@ -124,8 +123,10 @@ const ConfigureParams = () => {
             </label>
             <input
               type={param.type}
-              value={values[param.key]}
-              onInput={(e) => handleInput(param.key, e.currentTarget.value)}
+              value={values[param.key] ?? ''}
+              onChange={(e) => {
+                setValues((prev) => ({ ...prev, [param.key]: e.target.value }));
+              }}
               className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
               placeholder={param.placeholder}
             />
