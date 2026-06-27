@@ -49,7 +49,9 @@ const HealthCheck = () => {
           {check?.status === 'verifying' && (
             <p className="text-[12px] text-on-surface-faint">Checking...</p>
           )}
-          {check?.status === 'error' && <p className="text-[12px] text-red-400">{check.detail}</p>}
+          {check?.status === 'error' && (
+            <p className="text-[12px] text-danger-text">{check.detail}</p>
+          )}
         </>
       );
     },
@@ -134,7 +136,7 @@ const HealthCheck = () => {
         <div className="mt-6 flex justify-end">
           <button
             onClick={handleContinue}
-            className="px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-all duration-200"
+            className="px-6 py-2.5 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl transition-all duration-200"
           >
             Continue
           </button>

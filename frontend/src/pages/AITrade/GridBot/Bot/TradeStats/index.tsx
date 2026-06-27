@@ -28,19 +28,19 @@ const TradeStats = ({ botId }: Props) => {
       label: '累计盈亏',
       value: stats && stats.net_pnl !== 0 ? stats.net_pnl.toFixed(4) : '-',
       sub: stats ? `已实现 ${stats.realized_pnl.toFixed(2)}` : undefined,
-      color: stats && stats.net_pnl >= 0 ? 'text-emerald-400' : 'text-red-400',
+      color: stats && stats.net_pnl >= 0 ? 'text-success-text' : 'text-danger-text',
       highlight: true,
     },
     {
       label: '未实现',
       value: stats && stats.unrealized_pnl !== 0 ? stats.unrealized_pnl.toFixed(4) : '-',
-      color: stats && stats.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400',
+      color: stats && stats.unrealized_pnl >= 0 ? 'text-success-text' : 'text-danger-text',
     },
     {
       label: '胜率',
       value: stats && stats.closed_trades > 0 ? `${stats.win_rate.toFixed(1)}%` : '-',
       sub: stats ? `${stats.win_trades}胜 / ${stats.loss_trades}负` : undefined,
-      color: stats && stats.win_rate >= 50 ? 'text-emerald-400' : 'text-red-400',
+      color: stats && stats.win_rate >= 50 ? 'text-success-text' : 'text-danger-text',
     },
     {
       label: '盈亏比',
@@ -50,37 +50,37 @@ const TradeStats = ({ botId }: Props) => {
           : stats && stats.profit_loss_ratio > 0
             ? stats.profit_loss_ratio.toFixed(2)
             : '-',
-      color: stats && stats.profit_loss_ratio >= 1 ? 'text-emerald-400' : 'text-red-400',
+      color: stats && stats.profit_loss_ratio >= 1 ? 'text-success-text' : 'text-danger-text',
     },
     {
       label: '最大回撤',
       value: stats && stats.max_drawdown > 0 ? `-${stats.max_drawdown.toFixed(2)}` : '-',
-      color: 'text-red-400',
+      color: 'text-danger-text',
     },
     {
       label: '平均盈亏',
       value: stats && stats.avg_pnl !== 0 ? stats.avg_pnl.toFixed(4) : '-',
-      color: stats && stats.avg_pnl >= 0 ? 'text-emerald-400' : 'text-red-400',
+      color: stats && stats.avg_pnl >= 0 ? 'text-success-text' : 'text-danger-text',
     },
     {
       label: '最大盈利',
       value: stats && stats.max_profit > 0 ? `+${stats.max_profit.toFixed(4)}` : '-',
-      color: 'text-emerald-400',
+      color: 'text-success-text',
     },
     {
       label: '最大亏损',
       value: stats && stats.max_loss < 0 ? stats.max_loss.toFixed(4) : '-',
-      color: 'text-red-400',
+      color: 'text-danger-text',
     },
     {
       label: '连胜',
       value: stats && stats.max_win_streak > 0 ? `${stats.max_win_streak}` : '-',
-      color: 'text-emerald-400',
+      color: 'text-success-text',
     },
     {
       label: '连亏',
       value: stats && stats.max_loss_streak > 0 ? `${stats.max_loss_streak}` : '-',
-      color: 'text-red-400',
+      color: 'text-danger-text',
     },
     {
       label: '已平仓',

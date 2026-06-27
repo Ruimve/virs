@@ -182,8 +182,8 @@ const ConfigureLlm = () => {
             disabled={modelsLoading}
             className={`w-full px-4 py-2.5 bg-surface-2 border rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none transition-all duration-200 ${
               modelsLoading
-                ? 'border-indigo-500/30 opacity-60'
-                : 'border-line-strong focus:border-indigo-500/40'
+                ? 'border-accent-muted opacity-60'
+                : 'border-line-strong focus:border-accent'
             }`}
             placeholder="API Key"
           />
@@ -205,7 +205,7 @@ const ConfigureLlm = () => {
                   onClick={() => handleSelectModel(m.id)}
                   className={`px-2.5 py-1 rounded-md text-[11px] border transition-all duration-200 ${
                     model === m.id
-                      ? 'bg-indigo-500/15 border-indigo-500/30 text-on-surface'
+                      ? 'bg-accent-light border-accent-muted text-on-surface'
                       : 'bg-surface-1 border-line-default text-on-surface-tertiary hover:bg-surface-2'
                   }`}
                 >
@@ -215,11 +215,11 @@ const ConfigureLlm = () => {
             </div>
           </div>
         )}
-        {step1Error && <p className="text-[12px] text-red-400">{step1Error}</p>}
+        {step1Error && <p className="text-[12px] text-danger-text">{step1Error}</p>}
         <button
           onClick={startStep1}
           disabled={disabled}
-          className="px-4 py-2 text-[12px] bg-indigo-500/20 border border-indigo-500/30 rounded-lg text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-30 transition-all duration-200"
+          className="px-4 py-2 text-[12px] bg-accent-muted border border-accent-muted rounded-lg text-accent hover:bg-accent-muted disabled:opacity-30 transition-all duration-200"
         >
           {step1Status === 'verifying' ? 'Verifying...' : 'Verify'}
         </button>
@@ -246,7 +246,7 @@ const ConfigureLlm = () => {
           </p>
         )}
         {step2Status === 'error' && (
-          <p className="text-[12px] text-red-400">{step2Error || 'Connection failed'}</p>
+          <p className="text-[12px] text-danger-text">{step2Error || 'Connection failed'}</p>
         )}
       </div>
     );
@@ -264,7 +264,7 @@ const ConfigureLlm = () => {
           </div>
         )}
         {step3Status === 'error' && (
-          <p className="text-[12px] text-red-400">{step3Error || 'Connection failed'}</p>
+          <p className="text-[12px] text-danger-text">{step3Error || 'Connection failed'}</p>
         )}
       </div>
     );
@@ -314,7 +314,7 @@ const ConfigureLlm = () => {
             navigate('/setup/exchange', { replace: true });
           }}
           disabled={disabled}
-          className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+          className="w-full sm:w-auto sm:px-6 py-2.5 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
         >
           Continue
         </button>

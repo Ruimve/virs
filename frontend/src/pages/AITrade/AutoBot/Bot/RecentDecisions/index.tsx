@@ -51,7 +51,7 @@ const RecentDecisions = ({ logs, botId, botType = 'auto' }: Props) => {
                       </span>
                     )}
                     {log.status === 'failed' && (
-                      <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
+                      <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-danger-bg text-danger-text">
                         失败
                       </span>
                     )}

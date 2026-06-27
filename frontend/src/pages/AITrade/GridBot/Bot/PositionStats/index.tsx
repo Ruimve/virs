@@ -15,7 +15,7 @@ interface Props {
 // ────────────────────────────────────────────────────────
 
 const pnlColor = (v: number) =>
-  v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-on-surface';
+  v > 0 ? 'text-success-text' : v < 0 ? 'text-danger-text' : 'text-on-surface';
 
 const PositionStats = ({ bot, latestPrice }: Props) => {
   const { gridLevels } = useBot();
@@ -120,7 +120,7 @@ const PositionStats = ({ bot, latestPrice }: Props) => {
           </span>
         </Stat>
         <Stat label="利润率">
-          <span className={b.grid_profit_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+          <span className={b.grid_profit_pct >= 0 ? 'text-success-text' : 'text-danger-text'}>
             {b.grid_profit_pct}%
           </span>
         </Stat>
@@ -149,7 +149,7 @@ const PositionStats = ({ bot, latestPrice }: Props) => {
           <span className="text-on-surface">{b.quantity_per_grid}</span>
         </Stat>
         <Stat label="动态调整">
-          <span className={b.dynamic_adjust ? 'text-emerald-400' : 'text-on-surface-muted'}>
+          <span className={b.dynamic_adjust ? 'text-success-text' : 'text-on-surface-muted'}>
             {b.dynamic_adjust ? '开启' : '关闭'}
           </span>
         </Stat>

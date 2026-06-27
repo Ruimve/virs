@@ -93,7 +93,7 @@ const AILogDetail = ({ log, loading }: Props) => {
                   </span>
                 )}
                 {log.status === 'failed' && (
-                  <span className="text-xs font-medium px-2 py-0.5 rounded bg-red-500/10 text-red-400">
+                  <span className="text-xs font-medium px-2 py-0.5 rounded bg-danger-bg text-danger-text">
                     失败
                   </span>
                 )}
@@ -104,7 +104,7 @@ const AILogDetail = ({ log, loading }: Props) => {
             </div>
             {log.llm_model && (
               <div className="text-[11px] text-on-surface-tertiary mb-2">
-                模型: <span className="text-indigo-400 font-mono">{log.llm_model}</span>
+                模型: <span className="text-accent font-mono">{log.llm_model}</span>
               </div>
             )}
             {decision?.confidence != null && (
@@ -154,13 +154,13 @@ const AILogDetail = ({ log, loading }: Props) => {
                   <span
                     className={`px-2 py-0.5 text-xs rounded font-medium ${
                       log.result.market.market_regime === 'ranging'
-                        ? 'bg-blue-500/10 text-blue-400'
+                        ? 'bg-info-bg text-info-text'
                         : log.result.market.market_regime === 'trending_up'
-                          ? 'bg-emerald-500/10 text-emerald-400'
+                          ? 'bg-success-bg text-success-text'
                           : log.result.market.market_regime === 'trending_down'
-                            ? 'bg-red-500/10 text-red-400'
+                            ? 'bg-danger-bg text-danger-text'
                             : log.result.market.market_regime === 'volatile'
-                              ? 'bg-amber-500/10 text-amber-400'
+                              ? 'bg-warning-bg text-warning-text'
                               : 'bg-surface-2 text-on-surface-secondary'
                     }`}
                   >
@@ -168,14 +168,12 @@ const AILogDetail = ({ log, loading }: Props) => {
                   </span>
                 )}
                 {log.result.market.funding_rate_warning && (
-                  <p className="text-xs text-amber-400">
+                  <p className="text-xs text-warning-text">
                     ⚠ 资金费率: {log.result.market.funding_rate_warning}
                   </p>
                 )}
                 {log.result.market.event_impact && (
-                  <p className="text-xs text-purple-400">
-                    事件影响: {log.result.market.event_impact}
-                  </p>
+                  <p className="text-xs text-accent">事件影响: {log.result.market.event_impact}</p>
                 )}
               </div>
             </div>
@@ -215,19 +213,19 @@ const AILogDetail = ({ log, loading }: Props) => {
 
           {/* Risk warning */}
           {log.result?.risk_warning && log.result.risk_warning !== 'none' && (
-            <div className="bg-amber-500/5 rounded-xl border border-amber-500/20 p-5">
-              <div className="text-[10px] text-amber-400 uppercase tracking-wider mb-2">
+            <div className="bg-warning/5 rounded-xl border border-warning-border p-5">
+              <div className="text-[10px] text-warning-text uppercase tracking-wider mb-2">
                 风险提示
               </div>
-              <p className="text-xs text-amber-400">{log.result.risk_warning}</p>
+              <p className="text-xs text-warning-text">{log.result.risk_warning}</p>
             </div>
           )}
 
           {/* Error */}
           {log.error && (
-            <div className="bg-red-500/5 rounded-xl border border-red-500/20 p-5">
-              <div className="text-[10px] text-red-400 uppercase tracking-wider mb-2">错误</div>
-              <pre className="text-xs text-red-400 whitespace-pre-wrap">{log.error}</pre>
+            <div className="bg-danger/5 rounded-xl border border-danger-border p-5">
+              <div className="text-[10px] text-danger-text uppercase tracking-wider mb-2">错误</div>
+              <pre className="text-xs text-danger-text whitespace-pre-wrap">{log.error}</pre>
             </div>
           )}
 
@@ -283,7 +281,7 @@ const AILogDetail = ({ log, loading }: Props) => {
               <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-2">
                 LLM 原始响应
               </div>
-              <pre className="text-[11px] text-indigo-400 bg-indigo-500/5 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-indigo-500/10">
+              <pre className="text-[11px] text-accent bg-accent/5 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-accent/10">
                 {typeof log.result.raw_llm_response === 'string'
                   ? log.result.raw_llm_response
                   : JSON.stringify(log.result.raw_llm_response, null, 2)}

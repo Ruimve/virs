@@ -76,9 +76,9 @@ const StickyMarket = ({
 
   const changeColor = useMemo(() => {
     return summary.changePct > 0
-      ? 'text-emerald-400'
+      ? 'text-success-text'
       : summary.changePct < 0
-        ? 'text-red-400'
+        ? 'text-danger-text'
         : 'text-on-surface-tertiary';
   }, [summary.changePct]);
 
@@ -96,7 +96,7 @@ const StickyMarket = ({
   }, [klineData, markers, chartRef]);
 
   return (
-    <div className="bg-base border-t border-line-default shadow-[0_-4px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_12px_rgba(0,0,0,0.4)] shrink-0">
+    <div className="bg-base border-t border-line-default shadow-[var(--shadow-sticky)] shrink-0">
       {/* 折叠头部：行情摘要（最新价 + 24h涨跌 + 高/低/量） */}
       <button
         onClick={() => setExpanded(!expanded)}

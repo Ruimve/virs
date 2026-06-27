@@ -8,7 +8,7 @@ interface Props {
 }
 
 const pnlColor = (v: number) =>
-  v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-on-surface';
+  v > 0 ? 'text-success-text' : v < 0 ? 'text-danger-text' : 'text-on-surface';
 
 /** 网格机器人最近成交卡片（右侧栏） */
 const RecentTrades = ({ botId }: Props) => {
@@ -70,7 +70,7 @@ const RecentTrades = ({ botId }: Props) => {
               <div key={t.id} className="px-3 py-2">
                 <div className="flex items-center gap-2 mb-1">
                   <span
-                    className={`text-[11px] font-medium px-1.5 py-0.5 rounded shrink-0 ${t.open_side === 'buy' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}
+                    className={`text-[11px] font-medium px-1.5 py-0.5 rounded shrink-0 ${t.open_side === 'buy' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'}`}
                   >
                     {t.open_side === 'buy' ? '买入' : '卖出'} L{t.grid_level}
                   </span>

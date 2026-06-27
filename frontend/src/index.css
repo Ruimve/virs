@@ -24,11 +24,35 @@
   --color-line-strong: var(--border-strong);
   --color-line-emphasis: var(--border-emphasis);
 
-  /* Accent (indigo) */
+  /* Accent (indigo) —— 主操作色 / 品牌 */
   --color-accent: var(--color-accent-val);
   --color-accent-hover: var(--color-accent-hover-val);
   --color-accent-light: var(--color-accent-light-val);
   --color-accent-muted: var(--color-accent-muted-val);
+
+  /* Success —— 运行中 / 盈利 / 买入 / 上涨 */
+  --color-success: var(--color-success-val);
+  --color-success-text: var(--color-success-text-val);
+  --color-success-bg: var(--color-success-bg-val);
+  --color-success-border: var(--color-success-border-val);
+
+  /* Warning —— 警告 / 风险 / 暂停 / Paper 模式 */
+  --color-warning: var(--color-warning-val);
+  --color-warning-text: var(--color-warning-text-val);
+  --color-warning-bg: var(--color-warning-bg-val);
+  --color-warning-border: var(--color-warning-border-val);
+
+  /* Danger —— 错误 / 亏损 / 卖出 / 下跌 / 失败 */
+  --color-danger: var(--color-danger-val);
+  --color-danger-text: var(--color-danger-text-val);
+  --color-danger-bg: var(--color-danger-bg-val);
+  --color-danger-border: var(--color-danger-border-val);
+
+  /* Info —— 中性提示 / 系统指标 / 信息（与 accent indigo 区分） */
+  --color-info: var(--color-info-val);
+  --color-info-text: var(--color-info-text-val);
+  --color-info-bg: var(--color-info-bg-val);
+  --color-info-border: var(--color-info-border-val);
 }
 
 /* ===== 亮色主题 (默认) ===== */
@@ -60,6 +84,41 @@
   --color-accent-hover-val: #4338ca;
   --color-accent-light-val: #eef2ff;
   --color-accent-muted-val: #c7d2fe;
+
+  /* Success (emerald) */
+  --color-success-val: #10b981;
+  --color-success-text-val: #059669;
+  --color-success-bg-val: rgba(16, 185, 129, 0.1);
+  --color-success-border-val: rgba(16, 185, 129, 0.3);
+
+  /* Warning (amber) */
+  --color-warning-val: #f59e0b;
+  --color-warning-text-val: #d97706;
+  --color-warning-bg-val: rgba(245, 158, 11, 0.1);
+  --color-warning-border-val: rgba(245, 158, 11, 0.3);
+
+  /* Danger (red) */
+  --color-danger-val: #ef4444;
+  --color-danger-text-val: #dc2626;
+  --color-danger-bg-val: rgba(239, 68, 68, 0.1);
+  --color-danger-border-val: rgba(239, 68, 68, 0.3);
+
+  /* Info (sky/blue) */
+  --color-info-val: #0ea5e9;
+  --color-info-text-val: #0284c7;
+  --color-info-bg-val: rgba(14, 165, 233, 0.1);
+  --color-info-border-val: rgba(14, 165, 233, 0.3);
+
+  /* Chart —— 供 lightweight-charts 读取的裸色值 */
+  --chart-up: var(--color-success-val);
+  --chart-up-volume: rgba(16, 185, 129, 0.3);
+  --chart-down: var(--color-danger-val);
+  --chart-down-volume: rgba(239, 68, 68, 0.3);
+  --chart-line: var(--color-accent-val);
+  --chart-baseline: var(--text-on-surface-muted);
+
+  /* Elevation —— 阴影 */
+  --shadow-sticky: 0 -4px 12px rgba(0, 0, 0, 0.06);
 }
 
 /* ===== 暗色主题 ===== */
@@ -91,6 +150,37 @@
   --color-accent-hover-val: #818cf8;
   --color-accent-light-val: rgba(99, 102, 241, 0.15);
   --color-accent-muted-val: rgba(99, 102, 241, 0.3);
+
+  /* Success (emerald) */
+  --color-success-val: #34d399;
+  --color-success-text-val: #34d399;
+  --color-success-bg-val: rgba(52, 211, 153, 0.12);
+  --color-success-border-val: rgba(52, 211, 153, 0.3);
+
+  /* Warning (amber) */
+  --color-warning-val: #fbbf24;
+  --color-warning-text-val: #fbbf24;
+  --color-warning-bg-val: rgba(251, 191, 36, 0.12);
+  --color-warning-border-val: rgba(251, 191, 36, 0.3);
+
+  /* Danger (red) */
+  --color-danger-val: #f87171;
+  --color-danger-text-val: #f87171;
+  --color-danger-bg-val: rgba(248, 113, 113, 0.12);
+  --color-danger-border-val: rgba(248, 113, 113, 0.3);
+
+  /* Info (sky/blue) */
+  --color-info-val: #38bdf8;
+  --color-info-text-val: #38bdf8;
+  --color-info-bg-val: rgba(56, 189, 248, 0.12);
+  --color-info-border-val: rgba(56, 189, 248, 0.3);
+
+  /* Chart —— 暗色主题下的图表色 */
+  --chart-up-volume: rgba(52, 211, 153, 0.3);
+  --chart-down-volume: rgba(248, 113, 113, 0.3);
+
+  /* Elevation —— 暗色阴影 */
+  --shadow-sticky: 0 -4px 12px rgba(0, 0, 0, 0.4);
 }
 
 /* ===== 全局字体 ===== */

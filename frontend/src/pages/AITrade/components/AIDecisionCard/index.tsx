@@ -88,7 +88,7 @@ const AIDecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
           </span>
         )}
         {log.status === 'failed' && (
-          <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
+          <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-danger-bg text-danger-text">
             失败
           </span>
         )}
@@ -108,7 +108,7 @@ const AIDecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
 
       {/* Risk Warning */}
       {riskWarning && (
-        <div className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-400">
+        <div className="mt-2 flex items-start gap-1.5 text-[11px] text-warning-text">
           <Warning className="w-3.5 h-3.5 mt-0.5 shrink-0" strokeWidth={2} />
           <span className="line-clamp-2">{riskWarning}</span>
         </div>

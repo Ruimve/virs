@@ -69,6 +69,10 @@ function tradesToMarkers(trades: AutoTrade[]) {
     return p >= 1000 ? `${(p / 1000).toFixed(1)}k` : p.toFixed(2);
   };
 
+  const cs = getComputedStyle(document.documentElement);
+  const upColor = cs.getPropertyValue('--chart-up').trim() || '#10b981';
+  const downColor = cs.getPropertyValue('--chart-down').trim() || '#ef4444';
+
   for (const t of trades) {
     // 开仓 marker
     const openTime = Math.floor(new Date(t.opened_at).getTime() / 1000);
@@ -76,7 +80,7 @@ function tradesToMarkers(trades: AutoTrade[]) {
     markers.push({
       time: openTime,
       position: openIsBuy ? 'belowBar' : 'aboveBar',
-      color: openIsBuy ? '#10b981' : '#ef4444',
+      color: openIsBuy ? upColor : downColor,
       shape: openIsBuy ? 'arrowUp' : 'arrowDown',
       text: fmtPrice(t.open_price),
     });
@@ -88,7 +92,7 @@ function tradesToMarkers(trades: AutoTrade[]) {
       markers.push({
         time: closeTime,
         position: closeIsBuy ? 'belowBar' : 'aboveBar',
-        color: closeIsBuy ? '#10b981' : '#ef4444',
+        color: closeIsBuy ? upColor : downColor,
         shape: closeIsBuy ? 'arrowUp' : 'arrowDown',
         text: fmtPrice(t.close_price ?? 0),
       });

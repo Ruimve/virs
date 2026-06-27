@@ -99,7 +99,7 @@ const ConfigureParams = () => {
             navigate('/setup/review', { replace: true });
           }}
           disabled={disabled}
-          className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+          className="w-full sm:w-auto sm:px-6 py-2.5 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
         >
           Continue
         </button>
@@ -119,7 +119,7 @@ const ConfigureParams = () => {
           <div key={param.key}>
             <label className="block text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">
               {param.label}
-              {param.required && <span className="text-indigo-400/60 ml-1">*</span>}
+              {param.required && <span className="text-accent/60 ml-1">*</span>}
             </label>
             <input
               type={param.type}
@@ -127,7 +127,7 @@ const ConfigureParams = () => {
               onChange={(e) => {
                 setValues((prev) => ({ ...prev, [param.key]: e.target.value }));
               }}
-              className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
+              className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-accent transition-all duration-200"
               placeholder={param.placeholder}
             />
           </div>

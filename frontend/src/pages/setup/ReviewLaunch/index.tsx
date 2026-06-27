@@ -105,7 +105,7 @@ const ReviewLaunch = () => {
         <button
           onClick={handleLaunch}
           disabled={launching}
-          className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+          className="w-full sm:w-auto sm:px-6 py-2.5 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
         >
           {launching ? (
             <span className="flex items-center justify-center gap-2">
@@ -131,16 +131,14 @@ const ReviewLaunch = () => {
             onClick={() => setPaperMode(true)}
             className={`flex-1 p-4 rounded-xl border text-left transition-all duration-200 ${
               paperMode
-                ? 'bg-indigo-500/10 border-indigo-500/30 ring-1 ring-indigo-500/20'
+                ? 'bg-accent-light border-accent-muted ring-1 ring-accent-muted'
                 : 'bg-surface-1 border-line-default hover:bg-surface-2'
             }`}
           >
             <div className="flex items-center gap-3">
               <div
                 className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  paperMode
-                    ? 'bg-indigo-500/20 text-indigo-400'
-                    : 'bg-surface-2 text-on-surface-faint'
+                  paperMode ? 'bg-accent-muted text-accent' : 'bg-surface-2 text-on-surface-faint'
                 }`}
               >
                 <ShieldCheck className="w-4 h-4" strokeWidth={2} />
@@ -161,7 +159,7 @@ const ReviewLaunch = () => {
             onClick={() => setPaperMode(false)}
             className={`flex-1 p-4 rounded-xl border text-left transition-all duration-200 ${
               !paperMode
-                ? 'bg-amber-500/10 border-amber-500/30 ring-1 ring-amber-500/20'
+                ? 'bg-warning-bg border-warning-border ring-1 ring-warning/20'
                 : 'bg-surface-1 border-line-default hover:bg-surface-2'
             }`}
           >
@@ -169,7 +167,7 @@ const ReviewLaunch = () => {
               <div
                 className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                   !paperMode
-                    ? 'bg-amber-500/20 text-amber-400'
+                    ? 'bg-warning/20 text-warning-text'
                     : 'bg-surface-2 text-on-surface-faint'
                 }`}
               >
@@ -268,7 +266,7 @@ const ReviewLaunch = () => {
           <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
             <span className="text-[12px] text-on-surface-tertiary">Mode</span>
             <span
-              className={`text-[12px] font-mono font-medium ${paperMode ? 'text-indigo-400' : 'text-amber-400'}`}
+              className={`text-[12px] font-mono font-medium ${paperMode ? 'text-accent' : 'text-warning-text'}`}
             >
               {paperMode ? 'Paper' : 'Real'}
             </span>
@@ -301,7 +299,7 @@ const ReviewLaunch = () => {
 
         {/* Launch error */}
         {launchError && (
-          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400">
+          <div className="p-3 bg-danger-bg border border-danger-border rounded-xl text-sm text-danger-text">
             {launchError}
           </div>
         )}

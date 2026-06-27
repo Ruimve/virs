@@ -15,7 +15,7 @@ interface Props {
 // ────────────────────────────────────────────────────────
 
 const pnlColor = (v: number) =>
-  v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-on-surface';
+  v > 0 ? 'text-success-text' : v < 0 ? 'text-danger-text' : 'text-on-surface';
 
 const PositionStats = ({ bot, latestPrice }: Props) => {
   const { position } = usePositionContext();
@@ -93,7 +93,7 @@ const PositionStats = ({ bot, latestPrice }: Props) => {
         </Stat>
         <Stat label="持仓方向">
           {hasPosition ? (
-            <span className={position!.side === 'long' ? 'text-emerald-400' : 'text-red-400'}>
+            <span className={position!.side === 'long' ? 'text-success-text' : 'text-danger-text'}>
               {position!.side === 'long' ? '多' : '空'}
             </span>
           ) : (
@@ -126,7 +126,7 @@ const PositionStats = ({ bot, latestPrice }: Props) => {
         </Stat>
         <Stat label="强平价">
           {hasPosition && position!.liquidationPrice != null ? (
-            <span className="text-red-400">{position!.liquidationPrice.toFixed(2)}</span>
+            <span className="text-danger-text">{position!.liquidationPrice.toFixed(2)}</span>
           ) : (
             <span className="text-on-surface-muted">-</span>
           )}
@@ -139,14 +139,14 @@ const PositionStats = ({ bot, latestPrice }: Props) => {
           <span className="text-on-surface">{bot.leverage}x</span>
         </Stat>
         <Stat label="止损">
-          <span className="text-red-400">
+          <span className="text-danger-text">
             {hasPosition && position!.stopLoss != null && position!.stopLoss > 0
               ? position!.stopLoss.toFixed(2)
               : '-'}
           </span>
         </Stat>
         <Stat label="止盈">
-          <span className="text-emerald-400">
+          <span className="text-success-text">
             {hasPosition && position!.takeProfit != null && position!.takeProfit > 0
               ? position!.takeProfit.toFixed(2)
               : '-'}

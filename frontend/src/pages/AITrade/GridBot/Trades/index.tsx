@@ -63,7 +63,7 @@ const Trades = () => {
                   </td>
                   <td className="px-3 py-2">
                     <span
-                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${t.open_side === 'buy' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}
+                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${t.open_side === 'buy' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'}`}
                     >
                       {t.open_side === 'buy' ? '买入' : '卖出'}
                     </span>
@@ -77,7 +77,7 @@ const Trades = () => {
                   <td className="px-3 py-2">
                     {t.close_side ? (
                       <span
-                        className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${t.close_side === 'buy' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}
+                        className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${t.close_side === 'buy' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'}`}
                       >
                         {t.close_side === 'buy' ? '买入' : '卖出'}
                       </span>
@@ -96,9 +96,9 @@ const Trades = () => {
                     <span
                       className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
                         t.status === 'closed'
-                          ? 'bg-emerald-500/10 text-emerald-400'
+                          ? 'bg-success-bg text-success-text'
                           : t.status === 'open'
-                            ? 'bg-blue-500/10 text-blue-400'
+                            ? 'bg-info-bg text-info-text'
                             : 'bg-surface-2 text-on-surface-tertiary'
                       }`}
                     >

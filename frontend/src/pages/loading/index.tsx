@@ -54,11 +54,11 @@ const Loading = () => {
   return (
     <div className="min-h-screen bg-base flex flex-col items-center justify-center relative overflow-hidden">
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-500/[0.03] blur-[120px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-accent/3 blur-[120px]" />
       </div>
 
       <div className="relative mb-16">
-        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/20 flex items-center justify-center backdrop-blur-sm">
+        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-accent/20 to-accent-muted/20 border border-accent-muted flex items-center justify-center backdrop-blur-sm">
           <span className="text-3xl font-extralight tracking-[0.3em] text-on-base select-none">
             V
           </span>
@@ -76,7 +76,7 @@ const Loading = () => {
         <div className="w-64 relative">
           <div className="h-[2px] bg-line-default rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-indigo-400 to-violet-400 rounded-full transition-all duration-500 ease-out"
+              className="h-full bg-gradient-to-r from-accent to-accent-hover rounded-full transition-all duration-500 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>

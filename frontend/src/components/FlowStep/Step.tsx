@@ -70,26 +70,26 @@ function FlowStep({
         );
       case 'active':
         return (
-          <div className="w-7 h-7 rounded-full bg-indigo-500/80 flex items-center justify-center text-white font-medium">
+          <div className="w-7 h-7 rounded-full bg-accent/80 flex items-center justify-center text-white font-medium">
             {stepContent}
           </div>
         );
       case 'verifying':
         return (
-          <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
-            <Spinner className="w-3.5 h-3.5 text-indigo-400" />
+          <div className="w-7 h-7 rounded-full bg-accent-muted border border-accent-muted flex items-center justify-center">
+            <Spinner className="w-3.5 h-3.5 text-accent" />
           </div>
         );
       case 'done':
         return (
-          <div className="w-7 h-7 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
-            <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2.5} />
+          <div className="w-7 h-7 rounded-full bg-success-bg border border-success-border flex items-center justify-center">
+            <Check className="w-3.5 h-3.5 text-success-text" strokeWidth={2.5} />
           </div>
         );
       case 'error':
         return (
-          <div className="w-7 h-7 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center">
-            <Close className="w-3.5 h-3.5 text-red-400" strokeWidth={2.5} />
+          <div className="w-7 h-7 rounded-full bg-danger-bg border border-danger-border flex items-center justify-center">
+            <Close className="w-3.5 h-3.5 text-danger-text" strokeWidth={2.5} />
           </div>
         );
     }

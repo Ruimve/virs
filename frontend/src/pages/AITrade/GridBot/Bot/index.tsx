@@ -54,6 +54,9 @@ const useRafThrottledPrice = () => {
  * 卖出（open_side=sell）→ 红色向下箭头，位于 K线上方
  */
 function tradesToMarkers(trades: GridTrade[]) {
+  const cs = getComputedStyle(document.documentElement);
+  const upColor = cs.getPropertyValue('--chart-up').trim() || '#10b981';
+  const downColor = cs.getPropertyValue('--chart-down').trim() || '#ef4444';
   return trades
     .map((t) => {
       const time = Math.floor(new Date(t.opened_at).getTime() / 1000);
@@ -61,7 +64,7 @@ function tradesToMarkers(trades: GridTrade[]) {
       return {
         time,
         position: isBuy ? ('belowBar' as const) : ('aboveBar' as const),
-        color: isBuy ? '#10b981' : '#ef4444',
+        color: isBuy ? upColor : downColor,
         shape: isBuy ? ('arrowUp' as const) : ('arrowDown' as const),
         text: `${isBuy ? '买' : '卖'} L${t.grid_level}`,
       };

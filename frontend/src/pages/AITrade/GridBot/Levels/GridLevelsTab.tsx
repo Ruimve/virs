@@ -47,20 +47,20 @@ const GridLevelsTab = ({ gridLevels }: GridLevelsTabProps) => {
               return (
                 <tr
                   key={level.level}
-                  className={`border-b border-line-subtle ${isHolding ? 'bg-emerald-500/5' : isClosed ? 'bg-base-secondary/50' : ''}`}
+                  className={`border-b border-line-subtle ${isHolding ? 'bg-success/5' : isClosed ? 'bg-base-secondary/50' : ''}`}
                 >
                   <td className="px-4 py-2 text-on-surface-secondary font-mono">{level.level}</td>
                   <td className="px-3 py-2 text-center">
                     <span
-                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${level.side === 'buy' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}
+                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${level.side === 'buy' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'}`}
                     >
                       {level.side === 'buy' ? '多' : '空'}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-emerald-400 text-right font-mono">
+                  <td className="px-3 py-2 text-success-text text-right font-mono">
                     {level.buy_price.toFixed(2)}
                   </td>
-                  <td className="px-3 py-2 text-red-400 text-right font-mono">
+                  <td className="px-3 py-2 text-danger-text text-right font-mono">
                     {level.sell_price.toFixed(2)}
                   </td>
                   <td className="px-3 py-2 text-on-surface text-right font-mono">
@@ -79,7 +79,7 @@ const GridLevelsTab = ({ gridLevels }: GridLevelsTabProps) => {
                       />
                     ) : isHolding ? (
                       <span
-                        className="inline-block w-2 h-2 rounded-full bg-emerald-500"
+                        className="inline-block w-2 h-2 rounded-full bg-success"
                         title="持仓中"
                       />
                     ) : (

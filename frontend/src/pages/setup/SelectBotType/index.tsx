@@ -12,16 +12,16 @@ const BOT_TYPES = [
     name: 'Grid Bot',
     desc: 'Profit from market volatility by placing orders at regular price intervals. Best for ranging markets.',
     features: ['Grid levels', 'Auto buy/sell', 'Range-bound profit'],
-    color: 'from-indigo-500/20 to-blue-500/20',
-    border: 'border-indigo-500/30',
+    color: 'from-accent/20 to-info/20',
+    border: 'border-accent-muted',
   },
   {
     id: 'auto' as const,
     name: 'Auto Bot',
     desc: 'AI-driven fully automated trading. Analyzes market conditions and executes trades autonomously.',
     features: ['AI analysis', 'Auto execution', 'Multi-market'],
-    color: 'from-violet-500/20 to-purple-500/20',
-    border: 'border-violet-500/30',
+    color: 'from-accent/20 to-accent-muted/20',
+    border: 'border-accent-muted',
   },
 ];
 
@@ -40,9 +40,9 @@ const SelectBotType = () => {
 
   const renderExistedBot = useCallback(() => {
     return (
-      <div className="p-5 rounded-xl border border-amber-500/20 bg-amber-500/5 mb-8">
+      <div className="p-5 rounded-xl border border-warning-border bg-warning/5 mb-8">
         <div className="flex items-start gap-3">
-          <InfoCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" strokeWidth={2} />
+          <InfoCircle className="w-5 h-5 text-warning-text shrink-0 mt-0.5" strokeWidth={2} />
           <div>
             <p className="text-sm font-medium text-on-base mb-1">已有机器人</p>
             <p className="text-xs text-on-surface-tertiary mb-3">
@@ -56,7 +56,7 @@ const SelectBotType = () => {
                   navigate(`/trade/grid/${existingBot?.id}`, { replace: true });
                 }
               }}
-              className="px-4 py-2 text-xs font-medium bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-colors"
+              className="px-4 py-2 text-xs font-medium bg-accent-light border border-accent-muted text-accent hover:bg-accent-muted rounded-lg transition-colors"
             >
               查看已有机器人
             </button>
@@ -82,9 +82,7 @@ const SelectBotType = () => {
               }`}
             >
               <div className="flex items-start gap-4">
-                <div
-                  className={`shrink-0 ${isSelected ? 'text-indigo-400' : 'text-on-surface-faint'}`}
-                >
+                <div className={`shrink-0 ${isSelected ? 'text-accent' : 'text-on-surface-faint'}`}>
                   {bot.id === 'grid' ? (
                     <svg
                       className="w-8 h-8"
@@ -140,7 +138,7 @@ const SelectBotType = () => {
                   </div>
                 </div>
                 {isSelected && (
-                  <div className="shrink-0 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
+                  <div className="shrink-0 w-5 h-5 rounded-full bg-accent flex items-center justify-center">
                     <Check className="w-3 h-3 text-white" strokeWidth={3} />
                   </div>
                 )}
@@ -161,7 +159,7 @@ const SelectBotType = () => {
           navigate('/setup/llm', { replace: true });
         }}
         disabled={!!existingBot}
-        className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+        className="w-full sm:w-auto sm:px-6 py-2.5 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
       >
         Continue
       </button>

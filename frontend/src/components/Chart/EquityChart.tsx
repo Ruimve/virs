@@ -23,8 +23,12 @@ function EquityChart({ data, height, initialBalance }: EquityChartProps) {
     if (!chart || initializedRef.current) return;
     initializedRef.current = true;
 
+    const cs = getComputedStyle(document.documentElement);
+    const lineColor = cs.getPropertyValue('--chart-line').trim() || '#6366f1';
+    const baselineColor = cs.getPropertyValue('--chart-baseline').trim() || '#9ca3af';
+
     const lineSeries = chart.addSeries(LineSeries, {
-      color: '#6366f1',
+      color: lineColor,
       lineWidth: 2,
       priceLineVisible: true,
       lastValueVisible: true,
@@ -41,7 +45,7 @@ function EquityChart({ data, height, initialBalance }: EquityChartProps) {
     if (initialBalance && data.length > 0) {
       lineSeries.createPriceLine({
         price: initialBalance,
-        color: '#9ca3af',
+        color: baselineColor,
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,

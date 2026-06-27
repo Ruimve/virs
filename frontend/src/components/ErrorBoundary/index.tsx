@@ -18,7 +18,7 @@ export class ErrorBoundary extends ReactComponent<
             <h1 className="text-xl font-semibold text-on-surface mb-2">Error</h1>
             <p className="text-on-surface-tertiary mb-4">{this.state.error?.message}</p>
             <button
-              className="px-4 py-2 bg-indigo-500/80 text-white rounded-lg hover:bg-indigo-500 text-sm"
+              className="px-4 py-2 bg-accent/80 text-white rounded-lg hover:bg-accent-hover text-sm"
               onClick={() => window.location.reload()}
             >
               Reload

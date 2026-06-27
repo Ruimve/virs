@@ -180,14 +180,14 @@ const ConfigureExchange = () => {
           type="text"
           value={apiKey}
           onChange={handleApiKeyChange}
-          className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
+          className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-accent transition-all duration-200"
           placeholder="API Key"
         />
         <input
           type="password"
           value={apiSecret}
           onChange={handleApiSecretChange}
-          className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 transition-all duration-200"
+          className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-accent transition-all duration-200"
           placeholder="API Secret"
         />
         <div>
@@ -201,7 +201,7 @@ const ConfigureExchange = () => {
                 onClick={() => handleSelectMarketType(mt.id)}
                 className={`p-2.5 rounded-lg border text-center transition-all duration-200 ${
                   marketType === mt.id
-                    ? 'bg-indigo-500/10 border-indigo-500/30 text-on-base'
+                    ? 'bg-accent-light border-accent-muted text-on-base'
                     : 'bg-surface-1 border-line-default text-on-surface-tertiary hover:bg-surface-2'
                 }`}
               >
@@ -211,11 +211,11 @@ const ConfigureExchange = () => {
             ))}
           </div>
         </div>
-        {step1Status === 'error' && <p className="text-[12px] text-red-400">{step1Error}</p>}
+        {step1Status === 'error' && <p className="text-[12px] text-danger-text">{step1Error}</p>}
         <button
           onClick={startStep1}
           disabled={disabled}
-          className="px-4 py-2 text-[12px] bg-indigo-500/20 border border-indigo-500/30 rounded-lg text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-30 transition-all duration-200"
+          className="px-4 py-2 text-[12px] bg-accent-muted border border-accent-muted rounded-lg text-accent hover:bg-accent-muted disabled:opacity-30 transition-all duration-200"
         >
           {step1Status === 'verifying' ? 'Verifying...' : 'Verify'}
         </button>
@@ -240,16 +240,16 @@ const ConfigureExchange = () => {
           <p className="text-[12px] text-on-surface-tertiary">Testing connection to Binance...</p>
         )}
         {step2Status === 'error' && (
-          <p className="text-[12px] text-red-400">{step2Error || 'Connection failed'}</p>
+          <p className="text-[12px] text-danger-text">{step2Error || 'Connection failed'}</p>
         )}
       </div>
     );
   }, [step2Status, step2Error]);
 
   const renderStatusIcon = useCallback((status: string) => {
-    if (status === 'ok') return <span className="text-emerald-400">&#10003;</span>;
-    if (status === 'warn') return <span className="text-amber-400">&#9888;</span>;
-    return <span className="text-red-400">&#10007;</span>;
+    if (status === 'ok') return <span className="text-success-text">&#10003;</span>;
+    if (status === 'warn') return <span className="text-warning-text">&#9888;</span>;
+    return <span className="text-danger-text">&#10007;</span>;
   }, []);
 
   const renderStep3 = useCallback(() => {
@@ -269,8 +269,8 @@ const ConfigureExchange = () => {
                 p.status === 'ok'
                   ? 'text-on-surface-muted'
                   : p.status === 'warn'
-                    ? 'text-amber-400/60'
-                    : 'text-red-400/60'
+                    ? 'text-warning-text/60'
+                    : 'text-danger-text/60'
               }`}
             >
               {p.detail}
@@ -278,7 +278,7 @@ const ConfigureExchange = () => {
           </div>
         ))}
         {step3Status === 'error' && (
-          <p className="text-[12px] text-red-400">{step3Error || 'Connection failed'}</p>
+          <p className="text-[12px] text-danger-text">{step3Error || 'Connection failed'}</p>
         )}
       </div>
     );
@@ -324,7 +324,7 @@ const ConfigureExchange = () => {
             navigate('/setup/params', { replace: true });
           }}
           disabled={disabled}
-          className="w-full sm:w-auto sm:px-6 py-2.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+          className="w-full sm:w-auto sm:px-6 py-2.5 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
         >
           Continue
         </button>

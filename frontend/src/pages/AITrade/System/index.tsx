@@ -29,15 +29,15 @@ function formatUptime(secs: number): string {
 }
 
 function usageColor(pct: number): string {
-  if (pct >= 90) return 'text-red-400';
-  if (pct >= 70) return 'text-amber-400';
-  return 'text-emerald-400';
+  if (pct >= 90) return 'text-danger-text';
+  if (pct >= 70) return 'text-warning-text';
+  return 'text-success-text';
 }
 
 function barColor(pct: number): string {
-  if (pct >= 90) return 'bg-red-500';
-  if (pct >= 70) return 'bg-amber-500';
-  return 'bg-emerald-500';
+  if (pct >= 90) return 'bg-danger';
+  if (pct >= 70) return 'bg-warning';
+  return 'bg-success';
 }
 
 interface ProgressBarProps {
@@ -129,7 +129,9 @@ const System = () => {
 
   if (error) {
     return (
-      <div className="flex-1 flex items-center justify-center text-red-400 text-sm">{error}</div>
+      <div className="flex-1 flex items-center justify-center text-danger-text text-sm">
+        {error}
+      </div>
     );
   }
 
@@ -296,13 +298,13 @@ const System = () => {
                     <div className="flex gap-4">
                       <span className="text-on-surface-tertiary">
                         ↓{' '}
-                        <span className="text-emerald-400 font-mono">
+                        <span className="text-success-text font-mono">
                           {rate ? formatRate(rate.rx) : '-'}
                         </span>
                       </span>
                       <span className="text-on-surface-tertiary">
                         ↑{' '}
-                        <span className="text-sky-400 font-mono">
+                        <span className="text-info-text font-mono">
                           {rate ? formatRate(rate.tx) : '-'}
                         </span>
                       </span>

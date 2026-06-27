@@ -12,7 +12,7 @@ export const Layout = () => {
     <div className="h-dvh bg-base flex flex-col relative overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-500/[0.03] blur-[120px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-accent/[0.03] blur-[120px]" />
       </div>
 
       {/* Top bar */}
@@ -34,9 +34,9 @@ export const Layout = () => {
                   <div
                     className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-medium transition-all duration-300 ${
                       isActive
-                        ? 'bg-indigo-500/80 text-white'
+                        ? 'bg-accent/80 text-white'
                         : isCompleted
-                          ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
+                          ? 'bg-accent-muted text-accent border border-accent-muted'
                           : 'bg-surface-1 text-on-surface-faint border border-line-default'
                     }`}
                   >
@@ -44,7 +44,7 @@ export const Layout = () => {
                   </div>
                   {i < TOTAL_SETUP_STEPS - 1 && (
                     <div
-                      className={`w-6 h-[1px] ${isCompleted ? 'bg-indigo-500/40' : 'bg-line-default'}`}
+                      className={`w-6 h-[1px] ${isCompleted ? 'bg-accent/40' : 'bg-line-default'}`}
                     />
                   )}
                 </div>

@@ -45,12 +45,12 @@ const Login = () => {
   return (
     <div className="min-h-screen bg-base flex items-center justify-center relative overflow-hidden">
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-500/[0.03] blur-[120px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-accent/3 blur-[120px]" />
       </div>
 
       <div className="w-full max-w-sm px-6 relative">
         <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/20 mb-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-accent/20 to-accent-muted/20 border border-accent-muted mb-6">
             <span className="text-2xl font-extralight tracking-[0.3em] text-on-base">V</span>
           </div>
           <h1 className="text-2xl font-extralight tracking-[0.4em] text-on-surface mb-1">VIRS</h1>
@@ -61,7 +61,7 @@ const Login = () => {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400">
+            <div className="flex items-center gap-2 p-3 bg-danger-bg border border-danger-border rounded-xl text-sm text-danger-text">
               <InfoCircle className="w-4 h-4 shrink-0" strokeWidth={1.5} />
               <span>{error}</span>
             </div>
@@ -72,7 +72,7 @@ const Login = () => {
               type="text"
               value={username}
               onChange={handleChangeUsername}
-              className="w-full px-4 py-3 bg-surface-2 border border-line-strong rounded-xl text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 focus:bg-surface-3 transition-all duration-200"
+              className="w-full px-4 py-3 bg-surface-2 border border-line-strong rounded-xl text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-accent focus:bg-surface-3 transition-all duration-200"
               placeholder="Username"
               autoComplete="username"
               disabled={loading}
@@ -84,7 +84,7 @@ const Login = () => {
               type="password"
               value={password}
               onChange={handleChangePassword}
-              className="w-full px-4 py-3 bg-surface-2 border border-line-strong rounded-xl text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-indigo-500/40 focus:bg-surface-3 transition-all duration-200"
+              className="w-full px-4 py-3 bg-surface-2 border border-line-strong rounded-xl text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-accent focus:bg-surface-3 transition-all duration-200"
               placeholder="Password"
               autoComplete="current-password"
               disabled={loading}
@@ -94,7 +94,7 @@ const Login = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 px-4 bg-indigo-500/80 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:ring-offset-2 focus:ring-offset-base disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+            className="w-full py-3 px-4 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-muted focus:ring-offset-2 focus:ring-offset-base disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">

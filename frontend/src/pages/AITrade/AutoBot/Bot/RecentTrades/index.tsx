@@ -7,7 +7,7 @@ interface Props {
 }
 
 const pnlColor = (v: number) =>
-  v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-on-surface';
+  v > 0 ? 'text-success-text' : v < 0 ? 'text-danger-text' : 'text-on-surface';
 
 const RecentTrades = ({ trades }: Props) => {
   const recent = trades.slice(0, 10);
@@ -32,7 +32,7 @@ const RecentTrades = ({ trades }: Props) => {
                 {/* 第一行：方向 + 开平仓价 + 时间 */}
                 <div className="flex items-center gap-2 mb-1">
                   <span
-                    className={`text-[11px] font-medium px-1.5 py-0.5 rounded shrink-0 ${trade.open_side === 'buy' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}
+                    className={`text-[11px] font-medium px-1.5 py-0.5 rounded shrink-0 ${trade.open_side === 'buy' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'}`}
                   >
                     {trade.open_side === 'buy' ? '多' : '空'}
                   </span>
@@ -56,13 +56,13 @@ const RecentTrades = ({ trades }: Props) => {
                     </span>
                   </span>
                   {trade.stop_loss > 0 && (
-                    <span className="text-red-400/80">
+                    <span className="text-danger-text/80">
                       SL{' '}
                       <span className="font-mono tabular-nums">{trade.stop_loss.toFixed(2)}</span>
                     </span>
                   )}
                   {trade.take_profit > 0 && (
-                    <span className="text-emerald-400/80">
+                    <span className="text-success-text/80">
                       TP{' '}
                       <span className="font-mono tabular-nums">{trade.take_profit.toFixed(2)}</span>
                     </span>
@@ -77,7 +77,7 @@ const RecentTrades = ({ trades }: Props) => {
                     </span>
                   )}
                   {trade.status === 'open' && (
-                    <span className="text-amber-400 ml-auto">持仓中</span>
+                    <span className="text-warning-text ml-auto">持仓中</span>
                   )}
                 </div>
               </div>

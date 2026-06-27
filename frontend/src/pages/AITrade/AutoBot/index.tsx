@@ -53,7 +53,7 @@ const AutoBot = () => {
         key: 'stop',
         label: '暂停',
         className:
-          'bg-surface-1 border-line-default text-on-surface-tertiary hover:text-red-400 hover:border-red-500/20 transition-colors',
+          'bg-surface-1 border-line-default text-on-surface-tertiary hover:text-danger-text hover:border-danger-border transition-colors',
         onClick: async () => {
           await stopAutoBot(bot?.id);
         },
@@ -65,7 +65,7 @@ const AutoBot = () => {
         key: 'start',
         label: '运行',
         className:
-          'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors',
+          'bg-success-bg border-success-border text-success-text hover:bg-success/20 transition-colors',
         onClick: async () => {
           await startAutoBot(bot?.id);
         },
@@ -76,7 +76,7 @@ const AutoBot = () => {
       key: 'delete',
       label: '删除',
       className:
-        'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors',
+        'bg-danger-bg border-danger-border text-danger-text hover:bg-danger/20 transition-colors',
       onClick: async () => {
         if (!confirm('确定删除此机器人？将平仓所有持仓。')) return;
         await deleteAutoBot(bot?.id);

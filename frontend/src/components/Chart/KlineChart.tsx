@@ -76,6 +76,23 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | undefined>(undefined);
   const initializedRef = useRef(false);
 
+  // 主题感知颜色（在初始化时读取一次，避免每帧调用 getComputedStyle）
+  const colorsRef = useRef({
+    up: '',
+    upVolume: '',
+    down: '',
+    downVolume: '',
+  });
+  const readChartColors = useCallback(() => {
+    const cs = getComputedStyle(document.documentElement);
+    colorsRef.current = {
+      up: cs.getPropertyValue('--chart-up').trim() || '#10b981',
+      upVolume: cs.getPropertyValue('--chart-up-volume').trim() || 'rgba(16, 185, 129, 0.3)',
+      down: cs.getPropertyValue('--chart-down').trim() || '#ef4444',
+      downVolume: cs.getPropertyValue('--chart-down-volume').trim() || 'rgba(239, 68, 68, 0.3)',
+    };
+  }, []);
+
   // ── Expose imperative API ──────────────────────────────
 
   useImperativeHandle(
@@ -97,11 +114,11 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
         // Also update volume series if present
         const volumeSeries = volumeSeriesRef.current;
         if (volumeSeries && candle.volume !== undefined) {
+          const c = colorsRef.current;
           volumeSeries.update({
             time: toLocaleTime(candle.time),
             value: candle.volume,
-            color:
-              candle.close >= candle.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+            color: candle.close >= candle.open ? c.upVolume : c.downVolume,
           });
         }
       },
@@ -136,13 +153,17 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       timeScale: { timeVisible, secondsVisible },
     });
 
+    // 读取主题色（仅在初始化时读取一次）
+    readChartColors();
+    const c = colorsRef.current;
+
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#10b981',
-      downColor: '#ef4444',
-      borderDownColor: '#ef4444',
-      borderUpColor: '#10b981',
-      wickDownColor: '#ef4444',
-      wickUpColor: '#10b981',
+      upColor: c.up,
+      downColor: c.down,
+      borderDownColor: c.down,
+      borderUpColor: c.up,
+      wickDownColor: c.down,
+      wickUpColor: c.up,
     });
     candleSeriesRef.current = candleSeries;
 
@@ -184,7 +205,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
         data.map((item) => ({
           time: toLocaleTime(item.time),
           value: item.volume || 0,
-          color: item.close >= item.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+          color: item.close >= item.open ? c.upVolume : c.downVolume,
         })),
       );
 
@@ -263,11 +284,12 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     // Also update volume series
     const volumeSeries = volumeSeriesRef.current;
     if (volumeSeries) {
+      const c = colorsRef.current;
       volumeSeries.setData(
         data.map((item) => ({
           time: toLocaleTime(item.time),
           value: item.volume || 0,
-          color: item.close >= item.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+          color: item.close >= item.open ? c.upVolume : c.downVolume,
         })),
       );
     }

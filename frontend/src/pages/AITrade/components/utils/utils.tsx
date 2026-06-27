@@ -2,17 +2,17 @@ import type { ReactNode } from 'react';
 
 export const formatPnl = (pnl: number): ReactNode => {
   if (pnl > 0)
-    return <span className="text-emerald-400 font-semibold font-mono">+{pnl.toFixed(4)}</span>;
+    return <span className="text-success-text font-semibold font-mono">+{pnl.toFixed(4)}</span>;
   if (pnl < 0)
-    return <span className="text-red-400 font-semibold font-mono">{pnl.toFixed(4)}</span>;
+    return <span className="text-danger-text font-semibold font-mono">{pnl.toFixed(4)}</span>;
   return <span className="text-on-surface-tertiary font-mono">0.00</span>;
 };
 
 export const formatPnlShort = (pnl: number): ReactNode => {
   if (pnl > 0)
-    return <span className="text-emerald-400 font-semibold font-mono">+{pnl.toFixed(2)}</span>;
+    return <span className="text-success-text font-semibold font-mono">+{pnl.toFixed(2)}</span>;
   if (pnl < 0)
-    return <span className="text-red-400 font-semibold font-mono">{pnl.toFixed(2)}</span>;
+    return <span className="text-danger-text font-semibold font-mono">{pnl.toFixed(2)}</span>;
   return <span className="text-on-surface-tertiary font-mono">0.00</span>;
 };
 
@@ -54,23 +54,23 @@ export const actionColor = (action: string | undefined) => {
   if (!action) return defaultColor;
 
   const map: Record<string, string> = {
-    open_long: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    open_short: 'bg-red-500/10 text-red-400 border-red-500/20',
-    close_position: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    open_long: 'bg-success-bg text-success-text border-success-border',
+    open_short: 'bg-danger-bg text-danger-text border-danger-border',
+    close_position: 'bg-info-bg text-info-text border-info-border',
     hold: defaultColor,
-    reduce_position: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    reduce_position: 'bg-warning-bg text-warning-text border-warning-border',
     cancel_order: defaultColor,
-    adjust_grid: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-    pause_grid: 'bg-red-500/10 text-red-400 border-red-500/20',
-    resume_grid: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    adjust_grid: 'bg-info-bg text-info-text border-info-border',
+    pause_grid: 'bg-danger-bg text-danger-text border-danger-border',
+    resume_grid: 'bg-success-bg text-success-text border-success-border',
   };
   return map[action] || defaultColor;
 };
 
 export const confidenceColor = (conf: number) => {
-  if (conf >= 0.7) return 'text-emerald-400';
-  if (conf >= 0.4) return 'text-amber-400';
-  return 'text-red-400';
+  if (conf >= 0.7) return 'text-success-text';
+  if (conf >= 0.4) return 'text-warning-text';
+  return 'text-danger-text';
 };
 
 export const tradeTypeLabel = (t: string) => {
@@ -86,9 +86,9 @@ export const tradeTypeLabel = (t: string) => {
 };
 
 export const tradeTypeColor = (t: string) => {
-  if (t.startsWith('open_long') || t === 'close_short') return 'text-emerald-400';
-  if (t.startsWith('open_short') || t === 'close_long') return 'text-red-400';
-  if (t === 'stop_loss') return 'text-red-400';
-  if (t === 'take_profit') return 'text-emerald-400';
+  if (t.startsWith('open_long') || t === 'close_short') return 'text-success-text';
+  if (t.startsWith('open_short') || t === 'close_long') return 'text-danger-text';
+  if (t === 'stop_loss') return 'text-danger-text';
+  if (t === 'take_profit') return 'text-success-text';
   return 'text-on-surface-tertiary';
 };

@@ -31,7 +31,7 @@ const LevelsOverview = ({ gridLevels }: Props) => {
             {/* 统计摘要 */}
             <div className="grid grid-cols-3 gap-2 px-3 py-2 border-b border-line-subtle">
               <div className="text-center">
-                <div className="text-sm font-mono tabular-nums font-medium text-emerald-400">
+                <div className="text-sm font-mono tabular-nums font-medium text-success-text">
                   {holding.length}
                 </div>
                 <div className="text-[11px] text-on-surface-tertiary">持仓</div>
@@ -61,7 +61,7 @@ const LevelsOverview = ({ gridLevels }: Props) => {
                       L{level.level}
                     </span>
                     <span
-                      className={`inline-block px-1 py-0.5 rounded text-[11px] font-medium shrink-0 ${level.side === 'buy' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}
+                      className={`inline-block px-1 py-0.5 rounded text-[11px] font-medium shrink-0 ${level.side === 'buy' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'}`}
                     >
                       {level.side === 'buy' ? '多' : '空'}
                     </span>
@@ -69,7 +69,7 @@ const LevelsOverview = ({ gridLevels }: Props) => {
                       {level.buy_price.toFixed(2)} → {level.sell_price.toFixed(2)}
                     </span>
                     {isHolding && (
-                      <span className="text-emerald-400 font-mono tabular-nums text-[11px] shrink-0">
+                      <span className="text-success-text font-mono tabular-nums text-[11px] shrink-0">
                         {formatSmart(Math.abs(level.hold_quantity))}
                       </span>
                     )}

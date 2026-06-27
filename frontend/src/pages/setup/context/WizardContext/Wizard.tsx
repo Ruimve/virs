@@ -18,7 +18,7 @@ export const Wizard = ({ step, title, subtitle, children, actions }: WizardLayou
       <div className="flex-1 flex justify-center relative z-10 overflow-y-auto">
         <div className="w-full max-w-lg px-4 md:px-8 pt-8 md:pt-16 pb-6">
           <div className="mb-8 md:mb-10">
-            <p className="text-[11px] tracking-[0.2em] text-indigo-400/60 mb-2 md:mb-3 uppercase">
+            <p className="text-[11px] tracking-[0.2em] text-accent/60 mb-2 md:mb-3 uppercase">
               Step {stepIndex} of {TOTAL_SETUP_STEPS} — {STEP_LABELS[step]}
             </p>
             <h2 className="text-xl md:text-2xl font-extralight tracking-wide text-on-base">

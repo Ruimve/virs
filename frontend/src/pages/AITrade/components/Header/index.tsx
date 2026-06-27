@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import Logo from '@/components/Logo';
 import Theme from '@/components/Theme';
-import { Close } from '@/components/Icon';
+import { Close, Flame, ShieldCheck } from '@/components/Icon';
 import { useHeader } from './HeaderContext';
 import { usePaper } from '../../context/PaperContext';
 import { useBot } from '../../context/BotContext';
@@ -14,8 +14,8 @@ interface StatusStyle {
 
 const statusConfig = (status: string): StatusStyle => {
   const map: Record<string, StatusStyle> = {
-    running: { text: '运行中', dot: 'bg-emerald-500', bg: 'bg-emerald-500/10 text-emerald-400' },
-    paused: { text: '已暂停', dot: 'bg-amber-500', bg: 'bg-amber-500/10 text-amber-400' },
+    running: { text: '运行中', dot: 'bg-success', bg: 'bg-success-bg text-success-text' },
+    paused: { text: '已暂停', dot: 'bg-warning', bg: 'bg-warning-bg text-warning-text' },
     stopped: {
       text: '已停止',
       dot: 'bg-on-surface-muted',
@@ -26,7 +26,7 @@ const statusConfig = (status: string): StatusStyle => {
       dot: 'bg-on-surface-faint',
       bg: 'bg-surface-2 text-on-surface-tertiary',
     },
-    error: { text: '错误', dot: 'bg-red-500', bg: 'bg-red-500/10 text-red-400' },
+    error: { text: '错误', dot: 'bg-danger', bg: 'bg-danger-bg text-danger-text' },
   };
   return (
     map[status] || {
@@ -77,9 +77,13 @@ const Header = () => {
               {sc.text}
             </span>
             <span
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${paperMode ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}`}
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${paperMode ? 'text-warning-text' : 'text-success-text'}`}
             >
-              {paperMode ? 'Paper' : '实盘'}
+              {paperMode ? (
+                <ShieldCheck className="w-4 h-4" strokeWidth={2} />
+              ) : (
+                <Flame className="w-4 h-4" strokeWidth={2} />
+              )}
             </span>
             <span className="text-xs text-on-surface-tertiary md:hidden">
               {bot?.symbol || ''} · {bot?.leverage || ''}x

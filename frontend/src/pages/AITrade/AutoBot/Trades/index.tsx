@@ -54,11 +54,11 @@ const Trades = () => {
                     <span
                       className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
                         t.status === 'open'
-                          ? 'text-amber-400'
+                          ? 'text-warning-text'
                           : t.close_reason === 'stop_loss'
-                            ? 'text-red-400'
+                            ? 'text-danger-text'
                             : t.close_reason === 'take_profit'
-                              ? 'text-emerald-400'
+                              ? 'text-success-text'
                               : 'text-on-surface-tertiary'
                       } bg-surface-2`}
                     >
@@ -94,7 +94,7 @@ const Trades = () => {
                           </span>
                         )}
                         {totalFee > 0 && (
-                          <span className="text-amber-400 ml-2 font-mono">
+                          <span className="text-warning-text ml-2 font-mono">
                             手续费 {totalFee.toFixed(4)}
                           </span>
                         )}
