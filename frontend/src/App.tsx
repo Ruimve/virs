@@ -68,8 +68,8 @@ const App = () => {
                 <Route path="/trade/grid/:botId/trades" element={<GridBotTrades />} />
                 <Route path="/trade/grid/:botId/levels" element={<GridBotLevels />} />
               </Route>
-              <Route path="/trade/health/:botType/:botId" element={<HealthCheck />} />
-              <Route path="/trade/system" element={<System />} />
+              <Route path="/trade/:botType/:botId/health" element={<HealthCheck />} />
+              <Route path="/trade/:botType/:botId/system" element={<System />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -41,7 +41,7 @@ const AILog = () => {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="h-full overflow-y-auto max-w-5xl mx-auto">
       <AILogList logs={logs} loading={loading} botType="grid" botId={bot.id} />
 
       {/* 分页 */}

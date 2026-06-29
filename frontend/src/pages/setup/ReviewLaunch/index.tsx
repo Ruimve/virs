@@ -76,7 +76,7 @@ const ReviewLaunch = () => {
 
       // Step 3: Navigate to health check
       updateWizard({ paper_mode: paperMode, bot_id: botId });
-      navigate(`/trade/health/${wizard.bot_type}/${botId}`, { replace: true });
+      navigate(`/trade/${wizard.bot_type}/${botId}/health`, { replace: true });
     } catch (err) {
       setLaunchError(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

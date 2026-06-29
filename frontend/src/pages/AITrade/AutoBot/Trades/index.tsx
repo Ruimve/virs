@@ -38,7 +38,7 @@ const Trades = () => {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="max-w-5xl mx-auto px-4 md:px-8 py-6">
+    <div className="h-full overflow-y-auto max-w-5xl mx-auto px-4 md:px-8 py-6">
       {trades.length > 0 ? (
         <div className="bg-surface-1 rounded-xl border border-line-default shadow-sm overflow-hidden">
           <div className="divide-y divide-line-subtle">

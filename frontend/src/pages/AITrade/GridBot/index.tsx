@@ -38,7 +38,7 @@ const GridBot = () => {
         key: 'system',
         label: '系统',
         onClick: () => {
-          navigate(`/trade/system`, { replace: true });
+          navigate(`/trade/grid/${bot?.id}/system`, { replace: true });
         },
       },
     ]);
