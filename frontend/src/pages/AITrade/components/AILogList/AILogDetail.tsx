@@ -65,7 +65,7 @@ const AILogDetail = ({ log, loading }: Props) => {
   const decision = getDecision(log);
 
   return (
-    <div className="min-h-screen bg-base">
+    <div className="h-full overflow-y-auto bg-base">
       {/* Top bar */}
       <div className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-8 h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
         <div className="flex items-center gap-3">
