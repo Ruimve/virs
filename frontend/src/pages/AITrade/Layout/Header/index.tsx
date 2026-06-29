@@ -41,23 +41,24 @@ const Header = () => {
   const { bot } = useBot();
   const { tabs, activeTab, actions } = useHeader();
   const { enabled: paperMode } = usePaper();
+
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerClosing, setDrawerClosing] = useState(false);
 
-  const closeDrawer = () => {
+  const closeDrawer = useCallback(() => {
     setDrawerClosing(true);
-  };
+  }, []);
 
   const openDrawer = useCallback(() => {
     setDrawerOpen(true);
   }, []);
 
-  const handleDrawerAnimEnd = () => {
+  const handleDrawerAnimEnd = useCallback(() => {
     if (drawerClosing) {
       setDrawerOpen(false);
       setDrawerClosing(false);
     }
-  };
+  }, [drawerClosing]);
 
   const sc = statusConfig(bot?.status || '');
 

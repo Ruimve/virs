@@ -10,14 +10,6 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleChangeUsername = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setUsername(e.target.value);
-  };
-
-  const handleChangePassword = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPassword(e.target.value);
-  };
-
   const handleSubmit = async (e: React.SubmitEvent) => {
     e.preventDefault();
     setError('');
@@ -32,9 +24,10 @@ const Login = () => {
       const result = await login(username.trim(), password.trim());
       if (result.success) {
         navigate('/setup/bot-type', { replace: true });
-      } else {
-        setError(result.error || 'Login failed');
+        return;
       }
+
+      setError(result.error || 'Login failed');
     } catch {
       setError('Network error, please try again');
     } finally {
@@ -71,7 +64,7 @@ const Login = () => {
             <input
               type="text"
               value={username}
-              onChange={handleChangeUsername}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full px-4 py-3 bg-surface-2 border border-line-strong rounded-xl text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-accent focus:bg-surface-3 transition-all duration-200"
               placeholder="Username"
               autoComplete="username"
@@ -83,7 +76,7 @@ const Login = () => {
             <input
               type="password"
               value={password}
-              onChange={handleChangePassword}
+              onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 bg-surface-2 border border-line-strong rounded-xl text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-accent focus:bg-surface-3 transition-all duration-200"
               placeholder="Password"
               autoComplete="current-password"

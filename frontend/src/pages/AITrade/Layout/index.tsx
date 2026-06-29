@@ -1,7 +1,7 @@
 import { PaperProvider } from '../context/PaperContext/PaperProvider';
 import { BotProvider } from '../context/BotContext/BotProvider';
 import { PositionProvider } from '../context/PositionContext/PositionProvider';
-import { HeaderProvider } from '../components/Header/HeaderContext/HeaderProvider';
+import { HeaderProvider } from './Header/HeaderContext/HeaderProvider';
 import Layout from './Layout';
 
 export const LayoutBox = () => {

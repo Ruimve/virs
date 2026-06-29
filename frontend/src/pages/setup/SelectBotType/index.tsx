@@ -51,9 +51,9 @@ const SelectBotType = () => {
             <button
               onClick={() => {
                 if (existingBot?.bot_type === 'auto') {
-                  navigate(`/trade/auto/${existingBot?.id}`, { replace: true });
+                  navigate(`/trade/auto/${existingBot?.id}/bot`, { replace: true });
                 } else if (existingBot?.bot_type === 'grid') {
-                  navigate(`/trade/grid/${existingBot?.id}`, { replace: true });
+                  navigate(`/trade/grid/${existingBot?.id}/bot`, { replace: true });
                 }
               }}
               className="px-4 py-2 text-xs font-medium bg-accent-light border border-accent-muted text-accent hover:bg-accent-muted rounded-lg transition-colors"

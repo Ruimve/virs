@@ -14,6 +14,13 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        var t = localStorage.getItem('theme');
+        if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        if (t === 'dark') document.documentElement.classList.add('dark');
+      })();
+    </script>
     <script type="module" src="/src/index.tsx"></script>
   </body>
 </html>

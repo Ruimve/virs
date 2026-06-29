@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep';
 import { getAiStatus, fetchCredentialStatus, checkHealth } from '../../../service';
 import { useBot } from '../context/BotContext';
-import { useHeader } from '../components/Header/HeaderContext';
+import { useHeader } from '../Layout/Header/HeaderContext';
 
 interface CheckItem {
   key: string;

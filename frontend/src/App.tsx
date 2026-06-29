@@ -3,7 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Loading from './pages/loading';
 import Login from './pages/login';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import Transition from './components/Transition';
+import FullScreen from './components/Transition/FullScreen';
+import { Icon } from './components/Transition/Icon/AssetLoading';
 
 /** 向导 */
 const SetupLayout = lazy(() => import('./pages/setup/Layout'));
@@ -35,7 +36,7 @@ const HealthCheck = lazy(() => import('./pages/AITrade/HealthCheck'));
 const System = lazy(() => import('./pages/AITrade/System'));
 
 const SuspenseWrap = ({ children }: { children: React.ReactNode }) => {
-  return <Suspense fallback={<Transition icon="AssetLoading" />}>{children}</Suspense>;
+  return <Suspense fallback={<FullScreen icon={<Icon />} />}>{children}</Suspense>;
 };
 
 const App = () => {

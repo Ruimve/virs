@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { startAutoBot, stopAutoBot, deleteAutoBot } from '@/service/bot';
 import { useBot } from '../context/BotContext';
-import { useHeader, type ItemConfig } from '../components/Header/HeaderContext';
+import { useHeader, type ItemConfig } from '../Layout/Header/HeaderContext';
 
 const AutoBot = () => {
   const navigate = useNavigate();
