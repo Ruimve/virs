@@ -1,7 +1,109 @@
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+
+// ============================================================
+// Default value constants
+// ============================================================
+
+pub(crate) const DEFAULT_HOST: &str = "0.0.0.0";
+pub(crate) const DEFAULT_PORT: &str = "8080";
+pub(crate) const DEFAULT_LOG_LEVEL: &str = "info";
+pub(crate) const DEFAULT_JWT_HOURS: &str = "24";
+pub(crate) const DEFAULT_DB_POOL_MIN: &str = "5";
+pub(crate) const DEFAULT_DB_POOL_MAX: &str = "50";
+pub(crate) const DEFAULT_SMTP_PORT: &str = "587";
+pub(crate) const DEFAULT_SMTP_FROM: &str = "noreply@virs.com";
+pub(crate) const DEFAULT_CACHE_TTL_TICKER: &str = "10";
+pub(crate) const DEFAULT_CACHE_TTL_KLINE_1M: &str = "60";
+pub(crate) const DEFAULT_CACHE_TTL_KLINE_5M: &str = "120";
+pub(crate) const DEFAULT_CACHE_TTL_KLINE_1H: &str = "300";
+pub(crate) const DEFAULT_CACHE_TTL_KLINE_1D: &str = "3600";
+pub(crate) const DEFAULT_ADMIN_USERNAME: &str = "admin";
+pub(crate) const DEFAULT_ADMIN_PASSWORD: &str = "admin123";
+
+// ============================================================
+// Pure parsing functions (idempotent, no side effects)
+// ============================================================
+
+/// Parse a boolean-like string: "true" or "1" → true, everything else → false.
+///
+/// Used for environment variables that accept truthy string values.
+pub(crate) fn parse_bool_str(v: &str) -> bool {
+    v == "true" || v == "1"
+}
+
+/// Parse the `PAPER_TRADING` environment variable value.
+///
+/// - `Some("true")` / `Some("1")` → `Some(true)`
+/// - `Some("false")` / `Some("0")` / `Some(other)` → `Some(false)`
+/// - `None` → `Some(true)` (default to safe paper-trading mode)
+pub(crate) fn parse_paper_value(v: Option<String>) -> Option<bool> {
+    v.map(|s| parse_bool_str(&s)).or(Some(true))
+}
+
+/// Parse an optional environment variable string into a numeric type, using a default when absent.
+///
+/// Returns an error if the value is present but cannot be parsed.
+pub(crate) fn parse_env_num<T: FromStr>(value: Option<String>, default: &str) -> Result<T, anyhow::Error>
+where
+    <T as FromStr>::Err: std::error::Error + Send + Sync + 'static,
+{
+    let s = value.unwrap_or_else(|| default.to_string());
+    s.parse::<T>().map_err(|e| anyhow::anyhow!("Failed to parse '{}': {}", s, e))
+}
+
+// ============================================================
+// Pure config construction functions (idempotent)
+// ============================================================
+
+/// Build Redis configuration from optional URL and password.
+///
+/// Returns `None` if no URL is provided (Redis is optional).
+pub(crate) fn build_redis_config(
+    url: Option<String>,
+    password: Option<String>,
+) -> Option<RedisConfig> {
+    url.map(|url| RedisConfig { url, password })
+}
+
+/// Build Telegram notification configuration.
+///
+/// Both `bot_token` and `chat_id` must be present; otherwise returns `None`.
+pub(crate) fn build_telegram_config(
+    bot_token: Option<String>,
+    chat_id: Option<String>,
+) -> Option<TelegramConfig> {
+    bot_token.zip(chat_id).map(|(bot_token, chat_id)| TelegramConfig { bot_token, chat_id })
+}
+
+/// Build Email notification configuration.
+///
+/// Requires `host`, `username`, and `password` to all be present.
+/// `port` defaults to 587, `from` defaults to "noreply@virs.com".
+pub(crate) fn build_email_config(
+    host: Option<String>,
+    username: Option<String>,
+    password: Option<String>,
+    port: Option<String>,
+    from: Option<String>,
+) -> Option<EmailConfig> {
+    host.zip(username).zip(password).map(|((host, username), password)| EmailConfig {
+        host,
+        port: port
+            .and_then(|p| p.parse().ok())
+            .unwrap_or_else(|| DEFAULT_SMTP_PORT.parse().unwrap()),
+        username,
+        password,
+        from: from.unwrap_or_else(|| DEFAULT_SMTP_FROM.to_string()),
+    })
+}
+
+// ============================================================
+// Configuration structs
+// ============================================================
 
 /// Master application configuration, loaded from environment variables.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AppConfig {
     pub server: ServerConfig,
     pub database: DatabaseConfig,
@@ -20,7 +122,7 @@ fn default_paper() -> Option<bool> {
     Some(true)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
@@ -30,20 +132,20 @@ pub struct ServerConfig {
     pub jwt_expiration_hours: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DatabaseConfig {
     pub url: String,
     pub pool_min: u32,
     pub pool_max: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RedisConfig {
     pub url: String,
     pub password: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AdminConfig {
     pub username: String,
     pub password: String,
@@ -51,26 +153,26 @@ pub struct AdminConfig {
     pub id: Option<uuid::Uuid>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AiConfig {
     pub openrouter_api_key: Option<String>,
     pub openai_api_key: Option<String>,
     pub deepseek_api_key: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NotificationConfig {
     pub telegram: Option<TelegramConfig>,
     pub email: Option<EmailConfig>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TelegramConfig {
     pub bot_token: String,
     pub chat_id: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EmailConfig {
     pub host: String,
     pub port: u16,
@@ -79,7 +181,7 @@ pub struct EmailConfig {
     pub from: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CacheConfig {
     pub ttl_ticker: u64,
     pub ttl_kline_1m: u64,
@@ -88,17 +190,31 @@ pub struct CacheConfig {
     pub ttl_kline_1d: u64,
 }
 
+// ============================================================
+// Load configuration from environment variables
+// ============================================================
+
 /// Load configuration from environment variables.
 /// Falls back to sensible defaults for optional fields.
+///
+/// This function first loads `.env` via dotenvy, then reads all variables from
+/// the process environment. To test config loading without `.env` interference,
+/// use [`load_config_from_env`] directly.
 pub fn load_config() -> Result<AppConfig, anyhow::Error> {
     dotenvy::dotenv().ok();
+    load_config_from_env()
+}
+
+/// Load configuration from environment variables without loading `.env` file.
+///
+/// This is the pure env-reading portion of [`load_config`], extracted for
+/// testability. All defaults and validation logic are identical.
+pub fn load_config_from_env() -> Result<AppConfig, anyhow::Error> {
 
     let server = ServerConfig {
-        host: std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".into()),
-        port: std::env::var("PORT")
-            .unwrap_or_else(|_| "8080".into())
-            .parse()?,
-        log_level: std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".into()),
+        host: std::env::var("HOST").unwrap_or_else(|_| DEFAULT_HOST.into()),
+        port: parse_env_num(std::env::var("PORT").ok(), DEFAULT_PORT)?,
+        log_level: std::env::var("LOG_LEVEL").unwrap_or_else(|_| DEFAULT_LOG_LEVEL.into()),
         secret_key: std::env::var("SECRET_KEY")
             .map_err(|_| anyhow::anyhow!("SECRET_KEY environment variable is required"))?,
         encryption_key: std::env::var("ENCRYPTION_KEY").map_err(|_| {
@@ -106,30 +222,24 @@ pub fn load_config() -> Result<AppConfig, anyhow::Error> {
                 "ENCRYPTION_KEY environment variable is required (must differ from SECRET_KEY)"
             )
         })?,
-        jwt_expiration_hours: std::env::var("JWT_EXPIRATION_HOURS")
-            .unwrap_or_else(|_| "24".into())
-            .parse()?,
+        jwt_expiration_hours: parse_env_num(std::env::var("JWT_EXPIRATION_HOURS").ok(), DEFAULT_JWT_HOURS)?,
     };
 
     let database = DatabaseConfig {
         url: std::env::var("DATABASE_URL")
             .map_err(|_| anyhow::anyhow!("DATABASE_URL environment variable is required"))?,
-        pool_min: std::env::var("DB_POOL_MIN")
-            .unwrap_or_else(|_| "5".into())
-            .parse()?,
-        pool_max: std::env::var("DB_POOL_MAX")
-            .unwrap_or_else(|_| "50".into())
-            .parse()?,
+        pool_min: parse_env_num(std::env::var("DB_POOL_MIN").ok(), DEFAULT_DB_POOL_MIN)?,
+        pool_max: parse_env_num(std::env::var("DB_POOL_MAX").ok(), DEFAULT_DB_POOL_MAX)?,
     };
 
-    let redis = std::env::var("REDIS_URL").ok().map(|url| RedisConfig {
-        url,
-        password: std::env::var("REDIS_PASSWORD").ok(),
-    });
+    let redis = build_redis_config(
+        std::env::var("REDIS_URL").ok(),
+        std::env::var("REDIS_PASSWORD").ok(),
+    );
 
     let admin = AdminConfig {
-        username: std::env::var("ADMIN_USERNAME").unwrap_or_else(|_| "admin".into()),
-        password: std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| "admin123".into()),
+        username: std::env::var("ADMIN_USERNAME").unwrap_or_else(|_| DEFAULT_ADMIN_USERNAME.into()),
+        password: std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| DEFAULT_ADMIN_PASSWORD.into()),
         id: None,
     };
 
@@ -140,50 +250,30 @@ pub fn load_config() -> Result<AppConfig, anyhow::Error> {
     };
 
     let notification = NotificationConfig {
-        telegram: std::env::var("TELEGRAM_BOT_TOKEN")
-            .ok()
-            .zip(std::env::var("TELEGRAM_CHAT_ID").ok())
-            .map(|(bot_token, chat_id)| TelegramConfig { bot_token, chat_id }),
-        email: std::env::var("SMTP_HOST")
-            .ok()
-            .zip(std::env::var("SMTP_USERNAME").ok())
-            .zip(std::env::var("SMTP_PASSWORD").ok())
-            .map(|((host, username), password)| EmailConfig {
-                host,
-                port: std::env::var("SMTP_PORT")
-                    .unwrap_or_else(|_| "587".into())
-                    .parse()
-                    .unwrap_or(587),
-                username,
-                password,
-                from: std::env::var("SMTP_FROM").unwrap_or_else(|_| "noreply@virs.com".into()),
-            }),
+        telegram: build_telegram_config(
+            std::env::var("TELEGRAM_BOT_TOKEN").ok(),
+            std::env::var("TELEGRAM_CHAT_ID").ok(),
+        ),
+        email: build_email_config(
+            std::env::var("SMTP_HOST").ok(),
+            std::env::var("SMTP_USERNAME").ok(),
+            std::env::var("SMTP_PASSWORD").ok(),
+            std::env::var("SMTP_PORT").ok(),
+            std::env::var("SMTP_FROM").ok(),
+        ),
     };
 
     let cache = CacheConfig {
-        ttl_ticker: std::env::var("CACHE_TTL_TICKER")
-            .unwrap_or_else(|_| "10".into())
-            .parse()?,
-        ttl_kline_1m: std::env::var("CACHE_TTL_KLINE_1M")
-            .unwrap_or_else(|_| "60".into())
-            .parse()?,
-        ttl_kline_5m: std::env::var("CACHE_TTL_KLINE_5M")
-            .unwrap_or_else(|_| "120".into())
-            .parse()?,
-        ttl_kline_1h: std::env::var("CACHE_TTL_KLINE_1H")
-            .unwrap_or_else(|_| "300".into())
-            .parse()?,
-        ttl_kline_1d: std::env::var("CACHE_TTL_KLINE_1D")
-            .unwrap_or_else(|_| "3600".into())
-            .parse()?,
+        ttl_ticker: parse_env_num(std::env::var("CACHE_TTL_TICKER").ok(), DEFAULT_CACHE_TTL_TICKER)?,
+        ttl_kline_1m: parse_env_num(std::env::var("CACHE_TTL_KLINE_1M").ok(), DEFAULT_CACHE_TTL_KLINE_1M)?,
+        ttl_kline_5m: parse_env_num(std::env::var("CACHE_TTL_KLINE_5M").ok(), DEFAULT_CACHE_TTL_KLINE_5M)?,
+        ttl_kline_1h: parse_env_num(std::env::var("CACHE_TTL_KLINE_1H").ok(), DEFAULT_CACHE_TTL_KLINE_1H)?,
+        ttl_kline_1d: parse_env_num(std::env::var("CACHE_TTL_KLINE_1D").ok(), DEFAULT_CACHE_TTL_KLINE_1D)?,
     };
 
     let proxy = std::env::var("PROXY_URL").ok();
 
-    let paper = std::env::var("PAPER_TRADING")
-        .ok()
-        .map(|v| v == "true" || v == "1")
-        .or(Some(true));
+    let paper = parse_paper_value(std::env::var("PAPER_TRADING").ok());
 
     Ok(AppConfig {
         server,
