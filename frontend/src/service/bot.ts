@@ -8,7 +8,7 @@ import type {
   GridBotDetail,
   GridTradesPage,
   GridBotStats,
-  AnalysisLog,
+  AnalysisLogsPage,
 } from './types';
 
 // ── Grid Bot ──────────────────────────────────────────────
@@ -59,8 +59,12 @@ export async function getGridStats(botId: string): Promise<ApiResponse<GridBotSt
 
 export async function getGridAnalysisLogs(
   botId: string,
-): Promise<ApiResponse<{ items: AnalysisLog[] }>> {
-  return api.get<{ items: AnalysisLog[] }>(`/grid/analysis-logs?bot_id=${botId}`);
+  page: number = 1,
+  pageSize: number = 20,
+): Promise<ApiResponse<AnalysisLogsPage>> {
+  return api.get<AnalysisLogsPage>(
+    `/grid/${botId}/analysis-logs?page=${page}&page_size=${pageSize}`,
+  );
 }
 
 // ── Auto Bot ──────────────────────────────────────────────
@@ -107,8 +111,12 @@ export async function getAutoStats(botId: string): Promise<ApiResponse<AutoBotSt
 
 export async function getAutoAnalysisLogs(
   botId: string,
-): Promise<ApiResponse<{ logs: AnalysisLog[] }>> {
-  return api.get<{ logs: AnalysisLog[] }>(`/auto/analysis-logs?bot_id=${botId}`);
+  page: number = 1,
+  pageSize: number = 20,
+): Promise<ApiResponse<AnalysisLogsPage>> {
+  return api.get<AnalysisLogsPage>(
+    `/auto/${botId}/analysis-logs?page=${page}&page_size=${pageSize}`,
+  );
 }
 
 // ── Bot discovery ─────────────────────────────────────────

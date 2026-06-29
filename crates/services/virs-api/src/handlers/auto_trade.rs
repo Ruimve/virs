@@ -686,26 +686,50 @@ fn format_duration(ms: i64) -> String {
 pub async fn get_analysis_logs(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Path(id): Path<uuid::Uuid>,
+    axum::extract::Query(params): axum::extract::Query<TradesQuery>,
 ) -> Json<ApiResponse> {
     let user_id = match extract_user_id(&headers) {
         Ok(id) => id,
         Err((_, resp)) => return resp,
     };
 
+    let page = params.page.unwrap_or(1).max(1);
+    let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
+    let offset = (page - 1) * page_size;
+
+    // 查询总数
+    let total: i64 = match sqlx::query_scalar::<_, i64>(
+        r#"SELECT COUNT(*) FROM qd_auto_analysis_logs l
+           JOIN qd_auto_bots b ON l.bot_id = b.id
+           WHERE l.bot_id = $1 AND b.user_id = $2"#,
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_one(&state.db_pool)
+    .await
+    {
+        Ok(n) => n,
+        Err(e) => return Json(ApiResponse::err(format!("Database error: {}", e))),
+    };
+
     let rows = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, String, String, String, serde_json::Value, Option<String>, String, String, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT l.id, l.bot_id, l.analysis_type, l.status, l.system_prompt, l.result, l.error, l.user_prompt, l.llm_model, l.created_at
            FROM qd_auto_analysis_logs l
            JOIN qd_auto_bots b ON l.bot_id = b.id
-           WHERE b.user_id = $1
-           ORDER BY l.created_at DESC LIMIT 50"#,
+           WHERE l.bot_id = $1 AND b.user_id = $2
+           ORDER BY l.created_at DESC LIMIT $3 OFFSET $4"#,
     )
+    .bind(id)
     .bind(user_id)
+    .bind(page_size as i64)
+    .bind(offset as i64)
     .fetch_all(&state.db_pool)
     .await;
 
     match rows {
         Ok(logs) => Json(ApiResponse::ok(serde_json::json!({
-            "logs": logs.iter().map(|(id, bot_id, analysis_type, status, system_prompt, result, error, user_prompt, llm_model, created_at)| {
+            "items": logs.iter().map(|(id, bot_id, analysis_type, status, system_prompt, result, error, user_prompt, llm_model, created_at)| {
                 serde_json::json!({
                     "id": id.to_string(),
                     "bot_id": bot_id.to_string(),
@@ -718,7 +742,10 @@ pub async fn get_analysis_logs(
                     "llm_model": llm_model,
                     "created_at": created_at.to_rfc3339(),
                 })
-            }).collect::<Vec<_>>()
+            }).collect::<Vec<_>>(),
+            "total": total,
+            "page": page,
+            "page_size": page_size,
         }))),
         Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
     }

@@ -86,11 +86,8 @@ const Header = () => {
                 <Flame className="w-4 h-4" strokeWidth={2} />
               )}
             </span>
-            <span className="text-xs text-on-surface-tertiary md:hidden">
+            <span className="text-xs text-on-surface-tertiary">
               {bot?.symbol || ''} · {bot?.leverage || ''}x
-            </span>
-            <span className="text-xs text-on-surface-tertiary hidden md:block">
-              {bot?.symbol || ''} · {bot?.exchange?.toUpperCase()} · {bot?.leverage || ''}x
             </span>
           </div>
         </div>

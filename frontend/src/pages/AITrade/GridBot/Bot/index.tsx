@@ -85,7 +85,7 @@ const Bot = () => {
 
   const loadLogs = useCallback(async (botId: string) => {
     try {
-      const res = await getGridAnalysisLogs(botId);
+      const res = await getGridAnalysisLogs(botId, 1, 1);
       if (res.data?.items) setLogs(res.data.items);
     } catch (e) {
       console.error('Failed to load analysis logs:', e);

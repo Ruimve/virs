@@ -111,7 +111,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/grid/create", post(handlers::grid::create_bot))
         .route("/api/grid/list", get(handlers::grid::list_bots))
         .route(
-            "/api/grid/analysis-logs",
+            "/api/grid/{id}/analysis-logs",
             get(handlers::grid::get_analysis_logs),
         )
         .route("/api/grid/{id}", get(handlers::grid::get_bot))
@@ -124,7 +124,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/auto/create", post(handlers::auto_trade::create_bot))
         .route("/api/auto/list", get(handlers::auto_trade::list_bots))
         .route(
-            "/api/auto/analysis-logs",
+            "/api/auto/{id}/analysis-logs",
             get(handlers::auto_trade::get_analysis_logs),
         )
         .route("/api/auto/{id}", get(handlers::auto_trade::get_bot))

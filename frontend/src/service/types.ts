@@ -161,6 +161,13 @@ export interface AutoTradesPage {
   page_size: number;
 }
 
+export interface AnalysisLogsPage {
+  items: AnalysisLog[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface AutoBotStats {
   win_rate: number;
   profit_loss_ratio: number;

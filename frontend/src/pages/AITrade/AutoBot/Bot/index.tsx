@@ -115,8 +115,8 @@ const Bot = () => {
 
   const loadLogs = useCallback(async (botId: string) => {
     try {
-      const res = await getAutoAnalysisLogs(botId);
-      if (res.data?.logs) setLogs(res.data.logs);
+      const res = await getAutoAnalysisLogs(botId, 1, 1);
+      if (res.data?.items) setLogs(res.data.items);
     } catch (e) {
       console.error('Failed to load analysis logs:', e);
     }
