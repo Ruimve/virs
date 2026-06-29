@@ -22,6 +22,7 @@ const AutoBotMain = lazy(() => import('./pages/AITrade/AutoBot/Bot'));
 const AutoBotAILog = lazy(() => import('./pages/AITrade/AutoBot/AILog'));
 const AutoBotAILogDetail = lazy(() => import('./pages/AITrade/AutoBot/AILog/Detail'));
 const AutoBotTrades = lazy(() => import('./pages/AITrade/AutoBot/Trades'));
+const AutoBotSystem = lazy(() => import('./pages/AITrade/AutoBot/System'));
 /** 交易 - 网格交易 */
 const GridBot = lazy(() => import('./pages/AITrade/GridBot'));
 const GridBotMain = lazy(() => import('./pages/AITrade/GridBot/Bot'));
@@ -29,11 +30,11 @@ const GridBotAILog = lazy(() => import('./pages/AITrade/GridBot/AILog'));
 const GridBotAILogDetail = lazy(() => import('./pages/AITrade/GridBot/AILog/Detail'));
 const GridBotTrades = lazy(() => import('./pages/AITrade/GridBot/Trades'));
 const GridBotLevels = lazy(() => import('./pages/AITrade/GridBot/Levels'));
+const GridBotSystem = lazy(() => import('./pages/AITrade/GridBot/System'));
 
 /** 交易 - 健康检查 */
 const HealthCheck = lazy(() => import('./pages/AITrade/HealthCheck'));
 /** 交易 -系统信息 */
-const System = lazy(() => import('./pages/AITrade/System'));
 
 const SuspenseWrap = ({ children }: { children: React.ReactNode }) => {
   return <Suspense fallback={<FullScreen icon={<Icon />} />}>{children}</Suspense>;
@@ -60,6 +61,7 @@ const App = () => {
                 <Route path="/trade/auto/:botId/log" element={<AutoBotAILog />} />
                 <Route path="/trade/auto/:botId/log/:logId" element={<AutoBotAILogDetail />} />
                 <Route path="/trade/auto/:botId/trades" element={<AutoBotTrades />} />
+                <Route path="/trade/auto/:botId/system" element={<AutoBotSystem />} />
               </Route>
               <Route path="/trade/grid/:botId" element={<GridBot />}>
                 <Route path="/trade/grid/:botId/bot" element={<GridBotMain />} />
@@ -67,9 +69,9 @@ const App = () => {
                 <Route path="/trade/grid/:botId/log/:logId" element={<GridBotAILogDetail />} />
                 <Route path="/trade/grid/:botId/trades" element={<GridBotTrades />} />
                 <Route path="/trade/grid/:botId/levels" element={<GridBotLevels />} />
+                <Route path="/trade/grid/:botId/system" element={<GridBotSystem />} />
               </Route>
               <Route path="/trade/:botType/:botId/health" element={<HealthCheck />} />
-              <Route path="/trade/:botType/:botId/system" element={<System />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
