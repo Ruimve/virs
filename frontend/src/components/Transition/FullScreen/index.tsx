@@ -10,7 +10,11 @@ const FullScreen = (props: Props) => {
   return (
     <div className="h-dvh bg-base flex flex-col relative overflow-hidden">
       {header && <Header />}
-      <div className="flex-1 flex items-center justify-center">{icon}</div>
+      <div
+        className={`flex-1 flex items-center justify-center ${header ? '-mt-14 md:-mt-16' : ''}`}
+      >
+        {icon}
+      </div>
     </div>
   );
 };
