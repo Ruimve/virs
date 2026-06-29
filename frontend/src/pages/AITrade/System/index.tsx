@@ -129,7 +129,7 @@ const System = () => {
 
   if (error) {
     return (
-      <div className="flex-1 flex items-center justify-center text-danger-text text-sm">
+      <div className="h-full flex items-center justify-center text-danger-text text-sm">
         {error}
       </div>
     );
@@ -137,7 +137,7 @@ const System = () => {
 
   if (!info) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <Spinner className="h-6 w-6 text-on-surface-tertiary" />
       </div>
     );
@@ -147,7 +147,7 @@ const System = () => {
   const memPct = info.memory.usage_pct;
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div className="h-full overflow-y-auto p-4 space-y-4">
       {/* 系统概览 */}
       <Card title="系统概览">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
