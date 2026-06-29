@@ -1588,8 +1588,11 @@ pub(crate) async fn handle_close_position(
     adjust_params_for_position_mode(&mut params, mode);
     let reduce_only = params.reduce_only;
 
-    match inner.exchange.place_order(params).await {
-        Ok(mut order) => {
+    // 加超时保护：防止交易所 REST 调用卡死导致 PE engine loop 阻塞，
+    // 进而无法 emit OrderFailed 事件，bot 侧 pending_close 永远等不到响应。
+    const CLOSE_ORDER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+    match tokio::time::timeout(CLOSE_ORDER_TIMEOUT, inner.exchange.place_order(params)).await {
+        Ok(Ok(mut order)) => {
             order.reduce_only = reduce_only;
             // 确保订单关联正确的 position_id（交易所 REST 可能不返回此字段）
             order.position_id = position_id;
@@ -1663,9 +1666,21 @@ pub(crate) async fn handle_close_position(
                 pos.updated_at = Utc::now();
             }
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             let msg = format!("Failed to place close order: {}", e);
             error!(error = %e, position_id = %position_id, "Failed to place close order");
+            inner.emit_event(EngineEvent::OrderFailed {
+                order_id: Uuid::nil(),
+                reason: msg,
+            });
+        }
+        Err(_elapsed) => {
+            let msg = format!(
+                "Close order timed out after {}s for position {}",
+                CLOSE_ORDER_TIMEOUT.as_secs(),
+                position_id
+            );
+            warn!(position_id = %position_id, "{}", msg);
             inner.emit_event(EngineEvent::OrderFailed {
                 order_id: Uuid::nil(),
                 reason: msg,

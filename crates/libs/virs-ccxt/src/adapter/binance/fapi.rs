@@ -27,25 +27,12 @@ use crate::types::*;
 use crate::ExchangeClient;
 use crate::{parse_f64, parse_str, parse_u32};
 
+use super::parse_order_book_side;
+
 const BASE_URL: &str = "https://fapi.binance.com";
 
 fn url(path: &str) -> String {
     format!("{BASE_URL}{path}")
-}
-
-/// Parse order book bids/asks from exchange response.
-fn parse_order_book_side(data: &serde_json::Value, side: &str) -> Vec<(f64, f64)> {
-    data.get(side)
-        .and_then(|b| b.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|b| {
-                    let a = b.as_array()?;
-                    Some((a[0].as_str()?.parse().ok()?, a[1].as_str()?.parse().ok()?))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 // ---- Public endpoints ----
@@ -424,7 +411,7 @@ pub async fn create_order(
     let mut body = serde_json::json!({
         "symbol": native,
         "side": crate::adapter::binance::BinanceExchange::side_str(&params.side),
-        "type": crate::adapter::binance::BinanceExchange::order_type_str(&params.order_type),
+        "type": crate::adapter::binance::BinanceExchange::order_type_str_futures(&params.order_type),
         "quantity": params.amount,
     });
 
@@ -437,7 +424,7 @@ pub async fn create_order(
                 TimeInForce::Gtc => "GTC",
                 TimeInForce::Ioc => "IOC",
                 TimeInForce::Fok => "FOK",
-                TimeInForce::Poc => "GTC",
+                TimeInForce::Poc => "GTX",
             })
             .unwrap_or("GTC"));
     }
@@ -497,7 +484,7 @@ pub async fn create_order(
     })
 }
 
-/// POST /fapi/v1/order — cancel futures order
+/// DELETE /fapi/v1/order — cancel futures order
 pub async fn cancel_order(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -505,13 +492,13 @@ pub async fn cancel_order(
     order_id: &str,
 ) -> Result<CcxtOrder, ExchangeError> {
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
-    let body = serde_json::json!({
-        "symbol": native,
-        "orderId": order_id,
-    });
+    let params = vec![
+        ("symbol".into(), native),
+        ("orderId".into(), order_id.to_string()),
+    ];
 
     let data = client
-        .signed_post(signer, &url("/fapi/v1/order"), body)
+        .signed_delete(signer, &url("/fapi/v1/order"), params)
         .await?;
 
     let side_str =
@@ -533,7 +520,8 @@ pub async fn cancel_order(
         amount: parse_f64(&data, "origQty").unwrap_or(0.0),
         cost: None,
         filled: parse_f64(&data, "executedQty").unwrap_or(0.0),
-        remaining: 0.0,
+        remaining: parse_f64(&data, "origQty").unwrap_or(0.0)
+            - parse_f64(&data, "executedQty").unwrap_or(0.0),
         status: CcxtOrderStatus::Canceled,
         fee: None,
         created_at: None,

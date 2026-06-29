@@ -328,10 +328,46 @@ impl ExchangeClient {
         }
         handle_response(req.send().await?, path, display_body.as_deref()).await
     }
+
+    /// Signed DELETE request.
+    ///
+    /// Binance DELETE endpoints (e.g. cancel order) sign parameters via query
+    /// string, identical to GET. We reuse `sign_get` for the signature and
+    /// issue the request with the DELETE HTTP method.
+    pub async fn signed_delete(
+        &self,
+        signer: &dyn Signer,
+        path: &str,
+        mut params: Vec<(String, String)>,
+    ) -> Result<Value, ExchangeError> {
+        let _permit = self
+            .rate_limiter
+            .acquire()
+            .await
+            .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
+        let signed = signer.sign_get(path, &mut params)?;
+        let display_url = build_display_url(
+            path,
+            signed
+                .query_params
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str())),
+        );
+        let mut req = self.client.delete(path);
+        for (k, v) in &signed.query_params {
+            req = req.query(&[(k.as_str(), v.as_str())]);
+        }
+        for (name, value) in signed.headers {
+            if let Some(n) = name {
+                req = req.header(n, value);
+            }
+        }
+        handle_response(req.send().await?, &display_url, None).await
+    }
 }
 
 /// Build a display URL from path and query params, masking `signature` for safe logging.
-fn build_display_url<'a>(path: &str, params: impl Iterator<Item = (&'a str, &'a str)>) -> String {
+pub(crate) fn build_display_url<'a>(path: &str, params: impl Iterator<Item = (&'a str, &'a str)>) -> String {
     let mut url = path.to_string();
     let mut param_strs: Vec<String> = Vec::new();
     let mut has_params = false;
@@ -348,7 +384,7 @@ fn build_display_url<'a>(path: &str, params: impl Iterator<Item = (&'a str, &'a 
 }
 
 /// Mask `signature=XXX` in a URL-encoded body string for safe logging.
-fn mask_signature(s: &str) -> String {
+pub(crate) fn mask_signature(s: &str) -> String {
     if let Some(idx) = s.find("signature=") {
         let before = &s[..idx];
         let after = if let Some(amp_idx) = s[idx..].find('&') {
@@ -413,7 +449,7 @@ async fn handle_response(
     })
 }
 
-fn extract_error_message(json: &Value) -> String {
+pub(crate) fn extract_error_message(json: &Value) -> String {
     if let Some(msg) = json.get("msg").and_then(|v| v.as_str()) {
         if let Some(code) = json.get("code") {
             return format!("[{}] {}", code, msg);
@@ -519,3 +555,15 @@ pub fn parse_u32(v: &Value, field: &str) -> Option<u32> {
         })
         .map(|v| v as u32)
 }
+
+// ============================================================
+// Test modules (_tests suffix pattern)
+// ============================================================
+#[cfg(test)]
+mod lib_tests;
+#[cfg(test)]
+mod auth_tests;
+#[cfg(test)]
+mod errors_tests;
+#[cfg(test)]
+mod types_tests;

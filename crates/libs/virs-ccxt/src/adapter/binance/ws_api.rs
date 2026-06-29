@@ -463,7 +463,7 @@ async fn wait_for_response(
 ///
 /// 签名方式：把 params（除 signature 外）按 key 字典序排列，
 /// 拼成 `key1=value1&key2=value2`，用 Ed25519 签名后 base64 编码。
-fn build_session_logon_request(
+pub(crate) fn build_session_logon_request(
     signer: &BinanceEd25519Signer,
     id: u64,
 ) -> Result<serde_json::Value, String> {

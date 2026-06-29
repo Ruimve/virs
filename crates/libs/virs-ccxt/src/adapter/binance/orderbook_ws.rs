@@ -37,7 +37,7 @@ fn binance_ws_symbol(symbol: &str) -> String {
 /// - Spot:      bids / asks / lastUpdateId
 /// - Perpetual: b    / a    / e / E / T / s / U / u / pu
 #[derive(Debug, Clone, Deserialize)]
-struct BinanceDepthMessage {
+pub(crate) struct BinanceDepthMessage {
     #[allow(dead_code)]
     stream: Option<String>,
     /// 组合流格式: data 字段包含完整 payload
@@ -45,6 +45,7 @@ struct BinanceDepthMessage {
     /// 单流 spot 格式: 顶层 bids/asks
     bids: Option<Vec<[String; 2]>>,
     asks: Option<Vec<[String; 2]>>,
+    #[serde(rename = "lastUpdateId")]
     last_update_id: Option<i64>,
     /// 单流 perpetual 格式: 顶层 b/a
     #[serde(rename = "e")]
@@ -66,7 +67,7 @@ struct BinanceDepthMessage {
 impl BinanceDepthMessage {
     /// 提取订单簿数据，兼容单流/组合流 + spot/perpetual
     /// Returns: (bids, asks, stream_name, symbol_from_payload, timestamp_ms)
-    fn into_depth(
+    pub(crate) fn into_depth(
         self,
     ) -> Option<(
         Vec<[String; 2]>,
@@ -102,7 +103,7 @@ impl BinanceDepthMessage {
 }
 
 /// 解析 payload（组合流的 data 字段或单流的顶层）
-fn parse_payload(
+pub(crate) fn parse_payload(
     v: &serde_json::Value,
 ) -> Option<(Vec<[String; 2]>, Vec<[String; 2]>, Option<String>, i64)> {
     // Spot format: bids/asks
@@ -123,7 +124,7 @@ fn parse_payload(
     None
 }
 
-fn parse_levels(v: &serde_json::Value) -> Option<Vec<[String; 2]>> {
+pub(crate) fn parse_levels(v: &serde_json::Value) -> Option<Vec<[String; 2]>> {
     let arr = v.as_array()?;
     let mut out = Vec::with_capacity(arr.len());
     for item in arr {
@@ -149,7 +150,7 @@ fn parse_levels(v: &serde_json::Value) -> Option<Vec<[String; 2]>> {
     Some(out)
 }
 
-fn to_levels(raw: &[[String; 2]]) -> Vec<OrderBookLevel> {
+pub(crate) fn to_levels(raw: &[[String; 2]]) -> Vec<OrderBookLevel> {
     raw.iter()
         .filter_map(|[p, a]| {
             let price: f64 = p.parse().ok()?;

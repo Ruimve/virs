@@ -48,7 +48,7 @@ pub trait KlineWsClient: Send + Sync {
 // ---- Position Engine WS types ----
 
 /// WebSocket feed event from exchange order updates.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WsFeedEvent {
     OrderUpdate {
         exchange_order_id: String,
@@ -70,7 +70,7 @@ pub enum WsFeedEvent {
 // ---- OrderBook WS types ----
 
 /// A single price level in the order book.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct OrderBookLevel {
     pub price: f64,
     pub amount: f64,

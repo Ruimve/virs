@@ -160,6 +160,7 @@ impl ExecutionReportInner {
             "FILLED" => Some(OrderStatus::Filled),
             "CANCELED" => Some(OrderStatus::Canceled),
             "EXPIRED" => Some(OrderStatus::Canceled),
+            "EXPIRED_IN_MATCH" => Some(OrderStatus::Canceled),
             "REJECTED" => Some(OrderStatus::Failed),
             _ => None,
         }
@@ -347,45 +348,56 @@ impl BinanceOrderWs {
                                     match msg {
                                         Some(Ok(tungstenite::Message::Text(text))) => {
                                             if let Ok(bmsg) = serde_json::from_str::<BinanceOrderMessage>(&text) {
-                                                if let Some(report) = bmsg.into_execution_report() {
-                                                    if report.event_type == "executionReport" {
-                                                        if let Some(event) = report.order.to_ws_feed_event() {
-                                                            let status_str = match &event {
-                                                                WsFeedEvent::OrderUpdate { status, .. } => format!("{:?}", status),
-                                                                _ => "unknown".to_string(),
-                                                            };
-                                                            tracing::debug!(
-                                                                "[BinanceOrderWs] OrderUpdate: order_id={} status={} filled={:.4}",
-                                                                report.order.order_id, status_str, report.order.filled_qty
-                                                            );
-                                                            if event_tx.send(event).await.is_err() {
-                                                                tracing::warn!("[BinanceOrderWs] Event channel closed, stopping");
-                                                                running.store(false, Ordering::Relaxed);
-                                                                return;
-                                                            }
-                                                        }
-                                                    } else if report.event_type == "ACCOUNT_UPDATE" {
-                                                        tracing::debug!("[BinanceOrderWs] ACCOUNT_UPDATE received (balance change)");
-                                                    } else if report.event_type == "ORDER_TRADE_UPDATE" {
-                                                        tracing::debug!("[BinanceOrderWs] ORDER_TRADE_UPDATE received");
-                                                        if let Some(event) = report.order.to_ws_feed_event() {
-                                                            if event_tx.send(event).await.is_err() {
-                                                                running.store(false, Ordering::Relaxed);
-                                                                return;
-                                                            }
-                                                        }
-                                                    } else {
-                                                        tracing::trace!(
-                                                            "[BinanceOrderWs] Ignoring event type: {}",
-                                                            report.event_type
-                                                        );
+                                                let event_type = bmsg
+                                                    .event_type()
+                                                    .map(|s| s.to_string())
+                                                    .unwrap_or_else(|| "unknown".to_string());
+
+                                                // to_ws_feed_event() 同时处理 executionReport（现货）
+                                                // 和 ORDER_TRADE_UPDATE（合约），避免单流格式下
+                                                // into_execution_report() 丢弃合约事件。
+                                                if let Some(event) = bmsg.to_ws_feed_event() {
+                                                    let status_str = match &event {
+                                                        WsFeedEvent::OrderUpdate { status, .. } => format!("{:?}", status),
+                                                        _ => "unknown".to_string(),
+                                                    };
+                                                    tracing::debug!(
+                                                        "[BinanceOrderWs] {} -> OrderUpdate status={} forwarded",
+                                                        event_type, status_str
+                                                    );
+                                                    if event_tx.send(event).await.is_err() {
+                                                        tracing::warn!("[BinanceOrderWs] Event channel closed, stopping");
+                                                        running.store(false, Ordering::Relaxed);
+                                                        return;
                                                     }
                                                 } else {
-                                                    // 订阅确认 / listenKey 过期 / 其他响应
-                                                    tracing::trace!(
-                                                        "[BinanceOrderWs] WS message (no executionReport): {}",
-                                                        &text[..text.len().min(200)]
-                                                    );
+                                                    // 非订单事件：ACCOUNT_UPDATE / listenKeyExpired /
+                                                    // serverShutdown / MARGIN_CALL / 订阅确认等
+                                                    match event_type.as_str() {
+                                                        "ACCOUNT_UPDATE" => {
+                                                            tracing::debug!(
+                                                                "[BinanceOrderWs] ACCOUNT_UPDATE received (balance/position change)"
+                                                            );
+                                                        }
+                                                        "listenKeyExpired" => {
+                                                            tracing::warn!(
+                                                                "[BinanceOrderWs] listenKey expired, will reconnect"
+                                                            );
+                                                            break;
+                                                        }
+                                                        "serverShutdown" => {
+                                                            tracing::info!(
+                                                                "[BinanceOrderWs] serverShutdown received, server will disconnect soon; reconnecting"
+                                                            );
+                                                            break;
+                                                        }
+                                                        _ => {
+                                                            tracing::trace!(
+                                                                "[BinanceOrderWs] Ignoring event type: {}",
+                                                                event_type
+                                                            );
+                                                        }
+                                                    }
                                                 }
                                             } else {
                                                 tracing::warn!(
@@ -583,6 +595,70 @@ mod tests {
         assert!(report.is_none());
     }
 
+    #[test]
+    fn test_parse_order_trade_update_single_stream() {
+        // 永续合约 ORDER_TRADE_UPDATE 单流格式
+        // 之前 into_execution_report() 对单流 ORDER_TRADE_UPDATE 返回 None，
+        // 导致合约订单更新被静默丢弃。to_ws_feed_event() 应正确处理。
+        let json = r#"{
+            "e": "ORDER_TRADE_UPDATE",
+            "E": 1713900000000,
+            "T": 1713900000123,
+            "o": {
+                "s": "BTCUSDT",
+                "c": "test_client",
+                "S": "SELL",
+                "o": "LIMIT",
+                "f": "GTC",
+                "q": "0.002",
+                "p": "65000.00",
+                "ap": "65000.00",
+                "x": "FILLED",
+                "X": "FILLED",
+                "i": 123456789,
+                "l": "0.002",
+                "z": "0.002",
+                "L": "65000.00",
+                "n": "0.065",
+                "N": "USDT",
+                "T": 1713900000123,
+                "t": 1,
+                "R": true,
+                "w": "CONTRACT_PRICE",
+                "m": false,
+                "ps": "SHORT"
+            }
+        }"#;
+
+        let msg: BinanceOrderMessage = serde_json::from_str(json).unwrap();
+        // 单流 ORDER_TRADE_UPDATE 不应被 into_execution_report 处理
+        assert!(msg.clone().into_execution_report().is_none());
+
+        // 但 to_ws_feed_event() 应正确转换为 WsFeedEvent
+        let event = msg.to_ws_feed_event();
+        assert!(event.is_some(), "ORDER_TRADE_UPDATE should produce WsFeedEvent");
+
+        if let Some(WsFeedEvent::OrderUpdate {
+            exchange_order_id,
+            symbol,
+            status,
+            filled,
+            remaining,
+            position_side,
+            ..
+        }) = event
+        {
+            assert_eq!(exchange_order_id, "123456789");
+            assert_eq!(symbol, "BTCUSDT");
+            assert_eq!(status, OrderStatus::Filled);
+            assert!((filled - 0.002).abs() < 0.0001);
+            assert!((remaining - 0.0).abs() < 0.0001);
+            assert_eq!(position_side, Some(PositionSide::Short));
+        } else {
+            panic!("Expected OrderUpdate event");
+        }
+    }
+
     // ============================================================
     // 状态映射 (6 tests)
     // ============================================================
@@ -595,9 +671,9 @@ mod tests {
             ("FILLED", Some(OrderStatus::Filled)),
             ("CANCELED", Some(OrderStatus::Canceled)),
             ("EXPIRED", Some(OrderStatus::Canceled)),
+            ("EXPIRED_IN_MATCH", Some(OrderStatus::Canceled)),
             ("REJECTED", Some(OrderStatus::Failed)),
             ("PENDING_CANCEL", None),
-            ("EXPIRED_IN_MATCH", None),
         ];
 
         for (binance_status, expected) in cases {
@@ -755,8 +831,8 @@ mod tests {
     #[test]
     fn test_new_perpetual() {
         let ws = BinanceOrderWs::new_perpetual("test_listen_key".to_string());
-        assert_eq!(ws.ws_url, "wss://fstream.binance.com/ws/test_listen_key");
-        assert_eq!(ws.base_url, "wss://fstream.binance.com/ws");
+        assert_eq!(ws.ws_url, "wss://fstream.binance.com/private/ws/test_listen_key");
+        assert_eq!(ws.base_url, "wss://fstream.binance.com/private/ws");
         assert!(!ws.is_running());
     }
 
@@ -770,10 +846,10 @@ mod tests {
     #[test]
     fn test_update_listen_key() {
         let mut ws = BinanceOrderWs::new_perpetual("old_key".to_string());
-        assert_eq!(ws.ws_url, "wss://fstream.binance.com/ws/old_key");
+        assert_eq!(ws.ws_url, "wss://fstream.binance.com/private/ws/old_key");
 
         ws.update_listen_key("new_key".to_string());
-        assert_eq!(ws.ws_url, "wss://fstream.binance.com/ws/new_key");
+        assert_eq!(ws.ws_url, "wss://fstream.binance.com/private/ws/new_key");
     }
 
     // ============================================================

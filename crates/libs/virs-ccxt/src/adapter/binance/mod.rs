@@ -280,7 +280,7 @@ impl Signer for BinanceEd25519Signer {
 /// - 以 `-----BEGIN` 开头 → Ed25519 PEM
 /// - base64 解码后为 32 字节 → Ed25519 seed
 /// - 其他 → 返回 Err（调用方 fallback 到 HMAC）
-fn try_build_ed25519(
+pub(crate) fn try_build_ed25519(
     api_key: &str,
     api_secret: &str,
 ) -> Result<BinanceEd25519Signer, ExchangeError> {
@@ -399,7 +399,7 @@ impl BinanceExchange {
             "NEW" => CcxtOrderStatus::Open,
             "PARTIALLY_FILLED" => CcxtOrderStatus::PartiallyFilled,
             "FILLED" => CcxtOrderStatus::Filled,
-            "CANCELED" | "CANCELLED" | "EXPIRED" => CcxtOrderStatus::Canceled,
+            "CANCELED" | "CANCELLED" | "EXPIRED" | "EXPIRED_IN_MATCH" => CcxtOrderStatus::Canceled,
             "REJECTED" => CcxtOrderStatus::Rejected,
             "PENDING_CANCEL" => CcxtOrderStatus::Open,
             _ => CcxtOrderStatus::Open,
@@ -412,7 +412,7 @@ impl BinanceExchange {
             "MARKET" => OrderType::Market,
             "LIMIT" => OrderType::Limit,
             "STOP_MARKET" | "STOP_LOSS" => OrderType::StopMarket,
-            "STOP_LOSS_LIMIT" | "TAKE_PROFIT_LIMIT" => OrderType::StopLimit,
+            "STOP_LIMIT" | "STOP_LOSS_LIMIT" | "TAKE_PROFIT_LIMIT" => OrderType::StopLimit,
             "TAKE_PROFIT_MARKET" => OrderType::TakeProfitMarket,
             _ => OrderType::Market,
         }
@@ -426,13 +426,32 @@ impl BinanceExchange {
         }
     }
 
-    /// Convert unified OrderType to Binance string.
+    /// Convert unified OrderType to Binance spot string.
+    ///
+    /// 现货订单类型参考: https://developers.binance.com/docs/binance-spot-api-docs/rest-api
+    /// - StopLimit → `STOP_LOSS_LIMIT`（现货不支持统一的 STOP，必须区分止损/止盈，
+    ///   统一枚集中 StopLimit 默认映射为止损限价单 STOP_LOSS_LIMIT）
     pub fn order_type_str(order_type: &OrderType) -> &'static str {
         match order_type {
             OrderType::Market => "MARKET",
             OrderType::Limit => "LIMIT",
             OrderType::StopMarket => "STOP_MARKET",
-            OrderType::StopLimit => "STOP_LIMIT",
+            OrderType::StopLimit => "STOP_LOSS_LIMIT",
+            OrderType::TakeProfitMarket => "TAKE_PROFIT_MARKET",
+        }
+    }
+
+    /// Convert unified OrderType to Binance futures string.
+    ///
+    /// 合约订单类型参考: https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info
+    /// - StopLimit → `STOP`（合约使用 STOP 表示止损限价单，
+    ///   与现货的 STOP_LOSS_LIMIT 不同）
+    pub fn order_type_str_futures(order_type: &OrderType) -> &'static str {
+        match order_type {
+            OrderType::Market => "MARKET",
+            OrderType::Limit => "LIMIT",
+            OrderType::StopMarket => "STOP_MARKET",
+            OrderType::StopLimit => "STOP",
             OrderType::TakeProfitMarket => "TAKE_PROFIT_MARKET",
         }
     }
@@ -441,6 +460,28 @@ impl BinanceExchange {
     fn is_perpetual(&self) -> bool {
         self.market_type == MarketType::Perpetual
     }
+}
+
+// ============================================================
+// Shared parsing helpers (used by api.rs and fapi.rs)
+// ============================================================
+
+/// Parse order book bids/asks from exchange response.
+///
+/// Shared between spot (`/api/v3/depth`) and perpetual (`/fapi/v1/depth`) endpoints.
+/// Both return the same JSON structure for bids/asks arrays.
+pub(crate) fn parse_order_book_side(data: &serde_json::Value, side: &str) -> Vec<(f64, f64)> {
+    data.get(side)
+        .and_then(|b| b.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|b| {
+                    let a = b.as_array()?;
+                    Some((a[0].as_str()?.parse().ok()?, a[1].as_str()?.parse().ok()?))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[async_trait]
@@ -797,3 +838,13 @@ impl Exchange for BinanceExchange {
         &self.markets
     }
 }
+
+// ============================================================
+// Test modules (_tests suffix pattern)
+// ============================================================
+#[cfg(test)]
+mod mod_tests;
+#[cfg(test)]
+mod orderbook_ws_tests;
+#[cfg(test)]
+mod ws_api_tests;
