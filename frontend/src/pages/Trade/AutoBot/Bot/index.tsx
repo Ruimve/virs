@@ -11,7 +11,7 @@ import {
 import { useKlineWs, type KlineWsEvent } from '@/service/ws';
 import type { KlineChartHandle } from '@/components/Chart/KlineChart';
 import { useBot } from '../../context/BotContext';
-import AIDecisionCard from '../../components/AIDecisionCard';
+import DecisionCard from '../../components/DecisionCard';
 import TradeStats from './TradeStats';
 import StickyMarket from '../../components/StickyMarket';
 import PositionStats from './PositionStats';
@@ -193,7 +193,7 @@ const Bot = () => {
         <PositionStats bot={autoBot} latestPrice={latestPrice} />
 
         {/* AI 决策卡片 */}
-        <AIDecisionCard log={latestDecision} botId={autoBot?.id} botType="auto" />
+        <DecisionCard log={latestDecision} botId={autoBot?.id} botType="auto" />
 
         {/* 历史交易统计 */}
         <TradeStats botId={autoBot?.id} />

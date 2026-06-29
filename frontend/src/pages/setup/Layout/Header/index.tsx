@@ -14,7 +14,7 @@ const Header = () => {
       </div>
 
       {/* Center: tabs (desktop) */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-center flex-1 gap-2">
         <span className="text-[11px] text-on-surface-tertiary md:hidden">
           Step {wizard.current_step - 1}/{TOTAL_SETUP_STEPS}
         </span>

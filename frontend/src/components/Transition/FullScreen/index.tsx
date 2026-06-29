@@ -10,7 +10,7 @@ const FullScreen = (props: Props) => {
   return (
     <div className="h-dvh bg-base flex flex-col relative overflow-hidden">
       {header && <Header />}
-      <div className="flex-1 flex flex-col items-center">{icon}</div>
+      <div className="flex-1 flex items-center justify-center">{icon}</div>
     </div>
   );
 };

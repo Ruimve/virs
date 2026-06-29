@@ -10,7 +10,7 @@ interface Props {
   loading: boolean;
 }
 
-const AILogDetail = ({ log, loading }: Props) => {
+const LogDetail = ({ log, loading }: Props) => {
   const navigate = useNavigate();
 
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
@@ -306,4 +306,4 @@ const AILogDetail = ({ log, loading }: Props) => {
   );
 };
 
-export default memo(AILogDetail);
+export default memo(LogDetail);

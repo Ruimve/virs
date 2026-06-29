@@ -11,7 +11,7 @@ interface Props {
   botType?: 'auto' | 'grid';
 }
 
-const AIDecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
+const DecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
   const navigate = useNavigate();
 
   const handleClick = useCallback(() => {
@@ -124,4 +124,4 @@ const AIDecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
   );
 };
 
-export default memo(AIDecisionCard);
+export default memo(DecisionCard);

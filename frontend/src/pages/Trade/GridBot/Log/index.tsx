@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getAutoAnalysisLogs, type AnalysisLog } from '@/service';
-import AILogList from '../../components/AILogList';
+import { getGridAnalysisLogs, type AnalysisLog } from '@/service';
+import AILogList from '../../components/LogList';
 import { useBot } from '../../context/BotContext';
 
 const PAGE_SIZE = 20;
 
-const AILog = () => {
+const Log = () => {
   const { bot } = useBot();
   const [logs, setLogs] = useState<AnalysisLog[]>([]);
   const [total, setTotal] = useState(0);
@@ -18,7 +18,7 @@ const AILog = () => {
       if (!bot?.id) return;
       setLoading(true);
       try {
-        const res = await getAutoAnalysisLogs(bot.id, p, PAGE_SIZE);
+        const res = await getGridAnalysisLogs(bot.id, p, PAGE_SIZE);
         if (res.success && res.data) {
           const items = res.data.items || [];
           setLogs((prev) => (append ? [...prev, ...items] : items));
@@ -26,7 +26,7 @@ const AILog = () => {
           setPage(p);
         }
       } catch (e) {
-        console.error('Failed to load analysis logs:', e);
+        console.error(e);
       } finally {
         setLoading(false);
       }
@@ -62,7 +62,7 @@ const AILog = () => {
 
   return (
     <div className="h-full overflow-y-auto max-w-5xl mx-auto">
-      <AILogList logs={logs} loading={loading} botType="auto" botId={bot.id} />
+      <AILogList logs={logs} loading={loading} botType="grid" botId={bot.id} />
 
       {/* 上拉加载 sentinel */}
       <div
@@ -75,4 +75,4 @@ const AILog = () => {
   );
 };
 
-export default AILog;
+export default Log;

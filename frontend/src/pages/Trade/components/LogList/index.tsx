@@ -13,7 +13,7 @@ interface Props {
   botId: string;
 }
 
-const AILogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
+const LogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
   const navigate = useNavigate();
 
   const getDecision = (log: AnalysisLog) => {
@@ -87,4 +87,4 @@ const AILogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
   );
 };
 
-export default memo(AILogList);
+export default memo(LogList);

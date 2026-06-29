@@ -1,39 +1,39 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Loading from './pages/loading';
-import Login from './pages/login';
+import Loading from './pages/Loading';
+import Login from './pages/Login';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import FullScreen from './components/Transition/FullScreen';
 import { Icon } from './components/Transition/Icon/AssetLoading';
 
 /** 向导 */
-const SetupLayout = lazy(() => import('./pages/setup/Layout'));
-const SelectBotType = lazy(() => import('./pages/setup/SelectBotType'));
-const ConfigureLlm = lazy(() => import('./pages/setup/ConfigureLlm'));
-const ConfigureExchange = lazy(() => import('./pages/setup/ConfigureExchange'));
-const ConfigureParams = lazy(() => import('./pages/setup/ConfigureParams'));
-const ReviewLaunch = lazy(() => import('./pages/setup/ReviewLaunch'));
+const SetupLayout = lazy(() => import('./pages/Setup/Layout'));
+const SelectBotType = lazy(() => import('./pages/Setup/SelectBotType'));
+const ConfigureLlm = lazy(() => import('./pages/Setup/ConfigureLlm'));
+const ConfigureExchange = lazy(() => import('./pages/Setup/ConfigureExchange'));
+const ConfigureParams = lazy(() => import('./pages/Setup/ConfigureParams'));
+const ReviewLaunch = lazy(() => import('./pages/Setup/ReviewLaunch'));
 
 /** 交易 */
-const AITradeLayout = lazy(() => import('./pages/AITrade/Layout'));
+const TradeLayout = lazy(() => import('./pages/Trade/Layout'));
 /** 交易 - 自动交易 */
-const AutoBot = lazy(() => import('./pages/AITrade/AutoBot'));
-const AutoBotMain = lazy(() => import('./pages/AITrade/AutoBot/Bot'));
-const AutoBotAILog = lazy(() => import('./pages/AITrade/AutoBot/AILog'));
-const AutoBotAILogDetail = lazy(() => import('./pages/AITrade/AutoBot/AILog/Detail'));
-const AutoBotTrades = lazy(() => import('./pages/AITrade/AutoBot/Trades'));
-const AutoBotSystem = lazy(() => import('./pages/AITrade/AutoBot/System'));
+const AutoBot = lazy(() => import('./pages/Trade/AutoBot'));
+const AutoBotMain = lazy(() => import('./pages/Trade/AutoBot/Bot'));
+const AutoBotLog = lazy(() => import('./pages/Trade/AutoBot/Log'));
+const AutoBotLogDetail = lazy(() => import('./pages/Trade/AutoBot/Log/Detail'));
+const AutoBotTrades = lazy(() => import('./pages/Trade/AutoBot/Trades'));
+const AutoBotSystem = lazy(() => import('./pages/Trade/AutoBot/System'));
 /** 交易 - 网格交易 */
-const GridBot = lazy(() => import('./pages/AITrade/GridBot'));
-const GridBotMain = lazy(() => import('./pages/AITrade/GridBot/Bot'));
-const GridBotAILog = lazy(() => import('./pages/AITrade/GridBot/AILog'));
-const GridBotAILogDetail = lazy(() => import('./pages/AITrade/GridBot/AILog/Detail'));
-const GridBotTrades = lazy(() => import('./pages/AITrade/GridBot/Trades'));
-const GridBotLevels = lazy(() => import('./pages/AITrade/GridBot/Levels'));
-const GridBotSystem = lazy(() => import('./pages/AITrade/GridBot/System'));
+const GridBot = lazy(() => import('./pages/Trade/GridBot'));
+const GridBotMain = lazy(() => import('./pages/Trade/GridBot/Bot'));
+const GridBotLog = lazy(() => import('./pages/Trade/GridBot/Log'));
+const GridBotLogDetail = lazy(() => import('./pages/Trade/GridBot/Log/Detail'));
+const GridBotTrades = lazy(() => import('./pages/Trade/GridBot/Trades'));
+const GridBotLevels = lazy(() => import('./pages/Trade/GridBot/Levels'));
+const GridBotSystem = lazy(() => import('./pages/Trade/GridBot/System'));
 
 /** 交易 - 健康检查 */
-const HealthCheck = lazy(() => import('./pages/AITrade/HealthCheck'));
+const HealthCheck = lazy(() => import('./pages/Trade/HealthCheck'));
 /** 交易 -系统信息 */
 
 const SuspenseWrap = ({ children }: { children: React.ReactNode }) => {
@@ -55,18 +55,18 @@ const App = () => {
               <Route path="/setup/params" element={<ConfigureParams />} />
               <Route path="/setup/review" element={<ReviewLaunch />} />
             </Route>
-            <Route path="/trade" element={<AITradeLayout />}>
+            <Route path="/trade" element={<TradeLayout />}>
               <Route path="/trade/auto/:botId" element={<AutoBot />}>
                 <Route path="/trade/auto/:botId/bot" element={<AutoBotMain />} />
-                <Route path="/trade/auto/:botId/log" element={<AutoBotAILog />} />
-                <Route path="/trade/auto/:botId/log/:logId" element={<AutoBotAILogDetail />} />
+                <Route path="/trade/auto/:botId/log" element={<AutoBotLog />} />
+                <Route path="/trade/auto/:botId/log/:logId" element={<AutoBotLogDetail />} />
                 <Route path="/trade/auto/:botId/trades" element={<AutoBotTrades />} />
                 <Route path="/trade/auto/:botId/system" element={<AutoBotSystem />} />
               </Route>
               <Route path="/trade/grid/:botId" element={<GridBot />}>
                 <Route path="/trade/grid/:botId/bot" element={<GridBotMain />} />
-                <Route path="/trade/grid/:botId/log" element={<GridBotAILog />} />
-                <Route path="/trade/grid/:botId/log/:logId" element={<GridBotAILogDetail />} />
+                <Route path="/trade/grid/:botId/log" element={<GridBotLog />} />
+                <Route path="/trade/grid/:botId/log/:logId" element={<GridBotLogDetail />} />
                 <Route path="/trade/grid/:botId/trades" element={<GridBotTrades />} />
                 <Route path="/trade/grid/:botId/levels" element={<GridBotLevels />} />
                 <Route path="/trade/grid/:botId/system" element={<GridBotSystem />} />

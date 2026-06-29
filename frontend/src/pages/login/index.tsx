@@ -14,14 +14,9 @@ const Login = () => {
     e.preventDefault();
     setError('');
 
-    if (!username.trim() || !password.trim()) {
-      setError('Please enter username and password');
-      return;
-    }
-
     setLoading(true);
     try {
-      const result = await login(username.trim(), password.trim());
+      const result = await login(username, password);
       if (result.success) {
         navigate('/setup/bot-type', { replace: true });
         return;
