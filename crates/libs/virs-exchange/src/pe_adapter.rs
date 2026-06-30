@@ -58,39 +58,39 @@ impl CcxtExchangeAdapter {
 
 // ---- Type conversion helpers ----
 
-fn convert_side(side: &models::Side) -> Side {
+pub fn convert_side(side: &models::Side) -> Side {
     match side {
         models::Side::Buy => Side::Buy,
         models::Side::Sell => Side::Sell,
     }
 }
 
-fn convert_to_models_side(side: &Side) -> models::Side {
+pub fn convert_to_models_side(side: &Side) -> models::Side {
     match side {
         Side::Buy => models::Side::Buy,
         Side::Sell => models::Side::Sell,
     }
 }
 
-fn convert_position_side(side: &Option<PositionSide>) -> Option<models::PositionSide> {
+pub fn convert_position_side(side: &Option<PositionSide>) -> Option<models::PositionSide> {
     side.as_ref().map(|s| match s {
         PositionSide::Long => models::PositionSide::Long,
         PositionSide::Short => models::PositionSide::Short,
-        PositionSide::Both => models::PositionSide::Long,
+        PositionSide::Both => models::PositionSide::Both,
     })
 }
 
-fn convert_order_type(ot: &OrderType) -> models::OrderType {
+pub fn convert_order_type(ot: &OrderType) -> models::OrderType {
     match ot {
         OrderType::Limit => models::OrderType::Limit,
         OrderType::Market => models::OrderType::Market,
         OrderType::StopMarket => models::OrderType::StopMarket,
-        OrderType::TakeProfitMarket => models::OrderType::StopMarket,
+        OrderType::TakeProfitMarket => models::OrderType::TakeProfitMarket,
         OrderType::StopLimit => models::OrderType::StopLimit,
     }
 }
 
-fn convert_order_status(status: &models::OrderStatus) -> OrderStatus {
+pub fn convert_order_status(status: &models::OrderStatus) -> OrderStatus {
     match status {
         models::OrderStatus::Pending => OrderStatus::Pending,
         models::OrderStatus::Open => OrderStatus::Open,
@@ -101,7 +101,7 @@ fn convert_order_status(status: &models::OrderStatus) -> OrderStatus {
     }
 }
 
-fn convert_virs_position_side(side: &models::PositionSide) -> PositionSide {
+pub fn convert_virs_position_side(side: &models::PositionSide) -> PositionSide {
     match side {
         models::PositionSide::Long => PositionSide::Long,
         models::PositionSide::Short => PositionSide::Short,
@@ -109,14 +109,14 @@ fn convert_virs_position_side(side: &models::PositionSide) -> PositionSide {
     }
 }
 
-fn convert_virs_market_type(mt: &models::MarketType) -> MarketType {
+pub fn convert_virs_market_type(mt: &models::MarketType) -> MarketType {
     match mt {
         models::MarketType::Spot => MarketType::Spot,
         models::MarketType::Perpetual => MarketType::Perpetual,
     }
 }
 
-fn convert_order(o: &models::Order, exchange_name: &str) -> PositionOrder {
+pub fn convert_order(o: &models::Order, exchange_name: &str) -> PositionOrder {
     PositionOrder {
         id: uuid::Uuid::parse_str(&o.id).unwrap_or_else(|_| uuid::Uuid::new_v4()),
         position_id: uuid::Uuid::nil(),
@@ -147,7 +147,7 @@ fn convert_order(o: &models::Order, exchange_name: &str) -> PositionOrder {
     }
 }
 
-fn convert_exchange_position(ep: &models::ExchangePosition) -> ExchangePosition {
+pub fn convert_exchange_position(ep: &models::ExchangePosition) -> ExchangePosition {
     ExchangePosition {
         symbol: ep.symbol.clone(),
         side: convert_virs_position_side(&ep.side),
@@ -159,16 +159,16 @@ fn convert_exchange_position(ep: &models::ExchangePosition) -> ExchangePosition 
     }
 }
 
-fn to_pe_error(e: anyhow::Error) -> PositionEngineError {
+pub fn to_pe_error(e: anyhow::Error) -> PositionEngineError {
     PositionEngineError::Exchange(e.to_string())
 }
 
-fn no_exchange_error() -> PositionEngineError {
+pub fn no_exchange_error() -> PositionEngineError {
     PositionEngineError::Exchange("No perpetual exchange registered in Exchanges".to_string())
 }
 
 /// Convert ccxt WsFeedEvent to virs_types WsFeedEvent
-fn convert_ws_feed_event(event: virs_ccxt::ws_types::WsFeedEvent) -> WsFeedEvent {
+pub fn convert_ws_feed_event(event: virs_ccxt::ws_types::WsFeedEvent) -> WsFeedEvent {
     match event {
         virs_ccxt::ws_types::WsFeedEvent::OrderUpdate {
             exchange_order_id,
@@ -184,25 +184,14 @@ fn convert_ws_feed_event(event: virs_ccxt::ws_types::WsFeedEvent) -> WsFeedEvent
         } => WsFeedEvent::OrderUpdate {
             exchange_order_id,
             symbol,
-            status: match status {
-                virs_types::OrderStatus::Pending => OrderStatus::Pending,
-                virs_types::OrderStatus::Open => OrderStatus::Open,
-                virs_types::OrderStatus::PartiallyFilled => OrderStatus::PartiallyFilled,
-                virs_types::OrderStatus::Filled => OrderStatus::Filled,
-                virs_types::OrderStatus::Canceled => OrderStatus::Canceled,
-                virs_types::OrderStatus::Failed => OrderStatus::Failed,
-            },
+            status,
             filled,
             remaining,
             price,
             amount,
             commission,
             timestamp,
-            position_side: position_side.map(|ps| match ps {
-                virs_types::PositionSide::Long => PositionSide::Long,
-                virs_types::PositionSide::Short => PositionSide::Short,
-                virs_types::PositionSide::Both => PositionSide::Both,
-            }),
+            position_side,
         },
         virs_ccxt::ws_types::WsFeedEvent::ConnectionChanged { connected } => {
             WsFeedEvent::ConnectionChanged { connected }

@@ -41,21 +41,21 @@ impl CcxtAdapter {
 
 // ---- Type conversion helpers ----
 
-fn to_ccxt_market_type(mt: &MarketType) -> virs_ccxt::MarketType {
+pub fn to_ccxt_market_type(mt: &MarketType) -> virs_ccxt::MarketType {
     match mt {
         MarketType::Spot => virs_ccxt::MarketType::Spot,
         MarketType::Perpetual => virs_ccxt::MarketType::Perpetual,
     }
 }
 
-fn to_ccxt_side(side: &Side) -> virs_ccxt::Side {
+pub fn to_ccxt_side(side: &Side) -> virs_ccxt::Side {
     match side {
         Side::Buy => virs_ccxt::Side::Buy,
         Side::Sell => virs_ccxt::Side::Sell,
     }
 }
 
-fn to_ccxt_order_type(ot: &OrderType) -> virs_ccxt::OrderType {
+pub fn to_ccxt_order_type(ot: &OrderType) -> virs_ccxt::OrderType {
     match ot {
         OrderType::Market => virs_ccxt::OrderType::Market,
         OrderType::Limit => virs_ccxt::OrderType::Limit,
@@ -65,7 +65,7 @@ fn to_ccxt_order_type(ot: &OrderType) -> virs_ccxt::OrderType {
     }
 }
 
-fn to_models_kline(
+pub fn to_models_kline(
     ck: virs_ccxt::CcxtKline,
     symbol: &str,
     exchange: &str,
@@ -98,7 +98,7 @@ fn to_models_kline(
     }
 }
 
-fn to_models_balance(cb: virs_ccxt::Balance) -> Balance {
+pub fn to_models_balance(cb: virs_ccxt::Balance) -> Balance {
     Balance {
         asset: cb.asset,
         free: cb.free,
@@ -107,7 +107,7 @@ fn to_models_balance(cb: virs_ccxt::Balance) -> Balance {
     }
 }
 
-fn to_models_order(co: virs_ccxt::CcxtOrder) -> Order {
+pub fn to_models_order(co: virs_ccxt::CcxtOrder) -> Order {
     let fee_info = co.fee.as_ref();
     Order {
         id: co.id,
@@ -134,7 +134,7 @@ impl Exchange for CcxtAdapter {
         self.inner.id()
     }
     fn market_type(&self) -> MarketType {
-        self.market_type.clone()
+        self.market_type
     }
 
     async fn get_ticker(&self, symbol: &str) -> anyhow::Result<Ticker> {

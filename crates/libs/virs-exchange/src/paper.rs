@@ -67,7 +67,7 @@ pub struct PaperExchangeAdapter {
 /// Paper 模式简化强平价计算（忽略维持保证金率）：
 /// - 多头：entry_price * (1 - 1/leverage)
 /// - 空头：entry_price * (1 + 1/leverage)
-fn compute_paper_liquidation_price(
+pub fn compute_paper_liquidation_price(
     entry_price: f64,
     side: PositionSide,
     leverage: u32,
@@ -426,7 +426,7 @@ impl ExchangePe for PaperExchangeAdapter {
             .iter()
             .filter(|e| {
                 let pos = e.value();
-                symbol.map_or(true, |s| pos.symbol == s) && pos.size.abs() > 1e-8
+                symbol.is_none_or(|s| pos.symbol == s) && pos.size.abs() > 1e-8
             })
             .map(|e| {
                 let pos = e.value();
@@ -617,7 +617,7 @@ impl ExchangePe for PaperExchangeAdapter {
         let keys: Vec<Uuid> = self
             .pending
             .iter()
-            .filter(|e| symbol.map_or(true, |s| e.value().symbol == s))
+            .filter(|e| symbol.is_none_or(|s| e.value().symbol == s))
             .map(|e| *e.key())
             .collect();
         let mut canceled = Vec::new();
@@ -654,7 +654,7 @@ impl ExchangePe for PaperExchangeAdapter {
         Ok(self
             .pending
             .iter()
-            .filter(|e| symbol.map_or(true, |s| e.value().symbol == s))
+            .filter(|e| symbol.is_none_or(|s| e.value().symbol == s))
             .map(|e| {
                 let o = e.value();
                 PositionOrder {

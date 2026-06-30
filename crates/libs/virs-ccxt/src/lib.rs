@@ -34,6 +34,7 @@ pub use types::{
     MarketInfo,
     MarketType,
     OrderBook,
+    OrderFee,
     OrderStatus,
     OrderType,
     PlaceOrderParams,

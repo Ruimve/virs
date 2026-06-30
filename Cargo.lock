@@ -3128,6 +3128,7 @@ dependencies = [
  "chrono",
  "dashmap",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",

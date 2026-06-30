@@ -57,7 +57,7 @@ pub struct Balance {
 }
 
 /// Exchange position info
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExchangePosition {
     pub symbol: String,
     pub side: PositionSide,

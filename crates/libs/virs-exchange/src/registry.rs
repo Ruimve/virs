@@ -9,6 +9,12 @@ pub struct Exchanges {
     exchanges: Arc<DashMap<String, Box<dyn Exchange>>>,
 }
 
+impl Default for Exchanges {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Exchanges {
     pub fn new() -> Self {
         Self {

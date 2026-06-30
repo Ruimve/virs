@@ -33,7 +33,7 @@ pub struct Position {
 }
 
 /// Order (position engine)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PositionOrder {
     pub id: Uuid,
     pub position_id: Uuid,
@@ -76,7 +76,7 @@ pub struct Trade {
 }
 
 /// WebSocket feed event
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WsFeedEvent {
     OrderUpdate {
         exchange_order_id: String,
