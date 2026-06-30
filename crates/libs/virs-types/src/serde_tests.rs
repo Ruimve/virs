@@ -2,7 +2,6 @@
 
 use chrono::Utc;
 
-use crate::auto_port::AutoMarketType;
 use crate::enums::*;
 use crate::market::*;
 use crate::position::*;
@@ -85,34 +84,8 @@ fn s2_5_risk_config_default_roundtrip() {
     assert_eq!(de, config);
 }
 
-// ============================================================
-// TC-S3: MarketType::from_str_lossy
-// ============================================================
-
-#[test]
-fn s3_1_perpetual() {
-    assert_eq!(MarketType::from_str_lossy("perpetual"), MarketType::Perpetual);
-}
-
-#[test]
-fn s3_2_swap() {
-    assert_eq!(MarketType::from_str_lossy("swap"), MarketType::Perpetual);
-}
-
-#[test]
-fn s3_3_future() {
-    assert_eq!(MarketType::from_str_lossy("future"), MarketType::Perpetual);
-}
-
-#[test]
-fn s3_4_spot() {
-    assert_eq!(MarketType::from_str_lossy("spot"), MarketType::Spot);
-}
-
-#[test]
-fn s3_5_unknown_defaults_to_spot() {
-    assert_eq!(MarketType::from_str_lossy("unknown"), MarketType::Spot);
-}
+// Removed: TC-S3 tested orphan method MarketType::from_str_lossy (no business
+// consumer). Method deleted.
 
 // ============================================================
 // TC-S4: AutoMarketType::from_str_lossy
@@ -120,15 +93,18 @@ fn s3_5_unknown_defaults_to_spot() {
 
 #[test]
 fn s4_1_perpetual() {
+    use crate::auto_port::AutoMarketType;
     assert_eq!(AutoMarketType::from_str_lossy("perpetual"), AutoMarketType::Perpetual);
 }
 
 #[test]
 fn s4_2_spot() {
+    use crate::auto_port::AutoMarketType;
     assert_eq!(AutoMarketType::from_str_lossy("spot"), AutoMarketType::Spot);
 }
 
 #[test]
 fn s4_3_unknown_defaults_to_perpetual() {
+    use crate::auto_port::AutoMarketType;
     assert_eq!(AutoMarketType::from_str_lossy("unknown"), AutoMarketType::Perpetual);
 }

@@ -158,6 +158,8 @@ impl AutoMarketType {
         self == &Self::Spot
     }
 
+    /// Lossy parsing from a string. Unknown values default to `Perpetual`.
+    /// Used by `virs-app::adapters::auto_store` when loading bot configs from DB.
     pub fn from_str_lossy(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "spot" => Self::Spot,

@@ -71,7 +71,7 @@ impl EngineInner {
     }
 
     fn is_running(&self) -> bool {
-        *self.state.read().unwrap() == EngineState::Running
+        self.get_state().is_running()
     }
 
     fn set_state(&self, new_state: EngineState) {
@@ -179,7 +179,7 @@ impl PositionEngine {
         self.inner
             .positions
             .iter()
-            .filter(|r| r.value().symbol == symbol && r.value().status == PositionStatus::Open)
+            .filter(|r| r.value().symbol == symbol && r.value().is_open())
             .map(|r| r.value().clone())
             .next()
     }
@@ -1120,7 +1120,7 @@ pub(crate) async fn handle_ws_order_update(
     }
 
     // 4. 订单完全成交时更新仓位
-    if status == OrderStatus::Filled {
+    if status.is_filled() {
         let pos_key = inner
             .position_id_index
             .get(&position_id)

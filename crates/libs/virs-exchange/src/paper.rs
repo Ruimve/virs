@@ -36,17 +36,10 @@ struct PaperPendingOrder {
     created_at: chrono::DateTime<Utc>,
 }
 
-/// Paper position
-#[derive(Debug, Clone)]
-struct PaperPosition {
-    symbol: String,
-    side: PositionSide,
-    size: f64,
-    entry_price: f64,
-    leverage: u32,
-    unrealized_pnl: f64,
-    liquidation_price: Option<f64>,
-}
+/// Paper position — reuses `ExchangePosition` from `virs-types` so that
+/// `unrealized_pnl_at` / `pnl_pct_at` are shared with the rest of the codebase
+/// instead of being duplicated here.
+type PaperPosition = ExchangePosition;
 
 /// Paper Exchange Adapter
 pub struct PaperExchangeAdapter {
@@ -379,11 +372,7 @@ impl PaperExchangeAdapter {
             if pos.symbol != symbol {
                 continue;
             }
-            pos.unrealized_pnl = match pos.side {
-                PositionSide::Long => (current_price - pos.entry_price) * pos.size,
-                PositionSide::Short => (pos.entry_price - current_price) * pos.size.abs(),
-                PositionSide::Both => 0.0,
-            };
+            pos.unrealized_pnl = pos.unrealized_pnl_at(current_price);
         }
     }
 }
@@ -416,7 +405,7 @@ impl ExchangePe for PaperExchangeAdapter {
     async fn get_balance(&self) -> PositionResult<Balance> {
         self.ensure_balance_initialized().await;
         let mut balance = self.balance.lock().await;
-        balance.total = balance.free + balance.used;
+        balance.total = balance.compute_total();
         Ok(balance.clone())
     }
 

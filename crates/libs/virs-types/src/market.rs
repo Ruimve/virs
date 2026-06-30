@@ -21,18 +21,6 @@ pub struct Ticker {
     pub timestamp: DateTime<Utc>,
 }
 
-impl Ticker {
-    /// Returns the mid price: (bid + ask) / 2.
-    pub fn mid_price(&self) -> f64 {
-        (self.bid + self.ask) / 2.0
-    }
-
-    /// Returns the bid-ask spread: ask - bid.
-    pub fn spread(&self) -> f64 {
-        self.ask - self.bid
-    }
-}
-
 /// Kline / candlestick data
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Kline {
@@ -57,34 +45,6 @@ pub struct OrderBook {
     pub bids: Vec<(f64, f64)>,
     pub asks: Vec<(f64, f64)>,
     pub timestamp: DateTime<Utc>,
-}
-
-impl OrderBook {
-    /// Returns the best (highest) bid price, or None if empty.
-    pub fn best_bid(&self) -> Option<f64> {
-        self.bids.first().map(|(p, _)| *p)
-    }
-
-    /// Returns the best (lowest) ask price, or None if empty.
-    pub fn best_ask(&self) -> Option<f64> {
-        self.asks.first().map(|(p, _)| *p)
-    }
-
-    /// Returns the bid-ask spread, or None if either side is empty.
-    pub fn spread(&self) -> Option<f64> {
-        match (self.best_bid(), self.best_ask()) {
-            (Some(bid), Some(ask)) => Some(ask - bid),
-            _ => None,
-        }
-    }
-
-    /// Returns the mid price, or None if either side is empty.
-    pub fn mid_price(&self) -> Option<f64> {
-        match (self.best_bid(), self.best_ask()) {
-            (Some(bid), Some(ask)) => Some((bid + ask) / 2.0),
-            _ => None,
-        }
-    }
 }
 
 /// Account balance
@@ -190,15 +150,6 @@ impl<T: Serialize> ApiResponse<T> {
         }
     }
 
-    pub fn ok_with_message(data: T, message: impl Into<String>) -> Self {
-        Self {
-            success: true,
-            data: Some(data),
-            error: None,
-            message: Some(message.into()),
-        }
-    }
-
     pub fn err(msg: impl Into<String>) -> Self {
         Self {
             success: false,
@@ -214,12 +165,4 @@ impl<T: Serialize> ApiResponse<T> {
 pub struct PaginationParams {
     pub page: Option<i64>,
     pub page_size: Option<i64>,
-}
-
-impl PaginationParams {
-    pub fn normalize(&self) -> (i64, i64) {
-        let page = self.page.unwrap_or(1).max(1);
-        let page_size = self.page_size.unwrap_or(20).clamp(1, 100);
-        (page, page_size)
-    }
 }

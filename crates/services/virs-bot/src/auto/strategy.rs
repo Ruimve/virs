@@ -162,31 +162,28 @@ pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
 }
 
 /// Format position info for prompt.
+/// Uses `Position::unrealized_pnl_at` to avoid inline PnL duplication.
+/// Note: pnl_pct kept as PnL/notional (strategy prompt semantics), not ROI.
 pub fn format_position_info(
+    position: &virs_types::position::Position,
     current_side: Option<&str>,
-    entry_price: f64,
-    position_size: f64,
     current_price: f64,
-    liquidation_price: Option<f64>,
 ) -> String {
     match current_side {
         Some(side) if !side.is_empty() && side != "none" => {
-            let unrealized_pnl = if side == "long" {
-                (current_price - entry_price) * position_size
-            } else {
-                (entry_price - current_price) * position_size
-            };
-            let pnl_pct = if entry_price > 0.0 {
-                unrealized_pnl / (entry_price * position_size) * 100.0
+            let unrealized_pnl = position.unrealized_pnl_at(current_price);
+            let pnl_pct = if position.entry_price > 0.0 {
+                unrealized_pnl / (position.entry_price * position.size) * 100.0
             } else {
                 0.0
             };
-            let liq_str = liquidation_price
+            let liq_str = position
+                .liquidation_price
                 .map(|p| format!("\n- 强平价格：{:.2}", p))
                 .unwrap_or_default();
             format!(
                 "- 方向：{}\n- 入场价：{:.2}\n- 持仓量：{:.6}\n- 当前价：{:.2}\n- 未实现盈亏：{:.4} USDT ({:+.2}%){}",
-                side, entry_price, position_size, current_price, unrealized_pnl, pnl_pct, liq_str
+                side, position.entry_price, position.size, current_price, unrealized_pnl, pnl_pct, liq_str
             )
         }
         _ => "无仓位".to_string(),

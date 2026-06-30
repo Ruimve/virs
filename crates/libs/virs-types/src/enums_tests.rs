@@ -130,19 +130,8 @@ fn e9_1_canceled_is_canceled() {
     assert!(!OrderStatus::Open.is_canceled());
 }
 
-#[test]
-fn e10_1_terminal_states() {
-    assert!(OrderStatus::Filled.is_terminal());
-    assert!(OrderStatus::Canceled.is_terminal());
-    assert!(OrderStatus::Failed.is_terminal());
-}
-
-#[test]
-fn e10_2_non_terminal_states() {
-    assert!(!OrderStatus::Open.is_terminal());
-    assert!(!OrderStatus::PartiallyFilled.is_terminal());
-    assert!(!OrderStatus::Pending.is_terminal());
-}
+// Removed: TC-E10 tested orphan method OrderStatus::is_terminal (no business
+// consumer). Method deleted.
 
 // ============================================================
 // TC-E11-E13: PositionStatus methods

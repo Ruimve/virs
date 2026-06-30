@@ -96,11 +96,6 @@ impl OrderStatus {
     pub fn is_canceled(&self) -> bool {
         self == &Self::Canceled
     }
-
-    /// Returns true if the order has reached a terminal state (no further updates expected).
-    pub fn is_terminal(&self) -> bool {
-        matches!(self, Self::Filled | Self::Canceled | Self::Failed)
-    }
 }
 
 /// Position status
@@ -139,15 +134,6 @@ impl std::fmt::Display for MarketType {
         match self {
             MarketType::Spot => write!(f, "spot"),
             MarketType::Perpetual => write!(f, "perpetual"),
-        }
-    }
-}
-
-impl MarketType {
-    pub fn from_str_lossy(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "perpetual" | "swap" | "future" => MarketType::Perpetual,
-            _ => MarketType::Spot,
         }
     }
 }

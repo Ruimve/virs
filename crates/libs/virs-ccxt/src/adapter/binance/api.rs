@@ -278,7 +278,7 @@ pub async fn fetch_balance(
         .and_then(|b| b.as_array())
         .ok_or_else(|| ExchangeError::Internal("Invalid balance response from Binance".into()))?;
 
-    let result: Vec<Balance> = balances
+    let mut result: Vec<Balance> = balances
         .iter()
         .filter_map(|b| {
             let free = parse_f64(b, "free").unwrap_or(0.0);
@@ -290,10 +290,13 @@ pub async fn fetch_balance(
                 asset: parse_str(b, "asset").unwrap_or_default(),
                 free,
                 used,
-                total: free + used,
+                total: 0.0,
             })
         })
         .collect();
+    for b in &mut result {
+        b.total = b.compute_total();
+    }
 
     Ok(result)
 }

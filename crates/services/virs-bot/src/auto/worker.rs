@@ -11,8 +11,7 @@ use crate::auto::ai::{AutoAction, AutoAiService, AutoDecision};
 use crate::auto::ports::*;
 use crate::auto::strategy;
 use crate::auto::types::{AutoBotConfig, AutoEvent};
-use virs_types::auto_port::AutoMarketType;
-use virs_types::enums::{PositionSide, PositionStatus};
+use virs_types::enums::PositionSide;
 use virs_types::position::{EngineEvent, Position};
 
 const PENDING_ORDER_TIMEOUT: Duration = Duration::from_secs(60);
@@ -125,7 +124,7 @@ impl AutoWorker {
     /// 当前仓位方向（"long"/"short"/"none"）
     pub(crate) fn current_side_str(&self) -> String {
         match &self.current_position {
-            Some(p) if p.status == PositionStatus::Open => match p.side {
+            Some(p) if p.is_open() => match p.side {
                 PositionSide::Long => "long".to_string(),
                 PositionSide::Short => "short".to_string(),
                 PositionSide::Both => "none".to_string(),
@@ -135,12 +134,12 @@ impl AutoWorker {
     }
 
     pub(crate) fn is_spot(&self) -> bool {
-        matches!(self.bot.market_type, AutoMarketType::Spot)
+        self.bot.market_type.is_spot()
     }
 
     pub(crate) fn has_position(&self) -> bool {
         match &self.current_position {
-            Some(p) if p.status == PositionStatus::Open => p.size.abs() > 1e-8,
+            Some(p) if p.is_open() => p.size.abs() > 1e-8,
             _ => false,
         }
     }
@@ -214,7 +213,7 @@ impl AutoWorker {
             .await
         {
             Ok(Some(pe_pos))
-                if pe_pos.status == PositionStatus::Open && pe_pos.size.abs() > 1e-8 =>
+                if pe_pos.is_open() && pe_pos.size.abs() > 1e-8 =>
             {
                 // PE 有开仓但本地缓存为空 → 恢复
                 let was_empty = !self.has_position();
@@ -647,7 +646,7 @@ impl AutoWorker {
 
     async fn check_stop_take_profit(&mut self) -> bool {
         let entry_price = match &self.current_position {
-            Some(p) if p.status == PositionStatus::Open => p.entry_price,
+            Some(p) if p.is_open() => p.entry_price,
             _ => return false,
         };
         if entry_price <= 0.0 {
@@ -699,7 +698,7 @@ impl AutoWorker {
 
     fn update_trailing_stop(&mut self, atr: f64) {
         let entry_price = match &self.current_position {
-            Some(p) if p.status == PositionStatus::Open => p.entry_price,
+            Some(p) if p.is_open() => p.entry_price,
             _ => return,
         };
         if entry_price <= 0.0 || self.stop_loss <= 0.0 {
@@ -890,22 +889,14 @@ impl AutoWorker {
             0.0
         };
 
-        let (pos_side, pos_entry, pos_size, pos_liq) = match &self.current_position {
-            Some(p) if p.status == PositionStatus::Open => (
-                Some(self.current_side_str()),
-                p.entry_price,
-                p.size,
-                p.liquidation_price,
+        let position_info = match &self.current_position {
+            Some(p) if p.is_open() => strategy::format_position_info(
+                p,
+                Some(&self.current_side_str()),
+                snapshot.base.current_price,
             ),
-            _ => (None, 0.0, 0.0, None),
+            _ => "无仓位".to_string(),
         };
-        let position_info = strategy::format_position_info(
-            pos_side.as_deref(),
-            pos_entry,
-            pos_size,
-            snapshot.base.current_price,
-            pos_liq,
-        );
 
         let stop_take_profit_info =
             strategy::format_stop_take_profit(self.stop_loss, self.take_profit);
@@ -1555,7 +1546,7 @@ impl AutoWorker {
                 let is_ours = match self.bot.position_id {
                     Some(pid) if pid != Uuid::nil() => pid == position.id,
                     // position_id 还没建立时，按 symbol + Open 状态匹配
-                    _ => position.status == PositionStatus::Open,
+                    _ => position.is_open(),
                 };
                 if !is_ours {
                     return;

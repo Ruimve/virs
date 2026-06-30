@@ -1,9 +1,10 @@
 # virs-types 测试用例文档
 
 > 生成日期: 2026-06-30
+> 最后修订: 2026-06-30 (孤儿代码清理)
 > Crate: `crates/libs/virs-types`
 > 目标: 抽取类型中的幂等计算逻辑为方法，进行完整单元测试和集成测试覆盖。
-> 状态: **全部 100 个测试通过** (86 单元 + 14 集成)
+> 状态: **76 个测试通过** (67 单元 + 9 集成)；孤儿方法已删除，业务代码已重构调用类型方法
 
 ---
 
@@ -59,7 +60,7 @@ virs-types/
 | E7 | `OrderStatus::is_filled` | `(&self) -> bool` | Filled→true |
 | E8 | `OrderStatus::is_open` | `(&self) -> bool` | Open\|PartiallyFilled→true |
 | E9 | `OrderStatus::is_canceled` | `(&self) -> bool` | Canceled→true |
-| E10 | `OrderStatus::is_terminal` | `(&self) -> bool` | Filled\|Canceled\|Failed→true |
+| ~~E10~~ | ~~`OrderStatus::is_terminal`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
 | E11 | `PositionStatus::is_open` | `(&self) -> bool` | Open→true |
 | E12 | `PositionStatus::is_closed` | `(&self) -> bool` | Closed→true |
 | E13 | `PositionStatus::is_empty` | `(&self) -> bool` | Empty→true |
@@ -73,12 +74,12 @@ virs-types/
 | # | 方法 | 签名 | 说明 |
 |---|------|------|------|
 | M1 | `Balance::compute_total` | `(&self) -> f64` | free + used |
-| M2 | `Ticker::mid_price` | `(&self) -> f64` | (bid + ask) / 2 |
-| M3 | `Ticker::spread` | `(&self) -> f64` | ask - bid |
-| M4 | `OrderBook::best_bid` | `(&self) -> Option<f64>` | bids.first().map(\|(p,\_)\| *p) |
-| M5 | `OrderBook::best_ask` | `(&self) -> Option<f64>` | asks.first().map(\|(p,\_)\| *p) |
-| M6 | `OrderBook::spread` | `(&self) -> Option<f64>` | best_ask - best_bid |
-| M7 | `OrderBook::mid_price` | `(&self) -> Option<f64>` | (best_bid + best_ask) / 2 |
+| ~~M2~~ | ~~`Ticker::mid_price`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
+| ~~M3~~ | ~~`Ticker::spread`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
+| ~~M4~~ | ~~`OrderBook::best_bid`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
+| ~~M5~~ | ~~`OrderBook::best_ask`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
+| ~~M6~~ | ~~`OrderBook::spread`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
+| ~~M7~~ | ~~`OrderBook::mid_price`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
 | M8 | `ExchangePosition::is_long` | `(&self) -> bool` | side == Long |
 | M9 | `ExchangePosition::is_short` | `(&self) -> bool` | side == Short |
 | M10 | `ExchangePosition::unrealized_pnl_at` | `(&self, current_price: f64) -> f64` | 按 Long/Short 计算 |
@@ -116,6 +117,7 @@ virs-types/
 |---|------|------|------|
 | AM1 | `AutoMarketType::is_perpetual` | `(&self) -> bool` | Perpetual→true |
 | AM2 | `AutoMarketType::is_spot` | `(&self) -> bool` | Spot→true |
+| AM3 | `AutoMarketType::from_str_lossy` | `(s: &str) -> Self` | DB 字符串 → 枚举 (业务调用: `virs-app/auto_store.rs:31`) |
 
 ---
 
@@ -176,20 +178,8 @@ virs-types/
 - M1.1 free=100, used=50 → 150
 - M1.2 free=0, used=0 → 0
 
-#### TC-M2: Ticker::mid_price
-- M2.1 bid=99, ask=101 → 100
-
-#### TC-M3: Ticker::spread
-- M3.1 bid=99, ask=101 → 2
-
-#### TC-M4-M7: OrderBook 方法
-- M4.1 有 bids → best_bid
-- M4.2 空 bids → None
-- M5.1 有 asks → best_ask
-- M5.2 空 asks → None
-- M6.1 有买卖盘 → spread
-- M6.2 空盘 → None
-- M7.1 有买卖盘 → mid_price
+#### TC-M2-M7: Ticker / OrderBook 方法
+- **已删除**: 方法无业务消费者 (孤儿代码)，测试一并删除。
 
 #### TC-M8-M11: ExchangePosition 方法
 - M8.1 side=Long → is_long==true
@@ -241,9 +231,12 @@ virs-types/
 
 ### 3.5 auto_port_tests.rs
 
-#### TC-AM1-AM2: AutoMarketType 方法
+#### TC-AM1-AM3: AutoMarketType 方法
 - AM1.1 Perpetual → is_perpetual==true
 - AM2.1 Spot → is_spot==true
+- AM3.1 from_str_lossy("perpetual") → Perpetual
+- AM3.2 from_str_lossy("spot") → Spot
+- AM3.3 from_str_lossy("unknown") → Perpetual (默认值)
 
 ### 3.6 serde_tests.rs
 
@@ -261,11 +254,7 @@ virs-types/
 - S2.5 RiskConfig default → JSON → RiskConfig
 
 #### TC-S3: MarketType::from_str_lossy
-- S3.1 "perpetual" → Perpetual
-- S3.2 "swap" → Perpetual
-- S3.3 "future" → Perpetual
-- S3.4 "spot" → Spot
-- S3.5 "unknown" → Spot
+- **已删除**: 方法无业务消费者 (孤儿代码)，测试一并删除。
 
 #### TC-S4: AutoMarketType::from_str_lossy
 - S4.1 "perpetual" → Perpetual
@@ -288,11 +277,10 @@ virs-types/
 - INT-3.1 Long, entry=50000, current=51000 → unrealized_pnl_at=1000, pnl_pct_at=2.0
 
 ### TC-INT-4: OrderBook 衍生计算
-- INT-4.1 有买卖盘 → spread, mid_price
-- INT-4.2 空盘 → None
+- **已删除**: OrderBook 衍生方法无业务消费者 (孤儿代码)，测试一并删除。
 
 ### TC-INT-5: Ticker 衍生计算
-- INT-5.1 bid=99, ask=101 → mid_price=100, spread=2
+- **已删除**: Ticker 衍生方法无业务消费者 (孤儿代码)，测试一并删除。
 
 ### TC-INT-6: RiskConfig 验证链路
 - INT-6.1 默认配置 → validate() == Ok
@@ -303,6 +291,8 @@ virs-types/
 
 ### TC-INT-8: serde + 方法链路
 - INT-8.1 ExchangePosition → JSON → ExchangePosition → unrealized_pnl_at 一致
+- INT-8.2 MarketType::from_str_lossy round-trip — **已删除** (孤儿方法)
+- INT-8.3 AutoMarketType::from_str_lossy — 保留 (业务调用: `virs-app/auto_store.rs:31`)
 
 ---
 
@@ -310,14 +300,14 @@ virs-types/
 
 | 测试文件 | 被测模块 | 文档计划 | 实际实现 | 状态 |
 |----------|----------|---------|---------|------|
-| `src/enums_tests.rs` | enums.rs | 25 | 29 | ✅ 超额完成 |
-| `src/market_tests.rs` | market.rs | 17 | 17 | ✅ 完全匹配 |
+| `src/enums_tests.rs` | enums.rs | 25 | 27 | ✅ (E10 已删除) |
+| `src/market_tests.rs` | market.rs | 17 | 9 | ✅ (M2-M7 已删除) |
 | `src/position_tests.rs` | position.rs | 16 | 18 | ✅ 超额完成 |
 | `src/bot_tests.rs` | bot.rs | 3 | 4 | ✅ 超额完成 |
 | `src/auto_port_tests.rs` | auto_port.rs | 2 | 2 | ✅ 完全匹配 |
-| `src/serde_tests.rs` | 全部 serde | 14 | 16 | ✅ 超额完成 |
-| `tests/integration_tests.rs` | 跨模块 | 12 | 14 | ✅ 超额完成 |
-| **合计** | | **89** | **100** | ✅ 全部通过 |
+| `src/serde_tests.rs` | 全部 serde | 14 | 11 | ✅ (S3 已删除) |
+| `tests/integration_tests.rs` | 跨模块 | 12 | 9 | ✅ (INT-4/5/8.2 已删除) |
+| **合计** | | **89** | **80** (含 4 集成 INT-8.3 保留) → 实际 **76** | ✅ 全部通过 |
 
 ---
 
@@ -391,18 +381,27 @@ virs-types/
 
 | # | 问题 | 类型 | 修复 |
 |---|------|------|------|
-| 1 | 大量派生计算散落在业务代码中 | 可维护性 | 抽取 45 个幂等方法到类型定义中 |
+| 1 | 大量派生计算散落在业务代码中 | 可维护性 | 抽取幂等方法到类型定义中 |
 | 2 | 11 个结构体缺少 `PartialEq` | 测试需求 | 添加 `#[derive(PartialEq)]` |
-| 3 | `RiskConfig` 验证逻辑分散在 `RiskChecker` 中 | 可维护性 | 抽取 `validate()` 方法到 `RiskConfig` |
+| 3 | `RiskConfig` 验证逻辑分散在 `RiskChecker` 中 | 可维护性 | 抽取 `validate()` 方法到 `RiskConfig`，并在 `RiskChecker::new` 中调用 |
 | 4 | `Side` × `PositionSide` 组合判断重复出现 | 可维护性 | 抽取 `is_opening_for` / `is_closing_for` |
-| 5 | `Balance::compute_total` 在 2 处内联计算 | 可维护性 | 抽取为方法 |
-| 6 | `PaginationParams::normalize` 已定义但未被业务代码使用 | 孤儿代码 | 保留，供 API handler 后续重构使用 |
-| 7 | `MarketType::from_str_lossy` 已定义但未被业务代码使用 | 孤儿代码 | 保留，供未来使用 (测试已覆盖) |
-| 8 | 所有数值方法均含除零保护 | 健壮性 | `size==0`, `amount==0`, `margin==0`, `cost==0` |
+| 5 | `Balance::compute_total` 在 2 处内联计算 | 可维护性 | 抽取为方法，已重构 `paper.rs` / `binance/api.rs` 调用 |
+| 6 | `PaginationParams::normalize` 已定义但未被业务代码使用 | 孤儿代码 | **已删除** 方法 (业务代码使用各自的 `TradesQuery` + 内联 clamp) |
+| 7 | `MarketType::from_str_lossy` 已定义但未被业务代码使用 | 孤儿代码 | **已删除** 方法及测试 |
+| 8 | `OrderStatus::is_terminal` / `Ticker::mid_price` / `Ticker::spread` / `OrderBook::best_bid` / `best_ask` / `spread` / `mid_price` / `ApiResponse::ok_with_message` 仅测试引用 | 孤儿代码 | **已删除** 方法及对应测试 |
+| 9 | `PositionStatus::is_open` / `OrderStatus::is_filled` / `EngineState::is_running` / `Position::unrealized_pnl_at` / `ExchangePosition::unrealized_pnl_at` / `AutoMarketType::is_spot` 等方法此前仅测试引用 (业务代码用内联判断) | 孤儿代码 | **已重构业务代码** 调用类型方法：`engine.rs`, `auto/worker.rs`, `auto/strategy.rs`, `paper.rs`, `binance/api.rs` |
+| 10 | 所有数值方法均含除零保护 | 健壮性 | `size==0`, `amount==0`, `margin==0`, `cost==0` |
 
 ### 7.5 孤儿代码检查
 
-- 所有新增 `pub fn` 方法均有对应的单元测试覆盖
-- `PaginationParams::normalize` 和 `MarketType::from_str_lossy` 为预定义方法，已有测试覆盖，可供业务代码后续重构使用
-- Clippy 检查通过，零警告，无死代码
-- 整个工作区编译通过
+- 所有保留的 `pub fn` 方法均有业务代码调用 (非仅测试引用)
+- 已删除的孤儿方法: `MarketType::from_str_lossy`, `OrderStatus::is_terminal`, `Ticker::mid_price`, `Ticker::spread`, `OrderBook::best_bid/best_ask/spread/mid_price`, `ApiResponse::ok_with_message`, `PaginationParams::normalize`
+- 业务代码已重构的方法调用位置:
+  - `virs-position/src/engine.rs`: `status.is_open()`, `status.is_filled()`, `state.is_running()`
+  - `virs-position/src/risk.rs`: `RiskChecker::new` 调用 `config.validate()`
+  - `virs-bot/src/auto/worker.rs`: `p.is_open()`, `bot.market_type.is_spot()`
+  - `virs-bot/src/auto/strategy.rs`: `position.unrealized_pnl_at()` (替代内联 Long/Short 计算)
+  - `virs-exchange/src/paper.rs`: `Balance::compute_total()`, `pos.unrealized_pnl_at()` (移除本地 `PaperPosition` 结构体，复用 `ExchangePosition`)
+  - `virs-ccxt/src/adapter/binance/api.rs`: `Balance::compute_total()`
+- Clippy 检查通过 (无新增警告)
+- 整个工作区编译通过，76 个测试全部通过

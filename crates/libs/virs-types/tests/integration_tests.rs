@@ -6,7 +6,6 @@
 use chrono::Utc;
 use uuid::Uuid;
 
-use virs_types::auto_port::AutoMarketType;
 use virs_types::enums::*;
 use virs_types::market::*;
 use virs_types::position::*;
@@ -70,50 +69,14 @@ fn int_3_1_exchange_position_pnl_chain() {
 // ============================================================
 // TC-INT-4: OrderBook derived calculations
 // ============================================================
-
-#[test]
-fn int_4_1_orderbook_with_data() {
-    let ob = OrderBook {
-        symbol: "BTC/USDT".into(),
-        bids: vec![(100.0, 1.0), (99.0, 2.0)],
-        asks: vec![(102.0, 1.0), (103.0, 2.0)],
-        timestamp: Utc::now(),
-    };
-    assert_eq!(ob.best_bid(), Some(100.0));
-    assert_eq!(ob.best_ask(), Some(102.0));
-    assert!((ob.spread().unwrap() - 2.0).abs() < 0.01);
-    assert!((ob.mid_price().unwrap() - 101.0).abs() < 0.01);
-}
-
-#[test]
-fn int_4_2_empty_orderbook() {
-    let ob = OrderBook {
-        symbol: "BTC/USDT".into(),
-        bids: vec![], asks: vec![],
-        timestamp: Utc::now(),
-    };
-    assert_eq!(ob.best_bid(), None);
-    assert_eq!(ob.best_ask(), None);
-    assert_eq!(ob.spread(), None);
-    assert_eq!(ob.mid_price(), None);
-}
+// Removed: OrderBook::best_bid/best_ask/spread/mid_price were orphan methods
+// (only used in tests, no business consumer). Tests deleted alongside the methods.
 
 // ============================================================
 // TC-INT-5: Ticker derived calculations
 // ============================================================
-
-#[test]
-fn int_5_1_ticker_derivatives() {
-    let ticker = Ticker {
-        symbol: "BTC/USDT".into(), exchange: "binance".into(),
-        bid: 99.0, ask: 101.0, last: 100.0,
-        high_24h: 110.0, low_24h: 90.0, volume_24h: 1000.0,
-        price_change_24h: 5.0, price_change_pct_24h: 5.0,
-        timestamp: Utc::now(),
-    };
-    assert!((ticker.mid_price() - 100.0).abs() < 0.01);
-    assert!((ticker.spread() - 2.0).abs() < 0.01);
-}
+// Removed: Ticker::mid_price/spread were orphan methods (only used in tests,
+// no business consumer). Tests deleted alongside the methods.
 
 // ============================================================
 // TC-INT-6: RiskConfig validation chain
@@ -168,16 +131,13 @@ fn int_8_1_exchange_position_serde_then_pnl() {
     assert!((de.unrealized_pnl_at(52000.0) - original_pnl).abs() < 0.01);
 }
 
-#[test]
-fn int_8_2_market_type_from_str_roundtrip() {
-    let mt = MarketType::from_str_lossy("perpetual");
-    let json = serde_json::to_string(&mt).unwrap();
-    let de: MarketType = serde_json::from_str(&json).unwrap();
-    assert_eq!(de, MarketType::Perpetual);
-}
+// Removed: int_8_2 used orphan method MarketType::from_str_lossy (no business
+// consumer). int_8_3 (AutoMarketType::from_str_lossy) restored below — used by
+// virs-app::adapters::auto_store.
 
 #[test]
 fn int_8_3_auto_market_type_from_str() {
+    use virs_types::auto_port::AutoMarketType;
     assert!(AutoMarketType::from_str_lossy("perpetual").is_perpetual());
     assert!(AutoMarketType::from_str_lossy("spot").is_spot());
 }

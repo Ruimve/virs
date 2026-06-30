@@ -48,6 +48,9 @@ pub struct RiskChecker {
 
 impl RiskChecker {
     pub fn new(config: RiskConfig) -> Self {
+        if let Err(msg) = config.validate() {
+            tracing::warn!("RiskConfig validation failed: {}", msg);
+        }
         Self {
             config,
             consecutive_losses: 0,
