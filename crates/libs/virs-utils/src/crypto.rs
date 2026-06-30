@@ -53,3 +53,25 @@ pub fn derive_key(secret: &str) -> [u8; 32] {
     key.copy_from_slice(&result);
     key
 }
+
+/// Hash a password using bcrypt.
+pub fn hash_password(password: &str) -> anyhow::Result<String> {
+    Ok(bcrypt::hash(password, bcrypt::DEFAULT_COST)?)
+}
+
+/// Verify a password against a bcrypt hash.
+pub fn verify_password(password: &str, hash: &str) -> bool {
+    bcrypt::verify(password, hash).unwrap_or(false)
+}
+
+/// Encrypt a string using a secret string (derives key internally).
+pub fn encrypt_with_key(plaintext: &str, secret: &str) -> anyhow::Result<String> {
+    let key = derive_key(secret);
+    encrypt(plaintext, &key)
+}
+
+/// Decrypt a string using a secret string (derives key internally).
+pub fn decrypt_with_key(encoded: &str, secret: &str) -> anyhow::Result<String> {
+    let key = derive_key(secret);
+    decrypt(encoded, &key)
+}

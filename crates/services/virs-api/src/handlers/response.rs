@@ -52,22 +52,13 @@ pub fn extract_user_id(
     };
 
     let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "virs-secret-key".to_string());
-    let decoded = jsonwebtoken::decode::<serde_json::Value>(
-        token,
-        &jsonwebtoken::DecodingKey::from_secret(secret.as_bytes()),
-        &jsonwebtoken::Validation::default(),
-    );
-
-    match decoded {
-        Ok(data) => {
-            let user_id = data.claims["sub"].as_str().unwrap_or("");
-            uuid::Uuid::parse_str(user_id).map_err(|_| {
-                (
-                    StatusCode::UNAUTHORIZED,
-                    Json(ApiResponse::err("Invalid user ID in token")),
-                )
-            })
-        }
+    match virs_utils::auth::decode_jwt(token, &secret) {
+        Ok(claims) => uuid::Uuid::parse_str(&claims.sub).map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(ApiResponse::err("Invalid user ID in token")),
+            )
+        }),
         Err(_) => Err((
             StatusCode::UNAUTHORIZED,
             Json(ApiResponse::err("Invalid token")),

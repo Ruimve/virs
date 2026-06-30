@@ -456,16 +456,15 @@ impl EngineManager for AppEngineManager {
         .await
         .unwrap_or_default();
 
-        let derived_key = virs_utils::crypto::derive_key(&self.encryption_key);
         for (exchange, enc_key, enc_secret, enc_passphrase) in &rows {
-            let api_key = match virs_utils::crypto::decrypt(enc_key, &derived_key) {
+            let api_key = match virs_utils::crypto::decrypt_with_key(enc_key, &self.encryption_key) {
                 Ok(k) => k,
                 Err(e) => {
                     tracing::warn!(exchange, "Failed to decrypt API key: {}", e);
                     continue;
                 }
             };
-            let api_secret = match virs_utils::crypto::decrypt(enc_secret, &derived_key) {
+            let api_secret = match virs_utils::crypto::decrypt_with_key(enc_secret, &self.encryption_key) {
                 Ok(k) => k,
                 Err(e) => {
                     tracing::warn!(exchange, "Failed to decrypt API secret: {}", e);
@@ -474,7 +473,7 @@ impl EngineManager for AppEngineManager {
             };
             let passphrase = enc_passphrase
                 .as_ref()
-                .and_then(|p| virs_utils::crypto::decrypt(p, &derived_key).ok());
+                .and_then(|p| virs_utils::crypto::decrypt_with_key(p, &self.encryption_key).ok());
 
             // Try both market types (perpetual first, then spot)
             for mt_str in &["perpetual", "spot"] {

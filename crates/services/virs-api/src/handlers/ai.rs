@@ -177,8 +177,7 @@ async fn call_llm_with_fallback(
 
     let (api_key, base_url, model) = match row {
         Some((provider, encrypted_key)) => {
-            let derived_key = virs_utils::crypto::derive_key(&state.encryption_key);
-            let decrypted_key = virs_utils::crypto::decrypt(&encrypted_key, &derived_key)
+            let decrypted_key = virs_utils::crypto::decrypt_with_key(&encrypted_key, &state.encryption_key)
                 .map_err(|e| anyhow::anyhow!("Decryption error: {}", e))?;
 
             let resolved_base_url = match provider.as_str() {

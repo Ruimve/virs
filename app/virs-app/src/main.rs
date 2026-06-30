@@ -87,7 +87,7 @@ async fn main() -> Result<()> {
             .await?;
 
     let admin_id: Uuid = if !admin_exists {
-        let password_hash = bcrypt::hash(&config.admin.password, bcrypt::DEFAULT_COST)?;
+        let password_hash = virs_utils::crypto::hash_password(&config.admin.password)?;
         let row: (Uuid,) = sqlx::query_as(
             "INSERT INTO qd_users (username, password_hash, role, is_active) VALUES ($1, $2, 'admin', true) RETURNING id",
         )

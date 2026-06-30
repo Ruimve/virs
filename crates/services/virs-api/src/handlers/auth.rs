@@ -64,7 +64,7 @@ pub async fn login(
         ));
     }
 
-    let valid = bcrypt::verify(&req.password, &password_hash).unwrap_or(false);
+    let valid = virs_utils::crypto::verify_password(&req.password, &password_hash);
     if !valid {
         return Err((
             StatusCode::UNAUTHORIZED,
@@ -79,22 +79,13 @@ pub async fn login(
         .and_then(|v| v.parse().ok())
         .unwrap_or(24);
 
-    let now = chrono::Utc::now().timestamp();
-    let claims = serde_json::json!({
-        "sub": id.to_string(),
-        "username": username,
-        "role": role,
-        "exp": now + expiration_hours * 3600,
-        "iat": now,
-    });
-
-    let header = jsonwebtoken::Header::default();
-    let token = jsonwebtoken::encode(
-        &header,
-        &claims,
-        &jsonwebtoken::EncodingKey::from_secret(secret.as_bytes()),
-    )
-    .map_err(|e| {
+    let claims = virs_utils::auth::Claims::new(
+        &id.to_string(),
+        &username,
+        &role,
+        expiration_hours * 3600,
+    );
+    let token = virs_utils::auth::encode_jwt(&claims, &secret).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::err(format!("JWT error: {}", e))),

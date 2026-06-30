@@ -68,21 +68,22 @@ pub async fn save_credential(
     let id = uuid::Uuid::new_v4();
 
     // Encrypt sensitive fields with AES-256-GCM
-    let derived_key = virs_utils::crypto::derive_key(&state.encryption_key);
-    let encrypted_api_key = virs_utils::crypto::encrypt(api_key, &derived_key).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::err(format!("Encryption error: {}", e))),
-        )
-    })?;
-    let encrypted_secret = virs_utils::crypto::encrypt(api_secret, &derived_key).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::err(format!("Encryption error: {}", e))),
-        )
-    })?;
+    let encrypted_api_key =
+        virs_utils::crypto::encrypt_with_key(api_key, &state.encryption_key).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::err(format!("Encryption error: {}", e))),
+            )
+        })?;
+    let encrypted_secret =
+        virs_utils::crypto::encrypt_with_key(api_secret, &state.encryption_key).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::err(format!("Encryption error: {}", e))),
+            )
+        })?;
     let encrypted_passphrase = passphrase
-        .map(|p| virs_utils::crypto::encrypt(p, &derived_key))
+        .map(|p| virs_utils::crypto::encrypt_with_key(p, &state.encryption_key))
         .transpose()
         .map_err(|e| {
             (

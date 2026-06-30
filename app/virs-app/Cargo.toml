@@ -30,7 +30,6 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
-bcrypt = { workspace = true }
 
 [lints]
 workspace = true

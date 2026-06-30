@@ -57,7 +57,7 @@ pub async fn create_user(
         ));
     }
 
-    let password_hash = bcrypt::hash(password, bcrypt::DEFAULT_COST).map_err(|e| {
+    let password_hash = virs_utils::crypto::hash_password(password).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::err(format!("Hash error: {}", e))),
