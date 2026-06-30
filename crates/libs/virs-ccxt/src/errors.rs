@@ -50,32 +50,10 @@ pub enum ExchangeError {
 }
 
 impl ExchangeError {
-    /// Create an exchange-specific error from a code and message.
-    pub fn exchange(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self::ExchangeError {
-            code: code.into(),
-            message: message.into(),
-        }
-    }
-
     /// Create a "no data available" error — used when the exchange returns
     /// empty results and we must NOT return mock/fake data.
     pub fn no_data(context: String) -> Self {
         Self::NoData(context)
-    }
-
-    /// Check if this error is retryable (network, rate limit, internal).
-    pub fn is_retryable(&self) -> bool {
-        matches!(
-            self,
-            ExchangeError::Network(_)
-                | ExchangeError::RateLimited(_)
-                | ExchangeError::Internal(_)
-                | ExchangeError::Http {
-                    status: 429 | 500 | 502 | 503 | 504,
-                    ..
-                }
-        )
     }
 }
 

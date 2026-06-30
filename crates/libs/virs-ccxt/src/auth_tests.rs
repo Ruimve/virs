@@ -1,10 +1,10 @@
 //! Unit tests for auth.rs signing functions.
 //!
-//! Covers: hmac_sha256_hex, hmac_sha256_base64, make_header, insert_header.
+//! Covers: hmac_sha256_hex, make_header, insert_header.
 
 use reqwest::header::{HeaderMap, HeaderValue};
 
-use crate::auth::{hmac_sha256_base64, hmac_sha256_hex, insert_header, make_header};
+use crate::auth::{hmac_sha256_hex, insert_header, make_header};
 
 // ============================================================
 // TC-A1: hmac_sha256_hex
@@ -53,27 +53,6 @@ fn a1_5_hmac_sha256_hex_different_inputs() {
     let sig1 = hmac_sha256_hex("key1", "msg");
     let sig2 = hmac_sha256_hex("key2", "msg");
     assert_ne!(sig1, sig2);
-}
-
-// ============================================================
-// TC-A2: hmac_sha256_base64
-// ============================================================
-
-#[test]
-fn a2_1_hmac_sha256_base64_known_vector() {
-    let key = "NhqPtmdSJYdKjVHjA7PZj4Mge3R5YNiP1e3UZjInClVN65XAbvqqM6A7H5fATj0j";
-    let msg = "symbol=LTCBTC&side=BUY&type=LIMIT&timeInForce=GTC&quantity=1&price=0.1&recvWindow=5000&timestamp=1499827319559";
-    let sig = hmac_sha256_base64(key, msg);
-    // The hex is c8db56825ae71d6d79447849e617115f4a920fa2acdcab2b053c4b2838bd6b71
-    // Base64 of those bytes: yNtWglrnHW15RHhJ5hcRX0qSD6Ks3KsrBTxLKDi9a3E=
-    assert_eq!(sig, "yNtWglrnHW15RHhJ5hcRX0qSD6Ks3KsrBTxLKDi9a3E=");
-}
-
-#[test]
-fn a2_2_hmac_sha256_base64_idempotent() {
-    let sig1 = hmac_sha256_base64("key", "msg");
-    let sig2 = hmac_sha256_base64("key", "msg");
-    assert_eq!(sig1, sig2);
 }
 
 // ============================================================

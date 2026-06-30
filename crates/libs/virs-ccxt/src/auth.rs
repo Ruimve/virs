@@ -11,7 +11,6 @@
 //! - `adapter/okx/mod.rs` — OkxSigner  (TODO: future support)
 //! - `adapter/bybit/mod.rs` — BybitSigner (TODO: future support)
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use hmac::{Hmac, Mac};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use sha2::Sha256;
@@ -78,15 +77,6 @@ pub fn hmac_sha256_hex(secret: &str, message: &str) -> String {
     mac.update(message.as_bytes());
     let result = mac.finalize();
     hex::encode(result.into_bytes())
-}
-
-/// Compute HMAC-SHA256 and return Base64-encoded signature.
-pub fn hmac_sha256_base64(secret: &str, message: &str) -> String {
-    let mut mac =
-        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
-    mac.update(message.as_bytes());
-    let result = mac.finalize();
-    BASE64.encode(result.into_bytes())
 }
 
 /// Helper to create a header from static name and string value.

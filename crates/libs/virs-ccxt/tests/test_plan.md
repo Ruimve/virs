@@ -1,489 +1,216 @@
 # virs-ccxt 测试用例文档
 
-> 生成日期: 2026-06-29
+> 生成日期: 2026-06-30
 > Crate: `crates/libs/virs-ccxt`
-> 目标: 对 crate 内所有可提取的幂等/纯函数逻辑进行完整覆盖，并为关键业务路径编写集成测试。
-> 状态: **全部 190 个测试通过** (165 单元 + 25 集成)
+> 状态: **163 个测试全部通过** (144 单元 + 19 集成)
 
 ---
 
-## 1. Crate 结构概览
+## 单元测试用例
 
-```
-virs-ccxt/
-├── src/
-│   ├── lib.rs                      # Exchange trait, ExchangeClient, parse_* 辅助函数, URL/签名脱敏
-│   ├── auth.rs                     # Signer trait, HMAC-SHA256 签名辅助函数
-│   ├── errors.rs                   # ExchangeError 枚举, is_retryable()
-│   ├── types.rs                    # CCXT 内部类型定义 + From 转换实现
-│   ├── ws_types.rs                 # WebSocket 事件类型定义
-│   └── adapter/
-│       ├── mod.rs                  # adapter 模块入口
-│       └── binance/
-│           ├── mod.rs              # BinanceExchange, BinanceSigner, BinanceEd25519Signer, 符号/状态/类型映射
-│           ├── api.rs              # /api/v3 Spot REST (ticker, klines, orders...)
-│           ├── fapi.rs             # /fapi/v1 永续 REST (ticker, klines, orders, positions, funding...)
-│           ├── sapi.rs             # /sapi/v1 账户 API (apiRestrictions)
-│           ├── kline_ws.rs         # Kline WebSocket 客户端 (已有内联测试)
-│           ├── order_ws.rs         # 订单 User Data Stream WS 客户端 (已有内联测试)
-│           ├── orderbook_ws.rs     # OrderBook WebSocket 客户端
-│           └── ws_api.rs           # WebSocket API 客户端 (Ed25519 认证)
-├── tests/
-│   ├── test_plan.md                # 本文档
-│   └── integration_tests.rs        # 集成测试
-```
+### lib_tests.rs — lib.rs 工具函数 (28)
 
----
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| L1.1 | `l1_1_parse_f64_from_number` | 数字类型字段 → f64 |
+| L1.2 | `l1_2_parse_f64_from_string` | 字符串字段 → f64 |
+| L1.3 | `l1_3_parse_f64_missing_field` | 字段不存在 → None |
+| L1.4 | `l1_4_parse_f64_null_field` | null 字段 → None |
+| L1.5 | `l1_5_parse_f64_invalid_string` | 无效字符串 → None |
+| L1.6 | `l1_6_parse_f64_from_integer` | 整数字段 → f64 |
+| L2.1 | `l2_1_parse_str_from_string` | 字符串字段 → String |
+| L2.2 | `l2_2_parse_str_from_i64` | i64 字段 → String |
+| L2.3 | `l2_3_parse_str_from_f64` | f64 字段 → String |
+| L2.4 | `l2_4_parse_str_missing_field` | 字段不存在 → None |
+| L4.1 | `l4_1_parse_u32_from_u64` | u64 字段 → u32 |
+| L4.2 | `l4_2_parse_u32_from_string` | 字符串数字 → u32 |
+| L4.3 | `l4_3_parse_u32_missing_field` | 字段不存在 → None |
+| L5.1 | `l5_1_build_display_url_no_params` | 无参数 → 仅 path |
+| L5.2 | `l5_2_build_display_url_with_params` | 普通参数 → path?key=value |
+| L5.3 | `l5_3_build_display_url_masks_signature` | signature 参数被脱敏 |
+| L5.4 | `l5_4_build_display_url_empty_params` | 空参数迭代器 → 仅 path |
+| L6.1 | `l6_1_mask_signature_basic` | signature= 被脱敏 |
+| L6.2 | `l6_2_mask_signature_with_trailing_params` | 仅脱敏 signature，保留后续参数 |
+| L6.3 | `l6_3_mask_signature_no_signature` | 无 signature= → 原样返回 |
+| L6.4 | `l6_4_mask_signature_multiple_signatures` | 多个 signature= → 仅脱敏第一个 |
+| L7.1 | `l7_1_extract_error_msg_with_code` | msg + code → "[code] msg" |
+| L7.2 | `l7_2_extract_error_msg_only` | 仅 msg → msg |
+| L7.3 | `l7_3_extract_error_bybit_format` | retMsg + retCode → Bybit 格式 |
+| L7.4 | `l7_4_extract_error_error_field` | error 字段 |
+| L7.5 | `l7_5_extract_error_message_field` | message 字段 |
+| L7.6 | `l7_6_extract_error_detail_field` | detail 字段 |
+| L7.7 | `l7_7_extract_error_no_matching_field` | 无匹配 → JSON 字符串 |
 
-## 2. 幂等函数清单
+### auth_tests.rs — 签名函数 (9)
 
-以下函数为**纯函数或幂等函数**（相同输入永远产生相同输出，无副作用），是单元测试的核心目标。
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| A1.1 | `a1_1_hmac_sha256_hex_known_vector` | 已知输入 → 预期 hex 签名 |
+| A1.2 | `a1_2_hmac_sha256_hex_empty_message` | 空消息 → 有效 hex |
+| A1.3 | `a1_3_hmac_sha256_hex_empty_key` | 空密钥 → 有效 hex |
+| A1.4 | `a1_4_hmac_sha256_hex_idempotent` | 相同输入 → 相同输出 |
+| A1.5 | `a1_5_hmac_sha256_hex_different_inputs` | 不同输入 → 不同输出 |
+| A3.1 | `a3_1_make_header_valid_ascii` | 合法 ASCII → Ok(HeaderValue) |
+| A3.2 | `a3_2_make_header_invalid_chars` | 非法字符 → Err |
+| A4.1 | `a4_1_insert_header_success` | 插入合法 header |
+| A4.2 | `a4_2_insert_header_invalid_value` | 非法值 → Err，HeaderMap 不变 |
 
-### 2.1 lib.rs — 解析与工具函数
+### errors_tests.rs — 错误类型 (1)
 
-| # | 函数 | 签名 | 幂等 | 说明 |
-|---|------|------|------|------|
-| L1 | `parse_f64` | `(v: &Value, field: &str) -> Option<f64>` | 是 | 从 JSON Value 解析 f64，支持数字和字符串 |
-| L2 | `parse_str` | `(v: &Value, field: &str) -> Option<String>` | 是 | 从 JSON Value 解析 String，支持 str/i64/f64 |
-| L3 | `parse_i64` | `(v: &Value, field: &str) -> Option<i64>` | 是 | 从 JSON Value 解析 i64，支持数字和字符串 |
-| L4 | `parse_u32` | `(v: &Value, field: &str) -> Option<u32>` | 是 | 从 JSON Value 解析 u32，支持数字和字符串 |
-| L5 | `build_display_url` | `(path: &str, params: Iterator) -> String` | 是 | 构建 URL 字符串，脱敏 signature 参数 |
-| L6 | `mask_signature` | `(s: &str) -> String` | 是 | 脱敏 URL 编码 body 中的 signature= 字段 |
-| L7 | `extract_error_message` | `(json: &Value) -> String` | 是 | 从交易所错误 JSON 提取消息，支持 msg/retMsg/error/message/detail |
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| E2.1 | `e2_1_no_data_construction` | no_data 构造 → 消息正确 |
 
-### 2.2 auth.rs — 签名辅助函数
+### types_tests.rs — 类型转换 (14)
 
-| # | 函数 | 签名 | 幂等 | 说明 |
-|---|------|------|------|------|
-| A1 | `hmac_sha256_hex` | `(secret: &str, message: &str) -> String` | 是 | HMAC-SHA256 十六进制签名 |
-| A2 | `hmac_sha256_base64` | `(secret: &str, message: &str) -> String` | 是 | HMAC-SHA256 Base64 签名 |
-| A3 | `make_header` | `(name: &'static str, value: &str) -> Result<HeaderValue>` | 是 | 创建 HTTP HeaderValue |
-| A4 | `insert_header` | `(headers: &mut HeaderMap, name, value) -> Result<()>` | 是 | 向 HeaderMap 插入 header |
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| T1.1 | `t1_1_open_to_open` | Open → Open |
+| T1.2 | `t1_2_partially_filled` | PartiallyFilled → PartiallyFilled |
+| T1.3 | `t1_3_filled` | Filled → Filled |
+| T1.4 | `t1_4_canceled` | Canceled → Canceled |
+| T1.5 | `t1_5_expired_maps_to_canceled` | Expired → Canceled |
+| T1.6 | `t1_6_failed` | Failed → Failed |
+| T1.7 | `t1_7_rejected_maps_to_failed` | Rejected → Failed |
+| T2.1 | `t2_1_ticker_all_fields` | 所有字段有值 → 正确转换 |
+| T2.2 | `t2_2_ticker_none_fields_default_to_zero` | None 字段 → 0.0 |
+| T2.3 | `t2_3_ticker_timestamp_none_uses_now` | timestamp None → 当前时间 |
+| T3.1 | `t3_1_order_book_normal` | 正常转换 → bids/asks 保留 |
+| T3.2 | `t3_2_order_book_timestamp_none` | timestamp None → 当前时间 |
+| T4.1 | `t4_1_funding_rate_normal` | 正常转换 |
+| T5.1 | `t5_1_funding_history_normal` | 正常转换 |
 
-### 2.3 errors.rs — 错误类型
+### adapter/binance/mod_tests.rs — Binance 映射函数 (43)
 
-| # | 函数 | 签名 | 幂等 | 说明 |
-|---|------|------|------|------|
-| E1 | `ExchangeError::exchange` | `(code, message) -> Self` | 是 | 构造 ExchangeError 变体 |
-| E2 | `ExchangeError::no_data` | `(context: String) -> Self` | 是 | 构造 NoData 错误 |
-| E3 | `ExchangeError::is_retryable` | `(&self) -> bool` | 是 | 判断错误是否可重试 |
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| B1.1 | `b1_1_native_symbol_with_slash` | BTC/USDT → BTCUSDT |
+| B1.2 | `b1_2_native_symbol_with_dash` | BTC-USDT → BTCUSDT |
+| B1.3 | `b1_3_native_symbol_already_native` | BTCUSDT → BTCUSDT |
+| B1.4 | `b1_4_native_symbol_eth_usdc` | ETH/USDC → ETHUSDC |
+| B1.5 | `b1_5_native_symbol_empty` | 空字符串 → 空字符串 |
+| B2.1 | `b2_1_unified_symbol_usdt` | BTCUSDT → BTC/USDT |
+| B2.2 | `b2_2_unified_symbol_usdc` | ETHUSDC → ETH/USDC |
+| B2.3 | `b2_3_unified_symbol_btc` | BNBBTC → BNB/BTC |
+| B2.4 | `b2_4_unified_symbol_busd` | BTCBUSD → BTC/BUSD |
+| B2.5 | `b2_5_unified_symbol_unknown_quote` | 未知报价货币 → 原样返回 |
+| B2.6 | `b2_6_unified_symbol_only_quote` | 仅报价货币 → 原样返回 |
+| B3.1–B3.9 | `b3_*` | parse_order_status: NEW/PARTIALLY_FILLED/FILLED/CANCELED/CANCELLED/EXPIRED/REJECTED/PENDING_CANCEL/未知 |
+| B4.1–B4.8 | `b4_*` | parse_order_type: MARKET/LIMIT/STOP_MARKET/STOP_LOSS/STOP_LOSS_LIMIT/TAKE_PROFIT_LIMIT/TAKE_PROFIT_MARKET/未知 |
+| B5.1 | `b5_1_side_buy` | Side::Buy → "BUY" |
+| B5.2 | `b5_2_side_sell` | Side::Sell → "SELL" |
+| B6.1–B6.5 | `b6_*` | order_type_str: Market/Limit/StopMarket/StopLimit/TakeProfitMarket |
+| B7.1 | `b7_1_ed25519_pem` | PEM 格式密钥 → Ok |
+| B7.2 | `b7_2_ed25519_seed` | 32 字节 base64 seed → Ok |
+| B7.3 | `b7_3_ed25519_wrong_length` | 非 32 字节 base64 → Err |
+| B7.4 | `b7_4_ed25519_not_base64` | 非 base64 → HMAC fallback |
+| F1.* | `f1_*` | parse_order_book_side 解析测试 |
 
-### 2.4 types.rs — 类型转换 (From impls)
+### adapter/binance/orderbook_ws_tests.rs — OrderBook WS 解析 (18)
 
-| # | 实现 | 幂等 | 说明 |
-|---|------|------|------|
-| T1 | `From<CcxtOrderStatus> for OrderStatus` | 是 | CCXT 订单状态 → 应用层订单状态 |
-| T2 | `From<CcxtTicker> for Ticker` | 是 | CCXT Ticker → 应用层 Ticker (None → 0.0) |
-| T3 | `From<CcxtOrderBook> for OrderBook` | 是 | CCXT OrderBook → 应用层 OrderBook |
-| T4 | `From<CcxtFundingRate> for FundingRate` | 是 | CCXT 资金费率 → 应用层资金费率 |
-| T5 | `From<CcxtFundingHistoryEntry> for FundingHistoryEntry` | 是 | CCXT 资金历史 → 应用层资金历史 |
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| W1.1–W1.5 | `w1_*` | parse_levels: 标准数组/数字/空数组/非数组/元素不足 |
+| W2.1–W2.5 | `w2_*` | to_levels: 正常/amount=0/amount<0/无效数字/空输入 |
+| W3.1–W3.3 | `w3_*` | parse_payload: Spot/Perpetual/缺少字段 |
+| W4.1–W4.5 | `w4_*` | into_depth: 组合流spot/组合流perp/单流spot/单流perp/无效消息 |
 
-### 2.5 adapter/binance/mod.rs — Binance 映射函数
+### adapter/binance/ws_api_tests.rs — WebSocket API (5)
 
-| # | 函数 | 签名 | 幂等 | 说明 |
-|---|------|------|------|------|
-| B1 | `to_native_symbol` | `(&str) -> String` | 是 | 统一符号 → Binance 原生符号 (BTC/USDT → BTCUSDT) |
-| B2 | `to_unified_symbol` | `(&str) -> String` | 是 | Binance 原生符号 → 统一符号 (BTCUSDT → BTC/USDT) |
-| B3 | `parse_order_status` | `(&str) -> CcxtOrderStatus` | 是 | Binance 订单状态字符串 → CcxtOrderStatus |
-| B4 | `parse_order_type` | `(&str) -> OrderType` | 是 | Binance 订单类型字符串 → OrderType |
-| B5 | `side_str` | `(&Side) -> &'static str` | 是 | Side 枚举 → Binance 字符串 (BUY/SELL) |
-| B6 | `order_type_str` | `(&OrderType) -> &'static str` | 是 | OrderType 枚举 → Binance 字符串 |
-| B7 | `try_build_ed25519` | `(api_key, api_secret) -> Result<BinanceEd25519Signer>` | 是 | 根据 secret 格式判断签名器类型 |
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| WA1.1 | `wa1_1_logon_method` | JSON 包含 method="session.logon" |
+| WA1.2 | `wa1_2_logon_params` | params 包含 apiKey/recvWindow/timestamp/signature |
+| WA1.3 | `wa1_3_logon_signature_nonempty` | signature 非空 |
+| WA1.4 | `wa1_4_logon_id_preserved` | 相同输入 → 相同签名 (幂等性) |
+| WA1.5 | `wa1_5_logon_different_api_keys` | 不同 API key → 不同签名 |
 
-### 2.6 adapter/binance/api.rs & fapi.rs — 共享解析函数
+### adapter/binance/kline_ws.rs — 内联测试 (11)
 
-| # | 函数 | 签名 | 幂等 | 说明 |
-|---|------|------|------|------|
-| F1 | `parse_order_book_side` | `(&Value, side: &str) -> Vec<(f64, f64)>` | 是 | 解析订单簿 bids/asks 数组 |
+| 测试函数 | 描述 |
+|---------|------|
+| `test_binance_ws_symbol_basic` | WS symbol 基础格式 |
+| `test_ws_symbol` | WS symbol 转换 |
+| `test_new_spot` | 现货 WS URL 构建 |
+| `test_new_perpetual` | 合约 WS URL 构建 |
+| `test_parse_binance_kline_message` | 解析组合流 kline 消息 |
+| `test_parse_binance_kline_message_without_stream` | 解析单流 kline 消息 |
+| `test_parse_non_kline_event` | 非 kline 事件解析 |
+| `test_parse_invalid_json` | 无效 JSON 处理 |
+| `test_to_candle_basic` | kline → candle 基础转换 |
+| `test_to_candle_invalid_numbers` | 无效数字处理 |
 
-> **重构说明**: `api.rs` 和 `fapi.rs` 各有一份完全相同的 `parse_order_book_side`，应提取到共享位置。
+### adapter/binance/order_ws.rs — 内联测试 (15)
 
-### 2.7 adapter/binance/orderbook_ws.rs — OrderBook WS 解析
-
-| # | 函数 | 签名 | 幂等 | 说明 |
-|---|------|------|------|------|
-| W1 | `parse_levels` | `(&Value) -> Option<Vec<[String; 2]>>` | 是 | 解析价格层级数组为 [price, amount] 对 |
-| W2 | `to_levels` | `(&[[String; 2]]) -> Vec<OrderBookLevel>` | 是 | 字符串对 → OrderBookLevel (过滤 amount<=0) |
-| W3 | `parse_payload` | `(&Value) -> Option<(bids, asks, sym, ts)>` | 是 | 解析 depth payload (spot bids/asks 或 perpetual b/a) |
-| W4 | `BinanceDepthMessage::into_depth` | `(self) -> Option<(bids, asks, stream, sym, ts)>` | 是 | 提取深度数据，兼容单流/组合流 + spot/perp |
-
-### 2.8 adapter/binance/ws_api.rs — WebSocket API
-
-| # | 函数 | 签名 | 幂等 | 说明 |
-|---|------|------|------|------|
-| WA1 | `build_session_logon_request` | `(&BinanceEd25519Signer, id) -> Result<Value, String>` | 半幂等 | 构造 session.logon 请求 (含时间戳，但签名逻辑可验证) |
-
----
-
-## 3. 单元测试用例
-
-### 3.1 lib_tests.rs — lib.rs 工具函数
-
-#### TC-L1: parse_f64
-- **L1.1** 数字类型字段 → 返回正确 f64
-- **L1.2** 字符串类型字段 → 解析为 f64
-- **L1.3** 字段不存在 → 返回 None
-- **L1.4** 字段为 null → 返回 None
-- **L1.5** 无效字符串 → 返回 None
-- **L1.6** 字段为整数 → 返回 f64
-
-#### TC-L2: parse_str
-- **L2.1** 字符串字段 → 返回 String
-- **L2.2** i64 字段 → 转为 String
-- **L2.3** f64 字段 → 转为 String
-- **L2.4** 字段不存在 → 返回 None
-
-#### TC-L3: parse_i64
-- **L3.1** i64 字段 → 返回正确值
-- **L3.2** 字符串数字 → 解析为 i64
-- **L3.3** 无效字符串 → 返回 None
-- **L3.4** 字段不存在 → 返回 None
-
-#### TC-L4: parse_u32
-- **L4.1** u64 字段 → 返回正确 u32
-- **L4.2** 字符串数字 → 解析为 u32
-- **L4.3** 字段不存在 → 返回 None
-
-#### TC-L5: build_display_url
-- **L5.1** 无参数 → 仅返回 path
-- **L5.2** 有普通参数 → path?key=value&key2=value2
-- **L5.3** 含 signature 参数 → signature 被脱敏为 ***MASKED***
-- **L5.4** 空参数迭代器 → 仅返回 path
-
-#### TC-L6: mask_signature
-- **L6.1** 含 signature= 的 body → signature 值被脱敏
-- **L6.2** signature= 后还有 & 参数 → 仅脱敏 signature 值，保留后续参数
-- **L6.3** 不含 signature= → 原样返回
-- **L6.4** 多个 signature= → 仅脱敏第一个
-
-#### TC-L7: extract_error_message
-- **L7.1** 含 msg + code → "[code] msg"
-- **L7.2** 仅含 msg → 返回 msg
-- **L7.3** 含 retMsg + retCode → "[retCode] retMsg" (Bybit 格式)
-- **L7.4** 含 error 字段 → 返回 error
-- **L7.5** 含 message 字段 → 返回 message
-- **L7.6** 含 detail 字段 → 返回 detail
-- **L7.7** 无匹配字段 → 返回 JSON 字符串
+| 测试函数 | 描述 |
+|---------|------|
+| `test_execution_report` | executionReport 解析 |
+| `test_order_trade_update` | ORDER_TRADE_UPDATE 解析 |
+| `test_order_trade_update_single_stream` | 单流 ORDER_TRADE_UPDATE |
+| `test_non_order_event` | 非订单事件 → None |
+| `test_to_ws_feed_event_order_update` | → WsFeedEvent::OrderUpdate |
+| `test_to_ws_feed_event_filled` | FILLED 状态转换 |
+| `test_to_ws_feed_event_canceled` | CANCELED 状态转换 |
+| `test_new_spot` | 现货 WS URL |
+| `test_new_perpetual` | 合约 WS URL |
+| `test_update_listen_key` | listenKey URL |
+| `test_parse_order_message_*` | 订单消息解析系列 |
 
 ---
 
-### 3.2 auth_tests.rs — 签名函数
+## 集成测试用例
 
-#### TC-A1: hmac_sha256_hex
-- **A1.1** 已知输入 → 与预期签名匹配 (RFC 4231 测试向量)
-- **A1.2** 空消息 → 返回有效 hex
-- **A1.3** 空密钥 → 返回有效 hex
-- **A1.4** 相同输入 → 相同输出 (幂等性)
-- **A1.5** 不同输入 → 不同输出
+### integration_tests.rs (19)
 
-#### TC-A2: hmac_sha256_base64
-- **A2.1** 已知输入 → 与预期签名匹配
-- **A2.2** 相同输入 → 相同输出 (幂等性)
-
-#### TC-A3: make_header
-- **A3.1** 合法 ASCII 值 → 返回 Ok(HeaderValue)
-- **A3.2** 包含非法字符 → 返回 Err
-
-#### TC-A4: insert_header
-- **A4.1** 插入合法 header → HeaderMap 包含该 header
-- **A4.2** 非法值 → 返回 Err，HeaderMap 不变
-
----
-
-### 3.3 errors_tests.rs — 错误类型
-
-#### TC-E1: ExchangeError::exchange
-- **E1.1** 构造 ExchangeError 变体 → code 和 message 正确
-
-#### TC-E2: ExchangeError::no_data
-- **E2.1** 构造 NoData 错误 → 消息正确
-
-#### TC-E3: is_retryable
-- **E3.1** Network → true
-- **E3.2** RateLimited → true
-- **E3.3** Internal → true
-- **E3.4** Http 429 → true
-- **E3.5** Http 500 → true
-- **E3.6** Http 502 → true
-- **E3.7** Http 503 → true
-- **E3.8** Http 504 → true
-- **E3.9** Http 400 → false
-- **E3.10** Http 401 → false
-- **E3.11** Authentication → false
-- **E3.12** InvalidRequest → false
-- **E3.13** OrderNotFound → false
-- **E3.14** NotSupported → false
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| INT-1.1 | `int_1_1_symbol_roundtrip_usdt` | BTC/USDT → BTCUSDT → BTC/USDT |
+| INT-1.2 | `int_1_2_symbol_roundtrip_usdc` | ETH-USDC → ETHUSDC → ETH/USDC |
+| INT-1.3 | `int_1_3_symbol_roundtrip_btc_pair` | BNB/BTC → BNBBTC → BNB/BTC |
+| INT-2.1 | `int_2_1_hmac_signature_deterministic` | HMAC 签名幂等性 |
+| INT-4.1 | `int_4_1_execution_report_to_ws_feed_event` | executionReport → WsFeedEvent |
+| INT-4.2 | `int_4_2_order_trade_update_to_ws_feed_event` | ORDER_TRADE_UPDATE → WsFeedEvent |
+| INT-4.3 | `int_4_3_non_order_event_returns_none` | 非订单事件 → None |
+| INT-5.1 | `int_5_1_create_exchange_binance_hmac` | Binance + HMAC 创建成功 |
+| INT-5.2 | `int_5_2_create_exchange_binance_ed25519` | Binance + Ed25519 创建成功 |
+| INT-5.3 | `int_5_3_create_exchange_bybit_not_supported` | Bybit → NotSupported |
+| INT-5.4 | `int_5_4_create_exchange_okx_not_supported` | OKX → NotSupported |
+| INT-5.5 | `int_5_5_create_exchange_case_insensitive` | 大写交易所名兼容 |
+| INT-6.1 | `int_6_1_ticker_json_to_ticker_via_parse` | ticker JSON → parse_f64 → CcxtTicker → Ticker |
+| INT-6.2 | `int_6_2_order_status_chain` | Binance 状态字符串 → CcxtOrderStatus → OrderStatus |
+| INT-6.3 | `int_6_3_order_status_expired_to_canceled_chain` | EXPIRED → Canceled → Canceled |
+| INT-7.1 | `int_7_1_order_type_roundtrip` | OrderType 往返转换 |
+| INT-7.2 | `int_7_2_side_roundtrip` | Side 往返转换 |
+| INT-8.1 | `int_8_1_parse_f64_used_in_ticker_conversion` | parse_f64 在 ticker 转换中使用 |
+| INT-8.3 | `int_8_3_parse_str_used_in_symbol` | parse_str 在 symbol 提取中使用 |
 
 ---
 
-### 3.4 types_tests.rs — 类型转换
+## 代码覆盖率
 
-#### TC-T1: CcxtOrderStatus → OrderStatus
-- **T1.1** Open → Open
-- **T1.2** PartiallyFilled → PartiallyFilled
-- **T1.3** Filled → Filled
-- **T1.4** Canceled → Canceled
-- **T1.5** Expired → Canceled (合并到 Canceled)
-- **T1.6** Failed → Failed
-- **T1.7** Rejected → Failed (合并到 Failed)
+### 测试文件与模块映射
 
-#### TC-T2: CcxtTicker → Ticker
-- **T2.1** 所有字段有值 → 正确转换
-- **T2.2** Optional 字段为 None → 默认 0.0
-- **T2.3** timestamp 为 None → 使用当前时间
-
-#### TC-T3: CcxtOrderBook → OrderBook
-- **T3.1** 正常转换 → bids/asks 保留
-- **T3.2** timestamp 为 None → 使用当前时间
-
-#### TC-T4: CcxtFundingRate → FundingRate
-- **T4.1** 正常转换 → rate 和 next_funding_time 保留
-
-#### TC-T5: CcxtFundingHistoryEntry → FundingHistoryEntry
-- **T5.1** 正常转换 → funding_time 和 rate 保留
-
----
-
-### 3.5 binance_mod_tests.rs — Binance 映射函数
-
-#### TC-B1: to_native_symbol
-- **B1.1** "BTC/USDT" → "BTCUSDT"
-- **B1.2** "BTC-USDT" → "BTCUSDT"
-- **B1.3** "BTCUSDT" → "BTCUSDT" (已是无分隔符)
-- **B1.4** "ETH/USDC" → "ETHUSDC"
-- **B1.5** 空字符串 → 空字符串
-
-#### TC-B2: to_unified_symbol
-- **B2.1** "BTCUSDT" → "BTC/USDT"
-- **B2.2** "ETHUSDC" → "ETH/USDC"
-- **B2.3** "BNBBTC" → "BNB/BTC"
-- **B2.4** "BTCBUSD" → "BTC/BUSD"
-- **B2.5** 未知报价货币 → 原样返回
-- **B2.6** 仅报价货币 (如 "USDT") → 原样返回 (base 为空)
-
-#### TC-B3: parse_order_status
-- **B3.1** "NEW" → Open
-- **B3.2** "PARTIALLY_FILLED" → PartiallyFilled
-- **B3.3** "FILLED" → Filled
-- **B3.4** "CANCELED" → Canceled
-- **B3.5** "CANCELLED" → Canceled (拼写变体)
-- **B3.6** "EXPIRED" → Canceled
-- **B3.7** "REJECTED" → Rejected
-- **B3.8** "PENDING_CANCEL" → Open
-- **B3.9** 未知状态 → Open (默认)
-
-#### TC-B4: parse_order_type
-- **B4.1** "MARKET" → Market
-- **B4.2** "LIMIT" → Limit
-- **B4.3** "STOP_MARKET" → StopMarket
-- **B4.4** "STOP_LOSS" → StopMarket
-- **B4.5** "STOP_LOSS_LIMIT" → StopLimit
-- **B4.6** "TAKE_PROFIT_LIMIT" → StopLimit
-- **B4.7** "TAKE_PROFIT_MARKET" → TakeProfitMarket
-- **B4.8** 未知类型 → Market (默认)
-
-#### TC-B5: side_str
-- **B5.1** Side::Buy → "BUY"
-- **B5.2** Side::Sell → "SELL"
-
-#### TC-B6: order_type_str
-- **B6.1** Market → "MARKET"
-- **B6.2** Limit → "LIMIT"
-- **B6.3** StopMarket → "STOP_MARKET"
-- **B6.4** StopLimit → "STOP_LIMIT"
-- **B6.5** TakeProfitMarket → "TAKE_PROFIT_MARKET"
-
-#### TC-B7: try_build_ed25519
-- **B7.1** PEM 格式密钥 → 返回 Ok(BinanceEd25519Signer)
-- **B7.2** 32 字节 base64 seed → 返回 Ok(BinanceEd25519Signer)
-- **B7.3** 非 32 字节 base64 → 返回 Err
-- **B7.4** 非 base64 字符串 → 返回 Err (HMAC fallback)
-
----
-
-### 3.6 orderbook_ws_tests.rs — OrderBook WS 解析
-
-#### TC-W1: parse_levels
-- **W1.1** 标准字符串数组 → 正确解析
-- **W1.2** 数字类型元素 → 转为字符串
-- **W1.3** 空数组 → 返回空 Vec
-- **W1.4** 非数组 Value → 返回 None
-- **W1.5** 元素少于 2 个 → 返回 None
-
-#### TC-W2: to_levels
-- **W2.1** 正常价格层级 → 正确转换
-- **W2.2** amount 为 0 → 过滤掉
-- **W2.3** amount 为负 → 过滤掉
-- **W2.4** 无效数字字符串 → 过滤掉
-- **W2.5** 空输入 → 空 Vec
-
-#### TC-W3: parse_payload
-- **W3.1** Spot 格式 (bids/asks) → 正确解析
-- **W3.2** Perpetual 格式 (b/a + s + E) → 正确解析
-- **W3.3** 缺少 bids/asks 和 b/a → 返回 None
-
-#### TC-W4: BinanceDepthMessage::into_depth
-- **W4.1** 组合流 spot 格式 → 正确提取
-- **W4.2** 组合流 perpetual 格式 → 正确提取
-- **W4.3** 单流 spot 格式 → 正确提取
-- **W4.4** 单流 perpetual 格式 → 正确提取
-- **W4.5** 无效消息 → 返回 None
-
----
-
-### 3.7 ws_api_tests.rs — WebSocket API
-
-#### TC-WA1: build_session_logon_request
-- **WA1.1** 返回的 JSON 包含 method="session.logon"
-- **WA1.2** params 包含 apiKey, recvWindow, timestamp, signature
-- **WA1.3** signature 非空
-- **WA1.4** 相同输入 (相同时间戳) → 相同签名 (幂等性)
-- **WA1.5** 不同 API key → 不同签名
-
----
-
-## 4. 集成测试用例
-
-集成测试位于 `tests/integration_tests.rs`，测试跨模块协作和端到端数据流。
-
-### TC-INT-1: 符号转换往返
-- **INT-1.1** `to_native_symbol("BTC/USDT")` → `to_unified_symbol(result)` == "BTC/USDT"
-- **INT-1.2** `to_native_symbol("ETH-USDC")` → `to_unified_symbol(result)` == "ETH/USDC"
-
-### TC-INT-2: 签名 → URL 构建 → 脱敏 全链路
-- **INT-2.1** HMAC 签名生成 → build_display_url 包含 signature → signature 被脱敏
-- **INT-2.2** HMAC 签名生成 → mask_signature 脱敏 body
-
-### TC-INT-3: 错误响应 → 错误提取 → is_retryable 判定
-- **INT-3.1** 429 HTTP 错误 JSON → extract_error_message → is_retryable == true
-- **INT-3.2** 400 HTTP 错误 JSON → extract_error_message → is_retryable == false
-
-### TC-INT-4: WS 消息解析 → WsFeedEvent 转换全链路
-- **INT-4.1** executionReport JSON → BinanceOrderMessage → to_ws_feed_event → WsFeedEvent::OrderUpdate
-- **INT-4.2** ORDER_TRADE_UPDATE JSON → BinanceOrderMessage → to_ws_feed_event → WsFeedEvent::OrderUpdate
-
-### TC-INT-5: Kline WS 消息 → Candle 转换全链路
-- **INT-5.1** 组合流 kline JSON → BinanceKlineMessage → into_kline_data → to_candle
-
-### TC-INT-6: OrderBook WS 消息 → WsOrderBookUpdate 全链路
-- **INT-6.1** 组合流 spot depth JSON → BinanceDepthMessage → into_depth → to_levels
-- **INT-6.2** 组合流 perpetual depth JSON → BinanceDepthMessage → into_depth → to_levels
-
-### TC-INT-7: create_exchange 工厂函数
-- **INT-7.1** "binance" + HMAC secret → 创建成功，ed25519_signer 为 None
-- **INT-7.2** "binance" + Ed25519 PEM → 创建成功，ed25519_signer 为 Some
-- **INT-7.3** "bybit" → 返回 NotSupported 错误
-- **INT-7.4** "okx" → 返回 NotSupported 错误
-
-### TC-INT-8: 类型转换链 (REST 响应模拟)
-- **INT-8.1** 模拟 ticker JSON → parse_f64 提取字段 → CcxtTicker 构造 → From<Ticker>
-- **INT-8.2** 模拟 order JSON → parse_str/parse_f64 提取 → CcxtOrderStatus → From<OrderStatus>
-
----
-
-## 5. 测试文件与模块映射
-
-| 测试文件 | 被测模块 | 测试用例数 |
-|----------|----------|-----------|
-| `src/lib_tests.rs` | lib.rs | 23 |
-| `src/auth_tests.rs` | auth.rs | 11 |
-| `src/errors_tests.rs` | errors.rs | 14 |
-| `src/types_tests.rs` | types.rs | 16 |
-| `src/adapter/binance/mod_tests.rs` | adapter/binance/mod.rs | 28 |
+| 测试文件 | 被测模块 | 测试数 |
+|----------|----------|--------|
+| `src/lib_tests.rs` | lib.rs | 28 |
+| `src/auth_tests.rs` | auth.rs | 9 |
+| `src/errors_tests.rs` | errors.rs | 1 |
+| `src/types_tests.rs` | types.rs | 14 |
+| `src/adapter/binance/mod_tests.rs` | adapter/binance/mod.rs | 43 |
 | `src/adapter/binance/orderbook_ws_tests.rs` | orderbook_ws.rs | 18 |
 | `src/adapter/binance/ws_api_tests.rs` | ws_api.rs | 5 |
-| `tests/integration_tests.rs` | 跨模块 | 16 |
-| **合计** | | **131** |
+| `src/adapter/binance/kline_ws.rs` (内联) | kline_ws.rs | 11 |
+| `src/adapter/binance/order_ws.rs` (内联) | order_ws.rs | 15 |
+| `tests/integration_tests.rs` | 跨模块 | 19 |
+| **合计** | | **163** |
 
-> 注: `kline_ws.rs` 和 `order_ws.rs` 已有内联测试 (共约 25 个)，不重复编写。
+### 死代码清理记录
 
----
+| 已删除函数/方法 | 位置 | 删除原因 |
+|----------------|------|---------|
+| `parse_i64` | lib.rs | 零生产调用，零外部引用，仅被测试引用 |
+| `hmac_sha256_base64` | auth.rs | 零生产调用，零外部引用，仅被测试引用 |
+| `ExchangeError::exchange()` | errors.rs | 零生产调用，零外部引用，仅被测试引用 |
+| `ExchangeError::is_retryable()` | errors.rs | 零生产调用，零外部引用，仅被测试引用 |
 
-## 6. 重构需求
-
-### 6.1 提取 `parse_order_book_side` 到共享位置
-
-`api.rs` 和 `fapi.rs` 各有一份完全相同的 `parse_order_book_side` 函数。应提取到 `adapter/binance/mod.rs` 或单独的 `adapter/binance/shared.rs` 模块中，避免代码重复。
-
-### 6.2 公开测试所需函数
-
-部分函数当前为私有 (`fn` 而非 `pub fn`)，需要提升可见性以供 `_tests` 文件引用:
-- `lib.rs`: `build_display_url`, `mask_signature`, `extract_error_message` → `pub(crate)`
-- `orderbook_ws.rs`: `parse_levels`, `to_levels`, `parse_payload`, `BinanceDepthMessage` → `pub(crate)`
-- `ws_api.rs`: `build_session_logon_request` → `pub(crate)`
-
-### 6.3 `_tests` 文件模式
-
-每个测试文件以 `_tests.rs` 后缀命名，通过 `#[cfg(test)] mod xxx_tests;` 在父模块中引入，保持源文件与测试文件分离。
-
----
-
-## 7. 测试用例与文档对比审查报告
-
-### 7.1 数量对比
-
-| 测试文件 | 文档计划 | 实际实现 | 差异 | 状态 |
-|----------|---------|---------|------|------|
-| `lib_tests.rs` | 23 | 32 | +9 | ✅ 超额完成 |
-| `auth_tests.rs` | 11 | 11 | 0 | ✅ 完全匹配 |
-| `errors_tests.rs` | 14 | 16 | +2 | ✅ 超额完成 |
-| `types_tests.rs` | 16 | 14 | -2 | ✅ 略少 (合并部分用例) |
-| `mod_tests.rs` | 28 | 43 | +15 | ✅ 超额完成 |
-| `orderbook_ws_tests.rs` | 18 | 18 | 0 | ✅ 完全匹配 |
-| `ws_api_tests.rs` | 5 | 5 | 0 | ✅ 完全匹配 |
-| `integration_tests.rs` | 16 | 25 | +9 | ✅ 超额完成 |
-| 已有内联测试 (kline_ws + order_ws) | — | 25 | — | ✅ 已修复 (+1 ORDER_TRADE_UPDATE 单流测试) |
-| **合计** | **131** | **190** | **+59** | ✅ 全部通过 |
-
-### 7.2 文档中每个测试用例的实现状态
-
-所有文档中列出的测试用例 ID 均已实现并通过：
-
-- **TC-L1 ~ TC-L7** (lib_tests.rs): ✅ 全部实现
-- **TC-A1 ~ TC-A4** (auth_tests.rs): ✅ 全部实现
-- **TC-E1 ~ TC-E3** (errors_tests.rs): ✅ 全部实现
-- **TC-T1 ~ TC-T5** (types_tests.rs): ✅ 全部实现
-- **TC-B1 ~ TC-B7** (mod_tests.rs): ✅ 全部实现
-- **TC-F1** (mod_tests.rs - parse_order_book_side): ✅ 全部实现
-- **TC-W1 ~ TC-W4** (orderbook_ws_tests.rs): ✅ 全部实现
-- **TC-WA1** (ws_api_tests.rs): ✅ 全部实现
-- **TC-INT-1 ~ TC-INT-8** (integration_tests.rs): ✅ 全部实现
-
-### 7.3 业务逻辑使用验证
-
-每个被测函数均确认在生产代码中被正确使用：
-
-| 函数 | 使用位置 | 用途 |
-|------|---------|------|
-| `parse_f64/str/i64/u32` | api.rs, fapi.rs | 解析 REST 响应字段 |
-| `build_display_url` | lib.rs (signed_get, signed_post) | 构建日志 URL |
-| `mask_signature` | lib.rs (signed_get, signed_post) | 脱敏签名参数 |
-| `extract_error_message` | lib.rs (handle_response) | 提取错误消息 |
-| `hmac_sha256_hex` | binance/mod.rs (BinanceSigner) | HMAC 签名 |
-| `hmac_sha256_base64` | pub 工具函数 | 预留 (未来交易所如 Bybit) |
-| `make_header/insert_header` | binance/mod.rs (BinanceSigner) | 添加 API key header |
-| `to_native/unified_symbol` | api.rs, fapi.rs, ws clients | 符号格式转换 |
-| `parse_order_status/type` | api.rs, fapi.rs, order_ws.rs | 订单状态/类型映射 |
-| `side_str/order_type_str` | api.rs, fapi.rs | 创建订单参数 |
-| `parse_order_book_side` | api.rs, fapi.rs | 解析订单簿 |
-| `parse_levels/to_levels/parse_payload` | orderbook_ws.rs | WS 深度解析 |
-| `build_session_logon_request` | ws_api.rs | WS API 认证 |
-| `try_build_ed25519` | binance/mod.rs (new) | 签名器初始化 |
-
-### 7.4 回归审查发现的问题及修复
-
-| # | 问题 | 类型 | 修复 |
-|---|------|------|------|
-| 1 | `parse_order_type("STOP_LIMIT")` 无匹配项，回退到 Market | 生产 bug | 添加 `"STOP_LIMIT"` 到 match arms |
-| 2 | `last_update_id` 字段缺少 `#[serde(rename = "lastUpdateId")]` | 生产 bug | 添加 serde rename 属性 |
-| 3 | `test_new_perpetual` 期望 URL `/ws/` 但代码已改为 `/private/ws/` | 测试过时 | 更新期望值 |
-| 4 | `test_update_listen_key` 同上 | 测试过时 | 更新期望值 |
-| 5 | `api.rs` 和 `fapi.rs` 各有一份重复的 `parse_order_book_side` | 代码重复 | 提取到 `binance/mod.rs` 共享 |
-| 6 | `OrderBookLevel` 缺少 `PartialEq` | 测试需求 | 添加 `#[derive(PartialEq)]` |
-| 7 | `WsFeedEvent` 缺少 `PartialEq` | 测试需求 | 添加 `#[derive(PartialEq)]` |
-
-### 7.5 孤儿代码检查
-
-- **`hmac_sha256_base64`**: 定义为 `pub fn`，当前 crate 内未使用，保留供未来交易所实现（如 Bybit 使用 base64 编码的 HMAC-SHA256）。非孤儿代码。
-- 其余所有函数均确认在业务代码中使用，无孤儿代码。
-- Clippy 检查通过，无死代码警告。
+> 清理后测试数从 190 降至 163（删除 27 个仅测试死代码的用例），全部通过。

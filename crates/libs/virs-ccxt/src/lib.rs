@@ -541,13 +541,6 @@ pub fn parse_str(v: &Value, field: &str) -> Option<String> {
     })
 }
 
-pub fn parse_i64(v: &Value, field: &str) -> Option<i64> {
-    v.get(field).and_then(|f| {
-        f.as_i64()
-            .or_else(|| f.as_str().and_then(|s| s.parse().ok()))
-    })
-}
-
 pub fn parse_u32(v: &Value, field: &str) -> Option<u32> {
     v.get(field)
         .and_then(|f| {

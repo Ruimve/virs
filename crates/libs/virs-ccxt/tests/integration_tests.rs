@@ -5,10 +5,9 @@
 
 use serde_json::json;
 
-use base64::Engine;
 use virs_ccxt::{
-    create_exchange, parse_f64, parse_i64, parse_str,
-    auth::{hmac_sha256_base64, hmac_sha256_hex},
+    create_exchange, parse_f64, parse_str,
+    auth::hmac_sha256_hex,
     errors::ExchangeError,
     types::{CcxtOrderStatus, CcxtTicker},
     adapter::binance::{order_ws::BinanceOrderMessage, BinanceExchange},
@@ -56,57 +55,6 @@ fn int_2_1_hmac_signature_deterministic() {
     let sig2 = hmac_sha256_hex(key, msg);
     assert_eq!(sig1, sig2);
     assert_eq!(sig1.len(), 64);
-}
-
-#[test]
-fn int_2_2_hmac_hex_and_base64_same_bytes() {
-    let key = "test_secret_key";
-    let msg = "test_message";
-    let hex_sig = hmac_sha256_hex(key, msg);
-    let b64_sig = hmac_sha256_base64(key, msg);
-
-    // Decode hex to bytes
-    let hex_bytes = hex::decode(&hex_sig).unwrap();
-    // Decode base64 to bytes
-    let b64_bytes = base64::engine::general_purpose::STANDARD
-        .decode(&b64_sig)
-        .unwrap();
-
-    assert_eq!(hex_bytes, b64_bytes);
-}
-
-// ============================================================
-// TC-INT-3: Error handling pipeline
-// ============================================================
-
-#[test]
-fn int_3_1_rate_limit_error_is_retryable() {
-    let err = ExchangeError::RateLimited("too many requests".into());
-    assert!(err.is_retryable());
-}
-
-#[test]
-fn int_3_2_http_429_is_retryable() {
-    let err = ExchangeError::Http {
-        status: 429,
-        body: "rate limited".into(),
-    };
-    assert!(err.is_retryable());
-}
-
-#[test]
-fn int_3_3_http_400_not_retryable() {
-    let err = ExchangeError::Http {
-        status: 400,
-        body: "bad request".into(),
-    };
-    assert!(!err.is_retryable());
-}
-
-#[test]
-fn int_3_4_auth_error_not_retryable() {
-    let err = ExchangeError::Authentication("invalid api key".into());
-    assert!(!err.is_retryable());
 }
 
 // ============================================================
@@ -375,13 +323,6 @@ fn int_8_1_parse_f64_used_in_ticker_conversion() {
     let raw = json!({"price": "0.00012345"});
     let val = parse_f64(&raw, "price");
     assert_eq!(val, Some(0.00012345));
-}
-
-#[test]
-fn int_8_2_parse_i64_used_in_timestamp() {
-    let raw = json!({"closeTime": 1700000000000i64});
-    let val = parse_i64(&raw, "closeTime");
-    assert_eq!(val, Some(1700000000000i64));
 }
 
 #[test]

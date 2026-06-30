@@ -1,11 +1,11 @@
 //! Unit tests for lib.rs utility functions.
 //!
-//! Covers: parse_f64, parse_str, parse_i64, parse_u32, build_display_url,
+//! Covers: parse_f64, parse_str, parse_u32, build_display_url,
 //! mask_signature, extract_error_message.
 
 use serde_json::json;
 
-use crate::{build_display_url, extract_error_message, mask_signature, parse_f64, parse_i64, parse_str, parse_u32};
+use crate::{build_display_url, extract_error_message, mask_signature, parse_f64, parse_str, parse_u32};
 
 // ============================================================
 // TC-L1: parse_f64
@@ -65,46 +65,18 @@ fn l2_2_parse_str_from_i64() {
 
 #[test]
 fn l2_3_parse_str_from_f64() {
-    let v = json!({"price": 3.14});
+    let v = json!({"price": 2.5});
     let result = parse_str(&v, "price");
     assert!(result.is_some());
     // f64 → string may have float representation differences, so just check it parses back
     let s = result.unwrap();
-    assert!((s.parse::<f64>().unwrap() - 3.14).abs() < 0.001);
+    assert!((s.parse::<f64>().unwrap() - 2.5).abs() < 0.001);
 }
 
 #[test]
 fn l2_4_parse_str_missing_field() {
     let v = json!({"other": "x"});
     assert_eq!(parse_str(&v, "symbol"), None);
-}
-
-// ============================================================
-// TC-L3: parse_i64
-// ============================================================
-
-#[test]
-fn l3_1_parse_i64_from_number() {
-    let v = json!({"timestamp": 1700000000});
-    assert_eq!(parse_i64(&v, "timestamp"), Some(1700000000));
-}
-
-#[test]
-fn l3_2_parse_i64_from_string() {
-    let v = json!({"timestamp": "1700000000"});
-    assert_eq!(parse_i64(&v, "timestamp"), Some(1700000000));
-}
-
-#[test]
-fn l3_3_parse_i64_invalid_string() {
-    let v = json!({"timestamp": "not_a_number"});
-    assert_eq!(parse_i64(&v, "timestamp"), None);
-}
-
-#[test]
-fn l3_4_parse_i64_missing_field() {
-    let v = json!({"other": 1});
-    assert_eq!(parse_i64(&v, "timestamp"), None);
 }
 
 // ============================================================
