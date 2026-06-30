@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-types = { path = "../virs-types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 dotenvy = { workspace = true }

@@ -3113,7 +3113,6 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
- "virs-types",
 ]
 
 [[package]]
