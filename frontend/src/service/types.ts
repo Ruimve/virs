@@ -334,6 +334,7 @@ export interface OrderBookData {
 
 export interface HealthStatus {
   status: string;
+  version?: string;
 }
 
 export interface PaperModeStatus {
