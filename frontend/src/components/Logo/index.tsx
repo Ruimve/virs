@@ -1,5 +1,5 @@
-import { fn } from '@/utils/default';
 import { memo } from 'react';
+import { fn } from '@/utils/default';
 
 /**
  * VIRS Logo — flowing gradient text that shifts continuously.
