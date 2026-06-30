@@ -17,20 +17,6 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
-impl User {
-    /// Convert to a safe response that excludes the password hash.
-    pub fn to_response(&self) -> UserResponse {
-        UserResponse {
-            id: self.id,
-            username: self.username.clone(),
-            role: self.role,
-            email: self.email.clone(),
-            is_active: self.is_active,
-            created_at: self.created_at,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UserResponse {
     pub id: Uuid,

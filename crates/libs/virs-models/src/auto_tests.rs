@@ -1,9 +1,9 @@
-//! Unit tests for auto.rs AutoBot and AutoTrade methods.
+//! Unit tests for auto.rs AutoBot methods.
 
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::{AutoBot, AutoTrade};
+use crate::AutoBot;
 
 fn make_auto_bot(
     status: &str,
@@ -133,64 +133,4 @@ fn a5_1_stopped_status() {
 fn a5_2_running_status() {
     let bot = make_auto_bot("running", 0, 0, 0, 0.0, 10000.0);
     assert!(!bot.is_stopped());
-}
-
-// ============================================================
-// TC-AT1: AutoTrade::is_open
-// ============================================================
-
-fn make_auto_trade(status: &str) -> AutoTrade {
-    AutoTrade {
-        id: Uuid::nil(),
-        bot_id: Uuid::nil(),
-        user_id: Uuid::nil(),
-        symbol: "BTC/USDT".into(),
-        exchange: "binance".into(),
-        open_side: "buy".into(),
-        open_price: 50000.0,
-        open_quantity: 0.1,
-        open_order_id: None,
-        open_fee: 0.0,
-        opened_at: Utc::now(),
-        close_side: None,
-        close_price: None,
-        close_quantity: None,
-        close_order_id: None,
-        close_fee: 0.0,
-        closed_at: None,
-        pnl: 0.0,
-        pnl_pct: 0.0,
-        trigger_source: "ai".into(),
-        close_reason: None,
-        status: status.into(),
-        created_at: Utc::now(),
-    }
-}
-
-#[test]
-fn at1_1_open_status() {
-    let trade = make_auto_trade("open");
-    assert!(trade.is_open());
-}
-
-#[test]
-fn at1_2_closed_status() {
-    let trade = make_auto_trade("closed");
-    assert!(!trade.is_open());
-}
-
-// ============================================================
-// TC-AT2: AutoTrade::is_closed
-// ============================================================
-
-#[test]
-fn at2_1_closed_status() {
-    let trade = make_auto_trade("closed");
-    assert!(trade.is_closed());
-}
-
-#[test]
-fn at2_2_open_status() {
-    let trade = make_auto_trade("open");
-    assert!(!trade.is_closed());
 }

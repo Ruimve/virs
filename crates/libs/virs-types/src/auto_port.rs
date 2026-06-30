@@ -150,6 +150,14 @@ impl AutoMarketType {
         }
     }
 
+    pub fn is_perpetual(&self) -> bool {
+        self == &Self::Perpetual
+    }
+
+    pub fn is_spot(&self) -> bool {
+        self == &Self::Spot
+    }
+
     pub fn from_str_lossy(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "spot" => Self::Spot,

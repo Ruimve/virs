@@ -106,15 +106,3 @@ pub struct AutoTrade {
     pub status: String,
     pub created_at: DateTime<Utc>,
 }
-
-impl AutoTrade {
-    /// Returns true if the trade is still open (status == "open").
-    pub fn is_open(&self) -> bool {
-        self.status == "open"
-    }
-
-    /// Returns true if the trade has been closed (status == "closed").
-    pub fn is_closed(&self) -> bool {
-        self.status == "closed"
-    }
-}

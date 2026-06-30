@@ -241,28 +241,9 @@ pub async fn get_bot(
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
     let user_id = extract_user_id(&headers)?;
 
-    // Query 1: basic info
-    let basic = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            String,
-            String,
-            f64,
-            f64,
-            i32,
-            f64,
-            f64,
-            i32,
-            chrono::DateTime<chrono::Utc>,
-            chrono::DateTime<chrono::Utc>,
-        ),
-    >(
-        r#"SELECT name, symbol, exchange, status, market_type, upper_price, lower_price,
-           grid_count, grid_profit_pct, quantity_per_grid, leverage, created_at, updated_at
-           FROM qd_grid_bots WHERE id = $1 AND user_id = $2"#,
+    // 单次查询获取完整 GridBot，使用模型方法计算派生指标（total_return_pct/grid_spacing/is_running/is_stopped）
+    let bot = sqlx::query_as::<_, virs_models::GridBot>(
+        "SELECT * FROM qd_grid_bots WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
     .bind(user_id)
@@ -275,21 +256,7 @@ pub async fn get_bot(
         )
     })?;
 
-    let (
-        name,
-        symbol,
-        exchange,
-        status,
-        market_type,
-        upper_price,
-        lower_price,
-        grid_count,
-        grid_profit_pct,
-        quantity_per_grid,
-        leverage,
-        created_at,
-        updated_at,
-    ) = match basic {
+    let bot = match bot {
         Some(b) => b,
         None => {
             return Err((
@@ -299,40 +266,14 @@ pub async fn get_bot(
         }
     };
 
-    // Query 2: stats & ai
-    let stats = sqlx::query_as::<_, (
-        f64, f64, f64, i32, i32, bool,
-        Option<String>, Option<String>, Option<serde_json::Value>,
-    )>(
-        r#"SELECT total_pnl, unrealized_pnl, initial_capital, total_trades, grid_filled_count, dynamic_adjust,
-           market_regime, ai_analysis, grid_levels_json
-           FROM qd_grid_bots WHERE id = $1"#,
-    )
-    .bind(id)
-    .fetch_one(&state.db_pool)
-    .await
-    .map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
-    })?;
-
-    let (
-        total_pnl,
-        unrealized_pnl,
-        initial_capital,
-        total_trades,
-        grid_filled_count,
-        dynamic_adjust,
-        market_regime,
-        ai_analysis,
-        grid_levels_json,
-    ) = stats;
-
     // Parse grid levels from JSON
-    let grid_levels: Vec<serde_json::Value> = grid_levels_json
+    let grid_levels: Vec<serde_json::Value> = bot
+        .grid_levels_json
+        .as_ref()
         .and_then(|v| v.as_array().cloned())
         .unwrap_or_default();
 
-    // Query 3: recent trades
+    // Query: recent trades
     let trades_rows = sqlx::query_as::<
         _,
         (
@@ -401,27 +342,31 @@ pub async fn get_bot(
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "bot": {
             "id": id.to_string(),
-            "name": name,
-            "symbol": symbol,
-            "exchange": exchange,
-            "market_type": market_type,
-            "status": status,
-            "leverage": leverage,
-            "grid_count": grid_count,
-            "upper_price": upper_price,
-            "lower_price": lower_price,
-            "grid_profit_pct": grid_profit_pct,
-            "quantity_per_grid": quantity_per_grid,
-            "initial_capital": initial_capital,
-            "total_pnl": total_pnl,
-            "unrealized_pnl": unrealized_pnl,
-            "total_trades": total_trades,
-            "grid_filled_count": grid_filled_count,
-            "dynamic_adjust": dynamic_adjust,
-            "market_regime": market_regime,
-            "ai_analysis": ai_analysis,
-            "created_at": created_at.to_rfc3339(),
-            "updated_at": updated_at.to_rfc3339(),
+            "name": bot.name,
+            "symbol": bot.symbol,
+            "exchange": bot.exchange,
+            "market_type": bot.market_type,
+            "status": bot.status,
+            "is_running": bot.is_running(),
+            "is_stopped": bot.is_stopped(),
+            "leverage": bot.leverage,
+            "grid_count": bot.grid_count,
+            "upper_price": bot.upper_price,
+            "lower_price": bot.lower_price,
+            "grid_spacing": bot.grid_spacing(),
+            "grid_profit_pct": bot.grid_profit_pct,
+            "quantity_per_grid": bot.quantity_per_grid,
+            "initial_capital": bot.initial_capital,
+            "total_pnl": bot.total_pnl,
+            "total_return_pct": bot.total_return_pct(),
+            "unrealized_pnl": bot.unrealized_pnl,
+            "total_trades": bot.total_trades,
+            "grid_filled_count": bot.grid_filled_count,
+            "dynamic_adjust": bot.dynamic_adjust,
+            "market_regime": bot.market_regime,
+            "ai_analysis": bot.ai_analysis,
+            "created_at": bot.created_at.to_rfc3339(),
+            "updated_at": bot.updated_at.to_rfc3339(),
         },
         "trades": trades,
         "grid_levels": grid_levels,

@@ -23,10 +23,6 @@ pub use virs_types::market::*;
 // Test modules (_tests suffix pattern)
 // ============================================================
 #[cfg(test)]
-mod trading_tests;
-#[cfg(test)]
-mod user_tests;
-#[cfg(test)]
 mod grid_tests;
 #[cfg(test)]
 mod auto_tests;

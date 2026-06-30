@@ -45,6 +45,23 @@ pub enum BotPositionSide {
     Short,
 }
 
+impl BotPositionSide {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Long => "long",
+            Self::Short => "short",
+        }
+    }
+
+    pub fn is_long(&self) -> bool {
+        self == &Self::Long
+    }
+
+    pub fn is_short(&self) -> bool {
+        self == &Self::Short
+    }
+}
+
 /// Order info (bot-layer)
 #[derive(Debug, Clone)]
 pub struct OrderInfo {

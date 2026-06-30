@@ -7,58 +7,20 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use virs_models::*;
-use virs_types::enums::*;
 
 // ============================================================
-// TC-INT-1: User → UserResponse conversion chain
+// TC-INT-1: User struct (no transformation methods; API handler serializes directly)
 // ============================================================
-
-#[test]
-fn int_1_1_user_to_response_fields_match() {
-    let now = Utc::now();
-    let user = User {
-        id: Uuid::new_v4(),
-        username: "trader".into(),
-        password_hash: "super_secret_hash".into(),
-        role: UserRole::Manager,
-        email: Some("trader@virs.com".into()),
-        is_active: true,
-        created_at: now,
-        updated_at: now,
-    };
-    let response = user.to_response();
-
-    assert_eq!(response.id, user.id);
-    assert_eq!(response.username, user.username);
-    assert_eq!(response.role, user.role);
-    assert_eq!(response.email, user.email);
-    assert_eq!(response.is_active, user.is_active);
-    assert_eq!(response.created_at, user.created_at);
-    // UserResponse has no password_hash field — compile-time guarantee
-}
-
-#[test]
-fn int_1_2_user_email_none_preserved() {
-    let now = Utc::now();
-    let user = User {
-        id: Uuid::nil(),
-        username: "noemail".into(),
-        password_hash: "hash".into(),
-        role: UserRole::User,
-        email: None,
-        is_active: true,
-        created_at: now,
-        updated_at: now,
-    };
-    assert_eq!(user.to_response().email, None);
-}
+// Note: User struct is used by auth handler via sqlx::FromRow. No conversion
+// method is needed — the handler constructs the JSON response inline.
+// Removed tests for the deleted User::to_response() method.
 
 // ============================================================
 // TC-INT-2: GridBot computation chain
 // ============================================================
 
 #[test]
-fn int_2_1_valid_config_and_spacing() {
+fn int_2_1_spacing_and_return_pct() {
     let now = Utc::now();
     let bot = GridBot {
         id: Uuid::nil(),
@@ -93,7 +55,6 @@ fn int_2_1_valid_config_and_spacing() {
         started_at: None,
         stopped_at: None,
     };
-    assert!(bot.is_valid_config());
     assert!((bot.grid_spacing() - 1000.0).abs() < 0.01);
     assert!(bot.is_running());
     assert!(!bot.is_stopped());
@@ -101,7 +62,7 @@ fn int_2_1_valid_config_and_spacing() {
 }
 
 #[test]
-fn int_2_2_invalid_config_zero_spacing() {
+fn int_2_2_invalid_config_negative_spacing() {
     let now = Utc::now();
     let bot = GridBot {
         id: Uuid::nil(),
@@ -136,7 +97,6 @@ fn int_2_2_invalid_config_zero_spacing() {
         started_at: None,
         stopped_at: None,
     };
-    assert!(!bot.is_valid_config());
     // upper < lower → negative spacing
     assert!(bot.grid_spacing() < 0.0);
     assert!(!bot.is_running());
@@ -225,64 +185,11 @@ fn int_3_2_negative_return() {
 }
 
 // ============================================================
-// TC-INT-4: Order status judgment chain
+// TC-INT-4: Order struct (no judgment methods; business code uses raw status)
 // ============================================================
-
-#[test]
-fn int_4_1_filled_order_chain() {
-    let now = Utc::now();
-    let order = Order {
-        id: "filled_order".into(),
-        client_order_id: None,
-        symbol: "BTC/USDT".into(),
-        side: Side::Buy,
-        order_type: OrderType::Market,
-        price: Some(50000.0),
-        amount: 2.0,
-        cost: Some(100000.0),
-        filled: 2.0,
-        remaining: 0.0,
-        status: OrderStatus::Filled,
-        fee: 0.1,
-        fee_currency: "BTC".into(),
-        created_at: now,
-        updated_at: now,
-    };
-    assert!(order.is_filled());
-    assert!(!order.is_open());
-    assert!(!order.is_canceled());
-    assert!((order.fill_rate() - 1.0).abs() < 0.0001);
-    assert!(order.is_buy());
-    assert!(!order.is_sell());
-}
-
-#[test]
-fn int_4_2_open_order_chain() {
-    let now = Utc::now();
-    let order = Order {
-        id: "open_order".into(),
-        client_order_id: None,
-        symbol: "ETH/USDT".into(),
-        side: Side::Sell,
-        order_type: OrderType::Limit,
-        price: Some(3000.0),
-        amount: 10.0,
-        cost: None,
-        filled: 0.0,
-        remaining: 10.0,
-        status: OrderStatus::Open,
-        fee: 0.0,
-        fee_currency: "".into(),
-        created_at: now,
-        updated_at: now,
-    };
-    assert!(!order.is_filled());
-    assert!(order.is_open());
-    assert!(!order.is_canceled());
-    assert!((order.fill_rate() - 0.0).abs() < 0.0001);
-    assert!(!order.is_buy());
-    assert!(order.is_sell());
-}
+// Note: Order is a transient API-layer type. Status judgments (is_filled, etc.)
+// are handled by virs_types::PositionOrder in the engine layer, not here.
+// Removed tests for the deleted Order::is_filled/is_open/is_canceled/fill_rate/is_buy/is_sell methods.
 
 // ============================================================
 // TC-INT-5: serde round-trip with method calls
@@ -328,7 +235,6 @@ fn int_5_1_grid_bot_serde_then_methods() {
     let json = serde_json::to_string(&bot).unwrap();
     let de: GridBot = serde_json::from_str(&json).unwrap();
     assert!((de.grid_spacing() - original_spacing).abs() < 0.01);
-    assert!(de.is_valid_config());
     assert!(de.is_running());
 }
 

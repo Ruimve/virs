@@ -51,12 +51,6 @@ impl GridBot {
         }
     }
 
-    /// Validate grid configuration parameters.
-    /// Returns true only if grid_count > 0 and upper_price > lower_price.
-    pub fn is_valid_config(&self) -> bool {
-        self.grid_count > 0 && self.upper_price > self.lower_price
-    }
-
     /// Returns true if the bot is currently running.
     pub fn is_running(&self) -> bool {
         self.status == StrategyStatus::Running
@@ -100,16 +94,4 @@ pub struct GridTrade {
     pub pnl_pct: f64,
     pub status: String,
     pub created_at: DateTime<Utc>,
-}
-
-impl GridTrade {
-    /// Returns true if the trade is still open (status == "open").
-    pub fn is_open(&self) -> bool {
-        self.status == "open"
-    }
-
-    /// Returns true if the trade has been closed (status == "closed").
-    pub fn is_closed(&self) -> bool {
-        self.status == "closed"
-    }
 }

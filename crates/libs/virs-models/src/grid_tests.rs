@@ -1,9 +1,9 @@
-//! Unit tests for grid.rs GridBot and GridTrade methods.
+//! Unit tests for grid.rs GridBot methods.
 
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::{GridBot, GridTrade, StrategyStatus};
+use crate::{GridBot, StrategyStatus};
 
 fn make_grid_bot(
     upper: f64,
@@ -71,34 +71,6 @@ fn g1_3_zero_grid_count() {
 }
 
 // ============================================================
-// TC-G2: is_valid_config
-// ============================================================
-
-#[test]
-fn g2_1_valid_config() {
-    let bot = make_grid_bot(50000.0, 40000.0, 10, StrategyStatus::Running, 0.0, 10000.0);
-    assert!(bot.is_valid_config());
-}
-
-#[test]
-fn g2_2_upper_le_lower() {
-    let bot = make_grid_bot(40000.0, 50000.0, 10, StrategyStatus::Running, 0.0, 10000.0);
-    assert!(!bot.is_valid_config());
-}
-
-#[test]
-fn g2_3_zero_grid_count() {
-    let bot = make_grid_bot(50000.0, 40000.0, 0, StrategyStatus::Running, 0.0, 10000.0);
-    assert!(!bot.is_valid_config());
-}
-
-#[test]
-fn g2_4_negative_grid_count() {
-    let bot = make_grid_bot(50000.0, 40000.0, -5, StrategyStatus::Running, 0.0, 10000.0);
-    assert!(!bot.is_valid_config());
-}
-
-// ============================================================
 // TC-G3: is_running
 // ============================================================
 
@@ -150,61 +122,4 @@ fn g5_2_zero_return() {
 fn g5_3_zero_capital_division_protection() {
     let bot = make_grid_bot(50000.0, 40000.0, 10, StrategyStatus::Running, 500.0, 0.0);
     assert!((bot.total_return_pct() - 0.0).abs() < 0.01);
-}
-
-// ============================================================
-// TC-GT1: GridTrade::is_open
-// ============================================================
-
-fn make_grid_trade(status: &str) -> GridTrade {
-    GridTrade {
-        id: Uuid::nil(),
-        bot_id: Uuid::nil(),
-        user_id: Uuid::nil(),
-        symbol: "BTC/USDT".into(),
-        exchange: "binance".into(),
-        grid_level: 1,
-        open_side: "buy".into(),
-        open_price: 50000.0,
-        open_quantity: 0.1,
-        open_order_id: None,
-        opened_at: Utc::now(),
-        close_side: None,
-        close_price: None,
-        close_quantity: None,
-        close_order_id: None,
-        closed_at: None,
-        pnl: 0.0,
-        pnl_pct: 0.0,
-        status: status.into(),
-        created_at: Utc::now(),
-    }
-}
-
-#[test]
-fn gt1_1_open_status() {
-    let trade = make_grid_trade("open");
-    assert!(trade.is_open());
-}
-
-#[test]
-fn gt1_2_closed_status() {
-    let trade = make_grid_trade("closed");
-    assert!(!trade.is_open());
-}
-
-// ============================================================
-// TC-GT2: GridTrade::is_closed
-// ============================================================
-
-#[test]
-fn gt2_1_closed_status() {
-    let trade = make_grid_trade("closed");
-    assert!(trade.is_closed());
-}
-
-#[test]
-fn gt2_2_open_status() {
-    let trade = make_grid_trade("open");
-    assert!(!trade.is_closed());
 }

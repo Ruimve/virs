@@ -257,14 +257,9 @@ pub async fn get_bot(
 ) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
     let user_id = extract_user_id(&headers)?;
 
-    // Query 1: basic info
-    let basic = sqlx::query_as::<_, (
-        String, String, String, String, String, i32, f64, i32,
-        chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>,
-    )>(
-        r#"SELECT name, symbol, exchange, status, market_type, leverage, max_position_pct, decide_interval_secs,
-           created_at, updated_at
-           FROM qd_auto_bots WHERE id = $1 AND user_id = $2"#,
+    // 单次查询获取完整 AutoBot，使用模型方法计算派生指标（total_return_pct/is_running/is_stopped）
+    let bot = sqlx::query_as::<_, virs_models::AutoBot>(
+        "SELECT * FROM qd_auto_bots WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
     .bind(user_id)
@@ -274,18 +269,7 @@ pub async fn get_bot(
         (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
     })?;
 
-    let (
-        name,
-        symbol,
-        exchange,
-        status,
-        market_type,
-        leverage,
-        max_position_pct,
-        decide_interval_secs,
-        created_at,
-        updated_at,
-    ) = match basic {
+    let bot = match bot {
         Some(b) => b,
         None => {
             return Err((
@@ -295,54 +279,29 @@ pub async fn get_bot(
         }
     };
 
-    // Query 2: stats & risk-control params (position 实时状态由 /ws/position 推送)
-    // 注意：bot 级别已无 stop_loss/take_profit（移至 trade 级），实时风控边界由 ws/position 推送
-    let pos = sqlx::query_as::<_, (f64, Option<String>, Option<String>, f64, i32, i32, i32)>(
-        r#"SELECT initial_capital,
-           market_regime, ai_analysis,
-           total_pnl, total_trades, win_trades, loss_trades
-           FROM qd_auto_bots WHERE id = $1"#,
-    )
-    .bind(id)
-    .fetch_one(&state.db_pool)
-    .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::err(format!("Database error: {}", e))),
-        )
-    })?;
-
-    let (
-        initial_capital,
-        market_regime,
-        ai_analysis,
-        total_pnl,
-        total_trades,
-        win_trades,
-        loss_trades,
-    ) = pos;
-
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "bot": {
-            "id": id.to_string(),
-            "name": name,
-            "symbol": symbol,
-            "exchange": exchange,
-            "market_type": market_type,
-            "status": status,
-            "leverage": leverage,
-            "max_position_pct": max_position_pct,
-            "decide_interval_secs": decide_interval_secs,
-            "initial_capital": initial_capital,
-            "market_regime": market_regime,
-            "ai_analysis": ai_analysis,
-            "total_pnl": total_pnl,
-            "total_trades": total_trades,
-            "win_trades": win_trades,
-            "loss_trades": loss_trades,
-            "created_at": created_at.to_rfc3339(),
-            "updated_at": updated_at.to_rfc3339(),
+            "id": bot.id.to_string(),
+            "name": bot.name,
+            "symbol": bot.symbol,
+            "exchange": bot.exchange,
+            "market_type": bot.market_type,
+            "status": bot.status,
+            "is_running": bot.is_running(),
+            "is_stopped": bot.is_stopped(),
+            "leverage": bot.leverage,
+            "max_position_pct": bot.max_position_pct,
+            "decide_interval_secs": bot.decide_interval_secs,
+            "initial_capital": bot.initial_capital,
+            "market_regime": bot.market_regime,
+            "ai_analysis": bot.ai_analysis,
+            "total_pnl": bot.total_pnl,
+            "total_return_pct": bot.total_return_pct(),
+            "total_trades": bot.total_trades,
+            "win_trades": bot.win_trades,
+            "loss_trades": bot.loss_trades,
+            "created_at": bot.created_at.to_rfc3339(),
+            "updated_at": bot.updated_at.to_rfc3339(),
         },
     }))))
 }
@@ -531,26 +490,24 @@ pub async fn get_stats(
         Err(e) => return Json(ApiResponse::err(format!("Database error: {}", e))),
     };
 
-    // 读取 bot 汇总字段
-    let bot_stats = sqlx::query_as::<_, (i32, i32, i32)>(
-        r#"SELECT total_trades, win_trades, loss_trades FROM qd_auto_bots WHERE id = $1"#,
+    // 读取 bot 汇总字段（使用 AutoBot 模型方法计算胜率/亏损率，避免内联重复计算）
+    let bot = match sqlx::query_as::<_, virs_models::AutoBot>(
+        "SELECT * FROM qd_auto_bots WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(&state.db_pool)
-    .await;
-
-    let (total_trades, win_trades, loss_trades) = match bot_stats {
-        Ok(Some((t, w, l))) => (t, w, l),
-        Ok(None) => (0i32, 0i32, 0i32),
+    .await
+    {
+        Ok(Some(b)) => Some(b),
+        Ok(None) => None,
         Err(e) => return Json(ApiResponse::err(format!("Database error: {}", e))),
     };
 
-    // 胜率
-    let win_rate = if total_trades > 0 {
-        (win_trades as f64 / total_trades as f64) * 100.0
-    } else {
-        0.0
-    };
+    let total_trades = bot.as_ref().map_or(0, |b| b.total_trades);
+    let win_trades = bot.as_ref().map_or(0, |b| b.win_trades);
+    let loss_trades = bot.as_ref().map_or(0, |b| b.loss_trades);
+    let win_rate = bot.as_ref().map_or(0.0, |b| b.win_rate());
+    let loss_rate = bot.as_ref().map_or(0.0, |b| b.loss_rate());
 
     // 盈亏比 = 平均盈利 / 平均亏损
     let profits: Vec<f64> = trades.iter().filter(|t| t.4 > 0.0).map(|t| t.4).collect();
@@ -649,6 +606,7 @@ pub async fn get_stats(
 
     Json(ApiResponse::ok(serde_json::json!({
         "win_rate": win_rate,
+        "loss_rate": loss_rate,
         "profit_loss_ratio": profit_loss_ratio,
         "max_drawdown": max_drawdown,
         "avg_hold_time": avg_hold_time,

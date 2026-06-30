@@ -9,12 +9,51 @@ pub enum Side {
     Sell,
 }
 
+impl Side {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Buy => "buy",
+            Self::Sell => "sell",
+        }
+    }
+
+    /// Returns true if this side opens a position in the given direction.
+    /// (Buy, Long) and (Sell, Short) are opening trades.
+    pub fn is_opening_for(&self, pos_side: PositionSide) -> bool {
+        matches!((self, pos_side), (Self::Buy, PositionSide::Long) | (Self::Sell, PositionSide::Short))
+    }
+
+    /// Returns true if this side closes a position in the given direction.
+    /// (Sell, Long) and (Buy, Short) are closing trades.
+    pub fn is_closing_for(&self, pos_side: PositionSide) -> bool {
+        matches!((self, pos_side), (Self::Sell, PositionSide::Long) | (Self::Buy, PositionSide::Short))
+    }
+}
+
 /// Position side (for hedge mode)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PositionSide {
     Long,
     Short,
     Both,
+}
+
+impl PositionSide {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Long => "long",
+            Self::Short => "short",
+            Self::Both => "both",
+        }
+    }
+
+    pub fn is_long(&self) -> bool {
+        self == &Self::Long
+    }
+
+    pub fn is_short(&self) -> bool {
+        self == &Self::Short
+    }
 }
 
 /// Position mode
@@ -45,6 +84,25 @@ pub enum OrderStatus {
     Failed,
 }
 
+impl OrderStatus {
+    pub fn is_filled(&self) -> bool {
+        self == &Self::Filled
+    }
+
+    pub fn is_open(&self) -> bool {
+        matches!(self, Self::Open | Self::PartiallyFilled)
+    }
+
+    pub fn is_canceled(&self) -> bool {
+        self == &Self::Canceled
+    }
+
+    /// Returns true if the order has reached a terminal state (no further updates expected).
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Filled | Self::Canceled | Self::Failed)
+    }
+}
+
 /// Position status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PositionStatus {
@@ -53,6 +111,20 @@ pub enum PositionStatus {
     Open,
     Closing,
     Closed,
+}
+
+impl PositionStatus {
+    pub fn is_open(&self) -> bool {
+        self == &Self::Open
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self == &Self::Closed
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self == &Self::Empty
+    }
 }
 
 /// Market type
@@ -90,6 +162,16 @@ pub enum EngineState {
     Stopped,
 }
 
+impl EngineState {
+    pub fn is_running(&self) -> bool {
+        self == &Self::Running
+    }
+
+    pub fn is_stopped(&self) -> bool {
+        self == &Self::Stopped
+    }
+}
+
 /// Trade type (open vs close)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TradeType {
@@ -108,6 +190,16 @@ pub enum StrategyStatus {
     Paused,
     Stopped,
     Error,
+}
+
+impl StrategyStatus {
+    pub fn is_running(&self) -> bool {
+        self == &Self::Running
+    }
+
+    pub fn is_stopped(&self) -> bool {
+        self == &Self::Stopped
+    }
 }
 
 /// User role
