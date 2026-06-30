@@ -111,7 +111,7 @@ pub enum StrategyStatus {
 }
 
 /// User role
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[cfg_attr(feature = "sqlx", sqlx(type_name = "text", rename_all = "lowercase"))]
 pub enum UserRole {

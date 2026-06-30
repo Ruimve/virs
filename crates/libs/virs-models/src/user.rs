@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::UserRole;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: Uuid,
     pub username: String,
@@ -17,7 +17,21 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl User {
+    /// Convert to a safe response that excludes the password hash.
+    pub fn to_response(&self) -> UserResponse {
+        UserResponse {
+            id: self.id,
+            username: self.username.clone(),
+            role: self.role,
+            email: self.email.clone(),
+            is_active: self.is_active,
+            created_at: self.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UserResponse {
     pub id: Uuid,
     pub username: String,
