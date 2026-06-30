@@ -1,6 +1,5 @@
 import { memo, useEffect, useState } from 'react';
 import { getGridStats, type GridBotStats } from '@/service';
-import Skeleton from '@/components/Skeleton';
 
 interface Props {
   botId: string;
@@ -109,15 +108,11 @@ const TradeStats = ({ botId }: Props) => {
         {items.map((item) => (
           <div key={item.label} className="min-w-0">
             <div className="text-[11px] text-on-surface-tertiary mb-0.5">{item.label}</div>
-            {stats ? (
-              <div
-                className={`font-mono tabular-nums ${item.highlight ? 'text-base font-semibold' : 'text-sm'} ${item.color}`}
-              >
-                {item.value}
-              </div>
-            ) : (
-              <Skeleton className={item.highlight ? 'h-5 w-14' : 'h-4 w-12'} />
-            )}
+            <div
+              className={`font-mono tabular-nums ${item.highlight ? 'text-base font-semibold' : 'text-sm'} ${item.color}`}
+            >
+              {item.value}
+            </div>
             {item.sub && <div className="text-[10px] text-on-surface-muted mt-0.5">{item.sub}</div>}
           </div>
         ))}

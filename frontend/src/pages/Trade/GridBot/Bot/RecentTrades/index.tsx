@@ -1,6 +1,5 @@
 import { memo, useEffect, useState } from 'react';
 import { getGridTrades, type GridTrade } from '@/service';
-import Skeleton from '@/components/Skeleton';
 import { formatPnlShort } from '../../../components/utils/utils';
 
 interface Props {
@@ -13,7 +12,7 @@ const pnlColor = (v: number) =>
 /** 网格机器人最近成交卡片（右侧栏） */
 const RecentTrades = ({ botId }: Props) => {
   const [trades, setTrades] = useState<GridTrade[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   useEffect(() => {
     if (!botId) return;
@@ -46,23 +45,7 @@ const RecentTrades = ({ botId }: Props) => {
         </span>
       </div>
       <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          // 加载态：5 行骨架，保持与列表态相同的 DOM 结构，避免回流
-          <div className="divide-y divide-line-subtle">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="px-3 py-2">
-                <div className="flex items-center gap-2 mb-1">
-                  <Skeleton className="h-4 w-16" />
-                  <Skeleton className="h-3 w-10 ml-auto" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Skeleton className="h-3 w-24" />
-                  <Skeleton className="h-3 w-12" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : recent.length === 0 ? (
+        {recent.length === 0 ? (
           <div className="text-center py-6 text-sm text-on-surface-tertiary">暂无成交</div>
         ) : (
           <div className="divide-y divide-line-subtle">
