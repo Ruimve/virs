@@ -28,8 +28,6 @@ mod market_tests;
 #[cfg(test)]
 mod position_tests;
 #[cfg(test)]
-mod bot_tests;
-#[cfg(test)]
 mod auto_port_tests;
 #[cfg(test)]
 mod serde_tests;

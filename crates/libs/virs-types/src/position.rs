@@ -37,22 +37,6 @@ impl Position {
         self.status.is_open()
     }
 
-    pub fn is_closed(&self) -> bool {
-        self.status.is_closed()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.status.is_empty()
-    }
-
-    pub fn is_long(&self) -> bool {
-        self.side.is_long()
-    }
-
-    pub fn is_short(&self) -> bool {
-        self.side.is_short()
-    }
-
     /// Computes unrealized PnL at a given current price.
     /// Long: (current - entry) * size
     /// Short: (entry - current) * size
@@ -61,17 +45,6 @@ impl Position {
             PositionSide::Long => (current_price - self.entry_price) * self.size,
             PositionSide::Short => (self.entry_price - current_price) * self.size,
             PositionSide::Both => 0.0,
-        }
-    }
-
-    /// Computes PnL percentage at a given current price.
-    /// pnl / margin * 100
-    /// Returns 0.0 if margin is zero (division-by-zero protection).
-    pub fn pnl_pct_at(&self, current_price: f64) -> f64 {
-        if self.margin == 0.0 {
-            0.0
-        } else {
-            self.unrealized_pnl_at(current_price) / self.margin * 100.0
         }
     }
 }
@@ -99,30 +72,6 @@ pub struct PositionOrder {
     pub slippage: Option<f64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-}
-
-impl PositionOrder {
-    pub fn is_filled(&self) -> bool {
-        self.status.is_filled()
-    }
-
-    pub fn is_open(&self) -> bool {
-        self.status.is_open()
-    }
-
-    pub fn is_canceled(&self) -> bool {
-        self.status.is_canceled()
-    }
-
-    /// Returns the fill rate as a ratio (filled / amount).
-    /// Returns 0.0 if amount is zero (division-by-zero protection).
-    pub fn fill_rate(&self) -> f64 {
-        if self.amount == 0.0 {
-            0.0
-        } else {
-            self.filled / self.amount
-        }
-    }
 }
 
 /// Trade record

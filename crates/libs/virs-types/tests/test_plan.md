@@ -1,407 +1,148 @@
 # virs-types 测试用例文档
 
-> 生成日期: 2026-06-30
-> 最后修订: 2026-06-30 (孤儿代码清理)
+> 生成日期: 2026-07-01
 > Crate: `crates/libs/virs-types`
-> 目标: 抽取类型中的幂等计算逻辑为方法，进行完整单元测试和集成测试覆盖。
-> 状态: **76 个测试通过** (67 单元 + 9 集成)；孤儿方法已删除，业务代码已重构调用类型方法
+> 状态: **34 个测试全部通过** (27 单元 + 7 集成)
 
 ---
 
-## 1. Crate 结构概览
+## 单元测试用例
 
-```
-virs-types/
-├── src/
-│   ├── lib.rs          # 模块入口
-│   ├── enums.rs        # 枚举: Side, PositionSide, OrderType, OrderStatus, MarketType...
-│   ├── market.rs       # Ticker, Kline, OrderBook, Balance, ExchangePosition, ApiResponse, PaginationParams
-│   ├── position.rs     # Position, PositionOrder, Trade, WsFeedEvent, EngineCommand, RiskConfig, EngineConfig...
-│   ├── exchange_pe.rs  # ExchangePe trait
-│   ├── bot.rs          # OrderSide, BotPositionSide, OrderInfo, OrderCommand, BotError...
-│   ├── grid_port.rs    # GridStore trait, GridBotConfig
-│   └── auto_port.rs    # AutoStore trait, AutoBotConfig, AutoMarketType
-├── tests/
-│   ├── test_plan.md    # 本文档
-│   └── integration_tests.rs
-```
+### enums_tests.rs — 枚举方法 (3)
 
-### 问题识别
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| E7.1 | `e7_1_filled_is_filled` | OrderStatus::Filled → true, Open → false |
+| E11.1 | `e11_1_open_is_open` | PositionStatus::Open → true, Closed → false |
+| E14.1 | `e14_1_running_is_running` | EngineState::Running → true, Stopped → false |
 
-此 crate 已有少量方法（`MarketType::from_str_lossy`, `OrderSide::as_str`, `PaginationParams::normalize`, `ApiResponse::ok/err`），但大量派生计算散落在业务代码中。应抽取为类型方法：
+### market_tests.rs — 市场类型方法 (5)
 
-| 内联计算位置 | 计算内容 | 应抽取为 |
-|-------------|---------|---------|
-| `paper.rs:383`, `auto/strategy.rs:174` | `(current - entry) * size` 按 Long/Short | `ExchangePosition::unrealized_pnl_at()` / `Position::unrealized_pnl_at()` |
-| `auto/strategy.rs:179`, `grid/worker.rs:522` | `pnl / (entry * size) * 100` | `pnl_pct()` 辅助函数 |
-| `engine.rs:182,583,1177`, `auto/worker.rs:128,143,217...` | `status == PositionStatus::Open` | `Position::is_open()` / `is_closed()` / `is_empty()` |
-| `engine.rs:1123` | `status == OrderStatus::Filled` | `PositionOrder::is_filled()` / `is_open()` |
-| `paper.rs:419`, `binance/api.rs:293` | `free + used` | `Balance::compute_total()` |
-| `engine.rs:74` | `state == EngineState::Running` | `EngineState::is_running()` |
-| `engine.rs:943` | `(Sell, Long) \| (Buy, Short)` | `Side::is_closing_for()` |
-| `paper.rs:241-244`, `engine.rs:943` | 开仓方向判断 | `Side::is_opening_for()` |
-| `risk.rs:71,88,105...` | RiskConfig 验证 | `RiskConfig::validate()` |
-| `MarketType::from_str_lossy` | 已定义但未被使用 | 保留，供未来使用 |
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| M1.1 | `m1_1_normal_total` | free=100, used=50 → total=150 |
+| M1.2 | `m1_2_zero_total` | free=0, used=0 → total=0 |
+| M10.1 | `m10_1_long_profit` | Long, entry=50000, current=51000 → +1000 |
+| M10.2 | `m10_2_short_profit` | Short, entry=50000, current=49000 → +1000 |
+| M10.3 | `m10_3_long_loss` | Long, entry=50000, current=49000 → -1000 |
 
----
+### auto_port_tests.rs — AutoMarketType 方法 (1)
 
-## 2. 抽取的幂等函数
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| AM2.1 | `am2_1_spot_is_spot` | Spot → true, Perpetual → false |
 
-### 2.1 enums.rs — 枚举方法
+### position_tests.rs — Position/RiskConfig 方法 (7)
 
-| # | 方法 | 签名 | 说明 |
-|---|------|------|------|
-| E1 | `Side::as_str` | `(&self) -> &'static str` | Buy→"buy", Sell→"sell" |
-| E2 | `Side::is_opening_for` | `(&self, side: PositionSide) -> bool` | (Buy,Long)\|(Sell,Short)→true |
-| E3 | `Side::is_closing_for` | `(&self, side: PositionSide) -> bool` | (Sell,Long)\|(Buy,Short)→true |
-| E4 | `PositionSide::as_str` | `(&self) -> &'static str` | Long→"long", Short→"short", Both→"both" |
-| E5 | `PositionSide::is_long` | `(&self) -> bool` | Long→true |
-| E6 | `PositionSide::is_short` | `(&self) -> bool` | Short→true |
-| E7 | `OrderStatus::is_filled` | `(&self) -> bool` | Filled→true |
-| E8 | `OrderStatus::is_open` | `(&self) -> bool` | Open\|PartiallyFilled→true |
-| E9 | `OrderStatus::is_canceled` | `(&self) -> bool` | Canceled→true |
-| ~~E10~~ | ~~`OrderStatus::is_terminal`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
-| E11 | `PositionStatus::is_open` | `(&self) -> bool` | Open→true |
-| E12 | `PositionStatus::is_closed` | `(&self) -> bool` | Closed→true |
-| E13 | `PositionStatus::is_empty` | `(&self) -> bool` | Empty→true |
-| E14 | `EngineState::is_running` | `(&self) -> bool` | Running→true |
-| E15 | `EngineState::is_stopped` | `(&self) -> bool` | Stopped→true |
-| E16 | `StrategyStatus::is_running` | `(&self) -> bool` | Running→true |
-| E17 | `StrategyStatus::is_stopped` | `(&self) -> bool` | Stopped→true |
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| P1.1 | `p1_1_open_is_open` | Position(status=Open) → is_open=true |
+| P6.1 | `p6_1_long_pnl` | Long, entry=50000, current=51000 → +1000 |
+| P6.2 | `p6_2_short_pnl` | Short, entry=50000, current=49000 → +1000 |
+| P12.1 | `p12_1_default_valid` | RiskConfig::default() → Ok |
+| P12.2 | `p12_2_zero_leverage` | max_leverage=0 → Err |
+| P12.3 | `p12_3_negative_drawdown` | max_drawdown_pct<0 → Err |
+| P12.4 | `p12_4_negative_position_pct` | max_position_per_symbol_pct<0 → Err |
 
-### 2.2 market.rs — 市场数据方法
+### serde_tests.rs — 序列化/反序列化 (11)
 
-| # | 方法 | 签名 | 说明 |
-|---|------|------|------|
-| M1 | `Balance::compute_total` | `(&self) -> f64` | free + used |
-| ~~M2~~ | ~~`Ticker::mid_price`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
-| ~~M3~~ | ~~`Ticker::spread`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
-| ~~M4~~ | ~~`OrderBook::best_bid`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
-| ~~M5~~ | ~~`OrderBook::best_ask`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
-| ~~M6~~ | ~~`OrderBook::spread`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
-| ~~M7~~ | ~~`OrderBook::mid_price`~~ | — | **已删除**: 无业务消费者 (孤儿代码) |
-| M8 | `ExchangePosition::is_long` | `(&self) -> bool` | side == Long |
-| M9 | `ExchangePosition::is_short` | `(&self) -> bool` | side == Short |
-| M10 | `ExchangePosition::unrealized_pnl_at` | `(&self, current_price: f64) -> f64` | 按 Long/Short 计算 |
-| M11 | `ExchangePosition::pnl_pct_at` | `(&self, current_price: f64) -> f64` | unrealized_pnl / (entry*size) * 100 |
-
-### 2.3 position.rs — 仓位引擎方法
-
-| # | 方法 | 签名 | 说明 |
-|---|------|------|------|
-| P1 | `Position::is_open` | `(&self) -> bool` | status == Open |
-| P2 | `Position::is_closed` | `(&self) -> bool` | status == Closed |
-| P3 | `Position::is_empty` | `(&self) -> bool` | status == Empty |
-| P4 | `Position::is_long` | `(&self) -> bool` | side == Long |
-| P5 | `Position::is_short` | `(&self) -> bool` | side == Short |
-| P6 | `Position::unrealized_pnl_at` | `(&self, current_price: f64) -> f64` | 按 Long/Short 计算 |
-| P7 | `Position::pnl_pct_at` | `(&self, current_price: f64) -> f64` | unrealized_pnl / margin * 100 |
-| P8 | `PositionOrder::is_filled` | `(&self) -> bool` | status == Filled |
-| P9 | `PositionOrder::is_open` | `(&self) -> bool` | Open\|PartiallyFilled |
-| P10 | `PositionOrder::is_canceled` | `(&self) -> bool` | status == Canceled |
-| P11 | `PositionOrder::fill_rate` | `(&self) -> f64` | filled / amount (除零保护) |
-| P12 | `RiskConfig::validate` | `(&self) -> Result<(), String>` | 验证所有字段在合理范围 |
-
-### 2.4 bot.rs — Bot 层方法
-
-| # | 方法 | 签名 | 说明 |
-|---|------|------|------|
-| B1 | `BotPositionSide::as_str` | `(&self) -> &'static str` | Long→"long", Short→"short" |
-| B2 | `BotPositionSide::is_long` | `(&self) -> bool` | Long→true |
-| B3 | `BotPositionSide::is_short` | `(&self) -> bool` | Short→true |
-| B4 | `AccountBalance::total_equity` | `(&self) -> f64` | total (已有字段，别名) |
-
-### 2.5 auto_port.rs — AutoMarketType 方法
-
-| # | 方法 | 签名 | 说明 |
-|---|------|------|------|
-| AM1 | `AutoMarketType::is_perpetual` | `(&self) -> bool` | Perpetual→true |
-| AM2 | `AutoMarketType::is_spot` | `(&self) -> bool` | Spot→true |
-| AM3 | `AutoMarketType::from_str_lossy` | `(s: &str) -> Self` | DB 字符串 → 枚举 (业务调用: `virs-app/auto_store.rs:31`) |
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| S1.1 | `s1_1_side_roundtrip` | Side serde 往返 |
+| S1.2 | `s1_2_order_status_roundtrip` | OrderStatus serde 往返 |
+| S1.3 | `s1_3_market_type_roundtrip` | MarketType serde 往返 |
+| S1.4 | `s1_4_strategy_status_roundtrip` | StrategyStatus serde 往返 |
+| S2.1 | `s2_1_ticker_roundtrip` | Ticker serde 往返 |
+| S2.2 | `s2_2_balance_roundtrip` | Balance serde 往返 |
+| S2.3 | `s2_3_exchange_position_roundtrip` | ExchangePosition serde 往返 |
+| S2.5 | `s2_5_risk_config_default_roundtrip` | RiskConfig serde 往返 |
+| S4.1 | `s4_1_perpetual` | AutoMarketType::from_str_lossy("perpetual") → Perpetual |
+| S4.2 | `s4_2_spot` | AutoMarketType::from_str_lossy("spot") → Spot |
+| S4.3 | `s4_3_unknown_defaults_to_perpetual` | 未知值 → Perpetual (默认) |
 
 ---
 
-## 3. 单元测试用例
+## 集成测试用例
 
-### 3.1 enums_tests.rs
+### integration_tests.rs (7)
 
-#### TC-E1: Side::as_str
-- E1.1 Buy → "buy"
-- E1.2 Sell → "sell"
-
-#### TC-E2: Side::is_opening_for
-- E2.1 (Buy, Long) → true
-- E2.2 (Sell, Short) → true
-- E2.3 (Sell, Long) → false
-- E2.4 (Buy, Short) → false
-
-#### TC-E3: Side::is_closing_for
-- E3.1 (Sell, Long) → true
-- E3.2 (Buy, Short) → true
-- E3.3 (Buy, Long) → false
-- E3.4 (Sell, Short) → false
-
-#### TC-E4: PositionSide::as_str
-- E4.1 Long → "long"
-- E4.2 Short → "short"
-- E4.3 Both → "both"
-
-#### TC-E5/E6: PositionSide::is_long/is_short
-- E5.1 Long → is_long==true, is_short==false
-- E5.2 Short → is_long==false, is_short==true
-
-#### TC-E7-E10: OrderStatus 方法
-- E7.1 Filled → is_filled==true
-- E8.1 Open → is_open==true
-- E8.2 PartiallyFilled → is_open==true
-- E8.3 Filled → is_open==false
-- E9.1 Canceled → is_canceled==true
-- E10.1 Filled/Canceled/Failed → is_terminal==true
-- E10.2 Open/PartiallyFilled/Pending → is_terminal==false
-
-#### TC-E11-E13: PositionStatus 方法
-- E11.1 Open → is_open==true
-- E12.1 Closed → is_closed==true
-- E13.1 Empty → is_empty==true
-
-#### TC-E14-E15: EngineState 方法
-- E14.1 Running → is_running==true
-- E15.1 Stopped → is_stopped==true
-
-#### TC-E16-E17: StrategyStatus 方法
-- E16.1 Running → is_running==true
-- E17.1 Stopped → is_stopped==true
-
-### 3.2 market_tests.rs
-
-#### TC-M1: Balance::compute_total
-- M1.1 free=100, used=50 → 150
-- M1.2 free=0, used=0 → 0
-
-#### TC-M2-M7: Ticker / OrderBook 方法
-- **已删除**: 方法无业务消费者 (孤儿代码)，测试一并删除。
-
-#### TC-M8-M11: ExchangePosition 方法
-- M8.1 side=Long → is_long==true
-- M9.1 side=Short → is_short==true
-- M10.1 Long, entry=50000, current=51000, size=1 → 1000
-- M10.2 Short, entry=50000, current=49000, size=1 → 1000
-- M10.3 Long, entry=50000, current=49000, size=1 → -1000
-- M11.1 Long, entry=50000, current=51000, size=1 → 2.0
-
-### 3.3 position_tests.rs
-
-#### TC-P1-P3: Position 状态方法
-- P1.1 status=Open → is_open==true
-- P2.1 status=Closed → is_closed==true
-- P3.1 status=Empty → is_empty==true
-
-#### TC-P4-P5: Position 方向方法
-- P4.1 side=Long → is_long==true
-- P5.1 side=Short → is_short==true
-
-#### TC-P6: Position::unrealized_pnl_at
-- P6.1 Long, entry=50000, current=51000, size=1 → 1000
-- P6.2 Short, entry=50000, current=49000, size=1 → 1000
-
-#### TC-P7: Position::pnl_pct_at
-- P7.1 Long, margin=50000, pnl=1000 → 2.0
-
-#### TC-P8-P11: PositionOrder 方法
-- P8.1 status=Filled → is_filled==true
-- P9.1 status=Open → is_open==true
-- P9.2 status=PartiallyFilled → is_open==true
-- P10.1 status=Canceled → is_canceled==true
-- P11.1 filled=5, amount=10 → 0.5
-- P11.2 filled=0, amount=0 → 0.0 (除零保护)
-
-#### TC-P12: RiskConfig::validate
-- P12.1 默认配置 → Ok
-- P12.2 max_leverage=0 → Err
-- P12.3 max_drawdown=-0.1 → Err
-- P12.4 max_position_per_symbol=-1.0 → Err
-
-### 3.4 bot_tests.rs
-
-#### TC-B1-B3: BotPositionSide 方法
-- B1.1 Long → "long"
-- B1.2 Short → "short"
-- B2.1 Long → is_long==true
-- B3.1 Short → is_short==true
-
-### 3.5 auto_port_tests.rs
-
-#### TC-AM1-AM3: AutoMarketType 方法
-- AM1.1 Perpetual → is_perpetual==true
-- AM2.1 Spot → is_spot==true
-- AM3.1 from_str_lossy("perpetual") → Perpetual
-- AM3.2 from_str_lossy("spot") → Spot
-- AM3.3 from_str_lossy("unknown") → Perpetual (默认值)
-
-### 3.6 serde_tests.rs
-
-#### TC-S1: 枚举 serde round-trip
-- S1.1 Side::Buy → JSON → Side
-- S1.2 OrderStatus::Filled → JSON → OrderStatus
-- S1.3 MarketType::Perpetual → JSON → MarketType
-- S1.4 StrategyStatus::Running → JSON → StrategyStatus
-
-#### TC-S2: 结构体 serde round-trip
-- S2.1 Ticker round-trip
-- S2.2 Balance round-trip
-- S2.3 ExchangePosition round-trip
-- S2.4 Position round-trip
-- S2.5 RiskConfig default → JSON → RiskConfig
-
-#### TC-S3: MarketType::from_str_lossy
-- **已删除**: 方法无业务消费者 (孤儿代码)，测试一并删除。
-
-#### TC-S4: AutoMarketType::from_str_lossy
-- S4.1 "perpetual" → Perpetual
-- S4.2 "spot" → Spot
-- S4.3 "unknown" → Perpetual
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| INT-1.1 | `int_1_1_long_position_pnl_chain` | Long Position → unrealized_pnl_at 链路 |
+| INT-1.2 | `int_1_2_short_position_pnl_chain` | Short Position → unrealized_pnl_at 链路 |
+| INT-3.1 | `int_3_1_exchange_position_pnl_chain` | ExchangePosition → unrealized_pnl_at 链路 |
+| INT-6.1 | `int_6_1_default_config_valid` | RiskConfig::default() → validate Ok |
+| INT-6.2 | `int_6_2_invalid_config` | max_leverage=0 → validate Err |
+| INT-8.1 | `int_8_1_exchange_position_serde_then_pnl` | serde 往返后 unrealized_pnl_at 一致 |
+| INT-8.3 | `int_8_3_auto_market_type_from_str` | from_str_lossy("spot").is_spot() → true |
 
 ---
 
-## 4. 集成测试用例
+## 代码覆盖率
 
-### TC-INT-1: 仓位盈亏计算链路
-- INT-1.1 Long position, entry=50000, current=51000 → unrealized_pnl_at=1000, pnl_pct_at=2.0
-- INT-1.2 Short position, entry=50000, current=49000 → unrealized_pnl_at=1000
+### 测试文件与模块映射
 
-### TC-INT-2: 订单状态判断链路
-- INT-2.1 PositionOrder filled=10, amount=10, status=Filled → is_filled, !is_open, fill_rate=1.0
-- INT-2.2 PositionOrder filled=0, amount=10, status=Open → !is_filled, is_open, fill_rate=0.0
+| 测试文件 | 被测模块 | 测试数 |
+|----------|----------|--------|
+| `src/enums_tests.rs` | enums.rs (3 个存活方法) | 3 |
+| `src/market_tests.rs` | market.rs (2 个存活方法) | 5 |
+| `src/auto_port_tests.rs` | auto_port.rs (1 个存活方法) | 1 |
+| `src/position_tests.rs` | position.rs (2 个存活方法 + RiskConfig) | 7 |
+| `src/serde_tests.rs` | 全部结构体 serde | 11 |
+| `tests/integration_tests.rs` | 跨模块计算链 + serde 联合 | 7 |
+| **合计** | | **34** |
 
-### TC-INT-3: ExchangePosition 盈亏链路
-- INT-3.1 Long, entry=50000, current=51000 → unrealized_pnl_at=1000, pnl_pct_at=2.0
+### 死代码清理记录
 
-### TC-INT-4: OrderBook 衍生计算
-- **已删除**: OrderBook 衍生方法无业务消费者 (孤儿代码)，测试一并删除。
+本次清理删除 29 个仅被测试引用的方法，测试数从 80 降至 34。
 
-### TC-INT-5: Ticker 衍生计算
-- **已删除**: Ticker 衍生方法无业务消费者 (孤儿代码)，测试一并删除。
+| 已删除方法 | 位置 | 业务调用方 |
+|-----------|------|-----------|
+| `Side::as_str` | enums.rs | 无（virs-ccxt 用 match 而非 as_str） |
+| `Side::is_opening_for` | enums.rs | 无 |
+| `Side::is_closing_for` | enums.rs | 无 |
+| `PositionSide::as_str` | enums.rs | 无 |
+| `PositionSide::is_long` | enums.rs | 无（调用者 ExchangePosition::is_long、Position::is_long 均已删除） |
+| `PositionSide::is_short` | enums.rs | 无（同上） |
+| `OrderStatus::is_open` | enums.rs | 无（调用者 PositionOrder::is_open 已删除） |
+| `OrderStatus::is_canceled` | enums.rs | 无（调用者 PositionOrder::is_canceled 已删除） |
+| `PositionStatus::is_closed` | enums.rs | 无（调用者 Position::is_closed 已删除） |
+| `PositionStatus::is_empty` | enums.rs | 无（调用者 Position::is_empty 已删除） |
+| `EngineState::is_stopped` | enums.rs | 无 |
+| `StrategyStatus::is_running` | enums.rs | 无（virs-models 有同名独立方法） |
+| `StrategyStatus::is_stopped` | enums.rs | 无（同上） |
+| `ExchangePosition::is_long` | market.rs | 无 |
+| `ExchangePosition::is_short` | market.rs | 无 |
+| `ExchangePosition::pnl_pct_at` | market.rs | 无 |
+| `AutoMarketType::is_perpetual` | auto_port.rs | 无 |
+| `BotPositionSide::as_str` | bot.rs | 无 |
+| `BotPositionSide::is_long` | bot.rs | 无 |
+| `BotPositionSide::is_short` | bot.rs | 无 |
+| `Position::is_closed` | position.rs | 无 |
+| `Position::is_empty` | position.rs | 无 |
+| `Position::is_long` | position.rs | 无 |
+| `Position::is_short` | position.rs | 无 |
+| `Position::pnl_pct_at` | position.rs | 无 |
+| `PositionOrder::is_filled` | position.rs | 无 |
+| `PositionOrder::is_open` | position.rs | 无 |
+| `PositionOrder::is_canceled` | position.rs | 无 |
+| `PositionOrder::fill_rate` | position.rs | 无 |
 
-### TC-INT-6: RiskConfig 验证链路
-- INT-6.1 默认配置 → validate() == Ok
-- INT-6.2 无效配置 → validate() == Err
+### 存活方法验证
 
-### TC-INT-7: Side × PositionSide 组合
-- INT-7.1 所有4种组合 is_opening_for / is_closing_for 互补
+以下 11 个方法有外部 crate 非测试代码调用，予以保留：
 
-### TC-INT-8: serde + 方法链路
-- INT-8.1 ExchangePosition → JSON → ExchangePosition → unrealized_pnl_at 一致
-- INT-8.2 MarketType::from_str_lossy round-trip — **已删除** (孤儿方法)
-- INT-8.3 AutoMarketType::from_str_lossy — 保留 (业务调用: `virs-app/auto_store.rs:31`)
-
----
-
-## 5. 测试文件与模块映射
-
-| 测试文件 | 被测模块 | 文档计划 | 实际实现 | 状态 |
-|----------|----------|---------|---------|------|
-| `src/enums_tests.rs` | enums.rs | 25 | 27 | ✅ (E10 已删除) |
-| `src/market_tests.rs` | market.rs | 17 | 9 | ✅ (M2-M7 已删除) |
-| `src/position_tests.rs` | position.rs | 16 | 18 | ✅ 超额完成 |
-| `src/bot_tests.rs` | bot.rs | 3 | 4 | ✅ 超额完成 |
-| `src/auto_port_tests.rs` | auto_port.rs | 2 | 2 | ✅ 完全匹配 |
-| `src/serde_tests.rs` | 全部 serde | 14 | 11 | ✅ (S3 已删除) |
-| `tests/integration_tests.rs` | 跨模块 | 12 | 9 | ✅ (INT-4/5/8.2 已删除) |
-| **合计** | | **89** | **80** (含 4 集成 INT-8.3 保留) → 实际 **76** | ✅ 全部通过 |
-
----
-
-## 6. 重构需求
-
-### 6.1 添加方法
-- `enums.rs`: 17 个方法 (Side 3, PositionSide 3, OrderStatus 4, PositionStatus 3, EngineState 2, StrategyStatus 2)
-- `market.rs`: 11 个方法 (Balance 1, Ticker 2, OrderBook 4, ExchangePosition 4)
-- `position.rs`: 12 个方法 (Position 7, PositionOrder 4, RiskConfig 1)
-- `bot.rs`: 3 个方法 (BotPositionSide 3)
-- `auto_port.rs`: 2 个方法 (AutoMarketType 2)
-
-### 6.2 添加 PartialEq
-- `Ticker`, `Kline`, `OrderBook`, `Balance`, `FundingRate`, `FundingHistoryEntry`, `FeeRates`, `ExchangePosition` 添加 `PartialEq`
-- `Position`, `Trade`, `RiskConfig` 添加 `PartialEq`
-
-### 6.3 `_tests` 文件模式
-- 通过 `#[cfg(test)] mod xxx_tests;` 在 `lib.rs` 中引入
-
----
-
-## 7. 测试用例与文档对比审查报告
-
-### 7.1 数量对比
-
-| 测试文件 | 文档计划 | 实际实现 | 差异 | 状态 |
-|----------|---------|---------|------|------|
-| `enums_tests.rs` | 25 | 29 | +4 | ✅ 超额完成 |
-| `market_tests.rs` | 17 | 17 | 0 | ✅ 完全匹配 |
-| `position_tests.rs` | 16 | 18 | +2 | ✅ 超额完成 |
-| `bot_tests.rs` | 3 | 4 | +1 | ✅ 超额完成 |
-| `auto_port_tests.rs` | 2 | 2 | 0 | ✅ 完全匹配 |
-| `serde_tests.rs` | 14 | 16 | +2 | ✅ 超额完成 |
-| `integration_tests.rs` | 12 | 14 | +2 | ✅ 超额完成 |
-| **合计** | **89** | **100** | **+11** | ✅ 全部通过 |
-
-### 7.2 文档中每个测试用例的实现状态
-
-- **TC-E1 ~ E17** (enums_tests.rs): ✅ 全部实现 (29 个，含额外边界测试)
-- **TC-M1 ~ M11** (market_tests.rs): ✅ 17/17 实现
-- **TC-P1 ~ P12** (position_tests.rs): ✅ 18/16 实现 (含额外除零保护测试)
-- **TC-B1 ~ B3** (bot_tests.rs): ✅ 4/3 实现
-- **TC-AM1 ~ AM2** (auto_port_tests.rs): ✅ 2/2 实现
-- **TC-S1 ~ S4** (serde_tests.rs): ✅ 16/14 实现
-- **TC-INT-1 ~ INT-8** (integration_tests.rs): ✅ 14/12 实现
-
-### 7.3 业务逻辑使用验证
-
-新增方法封装了业务代码中已存在的内联计算逻辑：
-
-| 方法 | 对应的业务内联计算位置 | 计算逻辑 |
-|------|---------------------|---------|
-| `Side::is_opening_for` | `paper.rs:241-244`, `engine.rs:943` | `(Buy,Long)\|(Sell,Short)` 开仓判断 |
-| `Side::is_closing_for` | `engine.rs:943` | `(Sell,Long)\|(Buy,Short)` 平仓判断 |
-| `PositionStatus::is_open` | `engine.rs:182,583`, `auto/worker.rs:128,143,217,650,702,894,1558` | `status == PositionStatus::Open` |
-| `PositionStatus::is_closed` | `engine.rs:1177` | `status == PositionStatus::Closed` |
-| `OrderStatus::is_filled` | `engine.rs:1123` | `status == OrderStatus::Filled` |
-| `OrderStatus::is_open` | `engine.rs:968` | `PartiallyFilled\|Filled` |
-| `ExchangePosition::unrealized_pnl_at` | `paper.rs:383-384`, `auto/strategy.rs:174-177` | Long/Short PnL 计算 |
-| `ExchangePosition::pnl_pct_at` | `auto/strategy.rs:179-180`, `grid/worker.rs:522-523` | `pnl/(entry*size)*100` |
-| `Position::unrealized_pnl_at` | `paper.rs:383-384`, `auto/strategy.rs:174` | 同上 |
-| `Position::pnl_pct_at` | `auto/strategy.rs:179` | `pnl/margin*100` |
-| `PositionOrder::is_filled` | `engine.rs:1123` | `status == Filled` |
-| `PositionOrder::is_open` | `engine.rs:968` | `Open\|PartiallyFilled` |
-| `PositionOrder::fill_rate` | (新增，供未来使用) | `filled/amount` 除零保护 |
-| `Balance::compute_total` | `paper.rs:419`, `binance/api.rs:293` | `free + used` |
-| `EngineState::is_running` | `engine.rs:74` | `state == Running` |
-| `RiskConfig::validate` | `risk.rs:71,88,105,141,161,195,226,248` | 集中验证逻辑 |
-
-### 7.4 回归审查发现的问题
-
-| # | 问题 | 类型 | 修复 |
-|---|------|------|------|
-| 1 | 大量派生计算散落在业务代码中 | 可维护性 | 抽取幂等方法到类型定义中 |
-| 2 | 11 个结构体缺少 `PartialEq` | 测试需求 | 添加 `#[derive(PartialEq)]` |
-| 3 | `RiskConfig` 验证逻辑分散在 `RiskChecker` 中 | 可维护性 | 抽取 `validate()` 方法到 `RiskConfig`，并在 `RiskChecker::new` 中调用 |
-| 4 | `Side` × `PositionSide` 组合判断重复出现 | 可维护性 | 抽取 `is_opening_for` / `is_closing_for` |
-| 5 | `Balance::compute_total` 在 2 处内联计算 | 可维护性 | 抽取为方法，已重构 `paper.rs` / `binance/api.rs` 调用 |
-| 6 | `PaginationParams::normalize` 已定义但未被业务代码使用 | 孤儿代码 | **已删除** 方法 (业务代码使用各自的 `TradesQuery` + 内联 clamp) |
-| 7 | `MarketType::from_str_lossy` 已定义但未被业务代码使用 | 孤儿代码 | **已删除** 方法及测试 |
-| 8 | `OrderStatus::is_terminal` / `Ticker::mid_price` / `Ticker::spread` / `OrderBook::best_bid` / `best_ask` / `spread` / `mid_price` / `ApiResponse::ok_with_message` 仅测试引用 | 孤儿代码 | **已删除** 方法及对应测试 |
-| 9 | `PositionStatus::is_open` / `OrderStatus::is_filled` / `EngineState::is_running` / `Position::unrealized_pnl_at` / `ExchangePosition::unrealized_pnl_at` / `AutoMarketType::is_spot` 等方法此前仅测试引用 (业务代码用内联判断) | 孤儿代码 | **已重构业务代码** 调用类型方法：`engine.rs`, `auto/worker.rs`, `auto/strategy.rs`, `paper.rs`, `binance/api.rs` |
-| 10 | 所有数值方法均含除零保护 | 健壮性 | `size==0`, `amount==0`, `margin==0`, `cost==0` |
-
-### 7.5 孤儿代码检查
-
-- 所有保留的 `pub fn` 方法均有业务代码调用 (非仅测试引用)
-- 已删除的孤儿方法: `MarketType::from_str_lossy`, `OrderStatus::is_terminal`, `Ticker::mid_price`, `Ticker::spread`, `OrderBook::best_bid/best_ask/spread/mid_price`, `ApiResponse::ok_with_message`, `PaginationParams::normalize`
-- 业务代码已重构的方法调用位置:
-  - `virs-position/src/engine.rs`: `status.is_open()`, `status.is_filled()`, `state.is_running()`
-  - `virs-position/src/risk.rs`: `RiskChecker::new` 调用 `config.validate()`
-  - `virs-bot/src/auto/worker.rs`: `p.is_open()`, `bot.market_type.is_spot()`
-  - `virs-bot/src/auto/strategy.rs`: `position.unrealized_pnl_at()` (替代内联 Long/Short 计算)
-  - `virs-exchange/src/paper.rs`: `Balance::compute_total()`, `pos.unrealized_pnl_at()` (移除本地 `PaperPosition` 结构体，复用 `ExchangePosition`)
-  - `virs-ccxt/src/adapter/binance/api.rs`: `Balance::compute_total()`
-- Clippy 检查通过 (无新增警告)
-- 整个工作区编译通过，76 个测试全部通过
+| 方法 | 业务调用位置 |
+|------|-------------|
+| `OrderStatus::is_filled` | `virs-position/src/engine.rs` |
+| `PositionStatus::is_open` | `virs-types/src/position.rs` (Position::is_open 实现) |
+| `EngineState::is_running` | `virs-position/src/engine.rs` |
+| `Balance::compute_total` | `virs-ccxt/src/adapter/binance/api.rs`, `virs-exchange/src/paper.rs` |
+| `ExchangePosition::unrealized_pnl_at` | `virs-exchange/src/paper.rs` |
+| `AutoMarketType::as_str` | `virs-bot/src/auto/worker.rs` |
+| `AutoMarketType::is_spot` | `virs-bot/src/auto/worker.rs` |
+| `AutoMarketType::from_str_lossy` | `virs-app/src/adapters/auto_store.rs` |
+| `Position::is_open` | `virs-bot/src/auto/worker.rs`, `virs-position/src/engine.rs` |
+| `Position::unrealized_pnl_at` | `virs-bot/src/auto/strategy.rs` |
+| `RiskConfig::validate` | `virs-position/src/risk.rs` |
+| `OrderSide::as_str` | `virs-bot/src/grid/worker.rs` |

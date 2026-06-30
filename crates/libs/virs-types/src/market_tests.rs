@@ -1,7 +1,5 @@
 //! Unit tests for market.rs methods.
 
-use chrono::Utc;
-
 use crate::enums::PositionSide;
 use crate::market::{Balance, ExchangePosition};
 
@@ -22,22 +20,8 @@ fn m1_2_zero_total() {
 }
 
 // ============================================================
-// TC-M8-M11: ExchangePosition methods
+// TC-M10: ExchangePosition::unrealized_pnl_at
 // ============================================================
-
-#[test]
-fn m8_1_is_long() {
-    let pos = make_exchange_position(PositionSide::Long, 50000.0, 1.0);
-    assert!(pos.is_long());
-    assert!(!pos.is_short());
-}
-
-#[test]
-fn m9_1_is_short() {
-    let pos = make_exchange_position(PositionSide::Short, 50000.0, 1.0);
-    assert!(pos.is_short());
-    assert!(!pos.is_long());
-}
 
 #[test]
 fn m10_1_long_profit() {
@@ -55,12 +39,6 @@ fn m10_2_short_profit() {
 fn m10_3_long_loss() {
     let pos = make_exchange_position(PositionSide::Long, 50000.0, 1.0);
     assert!((pos.unrealized_pnl_at(49000.0) - (-1000.0)).abs() < 0.01);
-}
-
-#[test]
-fn m11_1_pnl_pct() {
-    let pos = make_exchange_position(PositionSide::Long, 50000.0, 1.0);
-    assert!((pos.pnl_pct_at(51000.0) - 2.0).abs() < 0.01);
 }
 
 // ============================================================

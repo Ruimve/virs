@@ -3,16 +3,6 @@
 use crate::auto_port::AutoMarketType;
 
 // ============================================================
-// TC-AM1: AutoMarketType::is_perpetual
-// ============================================================
-
-#[test]
-fn am1_1_perpetual_is_perpetual() {
-    assert!(AutoMarketType::Perpetual.is_perpetual());
-    assert!(!AutoMarketType::Spot.is_perpetual());
-}
-
-// ============================================================
 // TC-AM2: AutoMarketType::is_spot
 // ============================================================
 

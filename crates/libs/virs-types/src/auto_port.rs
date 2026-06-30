@@ -150,10 +150,6 @@ impl AutoMarketType {
         }
     }
 
-    pub fn is_perpetual(&self) -> bool {
-        self == &Self::Perpetual
-    }
-
     pub fn is_spot(&self) -> bool {
         self == &Self::Spot
     }

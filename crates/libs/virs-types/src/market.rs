@@ -76,14 +76,6 @@ pub struct ExchangePosition {
 }
 
 impl ExchangePosition {
-    pub fn is_long(&self) -> bool {
-        self.side.is_long()
-    }
-
-    pub fn is_short(&self) -> bool {
-        self.side.is_short()
-    }
-
     /// Computes unrealized PnL at a given current price.
     /// Long: (current - entry) * size
     /// Short: (entry - current) * size
@@ -92,18 +84,6 @@ impl ExchangePosition {
             PositionSide::Long => (current_price - self.entry_price) * self.size,
             PositionSide::Short => (self.entry_price - current_price) * self.size,
             PositionSide::Both => 0.0,
-        }
-    }
-
-    /// Computes PnL percentage at a given current price.
-    /// pnl / (entry_price * size) * 100
-    /// Returns 0.0 if entry_price or size is zero (division-by-zero protection).
-    pub fn pnl_pct_at(&self, current_price: f64) -> f64 {
-        let cost = self.entry_price * self.size;
-        if cost == 0.0 {
-            0.0
-        } else {
-            self.unrealized_pnl_at(current_price) / cost * 100.0
         }
     }
 }
