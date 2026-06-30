@@ -1,5 +1,5 @@
-import { forwardRef, memo } from "react";
-import { strokeBase, type IconProps } from "../define";
+import { forwardRef, memo } from 'react';
+import { strokeBase, type IconProps } from '../define';
 
 /** 盾牌+对勾（安全守护，适合 Paper Trading / 安全模式） */
 export const ShieldCheck = memo(

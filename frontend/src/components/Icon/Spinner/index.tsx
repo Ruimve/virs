@@ -1,5 +1,5 @@
-import { forwardRef, memo } from "react";
-import type { IconProps } from "../define";
+import { forwardRef, memo } from 'react';
+import type { IconProps } from '../define';
 
 /**
  * 旋转加载弧（Heroicons outline arrow-path 风格的简化版）。

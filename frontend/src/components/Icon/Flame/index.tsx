@@ -1,5 +1,5 @@
-import { forwardRef, memo } from "react";
-import { strokeBase, type IconProps } from "../define";
+import { forwardRef, memo } from 'react';
+import { strokeBase, type IconProps } from '../define';
 
 /** 火焰（真实/能量/风险，适合 Real Trading / 实盘） */
 export const Flame = memo(

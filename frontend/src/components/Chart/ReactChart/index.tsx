@@ -20,7 +20,7 @@ function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartP
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    console.log('加载图表')
+    console.log('加载图表');
 
     // Read theme-aware CSS variables for chart colors
     const cs = getComputedStyle(el);

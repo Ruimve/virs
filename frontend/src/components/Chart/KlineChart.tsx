@@ -83,7 +83,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     down: '',
     downVolume: '',
   });
-  
+
   const readChartColors = useCallback(() => {
     const cs = getComputedStyle(document.documentElement);
     colorsRef.current = {

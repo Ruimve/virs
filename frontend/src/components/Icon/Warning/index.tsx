@@ -1,5 +1,5 @@
-import { forwardRef, memo } from "react";
-import { strokeBase, type IconProps } from "../define";
+import { forwardRef, memo } from 'react';
+import { strokeBase, type IconProps } from '../define';
 
 /** 三角警告（Heroicons outline exclamation-triangle） */
 export const Warning = memo(

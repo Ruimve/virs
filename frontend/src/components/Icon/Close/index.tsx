@@ -1,5 +1,5 @@
-import { forwardRef, memo } from "react";
-import { strokeBase, type IconProps } from "../define";
+import { forwardRef, memo } from 'react';
+import { strokeBase, type IconProps } from '../define';
 
 /** 关闭 X */
 export const Close = memo(

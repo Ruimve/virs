@@ -1,5 +1,5 @@
-import { forwardRef, memo } from "react";
-import { strokeBase, type IconProps } from "../define";
+import { forwardRef, memo } from 'react';
+import { strokeBase, type IconProps } from '../define';
 
 /** 圆圈信息（Heroicons outline exclamation-circle，统一叹号长度） */
 export const InfoCircle = memo(
