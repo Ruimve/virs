@@ -83,6 +83,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     down: '',
     downVolume: '',
   });
+  
   const readChartColors = useCallback(() => {
     const cs = getComputedStyle(document.documentElement);
     colorsRef.current = {
@@ -262,7 +263,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     } else {
       chart.timeScale().fitContent();
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, markers, overlays, readChartColors]);
 
   // ── Full data replacement (timeframe change, etc.) ─────
 

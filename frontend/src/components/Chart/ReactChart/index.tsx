@@ -20,6 +20,7 @@ function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartP
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    console.log('加载图表')
 
     // Read theme-aware CSS variables for chart colors
     const cs = getComputedStyle(el);
@@ -72,7 +73,7 @@ function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartP
       chartRef.current = undefined;
       onLoad(undefined);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onLoad, timeVisible, secondsVisible]);
 
   return (
     <div

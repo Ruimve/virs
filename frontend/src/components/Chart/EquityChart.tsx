@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, memo, useCallback } from 'react';
 import { type IChartApi, type ISeriesApi, type LineData, LineSeries } from 'lightweight-charts';
 import ReactChart from './ReactChart';
 import { toLocaleTime } from './ReactChart/locale/zh_CN';
@@ -14,9 +14,9 @@ function EquityChart({ data, height, initialBalance }: EquityChartProps) {
   const lineSeriesRef = useRef<ISeriesApi<'Line'> | undefined>(undefined);
   const initializedRef = useRef(false);
 
-  const setChart = (c: IChartApi | undefined) => {
+  const setChart = useCallback((c: IChartApi | undefined) => {
     chartRef.current = c;
-  };
+  }, []);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -54,7 +54,7 @@ function EquityChart({ data, height, initialBalance }: EquityChartProps) {
     }
 
     chart.timeScale().fitContent();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, initialBalance]);
 
   useEffect(() => {
     const lineSeries = lineSeriesRef.current;
@@ -72,4 +72,4 @@ function EquityChart({ data, height, initialBalance }: EquityChartProps) {
   return <ReactChart onLoad={setChart} height={height} />;
 }
 
-export default EquityChart;
+export default memo(EquityChart);
