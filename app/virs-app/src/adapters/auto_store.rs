@@ -21,7 +21,7 @@ impl PgAutoStore {
     }
 }
 
-fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
+pub fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
     AutoBotConfig {
         id: bot.id,
         user_id: bot.user_id,
@@ -192,7 +192,7 @@ impl AutoStore for PgAutoStore {
         pnl_pct: f64,
         close_reason: &str,
     ) -> anyhow::Result<()> {
-        let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
+        let pnl_pct = crate::adapters::utils::sanitize_pnl_pct(pnl_pct);
         let result = sqlx::query(
             r#"UPDATE qd_auto_trades SET
                close_side = $2, close_price = $3, close_quantity = $4,
@@ -281,8 +281,8 @@ impl AutoStore for PgAutoStore {
         pnl_pct: f64,
         close_reason: &str,
     ) -> anyhow::Result<Uuid> {
-        let open_side = if close_side == "buy" { "sell" } else { "buy" };
-        let pnl_pct = if pnl_pct.is_nan() { 0.0 } else { pnl_pct };
+        let open_side = crate::adapters::utils::derive_open_side(close_side);
+        let pnl_pct = crate::adapters::utils::sanitize_pnl_pct(pnl_pct);
         let row: (Uuid,) = sqlx::query_as(
             r#"INSERT INTO qd_auto_trades
                (bot_id, user_id, symbol, exchange,

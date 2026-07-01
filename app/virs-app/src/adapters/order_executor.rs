@@ -162,7 +162,7 @@ impl OrderExecutor for PeOrderExecutor {
 }
 
 /// Convert a Position Engine event to a bot-layer OrderEvent.
-fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
+pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
     match event {
         EngineEvent::OrderPlaced { order } => Some(OrderEvent::OrderPlaced {
             order: OrderInfo {

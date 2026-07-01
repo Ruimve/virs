@@ -13,7 +13,7 @@ use virs_types::bot::{AccountBalance, MarketDataProvider, MarketSnapshot};
 use virs_types::exchange_pe::ExchangePe;
 
 /// Convert a virs-market Candle to virs-models Kline.
-fn candle_to_kline(c: &virs_market::Candle) -> Kline {
+pub fn candle_to_kline(c: &virs_market::Candle) -> Kline {
     Kline {
         open_time: c.open_time,
         open: c.open,

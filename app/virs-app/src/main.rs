@@ -5,9 +5,6 @@
 //! They are started when the first bot is created after the wizard,
 //! using the exchange credentials provided by the user.
 
-mod adapters;
-mod engine_manager;
-
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -16,13 +13,12 @@ use uuid::Uuid;
 use virs_api::EngineManager;
 
 use virs_api::{build_router, AppState, WsBroadcaster};
+use virs_app::engine_manager::AppEngineManager;
 use virs_config::load_config;
 use virs_exchange::Exchanges;
 use virs_market::{
     ExchangeKlineSource, KlineEngine, KlineEngineConfig, OrderBookEngine, OrderBookEngineConfig,
 };
-
-use engine_manager::AppEngineManager;
 
 #[tokio::main]
 async fn main() -> Result<()> {

@@ -53,9 +53,6 @@ pub trait EngineManager: Send + Sync {
     /// Get the auto engine command sender (None if engines not started)
     fn auto_cmd_tx(&self) -> Option<mpsc::Sender<AutoCommand>>;
 
-    /// Whether engines have been started
-    fn is_started(&self) -> bool;
-
     /// Current paper mode (meaningful only after engines started)
     fn paper_mode(&self) -> bool;
 

@@ -386,10 +386,6 @@ impl EngineManager for AppEngineManager {
         self.state.get().map(|s| s.auto_cmd_tx.clone())
     }
 
-    fn is_started(&self) -> bool {
-        self.started.load(Ordering::SeqCst)
-    }
-
     fn paper_mode(&self) -> bool {
         self.state.get().map(|s| s.paper_mode).unwrap_or(false)
     }
