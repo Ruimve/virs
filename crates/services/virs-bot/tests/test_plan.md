@@ -116,8 +116,6 @@
 
 ## 3. 代码覆盖率
 
-### 测试文件与模块映射
-
 | 测试文件 | 被测模块 | 测试数 |
 |----------|----------|--------|
 | `src/auto/strategy_tests.rs` | auto/strategy.rs | 26 |
@@ -128,25 +126,3 @@
 | `src/grid/utils/prompt_tests.rs` | grid/utils/prompt.rs | 3 |
 | `tests/integration_tests.rs` | 跨模块链路 | 11 |
 | **合计** | | **66** |
-
-### 幂等函数业务调用验证
-
-| 函数 | 模块 | 业务调用点 |
-|------|------|-----------|
-| `compute_stop_loss` | auto/strategy.rs | worker.rs:1279, 1703 |
-| `compute_take_profit` | auto/strategy.rs | worker.rs:1280, 1704 |
-| `compute_trailing_stop` | auto/strategy.rs | worker.rs:679 |
-| `compute_position_pct` | auto/strategy.rs | worker.rs:1236 |
-| `format_stop_take_profit` | auto/strategy.rs | worker.rs:867 |
-| `format_position_info` | auto/strategy.rs | worker.rs:858 |
-| `render_prompt` | auto/strategy.rs | worker.rs:945 |
-| `compute_cooldown_secs` | auto/strategy.rs | worker.rs:163 |
-| `AutoAction::from_str` | auto/ai.rs | ai.rs:99 |
-| `AutoAction::as_str` | auto/ai.rs | worker.rs:794, 966, 977, 1087 |
-| `AutoDecision::from_json` | auto/ai.rs | ai.rs:178 |
-| `GridAction::from_str` | grid/ai.rs | worker.rs:1122 |
-| `GridAction::as_str` | grid/ai.rs | worker.rs:1126, 1128 |
-| `parse_grid_decision` | grid/ai.rs | ai.rs:102 |
-| `calculate_levels` | grid/utils/mod.rs | worker.rs:54, 1435 |
-| `reset_for_relist` | grid/types.rs | worker.rs:587 |
-| `format_bars_outside` | grid/utils/prompt.rs | prompt.rs:73, 107 |
