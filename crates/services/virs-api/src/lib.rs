@@ -1,9 +1,8 @@
 //! virs-api — API Gateway service.
 //!
-//! HTTP/WebSocket API layer, routing, middleware, and SPA fallback.
+//! HTTP/WebSocket API layer, routing, and SPA fallback.
 
 pub mod handlers;
-pub mod middleware;
 pub mod router;
 pub mod state;
 pub mod ws;

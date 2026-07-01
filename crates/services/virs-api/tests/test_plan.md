@@ -1,53 +1,13 @@
 # virs-api 测试用例文档
 
-> 生成日期: 2026-07-01
 > Crate: `crates/services/virs-api`
 > 状态: **36 个测试全部通过** (28 单元 + 8 集成)
 
 ---
 
-## 1. 抽取的幂等函数清单
+## 1. 单元测试用例
 
-### 1.1 handlers/ai.rs — AI Provider 解析函数
-
-| # | 函数 | 签名 | 说明 |
-|---|------|------|------|
-| AI1 | `resolve_provider_base_url` | `(provider: &str) -> Option<&'static str>` | provider → base URL 映射 |
-| AI2 | `resolve_provider_model` | `(provider: &str) -> Option<&'static str>` | provider → model 映射 |
-
-> 从 `call_llm_with_fallback`、`test_credential`、`fetch_models` 中提取，消除 ai.rs 和 ai_credentials.rs 间的重复代码。
-
-### 1.2 handlers/ai_credentials.rs — API 响应解析函数
-
-| # | 函数 | 签名 | 说明 |
-|---|------|------|------|
-| AC1 | `parse_models_response` | `(data: &Value) -> Vec<Value>` | 解析 LLM /models API 响应 |
-| AC2 | `parse_balance_response` | `(data: &Value) -> Vec<Value>` | 解析 LLM balance API 响应 |
-
-> 从 `fetch_models`、`fetch_balance` 中提取内联解析逻辑。
-
-### 1.3 ws.rs — WebSocket JSON 转换函数
-
-| # | 函数 | 签名 | 说明 |
-|---|------|------|------|
-| W1 | `position_to_ws_json` | `(&Position) -> Value` | Position → WS JSON（消除 2 处重复） |
-| W2 | `kline_event_to_json` | `(&KlineEvent) -> Value` | KlineEvent → WS JSON |
-| W3 | `orderbook_event_to_json` | `(&OrderBookEvent) -> Value` | OrderBookEvent → WS JSON |
-
-> 从 `handle_position_ws`、`handle_kline_ws`、`handle_orderbook_ws` 中提取内联 JSON 构建。
-
-### 1.4 handlers/response.rs — API 响应构造
-
-| # | 函数 | 签名 | 说明 |
-|---|------|------|------|
-| R1 | `ApiResponse::ok` | `(data: Value) -> Self` | 成功响应 |
-| R2 | `ApiResponse::err` | `(msg: impl Into<String>) -> Self` | 错误响应 |
-
----
-
-## 2. 单元测试用例
-
-### 2.1 ai_tests.rs — Provider 解析 (8)
+### 1.1 ai_tests.rs — Provider 解析 (8)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
@@ -60,7 +20,7 @@
 | AI2.3 | `ai2_3_openrouter_model` | "openrouter" → "deepseek/deepseek-chat" |
 | AI2.4 | `ai2_4_unknown_model` | "unknown" → None |
 
-### 2.2 ai_credentials_tests.rs — API 响应解析 (6)
+### 1.2 ai_credentials_tests.rs — API 响应解析 (6)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
@@ -71,7 +31,7 @@
 | AC2.2 | `ac2_2_data_fallback` | 无 balance_infos, 有 data → 从 data 提取 |
 | AC2.3 | `ac2_3_no_balance_fields` | 无匹配字段 → 空列表 |
 
-### 2.3 ws_tests.rs — WS JSON 转换 (9)
+### 1.3 ws_tests.rs — WS JSON 转换 (9)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
@@ -85,7 +45,7 @@
 | W3.2 | `w3_2_orderbook_empty_levels` | bids/asks 空 → 空数组 |
 | W3.3 | `w3_3_orderbook_level_format` | bids → [[price, amount], ...] |
 
-### 2.4 response_tests.rs — ApiResponse (5)
+### 1.4 response_tests.rs — ApiResponse (5)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
@@ -97,7 +57,7 @@
 
 ---
 
-## 3. 集成测试用例
+## 2. 集成测试用例
 
 ### integration_tests.rs (8)
 
@@ -114,36 +74,15 @@
 
 ---
 
-## 4. 代码覆盖率
+## 3. 代码覆盖率
 
 ### 测试文件与模块映射
 
 | 测试文件 | 被测模块 | 测试数 |
 |----------|----------|--------|
-| `src/handlers/ai_tests.rs` | handlers/ai.rs (2 函数) | 8 |
-| `src/handlers/ai_credentials_tests.rs` | handlers/ai_credentials.rs (2 函数) | 6 |
-| `src/ws_tests.rs` | ws.rs (3 函数) | 9 |
-| `src/handlers/response_tests.rs` | handlers/response.rs (2 方法) | 5 |
+| `src/handlers/ai_tests.rs` | handlers/ai.rs | 8 |
+| `src/handlers/ai_credentials_tests.rs` | handlers/ai_credentials.rs | 6 |
+| `src/ws_tests.rs` | ws.rs | 9 |
+| `src/handlers/response_tests.rs` | handlers/response.rs | 5 |
 | `tests/integration_tests.rs` | 跨模块链路 | 8 |
 | **合计** | | **36** |
-
-### 业务使用验证
-
-| 函数 | 业务调用位置 | 调用次数 |
-|------|-------------|---------|
-| `resolve_provider_base_url` | ai.rs (call_llm_with_fallback), ai_credentials.rs (test_credential, fetch_models) | 3 |
-| `resolve_provider_model` | ai.rs (call_llm_with_fallback), ai_credentials.rs (test_credential) | 2 |
-| `parse_models_response` | ai_credentials.rs (fetch_models) | 1 |
-| `parse_balance_response` | ai_credentials.rs (fetch_balance) | 1 |
-| `position_to_ws_json` | ws.rs (handle_position_ws: 事件推送 + 快照推送) | 2 |
-| `kline_event_to_json` | ws.rs (handle_kline_ws) | 1 |
-| `orderbook_event_to_json` | ws.rs (handle_orderbook_ws) | 1 |
-| `ApiResponse::ok` | 全部 handler 模块 | 多处 |
-| `ApiResponse::err` | 全部 handler 模块 | 多处 |
-
-### 回归审查
-
-- clippy 零警告
-- 无孤儿代码（所有提取函数均在非测试业务代码中被调用）
-- 无重复代码（ai.rs 与 ai_credentials.rs 间的 provider 解析重复已消除）
-- 无重复代码（ws.rs 中的 position JSON 构建重复已消除）

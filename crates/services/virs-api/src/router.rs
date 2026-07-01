@@ -227,23 +227,3 @@ fn mime_guess_from_ext(ext: &str) -> &'static str {
         _ => "application/octet-stream",
     }
 }
-
-/// Normalize raw symbol string to BASE/QUOTE format
-pub fn normalize_symbol(raw: &str) -> String {
-    let s = raw.trim().to_uppercase();
-    if s.contains('/') {
-        return s;
-    }
-    let quotes = [
-        "USDT", "USDC", "BUSD", "BTC", "ETH", "BNB", "EUR", "GBP", "TRY", "BRL", "ARS",
-    ];
-    for q in &quotes {
-        if s.ends_with(q) {
-            let base = &s[..s.len() - q.len()];
-            if !base.is_empty() {
-                return format!("{}/{}", base, q);
-            }
-        }
-    }
-    s
-}

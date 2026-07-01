@@ -28,9 +28,6 @@ impl ApiResponse {
     }
 }
 
-/// Convenience type for handler return values that can fail.
-pub type ApiResult = Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)>;
-
 /// Extract user_id from JWT in Authorization header.
 /// Shared by all handlers that need user identity.
 pub fn extract_user_id(
