@@ -7,16 +7,18 @@
  * 单一 indigo 主色，自动适配亮/暗主题。
  */
 
+import { memo, type SVGProps } from 'react';
 import './style.css';
 
 export type IconName = 'botLoading';
 
-interface Props {
+interface Props extends SVGProps<SVGSVGElement> {
   /** 图标尺寸（px），默认 56。inline 场景可传 16-20。 */
   size?: number;
 }
 
-const Icon = ({ size = 56 }: Props) => {
+const Icon = memo((props: Props) => {
+  const { size, ...rest } = props;
   return (
     <svg
       className="bot-loading-icon"
@@ -25,6 +27,7 @@ const Icon = ({ size = 56 }: Props) => {
       height={size}
       role="img"
       aria-label="Loading bot"
+      {...rest}
     >
       <title>Loading bot</title>
       <desc>Minimalist bot mark with rotating arc</desc>
@@ -58,6 +61,6 @@ const Icon = ({ size = 56 }: Props) => {
       <line className="bot-mouth" x1="35" y1="47" x2="45" y2="47" strokeLinecap="round" />
     </svg>
   );
-};
+});
 
 export { Icon };

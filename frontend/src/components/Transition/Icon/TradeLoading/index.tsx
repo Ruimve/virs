@@ -7,16 +7,18 @@
  * 单一 indigo 主色，自动适配亮/暗主题。
  */
 
+import { memo, type SVGProps } from 'react';
 import './style.css';
 
 export type IconName = 'tradeLoading';
 
-interface Props {
+interface Props extends SVGProps<SVGSVGElement> {
   /** 图标尺寸（px），默认 56。inline 场景可传 16-20。 */
   size?: number;
 }
 
-const Icon = ({ size = 56 }: Props) => {
+const Icon = memo((props: Props) => {
+  const { size, ...rest } = props;
   return (
     <svg
       className="trade-loading-icon"
@@ -25,6 +27,7 @@ const Icon = ({ size = 56 }: Props) => {
       height={size}
       role="img"
       aria-label="Loading trades"
+      {...rest}
     >
       <title>Loading trades</title>
       <desc>Minimalist candlestick chart mark with rotating arc</desc>
@@ -56,6 +59,6 @@ const Icon = ({ size = 56 }: Props) => {
       <rect className="candle-body candle-body-right" x="47" y="33" width="6" height="8" />
     </svg>
   );
-};
+});
 
 export { Icon };

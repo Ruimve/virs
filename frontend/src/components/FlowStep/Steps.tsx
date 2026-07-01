@@ -1,5 +1,5 @@
-import { memo, type ReactNode } from 'react';
-import FlowStep, { type FlowStepStatus } from './Step';
+import { type ReactNode, memo } from 'react';
+import { type FlowStepStatus, FlowStep } from './Step';
 
 export type { FlowStepStatus };
 
@@ -21,7 +21,7 @@ export interface FlowStepsProps {
   onToggles?: Record<string, (expanded: boolean) => void>;
 }
 
-function FlowSteps({ steps, statuses, summaries, onToggles }: FlowStepsProps) {
+const FlowSteps = memo(({ steps, statuses, summaries, onToggles }: FlowStepsProps) => {
   return (
     <div className="space-y-1">
       {steps.map((config, index) => {
@@ -48,6 +48,6 @@ function FlowSteps({ steps, statuses, summaries, onToggles }: FlowStepsProps) {
       })}
     </div>
   );
-}
+});
 
-export default memo(FlowSteps);
+export { FlowSteps };

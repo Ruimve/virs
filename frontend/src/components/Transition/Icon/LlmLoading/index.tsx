@@ -7,16 +7,18 @@
  * 贴合 LLM 验证 / 推理调用语义。单一 indigo 主色，自动适配亮/暗主题。
  */
 
+import { memo, type SVGProps } from 'react';
 import './style.css';
 
 export type IconName = 'llmLoading';
 
-interface Props {
+interface Props extends SVGProps<SVGSVGElement> {
   /** 图标尺寸（px），默认 56。inline 场景可传 16-20。 */
   size?: number;
 }
 
-const Icon = ({ size = 56 }: Props) => {
+const Icon = memo((props: Props) => {
+  const { size, ...rest } = props;
   return (
     <svg
       className="llm-loading-icon"
@@ -25,6 +27,7 @@ const Icon = ({ size = 56 }: Props) => {
       height={size}
       role="img"
       aria-label="Loading LLM"
+      {...rest}
     >
       <title>Loading LLM</title>
       <desc>Minimalist chip core mark with rotating arc</desc>
@@ -86,6 +89,6 @@ const Icon = ({ size = 56 }: Props) => {
       <circle className="chip-inner" cx="40" cy="40" r="2" />
     </svg>
   );
-};
+});
 
 export { Icon };

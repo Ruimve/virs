@@ -1,7 +1,7 @@
 import { memo, useMemo, useState, type RefObject } from 'react';
 import type { KlineCandle } from '@/service';
 import KlineChart, { type KlineChartHandle } from '@/components/Chart/KlineChart';
-import { Icon as TradeLoadingIcon } from '@/components/Transition/Icon/TradeLoading';
+import { TradeLoading } from '@/components/Transition/Icon';
 
 interface ChartMarker {
   time: number;
@@ -89,7 +89,7 @@ const StickyMarket = ({
       <KlineChart ref={chartRef} data={klineData} markers={markers} height={300} />
     ) : (
       <div className="flex flex-col items-center justify-center h-[440px] gap-3 text-on-surface-tertiary text-xs">
-        <TradeLoadingIcon size={36} />
+        <TradeLoading size={36} />
         <span className="tracking-wider">加载 K 线</span>
       </div>
     );

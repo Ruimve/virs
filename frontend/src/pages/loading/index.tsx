@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { findActiveBot } from '@/service';
-import { Icon as AssetLoading } from '@/components/Transition/Icon/AssetLoading';
+import { AssetLoading } from '@/components/Transition/Icon';
 
 /**
  * Loading —— 应用启动加载页。

@@ -5,7 +5,7 @@ interface Props {
   header?: boolean;
   icon: ReactNode;
 }
-const FullScreen = (props: Props) => {
+const FullScreen = memo((props: Props) => {
   const { header = false, icon } = props;
   return (
     <div className="h-dvh bg-base flex flex-col relative overflow-hidden">
@@ -17,6 +17,6 @@ const FullScreen = (props: Props) => {
       </div>
     </div>
   );
-};
+});
 
-export default memo(FullScreen);
+export { FullScreen };

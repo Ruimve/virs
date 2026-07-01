@@ -1,7 +1,7 @@
 import { useState, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service/types';
-import { Icon as AiThinkingIcon } from '@/components/Transition/Icon/AiThinking';
+import { AiThinking } from '@/components/Transition/Icon';
 import { ChevronLeft, ChevronRight } from '@/components/Icon';
 import { actionColor, actionLabel } from '../utils/utils';
 
@@ -36,7 +36,7 @@ const LogDetail = ({ log, loading }: Props) => {
           </div>
         </div>
         <div className="flex flex-col items-center justify-center py-20 gap-4 text-on-surface-tertiary text-xs">
-          <AiThinkingIcon size={48} />
+          <AiThinking size={48} />
           <span className="tracking-wider">AI 决策详情加载中</span>
         </div>
       </div>

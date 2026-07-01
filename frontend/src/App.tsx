@@ -1,11 +1,15 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Loading from './pages/Loading';
-import Login from './pages/Login';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import FullScreen from './components/Transition/FullScreen';
-import { Icon } from './components/Transition/Icon/AssetLoading';
+import { FullScreen } from './components/Transition/FullScreen';
+import { AssetLoading } from './components/Transition/Icon';
 import { AuthProvider, ProtectedRoute } from './context/AuthContext/AuthProvider';
+
+/** 加载中 */
+const Loading = lazy(() => import('./pages/Loading'));
+
+/** 登录 */
+const Login = lazy(() => import('./pages/Login'));
 
 /** 向导 */
 const SetupLayout = lazy(() => import('./pages/Setup/Layout'));
@@ -38,7 +42,7 @@ const HealthCheck = lazy(() => import('./pages/Trade/HealthCheck'));
 /** 交易 -系统信息 */
 
 const SuspenseWrap = ({ children }: { children: React.ReactNode }) => {
-  return <Suspense fallback={<FullScreen icon={<Icon />} />}>{children}</Suspense>;
+  return <Suspense fallback={<FullScreen icon={<AssetLoading />} />}>{children}</Suspense>;
 };
 
 const App = () => {

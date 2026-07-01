@@ -16,130 +16,132 @@ export interface FlowStepProps {
   children?: ReactNode;
 }
 
-function FlowStep({
-  step,
-  title,
-  description,
-  status,
-  summary,
-  editable,
-  showLine,
-  indicator,
-  onToggle,
-  children,
-}: FlowStepProps) {
-  const [expanded, setExpanded] = useState(false);
+const FlowStep = memo(
+  ({
+    step,
+    title,
+    description,
+    status,
+    summary,
+    editable,
+    showLine,
+    indicator,
+    onToggle,
+    children,
+  }: FlowStepProps) => {
+    const [expanded, setExpanded] = useState(false);
 
-  // Auto-expand when status becomes active/verifying/error, auto-collapse when done
-  useEffect(() => {
-    if (status === 'active' || status === 'verifying' || status === 'error') {
-      setExpanded(true);
-    }
-    if (status === 'done') {
-      setExpanded(false);
-    }
-  }, [status]);
+    // Auto-expand when status becomes active/verifying/error, auto-collapse when done
+    useEffect(() => {
+      if (status === 'active' || status === 'verifying' || status === 'error') {
+        setExpanded(true);
+      }
+      if (status === 'done') {
+        setExpanded(false);
+      }
+    }, [status]);
 
-  const isEditable = editable !== false && status === 'done';
-  const isCollapsed = status === 'done' && !expanded;
-  const showContent =
-    status === 'active' ||
-    status === 'verifying' ||
-    status === 'error' ||
-    (status === 'done' && expanded);
+    const isEditable = editable !== false && status === 'done';
+    const isCollapsed = status === 'done' && !expanded;
+    const showContent =
+      status === 'active' ||
+      status === 'verifying' ||
+      status === 'error' ||
+      (status === 'done' && expanded);
 
-  const handleHeaderClick = () => {
-    if (!isEditable) return;
-    const next = !expanded;
-    setExpanded(next);
-    onToggle?.(next);
-  };
+    const handleHeaderClick = () => {
+      if (!isEditable) return;
+      const next = !expanded;
+      setExpanded(next);
+      onToggle?.(next);
+    };
 
-  const shouldShowLine = showLine !== undefined ? showLine : !isCollapsed;
+    const shouldShowLine = showLine !== undefined ? showLine : !isCollapsed;
 
-  const defaultIndicator = (): ReactNode => {
-    const stepContent =
-      typeof step === 'number' ? <span className="text-[11px]">{step}</span> : step;
+    const defaultIndicator = (): ReactNode => {
+      const stepContent =
+        typeof step === 'number' ? <span className="text-[11px]">{step}</span> : step;
 
-    switch (status) {
-      case 'pending':
-        return (
-          <div className="w-7 h-7 rounded-full border border-line-strong bg-surface-1 flex items-center justify-center text-on-surface-faint">
-            {stepContent}
+      switch (status) {
+        case 'pending':
+          return (
+            <div className="w-7 h-7 rounded-full border border-line-strong bg-surface-1 flex items-center justify-center text-on-surface-faint">
+              {stepContent}
+            </div>
+          );
+        case 'active':
+          return (
+            <div className="w-7 h-7 rounded-full bg-accent/80 flex items-center justify-center text-white font-medium">
+              {stepContent}
+            </div>
+          );
+        case 'verifying':
+          return (
+            <div className="w-7 h-7 rounded-full bg-accent-muted border border-accent-muted flex items-center justify-center">
+              <Spinner className="w-3.5 h-3.5 text-accent" />
+            </div>
+          );
+        case 'done':
+          return (
+            <div className="w-7 h-7 rounded-full bg-success-bg border border-success-border flex items-center justify-center">
+              <Check className="w-3.5 h-3.5 text-success-text" strokeWidth={2.5} />
+            </div>
+          );
+        case 'error':
+          return (
+            <div className="w-7 h-7 rounded-full bg-danger-bg border border-danger-border flex items-center justify-center">
+              <Close className="w-3.5 h-3.5 text-danger-text" strokeWidth={2.5} />
+            </div>
+          );
+      }
+    };
+
+    const titleColor = () => {
+      switch (status) {
+        case 'pending':
+          return 'text-on-surface-faint';
+        case 'done':
+          return 'text-on-surface-tertiary';
+        default:
+          return 'text-on-surface';
+      }
+    };
+
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center">
+          <div className={isEditable ? 'cursor-pointer' : ''} onClick={handleHeaderClick}>
+            {indicator ?? defaultIndicator()}
           </div>
-        );
-      case 'active':
-        return (
-          <div className="w-7 h-7 rounded-full bg-accent/80 flex items-center justify-center text-white font-medium">
-            {stepContent}
-          </div>
-        );
-      case 'verifying':
-        return (
-          <div className="w-7 h-7 rounded-full bg-accent-muted border border-accent-muted flex items-center justify-center">
-            <Spinner className="w-3.5 h-3.5 text-accent" />
-          </div>
-        );
-      case 'done':
-        return (
-          <div className="w-7 h-7 rounded-full bg-success-bg border border-success-border flex items-center justify-center">
-            <Check className="w-3.5 h-3.5 text-success-text" strokeWidth={2.5} />
-          </div>
-        );
-      case 'error':
-        return (
-          <div className="w-7 h-7 rounded-full bg-danger-bg border border-danger-border flex items-center justify-center">
-            <Close className="w-3.5 h-3.5 text-danger-text" strokeWidth={2.5} />
-          </div>
-        );
-    }
-  };
-
-  const titleColor = () => {
-    switch (status) {
-      case 'pending':
-        return 'text-on-surface-faint';
-      case 'done':
-        return 'text-on-surface-tertiary';
-      default:
-        return 'text-on-surface';
-    }
-  };
-
-  return (
-    <div className="flex gap-3">
-      <div className="flex flex-col items-center">
-        <div className={isEditable ? 'cursor-pointer' : ''} onClick={handleHeaderClick}>
-          {indicator ?? defaultIndicator()}
+          {shouldShowLine && <div className="w-px flex-1 min-h-[16px] bg-line-default mt-1" />}
         </div>
-        {shouldShowLine && <div className="w-px flex-1 min-h-[16px] bg-line-default mt-1" />}
-      </div>
 
-      <div className="flex-1 pb-4">
-        <div
-          className={`flex items-center gap-2 ${isEditable ? 'cursor-pointer group' : ''}`}
-          onClick={handleHeaderClick}
-        >
-          <p className={`text-sm font-medium leading-7 ${titleColor()}`}>{title}</p>
-          {isEditable && (
-            <span className="text-[10px] text-on-surface-muted group-hover:text-on-surface-tertiary transition-colors">
-              {expanded ? 'collapse' : 'edit'}
-            </span>
+        <div className="flex-1 pb-4">
+          <div
+            className={`flex items-center gap-2 ${isEditable ? 'cursor-pointer group' : ''}`}
+            onClick={handleHeaderClick}
+          >
+            <p className={`text-sm font-medium leading-7 ${titleColor()}`}>{title}</p>
+            {isEditable && (
+              <span className="text-[10px] text-on-surface-muted group-hover:text-on-surface-tertiary transition-colors">
+                {expanded ? 'collapse' : 'edit'}
+              </span>
+            )}
+          </div>
+
+          {description && (status !== 'done' || expanded) && (
+            <p className="text-[12px] text-on-surface-muted -mt-1 mb-1">{description}</p>
           )}
+
+          {isCollapsed && summary && (
+            <div className="text-[12px] text-on-surface-muted -mt-1">{summary}</div>
+          )}
+
+          {showContent && <div className="mt-2">{children}</div>}
         </div>
-
-        {description && (status !== 'done' || expanded) && (
-          <p className="text-[12px] text-on-surface-muted -mt-1 mb-1">{description}</p>
-        )}
-
-        {isCollapsed && summary && (
-          <div className="text-[12px] text-on-surface-muted -mt-1">{summary}</div>
-        )}
-
-        {showContent && <div className="mt-2">{children}</div>}
       </div>
-    </div>
-  );
-}
+    );
+  },
+);
 
-export default memo(FlowStep);
+export { FlowStep };

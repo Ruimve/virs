@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getAutoTrades, type AutoTrade } from '@/service';
-import { Icon as TradeLoadingIcon } from '@/components/Transition/Icon/TradeLoading';
+import { TradeLoading } from '@/components/Transition/Icon';
 import { formatPnl } from '../../components/utils/utils';
 
 const PAGE_SIZE = 20;
@@ -143,7 +143,7 @@ const Trades = () => {
         </div>
       ) : loading ? (
         <div className="flex flex-col items-center justify-center py-16 gap-4 text-on-surface-tertiary text-xs">
-          <TradeLoadingIcon size={40} />
+          <TradeLoading size={40} />
           <span className="tracking-wider">交易记录加载中</span>
         </div>
       ) : (

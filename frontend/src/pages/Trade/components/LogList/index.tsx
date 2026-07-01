@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service';
-import { Icon as AiThinkingIcon } from '@/components/Transition/Icon/AiThinking';
+import { AiThinking } from '@/components/Transition/Icon';
 import { ChevronRight } from '@/components/Icon';
 import { actionColor, actionLabel } from '../utils/utils';
 
@@ -25,7 +25,7 @@ const LogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
   if (loading && logs.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-4 text-on-surface-tertiary text-xs">
-        <AiThinkingIcon size={40} />
+        <AiThinking size={40} />
         <span className="tracking-wider">AI 决策加载中</span>
       </div>
     );

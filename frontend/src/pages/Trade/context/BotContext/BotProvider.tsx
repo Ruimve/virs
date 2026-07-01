@@ -6,8 +6,8 @@ import {
   type GridBot,
   type GridLevelInfo,
 } from '@/service';
-import FullScreen from '@/components/Transition/FullScreen';
-import { Icon } from '@/components/Transition/Icon/BotLoading';
+import { FullScreen } from '@/components/Transition/FullScreen';
+import { BotLoading } from '@/components/Transition/Icon';
 import { BotContext } from '.';
 
 type Bot = {
@@ -52,7 +52,7 @@ export const BotProviderMain = ({ children }: { children: ReactNode }) => {
 
 export const BotProvider = ({ children }: { children: ReactNode }) => {
   return (
-    <Suspense fallback={<FullScreen header icon={<Icon />} />}>
+    <Suspense fallback={<FullScreen header icon={<BotLoading />} />}>
       <BotProviderMain>{children}</BotProviderMain>
     </Suspense>
   );

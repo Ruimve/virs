@@ -9,7 +9,7 @@ import {
   type BalanceInfo,
 } from '@/service';
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '@/components/FlowStep';
-import { Icon as LlmLoadingIcon } from '@/components/Transition/Icon/LlmLoading';
+import { LlmLoading } from '@/components/Transition/Icon';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
 import { WizardStep } from '../context/WizardContext/consts';
@@ -189,7 +189,7 @@ const ConfigureLlm = () => {
           />
           {modelsLoading && (
             <div className="absolute right-3 top-1/2 -translate-y-1/2">
-              <LlmLoadingIcon size={16} />
+              <LlmLoading size={16} />
             </div>
           )}
         </div>
