@@ -8,15 +8,16 @@
  *  4. Provider 置于 BrowserRouter 内部，可用 useNavigate 做声明式跳转
  *  5. 消除 forceUpdate / 手动 subscribe / notify 的样板代码，规避 Concurrent tearing 风险
  */
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { type UserInfo, getUserInfo, login as loginService, getToken, setToken, removeToken } from '@/service';
+import {
+  type UserInfo,
+  getUserInfo,
+  login as loginService,
+  getToken,
+  setToken,
+  removeToken,
+} from '@/service';
 import {
   type AuthContextType,
   type LoginResult,

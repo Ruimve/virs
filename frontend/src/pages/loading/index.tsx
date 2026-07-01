@@ -43,7 +43,7 @@ const Loading = () => {
     } catch {
       navigate('/setup/bot-type', { replace: true });
     }
-  }, [navigate])
+  }, [navigate]);
 
   // 会话恢复就绪后，依据登录状态与活跃 bot 做路由决策
   useEffect(() => {
@@ -54,19 +54,20 @@ const Loading = () => {
     }
 
     startStage();
-  }, [user, loading, navigate]);
+  }, [user, loading, startStage, navigate]);
 
   const stageOrders = useMemo(() => {
     const currentIdx = STAGE_ORDER.indexOf(stage);
     return STAGE_ORDER.map((s, i) => (
       <span
         key={s}
-        className={`loading-dot h-1 rounded-full transition-all duration-500 ${i < currentIdx
+        className={`loading-dot h-1 rounded-full transition-all duration-500 ${
+          i < currentIdx
             ? 'w-4 bg-accent'
             : i === currentIdx
               ? 'w-6 bg-accent'
               : 'w-1 bg-line-default'
-          }`}
+        }`}
         style={{ transitionDelay: `${i * 60}ms` }}
       />
     ));

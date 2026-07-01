@@ -1,5 +1,5 @@
-import { createContext, useContext } from "react";
-import type { UserInfo } from "@/service";
+import { createContext, useContext } from 'react';
+import type { UserInfo } from '@/service';
 
 export const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
 

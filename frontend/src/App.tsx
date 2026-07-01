@@ -89,8 +89,8 @@ const App = () => {
                 </Route>
                 <Route path="/trade/:botType/:botId/health" element={<HealthCheck />} />
               </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
           </SuspenseWrap>
         </AuthProvider>
       </BrowserRouter>
