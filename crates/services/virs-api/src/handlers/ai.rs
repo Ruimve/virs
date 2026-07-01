@@ -9,6 +9,26 @@ use axum::{
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
+/// Resolve the base URL for a known LLM provider.
+pub fn resolve_provider_base_url(provider: &str) -> Option<&'static str> {
+    match provider {
+        "deepseek" => Some("https://api.deepseek.com"),
+        "openai" => Some("https://api.openai.com/v1"),
+        "openrouter" => Some("https://openrouter.ai/api/v1"),
+        _ => None,
+    }
+}
+
+/// Resolve the default model for a known LLM provider.
+pub fn resolve_provider_model(provider: &str) -> Option<&'static str> {
+    match provider {
+        "deepseek" => Some("deepseek-chat"),
+        "openai" => Some("gpt-4o"),
+        "openrouter" => Some("deepseek/deepseek-chat"),
+        _ => None,
+    }
+}
+
 pub async fn ai_status(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -61,7 +81,7 @@ Respond in JSON format with:
         symbol, exchange, current_price,
     );
 
-    match call_llm_with_fallback(&state, &system_prompt, &user_prompt).await {
+    match call_llm_with_fallback(&state, system_prompt, &user_prompt).await {
         Ok(result) => Ok(Json(ApiResponse::ok(result))),
         Err(e) => Ok(Json(ApiResponse::err(format!(
             "AI optimization failed: {}",
@@ -94,7 +114,7 @@ Respond in JSON format with:
 
     let user_prompt = format!("Symbol: {}\nQuestion: {}", symbol, question,);
 
-    match call_llm_with_fallback(&state, &system_prompt, &user_prompt).await {
+    match call_llm_with_fallback(&state, system_prompt, &user_prompt).await {
         Ok(result) => Ok(Json(ApiResponse::ok(result))),
         Err(e) => Ok(Json(ApiResponse::err(format!("AI explain failed: {}", e)))),
     }
@@ -137,7 +157,7 @@ Respond in JSON format with:
         symbol, exchange, current_price, risk_tolerance,
     );
 
-    match call_llm_with_fallback(&state, &system_prompt, &user_prompt).await {
+    match call_llm_with_fallback(&state, system_prompt, &user_prompt).await {
         Ok(result) => Ok(Json(ApiResponse::ok(result))),
         Err(e) => Ok(Json(ApiResponse::err(format!(
             "AI recommend failed: {}",
@@ -180,19 +200,14 @@ async fn call_llm_with_fallback(
             let decrypted_key = virs_utils::crypto::decrypt_with_key(&encrypted_key, &state.encryption_key)
                 .map_err(|e| anyhow::anyhow!("Decryption error: {}", e))?;
 
-            let resolved_base_url = match provider.as_str() {
-                "deepseek" => "https://api.deepseek.com".to_string(),
-                "openai" => "https://api.openai.com/v1".to_string(),
-                "openrouter" => "https://openrouter.ai/api/v1".to_string(),
-                _ => format!("https://api.{}.com", provider),
+            let resolved_base_url = match resolve_provider_base_url(&provider) {
+                Some(url) => url.to_string(),
+                None => format!("https://api.{}.com", provider),
             };
 
-            let resolved_model = match provider.as_str() {
-                "deepseek" => "deepseek-chat".to_string(),
-                "openai" => "gpt-4o".to_string(),
-                "openrouter" => "deepseek/deepseek-chat".to_string(),
-                _ => "deepseek-chat".to_string(),
-            };
+            let resolved_model = resolve_provider_model(&provider)
+                .unwrap_or("deepseek-chat")
+                .to_string();
 
             (decrypted_key, resolved_base_url, resolved_model)
         }

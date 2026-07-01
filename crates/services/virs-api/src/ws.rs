@@ -11,6 +11,69 @@ use std::sync::Arc;
 
 use crate::state::{AppState, WsBroadcaster};
 
+/// Convert a Position to WebSocket JSON format.
+/// Used by position_ws_handler for real-time position updates.
+pub fn position_to_ws_json(pos: &virs_types::Position) -> serde_json::Value {
+    serde_json::json!({
+        "type": "position_updated",
+        "symbol": pos.symbol,
+        "exchange": pos.exchange,
+        "side": format!("{:?}", pos.side).to_lowercase(),
+        "status": format!("{:?}", pos.status).to_lowercase(),
+        "size": pos.size,
+        "entry_price": pos.entry_price,
+        "current_price": pos.current_price,
+        "leverage": pos.leverage,
+        "margin": pos.margin,
+        "unrealized_pnl": pos.unrealized_pnl,
+        "realized_pnl": pos.realized_pnl,
+        "stop_loss": pos.stop_loss,
+        "take_profit": pos.take_profit,
+        "liquidation_price": pos.liquidation_price,
+        "position_id": pos.id.to_string(),
+        "updated_at": pos.updated_at.to_rfc3339(),
+    })
+}
+
+/// Convert a KlineEvent to WebSocket JSON format.
+/// Used by kline_ws_handler for real-time kline updates.
+pub fn kline_event_to_json(event: &virs_market::KlineEvent) -> serde_json::Value {
+    serde_json::json!({
+        "exchange": event.exchange,
+        "symbol": event.symbol,
+        "timeframe": format!("{}", event.timeframe),
+        "candle": {
+            "open_time": event.candle.open_time,
+            "close_time": event.candle.close_time,
+            "open": event.candle.open,
+            "high": event.candle.high,
+            "low": event.candle.low,
+            "close": event.candle.close,
+            "volume": event.candle.volume,
+            "quote_volume": event.candle.quote_volume,
+            "trades": event.candle.trades,
+            "closed": event.candle.closed,
+        },
+        "event_type": match event.event_type {
+            virs_market::KlineEventType::Update => "Update",
+            virs_market::KlineEventType::Closed => "Closed",
+            virs_market::KlineEventType::Backfilled => "Backfilled",
+        },
+    })
+}
+
+/// Convert an OrderBookEvent to WebSocket JSON format.
+/// Used by orderbook_ws_handler for real-time order book updates.
+pub fn orderbook_event_to_json(event: &virs_market::OrderBookEvent) -> serde_json::Value {
+    serde_json::json!({
+        "exchange": event.exchange,
+        "symbol": event.symbol,
+        "bids": event.bids.iter().map(|l| serde_json::json!([l.price, l.amount])).collect::<Vec<_>>(),
+        "asks": event.asks.iter().map(|l| serde_json::json!([l.price, l.amount])).collect::<Vec<_>>(),
+        "timestamp": event.timestamp,
+    })
+}
+
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_ws(socket, state.ws_broadcaster))
 }
@@ -69,28 +132,7 @@ async fn handle_kline_ws(mut socket: WebSocket, kline_engine: Arc<virs_market::K
                             }
                         }
 
-                        let json = serde_json::json!({
-                            "exchange": event.exchange,
-                            "symbol": event.symbol,
-                            "timeframe": format!("{}", event.timeframe),
-                            "candle": {
-                                "open_time": event.candle.open_time,
-                                "close_time": event.candle.close_time,
-                                "open": event.candle.open,
-                                "high": event.candle.high,
-                                "low": event.candle.low,
-                                "close": event.candle.close,
-                                "volume": event.candle.volume,
-                                "quote_volume": event.candle.quote_volume,
-                                "trades": event.candle.trades,
-                                "closed": event.candle.closed,
-                            },
-                            "event_type": match event.event_type {
-                                virs_market::KlineEventType::Update => "Update",
-                                virs_market::KlineEventType::Closed => "Closed",
-                                virs_market::KlineEventType::Backfilled => "Backfilled",
-                            },
-                        });
+                        let json = kline_event_to_json(&event);
                         if let Ok(text) = serde_json::to_string(&json) {
                             if socket.send(Message::Text(text.into())).await.is_err() {
                                 break;
@@ -144,13 +186,7 @@ async fn handle_orderbook_ws(
             msg = rx.recv() => {
                 match msg {
                     Ok(event) => {
-                        let json = serde_json::json!({
-                            "exchange": event.exchange,
-                            "symbol": event.symbol,
-                            "bids": event.bids.iter().map(|l| serde_json::json!([l.price, l.amount])).collect::<Vec<_>>(),
-                            "asks": event.asks.iter().map(|l| serde_json::json!([l.price, l.amount])).collect::<Vec<_>>(),
-                            "timestamp": event.timestamp,
-                        });
+                        let json = orderbook_event_to_json(&event);
                         if let Ok(text) = serde_json::to_string(&json) {
                             if socket.send(Message::Text(text.into())).await.is_err() {
                                 break;
@@ -211,25 +247,7 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
                             // 检查 symbol 是否被订阅
                             if !subscribed_symbols.contains(&position.symbol) { continue; }
 
-                            let json = serde_json::json!({
-                                "type": "position_updated",
-                                "symbol": position.symbol,
-                                "exchange": position.exchange,
-                                "side": format!("{:?}", position.side).to_lowercase(),
-                                "status": format!("{:?}", position.status).to_lowercase(),
-                                "size": position.size,
-                                "entry_price": position.entry_price,
-                                "current_price": position.current_price,
-                                "leverage": position.leverage,
-                                "margin": position.margin,
-                                "unrealized_pnl": position.unrealized_pnl,
-                                "realized_pnl": position.realized_pnl,
-                                "stop_loss": position.stop_loss,
-                                "take_profit": position.take_profit,
-                                "liquidation_price": position.liquidation_price,
-                                "position_id": position.id.to_string(),
-                                "updated_at": position.updated_at.to_rfc3339(),
-                            });
+                            let json = position_to_ws_json(&position);
                             if let Ok(text) = serde_json::to_string(&json) {
                                 if socket.send(Message::Text(text.into())).await.is_err() {
                                     break;
@@ -253,25 +271,7 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
                                     // 订阅时立即推送当前仓位快照，避免首次显示空仓
                                     let positions = state.engine_manager.get_positions_by_symbol(sym);
                                     for pos in positions {
-                                        let json = serde_json::json!({
-                                            "type": "position_updated",
-                                            "symbol": pos.symbol,
-                                            "exchange": pos.exchange,
-                                            "side": format!("{:?}", pos.side).to_lowercase(),
-                                            "status": format!("{:?}", pos.status).to_lowercase(),
-                                            "size": pos.size,
-                                            "entry_price": pos.entry_price,
-                                            "current_price": pos.current_price,
-                                            "leverage": pos.leverage,
-                                            "margin": pos.margin,
-                                            "unrealized_pnl": pos.unrealized_pnl,
-                                            "realized_pnl": pos.realized_pnl,
-                                            "stop_loss": pos.stop_loss,
-                                            "take_profit": pos.take_profit,
-                                            "liquidation_price": pos.liquidation_price,
-                                            "position_id": pos.id.to_string(),
-                                            "updated_at": pos.updated_at.to_rfc3339(),
-                                        });
+                                        let json = position_to_ws_json(&pos);
                                         if let Ok(text) = serde_json::to_string(&json) {
                                             if socket.send(Message::Text(text.into())).await.is_err() {
                                                 break;

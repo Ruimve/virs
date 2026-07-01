@@ -6,8 +6,42 @@ use axum::{
     Json,
 };
 
+use crate::handlers::ai::{resolve_provider_base_url, resolve_provider_model};
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
+
+/// Parse the /models API response into a list of model objects.
+/// Extracts id and owned_by from each model in the data array.
+pub fn parse_models_response(data: &serde_json::Value) -> Vec<serde_json::Value> {
+    data["data"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| {
+                    m["id"].as_str().map(|id| serde_json::json!({
+                        "id": id,
+                        "owned_by": m["owned_by"].as_str().unwrap_or("unknown"),
+                    }))
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+/// Parse the balance API response into a list of balance objects.
+/// Checks balance_infos first, then falls back to data array.
+pub fn parse_balance_response(data: &serde_json::Value) -> Vec<serde_json::Value> {
+    data["balance_infos"]
+        .as_array()
+        .or_else(|| data["data"].as_array())
+        .map(|arr| {
+            arr.iter().map(|b| serde_json::json!({
+                "total_balance": b["total_balance"].as_str().unwrap_or("0"),
+                "currency": b["currency"].as_str().unwrap_or("USD"),
+            })).collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
 
 pub async fn list_credentials(
     State(state): State<AppState>,
@@ -156,11 +190,9 @@ pub async fn test_credential(
         }
     };
 
-    let base_url = match provider.as_str() {
-        "deepseek" => "https://api.deepseek.com",
-        "openai" => "https://api.openai.com/v1",
-        "openrouter" => "https://openrouter.ai/api/v1",
-        _ => {
+    let base_url = match resolve_provider_base_url(&provider) {
+        Some(url) => url,
+        None => {
             return Ok(Json(ApiResponse::err(format!(
                 "Unknown provider: {}",
                 provider
@@ -168,12 +200,7 @@ pub async fn test_credential(
         }
     };
 
-    let model = match provider.as_str() {
-        "deepseek" => "deepseek-chat",
-        "openai" => "gpt-4o",
-        "openrouter" => "deepseek/deepseek-chat",
-        _ => "deepseek-chat",
-    };
+    let model = resolve_provider_model(&provider).unwrap_or("deepseek-chat");
 
     let http_client = &state.http_client;
     match virs_bot::common::ai_client::call_llm_api(
@@ -233,11 +260,9 @@ pub async fn fetch_models(
         }
     };
 
-    let base_url = match provider.as_str() {
-        "deepseek" => "https://api.deepseek.com",
-        "openai" => "https://api.openai.com/v1",
-        "openrouter" => "https://openrouter.ai/api/v1",
-        _ => {
+    let base_url = match resolve_provider_base_url(&provider) {
+        Some(url) => url,
+        None => {
             return Ok(Json(ApiResponse::err(format!(
                 "Unknown provider: {}",
                 provider
@@ -263,20 +288,7 @@ pub async fn fetch_models(
             }
             match response.json::<serde_json::Value>().await {
                 Ok(data) => {
-                    let models =
-                        data["data"]
-                            .as_array()
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|m| {
-                                        m["id"].as_str().map(|id| serde_json::json!({
-                                "id": id,
-                                "owned_by": m["owned_by"].as_str().unwrap_or("unknown"),
-                            }))
-                                    })
-                                    .collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default();
+                    let models = parse_models_response(&data);
                     Ok(Json(ApiResponse::ok(
                         serde_json::json!({ "models": models }),
                     )))
@@ -348,17 +360,7 @@ pub async fn fetch_balance(
             }
             match response.json::<serde_json::Value>().await {
                 Ok(data) => {
-                    let balances =
-                        data["balance_infos"]
-                            .as_array()
-                            .or_else(|| data["data"].as_array())
-                            .map(|arr| {
-                                arr.iter().map(|b| serde_json::json!({
-                            "total_balance": b["total_balance"].as_str().unwrap_or("0"),
-                            "currency": b["currency"].as_str().unwrap_or("USD"),
-                        })).collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default();
+                    let balances = parse_balance_response(&data);
                     Ok(Json(ApiResponse::ok(
                         serde_json::json!({ "balances": balances }),
                     )))

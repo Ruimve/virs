@@ -11,3 +11,10 @@ pub mod market;
 pub mod response;
 pub mod system;
 pub mod user;
+
+#[cfg(test)]
+mod ai_tests;
+#[cfg(test)]
+mod ai_credentials_tests;
+#[cfg(test)]
+mod response_tests;

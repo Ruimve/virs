@@ -32,6 +32,12 @@ impl WsBroadcaster {
     }
 }
 
+impl Default for WsBroadcaster {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Engine manager trait — lazy initialization of trading engines.
 /// Implemented in virs-app (composition root) with access to all adapters.
 #[async_trait]
