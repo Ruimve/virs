@@ -50,46 +50,12 @@ impl TimeframeBuffer {
         self.candles.iter().rev().find(|c| c.closed)
     }
 
-    fn last(&self) -> Option<&Candle> {
-        self.candles.back()
-    }
-
     fn get_all(&self) -> Vec<Candle> {
         self.candles.iter().cloned().collect()
     }
 
-    fn len(&self) -> usize {
-        self.candles.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.candles.is_empty()
-    }
-
     fn replace_all(&mut self, candles: Vec<Candle>) {
         self.candles = candles.into_iter().collect();
-        while self.candles.len() > self.max_size {
-            self.candles.pop_front();
-        }
-    }
-
-    fn insert_backfilled(&mut self, candles: Vec<Candle>) {
-        if self.candles.is_empty() {
-            self.replace_all(candles);
-            return;
-        }
-        let last_existing_time = self.candles.back().map(|c| c.open_time).unwrap_or(0);
-        for c in candles {
-            if c.open_time > last_existing_time {
-                self.candles.push_back(c);
-            } else if let Some(existing) =
-                self.candles.iter_mut().find(|e| e.open_time == c.open_time)
-            {
-                if c.closed && !existing.closed {
-                    *existing = c;
-                }
-            }
-        }
         while self.candles.len() > self.max_size {
             self.candles.pop_front();
         }
@@ -146,33 +112,9 @@ impl SymbolCache {
             .cloned()
     }
 
-    pub fn last_1m(&self) -> Option<Candle> {
-        self.timeframes
-            .get(&Timeframe::M1)
-            .and_then(|buf| buf.last())
-            .cloned()
-    }
-
     pub fn replace_timeframe(&mut self, timeframe: Timeframe, candles: Vec<Candle>) {
         if let Some(buf) = self.timeframes.get_mut(&timeframe) {
             buf.replace_all(candles);
         }
-    }
-
-    pub fn backfill_timeframe(&mut self, timeframe: Timeframe, candles: Vec<Candle>) {
-        if let Some(buf) = self.timeframes.get_mut(&timeframe) {
-            buf.insert_backfilled(candles);
-        }
-    }
-
-    pub fn candle_count(&self, timeframe: Timeframe) -> usize {
-        self.timeframes
-            .get(&timeframe)
-            .map(|buf| buf.len())
-            .unwrap_or(0)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.timeframes.values().all(|buf| buf.is_empty())
     }
 }

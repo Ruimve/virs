@@ -1,7 +1,7 @@
 # virs-market 测试用例文档
 
 > Crate: `crates/services/virs-market`
-> 状态: **52 个测试全部通过** (40 单元 + 12 集成)
+> 状态: **49 个测试全部通过** (37 单元 + 12 集成)
 
 ---
 
@@ -47,7 +47,7 @@
 | A3.4 | `a3_4_aggregate_m5_partial` | 3根1m → 1根未关闭 M5 |
 | A3.5 | `a3_5_aggregate_multi_group` | 7根1m → 2根 (5+2), 第二根未关闭 |
 
-### 1.3 cache_tests.rs — 符号缓存 (10)
+### 1.3 cache_tests.rs — 符号缓存 (7)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
@@ -57,10 +57,7 @@
 | C1.4 | `c1_4_max_size_eviction` | 超出容量 → 淘汰最旧 |
 | C2.1 | `c2_1_close_candle` | 标记关闭 → closed=true |
 | C2.2 | `c2_2_last_closed_1m` | 获取最后关闭的1m蜡烛 |
-| C2.3 | `c2_3_last_1m` | 获取最新1m蜡烛 |
 | C3.1 | `c3_1_replace_timeframe` | 替换整个时间周期数据 |
-| C3.2 | `c3_2_backfill_timeframe` | 回填: 仅更新未关闭的蜡烛 |
-| C3.3 | `c3_3_candle_count_and_is_empty` | 计数和空判断 |
 
 ---
 
@@ -91,6 +88,6 @@
 |----------|----------|--------|
 | `src/types_tests.rs` | types.rs | 18 |
 | `src/aggregator_tests.rs` | aggregator.rs | 12 |
-| `src/cache_tests.rs` | cache.rs | 10 |
+| `src/cache_tests.rs` | cache.rs | 7 |
 | `tests/integration_tests.rs` | 跨模块链路 | 12 |
-| **合计** | | **52** |
+| **合计** | | **49** |

@@ -21,7 +21,6 @@ use crate::types::{
 
 struct SubscriptionEntry {
     exchange: String,
-    symbol: String,
     market_type: MarketType,
 }
 
@@ -193,7 +192,6 @@ impl OrderBookEngine {
 
         let entry = SubscriptionEntry {
             exchange: exchange.to_string(),
-            symbol: symbol.to_string(),
             market_type,
         };
 

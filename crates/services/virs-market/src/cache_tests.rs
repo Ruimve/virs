@@ -69,7 +69,7 @@ fn c1_4_max_size_eviction() {
     assert_eq!(klines[0].open_time, 5 * 60_000);
 }
 
-// ── close_candle + last_closed + last_1m ───────────────────
+// ── close_candle + last_closed ─────────────────────────────
 
 #[test]
 fn c2_1_close_candle() {
@@ -90,16 +90,7 @@ fn c2_2_last_closed_1m() {
     assert!(last_closed.closed);
 }
 
-#[test]
-fn c2_3_last_1m() {
-    let mut cache = SymbolCache::new();
-    cache.update_candle(Timeframe::M1, make_candle(1_700_000_000_000, 100.0, true));
-    cache.update_candle(Timeframe::M1, make_candle(1_700_000_060_000, 101.0, false));
-    let last = cache.last_1m().unwrap();
-    assert_eq!(last.open_time, 1_700_000_060_000);
-}
-
-// ── replace_timeframe + backfill ───────────────────────────
+// ── replace_timeframe ──────────────────────────────────────
 
 #[test]
 fn c3_1_replace_timeframe() {
@@ -113,32 +104,4 @@ fn c3_1_replace_timeframe() {
     assert_eq!(klines.len(), 5);
     assert_eq!(klines[0].open_time, 0);
     assert_eq!(klines[4].close, 104.0);
-}
-
-#[test]
-fn c3_2_backfill_timeframe() {
-    let mut cache = SymbolCache::new();
-    // Initial data
-    cache.update_candle(Timeframe::M1, make_candle(1_700_000_000_000, 100.0, false));
-    // Backfill with closed version + new candles
-    let backfill: Vec<Candle> = vec![
-        make_candle(1_700_000_000_000, 100.0, true), // closed version
-        make_candle(1_700_000_060_000, 101.0, true), // new
-    ];
-    cache.backfill_timeframe(Timeframe::M1, backfill);
-    let klines = cache.get_klines(Timeframe::M1);
-    assert_eq!(klines.len(), 2);
-    // The unclosed candle should be replaced by closed version
-    assert!(klines.iter().any(|c| c.open_time == 1_700_000_000_000 && c.closed));
-}
-
-#[test]
-fn c3_3_candle_count_and_is_empty() {
-    let mut cache = SymbolCache::new();
-    assert!(cache.is_empty());
-    assert_eq!(cache.candle_count(Timeframe::M1), 0);
-    cache.update_candle(Timeframe::M1, make_candle(1_700_000_000_000, 100.0, false));
-    assert!(!cache.is_empty());
-    assert_eq!(cache.candle_count(Timeframe::M1), 1);
-    assert_eq!(cache.candle_count(Timeframe::M5), 0);
 }
