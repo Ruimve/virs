@@ -56,8 +56,6 @@ impl MarketWsHandler {
 }
 
 pub struct OrderBookEngine {
-    #[allow(dead_code)]
-    config: OrderBookEngineConfig,
     subscriptions: Arc<DashMap<String, SubscriptionEntry>>,
     /// Reverse index: symbol → subscription key (for fast WS event lookup)
     symbol_index: Arc<DashMap<String, String>>,
@@ -76,7 +74,6 @@ impl OrderBookEngine {
         let (event_tx, _) = broadcast::channel(config.event_channel_capacity);
 
         Self {
-            config,
             subscriptions: Arc::new(DashMap::new()),
             symbol_index: Arc::new(DashMap::new()),
             event_tx,
@@ -252,19 +249,5 @@ impl OrderBookEngine {
     pub fn is_subscribed(&self, exchange: &str, symbol: &str) -> bool {
         let key = subscription_key(exchange, symbol);
         self.subscriptions.contains_key(&key)
-    }
-
-    #[allow(dead_code)]
-    pub fn subscribed_symbols(&self) -> Vec<(String, String, MarketType)> {
-        self.subscriptions
-            .iter()
-            .map(|entry| {
-                (
-                    entry.exchange.clone(),
-                    entry.symbol.clone(),
-                    entry.market_type,
-                )
-            })
-            .collect()
     }
 }

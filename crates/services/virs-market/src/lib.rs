@@ -23,3 +23,10 @@ pub use types::{
     KlineWsClient, MarketType, OrderBookEngineConfig, OrderBookEvent, OrderBookLevel,
     OrderBookWsClient, Timeframe, WsCandleUpdate, WsEvent, WsOrderBookEvent, WsOrderBookUpdate,
 };
+
+#[cfg(test)]
+mod aggregator_tests;
+#[cfg(test)]
+mod cache_tests;
+#[cfg(test)]
+mod types_tests;

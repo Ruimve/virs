@@ -91,7 +91,7 @@ impl Aggregator {
         }
     }
 
-    pub(crate) fn is_last_1m_in_group(candle_1m: &Candle, tf: Timeframe) -> bool {
+    pub fn is_last_1m_in_group(candle_1m: &Candle, tf: Timeframe) -> bool {
         let tf_ms = tf.ms();
         let aligned_open = align_open_time(candle_1m.open_time, tf);
         let group_end = aligned_open + tf_ms - 1;

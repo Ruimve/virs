@@ -8,6 +8,20 @@ use virs_types::enums::MarketType;
 
 use crate::types::{Candle, KlineSource};
 
+/// Convert a timeframe string to milliseconds.
+/// Used to compute close_time from open_time + duration - 1.
+pub fn timeframe_str_to_ms(tf: &str) -> i64 {
+    match tf {
+        "1m" => 60_000,
+        "5m" => 300_000,
+        "15m" => 900_000,
+        "1h" => 3_600_000,
+        "4h" => 14_400_000,
+        "1d" => 86_400_000,
+        _ => 60_000,
+    }
+}
+
 pub struct ExchangeKlineSource {
     registry: std::sync::Arc<Exchanges>,
 }
@@ -64,17 +78,7 @@ impl KlineSource for ExchangeKlineSource {
             .into_iter()
             .map(|k| Candle {
                 open_time: k.open_time,
-                close_time: k.open_time
-                    + match timeframe {
-                        "1m" => 60_000,
-                        "5m" => 300_000,
-                        "15m" => 900_000,
-                        "1h" => 3_600_000,
-                        "4h" => 14_400_000,
-                        "1d" => 86_400_000,
-                        _ => 60_000,
-                    }
-                    - 1,
+                close_time: k.open_time + timeframe_str_to_ms(timeframe) - 1,
                 open: k.open,
                 high: k.high,
                 low: k.low,
