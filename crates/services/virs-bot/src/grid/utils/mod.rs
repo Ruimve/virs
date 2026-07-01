@@ -1,8 +1,9 @@
 //! Grid utility modules.
 
-pub mod holdings;
-pub mod levels;
 pub mod prompt;
+
+#[cfg(test)]
+mod prompt_tests;
 
 use crate::grid::ports::GridBotConfig;
 use crate::grid::types::GridLevel;
@@ -54,67 +55,4 @@ pub fn calculate_levels(bot: &GridBotConfig, current_price: f64) -> Vec<GridLeve
             }
         })
         .collect()
-}
-
-/// 根据高斯分布计算层级价格
-pub fn calculate_gaussian_levels(bot: &GridBotConfig, current_price: f64) -> Vec<GridLevel> {
-    let effective_price = if current_price > 0.0 {
-        current_price
-    } else {
-        (bot.upper_price + bot.lower_price) / 2.0
-    };
-    let quantity = if bot.quantity_per_grid > 0.0 && effective_price > 0.0 {
-        bot.quantity_per_grid / effective_price
-    } else {
-        0.0
-    };
-
-    let raw_levels =
-        levels::generate_gaussian_levels(bot.upper_price, bot.lower_price, bot.grid_count);
-    let grid_profit_mult = 1.0 + bot.grid_profit_pct / 100.0;
-
-    raw_levels
-        .into_iter()
-        .map(|(level_idx, price)| {
-            let side = if price < effective_price {
-                "buy"
-            } else {
-                "sell"
-            }
-            .to_string();
-            GridLevel {
-                level: level_idx,
-                price,
-                side,
-                buy_price: price,
-                sell_price: price * grid_profit_mult,
-                quantity,
-                buy_order_id: None,
-                sell_order_id: None,
-                buy_filled: false,
-                sell_filled: false,
-                hold_quantity: 0.0,
-                avg_buy_price: 0.0,
-                last_fill_price: None,
-                trade_id: None,
-            }
-        })
-        .collect()
-}
-
-/// 计算市场指标（委托给 common::indicators）
-pub fn compute_market_indicators(
-    klines_1h: &[virs_models::Kline],
-    klines_4h: &[virs_models::Kline],
-    klines_15m: &[virs_models::Kline],
-    funding_rate: f64,
-    funding_next_time: String,
-) -> crate::common::indicators::MarketIndicators {
-    crate::common::indicators::compute_market_indicators(
-        klines_1h,
-        klines_4h,
-        klines_15m,
-        funding_rate,
-        funding_next_time,
-    )
 }

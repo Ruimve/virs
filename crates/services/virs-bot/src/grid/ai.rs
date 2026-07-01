@@ -104,7 +104,7 @@ impl GridAiService {
     }
 }
 
-fn parse_grid_decision(json: &serde_json::Value) -> anyhow::Result<GridAiDecision> {
+pub fn parse_grid_decision(json: &serde_json::Value) -> anyhow::Result<GridAiDecision> {
     let decision = &json["decision"];
     let grid = &json["grid"];
     let risk = &json["risk"];

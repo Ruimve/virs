@@ -299,3 +299,31 @@ pub fn compute_position_pct(adx: f64, consecutive_losses: i32, funding_rate: f64
     };
     after_funding.clamp(10.0, 100.0)
 }
+
+/// Compute cooldown duration in seconds based on close reason and direction.
+///
+/// Rules:
+/// - stop_loss + same direction → 1800s (30min, prevent re-entering losing direction)
+/// - stop_loss + opposite direction → 0s (trend reversal, allow entry)
+/// - take_profit + same direction → 900s (15min, avoid chasing)
+/// - take_profit + opposite direction → 0s
+/// - llm_decision / position_timeout / unknown → 900s (15min, conservative)
+pub fn compute_cooldown_secs(closed_side: &str, reason: &str, new_side: &str) -> i64 {
+    match reason {
+        "stop_loss" => {
+            if closed_side == new_side {
+                30 * 60
+            } else {
+                0
+            }
+        }
+        "take_profit" => {
+            if closed_side == new_side {
+                15 * 60
+            } else {
+                0
+            }
+        }
+        _ => 15 * 60,
+    }
+}

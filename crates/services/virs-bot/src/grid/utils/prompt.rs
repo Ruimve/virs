@@ -123,7 +123,7 @@ pub fn render_user_prompt(
     prompt
 }
 
-fn format_bars_outside(count: i32) -> String {
+pub fn format_bars_outside(count: i32) -> String {
     if count > 0 {
         format!("向上{}根", count)
     } else if count < 0 {

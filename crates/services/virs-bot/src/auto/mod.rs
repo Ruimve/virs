@@ -9,3 +9,8 @@ pub mod types;
 pub mod worker;
 
 pub use engine::AutoEngine;
+
+#[cfg(test)]
+mod ai_tests;
+#[cfg(test)]
+mod strategy_tests;

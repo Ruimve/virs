@@ -160,42 +160,7 @@ impl AutoWorker {
         let elapsed = chrono::Utc::now().signed_duration_since(*closed_at);
         let elapsed_secs = elapsed.num_seconds().max(0);
 
-        // 根据平仓原因和新开仓方向，确定冷却时长
-        // 说明：closed_side 是上一次开仓方向（long/short），new_side 是即将开仓的方向
-        // close_reason 取值：stop_loss/take_profit/position_timeout/llm_decision
-        let cooldown_secs: i64 = match reason.as_str() {
-            "stop_loss" => {
-                // 止损说明入场点差，同方向立即重入大概率再次扫损
-                // 反方向可能是趋势反转，允许 LLM 判断后进入
-                if closed_side == new_side {
-                    30 * 60
-                } else {
-                    0
-                }
-            }
-            "take_profit" => {
-                // 止盈后同方向可能到顶/底，追高/追低风险
-                // 反方向允许进入
-                if closed_side == new_side {
-                    15 * 60
-                } else {
-                    0
-                }
-            }
-            "llm_decision" => {
-                // LLM 主动平仓（含趋势反转/风控/LLM决策）：双向保守冷却 15 分钟
-                // LLM 主动平仓意味着市场结构可能变化，新方向也需等待
-                15 * 60
-            }
-            "position_timeout" => {
-                // 持仓超时：双向保守冷却 15 分钟
-                15 * 60
-            }
-            _ => {
-                // 未知原因：双向保守冷却 15 分钟
-                15 * 60
-            }
-        };
+        let cooldown_secs = strategy::compute_cooldown_secs(closed_side, reason, new_side);
 
         if cooldown_secs > 0 && elapsed_secs < cooldown_secs {
             Some(cooldown_secs - elapsed_secs)
