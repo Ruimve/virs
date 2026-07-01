@@ -37,6 +37,101 @@ pub enum DrawdownAction {
 }
 
 // ============================================================================
+// Idempotent functions
+// ============================================================================
+
+/// 计算指定品种的仓位暴露（保证金占用）。
+pub fn calc_symbol_exposure(positions: &[&Position], symbol: &str) -> f64 {
+    positions
+        .iter()
+        .filter(|p| p.symbol == symbol)
+        .map(|p| p.size * p.entry_price / p.leverage as f64)
+        .sum()
+}
+
+/// 计算所有仓位的总暴露（保证金占用）。
+pub fn calc_total_exposure(positions: &[&Position]) -> f64 {
+    positions
+        .iter()
+        .map(|p| p.size * p.entry_price / p.leverage as f64)
+        .sum()
+}
+
+/// 检查资金费率是否超过阈值，返回告警信息。
+pub fn check_funding_rate(
+    config: &RiskConfig,
+    symbol: &str,
+    rate: f64,
+) -> Option<RiskAlertInfo> {
+    if rate.abs() > config.funding_rate_threshold {
+        let severity = if rate.abs() >= config.funding_rate_threshold * 2.0 {
+            "critical"
+        } else {
+            "warning"
+        };
+
+        Some(RiskAlertInfo {
+            symbol: symbol.to_string(),
+            alert_type: "funding_rate".to_string(),
+            severity: severity.to_string(),
+            message: format!(
+                "品种 {} 资金费率 {:.4}% 超过阈值 {:.4}%",
+                symbol,
+                rate * 100.0,
+                config.funding_rate_threshold * 100.0
+            ),
+        })
+    } else {
+        None
+    }
+}
+
+/// 检查回撤级别，返回处理动作。
+pub fn check_drawdown(
+    config: &RiskConfig,
+    peak_equity: f64,
+    current_equity: f64,
+) -> Option<DrawdownAction> {
+    if peak_equity <= 0.0 {
+        return None;
+    }
+
+    let drawdown = (peak_equity - current_equity) / peak_equity;
+    let max_dd = config.max_drawdown_pct;
+
+    if drawdown >= max_dd {
+        Some(DrawdownAction::CloseAll)
+    } else if drawdown >= max_dd * 0.75 {
+        Some(DrawdownAction::Pause)
+    } else if drawdown >= max_dd * 0.5 {
+        Some(DrawdownAction::Warning)
+    } else {
+        None
+    }
+}
+
+/// 检查强平预警，返回到强平价的距离百分比。
+pub fn check_liquidation(config: &RiskConfig, position: &Position) -> Option<f64> {
+    let liq_price = match position.liquidation_price {
+        Some(p) => p,
+        None => return None,
+    };
+
+    let current = position.current_price;
+    if current <= 0.0 || liq_price <= 0.0 {
+        return None;
+    }
+
+    let distance_pct = (current - liq_price).abs() / current;
+
+    if distance_pct <= config.liquidation_buffer_pct {
+        Some(distance_pct)
+    } else {
+        None
+    }
+}
+
+// ============================================================================
 // RiskChecker
 // ============================================================================
 
@@ -81,11 +176,7 @@ impl RiskChecker {
         }
 
         // 2. 检查单品种仓位上限
-        let symbol_exposure: f64 = current_positions
-            .iter()
-            .filter(|p| p.symbol == new_symbol)
-            .map(|p| p.size * p.entry_price / p.leverage as f64)
-            .sum::<f64>();
+        let symbol_exposure = calc_symbol_exposure(current_positions, new_symbol);
 
         let new_margin = new_amount / new_leverage as f64;
         let symbol_limit = total_equity * self.config.max_position_per_symbol_pct;
@@ -100,10 +191,7 @@ impl RiskChecker {
         }
 
         // 3. 检查总仓位上限
-        let total_exposure: f64 = current_positions
-            .iter()
-            .map(|p| p.size * p.entry_price / p.leverage as f64)
-            .sum::<f64>();
+        let total_exposure = calc_total_exposure(current_positions);
 
         let total_limit = total_equity * self.config.max_total_position_pct;
 
@@ -161,27 +249,7 @@ impl RiskChecker {
 
     /// 检查资金费率（同步循环中调用）。
     pub fn check_funding_rate(&self, symbol: &str, rate: f64) -> Option<RiskAlertInfo> {
-        if rate.abs() > self.config.funding_rate_threshold {
-            let severity = if rate.abs() >= self.config.funding_rate_threshold * 2.0 {
-                "critical"
-            } else {
-                "warning"
-            };
-
-            Some(RiskAlertInfo {
-                symbol: symbol.to_string(),
-                alert_type: "funding_rate".to_string(),
-                severity: severity.to_string(),
-                message: format!(
-                    "品种 {} 资金费率 {:.4}% 超过阈值 {:.4}%",
-                    symbol,
-                    rate * 100.0,
-                    self.config.funding_rate_threshold * 100.0
-                ),
-            })
-        } else {
-            None
-        }
+        check_funding_rate(&self.config, symbol, rate)
     }
 
     // -----------------------------------------------------------------------
@@ -190,22 +258,7 @@ impl RiskChecker {
 
     /// 检查回撤（同步循环中调用）。
     pub fn check_drawdown(&self, peak_equity: f64, current_equity: f64) -> Option<DrawdownAction> {
-        if peak_equity <= 0.0 {
-            return None;
-        }
-
-        let drawdown = (peak_equity - current_equity) / peak_equity;
-        let max_dd = self.config.max_drawdown_pct;
-
-        if drawdown >= max_dd {
-            Some(DrawdownAction::CloseAll)
-        } else if drawdown >= max_dd * 0.75 {
-            Some(DrawdownAction::Pause)
-        } else if drawdown >= max_dd * 0.5 {
-            Some(DrawdownAction::Warning)
-        } else {
-            None
-        }
+        check_drawdown(&self.config, peak_equity, current_equity)
     }
 
     // -----------------------------------------------------------------------
@@ -214,23 +267,7 @@ impl RiskChecker {
 
     /// 检查强平预警。
     pub fn check_liquidation(&self, position: &Position) -> Option<f64> {
-        let liq_price = match position.liquidation_price {
-            Some(p) => p,
-            None => return None,
-        };
-
-        let current = position.current_price;
-        if current <= 0.0 || liq_price <= 0.0 {
-            return None;
-        }
-
-        let distance_pct = (current - liq_price).abs() / current;
-
-        if distance_pct <= self.config.liquidation_buffer_pct {
-            Some(distance_pct)
-        } else {
-            None
-        }
+        check_liquidation(&self.config, position)
     }
 
     // -----------------------------------------------------------------------
@@ -249,10 +286,5 @@ impl RiskChecker {
     /// 检查连续亏损是否需要减仓。
     pub fn should_reduce_position(&self) -> bool {
         self.consecutive_losses >= self.config.max_consecutive_losses
-    }
-
-    /// 获取当前连续亏损次数。
-    pub fn consecutive_losses(&self) -> u32 {
-        self.consecutive_losses
     }
 }
