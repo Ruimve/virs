@@ -14,7 +14,7 @@ export async function login(
 
 export function logout(): void {
   removeToken();
-  window.location.href = '/login';
+  window.dispatchEvent(new CustomEvent('auth:unauthorized'));
 }
 
 export function getUserInfo(): Promise<ApiResponse<UserInfo>> {

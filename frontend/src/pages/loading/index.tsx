@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchUser, isLoggedIn } from '../../lib/auth';
-import { findActiveBot } from '../../service';
-import { Icon as AssetLoading } from '../../components/Transition/Icon/AssetLoading';
+import { useAuth } from '@/context/AuthContext';
+import { findActiveBot } from '@/service';
+import { Icon as AssetLoading } from '@/components/Transition/Icon/AssetLoading';
 
 /**
  * Loading —— 应用启动加载页。
@@ -11,6 +11,8 @@ import { Icon as AssetLoading } from '../../components/Transition/Icon/AssetLoad
  *  1. 真实状态驱动：阶段切换由实际异步操作触发，无 mock 进度
  *  2. 视觉连贯：复用 AssetLoading 图标，与全局过渡页统一语言
  *  3. 极简留白：单一 accent 主色，黑白主题自适应
+ *
+ * 认证会话由 AuthProvider 统一恢复，本页只读取 useAuth() 状态做路由决策。
  */
 
 type Stage = 'auth' | 'session' | 'routing';
@@ -25,57 +27,46 @@ const STAGE_ORDER: Stage[] = ['auth', 'session', 'routing'];
 
 const Loading = () => {
   const navigate = useNavigate();
+  const { user, loading } = useAuth();
   const [stage, setStage] = useState<Stage>('auth');
 
   const startStage = useCallback(async () => {
     try {
-      setStage('auth');
-      const loggedIn = await fetchUser();
-      if (!loggedIn) {
-        navigate('/login', { replace: true });
-        return;
-      }
-
-      try {
-        setStage('session');
-        const bot = await findActiveBot();
-        setStage('routing');
-        if (bot) {
-          const path =
-            bot.bot_type === 'auto' ? `/trade/auto/${bot.id}/bot` : `/trade/grid/${bot.id}/bot`;
-          navigate(path, { replace: true });
-        } else {
-          navigate('/setup/bot-type', { replace: true });
-        }
-      } catch {
+      setStage('session');
+      const bot = await findActiveBot();
+      setStage('routing');
+      if (bot) {
+        navigate(`/trade/${bot.bot_type}/${bot.id}/bot`, { replace: true });
+      } else {
         navigate('/setup/bot-type', { replace: true });
       }
     } catch {
-      navigate('/login', { replace: true });
+      navigate('/setup/bot-type', { replace: true });
     }
-  }, [navigate]);
+  }, [navigate])
 
+  // 会话恢复就绪后，依据登录状态与活跃 bot 做路由决策
   useEffect(() => {
-    if (!isLoggedIn()) {
+    if (loading) return;
+    if (!user) {
       navigate('/login', { replace: true });
       return;
     }
 
     startStage();
-  }, [navigate, startStage]);
+  }, [user, loading, navigate]);
 
   const stageOrders = useMemo(() => {
     const currentIdx = STAGE_ORDER.indexOf(stage);
     return STAGE_ORDER.map((s, i) => (
       <span
         key={s}
-        className={`loading-dot h-1 rounded-full transition-all duration-500 ${
-          i < currentIdx
+        className={`loading-dot h-1 rounded-full transition-all duration-500 ${i < currentIdx
             ? 'w-4 bg-accent'
             : i === currentIdx
               ? 'w-6 bg-accent'
               : 'w-1 bg-line-default'
-        }`}
+          }`}
         style={{ transitionDelay: `${i * 60}ms` }}
       />
     ));

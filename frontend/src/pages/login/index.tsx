@@ -1,34 +1,49 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 import { Spinner, InfoCircle } from '@/components/Icon';
-import { login } from '../../service';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.SubmitEvent) => {
-    e.preventDefault();
-    setError('');
+  const handleSubmit = useCallback(
+    async (e: React.SubmitEvent, uname: string, pwd: string) => {
+      e.preventDefault();
 
-    setLoading(true);
-    try {
-      const result = await login(username, password);
-      if (result.success) {
-        navigate('/setup/bot-type', { replace: true });
-        return;
+      setError('');
+      setLoading(true);
+      try {
+        const result = await login(uname, pwd);
+        if (result.success) {
+          navigate('/setup/bot-type', { replace: true });
+          return;
+        }
+        setError(result.error || 'Login failed');
+      } catch {
+        setError('Network error, please try again');
+      } finally {
+        setLoading(false);
       }
+    },
+    [navigate, login],
+  );
 
-      setError(result.error || 'Login failed');
-    } catch {
-      setError('Network error, please try again');
-    } finally {
-      setLoading(false);
+  const errorMessage = useMemo(() => {
+    if (error) {
+      return (
+        <div className="flex items-center gap-2 p-3 bg-danger-bg border border-danger-border rounded-xl text-sm text-danger-text">
+          <InfoCircle className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+          <span>{error}</span>
+        </div>
+      );
     }
-  };
+    return null;
+  }, [error]);
 
   return (
     <div className="min-h-screen bg-base flex items-center justify-center relative overflow-hidden">
@@ -47,14 +62,8 @@ const Login = () => {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {error && (
-            <div className="flex items-center gap-2 p-3 bg-danger-bg border border-danger-border rounded-xl text-sm text-danger-text">
-              <InfoCircle className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-              <span>{error}</span>
-            </div>
-          )}
-
+        <form onSubmit={(e) => handleSubmit(e, username, password)} className="space-y-5">
+          {errorMessage}
           <div>
             <input
               type="text"

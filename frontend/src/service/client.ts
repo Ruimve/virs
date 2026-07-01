@@ -37,7 +37,7 @@ async function request<T>(method: string, url: string, data?: unknown): Promise<
 
   if (response.status === 401) {
     removeToken();
-    window.location.href = '/login';
+    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
     return { success: false, error: '未授权，请重新登录' };
   }
 
