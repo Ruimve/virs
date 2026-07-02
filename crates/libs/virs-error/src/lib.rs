@@ -48,6 +48,18 @@ pub enum VirsError {
     #[error("{message}")]
     Http { status: u16, message: String },
 
+    /// Configuration loading or validation error.
+    #[error("Config error: {0}")]
+    Config(String),
+
+    /// Authentication / JWT error.
+    #[error("Auth error: {0}")]
+    Auth(String),
+
+    /// Cryptographic operation error (encrypt/decrypt/hash).
+    #[error("Crypto error: {0}")]
+    Crypto(String),
+
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -65,6 +77,15 @@ impl VirsError {
     pub fn conflict(msg: impl Into<String>) -> Self {
         Self::Http { status: 409, message: msg.into() }
     }
+    pub fn config(msg: impl Into<String>) -> Self {
+        Self::Config(msg.into())
+    }
+    pub fn auth(msg: impl Into<String>) -> Self {
+        Self::Auth(msg.into())
+    }
+    pub fn crypto(msg: impl Into<String>) -> Self {
+        Self::Crypto(msg.into())
+    }
 }
 
 /// Unified result type for the entire VIRS platform.
@@ -80,7 +101,7 @@ impl Retryable for VirsError {
             Self::Exchange(e) => e.is_retryable(),
             #[cfg(feature = "sqlx")]
             Self::Database(_) => true,
-            Self::Http { .. } | Self::Other(_) => false,
+            Self::Config(_) | Self::Auth(_) | Self::Crypto(_) | Self::Http { .. } | Self::Other(_) => false,
         }
     }
 }
@@ -99,6 +120,9 @@ impl Categorized for VirsError {
                 409 => ErrorCategory::Conflict,
                 _ => ErrorCategory::Validation,
             },
+            Self::Config(_) => ErrorCategory::Config,
+            Self::Auth(_) => ErrorCategory::Authentication,
+            Self::Crypto(_) => ErrorCategory::Internal,
             Self::Other(_) => ErrorCategory::Internal,
         }
     }
@@ -113,6 +137,9 @@ impl HttpStatus for VirsError {
             #[cfg(feature = "sqlx")]
             Self::Database(_) => 503,
             Self::Http { status, .. } => *status,
+            Self::Config(_) => 500,
+            Self::Auth(_) => 401,
+            Self::Crypto(_) => 500,
             Self::Other(_) => 500,
         }
     }
@@ -133,6 +160,9 @@ impl ErrorCode for VirsError {
                 409 => "CONFLICT",
                 _ => "HTTP_ERROR",
             },
+            Self::Config(_) => "CONFIG_ERROR",
+            Self::Auth(_) => "AUTH_ERROR",
+            Self::Crypto(_) => "CRYPTO_ERROR",
             Self::Other(_) => "INTERNAL_ERROR",
         }
     }

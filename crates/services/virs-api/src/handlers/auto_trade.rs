@@ -105,12 +105,7 @@ pub async fn create_bot(
         "spot" => virs_models::MarketType::Spot,
         _ => virs_models::MarketType::Perpetual,
     };
-    if let Err(e) = state.kline_engine.subscribe(exchange, symbol, mt).await {
-        return Err(VirsError::Other(anyhow::anyhow!(
-            "Failed to subscribe kline: {}",
-            e
-        )));
-    }
+    state.kline_engine.subscribe(exchange, symbol, mt).await?;
 
     // Register symbol for paper mode price ticks
     if paper_mode {

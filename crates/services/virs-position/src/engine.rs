@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 use virs_types::enums::*;
 use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
-use virs_types::market::{Balance, ExchangePosition};
+use virs_types::market::ExchangePosition;
 use virs_types::position::*;
 use virs_error::{PositionEngineError, PositionResult};
 
@@ -165,17 +165,6 @@ impl PositionEngine {
         self.inner.event_tx.clone()
     }
 
-    /// 获取指定仓位。
-    pub fn get_position(
-        &self,
-        exchange: &str,
-        symbol: &str,
-        side: PositionSide,
-    ) -> Option<Position> {
-        let key = (exchange.to_string(), symbol.to_string(), side);
-        self.inner.positions.get(&key).map(|r| r.value().clone())
-    }
-
     /// 获取所有仓位。
     pub fn get_all_positions(&self) -> Vec<Position> {
         self.inner
@@ -193,16 +182,6 @@ impl PositionEngine {
             .filter(|r| r.value().symbol == symbol && r.value().is_open())
             .map(|r| r.value().clone())
             .next()
-    }
-
-    /// 获取引擎当前状态。
-    pub fn state(&self) -> EngineState {
-        self.inner.get_state()
-    }
-
-    /// 查询交易所余额。
-    pub async fn get_balance(&self) -> PositionResult<Balance> {
-        self.inner.exchange.get_balance().await
     }
 
     /// 获取内部 Exchange 的共享引用。

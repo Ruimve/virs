@@ -31,16 +31,6 @@ fn t1_3_timeframe_ms() {
 }
 
 #[test]
-fn t1_4_timeframe_minutes() {
-    assert_eq!(Timeframe::M1.minutes(), 1);
-    assert_eq!(Timeframe::M5.minutes(), 5);
-    assert_eq!(Timeframe::M15.minutes(), 15);
-    assert_eq!(Timeframe::H1.minutes(), 60);
-    assert_eq!(Timeframe::H4.minutes(), 240);
-    assert_eq!(Timeframe::D1.minutes(), 1440);
-}
-
-#[test]
 fn t1_5_timeframe_default_limit() {
     for tf in Timeframe::all() {
         assert_eq!(tf.default_limit(), 1000);
@@ -100,50 +90,4 @@ fn t3_4_align_open_time_exact() {
     assert_eq!(exact % 60_000, 0);
     let aligned = align_open_time(exact, Timeframe::M1);
     assert_eq!(aligned, exact);
-}
-
-// ── BacktestRangeLimit ─────────────────────────────────────
-
-#[test]
-fn t4_1_backtest_range_m1() {
-    let limit = BacktestRangeLimit::for_timeframe(Timeframe::M1);
-    assert_eq!(limit.timeframe, Timeframe::M1);
-    assert_eq!(limit.max_days, 7);
-    assert_eq!(limit.recommended_days, 3);
-    assert_eq!(limit.estimated_candles, 7 * 24 * 60);
-}
-
-#[test]
-fn t4_2_backtest_range_d1() {
-    let limit = BacktestRangeLimit::for_timeframe(Timeframe::D1);
-    assert_eq!(limit.timeframe, Timeframe::D1);
-    assert_eq!(limit.max_days, 1825);
-    assert_eq!(limit.recommended_days, 365);
-    assert_eq!(limit.estimated_candles, 1825);
-}
-
-#[test]
-fn t4_3_backtest_range_all_limits() {
-    let limits = BacktestRangeLimit::all_limits();
-    assert_eq!(limits.len(), 6);
-    // Verify ascending order by max_days
-    for i in 1..limits.len() {
-        assert!(limits[i].max_days >= limits[i - 1].max_days);
-    }
-}
-
-#[test]
-fn t4_4_backtest_range_info_from() {
-    let limit = BacktestRangeLimit::for_timeframe(Timeframe::H1);
-    let info: BacktestRangeInfo = limit.into();
-    assert_eq!(info.timeframe, "1h");
-    assert_eq!(info.max_days, 365);
-    assert_eq!(info.recommended_days, 90);
-}
-
-#[test]
-fn t4_5_backtest_range_estimates() {
-    let limit = BacktestRangeLimit::for_timeframe(Timeframe::M5);
-    assert_eq!(limit.estimated_candles, 30 * 24 * 12);
-    assert_eq!(limit.estimated_1m_required, 30 * 24 * 60);
 }

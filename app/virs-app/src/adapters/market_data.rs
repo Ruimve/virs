@@ -530,7 +530,13 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
 
         // Get min qty
         let min_qty = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
-            ex.get_min_qty(symbol).await.unwrap_or(0.0)
+            match ex.get_min_qty(symbol).await {
+                Ok(q) => q,
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to fetch min_qty, defaulting to 0");
+                    0.0
+                }
+            }
         } else {
             0.0
         };

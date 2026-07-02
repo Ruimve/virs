@@ -22,7 +22,6 @@ use crate::types::{
 
 struct SubscriptionEntry {
     exchange: String,
-    market_type: MarketType,
 }
 
 struct MarketWsHandler {
@@ -49,10 +48,6 @@ impl MarketWsHandler {
         ws.subscribe(symbol).await;
     }
 
-    async fn unsubscribe(&self, symbol: &str) {
-        let ws = self.ws.lock().await;
-        ws.unsubscribe(symbol).await;
-    }
 }
 
 pub struct OrderBookEngine {
@@ -193,7 +188,6 @@ impl OrderBookEngine {
 
         let entry = SubscriptionEntry {
             exchange: exchange.to_string(),
-            market_type,
         };
 
         self.subscriptions.insert(key.clone(), entry);
@@ -217,36 +211,4 @@ impl OrderBookEngine {
         Ok(())
     }
 
-    pub async fn unsubscribe(&self, exchange: &str, symbol: &str) -> VirsResult<()> {
-        let key = subscription_key(exchange, symbol);
-
-        let market_type = match self.subscriptions.get(&key) {
-            Some(entry) => entry.market_type,
-            None => return Ok(()),
-        };
-
-        match market_type {
-            MarketType::Spot => {
-                self.spot_handler.unsubscribe(symbol).await;
-            }
-            MarketType::Perpetual => {
-                self.perpetual_handler.unsubscribe(symbol).await;
-            }
-        }
-
-        self.subscriptions.remove(&key);
-        self.symbol_index.remove(symbol);
-
-        tracing::debug!(
-            "[OrderBookEngine] Unsubscribed from {}/{}",
-            exchange,
-            symbol
-        );
-        Ok(())
-    }
-
-    pub fn is_subscribed(&self, exchange: &str, symbol: &str) -> bool {
-        let key = subscription_key(exchange, symbol);
-        self.subscriptions.contains_key(&key)
-    }
 }

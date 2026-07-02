@@ -190,10 +190,6 @@ impl BinanceEd25519Signer {
         &self.api_key
     }
 
-    /// 返回签名密钥引用（供 WebSocket API 客户端使用）
-    pub fn signing_key(&self) -> &ed25519_dalek::SigningKey {
-        &self.signing_key
-    }
 }
 
 impl Signer for BinanceEd25519Signer {

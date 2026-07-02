@@ -65,11 +65,6 @@ impl GridEngine {
         (engine, cmd_tx, grid_event_tx)
     }
 
-    /// 订阅网格事件广播
-    pub fn subscribe_events(&self) -> broadcast::Receiver<GridEvent> {
-        self.grid_event_tx.subscribe()
-    }
-
     /// 启动引擎主循环
     pub async fn run(&mut self) {
         let mut cmd_rx = self.cmd_rx.take().expect("GridEngine already running");

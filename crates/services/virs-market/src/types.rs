@@ -68,10 +68,6 @@ impl Timeframe {
         }
     }
 
-    pub fn minutes(&self) -> i64 {
-        self.ms() / 60_000
-    }
-
     pub fn default_limit(&self) -> usize {
         1000
     }
@@ -133,91 +129,6 @@ impl Default for KlineEngineConfig {
             backfill_on_start: true,
             event_channel_capacity: 8192,
             proxy_url: None,
-        }
-    }
-}
-
-/// Backtest range limit per timeframe.
-#[derive(Debug, Clone)]
-pub struct BacktestRangeLimit {
-    pub timeframe: Timeframe,
-    pub max_days: u32,
-    pub recommended_days: u32,
-    pub estimated_candles: u32,
-    pub estimated_1m_required: u32,
-}
-
-impl BacktestRangeLimit {
-    pub fn for_timeframe(tf: Timeframe) -> Self {
-        match tf {
-            Timeframe::M1 => BacktestRangeLimit {
-                timeframe: tf,
-                max_days: 7,
-                recommended_days: 3,
-                estimated_candles: 7 * 24 * 60,
-                estimated_1m_required: 7 * 24 * 60,
-            },
-            Timeframe::M5 => BacktestRangeLimit {
-                timeframe: tf,
-                max_days: 30,
-                recommended_days: 14,
-                estimated_candles: 30 * 24 * 12,
-                estimated_1m_required: 30 * 24 * 60,
-            },
-            Timeframe::M15 => BacktestRangeLimit {
-                timeframe: tf,
-                max_days: 90,
-                recommended_days: 30,
-                estimated_candles: 90 * 24 * 4,
-                estimated_1m_required: 90 * 24 * 60,
-            },
-            Timeframe::H1 => BacktestRangeLimit {
-                timeframe: tf,
-                max_days: 365,
-                recommended_days: 90,
-                estimated_candles: 365 * 24,
-                estimated_1m_required: 365 * 24 * 60,
-            },
-            Timeframe::H4 => BacktestRangeLimit {
-                timeframe: tf,
-                max_days: 730,
-                recommended_days: 180,
-                estimated_candles: 730 * 6,
-                estimated_1m_required: 730 * 24 * 60,
-            },
-            Timeframe::D1 => BacktestRangeLimit {
-                timeframe: tf,
-                max_days: 1825,
-                recommended_days: 365,
-                estimated_candles: 1825,
-                estimated_1m_required: 1825 * 24 * 60,
-            },
-        }
-    }
-
-    pub fn all_limits() -> Vec<BacktestRangeLimit> {
-        Timeframe::all()
-            .iter()
-            .map(|tf| Self::for_timeframe(*tf))
-            .collect()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BacktestRangeInfo {
-    pub timeframe: String,
-    pub max_days: u32,
-    pub recommended_days: u32,
-    pub estimated_candles: u32,
-}
-
-impl From<BacktestRangeLimit> for BacktestRangeInfo {
-    fn from(limit: BacktestRangeLimit) -> Self {
-        BacktestRangeInfo {
-            timeframe: limit.timeframe.to_string(),
-            max_days: limit.max_days,
-            recommended_days: limit.recommended_days,
-            estimated_candles: limit.estimated_candles,
         }
     }
 }

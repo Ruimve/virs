@@ -51,8 +51,7 @@ where
 {
     let s = value.unwrap_or_else(|| default.to_string());
     s.parse::<T>()
-        .map_err(|e| anyhow::anyhow!("Failed to parse '{}': {}", s, e))
-        .map_err(VirsError::Other)
+        .map_err(|e| VirsError::config(format!("Failed to parse '{}': {}", s, e)))
 }
 
 // ============================================================
@@ -219,19 +218,19 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
         port: parse_env_num(std::env::var("PORT").ok(), DEFAULT_PORT)?,
         log_level: std::env::var("LOG_LEVEL").unwrap_or_else(|_| DEFAULT_LOG_LEVEL.into()),
         secret_key: std::env::var("SECRET_KEY").map_err(|_| {
-            VirsError::Other(anyhow::anyhow!("SECRET_KEY environment variable is required"))
+            VirsError::config("SECRET_KEY environment variable is required")
         })?,
         encryption_key: std::env::var("ENCRYPTION_KEY").map_err(|_| {
-            VirsError::Other(anyhow::anyhow!(
-                "ENCRYPTION_KEY environment variable is required (must differ from SECRET_KEY)"
-            ))
+            VirsError::config(
+                "ENCRYPTION_KEY environment variable is required (must differ from SECRET_KEY)",
+            )
         })?,
         jwt_expiration_hours: parse_env_num(std::env::var("JWT_EXPIRATION_HOURS").ok(), DEFAULT_JWT_HOURS)?,
     };
 
     let database = DatabaseConfig {
         url: std::env::var("DATABASE_URL").map_err(|_| {
-            VirsError::Other(anyhow::anyhow!("DATABASE_URL environment variable is required"))
+            VirsError::config("DATABASE_URL environment variable is required")
         })?,
         pool_min: parse_env_num(std::env::var("DB_POOL_MIN").ok(), DEFAULT_DB_POOL_MIN)?,
         pool_max: parse_env_num(std::env::var("DB_POOL_MAX").ok(), DEFAULT_DB_POOL_MAX)?,

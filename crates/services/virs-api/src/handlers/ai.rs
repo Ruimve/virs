@@ -5,7 +5,7 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use virs_error::VirsError;
+use virs_error::{VirsError, VirsResult};
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -185,7 +185,7 @@ async fn call_llm_with_fallback(
     state: &AppState,
     system_prompt: &str,
     user_prompt: &str,
-) -> anyhow::Result<serde_json::Value> {
+) -> VirsResult<serde_json::Value> {
     // Try to find AI credentials from database
     let row: Option<(String, String)> = sqlx::query_as(
         r#"SELECT provider, encrypted_api_key
@@ -214,7 +214,7 @@ async fn call_llm_with_fallback(
             let api_key = std::env::var("DEEPSEEK_API_KEY")
                 .or_else(|_| std::env::var("OPENAI_API_KEY"))
                 .or_else(|_| std::env::var("OPENROUTER_API_KEY"))
-                .map_err(|_| anyhow::anyhow!("No AI API key configured"))?;
+                .map_err(|_| VirsError::unauthorized("No AI API key configured"))?;
 
             let (base_url, model) = if std::env::var("DEEPSEEK_API_KEY").is_ok() {
                 (

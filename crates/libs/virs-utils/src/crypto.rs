@@ -9,14 +9,14 @@ use virs_error::{VirsError, VirsResult};
 /// Encrypt a string using AES-256-GCM.
 pub fn encrypt(plaintext: &str, key: &[u8; 32]) -> VirsResult<String> {
     let cipher = Aes256Gcm::new_from_slice(key)
-        .map_err(|e| anyhow::anyhow!("Cipher init error: {:?}", e))?;
+        .map_err(|e| VirsError::crypto(format!("Cipher init error: {:?}", e)))?;
     let mut nonce_bytes = [0u8; 12];
     rand::thread_rng().fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
     let ciphertext = cipher
         .encrypt(nonce, plaintext.as_bytes())
-        .map_err(|e| anyhow::anyhow!("Encryption error: {:?}", e))?;
+        .map_err(|e| VirsError::crypto(format!("Encryption error: {:?}", e)))?;
 
     let mut combined = nonce_bytes.to_vec();
     combined.extend_from_slice(&ciphertext);
@@ -28,21 +28,21 @@ pub fn encrypt(plaintext: &str, key: &[u8; 32]) -> VirsResult<String> {
 pub fn decrypt(encoded: &str, key: &[u8; 32]) -> VirsResult<String> {
     let combined = BASE64
         .decode(encoded)
-        .map_err(|e| anyhow::anyhow!("Base64 decode error: {}", e))?;
+        .map_err(|e| VirsError::crypto(format!("Base64 decode error: {}", e)))?;
     if combined.len() < 12 {
-        return Err(VirsError::Other(anyhow::anyhow!("Invalid ciphertext length")));
+        return Err(VirsError::crypto("Invalid ciphertext length"));
     }
 
     let (nonce_bytes, ciphertext) = combined.split_at(12);
     let cipher = Aes256Gcm::new_from_slice(key)
-        .map_err(|e| anyhow::anyhow!("Cipher init error: {:?}", e))?;
+        .map_err(|e| VirsError::crypto(format!("Cipher init error: {:?}", e)))?;
     let nonce = Nonce::from_slice(nonce_bytes);
 
     let plaintext = cipher
         .decrypt(nonce, ciphertext)
-        .map_err(|e| anyhow::anyhow!("Decryption error: {:?}", e))?;
-    Ok(String::from_utf8(plaintext)
-        .map_err(|e| anyhow::anyhow!("UTF-8 decode error: {}", e))?)
+        .map_err(|e| VirsError::crypto(format!("Decryption error: {:?}", e)))?;
+    String::from_utf8(plaintext)
+        .map_err(|e| VirsError::crypto(format!("UTF-8 decode error: {}", e)))
 }
 
 /// Derive a 32-byte key from a secret string.
@@ -58,8 +58,8 @@ pub fn derive_key(secret: &str) -> [u8; 32] {
 
 /// Hash a password using bcrypt.
 pub fn hash_password(password: &str) -> VirsResult<String> {
-    Ok(bcrypt::hash(password, bcrypt::DEFAULT_COST)
-        .map_err(|e| anyhow::anyhow!("Hash error: {}", e))?)
+    bcrypt::hash(password, bcrypt::DEFAULT_COST)
+        .map_err(|e| VirsError::crypto(format!("Hash error: {}", e)))
 }
 
 /// Verify a password against a bcrypt hash.

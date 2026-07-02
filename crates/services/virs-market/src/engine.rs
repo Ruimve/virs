@@ -9,16 +9,15 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 use tokio::sync::{broadcast, Mutex};
 use tracing;
-use virs_error::{VirsError, VirsResult};
+use virs_error::VirsResult;
 
 use crate::aggregator::Aggregator;
 use crate::cache::SymbolCache;
 use crate::gap::GapDetector;
 pub use crate::source::ExchangeKlineSource;
 use crate::types::{
-    subscription_key, AllTimeframesData, BacktestRangeInfo, BacktestRangeLimit, Candle,
-    KlineEngineConfig, KlineEvent, KlineEventType, KlinePersistence, KlineSource, KlineWsClient,
-    MarketType, Timeframe, WsEvent,
+    subscription_key, AllTimeframesData, Candle, KlineEngineConfig, KlineEvent, KlineEventType,
+    KlinePersistence, KlineSource, KlineWsClient, MarketType, Timeframe, WsEvent,
 };
 
 struct NoOpPersistence;
@@ -75,11 +74,6 @@ impl MarketWsHandler {
         ws.subscribe(symbol).await;
     }
 
-    async fn unsubscribe(&self, symbol: &str) {
-        let ws = self.ws.lock().await;
-        ws.unsubscribe(symbol).await;
-    }
-
     async fn _is_running(&self) -> bool {
         let ws = self.ws.lock().await;
         ws.is_running()
@@ -118,11 +112,6 @@ impl KlineEngine {
             perpetual_handler: MarketWsHandler::new(perpetual_ws),
             started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
-    }
-
-    pub fn with_persistence(mut self, persistence: Arc<dyn KlinePersistence>) -> Self {
-        self.persistence = persistence;
-        self
     }
 
     pub fn subscribe_events(&self) -> broadcast::Receiver<KlineEvent> {
@@ -412,52 +401,6 @@ impl KlineEngine {
         Ok(())
     }
 
-    pub async fn unsubscribe(&self, exchange: &str, symbol: &str) -> VirsResult<()> {
-        let key = subscription_key(exchange, symbol);
-
-        let (market_type, cache) = match self.subscriptions.get(&key) {
-            Some(entry) => (entry.market_type, entry.cache.clone()),
-            None => return Ok(()),
-        };
-
-        match market_type {
-            MarketType::Spot => {
-                self.spot_handler.unsubscribe(symbol).await;
-            }
-            MarketType::Perpetual => {
-                self.perpetual_handler.unsubscribe(symbol).await;
-            }
-        }
-
-        let persist_data: Vec<(Timeframe, Vec<Candle>)> = {
-            let guard = cache.lock().await;
-            Timeframe::all()
-                .iter()
-                .filter_map(|&tf| {
-                    let candles = guard.get_klines(tf);
-                    if candles.is_empty() {
-                        None
-                    } else {
-                        Some((tf, candles))
-                    }
-                })
-                .collect()
-        };
-
-        for (tf, candles) in &persist_data {
-            let _ = self
-                .persistence
-                .save_candles(exchange, symbol, tf.as_str(), candles)
-                .await;
-        }
-
-        self.subscriptions.remove(&key);
-        self.symbol_index.remove(symbol);
-
-        tracing::debug!("[KlineEngine] Unsubscribed from {}/{}", exchange, symbol);
-        Ok(())
-    }
-
     pub fn get_klines(
         &self,
         exchange: &str,
@@ -501,11 +444,6 @@ impl KlineEngine {
         }
     }
 
-    pub fn is_subscribed(&self, exchange: &str, symbol: &str) -> bool {
-        let key = subscription_key(exchange, symbol);
-        self.subscriptions.contains_key(&key)
-    }
-
     pub fn subscribed_symbols(&self) -> Vec<(String, String, MarketType)> {
         self.subscriptions
             .iter()
@@ -517,130 +455,5 @@ impl KlineEngine {
                 )
             })
             .collect()
-    }
-
-    pub async fn force_backfill(&self, exchange: &str, symbol: &str) -> VirsResult<usize> {
-        let key = subscription_key(exchange, symbol);
-        let (cache, market_type) = match self.subscriptions.get(&key) {
-            Some(entry) => (entry.cache.clone(), entry.market_type),
-            None => {
-                return Err(VirsError::not_found(format!(
-                    "Not subscribed to {}/{}",
-                    exchange, symbol
-                )))
-            }
-        };
-        GapDetector::detect_and_backfill(
-            exchange,
-            symbol,
-            &cache,
-            &self.source,
-            &self.event_tx,
-            market_type,
-        )
-        .await
-    }
-
-    pub async fn continuity_check(
-        &self,
-        exchange: &str,
-        symbol: &str,
-    ) -> Option<crate::gap::ContinuityReport> {
-        let key = subscription_key(exchange, symbol);
-        match self.subscriptions.get(&key) {
-            Some(entry) => {
-                Some(GapDetector::check_continuity(exchange, symbol, &entry.cache).await)
-            }
-            None => None,
-        }
-    }
-
-    pub fn backtest_range_limits() -> Vec<BacktestRangeInfo> {
-        BacktestRangeLimit::all_limits()
-            .into_iter()
-            .map(|l| l.into())
-            .collect()
-    }
-
-    pub fn validate_backtest_range(timeframe: Timeframe, days: u32) -> VirsResult<()> {
-        let limit = BacktestRangeLimit::for_timeframe(timeframe);
-        if days > limit.max_days {
-            return Err(VirsError::Other(anyhow::anyhow!(
-                "Backtest range {} days exceeds maximum {} days for {} timeframe",
-                days,
-                limit.max_days,
-                timeframe
-            )));
-        }
-        if days > limit.recommended_days {
-            tracing::warn!(
-                "[KlineEngine] Backtest range {} days exceeds recommended {} days for {} timeframe",
-                days,
-                limit.recommended_days,
-                timeframe
-            );
-        }
-        Ok(())
-    }
-
-    pub async fn fetch_backtest_data(
-        &self,
-        exchange: &str,
-        symbol: &str,
-        timeframe: Timeframe,
-        start_ms: i64,
-        end_ms: i64,
-    ) -> VirsResult<Vec<Candle>> {
-        let days = ((end_ms - start_ms) / 86_400_000) as u32;
-        Self::validate_backtest_range(timeframe, days)?;
-
-        let market_type = self
-            .subscriptions
-            .get(&subscription_key(exchange, symbol))
-            .map(|e| e.market_type);
-
-        let cache_data = self.get_klines_async(exchange, symbol, timeframe).await;
-        let cache_start = cache_data
-            .as_ref()
-            .and_then(|c| c.first().map(|f| f.open_time));
-        let cache_end = cache_data
-            .as_ref()
-            .and_then(|c| c.last().map(|f| f.open_time));
-
-        if let (Some(cs), Some(ce)) = (cache_start, cache_end) {
-            if cs <= start_ms && ce >= end_ms {
-                if let Some(candles) = cache_data {
-                    let filtered: Vec<Candle> = candles
-                        .into_iter()
-                        .filter(|c| c.open_time >= start_ms && c.open_time <= end_ms)
-                        .collect();
-                    if !filtered.is_empty() {
-                        return Ok(filtered);
-                    }
-                }
-            }
-        }
-
-        let all_1m = self
-            .source
-            .fetch_klines(
-                exchange,
-                symbol,
-                "1m",
-                (days * 1440 + 100).min(1000),
-                Some(start_ms),
-                market_type,
-            )
-            .await?;
-
-        if timeframe == Timeframe::M1 {
-            return Ok(all_1m);
-        }
-
-        let aggregated = Aggregator::aggregate_1m_to_timeframe(&all_1m, timeframe);
-        Ok(aggregated
-            .into_iter()
-            .filter(|c| c.open_time >= start_ms && c.open_time <= end_ms)
-            .collect())
     }
 }

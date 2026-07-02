@@ -13,7 +13,6 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
-anyhow = { workspace = true }
 tracing = { workspace = true }
 dashmap = { workspace = true }
 reqwest = { workspace = true }

@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use virs_error::{VirsError, VirsResult};
 
 use crate::enums::*;
 
@@ -290,24 +291,32 @@ impl Default for RiskConfig {
 impl RiskConfig {
     /// Validates that all configuration fields are within reasonable bounds.
     /// Returns Ok(()) if valid, or Err(message) describing the first violation.
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> VirsResult<()> {
         if self.max_leverage == 0 {
-            return Err("max_leverage must be greater than 0".into());
+            return Err(VirsError::bad_request("max_leverage must be greater than 0"));
         }
         if self.max_drawdown_pct < 0.0 {
-            return Err("max_drawdown_pct must not be negative".into());
+            return Err(VirsError::bad_request("max_drawdown_pct must not be negative"));
         }
         if self.max_position_per_symbol_pct < 0.0 {
-            return Err("max_position_per_symbol_pct must not be negative".into());
+            return Err(VirsError::bad_request(
+                "max_position_per_symbol_pct must not be negative",
+            ));
         }
         if self.max_total_position_pct < 0.0 {
-            return Err("max_total_position_pct must not be negative".into());
+            return Err(VirsError::bad_request(
+                "max_total_position_pct must not be negative",
+            ));
         }
         if self.max_order_amount_pct < 0.0 {
-            return Err("max_order_amount_pct must not be negative".into());
+            return Err(VirsError::bad_request(
+                "max_order_amount_pct must not be negative",
+            ));
         }
         if self.liquidation_buffer_pct < 0.0 {
-            return Err("liquidation_buffer_pct must not be negative".into());
+            return Err(VirsError::bad_request(
+                "liquidation_buffer_pct must not be negative",
+            ));
         }
         Ok(())
     }

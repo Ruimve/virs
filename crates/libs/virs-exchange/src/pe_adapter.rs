@@ -34,16 +34,6 @@ impl CcxtExchangeAdapter {
         }
     }
 
-    pub fn with_listen_key(mut self, listen_key: String) -> Self {
-        self.listen_key = Some(listen_key);
-        self
-    }
-
-    pub fn with_name(mut self, name: String) -> Self {
-        self.cached_name = name;
-        self
-    }
-
     fn get_perpetual_exchange(
         &self,
     ) -> Option<dashmap::mapref::one::Ref<'_, String, Box<dyn Exchange>>> {

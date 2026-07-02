@@ -4,7 +4,7 @@ use virs_market::aggregator::{candle_from_1m, Aggregator};
 use virs_market::cache::SymbolCache;
 use virs_market::source::timeframe_str_to_ms;
 use virs_market::{
-    align_open_time, subscription_key, BacktestRangeInfo, BacktestRangeLimit, Candle, Timeframe,
+    align_open_time, subscription_key, Candle, Timeframe,
 };
 
 // Use a base time that is divisible by 60_000
@@ -115,27 +115,6 @@ fn int_3_2_align_multi_timeframe() {
     assert_eq!(m5 % 300_000, 0);
     assert_eq!(h1 % 3_600_000, 0);
     assert_eq!(d1 % 86_400_000, 0);
-}
-
-// ── INT-4: BacktestRangeLimit chain ────────────────────────
-
-#[test]
-fn int_4_1_backtest_range_all_consistent() {
-    let limits = BacktestRangeLimit::all_limits();
-    for limit in &limits {
-        let single = BacktestRangeLimit::for_timeframe(limit.timeframe);
-        assert_eq!(limit.max_days, single.max_days);
-        assert_eq!(limit.recommended_days, single.recommended_days);
-    }
-}
-
-#[test]
-fn int_4_2_backtest_range_info_chain() {
-    for limit in BacktestRangeLimit::all_limits() {
-        let info: BacktestRangeInfo = BacktestRangeLimit::for_timeframe(limit.timeframe).into();
-        assert_eq!(info.timeframe, limit.timeframe.to_string());
-        assert_eq!(info.max_days, limit.max_days);
-    }
 }
 
 // ── INT-5: Gap detection + full day aggregation ────────────

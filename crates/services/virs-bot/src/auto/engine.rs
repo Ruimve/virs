@@ -64,10 +64,6 @@ impl AutoEngine {
         (engine, cmd_tx, auto_event_tx)
     }
 
-    pub fn subscribe_events(&self) -> broadcast::Receiver<AutoEvent> {
-        self.auto_event_tx.subscribe()
-    }
-
     pub async fn run(&mut self) {
         let mut cmd_rx = self.cmd_rx.take().expect("AutoEngine already running");
         self.restore_running_bots().await;

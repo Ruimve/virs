@@ -3010,7 +3010,6 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "virs-api"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "axum",
  "chrono",
@@ -3037,7 +3036,6 @@ dependencies = [
 name = "virs-app"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "axum",
  "chrono",
@@ -3066,7 +3064,6 @@ dependencies = [
 name = "virs-bot"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "dashmap",
@@ -3109,7 +3106,6 @@ dependencies = [
 name = "virs-config"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "dotenvy",
  "serde",
  "serde_json",
@@ -3153,7 +3149,6 @@ dependencies = [
 name = "virs-market"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "dashmap",
@@ -3217,7 +3212,6 @@ name = "virs-utils"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
- "anyhow",
  "base64 0.22.1",
  "bcrypt",
  "chrono",

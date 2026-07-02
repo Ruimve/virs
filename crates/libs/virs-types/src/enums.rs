@@ -88,7 +88,6 @@ impl std::fmt::Display for MarketType {
 pub enum EngineState {
     Created,
     Running,
-    Paused,
     ShuttingDown,
     Stopped,
 }

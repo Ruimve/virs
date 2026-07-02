@@ -7,10 +7,10 @@
 
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
 use tracing::info;
 use uuid::Uuid;
 use virs_api::EngineManager;
+use virs_error::{Context, VirsError, VirsResult};
 
 use virs_api::{build_router, AppState, WsBroadcaster};
 use virs_app::engine_manager::AppEngineManager;
@@ -21,7 +21,7 @@ use virs_market::{
 };
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> VirsResult<()> {
     // Load config
     let mut config = load_config()?;
 
@@ -34,7 +34,9 @@ async fn main() -> Result<()> {
         tracing::warn!("WARNING: Using default ENCRYPTION_KEY. Change this in production!");
     }
     if config.server.secret_key == config.server.encryption_key {
-        anyhow::bail!("SECRET_KEY and ENCRYPTION_KEY must be different for security");
+        return Err(VirsError::config(
+            "SECRET_KEY and ENCRYPTION_KEY must be different for security",
+        ));
     }
 
     // Initialize tracing
@@ -193,7 +195,9 @@ async fn main() -> Result<()> {
 
     // Start server
     let addr = format!("{}:{}", config.server.host, config.server.port);
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .context(format!("Failed to bind to {}", addr))?;
     info!("API server listening on http://{}", addr);
 
     axum::serve(
@@ -201,7 +205,8 @@ async fn main() -> Result<()> {
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
     .with_graceful_shutdown(shutdown_signal())
-    .await?;
+    .await
+    .context("axum server error")?;
 
     info!("VIRS shut down gracefully");
     Ok(())

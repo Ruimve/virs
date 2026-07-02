@@ -1,6 +1,6 @@
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use virs_error::VirsResult;
+use virs_error::{VirsError, VirsResult};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Claims {
@@ -33,7 +33,7 @@ pub fn encode_jwt(claims: &Claims, secret: &str) -> VirsResult<String> {
         &claims,
         &EncodingKey::from_secret(secret.as_bytes()),
     )
-    .map_err(|e| anyhow::anyhow!("JWT encode error: {}", e))?;
+    .map_err(|e| VirsError::auth(format!("JWT encode error: {}", e)))?;
     Ok(token)
 }
 
@@ -43,6 +43,6 @@ pub fn decode_jwt(token: &str, secret: &str) -> VirsResult<Claims> {
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::default(),
     )
-    .map_err(|e| anyhow::anyhow!("JWT decode error: {}", e))?;
+    .map_err(|e| VirsError::auth(format!("JWT decode error: {}", e)))?;
     Ok(token_data.claims)
 }

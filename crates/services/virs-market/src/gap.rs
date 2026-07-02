@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 use tracing;
-use virs_error::{VirsError, VirsResult};
+use virs_error::{ExchangeError, VirsError, VirsResult};
 
 use super::aggregator::Aggregator;
 use super::cache::SymbolCache;
@@ -234,11 +234,10 @@ impl GapDetector {
         let candles_1m = match result_1m {
             Ok(c) if !c.is_empty() => c,
             Ok(_) => {
-                return Err(VirsError::Other(anyhow::anyhow!(
-                    "No 1m candles returned for {}/{}",
-                    exchange,
-                    symbol
-                )));
+                return Err(VirsError::Exchange(ExchangeError::no_data(format!(
+                    "No 1m candles for {}/{}",
+                    exchange, symbol
+                ))));
             }
             Err(e) => {
                 return Err(e);

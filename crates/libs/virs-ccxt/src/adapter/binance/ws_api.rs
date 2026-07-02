@@ -23,6 +23,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
+use virs_error::ExchangeError;
 
 use super::BinanceEd25519Signer;
 use crate::adapter::binance::order_ws::BinanceOrderMessage;
@@ -426,12 +427,15 @@ async fn wait_for_response(
     >,
     expected_id: u64,
     timeout: Duration,
-) -> Result<bool, String> {
+) -> Result<bool, ExchangeError> {
     let deadline = tokio::time::Instant::now() + timeout;
     loop {
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         if remaining.is_zero() {
-            return Err(format!("Timeout waiting for response id={}", expected_id));
+            return Err(ExchangeError::Internal(format!(
+                "Timeout waiting for response id={}",
+                expected_id
+            )));
         }
 
         tokio::select! {
@@ -445,15 +449,21 @@ async fn wait_for_response(
                                 if let Some(s) = status {
                                     return Ok(s == 200);
                                 }
-                                return Err(format!("Response id={} missing status field", expected_id));
+                                return Err(ExchangeError::Internal(format!(
+                                    "Response id={} missing status field",
+                                    expected_id
+                                )));
                             }
                             // 不是等待的响应，可能是用户数据事件，忽略（后续主循环会处理）
                         }
                     }
                     Ok(Some(Ok(_))) => { /* ignore non-text */ }
-                    Ok(Some(Err(e))) => return Err(format!("WS read error: {}", e)),
-                    Ok(None) => return Err("WS stream ended".into()),
-                    Err(_) => return Err(format!("Timeout waiting for response id={}", expected_id)),
+                    Ok(Some(Err(e))) => return Err(ExchangeError::Internal(format!("WS read error: {}", e))),
+                    Ok(None) => return Err(ExchangeError::Internal("WS stream ended".to_string())),
+                    Err(_) => return Err(ExchangeError::Internal(format!(
+                        "Timeout waiting for response id={}",
+                        expected_id
+                    ))),
                 }
             }
         }
@@ -467,7 +477,7 @@ async fn wait_for_response(
 pub(crate) fn build_session_logon_request(
     signer: &BinanceEd25519Signer,
     id: u64,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, ExchangeError> {
     let timestamp = chrono::Utc::now().timestamp_millis();
     let api_key = signer.api_key();
 
