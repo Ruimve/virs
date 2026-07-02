@@ -1,7 +1,8 @@
 //! DefaultLlmResolver — resolves LLM provider, API key, base URL, and model.
 
 use virs_config::AiConfig;
-use virs_types::bot::{BotError, BotResult, LlmProviderResolver};
+use virs_types::bot::LlmProviderResolver;
+use virs_error::{BotError, BotResult};
 
 /// Resolve LLM provider info from user credentials and AI config.
 ///

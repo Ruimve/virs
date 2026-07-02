@@ -8,7 +8,9 @@ use chrono::Utc;
 use virs_exchange::Exchanges;
 use virs_models as models;
 use virs_types::enums::*;
-use virs_types::position::{PositionEngineError, WsFeedEvent};
+use virs_types::position::WsFeedEvent;
+
+use virs_error::ExchangeError;
 
 // ============================================================
 // TC-INT-1: Type conversion round-trips
@@ -140,25 +142,13 @@ fn int_3_3_registry_list_names() {
 // ============================================================
 
 #[test]
-fn int_4_1_exchange_error_to_pe_error() {
-    let err = anyhow::anyhow!("network timeout");
-    let pe_err = virs_exchange::pe_adapter::to_pe_error(err);
-    match pe_err {
-        PositionEngineError::Exchange(msg) => {
-            assert!(msg.contains("network timeout"));
-        }
-        _ => panic!("Expected Exchange variant"),
-    }
-}
-
-#[test]
-fn int_4_2_no_exchange_error() {
+fn int_4_1_no_exchange_error() {
     let err = virs_exchange::pe_adapter::no_exchange_error();
     match err {
-        PositionEngineError::Exchange(msg) => {
+        ExchangeError::Internal(msg) => {
             assert!(msg.contains("No perpetual exchange"));
         }
-        _ => panic!("Expected Exchange variant"),
+        _ => panic!("Expected Internal variant"),
     }
 }
 

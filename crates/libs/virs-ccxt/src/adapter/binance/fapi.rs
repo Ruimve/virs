@@ -22,7 +22,7 @@
 use chrono::Utc;
 
 use crate::auth::Signer;
-use crate::errors::ExchangeError;
+use virs_error::ExchangeError;
 use crate::types::*;
 use crate::ExchangeClient;
 use crate::{parse_f64, parse_str, parse_u32};

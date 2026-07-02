@@ -1,6 +1,7 @@
 //! Risk checker for position engine.
 
-use virs_types::position::{Position, PositionEngineError, PositionResult, RiskConfig};
+use virs_types::position::{Position, RiskConfig};
+use virs_error::{PositionEngineError, PositionResult};
 
 // ============================================================================
 // RiskAlertInfo

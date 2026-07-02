@@ -9,7 +9,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use virs_types::enums::{PositionSide, PositionStatus};
-use virs_types::position::{Position, PositionResult};
+use virs_types::position::Position;
+use virs_error::PositionResult;
 
 // ============================================================================
 // PositionPersistence trait

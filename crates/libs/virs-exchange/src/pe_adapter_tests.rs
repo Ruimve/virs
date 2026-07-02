@@ -5,12 +5,14 @@ use chrono::Utc;
 use virs_models as models;
 use virs_types::enums::*;
 use virs_types::market::ExchangePosition;
-use virs_types::position::{PositionEngineError, PositionOrder, WsFeedEvent};
+use virs_types::position::{PositionOrder, WsFeedEvent};
+
+use virs_error::ExchangeError;
 
 use crate::pe_adapter::{
     convert_exchange_position, convert_order, convert_order_status, convert_order_type,
     convert_position_side, convert_side, convert_to_models_side, convert_virs_market_type,
-    convert_virs_position_side, convert_ws_feed_event, no_exchange_error, to_pe_error,
+    convert_virs_position_side, convert_ws_feed_event, no_exchange_error,
 };
 
 // ============================================================
@@ -376,44 +378,16 @@ fn pe10_2_connection_changed() {
 }
 
 // ============================================================
-// TC-PE11: to_pe_error
+// TC-PE11: no_exchange_error
 // ============================================================
 
 #[test]
-fn pe11_1_network_error() {
-    let err = anyhow::anyhow!("connection timeout");
-    let pe_err = to_pe_error(err);
-    match pe_err {
-        PositionEngineError::Exchange(msg) => {
-            assert!(msg.contains("connection timeout"));
-        }
-        _ => panic!("Expected Exchange variant"),
-    }
-}
-
-#[test]
-fn pe11_2_auth_error() {
-    let err = anyhow::anyhow!("invalid api key");
-    let pe_err = to_pe_error(err);
-    match pe_err {
-        PositionEngineError::Exchange(msg) => {
-            assert!(msg.contains("invalid api key"));
-        }
-        _ => panic!("Expected Exchange variant"),
-    }
-}
-
-// ============================================================
-// TC-PE12: no_exchange_error
-// ============================================================
-
-#[test]
-fn pe12_1_no_exchange_error() {
+fn pe11_1_no_exchange_error() {
     let err = no_exchange_error();
     match err {
-        PositionEngineError::Exchange(msg) => {
+        ExchangeError::Internal(msg) => {
             assert!(msg.contains("No perpetual exchange"));
         }
-        _ => panic!("Expected Exchange variant"),
+        _ => panic!("Expected Internal variant"),
     }
 }

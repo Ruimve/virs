@@ -2,10 +2,11 @@
 
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     Json,
 };
 use tracing::info;
+use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -13,11 +14,8 @@ use crate::state::AppState;
 pub async fn list_credentials(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Json<ApiResponse> {
-    let user_id = match extract_user_id(&headers) {
-        Ok(id) => id,
-        Err((_, resp)) => return resp,
-    };
+) -> Result<Json<ApiResponse>, VirsError> {
+    let user_id = extract_user_id(&headers)?;
 
     let rows = sqlx::query_as::<_, (uuid::Uuid, String, String, String, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT id, exchange, label, market_type, created_at FROM qd_exchange_credentials WHERE user_id = $1 ORDER BY created_at DESC"#,
@@ -27,7 +25,7 @@ pub async fn list_credentials(
     .await;
 
     match rows {
-        Ok(creds) => Json(ApiResponse::ok(serde_json::json!({
+        Ok(creds) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "items": creds.iter().map(|(id, exchange, label, market_type, created_at)| {
                 serde_json::json!({
                     "id": id.to_string(),
@@ -37,8 +35,8 @@ pub async fn list_credentials(
                     "created_at": created_at.to_rfc3339(),
                 })
             }).collect::<Vec<_>>()
-        }))),
-        Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
+        })))),
+        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
     }
 }
 
@@ -46,7 +44,7 @@ pub async fn save_credential(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers)?;
 
     let exchange = body["exchange"].as_str().unwrap_or("");
@@ -57,11 +55,8 @@ pub async fn save_credential(
     let market_type = body["market_type"].as_str().unwrap_or("perpetual");
 
     if exchange.is_empty() || api_key.is_empty() || api_secret.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::err(
-                "exchange, api_key, api_secret are required",
-            )),
+        return Err(VirsError::bad_request(
+            "exchange, api_key, api_secret are required",
         ));
     }
 
@@ -70,26 +65,17 @@ pub async fn save_credential(
     // Encrypt sensitive fields with AES-256-GCM
     let encrypted_api_key =
         virs_utils::crypto::encrypt_with_key(api_key, &state.encryption_key).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::err(format!("Encryption error: {}", e))),
-            )
+            VirsError::Other(anyhow::anyhow!("Encryption error: {}", e))
         })?;
     let encrypted_secret =
         virs_utils::crypto::encrypt_with_key(api_secret, &state.encryption_key).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::err(format!("Encryption error: {}", e))),
-            )
+            VirsError::Other(anyhow::anyhow!("Encryption error: {}", e))
         })?;
     let encrypted_passphrase = passphrase
         .map(|p| virs_utils::crypto::encrypt_with_key(p, &state.encryption_key))
         .transpose()
         .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::err(format!("Encryption error: {}", e))),
-            )
+            VirsError::Other(anyhow::anyhow!("Encryption error: {}", e))
         })?;
 
     sqlx::query(
@@ -109,7 +95,7 @@ pub async fn save_credential(
     .execute(&state.db_pool)
     .await
     .map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
+        VirsError::Other(anyhow::anyhow!("Database error: {}", e))
     })?;
 
     // Auto-register exchange in registry for immediate use
@@ -141,7 +127,7 @@ pub async fn delete_credential(
     State(state): State<AppState>,
     headers: HeaderMap,
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers)?;
 
     sqlx::query(r#"DELETE FROM qd_exchange_credentials WHERE id = $1 AND user_id = $2"#)
@@ -150,10 +136,7 @@ pub async fn delete_credential(
         .execute(&state.db_pool)
         .await
         .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::err(format!("Database error: {}", e))),
-            )
+            VirsError::Other(anyhow::anyhow!("Database error: {}", e))
         })?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
@@ -164,7 +147,7 @@ pub async fn delete_credential(
 pub async fn test_credential(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers)?;
 
     let names = state.exchange_registry.registered_names();
@@ -202,7 +185,7 @@ pub async fn test_credential(
 pub async fn check_permissions(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers)?;
 
     let names = state.exchange_registry.registered_names();
@@ -294,7 +277,7 @@ pub async fn check_permissions(
 pub async fn verify_permissions(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers)?;
 
     let names = state.exchange_registry.registered_names();
@@ -305,9 +288,9 @@ pub async fn verify_permissions(
     let exchange = match exchange_ref {
         Some(e) => e,
         None => {
-            return Ok(Json(ApiResponse::err(
+            return Err(VirsError::bad_request(
                 "No exchange registered. Please save credentials first.",
-            )))
+            ))
         }
     };
 
@@ -393,7 +376,7 @@ pub async fn verify_permissions(
 pub async fn exchange_status(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers)?;
 
     let row: Option<(String, String)> = sqlx::query_as(

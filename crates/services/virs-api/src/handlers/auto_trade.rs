@@ -2,11 +2,12 @@
 
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     Json,
 };
 use serde::Deserialize;
 use sqlx::FromRow;
+use virs_error::{Context, VirsError};
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -49,7 +50,7 @@ pub async fn create_bot(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers)?;
 
     let symbol = body["symbol"].as_str().unwrap_or("");
@@ -62,9 +63,8 @@ pub async fn create_bot(
     let paper_mode = body["paper_mode"].as_bool().unwrap_or(true);
 
     if symbol.is_empty() || exchange.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::err("symbol and exchange are required")),
+        return Err(VirsError::bad_request(
+            "symbol and exchange are required",
         ));
     }
 
@@ -75,41 +75,36 @@ pub async fn create_bot(
                 .bind(user_id)
                 .fetch_one(&state.db_pool)
                 .await
-                .unwrap_or(0);
+                .context("Failed to count grid bots")?;
         let auto_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM qd_auto_bots WHERE user_id = $1")
                 .bind(user_id)
                 .fetch_one(&state.db_pool)
                 .await
-                .unwrap_or(0);
+                .context("Failed to count auto bots")?;
         if grid_count + auto_count > 0 {
-            return Err((
-                StatusCode::CONFLICT,
-                Json(ApiResponse::err(
-                    "Each account can only have one bot. Please delete your existing bot first.",
-                )),
+            return Err(VirsError::conflict(
+                "Each account can only have one bot. Please delete your existing bot first.",
             ));
         }
     }
 
     // Ensure engines are started (lazy init on first bot creation)
     if let Err(e) = state.engine_manager.ensure_started(paper_mode).await {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::err(format!("Failed to start engines: {}", e))),
-        ));
+        return Err(VirsError::Other(anyhow::anyhow!(
+            "Failed to start engines: {}",
+            e
+        )));
     }
 
     // Verify exchange is registered in registry (must be done via /api/credentials/save first)
     let market_type_str = market_type;
     let exchange_key = format!("{}:{}", exchange, market_type_str);
     if state.exchange_registry.get(&exchange_key).is_none() {
-        return Err((
-            StatusCode::PRECONDITION_FAILED,
-            Json(ApiResponse::err(
-                "Exchange not registered. Please save API credentials first.",
-            )),
-        ));
+        return Err(VirsError::Http {
+            status: 412,
+            message: "Exchange not registered. Please save API credentials first.".into(),
+        });
     }
 
     // Subscribe kline engine for this symbol (backfill + WS push)
@@ -118,13 +113,10 @@ pub async fn create_bot(
         _ => virs_models::MarketType::Perpetual,
     };
     if let Err(e) = state.kline_engine.subscribe(exchange, symbol, mt).await {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::err(format!(
-                "Failed to subscribe kline: {}",
-                e
-            ))),
-        ));
+        return Err(VirsError::Other(anyhow::anyhow!(
+            "Failed to subscribe kline: {}",
+            e
+        )));
     }
 
     // Register symbol for paper mode price ticks
@@ -178,7 +170,7 @@ pub async fn create_bot(
     .execute(&state.db_pool)
     .await
     .map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
+        VirsError::Other(anyhow::anyhow!("Database error: {}", e))
     })?;
 
     tracing::info!(bot_id = %id, initial_capital, "Auto bot created with initial_capital from exchange");
@@ -188,11 +180,11 @@ pub async fn create_bot(
     )))
 }
 
-pub async fn list_bots(State(state): State<AppState>, headers: HeaderMap) -> Json<ApiResponse> {
-    let user_id = match extract_user_id(&headers) {
-        Ok(id) => id,
-        Err((_, resp)) => return resp,
-    };
+pub async fn list_bots(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, VirsError> {
+    let user_id = extract_user_id(&headers)?;
 
     let rows = sqlx::query_as::<_, (
         uuid::Uuid, String, String, String, String, String, i32, f64, i32,
@@ -241,12 +233,12 @@ pub async fn list_bots(State(state): State<AppState>, headers: HeaderMap) -> Jso
                 )
                 .collect();
             let total = items.len();
-            Json(ApiResponse::ok(serde_json::json!({
+            Ok(Json(ApiResponse::ok(serde_json::json!({
                 "items": items,
                 "total": total,
-            })))
+            }))))
         }
-        Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
+        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
     }
 }
 
@@ -254,7 +246,7 @@ pub async fn get_bot(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<uuid::Uuid>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers)?;
 
     // 单次查询获取完整 AutoBot，使用模型方法计算派生指标（total_return_pct/is_running/is_stopped）
@@ -265,17 +257,12 @@ pub async fn get_bot(
     .bind(user_id)
     .fetch_optional(&state.db_pool)
     .await
-    .map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
-    })?;
+    .map_err(|e| VirsError::Other(anyhow::anyhow!("Database error: {}", e)))?;
 
     let bot = match bot {
         Some(b) => b,
         None => {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::err("Bot not found")),
-            ))
+            return Err(VirsError::not_found("Bot not found"));
         }
     };
 
@@ -309,7 +296,7 @@ pub async fn get_bot(
 pub async fn start_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     if let Some(tx) = state.engine_manager.auto_cmd_tx() {
         let _ = tx
             .send(virs_bot::auto::types::AutoCommand::StartBot { bot_id: id })
@@ -336,7 +323,7 @@ fn extract_quote_asset(symbol: &str) -> String {
 pub async fn stop_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     if let Some(tx) = state.engine_manager.auto_cmd_tx() {
         let _ = tx
             .send(virs_bot::auto::types::AutoCommand::StopBot { bot_id: id })
@@ -348,7 +335,7 @@ pub async fn stop_bot(
 pub async fn delete_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     if let Some(tx) = state.engine_manager.auto_cmd_tx() {
         let _ = tx
             .send(virs_bot::auto::types::AutoCommand::DeleteBot {
@@ -363,10 +350,7 @@ pub async fn delete_bot(
         .execute(&state.db_pool)
         .await
         .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::err(format!("Database error: {}", e))),
-            )
+            VirsError::Other(anyhow::anyhow!("Database error: {}", e))
         })?;
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
@@ -376,28 +360,22 @@ pub async fn get_trades(
     headers: HeaderMap,
     Path(id): Path<uuid::Uuid>,
     axum::extract::Query(params): axum::extract::Query<TradesQuery>,
-) -> Json<ApiResponse> {
-    let user_id = match extract_user_id(&headers) {
-        Ok(id) => id,
-        Err((_, resp)) => return resp,
-    };
+) -> Result<Json<ApiResponse>, VirsError> {
+    let user_id = extract_user_id(&headers)?;
 
     let page = params.page.unwrap_or(1).max(1);
     let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
     let offset = (page - 1) * page_size;
 
     // 查询总数
-    let total: i64 = match sqlx::query_scalar::<_, i64>(
+    let total: i64 = sqlx::query_scalar::<_, i64>(
         r#"SELECT COUNT(*) FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2"#,
     )
     .bind(id)
     .bind(user_id)
     .fetch_one(&state.db_pool)
     .await
-    {
-        Ok(n) => n,
-        Err(e) => return Json(ApiResponse::err(format!("Database error: {}", e))),
-    };
+    .map_err(|e| VirsError::Other(anyhow::anyhow!("Database error: {}", e)))?;
 
     // 查询分页数据（字段较多，使用 struct + FromRow 避免 tuple 16 字段限制）
     let rows = sqlx::query_as::<_, AutoTradeRow>(
@@ -417,7 +395,7 @@ pub async fn get_trades(
     .await;
 
     match rows {
-        Ok(trades) => Json(ApiResponse::ok(serde_json::json!({
+        Ok(trades) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "trades": trades.iter().map(|t| {
                 serde_json::json!({
                     "id": t.id.to_string(),
@@ -447,8 +425,8 @@ pub async fn get_trades(
             "total": total,
             "page": page,
             "page_size": page_size,
-        }))),
-        Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
+        })))),
+        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
     }
 }
 
@@ -456,11 +434,8 @@ pub async fn get_stats(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<uuid::Uuid>,
-) -> Json<ApiResponse> {
-    let user_id = match extract_user_id(&headers) {
-        Ok(id) => id,
-        Err((_, resp)) => return resp,
-    };
+) -> Result<Json<ApiResponse>, VirsError> {
+    let user_id = extract_user_id(&headers)?;
 
     // 拉取全量已平仓 trades（按平仓时间正序），用于计算统计指标
     let rows = sqlx::query_as::<
@@ -487,7 +462,7 @@ pub async fn get_stats(
 
     let trades = match rows {
         Ok(t) => t,
-        Err(e) => return Json(ApiResponse::err(format!("Database error: {}", e))),
+        Err(e) => return Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
     };
 
     // 读取 bot 汇总字段（使用 AutoBot 模型方法计算胜率/亏损率，避免内联重复计算）
@@ -500,7 +475,7 @@ pub async fn get_stats(
     {
         Ok(Some(b)) => Some(b),
         Ok(None) => None,
-        Err(e) => return Json(ApiResponse::err(format!("Database error: {}", e))),
+        Err(e) => return Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
     };
 
     let total_trades = bot.as_ref().map_or(0, |b| b.total_trades);
@@ -604,7 +579,7 @@ pub async fn get_stats(
     // net_pnl 已扣除手续费（pnl = gross_pnl - open_fee - close_fee）
     let net_pnl_after_fee = net_pnl;
 
-    Json(ApiResponse::ok(serde_json::json!({
+    Ok(Json(ApiResponse::ok(serde_json::json!({
         "win_rate": win_rate,
         "loss_rate": loss_rate,
         "profit_loss_ratio": profit_loss_ratio,
@@ -622,7 +597,7 @@ pub async fn get_stats(
         "max_profit": max_profit,
         "max_loss": max_loss,
         "net_pnl_after_fee": net_pnl_after_fee,
-    })))
+    }))))
 }
 
 fn format_duration(ms: i64) -> String {
@@ -646,18 +621,15 @@ pub async fn get_analysis_logs(
     headers: HeaderMap,
     Path(id): Path<uuid::Uuid>,
     axum::extract::Query(params): axum::extract::Query<TradesQuery>,
-) -> Json<ApiResponse> {
-    let user_id = match extract_user_id(&headers) {
-        Ok(id) => id,
-        Err((_, resp)) => return resp,
-    };
+) -> Result<Json<ApiResponse>, VirsError> {
+    let user_id = extract_user_id(&headers)?;
 
     let page = params.page.unwrap_or(1).max(1);
     let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
     let offset = (page - 1) * page_size;
 
     // 查询总数
-    let total: i64 = match sqlx::query_scalar::<_, i64>(
+    let total: i64 = sqlx::query_scalar::<_, i64>(
         r#"SELECT COUNT(*) FROM qd_auto_analysis_logs l
            JOIN qd_auto_bots b ON l.bot_id = b.id
            WHERE l.bot_id = $1 AND b.user_id = $2"#,
@@ -666,10 +638,7 @@ pub async fn get_analysis_logs(
     .bind(user_id)
     .fetch_one(&state.db_pool)
     .await
-    {
-        Ok(n) => n,
-        Err(e) => return Json(ApiResponse::err(format!("Database error: {}", e))),
-    };
+    .map_err(|e| VirsError::Other(anyhow::anyhow!("Database error: {}", e)))?;
 
     let rows = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, String, String, String, serde_json::Value, Option<String>, String, String, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT l.id, l.bot_id, l.analysis_type, l.status, l.system_prompt, l.result, l.error, l.user_prompt, l.llm_model, l.created_at
@@ -686,7 +655,7 @@ pub async fn get_analysis_logs(
     .await;
 
     match rows {
-        Ok(logs) => Json(ApiResponse::ok(serde_json::json!({
+        Ok(logs) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "items": logs.iter().map(|(id, bot_id, analysis_type, status, system_prompt, result, error, user_prompt, llm_model, created_at)| {
                 serde_json::json!({
                     "id": id.to_string(),
@@ -704,7 +673,7 @@ pub async fn get_analysis_logs(
             "total": total,
             "page": page,
             "page_size": page_size,
-        }))),
-        Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
+        })))),
+        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
     }
 }

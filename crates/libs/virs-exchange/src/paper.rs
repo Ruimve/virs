@@ -19,6 +19,8 @@ use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_types::market::*;
 use virs_types::position::*;
 
+use virs_error::{ExchangeError, PositionEngineError, PositionResult};
+
 use crate::registry::Exchanges;
 
 /// Paper pending order
@@ -569,7 +571,10 @@ impl ExchangePe for PaperExchangeAdapter {
 
     async fn cancel_order(&self, _symbol: &str, order_id: &str) -> PositionResult<PositionOrder> {
         let uuid = Uuid::parse_str(order_id).map_err(|_| {
-            PositionEngineError::Exchange(format!("Invalid order ID: {}", order_id))
+            PositionEngineError::Exchange(ExchangeError::Internal(format!(
+                "Invalid order ID: {}",
+                order_id
+            )))
         })?;
         let now = Utc::now();
         match self.pending.remove(&uuid) {
@@ -674,7 +679,10 @@ impl ExchangePe for PaperExchangeAdapter {
 
     async fn get_order(&self, _symbol: &str, order_id: &str) -> PositionResult<PositionOrder> {
         let uuid = Uuid::parse_str(order_id).map_err(|_| {
-            PositionEngineError::Exchange(format!("Invalid order ID: {}", order_id))
+            PositionEngineError::Exchange(ExchangeError::Internal(format!(
+                "Invalid order ID: {}",
+                order_id
+            )))
         })?;
         match self.pending.get(&uuid) {
             Some(o) => Ok(PositionOrder {

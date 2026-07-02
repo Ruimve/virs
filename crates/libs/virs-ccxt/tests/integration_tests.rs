@@ -8,10 +8,10 @@ use serde_json::json;
 use virs_ccxt::{
     create_exchange, parse_f64, parse_str,
     auth::hmac_sha256_hex,
-    errors::ExchangeError,
     types::{CcxtOrderStatus, CcxtTicker},
     adapter::binance::{order_ws::BinanceOrderMessage, BinanceExchange},
 };
+use virs_error::ExchangeError;
 
 use virs_types::enums::{MarketType, OrderStatus};
 

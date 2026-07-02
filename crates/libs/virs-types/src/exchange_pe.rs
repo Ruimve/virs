@@ -9,6 +9,8 @@ use std::pin::Pin;
 use async_trait::async_trait;
 use futures_core::Stream;
 
+use virs_error::PositionResult;
+
 use crate::enums::*;
 use crate::market::*;
 use crate::position::*;

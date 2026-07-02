@@ -2,7 +2,7 @@
 //!
 //! Covers: ExchangeError::no_data.
 
-use crate::errors::ExchangeError;
+use virs_error::ExchangeError;
 
 // ============================================================
 // TC-E2: ExchangeError::no_data

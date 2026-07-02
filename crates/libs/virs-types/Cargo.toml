@@ -9,7 +9,7 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
-thiserror = { workspace = true }
+virs-error = { path = "../virs-error", features = ["sqlx"] }
 anyhow = { workspace = true }
 futures-core = { workspace = true }
 sqlx = { workspace = true, optional = true }

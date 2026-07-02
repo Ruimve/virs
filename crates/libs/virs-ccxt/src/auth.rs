@@ -15,7 +15,7 @@ use hmac::{Hmac, Mac};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use sha2::Sha256;
 
-use super::errors::ExchangeError;
+use virs_error::ExchangeError;
 
 type HmacSha256 = Hmac<Sha256>;
 

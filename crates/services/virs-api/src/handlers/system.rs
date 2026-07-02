@@ -2,20 +2,21 @@
 
 use axum::{extract::State, http::HeaderMap, Json};
 use sysinfo::{Disks, Networks, System};
+use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
-pub async fn paper_status(State(state): State<AppState>) -> Json<ApiResponse> {
-    Json(ApiResponse::ok(serde_json::json!({
+pub async fn paper_status(State(state): State<AppState>) -> Result<Json<ApiResponse>, VirsError> {
+    Ok(Json(ApiResponse::ok(serde_json::json!({
         "paper_mode": state.engine_manager.paper_mode(),
-    })))
+    }))))
 }
 
 pub async fn paper_enable(
     State(state): State<AppState>,
     _headers: HeaderMap,
-) -> Result<Json<ApiResponse>, (axum::http::StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&_headers)?;
     state.ws_broadcaster.broadcast(serde_json::json!({
         "type": "paper_mode",
@@ -30,7 +31,7 @@ pub async fn paper_enable(
 pub async fn paper_disable(
     State(state): State<AppState>,
     _headers: HeaderMap,
-) -> Result<Json<ApiResponse>, (axum::http::StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&_headers)?;
     state.ws_broadcaster.broadcast(serde_json::json!({
         "type": "paper_mode",
@@ -43,7 +44,7 @@ pub async fn paper_disable(
 }
 
 /// 系统性能信息：CPU、内存、磁盘、网络、运行时长、负载、进程数
-pub async fn system_info() -> Json<ApiResponse> {
+pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
     // CPU 使用率需要两次刷新之间的差值才能得到真实值
     let mut sys = System::new_all();
     sys.refresh_cpu_all();
@@ -135,7 +136,7 @@ pub async fn system_info() -> Json<ApiResponse> {
     let os_name = System::name().unwrap_or_default();
     let os_version = System::os_version().unwrap_or_default();
 
-    Json(ApiResponse::ok(serde_json::json!({
+    Ok(Json(ApiResponse::ok(serde_json::json!({
         "cpu": {
             "usage_pct": cpu_usage,
             "core_count": cpu_count,
@@ -163,7 +164,7 @@ pub async fn system_info() -> Json<ApiResponse> {
         "host_name": host_name,
         "os_name": os_name,
         "os_version": os_version,
-    })))
+    }))))
 }
 
 /// 判断是否为物理网卡或容器主接口。

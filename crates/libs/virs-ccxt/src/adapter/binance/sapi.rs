@@ -4,7 +4,7 @@
 //! - GET /sapi/v1/account/apiRestrictions
 
 use crate::auth::Signer;
-use crate::errors::ExchangeError;
+use virs_error::ExchangeError;
 use crate::types::*;
 use crate::ExchangeClient;
 

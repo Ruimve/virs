@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use virs_types::bot::{BotError, BotResult, CredentialStore};
+use virs_types::bot::CredentialStore;
+use virs_error::{BotError, BotResult};
 
 pub struct PgCredentialStore {
     db: PgPool,

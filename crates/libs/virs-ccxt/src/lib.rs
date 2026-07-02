@@ -2,7 +2,6 @@
 
 pub mod adapter;
 pub mod auth;
-pub mod errors;
 pub mod types;
 pub mod ws_types;
 
@@ -12,7 +11,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use auth::Signer;
-use errors::ExchangeError;
+use virs_error::ExchangeError;
 
 // Re-export shared types from virs-types (via types module)
 pub use types::{

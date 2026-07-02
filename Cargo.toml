@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/libs/virs-error",
     "crates/libs/virs-types",
     "crates/libs/virs-config",
     "crates/libs/virs-utils",

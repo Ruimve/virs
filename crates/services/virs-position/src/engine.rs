@@ -20,10 +20,21 @@ use virs_types::enums::*;
 use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_types::market::{Balance, ExchangePosition};
 use virs_types::position::*;
+use virs_error::{PositionEngineError, PositionResult};
 
 use crate::persistence::PositionPersistence;
 use crate::risk::{DrawdownAction, RiskChecker};
 use crate::tracker::PnlTracker;
+
+/// Recover from lock poisoning by accessing the inner data anyway.
+/// In a trading system, we prefer to continue with potentially stale state
+/// rather than panic and crash the engine.
+fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
+    lock.unwrap_or_else(|poisoned| {
+        warn!("Lock poisoned, recovering with inner data");
+        poisoned.into_inner()
+    })
+}
 
 macro_rules! persist {
     ($expr:expr, $label:expr) => {
@@ -75,11 +86,11 @@ impl EngineInner {
     }
 
     fn set_state(&self, new_state: EngineState) {
-        *self.state.write().unwrap() = new_state;
+        *recover_lock(self.state.write()) = new_state;
     }
 
     fn get_state(&self) -> EngineState {
-        *self.state.read().unwrap()
+        *recover_lock(self.state.read())
     }
 }
 
@@ -208,7 +219,7 @@ impl PositionEngine {
         match self.inner.exchange.get_position_mode().await {
             Ok(mode) => {
                 info!(engine_id = %self.inner.config.engine_id, position_mode = ?mode, "Fetched position mode from exchange");
-                *self.inner.position_mode.write().unwrap() = mode;
+                *recover_lock(self.inner.position_mode.write()) = mode;
             }
             Err(e) => {
                 warn!(engine_id = %self.inner.config.engine_id, error = %e, "Failed to get position mode from exchange");
@@ -693,7 +704,7 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
 
         // 3. 检查强平预警
         {
-            let risk_checker = inner.risk_checker.lock().unwrap();
+            let risk_checker = recover_lock(inner.risk_checker.lock());
             for entry in inner.positions.iter() {
                 let pos = entry.value();
                 if let Some(_distance_pct) = risk_checker.check_liquidation(pos) {
@@ -727,7 +738,7 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
             };
 
             // 5. 回撤检查
-            let peak_equity = { inner.tracker.lock().unwrap().peak_equity() };
+            let peak_equity = { recover_lock(inner.tracker.lock()).peak_equity() };
             let drawdown_action = {
                 inner
                     .risk_checker
@@ -756,7 +767,7 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                     let cooldown =
                         chrono::Duration::seconds(inner.config.sync_interval_secs as i64 * 2);
                     let in_cooldown = {
-                        let last = inner.last_close_all.read().unwrap();
+                        let last = recover_lock(inner.last_close_all.read());
                         last.map(|t| now - t < cooldown).unwrap_or(false)
                     };
                     if in_cooldown {
@@ -772,7 +783,7 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                         ),
                     });
 
-                    *inner.last_close_all.write().unwrap() = Some(now);
+                    *recover_lock(inner.last_close_all.write()) = Some(now);
 
                     let positions_to_close: Vec<(Uuid, String, PositionSide, f64)> = inner
                         .positions
@@ -810,7 +821,7 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                                 amount: size, price: None, reduce_only: true,
                                 position_side: Some(side), position_id: Some(pid), client_order_id: None,
                             };
-                            let mode = *inner.position_mode.read().unwrap();
+                            let mode = *recover_lock(inner.position_mode.read());
                             adjust_params_for_position_mode(&mut params, mode);
                             let mut attempts = 0u32;
                             let max_attempts = 3;
@@ -1056,10 +1067,10 @@ pub(crate) async fn handle_ws_order_update(
             };
 
             {
-                inner.tracker.lock().unwrap().record_trade(&trade);
+                recover_lock(inner.tracker.lock()).record_trade(&trade);
             }
             {
-                inner.risk_checker.lock().unwrap().record_trade_result(pnl);
+                recover_lock(inner.risk_checker.lock()).record_trade_result(pnl);
             }
 
             if pnl != 0.0 {
@@ -1296,7 +1307,7 @@ pub(crate) async fn handle_open_position(
             position_id: Some(position_id),
             client_order_id: strategy_id.clone(),
         };
-        let mode = *inner.position_mode.read().unwrap();
+        let mode = *recover_lock(inner.position_mode.read());
         adjust_params_for_position_mode(&mut params, mode);
         let reduce_only = params.reduce_only;
 
@@ -1374,14 +1385,14 @@ pub(crate) async fn handle_open_position(
         .map(|b| b.total)
         .unwrap_or_else(|e| {
             warn!(error = %e, "Failed to get balance for risk check, using tracker equity as fallback");
-            inner.tracker.lock().unwrap().equity()
+            recover_lock(inner.tracker.lock()).equity()
         });
 
     {
         let positions_owned: Vec<Position> =
             inner.positions.iter().map(|r| r.value().clone()).collect();
         let positions: Vec<&Position> = positions_owned.iter().collect();
-        let risk_checker = inner.risk_checker.lock().unwrap();
+        let risk_checker = recover_lock(inner.risk_checker.lock());
 
         if let Err(e) =
             risk_checker.check_open_position(&positions, &symbol, size, lev, total_equity)
@@ -1443,7 +1454,7 @@ pub(crate) async fn handle_open_position(
         position_id: Some(position_id),
         client_order_id: strategy_id.clone(),
     };
-    let mode = *inner.position_mode.read().unwrap();
+    let mode = *recover_lock(inner.position_mode.read());
     adjust_params_for_position_mode(&mut params, mode);
     let reduce_only = params.reduce_only;
 
@@ -1584,7 +1595,7 @@ pub(crate) async fn handle_close_position(
         position_id: Some(position.id),
         client_order_id: strategy_id.clone(),
     };
-    let mode = *inner.position_mode.read().unwrap();
+    let mode = *recover_lock(inner.position_mode.read());
     adjust_params_for_position_mode(&mut params, mode);
     let reduce_only = params.reduce_only;
 
@@ -1779,7 +1790,7 @@ pub(crate) fn adjust_params_for_position_mode(params: &mut PlaceOrderParams, mod
 }
 
 pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: PlaceOrderParams) {
-    let mode = *inner.position_mode.read().unwrap();
+    let mode = *recover_lock(inner.position_mode.read());
     adjust_params_for_position_mode(&mut params, mode);
 
     let total_equity = inner
@@ -1789,13 +1800,13 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
         .map(|b| b.total)
         .unwrap_or_else(|e| {
             warn!(error = %e, "Failed to get balance for risk check");
-            inner.tracker.lock().unwrap().equity()
+            recover_lock(inner.tracker.lock()).equity()
         });
     {
         let positions_owned: Vec<Position> =
             inner.positions.iter().map(|r| r.value().clone()).collect();
         let positions: Vec<&Position> = positions_owned.iter().collect();
-        let risk_checker = inner.risk_checker.lock().unwrap();
+        let risk_checker = recover_lock(inner.risk_checker.lock());
         if let Err(e) =
             risk_checker.check_place_order(&positions, &params.symbol, params.amount, total_equity)
         {

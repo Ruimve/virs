@@ -2,9 +2,10 @@
 
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     Json,
 };
+use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -12,7 +13,7 @@ use crate::state::AppState;
 pub async fn list_users(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers)?;
 
     let rows = sqlx::query_as::<_, (uuid::Uuid, String, String, Option<String>, bool, chrono::DateTime<chrono::Utc>)>(
@@ -34,7 +35,7 @@ pub async fn list_users(
                 })
             }).collect::<Vec<_>>()
         })))),
-        Err(e) => Ok(Json(ApiResponse::err(format!("Database error: {}", e)))),
+        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
     }
 }
 
@@ -42,7 +43,7 @@ pub async fn create_user(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers)?;
 
     let username = body["username"].as_str().unwrap_or("");
@@ -51,17 +52,13 @@ pub async fn create_user(
     let email = body["email"].as_str();
 
     if username.is_empty() || password.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::err("Username and password are required")),
+        return Err(VirsError::bad_request(
+            "Username and password are required",
         ));
     }
 
     let password_hash = virs_utils::crypto::hash_password(password).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::err(format!("Hash error: {}", e))),
-        )
+        VirsError::Other(anyhow::anyhow!("Hash error: {}", e))
     })?;
 
     let id = uuid::Uuid::new_v4();
@@ -77,7 +74,7 @@ pub async fn create_user(
     .execute(&state.db_pool)
     .await
     .map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
+        VirsError::Other(anyhow::anyhow!("Database error: {}", e))
     })?;
 
     Ok(Json(ApiResponse::ok(
@@ -89,16 +86,12 @@ pub async fn update_user(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers)?;
 
     let id = body["id"].as_str().unwrap_or("");
-    let uuid_id = uuid::Uuid::parse_str(id).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::err("Invalid user ID")),
-        )
-    })?;
+    let uuid_id = uuid::Uuid::parse_str(id)
+        .map_err(|_| VirsError::bad_request("Invalid user ID"))?;
 
     let is_active = body["is_active"].as_bool();
     let role = body["role"].as_str();
@@ -115,10 +108,7 @@ pub async fn update_user(
     .execute(&state.db_pool)
     .await
     .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::err(format!("Database error: {}", e))),
-        )
+        VirsError::Other(anyhow::anyhow!("Database error: {}", e))
     })?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"updated": true}))))
@@ -128,26 +118,19 @@ pub async fn delete_user(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers)?;
 
     let id = body["id"].as_str().unwrap_or("");
-    let uuid_id = uuid::Uuid::parse_str(id).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::err("Invalid user ID")),
-        )
-    })?;
+    let uuid_id = uuid::Uuid::parse_str(id)
+        .map_err(|_| VirsError::bad_request("Invalid user ID"))?;
 
     sqlx::query(r#"DELETE FROM qd_users WHERE id = $1"#)
         .bind(uuid_id)
         .execute(&state.db_pool)
         .await
         .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::err(format!("Database error: {}", e))),
-            )
+            VirsError::Other(anyhow::anyhow!("Database error: {}", e))
         })?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))

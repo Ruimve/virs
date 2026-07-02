@@ -1,6 +1,6 @@
 //! Common API response types.
 
-use axum::{http::StatusCode, Json};
+use virs_error::VirsError;
 
 /// API response wrapper — always uses serde_json::Value for data.
 #[derive(serde::Serialize)]
@@ -30,9 +30,7 @@ impl ApiResponse {
 
 /// Extract user_id from JWT in Authorization header.
 /// Shared by all handlers that need user identity.
-pub fn extract_user_id(
-    headers: &axum::http::HeaderMap,
-) -> Result<uuid::Uuid, (StatusCode, Json<ApiResponse>)> {
+pub fn extract_user_id(headers: &axum::http::HeaderMap) -> Result<uuid::Uuid, VirsError> {
     let auth_header = headers
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
@@ -41,24 +39,16 @@ pub fn extract_user_id(
     let token = match auth_header {
         Some(t) => t,
         None => {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                Json(ApiResponse::err("Missing or invalid authorization header")),
+            return Err(VirsError::unauthorized(
+                "Missing or invalid authorization header",
             ))
         }
     };
 
     let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "virs-secret-key".to_string());
     match virs_utils::auth::decode_jwt(token, &secret) {
-        Ok(claims) => uuid::Uuid::parse_str(&claims.sub).map_err(|_| {
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(ApiResponse::err("Invalid user ID in token")),
-            )
-        }),
-        Err(_) => Err((
-            StatusCode::UNAUTHORIZED,
-            Json(ApiResponse::err("Invalid token")),
-        )),
+        Ok(claims) => uuid::Uuid::parse_str(&claims.sub)
+            .map_err(|_| VirsError::unauthorized("Invalid user ID in token")),
+        Err(_) => Err(VirsError::unauthorized("Invalid token")),
     }
 }

@@ -2,9 +2,10 @@
 
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     Json,
 };
+use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -32,7 +33,7 @@ pub fn resolve_provider_model(provider: &str) -> Option<&'static str> {
 pub async fn ai_status(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers)?;
 
     // Check if any AI credentials are configured
@@ -54,14 +55,14 @@ pub async fn optimize(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers)?;
 
     let symbol = body["symbol"].as_str().unwrap_or("");
     let exchange = body["exchange"].as_str().unwrap_or("");
 
     if symbol.is_empty() {
-        return Ok(Json(ApiResponse::err("symbol is required")));
+        return Err(VirsError::bad_request("symbol is required"));
     }
 
     // Fetch market data for context
@@ -83,10 +84,10 @@ Respond in JSON format with:
 
     match call_llm_with_fallback(&state, system_prompt, &user_prompt).await {
         Ok(result) => Ok(Json(ApiResponse::ok(result))),
-        Err(e) => Ok(Json(ApiResponse::err(format!(
+        Err(e) => Err(VirsError::bad_request(format!(
             "AI optimization failed: {}",
             e
-        )))),
+        ))),
     }
 }
 
@@ -94,14 +95,14 @@ pub async fn explain(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers)?;
 
     let symbol = body["symbol"].as_str().unwrap_or("");
     let question = body["question"].as_str().unwrap_or("");
 
     if symbol.is_empty() || question.is_empty() {
-        return Ok(Json(ApiResponse::err("symbol and question are required")));
+        return Err(VirsError::bad_request("symbol and question are required"));
     }
 
     let system_prompt = r#"You are a trading education assistant. Explain trading concepts and market conditions clearly.
@@ -116,7 +117,7 @@ Respond in JSON format with:
 
     match call_llm_with_fallback(&state, system_prompt, &user_prompt).await {
         Ok(result) => Ok(Json(ApiResponse::ok(result))),
-        Err(e) => Ok(Json(ApiResponse::err(format!("AI explain failed: {}", e)))),
+        Err(e) => Err(VirsError::bad_request(format!("AI explain failed: {}", e))),
     }
 }
 
@@ -124,7 +125,7 @@ pub async fn recommend_strategy(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers)?;
 
     let symbol = body["symbol"].as_str().unwrap_or("");
@@ -132,7 +133,7 @@ pub async fn recommend_strategy(
     let risk_tolerance = body["risk_tolerance"].as_str().unwrap_or("medium");
 
     if symbol.is_empty() {
-        return Ok(Json(ApiResponse::err("symbol is required")));
+        return Err(VirsError::bad_request("symbol is required"));
     }
 
     let current_price = fetch_price_from_kline(&state, exchange, symbol).await;
@@ -159,10 +160,10 @@ Respond in JSON format with:
 
     match call_llm_with_fallback(&state, system_prompt, &user_prompt).await {
         Ok(result) => Ok(Json(ApiResponse::ok(result))),
-        Err(e) => Ok(Json(ApiResponse::err(format!(
+        Err(e) => Err(VirsError::bad_request(format!(
             "AI recommend failed: {}",
             e
-        )))),
+        ))),
     }
 }
 

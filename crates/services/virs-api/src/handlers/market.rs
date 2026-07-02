@@ -4,6 +4,7 @@ use axum::{
     extract::{Query, State},
     Json,
 };
+use virs_error::VirsError;
 
 use crate::handlers::response::ApiResponse;
 use crate::state::AppState;
@@ -34,7 +35,7 @@ pub struct KlineDataQuery {
 pub async fn kline_subscribe(
     State(state): State<AppState>,
     Json(body): Json<KlineSubscribeRequest>,
-) -> Json<ApiResponse> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let market_type_str = body.market_type.as_deref().unwrap_or("perpetual");
     let market_type = match market_type_str {
         "spot" => virs_models::MarketType::Spot,
@@ -44,7 +45,7 @@ pub async fn kline_subscribe(
     // Check exchange is registered before subscribing
     let exchange_key = format!("{}:{}", body.exchange, market_type_str);
     if state.exchange_registry.get(&exchange_key).is_none() {
-        return Json(ApiResponse::err(format!(
+        return Err(VirsError::bad_request(format!(
             "Exchange '{}' not registered. Please create a bot first.",
             exchange_key
         )));
@@ -55,19 +56,19 @@ pub async fn kline_subscribe(
         .subscribe(&body.exchange, &body.symbol, market_type)
         .await
     {
-        Ok(_) => Json(ApiResponse::ok(serde_json::json!({
+        Ok(_) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "subscribed": true,
             "exchange": body.exchange,
             "symbol": body.symbol,
-        }))),
-        Err(e) => Json(ApiResponse::err(format!("Subscribe failed: {}", e))),
+        })))),
+        Err(e) => Err(VirsError::bad_request(format!("Subscribe failed: {}", e))),
     }
 }
 
 pub async fn orderbook_subscribe(
     State(state): State<AppState>,
     Json(body): Json<KlineSubscribeRequest>,
-) -> Json<ApiResponse> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let market_type_str = body.market_type.as_deref().unwrap_or("perpetual");
     let market_type = match market_type_str {
         "spot" => virs_models::MarketType::Spot,
@@ -79,12 +80,12 @@ pub async fn orderbook_subscribe(
         .subscribe(&body.exchange, &body.symbol, market_type)
         .await
     {
-        Ok(_) => Json(ApiResponse::ok(serde_json::json!({
+        Ok(_) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "subscribed": true,
             "exchange": body.exchange,
             "symbol": body.symbol,
-        }))),
-        Err(e) => Json(ApiResponse::err(format!(
+        })))),
+        Err(e) => Err(VirsError::bad_request(format!(
             "OrderBook subscribe failed: {}",
             e
         ))),
@@ -94,7 +95,7 @@ pub async fn orderbook_subscribe(
 pub async fn kline_data(
     State(state): State<AppState>,
     Query(params): Query<KlineDataQuery>,
-) -> Json<ApiResponse> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let tf = match params.timeframe.as_deref() {
         Some("1m") => virs_market::Timeframe::M1,
         Some("5m") => virs_market::Timeframe::M5,
@@ -111,7 +112,7 @@ pub async fn kline_data(
         .await
     {
         if !candles.is_empty() {
-            return Json(ApiResponse::ok(serde_json::json!({
+            return Ok(Json(ApiResponse::ok(serde_json::json!({
                 "SingleTimeframe": candles.iter().map(|c| serde_json::json!({
                     "open_time": c.open_time,
                     "open": c.open,
@@ -120,26 +121,26 @@ pub async fn kline_data(
                     "close": c.close,
                     "volume": c.volume,
                 })).collect::<Vec<_>>(),
-            })));
+            }))));
         }
     }
 
-    Json(ApiResponse::ok(serde_json::json!({
+    Ok(Json(ApiResponse::ok(serde_json::json!({
         "SingleTimeframe": [],
-    })))
+    }))))
 }
 
 pub async fn get_ticker(
     State(state): State<AppState>,
     Query(params): Query<SymbolQuery>,
-) -> Json<ApiResponse> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let exchange = match params.exchange {
         Some(ref e) => e,
-        None => return Json(ApiResponse::err("exchange is required")),
+        None => return Err(VirsError::bad_request("exchange is required")),
     };
     let symbol = match params.symbol {
         Some(ref s) => s,
-        None => return Json(ApiResponse::err("symbol is required")),
+        None => return Err(VirsError::bad_request("symbol is required")),
     };
     let market_type = params.market_type.as_deref().unwrap_or("perpetual");
 
@@ -151,7 +152,7 @@ pub async fn get_ticker(
     {
         if let Some(last) = candles.last() {
             if last.close > 0.0 {
-                return Json(ApiResponse::ok(serde_json::json!({
+                return Ok(Json(ApiResponse::ok(serde_json::json!({
                     "symbol": symbol,
                     "exchange": exchange,
                     "last": last.close,
@@ -159,7 +160,7 @@ pub async fn get_ticker(
                     "low": last.low,
                     "volume": last.volume,
                     "open_time": last.open_time,
-                })));
+                }))));
             }
         }
     }
@@ -168,7 +169,7 @@ pub async fn get_ticker(
     let exchange_key = format!("{}:{}", exchange, market_type);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_ticker(symbol).await {
-            Ok(ticker) => Json(ApiResponse::ok(serde_json::json!({
+            Ok(ticker) => Ok(Json(ApiResponse::ok(serde_json::json!({
                 "symbol": ticker.symbol,
                 "exchange": exchange,
                 "last": ticker.last,
@@ -179,10 +180,10 @@ pub async fn get_ticker(
                 "volume_24h": ticker.volume_24h,
                 "change_24h": ticker.price_change_24h,
                 "change_pct_24h": ticker.price_change_pct_24h,
-            }))),
-            Err(e) => Json(ApiResponse::err(format!("Ticker error: {}", e))),
+            })))),
+            Err(e) => Err(VirsError::bad_request(format!("Ticker error: {}", e))),
         },
-        None => Json(ApiResponse::err(format!(
+        None => Err(VirsError::bad_request(format!(
             "Exchange '{}' not registered",
             exchange
         ))),
@@ -192,14 +193,14 @@ pub async fn get_ticker(
 pub async fn get_klines(
     State(state): State<AppState>,
     Query(params): Query<SymbolQuery>,
-) -> Json<ApiResponse> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let exchange = match params.exchange {
         Some(ref e) => e,
-        None => return Json(ApiResponse::err("exchange is required")),
+        None => return Err(VirsError::bad_request("exchange is required")),
     };
     let symbol = match params.symbol {
         Some(ref s) => s,
-        None => return Json(ApiResponse::err("symbol is required")),
+        None => return Err(VirsError::bad_request("symbol is required")),
     };
     let market_type = params.market_type.as_deref().unwrap_or("perpetual");
 
@@ -221,7 +222,7 @@ pub async fn get_klines(
         .await
     {
         if !candles.is_empty() {
-            return Json(ApiResponse::ok(serde_json::json!({
+            return Ok(Json(ApiResponse::ok(serde_json::json!({
                 "symbol": symbol,
                 "exchange": exchange,
                 "timeframe": requested_tf.as_str(),
@@ -233,7 +234,7 @@ pub async fn get_klines(
                     "close": c.close,
                     "volume": c.volume,
                 })).collect::<Vec<_>>(),
-            })));
+            }))));
         }
     }
 
@@ -250,7 +251,7 @@ pub async fn get_klines(
                 virs_market::Timeframe::D1 => "1d",
             };
             match ex.get_klines(symbol, tf_str, 500, None).await {
-                Ok(klines) => Json(ApiResponse::ok(serde_json::json!({
+                Ok(klines) => Ok(Json(ApiResponse::ok(serde_json::json!({
                     "symbol": symbol,
                     "exchange": exchange,
                     "timeframe": tf_str,
@@ -262,11 +263,11 @@ pub async fn get_klines(
                         "close": k.close,
                         "volume": k.volume,
                     })).collect::<Vec<_>>(),
-                }))),
-                Err(e) => Json(ApiResponse::err(format!("Klines error: {}", e))),
+                })))),
+                Err(e) => Err(VirsError::bad_request(format!("Klines error: {}", e))),
             }
         }
-        None => Json(ApiResponse::err(format!(
+        None => Err(VirsError::bad_request(format!(
             "Exchange '{}' not registered",
             exchange
         ))),
@@ -276,29 +277,29 @@ pub async fn get_klines(
 pub async fn get_order_book(
     State(state): State<AppState>,
     Query(params): Query<SymbolQuery>,
-) -> Json<ApiResponse> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let exchange = match params.exchange {
         Some(ref e) => e,
-        None => return Json(ApiResponse::err("exchange is required")),
+        None => return Err(VirsError::bad_request("exchange is required")),
     };
     let symbol = match params.symbol {
         Some(ref s) => s,
-        None => return Json(ApiResponse::err("symbol is required")),
+        None => return Err(VirsError::bad_request("symbol is required")),
     };
     let market_type = params.market_type.as_deref().unwrap_or("perpetual");
 
     let exchange_key = format!("{}:{}", exchange, market_type);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_order_book(symbol, 20).await {
-            Ok(ob) => Json(ApiResponse::ok(serde_json::json!({
+            Ok(ob) => Ok(Json(ApiResponse::ok(serde_json::json!({
                 "symbol": symbol,
                 "exchange": exchange,
                 "bids": ob.bids.iter().take(20).map(|(price, amount)| serde_json::json!([price, amount])).collect::<Vec<_>>(),
                 "asks": ob.asks.iter().take(20).map(|(price, amount)| serde_json::json!([price, amount])).collect::<Vec<_>>(),
-            }))),
-            Err(e) => Json(ApiResponse::err(format!("OrderBook error: {}", e))),
+            })))),
+            Err(e) => Err(VirsError::bad_request(format!("OrderBook error: {}", e))),
         },
-        None => Json(ApiResponse::err(format!(
+        None => Err(VirsError::bad_request(format!(
             "Exchange '{}' not registered",
             exchange
         ))),
@@ -308,10 +309,10 @@ pub async fn get_order_book(
 pub async fn get_balances(
     State(state): State<AppState>,
     Query(params): Query<SymbolQuery>,
-) -> Json<ApiResponse> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let exchange = match params.exchange {
         Some(ref e) => e,
-        None => return Json(ApiResponse::err("exchange is required")),
+        None => return Err(VirsError::bad_request("exchange is required")),
     };
 
     let market_type = params.market_type.as_deref().unwrap_or("perpetual");
@@ -332,11 +333,11 @@ pub async fn get_balances(
                         })
                     })
                     .collect();
-                Json(ApiResponse::ok(serde_json::json!({ "balances": filtered })))
+                Ok(Json(ApiResponse::ok(serde_json::json!({ "balances": filtered }))))
             }
-            Err(e) => Json(ApiResponse::err(format!("Balances error: {}", e))),
+            Err(e) => Err(VirsError::bad_request(format!("Balances error: {}", e))),
         },
-        None => Json(ApiResponse::err(format!(
+        None => Err(VirsError::bad_request(format!(
             "Exchange '{}' not registered for {}",
             exchange, market_type
         ))),
@@ -346,10 +347,10 @@ pub async fn get_balances(
 pub async fn get_symbols(
     State(state): State<AppState>,
     Query(params): Query<SymbolQuery>,
-) -> Json<ApiResponse> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let exchange = match params.exchange {
         Some(ref e) => e,
-        None => return Json(ApiResponse::err("exchange is required")),
+        None => return Err(VirsError::bad_request("exchange is required")),
     };
 
     let market_type = params.market_type.as_deref().unwrap_or("perpetual");
@@ -357,13 +358,13 @@ pub async fn get_symbols(
     let exchange_key = format!("{}:{}", exchange, market_type);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_symbols().await {
-            Ok(symbols) => Json(ApiResponse::ok(serde_json::json!({
+            Ok(symbols) => Ok(Json(ApiResponse::ok(serde_json::json!({
                 "exchange": exchange,
                 "symbols": symbols,
-            }))),
-            Err(e) => Json(ApiResponse::err(format!("Symbols error: {}", e))),
+            })))),
+            Err(e) => Err(VirsError::bad_request(format!("Symbols error: {}", e))),
         },
-        None => Json(ApiResponse::err(format!(
+        None => Err(VirsError::bad_request(format!(
             "Exchange '{}' not registered",
             exchange
         ))),

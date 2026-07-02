@@ -185,7 +185,9 @@ async fn main() -> Result<()> {
     };
 
     // Restore services if bots exist from previous session
-    engine_manager.restore_if_needed().await;
+    if let Err(e) = engine_manager.restore_if_needed().await {
+        tracing::warn!("Failed to restore services from previous session: {}", e);
+    }
 
     // Build router
     let app = build_router(app_state);

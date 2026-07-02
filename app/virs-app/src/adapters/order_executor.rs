@@ -6,9 +6,10 @@ use tracing::{info, warn};
 
 use virs_position::PositionEngine;
 use virs_types::bot::{
-    BotError, BotPositionSide, BotResult, OrderCommand, OrderEvent, OrderExecutor, OrderInfo,
+    BotPositionSide, OrderCommand, OrderEvent, OrderExecutor, OrderInfo,
     OrderSide,
 };
+use virs_error::{BotError, BotResult};
 use virs_types::enums::{OrderType, PositionSide, Side};
 use virs_types::position::*;
 

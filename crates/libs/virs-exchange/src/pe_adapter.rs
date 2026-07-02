@@ -13,6 +13,8 @@ use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_types::market::*;
 use virs_types::position::*;
 
+use virs_error::{ExchangeError, PositionResult};
+
 use crate::registry::Exchanges;
 use crate::Exchange;
 
@@ -159,12 +161,8 @@ pub fn convert_exchange_position(ep: &models::ExchangePosition) -> ExchangePosit
     }
 }
 
-pub fn to_pe_error(e: anyhow::Error) -> PositionEngineError {
-    PositionEngineError::Exchange(e.to_string())
-}
-
-pub fn no_exchange_error() -> PositionEngineError {
-    PositionEngineError::Exchange("No perpetual exchange registered in Exchanges".to_string())
+pub fn no_exchange_error() -> ExchangeError {
+    ExchangeError::Internal("No perpetual exchange registered in Exchanges".to_string())
 }
 
 /// Convert ccxt WsFeedEvent to virs_types WsFeedEvent
@@ -217,7 +215,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
-        let t = ex.get_ticker(symbol).await.map_err(to_pe_error)?;
+        let t = ex.get_ticker(symbol).await?;
         Ok(Ticker {
             symbol: t.symbol.clone(),
             exchange: t.exchange,
@@ -237,7 +235,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
-        let balances = ex.get_balances().await.map_err(to_pe_error)?;
+        let balances = ex.get_balances().await?;
         let usdt = balances
             .iter()
             .find(|b| b.asset.eq_ignore_ascii_case("USDT"));
@@ -253,7 +251,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
-        let positions = ex.get_positions(symbol).await.map_err(to_pe_error)?;
+        let positions = ex.get_positions(symbol).await?;
         Ok(positions.iter().map(convert_exchange_position).collect())
     }
 
@@ -261,7 +259,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
-        let fr = ex.get_funding_rate(symbol).await.map_err(to_pe_error)?;
+        let fr = ex.get_funding_rate(symbol).await?;
         Ok(FundingRate {
             symbol: fr.symbol,
             rate: fr.rate,
@@ -299,8 +297,7 @@ impl ExchangePe for CcxtExchangeAdapter {
                 reduce_only_param,
                 convert_position_side(&params.position_side),
             )
-            .await
-            .map_err(to_pe_error)?;
+            .await?;
         Ok(convert_order(&virs_order, &exchange_name))
     }
 
@@ -311,8 +308,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         let exchange_name = ex.name().to_string();
         let virs_order = ex
             .cancel_order(symbol, order_id)
-            .await
-            .map_err(to_pe_error)?;
+            .await?;
         Ok(convert_order(&virs_order, &exchange_name))
     }
 
@@ -321,7 +317,7 @@ impl ExchangePe for CcxtExchangeAdapter {
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
         let exchange_name = ex.name().to_string();
-        let open_orders = ex.get_open_orders(symbol).await.map_err(to_pe_error)?;
+        let open_orders = ex.get_open_orders(symbol).await?;
         let mut canceled = Vec::new();
         for o in &open_orders {
             match ex.cancel_order(&o.symbol, &o.id).await {
@@ -337,7 +333,7 @@ impl ExchangePe for CcxtExchangeAdapter {
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
         let exchange_name = ex.name().to_string();
-        let orders = ex.get_open_orders(symbol).await.map_err(to_pe_error)?;
+        let orders = ex.get_open_orders(symbol).await?;
         Ok(orders
             .iter()
             .map(|o| convert_order(o, &exchange_name))
@@ -349,7 +345,7 @@ impl ExchangePe for CcxtExchangeAdapter {
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
         let exchange_name = ex.name().to_string();
-        let virs_order = ex.get_order(symbol, order_id).await.map_err(to_pe_error)?;
+        let virs_order = ex.get_order(symbol, order_id).await?;
         Ok(convert_order(&virs_order, &exchange_name))
     }
 
@@ -357,14 +353,15 @@ impl ExchangePe for CcxtExchangeAdapter {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
-        ex.set_leverage(symbol, leverage).await.map_err(to_pe_error)
+        ex.set_leverage(symbol, leverage).await?;
+        Ok(())
     }
 
     async fn get_position_mode(&self) -> PositionResult<PositionMode> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
-        let mode = ex.get_position_mode().await.map_err(to_pe_error)?;
+        let mode = ex.get_position_mode().await?;
         Ok(match mode {
             models::PositionMode::OneWay => PositionMode::OneWay,
             models::PositionMode::Hedge => PositionMode::Hedge,
@@ -451,7 +448,7 @@ impl ExchangePe for CcxtExchangeAdapter {
                      migrate to Ed25519 API Key + WebSocket API (userDataStream.subscribe). \
                      For perpetual: check /fapi/v1/listenKey availability."
                 );
-                return Err(no_exchange_error());
+                return Err(no_exchange_error().into());
             }
         }
 

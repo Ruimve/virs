@@ -3025,6 +3025,7 @@ dependencies = [
  "uuid",
  "virs-bot",
  "virs-ccxt",
+ "virs-error",
  "virs-exchange",
  "virs-market",
  "virs-models",
@@ -3052,6 +3053,7 @@ dependencies = [
  "virs-bot",
  "virs-ccxt",
  "virs-config",
+ "virs-error",
  "virs-exchange",
  "virs-market",
  "virs-models",
@@ -3095,10 +3097,10 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "thiserror 1.0.69",
  "tokio",
  "tokio-tungstenite 0.26.2",
  "tracing",
+ "virs-error",
  "virs-types",
 ]
 
@@ -3111,6 +3113,19 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
+]
+
+[[package]]
+name = "virs-error"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3129,6 +3144,7 @@ dependencies = [
  "tracing",
  "uuid",
  "virs-ccxt",
+ "virs-error",
  "virs-models",
  "virs-types",
 ]
@@ -3177,6 +3193,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "virs-error",
  "virs-exchange",
  "virs-types",
 ]
@@ -3192,8 +3209,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
- "thiserror 1.0.69",
  "uuid",
+ "virs-error",
 ]
 
 [[package]]

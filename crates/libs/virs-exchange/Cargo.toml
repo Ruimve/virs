@@ -7,6 +7,7 @@ edition = "2021"
 virs-types = { path = "../virs-types" }
 virs-ccxt = { path = "../virs-ccxt" }
 virs-models = { path = "../virs-models" }
+virs-error = { path = "../virs-error", features = ["sqlx"] }
 serde = { workspace = true }
 chrono = { workspace = true }
 async-trait = { workspace = true }

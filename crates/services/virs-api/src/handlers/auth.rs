@@ -1,6 +1,7 @@
 //! Auth handlers — login, logout, user info.
 
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{extract::State, Json};
+use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -32,7 +33,7 @@ pub struct UserInfo {
 pub async fn login(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     // Query user from database
     let row = sqlx::query_as::<_, (uuid::Uuid, String, String, String, Option<String>, bool)>(
         r#"SELECT id, username, password_hash, role, email, is_active FROM qd_users WHERE username = $1"#,
@@ -40,36 +41,25 @@ pub async fn login(
     .bind(&req.username)
     .fetch_optional(&state.db_pool)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::err(format!("Database error: {}", e))),
-        )
-    })?;
+    .map_err(|e| VirsError::Other(anyhow::anyhow!("Database error: {}", e)))?;
 
     let (id, username, password_hash, role, email, is_active) = match row {
         Some(r) => r,
         None => {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                Json(ApiResponse::err("Invalid credentials")),
-            ));
+            return Err(VirsError::unauthorized("Invalid credentials"));
         }
     };
 
     if !is_active {
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::err("Account is disabled")),
-        ));
+        return Err(VirsError::Http {
+            status: 403,
+            message: "Account is disabled".into(),
+        });
     }
 
     let valid = virs_utils::crypto::verify_password(&req.password, &password_hash);
     if !valid {
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            Json(ApiResponse::err("Invalid credentials")),
-        ));
+        return Err(VirsError::unauthorized("Invalid credentials"));
     }
 
     // Generate JWT token
@@ -86,10 +76,7 @@ pub async fn login(
         expiration_hours * 3600,
     );
     let token = virs_utils::auth::encode_jwt(&claims, &secret).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::err(format!("JWT error: {}", e))),
-        )
+        VirsError::Other(anyhow::anyhow!("JWT error: {}", e))
     })?;
 
     Ok(Json(ApiResponse::ok(
@@ -107,20 +94,17 @@ pub async fn login(
     )))
 }
 
-pub async fn logout() -> Json<ApiResponse> {
-    Json(ApiResponse::ok(
+pub async fn logout() -> Result<Json<ApiResponse>, VirsError> {
+    Ok(Json(ApiResponse::ok(
         serde_json::json!({"message": "Logged out"}),
-    ))
+    )))
 }
 
 pub async fn get_user_info(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
-) -> Json<ApiResponse> {
-    let user_id = match extract_user_id(&headers) {
-        Ok(id) => id,
-        Err((_, resp)) => return resp,
-    };
+) -> Result<Json<ApiResponse>, VirsError> {
+    let user_id = extract_user_id(&headers)?;
 
     let row = sqlx::query_as::<_, (String, String, Option<String>, bool)>(
         r#"SELECT username, role, email, is_active FROM qd_users WHERE id = $1"#,
@@ -132,17 +116,20 @@ pub async fn get_user_info(
     match row {
         Ok(Some((db_username, db_role, email, is_active))) => {
             if !is_active {
-                return Json(ApiResponse::err("Account is disabled"));
+                return Err(VirsError::Http {
+                    status: 403,
+                    message: "Account is disabled".into(),
+                });
             }
-            Json(ApiResponse::ok(serde_json::json!({
+            Ok(Json(ApiResponse::ok(serde_json::json!({
                 "id": user_id.to_string(),
                 "username": db_username,
                 "role": db_role,
                 "email": email,
                 "is_active": is_active,
-            })))
+            }))))
         }
-        Ok(None) => Json(ApiResponse::err("User not found")),
-        Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
+        Ok(None) => Err(VirsError::not_found("User not found")),
+        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
     }
 }

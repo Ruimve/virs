@@ -26,7 +26,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::auth::{hmac_sha256_hex, insert_header, SignedRequest, Signer};
-use crate::errors::ExchangeError;
+use virs_error::ExchangeError;
 use crate::types::*;
 use crate::ws_types::WsFeedEvent;
 use crate::{Exchange, ExchangeClient};

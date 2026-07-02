@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use virs_ccxt::{self, Exchange as CcxtExchange, PlaceOrderParams};
+use virs_error::ExchangeError;
 use virs_models::*;
 
 use crate::Exchange;
@@ -22,7 +23,7 @@ impl CcxtAdapter {
         }
     }
 
-    async fn get_markets_cached(&self) -> anyhow::Result<Vec<virs_ccxt::MarketInfo>> {
+    async fn get_markets_cached(&self) -> Result<Vec<virs_ccxt::MarketInfo>, ExchangeError> {
         {
             let cache = self.markets_cache.read().await;
             if cache.is_some() {
@@ -31,7 +32,7 @@ impl CcxtAdapter {
         }
         let markets = self.inner.fetch_markets().await.map_err(|e| {
             tracing::error!(error = %e, "fetch_markets failed");
-            anyhow::anyhow!("ccxt fetch_markets error: {}", e)
+            e
         })?;
         let mut cache = self.markets_cache.write().await;
         *cache = Some(markets.clone());
@@ -137,12 +138,8 @@ impl Exchange for CcxtAdapter {
         self.market_type
     }
 
-    async fn get_ticker(&self, symbol: &str) -> anyhow::Result<Ticker> {
-        let ct = self
-            .inner
-            .fetch_ticker(symbol)
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt ticker error: {}", e))?;
+    async fn get_ticker(&self, symbol: &str) -> Result<Ticker, ExchangeError> {
+        let ct = self.inner.fetch_ticker(symbol).await?;
         Ok(ct.into())
     }
 
@@ -152,12 +149,11 @@ impl Exchange for CcxtAdapter {
         interval: &str,
         limit: u32,
         since: Option<i64>,
-    ) -> anyhow::Result<Vec<Kline>> {
+    ) -> Result<Vec<Kline>, ExchangeError> {
         let cks = self
             .inner
             .fetch_ohlcv(symbol, interval, limit, since)
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt ohlcv error: {}", e))?;
+            .await?;
         let exchange_name = self.inner.id();
         Ok(cks
             .into_iter()
@@ -171,12 +167,11 @@ impl Exchange for CcxtAdapter {
         interval: &str,
         start_ms: i64,
         end_ms: i64,
-    ) -> anyhow::Result<Vec<Kline>> {
+    ) -> Result<Vec<Kline>, ExchangeError> {
         let cks = self
             .inner
             .fetch_ohlcv_range(symbol, interval, start_ms, end_ms)
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt ohlcv range error: {}", e))?;
+            .await?;
         let exchange_name = self.inner.id();
         Ok(cks
             .into_iter()
@@ -184,21 +179,13 @@ impl Exchange for CcxtAdapter {
             .collect())
     }
 
-    async fn get_order_book(&self, symbol: &str, depth: u32) -> anyhow::Result<OrderBook> {
-        let cob = self
-            .inner
-            .fetch_order_book(symbol, depth)
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt orderbook error: {}", e))?;
+    async fn get_order_book(&self, symbol: &str, depth: u32) -> Result<OrderBook, ExchangeError> {
+        let cob = self.inner.fetch_order_book(symbol, depth).await?;
         Ok(cob.into())
     }
 
-    async fn get_balances(&self) -> anyhow::Result<Vec<Balance>> {
-        let cbs = self
-            .inner
-            .fetch_balance()
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt balance error: {}", e))?;
+    async fn get_balances(&self) -> Result<Vec<Balance>, ExchangeError> {
+        let cbs = self.inner.fetch_balance().await?;
         Ok(cbs.into_iter().map(to_models_balance).collect())
     }
 
@@ -211,7 +198,7 @@ impl Exchange for CcxtAdapter {
         price: Option<f64>,
         reduce_only: Option<bool>,
         position_side: Option<PositionSide>,
-    ) -> anyhow::Result<Order> {
+    ) -> Result<Order, ExchangeError> {
         let ccxt_position_side = position_side.map(|ps| match ps {
             PositionSide::Long => virs_ccxt::PositionSide::Long,
             PositionSide::Short => virs_ccxt::PositionSide::Short,
@@ -232,42 +219,26 @@ impl Exchange for CcxtAdapter {
             margin_mode: None,
             position_side: ccxt_position_side,
         };
-        let co = self
-            .inner
-            .create_order(params)
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt create_order error: {}", e))?;
+        let co = self.inner.create_order(params).await?;
         Ok(to_models_order(co))
     }
 
-    async fn cancel_order(&self, symbol: &str, order_id: &str) -> anyhow::Result<Order> {
-        let co = self
-            .inner
-            .cancel_order(symbol, order_id)
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt cancel_order error: {}", e))?;
+    async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError> {
+        let co = self.inner.cancel_order(symbol, order_id).await?;
         Ok(to_models_order(co))
     }
 
-    async fn get_order(&self, symbol: &str, order_id: &str) -> anyhow::Result<Order> {
-        let co = self
-            .inner
-            .fetch_order(symbol, order_id)
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt fetch_order error: {}", e))?;
+    async fn get_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError> {
+        let co = self.inner.fetch_order(symbol, order_id).await?;
         Ok(to_models_order(co))
     }
 
-    async fn get_open_orders(&self, symbol: Option<&str>) -> anyhow::Result<Vec<Order>> {
-        let cos = self
-            .inner
-            .fetch_open_orders(symbol)
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt fetch_open_orders error: {}", e))?;
+    async fn get_open_orders(&self, symbol: Option<&str>) -> Result<Vec<Order>, ExchangeError> {
+        let cos = self.inner.fetch_open_orders(symbol).await?;
         Ok(cos.into_iter().map(to_models_order).collect())
     }
 
-    async fn get_symbols(&self) -> anyhow::Result<Vec<String>> {
+    async fn get_symbols(&self) -> Result<Vec<String>, ExchangeError> {
         let markets = self.get_markets_cached().await?;
         let ccxt_mt = to_ccxt_market_type(&self.market_type);
         Ok(markets
@@ -277,7 +248,7 @@ impl Exchange for CcxtAdapter {
             .collect())
     }
 
-    async fn get_min_qty(&self, symbol: &str) -> anyhow::Result<f64> {
+    async fn get_min_qty(&self, symbol: &str) -> Result<f64, ExchangeError> {
         let markets = self.get_markets_cached().await?;
         let found = markets
             .iter()
@@ -291,26 +262,18 @@ impl Exchange for CcxtAdapter {
         }
     }
 
-    async fn ping(&self) -> anyhow::Result<bool> {
-        self.inner
-            .ping()
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt ping error: {}", e))
+    async fn ping(&self) -> Result<bool, ExchangeError> {
+        self.inner.ping().await
     }
 
-    async fn set_leverage(&self, symbol: &str, leverage: u32) -> anyhow::Result<()> {
+    async fn set_leverage(&self, symbol: &str, leverage: u32) -> Result<(), ExchangeError> {
         self.inner
             .set_leverage(symbol, leverage, virs_ccxt::MarginMode::Cross)
             .await
-            .map_err(|e| anyhow::anyhow!("ccxt set_leverage error: {}", e))
     }
 
-    async fn get_positions(&self, symbol: Option<&str>) -> anyhow::Result<Vec<ExchangePosition>> {
-        let positions = self
-            .inner
-            .fetch_positions(symbol)
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt fetch_positions error: {}", e))?;
+    async fn get_positions(&self, symbol: Option<&str>) -> Result<Vec<ExchangePosition>, ExchangeError> {
+        let positions = self.inner.fetch_positions(symbol).await?;
         Ok(positions
             .into_iter()
             .map(|p| ExchangePosition {
@@ -329,24 +292,16 @@ impl Exchange for CcxtAdapter {
             .collect())
     }
 
-    async fn get_position_mode(&self) -> anyhow::Result<PositionMode> {
-        let mode = self
-            .inner
-            .get_position_mode()
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt get_position_mode error: {}", e))?;
+    async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError> {
+        let mode = self.inner.get_position_mode().await?;
         Ok(match mode {
             virs_ccxt::PositionMode::OneWay => PositionMode::OneWay,
             virs_ccxt::PositionMode::Hedge => PositionMode::Hedge,
         })
     }
 
-    async fn get_funding_rate(&self, symbol: &str) -> anyhow::Result<FundingRate> {
-        let fr = self
-            .inner
-            .fetch_funding_rate(symbol)
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt fetch_funding_rate error: {}", e))?;
+    async fn get_funding_rate(&self, symbol: &str) -> Result<FundingRate, ExchangeError> {
+        let fr = self.inner.fetch_funding_rate(symbol).await?;
         Ok(fr.into())
     }
 
@@ -355,52 +310,36 @@ impl Exchange for CcxtAdapter {
         symbol: &str,
         start_time: i64,
         end_time: i64,
-    ) -> anyhow::Result<Vec<FundingHistoryEntry>> {
+    ) -> Result<Vec<FundingHistoryEntry>, ExchangeError> {
         let entries = self
             .inner
             .fetch_funding_history(symbol, start_time, end_time)
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt fetch_funding_history error: {}", e))?;
+            .await?;
         Ok(entries.into_iter().map(|e| e.into()).collect())
     }
 
-    async fn create_listen_key(&self) -> anyhow::Result<String> {
-        self.inner
-            .create_listen_key()
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt create_listen_key error: {}", e))
+    async fn create_listen_key(&self) -> Result<String, ExchangeError> {
+        self.inner.create_listen_key().await
     }
 
-    async fn keepalive_listen_key(&self, listen_key: &str) -> anyhow::Result<()> {
-        self.inner
-            .keepalive_listen_key(listen_key)
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt keepalive_listen_key error: {}", e))
+    async fn keepalive_listen_key(&self, listen_key: &str) -> Result<(), ExchangeError> {
+        self.inner.keepalive_listen_key(listen_key).await
     }
 
-    async fn get_api_restrictions(&self) -> anyhow::Result<virs_ccxt::ApiRestrictions> {
-        self.inner
-            .fetch_api_restrictions()
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt fetch_api_restrictions error: {}", e))
+    async fn get_api_restrictions(&self) -> Result<virs_ccxt::ApiRestrictions, ExchangeError> {
+        self.inner.fetch_api_restrictions().await
     }
 
     async fn start_spot_order_ws_api(
         &self,
-    ) -> anyhow::Result<tokio::sync::mpsc::Receiver<virs_ccxt::WsFeedEvent>> {
-        self.inner
-            .start_spot_order_ws_api()
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt start_spot_order_ws_api error: {}", e))
+    ) -> Result<tokio::sync::mpsc::Receiver<virs_ccxt::WsFeedEvent>, ExchangeError> {
+        self.inner.start_spot_order_ws_api().await
     }
 
     async fn start_listenkey_order_ws(
         &self,
         listen_key_hint: Option<&str>,
-    ) -> anyhow::Result<tokio::sync::mpsc::Receiver<virs_ccxt::WsFeedEvent>> {
-        self.inner
-            .start_listenkey_order_ws(listen_key_hint)
-            .await
-            .map_err(|e| anyhow::anyhow!("ccxt start_listenkey_order_ws error: {}", e))
+    ) -> Result<tokio::sync::mpsc::Receiver<virs_ccxt::WsFeedEvent>, ExchangeError> {
+        self.inner.start_listenkey_order_ws(listen_key_hint).await
     }
 }

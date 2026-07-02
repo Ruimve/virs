@@ -4,23 +4,9 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use virs_error::BotResult;
+
 use crate::position::Position;
-
-/// Bot-layer error type
-#[derive(Debug, thiserror::Error)]
-pub enum BotError {
-    #[error("Order execution failed: {0}")]
-    OrderExecution(String),
-    #[error("Credential error: {0}")]
-    Credential(String),
-    #[error("LLM error: {0}")]
-    Llm(String),
-    #[error("Internal error: {0}")]
-    Internal(String),
-}
-
-/// Bot-layer result type
-pub type BotResult<T> = std::result::Result<T, BotError>;
 
 /// Order side (bot-layer, distinct from engine Side for domain separation)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

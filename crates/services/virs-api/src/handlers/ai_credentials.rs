@@ -2,9 +2,10 @@
 
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     Json,
 };
+use virs_error::VirsError;
 
 use crate::handlers::ai::{resolve_provider_base_url, resolve_provider_model};
 use crate::handlers::response::{extract_user_id, ApiResponse};
@@ -46,11 +47,8 @@ pub fn parse_balance_response(data: &serde_json::Value) -> Vec<serde_json::Value
 pub async fn list_credentials(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Json<ApiResponse> {
-    let user_id = match extract_user_id(&headers) {
-        Ok(id) => id,
-        Err((_, resp)) => return resp,
-    };
+) -> Result<Json<ApiResponse>, VirsError> {
+    let user_id = extract_user_id(&headers)?;
 
     let rows = sqlx::query_as::<_, (uuid::Uuid, String, Option<String>, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT id, provider, label, is_default, created_at, updated_at FROM qd_ai_credentials WHERE user_id = $1 ORDER BY created_at DESC"#,
@@ -60,7 +58,7 @@ pub async fn list_credentials(
     .await;
 
     match rows {
-        Ok(creds) => Json(ApiResponse::ok(serde_json::json!({
+        Ok(creds) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "items": creds.iter().map(|(id, provider, label, is_default, created_at, updated_at)| {
                 serde_json::json!({
                     "id": id.to_string(),
@@ -71,8 +69,8 @@ pub async fn list_credentials(
                     "updated_at": updated_at.to_rfc3339(),
                 })
             }).collect::<Vec<_>>()
-        }))),
-        Err(e) => Json(ApiResponse::err(format!("Database error: {}", e))),
+        })))),
+        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
     }
 }
 
@@ -80,7 +78,7 @@ pub async fn save_credential(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers)?;
 
     let provider = body["provider"].as_str().unwrap_or("");
@@ -90,9 +88,8 @@ pub async fn save_credential(
     let is_default = body["is_default"].as_bool().unwrap_or(false);
 
     if provider.is_empty() || api_key.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::err("provider and api_key are required")),
+        return Err(VirsError::bad_request(
+            "provider and api_key are required",
         ));
     }
 
@@ -101,10 +98,7 @@ pub async fn save_credential(
     // Encrypt API key with AES-256-GCM
     let encrypted_key =
         virs_utils::crypto::encrypt_with_key(api_key, &state.encryption_key).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::err(format!("Encryption error: {}", e))),
-            )
+            VirsError::Other(anyhow::anyhow!("Encryption error: {}", e))
         })?;
 
     sqlx::query(
@@ -123,7 +117,7 @@ pub async fn save_credential(
     .execute(&state.db_pool)
     .await
     .map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(format!("Database error: {}", e))))
+        VirsError::Other(anyhow::anyhow!("Database error: {}", e))
     })?;
 
     Ok(Json(ApiResponse::ok(
@@ -135,7 +129,7 @@ pub async fn delete_credential(
     State(state): State<AppState>,
     headers: HeaderMap,
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers)?;
 
     sqlx::query(r#"DELETE FROM qd_ai_credentials WHERE id = $1 AND user_id = $2"#)
@@ -144,10 +138,7 @@ pub async fn delete_credential(
         .execute(&state.db_pool)
         .await
         .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::err(format!("Database error: {}", e))),
-            )
+            VirsError::Other(anyhow::anyhow!("Database error: {}", e))
         })?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
@@ -157,7 +148,7 @@ pub async fn delete_credential(
 pub async fn test_credential(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers)?;
 
     // Decrypt saved credential
@@ -174,10 +165,7 @@ pub async fn test_credential(
             let key =
                 virs_utils::crypto::decrypt_with_key(&enc_key, &state.encryption_key).map_err(
                     |_| {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(ApiResponse::err("Failed to decrypt API key")),
-                        )
+                        VirsError::Other(anyhow::anyhow!("Failed to decrypt API key"))
                     },
                 )?;
             (p, key)
@@ -193,10 +181,10 @@ pub async fn test_credential(
     let base_url = match resolve_provider_base_url(&provider) {
         Some(url) => url,
         None => {
-            return Ok(Json(ApiResponse::err(format!(
+            return Err(VirsError::bad_request(format!(
                 "Unknown provider: {}",
                 provider
-            ))))
+            )))
         }
     };
 
@@ -229,7 +217,7 @@ pub async fn test_credential(
 pub async fn fetch_models(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers)?;
 
     let row: Option<(String, String)> = sqlx::query_as(
@@ -245,10 +233,7 @@ pub async fn fetch_models(
             let key =
                 virs_utils::crypto::decrypt_with_key(&enc_key, &state.encryption_key).map_err(
                     |_| {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(ApiResponse::err("Failed to decrypt API key")),
-                        )
+                        VirsError::Other(anyhow::anyhow!("Failed to decrypt API key"))
                     },
                 )?;
             (p, key)
@@ -263,10 +248,10 @@ pub async fn fetch_models(
     let base_url = match resolve_provider_base_url(&provider) {
         Some(url) => url,
         None => {
-            return Ok(Json(ApiResponse::err(format!(
+            return Err(VirsError::bad_request(format!(
                 "Unknown provider: {}",
                 provider
-            ))))
+            )))
         }
     };
 
@@ -281,10 +266,10 @@ pub async fn fetch_models(
     match resp {
         Ok(response) => {
             if !response.status().is_success() {
-                return Ok(Json(ApiResponse::err(format!(
+                return Err(VirsError::bad_request(format!(
                     "Failed to fetch models: HTTP {}",
                     response.status()
-                ))));
+                )));
             }
             match response.json::<serde_json::Value>().await {
                 Ok(data) => {
@@ -293,16 +278,16 @@ pub async fn fetch_models(
                         serde_json::json!({ "models": models }),
                     )))
                 }
-                Err(e) => Ok(Json(ApiResponse::err(format!(
+                Err(e) => Err(VirsError::bad_request(format!(
                     "Failed to parse models: {}",
                     e
-                )))),
+                ))),
             }
         }
-        Err(e) => Ok(Json(ApiResponse::err(format!(
+        Err(e) => Err(VirsError::bad_request(format!(
             "Failed to fetch models: {}",
             e
-        )))),
+        ))),
     }
 }
 
@@ -310,7 +295,7 @@ pub async fn fetch_models(
 pub async fn fetch_balance(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)> {
+) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers)?;
 
     let row: Option<(String, String)> = sqlx::query_as(
@@ -326,10 +311,7 @@ pub async fn fetch_balance(
             let key =
                 virs_utils::crypto::decrypt_with_key(&enc_key, &state.encryption_key).map_err(
                     |_| {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(ApiResponse::err("Failed to decrypt API key")),
-                        )
+                        VirsError::Other(anyhow::anyhow!("Failed to decrypt API key"))
                     },
                 )?;
             (p, key)

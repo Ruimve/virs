@@ -17,6 +17,7 @@ use virs_bot::auto::types::AutoEvent;
 use virs_bot::grid::types::GridCommand;
 use virs_config::AiConfig;
 use virs_exchange::{CcxtExchangeAdapter, Exchanges, PaperExchangeAdapter};
+use virs_error::Context;
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
 use virs_types::bot::{OrderEvent, PriceProvider};
@@ -415,10 +416,10 @@ impl EngineManager for AppEngineManager {
         }
     }
 
-    async fn restore_if_needed(&self) {
+    async fn restore_if_needed(&self) -> anyhow::Result<()> {
         // Already started — nothing to do
         if self.started.load(Ordering::SeqCst) {
-            return;
+            return Ok(());
         }
 
         // Check if any bots exist in DB
@@ -426,19 +427,19 @@ impl EngineManager for AppEngineManager {
             let grid_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_grid_bots"#)
                 .fetch_one(&self.db_pool)
                 .await
-                .unwrap_or(0);
+                .context("Failed to count grid bots")?;
 
             let auto_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_auto_bots"#)
                 .fetch_one(&self.db_pool)
                 .await
-                .unwrap_or(0);
+                .context("Failed to count auto bots")?;
 
             grid_count + auto_count > 0
         };
 
         if !has_bots {
             info!("No bots found in DB — skip restore");
-            return;
+            return Ok(());
         }
 
         info!("Bots found in DB — restoring services...");
@@ -556,5 +557,7 @@ impl EngineManager for AppEngineManager {
                 bot_symbols.len()
             );
         }
+
+        Ok(())
     }
 }
