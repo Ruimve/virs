@@ -1432,7 +1432,11 @@ pub(crate) async fn handle_open_position(
             order.position_id = position_id;
             position.status = PositionStatus::Open;
             position.size = order.filled;
-            position.entry_price = order.fill_price.unwrap_or(0.0);
+            let fill_price = order.fill_price.unwrap_or_else(|| {
+                warn!(order_id = %order.id, filled = order.filled, "Order filled but no fill_price, using 0.0");
+                0.0
+            });
+            position.entry_price = fill_price;
             position.current_price = position.entry_price;
             position.margin = if lev > 0 {
                 position.size * position.entry_price / lev as f64

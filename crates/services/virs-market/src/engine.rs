@@ -250,9 +250,17 @@ impl KlineEngine {
                         }
 
                         if let Some(data) = persist_data {
-                            let _ = persistence
+                            if let Err(e) = persistence
                                 .save_candles(&exchange, &symbol, "1m", data.as_slice())
-                                .await;
+                                .await
+                            {
+                                tracing::warn!(
+                                    exchange = %exchange,
+                                    symbol = %symbol,
+                                    error = %e,
+                                    "Failed to save candles"
+                                );
+                            }
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {

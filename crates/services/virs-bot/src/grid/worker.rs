@@ -467,7 +467,10 @@ impl GridWorker {
             }
         };
 
-        let price = order.fill_price.unwrap_or(0.0);
+        let price = order.fill_price.unwrap_or_else(|| {
+            warn!(bot_id = %self.bot.id, order_id = %order.id, "Order filled but no fill_price, falling back to current_price");
+            self.current_price
+        });
         let level_side = self.levels[idx].side.clone();
         let level_num = self.levels[idx].level;
         let entry_price = self.levels[idx].avg_buy_price;
@@ -524,7 +527,7 @@ impl GridWorker {
                     0.0
                 };
                 let order_id_str = order.id.to_string();
-                let _ = self
+                if let Err(e) = self
                     .store
                     .record_orphaned_close_trade(
                         self.bot.id,
@@ -539,7 +542,10 @@ impl GridWorker {
                         pnl,
                         pnl_pct,
                     )
-                    .await;
+                    .await
+                {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to record orphaned close trade");
+                }
             }
             self.levels[idx].trade_id = None;
         }
@@ -618,12 +624,15 @@ impl GridWorker {
     pub(crate) async fn pause_with_cancel(&mut self, reason: &str) {
         if !self.paused {
             self.paused = true;
-            let _ = self
+            if let Err(e) = self
                 .order_executor
                 .send_command(OrderCommand::CancelAllOrders {
                     symbol: Some(self.bot.symbol.clone()),
                 })
-                .await;
+                .await
+            {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to send CancelAllOrders command");
+            }
             warn!(bot_id = %self.bot.id, "Grid paused due to {}", reason);
         }
     }
@@ -781,13 +790,16 @@ impl GridWorker {
             self.levels[level_idx].sell_order_id
         };
         if let Some(oid) = order_id {
-            let _ = self
+            if let Err(e) = self
                 .order_executor
                 .send_command(OrderCommand::CancelOrder {
                     order_id: oid,
                     symbol: self.bot.symbol.clone(),
                 })
-                .await;
+                .await
+            {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to send CancelOrder command");
+            }
         }
     }
 
@@ -953,7 +965,9 @@ impl GridWorker {
             .await;
         self.execute_decision(&action, decision.as_ref()).await;
         if !matches!(action, GridAction::Hold) {
-            let _ = self.store.update_last_adjusted(self.bot.id).await;
+            if let Err(e) = self.store.update_last_adjusted(self.bot.id).await {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to update last adjusted");
+            }
         }
     }
 
@@ -1111,7 +1125,7 @@ impl GridWorker {
                     "analysis": d.analysis,
                     "risk_warning": d.risk_warning,
                 });
-                let _ = self
+                if let Err(e) = self
                     .store
                     .save_analysis_log(
                         self.bot.id,
@@ -1122,7 +1136,10 @@ impl GridWorker {
                         None,
                         llm_model,
                     )
-                    .await;
+                    .await
+                {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to save analysis log");
+                }
 
                 GridAction::from_str(&d.action, d.upper_price, d.lower_price)
             }
@@ -1131,7 +1148,7 @@ impl GridWorker {
                 warn!(bot_id = %self.bot.id, action = rule_action.as_str(), source = "rule_fallback", "LLM call failed, falling back to rule-based decision");
 
                 let result = serde_json::json!({ "action": rule_action.as_str(), "reason": "LLM call failed, using rule-based fallback" });
-                let _ = self
+                if let Err(e) = self
                     .store
                     .save_analysis_log(
                         self.bot.id,
@@ -1142,7 +1159,10 @@ impl GridWorker {
                         Some("LLM call failed"),
                         llm_model,
                     )
-                    .await;
+                    .await
+                {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to save analysis log");
+                }
 
                 let _ = self.grid_event_tx.send(GridEvent::BotError {
                     bot_id: self.bot.id,
@@ -1189,16 +1209,22 @@ impl GridWorker {
             GridAction::ReducePosition => {
                 let new_qty = (self.bot.quantity_per_grid * 0.5).max(1.0);
                 self.bot.quantity_per_grid = new_qty;
-                let _ = self
+                if let Err(e) = self
                     .store
                     .update_quantity_per_grid(self.bot.id, new_qty)
-                    .await;
-                let _ = self
+                    .await
+                {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to update quantity per grid");
+                }
+                if let Err(e) = self
                     .order_executor
                     .send_command(OrderCommand::CancelAllOrders {
                         symbol: Some(self.bot.symbol.clone()),
                     })
-                    .await;
+                    .await
+                {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to send CancelAllOrders command");
+                }
                 self.recalculate_levels();
                 self.save_stats().await;
                 if !self.paused {
@@ -1219,7 +1245,9 @@ impl GridWorker {
                         .await;
                 }
             }
-            GridAction::Hold => unreachable!(),
+            GridAction::Hold => {
+                warn!(bot_id = %self.bot.id, "Hold action reached execute_action, skipping");
+            }
         }
     }
 
@@ -1263,10 +1291,13 @@ impl GridWorker {
                     structure_changed = true;
                 }
                 if self.bot.upper_price > 0.0 && self.bot.lower_price > 0.0 {
-                    let _ = self
+                    if let Err(e) = self
                         .store
                         .update_grid_params(self.bot.id, self.bot.upper_price, self.bot.lower_price)
-                        .await;
+                        .await
+                    {
+                        warn!(bot_id = %self.bot.id, error = %e, "Failed to update grid params");
+                    }
                 }
             }
         }
@@ -1275,7 +1306,7 @@ impl GridWorker {
             self.recalculate_levels();
         }
 
-        let _ = self
+        if let Err(e) = self
             .store
             .update_ai_analysis(
                 self.bot.id,
@@ -1288,7 +1319,10 @@ impl GridWorker {
                 self.bot.leverage,
                 &d.analysis,
             )
-            .await;
+            .await
+        {
+            warn!(bot_id = %self.bot.id, error = %e, "Failed to update AI analysis");
+        }
 
         self.save_stats().await;
         info!(bot_id = %self.bot.id, grid_count = self.bot.grid_count, grid_profit_pct = self.bot.grid_profit_pct, quantity_per_grid = self.bot.quantity_per_grid, leverage = self.bot.leverage, allow_structure_change, structure_changed, "LLM params applied");
@@ -1385,12 +1419,15 @@ impl GridWorker {
             return;
         }
 
-        let _ = self
+        if let Err(e) = self
             .order_executor
             .send_command(OrderCommand::CancelAllOrders {
                 symbol: Some(self.bot.symbol.clone()),
             })
-            .await;
+            .await
+        {
+            warn!(bot_id = %self.bot.id, error = %e, "Failed to send CancelAllOrders command");
+        }
 
         if let Some(upper) = new_upper {
             if upper > 0.0 {
@@ -1408,10 +1445,13 @@ impl GridWorker {
             return;
         }
 
-        let _ = self
+        if let Err(e) = self
             .store
             .update_grid_params(self.bot.id, self.bot.upper_price, self.bot.lower_price)
-            .await;
+            .await
+        {
+            warn!(bot_id = %self.bot.id, error = %e, "Failed to update grid params");
+        }
         self.recalculate_levels();
         self.save_stats().await;
 

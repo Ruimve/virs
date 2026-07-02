@@ -17,7 +17,7 @@ use virs_bot::auto::types::AutoEvent;
 use virs_bot::grid::types::GridCommand;
 use virs_config::AiConfig;
 use virs_exchange::{CcxtExchangeAdapter, Exchanges, PaperExchangeAdapter};
-use virs_error::{Context, VirsResult};
+use virs_error::VirsResult;
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
 use virs_types::bot::{OrderEvent, PriceProvider};
@@ -425,14 +425,12 @@ impl EngineManager for AppEngineManager {
         // Check if any bots exist in DB
         let has_bots: bool = {
             let grid_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_grid_bots"#)
-                .fetch_one(&self.db_pool)
-                .await
-                .context("Failed to count grid bots")?;
+        .fetch_one(&self.db_pool)
+        .await?;
 
-            let auto_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_auto_bots"#)
-                .fetch_one(&self.db_pool)
-                .await
-                .context("Failed to count auto bots")?;
+    let auto_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_auto_bots"#)
+        .fetch_one(&self.db_pool)
+        .await?;
 
             grid_count + auto_count > 0
         };

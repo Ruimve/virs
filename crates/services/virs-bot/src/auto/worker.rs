@@ -194,10 +194,13 @@ impl AutoWorker {
                 // 恢复 position_id（如果丢失）
                 if self.bot.position_id.is_none() || self.bot.position_id == Some(Uuid::nil()) {
                     self.bot.position_id = Some(pe_pos.id);
-                    let _ = self
+                    if let Err(e) = self
                         .store
                         .update_position(self.bot.id, self.bot.position_id)
-                        .await;
+                        .await
+                    {
+                        warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
+                    }
                     info!(bot_id = %self.bot.id, position_id = %pe_pos.id, "Recovered bot.position_id from PE direct query");
                 }
                 self.current_position = Some(pe_pos);
@@ -237,14 +240,17 @@ impl AutoWorker {
     }
 
     pub(crate) async fn save_position(&self) {
-        let _ = self
+        if let Err(e) = self
             .store
             .update_position(self.bot.id, self.bot.position_id)
-            .await;
+            .await
+        {
+            warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
+        }
     }
 
     pub(crate) async fn save_stats(&self) {
-        let _ = self
+        if let Err(e) = self
             .store
             .update_stats(
                 self.bot.id,
@@ -253,7 +259,10 @@ impl AutoWorker {
                 self.bot.win_trades,
                 self.bot.loss_trades,
             )
-            .await;
+            .await
+        {
+            warn!(bot_id = %self.bot.id, error = %e, "Failed to update stats");
+        }
     }
 
     pub(crate) async fn check_pending_timeout(&mut self) {
@@ -335,7 +344,9 @@ impl AutoWorker {
         }
         if self.current_price <= 0.0 {
             error!(bot_id = %self.bot.id, "Failed to fetch initial price after 10 attempts, setting error status");
-            let _ = self.store.update_bot_status(self.bot.id, "error").await;
+            if let Err(e) = self.store.update_bot_status(self.bot.id, "error").await {
+                error!(error = %e, "Failed to update bot status to error");
+            }
             let _ = self.auto_event_tx.send(AutoEvent::BotError {
                 bot_id: self.bot.id,
                 error: "Failed to fetch initial price after 10 attempts".to_string(),
@@ -402,7 +413,9 @@ impl AutoWorker {
                         trade_id = %trade_id,
                         "Orphaned trade detected: open trade exists but bot.position_id is empty, marking as orphaned"
                     );
-                    let _ = self.store.mark_trade_orphaned(trade_id).await;
+                    if let Err(e) = self.store.mark_trade_orphaned(trade_id).await {
+                        warn!(bot_id = %self.bot.id, trade_id = %trade_id, error = %e, "Failed to mark trade as orphaned");
+                    }
                 }
                 Ok(None) => {
                     // 无 open trade，正常状态
@@ -822,7 +835,9 @@ impl AutoWorker {
         }
 
         if !matches!(action, AutoAction::Hold) {
-            let _ = self.store.update_last_decided(self.bot.id).await;
+            if let Err(e) = self.store.update_last_decided(self.bot.id).await {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to update last decided");
+            }
         }
     }
 
@@ -1177,7 +1192,10 @@ impl AutoWorker {
                 }
                 None
             }
-            AutoAction::Hold => unreachable!(),
+            AutoAction::Hold => {
+                warn!(bot_id = %self.bot.id, "Hold action reached execute_action, skipping");
+                None
+            }
         }
     }
 
@@ -1187,7 +1205,7 @@ impl AutoWorker {
         }
 
         // 杠杆由用户配置决定（create 接口），不在运行时动态调整
-        let _ = self
+        if let Err(e) = self
             .store
             .update_ai_analysis(
                 self.bot.id,
@@ -1195,7 +1213,10 @@ impl AutoWorker {
                 self.bot.leverage,
                 d.analysis.as_deref().unwrap_or(""),
             )
-            .await;
+            .await
+        {
+            warn!(bot_id = %self.bot.id, error = %e, "Failed to update AI analysis");
+        }
     }
 
     async fn open_position(
@@ -1518,10 +1539,13 @@ impl AutoWorker {
                 // 这可以处理 PositionOpened 事件丢失（broadcast lag）的场景
                 if self.bot.position_id.is_none() || self.bot.position_id == Some(Uuid::nil()) {
                     self.bot.position_id = Some(position.id);
-                    let _ = self
+                    if let Err(e) = self
                         .store
                         .update_position(self.bot.id, self.bot.position_id)
-                        .await;
+                        .await
+                    {
+                        warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
+                    }
                     info!(
                         bot_id = %self.bot.id,
                         position_id = %position.id,
@@ -1539,10 +1563,13 @@ impl AutoWorker {
                         self.current_position = None;
                         // 清空 position_id 并持久化，避免重启后尝试恢复已关闭的仓位
                         self.bot.position_id = None;
-                        let _ = self
+                        if let Err(e) = self
                             .store
                             .update_position(self.bot.id, self.bot.position_id)
-                            .await;
+                            .await
+                        {
+                            warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
+                        }
                         info!(
                             bot_id = %self.bot.id,
                             position_id = %pid,
@@ -1558,10 +1585,13 @@ impl AutoWorker {
                 // 开仓事件到达后，记录 position_id 并缓存
                 if self.bot.position_id.is_none() || self.bot.position_id == Some(Uuid::nil()) {
                     self.bot.position_id = Some(position.id);
-                    let _ = self
+                    if let Err(e) = self
                         .store
                         .update_position(self.bot.id, self.bot.position_id)
-                        .await;
+                        .await
+                    {
+                        warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
+                    }
                 }
                 self.current_position = Some(position);
             }
@@ -1916,7 +1946,7 @@ impl AutoWorker {
                     }
                     Ok(None) => {
                         warn!(bot_id = %self.bot.id, "No open trade found for close, recording as orphaned");
-                        let _ = self
+                        if let Err(e) = self
                             .store
                             .record_orphaned_close_trade(
                                 self.bot.id,
@@ -1932,7 +1962,10 @@ impl AutoWorker {
                                 pnl_pct,
                                 close_reason,
                             )
-                            .await;
+                            .await
+                        {
+                            warn!(bot_id = %self.bot.id, error = %e, "Failed to record orphaned close trade");
+                        }
                     }
                     Err(e) => {
                         error!(bot_id = %self.bot.id, error = %e, "Failed to find open trade for close");

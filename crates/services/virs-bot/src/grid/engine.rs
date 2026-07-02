@@ -100,7 +100,9 @@ impl GridEngine {
         };
         for bot in running_bots {
             info!(bot_id = %bot.id, name = %bot.name, "Restoring running grid bot");
-            let _ = self.store.update_bot_status(bot.id, "stopped").await;
+            if let Err(e) = self.store.update_bot_status(bot.id, "stopped").await {
+                warn!(bot_id = %bot.id, error = %e, "Failed to update bot status to stopped");
+            }
             self.start_bot(bot.id).await;
         }
     }
@@ -153,7 +155,9 @@ impl GridEngine {
         self.adjust_txs.insert(bot_id, adjust_tx);
         self.bot_symbols.insert(bot_id, bot_symbol);
 
-        let _ = self.store.update_bot_status(bot_id, "running").await;
+        if let Err(e) = self.store.update_bot_status(bot_id, "running").await {
+            warn!(bot_id = %bot_id, error = %e, "Failed to update bot status to running");
+        }
         let _ = self.grid_event_tx.send(GridEvent::BotStarted { bot_id });
         info!(bot_id = %bot_id, "Grid bot started");
     }
@@ -168,15 +172,20 @@ impl GridEngine {
 
     async fn stop_or_pause_bot(&mut self, bot_id: Uuid, reason: &str, target_status: &str) {
         let cancel_symbol = self.bot_symbols.get(&bot_id).cloned();
-        let _ = self
+        if let Err(e) = self
             .order_executor
             .send_command(OrderCommand::CancelAllOrders {
                 symbol: cancel_symbol,
             })
-            .await;
+            .await
+        {
+            warn!(bot_id = %bot_id, error = %e, "Failed to send CancelAllOrders command");
+        }
 
         self.graceful_shutdown_worker(bot_id).await;
-        let _ = self.store.update_bot_status(bot_id, target_status).await;
+        if let Err(e) = self.store.update_bot_status(bot_id, target_status).await {
+            warn!(bot_id = %bot_id, error = %e, "Failed to update bot status to {}", target_status);
+        }
         let _ = self.grid_event_tx.send(GridEvent::BotStopped {
             bot_id,
             reason: reason.to_string(),
@@ -208,35 +217,51 @@ impl GridEngine {
     }
 
     async fn resume_bot(&mut self, bot_id: Uuid) {
-        let _ = self.store.update_bot_status(bot_id, "stopped").await;
+        if let Err(e) = self.store.update_bot_status(bot_id, "stopped").await {
+            warn!(bot_id = %bot_id, error = %e, "Failed to update bot status to stopped");
+        }
         self.start_bot(bot_id).await;
     }
 
     async fn delete_bot(&mut self, bot_id: Uuid, close_position: bool) {
-        let bot_info = self.store.load_bot(bot_id).await.ok().flatten();
+        let bot_info = match self.store.load_bot(bot_id).await {
+            Ok(info) => info,
+            Err(e) => {
+                warn!(bot_id = %bot_id, error = %e, "Failed to load bot info for deletion");
+                None
+            }
+        };
         let symbol = bot_info.as_ref().map(|b| b.symbol.clone());
         let exchange = bot_info.as_ref().map(|b| b.exchange.clone());
 
         if close_position {
             if let (Some(ref sym), Some(ref ex)) = (&symbol, &exchange) {
-                let _ = self
+                if let Err(e) = self
                     .order_executor
                     .send_command(OrderCommand::CancelAllOrders {
                         symbol: Some(sym.clone()),
                     })
-                    .await;
-                let _ = self
+                    .await
+                {
+                    warn!(bot_id = %bot_id, error = %e, "Failed to cancel orders during bot deletion");
+                }
+                if let Err(e) = self
                     .order_executor
                     .send_command(OrderCommand::CloseAllPositions {
                         symbol: sym.clone(),
                         exchange: ex.clone(),
                     })
-                    .await;
+                    .await
+                {
+                    error!(bot_id = %bot_id, error = %e, "Failed to close positions during bot deletion");
+                }
             }
         }
 
         self.stop_or_pause_bot(bot_id, "deleted", "stopped").await;
-        let _ = self.store.delete_bot(bot_id).await;
+        if let Err(e) = self.store.delete_bot(bot_id).await {
+            error!(bot_id = %bot_id, error = %e, "Failed to delete bot from database");
+        }
         info!(bot_id = %bot_id, close_position, "Grid bot deleted");
     }
 
