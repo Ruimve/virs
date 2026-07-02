@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use virs_error::VirsResult;
 
 /// AI 分析日志持久化记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,21 +23,21 @@ pub struct AutoAnalysisLogEntry {
 /// 自动交易数据存储端口
 #[async_trait]
 pub trait AutoStore: Send + Sync {
-    async fn load_running_bots(&self) -> anyhow::Result<Vec<crate::auto_port::AutoBotConfig>>;
+    async fn load_running_bots(&self) -> VirsResult<Vec<crate::auto_port::AutoBotConfig>>;
     async fn load_bot(
         &self,
         bot_id: Uuid,
-    ) -> anyhow::Result<Option<crate::auto_port::AutoBotConfig>>;
-    async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> anyhow::Result<()>;
-    async fn update_last_decided(&self, bot_id: Uuid) -> anyhow::Result<()>;
-    async fn update_position(&self, bot_id: Uuid, position_id: Option<Uuid>) -> anyhow::Result<()>;
+    ) -> VirsResult<Option<crate::auto_port::AutoBotConfig>>;
+    async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> VirsResult<()>;
+    async fn update_last_decided(&self, bot_id: Uuid) -> VirsResult<()>;
+    async fn update_position(&self, bot_id: Uuid, position_id: Option<Uuid>) -> VirsResult<()>;
     async fn update_ai_analysis(
         &self,
         bot_id: Uuid,
         market_regime: &str,
         leverage: i32,
         ai_analysis: &str,
-    ) -> anyhow::Result<()>;
+    ) -> VirsResult<()>;
     async fn update_stats(
         &self,
         bot_id: Uuid,
@@ -44,7 +45,7 @@ pub trait AutoStore: Send + Sync {
         total_trades: i32,
         win_trades: i32,
         loss_trades: i32,
-    ) -> anyhow::Result<()>;
+    ) -> VirsResult<()>;
     /// 开仓时 INSERT 一条 status='open' 的 trade 记录，返回 trade_id
     /// stop_loss/take_profit 为本次交易的风控边界（来自 LLM 决策）
     async fn record_open_trade(
@@ -60,7 +61,7 @@ pub trait AutoStore: Send + Sync {
         open_order_id: Option<&str>,
         stop_loss: f64,
         take_profit: f64,
-    ) -> anyhow::Result<Uuid>;
+    ) -> VirsResult<Uuid>;
     /// 平仓时 UPDATE 对应的 trade 记录为 status='closed'
     async fn close_trade(
         &self,
@@ -73,23 +74,23 @@ pub trait AutoStore: Send + Sync {
         pnl: f64,
         pnl_pct: f64,
         close_reason: &str,
-    ) -> anyhow::Result<()>;
+    ) -> VirsResult<()>;
     /// 更新 trade 的 stop_loss（trailing stop 调整时调用）
-    async fn update_trade_stop_loss(&self, trade_id: Uuid, stop_loss: f64) -> anyhow::Result<()>;
+    async fn update_trade_stop_loss(&self, trade_id: Uuid, stop_loss: f64) -> VirsResult<()>;
     /// 查找当前未平仓的 trade 记录（重启恢复用）
     /// 返回 (trade_id, stop_loss, take_profit) — 用于恢复内存中的风控边界
-    async fn find_open_trade(&self, bot_id: Uuid) -> anyhow::Result<Option<(Uuid, f64, f64)>>;
+    async fn find_open_trade(&self, bot_id: Uuid) -> VirsResult<Option<(Uuid, f64, f64)>>;
 
     /// 标记 trade 为孤儿状态（仅更新 status，保留开仓数据用于回溯）
     /// 用于 PE 仓位丢失但 trade 仍为 open 的场景
-    async fn mark_trade_orphaned(&self, trade_id: Uuid) -> anyhow::Result<()>;
+    async fn mark_trade_orphaned(&self, trade_id: Uuid) -> VirsResult<()>;
 
     /// 查找最近一次已平仓的 trade 记录（重启恢复冷却期用）
     /// 返回 (open_side, close_reason, closed_at) — 用于恢复内存中的 last_close_event
     async fn find_last_closed_trade(
         &self,
         bot_id: Uuid,
-    ) -> anyhow::Result<Option<(String, String, DateTime<Utc>)>>;
+    ) -> VirsResult<Option<(String, String, DateTime<Utc>)>>;
 
     /// 孤儿平仓：找不到对应开仓记录时，直接 INSERT 一条 status='orphaned' 的记录
     async fn record_orphaned_close_trade(
@@ -106,7 +107,7 @@ pub trait AutoStore: Send + Sync {
         pnl: f64,
         pnl_pct: f64,
         close_reason: &str,
-    ) -> anyhow::Result<Uuid>;
+    ) -> VirsResult<Uuid>;
     /// 保存 LLM 分析日志，返回日志 ID（用于后续 UPDATE 回填执行状态/拦截原因）
     async fn save_analysis_log(
         &self,
@@ -117,7 +118,7 @@ pub trait AutoStore: Send + Sync {
         result: &serde_json::Value,
         error: Option<&str>,
         llm_model: &str,
-    ) -> anyhow::Result<Uuid>;
+    ) -> VirsResult<Uuid>;
     /// 回填 LLM 日志的执行状态、拦截原因
     /// - execution_status: open/open_failed/close/close_failed/hold
     /// - intercept_reason: 被代码拦截时的原因（如冷却期/置信度不足）
@@ -127,10 +128,10 @@ pub trait AutoStore: Send + Sync {
         log_id: Uuid,
         execution_status: &str,
         intercept_reason: Option<&str>,
-    ) -> anyhow::Result<()>;
-    async fn load_analysis_logs(&self, bot_id: Uuid) -> anyhow::Result<Vec<AutoAnalysisLogEntry>>;
-    async fn load_consecutive_losses(&self, bot_id: Uuid) -> anyhow::Result<i32>;
-    async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()>;
+    ) -> VirsResult<()>;
+    async fn load_analysis_logs(&self, bot_id: Uuid) -> VirsResult<Vec<AutoAnalysisLogEntry>>;
+    async fn load_consecutive_losses(&self, bot_id: Uuid) -> VirsResult<i32>;
+    async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()>;
 }
 
 /// 市场类型（auto bot 专用）

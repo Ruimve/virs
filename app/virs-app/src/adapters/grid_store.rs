@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 use tracing::warn;
 use uuid::Uuid;
+use virs_error::VirsResult;
 
 use virs_models::GridBot;
 use virs_types::grid_port::*;
@@ -44,7 +45,7 @@ pub fn bot_to_config(b: &GridBot) -> GridBotConfig {
 
 #[async_trait]
 impl GridStore for PgGridStore {
-    async fn load_running_bots(&self) -> anyhow::Result<Vec<GridBotConfig>> {
+    async fn load_running_bots(&self) -> VirsResult<Vec<GridBotConfig>> {
         let bots: Vec<GridBot> =
             sqlx::query_as("SELECT * FROM qd_grid_bots WHERE status = 'running'")
                 .fetch_all(&self.db)
@@ -52,7 +53,7 @@ impl GridStore for PgGridStore {
         Ok(bots.iter().map(bot_to_config).collect())
     }
 
-    async fn load_bot(&self, bot_id: Uuid) -> anyhow::Result<Option<GridBotConfig>> {
+    async fn load_bot(&self, bot_id: Uuid) -> VirsResult<Option<GridBotConfig>> {
         let bot: Option<GridBot> = sqlx::query_as("SELECT * FROM qd_grid_bots WHERE id = $1")
             .bind(bot_id)
             .fetch_optional(&self.db)
@@ -60,7 +61,7 @@ impl GridStore for PgGridStore {
         Ok(bot.as_ref().map(bot_to_config))
     }
 
-    async fn load_trades(&self, bot_id: Uuid) -> anyhow::Result<Vec<GridTradeRecord>> {
+    async fn load_trades(&self, bot_id: Uuid) -> VirsResult<Vec<GridTradeRecord>> {
         let trades: Vec<virs_models::GridTrade> =
             sqlx::query_as("SELECT * FROM qd_grid_trades WHERE bot_id = $1 ORDER BY opened_at ASC")
                 .bind(bot_id)
@@ -95,7 +96,7 @@ impl GridStore for PgGridStore {
         open_price: f64,
         open_quantity: f64,
         open_order_id: Option<&str>,
-    ) -> anyhow::Result<Uuid> {
+    ) -> VirsResult<Uuid> {
         let row: (Uuid,) = sqlx::query_as(
             r#"INSERT INTO qd_grid_trades (bot_id, user_id, symbol, exchange, grid_level, open_side, open_price, open_quantity, open_order_id, status)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open')
@@ -117,7 +118,7 @@ impl GridStore for PgGridStore {
         close_order_id: Option<&str>,
         pnl: f64,
         pnl_pct: f64,
-    ) -> anyhow::Result<()> {
+    ) -> VirsResult<()> {
         let pnl_pct = crate::adapters::utils::sanitize_pnl_pct(pnl_pct);
         let result = sqlx::query(
             r#"UPDATE qd_grid_trades SET
@@ -142,7 +143,7 @@ impl GridStore for PgGridStore {
         Ok(())
     }
 
-    async fn find_open_trade(&self, bot_id: Uuid, grid_level: i32) -> anyhow::Result<Option<Uuid>> {
+    async fn find_open_trade(&self, bot_id: Uuid, grid_level: i32) -> VirsResult<Option<Uuid>> {
         let row: Option<(Uuid,)> = sqlx::query_as(
             "SELECT id FROM qd_grid_trades WHERE bot_id = $1 AND grid_level = $2 AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
         )
@@ -164,7 +165,7 @@ impl GridStore for PgGridStore {
         close_order_id: Option<&str>,
         pnl: f64,
         pnl_pct: f64,
-    ) -> anyhow::Result<Uuid> {
+    ) -> VirsResult<Uuid> {
         let open_side = crate::adapters::utils::derive_open_side(close_side);
         let pnl_pct = crate::adapters::utils::sanitize_pnl_pct(pnl_pct);
         let row: (Uuid,) = sqlx::query_as(
@@ -187,7 +188,7 @@ impl GridStore for PgGridStore {
         total_trades: i32,
         grid_filled_count: i32,
         levels_json: Option<&serde_json::Value>,
-    ) -> anyhow::Result<()> {
+    ) -> VirsResult<()> {
         sqlx::query(
             "UPDATE qd_grid_bots SET total_pnl = $2, unrealized_pnl = $3, total_trades = $4, grid_filled_count = $5, grid_levels_json = $6::jsonb, updated_at = NOW() WHERE id = $1",
         )
@@ -197,7 +198,7 @@ impl GridStore for PgGridStore {
         Ok(())
     }
 
-    async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> anyhow::Result<()> {
+    async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> VirsResult<()> {
         let sql = match status {
             "running" => "UPDATE qd_grid_bots SET status = 'running', started_at = NOW(), updated_at = NOW() WHERE id = $1",
             "stopped" => "UPDATE qd_grid_bots SET status = 'stopped', stopped_at = NOW(), updated_at = NOW() WHERE id = $1",
@@ -216,7 +217,7 @@ impl GridStore for PgGridStore {
         Ok(())
     }
 
-    async fn update_last_adjusted(&self, bot_id: Uuid) -> anyhow::Result<()> {
+    async fn update_last_adjusted(&self, bot_id: Uuid) -> VirsResult<()> {
         sqlx::query("UPDATE qd_grid_bots SET last_adjusted_at = NOW() WHERE id = $1")
             .bind(bot_id)
             .execute(&self.db)
@@ -229,14 +230,14 @@ impl GridStore for PgGridStore {
         bot_id: Uuid,
         upper_price: f64,
         lower_price: f64,
-    ) -> anyhow::Result<()> {
+    ) -> VirsResult<()> {
         sqlx::query("UPDATE qd_grid_bots SET upper_price = $2, lower_price = $3, updated_at = NOW() WHERE id = $1")
             .bind(bot_id).bind(upper_price).bind(lower_price)
             .execute(&self.db).await?;
         Ok(())
     }
 
-    async fn update_quantity_per_grid(&self, bot_id: Uuid, quantity: f64) -> anyhow::Result<()> {
+    async fn update_quantity_per_grid(&self, bot_id: Uuid, quantity: f64) -> VirsResult<()> {
         sqlx::query(
             "UPDATE qd_grid_bots SET quantity_per_grid = $2, updated_at = NOW() WHERE id = $1",
         )
@@ -258,7 +259,7 @@ impl GridStore for PgGridStore {
         quantity_per_grid: f64,
         leverage: i32,
         ai_analysis: &str,
-    ) -> anyhow::Result<()> {
+    ) -> VirsResult<()> {
         sqlx::query(
             r#"UPDATE qd_grid_bots SET
                 market_regime = $1, upper_price = $2, lower_price = $3,
@@ -290,7 +291,7 @@ impl GridStore for PgGridStore {
         result: &serde_json::Value,
         error: Option<&str>,
         llm_model: &str,
-    ) -> anyhow::Result<()> {
+    ) -> VirsResult<()> {
         let status = if error.is_some() {
             "failed"
         } else {
@@ -306,7 +307,7 @@ impl GridStore for PgGridStore {
         Ok(())
     }
 
-    async fn load_analysis_logs(&self, bot_id: Uuid) -> anyhow::Result<Vec<AnalysisLogEntry>> {
+    async fn load_analysis_logs(&self, bot_id: Uuid) -> VirsResult<Vec<AnalysisLogEntry>> {
         let rows: Vec<(Uuid, Uuid, String, String, String, serde_json::Value, Option<String>, String, chrono::DateTime<chrono::Utc>)> =
             sqlx::query_as(
                 r#"SELECT id, bot_id, analysis_type, system_prompt, user_prompt, result, error, llm_model, created_at
@@ -331,7 +332,7 @@ impl GridStore for PgGridStore {
             .collect())
     }
 
-    async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()> {
+    async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()> {
         sqlx::query("DELETE FROM qd_grid_bots WHERE id = $1")
             .bind(bot_id)
             .execute(&self.db)

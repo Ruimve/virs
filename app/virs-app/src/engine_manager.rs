@@ -17,7 +17,7 @@ use virs_bot::auto::types::AutoEvent;
 use virs_bot::grid::types::GridCommand;
 use virs_config::AiConfig;
 use virs_exchange::{CcxtExchangeAdapter, Exchanges, PaperExchangeAdapter};
-use virs_error::Context;
+use virs_error::{Context, VirsResult};
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
 use virs_types::bot::{OrderEvent, PriceProvider};
@@ -92,7 +92,7 @@ impl AppEngineManager {
 
 #[async_trait]
 impl EngineManager for AppEngineManager {
-    async fn ensure_started(&self, paper_mode: bool) -> Result<(), String> {
+    async fn ensure_started(&self, paper_mode: bool) -> VirsResult<()> {
         // Fast path — already started
         if self.started.load(Ordering::SeqCst) {
             return Ok(());
@@ -416,7 +416,7 @@ impl EngineManager for AppEngineManager {
         }
     }
 
-    async fn restore_if_needed(&self) -> anyhow::Result<()> {
+    async fn restore_if_needed(&self) -> VirsResult<()> {
         // Already started — nothing to do
         if self.started.load(Ordering::SeqCst) {
             return Ok(());

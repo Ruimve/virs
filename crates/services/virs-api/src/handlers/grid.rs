@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
-use virs_error::{Context, VirsError};
+use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -49,14 +49,12 @@ pub async fn create_bot(
             sqlx::query_scalar("SELECT COUNT(*) FROM qd_grid_bots WHERE user_id = $1")
                 .bind(user_id)
                 .fetch_one(&state.db_pool)
-                .await
-                .context("Failed to count grid bots")?;
+                .await?;
         let auto_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM qd_auto_bots WHERE user_id = $1")
                 .bind(user_id)
                 .fetch_one(&state.db_pool)
-                .await
-                .context("Failed to count auto bots")?;
+                .await?;
         if grid_count + auto_count > 0 {
             return Err(VirsError::conflict(
                 "Each account can only have one bot. Please delete your existing bot first.",
@@ -65,12 +63,7 @@ pub async fn create_bot(
     }
 
     // Ensure engines are started (lazy init on first bot creation)
-    if let Err(e) = state.engine_manager.ensure_started(paper_mode).await {
-        return Err(VirsError::Other(anyhow::anyhow!(
-            "Failed to start engines: {}",
-            e
-        )));
-    }
+    state.engine_manager.ensure_started(paper_mode).await?;
 
     // Verify exchange is registered in registry (must be done via /api/credentials/save first)
     let exchange_key = format!("{}:{}", exchange, market_type);
@@ -146,10 +139,7 @@ pub async fn create_bot(
     .bind(paper_mode)
     .bind(initial_capital)
     .execute(&state.db_pool)
-    .await
-    .map_err(|e| {
-        VirsError::Other(anyhow::anyhow!("Database error: {}", e))
-    })?;
+    .await?;
 
     tracing::info!(bot_id = %id, initial_capital, "Grid bot created with initial_capital from exchange");
 
@@ -164,7 +154,7 @@ pub async fn list_bots(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers)?;
 
-    let rows = sqlx::query_as::<
+    let bots = sqlx::query_as::<
         _,
         (
             uuid::Uuid,
@@ -184,46 +174,41 @@ pub async fn list_bots(
     )
     .bind(user_id)
     .fetch_all(&state.db_pool)
-    .await;
+    .await?;
 
-    match rows {
-        Ok(bots) => {
-            let items: Vec<_> = bots
-                .iter()
-                .map(
-                    |(
-                        id,
-                        name,
-                        symbol,
-                        exchange,
-                        status,
-                        market_type,
-                        leverage,
-                        created_at,
-                        updated_at,
-                    )| {
-                        serde_json::json!({
-                            "id": id.to_string(),
-                            "name": name,
-                            "symbol": symbol,
-                            "exchange": exchange,
-                            "status": status,
-                            "market_type": market_type,
-                            "leverage": leverage,
-                            "created_at": created_at.to_rfc3339(),
-                            "updated_at": updated_at.to_rfc3339(),
-                        })
-                    },
-                )
-                .collect();
-            let total = items.len();
-            Ok(Json(ApiResponse::ok(serde_json::json!({
-                "items": items,
-                "total": total,
-            }))))
-        }
-        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
-    }
+    let items: Vec<_> = bots
+        .iter()
+        .map(
+            |(
+                id,
+                name,
+                symbol,
+                exchange,
+                status,
+                market_type,
+                leverage,
+                created_at,
+                updated_at,
+            )| {
+                serde_json::json!({
+                    "id": id.to_string(),
+                    "name": name,
+                    "symbol": symbol,
+                    "exchange": exchange,
+                    "status": status,
+                    "market_type": market_type,
+                    "leverage": leverage,
+                    "created_at": created_at.to_rfc3339(),
+                    "updated_at": updated_at.to_rfc3339(),
+                })
+            },
+        )
+        .collect();
+    let total = items.len();
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "items": items,
+        "total": total,
+    }))))
 }
 
 pub async fn get_bot(
@@ -240,8 +225,7 @@ pub async fn get_bot(
     .bind(id)
     .bind(user_id)
     .fetch_optional(&state.db_pool)
-    .await
-    .map_err(|e| VirsError::Other(anyhow::anyhow!("Database error: {}", e)))?;
+    .await?;
 
     let bot = match bot {
         Some(b) => b,
@@ -411,10 +395,7 @@ pub async fn delete_bot(
     sqlx::query(r#"DELETE FROM qd_grid_bots WHERE id = $1"#)
         .bind(id)
         .execute(&state.db_pool)
-        .await
-        .map_err(|e| {
-            VirsError::Other(anyhow::anyhow!("Database error: {}", e))
-        })?;
+        .await?;
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
 
@@ -437,11 +418,10 @@ pub async fn get_trades(
     .bind(id)
     .bind(user_id)
     .fetch_one(&state.db_pool)
-    .await
-    .map_err(|e| VirsError::Other(anyhow::anyhow!("Database error: {}", e)))?;
+    .await?;
 
     // 查询分页数据（完整字段）
-    let rows = sqlx::query_as::<
+    let trades = sqlx::query_as::<
         _,
         (
             uuid::Uuid,
@@ -469,34 +449,31 @@ pub async fn get_trades(
     .bind(page_size as i64)
     .bind(offset as i64)
     .fetch_all(&state.db_pool)
-    .await;
+    .await?;
 
-    match rows {
-        Ok(trades) => Ok(Json(ApiResponse::ok(serde_json::json!({
-            "trades": trades.iter().map(|(tid, level, open_side, open_p, open_qty, close_side, close_p, close_qty, pnl, pnl_pct, status, opened_at, closed_at)| {
-                serde_json::json!({
-                    "id": tid.to_string(),
-                    "bot_id": id.to_string(),
-                    "grid_level": level,
-                    "open_side": open_side,
-                    "open_price": open_p,
-                    "open_quantity": open_qty,
-                    "close_side": close_side,
-                    "close_price": close_p,
-                    "close_quantity": close_qty,
-                    "pnl": pnl,
-                    "pnl_pct": pnl_pct,
-                    "status": status,
-                    "opened_at": opened_at.to_rfc3339(),
-                    "closed_at": closed_at.map(|t| t.to_rfc3339()),
-                })
-            }).collect::<Vec<_>>(),
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        })))),
-        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
-    }
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "trades": trades.iter().map(|(tid, level, open_side, open_p, open_qty, close_side, close_p, close_qty, pnl, pnl_pct, status, opened_at, closed_at)| {
+            serde_json::json!({
+                "id": tid.to_string(),
+                "bot_id": id.to_string(),
+                "grid_level": level,
+                "open_side": open_side,
+                "open_price": open_p,
+                "open_quantity": open_qty,
+                "close_side": close_side,
+                "close_price": close_p,
+                "close_quantity": close_qty,
+                "pnl": pnl,
+                "pnl_pct": pnl_pct,
+                "status": status,
+                "opened_at": opened_at.to_rfc3339(),
+                "closed_at": closed_at.map(|t| t.to_rfc3339()),
+            })
+        }).collect::<Vec<_>>(),
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }))))
 }
 
 /// 网格机器人统计接口（基于全量 trades 计算统计指标）
@@ -508,7 +485,7 @@ pub async fn get_stats(
     let user_id = extract_user_id(&headers)?;
 
     // 拉取全量已平仓 trades（按时间正序），用于计算统计指标
-    let rows = sqlx::query_as::<_, (f64, f64, chrono::DateTime<chrono::Utc>)>(
+    let trades = sqlx::query_as::<_, (f64, f64, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT pnl, pnl_pct, opened_at
            FROM qd_grid_trades WHERE bot_id = $1 AND user_id = $2 AND status = 'closed'
            ORDER BY opened_at ASC"#,
@@ -516,12 +493,7 @@ pub async fn get_stats(
     .bind(id)
     .bind(user_id)
     .fetch_all(&state.db_pool)
-    .await;
-
-    let trades = match rows {
-        Ok(t) => t,
-        Err(e) => return Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
-    };
+    .await?;
 
     // 读取 bot 汇总字段
     let bot_stats = sqlx::query_as::<_, (f64, f64, i32, i32)>(
@@ -529,12 +501,11 @@ pub async fn get_stats(
     )
     .bind(id)
     .fetch_optional(&state.db_pool)
-    .await;
+    .await?;
 
     let (total_pnl, unrealized_pnl, total_trades, grid_filled_count) = match bot_stats {
-        Ok(Some((tp, up, tt, gf))) => (tp, up, tt, gf),
-        Ok(None) => (0.0f64, 0.0f64, 0i32, 0i32),
-        Err(e) => return Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
+        Some((tp, up, tt, gf)) => (tp, up, tt, gf),
+        None => (0.0f64, 0.0f64, 0i32, 0i32),
     };
 
     // 累计已实现 PnL（从 trades 重新计算，确保一致性）
@@ -698,10 +669,9 @@ pub async fn get_analysis_logs(
     .bind(id)
     .bind(user_id)
     .fetch_one(&state.db_pool)
-    .await
-    .map_err(|e| VirsError::Other(anyhow::anyhow!("Database error: {}", e)))?;
+    .await?;
 
-    let rows = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, String, String, String, serde_json::Value, Option<String>, String, String, chrono::DateTime<chrono::Utc>)>(
+    let logs = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, String, String, String, serde_json::Value, Option<String>, String, String, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT l.id, l.bot_id, l.analysis_type, l.status, l.system_prompt, l.result, l.error, l.user_prompt, l.llm_model, l.created_at
            FROM qd_grid_analysis_logs l
            JOIN qd_grid_bots b ON l.bot_id = b.id
@@ -713,28 +683,25 @@ pub async fn get_analysis_logs(
     .bind(page_size as i64)
     .bind(offset as i64)
     .fetch_all(&state.db_pool)
-    .await;
+    .await?;
 
-    match rows {
-        Ok(logs) => Ok(Json(ApiResponse::ok(serde_json::json!({
-            "items": logs.iter().map(|(id, bot_id, analysis_type, status, system_prompt, result, error, user_prompt, llm_model, created_at)| {
-                serde_json::json!({
-                    "id": id.to_string(),
-                    "bot_id": bot_id.to_string(),
-                    "analysis_type": analysis_type,
-                    "status": status,
-                    "system_prompt": system_prompt,
-                    "user_prompt": user_prompt,
-                    "result": result,
-                    "error": error,
-                    "llm_model": llm_model,
-                    "created_at": created_at.to_rfc3339(),
-                })
-            }).collect::<Vec<_>>(),
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        })))),
-        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
-    }
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "items": logs.iter().map(|(id, bot_id, analysis_type, status, system_prompt, result, error, user_prompt, llm_model, created_at)| {
+            serde_json::json!({
+                "id": id.to_string(),
+                "bot_id": bot_id.to_string(),
+                "analysis_type": analysis_type,
+                "status": status,
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+                "result": result,
+                "error": error,
+                "llm_model": llm_model,
+                "created_at": created_at.to_rfc3339(),
+            })
+        }).collect::<Vec<_>>(),
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }))))
 }

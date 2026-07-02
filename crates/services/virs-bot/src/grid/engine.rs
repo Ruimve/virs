@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::sync::{broadcast, mpsc};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::grid::ai::GridAiService;
@@ -96,7 +96,13 @@ impl GridEngine {
     }
 
     async fn restore_running_bots(&mut self) {
-        let running_bots = self.store.load_running_bots().await.unwrap_or_default();
+        let running_bots = match self.store.load_running_bots().await {
+            Ok(bots) => bots,
+            Err(e) => {
+                error!(error = %e, "Failed to load running grid bots, skipping restore");
+                return;
+            }
+        };
         for bot in running_bots {
             info!(bot_id = %bot.id, name = %bot.name, "Restoring running grid bot");
             let _ = self.store.update_bot_status(bot.id, "stopped").await;

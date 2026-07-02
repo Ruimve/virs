@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::common::ai_client;
 use crate::common::ports::{CredentialStore, LlmProviderResolver};
+use virs_error::BotResult;
 
 /// Auto trading action
 #[derive(Debug, Clone, PartialEq)]
@@ -27,6 +28,7 @@ impl AutoAction {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "open_long" => Self::OpenLong,
@@ -151,7 +153,7 @@ impl AutoAiService {
         user_id: Uuid,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> anyhow::Result<ai_client::LlmCallResult> {
+    ) -> BotResult<ai_client::LlmCallResult> {
         let user_creds = self.credential_store.load_credentials(user_id).await?;
         let (api_key, base_url, model, _provider) = self.llm_resolver.resolve(&user_creds)?;
 

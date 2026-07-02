@@ -4,9 +4,10 @@ use aes_gcm::{
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use rand::RngCore;
+use virs_error::{VirsError, VirsResult};
 
 /// Encrypt a string using AES-256-GCM.
-pub fn encrypt(plaintext: &str, key: &[u8; 32]) -> anyhow::Result<String> {
+pub fn encrypt(plaintext: &str, key: &[u8; 32]) -> VirsResult<String> {
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|e| anyhow::anyhow!("Cipher init error: {:?}", e))?;
     let mut nonce_bytes = [0u8; 12];
@@ -24,12 +25,12 @@ pub fn encrypt(plaintext: &str, key: &[u8; 32]) -> anyhow::Result<String> {
 }
 
 /// Decrypt a string using AES-256-GCM.
-pub fn decrypt(encoded: &str, key: &[u8; 32]) -> anyhow::Result<String> {
+pub fn decrypt(encoded: &str, key: &[u8; 32]) -> VirsResult<String> {
     let combined = BASE64
         .decode(encoded)
         .map_err(|e| anyhow::anyhow!("Base64 decode error: {}", e))?;
     if combined.len() < 12 {
-        anyhow::bail!("Invalid ciphertext length");
+        return Err(VirsError::Other(anyhow::anyhow!("Invalid ciphertext length")));
     }
 
     let (nonce_bytes, ciphertext) = combined.split_at(12);
@@ -40,7 +41,8 @@ pub fn decrypt(encoded: &str, key: &[u8; 32]) -> anyhow::Result<String> {
     let plaintext = cipher
         .decrypt(nonce, ciphertext)
         .map_err(|e| anyhow::anyhow!("Decryption error: {:?}", e))?;
-    Ok(String::from_utf8(plaintext)?)
+    Ok(String::from_utf8(plaintext)
+        .map_err(|e| anyhow::anyhow!("UTF-8 decode error: {}", e))?)
 }
 
 /// Derive a 32-byte key from a secret string.
@@ -55,8 +57,9 @@ pub fn derive_key(secret: &str) -> [u8; 32] {
 }
 
 /// Hash a password using bcrypt.
-pub fn hash_password(password: &str) -> anyhow::Result<String> {
-    Ok(bcrypt::hash(password, bcrypt::DEFAULT_COST)?)
+pub fn hash_password(password: &str) -> VirsResult<String> {
+    Ok(bcrypt::hash(password, bcrypt::DEFAULT_COST)
+        .map_err(|e| anyhow::anyhow!("Hash error: {}", e))?)
 }
 
 /// Verify a password against a bcrypt hash.
@@ -65,13 +68,13 @@ pub fn verify_password(password: &str, hash: &str) -> bool {
 }
 
 /// Encrypt a string using a secret string (derives key internally).
-pub fn encrypt_with_key(plaintext: &str, secret: &str) -> anyhow::Result<String> {
+pub fn encrypt_with_key(plaintext: &str, secret: &str) -> VirsResult<String> {
     let key = derive_key(secret);
     encrypt(plaintext, &key)
 }
 
 /// Decrypt a string using a secret string (derives key internally).
-pub fn decrypt_with_key(encoded: &str, secret: &str) -> anyhow::Result<String> {
+pub fn decrypt_with_key(encoded: &str, secret: &str) -> VirsResult<String> {
     let key = derive_key(secret);
     decrypt(encoded, &key)
 }

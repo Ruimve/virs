@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 use tokio::sync::{broadcast, Mutex};
 use tracing;
+use virs_error::{VirsError, VirsResult};
 
 use crate::aggregator::Aggregator;
 use crate::cache::SymbolCache;
@@ -30,7 +31,7 @@ impl KlinePersistence for NoOpPersistence {
         _symbol: &str,
         _timeframe: &str,
         _candles: &[Candle],
-    ) -> anyhow::Result<()> {
+    ) -> VirsResult<()> {
         Ok(())
     }
     async fn load_candles(
@@ -38,7 +39,7 @@ impl KlinePersistence for NoOpPersistence {
         _exchange: &str,
         _symbol: &str,
         _timeframe: &str,
-    ) -> anyhow::Result<Vec<Candle>> {
+    ) -> VirsResult<Vec<Candle>> {
         Ok(Vec::new())
     }
 }
@@ -353,7 +354,7 @@ impl KlineEngine {
         exchange: &str,
         symbol: &str,
         market_type: MarketType,
-    ) -> anyhow::Result<()> {
+    ) -> VirsResult<()> {
         // Lazy start: auto-start the engine on first subscription
         if !self.started.load(std::sync::atomic::Ordering::Relaxed) {
             self.start().await;
@@ -411,7 +412,7 @@ impl KlineEngine {
         Ok(())
     }
 
-    pub async fn unsubscribe(&self, exchange: &str, symbol: &str) -> anyhow::Result<()> {
+    pub async fn unsubscribe(&self, exchange: &str, symbol: &str) -> VirsResult<()> {
         let key = subscription_key(exchange, symbol);
 
         let (market_type, cache) = match self.subscriptions.get(&key) {
@@ -518,11 +519,16 @@ impl KlineEngine {
             .collect()
     }
 
-    pub async fn force_backfill(&self, exchange: &str, symbol: &str) -> anyhow::Result<usize> {
+    pub async fn force_backfill(&self, exchange: &str, symbol: &str) -> VirsResult<usize> {
         let key = subscription_key(exchange, symbol);
         let (cache, market_type) = match self.subscriptions.get(&key) {
             Some(entry) => (entry.cache.clone(), entry.market_type),
-            None => return Err(anyhow::anyhow!("Not subscribed to {}/{}", exchange, symbol)),
+            None => {
+                return Err(VirsError::not_found(format!(
+                    "Not subscribed to {}/{}",
+                    exchange, symbol
+                )))
+            }
         };
         GapDetector::detect_and_backfill(
             exchange,
@@ -556,15 +562,15 @@ impl KlineEngine {
             .collect()
     }
 
-    pub fn validate_backtest_range(timeframe: Timeframe, days: u32) -> Result<(), anyhow::Error> {
+    pub fn validate_backtest_range(timeframe: Timeframe, days: u32) -> VirsResult<()> {
         let limit = BacktestRangeLimit::for_timeframe(timeframe);
         if days > limit.max_days {
-            return Err(anyhow::anyhow!(
+            return Err(VirsError::Other(anyhow::anyhow!(
                 "Backtest range {} days exceeds maximum {} days for {} timeframe",
                 days,
                 limit.max_days,
                 timeframe
-            ));
+            )));
         }
         if days > limit.recommended_days {
             tracing::warn!(
@@ -584,7 +590,7 @@ impl KlineEngine {
         timeframe: Timeframe,
         start_ms: i64,
         end_ms: i64,
-    ) -> anyhow::Result<Vec<Candle>> {
+    ) -> VirsResult<Vec<Candle>> {
         let days = ((end_ms - start_ms) / 86_400_000) as u32;
         Self::validate_backtest_range(timeframe, days)?;
 
@@ -621,7 +627,7 @@ impl KlineEngine {
                 exchange,
                 symbol,
                 "1m",
-                ((days as u32) * 1440 + 100).min(1000),
+                (days * 1440 + 100).min(1000),
                 Some(start_ms),
                 market_type,
             )

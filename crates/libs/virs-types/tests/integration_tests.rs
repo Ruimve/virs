@@ -54,8 +54,7 @@ fn int_6_1_default_config_valid() {
 
 #[test]
 fn int_6_2_invalid_config() {
-    let mut config = RiskConfig::default();
-    config.max_leverage = 0;
+    let config = RiskConfig { max_leverage: 0, ..Default::default() };
     assert!(config.validate().is_err());
 }
 

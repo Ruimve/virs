@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use tracing::warn;
 use uuid::Uuid;
+use virs_error::VirsResult;
 
 use virs_models::AutoBot;
 use virs_types::auto_port::AutoBotConfig;
@@ -48,7 +49,7 @@ pub fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
 
 #[async_trait]
 impl AutoStore for PgAutoStore {
-    async fn load_running_bots(&self) -> anyhow::Result<Vec<AutoBotConfig>> {
+    async fn load_running_bots(&self) -> VirsResult<Vec<AutoBotConfig>> {
         let bots: Vec<AutoBot> =
             sqlx::query_as("SELECT * FROM qd_auto_bots WHERE status = 'running'")
                 .fetch_all(&self.db)
@@ -56,7 +57,7 @@ impl AutoStore for PgAutoStore {
         Ok(bots.iter().map(bot_to_config).collect())
     }
 
-    async fn load_bot(&self, bot_id: Uuid) -> anyhow::Result<Option<AutoBotConfig>> {
+    async fn load_bot(&self, bot_id: Uuid) -> VirsResult<Option<AutoBotConfig>> {
         let bot: Option<AutoBot> = sqlx::query_as("SELECT * FROM qd_auto_bots WHERE id = $1")
             .bind(bot_id)
             .fetch_optional(&self.db)
@@ -64,7 +65,7 @@ impl AutoStore for PgAutoStore {
         Ok(bot.as_ref().map(bot_to_config))
     }
 
-    async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> anyhow::Result<()> {
+    async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> VirsResult<()> {
         let sql = match status {
             "running" => "UPDATE qd_auto_bots SET status = 'running', started_at = NOW(), updated_at = NOW() WHERE id = $1",
             "stopped" => "UPDATE qd_auto_bots SET status = 'stopped', stopped_at = NOW(), updated_at = NOW() WHERE id = $1",
@@ -83,7 +84,7 @@ impl AutoStore for PgAutoStore {
         Ok(())
     }
 
-    async fn update_last_decided(&self, bot_id: Uuid) -> anyhow::Result<()> {
+    async fn update_last_decided(&self, bot_id: Uuid) -> VirsResult<()> {
         sqlx::query("UPDATE qd_auto_bots SET last_decided_at = NOW() WHERE id = $1")
             .bind(bot_id)
             .execute(&self.db)
@@ -91,7 +92,7 @@ impl AutoStore for PgAutoStore {
         Ok(())
     }
 
-    async fn update_position(&self, bot_id: Uuid, position_id: Option<Uuid>) -> anyhow::Result<()> {
+    async fn update_position(&self, bot_id: Uuid, position_id: Option<Uuid>) -> VirsResult<()> {
         sqlx::query(
             r#"UPDATE qd_auto_bots SET
                 position_id = $2, updated_at = NOW()
@@ -110,7 +111,7 @@ impl AutoStore for PgAutoStore {
         market_regime: &str,
         leverage: i32,
         ai_analysis: &str,
-    ) -> anyhow::Result<()> {
+    ) -> VirsResult<()> {
         sqlx::query(
             r#"UPDATE qd_auto_bots SET
                 market_regime = $2, leverage = $3, ai_analysis = $4, updated_at = NOW()
@@ -132,7 +133,7 @@ impl AutoStore for PgAutoStore {
         total_trades: i32,
         win_trades: i32,
         loss_trades: i32,
-    ) -> anyhow::Result<()> {
+    ) -> VirsResult<()> {
         sqlx::query(
             r#"UPDATE qd_auto_bots SET
                 total_pnl = $2, total_trades = $3, win_trades = $4, loss_trades = $5, updated_at = NOW()
@@ -156,7 +157,7 @@ impl AutoStore for PgAutoStore {
         open_order_id: Option<&str>,
         stop_loss: f64,
         take_profit: f64,
-    ) -> anyhow::Result<Uuid> {
+    ) -> VirsResult<Uuid> {
         let row: (Uuid,) = sqlx::query_as(
             r#"INSERT INTO qd_auto_trades
                (bot_id, user_id, symbol, exchange, open_side, open_price, open_quantity,
@@ -191,7 +192,7 @@ impl AutoStore for PgAutoStore {
         pnl: f64,
         pnl_pct: f64,
         close_reason: &str,
-    ) -> anyhow::Result<()> {
+    ) -> VirsResult<()> {
         let pnl_pct = crate::adapters::utils::sanitize_pnl_pct(pnl_pct);
         let result = sqlx::query(
             r#"UPDATE qd_auto_trades SET
@@ -220,7 +221,7 @@ impl AutoStore for PgAutoStore {
         Ok(())
     }
 
-    async fn find_open_trade(&self, bot_id: Uuid) -> anyhow::Result<Option<(Uuid, f64, f64)>> {
+    async fn find_open_trade(&self, bot_id: Uuid) -> VirsResult<Option<(Uuid, f64, f64)>> {
         let row: Option<(Uuid, f64, f64)> = sqlx::query_as(
             "SELECT id, stop_loss, take_profit FROM qd_auto_trades WHERE bot_id = $1 AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
         )
@@ -229,7 +230,7 @@ impl AutoStore for PgAutoStore {
         Ok(row)
     }
 
-    async fn mark_trade_orphaned(&self, trade_id: Uuid) -> anyhow::Result<()> {
+    async fn mark_trade_orphaned(&self, trade_id: Uuid) -> VirsResult<()> {
         sqlx::query(
             "UPDATE qd_auto_trades SET status = 'orphaned', closed_at = NOW() WHERE id = $1 AND status = 'open'",
         )
@@ -241,7 +242,7 @@ impl AutoStore for PgAutoStore {
     async fn find_last_closed_trade(
         &self,
         bot_id: Uuid,
-    ) -> anyhow::Result<Option<(String, String, DateTime<Utc>)>> {
+    ) -> VirsResult<Option<(String, String, DateTime<Utc>)>> {
         // close_reason：stop_loss/take_profit/position_timeout/llm_decision
         // 用于冷却期判断
         let row: Option<(String, String, DateTime<Utc>)> = sqlx::query_as(
@@ -256,7 +257,7 @@ impl AutoStore for PgAutoStore {
         Ok(row)
     }
 
-    async fn update_trade_stop_loss(&self, trade_id: Uuid, stop_loss: f64) -> anyhow::Result<()> {
+    async fn update_trade_stop_loss(&self, trade_id: Uuid, stop_loss: f64) -> VirsResult<()> {
         sqlx::query(
             r#"UPDATE qd_auto_trades SET stop_loss = $2 WHERE id = $1 AND status = 'open'"#,
         )
@@ -280,7 +281,7 @@ impl AutoStore for PgAutoStore {
         pnl: f64,
         pnl_pct: f64,
         close_reason: &str,
-    ) -> anyhow::Result<Uuid> {
+    ) -> VirsResult<Uuid> {
         let open_side = crate::adapters::utils::derive_open_side(close_side);
         let pnl_pct = crate::adapters::utils::sanitize_pnl_pct(pnl_pct);
         let row: (Uuid,) = sqlx::query_as(
@@ -323,7 +324,7 @@ impl AutoStore for PgAutoStore {
         result: &serde_json::Value,
         error: Option<&str>,
         llm_model: &str,
-    ) -> anyhow::Result<Uuid> {
+    ) -> VirsResult<Uuid> {
         let status = if error.is_some() {
             "failed"
         } else {
@@ -345,7 +346,7 @@ impl AutoStore for PgAutoStore {
         log_id: Uuid,
         execution_status: &str,
         intercept_reason: Option<&str>,
-    ) -> anyhow::Result<()> {
+    ) -> VirsResult<()> {
         // 拦截时同步更新 status='intercepted'，便于前端按状态筛选
         let status = if intercept_reason.is_some() {
             "intercepted"
@@ -368,7 +369,7 @@ impl AutoStore for PgAutoStore {
         Ok(())
     }
 
-    async fn load_analysis_logs(&self, bot_id: Uuid) -> anyhow::Result<Vec<AutoAnalysisLogEntry>> {
+    async fn load_analysis_logs(&self, bot_id: Uuid) -> VirsResult<Vec<AutoAnalysisLogEntry>> {
         let rows: Vec<(Uuid, Uuid, String, String, String, serde_json::Value, Option<String>, String, chrono::DateTime<chrono::Utc>)> =
             sqlx::query_as(
                 r#"SELECT id, bot_id, analysis_type, system_prompt, user_prompt, result, error, llm_model, created_at
@@ -392,7 +393,7 @@ impl AutoStore for PgAutoStore {
             .collect())
     }
 
-    async fn load_consecutive_losses(&self, bot_id: Uuid) -> anyhow::Result<i32> {
+    async fn load_consecutive_losses(&self, bot_id: Uuid) -> VirsResult<i32> {
         let pnl_rows: Vec<(f64,)> = sqlx::query_as(
             r#"SELECT pnl FROM qd_auto_trades
                WHERE bot_id = $1 AND status = 'closed'
@@ -413,7 +414,7 @@ impl AutoStore for PgAutoStore {
         Ok(count)
     }
 
-    async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()> {
+    async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()> {
         sqlx::query("DELETE FROM qd_auto_bots WHERE id = $1")
             .bind(bot_id)
             .execute(&self.db)

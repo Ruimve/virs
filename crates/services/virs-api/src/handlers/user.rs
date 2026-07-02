@@ -16,27 +16,24 @@ pub async fn list_users(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers)?;
 
-    let rows = sqlx::query_as::<_, (uuid::Uuid, String, String, Option<String>, bool, chrono::DateTime<chrono::Utc>)>(
+    let users = sqlx::query_as::<_, (uuid::Uuid, String, String, Option<String>, bool, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT id, username, role, email, is_active, created_at FROM qd_users ORDER BY created_at DESC"#,
     )
     .fetch_all(&state.db_pool)
-    .await;
+    .await?;
 
-    match rows {
-        Ok(users) => Ok(Json(ApiResponse::ok(serde_json::json!({
-            "users": users.iter().map(|(id, username, role, email, is_active, created_at)| {
-                serde_json::json!({
-                    "id": id.to_string(),
-                    "username": username,
-                    "role": role,
-                    "email": email,
-                    "is_active": is_active,
-                    "created_at": created_at.to_rfc3339(),
-                })
-            }).collect::<Vec<_>>()
-        })))),
-        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
-    }
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "users": users.iter().map(|(id, username, role, email, is_active, created_at)| {
+            serde_json::json!({
+                "id": id.to_string(),
+                "username": username,
+                "role": role,
+                "email": email,
+                "is_active": is_active,
+                "created_at": created_at.to_rfc3339(),
+            })
+        }).collect::<Vec<_>>()
+    }))))
 }
 
 pub async fn create_user(
@@ -57,9 +54,7 @@ pub async fn create_user(
         ));
     }
 
-    let password_hash = virs_utils::crypto::hash_password(password).map_err(|e| {
-        VirsError::Other(anyhow::anyhow!("Hash error: {}", e))
-    })?;
+    let password_hash = virs_utils::crypto::hash_password(password)?;
 
     let id = uuid::Uuid::new_v4();
     sqlx::query(
@@ -72,10 +67,7 @@ pub async fn create_user(
     .bind(role)
     .bind(email)
     .execute(&state.db_pool)
-    .await
-    .map_err(|e| {
-        VirsError::Other(anyhow::anyhow!("Database error: {}", e))
-    })?;
+    .await?;
 
     Ok(Json(ApiResponse::ok(
         serde_json::json!({"id": id.to_string()}),
@@ -106,10 +98,7 @@ pub async fn update_user(
     .bind(email)
     .bind(is_active)
     .execute(&state.db_pool)
-    .await
-    .map_err(|e| {
-        VirsError::Other(anyhow::anyhow!("Database error: {}", e))
-    })?;
+    .await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"updated": true}))))
 }
@@ -128,10 +117,7 @@ pub async fn delete_user(
     sqlx::query(r#"DELETE FROM qd_users WHERE id = $1"#)
         .bind(uuid_id)
         .execute(&state.db_pool)
-        .await
-        .map_err(|e| {
-            VirsError::Other(anyhow::anyhow!("Database error: {}", e))
-        })?;
+        .await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }

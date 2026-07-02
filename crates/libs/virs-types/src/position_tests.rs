@@ -50,22 +50,19 @@ fn p12_1_default_valid() {
 
 #[test]
 fn p12_2_zero_leverage() {
-    let mut config = RiskConfig::default();
-    config.max_leverage = 0;
+    let config = RiskConfig { max_leverage: 0, ..Default::default() };
     assert!(config.validate().is_err());
 }
 
 #[test]
 fn p12_3_negative_drawdown() {
-    let mut config = RiskConfig::default();
-    config.max_drawdown_pct = -0.1;
+    let config = RiskConfig { max_drawdown_pct: -0.1, ..Default::default() };
     assert!(config.validate().is_err());
 }
 
 #[test]
 fn p12_4_negative_position_pct() {
-    let mut config = RiskConfig::default();
-    config.max_position_per_symbol_pct = -1.0;
+    let config = RiskConfig { max_position_per_symbol_pct: -1.0, ..Default::default() };
     assert!(config.validate().is_err());
 }
 

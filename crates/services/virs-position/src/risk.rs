@@ -113,10 +113,7 @@ pub fn check_drawdown(
 
 /// 检查强平预警，返回到强平价的距离百分比。
 pub fn check_liquidation(config: &RiskConfig, position: &Position) -> Option<f64> {
-    let liq_price = match position.liquidation_price {
-        Some(p) => p,
-        None => return None,
-    };
+    let liq_price = position.liquidation_price?;
 
     let current = position.current_price;
     if current <= 0.0 || liq_price <= 0.0 {

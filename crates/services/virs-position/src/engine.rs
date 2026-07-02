@@ -615,7 +615,7 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                                             | OrderStatus::Failed
                                     )
                             })
-                            .map(|r| r.key().clone())
+                            .map(|r| *r.key())
                             .collect();
 
                         for oid in &active_order_ids {
@@ -683,10 +683,7 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
             match result {
                 Ok(funding) => {
                     let alert = {
-                        inner
-                            .risk_checker
-                            .lock()
-                            .unwrap()
+                        recover_lock(inner.risk_checker.lock())
                             .check_funding_rate(&sym, funding.rate)
                     };
                     if let Some(alert) = alert {
@@ -730,20 +727,14 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                 .collect();
 
             let snapshot = {
-                inner
-                    .tracker
-                    .lock()
-                    .unwrap()
+                recover_lock(inner.tracker.lock())
                     .update_unrealized(&position_refs, &current_prices)
             };
 
             // 5. 回撤检查
             let peak_equity = { recover_lock(inner.tracker.lock()).peak_equity() };
             let drawdown_action = {
-                inner
-                    .risk_checker
-                    .lock()
-                    .unwrap()
+                recover_lock(inner.risk_checker.lock())
                     .check_drawdown(peak_equity, snapshot.equity)
             };
             match drawdown_action {
@@ -950,10 +941,7 @@ pub(crate) async fn handle_ws_order_update(
 
         let is_reduce_only = order.reduce_only || {
             if let Some(ref ws_ps) = ws_position_side {
-                match (&order.side, ws_ps) {
-                    (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short) => true,
-                    _ => false,
-                }
+                matches!((&order.side, ws_ps), (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short))
             } else {
                 false
             }
@@ -1282,7 +1270,7 @@ pub(crate) async fn handle_open_position(
     if let Some(existing) = inner.positions.get(&key) {
         let position_id = existing.id;
         let existing_size = existing.size;
-        let existing_status = existing.status.clone();
+        let existing_status = existing.status;
         drop(existing);
         info!(
             symbol = %symbol, side = ?side, position_id = %position_id,
@@ -1828,7 +1816,7 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
             let position_side =
                 params
                     .position_side
-                    .unwrap_or_else(|| match (&params.side, params.reduce_only) {
+                    .unwrap_or(match (&params.side, params.reduce_only) {
                         (Side::Buy, false) | (Side::Sell, true) => PositionSide::Long,
                         _ => PositionSide::Short,
                     });

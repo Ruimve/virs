@@ -1,6 +1,7 @@
 //! LLM API client for bot AI services.
 
 use tracing::{debug, warn};
+use virs_error::{BotError, BotResult};
 
 pub struct LlmCallResult {
     pub content: serde_json::Value,
@@ -15,7 +16,7 @@ pub async fn call_llm_api(
     system_prompt: &str,
     user_prompt: &str,
     provider_name: &str,
-) -> anyhow::Result<LlmCallResult> {
+) -> BotResult<LlmCallResult> {
     let request_body = serde_json::json!({
         "model": model,
         "messages": [
@@ -39,7 +40,10 @@ pub async fn call_llm_api(
     if !response.status().is_success() {
         let status = response.status();
         let body_text = response.text().await.unwrap_or_default();
-        anyhow::bail!("{} API returned {}: {}", provider_name, status, body_text);
+        return Err(BotError::llm(format!(
+            "{} API returned {}: {}",
+            provider_name, status, body_text
+        )));
     }
 
     let json: serde_json::Value = response.json().await?;
@@ -50,7 +54,7 @@ pub async fn call_llm_api(
         .to_string();
 
     if content_str.is_empty() {
-        anyhow::bail!("AI returned empty response");
+        return Err(BotError::llm("AI returned empty response".to_string()));
     }
 
     let used_model = json["model"].as_str().unwrap_or(model).to_string();
@@ -60,7 +64,7 @@ pub async fn call_llm_api(
             "Failed to parse AI JSON response: {}, raw: {}",
             e, content_str
         );
-        e
+        BotError::llm(e.to_string())
     })?;
 
     Ok(LlmCallResult {

@@ -363,18 +363,13 @@ impl BinanceExchange {
             ed25519_signer,
             markets: None,
             testnet: false,
-            market_type: market_type.clone(),
+            market_type: *market_type,
         })
-    }
-
-    /// 返回 Ed25519 签名器引用（若配置了 Ed25519 密钥），供 WebSocket API 客户端使用
-    pub fn ed25519_signer(&self) -> Option<&BinanceEd25519Signer> {
-        self.ed25519_signer.as_ref()
     }
 
     /// Convert unified symbol (e.g. "BTC/USDT") to Binance format (e.g. "BTCUSDT").
     pub fn to_native_symbol(symbol: &str) -> String {
-        symbol.replace('/', "").replace('-', "")
+        symbol.replace(['/', '-'], "")
     }
 
     /// Convert Binance symbol to unified format.
@@ -383,8 +378,7 @@ impl BinanceExchange {
             "USDT", "USDC", "BUSD", "BTC", "ETH", "BNB", "EUR", "GBP", "TRY", "BRL", "ARS",
         ];
         for q in &quotes {
-            if native.ends_with(q) {
-                let base = &native[..native.len() - q.len()];
+            if let Some(base) = native.strip_suffix(q) {
                 if !base.is_empty() {
                     return format!("{}/{}", base, q);
                 }

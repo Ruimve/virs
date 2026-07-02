@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use tracing::info;
 use uuid::Uuid;
 use virs_api::EngineManager;
@@ -34,7 +34,6 @@ async fn main() -> Result<()> {
         tracing::warn!("WARNING: Using default ENCRYPTION_KEY. Change this in production!");
     }
     if config.server.secret_key == config.server.encryption_key {
-        tracing::error!("FATAL: SECRET_KEY and ENCRYPTION_KEY must be different!");
         anyhow::bail!("SECRET_KEY and ENCRYPTION_KEY must be different for security");
     }
 
@@ -71,7 +70,7 @@ async fn main() -> Result<()> {
             std::fs::read_to_string(base.join("migrations/init.sql"))
         })
         .or_else(|_| std::fs::read_to_string("/app/migrations/init.sql"))
-        .map_err(|e| anyhow::anyhow!("Failed to read migrations/init.sql: {}. Ensure the migrations directory is accessible from the working directory, next to the executable, or at /app/migrations/", e))?;
+        .context("Failed to read migrations/init.sql: ensure the migrations directory is accessible from the working directory, next to the executable, or at /app/migrations/")?;
     sqlx::raw_sql(&init_sql).execute(&db_pool).await?;
     info!("Database migrations applied");
 

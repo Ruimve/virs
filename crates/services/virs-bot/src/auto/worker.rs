@@ -154,7 +154,7 @@ impl AutoWorker {
     ///   - take_profit：同方向冷却 15 分钟（防止追高/追低）
     ///   - trend_reversal：反方向冷却 15 分钟（等待新趋势结构形成）
     ///   - 其他（position_timeout/risk_management/llm_decision）：双向冷却 15 分钟
-    /// 返回 Some(剩余秒数) 表示仍在冷却中，None 表示可以开仓。
+    ///     返回 Some(剩余秒数) 表示仍在冷却中，None 表示可以开仓。
     pub(crate) fn cooldown_remaining_secs(&self, new_side: &str) -> Option<i64> {
         let (closed_side, reason, closed_at) = self.last_close_event.as_ref()?;
         let elapsed = chrono::Utc::now().signed_duration_since(*closed_at);
@@ -695,8 +695,6 @@ impl AutoWorker {
             // 同步更新 trade 维度的 stop_loss（异步执行，失败仅记录日志）
             if let Some(trade_id) = self.current_trade_id {
                 let store = self.store.clone();
-                let trade_id = trade_id;
-                let new_stop = new_stop;
                 tokio::spawn(async move {
                     if let Err(e) = store.update_trade_stop_loss(trade_id, new_stop).await {
                         warn!(trade_id = %trade_id, error = %e, "Failed to update trade stop_loss");
@@ -1622,8 +1620,7 @@ impl AutoWorker {
             OrderEvent::OrderFailed {
                 order_id: _,
                 reason,
-            } => {
-                if self.pending_open.is_some() || self.pending_close.is_some() {
+            } if self.pending_open.is_some() || self.pending_close.is_some() => {
                     // 记录是开仓还是平仓失败（rollback 前判断）
                     let was_open = self.pending_open.is_some();
                     warn!(
@@ -1650,7 +1647,6 @@ impl AutoWorker {
                             error!(bot_id = %self.bot.id, error = %e, "Failed to update log on order failed");
                         }
                     }
-                }
             }
             OrderEvent::LiquidationWarning {
                 symbol,

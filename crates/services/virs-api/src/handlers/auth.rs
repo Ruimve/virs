@@ -40,8 +40,7 @@ pub async fn login(
     )
     .bind(&req.username)
     .fetch_optional(&state.db_pool)
-    .await
-    .map_err(|e| VirsError::Other(anyhow::anyhow!("Database error: {}", e)))?;
+    .await?;
 
     let (id, username, password_hash, role, email, is_active) = match row {
         Some(r) => r,
@@ -75,9 +74,7 @@ pub async fn login(
         &role,
         expiration_hours * 3600,
     );
-    let token = virs_utils::auth::encode_jwt(&claims, &secret).map_err(|e| {
-        VirsError::Other(anyhow::anyhow!("JWT error: {}", e))
-    })?;
+    let token = virs_utils::auth::encode_jwt(&claims, &secret)?;
 
     Ok(Json(ApiResponse::ok(
         serde_json::to_value(LoginResponse {
@@ -111,10 +108,10 @@ pub async fn get_user_info(
     )
     .bind(user_id)
     .fetch_optional(&state.db_pool)
-    .await;
+    .await?;
 
     match row {
-        Ok(Some((db_username, db_role, email, is_active))) => {
+        Some((db_username, db_role, email, is_active)) => {
             if !is_active {
                 return Err(VirsError::Http {
                     status: 403,
@@ -129,7 +126,6 @@ pub async fn get_user_info(
                 "is_active": is_active,
             }))))
         }
-        Ok(None) => Err(VirsError::not_found("User not found")),
-        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
+        None => Err(VirsError::not_found("User not found")),
     }
 }

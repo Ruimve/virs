@@ -10,6 +10,7 @@ use virs_api::handlers::ai_credentials::{parse_balance_response, parse_models_re
 use virs_api::handlers::response::ApiResponse;
 use virs_api::ws::{kline_event_to_json, position_to_ws_json};
 use virs_ccxt::ws_types::Candle;
+use virs_error::{ApiError, VirsError};
 use virs_market::types::{KlineEvent, KlineEventType, Timeframe};
 use virs_types::enums::{PositionSide, PositionStatus};
 use virs_types::position::Position;
@@ -99,11 +100,11 @@ fn int_3_1_api_response_ok_then_serialize() {
 }
 
 #[test]
-fn int_3_2_api_response_err_then_serialize() {
-    let resp = ApiResponse::err("operation failed");
-    let json = serde_json::to_value(&resp).unwrap();
+fn int_3_2_api_error_from_virs_error_then_serialize() {
+    let err = ApiError::from(VirsError::bad_request("operation failed"));
+    let json = serde_json::to_value(&err).unwrap();
     assert_eq!(json["success"], false);
-    assert!(json["data"].is_null());
+    assert_eq!(json["status"], 400);
     assert_eq!(json["message"], "operation failed");
 }
 

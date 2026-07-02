@@ -6,6 +6,7 @@ use crate::common::ai_client;
 use crate::common::ports::CredentialStore;
 use crate::common::ports::LlmProviderResolver;
 use crate::grid::ports::GridBotConfig;
+use virs_error::BotResult;
 
 /// Grid AI 决策动作
 #[derive(Debug, Clone, PartialEq)]
@@ -84,7 +85,7 @@ impl GridAiService {
         bot: &GridBotConfig,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> anyhow::Result<(GridAiDecision, String)> {
+    ) -> BotResult<(GridAiDecision, String)> {
         let credentials = self.credential_store.load_credentials(bot.user_id).await?;
         let (api_key, base_url, model, _provider) = self.llm_resolver.resolve(&credentials)?;
 
@@ -99,18 +100,18 @@ impl GridAiService {
         )
         .await?;
 
-        let decision = parse_grid_decision(&result.content)?;
+        let decision = parse_grid_decision(&result.content);
         Ok((decision, result.used_model))
     }
 }
 
-pub fn parse_grid_decision(json: &serde_json::Value) -> anyhow::Result<GridAiDecision> {
+pub fn parse_grid_decision(json: &serde_json::Value) -> GridAiDecision {
     let decision = &json["decision"];
     let grid = &json["grid"];
     let risk = &json["risk"];
     let market = &json["market"];
 
-    Ok(GridAiDecision {
+    GridAiDecision {
         action: decision["action"].as_str().unwrap_or("hold").to_string(),
         reason: decision["reason"].as_str().unwrap_or("").to_string(),
         confidence: decision["confidence"].as_f64().unwrap_or(0.5),
@@ -126,5 +127,5 @@ pub fn parse_grid_decision(json: &serde_json::Value) -> anyhow::Result<GridAiDec
             .to_string(),
         analysis: json["analysis"].as_str().unwrap_or("").to_string(),
         risk_warning: json["risk_warning"].as_str().unwrap_or("").to_string(),
-    })
+    }
 }

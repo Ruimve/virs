@@ -9,7 +9,7 @@
 //! Stream formats:
 //! - Spot partial book depth:    { "lastUpdateId": 160, "bids": [[p,a]], "asks": [[p,a]] }
 //! - Perpetual partial book depth: { "e":"depthUpdate", "E":..., "T":..., "s":"BTCUSDT",
-//!                                    "U":..., "u":..., "pu":..., "b":[[p,a]], "a":[[p,a]] }
+//!   "U":..., "u":..., "pu":..., "b":[[p,a]], "a":[[p,a]] }
 //! - Combined stream wrapper:    { "stream": "<name>", "data": <payload> }
 
 use std::collections::HashMap;

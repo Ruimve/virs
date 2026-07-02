@@ -50,28 +50,25 @@ pub async fn list_credentials(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers)?;
 
-    let rows = sqlx::query_as::<_, (uuid::Uuid, String, Option<String>, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(
+    let creds = sqlx::query_as::<_, (uuid::Uuid, String, Option<String>, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT id, provider, label, is_default, created_at, updated_at FROM qd_ai_credentials WHERE user_id = $1 ORDER BY created_at DESC"#,
     )
     .bind(user_id)
     .fetch_all(&state.db_pool)
-    .await;
+    .await?;
 
-    match rows {
-        Ok(creds) => Ok(Json(ApiResponse::ok(serde_json::json!({
-            "items": creds.iter().map(|(id, provider, label, is_default, created_at, updated_at)| {
-                serde_json::json!({
-                    "id": id.to_string(),
-                    "provider": provider,
-                    "label": label,
-                    "is_default": is_default,
-                    "created_at": created_at.to_rfc3339(),
-                    "updated_at": updated_at.to_rfc3339(),
-                })
-            }).collect::<Vec<_>>()
-        })))),
-        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
-    }
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "items": creds.iter().map(|(id, provider, label, is_default, created_at, updated_at)| {
+            serde_json::json!({
+                "id": id.to_string(),
+                "provider": provider,
+                "label": label,
+                "is_default": is_default,
+                "created_at": created_at.to_rfc3339(),
+                "updated_at": updated_at.to_rfc3339(),
+            })
+        }).collect::<Vec<_>>()
+    }))))
 }
 
 pub async fn save_credential(
@@ -97,9 +94,7 @@ pub async fn save_credential(
 
     // Encrypt API key with AES-256-GCM
     let encrypted_key =
-        virs_utils::crypto::encrypt_with_key(api_key, &state.encryption_key).map_err(|e| {
-            VirsError::Other(anyhow::anyhow!("Encryption error: {}", e))
-        })?;
+        virs_utils::crypto::encrypt_with_key(api_key, &state.encryption_key)?;
 
     sqlx::query(
         r#"INSERT INTO qd_ai_credentials (id, user_id, provider, encrypted_api_key, model, label, is_default, created_at)
@@ -115,10 +110,7 @@ pub async fn save_credential(
     .bind(label)
     .bind(is_default)
     .execute(&state.db_pool)
-    .await
-    .map_err(|e| {
-        VirsError::Other(anyhow::anyhow!("Database error: {}", e))
-    })?;
+    .await?;
 
     Ok(Json(ApiResponse::ok(
         serde_json::json!({"id": id.to_string()}),
@@ -136,10 +128,7 @@ pub async fn delete_credential(
         .bind(id)
         .bind(user_id)
         .execute(&state.db_pool)
-        .await
-        .map_err(|e| {
-            VirsError::Other(anyhow::anyhow!("Database error: {}", e))
-        })?;
+        .await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
@@ -157,17 +146,12 @@ pub async fn test_credential(
     )
     .bind(user_id)
     .fetch_optional(&state.db_pool)
-    .await
-    .unwrap_or(None);
+    .await?;
 
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
             let key =
-                virs_utils::crypto::decrypt_with_key(&enc_key, &state.encryption_key).map_err(
-                    |_| {
-                        VirsError::Other(anyhow::anyhow!("Failed to decrypt API key"))
-                    },
-                )?;
+                virs_utils::crypto::decrypt_with_key(&enc_key, &state.encryption_key)?;
             (p, key)
         }
         None => {
@@ -225,17 +209,12 @@ pub async fn fetch_models(
     )
     .bind(user_id)
     .fetch_optional(&state.db_pool)
-    .await
-    .unwrap_or(None);
+    .await?;
 
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
             let key =
-                virs_utils::crypto::decrypt_with_key(&enc_key, &state.encryption_key).map_err(
-                    |_| {
-                        VirsError::Other(anyhow::anyhow!("Failed to decrypt API key"))
-                    },
-                )?;
+                virs_utils::crypto::decrypt_with_key(&enc_key, &state.encryption_key)?;
             (p, key)
         }
         None => {
@@ -303,17 +282,12 @@ pub async fn fetch_balance(
     )
     .bind(user_id)
     .fetch_optional(&state.db_pool)
-    .await
-    .unwrap_or(None);
+    .await?;
 
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
             let key =
-                virs_utils::crypto::decrypt_with_key(&enc_key, &state.encryption_key).map_err(
-                    |_| {
-                        VirsError::Other(anyhow::anyhow!("Failed to decrypt API key"))
-                    },
-                )?;
+                virs_utils::crypto::decrypt_with_key(&enc_key, &state.encryption_key)?;
             (p, key)
         }
         None => {

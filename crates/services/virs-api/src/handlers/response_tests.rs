@@ -2,6 +2,7 @@
 
 use crate::handlers::response::ApiResponse;
 use serde_json::json;
+use virs_error::{ApiError, VirsError};
 
 // ============================================================
 // TC-R1: ApiResponse::ok
@@ -27,17 +28,17 @@ fn r1_3_ok_message_none() {
 }
 
 // ============================================================
-// TC-R2: ApiResponse::err
+// TC-R2: ApiError::from(VirsError) error response
 // ============================================================
 
 #[test]
 fn r2_1_err_success_false() {
-    let resp = ApiResponse::err("something went wrong");
-    assert!(!resp.success);
+    let err = ApiError::from(VirsError::bad_request("something went wrong"));
+    assert!(!err.success);
 }
 
 #[test]
 fn r2_2_err_message_set() {
-    let resp = ApiResponse::err("error message");
-    assert_eq!(resp.message, Some("error message".to_string()));
+    let err = ApiError::from(VirsError::bad_request("error message"));
+    assert_eq!(err.message, "error message");
 }

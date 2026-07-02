@@ -25,16 +25,7 @@ fn make_1m(open_time: i64, open: f64, high: f64, low: f64, close: f64, closed: b
     }
 }
 
-// ── INT-1: Timeframe roundtrip ─────────────────────────────
-
-#[test]
-fn int_1_1_timeframe_roundtrip() {
-    for tf in Timeframe::all() {
-        let s = tf.as_str();
-        let back = Timeframe::from_str_lossy(s).unwrap();
-        assert_eq!(*tf, back);
-    }
-}
+// ── INT-1: Timeframe alignment ─────────────────────────────
 
 #[test]
 fn int_1_2_align_then_aggregate() {

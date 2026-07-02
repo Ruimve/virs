@@ -3077,6 +3077,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "virs-error",
  "virs-models",
  "virs-types",
 ]
@@ -3113,6 +3114,7 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
+ "virs-error",
 ]
 
 [[package]]
@@ -3132,13 +3134,11 @@ dependencies = [
 name = "virs-exchange"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "dashmap",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -3162,6 +3162,7 @@ dependencies = [
  "tokio",
  "tracing",
  "virs-ccxt",
+ "virs-error",
  "virs-exchange",
  "virs-types",
 ]
@@ -3182,7 +3183,6 @@ dependencies = [
 name = "virs-position"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "dashmap",
@@ -3202,7 +3202,6 @@ dependencies = [
 name = "virs-types"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "futures-core",
@@ -3227,6 +3226,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "virs-error",
 ]
 
 [[package]]

@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use virs_error::VirsResult;
 
 // Re-export kline types from ccxt
 pub use virs_ccxt::ws_types::{Candle, KlineWsClient, WsCandleUpdate, WsEvent};
@@ -64,18 +65,6 @@ impl Timeframe {
             Timeframe::H1 => 3_600_000,
             Timeframe::H4 => 14_400_000,
             Timeframe::D1 => 86_400_000,
-        }
-    }
-
-    pub fn from_str_lossy(s: &str) -> Option<Self> {
-        match s {
-            "1m" => Some(Timeframe::M1),
-            "5m" => Some(Timeframe::M5),
-            "15m" => Some(Timeframe::M15),
-            "1h" => Some(Timeframe::H1),
-            "4h" => Some(Timeframe::H4),
-            "1d" | "1D" => Some(Timeframe::D1),
-            _ => None,
         }
     }
 
@@ -244,7 +233,7 @@ pub trait KlineSource: Send + Sync {
         limit: u32,
         since: Option<i64>,
         market_type: Option<MarketType>,
-    ) -> anyhow::Result<Vec<Candle>>;
+    ) -> VirsResult<Vec<Candle>>;
 }
 
 /// Kline persistence — saves/loads candles to/from storage.
@@ -256,14 +245,14 @@ pub trait KlinePersistence: Send + Sync {
         symbol: &str,
         timeframe: &str,
         candles: &[Candle],
-    ) -> anyhow::Result<()>;
+    ) -> VirsResult<()>;
 
     async fn load_candles(
         &self,
         exchange: &str,
         symbol: &str,
         timeframe: &str,
-    ) -> anyhow::Result<Vec<Candle>>;
+    ) -> VirsResult<Vec<Candle>>;
 }
 
 pub fn subscription_key(exchange: &str, symbol: &str) -> String {

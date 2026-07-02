@@ -37,6 +37,11 @@ pub enum VirsError {
     #[error(transparent)]
     Exchange(#[from] ExchangeError),
 
+    /// Database error — classified as retryable, 503, category=database.
+    #[cfg(feature = "sqlx")]
+    #[error("Database error: {0}")]
+    Database(#[from] sqlx::Error),
+
     /// Generic HTTP-level error (validation, auth, not-found, conflict, etc.)
     /// used by API handlers for request-level failures that don't map to a
     /// specific domain error type.
@@ -73,6 +78,8 @@ impl Retryable for VirsError {
             Self::Bot(e) => e.is_retryable(),
             Self::Position(e) => e.is_retryable(),
             Self::Exchange(e) => e.is_retryable(),
+            #[cfg(feature = "sqlx")]
+            Self::Database(_) => true,
             Self::Http { .. } | Self::Other(_) => false,
         }
     }
@@ -84,6 +91,8 @@ impl Categorized for VirsError {
             Self::Bot(e) => e.category(),
             Self::Position(e) => e.category(),
             Self::Exchange(e) => e.category(),
+            #[cfg(feature = "sqlx")]
+            Self::Database(_) => ErrorCategory::Database,
             Self::Http { status, .. } => match status {
                 401 => ErrorCategory::Authentication,
                 404 => ErrorCategory::NotFound,
@@ -101,6 +110,8 @@ impl HttpStatus for VirsError {
             Self::Bot(e) => e.http_status(),
             Self::Position(e) => e.http_status(),
             Self::Exchange(e) => e.http_status(),
+            #[cfg(feature = "sqlx")]
+            Self::Database(_) => 503,
             Self::Http { status, .. } => *status,
             Self::Other(_) => 500,
         }
@@ -113,6 +124,8 @@ impl ErrorCode for VirsError {
             Self::Bot(e) => e.error_code(),
             Self::Position(e) => e.error_code(),
             Self::Exchange(e) => e.error_code(),
+            #[cfg(feature = "sqlx")]
+            Self::Database(_) => "DATABASE_ERROR",
             Self::Http { status, .. } => match status {
                 400 => "BAD_REQUEST",
                 401 => "UNAUTHORIZED",

@@ -3,6 +3,7 @@
 //! Uses virs-exchange's Exchange trait to fetch klines from exchange REST API.
 
 use async_trait::async_trait;
+use virs_error::{VirsError, VirsResult};
 use virs_exchange::Exchanges;
 use virs_types::enums::MarketType;
 
@@ -42,7 +43,7 @@ impl KlineSource for ExchangeKlineSource {
         limit: u32,
         since: Option<i64>,
         market_type: Option<MarketType>,
-    ) -> anyhow::Result<Vec<Candle>> {
+    ) -> VirsResult<Vec<Candle>> {
         // Try to find exchange by name with market type suffix
         let key = if let Some(mt) = market_type {
             let key = format!("{}:{}", exchange, mt);
@@ -55,7 +56,10 @@ impl KlineSource for ExchangeKlineSource {
                     .into_iter()
                     .find(|n| n.starts_with(&format!("{}:", exchange)))
                     .ok_or_else(|| {
-                        anyhow::anyhow!("Exchange '{}' not found in registry", exchange)
+                        VirsError::not_found(format!(
+                            "Exchange '{}' not found in registry",
+                            exchange
+                        ))
                     })?
             }
         } else {
@@ -63,13 +67,18 @@ impl KlineSource for ExchangeKlineSource {
                 .registered_names()
                 .into_iter()
                 .find(|n| n.starts_with(&format!("{}:", exchange)))
-                .ok_or_else(|| anyhow::anyhow!("Exchange '{}' not found in registry", exchange))?
+                .ok_or_else(|| {
+                    VirsError::not_found(format!(
+                        "Exchange '{}' not found in registry",
+                        exchange
+                    ))
+                })?
         };
 
         let ex = self
             .registry
             .get(&key)
-            .ok_or_else(|| anyhow::anyhow!("Exchange '{}' not available", exchange))?;
+            .ok_or_else(|| VirsError::not_found(format!("Exchange '{}' not available", exchange)))?;
 
         let klines = ex.get_klines(symbol, timeframe, limit, since).await?;
 

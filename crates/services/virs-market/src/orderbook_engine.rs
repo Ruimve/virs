@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use tokio::sync::{broadcast, Mutex};
+use virs_error::VirsResult;
 
 use crate::types::{
     subscription_key, MarketType, OrderBookEngineConfig, OrderBookEvent, OrderBookWsClient,
@@ -173,7 +174,7 @@ impl OrderBookEngine {
         exchange: &str,
         symbol: &str,
         market_type: MarketType,
-    ) -> anyhow::Result<()> {
+    ) -> VirsResult<()> {
         // Lazy start: auto-start the engine on first subscription
         if !self.started.load(std::sync::atomic::Ordering::Relaxed) {
             self.start().await;
@@ -216,7 +217,7 @@ impl OrderBookEngine {
         Ok(())
     }
 
-    pub async fn unsubscribe(&self, exchange: &str, symbol: &str) -> anyhow::Result<()> {
+    pub async fn unsubscribe(&self, exchange: &str, symbol: &str) -> VirsResult<()> {
         let key = subscription_key(exchange, symbol);
 
         let market_type = match self.subscriptions.get(&key) {

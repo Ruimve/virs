@@ -40,8 +40,7 @@ pub async fn ai_status(
     let rows: Vec<String> =
         sqlx::query_scalar(r#"SELECT DISTINCT provider FROM qd_ai_credentials"#)
             .fetch_all(&state.db_pool)
-            .await
-            .unwrap_or_default();
+            .await?;
 
     let configured = !rows.is_empty();
 
@@ -193,13 +192,11 @@ async fn call_llm_with_fallback(
            FROM qd_ai_credentials ORDER BY created_at DESC LIMIT 1"#,
     )
     .fetch_optional(&state.db_pool)
-    .await
-    .map_err(|e| anyhow::anyhow!("DB error: {}", e))?;
+    .await?;
 
     let (api_key, base_url, model) = match row {
         Some((provider, encrypted_key)) => {
-            let decrypted_key = virs_utils::crypto::decrypt_with_key(&encrypted_key, &state.encryption_key)
-                .map_err(|e| anyhow::anyhow!("Decryption error: {}", e))?;
+            let decrypted_key = virs_utils::crypto::decrypt_with_key(&encrypted_key, &state.encryption_key)?;
 
             let resolved_base_url = match resolve_provider_base_url(&provider) {
                 Some(url) => url.to_string(),

@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 use tracing;
+use virs_error::{VirsError, VirsResult};
 
 use super::aggregator::Aggregator;
 use super::cache::SymbolCache;
@@ -24,7 +25,7 @@ impl GapDetector {
         source: &Arc<dyn KlineSource>,
         event_tx: &tokio::sync::broadcast::Sender<KlineEvent>,
         market_type: MarketType,
-    ) -> anyhow::Result<usize> {
+    ) -> VirsResult<usize> {
         let last_closed_1m = {
             let guard = cache.lock().await;
             guard.last_closed_1m()
@@ -129,7 +130,7 @@ impl GapDetector {
                 exchange: exchange.to_string(),
                 symbol: symbol.to_string(),
                 timeframe: Timeframe::M1,
-                candle: fetched.last().cloned().unwrap_or_else(|| Candle {
+                candle: fetched.last().cloned().unwrap_or(Candle {
                     open_time: 0,
                     close_time: 0,
                     open: 0.0,
@@ -161,12 +162,12 @@ impl GapDetector {
         source: &Arc<dyn KlineSource>,
         event_tx: &tokio::sync::broadcast::Sender<KlineEvent>,
         market_type: MarketType,
-    ) -> anyhow::Result<usize> {
+    ) -> VirsResult<usize> {
         tracing::debug!("[GapDetector] Initial load for {}/{}", exchange, symbol);
 
         let (result_1m, results_high): (
-            anyhow::Result<Vec<Candle>>,
-            Vec<(Timeframe, anyhow::Result<Vec<Candle>>)>,
+            VirsResult<Vec<Candle>>,
+            Vec<(Timeframe, VirsResult<Vec<Candle>>)>,
         ) = {
             let fetch_1m = source.fetch_klines(
                 exchange,
@@ -174,7 +175,7 @@ impl GapDetector {
                 "1m",
                 INITIAL_1M_LIMIT,
                 None,
-                Some(market_type.clone()),
+                Some(market_type),
             );
             let fetch_m5 = source.fetch_klines(
                 exchange,
@@ -182,7 +183,7 @@ impl GapDetector {
                 "5m",
                 INITIAL_HIGH_TF_LIMIT,
                 None,
-                Some(market_type.clone()),
+                Some(market_type),
             );
             let fetch_m15 = source.fetch_klines(
                 exchange,
@@ -190,7 +191,7 @@ impl GapDetector {
                 "15m",
                 INITIAL_HIGH_TF_LIMIT,
                 None,
-                Some(market_type.clone()),
+                Some(market_type),
             );
             let fetch_h1 = source.fetch_klines(
                 exchange,
@@ -198,7 +199,7 @@ impl GapDetector {
                 "1h",
                 INITIAL_HIGH_TF_LIMIT,
                 None,
-                Some(market_type.clone()),
+                Some(market_type),
             );
             let fetch_h4 = source.fetch_klines(
                 exchange,
@@ -206,7 +207,7 @@ impl GapDetector {
                 "4h",
                 INITIAL_HIGH_TF_LIMIT,
                 None,
-                Some(market_type.clone()),
+                Some(market_type),
             );
             let fetch_d1 = source.fetch_klines(
                 exchange,
@@ -214,7 +215,7 @@ impl GapDetector {
                 "1d",
                 INITIAL_HIGH_TF_LIMIT,
                 None,
-                Some(market_type.clone()),
+                Some(market_type),
             );
 
             let (r_1m, r_m5, r_m15, r_h1, r_h4, r_d1) =
@@ -233,11 +234,11 @@ impl GapDetector {
         let candles_1m = match result_1m {
             Ok(c) if !c.is_empty() => c,
             Ok(_) => {
-                return Err(anyhow::anyhow!(
+                return Err(VirsError::Other(anyhow::anyhow!(
                     "No 1m candles returned for {}/{}",
                     exchange,
                     symbol
-                ));
+                )));
             }
             Err(e) => {
                 return Err(e);
@@ -352,7 +353,7 @@ impl GapDetector {
                 exchange: exchange.to_string(),
                 symbol: symbol.to_string(),
                 timeframe: Timeframe::M1,
-                candle: candles_1m.last().cloned().unwrap_or_else(|| Candle {
+                candle: candles_1m.last().cloned().unwrap_or(Candle {
                     open_time: 0,
                     close_time: 0,
                     open: 0.0,

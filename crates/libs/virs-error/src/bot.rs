@@ -11,22 +11,16 @@ pub enum BotError {
     Credential(String),
     #[error("LLM error: {0}")]
     Llm(String),
-    #[error("Internal error: {0}")]
-    Internal(String),
+    /// LLM HTTP request transport error (network/timeout/decode failure from reqwest).
+    /// Classified as retryable network error so transient failures can be retried.
+    #[cfg(feature = "reqwest")]
+    #[error("LLM request error: {0}")]
+    Reqwest(#[from] reqwest::Error),
 }
 
 impl BotError {
-    pub fn order_execution(msg: impl Into<String>) -> Self {
-        Self::OrderExecution(msg.into())
-    }
-    pub fn credential(msg: impl Into<String>) -> Self {
-        Self::Credential(msg.into())
-    }
     pub fn llm(msg: impl Into<String>) -> Self {
         Self::Llm(msg.into())
-    }
-    pub fn internal(msg: impl Into<String>) -> Self {
-        Self::Internal(msg.into())
     }
 }
 
@@ -37,7 +31,9 @@ impl Retryable for BotError {
     fn is_retryable(&self) -> bool {
         match self {
             Self::OrderExecution(_) | Self::Llm(_) => true,
-            Self::Credential(_) | Self::Internal(_) => false,
+            #[cfg(feature = "reqwest")]
+            Self::Reqwest(_) => true,
+            Self::Credential(_) => false,
         }
     }
 }
@@ -48,7 +44,8 @@ impl Categorized for BotError {
             Self::OrderExecution(_) => ErrorCategory::Internal,
             Self::Credential(_) => ErrorCategory::Authentication,
             Self::Llm(_) => ErrorCategory::Internal,
-            Self::Internal(_) => ErrorCategory::Internal,
+            #[cfg(feature = "reqwest")]
+            Self::Reqwest(_) => ErrorCategory::Network,
         }
     }
 }
@@ -57,6 +54,8 @@ impl HttpStatus for BotError {
     fn http_status(&self) -> u16 {
         match self {
             Self::Credential(_) => 401,
+            #[cfg(feature = "reqwest")]
+            Self::Reqwest(_) => 503,
             _ => 500,
         }
     }
@@ -68,7 +67,8 @@ impl ErrorCode for BotError {
             Self::OrderExecution(_) => "BOT_ORDER_EXECUTION_FAILED",
             Self::Credential(_) => "BOT_CREDENTIAL_ERROR",
             Self::Llm(_) => "BOT_LLM_ERROR",
-            Self::Internal(_) => "BOT_INTERNAL",
+            #[cfg(feature = "reqwest")]
+            Self::Reqwest(_) => "BOT_LLM_NETWORK_ERROR",
         }
     }
 }

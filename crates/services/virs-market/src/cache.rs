@@ -66,6 +66,12 @@ pub struct SymbolCache {
     timeframes: HashMap<Timeframe, TimeframeBuffer>,
 }
 
+impl Default for SymbolCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SymbolCache {
     pub fn new() -> Self {
         let mut timeframes = HashMap::new();

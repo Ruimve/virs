@@ -3,7 +3,7 @@
 //! These types map directly to database rows (sqlx FromRow).
 //! Enum types (Side, PositionSide, MarketType, etc.) are re-exported from virs-types
 //! to avoid duplicate definitions.
-//! Shared domain types (Kline, ApiResponse, PaginationParams, ExchangePosition, etc.)
+//! Shared domain types (Kline, ExchangePosition, etc.)
 //! are also re-exported from virs-types::market.
 
 pub mod auto;

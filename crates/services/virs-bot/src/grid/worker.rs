@@ -441,7 +441,6 @@ impl GridWorker {
                         self.levels[level_idx].sell_order_id = Some(order.id);
                     }
                     info!(bot_id = %self.bot.id, level = self.levels[level_idx].level, side = %side, order_id = %order.id, "Grid order placed");
-                    return;
                 }
             }
         }
@@ -632,11 +631,17 @@ impl GridWorker {
     // ── 历史交易加载 ────────────────────────────────────────
 
     pub(crate) async fn load_existing_trades(&mut self) {
-        let mut trades = self
-            .store
-            .load_trades(self.bot.id)
-            .await
-            .unwrap_or_default();
+        let mut trades = match self.store.load_trades(self.bot.id).await {
+            Ok(t) => t,
+            Err(e) => {
+                error!(
+                    bot_id = %self.bot.id,
+                    error = %e,
+                    "Failed to load existing grid trades, skipping restore"
+                );
+                return;
+            }
+        };
         let max_dist = self.grid_spacing();
         trades.sort_by_key(|t| t.opened_at);
 

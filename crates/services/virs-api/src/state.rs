@@ -8,6 +8,7 @@ use tokio::sync::{broadcast, mpsc};
 
 use virs_bot::auto::types::AutoCommand;
 use virs_bot::grid::types::GridCommand;
+use virs_error::VirsResult;
 use virs_exchange::Exchanges;
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_types::position::EngineEvent;
@@ -45,7 +46,7 @@ pub trait EngineManager: Send + Sync {
     /// Ensure all engines (Position, Grid, Auto) are started.
     /// Called when the first bot is created after wizard completion.
     /// `paper_mode` only takes effect on the first call; subsequent calls are no-ops.
-    async fn ensure_started(&self, paper_mode: bool) -> Result<(), String>;
+    async fn ensure_started(&self, paper_mode: bool) -> VirsResult<()>;
 
     /// Get the grid engine command sender (None if engines not started)
     fn grid_cmd_tx(&self) -> Option<mpsc::Sender<GridCommand>>;
@@ -67,7 +68,7 @@ pub trait EngineManager: Send + Sync {
 
     /// Restore services if bots exist in DB but engines are not started.
     /// Called once at server startup. No-op if engines already started or no bots exist.
-    async fn restore_if_needed(&self) -> anyhow::Result<()>;
+    async fn restore_if_needed(&self) -> VirsResult<()>;
 }
 
 /// API 应用状态

@@ -48,18 +48,6 @@ fn t1_5_timeframe_default_limit() {
 }
 
 #[test]
-fn t1_6_timeframe_from_str_lossy() {
-    assert_eq!(Timeframe::from_str_lossy("1m"), Some(Timeframe::M1));
-    assert_eq!(Timeframe::from_str_lossy("5m"), Some(Timeframe::M5));
-    assert_eq!(Timeframe::from_str_lossy("15m"), Some(Timeframe::M15));
-    assert_eq!(Timeframe::from_str_lossy("1h"), Some(Timeframe::H1));
-    assert_eq!(Timeframe::from_str_lossy("4h"), Some(Timeframe::H4));
-    assert_eq!(Timeframe::from_str_lossy("1d"), Some(Timeframe::D1));
-    assert_eq!(Timeframe::from_str_lossy("1D"), Some(Timeframe::D1));
-    assert_eq!(Timeframe::from_str_lossy("invalid"), None);
-}
-
-#[test]
 fn t1_7_timeframe_display() {
     assert_eq!(format!("{}", Timeframe::M1), "1m");
     assert_eq!(format!("{}", Timeframe::H1), "1h");

@@ -88,7 +88,7 @@ fn g2_1_parse_decision_complete() {
         "risk_warning": "Low volatility"
     });
 
-    let decision = parse_grid_decision(&json).unwrap();
+    let decision = parse_grid_decision(&json);
     assert_eq!(decision.action, "adjust_grid");
     assert_eq!(decision.reason, "Bollinger band narrowing");
     assert!((decision.confidence - 0.8).abs() < 1e-10);
@@ -104,7 +104,7 @@ fn g2_1_parse_decision_complete() {
 #[test]
 fn g2_2_parse_decision_defaults() {
     let json = serde_json::json!({});
-    let decision = parse_grid_decision(&json).unwrap();
+    let decision = parse_grid_decision(&json);
     assert_eq!(decision.action, "hold"); // default
     assert_eq!(decision.reason, ""); // default
     assert!((decision.confidence - 0.5).abs() < 1e-10); // default

@@ -17,27 +17,24 @@ pub async fn list_credentials(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers)?;
 
-    let rows = sqlx::query_as::<_, (uuid::Uuid, String, String, String, chrono::DateTime<chrono::Utc>)>(
+    let creds = sqlx::query_as::<_, (uuid::Uuid, String, String, String, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT id, exchange, label, market_type, created_at FROM qd_exchange_credentials WHERE user_id = $1 ORDER BY created_at DESC"#,
     )
     .bind(user_id)
     .fetch_all(&state.db_pool)
-    .await;
+    .await?;
 
-    match rows {
-        Ok(creds) => Ok(Json(ApiResponse::ok(serde_json::json!({
-            "items": creds.iter().map(|(id, exchange, label, market_type, created_at)| {
-                serde_json::json!({
-                    "id": id.to_string(),
-                    "exchange": exchange,
-                    "label": label,
-                    "market_type": market_type,
-                    "created_at": created_at.to_rfc3339(),
-                })
-            }).collect::<Vec<_>>()
-        })))),
-        Err(e) => Err(VirsError::Other(anyhow::anyhow!("Database error: {}", e))),
-    }
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "items": creds.iter().map(|(id, exchange, label, market_type, created_at)| {
+            serde_json::json!({
+                "id": id.to_string(),
+                "exchange": exchange,
+                "label": label,
+                "market_type": market_type,
+                "created_at": created_at.to_rfc3339(),
+            })
+        }).collect::<Vec<_>>()
+    }))))
 }
 
 pub async fn save_credential(
@@ -64,19 +61,12 @@ pub async fn save_credential(
 
     // Encrypt sensitive fields with AES-256-GCM
     let encrypted_api_key =
-        virs_utils::crypto::encrypt_with_key(api_key, &state.encryption_key).map_err(|e| {
-            VirsError::Other(anyhow::anyhow!("Encryption error: {}", e))
-        })?;
+        virs_utils::crypto::encrypt_with_key(api_key, &state.encryption_key)?;
     let encrypted_secret =
-        virs_utils::crypto::encrypt_with_key(api_secret, &state.encryption_key).map_err(|e| {
-            VirsError::Other(anyhow::anyhow!("Encryption error: {}", e))
-        })?;
+        virs_utils::crypto::encrypt_with_key(api_secret, &state.encryption_key)?;
     let encrypted_passphrase = passphrase
         .map(|p| virs_utils::crypto::encrypt_with_key(p, &state.encryption_key))
-        .transpose()
-        .map_err(|e| {
-            VirsError::Other(anyhow::anyhow!("Encryption error: {}", e))
-        })?;
+        .transpose()?;
 
     sqlx::query(
         r#"INSERT INTO qd_exchange_credentials (id, user_id, exchange, label, encrypted_api_key, encrypted_api_secret, encrypted_passphrase, market_type, created_at)
@@ -93,10 +83,7 @@ pub async fn save_credential(
     .bind(&encrypted_passphrase)
     .bind(market_type)
     .execute(&state.db_pool)
-    .await
-    .map_err(|e| {
-        VirsError::Other(anyhow::anyhow!("Database error: {}", e))
-    })?;
+    .await?;
 
     // Auto-register exchange in registry for immediate use
     let mt = match market_type {
@@ -134,10 +121,7 @@ pub async fn delete_credential(
         .bind(id)
         .bind(user_id)
         .execute(&state.db_pool)
-        .await
-        .map_err(|e| {
-            VirsError::Other(anyhow::anyhow!("Database error: {}", e))
-        })?;
+        .await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
@@ -384,8 +368,7 @@ pub async fn exchange_status(
     )
     .bind(user_id)
     .fetch_optional(&state.db_pool)
-    .await
-    .unwrap_or(None);
+    .await?;
 
     match row {
         Some((exchange, market_type)) => Ok(Json(ApiResponse::ok(serde_json::json!({

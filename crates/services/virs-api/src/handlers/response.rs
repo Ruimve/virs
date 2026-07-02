@@ -18,14 +18,6 @@ impl ApiResponse {
             message: None,
         }
     }
-
-    pub fn err(msg: impl Into<String>) -> Self {
-        Self {
-            success: false,
-            data: serde_json::Value::Null,
-            message: Some(msg.into()),
-        }
-    }
 }
 
 /// Extract user_id from JWT in Authorization header.

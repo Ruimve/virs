@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use virs_error::VirsResult;
 
 /// AI 分析日志持久化记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,9 +62,9 @@ pub struct GridBotConfig {
 /// 网格数据存储端口
 #[async_trait]
 pub trait GridStore: Send + Sync {
-    async fn load_running_bots(&self) -> anyhow::Result<Vec<GridBotConfig>>;
-    async fn load_bot(&self, bot_id: Uuid) -> anyhow::Result<Option<GridBotConfig>>;
-    async fn load_trades(&self, bot_id: Uuid) -> anyhow::Result<Vec<GridTradeRecord>>;
+    async fn load_running_bots(&self) -> VirsResult<Vec<GridBotConfig>>;
+    async fn load_bot(&self, bot_id: Uuid) -> VirsResult<Option<GridBotConfig>>;
+    async fn load_trades(&self, bot_id: Uuid) -> VirsResult<Vec<GridTradeRecord>>;
     async fn record_open_trade(
         &self,
         bot_id: Uuid,
@@ -75,7 +76,7 @@ pub trait GridStore: Send + Sync {
         open_price: f64,
         open_quantity: f64,
         open_order_id: Option<&str>,
-    ) -> anyhow::Result<Uuid>;
+    ) -> VirsResult<Uuid>;
     async fn close_trade(
         &self,
         trade_id: Uuid,
@@ -85,8 +86,8 @@ pub trait GridStore: Send + Sync {
         close_order_id: Option<&str>,
         pnl: f64,
         pnl_pct: f64,
-    ) -> anyhow::Result<()>;
-    async fn find_open_trade(&self, bot_id: Uuid, grid_level: i32) -> anyhow::Result<Option<Uuid>>;
+    ) -> VirsResult<()>;
+    async fn find_open_trade(&self, bot_id: Uuid, grid_level: i32) -> VirsResult<Option<Uuid>>;
     async fn record_orphaned_close_trade(
         &self,
         bot_id: Uuid,
@@ -100,7 +101,7 @@ pub trait GridStore: Send + Sync {
         close_order_id: Option<&str>,
         pnl: f64,
         pnl_pct: f64,
-    ) -> anyhow::Result<Uuid>;
+    ) -> VirsResult<Uuid>;
     async fn save_stats(
         &self,
         bot_id: Uuid,
@@ -109,16 +110,16 @@ pub trait GridStore: Send + Sync {
         total_trades: i32,
         grid_filled_count: i32,
         levels_json: Option<&serde_json::Value>,
-    ) -> anyhow::Result<()>;
-    async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> anyhow::Result<()>;
-    async fn update_last_adjusted(&self, bot_id: Uuid) -> anyhow::Result<()>;
+    ) -> VirsResult<()>;
+    async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> VirsResult<()>;
+    async fn update_last_adjusted(&self, bot_id: Uuid) -> VirsResult<()>;
     async fn update_grid_params(
         &self,
         bot_id: Uuid,
         upper_price: f64,
         lower_price: f64,
-    ) -> anyhow::Result<()>;
-    async fn update_quantity_per_grid(&self, bot_id: Uuid, quantity: f64) -> anyhow::Result<()>;
+    ) -> VirsResult<()>;
+    async fn update_quantity_per_grid(&self, bot_id: Uuid, quantity: f64) -> VirsResult<()>;
     async fn update_ai_analysis(
         &self,
         bot_id: Uuid,
@@ -130,7 +131,7 @@ pub trait GridStore: Send + Sync {
         quantity_per_grid: f64,
         leverage: i32,
         ai_analysis: &str,
-    ) -> anyhow::Result<()>;
+    ) -> VirsResult<()>;
     async fn save_analysis_log(
         &self,
         bot_id: Uuid,
@@ -140,7 +141,7 @@ pub trait GridStore: Send + Sync {
         result: &serde_json::Value,
         error: Option<&str>,
         llm_model: &str,
-    ) -> anyhow::Result<()>;
-    async fn load_analysis_logs(&self, bot_id: Uuid) -> anyhow::Result<Vec<AnalysisLogEntry>>;
-    async fn delete_bot(&self, bot_id: Uuid) -> anyhow::Result<()>;
+    ) -> VirsResult<()>;
+    async fn load_analysis_logs(&self, bot_id: Uuid) -> VirsResult<Vec<AnalysisLogEntry>>;
+    async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()>;
 }

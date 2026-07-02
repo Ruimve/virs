@@ -244,6 +244,7 @@ impl BinanceWsApiOrderWs {
 
                             tokio::select! {
                                 msg = read.next() => {
+                                    #[allow(clippy::collapsible_match)]
                                     match msg {
                                         Some(Ok(Message::Text(text))) => {
                                             if handle_text_message(&text, &event_tx).await {
@@ -472,7 +473,7 @@ pub(crate) fn build_session_logon_request(
 
     // 按 key 字典序排列：apiKey, recvWindow, timestamp
     // 注意：币安 WebSocket API session.logon 的 params 必须按字典序签名
-    let params_for_signing = vec![
+    let params_for_signing = [
         ("apiKey", api_key.to_string()),
         ("recvWindow", "5000".to_string()),
         ("timestamp", timestamp.to_string()),

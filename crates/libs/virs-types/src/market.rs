@@ -110,39 +110,3 @@ pub struct FeeRates {
     pub maker_rate: f64,
     pub taker_rate: f64,
 }
-
-/// API response wrapper
-#[derive(Debug, Serialize)]
-pub struct ApiResponse<T: Serialize> {
-    pub success: bool,
-    pub data: Option<T>,
-    pub error: Option<String>,
-    pub message: Option<String>,
-}
-
-impl<T: Serialize> ApiResponse<T> {
-    pub fn ok(data: T) -> Self {
-        Self {
-            success: true,
-            data: Some(data),
-            error: None,
-            message: None,
-        }
-    }
-
-    pub fn err(msg: impl Into<String>) -> Self {
-        Self {
-            success: false,
-            data: None,
-            error: Some(msg.into()),
-            message: None,
-        }
-    }
-}
-
-/// Pagination parameters
-#[derive(Debug, Deserialize)]
-pub struct PaginationParams {
-    pub page: Option<i64>,
-    pub page_size: Option<i64>,
-}
