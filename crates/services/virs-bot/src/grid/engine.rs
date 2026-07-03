@@ -74,17 +74,10 @@ impl GridEngine {
             match cmd {
                 GridCommand::StartBot { bot_id } => self.start_bot(bot_id).await,
                 GridCommand::StopBot { bot_id } => self.stop_bot(bot_id, "user requested").await,
-                GridCommand::PauseBot { bot_id } => self.pause_bot(bot_id).await,
-                GridCommand::ResumeBot { bot_id } => self.resume_bot(bot_id).await,
                 GridCommand::DeleteBot {
                     bot_id,
                     close_position,
                 } => self.delete_bot(bot_id, close_position).await,
-                GridCommand::AdjustGrid { bot_id } => self.adjust_grid(bot_id).await,
-                GridCommand::Shutdown => {
-                    self.shutdown_all().await;
-                    break;
-                }
             }
         }
         info!("GridEngine shutdown complete");
@@ -166,10 +159,6 @@ impl GridEngine {
         self.stop_or_pause_bot(bot_id, reason, "stopped").await;
     }
 
-    async fn pause_bot(&mut self, bot_id: Uuid) {
-        self.stop_or_pause_bot(bot_id, "paused", "paused").await;
-    }
-
     async fn stop_or_pause_bot(&mut self, bot_id: Uuid, reason: &str, target_status: &str) {
         let cancel_symbol = self.bot_symbols.get(&bot_id).cloned();
         if let Err(e) = self
@@ -216,13 +205,6 @@ impl GridEngine {
         }
     }
 
-    async fn resume_bot(&mut self, bot_id: Uuid) {
-        if let Err(e) = self.store.update_bot_status(bot_id, "stopped").await {
-            warn!(bot_id = %bot_id, error = %e, "Failed to update bot status to stopped");
-        }
-        self.start_bot(bot_id).await;
-    }
-
     async fn delete_bot(&mut self, bot_id: Uuid, close_position: bool) {
         let bot_info = match self.store.load_bot(bot_id).await {
             Ok(info) => info,
@@ -263,20 +245,5 @@ impl GridEngine {
             error!(bot_id = %bot_id, error = %e, "Failed to delete bot from database");
         }
         info!(bot_id = %bot_id, close_position, "Grid bot deleted");
-    }
-
-    async fn adjust_grid(&mut self, bot_id: Uuid) {
-        if let Some(adjust_tx) = self.adjust_txs.get(&bot_id) {
-            if let Err(e) = adjust_tx.send(()).await {
-                warn!(bot_id = %bot_id, error = %e, "Failed to send adjust signal");
-            }
-        }
-    }
-
-    async fn shutdown_all(&mut self) {
-        let bot_ids: Vec<Uuid> = self.workers.keys().copied().collect();
-        for id in bot_ids {
-            self.stop_bot(id, "engine shutdown").await;
-        }
     }
 }

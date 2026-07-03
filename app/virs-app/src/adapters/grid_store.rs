@@ -307,31 +307,6 @@ impl GridStore for PgGridStore {
         Ok(())
     }
 
-    async fn load_analysis_logs(&self, bot_id: Uuid) -> VirsResult<Vec<AnalysisLogEntry>> {
-        let rows: Vec<(Uuid, Uuid, String, String, String, serde_json::Value, Option<String>, String, chrono::DateTime<chrono::Utc>)> =
-            sqlx::query_as(
-                r#"SELECT id, bot_id, analysis_type, system_prompt, user_prompt, result, error, llm_model, created_at
-                   FROM qd_grid_analysis_logs WHERE bot_id = $1 ORDER BY created_at DESC LIMIT 50"#,
-            )
-            .bind(bot_id)
-            .fetch_all(&self.db).await?;
-
-        Ok(rows
-            .into_iter()
-            .map(|r| AnalysisLogEntry {
-                id: r.0,
-                bot_id: r.1,
-                analysis_type: r.2,
-                system_prompt: r.3,
-                user_prompt: r.4,
-                result: r.5,
-                error: r.6,
-                llm_model: r.7,
-                created_at: r.8,
-            })
-            .collect())
-    }
-
     async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()> {
         sqlx::query("DELETE FROM qd_grid_bots WHERE id = $1")
             .bind(bot_id)

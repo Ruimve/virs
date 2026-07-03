@@ -16,8 +16,8 @@ use crate::cache::SymbolCache;
 use crate::gap::GapDetector;
 pub use crate::source::ExchangeKlineSource;
 use crate::types::{
-    subscription_key, AllTimeframesData, Candle, KlineEngineConfig, KlineEvent, KlineEventType,
-    KlinePersistence, KlineSource, KlineWsClient, MarketType, Timeframe, WsEvent,
+    subscription_key, Candle, KlineEngineConfig, KlineEvent, KlineEventType, KlinePersistence,
+    KlineSource, KlineWsClient, MarketType, Timeframe, WsEvent,
 };
 
 struct NoOpPersistence;
@@ -32,14 +32,6 @@ impl KlinePersistence for NoOpPersistence {
         _candles: &[Candle],
     ) -> VirsResult<()> {
         Ok(())
-    }
-    async fn load_candles(
-        &self,
-        _exchange: &str,
-        _symbol: &str,
-        _timeframe: &str,
-    ) -> VirsResult<Vec<Candle>> {
-        Ok(Vec::new())
     }
 }
 
@@ -409,18 +401,6 @@ impl KlineEngine {
         Ok(())
     }
 
-    pub fn get_klines(
-        &self,
-        exchange: &str,
-        symbol: &str,
-        timeframe: Timeframe,
-    ) -> Option<Vec<Candle>> {
-        let key = subscription_key(exchange, symbol);
-        self.subscriptions
-            .get(&key)
-            .map(|entry| entry.cache.blocking_lock().get_klines(timeframe))
-    }
-
     pub async fn get_klines_async(
         &self,
         exchange: &str,
@@ -432,21 +412,6 @@ impl KlineEngine {
             Some(entry) => {
                 let guard = entry.cache.lock().await;
                 Some(guard.get_klines(timeframe))
-            }
-            None => None,
-        }
-    }
-
-    pub async fn get_all_timeframes(
-        &self,
-        exchange: &str,
-        symbol: &str,
-    ) -> Option<AllTimeframesData> {
-        let key = subscription_key(exchange, symbol);
-        match self.subscriptions.get(&key) {
-            Some(entry) => {
-                let guard = entry.cache.lock().await;
-                Some(guard.get_all_timeframes())
             }
             None => None,
         }

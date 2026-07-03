@@ -257,14 +257,6 @@ impl ExchangePe for CcxtExchangeAdapter {
         })
     }
 
-    async fn get_fee_rates(&self, _symbol: &str) -> PositionResult<FeeRates> {
-        Ok(FeeRates {
-            symbol: _symbol.to_string(),
-            maker_rate: 0.0002,
-            taker_rate: 0.0005,
-        })
-    }
-
     async fn place_order(&self, params: PlaceOrderParams) -> PositionResult<PositionOrder> {
         let ex = self
             .get_perpetual_exchange()

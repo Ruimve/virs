@@ -103,10 +103,4 @@ pub struct FundingHistoryEntry {
     pub rate: f64,
 }
 
-/// Fee rates
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct FeeRates {
-    pub symbol: String,
-    pub maker_rate: f64,
-    pub taker_rate: f64,
-}
+

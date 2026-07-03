@@ -424,13 +424,6 @@ pub(crate) async fn command_loop(
             } => {
                 handle_close_position(&inner, position_id, order_type, price, strategy_id).await;
             }
-            EngineCommand::ModifyPosition {
-                position_id,
-                stop_loss,
-                take_profit,
-            } => {
-                handle_modify_position(&inner, position_id, stop_loss, take_profit).await;
-            }
             EngineCommand::PlaceOrder { params } => {
                 handle_place_order(&inner, params).await;
             }
@@ -446,16 +439,8 @@ pub(crate) async fn command_loop(
             EngineCommand::CloseAllPositions { symbol } => {
                 handle_close_all_positions(&inner, &symbol).await;
             }
-            EngineCommand::SyncPositions => {
-                handle_sync_positions(&inner).await;
-            }
             EngineCommand::PriceTick { symbol, price } => {
                 inner.exchange.on_price_tick(&symbol, price).await;
-            }
-            EngineCommand::Shutdown => {
-                info!("Shutdown command received");
-                inner.set_state(EngineState::ShuttingDown);
-                break;
             }
         }
     }
@@ -1699,48 +1684,6 @@ pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol:
     }
 }
 
-pub(crate) async fn handle_modify_position(
-    inner: &Arc<EngineInner>,
-    position_id: Uuid,
-    stop_loss: Option<f64>,
-    take_profit: Option<f64>,
-) {
-    let key_opt = inner
-        .position_id_index
-        .get(&position_id)
-        .map(|r| r.value().clone());
-    let key = match key_opt {
-        Some(k) => k,
-        None => {
-            let msg = format!("Position not found: {}", position_id);
-            warn!(msg);
-            inner.emit_event(EngineEvent::OrderFailed {
-                order_id: Uuid::nil(),
-                reason: msg,
-            });
-            return;
-        }
-    };
-
-    if let Some(mut pos) = inner.positions.get_mut(&key) {
-        pos.stop_loss = stop_loss;
-        pos.take_profit = take_profit;
-        pos.updated_at = Utc::now();
-        let updated = pos.clone();
-        drop(pos);
-        persist!(
-            inner.persistence.upsert_position(&updated),
-            "Failed to persist position in modify_position"
-        );
-        inner.emit_event(EngineEvent::PositionModified {
-            position_id,
-            stop_loss,
-            take_profit,
-        });
-        info!(position_id = %position_id, "Position modified");
-    }
-}
-
 pub(crate) fn adjust_params_for_position_mode(params: &mut PlaceOrderParams, mode: PositionMode) {
     match mode {
         PositionMode::Hedge => {
@@ -1953,20 +1896,6 @@ pub(crate) async fn handle_cancel_all_orders(
         }
         Err(e) => {
             error!(error = %e, "Failed to cancel all orders");
-        }
-    }
-}
-
-pub(crate) async fn handle_sync_positions(inner: &Arc<EngineInner>) {
-    match inner.exchange.get_positions(None).await {
-        Ok(exchange_positions) => {
-            inner.emit_event(EngineEvent::PositionSynced {
-                positions: exchange_positions,
-            });
-            info!("Manual sync completed");
-        }
-        Err(e) => {
-            error!(error = %e, "Failed to sync positions");
         }
     }
 }

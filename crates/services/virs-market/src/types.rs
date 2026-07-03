@@ -96,17 +96,6 @@ pub enum KlineEventType {
     Backfilled,
 }
 
-/// All timeframes data for a symbol.
-#[derive(Debug, Clone, Serialize)]
-pub struct AllTimeframesData {
-    pub m1: Vec<Candle>,
-    pub m5: Vec<Candle>,
-    pub m15: Vec<Candle>,
-    pub h1: Vec<Candle>,
-    pub h4: Vec<Candle>,
-    pub d1: Vec<Candle>,
-}
-
 /// KlineEngine configuration.
 #[derive(Debug, Clone)]
 pub struct KlineEngineConfig {
@@ -157,13 +146,6 @@ pub trait KlinePersistence: Send + Sync {
         timeframe: &str,
         candles: &[Candle],
     ) -> VirsResult<()>;
-
-    async fn load_candles(
-        &self,
-        exchange: &str,
-        symbol: &str,
-        timeframe: &str,
-    ) -> VirsResult<Vec<Candle>>;
 }
 
 pub fn subscription_key(exchange: &str, symbol: &str) -> String {

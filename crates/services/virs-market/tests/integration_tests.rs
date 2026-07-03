@@ -72,22 +72,6 @@ fn int_2_2_aggregate_then_cache_update() {
     assert_eq!(klines[0].open_time, start);
 }
 
-#[test]
-fn int_2_3_cache_get_all_timeframes() {
-    let mut cache = SymbolCache::new();
-    cache.update_candle(Timeframe::M1, make_1m(BASE, 100.0, 101.0, 99.0, 100.0, true));
-    cache.update_candle(Timeframe::M5, make_1m(BASE, 100.0, 101.0, 99.0, 100.0, true));
-    cache.update_candle(Timeframe::H1, make_1m(BASE, 100.0, 101.0, 99.0, 100.0, true));
-
-    let all = cache.get_all_timeframes();
-    assert_eq!(all.m1.len(), 1);
-    assert_eq!(all.m5.len(), 1);
-    assert_eq!(all.h1.len(), 1);
-    assert!(all.m15.is_empty());
-    assert!(all.h4.is_empty());
-    assert!(all.d1.is_empty());
-}
-
 // ── INT-3: subscription_key + align ────────────────────────
 
 #[test]

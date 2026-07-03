@@ -314,7 +314,6 @@ pub struct BinanceExchange {
     signer: Arc<dyn Signer>,
     /// 若配置了 Ed25519 签名器，保存引用以便 WebSocket API 客户端使用
     ed25519_signer: Option<BinanceEd25519Signer>,
-    markets: Option<Vec<MarketInfo>>,
     #[allow(dead_code)]
     testnet: bool,
     market_type: MarketType,
@@ -357,7 +356,6 @@ impl BinanceExchange {
             client,
             signer,
             ed25519_signer,
-            markets: None,
             testnet: false,
             market_type: *market_type,
         })
@@ -481,48 +479,6 @@ impl Exchange for BinanceExchange {
     }
     fn name(&self) -> &str {
         "Binance"
-    }
-
-    fn capabilities(&self) -> &ExchangeCapabilities {
-        static CAPS: std::sync::OnceLock<ExchangeCapabilities> = std::sync::OnceLock::new();
-        CAPS.get_or_init(|| ExchangeCapabilities {
-            has: ExchangeFeatures {
-                spot: true,
-                futures: false,
-                perpetual: true,
-                fetch_ticker: true,
-                fetch_tickers: false,
-                fetch_order_book: true,
-                fetch_ohlcv: true,
-                fetch_balance: true,
-                create_order: true,
-                cancel_order: true,
-                fetch_order: true,
-                fetch_open_orders: true,
-                fetch_markets: true,
-            },
-            rate_limit: RateLimit {
-                max_requests_per_second: 20.0,
-                max_requests_per_minute: Some(1200.0),
-            },
-            timeframes: vec![
-                ("1m".into(), "1m".into()),
-                ("3m".into(), "3m".into()),
-                ("5m".into(), "5m".into()),
-                ("15m".into(), "15m".into()),
-                ("30m".into(), "30m".into()),
-                ("1h".into(), "1h".into()),
-                ("2h".into(), "2h".into()),
-                ("4h".into(), "4h".into()),
-                ("6h".into(), "6h".into()),
-                ("8h".into(), "8h".into()),
-                ("12h".into(), "12h".into()),
-                ("1d".into(), "1d".into()),
-                ("3d".into(), "3d".into()),
-                ("1w".into(), "1w".into()),
-                ("1M".into(), "1M".into()),
-            ],
-        })
     }
 
     // ---- Market data (dispatch by market_type) ----
@@ -812,20 +768,6 @@ impl Exchange for BinanceExchange {
         } else {
             api::ping(&self.client).await
         }
-    }
-
-    async fn load_markets(&mut self) -> Result<(), ExchangeError> {
-        tracing::debug!("Loading Binance markets (type={:?})...", self.market_type);
-        self.markets = Some(self.fetch_markets().await?);
-        tracing::debug!(
-            "Loaded {} Binance markets",
-            self.markets.as_ref().unwrap().len()
-        );
-        Ok(())
-    }
-
-    fn markets(&self) -> &Option<Vec<MarketInfo>> {
-        &self.markets
     }
 }
 

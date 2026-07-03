@@ -92,39 +92,6 @@ pub struct Position {
     pub info: serde_json::Value,
 }
 
-/// Exchange rate limit info.
-#[derive(Debug, Clone)]
-pub struct RateLimit {
-    pub max_requests_per_second: f64,
-    pub max_requests_per_minute: Option<f32>,
-}
-
-/// Exchange capabilities / features.
-#[derive(Debug, Clone)]
-pub struct ExchangeCapabilities {
-    pub has: ExchangeFeatures,
-    pub rate_limit: RateLimit,
-    pub timeframes: Vec<(String, String)>, // (unified, native)
-}
-
-/// Supported features flags.
-#[derive(Debug, Clone, Default)]
-pub struct ExchangeFeatures {
-    pub spot: bool,
-    pub futures: bool,
-    pub perpetual: bool,
-    pub fetch_ticker: bool,
-    pub fetch_tickers: bool,
-    pub fetch_order_book: bool,
-    pub fetch_ohlcv: bool,
-    pub fetch_balance: bool,
-    pub create_order: bool,
-    pub cancel_order: bool,
-    pub fetch_order: bool,
-    pub fetch_open_orders: bool,
-    pub fetch_markets: bool,
-}
-
 // ---- CCXT-internal order representation ----
 // The ccxt layer needs its own Order type because exchange responses
 // include `info: serde_json::Value` (raw exchange data) and `fee: Option<OrderFee>`,

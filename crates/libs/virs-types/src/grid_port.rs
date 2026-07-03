@@ -2,23 +2,8 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use virs_error::VirsResult;
-
-/// AI 分析日志持久化记录
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnalysisLogEntry {
-    pub id: Uuid,
-    pub bot_id: Uuid,
-    pub analysis_type: String,
-    pub system_prompt: String,
-    pub user_prompt: String,
-    pub result: serde_json::Value,
-    pub error: Option<String>,
-    pub llm_model: String,
-    pub created_at: DateTime<Utc>,
-}
 
 /// 网格交易记录
 #[derive(Debug, Clone)]
@@ -142,6 +127,5 @@ pub trait GridStore: Send + Sync {
         error: Option<&str>,
         llm_model: &str,
     ) -> VirsResult<()>;
-    async fn load_analysis_logs(&self, bot_id: Uuid) -> VirsResult<Vec<AnalysisLogEntry>>;
     async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()>;
 }

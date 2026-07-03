@@ -29,7 +29,6 @@ pub trait ExchangePe: Send + Sync {
     async fn get_balance(&self) -> PositionResult<Balance>;
     async fn get_positions(&self, symbol: Option<&str>) -> PositionResult<Vec<ExchangePosition>>;
     async fn get_funding_rate(&self, symbol: &str) -> PositionResult<FundingRate>;
-    async fn get_fee_rates(&self, symbol: &str) -> PositionResult<FeeRates>;
 
     // Trading
     async fn place_order(&self, params: PlaceOrderParams) -> PositionResult<PositionOrder>;

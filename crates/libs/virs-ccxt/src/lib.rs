@@ -25,7 +25,6 @@ pub use types::{
     CcxtOrderBook,
     CcxtOrderStatus,
     CcxtTicker,
-    ExchangeCapabilities,
     FundingHistoryEntry,
     FundingRate,
     Kline,
@@ -54,7 +53,6 @@ pub use ws_types::WsFeedEvent;
 pub trait Exchange: Send + Sync {
     fn id(&self) -> &str;
     fn name(&self) -> &str;
-    fn capabilities(&self) -> &ExchangeCapabilities;
 
     async fn fetch_ticker(&self, symbol: &str) -> Result<CcxtTicker, ExchangeError>;
     async fn fetch_ohlcv(
@@ -172,8 +170,6 @@ pub trait Exchange: Send + Sync {
         ))
     }
     async fn ping(&self) -> Result<bool, ExchangeError>;
-    async fn load_markets(&mut self) -> Result<(), ExchangeError>;
-    fn markets(&self) -> &Option<Vec<MarketInfo>>;
 }
 
 /// Base HTTP client for exchange REST API calls.

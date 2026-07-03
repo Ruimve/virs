@@ -324,7 +324,6 @@ impl EngineManager for AppEngineManager {
                                     "level": "error",
                                     "message": format!("Bot {}: {}", bot_id, error),
                                 })),
-                                _ => None,
                             };
                             if let Some(json) = ws_json {
                                 ws_broadcaster.broadcast(json);

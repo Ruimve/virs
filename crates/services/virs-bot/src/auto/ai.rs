@@ -134,10 +134,6 @@ impl AutoAiService {
         }
     }
 
-    pub fn is_available(&self) -> bool {
-        self.llm_resolver.is_available()
-    }
-
     pub async fn is_available_for_user(&self, user_id: Uuid) -> bool {
         if self.llm_resolver.is_available() {
             return true;

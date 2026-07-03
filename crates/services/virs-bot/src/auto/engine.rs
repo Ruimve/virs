@@ -72,16 +72,10 @@ impl AutoEngine {
             match cmd {
                 AutoCommand::StartBot { bot_id } => self.start_bot(bot_id).await,
                 AutoCommand::StopBot { bot_id } => self.stop_bot(bot_id, "user requested").await,
-                AutoCommand::PauseBot { bot_id } => self.pause_bot(bot_id).await,
-                AutoCommand::ResumeBot { bot_id } => self.resume_bot(bot_id).await,
                 AutoCommand::DeleteBot {
                     bot_id,
                     close_position,
                 } => self.delete_bot(bot_id, close_position).await,
-                AutoCommand::Shutdown => {
-                    self.shutdown_all().await;
-                    break;
-                }
             }
         }
         info!("AutoEngine shutdown complete");
@@ -163,10 +157,6 @@ impl AutoEngine {
         self.stop_or_pause_bot(bot_id, reason, "stopped").await;
     }
 
-    async fn pause_bot(&mut self, bot_id: Uuid) {
-        self.stop_or_pause_bot(bot_id, "paused", "paused").await;
-    }
-
     async fn stop_or_pause_bot(&mut self, bot_id: Uuid, reason: &str, target_status: &str) {
         let cancel_symbol = self.bot_symbols.get(&bot_id).cloned();
         if let Err(e) = self
@@ -212,13 +202,6 @@ impl AutoEngine {
         }
     }
 
-    async fn resume_bot(&mut self, bot_id: Uuid) {
-        if let Err(e) = self.store.update_bot_status(bot_id, "stopped").await {
-            warn!(bot_id = %bot_id, error = %e, "Failed to update bot status to stopped");
-        }
-        self.start_bot(bot_id).await;
-    }
-
     async fn delete_bot(&mut self, bot_id: Uuid, close_position: bool) {
         let bot_info = match self.store.load_bot(bot_id).await {
             Ok(info) => info,
@@ -259,12 +242,5 @@ impl AutoEngine {
             error!(bot_id = %bot_id, error = %e, "Failed to delete bot from database");
         }
         info!(bot_id = %bot_id, close_position, "Auto bot deleted");
-    }
-
-    async fn shutdown_all(&mut self) {
-        let bot_ids: Vec<Uuid> = self.workers.keys().copied().collect();
-        for id in bot_ids {
-            self.stop_bot(id, "engine shutdown").await;
-        }
     }
 }

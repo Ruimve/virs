@@ -442,15 +442,6 @@ impl ExchangePe for PaperExchangeAdapter {
         })
     }
 
-    async fn get_fee_rates(&self, _symbol: &str) -> PositionResult<FeeRates> {
-        // Paper 模式模拟币币合约手续费：taker 0.05%, maker 0.02%
-        Ok(FeeRates {
-            symbol: _symbol.to_string(),
-            maker_rate: 0.0002,
-            taker_rate: 0.0005,
-        })
-    }
-
     async fn place_order(&self, params: PlaceOrderParams) -> PositionResult<PositionOrder> {
         let order_id = Uuid::new_v4();
         let now = Utc::now();

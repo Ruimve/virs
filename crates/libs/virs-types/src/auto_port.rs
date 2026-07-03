@@ -6,20 +6,6 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use virs_error::VirsResult;
 
-/// AI 分析日志持久化记录
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AutoAnalysisLogEntry {
-    pub id: Uuid,
-    pub bot_id: Uuid,
-    pub analysis_type: String,
-    pub system_prompt: String,
-    pub user_prompt: String,
-    pub result: serde_json::Value,
-    pub error: Option<String>,
-    pub llm_model: String,
-    pub created_at: DateTime<Utc>,
-}
-
 /// 自动交易数据存储端口
 #[async_trait]
 pub trait AutoStore: Send + Sync {
@@ -129,7 +115,6 @@ pub trait AutoStore: Send + Sync {
         execution_status: &str,
         intercept_reason: Option<&str>,
     ) -> VirsResult<()>;
-    async fn load_analysis_logs(&self, bot_id: Uuid) -> VirsResult<Vec<AutoAnalysisLogEntry>>;
     async fn load_consecutive_losses(&self, bot_id: Uuid) -> VirsResult<i32>;
     async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()>;
 }

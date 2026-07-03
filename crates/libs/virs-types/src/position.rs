@@ -149,11 +149,6 @@ pub enum EngineCommand {
         price: Option<f64>,
         strategy_id: Option<String>,
     },
-    ModifyPosition {
-        position_id: Uuid,
-        stop_loss: Option<f64>,
-        take_profit: Option<f64>,
-    },
     PlaceOrder {
         params: PlaceOrderParams,
     },
@@ -167,12 +162,10 @@ pub enum EngineCommand {
     CloseAllPositions {
         symbol: String,
     },
-    SyncPositions,
     PriceTick {
         symbol: String,
         price: f64,
     },
-    Shutdown,
 }
 
 /// Engine event

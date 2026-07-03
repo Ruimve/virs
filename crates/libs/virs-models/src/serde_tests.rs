@@ -5,10 +5,7 @@ use uuid::Uuid;
 
 use virs_types::enums::*;
 
-use crate::{
-    AutoBot, AutoTrade, CreateUserRequest, GridBot, GridTrade, LoginRequest, Order,
-    StrategyStatus, User, UserRole, UserResponse,
-};
+use crate::{AutoBot, GridBot, GridTrade, Order, StrategyStatus};
 
 // ============================================================
 // TC-S1: Order serde round-trip
@@ -37,61 +34,6 @@ fn s1_1_order_roundtrip() {
     let json = serde_json::to_string(&order).unwrap();
     let de: Order = serde_json::from_str(&json).unwrap();
     assert_eq!(de, order);
-}
-
-// ============================================================
-// TC-S2: User / UserResponse serde
-// ============================================================
-
-#[test]
-fn s2_1_user_roundtrip() {
-    let now = Utc::now();
-    let user = User {
-        id: Uuid::nil(),
-        username: "admin".into(),
-        password_hash: "hash".into(),
-        role: UserRole::Admin,
-        email: Some("admin@virs.com".into()),
-        is_active: true,
-        created_at: now,
-        updated_at: now,
-    };
-    let json = serde_json::to_string(&user).unwrap();
-    let de: User = serde_json::from_str(&json).unwrap();
-    assert_eq!(de, user);
-}
-
-#[test]
-fn s2_2_user_response_roundtrip() {
-    let now = Utc::now();
-    let response = UserResponse {
-        id: Uuid::nil(),
-        username: "admin".into(),
-        role: UserRole::Admin,
-        email: None,
-        is_active: true,
-        created_at: now,
-    };
-    let json = serde_json::to_string(&response).unwrap();
-    let de: UserResponse = serde_json::from_str(&json).unwrap();
-    assert_eq!(de, response);
-}
-
-#[test]
-fn s2_3_login_request_deserialize() {
-    let json = r#"{"username":"admin","password":"secret"}"#;
-    let req: LoginRequest = serde_json::from_str(json).unwrap();
-    assert_eq!(req.username, "admin");
-    assert_eq!(req.password, "secret");
-}
-
-#[test]
-fn s2_4_create_user_request_with_role_none() {
-    let json = r#"{"username":"newuser","password":"pass","email":null,"role":null}"#;
-    let req: CreateUserRequest = serde_json::from_str(json).unwrap();
-    assert_eq!(req.username, "newuser");
-    assert_eq!(req.email, None);
-    assert_eq!(req.role, None);
 }
 
 // ============================================================
@@ -176,7 +118,7 @@ fn s3_2_grid_trade_roundtrip() {
 }
 
 // ============================================================
-// TC-S4: AutoBot / AutoTrade serde
+// TC-S4: AutoBot serde
 // ============================================================
 
 #[test]
@@ -215,39 +157,4 @@ fn s4_1_auto_bot_roundtrip() {
     assert_eq!(de.win_trades, bot.win_trades);
     assert_eq!(de.total_pnl, bot.total_pnl);
     assert_eq!(de.status, bot.status);
-}
-
-#[test]
-fn s4_2_auto_trade_roundtrip() {
-    let now = Utc::now();
-    let trade = AutoTrade {
-        id: Uuid::nil(),
-        bot_id: Uuid::nil(),
-        user_id: Uuid::nil(),
-        symbol: "ETH/USDT".into(),
-        exchange: "binance".into(),
-        open_side: "buy".into(),
-        open_price: 3000.0,
-        open_quantity: 2.0,
-        open_order_id: Some("open_order".into()),
-        open_fee: 0.6,
-        opened_at: now,
-        close_side: Some("sell".into()),
-        close_price: Some(3100.0),
-        close_quantity: Some(2.0),
-        close_order_id: Some("close_order".into()),
-        close_fee: 0.62,
-        closed_at: Some(now),
-        pnl: 198.78,
-        pnl_pct: 3.3,
-        trigger_source: "ai".into(),
-        close_reason: Some("take_profit".into()),
-        status: "closed".into(),
-        created_at: now,
-    };
-    let json = serde_json::to_string(&trade).unwrap();
-    let de: AutoTrade = serde_json::from_str(&json).unwrap();
-    assert_eq!(de.open_price, trade.open_price);
-    assert_eq!(de.pnl, trade.pnl);
-    assert_eq!(de.status, trade.status);
 }

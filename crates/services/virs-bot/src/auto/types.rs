@@ -1,24 +1,20 @@
 //! Auto trading bot types.
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 // Re-export AutoBotConfig and AutoMarketType from virs-types
 pub use virs_types::auto_port::{AutoBotConfig, AutoMarketType};
 
-// Re-export AutoBot and AutoTrade from virs-models (DB models, single source of truth)
-pub use virs_models::{AutoBot, AutoTrade};
+// Re-export AutoBot from virs-models (DB models, single source of truth)
+pub use virs_models::AutoBot;
 
 /// 自动交易引擎命令
 #[derive(Debug)]
 pub enum AutoCommand {
     StartBot { bot_id: Uuid },
     StopBot { bot_id: Uuid },
-    PauseBot { bot_id: Uuid },
-    ResumeBot { bot_id: Uuid },
     DeleteBot { bot_id: Uuid, close_position: bool },
-    Shutdown,
 }
 
 /// 自动交易引擎事件
@@ -47,48 +43,6 @@ pub enum AutoEvent {
         price: f64,
         pnl: f64,
     },
-    StatusUpdate {
-        bot_id: Uuid,
-        state: AutoBotState,
-    },
-    AnalysisLog {
-        log: AutoAnalysisLog,
-    },
-}
-
-/// 自动交易 Bot 运行状态
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AutoBotState {
-    pub bot_id: Uuid,
-    pub symbol: String,
-    pub exchange: String,
-    pub market_type: String,
-    pub current_side: Option<String>,
-    pub entry_price: f64,
-    pub position_size: f64,
-    pub stop_loss: f64,
-    pub take_profit: f64,
-    pub unrealized_pnl: f64,
-    pub current_price: f64,
-    pub liquidation_price: Option<f64>,
-    pub total_pnl: f64,
-    pub total_trades: i32,
-    pub win_trades: i32,
-    pub loss_trades: i32,
-    pub market_regime: Option<String>,
-    pub last_decided_at: Option<DateTime<Utc>>,
-}
-
-/// 自动交易 AI 分析日志
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AutoAnalysisLog {
-    pub bot_id: Uuid,
-    pub timestamp: DateTime<Utc>,
-    pub analysis_type: String,
-    pub system_prompt: String,
-    pub user_prompt: String,
-    pub result: serde_json::Value,
-    pub error: Option<String>,
 }
 
 /// 默认系统 Prompt

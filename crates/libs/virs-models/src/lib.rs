@@ -9,13 +9,11 @@
 pub mod auto;
 pub mod grid;
 pub mod trading;
-pub mod user;
 
 // Re-export unified types from virs-types
-pub use auto::{AutoBot, AutoTrade};
+pub use auto::AutoBot;
 pub use grid::{GridBot, GridTrade};
 pub use trading::Order;
-pub use user::{CreateUserRequest, LoginRequest, LoginResponse, User, UserResponse};
 pub use virs_types::enums::*;
 pub use virs_types::market::*;
 

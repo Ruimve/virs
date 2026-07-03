@@ -65,23 +65,7 @@ pub struct GridState {
 pub enum GridCommand {
     StartBot { bot_id: Uuid },
     StopBot { bot_id: Uuid },
-    PauseBot { bot_id: Uuid },
-    ResumeBot { bot_id: Uuid },
     DeleteBot { bot_id: Uuid, close_position: bool },
-    AdjustGrid { bot_id: Uuid },
-    Shutdown,
-}
-
-/// AI 分析日志记录
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnalysisLog {
-    pub bot_id: Uuid,
-    pub timestamp: DateTime<Utc>,
-    pub analysis_type: String,
-    pub system_prompt: String,
-    pub user_prompt: String,
-    pub result: serde_json::Value,
-    pub error: Option<String>,
 }
 
 /// 网格引擎事件
@@ -116,16 +100,9 @@ pub enum GridEvent {
         level: i32,
         pnl: f64,
     },
-    PriceUpdate {
-        bot_id: Uuid,
-        price: f64,
-    },
     StatusUpdate {
         bot_id: Uuid,
         state: GridState,
-    },
-    AnalysisLog {
-        log: AnalysisLog,
     },
 }
 

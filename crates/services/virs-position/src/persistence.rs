@@ -24,8 +24,6 @@ pub trait PositionPersistence: Send + Sync {
     async fn upsert_position(&self, pos: &Position) -> PositionResult<()>;
     /// 获取引擎下所有未平仓仓位（用于重启恢复）。
     async fn get_open_positions(&self, engine_id: &str) -> PositionResult<Vec<Position>>;
-    /// 按 ID 获取仓位。
-    async fn get_position(&self, id: &Uuid) -> PositionResult<Option<Position>>;
 }
 
 // ============================================================================
@@ -54,10 +52,6 @@ impl PositionPersistence for Persistence {
 
     async fn get_open_positions(&self, engine_id: &str) -> PositionResult<Vec<Position>> {
         self.get_open_positions_impl(engine_id).await
-    }
-
-    async fn get_position(&self, id: &Uuid) -> PositionResult<Option<Position>> {
-        self.get_position_impl(id).await
     }
 }
 
@@ -184,15 +178,6 @@ impl Persistence {
         .await?;
 
         Ok(rows.into_iter().filter_map(|r| r.into_position()).collect())
-    }
-
-    async fn get_position_impl(&self, id: &Uuid) -> PositionResult<Option<Position>> {
-        let row = sqlx::query_as::<_, PositionRow>("SELECT * FROM pe_positions WHERE id = $1")
-            .bind(id)
-            .fetch_optional(&self.db)
-            .await?;
-
-        Ok(row.and_then(|r| r.into_position()))
     }
 }
 

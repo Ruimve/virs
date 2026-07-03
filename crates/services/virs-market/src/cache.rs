@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use super::types::{AllTimeframesData, Candle, Timeframe};
+use super::types::{Candle, Timeframe};
 
 struct TimeframeBuffer {
     candles: VecDeque<Candle>,
@@ -98,17 +98,6 @@ impl SymbolCache {
             .get(&timeframe)
             .map(|buf| buf.get_all())
             .unwrap_or_default()
-    }
-
-    pub fn get_all_timeframes(&self) -> AllTimeframesData {
-        AllTimeframesData {
-            m1: self.get_klines(Timeframe::M1),
-            m5: self.get_klines(Timeframe::M5),
-            m15: self.get_klines(Timeframe::M15),
-            h1: self.get_klines(Timeframe::H1),
-            h4: self.get_klines(Timeframe::H4),
-            d1: self.get_klines(Timeframe::D1),
-        }
     }
 
     pub fn last_closed_1m(&self) -> Option<Candle> {
