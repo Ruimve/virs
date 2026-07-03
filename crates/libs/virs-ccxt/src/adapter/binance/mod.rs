@@ -12,10 +12,10 @@
 pub mod api;
 pub mod fapi;
 pub mod kline_ws;
-pub mod order_ws;
+pub mod user_data_ws;
 pub mod orderbook_ws;
 pub mod sapi;
-pub mod ws_api;
+pub mod user_data_ws_api;
 
 use async_trait::async_trait;
 use base64::Engine;
@@ -663,7 +663,7 @@ impl Exchange for BinanceExchange {
             )
         })?;
         let (tx, rx) = mpsc::channel(256);
-        let ws = ws_api::BinanceWsApiOrderWs::new_spot(ed25519.clone());
+        let ws = user_data_ws_api::BinanceUserDataWsApi::new_spot(ed25519.clone());
         ws.start(tx);
         tracing::info!(
             "[BinanceExchange] Spot order WS API started (Ed25519, userDataStream.subscribe)"
@@ -683,11 +683,11 @@ impl Exchange for BinanceExchange {
             None => self.create_listen_key().await?,
         };
 
-        // 2. 按市场类型构造 BinanceOrderWs
+        // 2. 按市场类型构造 BinanceUserDataWs
         let mut ws = if self.is_perpetual() {
-            order_ws::BinanceOrderWs::new_perpetual(listen_key.clone())
+            user_data_ws::BinanceUserDataWs::new_perpetual(listen_key.clone())
         } else {
-            order_ws::BinanceOrderWs::new_spot(listen_key.clone())
+            user_data_ws::BinanceUserDataWs::new_spot(listen_key.clone())
         };
 
         // 3. 获取 running flag 引用（keepalive task 据此判断 WS 是否已退出）
@@ -774,4 +774,4 @@ mod mod_tests;
 #[cfg(test)]
 mod orderbook_ws_tests;
 #[cfg(test)]
-mod ws_api_tests;
+mod user_data_ws_api_tests;

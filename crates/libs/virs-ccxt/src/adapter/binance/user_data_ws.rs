@@ -247,7 +247,7 @@ impl ExecutionReportInner {
 }
 
 // ============================================================
-// BinanceOrderWs: 订单 WebSocket 客户端
+// BinanceUserDataWs: 订单 WebSocket 客户端
 // ============================================================
 
 /// Binance User Data Stream 订单推送客户端
@@ -259,7 +259,7 @@ impl ExecutionReportInner {
 /// - 指数退避重连
 /// - Ping/Pong 心跳
 /// - 最大生命周期（23 小时）
-pub struct BinanceOrderWs {
+pub struct BinanceUserDataWs {
     /// WS URL（包含 listenKey）
     ws_url: String,
     /// 基础 URL（不含 listenKey，用于重连时拼接新 listenKey）
@@ -272,7 +272,7 @@ pub struct BinanceOrderWs {
     shutdown_tx: Option<mpsc::Sender<()>>,
 }
 
-impl BinanceOrderWs {
+impl BinanceUserDataWs {
     /// 创建新的订单 WS 客户端
     ///
     /// # 参数
@@ -352,11 +352,11 @@ impl BinanceOrderWs {
             while running.load(Ordering::Relaxed) {
                 let connect_start = tokio::time::Instant::now();
 
-                tracing::debug!("[BinanceOrderWs] Connecting to {}...", ws_url);
+                tracing::debug!("[BinanceUserDataWs] Connecting to {}...", ws_url);
 
                 match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
-                        tracing::debug!("[BinanceOrderWs] Connected to {}", ws_url);
+                        tracing::debug!("[BinanceUserDataWs] Connected to {}", ws_url);
                         reconnect_delay = reconnect_delay_secs;
 
                         // 发送连接恢复事件
@@ -377,7 +377,7 @@ impl BinanceOrderWs {
 
                             if connect_start.elapsed() > max_lifetime {
                                 tracing::debug!(
-                                    "[BinanceOrderWs] Max lifetime reached, reconnecting..."
+                                    "[BinanceUserDataWs] Max lifetime reached, reconnecting..."
                                 );
                                 break;
                             }
@@ -401,11 +401,11 @@ impl BinanceOrderWs {
                                                         _ => "unknown".to_string(),
                                                     };
                                                     tracing::debug!(
-                                                        "[BinanceOrderWs] {} -> OrderUpdate status={} forwarded",
+                                                        "[BinanceUserDataWs] {} -> OrderUpdate status={} forwarded",
                                                         event_type, status_str
                                                     );
                                                     if event_tx.send(event).await.is_err() {
-                                                        tracing::warn!("[BinanceOrderWs] Event channel closed, stopping");
+                                                        tracing::warn!("[BinanceUserDataWs] Event channel closed, stopping");
                                                         running.store(false, Ordering::Relaxed);
                                                         return;
                                                     }
@@ -415,24 +415,24 @@ impl BinanceOrderWs {
                                                     match event_type.as_str() {
                                                         "ACCOUNT_UPDATE" => {
                                                             tracing::debug!(
-                                                                "[BinanceOrderWs] ACCOUNT_UPDATE received (balance/position change)"
+                                                                "[BinanceUserDataWs] ACCOUNT_UPDATE received (balance/position change)"
                                                             );
                                                         }
                                                         "listenKeyExpired" => {
                                                             tracing::warn!(
-                                                                "[BinanceOrderWs] listenKey expired, will reconnect"
+                                                                "[BinanceUserDataWs] listenKey expired, will reconnect"
                                                             );
                                                             break;
                                                         }
                                                         "serverShutdown" => {
                                                             tracing::info!(
-                                                                "[BinanceOrderWs] serverShutdown received, server will disconnect soon; reconnecting"
+                                                                "[BinanceUserDataWs] serverShutdown received, server will disconnect soon; reconnecting"
                                                             );
                                                             break;
                                                         }
                                                         _ => {
                                                             tracing::trace!(
-                                                                "[BinanceOrderWs] Ignoring event type: {}",
+                                                                "[BinanceUserDataWs] Ignoring event type: {}",
                                                                 event_type
                                                             );
                                                         }
@@ -440,7 +440,7 @@ impl BinanceOrderWs {
                                                 }
                                             } else {
                                                 tracing::warn!(
-                                                    "[BinanceOrderWs] Failed to parse WS message: {}",
+                                                    "[BinanceUserDataWs] Failed to parse WS message: {}",
                                                     &text[..text.len().min(200)]
                                                 );
                                             }
@@ -449,15 +449,15 @@ impl BinanceOrderWs {
                                             let _ = write.send(tungstenite::Message::Pong(data)).await;
                                         }
                                         Some(Ok(tungstenite::Message::Close(_))) => {
-                                            tracing::warn!("[BinanceOrderWs] Server closed connection");
+                                            tracing::warn!("[BinanceUserDataWs] Server closed connection");
                                             break;
                                         }
                                         Some(Err(e)) => {
-                                            tracing::error!("[BinanceOrderWs] Read error: {}", e);
+                                            tracing::error!("[BinanceUserDataWs] Read error: {}", e);
                                             break;
                                         }
                                         None => {
-                                            tracing::warn!("[BinanceOrderWs] Stream ended");
+                                            tracing::warn!("[BinanceUserDataWs] Stream ended");
                                             break;
                                         }
                                         _ => {}
@@ -466,12 +466,12 @@ impl BinanceOrderWs {
                                 _ = ping_tick.tick() => {
                                     let ping = tungstenite::Message::Ping(vec![].into());
                                     if write.send(ping).await.is_err() {
-                                        tracing::warn!("[BinanceOrderWs] Ping failed, reconnecting...");
+                                        tracing::warn!("[BinanceUserDataWs] Ping failed, reconnecting...");
                                         break;
                                     }
                                 }
                                 _ = shutdown_rx.recv() => {
-                                    tracing::debug!("[BinanceOrderWs] Shutdown requested");
+                                    tracing::debug!("[BinanceUserDataWs] Shutdown requested");
                                     let _ = write.send(tungstenite::Message::Close(None)).await;
                                     running.store(false, Ordering::Relaxed);
                                     return;
@@ -485,7 +485,7 @@ impl BinanceOrderWs {
                             .await;
                     }
                     Err(e) => {
-                        tracing::error!("[BinanceOrderWs] Connection failed: {}", e);
+                        tracing::error!("[BinanceUserDataWs] Connection failed: {}", e);
                     }
                 }
 
@@ -493,13 +493,13 @@ impl BinanceOrderWs {
                     break;
                 }
 
-                tracing::debug!("[BinanceOrderWs] Reconnecting in {}s...", reconnect_delay);
+                tracing::debug!("[BinanceUserDataWs] Reconnecting in {}s...", reconnect_delay);
                 tokio::time::sleep(Duration::from_secs(reconnect_delay)).await;
                 reconnect_delay = (reconnect_delay * 2).min(max_reconnect_delay_secs);
             }
 
             running.store(false, Ordering::Relaxed);
-            tracing::debug!("[BinanceOrderWs] Worker exited");
+            tracing::debug!("[BinanceUserDataWs] Worker exited");
         });
     }
 
@@ -872,7 +872,7 @@ mod tests {
 
     #[test]
     fn test_new_perpetual() {
-        let ws = BinanceOrderWs::new_perpetual("test_listen_key".to_string());
+        let ws = BinanceUserDataWs::new_perpetual("test_listen_key".to_string());
         assert_eq!(
             ws.ws_url,
             "wss://fstream.binance.com/private/ws/test_listen_key"
@@ -883,14 +883,14 @@ mod tests {
 
     #[test]
     fn test_new_spot() {
-        let ws = BinanceOrderWs::new_spot("my_key".to_string());
+        let ws = BinanceUserDataWs::new_spot("my_key".to_string());
         assert_eq!(ws.ws_url, "wss://stream.binance.com/ws/my_key");
         assert!(!ws.is_running());
     }
 
     #[test]
     fn test_update_listen_key() {
-        let mut ws = BinanceOrderWs::new_perpetual("old_key".to_string());
+        let mut ws = BinanceUserDataWs::new_perpetual("old_key".to_string());
         assert_eq!(ws.ws_url, "wss://fstream.binance.com/private/ws/old_key");
 
         ws.update_listen_key("new_key".to_string());

@@ -1,8 +1,8 @@
-//! Unit tests for adapter/binance/ws_api.rs.
+//! Unit tests for adapter/binance/user_data_ws_api.rs.
 //!
 //! Covers: build_session_logon_request.
 
-use crate::adapter::binance::ws_api::build_session_logon_request;
+use crate::adapter::binance::user_data_ws_api::build_session_logon_request;
 use crate::adapter::binance::BinanceEd25519Signer;
 
 /// Helper: create a test Ed25519 signer from a known 32-byte zero seed.

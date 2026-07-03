@@ -6,7 +6,7 @@
 use serde_json::json;
 
 use virs_ccxt::{
-    adapter::binance::{order_ws::BinanceOrderMessage, BinanceExchange},
+    adapter::binance::{user_data_ws::BinanceOrderMessage, BinanceExchange},
     auth::hmac_sha256_hex,
     create_exchange, parse_f64, parse_str,
     types::{CcxtOrderStatus, CcxtTicker},
