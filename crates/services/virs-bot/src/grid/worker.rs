@@ -330,14 +330,14 @@ impl GridWorker {
             (OrderDir::Buy, "sell") => (
                 level.hold_quantity.abs().min(level.quantity),
                 true,
-                Some(BotPositionSide::Short),
+                BotPositionSide::Short,
             ),
-            (OrderDir::Buy, _) => (level.quantity, false, Some(BotPositionSide::Long)),
-            (OrderDir::Sell, "sell") => (level.quantity, false, Some(BotPositionSide::Short)),
+            (OrderDir::Buy, _) => (level.quantity, false, BotPositionSide::Long),
+            (OrderDir::Sell, "sell") => (level.quantity, false, BotPositionSide::Short),
             (OrderDir::Sell, _) => (
                 level.hold_quantity.min(level.quantity),
                 true,
-                Some(BotPositionSide::Long),
+                BotPositionSide::Long,
             ),
         };
 
@@ -351,7 +351,7 @@ impl GridWorker {
                 amount,
                 price: Some(price),
                 reduce_only: true,
-                position_side,
+                position_side: Some(position_side),
                 position_id: None,
                 client_order_id,
             }
@@ -359,7 +359,7 @@ impl GridWorker {
             // Open order: use OpenPosition
             OrderCommand::OpenPosition {
                 symbol: self.bot.symbol.clone(),
-                side: position_side.unwrap_or(BotPositionSide::Long),
+                side: position_side,
                 order_side: side,
                 amount,
                 leverage: Some(self.bot.leverage.max(1) as u32),
@@ -468,7 +468,7 @@ impl GridWorker {
         };
 
         let price = order.fill_price.unwrap_or_else(|| {
-            warn!(bot_id = %self.bot.id, order_id = %order.id, "Order filled but no fill_price, falling back to current_price");
+            error!(bot_id = %self.bot.id, order_id = %order.id, "Order filled but no fill_price — falling back to current_price (PnL may be inaccurate)");
             self.current_price
         });
         let level_side = self.levels[idx].side.clone();
@@ -1073,7 +1073,13 @@ impl GridWorker {
             .await;
 
         let indicators: crate::common::indicators::MarketIndicators =
-            serde_json::from_value(snapshot.indicators_json.clone()).unwrap_or_default();
+            serde_json::from_value(snapshot.indicators_json.clone()).unwrap_or_else(|e| {
+                tracing::warn!(
+                    error = %e,
+                    "Failed to deserialize indicators_json for grid LLM — using all-zero defaults"
+                );
+                crate::common::indicators::MarketIndicators::default()
+            });
 
         let user_prompt = utils::prompt::render_user_prompt(
             &indicators,

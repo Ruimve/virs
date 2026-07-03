@@ -44,7 +44,10 @@ impl BinanceOrderMessage {
             Some(data)
         } else if self.event_type_flat.as_deref() == Some("executionReport") {
             self.order_flat.map(|order| BinanceExecutionReport {
-                event_type: self.event_type_flat.unwrap(),
+                event_type: self.event_type_flat.unwrap_or_else(|| {
+                    tracing::error!("order_ws event_type_flat is None — data corruption");
+                    "unknown".to_string()
+                }),
                 event_time: self.event_time_flat.unwrap_or(0),
                 order,
             })
@@ -183,7 +186,14 @@ impl ExecutionReportInner {
             exchange_order_id: self.order_id.to_string(),
             symbol: self.symbol.clone(),
             status,
-            filled: self.filled_qty.parse().unwrap_or(0.0),
+            filled: self.filled_qty.parse().unwrap_or_else(|e| {
+                tracing::error!(
+                    filled_qty = %self.filled_qty,
+                    error = %e,
+                    "Failed to parse filled_qty in order_ws"
+                );
+                0.0
+            }),
             remaining: self
                 .remaining_qty
                 .as_ref()
@@ -198,9 +208,32 @@ impl ExecutionReportInner {
                 .as_ref()
                 .and_then(|s| s.parse::<f64>().ok())
                 .filter(|&p| p > 0.0)
-                .unwrap_or_else(|| self.last_fill_price.parse().unwrap_or(0.0)),
-            amount: self.orig_qty.parse().unwrap_or(0.0),
-            commission: self.commission.parse().unwrap_or(0.0),
+                .unwrap_or_else(|| {
+                    self.last_fill_price.parse().unwrap_or_else(|e| {
+                        tracing::error!(
+                            last_fill_price = %self.last_fill_price,
+                            error = %e,
+                            "Failed to parse last_fill_price in order_ws"
+                        );
+                        0.0
+                    })
+                }),
+            amount: self.orig_qty.parse().unwrap_or_else(|e| {
+                tracing::error!(
+                    orig_qty = %self.orig_qty,
+                    error = %e,
+                    "Failed to parse orig_qty in order_ws"
+                );
+                0.0
+            }),
+            commission: self.commission.parse().unwrap_or_else(|e| {
+                tracing::error!(
+                    commission = %self.commission,
+                    error = %e,
+                    "Failed to parse commission in order_ws"
+                );
+                0.0
+            }),
             timestamp: DateTime::from_timestamp_millis(self.trade_time).unwrap_or_else(Utc::now),
             position_side,
         })

@@ -455,10 +455,19 @@ impl AutoWorker {
                     );
                 }
                 Ok(None) => {
-                    warn!(bot_id = %self.bot.id, "No open trade record found for active position");
+                    error!(
+                        bot_id = %self.bot.id,
+                        "No open trade record found for active position — \
+                         stop_loss and take_profit remain 0.0, risk checks will be skipped"
+                    );
                 }
                 Err(e) => {
-                    warn!(bot_id = %self.bot.id, error = %e, "Failed to load open trade record");
+                    error!(
+                        bot_id = %self.bot.id,
+                        error = %e,
+                        "Failed to load open trade record — \
+                         stop_loss and take_profit remain 0.0, risk checks will be skipped"
+                    );
                 }
             }
             // 主动从 PE 查询仓位状态（不依赖事件推送，避免 full_sync 只发出 PositionSynced 导致超时）
@@ -1347,13 +1356,19 @@ impl AutoWorker {
         let position_side = match side {
             "long" => Some(BotPositionSide::Long),
             "short" => Some(BotPositionSide::Short),
-            _ => None,
+            _ => {
+                error!(side = %side, "Unknown position side — refusing to place order");
+                return;
+            }
         };
 
         let order_side = match side {
             "long" => OrderSide::Buy,
             "short" => OrderSide::Sell,
-            _ => OrderSide::Buy,
+            _ => {
+                error!(side = %side, "Unknown position side — refusing to place order");
+                return;
+            }
         };
 
         let client_order_id = format!("auto:{}:{}", side, self.bot.id);
@@ -1362,7 +1377,7 @@ impl AutoWorker {
             .order_executor
             .send_command(OrderCommand::OpenPosition {
                 symbol: self.bot.symbol.clone(),
-                side: position_side.unwrap_or(BotPositionSide::Long),
+                side: position_side.unwrap(),
                 order_side,
                 amount: quantity,
                 leverage: Some(self.bot.leverage.max(1) as u32),
@@ -1614,7 +1629,16 @@ impl AutoWorker {
                 let fill_price = order
                     .fill_price
                     .or(order.request_price)
-                    .unwrap_or(self.current_price);
+                    .unwrap_or_else(|| {
+                        // Using current_price as fallback for fill_price can cause
+                        // PnL miscalculation if the price has moved since fill.
+                        warn!(
+                            order_id = %order.id,
+                            "Order has no fill_price and no request_price — \
+                             using current_price as fallback (PnL may be inaccurate)"
+                        );
+                        self.current_price
+                    });
                 let filled_qty = if order.filled > 0.0 {
                     order.filled
                 } else {
@@ -1759,14 +1783,17 @@ impl AutoWorker {
             "long" => "open_long",
             "short" => "open_short",
             _ => {
-                warn!(bot_id = %self.bot.id, side = %pending.side, "Unexpected side, defaulting to open_long");
-                "open_long"
+                error!(side = %pending.side, "Unknown pending side — skipping trade record");
+                return;
             }
         };
         let trade_side = match pending.side.as_str() {
             "long" => "buy",
             "short" => "sell",
-            _ => "buy",
+            _ => {
+                error!(side = %pending.side, "Unknown pending side — skipping trade record");
+                return;
+            }
         };
         // 开仓时 INSERT 一条 status='open' 的 trade 记录，保存 trade_id 和 open_fee
         // 同时记录本次交易的风控边界（SL/TP）到 trade 维度，便于审计与前端展示
@@ -1841,7 +1868,10 @@ impl AutoWorker {
         let gross_pnl = match pending.side.as_str() {
             "long" => (fill_price - pending.entry_price) * actual_qty,
             "short" => (pending.entry_price - fill_price) * actual_qty,
-            _ => 0.0,
+            _ => {
+                error!(side = %pending.side, "Unknown pending side — skipping trade record");
+                return;
+            }
         };
         let total_fee = self.current_open_fee + fee;
         let realized_pnl = gross_pnl - total_fee;
@@ -1891,7 +1921,10 @@ impl AutoWorker {
         let close_side = match pending.side.as_str() {
             "long" => "sell",
             "short" => "buy",
-            _ => "sell",
+            _ => {
+                error!(side = %pending.side, "Unknown pending side — skipping trade record");
+                return;
+            }
         };
         // close_reason 直接使用 pending.close_reason（已为合法值）
         let close_reason = &pending.close_reason;

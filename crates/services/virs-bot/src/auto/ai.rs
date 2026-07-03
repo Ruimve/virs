@@ -68,14 +68,20 @@ impl AutoDecision {
         let decision = &json["decision"];
         let market = &json["market"];
 
-        let action_str = decision["action"].as_str().unwrap_or("hold");
+        let action_str = decision["action"].as_str().unwrap_or_else(|| {
+            warn!("LLM response missing 'action' field — defaulting to hold");
+            "hold"
+        });
         let reason = decision["reason"]
             .as_str()
             .unwrap_or("No reason provided")
             .to_string();
         let confidence = decision["confidence"]
             .as_f64()
-            .unwrap_or(0.5)
+            .unwrap_or_else(|| {
+                warn!("LLM response missing 'confidence' field — defaulting to 0.0");
+                0.0
+            })
             .clamp(0.0, 1.0);
 
         // 解析 SL/TP：LLM 应在 open_long/open_short 时返回正数价格；其他动作或异常时为 None

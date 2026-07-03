@@ -61,11 +61,21 @@ pub async fn login(
         return Err(VirsError::unauthorized("Invalid credentials"));
     }
 
-    // Generate JWT token
-    let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "virs-secret-key".to_string());
+    // Generate JWT token — JWT_SECRET is mandatory, fail-fast if missing
+    let secret = std::env::var("JWT_SECRET").map_err(|_| {
+        VirsError::config("JWT_SECRET environment variable is required")
+    })?;
     let expiration_hours: i64 = std::env::var("JWT_EXPIRATION_HOURS")
         .ok()
-        .and_then(|v| v.parse().ok())
+        .map(|v| {
+            v.parse::<i64>().map_err(|e| {
+                VirsError::config(format!(
+                    "Failed to parse JWT_EXPIRATION_HOURS '{}': {}",
+                    v, e
+                ))
+            })
+        })
+        .transpose()?
         .unwrap_or(24);
 
     let claims = virs_utils::auth::Claims::new(
@@ -76,19 +86,22 @@ pub async fn login(
     );
     let token = virs_utils::auth::encode_jwt(&claims, &secret)?;
 
-    Ok(Json(ApiResponse::ok(
-        serde_json::to_value(LoginResponse {
-            token,
-            user: UserInfo {
-                id,
-                username,
-                role,
-                email,
-                is_active,
-            },
-        })
-        .unwrap_or_default(),
-    )))
+    let login_resp = serde_json::to_value(LoginResponse {
+        token,
+        user: UserInfo {
+            id,
+            username,
+            role,
+            email,
+            is_active,
+        },
+    })
+    .map_err(|e| VirsError::Http {
+        status: 500,
+        message: format!("Failed to serialize login response: {}", e),
+    })?;
+
+    Ok(Json(ApiResponse::ok(login_resp)))
 }
 
 pub async fn logout() -> Result<Json<ApiResponse>, VirsError> {

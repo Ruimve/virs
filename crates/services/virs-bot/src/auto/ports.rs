@@ -23,7 +23,14 @@ impl AutoMarketSnapshot {
     /// Convert a base MarketSnapshot into AutoMarketSnapshot by deserializing indicators_json.
     pub fn from_base(snapshot: virs_types::bot::MarketSnapshot) -> Self {
         let indicators: crate::common::indicators::MarketIndicators =
-            serde_json::from_value(snapshot.indicators_json.clone()).unwrap_or_default();
+            serde_json::from_value(snapshot.indicators_json.clone()).unwrap_or_else(|e| {
+            tracing::warn!(
+                error = %e,
+                "Failed to deserialize indicators_json — using all-zero defaults. \
+                 LLM decisions based on zero indicators may be incorrect."
+            );
+            crate::common::indicators::MarketIndicators::default()
+        });
         Self {
             base: snapshot,
             indicators,

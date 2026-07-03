@@ -255,10 +255,10 @@ impl Exchange for CcxtAdapter {
             .find(|m| m.symbol == symbol || m.id == symbol);
         match found {
             Some(m) => Ok(m.min_amount.unwrap_or(0.0)),
-            None => {
-                tracing::warn!(symbol = %symbol, total_markets = markets.len(), "Symbol not found in markets, returning 0.0 for min_qty");
-                Ok(0.0)
-            }
+            None => Err(ExchangeError::NoData(format!(
+                "symbol {} not found in markets",
+                symbol
+            ))),
         }
     }
 

@@ -302,6 +302,6 @@ fn s3_1_default_constants_values() {
     assert_eq!(DEFAULT_CACHE_TTL_KLINE_5M, "120");
     assert_eq!(DEFAULT_CACHE_TTL_KLINE_1H, "300");
     assert_eq!(DEFAULT_CACHE_TTL_KLINE_1D, "3600");
-    assert_eq!(DEFAULT_ADMIN_USERNAME, "admin");
-    assert_eq!(DEFAULT_ADMIN_PASSWORD, "admin123");
+    // NOTE: ADMIN_USERNAME and ADMIN_PASSWORD no longer have defaults.
+    // They must be provided via environment variables — see app_config.rs.
 }

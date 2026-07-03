@@ -23,13 +23,19 @@ fn set_required_env_vars() {
     std::env::set_var("SECRET_KEY", "test_secret_key");
     std::env::set_var("ENCRYPTION_KEY", "test_encryption_key");
     std::env::set_var("DATABASE_URL", "postgres://localhost/virs_test");
+    // ADMIN_USERNAME and ADMIN_PASSWORD are required (no defaults).
+    // ADMIN_PASSWORD must be at least 12 characters.
+    std::env::set_var("ADMIN_USERNAME", "test_admin");
+    std::env::set_var("ADMIN_PASSWORD", "test_password_at_least_12_chars");
+    // JWT_SECRET is required for token signing/verification.
+    std::env::set_var("JWT_SECRET", "test_jwt_secret_at_least_32_chars_long");
 }
 
 /// Helper: remove all config-related env vars to ensure a clean state.
 fn clean_env_vars() {
     let keys = [
         "SECRET_KEY", "ENCRYPTION_KEY", "DATABASE_URL",
-        "HOST", "PORT", "LOG_LEVEL", "JWT_EXPIRATION_HOURS",
+        "HOST", "PORT", "LOG_LEVEL", "JWT_EXPIRATION_HOURS", "JWT_SECRET",
         "DB_POOL_MIN", "DB_POOL_MAX",
         "REDIS_URL", "REDIS_PASSWORD",
         "ADMIN_USERNAME", "ADMIN_PASSWORD",

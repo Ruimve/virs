@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use virs_models as models;
 use virs_types::enums::*;
@@ -110,7 +110,10 @@ pub fn convert_virs_market_type(mt: &models::MarketType) -> MarketType {
 
 pub fn convert_order(o: &models::Order, exchange_name: &str) -> PositionOrder {
     PositionOrder {
-        id: uuid::Uuid::parse_str(&o.id).unwrap_or_else(|_| uuid::Uuid::new_v4()),
+        id: uuid::Uuid::parse_str(&o.id).unwrap_or_else(|e| {
+            error!(order_id = %o.id, error = %e, "Failed to parse order UUID — generating new UUID (order identity will be lost)");
+            uuid::Uuid::new_v4()
+        }),
         position_id: uuid::Uuid::nil(),
         exchange_order_id: Some(o.id.clone()),
         client_order_id: o.client_order_id.clone(),

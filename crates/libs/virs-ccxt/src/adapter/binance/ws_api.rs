@@ -126,8 +126,16 @@ impl BinanceWsApiOrderWs {
                         let logon_id = request_id.fetch_add(1, Ordering::Relaxed);
                         match build_session_logon_request(&ed25519_signer, logon_id) {
                             Ok(logon_msg) => {
-                                let logon_text =
-                                    serde_json::to_string(&logon_msg).unwrap_or_default();
+                                let logon_text = match serde_json::to_string(&logon_msg) {
+                                    Ok(s) => s,
+                                    Err(e) => {
+                                        tracing::error!(
+                                            error = %e,
+                                            "[BinanceWsApiOrderWs] Failed to serialize logon_msg — skipping send"
+                                        );
+                                        continue;
+                                    }
+                                };
                                 tracing::debug!(
                                     "[BinanceWsApiOrderWs] Sending session.logon (id={})",
                                     logon_id
@@ -187,7 +195,16 @@ impl BinanceWsApiOrderWs {
                             "method": "userDataStream.subscribe",
                             "params": {}
                         });
-                        let sub_text = serde_json::to_string(&sub_msg).unwrap_or_default();
+                        let sub_text = match serde_json::to_string(&sub_msg) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                tracing::error!(
+                                    error = %e,
+                                    "[BinanceWsApiOrderWs] Failed to serialize sub_msg — skipping send"
+                                );
+                                continue;
+                            }
+                        };
                         tracing::debug!(
                             "[BinanceWsApiOrderWs] Sending userDataStream.subscribe (id={})",
                             sub_id
@@ -302,7 +319,16 @@ impl BinanceWsApiOrderWs {
                                         "method": "userDataStream.ping",
                                         "params": {}
                                     });
-                                    let ping_text = serde_json::to_string(&ping_msg).unwrap_or_default();
+                                    let ping_text = match serde_json::to_string(&ping_msg) {
+                                        Ok(s) => s,
+                                        Err(e) => {
+                                            tracing::error!(
+                                                error = %e,
+                                                "[BinanceWsApiOrderWs] Failed to serialize ping_msg — skipping send"
+                                            );
+                                            continue;
+                                        }
+                                    };
                                     if write
                                         .send(Message::Text(ping_text.into()))
                                         .await

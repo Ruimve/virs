@@ -67,7 +67,13 @@ impl GridEngine {
 
     /// 启动引擎主循环
     pub async fn run(&mut self) {
-        let mut cmd_rx = self.cmd_rx.take().expect("GridEngine already running");
+        let mut cmd_rx = match self.cmd_rx.take() {
+            Some(rx) => rx,
+            None => {
+                error!("GridEngine already running — run() called twice. Skipping.");
+                return;
+            }
+        };
         self.restore_running_bots().await;
 
         while let Some(cmd) = cmd_rx.recv().await {

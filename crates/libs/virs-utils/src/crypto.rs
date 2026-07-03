@@ -63,8 +63,15 @@ pub fn hash_password(password: &str) -> VirsResult<String> {
 }
 
 /// Verify a password against a bcrypt hash.
+///
+/// Returns `false` on verification failure or hash corruption.
+/// Hash corruption is logged at `error!` level so operators can diagnose
+/// why authentication is failing (e.g., database field was truncated).
 pub fn verify_password(password: &str, hash: &str) -> bool {
-    bcrypt::verify(password, hash).unwrap_or(false)
+    bcrypt::verify(password, hash).unwrap_or_else(|e| {
+        tracing::error!(error = %e, "bcrypt verify error — hash may be corrupted or malformed");
+        false
+    })
 }
 
 /// Encrypt a string using a secret string (derives key internally).

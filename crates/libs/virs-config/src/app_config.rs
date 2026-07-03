@@ -19,8 +19,9 @@ pub(crate) const DEFAULT_CACHE_TTL_KLINE_1M: &str = "60";
 pub(crate) const DEFAULT_CACHE_TTL_KLINE_5M: &str = "120";
 pub(crate) const DEFAULT_CACHE_TTL_KLINE_1H: &str = "300";
 pub(crate) const DEFAULT_CACHE_TTL_KLINE_1D: &str = "3600";
-pub(crate) const DEFAULT_ADMIN_USERNAME: &str = "admin";
-pub(crate) const DEFAULT_ADMIN_PASSWORD: &str = "admin123";
+// ADMIN_USERNAME and ADMIN_PASSWORD have NO defaults — they must be set
+// explicitly via environment variables. This is a security requirement:
+// hard-coded credentials allow attackers to forge admin access.
 
 // ============================================================
 // Pure parsing functions (idempotent, no side effects)
@@ -242,8 +243,20 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
     );
 
     let admin = AdminConfig {
-        username: std::env::var("ADMIN_USERNAME").unwrap_or_else(|_| DEFAULT_ADMIN_USERNAME.into()),
-        password: std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| DEFAULT_ADMIN_PASSWORD.into()),
+        username: std::env::var("ADMIN_USERNAME").map_err(|_| {
+            VirsError::config("ADMIN_USERNAME environment variable is required")
+        })?,
+        password: {
+            let pwd = std::env::var("ADMIN_PASSWORD").map_err(|_| {
+                VirsError::config("ADMIN_PASSWORD environment variable is required")
+            })?;
+            if pwd.len() < 12 {
+                return Err(VirsError::config(
+                    "ADMIN_PASSWORD must be at least 12 characters for security",
+                ));
+            }
+            pwd
+        },
         id: None,
     };
 

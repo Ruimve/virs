@@ -719,12 +719,35 @@ pub async fn fetch_positions(
 
             let symbol_str = parse_str(p, "symbol").unwrap_or_default();
 
+            // entryPrice / leverage are critical fields; if either is missing
+            // the position record is unusable, so log and skip it.
+            let entry_price = match parse_f64(p, "entryPrice") {
+                Some(v) => v,
+                None => {
+                    tracing::warn!(
+                        symbol = %symbol_str,
+                        "positionRisk entryPrice missing — skipping position"
+                    );
+                    return None;
+                }
+            };
+            let leverage = match parse_u32(p, "leverage") {
+                Some(v) => v,
+                None => {
+                    tracing::warn!(
+                        symbol = %symbol_str,
+                        "positionRisk leverage missing — skipping position"
+                    );
+                    return None;
+                }
+            };
+
             Some(Position {
                 symbol: crate::adapter::binance::BinanceExchange::to_unified_symbol(&symbol_str),
                 side,
                 size,
-                entry_price: parse_f64(p, "entryPrice").unwrap_or(0.0),
-                leverage: parse_u32(p, "leverage").unwrap_or(1),
+                entry_price,
+                leverage,
                 unrealized_pnl: parse_f64(p, "unRealizedProfit").unwrap_or(0.0),
                 margin_mode,
                 liquidation_price: parse_f64(p, "liquidationPrice"),

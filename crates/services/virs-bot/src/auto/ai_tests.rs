@@ -82,7 +82,7 @@ fn a3_2_decision_from_json_missing_fields() {
     let decision = AutoDecision::from_json(&json);
     assert_eq!(decision.action, AutoAction::Hold); // default
     assert_eq!(decision.reason, "No reason provided");
-    assert!((decision.confidence - 0.5).abs() < 1e-10); // default
+    assert!((decision.confidence - 0.0).abs() < 1e-10); // default is now 0.0 to prevent accidental trades
     assert!(decision.stop_loss.is_none());
     assert!(decision.take_profit.is_none());
     assert!(decision.market_regime.is_none());

@@ -43,6 +43,39 @@ pub async fn create_bot(
         ));
     }
 
+    // Validate critical trading parameters — no silent defaults for values
+    // that can cause financial loss if wrong.
+    if upper_price <= 0.0 {
+        return Err(VirsError::bad_request(
+            "upper_price is required and must be greater than 0",
+        ));
+    }
+    if lower_price <= 0.0 {
+        return Err(VirsError::bad_request(
+            "lower_price is required and must be greater than 0",
+        ));
+    }
+    if upper_price <= lower_price {
+        return Err(VirsError::bad_request(
+            "upper_price must be greater than lower_price",
+        ));
+    }
+    if quantity_per_grid <= 0.0 {
+        return Err(VirsError::bad_request(
+            "quantity_per_grid is required and must be greater than 0",
+        ));
+    }
+    if leverage <= 0 {
+        return Err(VirsError::bad_request(
+            "leverage is required and must be greater than 0",
+        ));
+    }
+    if market_type != "spot" && market_type != "perpetual" {
+        return Err(VirsError::bad_request(
+            "market_type must be 'spot' or 'perpetual'",
+        ));
+    }
+
     // Enforce 1-bot-per-user limit (across all bot types)
     {
         let grid_count: i64 =
@@ -340,11 +373,16 @@ pub async fn start_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    if let Some(tx) = state.engine_manager.grid_cmd_tx() {
-        let _ = tx
-            .send(virs_bot::grid::types::GridCommand::StartBot { bot_id: id })
-            .await;
-    }
+    let tx = state.engine_manager.grid_cmd_tx().ok_or_else(|| VirsError::Http {
+        status: 503,
+        message: "Grid engine not running".into(),
+    })?;
+    tx.send(virs_bot::grid::types::GridCommand::StartBot { bot_id: id })
+        .await
+        .map_err(|_| VirsError::Http {
+            status: 500,
+            message: "Failed to send command to grid engine".into(),
+        })?;
     Ok(Json(ApiResponse::ok(serde_json::json!({"started": true}))))
 }
 
@@ -366,11 +404,16 @@ pub async fn stop_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    if let Some(tx) = state.engine_manager.grid_cmd_tx() {
-        let _ = tx
-            .send(virs_bot::grid::types::GridCommand::StopBot { bot_id: id })
-            .await;
-    }
+    let tx = state.engine_manager.grid_cmd_tx().ok_or_else(|| VirsError::Http {
+        status: 503,
+        message: "Grid engine not running".into(),
+    })?;
+    tx.send(virs_bot::grid::types::GridCommand::StopBot { bot_id: id })
+        .await
+        .map_err(|_| VirsError::Http {
+            status: 500,
+            message: "Failed to send command to grid engine".into(),
+        })?;
     Ok(Json(ApiResponse::ok(serde_json::json!({"stopped": true}))))
 }
 
@@ -378,14 +421,19 @@ pub async fn delete_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    if let Some(tx) = state.engine_manager.grid_cmd_tx() {
-        let _ = tx
-            .send(virs_bot::grid::types::GridCommand::DeleteBot {
-                bot_id: id,
-                close_position: true,
-            })
-            .await;
-    }
+    let tx = state.engine_manager.grid_cmd_tx().ok_or_else(|| VirsError::Http {
+        status: 503,
+        message: "Grid engine not running".into(),
+    })?;
+    tx.send(virs_bot::grid::types::GridCommand::DeleteBot {
+        bot_id: id,
+        close_position: true,
+    })
+    .await
+    .map_err(|_| VirsError::Http {
+        status: 500,
+        message: "Failed to send command to grid engine".into(),
+    })?;
     // Delete from database
     sqlx::query(r#"DELETE FROM qd_grid_bots WHERE id = $1"#)
         .bind(id)

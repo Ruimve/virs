@@ -329,6 +329,11 @@ pub struct EngineConfig {
     pub risk: RiskConfig,
     #[serde(default = "default_pnl_snapshot_interval")]
     pub pnl_snapshot_interval_secs: u64,
+    /// Default leverage used when no leverage is explicitly specified for an order.
+    /// This prevents falling back to 1x (which overestimates margin requirements)
+    /// or 0x (which would cause division-by-zero in margin calculations).
+    #[serde(default = "default_leverage")]
+    pub default_leverage: u32,
 }
 
 fn default_sync_interval() -> u64 {
@@ -343,6 +348,9 @@ fn default_ws_reconnect_timeout() -> u64 {
 fn default_pnl_snapshot_interval() -> u64 {
     60
 }
+fn default_leverage() -> u32 {
+    1
+}
 
 impl Default for EngineConfig {
     fn default() -> Self {
@@ -353,6 +361,7 @@ impl Default for EngineConfig {
             ws_reconnect_timeout_secs: default_ws_reconnect_timeout(),
             risk: RiskConfig::default(),
             pnl_snapshot_interval_secs: default_pnl_snapshot_interval(),
+            default_leverage: default_leverage(),
         }
     }
 }

@@ -167,17 +167,48 @@ pub struct CcxtTicker {
 
 impl From<CcxtTicker> for Ticker {
     fn from(t: CcxtTicker) -> Self {
+        // NOTE: `From` cannot return a Result, so a missing field is logged and
+        // falls back to 0.0 rather than propagating an error. Critical price
+        // fields (bid/ask/last) are logged at `error!` level because a missing
+        // core price indicates a data-source anomaly; statistical fields use
+        // `warn!`. A missing timestamp falls back to the current time. These
+        // fallbacks should be investigated via the emitted log records.
+        let symbol = t.symbol.clone();
         Ticker {
             symbol: t.symbol,
             exchange: t.exchange,
-            bid: t.bid.unwrap_or(0.0),
-            ask: t.ask.unwrap_or(0.0),
-            last: t.last.unwrap_or(0.0),
-            high_24h: t.high.unwrap_or(0.0),
-            low_24h: t.low.unwrap_or(0.0),
-            volume_24h: t.volume.unwrap_or(0.0),
-            price_change_24h: t.price_change.unwrap_or(0.0),
-            price_change_pct_24h: t.price_change_pct.unwrap_or(0.0),
+            bid: t.bid.unwrap_or_else(|| {
+                tracing::error!(symbol = %symbol, "Ticker bid missing");
+                0.0
+            }),
+            ask: t.ask.unwrap_or_else(|| {
+                tracing::error!(symbol = %symbol, "Ticker ask missing");
+                0.0
+            }),
+            last: t.last.unwrap_or_else(|| {
+                tracing::error!(symbol = %symbol, "Ticker last missing");
+                0.0
+            }),
+            high_24h: t.high.unwrap_or_else(|| {
+                tracing::warn!(symbol = %symbol, "Ticker high_24h missing");
+                0.0
+            }),
+            low_24h: t.low.unwrap_or_else(|| {
+                tracing::warn!(symbol = %symbol, "Ticker low_24h missing");
+                0.0
+            }),
+            volume_24h: t.volume.unwrap_or_else(|| {
+                tracing::warn!(symbol = %symbol, "Ticker volume_24h missing");
+                0.0
+            }),
+            price_change_24h: t.price_change.unwrap_or_else(|| {
+                tracing::warn!(symbol = %symbol, "Ticker price_change_24h missing");
+                0.0
+            }),
+            price_change_pct_24h: t.price_change_pct.unwrap_or_else(|| {
+                tracing::warn!(symbol = %symbol, "Ticker price_change_pct_24h missing");
+                0.0
+            }),
             timestamp: t.timestamp.unwrap_or_else(chrono::Utc::now),
         }
     }

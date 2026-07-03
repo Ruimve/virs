@@ -27,11 +27,21 @@ use crate::risk::{DrawdownAction, RiskChecker};
 use crate::tracker::PnlTracker;
 
 /// Recover from lock poisoning by accessing the inner data anyway.
-/// In a trading system, we prefer to continue with potentially stale state
-/// rather than panic and crash the engine.
+///
+/// **WARNING**: Lock poisoning means a thread panicked while holding the lock,
+/// and the protected data may be in an inconsistent state. In a trading system,
+/// continuing with stale/inconsistent state can lead to incorrect risk checks,
+/// duplicate orders, or balance errors.
+///
+/// We log at `error!` level so monitoring can detect this and trigger an alert.
+/// The engine should be restarted as soon as possible after lock poisoning.
 fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
     lock.unwrap_or_else(|poisoned| {
-        warn!("Lock poisoned, recovering with inner data");
+        error!(
+            "Lock poisoned — a thread panicked while holding a lock. \
+             Continuing with potentially inconsistent state. \
+             Restart the engine immediately."
+        );
         poisoned.into_inner()
     })
 }
@@ -668,11 +678,26 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
             let risk_checker = recover_lock(inner.risk_checker.lock());
             for entry in inner.positions.iter() {
                 let pos = entry.value();
+                // liquidation_price is critical for risk assessment — if missing,
+                // skip this position's warning and log an error rather than
+                // silently using 0.0 which would make the warning meaningless.
+                let liq_price = match pos.liquidation_price {
+                    Some(p) if p > 0.0 => p,
+                    _ => {
+                        error!(
+                            position_id = %pos.id,
+                            symbol = %pos.symbol,
+                            "Position has no valid liquidation_price — \
+                             cannot assess liquidation risk. Skipping warning."
+                        );
+                        continue;
+                    }
+                };
                 if let Some(_distance_pct) = risk_checker.check_liquidation(pos) {
                     inner.emit_event(EngineEvent::LiquidationWarning {
                         position_id: pos.id,
                         symbol: pos.symbol.clone(),
-                        liquidation_price: pos.liquidation_price.unwrap_or(0.0),
+                        liquidation_price: liq_price,
                         current_price: pos.current_price,
                     });
                     warn!(position_id = %pos.id, symbol = %pos.symbol, "Liquidation warning");
@@ -1280,7 +1305,10 @@ pub(crate) async fn handle_open_position(
                         exchange: exchange_name.clone(),
                         symbol: symbol.clone(),
                         side: resolved_side,
-                        price: order.fill_price.unwrap_or(0.0),
+                        price: order.fill_price.unwrap_or_else(|| {
+                            error!(order_id = %order.id, "Order filled but no fill_price in Trade record — using 0.0");
+                            0.0
+                        }),
                         amount: order.filled,
                         fee: order.fee,
                         fee_currency: order.fee_currency.clone(),
@@ -1331,7 +1359,17 @@ pub(crate) async fn handle_open_position(
         }
     }
 
-    let lev = leverage.unwrap_or(1);
+    let lev = leverage.unwrap_or_else(|| {
+        // No leverage specified — use the engine's configured default leverage.
+        // Falling back to 1 would cause margin overestimation and incorrect
+        // risk checks. Log a warning so operators know the default was used.
+        warn!(
+            symbol = %symbol,
+            "No leverage specified for open_position — using engine default ({}x)",
+            inner.config.default_leverage
+        );
+        inner.config.default_leverage
+    });
 
     let total_equity = inner.exchange.get_balance().await
         .map(|b| b.total)
@@ -1417,10 +1455,25 @@ pub(crate) async fn handle_open_position(
             order.position_id = position_id;
             position.status = PositionStatus::Open;
             position.size = order.filled;
-            let fill_price = order.fill_price.unwrap_or_else(|| {
-                warn!(order_id = %order.id, filled = order.filled, "Order filled but no fill_price, using 0.0");
-                0.0
-            });
+            // fill_price is critical — a filled order without fill_price indicates
+            // a data integrity issue. Using 0.0 would cause zero-cost positions,
+            // infinite leverage capacity, and explosive PnL errors.
+            let fill_price = if order.filled > 0.0 {
+                match order.fill_price {
+                    Some(p) if p > 0.0 => p,
+                    _ => {
+                        error!(
+                            order_id = %order.id,
+                            filled = order.filled,
+                            "Order is filled but has no valid fill_price — \
+                             refusing to update position to prevent data corruption."
+                        );
+                        return;
+                    }
+                }
+            } else {
+                order.fill_price.unwrap_or(0.0)
+            };
             position.entry_price = fill_price;
             position.current_price = position.entry_price;
             position.margin = if lev > 0 {
@@ -1458,7 +1511,10 @@ pub(crate) async fn handle_open_position(
                     exchange: exchange_name.clone(),
                     symbol: symbol.clone(),
                     side: resolved_side,
-                    price: order.fill_price.unwrap_or(0.0),
+                    price: order.fill_price.unwrap_or_else(|| {
+                        error!(order_id = %order.id, "Order filled but no fill_price in Trade record — using 0.0");
+                        0.0
+                    }),
                     amount: order.filled,
                     fee: order.fee,
                     fee_currency: order.fee_currency.clone(),
@@ -1577,7 +1633,10 @@ pub(crate) async fn handle_close_position(
                     exchange: position.exchange.clone(),
                     symbol: position.symbol.clone(),
                     side: close_side,
-                    price: order.fill_price.unwrap_or(0.0),
+                    price: order.fill_price.unwrap_or_else(|| {
+                        error!(order_id = %order.id, "Close order filled but no fill_price in Trade record — using 0.0");
+                        0.0
+                    }),
                     amount: order.filled,
                     fee: order.fee,
                     fee_currency: order.fee_currency.clone(),
