@@ -263,11 +263,29 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             ind.current_price
         };
 
+        let exchange_key = format!("{}:perpetual", exchange);
+        let min_qty = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+            match ex.get_min_qty(symbol).await {
+                Ok(q) => q,
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to fetch min_qty, defaulting to 0");
+                    0.0
+                }
+            }
+        } else {
+            tracing::warn!(
+                exchange = %exchange,
+                symbol = %symbol,
+                "No exchange found for min_qty — defaulting to 0.0"
+            );
+            0.0
+        };
+
         MarketSnapshot {
             current_price: effective_price,
             funding_rate,
             funding_next_time: "N/A".to_string(),
-            min_qty: 0.0,
+            min_qty,
             liquidation_price: None,
             indicators_json: serde_json::to_value(&ind).unwrap_or_default(),
         }
@@ -578,6 +596,11 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
                 }
             }
         } else {
+            tracing::warn!(
+                exchange = %exchange,
+                symbol = %symbol,
+                "No exchange found for min_qty — defaulting to 0.0"
+            );
             0.0
         };
 

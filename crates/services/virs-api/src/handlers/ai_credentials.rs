@@ -36,10 +36,20 @@ pub fn parse_balance_response(data: &serde_json::Value) -> Vec<serde_json::Value
         .as_array()
         .or_else(|| data["data"].as_array())
         .map(|arr| {
-            arr.iter().map(|b| serde_json::json!({
-                "total_balance": b["total_balance"].as_str().unwrap_or("0"),
-                "currency": b["currency"].as_str().unwrap_or("USD"),
-            })).collect::<Vec<_>>()
+            arr.iter().map(|b| {
+                let total_balance = b["total_balance"].as_str().unwrap_or_else(|| {
+                    tracing::warn!("total_balance field missing in balance response — defaulting to '0'");
+                    "0"
+                });
+                let currency = b["currency"].as_str().unwrap_or_else(|| {
+                    tracing::warn!("currency field missing in balance response — defaulting to 'USD'");
+                    "USD"
+                });
+                serde_json::json!({
+                    "total_balance": total_balance,
+                    "currency": currency,
+                })
+            }).collect::<Vec<_>>()
         })
         .unwrap_or_default()
 }
