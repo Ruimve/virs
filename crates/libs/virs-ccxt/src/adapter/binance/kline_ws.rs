@@ -40,13 +40,17 @@ impl BinanceKlineMessage {
     fn into_kline_data(self) -> Option<BinanceKlineData> {
         if let Some(data) = self.data {
             Some(data)
-        } else if self.event_type_flat.as_deref() == Some("kline") {
-            self.kline_flat.map(|kline| BinanceKlineData {
-                event_type: self.event_type_flat.unwrap(),
-                event_time: 0,
-                symbol: self.symbol_flat.unwrap_or_default(),
-                kline,
-            })
+        } else if let Some(et) = self.event_type_flat.as_deref() {
+            if et == "kline" {
+                self.kline_flat.map(|kline| BinanceKlineData {
+                    event_type: et.to_string(),
+                    event_time: 0,
+                    symbol: self.symbol_flat.clone().unwrap_or_default(),
+                    kline,
+                })
+            } else {
+                None
+            }
         } else {
             None
         }

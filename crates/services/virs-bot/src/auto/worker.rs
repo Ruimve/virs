@@ -347,10 +347,12 @@ impl AutoWorker {
             if let Err(e) = self.store.update_bot_status(self.bot.id, "error").await {
                 error!(error = %e, "Failed to update bot status to error");
             }
-            let _ = self.auto_event_tx.send(AutoEvent::BotError {
+            if let Err(e) = self.auto_event_tx.send(AutoEvent::BotError {
                 bot_id: self.bot.id,
                 error: "Failed to fetch initial price after 10 attempts".to_string(),
-            });
+            }) {
+                tracing::warn!(error = %e, event = "BotError", "Failed to send event — receiver may be dropped");
+            }
             return;
         }
         info!(bot_id = %self.bot.id, price = self.current_price, "Initial price fetched");
@@ -774,10 +776,12 @@ impl AutoWorker {
             .await
         {
             warn!(bot_id = %self.bot.id, "AI service not available, skipping decision");
-            let _ = self.auto_event_tx.send(AutoEvent::BotError {
+            if let Err(e) = self.auto_event_tx.send(AutoEvent::BotError {
                 bot_id: self.bot.id,
                 error: "LLM decision skipped: AI service not configured".to_string(),
-            });
+            }) {
+                tracing::warn!(error = %e, event = "BotError", "Failed to send event — receiver may be dropped");
+            }
             return;
         }
 
@@ -1062,10 +1066,12 @@ impl AutoWorker {
                     .await
                     .ok();
 
-                let _ = self.auto_event_tx.send(AutoEvent::BotError {
+                if let Err(e) = self.auto_event_tx.send(AutoEvent::BotError {
                     bot_id: self.bot.id,
                     error: "LLM call failed, holding".to_string(),
-                });
+                }) {
+                    tracing::warn!(error = %e, event = "BotError", "Failed to send event — receiver may be dropped");
+                }
 
                 (AutoAction::Hold, log_id)
             }
@@ -1256,13 +1262,15 @@ impl AutoWorker {
 
         if account.total <= 0.0 && account.free <= 0.0 {
             warn!(bot_id = %self.bot.id, "Cannot retrieve account balance, skipping open");
-            let _ = self.auto_event_tx.send(AutoEvent::BotError {
+            if let Err(e) = self.auto_event_tx.send(AutoEvent::BotError {
                 bot_id: self.bot.id,
                 error: format!(
                     "Cannot retrieve account balance for opening {} position",
                     side
                 ),
-            });
+            }) {
+                tracing::warn!(error = %e, event = "BotError", "Failed to send event — receiver may be dropped");
+            }
             return;
         }
 
@@ -1282,13 +1290,15 @@ impl AutoWorker {
         let invest_amount = account.free * 0.95 * position_size_pct / 100.0;
         if invest_amount < 1.0 {
             warn!(bot_id = %self.bot.id, invest_amount, "Insufficient funds for opening position");
-            let _ = self.auto_event_tx.send(AutoEvent::BotError {
+            if let Err(e) = self.auto_event_tx.send(AutoEvent::BotError {
                 bot_id: self.bot.id,
                 error: format!(
                     "Insufficient funds: only {:.2} USDT available (need >= 1.0)",
                     invest_amount
                 ),
-            });
+            }) {
+                tracing::warn!(error = %e, event = "BotError", "Failed to send event — receiver may be dropped");
+            }
             return;
         }
 
@@ -1425,10 +1435,12 @@ impl AutoWorker {
             }
             Err(e) => {
                 warn!(bot_id = %self.bot.id, error = %e, "Failed to send open position order");
-                let _ = self.auto_event_tx.send(AutoEvent::BotError {
+                if let Err(e) = self.auto_event_tx.send(AutoEvent::BotError {
                     bot_id: self.bot.id,
                     error: format!("Failed to send open {} order: {}", side, e),
-                });
+                }) {
+                    tracing::warn!(error = %e, event = "BotError", "Failed to send event — receiver may be dropped");
+                }
             }
         }
     }
@@ -1483,10 +1495,12 @@ impl AutoWorker {
                 }
                 Err(e) => {
                     error!(bot_id = %self.bot.id, error = %e, "Failed to send close position order");
-                    let _ = self.auto_event_tx.send(AutoEvent::BotError {
+                    if let Err(e) = self.auto_event_tx.send(AutoEvent::BotError {
                         bot_id: self.bot.id,
                         error: format!("Failed to send close order ({}): {}", close_reason, e),
-                    });
+                    }) {
+                        tracing::warn!(error = %e, event = "BotError", "Failed to send event — receiver may be dropped");
+                    }
                 }
             }
         } else {
@@ -1538,10 +1552,12 @@ impl AutoWorker {
                 }
                 Err(e) => {
                     error!(bot_id = %self.bot.id, error = %e, "Failed to send close position order (fallback path)");
-                    let _ = self.auto_event_tx.send(AutoEvent::BotError {
+                    if let Err(e) = self.auto_event_tx.send(AutoEvent::BotError {
                         bot_id: self.bot.id,
                         error: format!("Failed to send close order ({}): {}", close_reason, e),
-                    });
+                    }) {
+                        tracing::warn!(error = %e, event = "BotError", "Failed to send event — receiver may be dropped");
+                    }
                 }
             }
         }
@@ -1839,12 +1855,14 @@ impl AutoWorker {
             }
         }
 
-        let _ = self.auto_event_tx.send(AutoEvent::PositionOpened {
+        if let Err(e) = self.auto_event_tx.send(AutoEvent::PositionOpened {
             bot_id: self.bot.id,
             side: pending.side.clone(),
             price: fill_price,
             quantity: actual_qty,
-        });
+        }) {
+            tracing::warn!(error = %e, event = "PositionOpened", "Failed to send event — receiver may be dropped");
+        }
 
         if actual_qty < pending.position_size {
             warn!(
@@ -2025,12 +2043,14 @@ impl AutoWorker {
         // 重置开仓手续费缓存
         self.current_open_fee = 0.0;
 
-        let _ = self.auto_event_tx.send(AutoEvent::PositionClosed {
+        if let Err(e) = self.auto_event_tx.send(AutoEvent::PositionClosed {
             bot_id: self.bot.id,
             side: pending.side.clone(),
             price: fill_price,
             pnl: realized_pnl,
-        });
+        }) {
+            tracing::warn!(error = %e, event = "PositionClosed", "Failed to send event — receiver may be dropped");
+        }
 
         // 回填 LLM 日志执行状态：平仓成功
         // 注：close_reason 不回填到此表，已记录在 qd_auto_trades.close_reason

@@ -554,19 +554,23 @@ impl GridWorker {
             .await;
 
         if is_close_trade(&level_side, side_str) {
-            let _ = self.grid_event_tx.send(GridEvent::GridTradeClosed {
+            if let Err(e) = self.grid_event_tx.send(GridEvent::GridTradeClosed {
                 bot_id: self.bot.id,
                 level: level_num,
                 pnl,
-            });
+            }) {
+                tracing::warn!(error = %e, event = "GridTradeClosed", "Failed to send event — receiver may be dropped");
+            }
         }
-        let _ = self.grid_event_tx.send(GridEvent::GridFilled {
+        if let Err(e) = self.grid_event_tx.send(GridEvent::GridFilled {
             bot_id: self.bot.id,
             level: level_num,
             side: side_str.to_string(),
             price,
             quantity: order.filled,
-        });
+        }) {
+            tracing::warn!(error = %e, event = "GridFilled", "Failed to send event — receiver may be dropped");
+        }
 
         self.save_stats().await;
         info!(bot_id = %self.bot.id, level = level_num, side = %side_str, price, quantity = order.filled, pnl, hold, "Grid order filled");
@@ -862,10 +866,12 @@ impl GridWorker {
             grid_filled_count: self.grid_filled_count,
             last_tick_at: Utc::now(),
         };
-        let _ = self.grid_event_tx.send(GridEvent::StatusUpdate {
+        if let Err(e) = self.grid_event_tx.send(GridEvent::StatusUpdate {
             bot_id: self.bot.id,
             state,
-        });
+        }) {
+            tracing::warn!(error = %e, event = "StatusUpdate", "Failed to send event — receiver may be dropped");
+        }
     }
 
     async fn record_open_trade(
@@ -1181,10 +1187,12 @@ impl GridWorker {
                     warn!(bot_id = %self.bot.id, error = %e, "Failed to save analysis log");
                 }
 
-                let _ = self.grid_event_tx.send(GridEvent::BotError {
+                if let Err(e) = self.grid_event_tx.send(GridEvent::BotError {
                     bot_id: self.bot.id,
                     error: "LLM call failed, using rule-based fallback".to_string(),
-                });
+                }) {
+                    tracing::warn!(error = %e, event = "BotError", "Failed to send event — receiver may be dropped");
+                }
                 rule_action
             }
         }
@@ -1477,12 +1485,14 @@ impl GridWorker {
         }
 
         info!(bot_id = %self.bot.id, new_upper = self.bot.upper_price, new_lower = self.bot.lower_price, grid_count = self.levels.len(), "Grid adjusted");
-        let _ = self.grid_event_tx.send(GridEvent::GridAdjusted {
+        if let Err(e) = self.grid_event_tx.send(GridEvent::GridAdjusted {
             bot_id: self.bot.id,
             upper_price: self.bot.upper_price,
             lower_price: self.bot.lower_price,
             level_count: self.levels.len(),
-        });
+        }) {
+            tracing::warn!(error = %e, event = "GridAdjusted", "Failed to send event — receiver may be dropped");
+        }
     }
 
     pub fn recalculate_levels(&mut self) {

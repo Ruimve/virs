@@ -1,4 +1,4 @@
-//! Unit tests for types.rs From implementations.
+//! Unit tests for types.rs From/TryFrom implementations.
 //!
 //! Covers: CcxtOrderStatus→OrderStatus, CcxtTicker→Ticker, CcxtOrderBook→OrderBook,
 //! CcxtFundingRate→FundingRate, CcxtFundingHistoryEntry→FundingHistoryEntry.
@@ -80,7 +80,7 @@ fn t2_1_ticker_all_fields() {
         timestamp: Some(now),
         info: serde_json::json!({}),
     };
-    let ticker: Ticker = ccxt.into();
+    let ticker: Ticker = ccxt.try_into().unwrap();
     assert_eq!(ticker.symbol, "BTC/USDT");
     assert_eq!(ticker.exchange, "binance");
     assert_eq!(ticker.bid, 50000.0);
@@ -95,7 +95,7 @@ fn t2_1_ticker_all_fields() {
 }
 
 #[test]
-fn t2_2_ticker_none_fields_default_to_zero() {
+fn t2_2_ticker_none_fields_return_error() {
     let ccxt = CcxtTicker {
         symbol: "ETH/USDT".into(),
         exchange: "binance".into(),
@@ -114,15 +114,8 @@ fn t2_2_ticker_none_fields_default_to_zero() {
         timestamp: None,
         info: serde_json::json!({}),
     };
-    let ticker: Ticker = ccxt.into();
-    assert_eq!(ticker.bid, 0.0);
-    assert_eq!(ticker.ask, 0.0);
-    assert_eq!(ticker.last, 0.0);
-    assert_eq!(ticker.high_24h, 0.0);
-    assert_eq!(ticker.low_24h, 0.0);
-    assert_eq!(ticker.volume_24h, 0.0);
-    assert_eq!(ticker.price_change_24h, 0.0);
-    assert_eq!(ticker.price_change_pct_24h, 0.0);
+    let result: Result<Ticker, _> = ccxt.try_into();
+    assert!(result.is_err(), "Ticker with None fields should return error, not default to 0.0");
 }
 
 #[test]
@@ -131,22 +124,22 @@ fn t2_3_ticker_timestamp_none_uses_now() {
     let ccxt = CcxtTicker {
         symbol: "BTC/USDT".into(),
         exchange: "binance".into(),
-        bid: None,
-        ask: None,
-        last: None,
-        high: None,
-        low: None,
-        volume: None,
-        quote_volume: None,
-        open: None,
-        close: None,
-        previous_close: None,
-        price_change: None,
-        price_change_pct: None,
+        bid: Some(50000.0),
+        ask: Some(50001.0),
+        last: Some(50000.5),
+        high: Some(51000.0),
+        low: Some(49000.0),
+        volume: Some(1000.5),
+        quote_volume: Some(50000000.0),
+        open: Some(49500.0),
+        close: Some(50000.5),
+        previous_close: Some(49499.0),
+        price_change: Some(500.5),
+        price_change_pct: Some(1.01),
         timestamp: None,
         info: serde_json::json!({}),
     };
-    let ticker: Ticker = ccxt.into();
+    let ticker: Ticker = ccxt.try_into().unwrap();
     let after = Utc::now();
     assert!(ticker.timestamp >= before);
     assert!(ticker.timestamp <= after);

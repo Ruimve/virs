@@ -26,8 +26,8 @@ impl CcxtAdapter {
     async fn get_markets_cached(&self) -> Result<Vec<virs_ccxt::MarketInfo>, ExchangeError> {
         {
             let cache = self.markets_cache.read().await;
-            if cache.is_some() {
-                return Ok(cache.as_ref().unwrap().clone());
+            if let Some(ref markets) = *cache {
+                return Ok(markets.clone());
             }
         }
         let markets = self.inner.fetch_markets().await.map_err(|e| {
@@ -149,7 +149,7 @@ impl Exchange for CcxtAdapter {
 
     async fn get_ticker(&self, symbol: &str) -> Result<Ticker, ExchangeError> {
         let ct = self.inner.fetch_ticker(symbol).await?;
-        Ok(ct.into())
+        ct.try_into()
     }
 
     async fn get_klines(

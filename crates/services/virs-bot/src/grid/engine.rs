@@ -157,7 +157,9 @@ impl GridEngine {
         if let Err(e) = self.store.update_bot_status(bot_id, "running").await {
             warn!(bot_id = %bot_id, error = %e, "Failed to update bot status to running");
         }
-        let _ = self.grid_event_tx.send(GridEvent::BotStarted { bot_id });
+        if let Err(e) = self.grid_event_tx.send(GridEvent::BotStarted { bot_id }) {
+            warn!(bot_id = %bot_id, error = %e, event = "BotStarted", "Failed to send event — receiver may be dropped");
+        }
         info!(bot_id = %bot_id, "Grid bot started");
     }
 
@@ -181,16 +183,20 @@ impl GridEngine {
         if let Err(e) = self.store.update_bot_status(bot_id, target_status).await {
             warn!(bot_id = %bot_id, error = %e, "Failed to update bot status to {}", target_status);
         }
-        let _ = self.grid_event_tx.send(GridEvent::BotStopped {
+        if let Err(e) = self.grid_event_tx.send(GridEvent::BotStopped {
             bot_id,
             reason: reason.to_string(),
-        });
+        }) {
+            warn!(bot_id = %bot_id, error = %e, event = "BotStopped", "Failed to send event — receiver may be dropped");
+        }
         info!(bot_id = %bot_id, "Grid bot {}: {}", target_status, reason);
     }
 
     async fn graceful_shutdown_worker(&mut self, bot_id: Uuid) {
         if let Some(tx) = self.shutdown_txs.remove(&bot_id) {
-            let _ = tx.send(()).await;
+            if let Err(e) = tx.send(()).await {
+                warn!(bot_id = %bot_id, error = %e, "Failed to send shutdown signal — worker may have already exited");
+            }
         }
         self.adjust_txs.remove(&bot_id);
         self.bot_symbols.remove(&bot_id);

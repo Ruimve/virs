@@ -6,6 +6,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use virs_error::ExchangeError;
 
 // Re-export all shared types from virs-types
 pub use virs_types::enums::{MarketType, OrderStatus, OrderType, PositionMode, PositionSide, Side};
@@ -165,52 +166,58 @@ pub struct CcxtTicker {
     pub info: serde_json::Value,
 }
 
-impl From<CcxtTicker> for Ticker {
-    fn from(t: CcxtTicker) -> Self {
-        // NOTE: `From` cannot return a Result, so a missing field is logged and
-        // falls back to 0.0 rather than propagating an error. Critical price
-        // fields (bid/ask/last) are logged at `error!` level because a missing
-        // core price indicates a data-source anomaly; statistical fields use
-        // `warn!`. A missing timestamp falls back to the current time. These
-        // fallbacks should be investigated via the emitted log records.
+impl TryFrom<CcxtTicker> for Ticker {
+    type Error = ExchangeError;
+
+    fn try_from(t: CcxtTicker) -> Result<Self, Self::Error> {
         let symbol = t.symbol.clone();
-        Ticker {
+
+        let bid = t.bid.ok_or_else(|| {
+            tracing::error!(symbol = %symbol, "Ticker bid missing");
+            ExchangeError::no_data(format!("Ticker bid missing for {}", symbol))
+        })?;
+        let ask = t.ask.ok_or_else(|| {
+            tracing::error!(symbol = %symbol, "Ticker ask missing");
+            ExchangeError::no_data(format!("Ticker ask missing for {}", symbol))
+        })?;
+        let last = t.last.ok_or_else(|| {
+            tracing::error!(symbol = %symbol, "Ticker last missing");
+            ExchangeError::no_data(format!("Ticker last missing for {}", symbol))
+        })?;
+        let high_24h = t.high.ok_or_else(|| {
+            tracing::warn!(symbol = %symbol, "Ticker high_24h missing");
+            ExchangeError::no_data(format!("Ticker high_24h missing for {}", symbol))
+        })?;
+        let low_24h = t.low.ok_or_else(|| {
+            tracing::warn!(symbol = %symbol, "Ticker low_24h missing");
+            ExchangeError::no_data(format!("Ticker low_24h missing for {}", symbol))
+        })?;
+        let volume_24h = t.volume.ok_or_else(|| {
+            tracing::warn!(symbol = %symbol, "Ticker volume_24h missing");
+            ExchangeError::no_data(format!("Ticker volume_24h missing for {}", symbol))
+        })?;
+        let price_change_24h = t.price_change.ok_or_else(|| {
+            tracing::warn!(symbol = %symbol, "Ticker price_change_24h missing");
+            ExchangeError::no_data(format!("Ticker price_change_24h missing for {}", symbol))
+        })?;
+        let price_change_pct_24h = t.price_change_pct.ok_or_else(|| {
+            tracing::warn!(symbol = %symbol, "Ticker price_change_pct_24h missing");
+            ExchangeError::no_data(format!("Ticker price_change_pct_24h missing for {}", symbol))
+        })?;
+
+        Ok(Ticker {
             symbol: t.symbol,
             exchange: t.exchange,
-            bid: t.bid.unwrap_or_else(|| {
-                tracing::error!(symbol = %symbol, "Ticker bid missing");
-                0.0
-            }),
-            ask: t.ask.unwrap_or_else(|| {
-                tracing::error!(symbol = %symbol, "Ticker ask missing");
-                0.0
-            }),
-            last: t.last.unwrap_or_else(|| {
-                tracing::error!(symbol = %symbol, "Ticker last missing");
-                0.0
-            }),
-            high_24h: t.high.unwrap_or_else(|| {
-                tracing::warn!(symbol = %symbol, "Ticker high_24h missing");
-                0.0
-            }),
-            low_24h: t.low.unwrap_or_else(|| {
-                tracing::warn!(symbol = %symbol, "Ticker low_24h missing");
-                0.0
-            }),
-            volume_24h: t.volume.unwrap_or_else(|| {
-                tracing::warn!(symbol = %symbol, "Ticker volume_24h missing");
-                0.0
-            }),
-            price_change_24h: t.price_change.unwrap_or_else(|| {
-                tracing::warn!(symbol = %symbol, "Ticker price_change_24h missing");
-                0.0
-            }),
-            price_change_pct_24h: t.price_change_pct.unwrap_or_else(|| {
-                tracing::warn!(symbol = %symbol, "Ticker price_change_pct_24h missing");
-                0.0
-            }),
+            bid,
+            ask,
+            last,
+            high_24h,
+            low_24h,
+            volume_24h,
+            price_change_24h,
+            price_change_pct_24h,
             timestamp: t.timestamp.unwrap_or_else(chrono::Utc::now),
-        }
+        })
     }
 }
 

@@ -35,14 +35,33 @@ use crate::tracker::PnlTracker;
 ///
 /// We log at `error!` level so monitoring can detect this and trigger an alert.
 /// The engine should be restarted as soon as possible after lock poisoning.
+///
+/// This function PANICS on lock poisoning — returning dirty data is more
+/// dangerous than crashing in a trading system. Use `recover_lock_result`
+/// in functions that return `PositionResult<T>` to propagate the error instead.
 fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
-    lock.unwrap_or_else(|poisoned| {
+    lock.unwrap_or_else(|_| {
         error!(
             "Lock poisoned — a thread panicked while holding a lock. \
-             Continuing with potentially inconsistent state. \
+             Refusing to return potentially inconsistent data. \
+             Panicking to prevent data corruption. \
              Restart the engine immediately."
         );
-        poisoned.into_inner()
+        panic!("Lock poisoned — cannot continue safely. Restart the engine.");
+    })
+}
+
+/// Like `recover_lock` but returns a `Result` instead of panicking.
+///
+/// Use this in functions that return `PositionResult<T>` to propagate
+/// lock-poisoning errors to the caller instead of crashing.
+fn recover_lock_result<T>(lock: std::sync::LockResult<T>) -> PositionResult<T> {
+    lock.map_err(|_| {
+        error!(
+            "Lock poisoned — a thread panicked while holding a lock. \
+             Propagating error to caller."
+        );
+        PositionEngineError::LockPoisoned
     })
 }
 
@@ -208,7 +227,7 @@ impl PositionEngine {
         match self.inner.exchange.get_position_mode().await {
             Ok(mode) => {
                 info!(engine_id = %self.inner.config.engine_id, position_mode = ?mode, "Fetched position mode from exchange");
-                *recover_lock(self.inner.position_mode.write()) = mode;
+                *recover_lock_result(self.inner.position_mode.write())? = mode;
             }
             Err(e) => {
                 warn!(engine_id = %self.inner.config.engine_id, error = %e, "Failed to get position mode from exchange");

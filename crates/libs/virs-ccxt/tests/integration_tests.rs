@@ -227,7 +227,7 @@ fn int_6_1_ticker_json_to_ticker_via_parse() {
         info: raw,
     };
 
-    let ticker: virs_types::market::Ticker = ccxt.into();
+    let ticker: virs_types::market::Ticker = ccxt.try_into().unwrap();
     assert_eq!(ticker.symbol, "BTC/USDT");
     assert_eq!(ticker.exchange, "binance");
     assert_eq!(ticker.bid, 50000.0);

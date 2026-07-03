@@ -477,6 +477,14 @@ pub async fn create_order(
         .signed_post(signer, &url("/fapi/v1/order"), body)
         .await?;
 
+    // Critical numeric fields MUST be present — propagate errors instead of
+    // silently defaulting to 0.0 (C4 issue fix).
+    let amount = parse_f64(&data, "origQty").ok_or_else(|| {
+        ExchangeError::no_data("Order amount (origQty) missing in exchange response".into())
+    })?;
+    let filled = parse_f64(&data, "executedQty").ok_or_else(|| {
+        ExchangeError::no_data("Order filled (executedQty) missing in exchange response".into())
+    })?;
     Ok(CcxtOrder {
         id: parse_str(&data, "orderId")
             .ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
@@ -485,22 +493,10 @@ pub async fn create_order(
         side: params.side,
         order_type: params.order_type,
         price: parse_f64(&data, "price"),
-        amount: parse_f64(&data, "origQty").unwrap_or_else(|| {
-            tracing::warn!("origQty missing in exchange response — using request amount");
-            params.amount
-        }),
+        amount,
         cost: None,
-        filled: parse_f64(&data, "executedQty").unwrap_or_else(|| {
-            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
-            0.0
-        }),
-        remaining: parse_f64(&data, "origQty").unwrap_or_else(|| {
-            tracing::warn!("origQty missing in exchange response — using request amount");
-            params.amount
-        }) - parse_f64(&data, "executedQty").unwrap_or_else(|| {
-            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
-            0.0
-        }),
+        filled,
+        remaining: amount - filled,
         status: crate::adapter::binance::BinanceExchange::parse_order_status(
             &parse_str(&data, "status")
                 .ok_or_else(|| ExchangeError::no_data("status missing".into()))?,
@@ -533,6 +529,14 @@ pub async fn cancel_order(
         parse_str(&data, "side").ok_or_else(|| ExchangeError::no_data("side missing".into()))?;
     let type_str =
         parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data("type missing".into()))?;
+    // Critical numeric fields MUST be present — propagate errors instead of
+    // silently defaulting to 0.0 (C4 issue fix).
+    let amount = parse_f64(&data, "origQty").ok_or_else(|| {
+        ExchangeError::no_data("Order amount (origQty) missing in exchange response".into())
+    })?;
+    let filled = parse_f64(&data, "executedQty").ok_or_else(|| {
+        ExchangeError::no_data("Order filled (executedQty) missing in exchange response".into())
+    })?;
     Ok(CcxtOrder {
         id: parse_str(&data, "orderId")
             .ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
@@ -545,22 +549,10 @@ pub async fn cancel_order(
         },
         order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
         price: parse_f64(&data, "price"),
-        amount: parse_f64(&data, "origQty").unwrap_or_else(|| {
-            tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
-            0.0
-        }),
+        amount,
         cost: None,
-        filled: parse_f64(&data, "executedQty").unwrap_or_else(|| {
-            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
-            0.0
-        }),
-        remaining: parse_f64(&data, "origQty").unwrap_or_else(|| {
-            tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
-            0.0
-        }) - parse_f64(&data, "executedQty").unwrap_or_else(|| {
-            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
-            0.0
-        }),
+        filled,
+        remaining: amount - filled,
         status: CcxtOrderStatus::Canceled,
         fee: None,
         created_at: None,
@@ -592,6 +584,14 @@ pub async fn fetch_order(
         parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data("type missing".into()))?;
     let status_str = parse_str(&data, "status")
         .ok_or_else(|| ExchangeError::no_data("status missing".into()))?;
+    // Critical numeric fields MUST be present — propagate errors instead of
+    // silently defaulting to 0.0 (C4 issue fix).
+    let amount = parse_f64(&data, "origQty").ok_or_else(|| {
+        ExchangeError::no_data("Order amount (origQty) missing in exchange response".into())
+    })?;
+    let filled = parse_f64(&data, "executedQty").ok_or_else(|| {
+        ExchangeError::no_data("Order filled (executedQty) missing in exchange response".into())
+    })?;
     Ok(CcxtOrder {
         id: parse_str(&data, "orderId")
             .ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
@@ -604,22 +604,10 @@ pub async fn fetch_order(
         },
         order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
         price: parse_f64(&data, "price"),
-        amount: parse_f64(&data, "origQty").unwrap_or_else(|| {
-            tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
-            0.0
-        }),
+        amount,
         cost: None,
-        filled: parse_f64(&data, "executedQty").unwrap_or_else(|| {
-            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
-            0.0
-        }),
-        remaining: parse_f64(&data, "origQty").unwrap_or_else(|| {
-            tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
-            0.0
-        }) - parse_f64(&data, "executedQty").unwrap_or_else(|| {
-            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
-            0.0
-        }),
+        filled,
+        remaining: amount - filled,
         status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
         fee: None,
         created_at: None,
@@ -648,48 +636,57 @@ pub async fn fetch_open_orders(
         .await?;
 
     let arr = data.as_array().cloned().unwrap_or_default();
-    let orders: Vec<CcxtOrder> = arr
-        .iter()
-        .filter_map(|o| {
-            let side_str = parse_str(o, "side")?;
-            let type_str = parse_str(o, "type")?;
-            let status_str = parse_str(o, "status")?;
-            let symbol_str = parse_str(o, "symbol")?;
-            Some(CcxtOrder {
-                id: parse_str(o, "orderId")?,
-                client_order_id: parse_str(o, "clientOrderId"),
-                symbol: crate::adapter::binance::BinanceExchange::to_unified_symbol(&symbol_str),
-                side: if side_str == "BUY" {
-                    Side::Buy
-                } else {
-                    Side::Sell
-                },
-                order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
-                price: parse_f64(o, "price"),
-                amount: parse_f64(o, "origQty").unwrap_or_else(|| {
-                    tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
-                    0.0
-                }),
-                cost: None,
-                filled: parse_f64(o, "executedQty").unwrap_or_else(|| {
-                    tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
-                    0.0
-                }),
-                remaining: parse_f64(o, "origQty").unwrap_or_else(|| {
-                    tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
-                    0.0
-                }) - parse_f64(o, "executedQty").unwrap_or_else(|| {
-                    tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
-                    0.0
-                }),
-                status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
-                fee: None,
-                created_at: None,
-                updated_at: None,
-                info: o.clone(),
-            })
-        })
-        .collect();
+    let mut orders: Vec<CcxtOrder> = Vec::with_capacity(arr.len());
+    for o in &arr {
+        // Skip orders missing required identifier string fields (lenient parsing,
+        // matching the previous filter_map behavior).
+        let Some(side_str) = parse_str(o, "side") else {
+            continue;
+        };
+        let Some(type_str) = parse_str(o, "type") else {
+            continue;
+        };
+        let Some(status_str) = parse_str(o, "status") else {
+            continue;
+        };
+        let Some(symbol_str) = parse_str(o, "symbol") else {
+            continue;
+        };
+        let Some(id) = parse_str(o, "orderId") else {
+            continue;
+        };
+
+        // Critical numeric fields MUST be present — propagate errors instead of
+        // silently defaulting to 0.0 (C4 issue fix).
+        let amount = parse_f64(o, "origQty").ok_or_else(|| {
+            ExchangeError::no_data("Order amount (origQty) missing in exchange response".into())
+        })?;
+        let filled = parse_f64(o, "executedQty").ok_or_else(|| {
+            ExchangeError::no_data("Order filled (executedQty) missing in exchange response".into())
+        })?;
+
+        orders.push(CcxtOrder {
+            id,
+            client_order_id: parse_str(o, "clientOrderId"),
+            symbol: crate::adapter::binance::BinanceExchange::to_unified_symbol(&symbol_str),
+            side: if side_str == "BUY" {
+                Side::Buy
+            } else {
+                Side::Sell
+            },
+            order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
+            price: parse_f64(o, "price"),
+            amount,
+            cost: None,
+            filled,
+            remaining: amount - filled,
+            status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
+            fee: None,
+            created_at: None,
+            updated_at: None,
+            info: o.clone(),
+        });
+    }
 
     Ok(orders)
 }

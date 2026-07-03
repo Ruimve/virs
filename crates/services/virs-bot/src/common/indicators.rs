@@ -17,7 +17,10 @@ pub fn lows(klines: &[Kline]) -> Vec<f64> {
 }
 
 pub fn atr(klines: &[Kline], period: usize) -> Vec<f64> {
-    volatility::atr(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_default()
+    volatility::atr(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_else(|e| {
+        warn!(indicator = "atr", error = %e, "TA-Lib ATR calculation failed — returning empty series");
+        Vec::new()
+    })
 }
 
 pub fn sma_at_from(series: &[f64], idx: usize, period: usize) -> f64 {
@@ -38,7 +41,10 @@ pub fn sma_at_from(series: &[f64], idx: usize, period: usize) -> f64 {
             / period.min(valid.len()) as f64;
     }
     let mapped_idx = idx.saturating_sub(nan_count);
-    let result = overlap::sma(&valid, period).unwrap_or_default();
+    let result = overlap::sma(&valid, period).unwrap_or_else(|e| {
+        warn!(indicator = "sma_at_from", error = %e, "TA-Lib SMA calculation failed — returning empty series");
+        Vec::new()
+    });
     result
         .get(mapped_idx)
         .copied()
@@ -59,7 +65,10 @@ pub fn ema_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     if klines.is_empty() || idx < period - 1 || period == 0 {
         return 0.0;
     }
-    let result = overlap::ema(&closes(klines), period).unwrap_or_default();
+    let result = overlap::ema(&closes(klines), period).unwrap_or_else(|e| {
+        warn!(indicator = "ema_at", error = %e, "TA-Lib EMA calculation failed — returning empty series");
+        Vec::new()
+    });
     result.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "ema_at",
@@ -75,7 +84,10 @@ pub fn rsi_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     if klines.is_empty() || idx < period || period == 0 {
         return 50.0;
     }
-    let result = momentum::rsi(&closes(klines), period).unwrap_or_default();
+    let result = momentum::rsi(&closes(klines), period).unwrap_or_else(|e| {
+        warn!(indicator = "rsi_at", error = %e, "TA-Lib RSI calculation failed — returning empty series");
+        Vec::new()
+    });
     result.get(idx).copied().unwrap_or(50.0)
 }
 
@@ -84,7 +96,10 @@ pub fn macd_at(klines: &[Kline], idx: usize, fast: usize, slow: usize) -> f64 {
     if klines.is_empty() || idx < slow - 1 {
         return 0.0;
     }
-    let (macd, _, _) = momentum::macd(&closes(klines), fast, slow, 9).unwrap_or_default();
+    let (macd, _, _) = momentum::macd(&closes(klines), fast, slow, 9).unwrap_or_else(|e| {
+        warn!(indicator = "macd_at", error = %e, "TA-Lib MACD calculation failed — returning empty series");
+        (Vec::new(), Vec::new(), Vec::new())
+    });
     macd.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "macd_at",
@@ -106,7 +121,10 @@ pub fn macd_signal_at(
     if klines.is_empty() || idx < slow + signal - 2 {
         return 0.0;
     }
-    let (_, sig, _) = momentum::macd(&closes(klines), fast, slow, signal).unwrap_or_default();
+    let (_, sig, _) = momentum::macd(&closes(klines), fast, slow, signal).unwrap_or_else(|e| {
+        warn!(indicator = "macd_signal_at", error = %e, "TA-Lib MACD calculation failed — returning empty series");
+        (Vec::new(), Vec::new(), Vec::new())
+    });
     sig.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "macd_signal_at",
@@ -123,7 +141,10 @@ pub fn bbands_at(klines: &[Kline], idx: usize, period: usize, std_dev: f64) -> (
         return (0.0, 0.0, 0.0);
     }
     let (upper, middle, lower) =
-        overlap::bbands(&closes(klines), period, std_dev, std_dev, MaType::Sma).unwrap_or_default();
+        overlap::bbands(&closes(klines), period, std_dev, std_dev, MaType::Sma).unwrap_or_else(|e| {
+            warn!(indicator = "bbands_at", error = %e, "TA-Lib BBands calculation failed — returning empty series");
+            (Vec::new(), Vec::new(), Vec::new())
+        });
     (
         upper.get(idx).copied().unwrap_or_else(|| {
             warn!(
@@ -158,7 +179,10 @@ pub fn atr_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
         return 0.0;
     }
     let result =
-        volatility::atr(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_default();
+        volatility::atr(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_else(|e| {
+            warn!(indicator = "atr_at", error = %e, "TA-Lib ATR calculation failed — returning empty series");
+            Vec::new()
+        });
     result.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "atr_at",
@@ -175,7 +199,10 @@ pub fn adx_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
         return 0.0;
     }
     let result =
-        momentum::adx(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_default();
+        momentum::adx(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_else(|e| {
+            warn!(indicator = "adx_at", error = %e, "TA-Lib ADX calculation failed — returning empty series");
+            Vec::new()
+        });
     result.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "adx_at",
@@ -197,7 +224,10 @@ pub fn macd_histogram_at(
     if klines.is_empty() || idx < slow + signal - 2 {
         return 0.0;
     }
-    let (macd, sig, _) = momentum::macd(&closes(klines), fast, slow, signal).unwrap_or_default();
+    let (macd, sig, _) = momentum::macd(&closes(klines), fast, slow, signal).unwrap_or_else(|e| {
+        warn!(indicator = "macd_histogram_at", error = %e, "TA-Lib MACD calculation failed — returning empty series");
+        (Vec::new(), Vec::new(), Vec::new())
+    });
     let m = macd.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "macd_histogram_at.macd",
@@ -231,7 +261,10 @@ pub fn highest_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     if klines.is_empty() || idx < period - 1 || period == 0 {
         return 0.0;
     }
-    let result = math_operator::max(&highs(klines), period).unwrap_or_default();
+    let result = math_operator::max(&highs(klines), period).unwrap_or_else(|e| {
+        warn!(indicator = "highest_at", error = %e, "TA-Lib MAX calculation failed — returning empty series");
+        Vec::new()
+    });
     result.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "highest_at",
@@ -247,7 +280,10 @@ pub fn lowest_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     if klines.is_empty() || idx < period - 1 || period == 0 {
         return 0.0;
     }
-    let result = math_operator::min(&lows(klines), period).unwrap_or_default();
+    let result = math_operator::min(&lows(klines), period).unwrap_or_else(|e| {
+        warn!(indicator = "lowest_at", error = %e, "TA-Lib MIN calculation failed — returning empty series");
+        Vec::new()
+    });
     result.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "lowest_at",
