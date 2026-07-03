@@ -157,7 +157,14 @@ impl ExchangeMarketDataProvider {
             }
         }
 
-        klines_1h.last().map(|k| k.close).unwrap_or(0.0)
+        klines_1h.last().map(|k| k.close).unwrap_or_else(|| {
+            warn!(
+                exchange = %exchange,
+                symbol = %symbol,
+                "All price sources failed (KlineEngine M1, REST ticker, klines_1h) — returning 0.0 as last resort"
+            );
+            0.0
+        })
     }
 }
 
@@ -221,8 +228,21 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
                 ex.get_funding_rate(symbol)
                     .await
                     .map(|fr| fr.rate)
-                    .unwrap_or(0.0)
+                    .unwrap_or_else(|e| {
+                        warn!(
+                            exchange = %exchange,
+                            symbol = %symbol,
+                            error = %e,
+                            "Funding rate fetch failed — defaulting to 0.0"
+                        );
+                        0.0
+                    })
             } else {
+                warn!(
+                    exchange = %exchange,
+                    symbol = %symbol,
+                    "No exchange found for funding rate — defaulting to 0.0"
+                );
                 0.0
             }
         } else {
@@ -431,7 +451,14 @@ impl AutoExchangeMarketDataProvider {
             }
         }
 
-        klines_1h.last().map(|k| k.close).unwrap_or(0.0)
+        klines_1h.last().map(|k| k.close).unwrap_or_else(|| {
+            warn!(
+                exchange = %exchange,
+                symbol = %symbol,
+                "All price sources failed (KlineEngine M1, REST ticker, klines_1h) — returning 0.0 as last resort"
+            );
+            0.0
+        })
     }
 }
 
@@ -505,9 +532,22 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
                             .unwrap_or_else(|| "N/A".to_string());
                         (fr.rate, next)
                     }
-                    Err(_) => (0.0, "N/A".to_string()),
+                    Err(e) => {
+                        warn!(
+                            exchange = %exchange,
+                            symbol = %symbol,
+                            error = %e,
+                            "Funding rate fetch failed — defaulting to 0.0"
+                        );
+                        (0.0, "N/A".to_string())
+                    }
                 }
             } else {
+                warn!(
+                    exchange = %exchange,
+                    symbol = %symbol,
+                    "No exchange found for funding rate — defaulting to 0.0"
+                );
                 (0.0, "N/A".to_string())
             }
         } else {
