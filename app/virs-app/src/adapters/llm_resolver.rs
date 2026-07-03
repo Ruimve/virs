@@ -1,20 +1,16 @@
 //! DefaultLlmResolver — resolves LLM provider, API key, base URL, and model.
 
-use virs_config::AiConfig;
 use virs_types::bot::LlmProviderResolver;
 use virs_error::{BotError, BotResult};
 
-/// Resolve LLM provider info from user credentials and AI config.
+/// Resolve LLM provider info from user credentials.
 ///
 /// Priority: deepseek > openai > openrouter.
-/// User credentials take precedence over system config keys.
 ///
 /// Returns (api_key, base_url, model, provider_name).
 pub fn resolve_llm_provider(
     user_credentials: &[(String, String, Option<String>)],
-    ai_config: &AiConfig,
 ) -> BotResult<(String, String, String, String)> {
-    // Check user credentials first
     let mut user_deepseek = None;
     let mut user_openai = None;
     let mut user_openrouter = None;
@@ -29,9 +25,7 @@ pub fn resolve_llm_provider(
     }
 
     // Priority: deepseek > openai > openrouter
-    if let Some((key, model)) =
-        user_deepseek.or(ai_config.deepseek_api_key.clone().map(|k| (k, None)))
-    {
+    if let Some((key, model)) = user_deepseek {
         let model = model.unwrap_or_else(|| "deepseek-chat".to_string());
         return Ok((
             key,
@@ -41,9 +35,7 @@ pub fn resolve_llm_provider(
         ));
     }
 
-    if let Some((key, model)) =
-        user_openai.or(ai_config.openai_api_key.clone().map(|k| (k, None)))
-    {
+    if let Some((key, model)) = user_openai {
         let model = model.unwrap_or_else(|| "gpt-4o".to_string());
         return Ok((
             key,
@@ -53,9 +45,7 @@ pub fn resolve_llm_provider(
         ));
     }
 
-    if let Some((key, model)) =
-        user_openrouter.or(ai_config.openrouter_api_key.clone().map(|k| (k, None)))
-    {
+    if let Some((key, model)) = user_openrouter {
         let model = model.unwrap_or_else(|| "deepseek/deepseek-chat".to_string());
         return Ok((
             key,
@@ -65,30 +55,27 @@ pub fn resolve_llm_provider(
         ));
     }
 
-    Err(BotError::Llm("No LLM API key configured. Set DEEPSEEK_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY".to_string()))
+    Err(BotError::Llm("No LLM API key configured. Set AI credentials via the wizard.".to_string()))
 }
 
-pub struct DefaultLlmResolver {
-    ai_config: AiConfig,
-}
+pub struct DefaultLlmResolver;
 
 impl DefaultLlmResolver {
-    pub fn new(ai_config: AiConfig) -> Self {
-        Self { ai_config }
+    pub fn new() -> Self {
+        Self
     }
 }
 
 impl LlmProviderResolver for DefaultLlmResolver {
     fn is_available(&self) -> bool {
-        self.ai_config.deepseek_api_key.is_some()
-            || self.ai_config.openai_api_key.is_some()
-            || self.ai_config.openrouter_api_key.is_some()
+        // No system-level keys; availability depends on user credentials saved via the wizard.
+        false
     }
 
     fn resolve(
         &self,
         user_credentials: &[(String, String, Option<String>)],
     ) -> BotResult<(String, String, String, String)> {
-        resolve_llm_provider(user_credentials, &self.ai_config)
+        resolve_llm_provider(user_credentials)
     }
 }

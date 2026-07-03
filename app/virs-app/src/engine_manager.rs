@@ -15,7 +15,6 @@ use virs_api::EngineManager;
 use virs_bot::auto::types::AutoCommand;
 use virs_bot::auto::types::AutoEvent;
 use virs_bot::grid::types::GridCommand;
-use virs_config::AiConfig;
 use virs_exchange::{CcxtExchangeAdapter, Exchanges, PaperExchangeAdapter};
 use virs_error::VirsResult;
 use virs_market::{KlineEngine, OrderBookEngine};
@@ -47,9 +46,6 @@ pub struct AppEngineManager {
     kline_engine: Arc<KlineEngine>,
     orderbook_engine: Arc<OrderBookEngine>,
     encryption_key: String,
-    ai_config: AiConfig,
-    /// Paper trading mode from AppConfig (unified config consumption)
-    paper_mode: Option<bool>,
     ws_broadcaster: Arc<virs_api::WsBroadcaster>,
     #[allow(dead_code)]
     proxy: Option<String>,
@@ -68,8 +64,6 @@ impl AppEngineManager {
         kline_engine: Arc<KlineEngine>,
         orderbook_engine: Arc<OrderBookEngine>,
         encryption_key: String,
-        ai_config: AiConfig,
-        paper_mode: Option<bool>,
         ws_broadcaster: Arc<virs_api::WsBroadcaster>,
         proxy: Option<String>,
     ) -> Self {
@@ -79,8 +73,6 @@ impl AppEngineManager {
             kline_engine,
             orderbook_engine,
             encryption_key,
-            ai_config,
-            paper_mode,
             ws_broadcaster,
             proxy,
             started: AtomicBool::new(false),
@@ -179,7 +171,7 @@ impl EngineManager for AppEngineManager {
                 virs_utils::crypto::derive_key(&self.encryption_key),
             ));
         let grid_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> =
-            Arc::new(DefaultLlmResolver::new(self.ai_config.clone()));
+            Arc::new(DefaultLlmResolver::new());
         let grid_ai_service = Arc::new(virs_bot::grid::ai::GridAiService::new(
             grid_llm_resolver,
             grid_credential_store,
@@ -257,7 +249,7 @@ impl EngineManager for AppEngineManager {
                 virs_utils::crypto::derive_key(&self.encryption_key),
             ));
         let auto_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> =
-            Arc::new(DefaultLlmResolver::new(self.ai_config.clone()));
+            Arc::new(DefaultLlmResolver::new());
         let auto_ai_service = Arc::new(virs_bot::auto::ai::AutoAiService::new(
             auto_llm_resolver,
             auto_credential_store,
@@ -542,8 +534,15 @@ impl EngineManager for AppEngineManager {
             }
         }
 
-        // 3. Determine paper mode from AppConfig (unified config consumption)
-        let paper_mode = self.paper_mode.unwrap_or(true);
+        // 3. Determine paper mode from DB (set by the wizard when creating bots)
+        let paper_mode: bool = sqlx::query_scalar(
+            r#"SELECT paper_mode FROM qd_auto_bots WHERE status = 'running' LIMIT 1
+               UNION ALL
+               SELECT paper_mode FROM qd_grid_bots WHERE status = 'running' LIMIT 1"#,
+        )
+        .fetch_optional(&self.db_pool)
+        .await?
+        .unwrap_or(true); // Default to safe paper trading
 
         // 4. Start engines (which will call restore_running_bots internally)
         if let Err(e) = self.ensure_started(paper_mode).await {

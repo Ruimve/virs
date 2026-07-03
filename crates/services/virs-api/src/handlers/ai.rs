@@ -237,30 +237,9 @@ async fn call_llm_with_fallback(
             (decrypted_key, resolved_base_url, resolved_model)
         }
         None => {
-            // Fallback to environment variables
-            let api_key = std::env::var("DEEPSEEK_API_KEY")
-                .or_else(|_| std::env::var("OPENAI_API_KEY"))
-                .or_else(|_| std::env::var("OPENROUTER_API_KEY"))
-                .map_err(|_| VirsError::unauthorized("No AI API key configured"))?;
-
-            let (base_url, model) = if std::env::var("DEEPSEEK_API_KEY").is_ok() {
-                (
-                    "https://api.deepseek.com".to_string(),
-                    "deepseek-chat".to_string(),
-                )
-            } else if std::env::var("OPENAI_API_KEY").is_ok() {
-                (
-                    "https://api.openai.com/v1".to_string(),
-                    "gpt-4o".to_string(),
-                )
-            } else {
-                (
-                    "https://openrouter.ai/api/v1".to_string(),
-                    "deepseek/deepseek-chat".to_string(),
-                )
-            };
-
-            (api_key, base_url, model)
+            return Err(VirsError::unauthorized(
+                "No AI API key configured. Set AI credentials via the wizard.",
+            ));
         }
     };
 

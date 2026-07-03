@@ -8,7 +8,6 @@ use virs_app::adapters::llm_resolver::resolve_llm_provider;
 use virs_app::adapters::market_data::candle_to_kline;
 use virs_app::adapters::order_executor::convert_pe_event;
 use virs_app::adapters::utils::{derive_open_side, sanitize_pnl_pct};
-use virs_config::AiConfig;
 use virs_market::Candle;
 use virs_models::AutoBot;
 use virs_models::GridBot;
@@ -218,46 +217,37 @@ fn int_2_2_sanitize_then_derive_chain() {
 
 #[test]
 fn int_3_1_llm_resolve_priority_chain() {
-    let config = AiConfig {
-        deepseek_api_key: Some("cfg-ds".to_string()),
-        openai_api_key: Some("cfg-oai".to_string()),
-        openrouter_api_key: Some("cfg-or".to_string()),
-    };
-    let creds: Vec<(String, String, Option<String>)> = vec![];
-    // deepseek wins
-    let (key, _, _, provider) = resolve_llm_provider(&creds, &config).unwrap();
-    assert_eq!(key, "cfg-ds");
+    // deepseek wins over openai and openrouter
+    let creds = vec![
+        ("openai".to_string(), "oai-key".to_string(), None),
+        ("deepseek".to_string(), "ds-key".to_string(), None),
+        ("openrouter".to_string(), "or-key".to_string(), None),
+    ];
+    let (key, _, _, provider) = resolve_llm_provider(&creds).unwrap();
+    assert_eq!(key, "ds-key");
     assert_eq!(provider, "deepseek");
 
     // Remove deepseek → openai wins
-    let config2 = AiConfig {
-        deepseek_api_key: None,
-        openai_api_key: Some("cfg-oai".to_string()),
-        openrouter_api_key: Some("cfg-or".to_string()),
-    };
-    let (key2, _, _, provider2) = resolve_llm_provider(&creds, &config2).unwrap();
-    assert_eq!(key2, "cfg-oai");
+    let creds2 = vec![
+        ("openai".to_string(), "oai-key".to_string(), None),
+        ("openrouter".to_string(), "or-key".to_string(), None),
+    ];
+    let (key2, _, _, provider2) = resolve_llm_provider(&creds2).unwrap();
+    assert_eq!(key2, "oai-key");
     assert_eq!(provider2, "openai");
 
     // Remove openai → openrouter wins
-    let config3 = AiConfig {
-        deepseek_api_key: None,
-        openai_api_key: None,
-        openrouter_api_key: Some("cfg-or".to_string()),
-    };
-    let (key3, _, _, provider3) = resolve_llm_provider(&creds, &config3).unwrap();
-    assert_eq!(key3, "cfg-or");
+    let creds3 = vec![
+        ("openrouter".to_string(), "or-key".to_string(), None),
+    ];
+    let (key3, _, _, provider3) = resolve_llm_provider(&creds3).unwrap();
+    assert_eq!(key3, "or-key");
     assert_eq!(provider3, "openrouter");
 }
 
 #[test]
-fn int_3_2_llm_resolve_user_overrides_config() {
-    let config = AiConfig {
-        deepseek_api_key: Some("cfg-ds".to_string()),
-        openai_api_key: Some("cfg-oai".to_string()),
-        openrouter_api_key: None,
-    };
-    // User has deepseek credential → overrides config deepseek key
+fn int_3_2_llm_resolve_user_model_override() {
+    // User specifies a custom model
     let creds = vec![
         (
             "deepseek".to_string(),
@@ -270,7 +260,7 @@ fn int_3_2_llm_resolve_user_overrides_config() {
             Some("gpt-4o-mini".to_string()),
         ),
     ];
-    let (key, _, model, provider) = resolve_llm_provider(&creds, &config).unwrap();
+    let (key, _, model, provider) = resolve_llm_provider(&creds).unwrap();
     assert_eq!(key, "user-ds");
     assert_eq!(model, "deepseek-reasoner");
     assert_eq!(provider, "deepseek");
@@ -379,29 +369,17 @@ fn int_6_1_grid_auto_bot_to_config_consistency() {
 #[test]
 fn int_6_2_llm_resolve_default_models() {
     // deepseek default model
-    let config_ds = AiConfig {
-        deepseek_api_key: Some("key".to_string()),
-        openai_api_key: None,
-        openrouter_api_key: None,
-    };
-    let (_, _, model, _) = resolve_llm_provider(&[], &config_ds).unwrap();
+    let creds_ds = vec![("deepseek".to_string(), "key".to_string(), None)];
+    let (_, _, model, _) = resolve_llm_provider(&creds_ds).unwrap();
     assert_eq!(model, "deepseek-chat");
 
     // openai default model
-    let config_oai = AiConfig {
-        deepseek_api_key: None,
-        openai_api_key: Some("key".to_string()),
-        openrouter_api_key: None,
-    };
-    let (_, _, model, _) = resolve_llm_provider(&[], &config_oai).unwrap();
+    let creds_oai = vec![("openai".to_string(), "key".to_string(), None)];
+    let (_, _, model, _) = resolve_llm_provider(&creds_oai).unwrap();
     assert_eq!(model, "gpt-4o");
 
     // openrouter default model
-    let config_or = AiConfig {
-        deepseek_api_key: None,
-        openai_api_key: None,
-        openrouter_api_key: Some("key".to_string()),
-    };
-    let (_, _, model, _) = resolve_llm_provider(&[], &config_or).unwrap();
+    let creds_or = vec![("openrouter".to_string(), "key".to_string(), None)];
+    let (_, _, model, _) = resolve_llm_provider(&creds_or).unwrap();
     assert_eq!(model, "deepseek/deepseek-chat");
 }
