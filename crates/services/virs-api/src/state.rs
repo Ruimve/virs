@@ -13,32 +13,6 @@ use virs_exchange::Exchanges;
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_types::position::EngineEvent;
 
-/// WebSocket 广播器
-pub struct WsBroadcaster {
-    tx: tokio::sync::broadcast::Sender<serde_json::Value>,
-}
-
-impl WsBroadcaster {
-    pub fn new() -> Self {
-        let (tx, _) = tokio::sync::broadcast::channel(256);
-        Self { tx }
-    }
-
-    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<serde_json::Value> {
-        self.tx.subscribe()
-    }
-
-    pub fn broadcast(&self, value: serde_json::Value) {
-        let _ = self.tx.send(value);
-    }
-}
-
-impl Default for WsBroadcaster {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Engine manager trait — lazy initialization of trading engines.
 /// Implemented in virs-app (composition root) with access to all adapters.
 #[async_trait]
@@ -75,7 +49,6 @@ pub trait EngineManager: Send + Sync {
 #[derive(Clone)]
 pub struct AppState {
     pub db_pool: sqlx::PgPool,
-    pub ws_broadcaster: Arc<WsBroadcaster>,
     pub engine_manager: Arc<dyn EngineManager>,
     pub http_client: reqwest::Client,
     pub exchange_registry: Arc<Exchanges>,

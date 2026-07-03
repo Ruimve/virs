@@ -34,14 +34,6 @@ export {
 } from './bot';
 export { fetchKlines, fetchOrderBook } from './market';
 export { checkHealth, getPaperStatus, enablePaperMode, disablePaperMode } from './system';
-export { useWs, useKlineWs } from './ws';
-export type {
-  WsEvent,
-  KlineWsEvent,
-  BotStatusEvent,
-  PositionEvent,
-  TradeEvent,
-  NotificationEvent,
-  PaperModeEvent,
-} from './ws';
+export { useKlineWs } from './ws';
+export type { KlineWsEvent } from './ws';
 export type * from './types';

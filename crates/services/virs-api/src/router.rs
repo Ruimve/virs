@@ -157,7 +157,6 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/system/info", get(handlers::system::system_info))
         // WebSocket (public)
-        .route("/ws", get(crate::ws::ws_handler))
         .route("/ws/kline", get(crate::ws::kline_ws_handler))
         .route("/ws/orderbook", get(crate::ws::orderbook_ws_handler))
         .route("/ws/position", get(crate::ws::position_ws_handler))

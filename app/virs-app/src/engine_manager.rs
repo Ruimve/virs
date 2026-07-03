@@ -13,7 +13,6 @@ use tracing::info;
 
 use virs_api::EngineManager;
 use virs_bot::auto::types::AutoCommand;
-use virs_bot::auto::types::AutoEvent;
 use virs_bot::grid::types::GridCommand;
 use virs_exchange::{CcxtExchangeAdapter, Exchanges, PaperExchangeAdapter};
 use virs_error::VirsResult;
@@ -46,7 +45,6 @@ pub struct AppEngineManager {
     kline_engine: Arc<KlineEngine>,
     orderbook_engine: Arc<OrderBookEngine>,
     encryption_key: String,
-    ws_broadcaster: Arc<virs_api::WsBroadcaster>,
     #[allow(dead_code)]
     proxy: Option<String>,
 
@@ -64,7 +62,6 @@ impl AppEngineManager {
         kline_engine: Arc<KlineEngine>,
         orderbook_engine: Arc<OrderBookEngine>,
         encryption_key: String,
-        ws_broadcaster: Arc<virs_api::WsBroadcaster>,
         proxy: Option<String>,
     ) -> Self {
         Self {
@@ -73,7 +70,6 @@ impl AppEngineManager {
             kline_engine,
             orderbook_engine,
             encryption_key,
-            ws_broadcaster,
             proxy,
             started: AtomicBool::new(false),
             init_lock: Mutex::new(()),
@@ -255,7 +251,7 @@ impl EngineManager for AppEngineManager {
             auto_credential_store,
         ));
 
-        let (mut auto_engine, auto_cmd_tx, auto_event_broadcast) = virs_bot::auto::AutoEngine::new(
+        let (mut auto_engine, auto_cmd_tx) = virs_bot::auto::AutoEngine::new(
             auto_store,
             auto_ai_service,
             auto_price_provider,
@@ -264,71 +260,6 @@ impl EngineManager for AppEngineManager {
             auto_order_event_tx.clone(),
             pe_event_sender.clone(),
         );
-
-        // Bridge AutoEvent -> WsBroadcaster
-        {
-            let mut auto_event_rx = auto_event_broadcast.subscribe();
-            let ws_broadcaster = self.ws_broadcaster.clone();
-            tokio::spawn(async move {
-                loop {
-                    match auto_event_rx.recv().await {
-                        Ok(event) => {
-                            let ws_json = match &event {
-                                AutoEvent::PositionOpened {
-                                    bot_id,
-                                    side,
-                                    price,
-                                    quantity,
-                                } => Some(serde_json::json!({
-                                    "type": "position",
-                                    "bot_id": bot_id.to_string(),
-                                    "side": side,
-                                    "entry_price": price,
-                                    "size": quantity,
-                                    "action": "opened",
-                                })),
-                                AutoEvent::PositionClosed {
-                                    bot_id,
-                                    side,
-                                    price,
-                                    pnl,
-                                } => Some(serde_json::json!({
-                                    "type": "trade",
-                                    "bot_id": bot_id.to_string(),
-                                    "side": side,
-                                    "price": price,
-                                    "pnl": pnl,
-                                })),
-                                AutoEvent::BotStarted { bot_id } => Some(serde_json::json!({
-                                    "type": "bot_status",
-                                    "bot_id": bot_id.to_string(),
-                                    "status": "running",
-                                })),
-                                AutoEvent::BotStopped { bot_id, reason } => {
-                                    Some(serde_json::json!({
-                                        "type": "bot_status",
-                                        "bot_id": bot_id.to_string(),
-                                        "status": reason,
-                                    }))
-                                }
-                                AutoEvent::BotError { bot_id, error } => Some(serde_json::json!({
-                                    "type": "notification",
-                                    "level": "error",
-                                    "message": format!("Bot {}: {}", bot_id, error),
-                                })),
-                            };
-                            if let Some(json) = ws_json {
-                                ws_broadcaster.broadcast(json);
-                            }
-                        }
-                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                            tracing::warn!(lagged = n, "Auto WS event bridge lagged");
-                        }
-                    }
-                }
-            });
-        }
 
         tokio::spawn(async move {
             auto_engine.run().await;

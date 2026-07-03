@@ -9,7 +9,7 @@ use axum::{
 };
 use std::sync::Arc;
 
-use crate::state::{AppState, WsBroadcaster};
+use crate::state::AppState;
 
 /// Convert a Position to WebSocket JSON format.
 /// Used by position_ws_handler for real-time position updates.
@@ -72,38 +72,6 @@ pub fn orderbook_event_to_json(event: &virs_market::OrderBookEvent) -> serde_jso
         "asks": event.asks.iter().map(|l| serde_json::json!([l.price, l.amount])).collect::<Vec<_>>(),
         "timestamp": event.timestamp,
     })
-}
-
-pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_ws(socket, state.ws_broadcaster))
-}
-
-async fn handle_ws(mut socket: WebSocket, broadcaster: Arc<WsBroadcaster>) {
-    let mut rx = broadcaster.subscribe();
-
-    loop {
-        tokio::select! {
-            msg = rx.recv() => {
-                match msg {
-                    Ok(value) => {
-                        if let Ok(text) = serde_json::to_string(&value) {
-                            if socket.send(Message::Text(text.into())).await.is_err() {
-                                break;
-                            }
-                        }
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                    Err(_) => break,
-                }
-            }
-            msg = socket.recv() => {
-                match msg {
-                    Some(Ok(Message::Close(_))) | None => break,
-                    _ => continue,
-                }
-            }
-        }
-    }
 }
 
 /// WebSocket handler for real-time kline data from KlineEngine.

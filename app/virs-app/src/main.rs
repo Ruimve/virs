@@ -12,7 +12,7 @@ use uuid::Uuid;
 use virs_api::EngineManager;
 use virs_error::{Context, VirsError, VirsResult};
 
-use virs_api::{build_router, AppState, WsBroadcaster};
+use virs_api::{build_router, AppState};
 use virs_app::engine_manager::AppEngineManager;
 use virs_config::load_config;
 use virs_exchange::Exchanges;
@@ -112,9 +112,6 @@ async fn main() -> VirsResult<()> {
     let exchange_registry = Arc::new(Exchanges::new());
     info!("Exchange registry initialized (empty — will be populated on first credential save)");
 
-    // WebSocket broadcaster
-    let ws_broadcaster = Arc::new(WsBroadcaster::new());
-
     // ── Kline Engine ──
     // Created at boot but only subscribes when bots need data
     let kline_config = KlineEngineConfig {
@@ -166,7 +163,6 @@ async fn main() -> VirsResult<()> {
         kline_engine.clone(),
         orderbook_engine.clone(),
         config.server.encryption_key.clone(),
-        ws_broadcaster.clone(),
         config.proxy.clone(),
     ));
     info!("Engine manager created (engines will start on first bot creation)");
@@ -174,7 +170,6 @@ async fn main() -> VirsResult<()> {
     // Build app state
     let app_state = AppState {
         db_pool: db_pool.clone(),
-        ws_broadcaster,
         engine_manager: engine_manager.clone(),
         http_client: reqwest::Client::new(),
         exchange_registry: exchange_registry.clone(),

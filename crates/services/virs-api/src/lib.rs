@@ -9,7 +9,7 @@ pub mod ws;
 
 // Re-export
 pub use router::build_router;
-pub use state::{AppState, EngineManager, WsBroadcaster};
+pub use state::{AppState, EngineManager};
 
 #[cfg(test)]
 mod ws_tests;

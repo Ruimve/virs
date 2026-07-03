@@ -1,6 +1,5 @@
 //! Auto trading bot types.
 
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 // Re-export AutoBotConfig and AutoMarketType from virs-types
@@ -15,34 +14,6 @@ pub enum AutoCommand {
     StartBot { bot_id: Uuid },
     StopBot { bot_id: Uuid },
     DeleteBot { bot_id: Uuid, close_position: bool },
-}
-
-/// 自动交易引擎事件
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AutoEvent {
-    BotStarted {
-        bot_id: Uuid,
-    },
-    BotStopped {
-        bot_id: Uuid,
-        reason: String,
-    },
-    BotError {
-        bot_id: Uuid,
-        error: String,
-    },
-    PositionOpened {
-        bot_id: Uuid,
-        side: String,
-        price: f64,
-        quantity: f64,
-    },
-    PositionClosed {
-        bot_id: Uuid,
-        side: String,
-        price: f64,
-        pnl: f64,
-    },
 }
 
 /// 默认系统 Prompt

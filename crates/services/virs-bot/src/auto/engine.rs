@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::ports::*;
-use crate::auto::types::{AutoCommand, AutoEvent};
+use crate::auto::types::AutoCommand;
 use crate::auto::worker::AutoWorker;
 use virs_types::position::EngineEvent;
 
@@ -21,7 +21,6 @@ pub struct AutoEngine {
     order_executor: Arc<dyn OrderExecutor>,
     market_data_provider: Arc<dyn MarketDataProvider>,
     event_tx: broadcast::Sender<OrderEvent>,
-    auto_event_tx: broadcast::Sender<AutoEvent>,
     pe_event_tx: broadcast::Sender<EngineEvent>,
     cmd_rx: Option<mpsc::Receiver<AutoCommand>>,
     workers: HashMap<Uuid, tokio::task::JoinHandle<()>>,
@@ -38,13 +37,8 @@ impl AutoEngine {
         market_data_provider: Arc<dyn MarketDataProvider>,
         event_tx: broadcast::Sender<OrderEvent>,
         pe_event_tx: broadcast::Sender<EngineEvent>,
-    ) -> (
-        Self,
-        mpsc::Sender<AutoCommand>,
-        broadcast::Sender<AutoEvent>,
-    ) {
+    ) -> (Self, mpsc::Sender<AutoCommand>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
-        let (auto_event_tx, _) = broadcast::channel(256);
 
         let engine = Self {
             store,
@@ -53,7 +47,6 @@ impl AutoEngine {
             order_executor,
             market_data_provider,
             event_tx,
-            auto_event_tx: auto_event_tx.clone(),
             pe_event_tx,
             cmd_rx: Some(cmd_rx),
             workers: HashMap::new(),
@@ -61,7 +54,7 @@ impl AutoEngine {
             bot_symbols: HashMap::new(),
         };
 
-        (engine, cmd_tx, auto_event_tx)
+        (engine, cmd_tx)
     }
 
     pub async fn run(&mut self) {
@@ -125,7 +118,6 @@ impl AutoEngine {
         let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>(1);
         let event_rx = self.event_tx.subscribe();
         let pe_event_rx = self.pe_event_tx.subscribe();
-        let auto_event_tx = self.auto_event_tx.clone();
         let store = self.store.clone();
         let price_provider = self.price_provider.clone();
         let order_executor = self.order_executor.clone();
@@ -143,7 +135,6 @@ impl AutoEngine {
                 market_data_provider,
                 event_rx,
                 pe_event_rx,
-                auto_event_tx,
             );
             worker.run(shutdown_rx).await;
         });
@@ -154,9 +145,6 @@ impl AutoEngine {
 
         if let Err(e) = self.store.update_bot_status(bot_id, "running").await {
             warn!(bot_id = %bot_id, error = %e, "Failed to update bot status to running");
-        }
-        if let Err(e) = self.auto_event_tx.send(AutoEvent::BotStarted { bot_id }) {
-            warn!(bot_id = %bot_id, error = %e, event = "BotStarted", "Failed to send event — receiver may be dropped");
         }
         info!(bot_id = %bot_id, "Auto bot started");
     }
@@ -180,12 +168,6 @@ impl AutoEngine {
         self.graceful_shutdown_worker(bot_id).await;
         if let Err(e) = self.store.update_bot_status(bot_id, target_status).await {
             warn!(bot_id = %bot_id, error = %e, "Failed to update bot status to {}", target_status);
-        }
-        if let Err(e) = self.auto_event_tx.send(AutoEvent::BotStopped {
-            bot_id,
-            reason: reason.to_string(),
-        }) {
-            warn!(bot_id = %bot_id, error = %e, event = "BotStopped", "Failed to send event — receiver may be dropped");
         }
         info!(bot_id = %bot_id, "Auto bot {}: {}", target_status, reason);
     }
