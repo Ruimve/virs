@@ -118,17 +118,6 @@ pub enum StrategyStatus {
     Error,
 }
 
-/// User role
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
-#[cfg_attr(feature = "sqlx", sqlx(type_name = "text", rename_all = "lowercase"))]
-pub enum UserRole {
-    Admin,
-    Manager,
-    User,
-    Viewer,
-}
-
 // sqlx Type implementations for enums that need DB mapping
 #[cfg(feature = "sqlx")]
 mod sqlx_impls {
