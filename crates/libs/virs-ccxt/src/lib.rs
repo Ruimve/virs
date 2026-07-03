@@ -92,7 +92,12 @@ pub trait Exchange: Send + Sync {
                 }
                 all_klines.push(k.clone());
             }
-            cursor = batch.last().unwrap().timestamp + 1;
+            let last = batch.last().ok_or_else(|| {
+                ExchangeError::Internal(
+                    "batch unexpectedly empty after is_empty check — pagination logic error".into(),
+                )
+            })?;
+            cursor = last.timestamp + 1;
             if (batch.len() as u32) < page_limit {
                 break;
             }

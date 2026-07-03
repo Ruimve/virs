@@ -132,7 +132,10 @@ pub fn to_models_order(co: virs_ccxt::CcxtOrder) -> Order {
             tracing::warn!("Order fee info is None — defaulting to 0.0");
             0.0
         }),
-        fee_currency: fee_info.map(|f| f.currency.clone()).unwrap_or_default(),
+        fee_currency: fee_info.map(|f| f.currency.clone()).unwrap_or_else(|| {
+            tracing::warn!("Order fee_currency missing — defaulting to empty string");
+            String::new()
+        }),
         created_at: co.created_at.unwrap_or_else(chrono::Utc::now),
         updated_at: co.updated_at.unwrap_or_else(chrono::Utc::now),
     }

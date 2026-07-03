@@ -281,7 +281,10 @@ pub async fn fetch_balance(
     let mut result: Vec<Balance> = balances
         .iter()
         .filter_map(|b| {
-            let asset = parse_str(b, "asset").unwrap_or_default();
+            let asset = parse_str(b, "asset").unwrap_or_else(|| {
+                tracing::warn!("Balance asset field missing — skipping entry");
+                String::new()
+            });
             let free = parse_f64(b, "free").unwrap_or_else(|| {
                 if !asset.is_empty() {
                     tracing::warn!(asset = %asset, "Balance 'free' field missing or unparseable — defaulting to 0.0");

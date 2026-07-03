@@ -180,7 +180,10 @@ pub fn format_position_info(
             let liq_str = position
                 .liquidation_price
                 .map(|p| format!("\n- 强平价格：{:.2}", p))
-                .unwrap_or_default();
+                .unwrap_or_else(|| {
+                    tracing::warn!("Liquidation price unavailable — omitting from display");
+                    String::new()
+                });
             format!(
                 "- 方向：{}\n- 入场价：{:.2}\n- 持仓量：{:.6}\n- 当前价：{:.2}\n- 未实现盈亏：{:.4} USDT ({:+.2}%){}",
                 side, position.entry_price, position.size, current_price, unrealized_pnl, pnl_pct, liq_str

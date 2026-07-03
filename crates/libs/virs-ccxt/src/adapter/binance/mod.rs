@@ -88,14 +88,12 @@ impl Signer for BinanceSigner {
             chrono::Utc::now().timestamp_millis().to_string(),
         )];
 
-        let form_body = if body.is_object() {
-            let mut pairs: Vec<(String, String)> = body
-                .as_object()
-                .unwrap()
+        let form_body = if let Some(obj) = body.as_object() {
+            let mut pairs: Vec<(String, String)> = obj
                 .iter()
                 .map(|(k, v)| {
-                    let val = if v.is_string() {
-                        v.as_str().unwrap().to_string()
+                    let val = if let Some(s) = v.as_str() {
+                        s.to_string()
                     } else {
                         v.to_string()
                     };
@@ -229,14 +227,12 @@ impl Signer for BinanceEd25519Signer {
             chrono::Utc::now().timestamp_millis().to_string(),
         )];
 
-        let form_body = if body.is_object() {
-            let mut pairs: Vec<(String, String)> = body
-                .as_object()
-                .unwrap()
+        let form_body = if let Some(obj) = body.as_object() {
+            let mut pairs: Vec<(String, String)> = obj
                 .iter()
                 .map(|(k, v)| {
-                    let val = if v.is_string() {
-                        v.as_str().unwrap().to_string()
+                    let val = if let Some(s) = v.as_str() {
+                        s.to_string()
                     } else {
                         v.to_string()
                     };

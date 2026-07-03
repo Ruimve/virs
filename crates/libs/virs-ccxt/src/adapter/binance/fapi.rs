@@ -345,7 +345,10 @@ pub async fn fetch_funding_history(
             let funding_time = item
                 .get("fundingTime")
                 .and_then(|t| t.as_i64())
-                .unwrap_or(0);
+                .unwrap_or_else(|| {
+                    tracing::warn!("fundingTime missing — using 0 as fallback");
+                    0
+                });
             let rate = parse_f64(item, "fundingRate").unwrap_or_else(|| {
                 tracing::warn!("fundingRate missing — defaulting to 0.0");
                 0.0
@@ -389,7 +392,10 @@ pub async fn fetch_balance(
     let result: Vec<Balance> = balances
         .iter()
         .filter_map(|b| {
-            let asset = parse_str(b, "asset").unwrap_or_default();
+            let asset = parse_str(b, "asset").unwrap_or_else(|| {
+                tracing::warn!("Balance asset field missing — skipping entry");
+                String::new()
+            });
             let free = parse_f64(b, "availableBalance").unwrap_or_else(|| {
                 if !asset.is_empty() {
                     tracing::warn!(asset = %asset, "Balance 'availableBalance' field missing or unparseable — defaulting to 0.0");
@@ -778,7 +784,13 @@ pub async fn fetch_positions(
                 _ => MarginMode::Cross,
             };
 
-            let symbol_str = parse_str(p, "symbol").unwrap_or_default();
+            let symbol_str = match parse_str(p, "symbol") {
+                Some(s) => s,
+                None => {
+                    tracing::warn!("positionRisk symbol missing — skipping position");
+                    return None;
+                }
+            };
 
             // entryPrice / leverage are critical fields; if either is missing
             // the position record is unusable, so log and skip it.

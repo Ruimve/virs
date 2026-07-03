@@ -1317,29 +1317,33 @@ pub(crate) async fn handle_open_position(
 
                 // 如果订单已成交，发出 OrderFilled 事件
                 if order.filled > 0.0 {
-                    let trade = Trade {
-                        id: Uuid::new_v4(),
-                        position_id,
-                        order_id: order.id,
-                        exchange: exchange_name.clone(),
-                        symbol: symbol.clone(),
-                        side: resolved_side,
-                        price: order.fill_price.unwrap_or_else(|| {
-                            error!(order_id = %order.id, "Order filled but no fill_price in Trade record — using 0.0");
-                            0.0
-                        }),
-                        amount: order.filled,
-                        fee: order.fee,
-                        fee_currency: order.fee_currency.clone(),
-                        pnl: 0.0,
-                        trade_type: TradeType::Open,
-                        created_at: Utc::now(),
-                    };
-                    inner.emit_event(EngineEvent::OrderFilled {
-                        order: order.clone(),
-                        trade,
-                    });
-                    info!(position_id = %position_id, symbol = %symbol, side = ?side, size = order.filled, "Order filled for existing position");
+                    match order.fill_price.filter(|p| *p > 0.0) {
+                        Some(fill_price) => {
+                            let trade = Trade {
+                                id: Uuid::new_v4(),
+                                position_id,
+                                order_id: order.id,
+                                exchange: exchange_name.clone(),
+                                symbol: symbol.clone(),
+                                side: resolved_side,
+                                price: fill_price,
+                                amount: order.filled,
+                                fee: order.fee,
+                                fee_currency: order.fee_currency.clone(),
+                                pnl: 0.0,
+                                trade_type: TradeType::Open,
+                                created_at: Utc::now(),
+                            };
+                            inner.emit_event(EngineEvent::OrderFilled {
+                                order: order.clone(),
+                                trade,
+                            });
+                            info!(position_id = %position_id, symbol = %symbol, side = ?side, size = order.filled, "Order filled for existing position");
+                        }
+                        None => {
+                            error!(order_id = %order.id, "Order filled but no valid fill_price — skipping Trade record to prevent 0.0 price propagation");
+                        }
+                    }
                 } else {
                     inner.emit_event(EngineEvent::OrderPlaced {
                         order: order.clone(),
@@ -1534,29 +1538,33 @@ pub(crate) async fn handle_open_position(
             // 如果订单已成交（市价单立即成交），发出 OrderFilled 事件
             // 这是 AutoWorker 等待的事件，用于确认开仓并记录交易
             if order.filled > 0.0 {
-                let trade = Trade {
-                    id: Uuid::new_v4(),
-                    position_id,
-                    order_id: order.id,
-                    exchange: exchange_name.clone(),
-                    symbol: symbol.clone(),
-                    side: resolved_side,
-                    price: order.fill_price.unwrap_or_else(|| {
-                        error!(order_id = %order.id, "Order filled but no fill_price in Trade record — using 0.0");
-                        0.0
-                    }),
-                    amount: order.filled,
-                    fee: order.fee,
-                    fee_currency: order.fee_currency.clone(),
-                    pnl: 0.0,
-                    trade_type: TradeType::Open,
-                    created_at: Utc::now(),
-                };
-                inner.emit_event(EngineEvent::OrderFilled {
-                    order: order.clone(),
-                    trade,
-                });
-                info!(position_id = %position.id, symbol = %symbol, side = ?side, size = order.filled, "Position opened and filled");
+                match order.fill_price.filter(|p| *p > 0.0) {
+                    Some(fill_price) => {
+                        let trade = Trade {
+                            id: Uuid::new_v4(),
+                            position_id,
+                            order_id: order.id,
+                            exchange: exchange_name.clone(),
+                            symbol: symbol.clone(),
+                            side: resolved_side,
+                            price: fill_price,
+                            amount: order.filled,
+                            fee: order.fee,
+                            fee_currency: order.fee_currency.clone(),
+                            pnl: 0.0,
+                            trade_type: TradeType::Open,
+                            created_at: Utc::now(),
+                        };
+                        inner.emit_event(EngineEvent::OrderFilled {
+                            order: order.clone(),
+                            trade,
+                        });
+                        info!(position_id = %position.id, symbol = %symbol, side = ?side, size = order.filled, "Position opened and filled");
+                    }
+                    None => {
+                        error!(order_id = %order.id, "Order filled but no valid fill_price — skipping Trade record to prevent 0.0 price propagation");
+                    }
+                }
             } else {
                 inner.emit_event(EngineEvent::OrderPlaced {
                     order: order.clone(),
@@ -1656,56 +1664,60 @@ pub(crate) async fn handle_close_position(
 
             // 如果订单已成交，发出 OrderFilled 事件
             if order.filled > 0.0 {
-                let trade = Trade {
-                    id: Uuid::new_v4(),
-                    position_id,
-                    order_id: order.id,
-                    exchange: position.exchange.clone(),
-                    symbol: position.symbol.clone(),
-                    side: close_side,
-                    price: order.fill_price.unwrap_or_else(|| {
-                        error!(order_id = %order.id, "Close order filled but no fill_price in Trade record — using 0.0");
-                        0.0
-                    }),
-                    amount: order.filled,
-                    fee: order.fee,
-                    fee_currency: order.fee_currency.clone(),
-                    pnl: 0.0,
-                    trade_type: TradeType::Close,
-                    created_at: Utc::now(),
-                };
-                inner.emit_event(EngineEvent::OrderFilled {
-                    order: order.clone(),
-                    trade,
-                });
-                info!(position_id = %position_id, symbol = %position.symbol, "Close order filled");
+                match order.fill_price.filter(|p| *p > 0.0) {
+                    Some(fill_price) => {
+                        let trade = Trade {
+                            id: Uuid::new_v4(),
+                            position_id,
+                            order_id: order.id,
+                            exchange: position.exchange.clone(),
+                            symbol: position.symbol.clone(),
+                            side: close_side,
+                            price: fill_price,
+                            amount: order.filled,
+                            fee: order.fee,
+                            fee_currency: order.fee_currency.clone(),
+                            pnl: 0.0,
+                            trade_type: TradeType::Close,
+                            created_at: Utc::now(),
+                        };
+                        inner.emit_event(EngineEvent::OrderFilled {
+                            order: order.clone(),
+                            trade,
+                        });
+                        info!(position_id = %position_id, symbol = %position.symbol, "Close order filled");
 
-                // 市价单立即成交时，直接更新仓位状态为 Closed 并发出事件
-                // 避免等待 sync_loop 检测仓位消失（最多 10 秒延迟）
-                let key = (
-                    position.exchange.clone(),
-                    position.symbol.clone(),
-                    position.side,
-                );
-                if let Some(mut pos) = inner.positions.get_mut(&key) {
-                    pos.size = 0.0;
-                    pos.status = PositionStatus::Closed;
-                    pos.closed_at = Some(Utc::now());
-                    pos.updated_at = Utc::now();
-                    let closed_pos = pos.clone();
-                    drop(pos);
-                    inner.position_id_index.remove(&closed_pos.id);
-                    inner.positions.remove(&key);
-                    persist!(
-                        inner.persistence.upsert_position(&closed_pos),
-                        "Failed to persist closed position in close_position"
-                    );
-                    inner.emit_event(EngineEvent::PositionClosed {
-                        position: closed_pos.clone(),
-                    });
-                    inner.emit_event(EngineEvent::PositionUpdated {
-                        position: closed_pos,
-                    });
+                        // 市价单立即成交时，直接更新仓位状态为 Closed 并发出事件
+                        // 避免等待 sync_loop 检测仓位消失（最多 10 秒延迟）
+                        let key = (
+                            position.exchange.clone(),
+                            position.symbol.clone(),
+                            position.side,
+                        );
+                        if let Some(mut pos) = inner.positions.get_mut(&key) {
+                            pos.size = 0.0;
+                            pos.status = PositionStatus::Closed;
+                            pos.closed_at = Some(Utc::now());
+                            pos.updated_at = Utc::now();
+                            let closed_pos = pos.clone();
+                            drop(pos);
+                            inner.position_id_index.remove(&closed_pos.id);
+                            inner.positions.remove(&key);
+                            persist!(
+                                inner.persistence.upsert_position(&closed_pos),
+                                "Failed to persist closed position in close_position"
+                            );
+                            inner.emit_event(EngineEvent::PositionClosed {
+                                position: closed_pos.clone(),
+                            });
+                            inner.emit_event(EngineEvent::PositionUpdated {
+                                position: closed_pos,
+                            });
+                        }
+                    }
+                    None => {
+                        error!(order_id = %order.id, "Close order filled but no valid fill_price — skipping Trade record to prevent 0.0 price propagation");
+                    }
                 }
             } else {
                 inner.emit_event(EngineEvent::OrderPlaced { order });
