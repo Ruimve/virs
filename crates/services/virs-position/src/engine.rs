@@ -1042,6 +1042,18 @@ pub(crate) async fn handle_ws_order_update(
                 }
             };
 
+            // Validate price — a 0.0 price indicates WS data anomaly.
+            // Skip Trade construction to prevent 0.0 price propagation (same as REST path).
+            if price <= 0.0 {
+                error!(
+                    order_id = %order_id,
+                    symbol = %symbol,
+                    price = price,
+                    "WS order update has invalid price (<=0.0) — skipping Trade record to prevent 0.0 price propagation"
+                );
+                return;
+            }
+
             let trade = Trade {
                 id: Uuid::new_v4(),
                 position_id,
@@ -1499,14 +1511,21 @@ pub(crate) async fn handle_open_position(
                     }
                 }
             } else {
-                order.fill_price.unwrap_or_else(|| {
-                    tracing::warn!(
-                        order_id = %order.id,
-                        filled = order.filled,
-                        "Order is not filled and has no fill_price — using 0.0 as entry price placeholder"
-                    );
-                    0.0
-                })
+                // Order is not filled — entry_price is unknown.
+                // Using 0.0 would produce a zero-cost position, which is incorrect.
+                // Skip position update entirely; the order will be picked up when it fills.
+                match order.fill_price {
+                    Some(p) if p > 0.0 => p,
+                    _ => {
+                        tracing::warn!(
+                            order_id = %order.id,
+                            filled = order.filled,
+                            "Order is not filled and has no fill_price — skipping position update to prevent zero-cost position"
+                        );
+                        position.status = PositionStatus::Opening;
+                        return;
+                    }
+                }
             };
             position.entry_price = fill_price;
             position.current_price = position.entry_price;

@@ -778,18 +778,21 @@ pub async fn fetch_positions(
             };
             let size = pos_amt.abs();
 
-            let margin_type_str = parse_str(p, "marginType").unwrap_or_default();
-            let margin_mode = match margin_type_str.as_str() {
-                "isolated" => MarginMode::Isolated,
-                _ => MarginMode::Cross,
-            };
-
             let symbol_str = match parse_str(p, "symbol") {
                 Some(s) => s,
                 None => {
                     tracing::warn!("positionRisk symbol missing — skipping position");
                     return None;
                 }
+            };
+
+            let margin_type_str = parse_str(p, "marginType").unwrap_or_else(|| {
+                tracing::warn!(symbol = %symbol_str, "positionRisk marginType missing — defaulting to Cross");
+                String::new()
+            });
+            let margin_mode = match margin_type_str.as_str() {
+                "isolated" => MarginMode::Isolated,
+                _ => MarginMode::Cross,
             };
 
             // entryPrice / leverage are critical fields; if either is missing

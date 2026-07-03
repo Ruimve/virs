@@ -268,6 +268,11 @@ fn default_max_consecutive_losses() -> u32 {
 
 impl Default for RiskConfig {
     fn default() -> Self {
+        tracing::warn!(
+            "RiskConfig::default() called — using default risk parameters. \
+             This should only happen during deserialization when config is missing. \
+             Ensure risk config is explicitly provided in production."
+        );
         Self {
             max_position_per_symbol_pct: default_max_position_per_symbol(),
             max_total_position_pct: default_max_total_position(),
@@ -354,6 +359,11 @@ fn default_leverage() -> u32 {
 
 impl Default for EngineConfig {
     fn default() -> Self {
+        tracing::warn!(
+            "EngineConfig::default() called — using default engine parameters. \
+             This should only happen during deserialization when config is missing. \
+             Ensure engine config is explicitly provided in production."
+        );
         Self {
             engine_id: "default".to_string(),
             sync_interval_secs: default_sync_interval(),

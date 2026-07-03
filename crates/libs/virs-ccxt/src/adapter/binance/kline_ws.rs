@@ -42,10 +42,17 @@ impl BinanceKlineMessage {
             Some(data)
         } else if let Some(et) = self.event_type_flat.as_deref() {
             if et == "kline" {
+                let symbol = match self.symbol_flat.clone() {
+                    Some(s) => s,
+                    None => {
+                        tracing::warn!("Kline WS message missing symbol — skipping kline");
+                        return None;
+                    }
+                };
                 self.kline_flat.map(|kline| BinanceKlineData {
                     event_type: et.to_string(),
                     event_time: 0,
-                    symbol: self.symbol_flat.clone().unwrap_or_default(),
+                    symbol,
                     kline,
                 })
             } else {

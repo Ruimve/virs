@@ -12,6 +12,7 @@ async-trait = { workspace = true }
 virs-error = { path = "../virs-error", features = ["sqlx"] }
 futures-core = { workspace = true }
 sqlx = { workspace = true, optional = true }
+tracing = { workspace = true }
 
 [features]
 default = ["sqlx"]
