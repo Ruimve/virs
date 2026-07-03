@@ -40,7 +40,7 @@ const statusConfig = (status: string): StatusStyle => {
 const Header = () => {
   const { bot } = useBot();
   const { tabs, activeTab, actions } = useHeader();
-  const { enabled: paperMode } = usePaper();
+  const { enabled: paperEnabled } = usePaper();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerClosing, setDrawerClosing] = useState(false);
@@ -78,9 +78,9 @@ const Header = () => {
               {sc.text}
             </span>
             <span
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${paperMode ? 'text-warning-text' : 'text-success-text'}`}
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${paperEnabled ? 'text-warning-text' : 'text-success-text'}`}
             >
-              {paperMode ? (
+              {paperEnabled ? (
                 <ShieldCheck className="w-4 h-4" strokeWidth={2} />
               ) : (
                 <Flame className="w-4 h-4" strokeWidth={2} />
