@@ -33,7 +33,7 @@ export {
   findActiveBot,
 } from './bot';
 export { fetchKlines, fetchOrderBook } from './market';
-export { checkHealth, getPaperStatus, enablePaperMode, disablePaperMode } from './system';
+export { checkHealth, getPaperStatus } from './system';
 export { useKlineWs } from './ws';
 export type { KlineWsEvent } from './ws';
 export type * from './types';

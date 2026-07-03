@@ -9,14 +9,6 @@ export function getPaperStatus(): Promise<ApiResponse<PaperModeStatus>> {
   return api.get<PaperModeStatus>('/system/paper/status');
 }
 
-export function enablePaperMode(): Promise<ApiResponse<null>> {
-  return api.post<null>('/system/paper/enable');
-}
-
-export function disablePaperMode(): Promise<ApiResponse<null>> {
-  return api.post<null>('/system/paper/disable');
-}
-
 export function getSystemInfo(): Promise<ApiResponse<SystemInfo>> {
   return api.get<SystemInfo>('/system/info');
 }

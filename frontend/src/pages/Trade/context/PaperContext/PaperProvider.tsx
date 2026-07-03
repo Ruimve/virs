@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { disablePaperMode, enablePaperMode, getPaperStatus } from '@/service';
+import { getPaperStatus } from '@/service';
 import { PaperContext } from '.';
 
 export function PaperProvider({ children }: { children: ReactNode }) {
   const [enabled, setEnabled] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -15,30 +14,12 @@ export function PaperProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const toggle = useCallback(async () => {
-    if (loading) return;
-    setLoading(true);
-    try {
-      if (enabled) {
-        await disablePaperMode();
-        setEnabled(false);
-      } else {
-        await enablePaperMode();
-        setEnabled(true);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }, [enabled, loading]);
-
   useEffect(() => {
     refresh();
   }, [refresh]);
 
   return (
-    <PaperContext.Provider value={{ enabled, loading, toggle, refresh }}>
+    <PaperContext.Provider value={{ enabled, refresh }}>
       {children}
     </PaperContext.Provider>
   );

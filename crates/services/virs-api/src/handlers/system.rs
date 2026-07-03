@@ -1,37 +1,15 @@
 //! System-level handlers — paper mode, engine status, system metrics.
 
-use axum::{extract::State, http::HeaderMap, Json};
+use axum::{extract::State, Json};
 use sysinfo::{Disks, Networks, System};
 use virs_error::VirsError;
 
-use crate::handlers::response::{extract_user_id, ApiResponse};
+use crate::handlers::response::ApiResponse;
 use crate::state::AppState;
 
 pub async fn paper_status(State(state): State<AppState>) -> Result<Json<ApiResponse>, VirsError> {
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "paper_mode": state.engine_manager.paper_mode(),
-    }))))
-}
-
-pub async fn paper_enable(
-    State(_state): State<AppState>,
-    _headers: HeaderMap,
-) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&_headers)?;
-    Ok(Json(ApiResponse::ok(serde_json::json!({
-        "paper_mode": true,
-        "message": "Paper mode is configured at startup. Restart the server with PAPER_MODE=true to enable.",
-    }))))
-}
-
-pub async fn paper_disable(
-    State(_state): State<AppState>,
-    _headers: HeaderMap,
-) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&_headers)?;
-    Ok(Json(ApiResponse::ok(serde_json::json!({
-        "paper_mode": false,
-        "message": "Paper mode is configured at startup. Restart the server with PAPER_MODE=false to disable.",
     }))))
 }
 

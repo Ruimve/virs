@@ -2,8 +2,6 @@ import { createContext, useContext } from 'react';
 
 interface PaperContextType {
   enabled: boolean;
-  loading: boolean;
-  toggle: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
