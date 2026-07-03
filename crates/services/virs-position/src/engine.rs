@@ -1468,11 +1468,22 @@ pub(crate) async fn handle_open_position(
                             "Order is filled but has no valid fill_price — \
                              refusing to update position to prevent data corruption."
                         );
+                        // Rollback: position was set to Open at line 1456, but
+                        // we cannot confirm a valid fill_price. Revert to Opening
+                        // to prevent a zero-cost Open position from entering the system.
+                        position.status = PositionStatus::Opening;
                         return;
                     }
                 }
             } else {
-                order.fill_price.unwrap_or(0.0)
+                order.fill_price.unwrap_or_else(|| {
+                    tracing::warn!(
+                        order_id = %order.id,
+                        filled = order.filled,
+                        "Order is not filled and has no fill_price — using 0.0 as entry price placeholder"
+                    );
+                    0.0
+                })
             };
             position.entry_price = fill_price;
             position.current_price = position.entry_price;

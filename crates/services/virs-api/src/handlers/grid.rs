@@ -28,8 +28,14 @@ pub async fn create_bot(
     let symbol = body["symbol"].as_str().unwrap_or("");
     let exchange = body["exchange"].as_str().unwrap_or("");
     let grid_count = body["grid_count"].as_i64().unwrap_or(10) as i32;
-    let upper_price = body["upper_price"].as_f64().unwrap_or(0.0);
-    let lower_price = body["lower_price"].as_f64().unwrap_or(0.0);
+    let upper_price = body["upper_price"].as_f64().unwrap_or_else(|| {
+        tracing::warn!("upper_price not provided in request — will be rejected by parameter validation");
+        0.0
+    });
+    let lower_price = body["lower_price"].as_f64().unwrap_or_else(|| {
+        tracing::warn!("lower_price not provided in request — will be rejected by parameter validation");
+        0.0
+    });
     let grid_profit_pct = body["grid_profit_pct"].as_f64().unwrap_or(0.5);
     let quantity_per_grid = body["quantity_per_grid"].as_f64().unwrap_or(10.0);
     let leverage = body["leverage"].as_i64().unwrap_or(5) as i32;
@@ -267,7 +273,10 @@ pub async fn get_bot(
         .grid_levels_json
         .as_ref()
         .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
+        .unwrap_or_else(|| {
+            tracing::warn!(bot_id = %id, "grid_levels_json is missing or not an array — returning empty list");
+            Vec::new()
+        });
 
     // Query: recent trades
     let trades_rows = sqlx::query_as::<
@@ -295,7 +304,10 @@ pub async fn get_bot(
     .bind(id)
     .fetch_all(&state.db_pool)
     .await
-    .unwrap_or_default();
+    .map_err(|e| {
+        tracing::error!(bot_id = %id, error = %e, "Failed to fetch grid trades from database");
+        VirsError::config(format!("Failed to fetch trade history: {}", e))
+    })?;
 
     let trades: Vec<serde_json::Value> = trades_rows
         .iter()

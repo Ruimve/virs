@@ -199,8 +199,14 @@ impl ExecutionReportInner {
                 .as_ref()
                 .and_then(|q| q.parse().ok())
                 .unwrap_or_else(|| {
-                    let orig = self.orig_qty.parse::<f64>().unwrap_or(0.0);
-                    let filled = self.filled_qty.parse::<f64>().unwrap_or(0.0);
+                    let orig = self.orig_qty.parse::<f64>().unwrap_or_else(|e| {
+                        tracing::error!(orig_qty = %self.orig_qty, error = %e, "Failed to parse orig_qty in remaining calculation — defaulting to 0.0");
+                        0.0
+                    });
+                    let filled = self.filled_qty.parse::<f64>().unwrap_or_else(|e| {
+                        tracing::error!(filled_qty = %self.filled_qty, error = %e, "Failed to parse filled_qty in remaining calculation — defaulting to 0.0");
+                        0.0
+                    });
                     (orig - filled).max(0.0)
                 }),
             price: self
@@ -669,7 +675,10 @@ mod tests {
 
         // 但 to_ws_feed_event() 应正确转换为 WsFeedEvent
         let event = msg.to_ws_feed_event();
-        assert!(event.is_some(), "ORDER_TRADE_UPDATE should produce WsFeedEvent");
+        assert!(
+            event.is_some(),
+            "ORDER_TRADE_UPDATE should produce WsFeedEvent"
+        );
 
         if let Some(WsFeedEvent::OrderUpdate {
             exchange_order_id,
@@ -864,7 +873,10 @@ mod tests {
     #[test]
     fn test_new_perpetual() {
         let ws = BinanceOrderWs::new_perpetual("test_listen_key".to_string());
-        assert_eq!(ws.ws_url, "wss://fstream.binance.com/private/ws/test_listen_key");
+        assert_eq!(
+            ws.ws_url,
+            "wss://fstream.binance.com/private/ws/test_listen_key"
+        );
         assert_eq!(ws.base_url, "wss://fstream.binance.com/private/ws");
         assert!(!ws.is_running());
     }

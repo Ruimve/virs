@@ -757,12 +757,23 @@ impl GridWorker {
     }
 
     pub(crate) fn find_level_by_price_within(&self, price: f64, max_dist: f64) -> Option<usize> {
+        if price.is_nan() || price.is_infinite() {
+            tracing::error!(price, "Price is NaN or infinite — cannot find grid level");
+            return None;
+        }
         let (idx, dist) = self
             .levels
             .iter()
             .enumerate()
             .map(|(i, l)| (i, (l.price - price).abs()))
-            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))?;
+            .min_by(|a, b| {
+                if a.1.is_nan() || b.1.is_nan() {
+                    tracing::warn!("NaN detected in grid level price comparison — treating as equal");
+                    std::cmp::Ordering::Equal
+                } else {
+                    a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+                }
+            })?;
         if max_dist <= 0.0 || dist <= max_dist {
             Some(idx)
         } else {

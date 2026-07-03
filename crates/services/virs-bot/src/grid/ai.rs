@@ -6,6 +6,7 @@ use crate::common::ai_client;
 use crate::common::ports::CredentialStore;
 use crate::common::ports::LlmProviderResolver;
 use crate::grid::ports::GridBotConfig;
+use tracing::warn;
 use virs_error::BotResult;
 
 /// Grid AI 决策动作
@@ -111,21 +112,78 @@ pub fn parse_grid_decision(json: &serde_json::Value) -> GridAiDecision {
     let risk = &json["risk"];
     let market = &json["market"];
 
+    let action = decision["action"].as_str().unwrap_or_else(|| {
+        warn!("LLM response missing 'decision.action' field — defaulting to hold");
+        "hold"
+    });
+    let reason = decision["reason"]
+        .as_str()
+        .unwrap_or("No reason provided")
+        .to_string();
+    let confidence = decision["confidence"]
+        .as_f64()
+        .unwrap_or_else(|| {
+            warn!("LLM response missing 'decision.confidence' field — defaulting to 0.0");
+            0.0
+        })
+        .clamp(0.0, 1.0);
+
+    // Grid price bounds are critical — 0.0 means invalid grid range.
+    // Log at warn level so operators can detect incomplete LLM responses.
+    let upper_price = grid["upper_price"].as_f64().unwrap_or_else(|| {
+        warn!("LLM response missing 'grid.upper_price' — grid range is invalid (0.0)");
+        0.0
+    });
+    let lower_price = grid["lower_price"].as_f64().unwrap_or_else(|| {
+        warn!("LLM response missing 'grid.lower_price' — grid range is invalid (0.0)");
+        0.0
+    });
+    let grid_count = grid["grid_count"].as_i64().unwrap_or_else(|| {
+        warn!("LLM response missing 'grid.grid_count' — defaulting to 0");
+        0
+    }) as i32;
+    let grid_profit_pct = grid["grid_profit_pct"].as_f64().unwrap_or_else(|| {
+        warn!("LLM response missing 'grid.grid_profit_pct' — defaulting to 0.0");
+        0.0
+    });
+
+    let leverage = risk["leverage"].as_i64().unwrap_or_else(|| {
+        warn!("LLM response missing 'risk.leverage' — defaulting to 1");
+        1
+    }) as i32;
+    let quantity_per_grid = risk["quantity_per_grid"].as_f64().unwrap_or_else(|| {
+        warn!("LLM response missing 'risk.quantity_per_grid' — defaulting to 0.0");
+        0.0
+    });
+
+    let market_regime = market["market_regime"]
+        .as_str()
+        .unwrap_or_else(|| {
+            warn!("LLM response missing 'market.market_regime' — defaulting to 'unknown'");
+            "unknown"
+        })
+        .to_string();
+    let analysis = json["analysis"]
+        .as_str()
+        .unwrap_or("No analysis provided")
+        .to_string();
+    let risk_warning = json["risk_warning"]
+        .as_str()
+        .unwrap_or("No risk warning")
+        .to_string();
+
     GridAiDecision {
-        action: decision["action"].as_str().unwrap_or("hold").to_string(),
-        reason: decision["reason"].as_str().unwrap_or("").to_string(),
-        confidence: decision["confidence"].as_f64().unwrap_or(0.5),
-        upper_price: grid["upper_price"].as_f64().unwrap_or(0.0),
-        lower_price: grid["lower_price"].as_f64().unwrap_or(0.0),
-        grid_count: grid["grid_count"].as_i64().unwrap_or(10) as i32,
-        grid_profit_pct: grid["grid_profit_pct"].as_f64().unwrap_or(0.5),
-        leverage: risk["leverage"].as_i64().unwrap_or(5) as i32,
-        quantity_per_grid: risk["quantity_per_grid"].as_f64().unwrap_or(10.0),
-        market_regime: market["market_regime"]
-            .as_str()
-            .unwrap_or("ranging")
-            .to_string(),
-        analysis: json["analysis"].as_str().unwrap_or("").to_string(),
-        risk_warning: json["risk_warning"].as_str().unwrap_or("").to_string(),
+        action: action.to_string(),
+        reason,
+        confidence,
+        upper_price,
+        lower_price,
+        grid_count,
+        grid_profit_pct,
+        leverage,
+        quantity_per_grid,
+        market_regime,
+        analysis,
+        risk_warning,
     }
 }

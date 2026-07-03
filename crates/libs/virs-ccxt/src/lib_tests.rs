@@ -5,7 +5,9 @@
 
 use serde_json::json;
 
-use crate::{build_display_url, extract_error_message, mask_signature, parse_f64, parse_str, parse_u32};
+use crate::{
+    build_display_url, extract_error_message, mask_signature, parse_f64, parse_str, parse_u32,
+};
 
 // ============================================================
 // TC-L1: parse_f64
@@ -129,7 +131,10 @@ fn l5_3_build_display_url_masks_signature() {
 #[test]
 fn l5_4_build_display_url_empty_params() {
     let params: [(&str, &str); 0] = [];
-    assert_eq!(build_display_url("/api/v3/ping", params.into_iter()), "/api/v3/ping");
+    assert_eq!(
+        build_display_url("/api/v3/ping", params.into_iter()),
+        "/api/v3/ping"
+    );
 }
 
 // ============================================================

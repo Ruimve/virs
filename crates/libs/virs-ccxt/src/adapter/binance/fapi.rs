@@ -22,10 +22,10 @@
 use chrono::Utc;
 
 use crate::auth::Signer;
-use virs_error::ExchangeError;
 use crate::types::*;
 use crate::ExchangeClient;
 use crate::{parse_f64, parse_str, parse_u32};
+use virs_error::ExchangeError;
 
 use super::parse_order_book_side;
 
@@ -292,7 +292,10 @@ pub async fn fetch_funding_rate(
         )
         .await?;
 
-    let rate = parse_f64(&data, "lastFundingRate").unwrap_or(0.0);
+    let rate = parse_f64(&data, "lastFundingRate").unwrap_or_else(|| {
+        tracing::warn!("lastFundingRate missing — defaulting to 0.0");
+        0.0
+    });
     let next_funding_time = data
         .get("nextFundingTime")
         .and_then(|t| t.as_i64())
@@ -343,7 +346,10 @@ pub async fn fetch_funding_history(
                 .get("fundingTime")
                 .and_then(|t| t.as_i64())
                 .unwrap_or(0);
-            let rate = parse_f64(item, "fundingRate").unwrap_or(0.0);
+            let rate = parse_f64(item, "fundingRate").unwrap_or_else(|| {
+                tracing::warn!("fundingRate missing — defaulting to 0.0");
+                0.0
+            });
             all_entries.push(CcxtFundingHistoryEntry { funding_time, rate });
         }
 
@@ -383,14 +389,25 @@ pub async fn fetch_balance(
     let result: Vec<Balance> = balances
         .iter()
         .filter_map(|b| {
-            let free = parse_f64(b, "availableBalance").unwrap_or(0.0);
-            let total = parse_f64(b, "balance").unwrap_or(0.0);
+            let asset = parse_str(b, "asset").unwrap_or_default();
+            let free = parse_f64(b, "availableBalance").unwrap_or_else(|| {
+                if !asset.is_empty() {
+                    tracing::warn!(asset = %asset, "Balance 'availableBalance' field missing or unparseable — defaulting to 0.0");
+                }
+                0.0
+            });
+            let total = parse_f64(b, "balance").unwrap_or_else(|| {
+                if !asset.is_empty() {
+                    tracing::warn!(asset = %asset, "Balance 'balance' field missing or unparseable — defaulting to 0.0");
+                }
+                0.0
+            });
             let used = total - free;
             if free == 0.0 && used == 0.0 {
                 return None;
             }
             Some(Balance {
-                asset: parse_str(b, "asset").unwrap_or_default(),
+                asset,
                 free,
                 used,
                 total,
@@ -468,11 +485,22 @@ pub async fn create_order(
         side: params.side,
         order_type: params.order_type,
         price: parse_f64(&data, "price"),
-        amount: parse_f64(&data, "origQty").unwrap_or(params.amount),
+        amount: parse_f64(&data, "origQty").unwrap_or_else(|| {
+            tracing::warn!("origQty missing in exchange response — using request amount");
+            params.amount
+        }),
         cost: None,
-        filled: parse_f64(&data, "executedQty").unwrap_or(0.0),
-        remaining: parse_f64(&data, "origQty").unwrap_or(params.amount)
-            - parse_f64(&data, "executedQty").unwrap_or(0.0),
+        filled: parse_f64(&data, "executedQty").unwrap_or_else(|| {
+            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
+        remaining: parse_f64(&data, "origQty").unwrap_or_else(|| {
+            tracing::warn!("origQty missing in exchange response — using request amount");
+            params.amount
+        }) - parse_f64(&data, "executedQty").unwrap_or_else(|| {
+            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
         status: crate::adapter::binance::BinanceExchange::parse_order_status(
             &parse_str(&data, "status")
                 .ok_or_else(|| ExchangeError::no_data("status missing".into()))?,
@@ -517,11 +545,22 @@ pub async fn cancel_order(
         },
         order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
         price: parse_f64(&data, "price"),
-        amount: parse_f64(&data, "origQty").unwrap_or(0.0),
+        amount: parse_f64(&data, "origQty").unwrap_or_else(|| {
+            tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
         cost: None,
-        filled: parse_f64(&data, "executedQty").unwrap_or(0.0),
-        remaining: parse_f64(&data, "origQty").unwrap_or(0.0)
-            - parse_f64(&data, "executedQty").unwrap_or(0.0),
+        filled: parse_f64(&data, "executedQty").unwrap_or_else(|| {
+            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
+        remaining: parse_f64(&data, "origQty").unwrap_or_else(|| {
+            tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }) - parse_f64(&data, "executedQty").unwrap_or_else(|| {
+            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
         status: CcxtOrderStatus::Canceled,
         fee: None,
         created_at: None,
@@ -565,11 +604,22 @@ pub async fn fetch_order(
         },
         order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
         price: parse_f64(&data, "price"),
-        amount: parse_f64(&data, "origQty").unwrap_or(0.0),
+        amount: parse_f64(&data, "origQty").unwrap_or_else(|| {
+            tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
         cost: None,
-        filled: parse_f64(&data, "executedQty").unwrap_or(0.0),
-        remaining: parse_f64(&data, "origQty").unwrap_or(0.0)
-            - parse_f64(&data, "executedQty").unwrap_or(0.0),
+        filled: parse_f64(&data, "executedQty").unwrap_or_else(|| {
+            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
+        remaining: parse_f64(&data, "origQty").unwrap_or_else(|| {
+            tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }) - parse_f64(&data, "executedQty").unwrap_or_else(|| {
+            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
         status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
         fee: None,
         created_at: None,
@@ -616,11 +666,22 @@ pub async fn fetch_open_orders(
                 },
                 order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
                 price: parse_f64(o, "price"),
-                amount: parse_f64(o, "origQty").unwrap_or(0.0),
+                amount: parse_f64(o, "origQty").unwrap_or_else(|| {
+                    tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
+                    0.0
+                }),
                 cost: None,
-                filled: parse_f64(o, "executedQty").unwrap_or(0.0),
-                remaining: parse_f64(o, "origQty").unwrap_or(0.0)
-                    - parse_f64(o, "executedQty").unwrap_or(0.0),
+                filled: parse_f64(o, "executedQty").unwrap_or_else(|| {
+                    tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+                    0.0
+                }),
+                remaining: parse_f64(o, "origQty").unwrap_or_else(|| {
+                    tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
+                    0.0
+                }) - parse_f64(o, "executedQty").unwrap_or_else(|| {
+                    tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+                    0.0
+                }),
                 status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
                 fee: None,
                 created_at: None,
@@ -699,7 +760,10 @@ pub async fn fetch_positions(
     let positions: Vec<Position> = arr
         .iter()
         .filter_map(|p| {
-            let pos_amt = parse_f64(p, "positionAmt").unwrap_or(0.0);
+            let pos_amt = parse_f64(p, "positionAmt").unwrap_or_else(|| {
+                tracing::warn!("positionAmt missing — defaulting to 0.0");
+                0.0
+            });
             if pos_amt == 0.0 {
                 return None;
             }
@@ -748,7 +812,10 @@ pub async fn fetch_positions(
                 size,
                 entry_price,
                 leverage,
-                unrealized_pnl: parse_f64(p, "unRealizedProfit").unwrap_or(0.0),
+                unrealized_pnl: parse_f64(p, "unRealizedProfit").unwrap_or_else(|| {
+                    tracing::warn!("unRealizedProfit missing — defaulting to 0.0");
+                    0.0
+                }),
                 margin_mode,
                 liquidation_price: parse_f64(p, "liquidationPrice"),
                 info: p.clone(),

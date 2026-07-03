@@ -26,10 +26,10 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::auth::{hmac_sha256_hex, insert_header, SignedRequest, Signer};
-use virs_error::ExchangeError;
 use crate::types::*;
 use crate::ws_types::WsFeedEvent;
 use crate::{Exchange, ExchangeClient};
+use virs_error::ExchangeError;
 
 // ============================================================
 // Binance Signer (HMAC-SHA256 via query string)
@@ -189,7 +189,6 @@ impl BinanceEd25519Signer {
     pub fn api_key(&self) -> &str {
         &self.api_key
     }
-
 }
 
 impl Signer for BinanceEd25519Signer {

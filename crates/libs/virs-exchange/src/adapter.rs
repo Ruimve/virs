@@ -91,8 +91,14 @@ pub fn to_models_kline(
         close: ck.close,
         volume: ck.volume,
         close_time: ck.timestamp + interval_ms,
-        quote_volume: ck.quote_volume.unwrap_or(0.0),
-        trades: ck.trades.unwrap_or(0),
+        quote_volume: ck.quote_volume.unwrap_or_else(|| {
+            tracing::warn!("Kline quote_volume is None — exchange did not provide this field, defaulting to 0.0");
+            0.0
+        }),
+        trades: ck.trades.unwrap_or_else(|| {
+            tracing::warn!("Kline trades count is None — exchange did not provide this field, defaulting to 0");
+            0
+        }),
         symbol: symbol.to_string(),
         exchange: exchange.to_string(),
         interval: interval.to_string(),
@@ -122,7 +128,10 @@ pub fn to_models_order(co: virs_ccxt::CcxtOrder) -> Order {
         filled: co.filled,
         remaining: co.remaining,
         status: co.status.into(),
-        fee: fee_info.map(|f| f.cost).unwrap_or(0.0),
+        fee: fee_info.map(|f| f.cost).unwrap_or_else(|| {
+            tracing::warn!("Order fee info is None — defaulting to 0.0");
+            0.0
+        }),
         fee_currency: fee_info.map(|f| f.currency.clone()).unwrap_or_default(),
         created_at: co.created_at.unwrap_or_else(chrono::Utc::now),
         updated_at: co.updated_at.unwrap_or_else(chrono::Utc::now),
@@ -254,7 +263,14 @@ impl Exchange for CcxtAdapter {
             .iter()
             .find(|m| m.symbol == symbol || m.id == symbol);
         match found {
-            Some(m) => Ok(m.min_amount.unwrap_or(0.0)),
+            Some(m) => {
+                m.min_amount.ok_or_else(|| {
+                    ExchangeError::NoData(format!(
+                        "symbol {} found but min_amount is None — exchange did not return minimum order amount",
+                        symbol
+                    ))
+                })
+            }
             None => Err(ExchangeError::NoData(format!(
                 "symbol {} not found in markets",
                 symbol

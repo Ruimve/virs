@@ -15,10 +15,10 @@
 use chrono::Utc;
 
 use crate::auth::Signer;
-use virs_error::ExchangeError;
 use crate::types::*;
 use crate::ExchangeClient;
 use crate::{parse_f64, parse_str, parse_u32};
+use virs_error::ExchangeError;
 
 use super::parse_order_book_side;
 
@@ -281,13 +281,24 @@ pub async fn fetch_balance(
     let mut result: Vec<Balance> = balances
         .iter()
         .filter_map(|b| {
-            let free = parse_f64(b, "free").unwrap_or(0.0);
-            let used = parse_f64(b, "locked").unwrap_or(0.0);
+            let asset = parse_str(b, "asset").unwrap_or_default();
+            let free = parse_f64(b, "free").unwrap_or_else(|| {
+                if !asset.is_empty() {
+                    tracing::warn!(asset = %asset, "Balance 'free' field missing or unparseable — defaulting to 0.0");
+                }
+                0.0
+            });
+            let used = parse_f64(b, "locked").unwrap_or_else(|| {
+                if !asset.is_empty() {
+                    tracing::warn!(asset = %asset, "Balance 'locked' field missing or unparseable — defaulting to 0.0");
+                }
+                0.0
+            });
             if free == 0.0 && used == 0.0 {
                 return None;
             }
             Some(Balance {
-                asset: parse_str(b, "asset").unwrap_or_default(),
+                asset,
                 free,
                 used,
                 total: 0.0,
@@ -349,11 +360,22 @@ pub async fn create_order(
         side: params.side,
         order_type: params.order_type,
         price: parse_f64(&data, "price"),
-        amount: parse_f64(&data, "origQty").unwrap_or(params.amount),
+        amount: parse_f64(&data, "origQty").unwrap_or_else(|| {
+            tracing::warn!("origQty missing in exchange response — using request amount");
+            params.amount
+        }),
         cost: None,
-        filled: parse_f64(&data, "executedQty").unwrap_or(0.0),
-        remaining: parse_f64(&data, "origQty").unwrap_or(params.amount)
-            - parse_f64(&data, "executedQty").unwrap_or(0.0),
+        filled: parse_f64(&data, "executedQty").unwrap_or_else(|| {
+            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
+        remaining: parse_f64(&data, "origQty").unwrap_or_else(|| {
+            tracing::warn!("origQty missing in exchange response — using request amount");
+            params.amount
+        }) - parse_f64(&data, "executedQty").unwrap_or_else(|| {
+            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
         status: crate::adapter::binance::BinanceExchange::parse_order_status(
             &parse_str(&data, "status")
                 .ok_or_else(|| ExchangeError::no_data("status missing".into()))?,
@@ -398,11 +420,22 @@ pub async fn cancel_order(
         },
         order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
         price: parse_f64(&data, "price"),
-        amount: parse_f64(&data, "origQty").unwrap_or(0.0),
+        amount: parse_f64(&data, "origQty").unwrap_or_else(|| {
+            tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
         cost: None,
-        filled: parse_f64(&data, "executedQty").unwrap_or(0.0),
-        remaining: parse_f64(&data, "origQty").unwrap_or(0.0)
-            - parse_f64(&data, "executedQty").unwrap_or(0.0),
+        filled: parse_f64(&data, "executedQty").unwrap_or_else(|| {
+            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
+        remaining: parse_f64(&data, "origQty").unwrap_or_else(|| {
+            tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }) - parse_f64(&data, "executedQty").unwrap_or_else(|| {
+            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
         status: CcxtOrderStatus::Canceled,
         fee: None,
         created_at: None,
@@ -446,11 +479,22 @@ pub async fn fetch_order(
         },
         order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
         price: parse_f64(&data, "price"),
-        amount: parse_f64(&data, "origQty").unwrap_or(0.0),
+        amount: parse_f64(&data, "origQty").unwrap_or_else(|| {
+            tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
         cost: None,
-        filled: parse_f64(&data, "executedQty").unwrap_or(0.0),
-        remaining: parse_f64(&data, "origQty").unwrap_or(0.0)
-            - parse_f64(&data, "executedQty").unwrap_or(0.0),
+        filled: parse_f64(&data, "executedQty").unwrap_or_else(|| {
+            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
+        remaining: parse_f64(&data, "origQty").unwrap_or_else(|| {
+            tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }) - parse_f64(&data, "executedQty").unwrap_or_else(|| {
+            tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+            0.0
+        }),
         status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
         fee: None,
         created_at: None,
@@ -497,11 +541,22 @@ pub async fn fetch_open_orders(
                 },
                 order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
                 price: parse_f64(o, "price"),
-                amount: parse_f64(o, "origQty").unwrap_or(0.0),
+                amount: parse_f64(o, "origQty").unwrap_or_else(|| {
+                    tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
+                    0.0
+                }),
                 cost: None,
-                filled: parse_f64(o, "executedQty").unwrap_or(0.0),
-                remaining: parse_f64(o, "origQty").unwrap_or(0.0)
-                    - parse_f64(o, "executedQty").unwrap_or(0.0),
+                filled: parse_f64(o, "executedQty").unwrap_or_else(|| {
+                    tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+                    0.0
+                }),
+                remaining: parse_f64(o, "origQty").unwrap_or_else(|| {
+                    tracing::warn!("origQty missing in exchange response — defaulting to 0.0");
+                    0.0
+                }) - parse_f64(o, "executedQty").unwrap_or_else(|| {
+                    tracing::warn!("executedQty missing in exchange response — defaulting to 0.0");
+                    0.0
+                }),
                 status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
                 fee: None,
                 created_at: None,

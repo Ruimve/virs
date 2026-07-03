@@ -231,12 +231,17 @@ impl ExchangePe for CcxtExchangeAdapter {
         let balances = ex.get_balances().await?;
         let usdt = balances
             .iter()
-            .find(|b| b.asset.eq_ignore_ascii_case("USDT"));
+            .find(|b| b.asset.eq_ignore_ascii_case("USDT"))
+            .ok_or_else(|| {
+                ExchangeError::NoData(
+                    "USDT balance not found in exchange balances — cannot return 0.0 as it would bypass risk checks".to_string(),
+                )
+            })?;
         Ok(Balance {
             asset: "USDT".to_string(),
-            free: usdt.map(|b| b.free).unwrap_or(0.0),
-            used: usdt.map(|b| b.used).unwrap_or(0.0),
-            total: usdt.map(|b| b.total).unwrap_or(0.0),
+            free: usdt.free,
+            used: usdt.used,
+            total: usdt.total,
         })
     }
 

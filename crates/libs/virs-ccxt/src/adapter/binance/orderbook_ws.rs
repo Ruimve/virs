@@ -88,13 +88,19 @@ impl BinanceDepthMessage {
 
         // 单流 spot: bids/asks at top level
         if let (Some(bids), Some(asks)) = (self.bids.clone(), self.asks.clone()) {
-            let ts = self.last_update_id.unwrap_or(0);
+            let ts = self.last_update_id.unwrap_or_else(|| {
+                tracing::warn!("orderbook_ws: last_update_id is None — using 0 as fallback timestamp");
+                0
+            });
             return Some((bids, asks, stream, None, ts));
         }
 
         // 单流 perpetual: b/a at top level
         if let (Some(bids), Some(asks)) = (self.bids_perp_flat, self.asks_perp_flat) {
-            let ts = self.event_time_flat.unwrap_or(0);
+            let ts = self.event_time_flat.unwrap_or_else(|| {
+                tracing::warn!("orderbook_ws: event_time_flat is None — using 0 as fallback timestamp");
+                0
+            });
             return Some((bids, asks, stream, self.symbol_flat, ts));
         }
 
@@ -110,7 +116,10 @@ pub(crate) fn parse_payload(
     if let (Some(bids), Some(asks)) = (v.get("bids"), v.get("asks")) {
         let bids = parse_levels(bids)?;
         let asks = parse_levels(asks)?;
-        let ts = v.get("lastUpdateId").and_then(|t| t.as_i64()).unwrap_or(0);
+        let ts = v.get("lastUpdateId").and_then(|t| t.as_i64()).unwrap_or_else(|| {
+            tracing::warn!("orderbook_ws: lastUpdateId missing in spot payload — using 0 as fallback");
+            0
+        });
         return Some((bids, asks, None, ts));
     }
     // Perpetual format: b/a
@@ -118,7 +127,10 @@ pub(crate) fn parse_payload(
         let bids = parse_levels(bids)?;
         let asks = parse_levels(asks)?;
         let sym = v.get("s").and_then(|s| s.as_str()).map(String::from);
-        let ts = v.get("E").and_then(|t| t.as_i64()).unwrap_or(0);
+        let ts = v.get("E").and_then(|t| t.as_i64()).unwrap_or_else(|| {
+            tracing::warn!("orderbook_ws: event time 'E' missing in perpetual payload — using 0 as fallback");
+            0
+        });
         return Some((bids, asks, sym, ts));
     }
     None

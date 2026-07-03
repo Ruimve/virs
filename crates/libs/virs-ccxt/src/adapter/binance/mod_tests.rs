@@ -79,7 +79,10 @@ fn b2_6_unified_symbol_only_quote() {
 
 #[test]
 fn b3_1_status_new() {
-    assert_eq!(BinanceExchange::parse_order_status("NEW"), CcxtOrderStatus::Open);
+    assert_eq!(
+        BinanceExchange::parse_order_status("NEW"),
+        CcxtOrderStatus::Open
+    );
 }
 
 #[test]
@@ -92,37 +95,58 @@ fn b3_2_status_partially_filled() {
 
 #[test]
 fn b3_3_status_filled() {
-    assert_eq!(BinanceExchange::parse_order_status("FILLED"), CcxtOrderStatus::Filled);
+    assert_eq!(
+        BinanceExchange::parse_order_status("FILLED"),
+        CcxtOrderStatus::Filled
+    );
 }
 
 #[test]
 fn b3_4_status_canceled() {
-    assert_eq!(BinanceExchange::parse_order_status("CANCELED"), CcxtOrderStatus::Canceled);
+    assert_eq!(
+        BinanceExchange::parse_order_status("CANCELED"),
+        CcxtOrderStatus::Canceled
+    );
 }
 
 #[test]
 fn b3_5_status_cancelled_variant() {
-    assert_eq!(BinanceExchange::parse_order_status("CANCELLED"), CcxtOrderStatus::Canceled);
+    assert_eq!(
+        BinanceExchange::parse_order_status("CANCELLED"),
+        CcxtOrderStatus::Canceled
+    );
 }
 
 #[test]
 fn b3_6_status_expired() {
-    assert_eq!(BinanceExchange::parse_order_status("EXPIRED"), CcxtOrderStatus::Canceled);
+    assert_eq!(
+        BinanceExchange::parse_order_status("EXPIRED"),
+        CcxtOrderStatus::Canceled
+    );
 }
 
 #[test]
 fn b3_7_status_rejected() {
-    assert_eq!(BinanceExchange::parse_order_status("REJECTED"), CcxtOrderStatus::Rejected);
+    assert_eq!(
+        BinanceExchange::parse_order_status("REJECTED"),
+        CcxtOrderStatus::Rejected
+    );
 }
 
 #[test]
 fn b3_8_status_pending_cancel() {
-    assert_eq!(BinanceExchange::parse_order_status("PENDING_CANCEL"), CcxtOrderStatus::Open);
+    assert_eq!(
+        BinanceExchange::parse_order_status("PENDING_CANCEL"),
+        CcxtOrderStatus::Open
+    );
 }
 
 #[test]
 fn b3_9_status_unknown_defaults_to_open() {
-    assert_eq!(BinanceExchange::parse_order_status("UNKNOWN"), CcxtOrderStatus::Open);
+    assert_eq!(
+        BinanceExchange::parse_order_status("UNKNOWN"),
+        CcxtOrderStatus::Open
+    );
 }
 
 // ============================================================
@@ -131,7 +155,10 @@ fn b3_9_status_unknown_defaults_to_open() {
 
 #[test]
 fn b4_1_type_market() {
-    assert_eq!(BinanceExchange::parse_order_type("MARKET"), OrderType::Market);
+    assert_eq!(
+        BinanceExchange::parse_order_type("MARKET"),
+        OrderType::Market
+    );
 }
 
 #[test]
@@ -141,22 +168,34 @@ fn b4_2_type_limit() {
 
 #[test]
 fn b4_3_type_stop_market() {
-    assert_eq!(BinanceExchange::parse_order_type("STOP_MARKET"), OrderType::StopMarket);
+    assert_eq!(
+        BinanceExchange::parse_order_type("STOP_MARKET"),
+        OrderType::StopMarket
+    );
 }
 
 #[test]
 fn b4_4_type_stop_loss() {
-    assert_eq!(BinanceExchange::parse_order_type("STOP_LOSS"), OrderType::StopMarket);
+    assert_eq!(
+        BinanceExchange::parse_order_type("STOP_LOSS"),
+        OrderType::StopMarket
+    );
 }
 
 #[test]
 fn b4_5_type_stop_loss_limit() {
-    assert_eq!(BinanceExchange::parse_order_type("STOP_LOSS_LIMIT"), OrderType::StopLimit);
+    assert_eq!(
+        BinanceExchange::parse_order_type("STOP_LOSS_LIMIT"),
+        OrderType::StopLimit
+    );
 }
 
 #[test]
 fn b4_6_type_take_profit_limit() {
-    assert_eq!(BinanceExchange::parse_order_type("TAKE_PROFIT_LIMIT"), OrderType::StopLimit);
+    assert_eq!(
+        BinanceExchange::parse_order_type("TAKE_PROFIT_LIMIT"),
+        OrderType::StopLimit
+    );
 }
 
 #[test]
@@ -169,7 +208,10 @@ fn b4_7_type_take_profit_market() {
 
 #[test]
 fn b4_8_type_unknown_defaults_to_market() {
-    assert_eq!(BinanceExchange::parse_order_type("UNKNOWN"), OrderType::Market);
+    assert_eq!(
+        BinanceExchange::parse_order_type("UNKNOWN"),
+        OrderType::Market
+    );
 }
 
 // ============================================================
@@ -192,7 +234,10 @@ fn b5_2_side_sell() {
 
 #[test]
 fn b6_1_order_type_market() {
-    assert_eq!(BinanceExchange::order_type_str(&OrderType::Market), "MARKET");
+    assert_eq!(
+        BinanceExchange::order_type_str(&OrderType::Market),
+        "MARKET"
+    );
 }
 
 #[test]
@@ -202,15 +247,24 @@ fn b6_2_order_type_limit() {
 
 #[test]
 fn b6_3_order_type_stop_market() {
-    assert_eq!(BinanceExchange::order_type_str(&OrderType::StopMarket), "STOP_MARKET");
+    assert_eq!(
+        BinanceExchange::order_type_str(&OrderType::StopMarket),
+        "STOP_MARKET"
+    );
 }
 
 #[test]
 fn b6_4_order_type_stop_limit() {
     // 现货 StopLimit → STOP_LOSS_LIMIT
-    assert_eq!(BinanceExchange::order_type_str(&OrderType::StopLimit), "STOP_LOSS_LIMIT");
+    assert_eq!(
+        BinanceExchange::order_type_str(&OrderType::StopLimit),
+        "STOP_LOSS_LIMIT"
+    );
     // 合约 StopLimit → STOP
-    assert_eq!(BinanceExchange::order_type_str_futures(&OrderType::StopLimit), "STOP");
+    assert_eq!(
+        BinanceExchange::order_type_str_futures(&OrderType::StopLimit),
+        "STOP"
+    );
 }
 
 #[test]

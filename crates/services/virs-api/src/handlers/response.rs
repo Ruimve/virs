@@ -37,13 +37,10 @@ pub fn extract_user_id(headers: &axum::http::HeaderMap) -> Result<uuid::Uuid, Vi
         }
     };
 
-    let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
-        tracing::error!("JWT_SECRET environment variable is not set — refusing to verify token");
-        String::new()
-    });
-    if secret.is_empty() {
-        return Err(VirsError::unauthorized("Server authentication not configured"));
-    }
+    // JWT_SECRET is mandatory — fail-fast if missing, consistent with auth.rs
+    let secret = std::env::var("JWT_SECRET").map_err(|_| {
+        VirsError::config("JWT_SECRET environment variable is required")
+    })?;
     match virs_utils::auth::decode_jwt(token, &secret) {
         Ok(claims) => uuid::Uuid::parse_str(&claims.sub)
             .map_err(|_| VirsError::unauthorized("Invalid user ID in token")),

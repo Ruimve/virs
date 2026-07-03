@@ -221,12 +221,21 @@ impl PaperExchangeAdapter {
         } else {
             -order.amount
         };
-        // 使用 set_leverage 配置的值，默认 20
+        // Leverage must be explicitly configured via set_leverage.
+        // Default to 1 (no leverage) — never 20, as high leverage can cause
+        // irreversible liquidation if the caller forgets to set it.
         let leverage: u32 = self
             .configured_leverage
             .get(&order.symbol)
             .map(|v| *v)
-            .unwrap_or(20);
+            .unwrap_or_else(|| {
+                tracing::error!(
+                    symbol = %order.symbol,
+                    "No leverage configured for symbol — defaulting to 1 (no leverage). \
+                     Call set_leverage() before trading to avoid unexpected margin calculations."
+                );
+                1
+            });
         let leverage_f64 = leverage as f64;
         let notional = fill_price * order.amount;
         let margin = notional / leverage_f64;
@@ -452,7 +461,13 @@ impl ExchangePe for PaperExchangeAdapter {
                 .last_prices
                 .get(&params.symbol)
                 .map(|r| *r)
-                .unwrap_or(0.0);
+                .unwrap_or_else(|| {
+                    tracing::error!(
+                        symbol = %params.symbol,
+                        "No last price available for paper market order — fill_price will be 0.0, PnL will be incorrect"
+                    );
+                    0.0
+                });
             let pending_for_fill = PaperPendingOrder {
                 id: order_id,
                 symbol: params.symbol.clone(),

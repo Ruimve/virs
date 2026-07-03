@@ -4,9 +4,9 @@
 //! - GET /sapi/v1/account/apiRestrictions
 
 use crate::auth::Signer;
-use virs_error::ExchangeError;
 use crate::types::*;
 use crate::ExchangeClient;
+use virs_error::ExchangeError;
 
 const BASE_URL: &str = "https://api.binance.com";
 

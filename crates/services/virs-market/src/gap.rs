@@ -130,17 +130,24 @@ impl GapDetector {
                 exchange: exchange.to_string(),
                 symbol: symbol.to_string(),
                 timeframe: Timeframe::M1,
-                candle: fetched.last().cloned().unwrap_or(Candle {
-                    open_time: 0,
-                    close_time: 0,
-                    open: 0.0,
-                    high: 0.0,
-                    low: 0.0,
-                    close: 0.0,
-                    volume: 0.0,
-                    quote_volume: 0.0,
-                    trades: 0,
-                    closed: false,
+                candle: fetched.last().cloned().unwrap_or_else(|| {
+                    tracing::error!(
+                        exchange = %exchange,
+                        symbol = %symbol,
+                        "backfilled_count > 0 but fetched is empty — sending zero Candle placeholder"
+                    );
+                    Candle {
+                        open_time: 0,
+                        close_time: 0,
+                        open: 0.0,
+                        high: 0.0,
+                        low: 0.0,
+                        close: 0.0,
+                        volume: 0.0,
+                        quote_volume: 0.0,
+                        trades: 0,
+                        closed: false,
+                    }
                 }),
                 event_type: KlineEventType::Backfilled,
             });
@@ -352,17 +359,24 @@ impl GapDetector {
                 exchange: exchange.to_string(),
                 symbol: symbol.to_string(),
                 timeframe: Timeframe::M1,
-                candle: candles_1m.last().cloned().unwrap_or(Candle {
-                    open_time: 0,
-                    close_time: 0,
-                    open: 0.0,
-                    high: 0.0,
-                    low: 0.0,
-                    close: 0.0,
-                    volume: 0.0,
-                    quote_volume: 0.0,
-                    trades: 0,
-                    closed: false,
+                candle: candles_1m.last().cloned().unwrap_or_else(|| {
+                    tracing::error!(
+                        exchange = %exchange,
+                        symbol = %symbol,
+                        "total > 0 but candles_1m is empty — sending zero Candle placeholder"
+                    );
+                    Candle {
+                        open_time: 0,
+                        close_time: 0,
+                        open: 0.0,
+                        high: 0.0,
+                        low: 0.0,
+                        close: 0.0,
+                        volume: 0.0,
+                        quote_volume: 0.0,
+                        trades: 0,
+                        closed: false,
+                    }
                 }),
                 event_type: KlineEventType::Backfilled,
             });

@@ -1008,11 +1008,12 @@ impl AutoWorker {
                     "analysis": d.analysis,
                     "risk_warning": d.risk_warning,
                 });
-                if let Some(raw) = raw_llm_response {
-                    result
-                        .as_object_mut()
-                        .unwrap()
-                        .insert("raw_llm_response".to_string(), raw.clone());
+                if let Some(raw_llm_response) = raw_llm_response {
+                    if let Some(obj) = result.as_object_mut() {
+                        obj.insert("raw_llm_response".to_string(), raw_llm_response.clone());
+                    } else {
+                        tracing::error!("LLM result is not a JSON object — cannot insert raw_llm_response");
+                    }
                 }
                 let log_id = self
                     .store
@@ -1156,7 +1157,18 @@ impl AutoWorker {
                 // 冷却期检查：防止止损/止盈后立即同方向重入被反弹扫损
                 if let Some(remaining) = self.cooldown_remaining_secs(side) {
                     let (closed_side, close_reason, closed_at) =
-                        self.last_close_event.as_ref().unwrap();
+                        match self.last_close_event.as_ref() {
+                            Some(ev) => ev,
+                            None => {
+                                error!(
+                                    bot_id = %self.bot.id,
+                                    side = %side,
+                                    remaining_secs = remaining,
+                                    "In cooldown but last_close_event is None — data inconsistency, skipping open"
+                                );
+                                return Some("冷却期中但关闭事件丢失，无法开仓".to_string());
+                            }
+                        };
                     warn!(
                         bot_id = %self.bot.id,
                         new_side = %side,
@@ -1218,7 +1230,10 @@ impl AutoWorker {
             .store
             .update_ai_analysis(
                 self.bot.id,
-                self.bot.market_regime.as_deref().unwrap_or("ranging"),
+                self.bot.market_regime.as_deref().unwrap_or_else(|| {
+                    tracing::warn!(bot_id = %self.bot.id, "market_regime is None — defaulting to 'ranging'");
+                    "ranging"
+                }),
                 self.bot.leverage,
                 d.analysis.as_deref().unwrap_or(""),
             )
@@ -1354,8 +1369,8 @@ impl AutoWorker {
         };
 
         let position_side = match side {
-            "long" => Some(BotPositionSide::Long),
-            "short" => Some(BotPositionSide::Short),
+            "long" => BotPositionSide::Long,
+            "short" => BotPositionSide::Short,
             _ => {
                 error!(side = %side, "Unknown position side — refusing to place order");
                 return;
@@ -1377,7 +1392,7 @@ impl AutoWorker {
             .order_executor
             .send_command(OrderCommand::OpenPosition {
                 symbol: self.bot.symbol.clone(),
-                side: position_side.unwrap(),
+                side: position_side,
                 order_side,
                 amount: quantity,
                 leverage: Some(self.bot.leverage.max(1) as u32),
@@ -1467,7 +1482,7 @@ impl AutoWorker {
                     });
                 }
                 Err(e) => {
-                    warn!(bot_id = %self.bot.id, error = %e, "Failed to send close position order");
+                    error!(bot_id = %self.bot.id, error = %e, "Failed to send close position order");
                     let _ = self.auto_event_tx.send(AutoEvent::BotError {
                         bot_id: self.bot.id,
                         error: format!("Failed to send close order ({}): {}", close_reason, e),
@@ -1480,7 +1495,7 @@ impl AutoWorker {
                 "long" => (OrderSide::Sell, Some(BotPositionSide::Long)),
                 "short" => (OrderSide::Buy, Some(BotPositionSide::Short)),
                 _ => {
-                    warn!(bot_id = %self.bot.id, side = %side, "Unknown position side, cannot close");
+                    error!(bot_id = %self.bot.id, side = %side, "Unknown position side, cannot close");
                     return;
                 }
             };
@@ -1522,7 +1537,7 @@ impl AutoWorker {
                     });
                 }
                 Err(e) => {
-                    warn!(bot_id = %self.bot.id, error = %e, "Failed to send close position order");
+                    error!(bot_id = %self.bot.id, error = %e, "Failed to send close position order (fallback path)");
                     let _ = self.auto_event_tx.send(AutoEvent::BotError {
                         bot_id: self.bot.id,
                         error: format!("Failed to send close order ({}): {}", close_reason, e),

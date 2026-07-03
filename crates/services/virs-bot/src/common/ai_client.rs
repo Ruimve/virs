@@ -39,7 +39,10 @@ pub async fn call_llm_api(
 
     if !response.status().is_success() {
         let status = response.status();
-        let body_text = response.text().await.unwrap_or_default();
+        let body_text = response.text().await.unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "Failed to read LLM API error response body — using empty string");
+            String::new()
+        });
         return Err(BotError::llm(format!(
             "{} API returned {}: {}",
             provider_name, status, body_text

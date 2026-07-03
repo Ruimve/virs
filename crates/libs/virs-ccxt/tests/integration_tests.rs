@@ -6,10 +6,10 @@
 use serde_json::json;
 
 use virs_ccxt::{
-    create_exchange, parse_f64, parse_str,
-    auth::hmac_sha256_hex,
-    types::{CcxtOrderStatus, CcxtTicker},
     adapter::binance::{order_ws::BinanceOrderMessage, BinanceExchange},
+    auth::hmac_sha256_hex,
+    create_exchange, parse_f64, parse_str,
+    types::{CcxtOrderStatus, CcxtTicker},
 };
 use virs_error::ExchangeError;
 
@@ -165,14 +165,7 @@ fn int_5_2_create_exchange_binance_ed25519() {
 
 #[test]
 fn int_5_3_create_exchange_bybit_not_supported() {
-    let result = create_exchange(
-        "bybit",
-        "key",
-        "secret",
-        None,
-        None,
-        &MarketType::Spot,
-    );
+    let result = create_exchange("bybit", "key", "secret", None, None, &MarketType::Spot);
     assert!(result.is_err());
     match result.err().unwrap() {
         ExchangeError::NotSupported(_) => {}
@@ -182,14 +175,7 @@ fn int_5_3_create_exchange_bybit_not_supported() {
 
 #[test]
 fn int_5_4_create_exchange_okx_not_supported() {
-    let result = create_exchange(
-        "okx",
-        "key",
-        "secret",
-        None,
-        None,
-        &MarketType::Spot,
-    );
+    let result = create_exchange("okx", "key", "secret", None, None, &MarketType::Spot);
     assert!(result.is_err());
     match result.err().unwrap() {
         ExchangeError::NotSupported(_) => {}
@@ -199,14 +185,7 @@ fn int_5_4_create_exchange_okx_not_supported() {
 
 #[test]
 fn int_5_5_create_exchange_case_insensitive() {
-    let result = create_exchange(
-        "BINANCE",
-        "key",
-        "secret",
-        None,
-        None,
-        &MarketType::Spot,
-    );
+    let result = create_exchange("BINANCE", "key", "secret", None, None, &MarketType::Spot);
     assert!(result.is_ok());
 }
 

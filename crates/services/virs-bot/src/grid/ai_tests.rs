@@ -106,12 +106,12 @@ fn g2_2_parse_decision_defaults() {
     let json = serde_json::json!({});
     let decision = parse_grid_decision(&json);
     assert_eq!(decision.action, "hold"); // default
-    assert_eq!(decision.reason, ""); // default
-    assert!((decision.confidence - 0.5).abs() < 1e-10); // default
+    assert_eq!(decision.reason, "No reason provided"); // default
+    assert!((decision.confidence - 0.0).abs() < 1e-10); // default — 0.0, not 0.5
     assert!((decision.upper_price - 0.0).abs() < 1e-10); // default
-    assert_eq!(decision.grid_count, 10); // default
-    assert!((decision.grid_profit_pct - 0.5).abs() < 1e-10); // default
-    assert_eq!(decision.leverage, 5); // default
-    assert!((decision.quantity_per_grid - 10.0).abs() < 1e-10); // default
-    assert_eq!(decision.market_regime, "ranging"); // default
+    assert_eq!(decision.grid_count, 0); // default — 0, not 10
+    assert!((decision.grid_profit_pct - 0.0).abs() < 1e-10); // default — 0.0, not 0.5
+    assert_eq!(decision.leverage, 1); // default — 1, not 5
+    assert!((decision.quantity_per_grid - 0.0).abs() < 1e-10); // default — 0.0, not 10.0
+    assert_eq!(decision.market_regime, "unknown"); // default — "unknown", not "ranging"
 }

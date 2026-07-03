@@ -21,7 +21,10 @@ fn a1_1_hmac_sha256_hex_known_vector() {
     let key = "NhqPtmdSJYdKjVHjA7PZj4Mge3R5YNiP1e3UZjInClVN65XAbvqqM6A7H5fATj0j";
     let msg = "symbol=LTCBTC&side=BUY&type=LIMIT&timeInForce=GTC&quantity=1&price=0.1&recvWindow=5000&timestamp=1499827319559";
     let sig = hmac_sha256_hex(key, msg);
-    assert_eq!(sig, "c8db56825ae71d6d79447849e617115f4a920fa2acdcab2b053c4b2838bd6b71");
+    assert_eq!(
+        sig,
+        "c8db56825ae71d6d79447849e617115f4a920fa2acdcab2b053c4b2838bd6b71"
+    );
 }
 
 #[test]

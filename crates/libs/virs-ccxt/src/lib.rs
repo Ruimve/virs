@@ -363,7 +363,10 @@ impl ExchangeClient {
 }
 
 /// Build a display URL from path and query params, masking `signature` for safe logging.
-pub(crate) fn build_display_url<'a>(path: &str, params: impl Iterator<Item = (&'a str, &'a str)>) -> String {
+pub(crate) fn build_display_url<'a>(
+    path: &str,
+    params: impl Iterator<Item = (&'a str, &'a str)>,
+) -> String {
     let mut url = path.to_string();
     let mut param_strs: Vec<String> = Vec::new();
     let mut has_params = false;
@@ -549,10 +552,10 @@ pub fn parse_u32(v: &Value, field: &str) -> Option<u32> {
 // Test modules (_tests suffix pattern)
 // ============================================================
 #[cfg(test)]
-mod lib_tests;
-#[cfg(test)]
 mod auth_tests;
 #[cfg(test)]
 mod errors_tests;
+#[cfg(test)]
+mod lib_tests;
 #[cfg(test)]
 mod types_tests;

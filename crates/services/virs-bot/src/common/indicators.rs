@@ -1,6 +1,7 @@
 //! Technical indicators using talib-rs.
 
 use talib_rs::{ma_type::MaType, math_operator, momentum, overlap, volatility};
+use tracing::warn;
 use virs_models::Kline;
 
 pub fn closes(klines: &[Kline]) -> Vec<f64> {
@@ -41,7 +42,16 @@ pub fn sma_at_from(series: &[f64], idx: usize, period: usize) -> f64 {
     result
         .get(mapped_idx)
         .copied()
-        .unwrap_or_else(|| result.last().copied().unwrap_or(0.0))
+        .unwrap_or_else(|| {
+            result.last().copied().unwrap_or_else(|| {
+                warn!(
+                    indicator = "sma_at_from",
+                    idx,
+                    "Insufficient data for indicator calculation — defaulting to 0.0"
+                );
+                0.0
+            })
+        })
 }
 
 #[inline(always)]
@@ -50,7 +60,14 @@ pub fn ema_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
         return 0.0;
     }
     let result = overlap::ema(&closes(klines), period).unwrap_or_default();
-    result.get(idx).copied().unwrap_or(0.0)
+    result.get(idx).copied().unwrap_or_else(|| {
+        warn!(
+            indicator = "ema_at",
+            idx,
+            "Insufficient data for indicator calculation — defaulting to 0.0"
+        );
+        0.0
+    })
 }
 
 #[inline(always)]
@@ -68,7 +85,14 @@ pub fn macd_at(klines: &[Kline], idx: usize, fast: usize, slow: usize) -> f64 {
         return 0.0;
     }
     let (macd, _, _) = momentum::macd(&closes(klines), fast, slow, 9).unwrap_or_default();
-    macd.get(idx).copied().unwrap_or(0.0)
+    macd.get(idx).copied().unwrap_or_else(|| {
+        warn!(
+            indicator = "macd_at",
+            idx,
+            "Insufficient data for indicator calculation — defaulting to 0.0"
+        );
+        0.0
+    })
 }
 
 #[inline(always)]
@@ -83,7 +107,14 @@ pub fn macd_signal_at(
         return 0.0;
     }
     let (_, sig, _) = momentum::macd(&closes(klines), fast, slow, signal).unwrap_or_default();
-    sig.get(idx).copied().unwrap_or(0.0)
+    sig.get(idx).copied().unwrap_or_else(|| {
+        warn!(
+            indicator = "macd_signal_at",
+            idx,
+            "Insufficient data for indicator calculation — defaulting to 0.0"
+        );
+        0.0
+    })
 }
 
 #[inline(always)]
@@ -94,9 +125,30 @@ pub fn bbands_at(klines: &[Kline], idx: usize, period: usize, std_dev: f64) -> (
     let (upper, middle, lower) =
         overlap::bbands(&closes(klines), period, std_dev, std_dev, MaType::Sma).unwrap_or_default();
     (
-        upper.get(idx).copied().unwrap_or(0.0),
-        middle.get(idx).copied().unwrap_or(0.0),
-        lower.get(idx).copied().unwrap_or(0.0),
+        upper.get(idx).copied().unwrap_or_else(|| {
+            warn!(
+                indicator = "bbands_at.upper",
+                idx,
+                "Insufficient data for indicator calculation — defaulting to 0.0"
+            );
+            0.0
+        }),
+        middle.get(idx).copied().unwrap_or_else(|| {
+            warn!(
+                indicator = "bbands_at.middle",
+                idx,
+                "Insufficient data for indicator calculation — defaulting to 0.0"
+            );
+            0.0
+        }),
+        lower.get(idx).copied().unwrap_or_else(|| {
+            warn!(
+                indicator = "bbands_at.lower",
+                idx,
+                "Insufficient data for indicator calculation — defaulting to 0.0"
+            );
+            0.0
+        }),
     )
 }
 
@@ -107,7 +159,14 @@ pub fn atr_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     }
     let result =
         volatility::atr(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_default();
-    result.get(idx).copied().unwrap_or(0.0)
+    result.get(idx).copied().unwrap_or_else(|| {
+        warn!(
+            indicator = "atr_at",
+            idx,
+            "Insufficient data for indicator calculation — defaulting to 0.0"
+        );
+        0.0
+    })
 }
 
 #[inline(always)]
@@ -117,7 +176,14 @@ pub fn adx_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     }
     let result =
         momentum::adx(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_default();
-    result.get(idx).copied().unwrap_or(0.0)
+    result.get(idx).copied().unwrap_or_else(|| {
+        warn!(
+            indicator = "adx_at",
+            idx,
+            "Insufficient data for indicator calculation — defaulting to 0.0"
+        );
+        0.0
+    })
 }
 
 #[inline(always)]
@@ -132,8 +198,22 @@ pub fn macd_histogram_at(
         return 0.0;
     }
     let (macd, sig, _) = momentum::macd(&closes(klines), fast, slow, signal).unwrap_or_default();
-    let m = macd.get(idx).copied().unwrap_or(0.0);
-    let s = sig.get(idx).copied().unwrap_or(0.0);
+    let m = macd.get(idx).copied().unwrap_or_else(|| {
+        warn!(
+            indicator = "macd_histogram_at.macd",
+            idx,
+            "Insufficient data for indicator calculation — defaulting to 0.0"
+        );
+        0.0
+    });
+    let s = sig.get(idx).copied().unwrap_or_else(|| {
+        warn!(
+            indicator = "macd_histogram_at.signal",
+            idx,
+            "Insufficient data for indicator calculation — defaulting to 0.0"
+        );
+        0.0
+    });
     m - s
 }
 
@@ -152,7 +232,14 @@ pub fn highest_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
         return 0.0;
     }
     let result = math_operator::max(&highs(klines), period).unwrap_or_default();
-    result.get(idx).copied().unwrap_or(0.0)
+    result.get(idx).copied().unwrap_or_else(|| {
+        warn!(
+            indicator = "highest_at",
+            idx,
+            "Insufficient data for indicator calculation — defaulting to 0.0"
+        );
+        0.0
+    })
 }
 
 #[inline(always)]
@@ -161,7 +248,14 @@ pub fn lowest_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
         return 0.0;
     }
     let result = math_operator::min(&lows(klines), period).unwrap_or_default();
-    result.get(idx).copied().unwrap_or(0.0)
+    result.get(idx).copied().unwrap_or_else(|| {
+        warn!(
+            indicator = "lowest_at",
+            idx,
+            "Insufficient data for indicator calculation — defaulting to 0.0"
+        );
+        0.0
+    })
 }
 
 pub fn volume_sma_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
@@ -289,7 +383,14 @@ pub fn compute_market_indicators(
     funding_next_time: String,
 ) -> MarketIndicators {
     let last_idx = klines_1h.len().saturating_sub(1);
-    let current_price = klines_1h.last().map(|k| k.close).unwrap_or(0.0);
+    let current_price = klines_1h.last().map(|k| k.close).unwrap_or_else(|| {
+        warn!(
+            indicator = "current_price",
+            len = klines_1h.len(),
+            "Insufficient data for indicator calculation — defaulting to 0.0"
+        );
+        0.0
+    });
 
     let rsi = rsi_at(klines_1h, last_idx, 14);
     let atr_val = atr_at(klines_1h, last_idx, 14);
@@ -330,7 +431,14 @@ pub fn compute_market_indicators(
         0.0
     };
 
-    let h1_candle_body = klines_1h.last().map(|k| k.close - k.open).unwrap_or(0.0);
+    let h1_candle_body = klines_1h.last().map(|k| k.close - k.open).unwrap_or_else(|| {
+        warn!(
+            indicator = "h1_candle_body",
+            len = klines_1h.len(),
+            "Insufficient data for indicator calculation — defaulting to 0.0"
+        );
+        0.0
+    });
     let h1_bars_outside_band = compute_bars_outside_band(klines_1h, bb_upper, bb_lower);
     let h1_bandwidth_5bars_ago = if last_idx >= 5 {
         bbands_width_at(klines_1h, last_idx.saturating_sub(5), 20, 2.0)
@@ -346,7 +454,14 @@ pub fn compute_market_indicators(
     let h1_volume = klines_1h
         .get(h1_last_completed)
         .map(|k| k.volume)
-        .unwrap_or(0.0);
+        .unwrap_or_else(|| {
+            warn!(
+                indicator = "h1_volume",
+                idx = h1_last_completed,
+                "Insufficient data for indicator calculation — defaulting to 0.0"
+            );
+            0.0
+        });
     let h1_volume_sma20 = if h1_last_completed >= 19 {
         volume_sma_at(klines_1h, h1_last_completed, 20)
     } else {
@@ -488,7 +603,14 @@ pub fn compute_market_indicators(
     let m15_volume = klines_15m
         .get(m15_last_completed)
         .map(|k| k.volume)
-        .unwrap_or(0.0);
+        .unwrap_or_else(|| {
+            warn!(
+                indicator = "m15_volume",
+                idx = m15_last_completed,
+                "Insufficient data for indicator calculation — defaulting to 0.0"
+            );
+            0.0
+        });
     let m15_volume_sma20 = if m15_last_completed >= 19 {
         volume_sma_at(klines_15m, m15_last_completed, 20)
     } else {

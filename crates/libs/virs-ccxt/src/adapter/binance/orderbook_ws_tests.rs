@@ -17,10 +17,13 @@ use crate::ws_types::OrderBookLevel;
 fn w1_1_parse_levels_standard() {
     let v = json!([["50000.0", "1.5"], ["49999.0", "2.0"]]);
     let result = parse_levels(&v);
-    assert_eq!(result, Some(vec![
-        ["50000.0".to_string(), "1.5".to_string()],
-        ["49999.0".to_string(), "2.0".to_string()],
-    ]));
+    assert_eq!(
+        result,
+        Some(vec![
+            ["50000.0".to_string(), "1.5".to_string()],
+            ["49999.0".to_string(), "2.0".to_string()],
+        ])
+    );
 }
 
 #[test]
@@ -67,10 +70,19 @@ fn w2_1_to_levels_normal() {
         ["49999.0".to_string(), "2.0".to_string()],
     ];
     let levels = to_levels(&raw);
-    assert_eq!(levels, vec![
-        OrderBookLevel { price: 50000.0, amount: 1.5 },
-        OrderBookLevel { price: 49999.0, amount: 2.0 },
-    ]);
+    assert_eq!(
+        levels,
+        vec![
+            OrderBookLevel {
+                price: 50000.0,
+                amount: 1.5
+            },
+            OrderBookLevel {
+                price: 49999.0,
+                amount: 2.0
+            },
+        ]
+    );
 }
 
 #[test]

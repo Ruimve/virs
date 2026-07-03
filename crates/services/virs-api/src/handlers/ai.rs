@@ -65,7 +65,7 @@ pub async fn optimize(
     }
 
     // Fetch market data for context
-    let current_price = fetch_price_from_kline(&state, exchange, symbol).await;
+    let current_price = fetch_price_from_kline(&state, exchange, symbol).await?;
 
     let system_prompt = r#"You are a trading strategy optimizer. Analyze the given market data and provide optimization suggestions.
 Respond in JSON format with:
@@ -129,13 +129,16 @@ pub async fn recommend_strategy(
 
     let symbol = body["symbol"].as_str().unwrap_or("");
     let exchange = body["exchange"].as_str().unwrap_or("");
-    let risk_tolerance = body["risk_tolerance"].as_str().unwrap_or("medium");
+    let risk_tolerance = body["risk_tolerance"].as_str().unwrap_or_else(|| {
+        tracing::warn!("risk_tolerance not provided — defaulting to 'medium'");
+        "medium"
+    });
 
     if symbol.is_empty() {
         return Err(VirsError::bad_request("symbol is required"));
     }
 
-    let current_price = fetch_price_from_kline(&state, exchange, symbol).await;
+    let current_price = fetch_price_from_kline(&state, exchange, symbol).await?;
 
     let system_prompt = r#"You are a trading strategy advisor. Recommend a trading strategy based on market conditions.
 Respond in JSON format with:
@@ -166,19 +169,37 @@ Respond in JSON format with:
     }
 }
 
-async fn fetch_price_from_kline(state: &AppState, exchange: &str, symbol: &str) -> f64 {
-    if let Some(candles) = state
+async fn fetch_price_from_kline(
+    state: &AppState,
+    exchange: &str,
+    symbol: &str,
+) -> Result<f64, VirsError> {
+    let candles = state
         .kline_engine
         .get_klines_async(exchange, symbol, virs_market::Timeframe::M1)
         .await
-    {
-        if let Some(last) = candles.last() {
-            if last.close > 0.0 {
-                return last.close;
-            }
-        }
+        .ok_or_else(|| {
+            VirsError::not_found(format!(
+                "No kline data available for {} on {} — cannot determine current price",
+                symbol, exchange
+            ))
+        })?;
+
+    let last = candles.last().ok_or_else(|| {
+        VirsError::not_found(format!(
+            "Kline data empty for {} on {} — cannot determine current price",
+            symbol, exchange
+        ))
+    })?;
+
+    if last.close <= 0.0 {
+        return Err(VirsError::config(format!(
+            "Last kline close price is {} for {} on {} — invalid price data",
+            last.close, symbol, exchange
+        )));
     }
-    0.0
+
+    Ok(last.close)
 }
 
 async fn call_llm_with_fallback(
@@ -204,7 +225,13 @@ async fn call_llm_with_fallback(
             };
 
             let resolved_model = resolve_provider_model(&provider)
-                .unwrap_or("deepseek-chat")
+                .ok_or_else(|| {
+                    VirsError::config(format!(
+                        "Unknown AI provider '{}' — cannot resolve default model. \
+                         Supported providers: deepseek, openai, openrouter",
+                        provider
+                    ))
+                })?
                 .to_string();
 
             (decrypted_key, resolved_base_url, resolved_model)

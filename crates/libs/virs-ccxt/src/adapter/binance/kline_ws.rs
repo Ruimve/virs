@@ -98,15 +98,34 @@ struct BinanceKlineInner {
 
 impl BinanceKlineData {
     fn to_candle(&self) -> Candle {
+        let symbol = &self.kline.symbol;
         Candle {
             open_time: self.kline.start_time,
             close_time: self.kline.end_time,
-            open: self.kline.open.parse().unwrap_or(0.0),
-            high: self.kline.high.parse().unwrap_or(0.0),
-            low: self.kline.low.parse().unwrap_or(0.0),
-            close: self.kline.close.parse().unwrap_or(0.0),
-            volume: self.kline.volume.parse().unwrap_or(0.0),
-            quote_volume: self.kline.quote_volume.parse().unwrap_or(0.0),
+            open: self.kline.open.parse().unwrap_or_else(|e| {
+                tracing::error!(symbol = %symbol, field = "open", raw = %self.kline.open, error = %e, "Failed to parse kline OHLCV field — defaulting to 0.0");
+                0.0
+            }),
+            high: self.kline.high.parse().unwrap_or_else(|e| {
+                tracing::error!(symbol = %symbol, field = "high", raw = %self.kline.high, error = %e, "Failed to parse kline OHLCV field — defaulting to 0.0");
+                0.0
+            }),
+            low: self.kline.low.parse().unwrap_or_else(|e| {
+                tracing::error!(symbol = %symbol, field = "low", raw = %self.kline.low, error = %e, "Failed to parse kline OHLCV field — defaulting to 0.0");
+                0.0
+            }),
+            close: self.kline.close.parse().unwrap_or_else(|e| {
+                tracing::error!(symbol = %symbol, field = "close", raw = %self.kline.close, error = %e, "Failed to parse kline OHLCV field — defaulting to 0.0");
+                0.0
+            }),
+            volume: self.kline.volume.parse().unwrap_or_else(|e| {
+                tracing::error!(symbol = %symbol, field = "volume", raw = %self.kline.volume, error = %e, "Failed to parse kline OHLCV field — defaulting to 0.0");
+                0.0
+            }),
+            quote_volume: self.kline.quote_volume.parse().unwrap_or_else(|e| {
+                tracing::error!(symbol = %symbol, field = "quote_volume", raw = %self.kline.quote_volume, error = %e, "Failed to parse kline OHLCV field — defaulting to 0.0");
+                0.0
+            }),
             trades: self.kline.trades,
             closed: self.kline.closed,
         }
