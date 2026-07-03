@@ -23,6 +23,23 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Postgres entrypoint runs as root, chowns the data dir, then uses gosu
+    # to switch to the 'postgres' user. These caps are the minimum required
+    # for that flow; all others are dropped.
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - virs-net
 
@@ -86,12 +103,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # distroless runtime has no shell/curl, so in-container HTTP health check
+    # is disabled. To re-enable, add a --health-check subcommand to the binary
+    # and switch to: test: ["CMD", "/app/virs", "--health-check"]
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["NONE"]
       start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - virs-net
 

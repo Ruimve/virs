@@ -7,6 +7,7 @@ frontend/node_modules/
 .env
 .env.local
 .env.*.local
+.env.example
 
 # Version control
 .git
@@ -29,3 +30,28 @@ Thumbs.db
 docs/
 *.md
 LICENSE
+
+# Docker files (not needed inside image)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# CI/CD & scripts
+.github/
+scripts/
+
+# Test artifacts
+tests/
+coverage/
+*.tmp
+
+# Rust config (not needed in image)
+clippy.toml
+
+# Archives & misc
+*.tar.gz
+*.zip
+*.tgz
+*.pid
+*.bak
+.eslintcache
