@@ -78,6 +78,12 @@ export interface PermissionItem {
   detail: string;
 }
 
+export interface PositionModeResult {
+  supported: boolean;
+  mode: 'hedge' | 'oneway' | null;
+  message?: string;
+}
+
 // ── Bot common ──────────────────────────────────────────────
 
 export interface BotSummary {

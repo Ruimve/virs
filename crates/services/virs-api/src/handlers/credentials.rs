@@ -356,6 +356,63 @@ pub async fn verify_permissions(
     }
 }
 
+/// GET /api/credentials/position-mode — query the exchange's current position mode.
+/// Returns { supported: bool, mode: "hedge"|"oneway"|null }.
+/// Spot exchanges return supported=false (position mode is perpetual-only).
+/// OneWay is returned as a normal 200 (not an error) — the frontend wizard
+/// decides whether to block.
+pub async fn check_position_mode(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse>, VirsError> {
+    let _user_id = extract_user_id(&headers)?;
+
+    let names = state.exchange_registry.registered_names();
+    let exchange_ref = names
+        .first()
+        .and_then(|key| state.exchange_registry.get(key));
+
+    let exchange = match exchange_ref {
+        Some(e) => e,
+        None => {
+            return Ok(Json(ApiResponse::ok(serde_json::json!({
+                "supported": false,
+                "mode": null,
+                "message": "No exchange registered. Please save credentials first.",
+            }))))
+        }
+    };
+
+    match exchange.get_position_mode().await {
+        Ok(mode) => {
+            let mode_str = match mode {
+                virs_types::PositionMode::Hedge => "hedge",
+                virs_types::PositionMode::OneWay => "oneway",
+            };
+            Ok(Json(ApiResponse::ok(serde_json::json!({
+                "supported": true,
+                "mode": mode_str,
+            }))))
+        }
+        Err(e) => {
+            // Spot exchanges return NotSupported — treat as "not applicable".
+            let err_str = format!("{}", e);
+            if err_str.contains("Not supported") || err_str.contains("not supported") {
+                Ok(Json(ApiResponse::ok(serde_json::json!({
+                    "supported": false,
+                    "mode": null,
+                }))))
+            } else {
+                Ok(Json(ApiResponse::ok(serde_json::json!({
+                    "supported": false,
+                    "mode": null,
+                    "message": err_str,
+                }))))
+            }
+        }
+    }
+}
+
 /// GET /api/credentials/status — check if user has exchange credentials configured
 pub async fn exchange_status(
     State(state): State<AppState>,

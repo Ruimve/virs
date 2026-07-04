@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse, BalanceInfo, DeepSeekModel, PermissionItem } from './types';
+import type { ApiResponse, BalanceInfo, DeepSeekModel, PermissionItem, PositionModeResult } from './types';
 
 export async function saveCredential(params: {
   exchange: string;
@@ -34,6 +34,13 @@ export async function testCredential(): Promise<
 /// Uses the exchange already saved via saveCredential.
 export async function checkPermissions(): Promise<ApiResponse<{ permissions: PermissionItem[] }>> {
   return api.get('/credentials/check-permissions');
+}
+
+/// GET /credentials/position-mode — query the exchange's current position mode.
+/// Returns { supported: bool, mode: "hedge"|"oneway"|null }.
+/// Spot exchanges return supported=false (position mode is perpetual-only).
+export async function fetchPositionMode(): Promise<ApiResponse<PositionModeResult>> {
+  return api.get('/credentials/position-mode');
 }
 
 /// POST /credentials/verify — verify saved credentials via apiRestrictions.

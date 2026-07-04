@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
-import { saveCredential, testCredential, checkPermissions } from '../../../service';
+import { saveCredential, testCredential, checkPermissions, fetchPositionMode } from '../../../service';
 import type { PermissionItem } from '../../../service';
 import { WizardStep } from '../context/WizardContext/consts';
 
@@ -75,13 +75,53 @@ const ConfigureExchange = () => {
   const [step3Error, setStep3Error] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
 
+  // Step 4: Position mode (perpetual only — spot auto-skips)
+  const [step4Status, setStep4Status] = useState<FlowStepStatus>('pending');
+  const [step4Error, setStep4Error] = useState<string | null>(null);
+
   const resetSteps = useCallback(() => {
     setStep1Status('active');
     setStep1Error(null);
     setStep2Status('pending');
     setStep2Error(null);
     setStep3Status('pending');
-    setStep2Error(null);
+    setStep3Error(null);
+    setStep4Status('pending');
+    setStep4Error(null);
+  }, []);
+
+  // Step 4: Check position mode (perpetual only — spot auto-skips)
+  const startStep4 = useCallback(async () => {
+    setStep4Status('verifying');
+    try {
+      const result = await fetchPositionMode();
+      if (!result.success || !result.data) {
+        setStep4Status('error');
+        setStep4Error(result.error || 'Failed to query position mode');
+        return;
+      }
+
+      const { supported, mode } = result.data;
+      // Spot exchanges don't support position mode — skip this step.
+      if (!supported) {
+        setStep4Status('done');
+        return;
+      }
+
+      if (mode === 'hedge') {
+        setStep4Status('done');
+        return;
+      }
+
+      // OneWay — block: user must switch to Hedge mode in Binance APP.
+      setStep4Status('error');
+      setStep4Error(
+        '当前为单向持仓模式。请在 Binance APP > 合约 > 设置 > 持仓模式 中切换到双向持仓后重新验证。',
+      );
+    } catch {
+      setStep4Status('error');
+      setStep4Error('Network error');
+    }
   }, []);
 
   // Check permissions via apiRestrictions
@@ -94,17 +134,22 @@ const ConfigureExchange = () => {
         const allOk = result.data.permissions.every(
           (p) => p.status === 'ok' || p.status === 'warn',
         );
-        setStep3Status(allOk ? 'done' : 'active');
+        if (allOk) {
+          setStep3Status('done');
+          startStep4();
+          return;
+        }
+        setStep3Status('active');
         return;
       }
 
       setStep3Status('error');
       setStep3Error(result.error || 'Permission check failed');
     } catch {
-      setStep2Status('error');
-      setStep2Error('Network error');
+      setStep3Status('error');
+      setStep3Error('Network error');
     }
-  }, []);
+  }, [startStep4]);
 
   // Test connectivity only (ping) — uses saved credentials from registry
   const startStep2 = useCallback(async () => {
@@ -284,6 +329,30 @@ const ConfigureExchange = () => {
     );
   }, [permissions, step3Status, step3Error, renderStatusIcon]);
 
+  const renderStep4 = useCallback(() => {
+    return (
+      <div className="space-y-2">
+        {step4Status === 'verifying' && (
+          <p className="text-[12px] text-on-surface-tertiary">Checking position mode...</p>
+        )}
+        {step4Status === 'done' && (
+          <p className="text-[12px] text-success-text">双向持仓模式 (Hedge Mode) ✓</p>
+        )}
+        {step4Status === 'error' && (
+          <div className="space-y-1">
+            <p className="text-[12px] text-danger-text">{step4Error || 'Position mode check failed'}</p>
+            <button
+              onClick={startStep4}
+              className="px-3 py-1.5 text-[11px] bg-surface-2 border border-line-strong rounded-lg text-on-surface-secondary hover:bg-surface-1 transition-all duration-200"
+            >
+              重新验证
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }, [step4Status, step4Error, startStep4]);
+
   const steps: FlowStepConfig[] = useMemo(
     () => [
       {
@@ -303,12 +372,22 @@ const ConfigureExchange = () => {
         description: 'Check API key permissions and restrictions',
         render: renderStep3,
       },
+      {
+        key: 'position-mode',
+        title: 'Position Mode',
+        description: 'Verify hedge mode is enabled (perpetual only)',
+        render: renderStep4,
+      },
     ],
-    [renderStep1, renderStep2, renderStep3],
+    [renderStep1, renderStep2, renderStep3, renderStep4],
   );
 
   const actions = useMemo(() => {
-    const disabled = step1Status !== 'done' || step2Status !== 'done' || step3Status !== 'done';
+    const disabled =
+      step1Status !== 'done' ||
+      step2Status !== 'done' ||
+      step3Status !== 'done' ||
+      step4Status !== 'done';
     return (
       <>
         <button
@@ -330,15 +409,16 @@ const ConfigureExchange = () => {
         </button>
       </>
     );
-  }, [step1Status, step2Status, step3Status, marketType, updateWizard, advanceStep, navigate]);
+  }, [step1Status, step2Status, step3Status, step4Status, marketType, updateWizard, advanceStep, navigate]);
 
   const statuses = useMemo(() => {
     return {
       credentials: step1Status,
       connectivity: step2Status,
       permissions: step3Status,
+      'position-mode': step4Status,
     };
-  }, [step1Status, step2Status, step3Status]);
+  }, [step1Status, step2Status, step3Status, step4Status]);
 
   const summaries = useMemo(() => {
     const summaryMap: Record<string, string | ReactNode> = {};
@@ -356,8 +436,14 @@ const ConfigureExchange = () => {
       summaryMap.permissions = 'All checks passed';
     }
 
+    if (step4Status === 'done') {
+      summaryMap['position-mode'] = 'Hedge mode ✓';
+    } else if (step4Status === 'error') {
+      summaryMap['position-mode'] = 'OneWay — switch to Hedge';
+    }
+
     return summaryMap;
-  }, [apiKey, step1Status, step2Status, step3Status]);
+  }, [apiKey, step1Status, step2Status, step3Status, step4Status]);
 
   return (
     <Wizard

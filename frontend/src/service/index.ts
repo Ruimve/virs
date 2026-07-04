@@ -8,6 +8,7 @@ export {
   testCredential,
   checkPermissions,
   verifyPermissions,
+  fetchPositionMode,
   fetchCredentialStatus,
   fetchAiModels,
   fetchAiBalance,

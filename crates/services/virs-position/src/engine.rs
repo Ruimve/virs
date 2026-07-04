@@ -38,8 +38,7 @@ use crate::tracker::PnlTracker;
 /// The engine should be restarted as soon as possible after lock poisoning.
 ///
 /// This function PANICS on lock poisoning — returning dirty data is more
-/// dangerous than crashing in a trading system. Use `recover_lock_result`
-/// in functions that return `PositionResult<T>` to propagate the error instead.
+/// dangerous than crashing in a trading system.
 fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
     lock.unwrap_or_else(|_| {
         error!(
@@ -49,20 +48,6 @@ fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
              Restart the engine immediately."
         );
         panic!("Lock poisoned — cannot continue safely. Restart the engine.");
-    })
-}
-
-/// Like `recover_lock` but returns a `Result` instead of panicking.
-///
-/// Use this in functions that return `PositionResult<T>` to propagate
-/// lock-poisoning errors to the caller instead of crashing.
-fn recover_lock_result<T>(lock: std::sync::LockResult<T>) -> PositionResult<T> {
-    lock.map_err(|_| {
-        error!(
-            "Lock poisoned — a thread panicked while holding a lock. \
-             Propagating error to caller."
-        );
-        PositionEngineError::LockPoisoned
     })
 }
 
@@ -224,29 +209,10 @@ impl PositionEngine {
         // 1. 初始化数据库表
         self.inner.persistence.init_tables().await?;
 
-        // 1.5 获取持仓模式 — OneWay is not supported (PositionSide::Both removed).
-        match self.inner.exchange.get_position_mode().await {
-            Ok(PositionMode::Hedge) => {
-                info!(engine_id = %self.inner.config.engine_id, "Exchange is in Hedge mode");
-                *recover_lock_result(self.inner.position_mode.write())? = PositionMode::Hedge;
-            }
-            Ok(PositionMode::OneWay) => {
-                error!(
-                    engine_id = %self.inner.config.engine_id,
-                    "Exchange account is in OneWay (single-position) mode. \
-                     VIRS requires Hedge mode. Switch to Hedge mode in Binance futures \
-                     settings (API key > Position Mode > Hedge Mode) before starting the engine."
-                );
-                return Err(PositionEngineError::PositionModeMismatch {
-                    expected: "Hedge".into(),
-                    actual: "OneWay".into(),
-                });
-            }
-            Err(e) => {
-                warn!(engine_id = %self.inner.config.engine_id, error = %e, "Failed to get position mode from exchange");
-                return Err(PositionEngineError::PositionModeQueryFailed(e.to_string()));
-            }
-        }
+        // position_mode 默认 Hedge（系统只支持双向持仓）。
+        // 启动时不再查询交易所——前端配置向导已在保存凭证时校验过持仓模式，
+        // 且用户可在交易所随时修改，启动时查询意义不大。
+        // adjust_params_for_position_mode 使用缓存值（始终 Hedge）调整下单参数。
 
         // 2. 从数据库恢复状态
         self.recover_state().await?;
@@ -1841,11 +1807,13 @@ pub(crate) fn adjust_params_for_position_mode(params: &mut PlaceOrderParams, mod
         }
         PositionMode::OneWay => {
             // OneWay is not supported — refuse to silently strip position_side.
-            // The engine should never reach here because startup validation
-            // rejects OneWay accounts; this arm is a defensive guard.
+            // position_mode defaults to Hedge and is never overwritten at runtime,
+            // so this arm should be unreachable. It's a defensive guard in case
+            // the field is ever set to OneWay by future code.
             tracing::error!(
                 "adjust_params_for_position_mode called with OneWay mode — \
-                 this should have been caught at startup. Leaving position_side as-is."
+                 this is unreachable (position_mode defaults to Hedge and is never changed). \
+                 Leaving position_side as-is."
             );
         }
     }

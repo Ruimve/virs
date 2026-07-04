@@ -71,6 +71,10 @@ pub fn build_router(state: AppState) -> Router {
             post(handlers::credentials::verify_permissions),
         )
         .route(
+            "/api/credentials/position-mode",
+            get(handlers::credentials::check_position_mode),
+        )
+        .route(
             "/api/credentials/status",
             get(handlers::credentials::exchange_status),
         )
