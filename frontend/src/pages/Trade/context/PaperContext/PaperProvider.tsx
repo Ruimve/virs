@@ -18,9 +18,5 @@ export function PaperProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
 
-  return (
-    <PaperContext.Provider value={{ enabled, refresh }}>
-      {children}
-    </PaperContext.Provider>
-  );
+  return <PaperContext.Provider value={{ enabled, refresh }}>{children}</PaperContext.Provider>;
 }

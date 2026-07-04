@@ -67,10 +67,7 @@ export function connectWs<T>(
           MAX_RECONNECT_MS,
         );
         inst.reconnectAttempts++;
-        inst.reconnectTimer = setTimeout(
-          () => connectWs(inst, getUrl, parse),
-          delay,
-        );
+        inst.reconnectTimer = setTimeout(() => connectWs(inst, getUrl, parse), delay);
       }
     };
 

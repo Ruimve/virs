@@ -3,7 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
-import { saveCredential, testCredential, checkPermissions, fetchPositionMode } from '../../../service';
+import {
+  saveCredential,
+  testCredential,
+  checkPermissions,
+  fetchPositionMode,
+} from '../../../service';
 import type { PermissionItem } from '../../../service';
 import { WizardStep } from '../context/WizardContext/consts';
 
@@ -340,7 +345,9 @@ const ConfigureExchange = () => {
         )}
         {step4Status === 'error' && (
           <div className="space-y-1">
-            <p className="text-[12px] text-danger-text">{step4Error || 'Position mode check failed'}</p>
+            <p className="text-[12px] text-danger-text">
+              {step4Error || 'Position mode check failed'}
+            </p>
             <button
               onClick={startStep4}
               className="px-3 py-1.5 text-[11px] bg-surface-2 border border-line-strong rounded-lg text-on-surface-secondary hover:bg-surface-1 transition-all duration-200"
@@ -409,7 +416,16 @@ const ConfigureExchange = () => {
         </button>
       </>
     );
-  }, [step1Status, step2Status, step3Status, step4Status, marketType, updateWizard, advanceStep, navigate]);
+  }, [
+    step1Status,
+    step2Status,
+    step3Status,
+    step4Status,
+    marketType,
+    updateWizard,
+    advanceStep,
+    navigate,
+  ]);
 
   const statuses = useMemo(() => {
     return {

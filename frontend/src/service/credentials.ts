@@ -1,5 +1,11 @@
 import { api } from './client';
-import type { ApiResponse, BalanceInfo, DeepSeekModel, PermissionItem, PositionModeResult } from './types';
+import type {
+  ApiResponse,
+  BalanceInfo,
+  DeepSeekModel,
+  PermissionItem,
+  PositionModeResult,
+} from './types';
 
 export async function saveCredential(params: {
   exchange: string;
