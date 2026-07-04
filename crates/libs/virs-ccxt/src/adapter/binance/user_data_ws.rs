@@ -323,6 +323,11 @@ impl UserDataWs {
         Arc::clone(&self.running)
     }
 
+    /// 停止 WS 连接
+    pub fn stop(&self) {
+        self.running.store(false, Ordering::Relaxed);
+    }
+
     /// 启动 WS 连接，将订单事件发送到 event_tx
     ///
     /// 返回后立即返回，WS 连接在后台 tokio task 中运行。
@@ -355,15 +360,24 @@ impl UserDataWs {
                         reconnect_delay = reconnect_delay_secs;
 
                         // 发送连接恢复事件
-                        let _ = event_tx
+                        if event_tx
                             .send(WsFeedEvent::ConnectionChanged { connected: true })
-                            .await;
+                            .await
+                            .is_err()
+                        {
+                            tracing::warn!(
+                                "[UserDataWs] Event channel closed on connect, stopping"
+                            );
+                            running.store(false, Ordering::Relaxed);
+                            break;
+                        }
 
                         let (mut write, mut read) = ws_stream.split();
 
                         let ping_interval = Duration::from_secs(ws_ping_interval_secs);
                         let mut ping_tick = tokio::time::interval(ping_interval);
                         let max_lifetime = Duration::from_secs(ws_max_lifetime_secs);
+                        let mut running_check = tokio::time::interval(Duration::from_secs(1));
 
                         loop {
                             if !running.load(Ordering::Relaxed) {
@@ -465,13 +479,28 @@ impl UserDataWs {
                                         break;
                                     }
                                 }
+                                _ = running_check.tick() => {
+                                    if !running.load(Ordering::Relaxed) {
+                                        tracing::debug!("[UserDataWs] Stop requested, sending Close frame");
+                                        let _ = write.send(tungstenite::Message::Close(None)).await;
+                                        break;
+                                    }
+                                }
                             }
                         }
 
                         // 连接断开，发送断连事件
-                        let _ = event_tx
+                        if event_tx
                             .send(WsFeedEvent::ConnectionChanged { connected: false })
-                            .await;
+                            .await
+                            .is_err()
+                        {
+                            tracing::warn!(
+                                "[UserDataWs] Event channel closed on disconnect, stopping"
+                            );
+                            running.store(false, Ordering::Relaxed);
+                            break;
+                        }
                     }
                     Err(e) => {
                         tracing::error!("[UserDataWs] Connection failed: {}", e);
@@ -483,7 +512,9 @@ impl UserDataWs {
                 }
 
                 tracing::debug!("[UserDataWs] Reconnecting in {}s...", reconnect_delay);
-                tokio::time::sleep(Duration::from_secs(reconnect_delay)).await;
+                let jitter = (reconnect_delay as f64 * 0.1 * (2.0 * rand::random::<f64>() - 1.0)) as i64;
+                let delay = (reconnect_delay as i64 + jitter).max(1) as u64;
+                tokio::time::sleep(Duration::from_secs(delay)).await;
                 reconnect_delay = (reconnect_delay * 2).min(max_reconnect_delay_secs);
             }
 

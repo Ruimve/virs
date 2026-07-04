@@ -8,6 +8,13 @@ use virs_market::types::{KlineEvent, KlineEventType, OrderBookEvent, Timeframe};
 use virs_types::enums::{PositionSide, PositionStatus};
 use virs_types::position::Position;
 
+/// Serialize a wire DTO to a `serde_json::Value` for assertions.
+/// The production handlers serialize directly to a string (single pass);
+/// tests re-serialize to a Value only to index into the JSON tree.
+fn ws_value<T: serde::Serialize>(v: T) -> serde_json::Value {
+    serde_json::to_value(v).unwrap()
+}
+
 // ============================================================
 // TC-W1: position_to_ws_json
 // ============================================================
@@ -15,7 +22,7 @@ use virs_types::position::Position;
 #[test]
 fn w1_1_position_all_fields() {
     let pos = make_position(PositionSide::Long, PositionStatus::Open, Some(45000.0));
-    let json = position_to_ws_json(&pos);
+    let json = ws_value(position_to_ws_json(&pos));
     assert_eq!(json["type"], "position_updated");
     assert_eq!(json["symbol"], "BTC/USDT");
     assert_eq!(json["exchange"], "binance");
@@ -30,7 +37,7 @@ fn w1_1_position_all_fields() {
 #[test]
 fn w1_2_position_optional_fields_none() {
     let pos = make_position(PositionSide::Short, PositionStatus::Closed, None);
-    let json = position_to_ws_json(&pos);
+    let json = ws_value(position_to_ws_json(&pos));
     assert!(json["stop_loss"].is_null());
     assert!(json["take_profit"].is_null());
     assert!(json["liquidation_price"].is_null());
@@ -39,7 +46,7 @@ fn w1_2_position_optional_fields_none() {
 #[test]
 fn w1_3_position_type_field() {
     let pos = make_position(PositionSide::Long, PositionStatus::Open, None);
-    let json = position_to_ws_json(&pos);
+    let json = ws_value(position_to_ws_json(&pos));
     assert_eq!(json["type"], "position_updated");
 }
 
@@ -50,7 +57,7 @@ fn w1_3_position_type_field() {
 #[test]
 fn w2_1_kline_normal() {
     let event = make_kline_event(KlineEventType::Update);
-    let json = kline_event_to_json(&event);
+    let json = ws_value(kline_event_to_json(&event));
     assert_eq!(json["exchange"], "binance");
     assert_eq!(json["symbol"], "BTC/USDT");
     assert_eq!(json["timeframe"], "1m");
@@ -62,15 +69,15 @@ fn w2_1_kline_normal() {
 
 #[test]
 fn w2_2_kline_event_types() {
-    assert_eq!(kline_event_to_json(&make_kline_event(KlineEventType::Update))["event_type"], "Update");
-    assert_eq!(kline_event_to_json(&make_kline_event(KlineEventType::Closed))["event_type"], "Closed");
-    assert_eq!(kline_event_to_json(&make_kline_event(KlineEventType::Backfilled))["event_type"], "Backfilled");
+    assert_eq!(ws_value(kline_event_to_json(&make_kline_event(KlineEventType::Update)))["event_type"], "Update");
+    assert_eq!(ws_value(kline_event_to_json(&make_kline_event(KlineEventType::Closed)))["event_type"], "Closed");
+    assert_eq!(ws_value(kline_event_to_json(&make_kline_event(KlineEventType::Backfilled)))["event_type"], "Backfilled");
 }
 
 #[test]
 fn w2_3_kline_timeframe_format() {
     let event = make_kline_event(KlineEventType::Update);
-    let json = kline_event_to_json(&event);
+    let json = ws_value(kline_event_to_json(&event));
     assert_eq!(json["timeframe"], "1m");
 }
 
@@ -81,7 +88,7 @@ fn w2_3_kline_timeframe_format() {
 #[test]
 fn w3_1_orderbook_normal() {
     let event = make_orderbook_event();
-    let json = orderbook_event_to_json(&event);
+    let json = ws_value(orderbook_event_to_json(&event));
     assert_eq!(json["exchange"], "binance");
     assert_eq!(json["symbol"], "BTC/USDT");
     assert_eq!(json["bids"].as_array().unwrap().len(), 2);
@@ -99,7 +106,7 @@ fn w3_2_orderbook_empty_levels() {
         asks: vec![],
         timestamp: 1700000000000,
     };
-    let json = orderbook_event_to_json(&event);
+    let json = ws_value(orderbook_event_to_json(&event));
     assert!(json["bids"].as_array().unwrap().is_empty());
     assert!(json["asks"].as_array().unwrap().is_empty());
 }
@@ -107,7 +114,7 @@ fn w3_2_orderbook_empty_levels() {
 #[test]
 fn w3_3_orderbook_level_format() {
     let event = make_orderbook_event();
-    let json = orderbook_event_to_json(&event);
+    let json = ws_value(orderbook_event_to_json(&event));
     let first_bid = &json["bids"][0];
     assert!(first_bid.is_array());
     assert_eq!(first_bid[0], 50000.0);

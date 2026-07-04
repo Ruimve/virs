@@ -201,13 +201,40 @@ async fn main() -> VirsResult<()> {
     .await
     .context("axum server error")?;
 
+    // === Graceful shutdown of engines ===
+    // Order matters: stop trading engines first (they consume market data),
+    // then stop market data engines (their broadcast senders become unused).
+    info!("Shutting down trading engines...");
+    engine_manager.shutdown().await;
+
+    info!("Shutting down market data engines...");
+    kline_engine.stop().await;
+    orderbook_engine.stop().await;
+
     info!("VIRS shut down gracefully");
     Ok(())
 }
 
 async fn shutdown_signal() {
-    tokio::signal::ctrl_c()
-        .await
-        .expect("Failed to install CTRL+C handler");
-    info!("Received shutdown signal");
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install CTRL+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => info!("Received SIGINT (Ctrl+C)"),
+        _ = terminate => info!("Received SIGTERM"),
+    }
 }

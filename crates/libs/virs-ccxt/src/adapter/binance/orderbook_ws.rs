@@ -20,7 +20,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
-use tokio::sync::{broadcast, mpsc, Mutex};
+use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio_tungstenite::{connect_async, tungstenite};
 
 use crate::ws_types::{OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate};
@@ -187,9 +187,9 @@ pub struct OrderBookWs {
     max_reconnect_delay_secs: u64,
     ws_ping_interval_secs: u64,
     ws_max_lifetime_secs: u64,
-    subscriptions: Arc<Mutex<Vec<String>>>,
+    subscriptions: Arc<RwLock<Vec<String>>>,
     /// Map: lowercase binance symbol (e.g. "btcusdt") → unified symbol (e.g. "BTC/USDT")
-    symbol_map: Arc<Mutex<HashMap<String, String>>>,
+    symbol_map: Arc<RwLock<HashMap<String, String>>>,
     running: Arc<AtomicBool>,
     request_id: Arc<AtomicU64>,
     shutdown_tx: Option<mpsc::Sender<()>>,
@@ -210,8 +210,8 @@ impl OrderBookWs {
             max_reconnect_delay_secs,
             ws_ping_interval_secs,
             ws_max_lifetime_secs,
-            subscriptions: Arc::new(Mutex::new(Vec::new())),
-            symbol_map: Arc::new(Mutex::new(HashMap::new())),
+            subscriptions: Arc::new(RwLock::new(Vec::new())),
+            symbol_map: Arc::new(RwLock::new(HashMap::new())),
             running: Arc::new(AtomicBool::new(false)),
             request_id: Arc::new(AtomicU64::new(1)),
             shutdown_tx: None,
@@ -285,7 +285,11 @@ impl OrderBookWsClient for OrderBookWs {
                         reconnect_delay = reconnect_delay_secs;
 
                         if !is_first_connect {
-                            let _ = update_tx.send(WsOrderBookEvent::Reconnected);
+                            if update_tx.send(WsOrderBookEvent::Reconnected).is_err() {
+                                tracing::warn!("[OrderBookWs] All receivers dropped, stopping");
+                                running.store(false, Ordering::Relaxed);
+                                break;
+                            }
                         }
                         is_first_connect = false;
 
@@ -293,13 +297,14 @@ impl OrderBookWsClient for OrderBookWs {
 
                         // Re-subscribe existing streams on (re)connect
                         {
-                            let subs = subscriptions.lock().await;
-                            if !subs.is_empty() {
+                            // Clone subscriptions and drop the read guard before
+                            // async send to avoid holding the lock across .await
+                            let subs_vec: Vec<String> = subscriptions.read().await.clone();
+                            if !subs_vec.is_empty() {
                                 let id = request_id.fetch_add(1, Ordering::Relaxed);
-                                let subs_vec: Vec<&String> = subs.iter().collect();
                                 tracing::debug!(
                                     "[OrderBookWs] Resubscribing {} streams",
-                                    subs.len()
+                                    subs_vec.len()
                                 );
                                 let msg = serde_json::json!({
                                     "method": "SUBSCRIBE",
@@ -357,14 +362,18 @@ impl OrderBookWsClient for OrderBookWs {
                                                         let bids = to_levels(&bids_raw);
                                                         let asks = to_levels(&asks_raw);
                                                         if !bids.is_empty() || !asks.is_empty() {
-                                                            let _ = update_tx.send(WsOrderBookEvent::OrderBook(
+                                                            if update_tx.send(WsOrderBookEvent::OrderBook(
                                                                 WsOrderBookUpdate {
                                                                     symbol,
                                                                     bids,
                                                                     asks,
                                                                     timestamp: ts,
                                                                 }
-                                                            ));
+                                                            )).is_err() {
+                                                                tracing::warn!("[OrderBookWs] All receivers dropped, stopping");
+                                                                running.store(false, Ordering::Relaxed);
+                                                                break;
+                                                            }
                                                         }
                                                     }
                                                 } else {
@@ -468,7 +477,9 @@ impl OrderBookWsClient for OrderBookWs {
                     "[OrderBookWs] Reconnecting in {}s...",
                     reconnect_delay
                 );
-                tokio::time::sleep(Duration::from_secs(reconnect_delay)).await;
+                let jitter = (reconnect_delay as f64 * 0.1 * (2.0 * rand::random::<f64>() - 1.0)) as i64;
+                let delay = (reconnect_delay as i64 + jitter).max(1) as u64;
+                tokio::time::sleep(Duration::from_secs(delay)).await;
                 reconnect_delay = (reconnect_delay * 2).min(max_reconnect_delay_secs);
             }
 
@@ -489,11 +500,11 @@ impl OrderBookWsClient for OrderBookWs {
         let ws_sym = binance_ws_symbol(symbol);
 
         {
-            let mut map = self.symbol_map.lock().await;
+            let mut map = self.symbol_map.write().await;
             map.insert(ws_sym, symbol.to_string());
         }
 
-        let mut subs = self.subscriptions.lock().await;
+        let mut subs = self.subscriptions.write().await;
         if !subs.contains(&stream_name) {
             subs.push(stream_name.clone());
             drop(subs);
@@ -508,11 +519,11 @@ impl OrderBookWsClient for OrderBookWs {
         let ws_sym = binance_ws_symbol(symbol);
 
         {
-            let mut map = self.symbol_map.lock().await;
+            let mut map = self.symbol_map.write().await;
             map.remove(&ws_sym);
         }
 
-        let mut subs = self.subscriptions.lock().await;
+        let mut subs = self.subscriptions.write().await;
         let existed = subs.iter().any(|s| s == &stream_name);
         subs.retain(|s| s != &stream_name);
         drop(subs);
@@ -537,9 +548,9 @@ impl OrderBookWsClient for OrderBookWs {
 async fn resolve_symbol(
     stream_name: Option<&str>,
     sym_from_payload: Option<&str>,
-    symbol_map: &Arc<Mutex<HashMap<String, String>>>,
+    symbol_map: &Arc<RwLock<HashMap<String, String>>>,
 ) -> Option<String> {
-    let map = symbol_map.lock().await;
+    let map = symbol_map.read().await;
 
     // 1. Try stream name: "btcusdt@depth20@500ms" → "btcusdt"
     if let Some(stream) = stream_name {

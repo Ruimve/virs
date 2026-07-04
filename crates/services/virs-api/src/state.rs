@@ -43,6 +43,10 @@ pub trait EngineManager: Send + Sync {
     /// Restore services if bots exist in DB but engines are not started.
     /// Called once at server startup. No-op if engines already started or no bots exist.
     async fn restore_if_needed(&self) -> VirsResult<()>;
+
+    /// Gracefully shut down all trading engines (Position, Grid, Auto).
+    /// Called during application shutdown to ensure clean exit.
+    async fn shutdown(&self);
 }
 
 /// API 应用状态

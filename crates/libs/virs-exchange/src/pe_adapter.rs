@@ -21,7 +21,6 @@ use crate::Exchange;
 pub struct CcxtExchangeAdapter {
     registry: Arc<Exchanges>,
     cached_name: String,
-    listen_key: Option<String>,
 }
 
 impl CcxtExchangeAdapter {
@@ -29,7 +28,6 @@ impl CcxtExchangeAdapter {
         Self {
             registry,
             cached_name: "binance".to_string(),
-            listen_key: None,
         }
     }
 
@@ -352,8 +350,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         }
 
         // listenKey 路径（合约始终走这里；现货在 WS API 不可用时降级到这里）
-        let listen_key_hint = self.listen_key.as_deref();
-        match ex.start_listenkey_order_ws(listen_key_hint).await {
+        match ex.start_listenkey_order_ws(None).await {
             Ok(ws_rx) => {
                 info!(
                     symbols_count = symbols.len(),

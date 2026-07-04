@@ -5,7 +5,7 @@
 //! using the exchange credentials provided by the user.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, Mutex as StdMutex};
 
 use async_trait::async_trait;
 use tokio::sync::{broadcast, mpsc, Mutex};
@@ -28,14 +28,24 @@ use crate::adapters::*;
 /// Inner state — populated on first `ensure_started` call.
 struct EngineState {
     paper_mode: bool,
-    grid_cmd_tx: mpsc::Sender<GridCommand>,
-    auto_cmd_tx: mpsc::Sender<AutoCommand>,
+    grid_cmd_tx: StdMutex<Option<mpsc::Sender<GridCommand>>>,
+    auto_cmd_tx: StdMutex<Option<mpsc::Sender<AutoCommand>>>,
     /// Position Engine 事件广播器（用于 /ws/position 推送）
-    pe_event_tx: broadcast::Sender<EngineEvent>,
+    /// shutdown 时 take() 丢弃，使 /ws/position handler 收到 broadcast Closed
+    pe_event_tx: StdMutex<Option<broadcast::Sender<EngineEvent>>>,
     /// Position Engine 共享引用（用于查询当前仓位快照）
-    position_engine: PositionEngine,
+    /// shutdown 时 take() 丢弃，释放 cmd_tx clone + Arc<EngineInner> 引用
+    position_engine: StdMutex<Option<PositionEngine>>,
     /// Symbols that need price ticks in paper mode (exchange, symbol)
     paper_symbols: Arc<Mutex<Vec<(String, String)>>>,
+    /// JoinHandle for paper mode price tick task
+    paper_tick_handle: StdMutex<Option<tokio::task::JoinHandle<()>>>,
+    /// JoinHandle for PositionEngine run loop
+    pe_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// JoinHandle for GridEngine run loop
+    grid_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// JoinHandle for AutoEngine run loop
+    auto_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 /// Application-level engine manager.
@@ -135,7 +145,7 @@ impl EngineManager for AppEngineManager {
         // 保存 clone 用于后续查询当前仓位快照（/ws/position subscribe 时推送）
         let position_engine_clone = position_engine.clone();
 
-        tokio::spawn(async move {
+        let pe_handle = tokio::spawn(async move {
             if let Err(e) = position_engine.run().await {
                 tracing::error!(error = %e, "Position Engine run failed");
             }
@@ -184,12 +194,12 @@ impl EngineManager for AppEngineManager {
 
         // Paper mode price tick
         let paper_symbols: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
-        if paper_mode {
+        let paper_tick_handle: Option<tokio::task::JoinHandle<()>> = if paper_mode {
             let price_provider_for_paper: Arc<dyn PriceProvider> = grid_price_provider.clone();
             let kline_engine_for_paper = self.kline_engine.clone();
             let pe_cmd_tx_for_tick = pe_cmd_tx.clone();
             let paper_symbols_for_tick = paper_symbols.clone();
-            tokio::spawn(async move {
+            Some(tokio::spawn(async move {
                 let mut tick = tokio::time::interval(std::time::Duration::from_secs(3));
                 loop {
                     tick.tick().await;
@@ -204,19 +214,26 @@ impl EngineManager for AppEngineManager {
                             .get_price(&exchange, &symbol, "perpetual")
                             .await
                         {
-                            let _ = pe_cmd_tx_for_tick
+                            if pe_cmd_tx_for_tick
                                 .send(EngineCommand::PriceTick {
                                     symbol: symbol.clone(),
                                     price,
                                 })
-                                .await;
+                                .await
+                                .is_err()
+                            {
+                                tracing::debug!("Paper price tick loop exiting: PE command channel closed");
+                                return;
+                            }
                         }
                     }
                 }
-            });
-        }
+            }))
+        } else {
+            None
+        };
 
-        tokio::spawn(async move {
+        let grid_handle = tokio::spawn(async move {
             grid_engine.run().await;
         });
         info!("Grid engine started");
@@ -261,7 +278,7 @@ impl EngineManager for AppEngineManager {
             pe_event_sender.clone(),
         );
 
-        tokio::spawn(async move {
+        let auto_handle = tokio::spawn(async move {
             auto_engine.run().await;
         });
         info!("Auto trade engine started");
@@ -289,11 +306,15 @@ impl EngineManager for AppEngineManager {
         // Store state (OnceLock — set once, then readable synchronously)
         let _ = self.state.set(EngineState {
             paper_mode,
-            grid_cmd_tx,
-            auto_cmd_tx,
-            pe_event_tx: pe_event_sender,
-            position_engine: position_engine_clone,
+            grid_cmd_tx: StdMutex::new(Some(grid_cmd_tx)),
+            auto_cmd_tx: StdMutex::new(Some(auto_cmd_tx)),
+            pe_event_tx: StdMutex::new(Some(pe_event_sender)),
+            position_engine: StdMutex::new(Some(position_engine_clone)),
             paper_symbols: paper_symbols.clone(),
+            paper_tick_handle: StdMutex::new(paper_tick_handle),
+            pe_handle: Mutex::new(Some(pe_handle)),
+            grid_handle: Mutex::new(Some(grid_handle)),
+            auto_handle: Mutex::new(Some(auto_handle)),
         });
         self.started.store(true, Ordering::SeqCst);
 
@@ -302,11 +323,11 @@ impl EngineManager for AppEngineManager {
     }
 
     fn grid_cmd_tx(&self) -> Option<mpsc::Sender<GridCommand>> {
-        self.state.get().map(|s| s.grid_cmd_tx.clone())
+        self.state.get().and_then(|s| s.grid_cmd_tx.lock().unwrap().clone())
     }
 
     fn auto_cmd_tx(&self) -> Option<mpsc::Sender<AutoCommand>> {
-        self.state.get().map(|s| s.auto_cmd_tx.clone())
+        self.state.get().and_then(|s| s.auto_cmd_tx.lock().unwrap().clone())
     }
 
     fn paper_mode(&self) -> bool {
@@ -323,17 +344,24 @@ impl EngineManager for AppEngineManager {
     }
 
     fn pe_event_subscribe(&self) -> Option<broadcast::Receiver<EngineEvent>> {
-        self.state.get().map(|s| s.pe_event_tx.subscribe())
+        self.state
+            .get()
+            .and_then(|s| s.pe_event_tx.lock().unwrap().as_ref().map(|tx| tx.subscribe()))
     }
 
     fn get_positions_by_symbol(&self, symbol: &str) -> Vec<virs_types::position::Position> {
         match self.state.get() {
-            Some(s) => s
-                .position_engine
-                .get_all_positions()
-                .into_iter()
-                .filter(|p| p.symbol == symbol)
-                .collect(),
+            Some(s) => {
+                let guard = s.position_engine.lock().unwrap();
+                match guard.as_ref() {
+                    Some(pe) => pe
+                        .get_all_positions()
+                        .into_iter()
+                        .filter(|p| p.symbol == symbol)
+                        .collect(),
+                    None => Vec::new(),
+                }
+            }
             None => Vec::new(),
         }
     }
@@ -486,5 +514,50 @@ impl EngineManager for AppEngineManager {
         }
 
         Ok(())
+    }
+
+    async fn shutdown(&self) {
+        if let Some(state) = self.state.get() {
+            info!("Shutting down trading engines...");
+
+            // 1. Signal PositionEngine to stop (sets ShuttingDown state)
+            //    Take position_engine clone to call stop(), then drop its cmd_tx
+            let pe_opt = state.position_engine.lock().unwrap().take();
+            if let Some(pe) = &pe_opt {
+                pe.stop();
+            }
+
+            // 2. Abort paper price tick task (holds pe_cmd_tx clone)
+            if let Some(handle) = state.paper_tick_handle.lock().unwrap().take() {
+                handle.abort();
+            }
+
+            // 3. Drop command senders to trigger grid/auto cmd_loop exit
+            //    (recv() returns None when all senders are dropped)
+            drop(state.grid_cmd_tx.lock().unwrap().take());
+            drop(state.auto_cmd_tx.lock().unwrap().take());
+
+            // 4. Drop pe_event_tx so /ws/position handlers see broadcast Closed
+            drop(state.pe_event_tx.lock().unwrap().take());
+
+            // 5. Take JoinHandles and await all three in parallel (with timeout)
+            let pe_handle = state.pe_handle.lock().await.take();
+            let grid_handle = state.grid_handle.lock().await.take();
+            let auto_handle = state.auto_handle.lock().await.take();
+
+            let timeout = std::time::Duration::from_secs(5);
+            let _ = tokio::time::timeout(timeout, async {
+                let pe_fut = async { if let Some(h) = pe_handle { let _ = h.await; } };
+                let grid_fut = async { if let Some(h) = grid_handle { let _ = h.await; } };
+                let auto_fut = async { if let Some(h) = auto_handle { let _ = h.await; } };
+                tokio::join!(pe_fut, grid_fut, auto_fut);
+            }).await;
+
+            // 6. Drop pe_opt — releases the last cmd_tx clone (other than
+            //    the one inside the run() task, which is dropped when run() returns)
+            drop(pe_opt);
+
+            info!("All trading engines stopped");
+        }
     }
 }

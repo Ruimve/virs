@@ -46,7 +46,7 @@ fn int_1_2_known_provider_roundtrip() {
 #[test]
 fn int_2_1_position_serde_then_ws_json() {
     let pos = make_position(PositionSide::Long, Some(45000.0));
-    let json = position_to_ws_json(&pos);
+    let json = serde_json::to_value(position_to_ws_json(&pos)).unwrap();
     assert_eq!(json["type"], "position_updated");
     assert_eq!(json["symbol"], "BTC/USDT");
     assert_eq!(json["side"], "long");
@@ -77,7 +77,7 @@ fn int_2_2_kline_event_to_json_chain() {
         },
         event_type: KlineEventType::Closed,
     };
-    let json = kline_event_to_json(&event);
+    let json = serde_json::to_value(kline_event_to_json(&event)).unwrap();
     assert_eq!(json["exchange"], "binance");
     assert_eq!(json["symbol"], "ETH/USDT");
     assert_eq!(json["timeframe"], "1h");

@@ -6,7 +6,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
-use tokio::sync::{broadcast, mpsc, Mutex};
+use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio_tungstenite::{connect_async, tungstenite};
 
 // Re-export for convenience
@@ -158,8 +158,8 @@ pub struct KlineWs {
     max_reconnect_delay_secs: u64,
     ws_ping_interval_secs: u64,
     ws_max_lifetime_secs: u64,
-    subscriptions: Arc<Mutex<Vec<String>>>,
-    symbol_map: Arc<Mutex<HashMap<String, String>>>,
+    subscriptions: Arc<RwLock<Vec<String>>>,
+    symbol_map: Arc<RwLock<HashMap<String, String>>>,
     running: Arc<AtomicBool>,
     request_id: Arc<AtomicU64>,
     shutdown_tx: Option<mpsc::Sender<()>>,
@@ -180,8 +180,8 @@ impl KlineWs {
             max_reconnect_delay_secs,
             ws_ping_interval_secs,
             ws_max_lifetime_secs,
-            subscriptions: Arc::new(Mutex::new(Vec::new())),
-            symbol_map: Arc::new(Mutex::new(HashMap::new())),
+            subscriptions: Arc::new(RwLock::new(Vec::new())),
+            symbol_map: Arc::new(RwLock::new(HashMap::new())),
             running: Arc::new(AtomicBool::new(false)),
             request_id: Arc::new(AtomicU64::new(1)),
             shutdown_tx: None,
@@ -249,21 +249,26 @@ impl KlineWsClient for KlineWs {
                         reconnect_delay = reconnect_delay_secs;
 
                         if !is_first_connect {
-                            let _ = update_tx.send(WsEvent::Reconnected);
+                            if update_tx.send(WsEvent::Reconnected).is_err() {
+                                tracing::warn!("[KlineWs] All receivers dropped, stopping");
+                                running.store(false, Ordering::Relaxed);
+                                break;
+                            }
                         }
                         is_first_connect = false;
 
                         let (mut write, mut read) = ws_stream.split();
 
                         {
-                            let subs = subscriptions.lock().await;
-                            if !subs.is_empty() {
+                            // Clone subscriptions and drop the read guard before
+                            // async send to avoid holding the lock across .await
+                            let subs_vec: Vec<String> = subscriptions.read().await.clone();
+                            if !subs_vec.is_empty() {
                                 let id = request_id.fetch_add(1, Ordering::Relaxed);
-                                let subs_vec: Vec<&String> = subs.iter().collect();
                                 tracing::debug!(
                                     "[KlineWs] Connected to {} (subscribing {} streams)",
                                     ws_url,
-                                    subs.len()
+                                    subs_vec.len()
                                 );
                                 let msg = serde_json::json!({
                                     "method": "SUBSCRIBE",
@@ -312,7 +317,7 @@ impl KlineWsClient for KlineWs {
                                                     if data.event_type == "kline" {
                                                         let raw_sym = data.ws_symbol().to_lowercase();
                                                         let original_symbol = {
-                                                            let map = symbol_map.lock().await;
+                                                            let map = symbol_map.read().await;
                                                             map.get(&raw_sym).cloned().unwrap_or_else(|| raw_sym.clone())
                                                         };
                                                         let candle = data.to_candle();
@@ -320,10 +325,14 @@ impl KlineWsClient for KlineWs {
                                                             "[KlineWs] 1m kline: {} open_time={} close={:.2} closed={}",
                                                             original_symbol, candle.open_time, candle.close, candle.closed
                                                         );
-                                                        let _ = update_tx.send(WsEvent::Candle(WsCandleUpdate {
+                                                        if update_tx.send(WsEvent::Candle(WsCandleUpdate {
                                                             symbol: original_symbol,
                                                             candle,
-                                                        }));
+                                                        })).is_err() {
+                                                            tracing::warn!("[KlineWs] All receivers dropped, stopping");
+                                                            running.store(false, Ordering::Relaxed);
+                                                            break;
+                                                        }
                                                     } else {
                                                         tracing::debug!("[KlineWs] Received non-kline event: {}", data.event_type);
                                                     }
@@ -417,7 +426,9 @@ impl KlineWsClient for KlineWs {
                 }
 
                 tracing::debug!("[KlineWs] Reconnecting in {}s...", reconnect_delay);
-                tokio::time::sleep(Duration::from_secs(reconnect_delay)).await;
+                let jitter = (reconnect_delay as f64 * 0.1 * (2.0 * rand::random::<f64>() - 1.0)) as i64;
+                let delay = (reconnect_delay as i64 + jitter).max(1) as u64;
+                tokio::time::sleep(Duration::from_secs(delay)).await;
                 reconnect_delay = (reconnect_delay * 2).min(max_reconnect_delay_secs);
             }
 
@@ -438,11 +449,11 @@ impl KlineWsClient for KlineWs {
         let ws_sym = binance_ws_symbol(symbol);
 
         {
-            let mut map = self.symbol_map.lock().await;
+            let mut map = self.symbol_map.write().await;
             map.insert(ws_sym, symbol.to_string());
         }
 
-        let mut subs = self.subscriptions.lock().await;
+        let mut subs = self.subscriptions.write().await;
         if !subs.contains(&stream_name) {
             subs.push(stream_name.clone());
             drop(subs);
@@ -457,11 +468,11 @@ impl KlineWsClient for KlineWs {
         let ws_sym = binance_ws_symbol(symbol);
 
         {
-            let mut map = self.symbol_map.lock().await;
+            let mut map = self.symbol_map.write().await;
             map.remove(&ws_sym);
         }
 
-        let mut subs = self.subscriptions.lock().await;
+        let mut subs = self.subscriptions.write().await;
         let existed = subs.iter().any(|s| s == &stream_name);
         subs.retain(|s| s != &stream_name);
         drop(subs);
@@ -792,11 +803,11 @@ mod tests {
         ws.subscribe("BTCUSDT").await;
 
         // 验证 subscriptions 包含正确的 stream name
-        let subs = ws.subscriptions.lock().await;
+        let subs = ws.subscriptions.read().await;
         assert!(subs.contains(&"btcusdt@kline_1m".to_string()));
 
         // 验证 symbol_map 包含映射
-        let map = ws.symbol_map.lock().await;
+        let map = ws.symbol_map.read().await;
         assert_eq!(map.get("btcusdt").unwrap(), "BTCUSDT");
 
         // 客户端仍然没有运行

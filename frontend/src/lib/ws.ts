@@ -8,6 +8,8 @@ export interface WsInstance<T> {
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   reconnectAttempts: number;
   reconnectCallbacks: Set<() => void>;
+  /** State-change callbacks — each hook registers its own setConnected */
+  stateChangeCallbacks: Set<() => void>;
   /** Reference count — how many hooks are currently mounted */
   refCount: number;
 }
@@ -19,6 +21,7 @@ export function createWsInstance<T>(): WsInstance<T> {
     reconnectTimer: null,
     reconnectAttempts: 0,
     reconnectCallbacks: new Set(),
+    stateChangeCallbacks: new Set(),
     refCount: 0,
   };
 }
@@ -30,16 +33,18 @@ export function connectWs<T>(
   inst: WsInstance<T>,
   getUrl: () => string,
   parse: (raw: string) => T | null,
-  onStateChange: () => void,
 ) {
-  if (inst.ws && inst.ws.readyState === WebSocket.OPEN) return;
+  // Guard: only block if a connection is already OPEN or CONNECTING.
+  // CLOSING/CLOSED states are allowed to proceed (old ws onclose will be a no-op
+  // because inst.ws is reassigned before the old callback fires).
+  if (inst.ws && inst.ws.readyState < WebSocket.CLOSING) return;
 
   try {
     const ws = new WebSocket(getUrl());
 
     ws.onopen = () => {
       inst.reconnectAttempts = 0;
-      onStateChange();
+      inst.stateChangeCallbacks.forEach((cb) => cb());
       inst.reconnectCallbacks.forEach((cb) => cb());
     };
 
@@ -54,7 +59,7 @@ export function connectWs<T>(
 
     ws.onclose = () => {
       inst.ws = null;
-      onStateChange();
+      inst.stateChangeCallbacks.forEach((cb) => cb());
       // Only auto-reconnect if there are still active consumers
       if (inst.refCount > 0) {
         const delay = Math.min(
@@ -63,7 +68,7 @@ export function connectWs<T>(
         );
         inst.reconnectAttempts++;
         inst.reconnectTimer = setTimeout(
-          () => connectWs(inst, getUrl, parse, onStateChange),
+          () => connectWs(inst, getUrl, parse),
           delay,
         );
       }
@@ -80,7 +85,7 @@ export function connectWs<T>(
         MAX_RECONNECT_MS,
       );
       inst.reconnectAttempts++;
-      inst.reconnectTimer = setTimeout(() => connectWs(inst, getUrl, parse, onStateChange), delay);
+      inst.reconnectTimer = setTimeout(() => connectWs(inst, getUrl, parse), delay);
     }
   }
 }
@@ -123,12 +128,14 @@ export function useWsHook<T>(
   }, []);
 
   // ── Reactive connected state ───────────────────────────
+  // Reads inst.ws?.readyState at CALL TIME, not at creation time.
+  // Empty deps: inst is a stable module-level reference, setConnected is stable from useState.
 
   const [connected, setConnected] = useState(() => inst.ws?.readyState === WebSocket.OPEN);
 
-  const onStateChange = useCallback(() => {
+  const stableStateChange = useCallback(() => {
     setConnected(inst.ws?.readyState === WebSocket.OPEN);
-  }, [inst.ws?.readyState]);
+  }, []);
 
   // ── Mount/unmount lifecycle ────────────────────────────
   // Dependencies are intentionally empty — all inputs are stable refs.
@@ -138,11 +145,12 @@ export function useWsHook<T>(
     inst.refCount++;
     inst.listeners.add(stableListener);
     inst.reconnectCallbacks.add(stableReconnect);
+    inst.stateChangeCallbacks.add(stableStateChange);
 
     // Connect if not already connected
     if (!inst.ws || inst.ws.readyState === WebSocket.CLOSED) {
       inst.reconnectAttempts = 0;
-      connectWs(inst, getUrl, parse, onStateChange);
+      connectWs(inst, getUrl, parse);
     } else if (inst.ws.readyState === WebSocket.OPEN) {
       setConnected(true);
     }
@@ -150,6 +158,7 @@ export function useWsHook<T>(
     return () => {
       inst.listeners.delete(stableListener);
       inst.reconnectCallbacks.delete(stableReconnect);
+      inst.stateChangeCallbacks.delete(stableStateChange);
       inst.refCount--;
 
       // Only disconnect when no consumers remain

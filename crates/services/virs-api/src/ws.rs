@@ -11,67 +11,129 @@ use std::sync::Arc;
 
 use crate::state::AppState;
 
-/// Convert a Position to WebSocket JSON format.
-/// Used by position_ws_handler for real-time position updates.
-pub fn position_to_ws_json(pos: &virs_types::Position) -> serde_json::Value {
-    serde_json::json!({
-        "type": "position_updated",
-        "symbol": pos.symbol,
-        "exchange": pos.exchange,
-        "side": format!("{:?}", pos.side).to_lowercase(),
-        "status": format!("{:?}", pos.status).to_lowercase(),
-        "size": pos.size,
-        "entry_price": pos.entry_price,
-        "current_price": pos.current_price,
-        "leverage": pos.leverage,
-        "margin": pos.margin,
-        "unrealized_pnl": pos.unrealized_pnl,
-        "realized_pnl": pos.realized_pnl,
-        "stop_loss": pos.stop_loss,
-        "take_profit": pos.take_profit,
-        "liquidation_price": pos.liquidation_price,
-        "position_id": pos.id.to_string(),
-        "updated_at": pos.updated_at.to_rfc3339(),
-    })
+// ============================================================
+// Wire DTOs for WebSocket messages.
+//
+// These structs derive `Serialize` so handlers can call
+// `serde_json::to_string(&msg)` directly, avoiding the previous
+// two-pass serialization (`json!` -> Value -> to_string).
+// Field names are kept identical (snake_case) for frontend compat.
+// ============================================================
+
+#[derive(serde::Serialize)]
+pub struct KlineWsMsg<'a> {
+    exchange: &'a str,
+    symbol: &'a str,
+    timeframe: &'a str,
+    candle: &'a virs_market::Candle,
+    event_type: &'a str,
 }
 
-/// Convert a KlineEvent to WebSocket JSON format.
+#[derive(serde::Serialize)]
+pub struct PositionWsMsg<'a> {
+    #[serde(rename = "type")]
+    msg_type: &'static str,
+    symbol: &'a str,
+    exchange: &'a str,
+    side: &'static str,
+    status: &'static str,
+    size: f64,
+    entry_price: f64,
+    current_price: f64,
+    leverage: u32,
+    margin: f64,
+    unrealized_pnl: f64,
+    realized_pnl: f64,
+    stop_loss: Option<f64>,
+    take_profit: Option<f64>,
+    liquidation_price: Option<f64>,
+    position_id: String,
+    updated_at: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct OrderBookWsMsg<'a> {
+    exchange: &'a str,
+    symbol: &'a str,
+    // Each level serializes as a JSON array `[price, amount]`,
+    // matching the previous `json!([l.price, l.amount])` output.
+    bids: Vec<[f64; 2]>,
+    asks: Vec<[f64; 2]>,
+    timestamp: i64,
+}
+
+/// Map a `PositionSide` to its wire string (lowercase, matches the old
+/// `format!("{:?}", side).to_lowercase()` output).
+fn position_side_str(side: &virs_types::PositionSide) -> &'static str {
+    match side {
+        virs_types::PositionSide::Long => "long",
+        virs_types::PositionSide::Short => "short",
+        virs_types::PositionSide::Both => "both",
+    }
+}
+
+/// Map a `PositionStatus` to its wire string (lowercase, matches the old
+/// `format!("{:?}", status).to_lowercase()` output).
+fn position_status_str(status: &virs_types::PositionStatus) -> &'static str {
+    match status {
+        virs_types::PositionStatus::Empty => "empty",
+        virs_types::PositionStatus::Opening => "opening",
+        virs_types::PositionStatus::Open => "open",
+        virs_types::PositionStatus::Closing => "closing",
+        virs_types::PositionStatus::Closed => "closed",
+    }
+}
+
+/// Build the WebSocket wire message for a `Position` update.
+/// Used by position_ws_handler for real-time position updates.
+pub fn position_to_ws_json(pos: &virs_types::Position) -> PositionWsMsg<'_> {
+    PositionWsMsg {
+        msg_type: "position_updated",
+        symbol: &pos.symbol,
+        exchange: &pos.exchange,
+        side: position_side_str(&pos.side),
+        status: position_status_str(&pos.status),
+        size: pos.size,
+        entry_price: pos.entry_price,
+        current_price: pos.current_price,
+        leverage: pos.leverage,
+        margin: pos.margin,
+        unrealized_pnl: pos.unrealized_pnl,
+        realized_pnl: pos.realized_pnl,
+        stop_loss: pos.stop_loss,
+        take_profit: pos.take_profit,
+        liquidation_price: pos.liquidation_price,
+        position_id: pos.id.to_string(),
+        updated_at: pos.updated_at.to_rfc3339(),
+    }
+}
+
+/// Build the WebSocket wire message for a `KlineEvent`.
 /// Used by kline_ws_handler for real-time kline updates.
-pub fn kline_event_to_json(event: &virs_market::KlineEvent) -> serde_json::Value {
-    serde_json::json!({
-        "exchange": event.exchange,
-        "symbol": event.symbol,
-        "timeframe": format!("{}", event.timeframe),
-        "candle": {
-            "open_time": event.candle.open_time,
-            "close_time": event.candle.close_time,
-            "open": event.candle.open,
-            "high": event.candle.high,
-            "low": event.candle.low,
-            "close": event.candle.close,
-            "volume": event.candle.volume,
-            "quote_volume": event.candle.quote_volume,
-            "trades": event.candle.trades,
-            "closed": event.candle.closed,
-        },
-        "event_type": match event.event_type {
+pub fn kline_event_to_json(event: &virs_market::KlineEvent) -> KlineWsMsg<'_> {
+    KlineWsMsg {
+        exchange: &event.exchange,
+        symbol: &event.symbol,
+        timeframe: event.timeframe.as_str(),
+        candle: &event.candle,
+        event_type: match event.event_type {
             virs_market::KlineEventType::Update => "Update",
             virs_market::KlineEventType::Closed => "Closed",
             virs_market::KlineEventType::Backfilled => "Backfilled",
         },
-    })
+    }
 }
 
-/// Convert an OrderBookEvent to WebSocket JSON format.
+/// Build the WebSocket wire message for an `OrderBookEvent`.
 /// Used by orderbook_ws_handler for real-time order book updates.
-pub fn orderbook_event_to_json(event: &virs_market::OrderBookEvent) -> serde_json::Value {
-    serde_json::json!({
-        "exchange": event.exchange,
-        "symbol": event.symbol,
-        "bids": event.bids.iter().map(|l| serde_json::json!([l.price, l.amount])).collect::<Vec<_>>(),
-        "asks": event.asks.iter().map(|l| serde_json::json!([l.price, l.amount])).collect::<Vec<_>>(),
-        "timestamp": event.timestamp,
-    })
+pub fn orderbook_event_to_json(event: &virs_market::OrderBookEvent) -> OrderBookWsMsg<'_> {
+    OrderBookWsMsg {
+        exchange: &event.exchange,
+        symbol: &event.symbol,
+        bids: event.bids.iter().map(|l| [l.price, l.amount]).collect(),
+        asks: event.asks.iter().map(|l| [l.price, l.amount]).collect(),
+        timestamp: event.timestamp,
+    }
 }
 
 /// WebSocket handler for real-time kline data from KlineEngine.
@@ -93,15 +155,15 @@ async fn handle_kline_ws(mut socket: WebSocket, kline_engine: Arc<virs_market::K
             msg = rx.recv() => {
                 match msg {
                     Ok(event) => {
-                        // 按 timeframe 过滤
+                        // 按 timeframe 过滤；用 as_str() 避免 format! 分配
                         if let Some(ref tf) = timeframe_filter {
-                            if format!("{}", event.timeframe) != *tf {
+                            if event.timeframe.as_str() != tf.as_str() {
                                 continue;
                             }
                         }
 
-                        let json = kline_event_to_json(&event);
-                        if let Ok(text) = serde_json::to_string(&json) {
+                        let msg = kline_event_to_json(&event);
+                        if let Ok(text) = serde_json::to_string(&msg) {
                             if socket.send(Message::Text(text.into())).await.is_err() {
                                 break;
                             }
@@ -149,13 +211,25 @@ async fn handle_orderbook_ws(
 ) {
     let mut rx = orderbook_engine.subscribe_events();
 
+    // 客户端订阅的 symbol 集合；为空时推送全部（向后兼容）
+    // select! 不会并发执行两个分支，所以直接用局部变量即可，无需 Mutex
+    let mut subscribed_symbols: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+
     loop {
         tokio::select! {
             msg = rx.recv() => {
                 match msg {
                     Ok(event) => {
-                        let json = orderbook_event_to_json(&event);
-                        if let Ok(text) = serde_json::to_string(&json) {
+                        // 若客户端已订阅指定 symbol，则按 symbol 过滤
+                        if !subscribed_symbols.is_empty()
+                            && !subscribed_symbols.contains(&event.symbol)
+                        {
+                            continue;
+                        }
+
+                        let msg = orderbook_event_to_json(&event);
+                        if let Ok(text) = serde_json::to_string(&msg) {
                             if socket.send(Message::Text(text.into())).await.is_err() {
                                 break;
                             }
@@ -167,6 +241,23 @@ async fn handle_orderbook_ws(
             }
             msg = socket.recv() => {
                 match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        // 解析客户端订阅消息：
+                        // {"action":"subscribe","symbol":"BTCUSDT"}
+                        if let Ok(req) = serde_json::from_str::<serde_json::Value>(&text) {
+                            if req.get("action").and_then(|v| v.as_str()) == Some("subscribe") {
+                                if let Some(sym) = req.get("symbol").and_then(|v| v.as_str()) {
+                                    subscribed_symbols.insert(sym.to_string());
+                                    tracing::debug!("[orderbook_ws] subscribed symbol: {}", sym);
+                                }
+                            } else if req.get("action").and_then(|v| v.as_str()) == Some("unsubscribe") {
+                                if let Some(sym) = req.get("symbol").and_then(|v| v.as_str()) {
+                                    subscribed_symbols.remove(sym);
+                                    tracing::debug!("[orderbook_ws] unsubscribed symbol: {}", sym);
+                                }
+                            }
+                        }
+                    }
                     Some(Ok(Message::Close(_))) | None => break,
                     _ => continue,
                 }
@@ -212,11 +303,14 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
                 match msg {
                     Ok(event) => {
                         if let virs_types::position::EngineEvent::PositionUpdated { position } = event {
-                            // 检查 symbol 是否被订阅
-                            if !subscribed_symbols.contains(&position.symbol) { continue; }
+                            // 若客户端已订阅指定 symbol，则按 symbol 过滤；
+                            // 空集合时推送全部（与 kline/orderbook handler 语义一致）
+                            if !subscribed_symbols.is_empty()
+                                && !subscribed_symbols.contains(&position.symbol)
+                            { continue; }
 
-                            let json = position_to_ws_json(&position);
-                            if let Ok(text) = serde_json::to_string(&json) {
+                            let msg = position_to_ws_json(&position);
+                            if let Ok(text) = serde_json::to_string(&msg) {
                                 if socket.send(Message::Text(text.into())).await.is_err() {
                                     break;
                                 }
@@ -239,8 +333,8 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
                                     // 订阅时立即推送当前仓位快照，避免首次显示空仓
                                     let positions = state.engine_manager.get_positions_by_symbol(sym);
                                     for pos in positions {
-                                        let json = position_to_ws_json(&pos);
-                                        if let Ok(text) = serde_json::to_string(&json) {
+                                        let msg = position_to_ws_json(&pos);
+                                        if let Ok(text) = serde_json::to_string(&msg) {
                                             if socket.send(Message::Text(text.into())).await.is_err() {
                                                 break;
                                             }

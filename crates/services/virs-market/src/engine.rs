@@ -132,7 +132,7 @@ impl KlineEngine {
         let gap_check_event_tx = self.event_tx.clone();
         let gap_check_started = started.clone();
 
-        let (ws_update_tx, mut ws_update_rx) = broadcast::channel::<WsEvent>(8192);
+        let (ws_update_tx, mut ws_update_rx) = broadcast::channel::<WsEvent>(512);
 
         self.spot_handler.start(ws_update_tx.clone()).await;
         self.perpetual_handler.start(ws_update_tx).await;
@@ -147,24 +147,37 @@ impl KlineEngine {
                         tracing::debug!(
                             "[KlineEngine] WS reconnected, triggering continuity check"
                         );
-                        for entry in subscriptions.iter() {
-                            let sub = entry.value();
+                        // Collect needed data and drop the DashMap Ref guard before
+                        // async operations to avoid holding the guard across `.await`.
+                        let entries: Vec<_> = subscriptions
+                            .iter()
+                            .map(|e| {
+                                let sub = e.value();
+                                (
+                                    sub.exchange.clone(),
+                                    sub.symbol.clone(),
+                                    sub.cache.clone(),
+                                    sub.market_type,
+                                )
+                            })
+                            .collect();
+                        for (exchange, symbol, cache, market_type) in entries {
                             match GapDetector::detect_and_backfill(
-                                &sub.exchange,
-                                &sub.symbol,
-                                &sub.cache,
+                                &exchange,
+                                &symbol,
+                                &cache,
                                 &source,
                                 &event_tx,
-                                sub.market_type,
+                                market_type,
                             )
                             .await
                             {
                                 Ok(count) if count > 0 => {
-                                    tracing::debug!("[KlineEngine] Post-reconnect backfill: {} candles for {}/{}", count, sub.exchange, sub.symbol);
+                                    tracing::debug!("[KlineEngine] Post-reconnect backfill: {} candles for {}/{}", count, exchange, symbol);
                                 }
                                 Ok(_) => {}
                                 Err(e) => {
-                                    tracing::error!("[KlineEngine] Post-reconnect backfill failed for {}/{}: {}", sub.exchange, sub.symbol, e);
+                                    tracing::error!("[KlineEngine] Post-reconnect backfill failed for {}/{}: {}", exchange, symbol, e);
                                 }
                             }
                         }
@@ -276,25 +289,38 @@ impl KlineEngine {
             while gap_check_started.load(std::sync::atomic::Ordering::Relaxed) {
                 interval.tick().await;
 
-                for entry in gap_check_subscriptions.iter() {
-                    let sub = entry.value();
+                // Collect needed data and drop the DashMap Ref guard before
+                // async operations to avoid holding the guard across `.await`.
+                let entries: Vec<_> = gap_check_subscriptions
+                    .iter()
+                    .map(|e| {
+                        let sub = e.value();
+                        (
+                            sub.exchange.clone(),
+                            sub.symbol.clone(),
+                            sub.cache.clone(),
+                            sub.market_type,
+                        )
+                    })
+                    .collect();
+                for (exchange, symbol, cache, market_type) in entries {
                     let report =
-                        GapDetector::check_continuity(&sub.exchange, &sub.symbol, &sub.cache).await;
+                        GapDetector::check_continuity(&exchange, &symbol, &cache).await;
 
                     if !report.is_continuous {
                         tracing::debug!(
                             "[KlineEngine] Gap detected for {}/{}: {} minutes",
-                            sub.exchange,
-                            sub.symbol,
+                            exchange,
+                            symbol,
                             report.missing_minutes
                         );
                         match GapDetector::detect_and_backfill(
-                            &sub.exchange,
-                            &sub.symbol,
-                            &sub.cache,
+                            &exchange,
+                            &symbol,
+                            &cache,
                             &gap_check_source,
                             &gap_check_event_tx,
-                            sub.market_type,
+                            market_type,
                         )
                         .await
                         {
@@ -302,15 +328,15 @@ impl KlineEngine {
                                 tracing::debug!(
                                     "[KlineEngine] Backfilled {} candles for {}/{}",
                                     count,
-                                    sub.exchange,
-                                    sub.symbol
+                                    exchange,
+                                    symbol
                                 );
                             }
                             Err(e) => {
                                 tracing::error!(
                                     "[KlineEngine] Backfill failed for {}/{}: {}",
-                                    sub.exchange,
-                                    sub.symbol,
+                                    exchange,
+                                    symbol,
                                     e
                                 );
                             }

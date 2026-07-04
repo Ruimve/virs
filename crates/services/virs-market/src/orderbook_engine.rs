@@ -92,7 +92,7 @@ impl OrderBookEngine {
 
         tracing::debug!("[OrderBookEngine] Starting...");
 
-        let (ws_update_tx, mut ws_update_rx) = broadcast::channel::<WsOrderBookEvent>(4096);
+        let (ws_update_tx, mut ws_update_rx) = broadcast::channel::<WsOrderBookEvent>(512);
 
         self.spot_handler.start(ws_update_tx.clone()).await;
         self.perpetual_handler.start(ws_update_tx).await;

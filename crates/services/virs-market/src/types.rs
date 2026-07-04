@@ -116,7 +116,7 @@ impl Default for KlineEngineConfig {
             ws_ping_interval_secs: 30,
             ws_max_lifetime_secs: 23 * 3600,
             backfill_on_start: true,
-            event_channel_capacity: 8192,
+            event_channel_capacity: 512,
             proxy_url: None,
         }
     }
@@ -180,7 +180,7 @@ pub struct OrderBookEngineConfig {
 impl Default for OrderBookEngineConfig {
     fn default() -> Self {
         Self {
-            event_channel_capacity: 1024,
+            event_channel_capacity: 512,
         }
     }
 }

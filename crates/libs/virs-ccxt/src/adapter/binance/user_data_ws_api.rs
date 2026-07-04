@@ -171,10 +171,20 @@ impl UserDataWsApi {
                                     "[UserDataWsApi] session.logon returned non-200 status; \
                                      check if API key is Ed25519 type"
                                 );
-                                let _ = event_tx
+                                if event_tx
                                     .send(WsFeedEvent::ConnectionChanged { connected: false })
-                                    .await;
-                                tokio::time::sleep(Duration::from_secs(reconnect_delay)).await;
+                                    .await
+                                    .is_err()
+                                {
+                                    tracing::warn!(
+                                        "[UserDataWsApi] Event channel closed, stopping"
+                                    );
+                                    running.store(false, Ordering::Relaxed);
+                                    break;
+                                }
+                                let jitter = (reconnect_delay as f64 * 0.1 * (2.0 * rand::random::<f64>() - 1.0)) as i64;
+                                let delay = (reconnect_delay as i64 + jitter).max(1) as u64;
+                                tokio::time::sleep(Duration::from_secs(delay)).await;
                                 reconnect_delay =
                                     (reconnect_delay * 2).min(max_reconnect_delay_secs);
                                 continue;
@@ -245,6 +255,7 @@ impl UserDataWsApi {
                         let max_lifetime = Duration::from_secs(ws_max_lifetime_secs);
                         let mut ws_ping_tick = tokio::time::interval(ws_ping);
                         let mut user_ping_tick = tokio::time::interval(user_ping);
+                        let mut running_check = tokio::time::interval(Duration::from_secs(1));
                         // 第一次 tick 立即触发，跳过
                         ws_ping_tick.tick().await;
                         user_ping_tick.tick().await;
@@ -310,6 +321,7 @@ impl UserDataWsApi {
                                 }
                                 _ = user_ping_tick.tick() => {
                                     if !running.load(Ordering::Relaxed) {
+                                        let _ = write.send(Message::Close(None)).await;
                                         break;
                                     }
                                     // 发送 userDataStream.ping 保活用户数据流
@@ -342,16 +354,39 @@ impl UserDataWsApi {
                                         ping_id
                                     );
                                 }
+                                _ = running_check.tick() => {
+                                    if !running.load(Ordering::Relaxed) {
+                                        tracing::debug!("[UserDataWsApi] Stop requested, sending Close frame");
+                                        let _ = write.send(Message::Close(None)).await;
+                                        break;
+                                    }
+                                }
                             }
                         }
 
-                        let _ = event_tx
+                        if event_tx
                             .send(WsFeedEvent::ConnectionChanged { connected: false })
-                            .await;
-                        // 如果发送失败，receiver 已关闭，停止重连
+                            .await
+                            .is_err()
+                        {
+                            tracing::warn!(
+                                "[UserDataWsApi] Event channel closed on disconnect, stopping"
+                            );
+                            running.store(false, Ordering::Relaxed);
+                            break;
+                        }
                         if !running.load(Ordering::Relaxed) {
                             break;
                         }
+
+                        tracing::debug!(
+                            "[UserDataWsApi] Reconnecting in {}s...",
+                            reconnect_delay
+                        );
+                        let jitter = (reconnect_delay as f64 * 0.1 * (2.0 * rand::random::<f64>() - 1.0)) as i64;
+                        let delay = (reconnect_delay as i64 + jitter).max(1) as u64;
+                        tokio::time::sleep(Duration::from_secs(delay)).await;
+                        reconnect_delay = (reconnect_delay * 2).min(max_reconnect_delay_secs);
                     }
                     Err(e) => {
                         tracing::warn!(
@@ -368,7 +403,9 @@ impl UserDataWsApi {
                             running.store(false, Ordering::Relaxed);
                             break;
                         }
-                        tokio::time::sleep(Duration::from_secs(reconnect_delay)).await;
+                        let jitter = (reconnect_delay as f64 * 0.1 * (2.0 * rand::random::<f64>() - 1.0)) as i64;
+                        let delay = (reconnect_delay as i64 + jitter).max(1) as u64;
+                        tokio::time::sleep(Duration::from_secs(delay)).await;
                         reconnect_delay = (reconnect_delay * 2).min(max_reconnect_delay_secs);
                     }
                 }
@@ -391,13 +428,46 @@ impl UserDataWsApi {
 /// 返回 `true` 表示事件通道已关闭，调用方应停止后台 task。
 async fn handle_text_message(text: &str, event_tx: &mpsc::Sender<WsFeedEvent>) -> bool {
     // WebSocket API 响应有两种：
-    // 1. 请求响应: {"id":..., "status":200, "result":..., "rateLimits":[...]}
-    // 2. 用户数据事件: {"e":"executionReport", ...} / {"e":"outboundAccountPosition", ...}
+    // 1. 用户数据事件: {"e":"executionReport", ...} / {"e":"outboundAccountPosition", ...}（高频）
+    // 2. 请求响应: {"id":..., "status":200, "result":..., "rateLimits":[...]}（低频）
     //
-    // 只关心用户数据事件，请求响应用 debug 日志记录即可。
+    // 先尝试解析为用户数据事件（高频路径，仅需一次反序列化），
+    // 失败或无事件类型时再检查是否为请求响应。
+    if let Ok(bmsg) = serde_json::from_str::<BinanceOrderMessage>(text) {
+        if bmsg.event_type().is_some() {
+            let event_type = bmsg
+                .event_type()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+
+            if event_type == "executionReport" || event_type == "ORDER_TRADE_UPDATE" {
+                if let Some(event) = bmsg.to_ws_feed_event() {
+                    tracing::debug!(
+                        "[UserDataWsApi] {} event received, forwarding",
+                        event_type
+                    );
+                    if event_tx.send(event).await.is_err() {
+                        tracing::warn!("[UserDataWsApi] Event channel closed, stopping");
+                        return true;
+                    }
+                }
+            } else if event_type == "outboundAccountPosition" || event_type == "ACCOUNT_UPDATE" {
+                tracing::debug!(
+                    "[UserDataWsApi] {} event received (balance/position update)",
+                    event_type
+                );
+            } else if event_type == "listStatus" {
+                tracing::debug!("[UserDataWsApi] listStatus event received (OCO order)");
+            } else {
+                tracing::trace!("[UserDataWsApi] Ignoring event type: {}", event_type);
+            }
+            return false;
+        }
+    }
+
+    // 检查是否为请求响应（有 id/status）
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(text) {
         if json.get("id").is_some() && json.get("status").is_some() {
-            // 请求响应
             tracing::debug!(
                 "[UserDataWsApi] Request response: id={} status={}",
                 json.get("id").and_then(|v| v.as_u64()).unwrap_or(0),
@@ -407,40 +477,10 @@ async fn handle_text_message(text: &str, event_tx: &mpsc::Sender<WsFeedEvent>) -
         }
     }
 
-    // 尝试解析为用户数据事件
-    if let Ok(bmsg) = serde_json::from_str::<BinanceOrderMessage>(text) {
-        let event_type = bmsg
-            .event_type()
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "unknown".to_string());
-
-        if event_type == "executionReport" || event_type == "ORDER_TRADE_UPDATE" {
-            if let Some(event) = bmsg.to_ws_feed_event() {
-                tracing::debug!(
-                    "[UserDataWsApi] {} event received, forwarding",
-                    event_type
-                );
-                if event_tx.send(event).await.is_err() {
-                    tracing::warn!("[UserDataWsApi] Event channel closed, stopping");
-                    return true;
-                }
-            }
-        } else if event_type == "outboundAccountPosition" || event_type == "ACCOUNT_UPDATE" {
-            tracing::debug!(
-                "[UserDataWsApi] {} event received (balance/position update)",
-                event_type
-            );
-        } else if event_type == "listStatus" {
-            tracing::debug!("[UserDataWsApi] listStatus event received (OCO order)");
-        } else {
-            tracing::trace!("[UserDataWsApi] Ignoring event type: {}", event_type);
-        }
-    } else {
-        tracing::trace!(
-            "[UserDataWsApi] Unparseable message: {}",
-            &text[..text.len().min(200)]
-        );
-    }
+    tracing::trace!(
+        "[UserDataWsApi] Unparseable message: {}",
+        &text[..text.len().min(200)]
+    );
     false
 }
 

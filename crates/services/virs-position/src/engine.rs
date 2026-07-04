@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use chrono::Utc;
 use dashmap::DashMap;
 use futures_util::StreamExt;
+use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -264,21 +265,47 @@ impl PositionEngine {
             .ok_or(PositionEngineError::ChannelClosed)?;
         let inner = Arc::clone(&self.inner);
 
-        let cmd_handle = tokio::spawn(command_loop(inner.clone(), cmd_rx));
-        let sync_handle = tokio::spawn(sync_loop(inner.clone()));
-        let ws_handle = tokio::spawn(ws_feed_loop(inner.clone(), ws_feed_rx));
-        let poll_handle = tokio::spawn(poll_loop(inner));
+        let mut cmd_handle = tokio::spawn(command_loop(inner.clone(), cmd_rx));
+        let mut sync_handle = tokio::spawn(sync_loop(inner.clone()));
+        let mut ws_handle = tokio::spawn(ws_feed_loop(inner.clone(), ws_feed_rx));
+        let mut poll_handle = tokio::spawn(poll_loop(inner));
 
+        // Wait for any task to complete (error path)
         let _ = tokio::select! {
-            r = cmd_handle => r,
-            r = sync_handle => r,
-            r = ws_handle => r,
-            r = poll_handle => r,
+            r = &mut cmd_handle => r,
+            r = &mut sync_handle => r,
+            r = &mut ws_handle => r,
+            r = &mut poll_handle => r,
         };
+
+        // Signal all loops to stop
+        self.inner.set_state(EngineState::ShuttingDown);
+
+        // ws_feed_loop exits within ~1s via select! timeout.
+        // command_loop exits when all cmd_tx senders are dropped (engine_manager handles this).
+        // sync_loop/poll_loop check is_running() on their next tick (default 10s interval),
+        // which exceeds our 5s timeout — abort them immediately since they only do
+        // read-only sync/poll operations that are safe to interrupt.
+        sync_handle.abort();
+        poll_handle.abort();
+
+        // Wait for command_loop and ws_feed_loop to finish (with timeout)
+        let timeout = Duration::from_secs(5);
+        let _ = tokio::time::timeout(timeout, async {
+            let _ = tokio::join!(cmd_handle, ws_handle);
+        }).await;
 
         self.inner.set_state(EngineState::Stopped);
         info!(engine_id = %self.inner.config.engine_id, "Position engine stopped");
         Ok(())
+    }
+
+    /// Signal the engine to stop gracefully.
+    /// Sets state to ShuttingDown, which causes sync_loop/poll_loop to break
+    /// on their next tick. command_loop exits when cmd_tx senders are dropped.
+    pub fn stop(&self) {
+        self.inner.set_state(EngineState::ShuttingDown);
+        info!(engine_id = %self.inner.config.engine_id, "Position engine stop requested");
     }
 
     // -----------------------------------------------------------------------
@@ -862,37 +889,47 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
 // ============================================================================
 
 pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdateStream) {
-    while let Some(event) = ws_rx.next().await {
-        match event {
-            WsFeedEvent::OrderUpdate {
-                exchange_order_id,
-                symbol,
-                status,
-                filled,
-                remaining,
-                price,
-                amount,
-                commission,
-                timestamp,
-                position_side,
-            } => {
-                handle_ws_order_update(
-                    &inner,
-                    &exchange_order_id,
-                    &symbol,
-                    status,
-                    filled,
-                    remaining,
-                    price,
-                    amount,
-                    commission,
-                    timestamp,
-                    position_side,
-                )
-                .await;
+    loop {
+        tokio::select! {
+            event = ws_rx.next() => {
+                match event {
+                    Some(WsFeedEvent::OrderUpdate {
+                        exchange_order_id,
+                        symbol,
+                        status,
+                        filled,
+                        remaining,
+                        price,
+                        amount,
+                        commission,
+                        timestamp,
+                        position_side,
+                    }) => {
+                        handle_ws_order_update(
+                            &inner,
+                            &exchange_order_id,
+                            &symbol,
+                            status,
+                            filled,
+                            remaining,
+                            price,
+                            amount,
+                            commission,
+                            timestamp,
+                            position_side,
+                        )
+                        .await;
+                    }
+                    Some(WsFeedEvent::ConnectionChanged { connected }) => {
+                        debug!(connected, "WebSocket connection changed");
+                    }
+                    None => break,
+                }
             }
-            WsFeedEvent::ConnectionChanged { connected } => {
-                debug!(connected, "WebSocket connection changed");
+            _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                if !inner.is_running() {
+                    break;
+                }
             }
         }
     }
@@ -934,19 +971,6 @@ pub(crate) async fn handle_ws_order_update(
             }
         };
 
-        if let Some(ref ws_ps) = ws_position_side {
-            if let Some(pos_key) = inner
-                .position_id_index
-                .get(&order.position_id)
-                .map(|r| r.value().clone())
-            {
-                let pos_side = &pos_key.2;
-                if pos_side != ws_ps {
-                    warn!(exchange_order_id, order_id = %order.id, ws_position_side = ?ws_ps, local_position_side = ?pos_side, "WS position_side mismatch");
-                }
-            }
-        }
-
         let is_reduce_only = order.reduce_only || {
             if let Some(ref ws_ps) = ws_position_side {
                 matches!((&order.side, ws_ps), (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short))
@@ -957,6 +981,23 @@ pub(crate) async fn handle_ws_order_update(
 
         (order.id, order.position_id, order.filled, is_reduce_only)
     };
+
+    // Cache the position key once; it is stable for the lifetime of this call
+    // (only removed at the very end when a position fully closes).
+    let pos_key_opt = inner
+        .position_id_index
+        .get(&position_id)
+        .map(|r| r.value().clone());
+
+    // WS position_side mismatch check (uses cached key).
+    if let Some(ref ws_ps) = ws_position_side {
+        if let Some(ref pos_key) = pos_key_opt {
+            let pos_side = &pos_key.2;
+            if pos_side != ws_ps {
+                warn!(exchange_order_id, order_id = %order_id, ws_position_side = ?ws_ps, local_position_side = ?pos_side, "WS position_side mismatch");
+            }
+        }
+    }
 
     // 2. 更新 Order
     {
@@ -971,6 +1012,17 @@ pub(crate) async fn handle_ws_order_update(
         }
     }
 
+    // Clone the current order state once for reuse in trade event emission
+    // and position update below. The order is not modified after step 2.
+    let current_order_opt = if matches!(
+        status,
+        OrderStatus::PartiallyFilled | OrderStatus::Filled
+    ) {
+        inner.orders.get(&order_id).map(|r| r.value().clone())
+    } else {
+        None
+    };
+
     // 3. 部分成交或完全成交时创建 Trade 记录
     if matches!(status, OrderStatus::PartiallyFilled | OrderStatus::Filled) {
         let trade_fill = filled - prev_filled;
@@ -982,13 +1034,9 @@ pub(crate) async fn handle_ws_order_update(
 
         if trade_fill > 0.0 {
             let (pnl, trade_side) = {
-                let pos_key = inner
-                    .position_id_index
-                    .get(&position_id)
-                    .map(|r| r.value().clone());
-                match pos_key {
+                match &pos_key_opt {
                     Some(key) => {
-                        let pos_entry = inner.positions.get(&key);
+                        let pos_entry = inner.positions.get(key);
                         match pos_entry {
                             Some(pe) => {
                                 let pos = pe.value();
@@ -1082,21 +1130,15 @@ pub(crate) async fn handle_ws_order_update(
             }
 
             if pnl != 0.0 {
-                let pos_key = inner
-                    .position_id_index
-                    .get(&position_id)
-                    .map(|r| r.value().clone());
-                if let Some(key) = pos_key {
-                    if let Some(mut pos) = inner.positions.get_mut(&key) {
+                if let Some(key) = &pos_key_opt {
+                    if let Some(mut pos) = inner.positions.get_mut(key) {
                         pos.realized_pnl += pnl;
                     }
                 }
             }
 
-            let current_order = inner
-                .orders
-                .get(&order_id)
-                .map(|r| r.value().clone())
+            let current_order = current_order_opt
+                .clone()
                 .unwrap_or_else(|| PositionOrder {
                     id: order_id,
                     position_id,
@@ -1140,17 +1182,13 @@ pub(crate) async fn handle_ws_order_update(
 
     // 4. 订单完全成交时更新仓位
     if status.is_filled() {
-        let pos_key = inner
-            .position_id_index
-            .get(&position_id)
-            .map(|r| r.value().clone());
-        let pos_entry = match pos_key {
-            Some(key) => inner.positions.get(&key).map(|r| r.value().clone()),
+        let pos_entry = match &pos_key_opt {
+            Some(key) => inner.positions.get(key).map(|r| r.value().clone()),
             None => None,
         };
 
         if let Some(mut position) = pos_entry {
-            let order = inner.orders.get(&order_id).map(|r| r.value().clone());
+            let order = current_order_opt.clone();
 
             if let Some(order) = order {
                 if is_reduce_only {
