@@ -1785,8 +1785,8 @@ pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol:
 
 /// Resolves `position_side` from the order `side` + `reduce_only` when the
 /// caller omitted it. VIRS is Hedge-only — this is the only valid inference.
-/// Also clears `reduce_only` (Binance Hedge mode uses positionSide, not reduceOnly,
-/// for position management; reduceOnly is still passed through for close orders).
+/// Clears `reduce_only` afterwards: Binance Hedge mode uses positionSide
+/// (not reduceOnly) for position management, so reduceOnly is unnecessary.
 pub(crate) fn resolve_position_side_for_hedge(params: &mut PlaceOrderParams) {
     if params.position_side.is_none() {
         params.position_side = match (&params.side, params.reduce_only) {
