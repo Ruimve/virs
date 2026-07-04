@@ -310,11 +310,9 @@ impl Exchange for CcxtAdapter {
     }
 
     async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError> {
-        let mode = self.inner.get_position_mode().await?;
-        Ok(match mode {
-            virs_ccxt::PositionMode::OneWay => PositionMode::OneWay,
-            virs_ccxt::PositionMode::Hedge => PositionMode::Hedge,
-        })
+        // fapi returns Err for OneWay — the `?` propagates it.
+        // Ok(Hedge) is the only success path.
+        self.inner.get_position_mode().await
     }
 
     async fn get_funding_rate(&self, symbol: &str) -> Result<FundingRate, ExchangeError> {

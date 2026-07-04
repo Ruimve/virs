@@ -233,13 +233,9 @@ impl ExchangePe for CcxtExchangeAdapter {
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
         let exchange_name = ex.name().to_string();
-        let reduce_only_param = if params.position_side.is_some() {
-            None
-        } else if params.reduce_only {
-            Some(true)
-        } else {
-            None
-        };
+        // Hedge mode: position_side is always Some (resolved by caller or engine).
+        // reduce_only is passed through directly — Binance supports reduceOnly + positionSide.
+        let reduce_only_param = if params.reduce_only { Some(true) } else { None };
         let virs_order = ex
             .place_order_with_options(
                 &params.symbol,
@@ -314,11 +310,9 @@ impl ExchangePe for CcxtExchangeAdapter {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
-        let mode = ex.get_position_mode().await?;
-        Ok(match mode {
-            models::PositionMode::OneWay => PositionMode::OneWay,
-            models::PositionMode::Hedge => PositionMode::Hedge,
-        })
+        // fapi returns Err for OneWay — the `?` propagates it as PositionEngineError::Exchange.
+        // Ok(Hedge) is the only success path.
+        ex.get_position_mode().await.map_err(Into::into)
     }
 
     async fn subscribe_order_updates(&self, symbols: &[&str]) -> PositionResult<OrderUpdateStream> {

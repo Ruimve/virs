@@ -88,7 +88,6 @@ pub(crate) struct EngineInner {
     pub(crate) exchange_order_id_index: DashMap<String, Uuid>,
     pub(crate) position_id_index: DashMap<Uuid, (String, String, PositionSide)>,
     pub(crate) last_close_all: RwLock<Option<chrono::DateTime<Utc>>>,
-    pub(crate) position_mode: RwLock<PositionMode>,
 }
 
 impl EngineInner {
@@ -155,7 +154,6 @@ impl PositionEngine {
             exchange_order_id_index: DashMap::new(),
             position_id_index: DashMap::new(),
             last_close_all: RwLock::new(None),
-            position_mode: RwLock::new(PositionMode::Hedge),
         };
 
         Self {
@@ -209,10 +207,10 @@ impl PositionEngine {
         // 1. 初始化数据库表
         self.inner.persistence.init_tables().await?;
 
-        // position_mode 默认 Hedge（系统只支持双向持仓）。
-        // 启动时不再查询交易所——前端配置向导已在保存凭证时校验过持仓模式，
-        // 且用户可在交易所随时修改，启动时查询意义不大。
-        // adjust_params_for_position_mode 使用缓存值（始终 Hedge）调整下单参数。
+        // VIRS is Hedge-only. Position mode is not stored or queried at runtime —
+        // the frontend wizard validates Hedge mode when credentials are saved.
+        // resolve_position_side_for_hedge auto-resolves position_side for callers
+        // that omit it (e.g. grid bot PlaceOrder).
 
         // 2. 从数据库恢复状态
         self.recover_state().await?;
@@ -824,8 +822,7 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                                 amount: size, price: None, reduce_only: true,
                                 position_side: Some(side), position_id: Some(pid), client_order_id: None,
                             };
-                            let mode = *recover_lock(inner.position_mode.read());
-                            adjust_params_for_position_mode(&mut params, mode);
+                            resolve_position_side_for_hedge(&mut params);
                             let mut attempts = 0u32;
                             let max_attempts = 3;
                             loop {
@@ -1308,8 +1305,7 @@ pub(crate) async fn handle_open_position(
             position_id: Some(position_id),
             client_order_id: strategy_id.clone(),
         };
-        let mode = *recover_lock(inner.position_mode.read());
-        adjust_params_for_position_mode(&mut params, mode);
+        resolve_position_side_for_hedge(&mut params);
         let reduce_only = params.reduce_only;
 
         match inner.exchange.place_order(params).await {
@@ -1471,8 +1467,7 @@ pub(crate) async fn handle_open_position(
         position_id: Some(position_id),
         client_order_id: strategy_id.clone(),
     };
-    let mode = *recover_lock(inner.position_mode.read());
-    adjust_params_for_position_mode(&mut params, mode);
+    resolve_position_side_for_hedge(&mut params);
     let reduce_only = params.reduce_only;
 
     match inner.exchange.place_order(params).await {
@@ -1649,8 +1644,7 @@ pub(crate) async fn handle_close_position(
         position_id: Some(position.id),
         client_order_id: strategy_id.clone(),
     };
-    let mode = *recover_lock(inner.position_mode.read());
-    adjust_params_for_position_mode(&mut params, mode);
+    resolve_position_side_for_hedge(&mut params);
     let reduce_only = params.reduce_only;
 
     // 加超时保护：防止交易所 REST 调用卡死导致 PE engine loop 阻塞，
@@ -1790,38 +1784,23 @@ pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol:
 }
 
 /// Resolves `position_side` from the order `side` + `reduce_only` when the
-/// caller omitted it. In Hedge-only mode this is the only valid inference;
-/// OneWay (position_side=None) is no longer accepted downstream.
-pub(crate) fn adjust_params_for_position_mode(params: &mut PlaceOrderParams, mode: PositionMode) {
-    match mode {
-        PositionMode::Hedge => {
-            if params.position_side.is_none() {
-                params.position_side = match (&params.side, params.reduce_only) {
-                    (Side::Buy, false) => Some(PositionSide::Long),
-                    (Side::Sell, false) => Some(PositionSide::Short),
-                    (Side::Sell, true) => Some(PositionSide::Long),
-                    (Side::Buy, true) => Some(PositionSide::Short),
-                };
-            }
-            params.reduce_only = false;
-        }
-        PositionMode::OneWay => {
-            // OneWay is not supported — refuse to silently strip position_side.
-            // position_mode defaults to Hedge and is never overwritten at runtime,
-            // so this arm should be unreachable. It's a defensive guard in case
-            // the field is ever set to OneWay by future code.
-            tracing::error!(
-                "adjust_params_for_position_mode called with OneWay mode — \
-                 this is unreachable (position_mode defaults to Hedge and is never changed). \
-                 Leaving position_side as-is."
-            );
-        }
+/// caller omitted it. VIRS is Hedge-only — this is the only valid inference.
+/// Also clears `reduce_only` (Binance Hedge mode uses positionSide, not reduceOnly,
+/// for position management; reduceOnly is still passed through for close orders).
+pub(crate) fn resolve_position_side_for_hedge(params: &mut PlaceOrderParams) {
+    if params.position_side.is_none() {
+        params.position_side = match (&params.side, params.reduce_only) {
+            (Side::Buy, false) => Some(PositionSide::Long),
+            (Side::Sell, false) => Some(PositionSide::Short),
+            (Side::Sell, true) => Some(PositionSide::Long),
+            (Side::Buy, true) => Some(PositionSide::Short),
+        };
     }
+    params.reduce_only = false;
 }
 
 pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: PlaceOrderParams) {
-    let mode = *recover_lock(inner.position_mode.read());
-    adjust_params_for_position_mode(&mut params, mode);
+    resolve_position_side_for_hedge(&mut params);
 
     let total_equity = inner
         .exchange
@@ -1855,13 +1834,10 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
         Some(pid) => pid,
         None => {
             let pos_id = Uuid::new_v4();
-            let position_side =
-                params
-                    .position_side
-                    .unwrap_or(match (&params.side, params.reduce_only) {
-                        (Side::Buy, false) | (Side::Sell, true) => PositionSide::Long,
-                        _ => PositionSide::Short,
-                    });
+            // resolve_position_side_for_hedge has already resolved position_side
+            // from side+reduce_only. If it's still None here, that's a bug.
+            let position_side = params.position_side
+                .expect("position_side must be resolved by resolve_position_side_for_hedge");
             let exchange_name = inner.exchange.name().to_string();
             let key = (exchange_name.clone(), params.symbol.clone(), position_side);
 

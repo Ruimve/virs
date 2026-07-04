@@ -844,7 +844,11 @@ pub async fn fetch_positions(
     Ok(positions)
 }
 
-/// GET /fapi/v1/positionSide/dual — get position mode
+/// GET /fapi/v1/positionSide/dual — get position mode.
+/// Returns `Ok(Hedge)` when the exchange is in Hedge mode.
+/// Returns `Err` when the exchange is in OneWay mode — VIRS does not support
+/// OneWay. The `check_position_mode` API endpoint catches this error to
+/// report "oneway" to the frontend wizard.
 pub async fn get_position_mode(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -857,11 +861,17 @@ pub async fn get_position_mode(
         .get("dualSidePosition")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    Ok(if dual_side {
-        PositionMode::Hedge
+
+    if dual_side {
+        Ok(PositionMode::Hedge)
     } else {
-        PositionMode::OneWay
-    })
+        Err(ExchangeError::InvalidRequest(
+            "Exchange account is in OneWay (single-position) mode. \
+             VIRS requires Hedge mode. Switch to Hedge mode in Binance futures \
+             settings (API key > Position Mode > Hedge Mode)."
+                .into(),
+        ))
+    }
 }
 
 /// POST /fapi/v1/listenKey — create listen key for futures user data stream

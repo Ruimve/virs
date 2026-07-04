@@ -38,12 +38,6 @@ pub enum PositionEngineError {
     ChannelClosed,
     #[error("Configuration error: {0}")]
     Config(String),
-    #[error("Position mode mismatch: expected={expected}, actual={actual}")]
-    PositionModeMismatch { expected: String, actual: String },
-    #[error("Position mode query failed: {0}")]
-    PositionModeQueryFailed(String),
-    #[error("Lock poisoned — a thread panicked while holding a lock")]
-    LockPoisoned,
 }
 
 /// Position engine result type
@@ -65,12 +59,10 @@ impl Categorized for PositionEngineError {
         match self {
             Self::Exchange(e) => e.category(),
             Self::Database(_) => ErrorCategory::Database,
-            Self::EngineNotRunning | Self::EngineAlreadyRunning | Self::ChannelClosed | Self::LockPoisoned => {
+            Self::EngineNotRunning | Self::EngineAlreadyRunning | Self::ChannelClosed => {
                 ErrorCategory::Internal
             }
-            Self::Config(_) | Self::PositionModeMismatch { .. } | Self::PositionModeQueryFailed(_) => {
-                ErrorCategory::Config
-            }
+            Self::Config(_) => ErrorCategory::Config,
             Self::OrderNotFound { .. } | Self::PositionNotFound { .. } => ErrorCategory::NotFound,
             Self::PositionAlreadyExists { .. } => ErrorCategory::Conflict,
             Self::InvalidAmount { .. } | Self::InsufficientPosition { .. } => {
@@ -91,9 +83,7 @@ impl HttpStatus for PositionEngineError {
             Self::InvalidAmount { .. }
             | Self::InsufficientPosition { .. }
             | Self::RiskCheckFailed { .. } => 400,
-            Self::Config(_) | Self::PositionModeMismatch { .. } | Self::PositionModeQueryFailed(_) => {
-                500
-            }
+            Self::Config(_) => 500,
             _ => 500,
         }
     }
@@ -114,9 +104,6 @@ impl ErrorCode for PositionEngineError {
             Self::EngineAlreadyRunning => "PE_ENGINE_ALREADY_RUNNING",
             Self::ChannelClosed => "PE_CHANNEL_CLOSED",
             Self::Config(_) => "PE_CONFIG_ERROR",
-            Self::PositionModeMismatch { .. } => "PE_POSITION_MODE_MISMATCH",
-            Self::PositionModeQueryFailed(_) => "PE_POSITION_MODE_QUERY_FAILED",
-            Self::LockPoisoned => "PE_LOCK_POISONED",
         }
     }
 }

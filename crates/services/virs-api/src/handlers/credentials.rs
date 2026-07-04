@@ -358,9 +358,9 @@ pub async fn verify_permissions(
 
 /// GET /api/credentials/position-mode — query the exchange's current position mode.
 /// Returns { supported: bool, mode: "hedge"|"oneway"|null }.
-/// Spot exchanges return supported=false (position mode is perpetual-only).
-/// OneWay is returned as a normal 200 (not an error) — the frontend wizard
-/// decides whether to block.
+/// - Hedge:  { supported: true, mode: "hedge" }
+/// - OneWay: { supported: true, mode: "oneway" }  (fapi returns Err for OneWay — caught here)
+/// - Spot:   { supported: false, mode: null }     (get_position_mode returns NotSupported)
 pub async fn check_position_mode(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -384,20 +384,24 @@ pub async fn check_position_mode(
     };
 
     match exchange.get_position_mode().await {
-        Ok(mode) => {
-            let mode_str = match mode {
-                virs_types::PositionMode::Hedge => "hedge",
-                virs_types::PositionMode::OneWay => "oneway",
-            };
+        Ok(_) => {
+            // Only Hedge reaches Ok — fapi returns Err for OneWay.
             Ok(Json(ApiResponse::ok(serde_json::json!({
                 "supported": true,
-                "mode": mode_str,
+                "mode": "hedge",
             }))))
         }
         Err(e) => {
-            // Spot exchanges return NotSupported — treat as "not applicable".
             let err_str = format!("{}", e);
-            if err_str.contains("Not supported") || err_str.contains("not supported") {
+            // OneWay mode — fapi returns InvalidRequest with "OneWay" in the message.
+            // Report it to the frontend so the wizard can block.
+            if err_str.contains("OneWay") || err_str.contains("oneway") {
+                Ok(Json(ApiResponse::ok(serde_json::json!({
+                    "supported": true,
+                    "mode": "oneway",
+                }))))
+            } else if err_str.contains("Not supported") || err_str.contains("not supported") {
+                // Spot exchanges don't support position mode.
                 Ok(Json(ApiResponse::ok(serde_json::json!({
                     "supported": false,
                     "mode": null,

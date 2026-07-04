@@ -47,7 +47,6 @@ type PaperPosition = ExchangePosition;
 pub struct PaperExchangeAdapter {
     name: String,
     market_type: MarketType,
-    position_mode: PositionMode,
     pending: Arc<DashMap<Uuid, PaperPendingOrder>>,
     positions: Arc<DashMap<String, PaperPosition>>,
     balance: Arc<Mutex<Balance>>,
@@ -79,23 +78,13 @@ pub fn compute_paper_liquidation_price(
 
 impl PaperExchangeAdapter {
     pub fn new(name: &str, market_type: MarketType, initial_balance: f64) -> Self {
-        Self::with_position_mode(name, market_type, initial_balance, PositionMode::Hedge)
-    }
-
-    pub fn with_position_mode(
-        name: &str,
-        market_type: MarketType,
-        initial_balance: f64,
-        position_mode: PositionMode,
-    ) -> Self {
         info!(
-            name, market_type = ?market_type, position_mode = ?position_mode, initial_balance,
+            name, market_type = ?market_type, initial_balance,
             "PaperExchangeAdapter created"
         );
         Self {
             name: name.to_string(),
             market_type,
-            position_mode,
             pending: Arc::new(DashMap::new()),
             positions: Arc::new(DashMap::new()),
             balance: Arc::new(Mutex::new(Balance {
@@ -263,7 +252,7 @@ impl PaperExchangeAdapter {
 
         // ── 2. 计算 realized_pnl（平仓/部分平仓/反转时） ──
         // 对于平仓单：closed_amount = order.amount
-        // 对于开仓单但发生反转（one-way 模式）：closed_amount = min(order.amount, |old_size|)
+        // 对于开仓单但发生反转（仓位 size 与 delta 符号相反）：closed_amount = min(order.amount, |old_size|)
         let realized_pnl: f64 = match (&old_pos_info, is_opening) {
             (Some((side, entry, old_size)), false) => {
                 // 平仓单：按 order.amount 计算已实现盈亏
@@ -732,7 +721,23 @@ impl ExchangePe for PaperExchangeAdapter {
     }
 
     async fn get_position_mode(&self) -> PositionResult<PositionMode> {
-        Ok(self.position_mode)
+        // Proxy to the real perpetual exchange when available — paper mode
+        // should reflect the actual account's position mode, not a hard-coded
+        // value. If no registry is attached (pure paper without a real
+        // exchange), default to Hedge.
+        let registry = match &self.exchange_registry {
+            Some(r) => r.clone(),
+            None => return Ok(PositionMode::Hedge),
+        };
+        let exchange = registry
+            .registered_names()
+            .iter()
+            .find(|n| n.contains("perpetual"))
+            .and_then(|key| registry.get(key));
+        match exchange {
+            Some(ex) => ex.get_position_mode().await.map_err(Into::into),
+            None => Ok(PositionMode::Hedge),
+        }
     }
 
     async fn subscribe_order_updates(

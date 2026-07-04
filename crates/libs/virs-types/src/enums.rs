@@ -20,10 +20,13 @@ pub enum PositionSide {
     Short,
 }
 
-/// Position mode
+/// Position mode — Hedge only. OneWay is not supported by VIRS.
+/// When `get_position_mode` reads OneWay from the exchange, it returns
+/// `ExchangeError::InvalidRequest` rather than `Ok(OneWay)`.
+/// The only consumer that catches this error is the `check_position_mode`
+/// API endpoint, which reports "oneway" to the frontend wizard.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PositionMode {
-    OneWay,
     Hedge,
 }
 
