@@ -45,7 +45,6 @@ impl Position {
         match self.side {
             PositionSide::Long => (current_price - self.entry_price) * self.size,
             PositionSide::Short => (self.entry_price - current_price) * self.size,
-            PositionSide::Both => 0.0,
         }
     }
 }

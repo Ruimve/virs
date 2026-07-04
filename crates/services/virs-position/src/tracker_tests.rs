@@ -113,17 +113,6 @@ fn p1_5_calc_unrealized_pnl_short_loss() {
 }
 
 #[test]
-fn p1_6_calc_unrealized_pnl_both() {
-    let mut pos = make_position("BTC/USDT", PositionSide::Both, 2.0, 100.0, 0.0);
-    pos.unrealized_pnl = 15.0;
-    let positions: Vec<&Position> = vec![&pos];
-    let prices = HashMap::new();
-    // Both → uses pos.unrealized_pnl
-    let result = calc_unrealized_pnl(&positions, &prices);
-    assert!((result - 15.0).abs() < 1e-10);
-}
-
-#[test]
 fn p1_7_calc_unrealized_pnl_no_price() {
     let pos = make_position("BTC/USDT", PositionSide::Long, 2.0, 100.0, 105.0);
     let positions: Vec<&Position> = vec![&pos];

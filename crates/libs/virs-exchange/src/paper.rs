@@ -74,7 +74,6 @@ pub fn compute_paper_liquidation_price(
     Some(match side {
         PositionSide::Long => entry_price * (1.0 - ratio),
         PositionSide::Short => entry_price * (1.0 + ratio),
-        PositionSide::Both => return None,
     })
 }
 
@@ -211,11 +210,20 @@ impl PaperExchangeAdapter {
     }
 
     async fn update_position_on_fill(&self, order: &PaperPendingOrder, fill_price: f64) {
-        let key = format!(
-            "{}:{:?}",
-            order.symbol,
-            order.position_side.unwrap_or(PositionSide::Both)
-        );
+        // Hedge mode requires position_side — None is an irrecoverable caller bug.
+        let position_side = match order.position_side {
+            Some(ps) => ps,
+            None => {
+                tracing::error!(
+                    symbol = %order.symbol,
+                    order_id = %order.id,
+                    "position_side is None in Hedge mode — skipping fill update to avoid \
+                     silent position corruption. Caller must provide position_side."
+                );
+                return;
+            }
+        };
+        let key = format!("{}:{:?}", order.symbol, position_side);
         let size_delta = if order.side == Side::Buy {
             order.amount
         } else {
@@ -240,11 +248,10 @@ impl PaperExchangeAdapter {
         let notional = fill_price * order.amount;
         let margin = notional / leverage_f64;
 
-        let position_side = order.position_side.unwrap_or(PositionSide::Both);
         let is_opening = match (order.side, position_side) {
-            (Side::Buy, PositionSide::Long) | (Side::Buy, PositionSide::Both) => true,
+            (Side::Buy, PositionSide::Long) => true,
             (Side::Sell, PositionSide::Short) => true,
-            (Side::Sell, PositionSide::Long) | (Side::Sell, PositionSide::Both) => false,
+            (Side::Sell, PositionSide::Long) => false,
             (Side::Buy, PositionSide::Short) => false,
         };
 
@@ -264,7 +271,6 @@ impl PaperExchangeAdapter {
                 match side {
                     PositionSide::Long => (fill_price - entry) * closed,
                     PositionSide::Short => (entry - fill_price) * closed,
-                    PositionSide::Both => 0.0,
                 }
             }
             (Some((side, entry, old_size)), true)
@@ -275,7 +281,6 @@ impl PaperExchangeAdapter {
                 match side {
                     PositionSide::Long => (fill_price - entry) * closed,
                     PositionSide::Short => (entry - fill_price) * closed,
-                    PositionSide::Both => 0.0,
                 }
             }
             _ => 0.0,

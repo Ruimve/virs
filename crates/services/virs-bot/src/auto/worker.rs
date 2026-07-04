@@ -124,7 +124,6 @@ impl AutoWorker {
             Some(p) if p.is_open() => match p.side {
                 PositionSide::Long => "long".to_string(),
                 PositionSide::Short => "short".to_string(),
-                PositionSide::Both => "none".to_string(),
             },
             _ => "none".to_string(),
         }

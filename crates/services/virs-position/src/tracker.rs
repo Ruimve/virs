@@ -42,7 +42,6 @@ pub fn calc_unrealized_pnl(
         let pos_pnl = match pos.side {
             PositionSide::Long => (price - pos.entry_price) * pos.size,
             PositionSide::Short => (pos.entry_price - price) * pos.size,
-            PositionSide::Both => pos.unrealized_pnl,
         };
 
         unrealized_pnl += pos_pnl;

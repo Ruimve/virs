@@ -39,7 +39,6 @@
 | P1.3 | `p1_3_calc_unrealized_pnl_long_loss` | long, price<entry → 负盈亏 |
 | P1.4 | `p1_4_calc_unrealized_pnl_short_profit` | short, price<entry → 正盈亏 |
 | P1.5 | `p1_5_calc_unrealized_pnl_short_loss` | short, price>entry → 负盈亏 |
-| P1.6 | `p1_6_calc_unrealized_pnl_both` | Both → 使用 pos.unrealized_pnl |
 | P1.7 | `p1_7_calc_unrealized_pnl_no_price` | 无当前价格 → 使用 pos.current_price |
 | P2.1 | `p2_1_calc_drawdown_pct_zero_peak` | peak=0 → 0.0 |
 | P2.2 | `p2_2_calc_drawdown_pct_no_drawdown` | equity > peak → 负值 |

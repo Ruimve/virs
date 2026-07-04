@@ -214,7 +214,6 @@ impl Exchange for CcxtAdapter {
         let ccxt_position_side = position_side.map(|ps| match ps {
             PositionSide::Long => virs_ccxt::PositionSide::Long,
             PositionSide::Short => virs_ccxt::PositionSide::Short,
-            PositionSide::Both => virs_ccxt::PositionSide::Both,
         });
         let params = PlaceOrderParams {
             symbol: symbol.to_string(),
@@ -300,7 +299,6 @@ impl Exchange for CcxtAdapter {
                 side: match p.side {
                     virs_ccxt::PositionSide::Long => PositionSide::Long,
                     virs_ccxt::PositionSide::Short => PositionSide::Short,
-                    virs_ccxt::PositionSide::Both => PositionSide::Both,
                 },
                 size: p.size,
                 entry_price: p.entry_price,

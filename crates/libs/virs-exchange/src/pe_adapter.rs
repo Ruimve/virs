@@ -65,7 +65,6 @@ pub fn convert_position_side(side: &Option<PositionSide>) -> Option<models::Posi
     side.as_ref().map(|s| match s {
         PositionSide::Long => models::PositionSide::Long,
         PositionSide::Short => models::PositionSide::Short,
-        PositionSide::Both => models::PositionSide::Both,
     })
 }
 
@@ -94,7 +93,6 @@ pub fn convert_virs_position_side(side: &models::PositionSide) -> PositionSide {
     match side {
         models::PositionSide::Long => PositionSide::Long,
         models::PositionSide::Short => PositionSide::Short,
-        models::PositionSide::Both => PositionSide::Both,
     }
 }
 

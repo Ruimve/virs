@@ -36,7 +36,6 @@
 | P1.3 | `p1_3_leverage_zero` | leverage=0 → None |
 | P1.4 | `p1_4_entry_price_zero` | entry_price=0 → None |
 | P1.5 | `p1_5_entry_price_negative` | entry_price<0 → None |
-| P1.6 | `p1_6_position_both` | PositionSide::Both → None |
 | P1.7 | `p1_7_leverage_one_long` | lev=1, Long → entry * 0 = 0.0 |
 | P1.8 | `p1_8_leverage_one_short` | lev=1, Short → entry * 2 = 100000.0 |
 
@@ -50,7 +49,6 @@
 | PE2.2 | `pe2_2_sell` | Side::Sell → models::Side::Sell |
 | PE3.1 | `pe3_1_long` | Some(Long) → Some(Long) |
 | PE3.2 | `pe3_2_short` | Some(Short) → Some(Short) |
-| PE3.3 | `pe3_3_both` | Some(Both) → Some(Both) |
 | PE3.4 | `pe3_4_none` | None → None |
 | PE4.1 | `pe4_1_market` | Market → Market |
 | PE4.2 | `pe4_2_limit` | Limit → Limit |
@@ -65,7 +63,6 @@
 | PE5.6 | `pe5_6_pending` | Pending → Pending |
 | PE6.1 | `pe6_1_long` | models Long → PE Long |
 | PE6.2 | `pe6_2_short` | models Short → PE Short |
-| PE6.3 | `pe6_3_both` | models Both → PE Both |
 | PE7.1 | `pe7_1_spot` | models Spot → PE Spot |
 | PE7.2 | `pe7_2_perpetual` | models Perpetual → PE Perpetual |
 | PE8.1 | `pe8_1_order_normal` | 正常 order → PositionOrder 字段一致 |

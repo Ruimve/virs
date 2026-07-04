@@ -460,22 +460,28 @@ pub async fn create_order(
         body["newClientOrderId"] = serde_json::json!(client_id);
     }
 
-    // Perpetual: add positionSide for hedge mode
+    // Perpetual: positionSide is mandatory in Hedge mode.
+    // OneWay mode (positionSide=BOTH) is not supported — the caller must
+    // resolve Long/Short before placing the order.
     let position_side = match (&params.side, &params.position_side) {
         (Side::Buy, Some(PositionSide::Long)) => "LONG",
         (Side::Sell, Some(PositionSide::Short)) => "SHORT",
         (Side::Buy, Some(PositionSide::Short)) => "SHORT",
         (Side::Sell, Some(PositionSide::Long)) => "LONG",
-        _ => "BOTH",
+        (_, None) => {
+            return Err(ExchangeError::InvalidRequest(
+                "position_side is required in Hedge mode — OneWay (BOTH) is not supported. \
+                 Switch the Binance futures account to Hedge mode and provide position_side."
+                    .into(),
+            ));
+        }
     };
     body["positionSide"] = serde_json::json!(position_side);
 
-    // One-way mode: use reduceOnly
-    if params.position_side.is_none() {
-        if let Some(reduce) = params.reduce_only {
-            if reduce {
-                body["reduceOnly"] = serde_json::json!(true);
-            }
+    // reduceOnly is still valid in Hedge mode (marks a close order).
+    if let Some(reduce) = params.reduce_only {
+        if reduce {
+            body["reduceOnly"] = serde_json::json!(true);
         }
     }
 

@@ -99,6 +99,37 @@ impl Persistence {
             sqlx::query(idx).execute(&self.db).await?;
         }
 
+        // ── Migration: remove PositionSide::Both (OneWay mode) ──
+        // Backfill existing 'Both' rows by size sign, then enforce CHECK.
+        // This is idempotent: UPDATE is a no-op once no 'Both' rows remain,
+        // and ADD CONSTRAINT IF NOT EXISTS skips if the constraint exists.
+        //
+        // If a 'Both' row collides with an existing Long/Short row for the
+        // same (engine_id, exchange, symbol), the UNIQUE constraint will
+        // block the UPDATE — the operator must resolve such rows manually
+        // before the next startup succeeds.
+        sqlx::query(
+            r#"
+            UPDATE pe_positions
+               SET side = CASE WHEN size >= 0 THEN 'Long' ELSE 'Short' END,
+                   size = ABS(size)
+             WHERE side = 'Both'
+            "#,
+        )
+        .execute(&self.db)
+        .await?;
+
+        sqlx::query(
+            r#"
+            ALTER TABLE pe_positions
+                DROP CONSTRAINT IF EXISTS chk_pe_positions_side,
+                ADD CONSTRAINT chk_pe_positions_side
+                    CHECK (side IN ('Long', 'Short'))
+            "#,
+        )
+        .execute(&self.db)
+        .await?;
+
         Ok(())
     }
 
@@ -215,7 +246,6 @@ impl PositionRow {
         let side = match self.side.as_str() {
             "Long" => PositionSide::Long,
             "Short" => PositionSide::Short,
-            "Both" => PositionSide::Both,
             _ => return None,
         };
         let status = match self.status.as_str() {

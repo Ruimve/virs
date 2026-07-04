@@ -42,12 +42,6 @@ fn p1_5_entry_price_negative() {
 }
 
 #[test]
-fn p1_6_position_both() {
-    let result = compute_paper_liquidation_price(50000.0, PositionSide::Both, 10);
-    assert_eq!(result, None);
-}
-
-#[test]
 fn p1_7_leverage_one_long() {
     // entry=50000, lev=1 → 50000 * (1 - 1/1) = 50000 * 0 = 0
     let result = compute_paper_liquidation_price(50000.0, PositionSide::Long, 1);

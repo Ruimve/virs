@@ -170,7 +170,7 @@ impl PositionEngine {
             exchange_order_id_index: DashMap::new(),
             position_id_index: DashMap::new(),
             last_close_all: RwLock::new(None),
-            position_mode: RwLock::new(PositionMode::OneWay),
+            position_mode: RwLock::new(PositionMode::Hedge),
         };
 
         Self {
@@ -224,11 +224,23 @@ impl PositionEngine {
         // 1. 初始化数据库表
         self.inner.persistence.init_tables().await?;
 
-        // 1.5 获取持仓模式
+        // 1.5 获取持仓模式 — OneWay is not supported (PositionSide::Both removed).
         match self.inner.exchange.get_position_mode().await {
-            Ok(mode) => {
-                info!(engine_id = %self.inner.config.engine_id, position_mode = ?mode, "Fetched position mode from exchange");
-                *recover_lock_result(self.inner.position_mode.write())? = mode;
+            Ok(PositionMode::Hedge) => {
+                info!(engine_id = %self.inner.config.engine_id, "Exchange is in Hedge mode");
+                *recover_lock_result(self.inner.position_mode.write())? = PositionMode::Hedge;
+            }
+            Ok(PositionMode::OneWay) => {
+                error!(
+                    engine_id = %self.inner.config.engine_id,
+                    "Exchange account is in OneWay (single-position) mode. \
+                     VIRS requires Hedge mode. Switch to Hedge mode in Binance futures \
+                     settings (API key > Position Mode > Hedge Mode) before starting the engine."
+                );
+                return Err(PositionEngineError::PositionModeMismatch {
+                    expected: "Hedge".into(),
+                    actual: "OneWay".into(),
+                });
             }
             Err(e) => {
                 warn!(engine_id = %self.inner.config.engine_id, error = %e, "Failed to get position mode from exchange");
@@ -840,7 +852,6 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                             let close_side = match side {
                                 PositionSide::Long => Side::Sell,
                                 PositionSide::Short => Side::Buy,
-                                PositionSide::Both => Side::Sell,
                             };
                             let mut params = PlaceOrderParams {
                                 symbol: sym.clone(), side: close_side, order_type: OrderType::Market,
@@ -1048,37 +1059,16 @@ pub(crate) async fn handle_ws_order_update(
                                         PositionSide::Short => {
                                             (pos.entry_price - price) * trade_fill
                                         }
-                                        PositionSide::Both => {
-                                            if pos.size >= 0.0 {
-                                                (price - pos.entry_price) * trade_fill
-                                            } else {
-                                                (pos.entry_price - price) * trade_fill
-                                            }
-                                        }
                                     };
                                     let side = match pos.side {
                                         PositionSide::Long => Side::Sell,
                                         PositionSide::Short => Side::Buy,
-                                        PositionSide::Both => {
-                                            if pos.size >= 0.0 {
-                                                Side::Sell
-                                            } else {
-                                                Side::Buy
-                                            }
-                                        }
                                     };
                                     (p, side)
                                 } else {
                                     let side = match pos.side {
                                         PositionSide::Long => Side::Buy,
                                         PositionSide::Short => Side::Sell,
-                                        PositionSide::Both => {
-                                            if pos.size >= 0.0 {
-                                                Side::Buy
-                                            } else {
-                                                Side::Sell
-                                            }
-                                        }
                                     };
                                     (0.0, side)
                                 }
@@ -1308,7 +1298,7 @@ pub(crate) async fn handle_open_position(
     exchange: String,
     symbol: String,
     side: PositionSide,
-    order_side: Side,
+    _order_side: Side,
     size: f64,
     leverage: Option<u32>,
     order_type: OrderType,
@@ -1339,7 +1329,6 @@ pub(crate) async fn handle_open_position(
         let resolved_side = match side {
             PositionSide::Long => Side::Buy,
             PositionSide::Short => Side::Sell,
-            PositionSide::Both => order_side,
         };
 
         let mut params = PlaceOrderParams {
@@ -1503,7 +1492,6 @@ pub(crate) async fn handle_open_position(
     let resolved_side = match side {
         PositionSide::Long => Side::Buy,
         PositionSide::Short => Side::Sell,
-        PositionSide::Both => order_side,
     };
 
     let mut params = PlaceOrderParams {
@@ -1682,13 +1670,6 @@ pub(crate) async fn handle_close_position(
     let close_side = match position.side {
         PositionSide::Long => Side::Sell,
         PositionSide::Short => Side::Buy,
-        PositionSide::Both => {
-            if position.size >= 0.0 {
-                Side::Sell
-            } else {
-                Side::Buy
-            }
-        }
     };
 
     let mut params = PlaceOrderParams {
@@ -1842,10 +1823,13 @@ pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol:
     }
 }
 
+/// Resolves `position_side` from the order `side` + `reduce_only` when the
+/// caller omitted it. In Hedge-only mode this is the only valid inference;
+/// OneWay (position_side=None) is no longer accepted downstream.
 pub(crate) fn adjust_params_for_position_mode(params: &mut PlaceOrderParams, mode: PositionMode) {
     match mode {
         PositionMode::Hedge => {
-            if params.position_side.is_none() || params.position_side == Some(PositionSide::Both) {
+            if params.position_side.is_none() {
                 params.position_side = match (&params.side, params.reduce_only) {
                     (Side::Buy, false) => Some(PositionSide::Long),
                     (Side::Sell, false) => Some(PositionSide::Short),
@@ -1856,7 +1840,13 @@ pub(crate) fn adjust_params_for_position_mode(params: &mut PlaceOrderParams, mod
             params.reduce_only = false;
         }
         PositionMode::OneWay => {
-            params.position_side = None;
+            // OneWay is not supported — refuse to silently strip position_side.
+            // The engine should never reach here because startup validation
+            // rejects OneWay accounts; this arm is a defensive guard.
+            tracing::error!(
+                "adjust_params_for_position_mode called with OneWay mode — \
+                 this should have been caught at startup. Leaving position_side as-is."
+            );
         }
     }
 }

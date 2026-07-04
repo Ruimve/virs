@@ -9,12 +9,15 @@ pub enum Side {
     Sell,
 }
 
-/// Position side (for hedge mode)
+/// Position side (hedge mode only — OneWay is not supported).
+/// A Binance futures account must be switched to Hedge mode before use;
+/// `PositionSide::Both` (OneWay semantics) is intentionally absent so that
+/// the type system forbids the silent PnL-miscalculation path that existed
+/// when Both was a valid variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PositionSide {
     Long,
     Short,
-    Both,
 }
 
 /// Position mode
@@ -178,7 +181,6 @@ mod sqlx_impls {
             let s = match self {
                 PositionSide::Long => "long",
                 PositionSide::Short => "short",
-                PositionSide::Both => "both",
             };
             <&str as sqlx::Encode<sqlx::Postgres>>::encode_by_ref(&s, buf)
         }

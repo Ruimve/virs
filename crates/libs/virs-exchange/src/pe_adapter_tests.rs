@@ -64,14 +64,6 @@ fn pe3_2_short() {
 }
 
 #[test]
-fn pe3_3_both() {
-    assert_eq!(
-        convert_position_side(&Some(PositionSide::Both)),
-        Some(models::PositionSide::Both)
-    );
-}
-
-#[test]
 fn pe3_4_none() {
     assert_eq!(convert_position_side(&None), None);
 }
@@ -189,14 +181,6 @@ fn pe6_2_short() {
     assert_eq!(
         convert_virs_position_side(&models::PositionSide::Short),
         PositionSide::Short
-    );
-}
-
-#[test]
-fn pe6_3_both() {
-    assert_eq!(
-        convert_virs_position_side(&models::PositionSide::Both),
-        PositionSide::Both
     );
 }
 

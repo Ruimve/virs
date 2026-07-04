@@ -68,7 +68,6 @@ fn position_side_str(side: &virs_types::PositionSide) -> &'static str {
     match side {
         virs_types::PositionSide::Long => "long",
         virs_types::PositionSide::Short => "short",
-        virs_types::PositionSide::Both => "both",
     }
 }
 
