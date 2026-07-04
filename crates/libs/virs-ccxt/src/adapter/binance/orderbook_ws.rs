@@ -3,7 +3,7 @@
 //! Subscribes to `<symbol>@depth20@500ms` partial book depth streams
 //! (top 20 bid/ask levels, pushed every 500ms).
 //!
-//! Mirrors `BinanceKlineWs` architecture: reconnect with backoff,
+//! Mirrors `KlineWs` architecture: reconnect with backoff,
 //! dynamic subscribe/unsubscribe, symbol map for unified format.
 //!
 //! Stream formats:
@@ -181,7 +181,7 @@ enum WsCommand {
     Unsubscribe(String),
 }
 
-pub struct BinanceOrderBookWs {
+pub struct OrderBookWs {
     ws_url: String,
     reconnect_delay_secs: u64,
     max_reconnect_delay_secs: u64,
@@ -196,7 +196,7 @@ pub struct BinanceOrderBookWs {
     command_tx: Option<mpsc::UnboundedSender<WsCommand>>,
 }
 
-impl BinanceOrderBookWs {
+impl OrderBookWs {
     pub fn new(
         ws_url: String,
         reconnect_delay_secs: u64,
@@ -247,7 +247,7 @@ impl BinanceOrderBookWs {
 }
 
 #[async_trait]
-impl OrderBookWsClient for BinanceOrderBookWs {
+impl OrderBookWsClient for OrderBookWs {
     async fn start(&mut self, update_tx: broadcast::Sender<WsOrderBookEvent>) {
         if self.running.load(Ordering::Relaxed) {
             return;
@@ -277,11 +277,11 @@ impl OrderBookWsClient for BinanceOrderBookWs {
             while running.load(Ordering::Relaxed) {
                 let connect_start = tokio::time::Instant::now();
 
-                tracing::debug!("[BinanceOrderBookWs] Connecting to {}...", ws_url);
+                tracing::debug!("[OrderBookWs] Connecting to {}...", ws_url);
 
                 match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
-                        tracing::debug!("[BinanceOrderBookWs] Connected to {}", ws_url);
+                        tracing::debug!("[OrderBookWs] Connected to {}", ws_url);
                         reconnect_delay = reconnect_delay_secs;
 
                         if !is_first_connect {
@@ -298,7 +298,7 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                                 let id = request_id.fetch_add(1, Ordering::Relaxed);
                                 let subs_vec: Vec<&String> = subs.iter().collect();
                                 tracing::debug!(
-                                    "[BinanceOrderBookWs] Resubscribing {} streams",
+                                    "[OrderBookWs] Resubscribing {} streams",
                                     subs.len()
                                 );
                                 let msg = serde_json::json!({
@@ -313,7 +313,7 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                                         .is_err()
                                     {
                                         tracing::error!(
-                                            "[BinanceOrderBookWs] Failed to send resubscribe"
+                                            "[OrderBookWs] Failed to send resubscribe"
                                         );
                                         continue;
                                     }
@@ -332,7 +332,7 @@ impl OrderBookWsClient for BinanceOrderBookWs {
 
                             if connect_start.elapsed() > max_lifetime {
                                 tracing::debug!(
-                                    "[BinanceOrderBookWs] Max lifetime reached, reconnecting"
+                                    "[OrderBookWs] Max lifetime reached, reconnecting"
                                 );
                                 break;
                             }
@@ -369,13 +369,13 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                                                     }
                                                 } else {
                                                     tracing::debug!(
-                                                        "[BinanceOrderBookWs] Non-depth message: {}",
+                                                        "[OrderBookWs] Non-depth message: {}",
                                                         &text[..text.len().min(200)]
                                                     );
                                                 }
                                             } else {
                                                 tracing::warn!(
-                                                    "[BinanceOrderBookWs] Failed to parse: {}",
+                                                    "[OrderBookWs] Failed to parse: {}",
                                                     &text[..text.len().min(200)]
                                                 );
                                             }
@@ -384,15 +384,15 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                                             let _ = write.send(tungstenite::Message::Pong(data)).await;
                                         }
                                         Some(Ok(tungstenite::Message::Close(_))) => {
-                                            tracing::warn!("[BinanceOrderBookWs] Server closed");
+                                            tracing::warn!("[OrderBookWs] Server closed");
                                             break;
                                         }
                                         Some(Err(e)) => {
-                                            tracing::error!("[BinanceOrderBookWs] Read error: {}", e);
+                                            tracing::error!("[OrderBookWs] Read error: {}", e);
                                             break;
                                         }
                                         None => {
-                                            tracing::warn!("[BinanceOrderBookWs] Stream ended");
+                                            tracing::warn!("[OrderBookWs] Stream ended");
                                             break;
                                         }
                                         _ => {}
@@ -401,7 +401,7 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                                 _ = ping_tick.tick() => {
                                     let ping = tungstenite::Message::Ping(vec![].into());
                                     if write.send(ping).await.is_err() {
-                                        tracing::warn!("[BinanceOrderBookWs] Ping failed");
+                                        tracing::warn!("[OrderBookWs] Ping failed");
                                         break;
                                     }
                                 }
@@ -416,11 +416,11 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                                             });
                                             if let Ok(text) = serde_json::to_string(&msg) {
                                                 if write.send(tungstenite::Message::Text(text.into())).await.is_err() {
-                                                    tracing::warn!("[BinanceOrderBookWs] Subscribe send failed");
+                                                    tracing::warn!("[OrderBookWs] Subscribe send failed");
                                                     break;
                                                 }
                                                 tracing::debug!(
-                                                    "[BinanceOrderBookWs] Subscribed to {}",
+                                                    "[OrderBookWs] Subscribed to {}",
                                                     stream_name
                                                 );
                                             }
@@ -434,11 +434,11 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                                             });
                                             if let Ok(text) = serde_json::to_string(&msg) {
                                                 if write.send(tungstenite::Message::Text(text.into())).await.is_err() {
-                                                    tracing::warn!("[BinanceOrderBookWs] Unsubscribe send failed");
+                                                    tracing::warn!("[OrderBookWs] Unsubscribe send failed");
                                                     break;
                                                 }
                                                 tracing::debug!(
-                                                    "[BinanceOrderBookWs] Unsubscribed from {}",
+                                                    "[OrderBookWs] Unsubscribed from {}",
                                                     stream_name
                                                 );
                                             }
@@ -447,7 +447,7 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                                     }
                                 }
                                 _ = shutdown_rx.recv() => {
-                                    tracing::debug!("[BinanceOrderBookWs] Shutdown requested");
+                                    tracing::debug!("[OrderBookWs] Shutdown requested");
                                     let _ = write.send(tungstenite::Message::Close(None)).await;
                                     running.store(false, Ordering::Relaxed);
                                     return;
@@ -456,7 +456,7 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                         }
                     }
                     Err(e) => {
-                        tracing::error!("[BinanceOrderBookWs] Connection failed: {}", e);
+                        tracing::error!("[OrderBookWs] Connection failed: {}", e);
                     }
                 }
 
@@ -465,7 +465,7 @@ impl OrderBookWsClient for BinanceOrderBookWs {
                 }
 
                 tracing::debug!(
-                    "[BinanceOrderBookWs] Reconnecting in {}s...",
+                    "[OrderBookWs] Reconnecting in {}s...",
                     reconnect_delay
                 );
                 tokio::time::sleep(Duration::from_secs(reconnect_delay)).await;
@@ -473,7 +473,7 @@ impl OrderBookWsClient for BinanceOrderBookWs {
             }
 
             running.store(false, Ordering::Relaxed);
-            tracing::debug!("[BinanceOrderBookWs] Worker exited");
+            tracing::debug!("[OrderBookWs] Worker exited");
         });
     }
 

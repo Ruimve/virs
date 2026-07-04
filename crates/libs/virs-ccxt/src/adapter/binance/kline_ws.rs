@@ -152,7 +152,7 @@ enum WsCommand {
     Unsubscribe(String),
 }
 
-pub struct BinanceKlineWs {
+pub struct KlineWs {
     ws_url: String,
     reconnect_delay_secs: u64,
     max_reconnect_delay_secs: u64,
@@ -166,7 +166,7 @@ pub struct BinanceKlineWs {
     command_tx: Option<mpsc::UnboundedSender<WsCommand>>,
 }
 
-impl BinanceKlineWs {
+impl KlineWs {
     pub fn new(
         ws_url: String,
         reconnect_delay_secs: u64,
@@ -211,7 +211,7 @@ impl BinanceKlineWs {
 }
 
 #[async_trait]
-impl KlineWsClient for BinanceKlineWs {
+impl KlineWsClient for KlineWs {
     async fn start(&mut self, update_tx: broadcast::Sender<WsEvent>) {
         if self.running.load(Ordering::Relaxed) {
             return;
@@ -241,11 +241,11 @@ impl KlineWsClient for BinanceKlineWs {
             while running.load(Ordering::Relaxed) {
                 let connect_start = tokio::time::Instant::now();
 
-                tracing::debug!("[BinanceKlineWs] Connecting to {}...", ws_url);
+                tracing::debug!("[KlineWs] Connecting to {}...", ws_url);
 
                 match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
-                        tracing::debug!("[BinanceKlineWs] Connected to {} successfully", ws_url);
+                        tracing::debug!("[KlineWs] Connected to {} successfully", ws_url);
                         reconnect_delay = reconnect_delay_secs;
 
                         if !is_first_connect {
@@ -261,7 +261,7 @@ impl KlineWsClient for BinanceKlineWs {
                                 let id = request_id.fetch_add(1, Ordering::Relaxed);
                                 let subs_vec: Vec<&String> = subs.iter().collect();
                                 tracing::debug!(
-                                    "[BinanceKlineWs] Connected to {} (subscribing {} streams)",
+                                    "[KlineWs] Connected to {} (subscribing {} streams)",
                                     ws_url,
                                     subs.len()
                                 );
@@ -277,13 +277,13 @@ impl KlineWsClient for BinanceKlineWs {
                                         .is_err()
                                     {
                                         tracing::error!(
-                                            "[BinanceKlineWs] Failed to send subscription message"
+                                            "[KlineWs] Failed to send subscription message"
                                         );
                                         continue;
                                     }
                                 }
                             } else {
-                                tracing::warn!("[BinanceKlineWs] No streams to subscribe (subscriptions empty)");
+                                tracing::warn!("[KlineWs] No streams to subscribe (subscriptions empty)");
                             }
                         }
 
@@ -298,7 +298,7 @@ impl KlineWsClient for BinanceKlineWs {
 
                             if connect_start.elapsed() > max_lifetime {
                                 tracing::debug!(
-                                    "[BinanceKlineWs] Max lifetime reached, reconnecting..."
+                                    "[KlineWs] Max lifetime reached, reconnecting..."
                                 );
                                 break;
                             }
@@ -317,7 +317,7 @@ impl KlineWsClient for BinanceKlineWs {
                                                         };
                                                         let candle = data.to_candle();
                                                         tracing::debug!(
-                                                            "[BinanceKlineWs] 1m kline: {} open_time={} close={:.2} closed={}",
+                                                            "[KlineWs] 1m kline: {} open_time={} close={:.2} closed={}",
                                                             original_symbol, candle.open_time, candle.close, candle.closed
                                                         );
                                                         let _ = update_tx.send(WsEvent::Candle(WsCandleUpdate {
@@ -325,29 +325,29 @@ impl KlineWsClient for BinanceKlineWs {
                                                             candle,
                                                         }));
                                                     } else {
-                                                        tracing::debug!("[BinanceKlineWs] Received non-kline event: {}", data.event_type);
+                                                        tracing::debug!("[KlineWs] Received non-kline event: {}", data.event_type);
                                                     }
                                                 } else {
                                                     // 订阅确认/错误响应（无 kline 数据）
-                                                    tracing::debug!("[BinanceKlineWs] Received WS message (no kline data): {}", &text[..text.len().min(200)]);
+                                                    tracing::debug!("[KlineWs] Received WS message (no kline data): {}", &text[..text.len().min(200)]);
                                                 }
                                             } else {
-                                                tracing::warn!("[BinanceKlineWs] Failed to parse WS message: {}", &text[..text.len().min(200)]);
+                                                tracing::warn!("[KlineWs] Failed to parse WS message: {}", &text[..text.len().min(200)]);
                                             }
                                         }
                                         Some(Ok(tungstenite::Message::Ping(data))) => {
                                             let _ = write.send(tungstenite::Message::Pong(data)).await;
                                         }
                                         Some(Ok(tungstenite::Message::Close(_))) => {
-                                            tracing::warn!("[BinanceKlineWs] Server closed connection");
+                                            tracing::warn!("[KlineWs] Server closed connection");
                                             break;
                                         }
                                         Some(Err(e)) => {
-                                            tracing::error!("[BinanceKlineWs] Read error: {}", e);
+                                            tracing::error!("[KlineWs] Read error: {}", e);
                                             break;
                                         }
                                         None => {
-                                            tracing::warn!("[BinanceKlineWs] Stream ended");
+                                            tracing::warn!("[KlineWs] Stream ended");
                                             break;
                                         }
                                         _ => {}
@@ -356,7 +356,7 @@ impl KlineWsClient for BinanceKlineWs {
                                 _ = ping_tick.tick() => {
                                     let ping = tungstenite::Message::Ping(vec![].into());
                                     if write.send(ping).await.is_err() {
-                                        tracing::warn!("[BinanceKlineWs] Ping failed, reconnecting...");
+                                        tracing::warn!("[KlineWs] Ping failed, reconnecting...");
                                         break;
                                     }
                                 }
@@ -371,10 +371,10 @@ impl KlineWsClient for BinanceKlineWs {
                                             });
                                             if let Ok(text) = serde_json::to_string(&msg) {
                                                 if write.send(tungstenite::Message::Text(text.into())).await.is_err() {
-                                                    tracing::warn!("[BinanceKlineWs] Failed to send dynamic subscribe");
+                                                    tracing::warn!("[KlineWs] Failed to send dynamic subscribe");
                                                     break;
                                                 }
-                                                tracing::debug!("[BinanceKlineWs] Dynamically subscribed to stream {}", stream_name);
+                                                tracing::debug!("[KlineWs] Dynamically subscribed to stream {}", stream_name);
                                             }
                                         }
                                         Some(WsCommand::Unsubscribe(stream_name)) => {
@@ -386,20 +386,20 @@ impl KlineWsClient for BinanceKlineWs {
                                             });
                                             if let Ok(text) = serde_json::to_string(&msg) {
                                                 if write.send(tungstenite::Message::Text(text.into())).await.is_err() {
-                                                    tracing::warn!("[BinanceKlineWs] Failed to send dynamic unsubscribe");
+                                                    tracing::warn!("[KlineWs] Failed to send dynamic unsubscribe");
                                                     break;
                                                 }
-                                                tracing::debug!("[BinanceKlineWs] Dynamically unsubscribed from stream");
+                                                tracing::debug!("[KlineWs] Dynamically unsubscribed from stream");
                                             }
                                         }
                                         None => {
-                                            tracing::debug!("[BinanceKlineWs] Command channel closed");
+                                            tracing::debug!("[KlineWs] Command channel closed");
                                             break;
                                         }
                                     }
                                 }
                                 _ = shutdown_rx.recv() => {
-                                    tracing::debug!("[BinanceKlineWs] Shutdown requested");
+                                    tracing::debug!("[KlineWs] Shutdown requested");
                                     let _ = write.send(tungstenite::Message::Close(None)).await;
                                     running.store(false, Ordering::Relaxed);
                                     return;
@@ -408,7 +408,7 @@ impl KlineWsClient for BinanceKlineWs {
                         }
                     }
                     Err(e) => {
-                        tracing::error!("[BinanceKlineWs] Connection failed: {}", e);
+                        tracing::error!("[KlineWs] Connection failed: {}", e);
                     }
                 }
 
@@ -416,13 +416,13 @@ impl KlineWsClient for BinanceKlineWs {
                     break;
                 }
 
-                tracing::debug!("[BinanceKlineWs] Reconnecting in {}s...", reconnect_delay);
+                tracing::debug!("[KlineWs] Reconnecting in {}s...", reconnect_delay);
                 tokio::time::sleep(Duration::from_secs(reconnect_delay)).await;
                 reconnect_delay = (reconnect_delay * 2).min(max_reconnect_delay_secs);
             }
 
             running.store(false, Ordering::Relaxed);
-            tracing::debug!("[BinanceKlineWs] Worker exited");
+            tracing::debug!("[KlineWs] Worker exited");
         });
     }
 
@@ -771,21 +771,21 @@ mod tests {
 
     #[test]
     fn test_new_spot() {
-        let ws = BinanceKlineWs::new_spot(None);
+        let ws = KlineWs::new_spot(None);
         assert_eq!(ws.ws_url, "wss://stream.binance.com/ws");
         assert!(!ws.is_running());
     }
 
     #[test]
     fn test_new_perpetual() {
-        let ws = BinanceKlineWs::new_perpetual(None);
+        let ws = KlineWs::new_perpetual(None);
         assert_eq!(ws.ws_url, "wss://fstream.binance.com/market/ws");
         assert!(!ws.is_running());
     }
 
     #[tokio::test]
     async fn test_subscribe_without_start() {
-        let ws = BinanceKlineWs::new_spot(None);
+        let ws = KlineWs::new_spot(None);
         assert!(!ws.is_running());
 
         // 不调用 start()，直接调用 subscribe

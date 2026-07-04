@@ -663,7 +663,7 @@ impl Exchange for BinanceExchange {
             )
         })?;
         let (tx, rx) = mpsc::channel(256);
-        let ws = user_data_ws_api::BinanceUserDataWsApi::new_spot(ed25519.clone());
+        let ws = user_data_ws_api::UserDataWsApi::new_spot(ed25519.clone());
         ws.start(tx);
         tracing::info!(
             "[BinanceExchange] Spot order WS API started (Ed25519, userDataStream.subscribe)"
@@ -683,11 +683,11 @@ impl Exchange for BinanceExchange {
             None => self.create_listen_key().await?,
         };
 
-        // 2. 按市场类型构造 BinanceUserDataWs
+        // 2. 按市场类型构造 UserDataWs
         let mut ws = if self.is_perpetual() {
-            user_data_ws::BinanceUserDataWs::new_perpetual(listen_key.clone())
+            user_data_ws::UserDataWs::new_perpetual(listen_key.clone())
         } else {
-            user_data_ws::BinanceUserDataWs::new_spot(listen_key.clone())
+            user_data_ws::UserDataWs::new_spot(listen_key.clone())
         };
 
         // 3. 获取 running flag 引用（keepalive task 据此判断 WS 是否已退出）

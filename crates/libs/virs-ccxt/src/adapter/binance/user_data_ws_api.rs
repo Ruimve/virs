@@ -34,7 +34,7 @@ const SPOT_WS_API_URL: &str = "wss://ws-api.binance.com/ws-api/v3";
 
 /// Binance WebSocket API 用户数据流客户端（基于 Ed25519 认证）。
 ///
-/// 与 `BinanceUserDataWs`（listenKey 模式）的区别：
+/// 与 `UserDataWs`（listenKey 模式）的区别：
 /// - 无需调用 `POST /api/v3/userDataStream` 获取 listenKey
 /// - 通过 `session.logon` 用 Ed25519 签名直接认证
 /// - 通过 `userDataStream.subscribe` 直接订阅，不需要把 listenKey 拼到 URL
@@ -42,7 +42,7 @@ const SPOT_WS_API_URL: &str = "wss://ws-api.binance.com/ws-api/v3";
 ///
 /// 生命周期：`start()` 后客户端结构体可被丢弃，后台 task 通过 `event_tx.send()`
 /// 失败（接收方关闭）或 `stop()` 设置 `running=false` 来退出。
-pub struct BinanceUserDataWsApi {
+pub struct UserDataWsApi {
     url: String,
     ed25519_signer: BinanceEd25519Signer,
     reconnect_delay_secs: u64,
@@ -55,7 +55,7 @@ pub struct BinanceUserDataWsApi {
     request_id: Arc<AtomicU64>,
 }
 
-impl BinanceUserDataWsApi {
+impl UserDataWsApi {
     /// 创建现货用户数据流 WebSocket API 客户端
     pub fn new_spot(ed25519_signer: BinanceEd25519Signer) -> Self {
         Self {
@@ -101,11 +101,11 @@ impl BinanceUserDataWsApi {
             while running.load(Ordering::Relaxed) {
                 let connect_start = tokio::time::Instant::now();
 
-                tracing::debug!("[BinanceUserDataWsApi] Connecting to {}...", url);
+                tracing::debug!("[UserDataWsApi] Connecting to {}...", url);
 
                 match connect_async(&url).await {
                     Ok((ws_stream, _)) => {
-                        tracing::debug!("[BinanceUserDataWsApi] Connected to {}", url);
+                        tracing::debug!("[UserDataWsApi] Connected to {}", url);
                         reconnect_delay = reconnect_delay_secs;
 
                         if event_tx
@@ -114,7 +114,7 @@ impl BinanceUserDataWsApi {
                             .is_err()
                         {
                             tracing::warn!(
-                                "[BinanceUserDataWsApi] Event channel closed during connect, stopping"
+                                "[UserDataWsApi] Event channel closed during connect, stopping"
                             );
                             running.store(false, Ordering::Relaxed);
                             break;
@@ -131,18 +131,18 @@ impl BinanceUserDataWsApi {
                                     Err(e) => {
                                         tracing::error!(
                                             error = %e,
-                                            "[BinanceUserDataWsApi] Failed to serialize logon_msg — skipping send"
+                                            "[UserDataWsApi] Failed to serialize logon_msg — skipping send"
                                         );
                                         continue;
                                     }
                                 };
                                 tracing::debug!(
-                                    "[BinanceUserDataWsApi] Sending session.logon (id={})",
+                                    "[UserDataWsApi] Sending session.logon (id={})",
                                     logon_id
                                 );
                                 if write.send(Message::Text(logon_text.into())).await.is_err() {
                                     tracing::error!(
-                                        "[BinanceUserDataWsApi] Failed to send session.logon"
+                                        "[UserDataWsApi] Failed to send session.logon"
                                     );
                                     continue;
                                 }
@@ -150,7 +150,7 @@ impl BinanceUserDataWsApi {
                             Err(e) => {
                                 tracing::error!(
                                     error = %e,
-                                    "[BinanceUserDataWsApi] Failed to build session.logon request"
+                                    "[UserDataWsApi] Failed to build session.logon request"
                                 );
                                 continue;
                             }
@@ -163,12 +163,12 @@ impl BinanceUserDataWsApi {
                         match logon_ok {
                             Ok(true) => {
                                 tracing::info!(
-                                    "[BinanceUserDataWsApi] session.logon succeeded, user data stream authenticated"
+                                    "[UserDataWsApi] session.logon succeeded, user data stream authenticated"
                                 );
                             }
                             Ok(false) => {
                                 tracing::error!(
-                                    "[BinanceUserDataWsApi] session.logon returned non-200 status; \
+                                    "[UserDataWsApi] session.logon returned non-200 status; \
                                      check if API key is Ed25519 type"
                                 );
                                 let _ = event_tx
@@ -182,7 +182,7 @@ impl BinanceUserDataWsApi {
                             Err(e) => {
                                 tracing::error!(
                                     error = %e,
-                                    "[BinanceUserDataWsApi] Failed to receive session.logon response"
+                                    "[UserDataWsApi] Failed to receive session.logon response"
                                 );
                                 continue;
                             }
@@ -200,18 +200,18 @@ impl BinanceUserDataWsApi {
                             Err(e) => {
                                 tracing::error!(
                                     error = %e,
-                                    "[BinanceUserDataWsApi] Failed to serialize sub_msg — skipping send"
+                                    "[UserDataWsApi] Failed to serialize sub_msg — skipping send"
                                 );
                                 continue;
                             }
                         };
                         tracing::debug!(
-                            "[BinanceUserDataWsApi] Sending userDataStream.subscribe (id={})",
+                            "[UserDataWsApi] Sending userDataStream.subscribe (id={})",
                             sub_id
                         );
                         if write.send(Message::Text(sub_text.into())).await.is_err() {
                             tracing::error!(
-                                "[BinanceUserDataWsApi] Failed to send userDataStream.subscribe"
+                                "[UserDataWsApi] Failed to send userDataStream.subscribe"
                             );
                             continue;
                         }
@@ -221,19 +221,19 @@ impl BinanceUserDataWsApi {
                         match sub_ok {
                             Ok(true) => {
                                 tracing::info!(
-                                    "[BinanceUserDataWsApi] userDataStream.subscribe succeeded"
+                                    "[UserDataWsApi] userDataStream.subscribe succeeded"
                                 );
                             }
                             Ok(false) => {
                                 tracing::error!(
-                                    "[BinanceUserDataWsApi] userDataStream.subscribe returned non-200 status"
+                                    "[UserDataWsApi] userDataStream.subscribe returned non-200 status"
                                 );
                                 continue;
                             }
                             Err(e) => {
                                 tracing::error!(
                                     error = %e,
-                                    "[BinanceUserDataWsApi] Failed to receive subscribe response"
+                                    "[UserDataWsApi] Failed to receive subscribe response"
                                 );
                                 continue;
                             }
@@ -255,7 +255,7 @@ impl BinanceUserDataWsApi {
                             }
                             if connect_start.elapsed() > max_lifetime {
                                 tracing::debug!(
-                                    "[BinanceUserDataWsApi] Max lifetime reached, reconnecting..."
+                                    "[UserDataWsApi] Max lifetime reached, reconnecting..."
                                 );
                                 break;
                             }
@@ -282,18 +282,18 @@ impl BinanceUserDataWsApi {
                                             let _ = write.send(Message::Pong(p)).await;
                                         }
                                         Some(Ok(Message::Close(_))) => {
-                                            tracing::debug!("[BinanceUserDataWsApi] Server closed connection");
+                                            tracing::debug!("[UserDataWsApi] Server closed connection");
                                             break;
                                         }
                                         Some(Err(e)) => {
                                             tracing::warn!(
                                                 error = %e,
-                                                "[BinanceUserDataWsApi] WS read error"
+                                                "[UserDataWsApi] WS read error"
                                             );
                                             break;
                                         }
                                         None => {
-                                            tracing::debug!("[BinanceUserDataWsApi] WS stream ended");
+                                            tracing::debug!("[UserDataWsApi] WS stream ended");
                                             break;
                                         }
                                         _ => {}
@@ -304,7 +304,7 @@ impl BinanceUserDataWsApi {
                                         break;
                                     }
                                     if write.send(Message::Ping(Vec::new().into())).await.is_err() {
-                                        tracing::warn!("[BinanceUserDataWsApi] Failed to send WS ping");
+                                        tracing::warn!("[UserDataWsApi] Failed to send WS ping");
                                         break;
                                     }
                                 }
@@ -324,7 +324,7 @@ impl BinanceUserDataWsApi {
                                         Err(e) => {
                                             tracing::error!(
                                                 error = %e,
-                                                "[BinanceUserDataWsApi] Failed to serialize ping_msg — skipping send"
+                                                "[UserDataWsApi] Failed to serialize ping_msg — skipping send"
                                             );
                                             continue;
                                         }
@@ -334,11 +334,11 @@ impl BinanceUserDataWsApi {
                                         .await
                                         .is_err()
                                     {
-                                        tracing::warn!("[BinanceUserDataWsApi] Failed to send userDataStream.ping");
+                                        tracing::warn!("[UserDataWsApi] Failed to send userDataStream.ping");
                                         break;
                                     }
                                     tracing::debug!(
-                                        "[BinanceUserDataWsApi] Sent userDataStream.ping (id={})",
+                                        "[UserDataWsApi] Sent userDataStream.ping (id={})",
                                         ping_id
                                     );
                                 }
@@ -356,7 +356,7 @@ impl BinanceUserDataWsApi {
                     Err(e) => {
                         tracing::warn!(
                             error = %e,
-                            "[BinanceUserDataWsApi] Failed to connect, retrying in {}s",
+                            "[UserDataWsApi] Failed to connect, retrying in {}s",
                             reconnect_delay
                         );
                         if event_tx
@@ -364,7 +364,7 @@ impl BinanceUserDataWsApi {
                             .await
                             .is_err()
                         {
-                            tracing::warn!("[BinanceUserDataWsApi] Event channel closed, stopping");
+                            tracing::warn!("[UserDataWsApi] Event channel closed, stopping");
                             running.store(false, Ordering::Relaxed);
                             break;
                         }
@@ -374,7 +374,7 @@ impl BinanceUserDataWsApi {
                 }
             }
 
-            tracing::debug!("[BinanceUserDataWsApi] Background task exited");
+            tracing::debug!("[UserDataWsApi] Background task exited");
         });
     }
 
@@ -399,7 +399,7 @@ async fn handle_text_message(text: &str, event_tx: &mpsc::Sender<WsFeedEvent>) -
         if json.get("id").is_some() && json.get("status").is_some() {
             // 请求响应
             tracing::debug!(
-                "[BinanceUserDataWsApi] Request response: id={} status={}",
+                "[UserDataWsApi] Request response: id={} status={}",
                 json.get("id").and_then(|v| v.as_u64()).unwrap_or(0),
                 json.get("status").and_then(|v| v.as_u64()).unwrap_or(0),
             );
@@ -417,27 +417,27 @@ async fn handle_text_message(text: &str, event_tx: &mpsc::Sender<WsFeedEvent>) -
         if event_type == "executionReport" || event_type == "ORDER_TRADE_UPDATE" {
             if let Some(event) = bmsg.to_ws_feed_event() {
                 tracing::debug!(
-                    "[BinanceUserDataWsApi] {} event received, forwarding",
+                    "[UserDataWsApi] {} event received, forwarding",
                     event_type
                 );
                 if event_tx.send(event).await.is_err() {
-                    tracing::warn!("[BinanceUserDataWsApi] Event channel closed, stopping");
+                    tracing::warn!("[UserDataWsApi] Event channel closed, stopping");
                     return true;
                 }
             }
         } else if event_type == "outboundAccountPosition" || event_type == "ACCOUNT_UPDATE" {
             tracing::debug!(
-                "[BinanceUserDataWsApi] {} event received (balance/position update)",
+                "[UserDataWsApi] {} event received (balance/position update)",
                 event_type
             );
         } else if event_type == "listStatus" {
-            tracing::debug!("[BinanceUserDataWsApi] listStatus event received (OCO order)");
+            tracing::debug!("[UserDataWsApi] listStatus event received (OCO order)");
         } else {
-            tracing::trace!("[BinanceUserDataWsApi] Ignoring event type: {}", event_type);
+            tracing::trace!("[UserDataWsApi] Ignoring event type: {}", event_type);
         }
     } else {
         tracing::trace!(
-            "[BinanceUserDataWsApi] Unparseable message: {}",
+            "[UserDataWsApi] Unparseable message: {}",
             &text[..text.len().min(200)]
         );
     }

@@ -247,7 +247,7 @@ impl ExecutionReportInner {
 }
 
 // ============================================================
-// BinanceUserDataWs: 订单 WebSocket 客户端
+// UserDataWs: 订单 WebSocket 客户端
 // ============================================================
 
 /// Binance User Data Stream 订单推送客户端
@@ -255,11 +255,11 @@ impl ExecutionReportInner {
 /// 连接到 Binance 的 User Data Stream（需要 listenKey），
 /// 接收 executionReport 事件并转换为 WsFeedEvent。
 ///
-/// 连接管理参考 BinanceKlineWs：
+/// 连接管理参考 KlineWs：
 /// - 指数退避重连
 /// - Ping/Pong 心跳
 /// - 最大生命周期（23 小时）
-pub struct BinanceUserDataWs {
+pub struct UserDataWs {
     /// WS URL（包含 listenKey）
     ws_url: String,
     /// 基础 URL（不含 listenKey，用于重连时拼接新 listenKey）
@@ -271,7 +271,7 @@ pub struct BinanceUserDataWs {
     running: Arc<AtomicBool>,
 }
 
-impl BinanceUserDataWs {
+impl UserDataWs {
     /// 创建新的订单 WS 客户端
     ///
     /// # 参数
@@ -347,11 +347,11 @@ impl BinanceUserDataWs {
             while running.load(Ordering::Relaxed) {
                 let connect_start = tokio::time::Instant::now();
 
-                tracing::debug!("[BinanceUserDataWs] Connecting to {}...", ws_url);
+                tracing::debug!("[UserDataWs] Connecting to {}...", ws_url);
 
                 match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
-                        tracing::debug!("[BinanceUserDataWs] Connected to {}", ws_url);
+                        tracing::debug!("[UserDataWs] Connected to {}", ws_url);
                         reconnect_delay = reconnect_delay_secs;
 
                         // 发送连接恢复事件
@@ -372,7 +372,7 @@ impl BinanceUserDataWs {
 
                             if connect_start.elapsed() > max_lifetime {
                                 tracing::debug!(
-                                    "[BinanceUserDataWs] Max lifetime reached, reconnecting..."
+                                    "[UserDataWs] Max lifetime reached, reconnecting..."
                                 );
                                 break;
                             }
@@ -396,11 +396,11 @@ impl BinanceUserDataWs {
                                                         _ => "unknown".to_string(),
                                                     };
                                                     tracing::debug!(
-                                                        "[BinanceUserDataWs] {} -> OrderUpdate status={} forwarded",
+                                                        "[UserDataWs] {} -> OrderUpdate status={} forwarded",
                                                         event_type, status_str
                                                     );
                                                     if event_tx.send(event).await.is_err() {
-                                                        tracing::warn!("[BinanceUserDataWs] Event channel closed, stopping");
+                                                        tracing::warn!("[UserDataWs] Event channel closed, stopping");
                                                         running.store(false, Ordering::Relaxed);
                                                         return;
                                                     }
@@ -410,24 +410,24 @@ impl BinanceUserDataWs {
                                                     match event_type.as_str() {
                                                         "ACCOUNT_UPDATE" => {
                                                             tracing::debug!(
-                                                                "[BinanceUserDataWs] ACCOUNT_UPDATE received (balance/position change)"
+                                                                "[UserDataWs] ACCOUNT_UPDATE received (balance/position change)"
                                                             );
                                                         }
                                                         "listenKeyExpired" => {
                                                             tracing::warn!(
-                                                                "[BinanceUserDataWs] listenKey expired, will reconnect"
+                                                                "[UserDataWs] listenKey expired, will reconnect"
                                                             );
                                                             break;
                                                         }
                                                         "serverShutdown" => {
                                                             tracing::info!(
-                                                                "[BinanceUserDataWs] serverShutdown received, server will disconnect soon; reconnecting"
+                                                                "[UserDataWs] serverShutdown received, server will disconnect soon; reconnecting"
                                                             );
                                                             break;
                                                         }
                                                         _ => {
                                                             tracing::trace!(
-                                                                "[BinanceUserDataWs] Ignoring event type: {}",
+                                                                "[UserDataWs] Ignoring event type: {}",
                                                                 event_type
                                                             );
                                                         }
@@ -435,7 +435,7 @@ impl BinanceUserDataWs {
                                                 }
                                             } else {
                                                 tracing::warn!(
-                                                    "[BinanceUserDataWs] Failed to parse WS message: {}",
+                                                    "[UserDataWs] Failed to parse WS message: {}",
                                                     &text[..text.len().min(200)]
                                                 );
                                             }
@@ -444,15 +444,15 @@ impl BinanceUserDataWs {
                                             let _ = write.send(tungstenite::Message::Pong(data)).await;
                                         }
                                         Some(Ok(tungstenite::Message::Close(_))) => {
-                                            tracing::warn!("[BinanceUserDataWs] Server closed connection");
+                                            tracing::warn!("[UserDataWs] Server closed connection");
                                             break;
                                         }
                                         Some(Err(e)) => {
-                                            tracing::error!("[BinanceUserDataWs] Read error: {}", e);
+                                            tracing::error!("[UserDataWs] Read error: {}", e);
                                             break;
                                         }
                                         None => {
-                                            tracing::warn!("[BinanceUserDataWs] Stream ended");
+                                            tracing::warn!("[UserDataWs] Stream ended");
                                             break;
                                         }
                                         _ => {}
@@ -461,7 +461,7 @@ impl BinanceUserDataWs {
                                 _ = ping_tick.tick() => {
                                     let ping = tungstenite::Message::Ping(vec![].into());
                                     if write.send(ping).await.is_err() {
-                                        tracing::warn!("[BinanceUserDataWs] Ping failed, reconnecting...");
+                                        tracing::warn!("[UserDataWs] Ping failed, reconnecting...");
                                         break;
                                     }
                                 }
@@ -474,7 +474,7 @@ impl BinanceUserDataWs {
                             .await;
                     }
                     Err(e) => {
-                        tracing::error!("[BinanceUserDataWs] Connection failed: {}", e);
+                        tracing::error!("[UserDataWs] Connection failed: {}", e);
                     }
                 }
 
@@ -482,13 +482,13 @@ impl BinanceUserDataWs {
                     break;
                 }
 
-                tracing::debug!("[BinanceUserDataWs] Reconnecting in {}s...", reconnect_delay);
+                tracing::debug!("[UserDataWs] Reconnecting in {}s...", reconnect_delay);
                 tokio::time::sleep(Duration::from_secs(reconnect_delay)).await;
                 reconnect_delay = (reconnect_delay * 2).min(max_reconnect_delay_secs);
             }
 
             running.store(false, Ordering::Relaxed);
-            tracing::debug!("[BinanceUserDataWs] Worker exited");
+            tracing::debug!("[UserDataWs] Worker exited");
         });
     }
 }
@@ -853,7 +853,7 @@ mod tests {
 
     #[test]
     fn test_new_perpetual() {
-        let ws = BinanceUserDataWs::new_perpetual("test_listen_key".to_string());
+        let ws = UserDataWs::new_perpetual("test_listen_key".to_string());
         assert_eq!(
             ws.ws_url,
             "wss://fstream.binance.com/private/ws/test_listen_key"
@@ -864,14 +864,14 @@ mod tests {
 
     #[test]
     fn test_new_spot() {
-        let ws = BinanceUserDataWs::new_spot("my_key".to_string());
+        let ws = UserDataWs::new_spot("my_key".to_string());
         assert_eq!(ws.ws_url, "wss://stream.binance.com/ws/my_key");
         assert!(!ws.is_running());
     }
 
     #[test]
     fn test_update_listen_key() {
-        let mut ws = BinanceUserDataWs::new_perpetual("old_key".to_string());
+        let mut ws = UserDataWs::new_perpetual("old_key".to_string());
         assert_eq!(ws.ws_url, "wss://fstream.binance.com/private/ws/old_key");
 
         ws.update_listen_key("new_key".to_string());

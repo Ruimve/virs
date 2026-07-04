@@ -120,10 +120,10 @@ async fn main() -> VirsResult<()> {
     };
     let kline_source = Arc::new(ExchangeKlineSource::new(exchange_registry.clone()));
     let spot_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::kline_ws::BinanceKlineWs::new_spot(config.proxy.as_deref()),
+        virs_ccxt::adapter::binance::kline_ws::KlineWs::new_spot(config.proxy.as_deref()),
     ));
     let perpetual_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::kline_ws::BinanceKlineWs::new_perpetual(
+        virs_ccxt::adapter::binance::kline_ws::KlineWs::new_perpetual(
             config.proxy.as_deref(),
         ),
     ));
@@ -138,12 +138,12 @@ async fn main() -> VirsResult<()> {
     // ── OrderBook Engine ──
     // Created at boot but only subscribes when bots need data
     let ob_spot_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::orderbook_ws::BinanceOrderBookWs::new_spot(
+        virs_ccxt::adapter::binance::orderbook_ws::OrderBookWs::new_spot(
             config.proxy.as_deref(),
         ),
     ));
     let ob_perpetual_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::orderbook_ws::BinanceOrderBookWs::new_perpetual(
+        virs_ccxt::adapter::binance::orderbook_ws::OrderBookWs::new_perpetual(
             config.proxy.as_deref(),
         ),
     ));

@@ -162,7 +162,7 @@ pub trait Exchange: Send + Sync {
     ///
     /// 实现负责：
     /// 1. 调用 `create_listen_key` 获取 listenKey（若调用方未提供）
-    /// 2. 构造并启动对应交易所/市场类型的 BinanceUserDataWs
+    /// 2. 构造并启动对应交易所/市场类型的 UserDataWs
     /// 3. 返回事件 receiver
     ///
     /// 调用方可通过 `listen_key_hint` 传入已缓存的 listenKey 以避免重复创建。
