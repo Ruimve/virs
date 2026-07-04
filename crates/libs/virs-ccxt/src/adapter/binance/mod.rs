@@ -27,7 +27,7 @@ use tokio::sync::mpsc;
 
 use crate::auth::{hmac_sha256_hex, insert_header, SignedRequest, Signer};
 use crate::types::*;
-use crate::ws_types::WsFeedEvent;
+use virs_types::WsFeedEvent;
 use crate::{Exchange, ExchangeClient};
 use virs_error::ExchangeError;
 

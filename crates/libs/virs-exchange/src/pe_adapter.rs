@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, info, warn};
 
@@ -156,38 +155,6 @@ pub fn convert_exchange_position(ep: &models::ExchangePosition) -> ExchangePosit
 
 pub fn no_exchange_error() -> ExchangeError {
     ExchangeError::Internal("No perpetual exchange registered in Exchanges".to_string())
-}
-
-/// Convert ccxt WsFeedEvent to virs_types WsFeedEvent
-pub fn convert_ws_feed_event(event: virs_ccxt::ws_types::WsFeedEvent) -> WsFeedEvent {
-    match event {
-        virs_ccxt::ws_types::WsFeedEvent::OrderUpdate {
-            exchange_order_id,
-            symbol,
-            status,
-            filled,
-            remaining,
-            price,
-            amount,
-            commission,
-            timestamp,
-            position_side,
-        } => WsFeedEvent::OrderUpdate {
-            exchange_order_id,
-            symbol,
-            status,
-            filled,
-            remaining,
-            price,
-            amount,
-            commission,
-            timestamp,
-            position_side,
-        },
-        virs_ccxt::ws_types::WsFeedEvent::ConnectionChanged { connected } => {
-            WsFeedEvent::ConnectionChanged { connected }
-        }
-    }
 }
 
 #[async_trait]
@@ -359,11 +326,6 @@ impl ExchangePe for CcxtExchangeAdapter {
     }
 
     async fn subscribe_order_updates(&self, symbols: &[&str]) -> PositionResult<OrderUpdateStream> {
-        let (tx, rx) = mpsc::channel(256);
-
-        // Spawn a task that receives ccxt WsFeedEvents and converts them
-        let (ccxt_tx, ccxt_rx) = mpsc::channel(256);
-
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
@@ -372,33 +334,14 @@ impl ExchangePe for CcxtExchangeAdapter {
         // 现货优先使用 WebSocket API（Ed25519 认证，替代废弃的 listenKey 方案）
         if !is_perpetual {
             match ex.start_spot_order_ws_api().await {
-                Ok(mut ws_rx) => {
+                Ok(ws_rx) => {
                     info!(
                         symbols_count = symbols.len(),
                         "Starting spot order updates via WebSocket API (Ed25519, userDataStream.subscribe)"
                     );
-                    // 转发 WS API 事件到 ccxt_rx
-                    tokio::spawn(async move {
-                        while let Some(event) = ws_rx.recv().await {
-                            if ccxt_tx.send(event).await.is_err() {
-                                break;
-                            }
-                        }
-                    });
-                    // ccxt_tx 已移入上面的 task；converter task 在 ccxt_rx 收到 None 时自动退出
-                    tokio::spawn(async move {
-                        let mut ccxt_rx = ccxt_rx;
-                        while let Some(event) = ccxt_rx.recv().await {
-                            let converted = convert_ws_feed_event(event);
-                            if tx.send(converted).await.is_err() {
-                                break;
-                            }
-                        }
-                    });
-                    return Ok(Box::pin(ReceiverStream::new(rx)));
+                    return Ok(Box::pin(ReceiverStream::new(ws_rx)));
                 }
                 Err(e) => {
-                    // 不支持 WS API（非 Ed25519 密钥），降级到 listenKey
                     warn!(
                         error = %e,
                         "Spot WebSocket API unavailable, falling back to deprecated listenKey. \
@@ -409,7 +352,6 @@ impl ExchangePe for CcxtExchangeAdapter {
         }
 
         // listenKey 路径（合约始终走这里；现货在 WS API 不可用时降级到这里）
-        // 通过 trait 方法调用，不感知具体交易所实现
         let listen_key_hint = self.listen_key.as_deref();
         match ex.start_listenkey_order_ws(listen_key_hint).await {
             Ok(ws_rx) => {
@@ -417,19 +359,9 @@ impl ExchangePe for CcxtExchangeAdapter {
                     symbols_count = symbols.len(),
                     "Starting WebSocket order updates via listenKey"
                 );
-                // 转发底层 WS 事件到 ccxt_rx
-                let mut ws_rx = ws_rx;
-                tokio::spawn(async move {
-                    while let Some(event) = ws_rx.recv().await {
-                        if ccxt_tx.send(event).await.is_err() {
-                            break;
-                        }
-                    }
-                });
+                Ok(Box::pin(ReceiverStream::new(ws_rx)))
             }
             Err(e) => {
-                drop(ccxt_tx);
-                drop(tx);
                 warn!(
                     error = %e,
                     market_type = ?ex.market_type(),
@@ -438,22 +370,8 @@ impl ExchangePe for CcxtExchangeAdapter {
                      migrate to Ed25519 API Key + WebSocket API (userDataStream.subscribe). \
                      For perpetual: check /fapi/v1/listenKey availability."
                 );
-                return Err(no_exchange_error().into());
+                Err(no_exchange_error().into())
             }
         }
-
-        // Spawn converter task
-        tokio::spawn(async move {
-            let mut ccxt_rx = ccxt_rx;
-            while let Some(event) = ccxt_rx.recv().await {
-                let converted = convert_ws_feed_event(event);
-                if tx.send(converted).await.is_err() {
-                    break;
-                }
-            }
-        });
-
-        // Convert mpsc::Receiver to Stream via ReceiverStream
-        Ok(Box::pin(ReceiverStream::new(rx)))
     }
 }

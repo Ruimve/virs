@@ -27,7 +27,7 @@ use virs_error::ExchangeError;
 
 use super::BinanceEd25519Signer;
 use crate::adapter::binance::user_data_ws::BinanceOrderMessage;
-use crate::ws_types::WsFeedEvent;
+use virs_types::WsFeedEvent;
 
 /// 现货 WebSocket API 端点
 const SPOT_WS_API_URL: &str = "wss://ws-api.binance.com/ws-api/v3";

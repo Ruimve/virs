@@ -46,26 +46,8 @@ pub trait KlineWsClient: Send + Sync {
 }
 
 // ---- Position Engine WS types ----
-
-/// WebSocket feed event from exchange order updates.
-#[derive(Debug, Clone, PartialEq)]
-pub enum WsFeedEvent {
-    OrderUpdate {
-        exchange_order_id: String,
-        symbol: String,
-        status: virs_types::OrderStatus,
-        filled: f64,
-        remaining: f64,
-        price: f64,
-        amount: f64,
-        commission: f64,
-        timestamp: chrono::DateTime<chrono::Utc>,
-        position_side: Option<virs_types::PositionSide>,
-    },
-    ConnectionChanged {
-        connected: bool,
-    },
-}
+// WsFeedEvent is now defined in virs_types::position and re-used directly.
+// This eliminates the duplicate definition and the convert_ws_feed_event hop.
 
 // ---- OrderBook WS types ----
 

@@ -153,45 +153,9 @@ fn int_4_1_no_exchange_error() {
 }
 
 // ============================================================
-// TC-INT-5: WsFeedEvent conversion
+// TC-INT-5: WsFeedEvent — no longer needs conversion
+// (virs-ccxt now uses virs_types::WsFeedEvent directly)
 // ============================================================
-
-#[test]
-fn int_5_1_ws_order_update_conversion() {
-    let now = Utc::now();
-    let ccxt_event = virs_ccxt::WsFeedEvent::OrderUpdate {
-        exchange_order_id: "test_order".into(),
-        symbol: "BTC/USDT".into(),
-        status: virs_types::OrderStatus::Filled,
-        filled: 1.0,
-        remaining: 0.0,
-        price: 50000.0,
-        amount: 1.0,
-        commission: 0.05,
-        timestamp: now,
-        position_side: Some(virs_types::PositionSide::Long),
-    };
-    let pe_event: WsFeedEvent =
-        virs_exchange::pe_adapter::convert_ws_feed_event(ccxt_event);
-    match pe_event {
-        WsFeedEvent::OrderUpdate {
-            exchange_order_id, symbol, status, ..
-        } => {
-            assert_eq!(exchange_order_id, "test_order");
-            assert_eq!(symbol, "BTC/USDT");
-            assert_eq!(status, OrderStatus::Filled);
-        }
-        _ => panic!("Expected OrderUpdate"),
-    }
-}
-
-#[test]
-fn int_5_2_ws_connection_changed_conversion() {
-    let ccxt_event = virs_ccxt::WsFeedEvent::ConnectionChanged { connected: false };
-    let pe_event: WsFeedEvent =
-        virs_exchange::pe_adapter::convert_ws_feed_event(ccxt_event);
-    assert_eq!(pe_event, WsFeedEvent::ConnectionChanged { connected: false });
-}
 
 // ============================================================
 // TC-INT-6: Full data flow — order and position conversion

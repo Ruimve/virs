@@ -12,7 +12,7 @@ use virs_error::ExchangeError;
 use crate::pe_adapter::{
     convert_exchange_position, convert_order, convert_order_status, convert_order_type,
     convert_position_side, convert_side, convert_to_models_side, convert_virs_market_type,
-    convert_virs_position_side, convert_ws_feed_event, no_exchange_error,
+    convert_virs_position_side, no_exchange_error,
 };
 
 // ============================================================
@@ -329,52 +329,6 @@ fn pe9_2_position_no_liquidation() {
     let result = convert_exchange_position(&ep);
     assert_eq!(result.liquidation_price, None);
     assert_eq!(result.side, PositionSide::Short);
-}
-
-// ============================================================
-// TC-PE10: convert_ws_feed_event
-// ============================================================
-
-#[test]
-fn pe10_1_order_update() {
-    let now = Utc::now();
-    let event = virs_ccxt::WsFeedEvent::OrderUpdate {
-        exchange_order_id: "order_1".into(),
-        symbol: "BTC/USDT".into(),
-        status: virs_types::OrderStatus::Filled,
-        filled: 1.0,
-        remaining: 0.0,
-        price: 50000.0,
-        amount: 1.0,
-        commission: 0.05,
-        timestamp: now,
-        position_side: Some(virs_types::PositionSide::Long),
-    };
-    let result: WsFeedEvent = convert_ws_feed_event(event);
-    match result {
-        WsFeedEvent::OrderUpdate {
-            exchange_order_id, symbol, status, filled, remaining, price, amount, commission, timestamp, position_side,
-        } => {
-            assert_eq!(exchange_order_id, "order_1");
-            assert_eq!(symbol, "BTC/USDT");
-            assert_eq!(status, OrderStatus::Filled);
-            assert_eq!(filled, 1.0);
-            assert_eq!(remaining, 0.0);
-            assert_eq!(price, 50000.0);
-            assert_eq!(amount, 1.0);
-            assert_eq!(commission, 0.05);
-            assert_eq!(timestamp, now);
-            assert_eq!(position_side, Some(PositionSide::Long));
-        }
-        _ => panic!("Expected OrderUpdate"),
-    }
-}
-
-#[test]
-fn pe10_2_connection_changed() {
-    let event = virs_ccxt::WsFeedEvent::ConnectionChanged { connected: true };
-    let result: WsFeedEvent = convert_ws_feed_event(event);
-    assert_eq!(result, WsFeedEvent::ConnectionChanged { connected: true });
 }
 
 // ============================================================

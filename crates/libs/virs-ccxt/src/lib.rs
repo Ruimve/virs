@@ -42,7 +42,6 @@ pub use types::{
     // Shared types (re-exported from virs-types)
     Ticker,
 };
-pub use ws_types::WsFeedEvent;
 
 /// Unified exchange trait — the core abstraction following CCXT's design.
 ///
@@ -151,7 +150,9 @@ pub trait Exchange: Send + Sync {
     /// 返回 `mpsc::Receiver<WsFeedEvent>`，调用方通过该 receiver 接收订单事件。
     /// 仅当交易所支持 Ed25519 签名时可用（如 Binance 现货 + Ed25519 API Key）。
     /// 不支持的交易所返回 `ExchangeError::NotSupported`。
-    async fn start_spot_order_ws_api(&self) -> Result<mpsc::Receiver<WsFeedEvent>, ExchangeError> {
+    async fn start_spot_order_ws_api(
+        &self,
+    ) -> Result<mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError> {
         Err(ExchangeError::NotSupported(
             "start_spot_order_ws_api not supported".into(),
         ))
@@ -169,7 +170,7 @@ pub trait Exchange: Send + Sync {
     async fn start_listenkey_order_ws(
         &self,
         _listen_key_hint: Option<&str>,
-    ) -> Result<mpsc::Receiver<WsFeedEvent>, ExchangeError> {
+    ) -> Result<mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError> {
         Err(ExchangeError::NotSupported(
             "start_listenkey_order_ws not supported".into(),
         ))

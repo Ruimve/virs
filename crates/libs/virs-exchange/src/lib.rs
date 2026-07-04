@@ -113,7 +113,7 @@ pub trait Exchange: Send + Sync {
     /// 不支持时返回 `Err`，调用方应降级到 listenKey 方案。
     async fn start_spot_order_ws_api(
         &self,
-    ) -> Result<tokio::sync::mpsc::Receiver<virs_ccxt::WsFeedEvent>, ExchangeError>;
+    ) -> Result<tokio::sync::mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError>;
 
     /// 启动基于 listenKey 的订单 WebSocket（合约用户数据流，或现货 HMAC 降级路径）。
     ///
@@ -123,7 +123,7 @@ pub trait Exchange: Send + Sync {
     async fn start_listenkey_order_ws(
         &self,
         listen_key_hint: Option<&str>,
-    ) -> Result<tokio::sync::mpsc::Receiver<virs_ccxt::WsFeedEvent>, ExchangeError>;
+    ) -> Result<tokio::sync::mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError>;
 }
 
 #[async_trait]
@@ -248,13 +248,13 @@ impl Exchange for Box<dyn Exchange> {
     }
     async fn start_spot_order_ws_api(
         &self,
-    ) -> Result<tokio::sync::mpsc::Receiver<virs_ccxt::WsFeedEvent>, ExchangeError> {
+    ) -> Result<tokio::sync::mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError> {
         (**self).start_spot_order_ws_api().await
     }
     async fn start_listenkey_order_ws(
         &self,
         listen_key_hint: Option<&str>,
-    ) -> Result<tokio::sync::mpsc::Receiver<virs_ccxt::WsFeedEvent>, ExchangeError> {
+    ) -> Result<tokio::sync::mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError> {
         (**self).start_listenkey_order_ws(listen_key_hint).await
     }
 }

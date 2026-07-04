@@ -351,14 +351,14 @@ impl Exchange for CcxtAdapter {
 
     async fn start_spot_order_ws_api(
         &self,
-    ) -> Result<tokio::sync::mpsc::Receiver<virs_ccxt::WsFeedEvent>, ExchangeError> {
+    ) -> Result<tokio::sync::mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError> {
         self.inner.start_spot_order_ws_api().await
     }
 
     async fn start_listenkey_order_ws(
         &self,
         listen_key_hint: Option<&str>,
-    ) -> Result<tokio::sync::mpsc::Receiver<virs_ccxt::WsFeedEvent>, ExchangeError> {
+    ) -> Result<tokio::sync::mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError> {
         self.inner.start_listenkey_order_ws(listen_key_hint).await
     }
 }

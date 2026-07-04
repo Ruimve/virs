@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite};
 
 // Re-export for convenience
-pub use crate::ws_types::WsFeedEvent;
+pub use virs_types::WsFeedEvent;
 use virs_types::{OrderStatus, PositionSide};
 
 // ============================================================
@@ -269,7 +269,6 @@ pub struct BinanceUserDataWs {
     ws_ping_interval_secs: u64,
     ws_max_lifetime_secs: u64,
     running: Arc<AtomicBool>,
-    shutdown_tx: Option<mpsc::Sender<()>>,
 }
 
 impl BinanceUserDataWs {
@@ -288,7 +287,6 @@ impl BinanceUserDataWs {
             ws_ping_interval_secs: 30,
             ws_max_lifetime_secs: 23 * 3600,
             running: Arc::new(AtomicBool::new(false)),
-            shutdown_tx: None,
         }
     }
 
@@ -335,9 +333,6 @@ impl BinanceUserDataWs {
             return;
         }
         self.running.store(true, Ordering::Relaxed);
-
-        let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
-        self.shutdown_tx = Some(shutdown_tx);
 
         let ws_url = self.ws_url.clone();
         let running = self.running.clone();
@@ -470,12 +465,6 @@ impl BinanceUserDataWs {
                                         break;
                                     }
                                 }
-                                _ = shutdown_rx.recv() => {
-                                    tracing::debug!("[BinanceUserDataWs] Shutdown requested");
-                                    let _ = write.send(tungstenite::Message::Close(None)).await;
-                                    running.store(false, Ordering::Relaxed);
-                                    return;
-                                }
                             }
                         }
 
@@ -501,14 +490,6 @@ impl BinanceUserDataWs {
             running.store(false, Ordering::Relaxed);
             tracing::debug!("[BinanceUserDataWs] Worker exited");
         });
-    }
-
-    /// 停止 WS 连接
-    pub async fn stop(&mut self) {
-        self.running.store(false, Ordering::Relaxed);
-        if let Some(tx) = self.shutdown_tx.take() {
-            let _ = tx.send(()).await;
-        }
     }
 }
 
