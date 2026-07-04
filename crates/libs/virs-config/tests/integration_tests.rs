@@ -93,6 +93,7 @@ fn int_1_4_load_config_missing_database_url() {
     clean_env_vars();
     std::env::set_var("SECRET_KEY", "secret");
     std::env::set_var("ENCRYPTION_KEY", "enc");
+    std::env::set_var("JWT_SECRET", "test_jwt_secret_at_least_32_chars_long");
 
     let result = load_config_from_env();
     assert!(result.is_err());

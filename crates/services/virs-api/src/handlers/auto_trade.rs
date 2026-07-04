@@ -51,7 +51,7 @@ pub async fn create_bot(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let symbol = body["symbol"].as_str().unwrap_or("");
     let exchange = body["exchange"].as_str().unwrap_or("");
@@ -187,7 +187,7 @@ pub async fn list_bots(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let bots = sqlx::query_as::<_, (
         uuid::Uuid, String, String, String, String, String, i32, f64, i32,
@@ -245,7 +245,7 @@ pub async fn get_bot(
     headers: HeaderMap,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     // 单次查询获取完整 AutoBot，使用模型方法计算派生指标（total_return_pct/is_running/is_stopped）
     let bot = sqlx::query_as::<_, virs_models::AutoBot>(
@@ -370,7 +370,7 @@ pub async fn get_trades(
     Path(id): Path<uuid::Uuid>,
     axum::extract::Query(params): axum::extract::Query<TradesQuery>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let page = params.page.unwrap_or(1).max(1);
     let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
@@ -440,7 +440,7 @@ pub async fn get_stats(
     headers: HeaderMap,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     // 拉取全量已平仓 trades（按平仓时间正序），用于计算统计指标
     let trades = sqlx::query_as::<
@@ -617,7 +617,7 @@ pub async fn get_analysis_logs(
     Path(id): Path<uuid::Uuid>,
     axum::extract::Query(params): axum::extract::Query<TradesQuery>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let page = params.page.unwrap_or(1).max(1);
     let page_size = params.page_size.unwrap_or(20).clamp(1, 100);

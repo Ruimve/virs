@@ -58,7 +58,7 @@ pub async fn list_credentials(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let creds = sqlx::query_as::<_, (uuid::Uuid, String, Option<String>, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT id, provider, label, is_default, created_at, updated_at FROM qd_ai_credentials WHERE user_id = $1 ORDER BY created_at DESC"#,
@@ -86,7 +86,7 @@ pub async fn save_credential(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let provider = body["provider"].as_str().unwrap_or("");
     let label = body["label"].as_str().unwrap_or("");
@@ -132,7 +132,7 @@ pub async fn delete_credential(
     headers: HeaderMap,
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     sqlx::query(r#"DELETE FROM qd_ai_credentials WHERE id = $1 AND user_id = $2"#)
         .bind(id)
@@ -148,7 +148,7 @@ pub async fn test_credential(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     // Decrypt saved credential
     let row: Option<(String, String)> = sqlx::query_as(
@@ -212,7 +212,7 @@ pub async fn fetch_models(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let row: Option<(String, String)> = sqlx::query_as(
         r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials WHERE user_id = $1 AND is_default = true ORDER BY created_at DESC LIMIT 1"#,
@@ -285,7 +285,7 @@ pub async fn fetch_balance(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let row: Option<(String, String)> = sqlx::query_as(
         r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials WHERE user_id = $1 AND is_default = true ORDER BY created_at DESC LIMIT 1"#,

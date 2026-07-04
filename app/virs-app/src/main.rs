@@ -176,6 +176,8 @@ async fn main() -> VirsResult<()> {
         kline_engine: kline_engine.clone(),
         orderbook_engine: orderbook_engine.clone(),
         encryption_key: config.server.encryption_key.clone(),
+        jwt_secret: config.server.jwt_secret.clone(),
+        jwt_expiration_hours: config.server.jwt_expiration_hours,
     };
 
     // Restore services if bots exist from previous session

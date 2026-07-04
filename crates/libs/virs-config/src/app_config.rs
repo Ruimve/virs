@@ -50,6 +50,7 @@ pub struct ServerConfig {
     pub port: u16,
     pub secret_key: String,
     pub encryption_key: String,
+    pub jwt_secret: String,
     pub jwt_expiration_hours: i64,
 }
 
@@ -100,6 +101,17 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
                 "ENCRYPTION_KEY environment variable is required (must differ from SECRET_KEY)",
             )
         })?,
+        jwt_secret: {
+            let secret = std::env::var("JWT_SECRET").map_err(|_| {
+                VirsError::config("JWT_SECRET environment variable is required")
+            })?;
+            if secret.len() < 32 {
+                return Err(VirsError::config(
+                    "JWT_SECRET must be at least 32 characters for security",
+                ));
+            }
+            secret
+        },
         jwt_expiration_hours: parse_env_num(std::env::var("JWT_EXPIRATION_HOURS").ok(), DEFAULT_JWT_HOURS)?,
     };
 

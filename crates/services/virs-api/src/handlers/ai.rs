@@ -34,7 +34,7 @@ pub async fn ai_status(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     // Check if any AI credentials are configured
     let rows: Vec<String> =
@@ -55,7 +55,7 @@ pub async fn optimize(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let symbol = body["symbol"].as_str().unwrap_or("");
     let exchange = body["exchange"].as_str().unwrap_or("");
@@ -95,7 +95,7 @@ pub async fn explain(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let symbol = body["symbol"].as_str().unwrap_or("");
     let question = body["question"].as_str().unwrap_or("");
@@ -125,7 +125,7 @@ pub async fn recommend_strategy(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let symbol = body["symbol"].as_str().unwrap_or("");
     let exchange = body["exchange"].as_str().unwrap_or("");

@@ -15,7 +15,7 @@ pub async fn list_credentials(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let creds = sqlx::query_as::<_, (uuid::Uuid, String, String, String, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT id, exchange, label, market_type, created_at FROM qd_exchange_credentials WHERE user_id = $1 ORDER BY created_at DESC"#,
@@ -42,7 +42,7 @@ pub async fn save_credential(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let exchange = body["exchange"].as_str().unwrap_or("");
     let label = body["label"].as_str().unwrap_or("");
@@ -115,7 +115,7 @@ pub async fn delete_credential(
     headers: HeaderMap,
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     sqlx::query(r#"DELETE FROM qd_exchange_credentials WHERE id = $1 AND user_id = $2"#)
         .bind(id)
@@ -132,7 +132,7 @@ pub async fn test_credential(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let names = state.exchange_registry.registered_names();
     let exchange_ref = names
@@ -170,7 +170,7 @@ pub async fn check_permissions(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let names = state.exchange_registry.registered_names();
     let exchange_ref = names
@@ -262,7 +262,7 @@ pub async fn verify_permissions(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let names = state.exchange_registry.registered_names();
     let exchange_ref = names
@@ -365,7 +365,7 @@ pub async fn check_position_mode(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let names = state.exchange_registry.registered_names();
     let exchange_ref = names
@@ -422,7 +422,7 @@ pub async fn exchange_status(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let row: Option<(String, String)> = sqlx::query_as(
         r#"SELECT exchange, market_type FROM qd_exchange_credentials WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1"#,

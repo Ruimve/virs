@@ -22,7 +22,12 @@ impl ApiResponse {
 
 /// Extract user_id from JWT in Authorization header.
 /// Shared by all handlers that need user identity.
-pub fn extract_user_id(headers: &axum::http::HeaderMap) -> Result<uuid::Uuid, VirsError> {
+///
+/// `jwt_secret` is validated at startup and passed via AppState — no env read at request time.
+pub fn extract_user_id(
+    headers: &axum::http::HeaderMap,
+    jwt_secret: &str,
+) -> Result<uuid::Uuid, VirsError> {
     let auth_header = headers
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
@@ -37,11 +42,7 @@ pub fn extract_user_id(headers: &axum::http::HeaderMap) -> Result<uuid::Uuid, Vi
         }
     };
 
-    // JWT_SECRET is mandatory — fail-fast if missing, consistent with auth.rs
-    let secret = std::env::var("JWT_SECRET").map_err(|_| {
-        VirsError::config("JWT_SECRET environment variable is required")
-    })?;
-    match virs_utils::auth::decode_jwt(token, &secret) {
+    match virs_utils::auth::decode_jwt(token, jwt_secret) {
         Ok(claims) => uuid::Uuid::parse_str(&claims.sub)
             .map_err(|_| VirsError::unauthorized("Invalid user ID in token")),
         Err(_) => Err(VirsError::unauthorized("Invalid token")),

@@ -14,7 +14,7 @@ pub async fn list_users(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let users = sqlx::query_as::<_, (uuid::Uuid, String, String, Option<String>, bool, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT id, username, role, email, is_active, created_at FROM qd_users ORDER BY created_at DESC"#,
@@ -41,7 +41,7 @@ pub async fn create_user(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let username = body["username"].as_str().unwrap_or("");
     let password = body["password"].as_str().unwrap_or("");
@@ -79,7 +79,7 @@ pub async fn update_user(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let id = body["id"].as_str().unwrap_or("");
     let uuid_id = uuid::Uuid::parse_str(id)
@@ -108,7 +108,7 @@ pub async fn delete_user(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let id = body["id"].as_str().unwrap_or("");
     let uuid_id = uuid::Uuid::parse_str(id)

@@ -61,22 +61,10 @@ pub async fn login(
         return Err(VirsError::unauthorized("Invalid credentials"));
     }
 
-    // Generate JWT token — JWT_SECRET is mandatory, fail-fast if missing
-    let secret = std::env::var("JWT_SECRET").map_err(|_| {
-        VirsError::config("JWT_SECRET environment variable is required")
-    })?;
-    let expiration_hours: i64 = std::env::var("JWT_EXPIRATION_HOURS")
-        .ok()
-        .map(|v| {
-            v.parse::<i64>().map_err(|e| {
-                VirsError::config(format!(
-                    "Failed to parse JWT_EXPIRATION_HOURS '{}': {}",
-                    v, e
-                ))
-            })
-        })
-        .transpose()?
-        .unwrap_or(24);
+    // Generate JWT token — jwt_secret and expiration are validated at startup
+    // and passed via AppState, no env read at request time.
+    let secret = &state.jwt_secret;
+    let expiration_hours: i64 = state.jwt_expiration_hours;
 
     let claims = virs_utils::auth::Claims::new(
         &id.to_string(),
@@ -84,7 +72,7 @@ pub async fn login(
         &role,
         expiration_hours * 3600,
     );
-    let token = virs_utils::auth::encode_jwt(&claims, &secret)?;
+    let token = virs_utils::auth::encode_jwt(&claims, secret)?;
 
     let login_resp = serde_json::to_value(LoginResponse {
         token,
@@ -114,7 +102,7 @@ pub async fn get_user_info(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let user_id = extract_user_id(&headers)?;
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let row = sqlx::query_as::<_, (String, String, Option<String>, bool)>(
         r#"SELECT username, role, email, is_active FROM qd_users WHERE id = $1"#,
