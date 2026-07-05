@@ -231,13 +231,19 @@ impl KlineEngine {
                             KlineEventType::Update
                         };
 
-                        let _ = event_tx.send(KlineEvent {
+                        if event_tx.send(KlineEvent {
                             exchange: exchange.clone(),
                             symbol: symbol.clone(),
                             timeframe: Timeframe::M1,
                             candle: candle_1m.clone(),
                             event_type,
-                        });
+                        }).is_err() {
+                            tracing::warn!(
+                                exchange = %exchange,
+                                symbol = %symbol,
+                                "KlineEvent (M1) broadcast failed — no receivers, event dropped"
+                            );
+                        }
 
                         for (tf, candle) in higher_updates {
                             let ht_event_type = if candle.closed {
@@ -245,13 +251,19 @@ impl KlineEngine {
                             } else {
                                 KlineEventType::Update
                             };
-                            let _ = event_tx.send(KlineEvent {
+                            if event_tx.send(KlineEvent {
                                 exchange: exchange.clone(),
                                 symbol: symbol.clone(),
                                 timeframe: tf,
                                 candle,
                                 event_type: ht_event_type,
-                            });
+                            }).is_err() {
+                                tracing::warn!(
+                                    exchange = %exchange,
+                                    symbol = %symbol,
+                                    "KlineEvent (higher tf) broadcast failed — no receivers, event dropped"
+                                );
+                            }
                         }
 
                         if let Some(data) = persist_data {

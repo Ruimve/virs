@@ -133,7 +133,9 @@ impl OrderBookEngine {
                             timestamp: update.timestamp,
                         };
 
-                        let _ = event_tx.send(event);
+                        if event_tx.send(event).is_err() {
+                            tracing::warn!("[OrderBookEngine] OrderBookEvent broadcast failed — no receivers, event dropped");
+                        }
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {
                         tracing::warn!("[OrderBookEngine] WS update lagged by {} messages", n);

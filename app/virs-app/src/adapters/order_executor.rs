@@ -31,7 +31,9 @@ impl PeOrderExecutor {
                 match engine_event_rx.recv().await {
                     Ok(engine_event) => {
                         if let Some(order_event) = convert_pe_event(engine_event) {
-                            let _ = event_tx.send(order_event);
+                            if event_tx.send(order_event).is_err() {
+                                warn!("OrderEvent broadcast failed — no receivers, event dropped");
+                            }
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {

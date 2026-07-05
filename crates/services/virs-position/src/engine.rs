@@ -92,7 +92,9 @@ pub(crate) struct EngineInner {
 
 impl EngineInner {
     fn emit_event(&self, event: EngineEvent) {
-        let _ = self.event_tx.send(event);
+        if self.event_tx.send(event).is_err() {
+            warn!("EngineEvent broadcast failed — no receivers, event dropped");
+        }
     }
 
     fn is_running(&self) -> bool {

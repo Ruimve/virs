@@ -126,7 +126,7 @@ impl GapDetector {
         }
 
         if backfilled_count > 0 {
-            let _ = event_tx.send(KlineEvent {
+            if event_tx.send(KlineEvent {
                 exchange: exchange.to_string(),
                 symbol: symbol.to_string(),
                 timeframe: Timeframe::M1,
@@ -150,7 +150,13 @@ impl GapDetector {
                     }
                 }),
                 event_type: KlineEventType::Backfilled,
-            });
+            }).is_err() {
+                tracing::warn!(
+                    exchange = %exchange,
+                    symbol = %symbol,
+                    "KlineEvent (Backfilled) broadcast failed — no receivers, event dropped"
+                );
+            }
         }
 
         tracing::debug!(
@@ -355,7 +361,7 @@ impl GapDetector {
         }
 
         if total > 0 {
-            let _ = event_tx.send(KlineEvent {
+            if event_tx.send(KlineEvent {
                 exchange: exchange.to_string(),
                 symbol: symbol.to_string(),
                 timeframe: Timeframe::M1,
@@ -379,7 +385,13 @@ impl GapDetector {
                     }
                 }),
                 event_type: KlineEventType::Backfilled,
-            });
+            }).is_err() {
+                tracing::warn!(
+                    exchange = %exchange,
+                    symbol = %symbol,
+                    "KlineEvent (Backfilled) broadcast failed — no receivers, event dropped"
+                );
+            }
         }
 
         Ok(total)

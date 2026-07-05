@@ -176,7 +176,7 @@ impl PaperExchangeAdapter {
             let fee = current_price * order.amount * 0.0002;
             let tx = self.price_tx.lock().await;
             if let Some(ref tx) = *tx {
-                let _ = tx
+                if tx
                     .send(WsFeedEvent::OrderUpdate {
                         exchange_order_id: order.id.to_string(),
                         symbol: order.symbol.clone(),
@@ -189,7 +189,11 @@ impl PaperExchangeAdapter {
                         timestamp: Utc::now(),
                         position_side: order.position_side,
                     })
-                    .await;
+                    .await
+                    .is_err()
+                {
+                    warn!(order_id = %order.id, symbol = %order.symbol, "Paper WsFeedEvent::OrderUpdate send failed — receiver dropped, event lost");
+                }
             }
             debug!(order_id = %order.id, symbol = %order.symbol, side = ?order.side,
                 price = ?order.price, fill_price = current_price, amount = order.amount,
@@ -348,6 +352,11 @@ impl ExchangePe for PaperExchangeAdapter {
     }
 
     async fn get_ticker(&self, symbol: &str) -> PositionResult<Ticker> {
+        warn!(
+            exchange = %self.name,
+            symbol = %symbol,
+            "PaperExchange get_ticker stub — returning all-zero Ticker (paper mode, no real market data)"
+        );
         Ok(Ticker {
             symbol: symbol.to_string(),
             exchange: self.name.clone(),
@@ -394,6 +403,11 @@ impl ExchangePe for PaperExchangeAdapter {
     }
 
     async fn get_funding_rate(&self, symbol: &str) -> PositionResult<FundingRate> {
+        warn!(
+            exchange = %self.name,
+            symbol = %symbol,
+            "PaperExchange get_funding_rate stub — returning zero rate (paper mode, no real funding data)"
+        );
         Ok(FundingRate {
             symbol: symbol.to_string(),
             rate: 0.0,
@@ -465,7 +479,7 @@ impl ExchangePe for PaperExchangeAdapter {
 
             let tx = self.price_tx.lock().await;
             if let Some(ref tx) = *tx {
-                let _ = tx
+                if tx
                     .send(WsFeedEvent::OrderUpdate {
                         exchange_order_id: order_id.to_string(),
                         symbol: params.symbol.clone(),
@@ -478,7 +492,11 @@ impl ExchangePe for PaperExchangeAdapter {
                         timestamp: Utc::now(),
                         position_side: params.position_side,
                     })
-                    .await;
+                    .await
+                    .is_err()
+                {
+                    warn!(order_id = %order_id, symbol = %params.symbol, "Paper WsFeedEvent::OrderUpdate send failed — receiver dropped, event lost");
+                }
             }
             info!(order_id = %order_id, symbol = %params.symbol, side = ?params.side,
                 amount = params.amount, fill_price, "Paper market order filled immediately");
