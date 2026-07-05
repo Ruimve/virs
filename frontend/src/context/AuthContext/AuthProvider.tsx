@@ -101,6 +101,8 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
+  console.log('ProtectedRoute', user, loading);
+
   if (loading) {
     return null;
   }

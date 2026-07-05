@@ -104,7 +104,7 @@ pub async fn save_credential(
 
     // Encrypt API key with AES-256-GCM
     let encrypted_key =
-        virs_utils::crypto::encrypt_with_key(api_key, &state.encryption_key)?;
+        virs_utils::crypto::encrypt_with_key(api_key, &state.llm_key)?;
 
     sqlx::query(
         r#"INSERT INTO qd_ai_credentials (id, user_id, provider, encrypted_api_key, model, label, is_default, created_at)
@@ -161,7 +161,7 @@ pub async fn test_credential(
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
             let key =
-                virs_utils::crypto::decrypt_with_key(&enc_key, &state.encryption_key)?;
+                virs_utils::crypto::decrypt_with_key(&enc_key, &state.llm_key)?;
             (p, key)
         }
         None => {
@@ -224,7 +224,7 @@ pub async fn fetch_models(
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
             let key =
-                virs_utils::crypto::decrypt_with_key(&enc_key, &state.encryption_key)?;
+                virs_utils::crypto::decrypt_with_key(&enc_key, &state.llm_key)?;
             (p, key)
         }
         None => {
@@ -297,7 +297,7 @@ pub async fn fetch_balance(
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
             let key =
-                virs_utils::crypto::decrypt_with_key(&enc_key, &state.encryption_key)?;
+                virs_utils::crypto::decrypt_with_key(&enc_key, &state.llm_key)?;
             (p, key)
         }
         None => {

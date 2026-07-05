@@ -55,6 +55,7 @@ pub struct AppEngineManager {
     kline_engine: Arc<KlineEngine>,
     orderbook_engine: Arc<OrderBookEngine>,
     encryption_key: String,
+    llm_key: String,
     #[allow(dead_code)]
     proxy: Option<String>,
 
@@ -72,6 +73,7 @@ impl AppEngineManager {
         kline_engine: Arc<KlineEngine>,
         orderbook_engine: Arc<OrderBookEngine>,
         encryption_key: String,
+        llm_key: String,
         proxy: Option<String>,
     ) -> Self {
         Self {
@@ -80,6 +82,7 @@ impl AppEngineManager {
             kline_engine,
             orderbook_engine,
             encryption_key,
+            llm_key,
             proxy,
             started: AtomicBool::new(false),
             init_lock: Mutex::new(()),
@@ -174,7 +177,7 @@ impl EngineManager for AppEngineManager {
         let grid_credential_store: Arc<dyn virs_types::bot::CredentialStore> =
             Arc::new(PgCredentialStore::new(
                 self.db_pool.clone(),
-                virs_utils::crypto::derive_key(&self.encryption_key),
+                virs_utils::crypto::derive_key(&self.llm_key),
             ));
         let grid_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> =
             Arc::new(DefaultLlmResolver::new());
@@ -259,7 +262,7 @@ impl EngineManager for AppEngineManager {
         let auto_credential_store: Arc<dyn virs_types::bot::CredentialStore> =
             Arc::new(PgCredentialStore::new(
                 self.db_pool.clone(),
-                virs_utils::crypto::derive_key(&self.encryption_key),
+                virs_utils::crypto::derive_key(&self.llm_key),
             ));
         let auto_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> =
             Arc::new(DefaultLlmResolver::new());

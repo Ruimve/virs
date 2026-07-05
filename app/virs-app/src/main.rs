@@ -25,18 +25,25 @@ async fn main() -> VirsResult<()> {
     // Load config
     let mut config = load_config()?;
 
-    if config.server.secret_key == "change-me-to-a-random-64-char-string-in-production" {
-        tracing::warn!("WARNING: Using default SECRET_KEY. Change this in production!");
-    }
     if config.server.encryption_key
-        == "change-me-to-another-random-64-char-string-must-differ-from-secret-key"
+        == "change-me-to-a-random-64-char-string-in-production"
     {
         tracing::warn!("WARNING: Using default ENCRYPTION_KEY. Change this in production!");
     }
-    if config.server.secret_key == config.server.encryption_key {
+    if config.server.llm_key
+        == "change-me-to-a-unique-llm-key-must-differ-from-encryption-key"
+    {
+        tracing::warn!("WARNING: Using default LLM_KEY. Change this in production!");
+    }
+    if config.server.encryption_key == config.server.llm_key {
         return Err(VirsError::config(
-            "SECRET_KEY and ENCRYPTION_KEY must be different for security",
+            "ENCRYPTION_KEY and LLM_KEY must be different for security isolation",
         ));
+    }
+    if config.server.jwt_secret
+        == "change-me-to-a-random-32-char-or-longer-string-in-production"
+    {
+        tracing::warn!("WARNING: Using default JWT_SECRET. Change this in production!");
     }
 
     // Initialize tracing
@@ -163,6 +170,7 @@ async fn main() -> VirsResult<()> {
         kline_engine.clone(),
         orderbook_engine.clone(),
         config.server.encryption_key.clone(),
+        config.server.llm_key.clone(),
         config.proxy.clone(),
     ));
     info!("Engine manager created (engines will start on first bot creation)");
@@ -176,6 +184,7 @@ async fn main() -> VirsResult<()> {
         kline_engine: kline_engine.clone(),
         orderbook_engine: orderbook_engine.clone(),
         encryption_key: config.server.encryption_key.clone(),
+        llm_key: config.server.llm_key.clone(),
         jwt_secret: config.server.jwt_secret.clone(),
         jwt_expiration_hours: config.server.jwt_expiration_hours,
     };

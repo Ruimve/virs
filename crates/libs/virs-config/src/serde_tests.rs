@@ -12,8 +12,8 @@ fn s1_1_app_config_full_roundtrip() {
         server: ServerConfig {
             host: "0.0.0.0".into(),
             port: 8080,
-            secret_key: "secret".into(),
             encryption_key: "enc_key".into(),
+            llm_key: "llm_key_val".into(),
             jwt_secret: "jwt_secret_at_least_32_chars_long".into(),
             jwt_expiration_hours: 24,
         },
@@ -35,7 +35,8 @@ fn s1_1_app_config_full_roundtrip() {
 
     assert_eq!(deserialized.server.host, config.server.host);
     assert_eq!(deserialized.server.port, config.server.port);
-    assert_eq!(deserialized.server.secret_key, config.server.secret_key);
+    assert_eq!(deserialized.server.encryption_key, config.server.encryption_key);
+    assert_eq!(deserialized.server.llm_key, config.server.llm_key);
     assert_eq!(deserialized.server.jwt_secret, config.server.jwt_secret);
     assert_eq!(deserialized.database.url, config.database.url);
     assert_eq!(deserialized.database.pool_min, config.database.pool_min);
@@ -54,8 +55,8 @@ fn s2_1_server_config_roundtrip() {
     let config = ServerConfig {
         host: "127.0.0.1".into(),
         port: 3000,
-        secret_key: "my_secret".into(),
         encryption_key: "my_enc_key".into(),
+        llm_key: "my_llm_key".into(),
         jwt_secret: "another_jwt_secret_at_least_32_chars".into(),
         jwt_expiration_hours: 48,
     };
@@ -63,8 +64,8 @@ fn s2_1_server_config_roundtrip() {
     let de: ServerConfig = serde_json::from_str(&json).unwrap();
     assert_eq!(de.host, config.host);
     assert_eq!(de.port, config.port);
-    assert_eq!(de.secret_key, config.secret_key);
     assert_eq!(de.encryption_key, config.encryption_key);
+    assert_eq!(de.llm_key, config.llm_key);
     assert_eq!(de.jwt_secret, config.jwt_secret);
     assert_eq!(de.jwt_expiration_hours, config.jwt_expiration_hours);
 }

@@ -64,8 +64,8 @@ services:
       RUST_LOG: ${RUST_LOG:-virs_app=info,virs_bot=info,virs_position=info,virs_market=info,virs_api=info,binance_api=info}
       FRONTEND_DIR: /app/frontend/dist
       # Security (MUST change in production)
-      SECRET_KEY: ${SECRET_KEY:-change-me-to-a-random-64-char-string-in-production}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-to-another-random-64-char-string-must-differ-from-secret-key}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-to-a-random-64-char-string-in-production}
+      LLM_KEY: ${LLM_KEY:?LLM_KEY is required (must differ from ENCRYPTION_KEY)}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (min 32 chars)}
       JWT_EXPIRATION_HOURS: ${JWT_EXPIRATION_HOURS:-24}
       # Database (Docker internal hostname)

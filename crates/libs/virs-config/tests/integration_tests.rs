@@ -20,8 +20,8 @@ fn lock_env() -> std::sync::MutexGuard<'static, ()> {
 
 /// Helper: set required env vars for load_config to succeed.
 fn set_required_env_vars() {
-    std::env::set_var("SECRET_KEY", "test_secret_key");
     std::env::set_var("ENCRYPTION_KEY", "test_encryption_key");
+    std::env::set_var("LLM_KEY", "test_llm_key");
     std::env::set_var("DATABASE_URL", "postgres://localhost/virs_test");
     // ADMIN_USERNAME and ADMIN_PASSWORD are required (no defaults).
     // ADMIN_PASSWORD must be at least 12 characters.
@@ -34,7 +34,7 @@ fn set_required_env_vars() {
 /// Helper: remove all config-related env vars to ensure a clean state.
 fn clean_env_vars() {
     let keys = [
-        "SECRET_KEY", "ENCRYPTION_KEY", "DATABASE_URL",
+        "ENCRYPTION_KEY", "LLM_KEY", "DATABASE_URL",
         "HOST", "PORT", "JWT_EXPIRATION_HOURS", "JWT_SECRET",
         "DB_POOL_MIN", "DB_POOL_MAX",
         "ADMIN_USERNAME", "ADMIN_PASSWORD",
@@ -58,13 +58,13 @@ fn int_1_1_load_config_minimal_required() {
     let config = load_config();
     assert!(config.is_ok());
     let config = config.unwrap();
-    assert_eq!(config.server.secret_key, "test_secret_key");
     assert_eq!(config.server.encryption_key, "test_encryption_key");
+    assert_eq!(config.server.llm_key, "test_llm_key");
     assert_eq!(config.database.url, "postgres://localhost/virs_test");
 }
 
 #[test]
-fn int_1_2_load_config_missing_secret_key() {
+fn int_1_2_load_config_missing_llm_key() {
     let _guard = lock_env();
     clean_env_vars();
     std::env::set_var("ENCRYPTION_KEY", "enc");
@@ -72,14 +72,14 @@ fn int_1_2_load_config_missing_secret_key() {
 
     let result = load_config_from_env();
     assert!(result.is_err());
-    assert!(result.err().unwrap().to_string().contains("SECRET_KEY"));
+    assert!(result.err().unwrap().to_string().contains("LLM_KEY"));
 }
 
 #[test]
 fn int_1_3_load_config_missing_encryption_key() {
     let _guard = lock_env();
     clean_env_vars();
-    std::env::set_var("SECRET_KEY", "secret");
+    std::env::set_var("LLM_KEY", "llm_key");
     std::env::set_var("DATABASE_URL", "postgres://localhost/db");
 
     let result = load_config_from_env();
@@ -91,8 +91,8 @@ fn int_1_3_load_config_missing_encryption_key() {
 fn int_1_4_load_config_missing_database_url() {
     let _guard = lock_env();
     clean_env_vars();
-    std::env::set_var("SECRET_KEY", "secret");
     std::env::set_var("ENCRYPTION_KEY", "enc");
+    std::env::set_var("LLM_KEY", "llm_key");
     std::env::set_var("JWT_SECRET", "test_jwt_secret_at_least_32_chars_long");
 
     let result = load_config_from_env();

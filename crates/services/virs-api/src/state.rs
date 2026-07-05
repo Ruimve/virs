@@ -59,6 +59,7 @@ pub struct AppState {
     pub kline_engine: Arc<KlineEngine>,
     pub orderbook_engine: Arc<OrderBookEngine>,
     pub encryption_key: String,
+    pub llm_key: String,
     pub jwt_secret: String,
     pub jwt_expiration_hours: i64,
 }

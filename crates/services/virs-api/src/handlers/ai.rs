@@ -217,7 +217,7 @@ async fn call_llm_with_fallback(
 
     let (api_key, base_url, model) = match row {
         Some((provider, encrypted_key)) => {
-            let decrypted_key = virs_utils::crypto::decrypt_with_key(&encrypted_key, &state.encryption_key)?;
+            let decrypted_key = virs_utils::crypto::decrypt_with_key(&encrypted_key, &state.llm_key)?;
 
             let resolved_base_url = match resolve_provider_base_url(&provider) {
                 Some(url) => url.to_string(),
