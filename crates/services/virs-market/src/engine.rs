@@ -213,38 +213,40 @@ impl KlineEngine {
                             KlineEventType::Update
                         };
 
-                        if event_tx.send(KlineEvent {
-                            exchange: exchange.clone(),
-                            symbol: symbol.clone(),
-                            timeframe: Timeframe::M1,
-                            candle: candle_1m.clone(),
-                            event_type,
-                        }).is_err() {
-                            tracing::warn!(
-                                exchange = %exchange,
-                                symbol = %symbol,
-                                "KlineEvent (M1) broadcast failed — no receivers, event dropped"
-                            );
-                        }
-
-                        for (tf, candle) in higher_updates {
-                            let ht_event_type = if candle.closed {
-                                KlineEventType::Closed
-                            } else {
-                                KlineEventType::Update
-                            };
+                        if event_tx.receiver_count() > 0 {
                             if event_tx.send(KlineEvent {
                                 exchange: exchange.clone(),
                                 symbol: symbol.clone(),
-                                timeframe: tf,
-                                candle,
-                                event_type: ht_event_type,
+                                timeframe: Timeframe::M1,
+                                candle: candle_1m.clone(),
+                                event_type,
                             }).is_err() {
-                                tracing::warn!(
+                                tracing::debug!(
                                     exchange = %exchange,
                                     symbol = %symbol,
-                                    "KlineEvent (higher tf) broadcast failed — no receivers, event dropped"
+                                    "KlineEvent (M1) broadcast — receiver dropped between check and send"
                                 );
+                            }
+
+                            for (tf, candle) in higher_updates {
+                                let ht_event_type = if candle.closed {
+                                    KlineEventType::Closed
+                                } else {
+                                    KlineEventType::Update
+                                };
+                                if event_tx.send(KlineEvent {
+                                    exchange: exchange.clone(),
+                                    symbol: symbol.clone(),
+                                    timeframe: tf,
+                                    candle,
+                                    event_type: ht_event_type,
+                                }).is_err() {
+                                    tracing::debug!(
+                                        exchange = %exchange,
+                                        symbol = %symbol,
+                                        "KlineEvent (higher tf) broadcast — receiver dropped between check and send"
+                                    );
+                                }
                             }
                         }
 

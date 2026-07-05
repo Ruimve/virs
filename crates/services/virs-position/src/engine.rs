@@ -92,8 +92,10 @@ pub(crate) struct EngineInner {
 
 impl EngineInner {
     fn emit_event(&self, event: EngineEvent) {
-        if self.event_tx.send(event).is_err() {
-            warn!("EngineEvent broadcast failed — no receivers, event dropped");
+        if self.event_tx.receiver_count() > 0 {
+            if self.event_tx.send(event).is_err() {
+                tracing::debug!("EngineEvent broadcast — receiver dropped between check and send");
+            }
         }
     }
 
