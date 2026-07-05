@@ -343,24 +343,29 @@ pub async fn delete_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let tx = state.engine_manager.auto_cmd_tx().ok_or_else(|| VirsError::Http {
-        status: 503,
-        message: "Auto trade engine not running".into(),
-    })?;
-    tx.send(virs_bot::auto::types::AutoCommand::DeleteBot {
-        bot_id: id,
-        close_position: true,
-    })
-    .await
-    .map_err(|_| VirsError::Http {
-        status: 500,
-        message: "Failed to send command to auto trade engine".into(),
-    })?;
+    // 引擎运行中：发 DeleteBot 命令清理内存状态和平仓
+    if let Some(tx) = state.engine_manager.auto_cmd_tx() {
+        tx.send(virs_bot::auto::types::AutoCommand::DeleteBot {
+            bot_id: id,
+            close_position: true,
+        })
+        .await
+        .map_err(|_| VirsError::Http {
+            status: 500,
+            message: "Failed to send command to auto trade engine".into(),
+        })?;
+    } else {
+        // 引擎未运行（bot 处于 stopped 状态，无运行实例需清理）—— 直接删 DB
+        tracing::info!(bot_id = %id, "Auto engine not running, deleting stopped bot from DB directly");
+    }
     // Delete from database
-    sqlx::query(r#"DELETE FROM qd_auto_bots WHERE id = $1"#)
+    let result = sqlx::query(r#"DELETE FROM qd_auto_bots WHERE id = $1"#)
         .bind(id)
         .execute(&state.db_pool)
         .await?;
+    if result.rows_affected() == 0 {
+        return Err(VirsError::not_found("Bot not found"));
+    }
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
 

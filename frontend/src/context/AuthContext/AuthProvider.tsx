@@ -29,11 +29,15 @@ import {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [user, setUser] = useState<UserInfo | null>(null);
-  const [loading, setLoading] = useState(false);
+  // 初始为 true：应用启动时会话恢复（refresh）是异步的，路由守卫在首次渲染时
+  // 必须等待恢复完成再判定 user，否则 token 仍在也会被立即重定向回登录页。
+  const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     if (!getToken()) {
       setUser(null);
+      // 无 token 时也要结束 loading，否则守卫会一直返回 null 卡在空白页
+      setLoading(false);
       return;
     }
 
@@ -100,8 +104,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-
-  console.log('ProtectedRoute', user, loading);
 
   if (loading) {
     return null;
