@@ -9,6 +9,8 @@
 //! based on `market_type` (Spot → api, Perpetual → fapi).
 //! Account endpoints (sapi) are shared across market types.
 
+use tracing::info;
+
 pub mod api;
 pub mod fapi;
 pub mod kline_ws;
@@ -277,11 +279,9 @@ pub(crate) fn try_build_ed25519(
 ) -> Result<BinanceEd25519Signer, ExchangeError> {
     let trimmed = api_secret.trim();
     if trimmed.starts_with("-----BEGIN") {
-        tracing::info!("Detected Ed25519 PEM private key, using BinanceEd25519Signer");
         BinanceEd25519Signer::from_pem(api_key, trimmed)
     } else if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(trimmed) {
         if decoded.len() == 32 {
-            tracing::info!("Detected Ed25519 32-byte seed (base64), using BinanceEd25519Signer");
             BinanceEd25519Signer::from_seed_b64(api_key, trimmed)
         } else {
             Err(ExchangeError::Internal(format!(
@@ -665,9 +665,7 @@ impl Exchange for BinanceExchange {
         let (tx, rx) = mpsc::channel(256);
         let ws = user_data_ws_api::UserDataWsApi::new_spot(ed25519.clone());
         ws.start(tx);
-        tracing::info!(
-            "[BinanceExchange] Spot order WS API started (Ed25519, userDataStream.subscribe)"
-        );
+        info!("Spot order WS API started (Ed25519, userDataStream.subscribe)");
         Ok(rx)
     }
 
@@ -696,9 +694,9 @@ impl Exchange for BinanceExchange {
         // 4. 启动 WS 并返回 receiver
         let (tx, rx) = mpsc::channel(256);
         ws.start(tx).await;
-        tracing::info!(
+        info!(
             market_type = ?self.market_type,
-            "[BinanceExchange] listenKey order WS started"
+            "listenKey order WS started"
         );
 
         // 5. spawn listenKey REST keepalive task

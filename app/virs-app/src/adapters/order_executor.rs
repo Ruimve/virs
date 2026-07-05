@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use tokio::sync::broadcast;
-use tracing::{info, warn};
+use tracing::warn;
 
 use virs_position::PositionEngine;
 use virs_types::bot::{
@@ -40,7 +40,6 @@ impl PeOrderExecutor {
                         warn!(lagged = n, "PeOrderExecutor: EngineEvent lagged");
                     }
                     Err(broadcast::error::RecvError::Closed) => {
-                        info!("PeOrderExecutor: EngineEvent channel closed");
                         break;
                     }
                 }

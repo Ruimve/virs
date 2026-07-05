@@ -197,7 +197,6 @@ impl AutoWorker {
                     {
                         warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
                     }
-                    info!(bot_id = %self.bot.id, position_id = %pe_pos.id, "Recovered bot.position_id from PE direct query");
                 }
                 self.current_position = Some(pe_pos);
             }
@@ -322,13 +321,6 @@ impl AutoWorker {
     // ── 主运行循环 ──────────────────────────────────────────
 
     pub async fn run(&mut self, mut shutdown_rx: tokio::sync::mpsc::Receiver<()>) {
-        info!(
-            bot_id = %self.bot.id,
-            symbol = %self.bot.symbol,
-            market_type = %self.bot.market_type,
-            "AutoWorker starting"
-        );
-
         // 获取初始价格
         for attempt in 1..=10 {
             self.current_price = self.fetch_current_price().await;
@@ -345,13 +337,11 @@ impl AutoWorker {
             }
             return;
         }
-        info!(bot_id = %self.bot.id, price = self.current_price, "Initial price fetched");
 
         // 加载连续亏损次数
         match self.store.load_consecutive_losses(self.bot.id).await {
             Ok(losses) => {
                 self.consecutive_losses = losses;
-                info!(bot_id = %self.bot.id, consecutive_losses = losses, "Loaded consecutive losses from DB");
             }
             Err(e) => {
                 warn!(bot_id = %self.bot.id, error = %e, "Failed to load consecutive losses, starting from 0");
@@ -362,29 +352,8 @@ impl AutoWorker {
         match self.store.find_last_closed_trade(self.bot.id).await {
             Ok(Some((side, close_reason, closed_at))) => {
                 self.last_close_event = Some((side.clone(), close_reason.clone(), closed_at));
-                // 检查是否仍在冷却期，便于运维观察
-                if let Some(remaining) = self.cooldown_remaining_secs(&side) {
-                    info!(
-                        bot_id = %self.bot.id,
-                        last_close_side = %side,
-                        last_close_reason = %close_reason,
-                        last_close_at = %closed_at,
-                        remaining_secs = remaining,
-                        "Restored last_close_event, still in cooldown"
-                    );
-                } else {
-                    info!(
-                        bot_id = %self.bot.id,
-                        last_close_side = %side,
-                        last_close_reason = %close_reason,
-                        last_close_at = %closed_at,
-                        "Restored last_close_event, cooldown expired"
-                    );
-                }
             }
-            Ok(None) => {
-                info!(bot_id = %self.bot.id, "No previous closed trade found, no cooldown");
-            }
+            Ok(None) => {}
             Err(e) => {
                 warn!(bot_id = %self.bot.id, error = %e, "Failed to load last closed trade");
             }
@@ -426,11 +395,6 @@ impl AutoWorker {
             .filter(|id| *id != Uuid::nil())
             .is_some()
         {
-            info!(
-                bot_id = %self.bot.id,
-                position_id = ?self.bot.position_id,
-                "Waiting for PE to restore current_position"
-            );
             // 同时从 DB 恢复 current_trade_id（用于平仓时 UPDATE 对应的开仓记录）
             // 以及 stop_loss/take_profit（用于恢复内存中的风控边界）
             match self.store.find_open_trade(self.bot.id).await {
@@ -438,13 +402,6 @@ impl AutoWorker {
                     self.current_trade_id = Some(trade_id);
                     self.stop_loss = sl;
                     self.take_profit = tp;
-                    info!(
-                        bot_id = %self.bot.id,
-                        trade_id = %trade_id,
-                        stop_loss = sl,
-                        take_profit = tp,
-                        "Restored current_trade_id and risk boundaries from DB"
-                    );
                 }
                 Ok(None) => {
                     error!(
@@ -465,17 +422,11 @@ impl AutoWorker {
             // 主动从 PE 查询仓位状态（不依赖事件推送，避免 full_sync 只发出 PositionSynced 导致超时）
             self.refresh_position_from_pe().await;
             // 如果主动查询已恢复，跳过事件等待循环
-            if self.current_position.is_some() {
-                info!(
-                    bot_id = %self.bot.id,
-                    "current_position restored via direct PE query"
-                );
-            } else {
+            if self.current_position.is_none() {
                 // 主动查询未恢复，等待 PE 事件推送（最多 15 秒）
                 let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
                 loop {
                     if self.current_position.is_some() {
-                        info!(bot_id = %self.bot.id, "current_position restored from PE event");
                         break;
                     }
                     if tokio::time::Instant::now() >= deadline {
@@ -501,7 +452,6 @@ impl AutoWorker {
                             }
                         }
                         _ = shutdown_rx.recv() => {
-                            info!(bot_id = %self.bot.id, "Shutdown during PE position restore");
                             return;
                         }
                         _ = tokio::time::sleep(Duration::from_millis(200)) => {}
@@ -511,17 +461,19 @@ impl AutoWorker {
         }
 
         // 初始 LLM 分析
-        if self.has_position() {
+        let skip_llm = if self.has_position() {
             self.position_opened_at = Some(tokio::time::Instant::now());
             if self.check_stop_take_profit().await {
-                info!(bot_id = %self.bot.id, "Stop/take profit triggered on startup, skipping initial LLM analysis");
                 self.save_position().await;
+                true
             } else {
-                info!(bot_id = %self.bot.id, "Performing initial LLM analysis");
-                self.on_llm_decision().await;
+                false
             }
         } else {
-            info!(bot_id = %self.bot.id, "Performing initial LLM analysis");
+            false
+        };
+
+        if !skip_llm {
             self.on_llm_decision().await;
         }
 
@@ -531,7 +483,6 @@ impl AutoWorker {
         let (llm_signal_tx, mut llm_signal_rx) = tokio::sync::mpsc::channel::<()>(1);
         {
             let interval_secs = self.bot.decide_interval_secs.max(60) as u64;
-            info!(bot_id = %self.bot.id, interval_secs, "LLM periodic decision enabled");
             tokio::spawn(async move {
                 let mut tick = tokio::time::interval(Duration::from_secs(interval_secs));
                 tick.tick().await;
@@ -548,7 +499,6 @@ impl AutoWorker {
         loop {
             tokio::select! {
                 _ = shutdown_rx.recv() => {
-                    info!(bot_id = %self.bot.id, "AutoWorker shutting down");
                     break;
                 }
                 _ = price_tick.tick() => {
@@ -699,11 +649,6 @@ impl AutoWorker {
         );
 
         if new_stop != self.stop_loss {
-            info!(
-                bot_id = %self.bot.id, side = %side,
-                old_stop = self.stop_loss, new_stop,
-                "Trailing stop updated"
-            );
             self.stop_loss = new_stop;
             self.trailing_stop_dirty = true;
             // 同步更新 trade 维度的 stop_loss（异步执行，失败仅记录日志）
@@ -749,8 +694,6 @@ impl AutoWorker {
     // ── LLM 决策 ────────────────────────────────────────────
 
     pub(crate) async fn on_llm_decision(&mut self) {
-        info!(bot_id = %self.bot.id, "LLM decision tick");
-
         if self.is_pending() {
             warn!(bot_id = %self.bot.id, "Pending order in progress, skipping LLM decision");
             return;
@@ -973,8 +916,6 @@ impl AutoWorker {
     ) -> (AutoAction, Option<Uuid>) {
         match decision {
             Some(d) => {
-                info!(bot_id = %self.bot.id, action = d.action.as_str(), reason = %d.reason, confidence = d.confidence, "LLM decision");
-
                 if let Some(ref w) = d.funding_rate_warning {
                     warn!(bot_id = %self.bot.id, warning = %w, "Funding rate warning");
                 }
@@ -1076,7 +1017,6 @@ impl AutoWorker {
         decision: Option<&AutoDecision>,
     ) -> Option<String> {
         if matches!(action, AutoAction::Hold) {
-            info!(bot_id = %self.bot.id, "Hold: no action taken, no params applied");
             return None;
         }
 
@@ -1540,11 +1480,6 @@ impl AutoWorker {
                     {
                         warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
                     }
-                    info!(
-                        bot_id = %self.bot.id,
-                        position_id = %position.id,
-                        "Recovered bot.position_id from PositionUpdated event"
-                    );
                 }
                 self.current_position = Some(position);
             }
@@ -1564,11 +1499,6 @@ impl AutoWorker {
                         {
                             warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
                         }
-                        info!(
-                            bot_id = %self.bot.id,
-                            position_id = %pid,
-                            "Position closed event received, cleared bot.position_id"
-                        );
                     }
                 }
             }
@@ -1625,27 +1555,9 @@ impl AutoWorker {
                 };
 
                 if self.pending_open.is_some() {
-                    info!(
-                        bot_id = %self.bot.id,
-                        symbol = %order.symbol,
-                        side = ?order.side,
-                        fill_price,
-                        filled_qty,
-                        fee = order.fee,
-                        "Open order filled, confirming position"
-                    );
                     self.apply_pending_open(fill_price, filled_qty, order.fee)
                         .await;
                 } else if self.pending_close.is_some() {
-                    info!(
-                        bot_id = %self.bot.id,
-                        symbol = %order.symbol,
-                        side = ?order.side,
-                        fill_price,
-                        filled_qty,
-                        fee = order.fee,
-                        "Close order filled, confirming close"
-                    );
                     self.apply_pending_close(fill_price, filled_qty, order.fee)
                         .await;
                 }

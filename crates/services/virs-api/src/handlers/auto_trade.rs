@@ -176,8 +176,6 @@ pub async fn create_bot(
     .execute(&state.db_pool)
     .await?;
 
-    tracing::info!(bot_id = %id, initial_capital, "Auto bot created with initial_capital from exchange");
-
     Ok(Json(ApiResponse::ok(
         serde_json::json!({"id": id.to_string()}),
     )))
@@ -356,7 +354,6 @@ pub async fn delete_bot(
         })?;
     } else {
         // 引擎未运行（bot 处于 stopped 状态，无运行实例需清理）—— 直接删 DB
-        tracing::info!(bot_id = %id, "Auto engine not running, deleting stopped bot from DB directly");
     }
     // Delete from database
     let result = sqlx::query(r#"DELETE FROM qd_auto_bots WHERE id = $1"#)

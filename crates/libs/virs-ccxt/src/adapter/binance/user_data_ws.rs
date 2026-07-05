@@ -442,9 +442,6 @@ impl UserDataWs {
                                                             break;
                                                         }
                                                         "serverShutdown" => {
-                                                            tracing::info!(
-                                                                "[UserDataWs] serverShutdown received, server will disconnect soon; reconnecting"
-                                                            );
                                                             break;
                                                         }
                                                         _ => {

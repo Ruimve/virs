@@ -406,24 +406,13 @@ pub(crate) fn mask_signature(s: &str) -> String {
 async fn handle_response(
     resp: reqwest::Response,
     display_url: &str,
-    display_body: Option<&str>,
+    _display_body: Option<&str>,
 ) -> Result<Value, ExchangeError> {
     let status = resp.status();
     let text = resp
         .text()
         .await
         .map_err(|e| ExchangeError::Network(format!("Failed to read response body: {}", e)))?;
-
-    // Print the RAW response body from Binance as-is (no transformation).
-    // This is the native return value before any field mapping/conversion.
-    tracing::info!(
-        target: "binance_api",
-        url = %display_url,
-        request_body = ?display_body,
-        http_status = %status.as_u16(),
-        response = %text,
-        "Binance API call"
-    );
 
     if !status.is_success() {
         if let Ok(json) = serde_json::from_str::<Value>(&text) {

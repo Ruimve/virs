@@ -80,8 +80,6 @@ impl GridWorker {
         mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
         mut adjust_rx: tokio::sync::mpsc::Receiver<()>,
     ) {
-        info!(bot_id = %self.bot.id, symbol = %self.bot.symbol, grid_count = self.bot.grid_count, "GridWorker starting");
-
         if self.levels.is_empty() {
             if self.bot.dynamic_adjust {
                 warn!(bot_id = %self.bot.id, "No grid levels yet, will trigger initial LLM analysis after price fetch");
@@ -102,15 +100,12 @@ impl GridWorker {
         }
         if self.current_price <= 0.0 {
             error!(bot_id = %self.bot.id, "Failed to fetch initial price after 10 attempts");
-        } else {
-            info!(bot_id = %self.bot.id, price = self.current_price, "Initial price fetched");
         }
 
         self.load_existing_trades().await;
 
         // 若网格参数为空，触发初始 LLM 分析
         if self.bot.upper_price <= 0.0 || self.bot.lower_price <= 0.0 || self.levels.is_empty() {
-            info!(bot_id = %self.bot.id, "Grid parameters empty, triggering initial LLM analysis");
             self.on_llm_decision().await;
         }
 
@@ -124,7 +119,6 @@ impl GridWorker {
         let (llm_signal_tx, mut llm_signal_rx) = tokio::sync::mpsc::channel::<()>(1);
         if self.bot.dynamic_adjust {
             let interval_secs = self.bot.adjust_interval_secs.max(60) as u64;
-            info!(bot_id = %self.bot.id, interval_secs, "LLM periodic analysis enabled");
             tokio::spawn(async move {
                 let mut tick = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
                 tick.tick().await;
@@ -135,15 +129,12 @@ impl GridWorker {
                     }
                 }
             });
-        } else {
-            info!(bot_id = %self.bot.id, "LLM periodic analysis disabled (dynamic_adjust=false)");
         }
 
         // 主事件循环
         loop {
             tokio::select! {
                 _ = shutdown_rx.recv() => {
-                    info!(bot_id = %self.bot.id, "GridWorker shutting down");
                     break;
                 }
                 Some(()) = adjust_rx.recv() => {
@@ -297,8 +288,6 @@ impl GridWorker {
             };
             self.place_order(level, &dir).await;
         }
-
-        info!(bot_id = %self.bot.id, current_level = current_level_idx, "Initial orders placed");
     }
 
     fn filter_levels(&self, predicate: impl Fn(&GridLevel) -> bool) -> Vec<GridLevel> {
@@ -440,7 +429,6 @@ impl GridWorker {
                     } else {
                         self.levels[level_idx].sell_order_id = Some(order.id);
                     }
-                    info!(bot_id = %self.bot.id, level = self.levels[level_idx].level, side = %side, order_id = %order.id, "Grid order placed");
                 }
             }
         }
@@ -573,7 +561,6 @@ impl GridWorker {
         }
 
         self.save_stats().await;
-        info!(bot_id = %self.bot.id, level = level_num, side = %side_str, price, quantity = order.filled, pnl, hold, "Grid order filled");
     }
 
     async fn place_reverse_order_if_cycle_complete(
@@ -658,7 +645,6 @@ impl GridWorker {
         let max_dist = self.grid_spacing();
         trades.sort_by_key(|t| t.opened_at);
 
-        let trade_count = trades.len();
         for trade in &trades {
             if let Some(level_idx) = self.find_level_by_price_within(trade.open_price, max_dist) {
                 apply_fill_to_level(
@@ -707,7 +693,6 @@ impl GridWorker {
             }
         }
 
-        info!(bot_id = %self.bot.id, loaded_trades = trade_count, total_pnl = self.total_pnl, "Loaded existing grid trades");
         self.reset_completed_cycles();
     }
 
@@ -948,8 +933,6 @@ impl GridWorker {
     // ── LLM 决策 ────────────────────────────────────────────
 
     pub(crate) async fn on_llm_decision(&mut self) {
-        info!(bot_id = %self.bot.id, "LLM decision tick");
-
         let is_initial =
             self.bot.upper_price <= 0.0 || self.bot.lower_price <= 0.0 || self.levels.is_empty();
 
@@ -1138,8 +1121,6 @@ impl GridWorker {
     ) -> GridAction {
         match decision {
             Some(d) => {
-                info!(bot_id = %self.bot.id, action = %d.action, reason = %d.reason, confidence = d.confidence, source = "llm", "LLM decision");
-
                 let result = serde_json::json!({
                     "decision": { "action": d.action, "reason": d.reason, "confidence": d.confidence },
                     "grid": { "upper_price": d.upper_price, "lower_price": d.lower_price, "grid_count": d.grid_count, "grid_profit_pct": d.grid_profit_pct },
@@ -1204,7 +1185,6 @@ impl GridWorker {
         decision: Option<&GridAiDecision>,
     ) {
         if matches!(action, GridAction::Hold) {
-            info!(bot_id = %self.bot.id, "Hold: no params applied, no orders placed");
             return;
         }
 
@@ -1228,7 +1208,6 @@ impl GridWorker {
                     self.paused = false;
                     self.save_stats().await;
                     self.place_initial_orders().await;
-                    info!(bot_id = %self.bot.id, "Grid resumed by decision");
                 }
             }
             GridAction::ReducePosition => {
@@ -1350,7 +1329,6 @@ impl GridWorker {
         }
 
         self.save_stats().await;
-        info!(bot_id = %self.bot.id, grid_count = self.bot.grid_count, grid_profit_pct = self.bot.grid_profit_pct, quantity_per_grid = self.bot.quantity_per_grid, leverage = self.bot.leverage, allow_structure_change, structure_changed, "LLM params applied");
         structure_changed
     }
 
@@ -1405,7 +1383,6 @@ impl GridWorker {
                     self.bot.quantity_per_grid = updated_bot.quantity_per_grid;
                     self.bot.dynamic_adjust = updated_bot.dynamic_adjust;
                     self.bot.adjust_interval_secs = updated_bot.adjust_interval_secs;
-                    info!(bot_id = %self.bot.id, "Adjust signal received, non-structural params updated");
                 }
                 self.bot.system_prompt = updated_bot.system_prompt;
                 self.bot.leverage = updated_bot.leverage;
@@ -1483,7 +1460,6 @@ impl GridWorker {
             self.place_initial_orders().await;
         }
 
-        info!(bot_id = %self.bot.id, new_upper = self.bot.upper_price, new_lower = self.bot.lower_price, grid_count = self.levels.len(), "Grid adjusted");
         if let Err(e) = self.grid_event_tx.send(GridEvent::GridAdjusted {
             bot_id: self.bot.id,
             upper_price: self.bot.upper_price,
@@ -1536,7 +1512,6 @@ impl GridWorker {
         }
 
         self.pending_orders.clear();
-        info!(bot_id = %self.bot.id, grid_count = self.levels.len(), holdings_matched = holdings.len(), "Grid levels recalculated (preserved holdings by price)");
     }
 }
 

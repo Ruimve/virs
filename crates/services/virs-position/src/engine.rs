@@ -299,7 +299,6 @@ impl PositionEngine {
             self.inner.position_id_index.insert(pos.id, key.clone());
             self.inner.positions.insert(key, pos.clone());
         }
-        info!(engine_id = %engine_id, count = self.inner.positions.len(), "Recovered positions from database");
 
         // 同步恢复的仓位到交易所内存状态（仅 Paper 模式需要，真实交易所空实现）
         // 避免 sync_loop 误判"本地有但交易所没有" → 强制关闭本地仓位
@@ -390,7 +389,6 @@ impl PositionEngine {
                                 "Failed to persist new position in full_sync"
                             );
                             self.inner.positions.insert(new_key, position.clone());
-                            info!(symbol = %ep.symbol, "Recovered external position");
                             // 外部发现的仓位也发出事件
                             self.inner.emit_event(EngineEvent::PositionOpened {
                                 position: position.clone(),
@@ -533,7 +531,6 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                             }
                         }
                         None => {
-                            info!(symbol = %ep.symbol, "New position detected from exchange");
                             let now = Utc::now();
                             let position = Position {
                                 id: Uuid::new_v4(),
@@ -1274,14 +1271,7 @@ pub(crate) async fn handle_open_position(
     // If position already exists, append order to it (e.g. grid multi-level orders)
     if let Some(existing) = inner.positions.get(&key) {
         let position_id = existing.id;
-        let existing_size = existing.size;
-        let existing_status = existing.status;
         drop(existing);
-        info!(
-            symbol = %symbol, side = ?side, position_id = %position_id,
-            existing_size, existing_status = ?existing_status,
-            "OpenPosition: merging into existing position (prevents duplicate)"
-        );
 
         let resolved_side = match side {
             PositionSide::Long => Side::Buy,
@@ -1333,7 +1323,6 @@ pub(crate) async fn handle_open_position(
                                 order: order.clone(),
                                 trade,
                             });
-                            info!(position_id = %position_id, symbol = %symbol, side = ?side, size = order.filled, "Order filled for existing position");
                         }
                         None => {
                             error!(order_id = %order.id, "Order filled but no valid fill_price — skipping Trade record to prevent 0.0 price propagation");
@@ -1343,7 +1332,6 @@ pub(crate) async fn handle_open_position(
                     inner.emit_event(EngineEvent::OrderPlaced {
                         order: order.clone(),
                     });
-                    info!(position_id = %position_id, symbol = %symbol, side = ?side, "Order placed for existing position");
                 }
             }
             Err(e) => {
@@ -1766,7 +1754,6 @@ pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol:
         .collect();
 
     if positions_to_close.is_empty() {
-        info!(symbol = %symbol, "No open positions to close");
         return;
     }
 
@@ -1885,7 +1872,6 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
             inner.emit_event(EngineEvent::OrderPlaced {
                 order: order.clone(),
             });
-            info!(order_id = %order.id, symbol = %params.symbol, "Order placed");
         }
         Err(e) => {
             let msg = format!("Failed to place order: {}", e);
@@ -1936,7 +1922,6 @@ pub(crate) async fn handle_cancel_order(inner: &Arc<EngineInner>, order_id: Uuid
             inner.emit_event(EngineEvent::OrderCanceled {
                 order: cancelled_order,
             });
-            info!(order_id = %order_id, "Order canceled");
         }
         Err(e) => {
             let msg = format!("Failed to cancel order: {}", e);
@@ -1978,7 +1963,6 @@ pub(crate) async fn handle_cancel_all_orders(
                     order: order.clone(),
                 });
             }
-            info!(count = cancelled_orders.len(), "Orders canceled");
         }
         Err(e) => {
             error!(error = %e, "Failed to cancel all orders");

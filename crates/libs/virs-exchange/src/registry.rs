@@ -3,7 +3,6 @@
 use crate::Exchange;
 use dashmap::DashMap;
 use std::sync::Arc;
-use tracing::info;
 
 pub struct Exchanges {
     exchanges: Arc<DashMap<String, Box<dyn Exchange>>>,
@@ -26,7 +25,6 @@ impl Exchanges {
         let name = exchange.name().to_string();
         let mt = exchange.market_type();
         let key = format!("{}:{}", name, mt);
-        info!("Registered exchange: {} (key={})", name, key);
         self.exchanges.insert(key, exchange);
     }
 

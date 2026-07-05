@@ -5,7 +5,6 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use tracing::info;
 use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
@@ -99,10 +98,6 @@ pub async fn save_credential(
         };
         let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, app_mt);
         state.exchange_registry.register(Box::new(adapter));
-        info!(
-            exchange,
-            market_type, "Auto-registered exchange after credential save"
-        );
     }
 
     Ok(Json(ApiResponse::ok(
@@ -281,17 +276,6 @@ pub async fn verify_permissions(
     // Call apiRestrictions
     match exchange.get_api_restrictions().await {
         Ok(restrictions) => {
-            tracing::info!(
-                ip_restrict = restrictions.ip_restrict,
-                ip_not_restricted = restrictions.ip_not_restricted,
-                ip_whitelist = ?restrictions.ip_whitelist,
-                read_info = restrictions.read_info,
-                enable_spot_and_margin_trading = restrictions.enable_spot_and_margin_trading,
-                enable_futures = restrictions.enable_futures,
-                enable_withdrawals = restrictions.enable_withdrawals,
-                enable_internal_transfer = restrictions.enable_internal_transfer,
-                "apiRestrictions parsed result"
-            );
             let mut permissions = Vec::new();
 
             // Note: "connectivity" is NOT included here — it's already checked

@@ -11,7 +11,7 @@ use chrono::Utc;
 use dashmap::DashMap;
 use tokio::sync::{mpsc, Mutex};
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{info, warn};
+use tracing::warn;
 use uuid::Uuid;
 
 use virs_types::enums::*;
@@ -78,10 +78,6 @@ pub fn compute_paper_liquidation_price(
 
 impl PaperExchangeAdapter {
     pub fn new(name: &str, market_type: MarketType, initial_balance: f64) -> Self {
-        info!(
-            name, market_type = ?market_type, initial_balance,
-            "PaperExchangeAdapter created"
-        );
         Self {
             name: name.to_string(),
             market_type,
@@ -132,12 +128,6 @@ impl PaperExchangeAdapter {
                             balance.used = usdt.used;
                             balance.total = usdt.total;
                             self.balance_initialized.store(true, Ordering::Relaxed);
-                            info!(
-                                total = usdt.total,
-                                free = usdt.free,
-                                used = usdt.used,
-                                "PaperExchangeAdapter: balance initialized from real exchange"
-                            );
                         }
                     }
                 }
@@ -494,8 +484,6 @@ impl ExchangePe for PaperExchangeAdapter {
                     warn!(order_id = %order_id, symbol = %params.symbol, "Paper WsFeedEvent::OrderUpdate send failed — receiver dropped, event lost");
                 }
             }
-            info!(order_id = %order_id, symbol = %params.symbol, side = ?params.side,
-                amount = params.amount, fill_price, "Paper market order filled immediately");
             Ok(order)
         } else {
             let pending = PaperPendingOrder {
@@ -745,7 +733,6 @@ impl ExchangePe for PaperExchangeAdapter {
             );
             // 同步 entry_price 作为 last_price（避免后续下单 fill_price=0）
             self.last_prices.insert(pos.symbol.clone(), pos.entry_price);
-            info!(symbol = %pos.symbol, side = ?pos.side, size = pos.size, "Paper position restored from DB");
         }
     }
 }

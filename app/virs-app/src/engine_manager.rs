@@ -114,11 +114,6 @@ impl EngineManager for AppEngineManager {
                 let temp_adapter = CcxtExchangeAdapter::new(self.exchange_registry.clone());
                 match temp_adapter.get_balance().await {
                     Ok(b) => {
-                        info!(
-                            total = b.total,
-                            free = b.free,
-                            "Paper mode: fetched real balance as initial capital"
-                        );
                         b.total
                     }
                     Err(e) => {
@@ -132,7 +127,6 @@ impl EngineManager for AppEngineManager {
                     .with_exchange_registry(self.exchange_registry.clone()),
             )
         } else {
-            info!("Position Engine: Real exchange mode");
             Box::new(CcxtExchangeAdapter::new(self.exchange_registry.clone()))
         };
 
@@ -388,11 +382,8 @@ impl EngineManager for AppEngineManager {
         };
 
         if !has_bots {
-            info!("No bots found in DB — skip restore");
             return Ok(());
         }
-
-        info!("Bots found in DB — restoring services...");
 
         // 1. Restore Exchanges from DB credentials
         let rows: Vec<(String, String, String, Option<String>)> = sqlx::query_as(
@@ -448,7 +439,6 @@ impl EngineManager for AppEngineManager {
                     };
                     let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, app_mt);
                     self.exchange_registry.register(Box::new(adapter));
-                    info!(exchange, market_type = mt_str, "Restored exchange from DB");
                 }
             }
         }
@@ -508,11 +498,6 @@ impl EngineManager for AppEngineManager {
         // 4. Start engines (which will call restore_running_bots internally)
         if let Err(e) = self.ensure_started(paper_mode).await {
             tracing::error!("Failed to restore engines: {}", e);
-        } else {
-            info!(
-                "Services restored successfully ({} bot symbols subscribed)",
-                bot_symbols.len()
-            );
         }
 
         Ok(())

@@ -23,6 +23,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
+use tracing::info;
 use virs_error::ExchangeError;
 
 use super::BinanceEd25519Signer;
@@ -155,9 +156,6 @@ impl UserDataWsApi {
 
                         match logon_ok {
                             Ok(true) => {
-                                tracing::info!(
-                                    "[UserDataWsApi] session.logon succeeded, user data stream authenticated"
-                                );
                             }
                             Ok(false) => {
                                 tracing::error!(
@@ -219,8 +217,8 @@ impl UserDataWsApi {
                             wait_for_response(&mut read, sub_id, Duration::from_secs(10)).await;
                         match sub_ok {
                             Ok(true) => {
-                                tracing::info!(
-                                    "[UserDataWsApi] userDataStream.subscribe succeeded"
+                                info!(
+                                    "userDataStream.subscribe succeeded"
                                 );
                             }
                             Ok(false) => {

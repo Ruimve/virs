@@ -98,7 +98,6 @@ impl GridEngine {
             }
         };
         for bot in running_bots {
-            info!(bot_id = %bot.id, name = %bot.name, "Restoring running grid bot");
             if let Err(e) = self.store.update_bot_status(bot.id, "stopped").await {
                 warn!(bot_id = %bot.id, error = %e, "Failed to update bot status to stopped");
             }
@@ -160,7 +159,6 @@ impl GridEngine {
         if let Err(e) = self.grid_event_tx.send(GridEvent::BotStarted { bot_id }) {
             warn!(bot_id = %bot_id, error = %e, event = "BotStarted", "Failed to send event — receiver may be dropped");
         }
-        info!(bot_id = %bot_id, "Grid bot started");
     }
 
     async fn stop_bot(&mut self, bot_id: Uuid, reason: &str) {
@@ -189,7 +187,6 @@ impl GridEngine {
         }) {
             warn!(bot_id = %bot_id, error = %e, event = "BotStopped", "Failed to send event — receiver may be dropped");
         }
-        info!(bot_id = %bot_id, "Grid bot {}: {}", target_status, reason);
     }
 
     async fn graceful_shutdown_worker(&mut self, bot_id: Uuid) {
@@ -203,9 +200,7 @@ impl GridEngine {
         if let Some(handle) = self.workers.remove(&bot_id) {
             let abort_handle = handle.abort_handle();
             match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
-                Ok(Ok(())) => {
-                    info!(bot_id = %bot_id, "Grid worker exited gracefully");
-                }
+                Ok(Ok(())) => {}
                 Ok(Err(e)) => {
                     warn!(bot_id = %bot_id, error = %e, "Grid worker exited with error");
                 }
@@ -256,6 +251,5 @@ impl GridEngine {
         if let Err(e) = self.store.delete_bot(bot_id).await {
             error!(bot_id = %bot_id, error = %e, "Failed to delete bot from database");
         }
-        info!(bot_id = %bot_id, close_position, "Grid bot deleted");
     }
 }

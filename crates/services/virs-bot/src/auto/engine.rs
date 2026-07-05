@@ -89,7 +89,6 @@ impl AutoEngine {
             }
         };
         for bot in running_bots {
-            info!(bot_id = %bot.id, name = %bot.name, "Restoring running auto bot");
             if let Err(e) = self.store.update_bot_status(bot.id, "stopped").await {
                 warn!(bot_id = %bot.id, error = %e, "Failed to update bot status to stopped");
             }
@@ -146,14 +145,13 @@ impl AutoEngine {
         if let Err(e) = self.store.update_bot_status(bot_id, "running").await {
             warn!(bot_id = %bot_id, error = %e, "Failed to update bot status to running");
         }
-        info!(bot_id = %bot_id, "Auto bot started");
     }
 
     async fn stop_bot(&mut self, bot_id: Uuid, reason: &str) {
         self.stop_or_pause_bot(bot_id, reason, "stopped").await;
     }
 
-    async fn stop_or_pause_bot(&mut self, bot_id: Uuid, reason: &str, target_status: &str) {
+    async fn stop_or_pause_bot(&mut self, bot_id: Uuid, _reason: &str, target_status: &str) {
         let cancel_symbol = self.bot_symbols.get(&bot_id).cloned();
         if let Err(e) = self
             .order_executor
@@ -169,7 +167,6 @@ impl AutoEngine {
         if let Err(e) = self.store.update_bot_status(bot_id, target_status).await {
             warn!(bot_id = %bot_id, error = %e, "Failed to update bot status to {}", target_status);
         }
-        info!(bot_id = %bot_id, "Auto bot {}: {}", target_status, reason);
     }
 
     async fn graceful_shutdown_worker(&mut self, bot_id: Uuid) {
@@ -182,9 +179,7 @@ impl AutoEngine {
         if let Some(handle) = self.workers.remove(&bot_id) {
             let abort_handle = handle.abort_handle();
             match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
-                Ok(Ok(())) => {
-                    info!(bot_id = %bot_id, "Auto worker exited gracefully");
-                }
+                Ok(Ok(())) => {}
                 Ok(Err(e)) => {
                     warn!(bot_id = %bot_id, error = %e, "Auto worker exited with error");
                 }
@@ -235,6 +230,5 @@ impl AutoEngine {
         if let Err(e) = self.store.delete_bot(bot_id).await {
             error!(bot_id = %bot_id, error = %e, "Failed to delete bot from database");
         }
-        info!(bot_id = %bot_id, close_position, "Auto bot deleted");
     }
 }
