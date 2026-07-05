@@ -35,11 +35,6 @@ async fn main() -> VirsResult<()> {
     {
         tracing::warn!("WARNING: Using default LLM_KEY. Change this in production!");
     }
-    if config.server.encryption_key == config.server.llm_key {
-        return Err(VirsError::config(
-            "ENCRYPTION_KEY and LLM_KEY must be different for security isolation",
-        ));
-    }
     if config.server.jwt_secret
         == "change-me-to-a-random-32-char-or-longer-string-in-production"
     {
