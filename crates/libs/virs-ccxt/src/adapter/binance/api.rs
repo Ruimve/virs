@@ -285,18 +285,23 @@ pub async fn fetch_balance(
                 tracing::warn!("Balance asset field missing — skipping entry");
                 String::new()
             });
+            if asset.is_empty() {
+                return None;
+            }
             let free = parse_f64(b, "free").unwrap_or_else(|| {
-                if !asset.is_empty() {
-                    tracing::warn!(asset = %asset, "Balance 'free' field missing or unparseable — defaulting to 0.0");
-                }
-                0.0
+                tracing::warn!(asset = %asset, "Balance 'free' field missing or unparseable — skipping entry to avoid 0.0 propagation");
+                f64::NAN
             });
+            if free.is_nan() {
+                return None;
+            }
             let used = parse_f64(b, "locked").unwrap_or_else(|| {
-                if !asset.is_empty() {
-                    tracing::warn!(asset = %asset, "Balance 'locked' field missing or unparseable — defaulting to 0.0");
-                }
-                0.0
+                tracing::warn!(asset = %asset, "Balance 'locked' field missing or unparseable — skipping entry to avoid 0.0 propagation");
+                f64::NAN
             });
+            if used.is_nan() {
+                return None;
+            }
             if free == 0.0 && used == 0.0 {
                 return None;
             }

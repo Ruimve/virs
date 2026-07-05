@@ -268,7 +268,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             match ex.get_min_qty(symbol).await {
                 Ok(q) => q,
                 Err(e) => {
-                    tracing::warn!(error = %e, "Failed to fetch min_qty, defaulting to 0");
+                    tracing::warn!(error = %e, "Failed to fetch min_qty — using 0.0 (precision check will be skipped, orders may be rejected by exchange)");
                     0.0
                 }
             }
@@ -276,7 +276,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             tracing::warn!(
                 exchange = %exchange,
                 symbol = %symbol,
-                "No exchange found for min_qty — defaulting to 0.0"
+                "No exchange found for min_qty — using 0.0 (precision check will be skipped)"
             );
             0.0
         };
@@ -591,7 +591,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             match ex.get_min_qty(symbol).await {
                 Ok(q) => q,
                 Err(e) => {
-                    tracing::warn!(error = %e, "Failed to fetch min_qty, defaulting to 0");
+                    tracing::warn!(error = %e, "Failed to fetch min_qty — using 0.0 (precision check will be skipped, orders may be rejected by exchange)");
                     0.0
                 }
             }
@@ -599,7 +599,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             tracing::warn!(
                 exchange = %exchange,
                 symbol = %symbol,
-                "No exchange found for min_qty — defaulting to 0.0"
+                "No exchange found for min_qty — using 0.0 (precision check will be skipped)"
             );
             0.0
         };

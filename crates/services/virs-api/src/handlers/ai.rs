@@ -129,10 +129,9 @@ pub async fn recommend_strategy(
 
     let symbol = body["symbol"].as_str().unwrap_or("");
     let exchange = body["exchange"].as_str().unwrap_or("");
-    let risk_tolerance = body["risk_tolerance"].as_str().unwrap_or_else(|| {
-        tracing::warn!("risk_tolerance not provided — defaulting to 'medium'");
-        "medium"
-    });
+    let risk_tolerance = body["risk_tolerance"].as_str().ok_or_else(|| {
+        VirsError::bad_request("risk_tolerance is required")
+    })?;
 
     if symbol.is_empty() {
         return Err(VirsError::bad_request("symbol is required"));

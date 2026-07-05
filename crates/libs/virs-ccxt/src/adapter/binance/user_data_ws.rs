@@ -170,6 +170,9 @@ impl ExecutionReportInner {
     }
 
     /// 转换为 WsFeedEvent::OrderUpdate
+    ///
+    /// 关键数值字段（filled/amount/price/commission）解析失败时返回 None，
+    /// 跳过该事件而非传播 0.0，避免订单状态判断错误和 PnL 计算偏差。
     pub fn to_ws_feed_event(&self) -> Option<WsFeedEvent> {
         let status = self.to_order_status()?;
 
@@ -182,64 +185,86 @@ impl ExecutionReportInner {
                 _ => None,
             });
 
+        let filled = self.filled_qty.parse::<f64>().unwrap_or_else(|e| {
+            tracing::error!(
+                filled_qty = %self.filled_qty,
+                error = %e,
+                "Failed to parse filled_qty in order_ws — skipping event to avoid 0.0 propagation"
+            );
+            f64::NAN
+        });
+        if filled.is_nan() {
+            return None;
+        }
+
+        let amount = self.orig_qty.parse::<f64>().unwrap_or_else(|e| {
+            tracing::error!(
+                orig_qty = %self.orig_qty,
+                error = %e,
+                "Failed to parse orig_qty in order_ws — skipping event to avoid 0.0 propagation"
+            );
+            f64::NAN
+        });
+        if amount.is_nan() {
+            return None;
+        }
+
+        let remaining = self
+            .remaining_qty
+            .as_ref()
+            .and_then(|q| q.parse().ok())
+            .unwrap_or_else(|| (amount - filled).max(0.0));
+
+        let price = self
+            .avg_fill_price
+            .as_ref()
+            .and_then(|s| s.parse::<f64>().ok())
+            .filter(|&p| p > 0.0)
+            .unwrap_or_else(|| {
+                match self.last_fill_price.parse::<f64>() {
+                    Ok(p) if p > 0.0 => p,
+                    Ok(_) => {
+                        tracing::warn!(
+                            last_fill_price = %self.last_fill_price,
+                            "last_fill_price is 0.0 in order_ws — using 0.0 (order may not be filled yet)"
+                        );
+                        0.0
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            last_fill_price = %self.last_fill_price,
+                            error = %e,
+                            "Failed to parse last_fill_price in order_ws — skipping event to avoid 0.0 price propagation"
+                        );
+                        return f64::NAN;
+                    }
+                }
+            });
+        if price.is_nan() {
+            return None;
+        }
+
+        let commission = match self.commission.parse::<f64>() {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!(
+                    commission = %self.commission,
+                    error = %e,
+                    "Failed to parse commission in order_ws — skipping event to avoid 0.0 propagation"
+                );
+                return None;
+            }
+        };
+
         Some(WsFeedEvent::OrderUpdate {
             exchange_order_id: self.order_id.to_string(),
             symbol: self.symbol.clone(),
             status,
-            filled: self.filled_qty.parse().unwrap_or_else(|e| {
-                tracing::error!(
-                    filled_qty = %self.filled_qty,
-                    error = %e,
-                    "Failed to parse filled_qty in order_ws"
-                );
-                0.0
-            }),
-            remaining: self
-                .remaining_qty
-                .as_ref()
-                .and_then(|q| q.parse().ok())
-                .unwrap_or_else(|| {
-                    let orig = self.orig_qty.parse::<f64>().unwrap_or_else(|e| {
-                        tracing::error!(orig_qty = %self.orig_qty, error = %e, "Failed to parse orig_qty in remaining calculation — defaulting to 0.0");
-                        0.0
-                    });
-                    let filled = self.filled_qty.parse::<f64>().unwrap_or_else(|e| {
-                        tracing::error!(filled_qty = %self.filled_qty, error = %e, "Failed to parse filled_qty in remaining calculation — defaulting to 0.0");
-                        0.0
-                    });
-                    (orig - filled).max(0.0)
-                }),
-            price: self
-                .avg_fill_price
-                .as_ref()
-                .and_then(|s| s.parse::<f64>().ok())
-                .filter(|&p| p > 0.0)
-                .unwrap_or_else(|| {
-                    self.last_fill_price.parse().unwrap_or_else(|e| {
-                        tracing::error!(
-                            last_fill_price = %self.last_fill_price,
-                            error = %e,
-                            "Failed to parse last_fill_price in order_ws"
-                        );
-                        0.0
-                    })
-                }),
-            amount: self.orig_qty.parse().unwrap_or_else(|e| {
-                tracing::error!(
-                    orig_qty = %self.orig_qty,
-                    error = %e,
-                    "Failed to parse orig_qty in order_ws"
-                );
-                0.0
-            }),
-            commission: self.commission.parse().unwrap_or_else(|e| {
-                tracing::error!(
-                    commission = %self.commission,
-                    error = %e,
-                    "Failed to parse commission in order_ws"
-                );
-                0.0
-            }),
+            filled,
+            remaining,
+            price,
+            amount,
+            commission,
             timestamp: DateTime::from_timestamp_millis(self.trade_time).unwrap_or_else(Utc::now),
             position_side,
         })

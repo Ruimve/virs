@@ -39,7 +39,7 @@ pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
         .first()
         .map(|c| c.brand().to_string())
         .unwrap_or_else(|| {
-            tracing::warn!("CPU brand unavailable — using empty string");
+            tracing::debug!("CPU brand unavailable — using empty string");
             String::new()
         });
     // CPU 主频（MHz）
@@ -48,7 +48,7 @@ pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
         .first()
         .map(|c| c.frequency())
         .unwrap_or_else(|| {
-            tracing::warn!("CPU frequency unavailable — using 0");
+            tracing::debug!("CPU frequency unavailable — using 0");
             0
         });
 
@@ -113,15 +113,15 @@ pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
 
     // 主机名
     let host_name = System::host_name().unwrap_or_else(|| {
-        tracing::warn!("System host_name unavailable — using empty string");
+        tracing::debug!("System host_name unavailable — using empty string");
         String::new()
     });
     let os_name = System::name().unwrap_or_else(|| {
-        tracing::warn!("System name unavailable — using empty string");
+        tracing::debug!("System name unavailable — using empty string");
         String::new()
     });
     let os_version = System::os_version().unwrap_or_else(|| {
-        tracing::warn!("System os_version unavailable — using empty string");
+        tracing::debug!("System os_version unavailable — using empty string");
         String::new()
     });
 

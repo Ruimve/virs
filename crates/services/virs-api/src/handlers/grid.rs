@@ -29,11 +29,11 @@ pub async fn create_bot(
     let exchange = body["exchange"].as_str().unwrap_or("");
     let grid_count = body["grid_count"].as_i64().unwrap_or(10) as i32;
     let upper_price = body["upper_price"].as_f64().unwrap_or_else(|| {
-        tracing::warn!("upper_price not provided in request — will be rejected by parameter validation");
+        tracing::debug!("upper_price not provided in request — will be rejected by parameter validation");
         0.0
     });
     let lower_price = body["lower_price"].as_f64().unwrap_or_else(|| {
-        tracing::warn!("lower_price not provided in request — will be rejected by parameter validation");
+        tracing::debug!("lower_price not provided in request — will be rejected by parameter validation");
         0.0
     });
     let grid_profit_pct = body["grid_profit_pct"].as_f64().unwrap_or(0.5);

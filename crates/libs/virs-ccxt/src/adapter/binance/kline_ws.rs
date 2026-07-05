@@ -108,38 +108,28 @@ struct BinanceKlineInner {
 }
 
 impl BinanceKlineData {
-    fn to_candle(&self) -> Candle {
+    fn to_candle(&self) -> Result<Candle, virs_error::ExchangeError> {
         let symbol = &self.kline.symbol;
-        Candle {
+        let parse = |field: &str, raw: &str| -> Result<f64, virs_error::ExchangeError> {
+            raw.parse::<f64>().map_err(|e| {
+                tracing::error!(symbol = %symbol, field = field, raw = %raw, error = %e, "Failed to parse kline OHLCV field — returning NoData instead of 0.0");
+                virs_error::ExchangeError::no_data(format!(
+                    "kline {field} parse failed for {symbol}: {raw} ({e})"
+                ))
+            })
+        };
+        Ok(Candle {
             open_time: self.kline.start_time,
             close_time: self.kline.end_time,
-            open: self.kline.open.parse().unwrap_or_else(|e| {
-                tracing::error!(symbol = %symbol, field = "open", raw = %self.kline.open, error = %e, "Failed to parse kline OHLCV field — defaulting to 0.0");
-                0.0
-            }),
-            high: self.kline.high.parse().unwrap_or_else(|e| {
-                tracing::error!(symbol = %symbol, field = "high", raw = %self.kline.high, error = %e, "Failed to parse kline OHLCV field — defaulting to 0.0");
-                0.0
-            }),
-            low: self.kline.low.parse().unwrap_or_else(|e| {
-                tracing::error!(symbol = %symbol, field = "low", raw = %self.kline.low, error = %e, "Failed to parse kline OHLCV field — defaulting to 0.0");
-                0.0
-            }),
-            close: self.kline.close.parse().unwrap_or_else(|e| {
-                tracing::error!(symbol = %symbol, field = "close", raw = %self.kline.close, error = %e, "Failed to parse kline OHLCV field — defaulting to 0.0");
-                0.0
-            }),
-            volume: self.kline.volume.parse().unwrap_or_else(|e| {
-                tracing::error!(symbol = %symbol, field = "volume", raw = %self.kline.volume, error = %e, "Failed to parse kline OHLCV field — defaulting to 0.0");
-                0.0
-            }),
-            quote_volume: self.kline.quote_volume.parse().unwrap_or_else(|e| {
-                tracing::error!(symbol = %symbol, field = "quote_volume", raw = %self.kline.quote_volume, error = %e, "Failed to parse kline OHLCV field — defaulting to 0.0");
-                0.0
-            }),
+            open: parse("open", &self.kline.open)?,
+            high: parse("high", &self.kline.high)?,
+            low: parse("low", &self.kline.low)?,
+            close: parse("close", &self.kline.close)?,
+            volume: parse("volume", &self.kline.volume)?,
+            quote_volume: parse("quote_volume", &self.kline.quote_volume)?,
             trades: self.kline.trades,
             closed: self.kline.closed,
-        }
+        })
     }
 
     fn ws_symbol(&self) -> &str {
@@ -320,7 +310,17 @@ impl KlineWsClient for KlineWs {
                                                             let map = symbol_map.read().await;
                                                             map.get(&raw_sym).cloned().unwrap_or_else(|| raw_sym.clone())
                                                         };
-                                                        let candle = data.to_candle();
+                                                        let candle = match data.to_candle() {
+                                                            Ok(c) => c,
+                                                            Err(e) => {
+                                                                tracing::warn!(
+                                                                    symbol = %data.ws_symbol(),
+                                                                    error = %e,
+                                                                    "Failed to parse kline — skipping this candle update"
+                                                                );
+                                                                continue;
+                                                            }
+                                                        };
                                                         tracing::debug!(
                                                             "[KlineWs] 1m kline: {} open_time={} close={:.2} closed={}",
                                                             original_symbol, candle.open_time, candle.close, candle.closed
@@ -676,7 +676,7 @@ mod tests {
             },
         };
 
-        let candle = data.to_candle();
+        let candle = data.to_candle().expect("valid candle");
         assert_eq!(candle.open_time, 1713900000000);
         assert_eq!(candle.close_time, 1713900059999);
         assert!((candle.open - 65000.0).abs() < f64::EPSILON);
@@ -708,7 +708,7 @@ mod tests {
                 quote_volume: "6532500.00".to_string(),
             },
         };
-        let candle_closed = data_closed.to_candle();
+        let candle_closed = data_closed.to_candle().expect("valid closed candle");
         assert!(candle_closed.closed);
     }
 
@@ -734,12 +734,13 @@ mod tests {
             },
         };
 
-        let candle = data.to_candle();
-        assert!((candle.open - 0.0).abs() < f64::EPSILON);
-        assert!((candle.high - 0.0).abs() < f64::EPSILON);
-        // 正常字段不受影响
-        assert!((candle.low - 64900.0).abs() < f64::EPSILON);
-        assert!((candle.close - 65050.0).abs() < f64::EPSILON);
+        let result = data.to_candle();
+        assert!(result.is_err(), "invalid OHLCV fields must return Err, not 0.0");
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, virs_error::ExchangeError::NoData(_)),
+            "expected NoData error, got {err:?}"
+        );
     }
 
     #[test]

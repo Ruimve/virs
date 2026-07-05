@@ -425,13 +425,16 @@ impl ExchangePe for PaperExchangeAdapter {
                 .last_prices
                 .get(&params.symbol)
                 .map(|r| *r)
-                .unwrap_or_else(|| {
+                .ok_or_else(|| {
                     tracing::error!(
                         symbol = %params.symbol,
-                        "No last price available for paper market order — fill_price will be 0.0, PnL will be incorrect"
+                        "No last price available for paper market order — returning NoData instead of 0.0"
                     );
-                    0.0
-                });
+                    PositionEngineError::Exchange(ExchangeError::no_data(format!(
+                        "No last price for paper market order on {}",
+                        params.symbol
+                    )))
+                })?;
             let pending_for_fill = PaperPendingOrder {
                 id: order_id,
                 symbol: params.symbol.clone(),

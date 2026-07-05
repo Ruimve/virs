@@ -1208,15 +1208,22 @@ impl AutoWorker {
             self.bot.market_regime = Some(regime.clone());
         }
 
+        // market_regime 是交易决策的关键参数，不得使用默认值。
+        // 若 market_regime 为 None，跳过 AI 分析更新以避免写入错误的 regime。
+        let regime = match self.bot.market_regime.as_deref() {
+            Some(r) => r,
+            None => {
+                tracing::warn!(bot_id = %self.bot.id, "market_regime is None — skipping AI analysis update to avoid default value");
+                return;
+            }
+        };
+
         // 杠杆由用户配置决定（create 接口），不在运行时动态调整
         if let Err(e) = self
             .store
             .update_ai_analysis(
                 self.bot.id,
-                self.bot.market_regime.as_deref().unwrap_or_else(|| {
-                    tracing::warn!(bot_id = %self.bot.id, "market_regime is None — defaulting to 'ranging'");
-                    "ranging"
-                }),
+                regime,
                 self.bot.leverage,
                 d.analysis.as_deref().unwrap_or(""),
             )

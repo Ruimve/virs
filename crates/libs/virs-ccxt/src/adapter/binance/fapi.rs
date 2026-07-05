@@ -292,10 +292,10 @@ pub async fn fetch_funding_rate(
         )
         .await?;
 
-    let rate = parse_f64(&data, "lastFundingRate").unwrap_or_else(|| {
-        tracing::warn!("lastFundingRate missing — defaulting to 0.0");
-        0.0
-    });
+    let rate = parse_f64(&data, "lastFundingRate").ok_or_else(|| {
+        tracing::warn!(symbol = %symbol, "lastFundingRate missing — returning NoData instead of 0.0");
+        ExchangeError::no_data(format!("lastFundingRate missing for {symbol}"))
+    })?;
     let next_funding_time = data
         .get("nextFundingTime")
         .and_then(|t| t.as_i64())
@@ -345,14 +345,14 @@ pub async fn fetch_funding_history(
             let funding_time = item
                 .get("fundingTime")
                 .and_then(|t| t.as_i64())
-                .unwrap_or_else(|| {
-                    tracing::warn!("fundingTime missing — using 0 as fallback");
-                    0
-                });
-            let rate = parse_f64(item, "fundingRate").unwrap_or_else(|| {
-                tracing::warn!("fundingRate missing — defaulting to 0.0");
-                0.0
-            });
+                .ok_or_else(|| {
+                    tracing::warn!("fundingTime missing — returning NoData instead of 0");
+                    ExchangeError::no_data("fundingTime missing in funding history".into())
+                })?;
+            let rate = parse_f64(item, "fundingRate").ok_or_else(|| {
+                tracing::warn!("fundingRate missing — returning NoData instead of 0.0");
+                ExchangeError::no_data("fundingRate missing in funding history".into())
+            })?;
             all_entries.push(CcxtFundingHistoryEntry { funding_time, rate });
         }
 
@@ -396,18 +396,23 @@ pub async fn fetch_balance(
                 tracing::warn!("Balance asset field missing — skipping entry");
                 String::new()
             });
+            if asset.is_empty() {
+                return None;
+            }
             let free = parse_f64(b, "availableBalance").unwrap_or_else(|| {
-                if !asset.is_empty() {
-                    tracing::warn!(asset = %asset, "Balance 'availableBalance' field missing or unparseable — defaulting to 0.0");
-                }
-                0.0
+                tracing::warn!(asset = %asset, "Balance 'availableBalance' field missing or unparseable — skipping entry to avoid 0.0 propagation");
+                f64::NAN
             });
+            if free.is_nan() {
+                return None;
+            }
             let total = parse_f64(b, "balance").unwrap_or_else(|| {
-                if !asset.is_empty() {
-                    tracing::warn!(asset = %asset, "Balance 'balance' field missing or unparseable — defaulting to 0.0");
-                }
-                0.0
+                tracing::warn!(asset = %asset, "Balance 'balance' field missing or unparseable — skipping entry to avoid 0.0 propagation");
+                f64::NAN
             });
+            if total.is_nan() {
+                return None;
+            }
             let used = total - free;
             if free == 0.0 && used == 0.0 {
                 return None;
@@ -770,10 +775,10 @@ pub async fn fetch_positions(
         .iter()
         .filter_map(|p| {
             let pos_amt = parse_f64(p, "positionAmt").unwrap_or_else(|| {
-                tracing::warn!("positionAmt missing — defaulting to 0.0");
-                0.0
+                tracing::warn!("positionAmt missing — skipping entry to avoid silent position drop");
+                f64::NAN
             });
-            if pos_amt == 0.0 {
+            if pos_amt.is_nan() || pos_amt == 0.0 {
                 return None;
             }
 

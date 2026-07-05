@@ -692,7 +692,7 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                     }
                 }
                 Err(e) => {
-                    debug!(error = %e, symbol = %sym, "Failed to get funding rate");
+                    warn!(error = %e, symbol = %sym, "Failed to get funding rate — PnL calculation may be inaccurate");
                 }
             }
         }
@@ -935,14 +935,14 @@ pub(crate) async fn handle_ws_order_update(
         let order_id = match order_id_opt {
             Some(id) => id,
             None => {
-                debug!(exchange_order_id, "Received order update for unknown order");
-                return;
-            }
-        };
+                    warn!(exchange_order_id, "Received order update for unknown order — state may be out of sync");
+                    return;
+                }
+            };
         let order = match inner.orders.get(&order_id) {
             Some(o) => o,
             None => {
-                debug!(exchange_order_id, "Order index points to missing order");
+                warn!(exchange_order_id, "Order index points to missing order — state inconsistency detected");
                 return;
             }
         };
