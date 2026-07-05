@@ -90,8 +90,6 @@ impl OrderBookEngine {
             return;
         }
 
-        tracing::debug!("[OrderBookEngine] Starting...");
-
         let (ws_update_tx, mut ws_update_rx) = broadcast::channel::<WsOrderBookEvent>(512);
 
         self.spot_handler.start(ws_update_tx.clone()).await;
@@ -104,14 +102,9 @@ impl OrderBookEngine {
 
         // WS update processor
         tokio::spawn(async move {
-            tracing::debug!("[OrderBookEngine] WS update processor started");
-
             while started.load(std::sync::atomic::Ordering::Relaxed) {
                 match ws_update_rx.recv().await {
                     Ok(WsOrderBookEvent::Reconnected) => {
-                        tracing::debug!(
-                            "[OrderBookEngine] WS reconnected — snapshots will resume automatically"
-                        );
                     }
                     Ok(WsOrderBookEvent::OrderBook(update)) => {
                         let symbol = update.symbol;
@@ -141,16 +134,12 @@ impl OrderBookEngine {
                         tracing::warn!("[OrderBookEngine] WS update lagged by {} messages", n);
                     }
                     Err(broadcast::error::RecvError::Closed) => {
-                        tracing::debug!("[OrderBookEngine] WS update channel closed");
                         break;
                     }
                 }
             }
 
-            tracing::debug!("[OrderBookEngine] WS update processor stopped");
         });
-
-        tracing::debug!("[OrderBookEngine] Started successfully");
     }
 
     pub async fn stop(&self) {
@@ -160,10 +149,8 @@ impl OrderBookEngine {
         {
             return;
         }
-        tracing::debug!("[OrderBookEngine] Stopping...");
         self.spot_handler.stop().await;
         self.perpetual_handler.stop().await;
-        tracing::debug!("[OrderBookEngine] Stopped");
     }
 
     pub async fn subscribe(
@@ -180,11 +167,6 @@ impl OrderBookEngine {
         let key = subscription_key(exchange, symbol);
 
         if self.subscriptions.contains_key(&key) {
-            tracing::debug!(
-                "[OrderBookEngine] Already subscribed to {}/{}",
-                exchange,
-                symbol
-            );
             return Ok(());
         }
 
@@ -204,12 +186,6 @@ impl OrderBookEngine {
             }
         }
 
-        tracing::debug!(
-            "[OrderBookEngine] Subscribed to {}/{} ({})",
-            exchange,
-            symbol,
-            market_type
-        );
         Ok(())
     }
 

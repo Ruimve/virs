@@ -14,7 +14,7 @@ use dashmap::DashMap;
 use futures_util::StreamExt;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use virs_types::enums::*;
@@ -478,7 +478,6 @@ pub(crate) async fn command_loop(
             }
         }
     }
-    debug!("Command loop exited");
 }
 
 // ============================================================================
@@ -857,7 +856,6 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
             }
         }
     }
-    debug!("Sync loop exited");
 }
 
 // ============================================================================
@@ -896,9 +894,7 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
                         )
                         .await;
                     }
-                    Some(WsFeedEvent::ConnectionChanged { connected }) => {
-                        debug!(connected, "WebSocket connection changed");
-                    }
+                    Some(WsFeedEvent::ConnectionChanged { .. }) => {}
                     None => break,
                 }
             }
@@ -909,7 +905,6 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
             }
         }
     }
-    debug!("WebSocket feed loop exited");
 }
 
 /// 处理 WebSocket 订单更新。
@@ -1246,12 +1241,9 @@ pub(crate) async fn poll_loop(inner: Arc<EngineInner>) {
                     }
                 }
             }
-            Err(e) => {
-                debug!(error = %e, "Failed to poll open orders");
-            }
+            Err(_) => {}
         }
     }
-    debug!("Poll loop exited");
 }
 
 // ============================================================================

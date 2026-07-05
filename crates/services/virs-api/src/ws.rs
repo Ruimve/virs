@@ -180,11 +180,9 @@ async fn handle_kline_ws(mut socket: WebSocket, kline_engine: Arc<virs_market::K
                             if req.get("action").and_then(|v| v.as_str()) == Some("subscribe") {
                                 if let Some(tf) = req.get("timeframe").and_then(|v| v.as_str()) {
                                     timeframe_filter = Some(tf.to_string());
-                                    tracing::debug!("[kline_ws] client subscribed to timeframe: {}", tf);
                                 }
                             } else if req.get("action").and_then(|v| v.as_str()) == Some("unsubscribe") {
                                 timeframe_filter = None;
-                                tracing::debug!("[kline_ws] client unsubscribed timeframe filter");
                             }
                         }
                     }
@@ -247,12 +245,10 @@ async fn handle_orderbook_ws(
                             if req.get("action").and_then(|v| v.as_str()) == Some("subscribe") {
                                 if let Some(sym) = req.get("symbol").and_then(|v| v.as_str()) {
                                     subscribed_symbols.insert(sym.to_string());
-                                    tracing::debug!("[orderbook_ws] subscribed symbol: {}", sym);
                                 }
                             } else if req.get("action").and_then(|v| v.as_str()) == Some("unsubscribe") {
                                 if let Some(sym) = req.get("symbol").and_then(|v| v.as_str()) {
                                     subscribed_symbols.remove(sym);
-                                    tracing::debug!("[orderbook_ws] unsubscribed symbol: {}", sym);
                                 }
                             }
                         }
@@ -327,7 +323,6 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
                             if req.get("action").and_then(|v| v.as_str()) == Some("subscribe") {
                                 if let Some(sym) = req.get("symbol").and_then(|v| v.as_str()) {
                                     subscribed_symbols.insert(sym.to_string());
-                                    tracing::debug!("[position_ws] subscribed symbol: {}", sym);
 
                                     // 订阅时立即推送当前仓位快照，避免首次显示空仓
                                     let positions = state.engine_manager.get_positions_by_symbol(sym);
@@ -343,7 +338,6 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
                             } else if req.get("action").and_then(|v| v.as_str()) == Some("unsubscribe") {
                                 if let Some(sym) = req.get("symbol").and_then(|v| v.as_str()) {
                                     subscribed_symbols.remove(sym);
-                                    tracing::debug!("[position_ws] unsubscribed symbol: {}", sym);
                                 }
                             }
                         }

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tracing::{debug, warn};
+use tracing::warn;
 
 use virs_exchange::Exchanges;
 use virs_market::KlineEngine;
@@ -73,14 +73,6 @@ impl ExchangeMarketDataProvider {
                 if candles.len() >= min_count {
                     return Some(candles.iter().map(candle_to_kline).collect());
                 }
-                debug!(
-                    exchange,
-                    symbol,
-                    timeframe = timeframe.as_str(),
-                    cached = candles.len(),
-                    required = min_count,
-                    "KlineEngine cache insufficient, falling back to REST"
-                );
             }
         }
 
@@ -379,14 +371,6 @@ impl AutoExchangeMarketDataProvider {
                 if candles.len() >= min_count {
                     return Some(candles.iter().map(candle_to_kline).collect());
                 }
-                debug!(
-                    exchange,
-                    symbol,
-                    timeframe = timeframe.as_str(),
-                    cached = candles.len(),
-                    required = min_count,
-                    "KlineEngine cache insufficient"
-                );
             }
         }
 

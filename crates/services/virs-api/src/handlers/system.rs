@@ -38,19 +38,13 @@ pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
         .cpus()
         .first()
         .map(|c| c.brand().to_string())
-        .unwrap_or_else(|| {
-            tracing::debug!("CPU brand unavailable — using empty string");
-            String::new()
-        });
+        .unwrap_or(String::new());
     // CPU 主频（MHz）
     let cpu_frequency_mhz = sys
         .cpus()
         .first()
         .map(|c| c.frequency())
-        .unwrap_or_else(|| {
-            tracing::debug!("CPU frequency unavailable — using 0");
-            0
-        });
+        .unwrap_or(0);
 
     // 内存
     let total_memory = sys.total_memory();
@@ -112,18 +106,9 @@ pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
     let uptime_secs = System::uptime();
 
     // 主机名
-    let host_name = System::host_name().unwrap_or_else(|| {
-        tracing::debug!("System host_name unavailable — using empty string");
-        String::new()
-    });
-    let os_name = System::name().unwrap_or_else(|| {
-        tracing::debug!("System name unavailable — using empty string");
-        String::new()
-    });
-    let os_version = System::os_version().unwrap_or_else(|| {
-        tracing::debug!("System os_version unavailable — using empty string");
-        String::new()
-    });
+    let host_name = System::host_name().unwrap_or(String::new());
+    let os_name = System::name().unwrap_or(String::new());
+    let os_version = System::os_version().unwrap_or(String::new());
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "cpu": {

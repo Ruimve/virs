@@ -101,11 +101,8 @@ impl UserDataWsApi {
             while running.load(Ordering::Relaxed) {
                 let connect_start = tokio::time::Instant::now();
 
-                tracing::debug!("[UserDataWsApi] Connecting to {}...", url);
-
                 match connect_async(&url).await {
                     Ok((ws_stream, _)) => {
-                        tracing::debug!("[UserDataWsApi] Connected to {}", url);
                         reconnect_delay = reconnect_delay_secs;
 
                         if event_tx
@@ -136,10 +133,6 @@ impl UserDataWsApi {
                                         continue;
                                     }
                                 };
-                                tracing::debug!(
-                                    "[UserDataWsApi] Sending session.logon (id={})",
-                                    logon_id
-                                );
                                 if write.send(Message::Text(logon_text.into())).await.is_err() {
                                     tracing::error!(
                                         "[UserDataWsApi] Failed to send session.logon"
@@ -215,10 +208,6 @@ impl UserDataWsApi {
                                 continue;
                             }
                         };
-                        tracing::debug!(
-                            "[UserDataWsApi] Sending userDataStream.subscribe (id={})",
-                            sub_id
-                        );
                         if write.send(Message::Text(sub_text.into())).await.is_err() {
                             tracing::error!(
                                 "[UserDataWsApi] Failed to send userDataStream.subscribe"
@@ -265,9 +254,6 @@ impl UserDataWsApi {
                                 break;
                             }
                             if connect_start.elapsed() > max_lifetime {
-                                tracing::debug!(
-                                    "[UserDataWsApi] Max lifetime reached, reconnecting..."
-                                );
                                 break;
                             }
 
@@ -293,7 +279,6 @@ impl UserDataWsApi {
                                             let _ = write.send(Message::Pong(p)).await;
                                         }
                                         Some(Ok(Message::Close(_))) => {
-                                            tracing::debug!("[UserDataWsApi] Server closed connection");
                                             break;
                                         }
                                         Some(Err(e)) => {
@@ -304,7 +289,6 @@ impl UserDataWsApi {
                                             break;
                                         }
                                         None => {
-                                            tracing::debug!("[UserDataWsApi] WS stream ended");
                                             break;
                                         }
                                         _ => {}
@@ -349,14 +333,9 @@ impl UserDataWsApi {
                                         tracing::warn!("[UserDataWsApi] Failed to send userDataStream.ping");
                                         break;
                                     }
-                                    tracing::debug!(
-                                        "[UserDataWsApi] Sent userDataStream.ping (id={})",
-                                        ping_id
-                                    );
                                 }
                                 _ = running_check.tick() => {
                                     if !running.load(Ordering::Relaxed) {
-                                        tracing::debug!("[UserDataWsApi] Stop requested, sending Close frame");
                                         let _ = write.send(Message::Close(None)).await;
                                         break;
                                     }
@@ -379,10 +358,6 @@ impl UserDataWsApi {
                             break;
                         }
 
-                        tracing::debug!(
-                            "[UserDataWsApi] Reconnecting in {}s...",
-                            reconnect_delay
-                        );
                         let jitter = (reconnect_delay as f64 * 0.1 * (2.0 * rand::random::<f64>() - 1.0)) as i64;
                         let delay = (reconnect_delay as i64 + jitter).max(1) as u64;
                         tokio::time::sleep(Duration::from_secs(delay)).await;
@@ -411,7 +386,6 @@ impl UserDataWsApi {
                 }
             }
 
-            tracing::debug!("[UserDataWsApi] Background task exited");
         });
     }
 
@@ -442,22 +416,13 @@ async fn handle_text_message(text: &str, event_tx: &mpsc::Sender<WsFeedEvent>) -
 
             if event_type == "executionReport" || event_type == "ORDER_TRADE_UPDATE" {
                 if let Some(event) = bmsg.to_ws_feed_event() {
-                    tracing::debug!(
-                        "[UserDataWsApi] {} event received, forwarding",
-                        event_type
-                    );
                     if event_tx.send(event).await.is_err() {
                         tracing::warn!("[UserDataWsApi] Event channel closed, stopping");
                         return true;
                     }
                 }
             } else if event_type == "outboundAccountPosition" || event_type == "ACCOUNT_UPDATE" {
-                tracing::debug!(
-                    "[UserDataWsApi] {} event received (balance/position update)",
-                    event_type
-                );
             } else if event_type == "listStatus" {
-                tracing::debug!("[UserDataWsApi] listStatus event received (OCO order)");
             } else {
                 tracing::trace!("[UserDataWsApi] Ignoring event type: {}", event_type);
             }
@@ -468,11 +433,6 @@ async fn handle_text_message(text: &str, event_tx: &mpsc::Sender<WsFeedEvent>) -
     // 检查是否为请求响应（有 id/status）
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(text) {
         if json.get("id").is_some() && json.get("status").is_some() {
-            tracing::debug!(
-                "[UserDataWsApi] Request response: id={} status={}",
-                json.get("id").and_then(|v| v.as_u64()).unwrap_or(0),
-                json.get("status").and_then(|v| v.as_u64()).unwrap_or(0),
-            );
             return false;
         }
     }

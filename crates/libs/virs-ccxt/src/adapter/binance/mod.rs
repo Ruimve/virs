@@ -720,16 +720,10 @@ impl Exchange for BinanceExchange {
 
             loop {
                 if !ws_running.load(Ordering::Relaxed) {
-                    tracing::debug!(
-                        "[BinanceExchange] listenKey keepalive task exiting: WS stopped"
-                    );
                     return;
                 }
                 tick.tick().await;
                 if !ws_running.load(Ordering::Relaxed) {
-                    tracing::debug!(
-                        "[BinanceExchange] listenKey keepalive task exiting: WS stopped"
-                    );
                     return;
                 }
                 let result = if is_perpetual {
@@ -739,7 +733,6 @@ impl Exchange for BinanceExchange {
                 };
                 match result {
                     Ok(()) => {
-                        tracing::debug!("[BinanceExchange] listenKey keepalive succeeded");
                     }
                     Err(e) => {
                         tracing::warn!(

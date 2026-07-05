@@ -35,11 +35,6 @@ impl GapDetector {
         let expected_next = match last_closed_1m {
             Some(c) => c.open_time + 60_000,
             None => {
-                tracing::debug!(
-                    "[GapDetector] No 1m candles in cache for {}/{}, loading initial data",
-                    exchange,
-                    symbol
-                );
                 return Self::initial_load(exchange, symbol, cache, source, event_tx, market_type)
                     .await;
             }
@@ -47,20 +42,12 @@ impl GapDetector {
 
         let current_1m_open = (now_ms / 60_000) * 60_000;
         if expected_next >= current_1m_open {
-            tracing::debug!("[GapDetector] No gap for {}/{}", exchange, symbol);
             return Ok(0);
         }
 
         let gap_start = expected_next;
         let gap_end = current_1m_open;
         let gap_minutes = ((gap_end - gap_start) / 60_000) as u32;
-
-        tracing::debug!(
-            "[GapDetector] Gap detected for {}/{}: {} minutes",
-            exchange,
-            symbol,
-            gap_minutes
-        );
 
         let limit = gap_minutes.min(1000);
         let fetched = source
@@ -159,12 +146,6 @@ impl GapDetector {
             }
         }
 
-        tracing::debug!(
-            "[GapDetector] Backfilled {} candles for {}/{}",
-            backfilled_count,
-            exchange,
-            symbol
-        );
         Ok(backfilled_count)
     }
 
@@ -176,8 +157,6 @@ impl GapDetector {
         event_tx: &tokio::sync::broadcast::Sender<KlineEvent>,
         market_type: MarketType,
     ) -> VirsResult<usize> {
-        tracing::debug!("[GapDetector] Initial load for {}/{}", exchange, symbol);
-
         let (result_1m, results_high): (
             VirsResult<Vec<Candle>>,
             Vec<(Timeframe, VirsResult<Vec<Candle>>)>,
@@ -257,13 +236,6 @@ impl GapDetector {
             }
         };
 
-        tracing::debug!(
-            "[GapDetector] Loaded {} 1m candles for {}/{}",
-            candles_1m.len(),
-            exchange,
-            symbol
-        );
-
         let now_ms = chrono::Utc::now().timestamp_millis();
         let current_1m_open = (now_ms / 60_000) * 60_000;
 
@@ -321,13 +293,6 @@ impl GapDetector {
                             }
                         }
 
-                        tracing::debug!(
-                            "[GapDetector] Loaded {} {} candles for {}/{}",
-                            final_candles.len(),
-                            tf.as_str(),
-                            exchange,
-                            symbol
-                        );
                         guard.replace_timeframe(*tf, final_candles);
                         total += guard.get_klines(*tf).len();
                     }

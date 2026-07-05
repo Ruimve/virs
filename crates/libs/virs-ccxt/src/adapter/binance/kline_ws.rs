@@ -231,11 +231,8 @@ impl KlineWsClient for KlineWs {
             while running.load(Ordering::Relaxed) {
                 let connect_start = tokio::time::Instant::now();
 
-                tracing::debug!("[KlineWs] Connecting to {}...", ws_url);
-
                 match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
-                        tracing::debug!("[KlineWs] Connected to {} successfully", ws_url);
                         reconnect_delay = reconnect_delay_secs;
 
                         if !is_first_connect {
@@ -255,11 +252,6 @@ impl KlineWsClient for KlineWs {
                             let subs_vec: Vec<String> = subscriptions.read().await.clone();
                             if !subs_vec.is_empty() {
                                 let id = request_id.fetch_add(1, Ordering::Relaxed);
-                                tracing::debug!(
-                                    "[KlineWs] Connected to {} (subscribing {} streams)",
-                                    ws_url,
-                                    subs_vec.len()
-                                );
                                 let msg = serde_json::json!({
                                     "method": "SUBSCRIBE",
                                     "params": subs_vec,
@@ -292,9 +284,6 @@ impl KlineWsClient for KlineWs {
                             }
 
                             if connect_start.elapsed() > max_lifetime {
-                                tracing::debug!(
-                                    "[KlineWs] Max lifetime reached, reconnecting..."
-                                );
                                 break;
                             }
 
@@ -321,10 +310,6 @@ impl KlineWsClient for KlineWs {
                                                                 continue;
                                                             }
                                                         };
-                                                        tracing::debug!(
-                                                            "[KlineWs] 1m kline: {} open_time={} close={:.2} closed={}",
-                                                            original_symbol, candle.open_time, candle.close, candle.closed
-                                                        );
                                                         if update_tx.send(WsEvent::Candle(WsCandleUpdate {
                                                             symbol: original_symbol,
                                                             candle,
@@ -334,11 +319,9 @@ impl KlineWsClient for KlineWs {
                                                             break;
                                                         }
                                                     } else {
-                                                        tracing::debug!("[KlineWs] Received non-kline event: {}", data.event_type);
                                                     }
                                                 } else {
                                                     // 订阅确认/错误响应（无 kline 数据）
-                                                    tracing::debug!("[KlineWs] Received WS message (no kline data): {}", &text[..text.len().min(200)]);
                                                 }
                                             } else {
                                                 tracing::warn!("[KlineWs] Failed to parse WS message: {}", &text[..text.len().min(200)]);
@@ -383,7 +366,6 @@ impl KlineWsClient for KlineWs {
                                                     tracing::warn!("[KlineWs] Failed to send dynamic subscribe");
                                                     break;
                                                 }
-                                                tracing::debug!("[KlineWs] Dynamically subscribed to stream {}", stream_name);
                                             }
                                         }
                                         Some(WsCommand::Unsubscribe(stream_name)) => {
@@ -398,17 +380,14 @@ impl KlineWsClient for KlineWs {
                                                     tracing::warn!("[KlineWs] Failed to send dynamic unsubscribe");
                                                     break;
                                                 }
-                                                tracing::debug!("[KlineWs] Dynamically unsubscribed from stream");
                                             }
                                         }
                                         None => {
-                                            tracing::debug!("[KlineWs] Command channel closed");
                                             break;
                                         }
                                     }
                                 }
                                 _ = shutdown_rx.recv() => {
-                                    tracing::debug!("[KlineWs] Shutdown requested");
                                     let _ = write.send(tungstenite::Message::Close(None)).await;
                                     running.store(false, Ordering::Relaxed);
                                     return;
@@ -425,7 +404,6 @@ impl KlineWsClient for KlineWs {
                     break;
                 }
 
-                tracing::debug!("[KlineWs] Reconnecting in {}s...", reconnect_delay);
                 let jitter = (reconnect_delay as f64 * 0.1 * (2.0 * rand::random::<f64>() - 1.0)) as i64;
                 let delay = (reconnect_delay as i64 + jitter).max(1) as u64;
                 tokio::time::sleep(Duration::from_secs(delay)).await;
@@ -433,7 +411,6 @@ impl KlineWsClient for KlineWs {
             }
 
             running.store(false, Ordering::Relaxed);
-            tracing::debug!("[KlineWs] Worker exited");
         });
     }
 

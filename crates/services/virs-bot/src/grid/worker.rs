@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use tokio::sync::broadcast;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::grid::ai::{GridAction, GridAiDecision, GridAiService};
@@ -1440,7 +1440,6 @@ impl GridWorker {
         }
 
         if !updated && !force_recalculate {
-            debug!(bot_id = %self.bot.id, "adjust_grid: no parameter changes");
             return;
         }
 

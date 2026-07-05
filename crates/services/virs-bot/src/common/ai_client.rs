@@ -1,6 +1,6 @@
 //! LLM API client for bot AI services.
 
-use tracing::{debug, warn};
+use tracing::warn;
 use virs_error::{BotError, BotResult};
 
 pub struct LlmCallResult {
@@ -26,8 +26,6 @@ pub async fn call_llm_api(
         "response_format": { "type": "json_object" },
         "temperature": 0.5,
     });
-
-    debug!(provider = %provider_name, model = %model, "Calling LLM API");
 
     let response = http_client
         .post(format!("{}/chat/completions", base_url))

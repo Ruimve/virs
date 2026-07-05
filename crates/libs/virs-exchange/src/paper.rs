@@ -11,7 +11,7 @@ use chrono::Utc;
 use dashmap::DashMap;
 use tokio::sync::{mpsc, Mutex};
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use virs_types::enums::*;
@@ -195,9 +195,6 @@ impl PaperExchangeAdapter {
                     warn!(order_id = %order.id, symbol = %order.symbol, "Paper WsFeedEvent::OrderUpdate send failed — receiver dropped, event lost");
                 }
             }
-            debug!(order_id = %order.id, symbol = %order.symbol, side = ?order.side,
-                price = ?order.price, fill_price = current_price, amount = order.amount,
-                "Paper limit order filled via price tick");
         }
         self.update_unrealized_pnl(symbol, current_price).await;
     }
@@ -279,7 +276,6 @@ impl PaperExchangeAdapter {
                     pos.leverage = leverage;
                     pos.liquidation_price =
                         compute_paper_liquidation_price(pos.entry_price, pos.side, leverage);
-                    debug!(symbol = %order.symbol, new_size, entry_price = pos.entry_price, "Paper position added");
                 } else {
                     // 平仓：减少 size
                     let new_size = pos.size - size_delta;
@@ -287,14 +283,12 @@ impl PaperExchangeAdapter {
                         // 全部平仓（含超量平仓钳制到 0）
                         drop(pos);
                         self.positions.remove(&key);
-                        debug!(symbol = %order.symbol, realized_pnl, "Paper position closed");
                     } else {
                         // 部分平仓：入场价不变
                         pos.size = new_size;
                         pos.leverage = leverage;
                         pos.liquidation_price =
                             compute_paper_liquidation_price(pos.entry_price, pos.side, leverage);
-                        debug!(symbol = %order.symbol, new_size, realized_pnl, "Paper position partially closed");
                     }
                 }
             }
@@ -313,7 +307,6 @@ impl PaperExchangeAdapter {
                         liquidation_price: liq_price,
                     },
                 );
-                debug!(symbol = %order.symbol, side = ?position_side, size = size_delta, "Paper position opened");
             }
         }
 
@@ -540,8 +533,6 @@ impl ExchangePe for PaperExchangeAdapter {
                 created_at: now,
                 updated_at: now,
             };
-            debug!(order_id = %order_id, symbol = %params.symbol, side = ?params.side,
-                price = ?params.price, amount = params.amount, "Paper limit order placed");
             Ok(order)
         }
     }

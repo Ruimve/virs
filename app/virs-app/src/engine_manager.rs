@@ -225,7 +225,6 @@ impl EngineManager for AppEngineManager {
                                 .await
                                 .is_err()
                             {
-                                tracing::debug!("Paper price tick loop exiting: PE command channel closed");
                                 return;
                             }
                         }

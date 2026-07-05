@@ -277,11 +277,8 @@ impl OrderBookWsClient for OrderBookWs {
             while running.load(Ordering::Relaxed) {
                 let connect_start = tokio::time::Instant::now();
 
-                tracing::debug!("[OrderBookWs] Connecting to {}...", ws_url);
-
                 match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
-                        tracing::debug!("[OrderBookWs] Connected to {}", ws_url);
                         reconnect_delay = reconnect_delay_secs;
 
                         if !is_first_connect {
@@ -302,10 +299,6 @@ impl OrderBookWsClient for OrderBookWs {
                             let subs_vec: Vec<String> = subscriptions.read().await.clone();
                             if !subs_vec.is_empty() {
                                 let id = request_id.fetch_add(1, Ordering::Relaxed);
-                                tracing::debug!(
-                                    "[OrderBookWs] Resubscribing {} streams",
-                                    subs_vec.len()
-                                );
                                 let msg = serde_json::json!({
                                     "method": "SUBSCRIBE",
                                     "params": subs_vec,
@@ -336,9 +329,6 @@ impl OrderBookWsClient for OrderBookWs {
                             }
 
                             if connect_start.elapsed() > max_lifetime {
-                                tracing::debug!(
-                                    "[OrderBookWs] Max lifetime reached, reconnecting"
-                                );
                                 break;
                             }
 
@@ -377,10 +367,6 @@ impl OrderBookWsClient for OrderBookWs {
                                                         }
                                                     }
                                                 } else {
-                                                    tracing::debug!(
-                                                        "[OrderBookWs] Non-depth message: {}",
-                                                        &text[..text.len().min(200)]
-                                                    );
                                                 }
                                             } else {
                                                 tracing::warn!(
@@ -428,10 +414,6 @@ impl OrderBookWsClient for OrderBookWs {
                                                     tracing::warn!("[OrderBookWs] Subscribe send failed");
                                                     break;
                                                 }
-                                                tracing::debug!(
-                                                    "[OrderBookWs] Subscribed to {}",
-                                                    stream_name
-                                                );
                                             }
                                         }
                                         Some(WsCommand::Unsubscribe(stream_name)) => {
@@ -446,17 +428,12 @@ impl OrderBookWsClient for OrderBookWs {
                                                     tracing::warn!("[OrderBookWs] Unsubscribe send failed");
                                                     break;
                                                 }
-                                                tracing::debug!(
-                                                    "[OrderBookWs] Unsubscribed from {}",
-                                                    stream_name
-                                                );
                                             }
                                         }
                                         None => break,
                                     }
                                 }
                                 _ = shutdown_rx.recv() => {
-                                    tracing::debug!("[OrderBookWs] Shutdown requested");
                                     let _ = write.send(tungstenite::Message::Close(None)).await;
                                     running.store(false, Ordering::Relaxed);
                                     return;
@@ -473,10 +450,6 @@ impl OrderBookWsClient for OrderBookWs {
                     break;
                 }
 
-                tracing::debug!(
-                    "[OrderBookWs] Reconnecting in {}s...",
-                    reconnect_delay
-                );
                 let jitter = (reconnect_delay as f64 * 0.1 * (2.0 * rand::random::<f64>() - 1.0)) as i64;
                 let delay = (reconnect_delay as i64 + jitter).max(1) as u64;
                 tokio::time::sleep(Duration::from_secs(delay)).await;
@@ -484,7 +457,6 @@ impl OrderBookWsClient for OrderBookWs {
             }
 
             running.store(false, Ordering::Relaxed);
-            tracing::debug!("[OrderBookWs] Worker exited");
         });
     }
 

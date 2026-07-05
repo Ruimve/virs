@@ -118,8 +118,6 @@ impl KlineEngine {
             return;
         }
 
-        tracing::debug!("[KlineEngine] Starting...");
-
         let event_tx = self.event_tx.clone();
         let subscriptions = self.subscriptions.clone();
         let symbol_index = self.symbol_index.clone();
@@ -139,14 +137,9 @@ impl KlineEngine {
 
         // WS update processor
         tokio::spawn(async move {
-            tracing::debug!("[KlineEngine] WS update processor started");
-
             while started.load(std::sync::atomic::Ordering::Relaxed) {
                 match ws_update_rx.recv().await {
                     Ok(WsEvent::Reconnected) => {
-                        tracing::debug!(
-                            "[KlineEngine] WS reconnected, triggering continuity check"
-                        );
                         // Collect needed data and drop the DashMap Ref guard before
                         // async operations to avoid holding the guard across `.await`.
                         let entries: Vec<_> = subscriptions
@@ -172,9 +165,6 @@ impl KlineEngine {
                             )
                             .await
                             {
-                                Ok(count) if count > 0 => {
-                                    tracing::debug!("[KlineEngine] Post-reconnect backfill: {} candles for {}/{}", count, exchange, symbol);
-                                }
                                 Ok(_) => {}
                                 Err(e) => {
                                     tracing::error!("[KlineEngine] Post-reconnect backfill failed for {}/{}: {}", exchange, symbol, e);
@@ -196,14 +186,6 @@ impl KlineEngine {
 
                         let candle_1m = update.candle;
                         let is_closed = candle_1m.closed;
-
-                        tracing::debug!(
-                            "[KlineEngine] WS 1m candle: {} open_time={} close={:.2} closed={}",
-                            symbol,
-                            candle_1m.open_time,
-                            candle_1m.close,
-                            is_closed
-                        );
 
                         let (exchange, persist_data, higher_updates) = {
                             let mut guard = cache.lock().await;
@@ -284,19 +266,16 @@ impl KlineEngine {
                         tracing::warn!("[KlineEngine] WS update lagged by {} messages", n);
                     }
                     Err(broadcast::error::RecvError::Closed) => {
-                        tracing::debug!("[KlineEngine] WS update channel closed");
                         break;
                     }
                 }
             }
 
-            tracing::debug!("[KlineEngine] WS update processor stopped");
         });
 
         // Gap checker
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
-            tracing::debug!("[KlineEngine] Gap checker started (60s interval)");
 
             while gap_check_started.load(std::sync::atomic::Ordering::Relaxed) {
                 interval.tick().await;
@@ -320,12 +299,6 @@ impl KlineEngine {
                         GapDetector::check_continuity(&exchange, &symbol, &cache).await;
 
                     if !report.is_continuous {
-                        tracing::debug!(
-                            "[KlineEngine] Gap detected for {}/{}: {} minutes",
-                            exchange,
-                            symbol,
-                            report.missing_minutes
-                        );
                         match GapDetector::detect_and_backfill(
                             &exchange,
                             &symbol,
@@ -336,14 +309,7 @@ impl KlineEngine {
                         )
                         .await
                         {
-                            Ok(count) => {
-                                tracing::debug!(
-                                    "[KlineEngine] Backfilled {} candles for {}/{}",
-                                    count,
-                                    exchange,
-                                    symbol
-                                );
-                            }
+                            Ok(_) => {}
                             Err(e) => {
                                 tracing::error!(
                                     "[KlineEngine] Backfill failed for {}/{}: {}",
@@ -356,11 +322,7 @@ impl KlineEngine {
                     }
                 }
             }
-
-            tracing::debug!("[KlineEngine] Gap checker stopped");
         });
-
-        tracing::debug!("[KlineEngine] Started successfully");
     }
 
     pub async fn stop(&self) {
@@ -370,10 +332,8 @@ impl KlineEngine {
         {
             return;
         }
-        tracing::debug!("[KlineEngine] Stopping...");
         self.spot_handler.stop().await;
         self.perpetual_handler.stop().await;
-        tracing::debug!("[KlineEngine] Stopped");
     }
 
     pub async fn subscribe(
@@ -390,11 +350,6 @@ impl KlineEngine {
         let key = subscription_key(exchange, symbol);
 
         if self.subscriptions.contains_key(&key) {
-            tracing::debug!(
-                "[KlineEngine] Already subscribed to {}/{}",
-                exchange,
-                symbol
-            );
             return Ok(());
         }
 
@@ -430,12 +385,6 @@ impl KlineEngine {
             .await?;
         }
 
-        tracing::debug!(
-            "[KlineEngine] Subscribed to {}/{} ({})",
-            exchange,
-            symbol,
-            market_type
-        );
         Ok(())
     }
 

@@ -377,11 +377,8 @@ impl UserDataWs {
             while running.load(Ordering::Relaxed) {
                 let connect_start = tokio::time::Instant::now();
 
-                tracing::debug!("[UserDataWs] Connecting to {}...", ws_url);
-
                 match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
-                        tracing::debug!("[UserDataWs] Connected to {}", ws_url);
                         reconnect_delay = reconnect_delay_secs;
 
                         // 发送连接恢复事件
@@ -410,9 +407,6 @@ impl UserDataWs {
                             }
 
                             if connect_start.elapsed() > max_lifetime {
-                                tracing::debug!(
-                                    "[UserDataWs] Max lifetime reached, reconnecting..."
-                                );
                                 break;
                             }
 
@@ -430,14 +424,6 @@ impl UserDataWs {
                                                 // 和 ORDER_TRADE_UPDATE（合约），避免单流格式下
                                                 // into_execution_report() 丢弃合约事件。
                                                 if let Some(event) = bmsg.to_ws_feed_event() {
-                                                    let status_str = match &event {
-                                                        WsFeedEvent::OrderUpdate { status, .. } => format!("{:?}", status),
-                                                        _ => "unknown".to_string(),
-                                                    };
-                                                    tracing::debug!(
-                                                        "[UserDataWs] {} -> OrderUpdate status={} forwarded",
-                                                        event_type, status_str
-                                                    );
                                                     if event_tx.send(event).await.is_err() {
                                                         tracing::warn!("[UserDataWs] Event channel closed, stopping");
                                                         running.store(false, Ordering::Relaxed);
@@ -448,9 +434,6 @@ impl UserDataWs {
                                                     // serverShutdown / MARGIN_CALL / 订阅确认等
                                                     match event_type.as_str() {
                                                         "ACCOUNT_UPDATE" => {
-                                                            tracing::debug!(
-                                                                "[UserDataWs] ACCOUNT_UPDATE received (balance/position change)"
-                                                            );
                                                         }
                                                         "listenKeyExpired" => {
                                                             tracing::warn!(
@@ -506,7 +489,6 @@ impl UserDataWs {
                                 }
                                 _ = running_check.tick() => {
                                     if !running.load(Ordering::Relaxed) {
-                                        tracing::debug!("[UserDataWs] Stop requested, sending Close frame");
                                         let _ = write.send(tungstenite::Message::Close(None)).await;
                                         break;
                                     }
@@ -536,7 +518,6 @@ impl UserDataWs {
                     break;
                 }
 
-                tracing::debug!("[UserDataWs] Reconnecting in {}s...", reconnect_delay);
                 let jitter = (reconnect_delay as f64 * 0.1 * (2.0 * rand::random::<f64>() - 1.0)) as i64;
                 let delay = (reconnect_delay as i64 + jitter).max(1) as u64;
                 tokio::time::sleep(Duration::from_secs(delay)).await;
@@ -544,7 +525,6 @@ impl UserDataWs {
             }
 
             running.store(false, Ordering::Relaxed);
-            tracing::debug!("[UserDataWs] Worker exited");
         });
     }
 }
