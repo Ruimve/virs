@@ -22,8 +22,6 @@ pub enum PositionEngineError {
     InvalidAmount { amount: f64 },
     #[error("Insufficient position size: requested={requested}, available={available}")]
     InsufficientPosition { requested: f64, available: f64 },
-    #[error("Risk check failed: {reason}")]
-    RiskCheckFailed { reason: String },
     #[cfg(feature = "sqlx")]
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
@@ -68,7 +66,6 @@ impl Categorized for PositionEngineError {
             Self::InvalidAmount { .. } | Self::InsufficientPosition { .. } => {
                 ErrorCategory::Validation
             }
-            Self::RiskCheckFailed { .. } => ErrorCategory::Validation,
         }
     }
 }
@@ -81,8 +78,7 @@ impl HttpStatus for PositionEngineError {
             Self::OrderNotFound { .. } | Self::PositionNotFound { .. } => 404,
             Self::PositionAlreadyExists { .. } => 409,
             Self::InvalidAmount { .. }
-            | Self::InsufficientPosition { .. }
-            | Self::RiskCheckFailed { .. } => 400,
+            | Self::InsufficientPosition { .. } => 400,
             Self::Config(_) => 500,
             _ => 500,
         }
@@ -98,7 +94,6 @@ impl ErrorCode for PositionEngineError {
             Self::PositionAlreadyExists { .. } => "PE_POSITION_EXISTS",
             Self::InvalidAmount { .. } => "PE_INVALID_AMOUNT",
             Self::InsufficientPosition { .. } => "PE_INSUFFICIENT_POSITION",
-            Self::RiskCheckFailed { .. } => "PE_RISK_CHECK_FAILED",
             Self::Database(_) => "PE_DATABASE_ERROR",
             Self::EngineNotRunning => "PE_ENGINE_NOT_RUNNING",
             Self::EngineAlreadyRunning => "PE_ENGINE_ALREADY_RUNNING",

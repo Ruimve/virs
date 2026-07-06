@@ -76,14 +76,6 @@ fn s2_3_exchange_position_roundtrip() {
     assert_eq!(de, pos);
 }
 
-#[test]
-fn s2_5_risk_config_default_roundtrip() {
-    let config = RiskConfig::default();
-    let json = serde_json::to_string(&config).unwrap();
-    let de: RiskConfig = serde_json::from_str(&json).unwrap();
-    assert_eq!(de, config);
-}
-
 // Removed: TC-S3 tested orphan method MarketType::from_str_lossy (no business
 // consumer). Method deleted.
 

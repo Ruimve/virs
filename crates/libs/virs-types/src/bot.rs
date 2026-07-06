@@ -109,11 +109,6 @@ pub enum OrderEvent {
         level: String,
         message: String,
     },
-    LiquidationWarning {
-        symbol: String,
-        liquidation_price: f64,
-        current_price: f64,
-    },
 }
 
 /// Order executor trait (bot-layer)

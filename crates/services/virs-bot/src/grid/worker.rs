@@ -408,14 +408,6 @@ impl GridWorker {
                     self.pause_with_cancel("CloseAll risk alert").await;
                 }
             }
-            OrderEvent::LiquidationWarning {
-                symbol,
-                liquidation_price,
-                current_price,
-            } => {
-                warn!(bot_id = %self.bot.id, %symbol, liquidation_price, current_price, "Liquidation warning");
-                self.pause_with_cancel("liquidation warning").await;
-            }
         }
     }
 

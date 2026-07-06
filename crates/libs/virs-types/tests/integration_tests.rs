@@ -43,22 +43,6 @@ fn int_3_1_exchange_position_pnl_chain() {
 }
 
 // ============================================================
-// TC-INT-6: RiskConfig validation chain
-// ============================================================
-
-#[test]
-fn int_6_1_default_config_valid() {
-    let config = RiskConfig::default();
-    assert!(config.validate().is_ok());
-}
-
-#[test]
-fn int_6_2_invalid_config() {
-    let config = RiskConfig { max_leverage: 0, ..Default::default() };
-    assert!(config.validate().is_err());
-}
-
-// ============================================================
 // TC-INT-8: serde + method chain
 // ============================================================
 

@@ -206,16 +206,6 @@ pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
             Some(OrderEvent::OrderFailed { order_id, reason })
         }
         EngineEvent::RiskAlert { level, message } => Some(OrderEvent::RiskAlert { level, message }),
-        EngineEvent::LiquidationWarning {
-            symbol,
-            liquidation_price,
-            current_price,
-            ..
-        } => Some(OrderEvent::LiquidationWarning {
-            symbol,
-            liquidation_price,
-            current_price,
-        }),
         _ => None,
     }
 }

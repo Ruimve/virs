@@ -3,7 +3,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use virs_error::{VirsError, VirsResult};
 
 use crate::enums::*;
 
@@ -211,112 +210,6 @@ pub enum EngineEvent {
     PositionSynced {
         positions: Vec<crate::market::ExchangePosition>,
     },
-    LiquidationWarning {
-        position_id: Uuid,
-        symbol: String,
-        liquidation_price: f64,
-        current_price: f64,
-    },
-}
-
-/// Risk configuration
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RiskConfig {
-    #[serde(default = "default_max_position_per_symbol")]
-    pub max_position_per_symbol_pct: f64,
-    #[serde(default = "default_max_total_position")]
-    pub max_total_position_pct: f64,
-    #[serde(default = "default_max_order_amount")]
-    pub max_order_amount_pct: f64,
-    #[serde(default = "default_max_drawdown")]
-    pub max_drawdown_pct: f64,
-    #[serde(default = "default_max_leverage")]
-    pub max_leverage: u32,
-    #[serde(default = "default_funding_rate_threshold")]
-    pub funding_rate_threshold: f64,
-    #[serde(default = "default_liquidation_buffer")]
-    pub liquidation_buffer_pct: f64,
-    #[serde(default = "default_max_consecutive_losses")]
-    pub max_consecutive_losses: u32,
-}
-
-fn default_max_position_per_symbol() -> f64 {
-    1.0
-}
-fn default_max_total_position() -> f64 {
-    3.0
-}
-fn default_max_order_amount() -> f64 {
-    0.3
-}
-fn default_max_drawdown() -> f64 {
-    0.15
-}
-fn default_max_leverage() -> u32 {
-    20
-}
-fn default_funding_rate_threshold() -> f64 {
-    0.001
-}
-fn default_liquidation_buffer() -> f64 {
-    0.2
-}
-fn default_max_consecutive_losses() -> u32 {
-    5
-}
-
-impl Default for RiskConfig {
-    fn default() -> Self {
-        tracing::warn!(
-            "RiskConfig::default() called — using default risk parameters. \
-             This should only happen during deserialization when config is missing. \
-             Ensure risk config is explicitly provided in production."
-        );
-        Self {
-            max_position_per_symbol_pct: default_max_position_per_symbol(),
-            max_total_position_pct: default_max_total_position(),
-            max_order_amount_pct: default_max_order_amount(),
-            max_drawdown_pct: default_max_drawdown(),
-            max_leverage: default_max_leverage(),
-            funding_rate_threshold: default_funding_rate_threshold(),
-            liquidation_buffer_pct: default_liquidation_buffer(),
-            max_consecutive_losses: default_max_consecutive_losses(),
-        }
-    }
-}
-
-impl RiskConfig {
-    /// Validates that all configuration fields are within reasonable bounds.
-    /// Returns Ok(()) if valid, or Err(message) describing the first violation.
-    pub fn validate(&self) -> VirsResult<()> {
-        if self.max_leverage == 0 {
-            return Err(VirsError::bad_request("max_leverage must be greater than 0"));
-        }
-        if self.max_drawdown_pct < 0.0 {
-            return Err(VirsError::bad_request("max_drawdown_pct must not be negative"));
-        }
-        if self.max_position_per_symbol_pct < 0.0 {
-            return Err(VirsError::bad_request(
-                "max_position_per_symbol_pct must not be negative",
-            ));
-        }
-        if self.max_total_position_pct < 0.0 {
-            return Err(VirsError::bad_request(
-                "max_total_position_pct must not be negative",
-            ));
-        }
-        if self.max_order_amount_pct < 0.0 {
-            return Err(VirsError::bad_request(
-                "max_order_amount_pct must not be negative",
-            ));
-        }
-        if self.liquidation_buffer_pct < 0.0 {
-            return Err(VirsError::bad_request(
-                "liquidation_buffer_pct must not be negative",
-            ));
-        }
-        Ok(())
-    }
 }
 
 /// Engine configuration
@@ -327,12 +220,6 @@ pub struct EngineConfig {
     pub sync_interval_secs: u64,
     #[serde(default = "default_poll_interval")]
     pub poll_interval_secs: u64,
-    #[serde(default = "default_ws_reconnect_timeout")]
-    pub ws_reconnect_timeout_secs: u64,
-    #[serde(default)]
-    pub risk: RiskConfig,
-    #[serde(default = "default_pnl_snapshot_interval")]
-    pub pnl_snapshot_interval_secs: u64,
     /// Default leverage used when no leverage is explicitly specified for an order.
     /// This prevents falling back to 1x (which overestimates margin requirements)
     /// or 0x (which would cause division-by-zero in margin calculations).
@@ -345,12 +232,6 @@ fn default_sync_interval() -> u64 {
 }
 fn default_poll_interval() -> u64 {
     10
-}
-fn default_ws_reconnect_timeout() -> u64 {
-    30
-}
-fn default_pnl_snapshot_interval() -> u64 {
-    60
 }
 fn default_leverage() -> u32 {
     1
@@ -367,9 +248,6 @@ impl Default for EngineConfig {
             engine_id: "default".to_string(),
             sync_interval_secs: default_sync_interval(),
             poll_interval_secs: default_poll_interval(),
-            ws_reconnect_timeout_secs: default_ws_reconnect_timeout(),
-            risk: RiskConfig::default(),
-            pnl_snapshot_interval_secs: default_pnl_snapshot_interval(),
             default_leverage: default_leverage(),
         }
     }

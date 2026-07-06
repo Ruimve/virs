@@ -1,6 +1,6 @@
 //! PositionEngine — position management engine.
 //!
-//! Manages positions, orders, risk checks, PnL tracking via 4 parallel loops:
+//! Manages positions, orders, PnL tracking via 4 parallel loops:
 //! - command_loop: command dispatch
 //! - sync_loop: position synchronization
 //! - ws_feed_loop: WebSocket order update consumption
@@ -24,15 +24,14 @@ use virs_types::position::*;
 use virs_error::{PositionEngineError, PositionResult};
 
 use crate::persistence::PositionPersistence;
-use crate::risk::{DrawdownAction, RiskChecker};
 use crate::tracker::PnlTracker;
 
 /// Recover from lock poisoning by accessing the inner data anyway.
 ///
 /// **WARNING**: Lock poisoning means a thread panicked while holding the lock,
 /// and the protected data may be in an inconsistent state. In a trading system,
-/// continuing with stale/inconsistent state can lead to incorrect risk checks,
-/// duplicate orders, or balance errors.
+/// continuing with stale/inconsistent state can lead to duplicate orders
+/// or balance errors.
 ///
 /// We log at `error!` level so monitoring can detect this and trigger an alert.
 /// The engine should be restarted as soon as possible after lock poisoning.
@@ -82,12 +81,10 @@ pub(crate) struct EngineInner {
     pub(crate) positions: DashMap<(String, String, PositionSide), Position>,
     pub(crate) orders: DashMap<Uuid, PositionOrder>,
     pub(crate) event_tx: broadcast::Sender<EngineEvent>,
-    pub(crate) risk_checker: Mutex<RiskChecker>,
     pub(crate) tracker: Mutex<PnlTracker>,
     pub(crate) state: RwLock<EngineState>,
     pub(crate) exchange_order_id_index: DashMap<String, Uuid>,
     pub(crate) position_id_index: DashMap<Uuid, (String, String, PositionSide)>,
-    pub(crate) last_close_all: RwLock<Option<chrono::DateTime<Utc>>>,
 }
 
 impl EngineInner {
@@ -147,7 +144,6 @@ impl PositionEngine {
 
         let inner = EngineInner {
             persistence,
-            risk_checker: Mutex::new(RiskChecker::new(config.risk.clone())),
             tracker: Mutex::new(PnlTracker::new(0.0)),
             state: RwLock::new(EngineState::Created),
             config,
@@ -157,7 +153,6 @@ impl PositionEngine {
             orders: DashMap::new(),
             exchange_order_id_index: DashMap::new(),
             position_id_index: DashMap::new(),
-            last_close_all: RwLock::new(None),
         };
 
         Self {
@@ -657,77 +652,7 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
             }
         }
 
-        // 2. 检查资金费率
-        let symbols_to_check: Vec<String> = inner
-            .positions
-            .iter()
-            .map(|r| r.value().symbol.clone())
-            .collect();
-        let funding_futures: Vec<_> = symbols_to_check
-            .iter()
-            .map(|sym| {
-                let sym = sym.clone();
-                let inner = inner.clone();
-                async move {
-                    let result = inner.exchange.get_funding_rate(&sym).await;
-                    (sym, result)
-                }
-            })
-            .collect();
-        let funding_results = futures_util::future::join_all(funding_futures).await;
-        for (sym, result) in funding_results {
-            match result {
-                Ok(funding) => {
-                    let alert = {
-                        recover_lock(inner.risk_checker.lock())
-                            .check_funding_rate(&sym, funding.rate)
-                    };
-                    if let Some(alert) = alert {
-                        inner.emit_event(EngineEvent::RiskAlert {
-                            level: alert.severity,
-                            message: alert.message,
-                        });
-                    }
-                }
-                Err(e) => {
-                    warn!(error = %e, symbol = %sym, "Failed to get funding rate — PnL calculation may be inaccurate");
-                }
-            }
-        }
-
-        // 3. 检查强平预警
-        {
-            let risk_checker = recover_lock(inner.risk_checker.lock());
-            for entry in inner.positions.iter() {
-                let pos = entry.value();
-                // liquidation_price is critical for risk assessment — if missing,
-                // skip this position's warning and log an error rather than
-                // silently using 0.0 which would make the warning meaningless.
-                let liq_price = match pos.liquidation_price {
-                    Some(p) if p > 0.0 => p,
-                    _ => {
-                        error!(
-                            position_id = %pos.id,
-                            symbol = %pos.symbol,
-                            "Position has no valid liquidation_price — \
-                             cannot assess liquidation risk. Skipping warning."
-                        );
-                        continue;
-                    }
-                };
-                if let Some(_distance_pct) = risk_checker.check_liquidation(pos) {
-                    inner.emit_event(EngineEvent::LiquidationWarning {
-                        position_id: pos.id,
-                        symbol: pos.symbol.clone(),
-                        liquidation_price: liq_price,
-                        current_price: pos.current_price,
-                    });
-                    warn!(position_id = %pos.id, symbol = %pos.symbol, "Liquidation warning");
-                }
-            }
-        }
-
-        // 4. 更新未实现盈亏
+        // 2. 更新未实现盈亏
         {
             let positions: Vec<Position> =
                 inner.positions.iter().map(|r| r.value().clone()).collect();
@@ -737,122 +662,8 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                 .map(|p| (p.symbol.clone(), p.current_price))
                 .collect();
 
-            let snapshot = {
-                recover_lock(inner.tracker.lock())
-                    .update_unrealized(&position_refs, &current_prices)
-            };
-
-            // 5. 回撤检查
-            let peak_equity = { recover_lock(inner.tracker.lock()).peak_equity() };
-            let drawdown_action = {
-                recover_lock(inner.risk_checker.lock())
-                    .check_drawdown(peak_equity, snapshot.equity)
-            };
-            match drawdown_action {
-                Some(DrawdownAction::Warning) => {
-                    inner.emit_event(EngineEvent::RiskAlert {
-                        level: "warning".to_string(),
-                        message: format!("Drawdown warning: {:.2}%", snapshot.max_drawdown * 100.0),
-                    });
-                }
-                Some(DrawdownAction::Pause) => {
-                    inner.emit_event(EngineEvent::RiskAlert {
-                        level: "warning".to_string(),
-                        message: format!(
-                            "Drawdown pause: {:.2}%, new positions blocked",
-                            snapshot.max_drawdown * 100.0
-                        ),
-                    });
-                }
-                Some(DrawdownAction::CloseAll) => {
-                    let now = Utc::now();
-                    let cooldown =
-                        chrono::Duration::seconds(inner.config.sync_interval_secs as i64 * 2);
-                    let in_cooldown = {
-                        let last = recover_lock(inner.last_close_all.read());
-                        last.map(|t| now - t < cooldown).unwrap_or(false)
-                    };
-                    if in_cooldown {
-                        warn!("CloseAll in cooldown, skipping duplicate trigger");
-                        continue;
-                    }
-
-                    inner.emit_event(EngineEvent::RiskAlert {
-                        level: "critical".to_string(),
-                        message: format!(
-                            "Max drawdown exceeded, closing all positions: {:.2}%",
-                            snapshot.max_drawdown * 100.0
-                        ),
-                    });
-
-                    *recover_lock(inner.last_close_all.write()) = Some(now);
-
-                    let positions_to_close: Vec<(Uuid, String, PositionSide, f64)> = inner
-                        .positions
-                        .iter()
-                        .filter_map(|r| {
-                            let pos = r.value();
-                            if pos.size > 0.0 && pos.status != PositionStatus::Closing {
-                                Some((pos.id, pos.symbol.clone(), pos.side, pos.size))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-
-                    for (pid, _, _, _) in &positions_to_close {
-                        let pos_key = inner.position_id_index.get(pid).map(|r| r.value().clone());
-                        if let Some(key) = pos_key {
-                            if let Some(mut pos) = inner.positions.get_mut(&key) {
-                                pos.status = PositionStatus::Closing;
-                                pos.updated_at = now;
-                            }
-                        }
-                    }
-
-                    let close_futures: Vec<_> = positions_to_close.into_iter().map(|(pid, sym, side, size)| {
-                        let inner = inner.clone();
-                        async move {
-                            let close_side = match side {
-                                PositionSide::Long => Side::Sell,
-                                PositionSide::Short => Side::Buy,
-                            };
-                            let mut params = PlaceOrderParams {
-                                symbol: sym.clone(), side: close_side, order_type: OrderType::Market,
-                                amount: size, price: None, reduce_only: true,
-                                position_side: Some(side), position_id: Some(pid), client_order_id: None,
-                            };
-                            resolve_position_side_for_hedge(&mut params);
-                            let mut attempts = 0u32;
-                            let max_attempts = 3;
-                            loop {
-                                match inner.exchange.place_order(params.clone()).await {
-                                    Ok(mut order) => {
-                                        order.reduce_only = params.reduce_only;
-                                        if let Some(ref eoid) = order.exchange_order_id {
-                                            inner.exchange_order_id_index.insert(eoid.clone(), order.id);
-                                        }
-                                        inner.orders.insert(order.id, order.clone());
-                                        warn!(position_id = %pid, symbol = %sym, "Emergency close order placed due to max drawdown");
-                                        return;
-                                    }
-                                    Err(e) => {
-                                        attempts += 1;
-                                        if attempts >= max_attempts {
-                                            error!(position_id = %pid, symbol = %sym, error = %e, attempts, "Failed to place emergency close order after retries");
-                                            return;
-                                        }
-                                        warn!(position_id = %pid, symbol = %sym, error = %e, attempt = attempts, "Emergency close order failed, retrying");
-                                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                                    }
-                                }
-                            }
-                        }
-                    }).collect();
-                    futures_util::future::join_all(close_futures).await;
-                }
-                Some(DrawdownAction::Normal) | None => {}
-            }
+            recover_lock(inner.tracker.lock())
+                .update_unrealized(&position_refs, &current_prices);
         }
     }
 }
@@ -1073,9 +884,6 @@ pub(crate) async fn handle_ws_order_update(
 
             {
                 recover_lock(inner.tracker.lock()).record_trade(&trade);
-            }
-            {
-                recover_lock(inner.risk_checker.lock()).record_trade_result(pnl);
             }
 
             if pnl != 0.0 {
@@ -1369,8 +1177,8 @@ pub(crate) async fn handle_open_position(
 
     let lev = leverage.unwrap_or_else(|| {
         // No leverage specified — use the engine's configured default leverage.
-        // Falling back to 1 would cause margin overestimation and incorrect
-        // risk checks. Log a warning so operators know the default was used.
+        // Falling back to 1 would cause margin overestimation. Log a warning
+        // so operators know the default was used.
         warn!(
             symbol = %symbol,
             "No leverage specified for open_position — using engine default ({}x)",
@@ -1378,36 +1186,6 @@ pub(crate) async fn handle_open_position(
         );
         inner.config.default_leverage
     });
-
-    let total_equity = inner.exchange.get_balance().await
-        .map(|b| b.total)
-        .unwrap_or_else(|e| {
-            warn!(error = %e, "Failed to get balance for risk check, using tracker equity as fallback");
-            recover_lock(inner.tracker.lock()).equity()
-        });
-
-    {
-        let positions_owned: Vec<Position> =
-            inner.positions.iter().map(|r| r.value().clone()).collect();
-        let positions: Vec<&Position> = positions_owned.iter().collect();
-        let risk_checker = recover_lock(inner.risk_checker.lock());
-
-        if let Err(e) =
-            risk_checker.check_open_position(&positions, &symbol, size, lev, total_equity)
-        {
-            let msg = format!("Risk check failed: {}", e);
-            warn!(error = %e, "Risk check failed for {}", symbol);
-            inner.emit_event(EngineEvent::RiskAlert {
-                level: "warning".to_string(),
-                message: msg.clone(),
-            });
-            inner.emit_event(EngineEvent::OrderFailed {
-                order_id: Uuid::nil(),
-                reason: msg,
-            });
-            return;
-        }
-    }
 
     let now = Utc::now();
     let position_id = Uuid::new_v4();
@@ -1784,33 +1562,6 @@ pub(crate) fn resolve_position_side_for_hedge(params: &mut PlaceOrderParams) {
 
 pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: PlaceOrderParams) {
     resolve_position_side_for_hedge(&mut params);
-
-    let total_equity = inner
-        .exchange
-        .get_balance()
-        .await
-        .map(|b| b.total)
-        .unwrap_or_else(|e| {
-            warn!(error = %e, "Failed to get balance for risk check");
-            recover_lock(inner.tracker.lock()).equity()
-        });
-    {
-        let positions_owned: Vec<Position> =
-            inner.positions.iter().map(|r| r.value().clone()).collect();
-        let positions: Vec<&Position> = positions_owned.iter().collect();
-        let risk_checker = recover_lock(inner.risk_checker.lock());
-        if let Err(e) =
-            risk_checker.check_place_order(&positions, &params.symbol, params.amount, total_equity)
-        {
-            let msg = format!("Risk check failed: {}", e);
-            warn!(error = %e, symbol = %params.symbol, "Risk check failed for place order");
-            inner.emit_event(EngineEvent::OrderFailed {
-                order_id: Uuid::nil(),
-                reason: msg,
-            });
-            return;
-        }
-    }
 
     // Auto-create position if not provided (e.g. from Grid bot PlaceOrder)
     let position_id = match params.position_id {

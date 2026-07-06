@@ -1593,17 +1593,6 @@ impl AutoWorker {
                         }
                     }
             }
-            OrderEvent::LiquidationWarning {
-                symbol,
-                liquidation_price,
-                current_price,
-            } => {
-                warn!(
-                    bot_id = %self.bot.id, symbol = %symbol,
-                    liquidation_price, current_price,
-                    "Liquidation warning in auto trade"
-                );
-            }
             _ => {}
         }
     }

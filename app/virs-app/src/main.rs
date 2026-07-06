@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
 use virs_api::EngineManager;
-use virs_error::{Context, VirsError, VirsResult};
+use virs_error::{Context, VirsResult};
 
 use virs_api::{build_router, AppState};
 use virs_app::engine_manager::AppEngineManager;
