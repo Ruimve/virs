@@ -252,25 +252,33 @@ impl KlineWsClient for KlineWs {
                             let subs_vec: Vec<String> = subscriptions.read().await.clone();
                             if !subs_vec.is_empty() {
                                 let id = request_id.fetch_add(1, Ordering::Relaxed);
+                                let count = subs_vec.len();
                                 let msg = serde_json::json!({
                                     "method": "SUBSCRIBE",
                                     "params": subs_vec,
                                     "id": id
                                 });
                                 if let Ok(text) = serde_json::to_string(&msg) {
-                                    if write
+                                    match write
                                         .send(tungstenite::Message::Text(text.into()))
                                         .await
-                                        .is_err()
                                     {
-                                        tracing::error!(
-                                            "[KlineWs] Failed to send subscription message"
-                                        );
-                                        continue;
+                                        Ok(()) => {
+                                            tracing::info!(
+                                                id = id,
+                                                count = count,
+                                                "[KlineWs] Batch subscription request sent"
+                                            );
+                                        }
+                                        Err(_) => {
+                                            tracing::error!(
+                                                id = id,
+                                                "[KlineWs] Failed to send subscription message"
+                                            );
+                                            continue;
+                                        }
                                     }
                                 }
-                            } else {
-                                tracing::warn!("[KlineWs] No streams to subscribe (subscriptions empty)");
                             }
                         }
 
@@ -322,6 +330,25 @@ impl KlineWsClient for KlineWs {
                                                     }
                                                 } else {
                                                     // 订阅确认/错误响应（无 kline 数据）
+                                                    // 币安成功: {"result": null, "id": N}
+                                                    // 币安错误: {"code": 2, "msg": "..."} (合约无 id; 现货含 id)
+                                                    if let Ok(resp) =
+                                                        serde_json::from_str::<serde_json::Value>(&text)
+                                                    {
+                                                        if let Some(code) = resp.get("code") {
+                                                            tracing::error!(
+                                                                id = ?resp.get("id"),
+                                                                code = ?code,
+                                                                msg = ?resp.get("msg"),
+                                                                "[KlineWs] Subscription rejected by Binance"
+                                                            );
+                                                        } else if resp.get("result").is_some() {
+                                                            tracing::info!(
+                                                                id = ?resp.get("id"),
+                                                                "[KlineWs] Subscription confirmed by Binance"
+                                                            );
+                                                        }
+                                                    }
                                                 }
                                             } else {
                                                 tracing::warn!("[KlineWs] Failed to parse WS message: {}", &text[..text.len().min(200)]);
@@ -358,13 +385,26 @@ impl KlineWsClient for KlineWs {
                                             let id = request_id.fetch_add(1, Ordering::Relaxed);
                                             let msg = serde_json::json!({
                                                 "method": "SUBSCRIBE",
-                                                "params": [stream_name],
+                                                "params": [stream_name.clone()],
                                                 "id": id
                                             });
                                             if let Ok(text) = serde_json::to_string(&msg) {
-                                                if write.send(tungstenite::Message::Text(text.into())).await.is_err() {
-                                                    tracing::warn!("[KlineWs] Failed to send dynamic subscribe");
-                                                    break;
+                                                match write.send(tungstenite::Message::Text(text.into())).await {
+                                                    Ok(()) => {
+                                                        tracing::info!(
+                                                            id = id,
+                                                            stream = %stream_name,
+                                                            "[KlineWs] Dynamic subscribe request sent"
+                                                        );
+                                                    }
+                                                    Err(_) => {
+                                                        tracing::error!(
+                                                            id = id,
+                                                            stream = %stream_name,
+                                                            "[KlineWs] Failed to send dynamic subscribe"
+                                                        );
+                                                        break;
+                                                    }
                                                 }
                                             }
                                         }
@@ -372,13 +412,26 @@ impl KlineWsClient for KlineWs {
                                             let id = request_id.fetch_add(1, Ordering::Relaxed);
                                             let msg = serde_json::json!({
                                                 "method": "UNSUBSCRIBE",
-                                                "params": [stream_name],
+                                                "params": [stream_name.clone()],
                                                 "id": id
                                             });
                                             if let Ok(text) = serde_json::to_string(&msg) {
-                                                if write.send(tungstenite::Message::Text(text.into())).await.is_err() {
-                                                    tracing::warn!("[KlineWs] Failed to send dynamic unsubscribe");
-                                                    break;
+                                                match write.send(tungstenite::Message::Text(text.into())).await {
+                                                    Ok(()) => {
+                                                        tracing::info!(
+                                                            id = id,
+                                                            stream = %stream_name,
+                                                            "[KlineWs] Dynamic unsubscribe request sent"
+                                                        );
+                                                    }
+                                                    Err(_) => {
+                                                        tracing::error!(
+                                                            id = id,
+                                                            stream = %stream_name,
+                                                            "[KlineWs] Failed to send dynamic unsubscribe"
+                                                        );
+                                                        break;
+                                                    }
                                                 }
                                             }
                                         }
