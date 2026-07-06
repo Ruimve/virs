@@ -203,18 +203,16 @@ impl PositionEngine {
 
     /// 启动引擎主循环。
     pub async fn run(&mut self) -> PositionResult<()> {
-        // 1. 初始化数据库表
-        self.inner.persistence.init_tables().await?;
-
+        // 表结构由 migrations/init.sql 统一管理，应用启动时已执行。
         // VIRS is Hedge-only. Position mode is not stored or queried at runtime —
         // the frontend wizard validates Hedge mode when credentials are saved.
         // resolve_position_side_for_hedge auto-resolves position_side for callers
         // that omit it (e.g. grid bot PlaceOrder).
 
-        // 2. 从数据库恢复状态
+        // 1. 从数据库恢复状态
         self.recover_state().await?;
 
-        // 3. 订阅 WebSocket 成交回报
+        // 2. 订阅 WebSocket 成交回报
         let symbols: Vec<String> = self
             .inner
             .positions
@@ -229,11 +227,11 @@ impl PositionEngine {
             .subscribe_order_updates(&unique_symbol_refs)
             .await?;
 
-        // 4. 设置状态为 Running
+        // 3. 设置状态为 Running
         self.inner.set_state(EngineState::Running);
         info!(engine_id = %self.inner.config.engine_id, "Position engine started");
 
-        // 5. 启动 4 个并行循环
+        // 4. 启动 4 个并行循环
         let cmd_rx = self
             .cmd_rx
             .take()

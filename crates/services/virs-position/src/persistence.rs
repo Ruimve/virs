@@ -18,8 +18,6 @@ use virs_error::PositionResult;
 
 #[async_trait::async_trait]
 pub trait PositionPersistence: Send + Sync {
-    /// 初始化表结构（幂等）。
-    async fn init_tables(&self) -> PositionResult<()>;
     /// 写入/更新仓位。
     async fn upsert_position(&self, pos: &Position) -> PositionResult<()>;
     /// 获取引擎下所有未平仓仓位（用于重启恢复）。
@@ -42,10 +40,6 @@ impl Persistence {
 
 #[async_trait::async_trait]
 impl PositionPersistence for Persistence {
-    async fn init_tables(&self) -> PositionResult<()> {
-        self.init_tables_impl().await
-    }
-
     async fn upsert_position(&self, pos: &Position) -> PositionResult<()> {
         self.upsert_position_impl(pos).await
     }
@@ -56,83 +50,6 @@ impl PositionPersistence for Persistence {
 }
 
 impl Persistence {
-    async fn init_tables_impl(&self) -> PositionResult<()> {
-        // pe_positions
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS pe_positions (
-                id              UUID PRIMARY KEY,
-                engine_id       TEXT NOT NULL,
-                strategy_id     TEXT,
-                exchange        TEXT NOT NULL,
-                symbol          TEXT NOT NULL,
-                side            TEXT NOT NULL,
-                status          TEXT NOT NULL,
-                size            DOUBLE PRECISION NOT NULL,
-                entry_price     DOUBLE PRECISION NOT NULL,
-                current_price   DOUBLE PRECISION NOT NULL,
-                leverage        INT NOT NULL,
-                margin          DOUBLE PRECISION NOT NULL,
-                unrealized_pnl  DOUBLE PRECISION NOT NULL,
-                realized_pnl    DOUBLE PRECISION NOT NULL,
-                stop_loss       DOUBLE PRECISION,
-                take_profit     DOUBLE PRECISION,
-                liquidation_price DOUBLE PRECISION,
-                opened_at       TIMESTAMPTZ NOT NULL,
-                updated_at      TIMESTAMPTZ NOT NULL,
-                closed_at       TIMESTAMPTZ,
-                metadata        JSONB NOT NULL DEFAULT '{}',
-                UNIQUE (engine_id, exchange, symbol, side)
-            )
-            "#,
-        )
-        .execute(&self.db)
-        .await?;
-
-        // Indexes
-        let indexes = [
-            "CREATE INDEX IF NOT EXISTS idx_pe_positions_engine_id ON pe_positions (engine_id)",
-            "CREATE INDEX IF NOT EXISTS idx_pe_positions_status ON pe_positions (status)",
-        ];
-
-        for idx in &indexes {
-            sqlx::query(idx).execute(&self.db).await?;
-        }
-
-        // ── Migration: remove PositionSide::Both (OneWay mode) ──
-        // Backfill existing 'Both' rows by size sign, then enforce CHECK.
-        // This is idempotent: UPDATE is a no-op once no 'Both' rows remain,
-        // and ADD CONSTRAINT IF NOT EXISTS skips if the constraint exists.
-        //
-        // If a 'Both' row collides with an existing Long/Short row for the
-        // same (engine_id, exchange, symbol), the UNIQUE constraint will
-        // block the UPDATE — the operator must resolve such rows manually
-        // before the next startup succeeds.
-        sqlx::query(
-            r#"
-            UPDATE pe_positions
-               SET side = CASE WHEN size >= 0 THEN 'Long' ELSE 'Short' END,
-                   size = ABS(size)
-             WHERE side = 'Both'
-            "#,
-        )
-        .execute(&self.db)
-        .await?;
-
-        sqlx::query(
-            r#"
-            ALTER TABLE pe_positions
-                DROP CONSTRAINT IF EXISTS chk_pe_positions_side,
-                ADD CONSTRAINT chk_pe_positions_side
-                    CHECK (side IN ('Long', 'Short'))
-            "#,
-        )
-        .execute(&self.db)
-        .await?;
-
-        Ok(())
-    }
-
     // ===================================================================
     // Position CRUD
     // ===================================================================

@@ -3,7 +3,7 @@
 -- Crypto-only trading platform
 --
 -- 注意：本文件为全量初始化脚本，会重新创建整个数据库。
--- 所有字段已聚合到初始 CREATE TABLE 中，无增量 ALTER 语句。
+-- 所有字段及约束已聚合到初始 CREATE TABLE 中，无增量 ALTER 语句。
 
 -- ============================================================
 -- Users & Authentication
@@ -280,3 +280,38 @@ CREATE TABLE IF NOT EXISTS qd_auto_analysis_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_auto_analysis_logs_bot ON qd_auto_analysis_logs(bot_id, created_at DESC);
+
+-- ============================================================
+-- Position Engine (pe_positions)
+-- ============================================================
+-- 仅保留 pe_positions 表用于引擎重启后快速恢复内存仓位状态。
+-- 订单（pe_orders）、成交（pe_trades）、PnL 快照（pe_pnl_snapshots）、事件（pe_events）
+-- 已删除：业务数据由 qd_auto_trades/qd_grid_trades 承载，引擎运行时状态在内存中维护。
+
+CREATE TABLE IF NOT EXISTS pe_positions (
+    id              UUID PRIMARY KEY,
+    engine_id       TEXT NOT NULL,
+    strategy_id     TEXT,
+    exchange        TEXT NOT NULL,
+    symbol          TEXT NOT NULL,
+    side            TEXT NOT NULL CHECK (side IN ('Long', 'Short')),
+    status          TEXT NOT NULL,
+    size            DOUBLE PRECISION NOT NULL,
+    entry_price     DOUBLE PRECISION NOT NULL,
+    current_price   DOUBLE PRECISION NOT NULL,
+    leverage        INT NOT NULL,
+    margin          DOUBLE PRECISION NOT NULL,
+    unrealized_pnl  DOUBLE PRECISION NOT NULL,
+    realized_pnl    DOUBLE PRECISION NOT NULL,
+    stop_loss       DOUBLE PRECISION,
+    take_profit     DOUBLE PRECISION,
+    liquidation_price DOUBLE PRECISION,
+    opened_at       TIMESTAMPTZ NOT NULL,
+    updated_at      TIMESTAMPTZ NOT NULL,
+    closed_at       TIMESTAMPTZ,
+    metadata        JSONB NOT NULL DEFAULT '{}',
+    UNIQUE (engine_id, exchange, symbol, side)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pe_positions_engine_id ON pe_positions (engine_id);
+CREATE INDEX IF NOT EXISTS idx_pe_positions_status ON pe_positions (status);
