@@ -17,7 +17,7 @@ interface Props extends SVGProps<SVGSVGElement> {
 }
 
 const Icon = memo((props: Props) => {
-  const { size, ...rest } = props;
+  const { size = 56, ...rest } = props;
   return (
     <svg
       className="load-assets-icon"
