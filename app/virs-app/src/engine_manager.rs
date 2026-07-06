@@ -326,8 +326,8 @@ impl EngineManager for AppEngineManager {
         self.state.get().and_then(|s| s.auto_cmd_tx.lock().unwrap().clone())
     }
 
-    fn paper_mode(&self) -> bool {
-        self.state.get().map(|s| s.paper_mode).unwrap_or(false)
+    fn paper_mode(&self) -> Option<bool> {
+        self.state.get().map(|s| s.paper_mode)
     }
 
     async fn register_paper_symbol(&self, exchange: String, symbol: String) {
@@ -485,20 +485,40 @@ impl EngineManager for AppEngineManager {
             }
         }
 
-        // 3. Determine paper mode from DB (set by the wizard when creating bots)
-        let paper_mode: bool = sqlx::query_scalar(
-            r#"SELECT paper_mode FROM qd_auto_bots WHERE status = 'running' LIMIT 1
-               UNION ALL
-               SELECT paper_mode FROM qd_grid_bots WHERE status = 'running' LIMIT 1"#,
+        // 3. Determine paper mode from DB.
+        // Query DISTINCT paper_mode among all running bots to enforce
+        // consistency. If running bots disagree on paper_mode, we refuse to
+        // start the engine rather than silently picking one — mismatched
+        // modes could route paper-trading orders to a live exchange.
+        let paper_modes: Vec<bool> = sqlx::query_scalar(
+            r#"SELECT DISTINCT paper_mode FROM (
+                SELECT paper_mode FROM qd_auto_bots WHERE status = 'running'
+                UNION ALL
+                SELECT paper_mode FROM qd_grid_bots WHERE status = 'running'
+            ) AS combined"#,
         )
-        .fetch_optional(&self.db_pool)
-        .await?
-        .unwrap_or(true); // Default to safe paper trading
+        .fetch_all(&self.db_pool)
+        .await?;
+
+        if paper_modes.is_empty() {
+            // No running bots — nothing to restore. Engines will start lazily
+            // when the user creates or starts a bot via the API.
+            info!("No running bots found — engines will start on first bot creation");
+            return Ok(());
+        }
+
+        if paper_modes.len() > 1 {
+            return Err(virs_error::VirsError::config(
+                "Inconsistent paper_mode values among running bots — \
+                 cannot determine engine mode. All running bots must share \
+                 the same paper_mode.",
+            ));
+        }
+
+        let paper_mode = paper_modes[0];
 
         // 4. Start engines (which will call restore_running_bots internally)
-        if let Err(e) = self.ensure_started(paper_mode).await {
-            tracing::error!("Failed to restore engines: {}", e);
-        }
+        self.ensure_started(paper_mode).await?;
 
         Ok(())
     }

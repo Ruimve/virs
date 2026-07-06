@@ -34,7 +34,9 @@ pub async fn create_bot(
     let quantity_per_grid = body["quantity_per_grid"].as_f64().unwrap_or(10.0);
     let leverage = body["leverage"].as_i64().unwrap_or(5) as i32;
     let name = body["name"].as_str().unwrap_or("Grid Bot");
-    let paper_mode = body["paper_mode"].as_bool().unwrap_or(true);
+    let paper_mode = body["paper_mode"].as_bool().ok_or_else(|| {
+        VirsError::bad_request("paper_mode is required (must be true or false)")
+    })?;
     let market_type = body["market_type"].as_str().unwrap_or("perpetual");
 
     if symbol.is_empty() || exchange.is_empty() {

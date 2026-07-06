@@ -28,8 +28,12 @@ pub trait EngineManager: Send + Sync {
     /// Get the auto engine command sender (None if engines not started)
     fn auto_cmd_tx(&self) -> Option<mpsc::Sender<AutoCommand>>;
 
-    /// Current paper mode (meaningful only after engines started)
-    fn paper_mode(&self) -> bool;
+    /// Current paper mode.
+    /// Returns `None` when engines have not been started yet (e.g. restore
+    /// failed at boot, or no bots exist). Returning `None` — rather than a
+    /// silent `false` — prevents the frontend from mistaking "engine not
+    /// running" for "live trading mode".
+    fn paper_mode(&self) -> Option<bool>;
 
     /// Register a symbol for paper mode price ticks
     async fn register_paper_symbol(&self, exchange: String, symbol: String);

@@ -186,7 +186,7 @@ async fn main() -> VirsResult<()> {
 
     // Restore services if bots exist from previous session
     if let Err(e) = engine_manager.restore_if_needed().await {
-        tracing::warn!("Failed to restore services from previous session: {}", e);
+        tracing::error!("Failed to restore services from previous session: {}", e);
     }
 
     // Build router

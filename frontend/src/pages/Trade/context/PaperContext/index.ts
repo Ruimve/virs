@@ -1,7 +1,8 @@
 import { createContext, useContext } from 'react';
 
 interface PaperContextType {
-  enabled: boolean;
+  /** null = engines not started (restore failed or no bots) */
+  enabled: boolean | null;
   refresh: () => Promise<void>;
 }
 

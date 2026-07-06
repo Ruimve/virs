@@ -77,15 +77,17 @@ const Header = () => {
               <span className={`w-1 h-1 rounded-full ${sc.dot} `} />
               {sc.text}
             </span>
-            <span
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${paperEnabled ? 'text-warning-text' : 'text-success-text'}`}
-            >
-              {paperEnabled ? (
-                <ShieldCheck className="w-4 h-4" strokeWidth={2} />
-              ) : (
-                <Flame className="w-4 h-4" strokeWidth={2} />
-              )}
-            </span>
+            {paperEnabled !== null && (
+              <span
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${paperEnabled ? 'text-warning-text' : 'text-success-text'}`}
+              >
+                {paperEnabled ? (
+                  <ShieldCheck className="w-4 h-4" strokeWidth={2} />
+                ) : (
+                  <Flame className="w-4 h-4" strokeWidth={2} />
+                )}
+              </span>
+            )}
             <span className="text-xs text-on-surface-tertiary">
               {bot?.symbol || ''} · {bot?.leverage || ''}x
             </span>

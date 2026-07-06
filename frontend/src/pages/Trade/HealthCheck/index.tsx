@@ -180,6 +180,12 @@ const HealthCheck = () => {
         return;
       }
       const paperMode = res.data.paper_mode;
+      if (paperMode === null) {
+        updateCheck('trading', 'error', 'Engines not started', {
+          message: 'Trading engines have not been started. Create or start a bot to initialize.',
+        });
+        return;
+      }
       updateCheck('trading', 'done', paperMode ? 'Paper trading' : 'Live trading', {
         paperMode,
       });

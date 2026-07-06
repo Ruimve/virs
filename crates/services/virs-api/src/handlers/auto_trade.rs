@@ -60,7 +60,9 @@ pub async fn create_bot(
     let max_position_pct = body["max_position_pct"].as_f64().unwrap_or(80.0);
     let decide_interval_secs = body["decide_interval_secs"].as_i64().unwrap_or(300) as i32;
     let name = body["name"].as_str().unwrap_or("Auto Bot");
-    let paper_mode = body["paper_mode"].as_bool().unwrap_or(true);
+    let paper_mode = body["paper_mode"].as_bool().ok_or_else(|| {
+        VirsError::bad_request("paper_mode is required (must be true or false)")
+    })?;
 
     if symbol.is_empty() || exchange.is_empty() {
         return Err(VirsError::bad_request(
