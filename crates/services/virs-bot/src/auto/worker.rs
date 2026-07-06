@@ -1311,7 +1311,7 @@ impl AutoWorker {
                 side: position_side,
                 order_side,
                 amount: quantity,
-                leverage: Some(self.bot.leverage.max(1) as u32),
+                leverage: self.bot.leverage.max(1) as u32,
                 price: None,
                 stop_loss: Some(stop_loss),
                 take_profit: Some(take_profit),

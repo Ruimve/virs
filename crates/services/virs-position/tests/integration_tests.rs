@@ -18,7 +18,6 @@ fn make_position(
 ) -> Position {
     Position {
         id: Uuid::new_v4(),
-        engine_id: "test".to_string(),
         strategy_id: None,
         exchange: "binance".to_string(),
         symbol: symbol.to_string(),

@@ -290,7 +290,6 @@ CREATE INDEX IF NOT EXISTS idx_auto_analysis_logs_bot ON qd_auto_analysis_logs(b
 
 CREATE TABLE IF NOT EXISTS pe_positions (
     id              UUID PRIMARY KEY,
-    engine_id       TEXT NOT NULL,
     strategy_id     TEXT,
     exchange        TEXT NOT NULL,
     symbol          TEXT NOT NULL,
@@ -310,8 +309,7 @@ CREATE TABLE IF NOT EXISTS pe_positions (
     updated_at      TIMESTAMPTZ NOT NULL,
     closed_at       TIMESTAMPTZ,
     metadata        JSONB NOT NULL DEFAULT '{}',
-    UNIQUE (engine_id, exchange, symbol, side)
+    UNIQUE (exchange, symbol, side)
 );
 
-CREATE INDEX IF NOT EXISTS idx_pe_positions_engine_id ON pe_positions (engine_id);
 CREATE INDEX IF NOT EXISTS idx_pe_positions_status ON pe_positions (status);

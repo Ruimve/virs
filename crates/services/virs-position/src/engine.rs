@@ -229,7 +229,7 @@ impl PositionEngine {
 
         // 3. 设置状态为 Running
         self.inner.set_state(EngineState::Running);
-        info!(engine_id = %self.inner.config.engine_id, "Position engine started");
+        info!("Position engine started");
 
         // 4. 启动 4 个并行循环
         let cmd_rx = self
@@ -269,7 +269,7 @@ impl PositionEngine {
         }).await;
 
         self.inner.set_state(EngineState::Stopped);
-        info!(engine_id = %self.inner.config.engine_id, "Position engine stopped");
+        info!("Position engine stopped");
         Ok(())
     }
 
@@ -278,7 +278,7 @@ impl PositionEngine {
     /// on their next tick. command_loop exits when cmd_tx senders are dropped.
     pub fn stop(&self) {
         self.inner.set_state(EngineState::ShuttingDown);
-        info!(engine_id = %self.inner.config.engine_id, "Position engine stop requested");
+        info!("Position engine stop requested");
     }
 
     // -----------------------------------------------------------------------
@@ -286,9 +286,7 @@ impl PositionEngine {
     // -----------------------------------------------------------------------
 
     async fn recover_state(&self) -> PositionResult<()> {
-        let engine_id = &self.inner.config.engine_id;
-
-        let open_positions = self.inner.persistence.get_open_positions(engine_id).await?;
+        let open_positions = self.inner.persistence.get_open_positions().await?;
         for pos in &open_positions {
             let key = (pos.exchange.clone(), pos.symbol.clone(), pos.side);
             self.inner.position_id_index.insert(pos.id, key.clone());
@@ -346,7 +344,6 @@ impl PositionEngine {
                             let now = Utc::now();
                             let position = Position {
                                 id: Uuid::new_v4(),
-                                engine_id: self.inner.config.engine_id.clone(),
                                 strategy_id: None,
                                 exchange: exchange_name.clone(),
                                 symbol: ep.symbol.clone(),
@@ -529,7 +526,6 @@ pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
                             let now = Utc::now();
                             let position = Position {
                                 id: Uuid::new_v4(),
-                                engine_id: inner.config.engine_id.clone(),
                                 strategy_id: None,
                                 exchange: exchange_name.clone(),
                                 symbol: ep.symbol.clone(),
@@ -1062,7 +1058,7 @@ pub(crate) async fn handle_open_position(
     side: PositionSide,
     _order_side: Side,
     size: f64,
-    leverage: Option<u32>,
+    leverage: u32,
     order_type: OrderType,
     price: Option<f64>,
     stop_loss: Option<f64>,
@@ -1154,42 +1150,40 @@ pub(crate) async fn handle_open_position(
         return;
     }
 
-    if let Some(lev) = leverage {
-        if let Err(e) = inner.exchange.set_leverage(&symbol, lev).await {
-            let msg = format!("Failed to set leverage: {}", e);
-            error!(error = %e, symbol = %symbol, leverage = lev, "Failed to set leverage");
-            inner.emit_event(EngineEvent::RiskAlert {
-                level: "warning".to_string(),
-                message: format!(
-                    "Leverage inconsistency: {}x requested for {} but exchange returned error: {}",
-                    lev, symbol, e
-                ),
-            });
-            inner.emit_event(EngineEvent::OrderFailed {
-                order_id: Uuid::nil(),
-                reason: msg,
-            });
-            return;
-        }
+    // Leverage is a critical trading parameter — must not be 0.
+    if leverage == 0 {
+        let msg = "leverage must be > 0".to_string();
+        error!(symbol = %symbol, "open_position rejected: leverage is 0");
+        inner.emit_event(EngineEvent::OrderFailed {
+            order_id: Uuid::nil(),
+            reason: msg,
+        });
+        return;
     }
 
-    let lev = leverage.unwrap_or_else(|| {
-        // No leverage specified — use the engine's configured default leverage.
-        // Falling back to 1 would cause margin overestimation. Log a warning
-        // so operators know the default was used.
-        warn!(
-            symbol = %symbol,
-            "No leverage specified for open_position — using engine default ({}x)",
-            inner.config.default_leverage
-        );
-        inner.config.default_leverage
-    });
+    if let Err(e) = inner.exchange.set_leverage(&symbol, leverage).await {
+        let msg = format!("Failed to set leverage: {}", e);
+        error!(error = %e, symbol = %symbol, leverage = leverage, "Failed to set leverage");
+        inner.emit_event(EngineEvent::RiskAlert {
+            level: "warning".to_string(),
+            message: format!(
+                "Leverage inconsistency: {}x requested for {} but exchange returned error: {}",
+                leverage, symbol, e
+            ),
+        });
+        inner.emit_event(EngineEvent::OrderFailed {
+            order_id: Uuid::nil(),
+            reason: msg,
+        });
+        return;
+    }
+
+    let lev = leverage;
 
     let now = Utc::now();
     let position_id = Uuid::new_v4();
     let mut position = Position {
         id: position_id,
-        engine_id: inner.config.engine_id.clone(),
         strategy_id: strategy_id.clone(),
         exchange: exchange_name.clone(),
         symbol: symbol.clone(),
@@ -1579,7 +1573,6 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
             } else {
                 let position = Position {
                     id: pos_id,
-                    engine_id: inner.config.engine_id.clone(),
                     strategy_id: params.client_order_id.clone(),
                     exchange: exchange_name,
                     symbol: params.symbol.clone(),

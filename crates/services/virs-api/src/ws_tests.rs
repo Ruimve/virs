@@ -128,7 +128,6 @@ fn w3_3_orderbook_level_format() {
 fn make_position(side: PositionSide, status: PositionStatus, stop_loss: Option<f64>) -> Position {
     Position {
         id: Uuid::nil(),
-        engine_id: "test-engine".into(),
         strategy_id: None,
         exchange: "binance".into(),
         symbol: "BTC/USDT".into(),

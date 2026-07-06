@@ -71,7 +71,7 @@ fn int_8_3_auto_market_type_from_str() {
 
 fn make_position(side: PositionSide, entry: f64, size: f64, margin: f64) -> Position {
     Position {
-        id: Uuid::nil(), engine_id: "test".into(), strategy_id: None,
+        id: Uuid::nil(), strategy_id: None,
         exchange: "binance".into(), symbol: "BTC/USDT".into(),
         side, status: PositionStatus::Open,
         size, entry_price: entry, current_price: entry,

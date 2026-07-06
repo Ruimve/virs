@@ -351,7 +351,7 @@ impl GridWorker {
                 side: position_side,
                 order_side: side,
                 amount,
-                leverage: Some(self.bot.leverage.max(1) as u32),
+                leverage: self.bot.leverage.max(1) as u32,
                 price: Some(price),
                 stop_loss: None,
                 take_profit: None,

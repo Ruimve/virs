@@ -20,8 +20,8 @@ use virs_error::PositionResult;
 pub trait PositionPersistence: Send + Sync {
     /// 写入/更新仓位。
     async fn upsert_position(&self, pos: &Position) -> PositionResult<()>;
-    /// 获取引擎下所有未平仓仓位（用于重启恢复）。
-    async fn get_open_positions(&self, engine_id: &str) -> PositionResult<Vec<Position>>;
+    /// 获取所有未平仓仓位（用于重启恢复）。
+    async fn get_open_positions(&self) -> PositionResult<Vec<Position>>;
 }
 
 // ============================================================================
@@ -44,8 +44,8 @@ impl PositionPersistence for Persistence {
         self.upsert_position_impl(pos).await
     }
 
-    async fn get_open_positions(&self, engine_id: &str) -> PositionResult<Vec<Position>> {
-        self.get_open_positions_impl(engine_id).await
+    async fn get_open_positions(&self) -> PositionResult<Vec<Position>> {
+        self.get_open_positions_impl().await
     }
 }
 
@@ -61,13 +61,13 @@ impl Persistence {
         sqlx::query(
             r#"
             INSERT INTO pe_positions (
-                id, engine_id, strategy_id, exchange, symbol, side, status,
+                id, strategy_id, exchange, symbol, side, status,
                 size, entry_price, current_price, leverage, margin,
                 unrealized_pnl, realized_pnl, stop_loss, take_profit,
                 liquidation_price, opened_at, updated_at, closed_at, metadata
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-            ON CONFLICT (engine_id, exchange, symbol, side)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+            ON CONFLICT (exchange, symbol, side)
             DO UPDATE SET
                 strategy_id     = EXCLUDED.strategy_id,
                 status          = EXCLUDED.status,
@@ -87,7 +87,6 @@ impl Persistence {
             "#,
         )
         .bind(pos.id)
-        .bind(&pos.engine_id)
         .bind(&pos.strategy_id)
         .bind(&pos.exchange)
         .bind(&pos.symbol)
@@ -113,15 +112,14 @@ impl Persistence {
         Ok(())
     }
 
-    async fn get_open_positions_impl(&self, engine_id: &str) -> PositionResult<Vec<Position>> {
+    async fn get_open_positions_impl(&self) -> PositionResult<Vec<Position>> {
         let rows = sqlx::query_as::<_, PositionRow>(
             r#"
             SELECT * FROM pe_positions
-            WHERE engine_id = $1 AND status IN ('Opening', 'Open', 'Closing')
+            WHERE status IN ('Opening', 'Open', 'Closing')
             ORDER BY opened_at
             "#,
         )
-        .bind(engine_id)
         .fetch_all(&self.db)
         .await?;
 
@@ -136,7 +134,6 @@ impl Persistence {
 #[derive(Debug, sqlx::FromRow)]
 struct PositionRow {
     id: Uuid,
-    engine_id: String,
     strategy_id: Option<String>,
     exchange: String,
     symbol: String,
@@ -175,7 +172,6 @@ impl PositionRow {
         };
         Some(Position {
             id: self.id,
-            engine_id: self.engine_id,
             strategy_id: self.strategy_id,
             exchange: self.exchange,
             symbol: self.symbol,

@@ -10,7 +10,6 @@ use crate::enums::*;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Position {
     pub id: Uuid,
-    pub engine_id: String,
     pub strategy_id: Option<String>,
     pub exchange: String,
     pub symbol: String,
@@ -134,7 +133,7 @@ pub enum EngineCommand {
         side: PositionSide,
         order_side: Side,
         size: f64,
-        leverage: Option<u32>,
+        leverage: u32,
         order_type: OrderType,
         price: Option<f64>,
         stop_loss: Option<f64>,
@@ -215,16 +214,10 @@ pub enum EngineEvent {
 /// Engine configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EngineConfig {
-    pub engine_id: String,
     #[serde(default = "default_sync_interval")]
     pub sync_interval_secs: u64,
     #[serde(default = "default_poll_interval")]
     pub poll_interval_secs: u64,
-    /// Default leverage used when no leverage is explicitly specified for an order.
-    /// This prevents falling back to 1x (which overestimates margin requirements)
-    /// or 0x (which would cause division-by-zero in margin calculations).
-    #[serde(default = "default_leverage")]
-    pub default_leverage: u32,
 }
 
 fn default_sync_interval() -> u64 {
@@ -232,9 +225,6 @@ fn default_sync_interval() -> u64 {
 }
 fn default_poll_interval() -> u64 {
     10
-}
-fn default_leverage() -> u32 {
-    1
 }
 
 impl Default for EngineConfig {
@@ -245,10 +235,8 @@ impl Default for EngineConfig {
              Ensure engine config is explicitly provided in production."
         );
         Self {
-            engine_id: "default".to_string(),
             sync_interval_secs: default_sync_interval(),
             poll_interval_secs: default_poll_interval(),
-            default_leverage: default_leverage(),
         }
     }
 }

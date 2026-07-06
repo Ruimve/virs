@@ -164,7 +164,6 @@ fn int_4_2_balance_response_parse_chain() {
 fn make_position(side: PositionSide, stop_loss: Option<f64>) -> Position {
     Position {
         id: Uuid::nil(),
-        engine_id: "test-engine".into(),
         strategy_id: None,
         exchange: "binance".into(),
         symbol: "BTC/USDT".into(),

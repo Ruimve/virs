@@ -45,7 +45,6 @@ fn p6_2_short_pnl() {
 fn make_position(status: PositionStatus) -> Position {
     Position {
         id: Uuid::nil(),
-        engine_id: "test".into(),
         strategy_id: None,
         exchange: "binance".into(),
         symbol: "BTC/USDT".into(),

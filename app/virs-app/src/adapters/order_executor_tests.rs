@@ -142,7 +142,6 @@ fn o1_6_convert_position_opened_none() {
     // PositionOpened is not mapped to OrderEvent → None
     let pos = virs_types::position::Position {
         id: Uuid::new_v4(),
-        engine_id: "test".to_string(),
         strategy_id: None,
         exchange: "binance".to_string(),
         symbol: "BTC/USDT".to_string(),

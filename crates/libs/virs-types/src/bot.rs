@@ -54,7 +54,7 @@ pub enum OrderCommand {
         side: BotPositionSide,
         order_side: OrderSide,
         amount: f64,
-        leverage: Option<u32>,
+        leverage: u32,
         price: Option<f64>,
         stop_loss: Option<f64>,
         take_profit: Option<f64>,
