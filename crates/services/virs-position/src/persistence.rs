@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use virs_types::enums::{PositionSide, PositionStatus};
 use virs_types::position::Position;
-use virs_error::PositionResult;
+use virs_error::VirsResult;
 
 // ============================================================================
 // PositionPersistence trait
@@ -19,9 +19,9 @@ use virs_error::PositionResult;
 #[async_trait::async_trait]
 pub trait PositionPersistence: Send + Sync {
     /// 写入/更新仓位。
-    async fn upsert_position(&self, pos: &Position) -> PositionResult<()>;
+    async fn upsert_position(&self, pos: &Position) -> VirsResult<()>;
     /// 获取所有未平仓仓位（用于重启恢复）。
-    async fn get_open_positions(&self) -> PositionResult<Vec<Position>>;
+    async fn get_open_positions(&self) -> VirsResult<Vec<Position>>;
 }
 
 // ============================================================================
@@ -40,11 +40,11 @@ impl Persistence {
 
 #[async_trait::async_trait]
 impl PositionPersistence for Persistence {
-    async fn upsert_position(&self, pos: &Position) -> PositionResult<()> {
+    async fn upsert_position(&self, pos: &Position) -> VirsResult<()> {
         self.upsert_position_impl(pos).await
     }
 
-    async fn get_open_positions(&self) -> PositionResult<Vec<Position>> {
+    async fn get_open_positions(&self) -> VirsResult<Vec<Position>> {
         self.get_open_positions_impl().await
     }
 }
@@ -54,7 +54,7 @@ impl Persistence {
     // Position CRUD
     // ===================================================================
 
-    async fn upsert_position_impl(&self, pos: &Position) -> PositionResult<()> {
+    async fn upsert_position_impl(&self, pos: &Position) -> VirsResult<()> {
         let side_str = format!("{:?}", pos.side);
         let status_str = format!("{:?}", pos.status);
 
@@ -112,7 +112,7 @@ impl Persistence {
         Ok(())
     }
 
-    async fn get_open_positions_impl(&self) -> PositionResult<Vec<Position>> {
+    async fn get_open_positions_impl(&self) -> VirsResult<Vec<Position>> {
         let rows = sqlx::query_as::<_, PositionRow>(
             r#"
             SELECT * FROM pe_positions

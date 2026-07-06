@@ -19,7 +19,7 @@ use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_types::market::*;
 use virs_types::position::*;
 
-use virs_error::{ExchangeError, PositionEngineError, PositionResult};
+use virs_error::{ExchangeError, VirsError, VirsResult};
 
 use crate::registry::Exchanges;
 
@@ -334,7 +334,7 @@ impl ExchangePe for PaperExchangeAdapter {
         self.market_type
     }
 
-    async fn get_ticker(&self, symbol: &str) -> PositionResult<Ticker> {
+    async fn get_ticker(&self, symbol: &str) -> VirsResult<Ticker> {
         warn!(
             exchange = %self.name,
             symbol = %symbol,
@@ -355,14 +355,14 @@ impl ExchangePe for PaperExchangeAdapter {
         })
     }
 
-    async fn get_balance(&self) -> PositionResult<Balance> {
+    async fn get_balance(&self) -> VirsResult<Balance> {
         self.ensure_balance_initialized().await;
         let mut balance = self.balance.lock().await;
         balance.total = balance.compute_total();
         Ok(balance.clone())
     }
 
-    async fn get_positions(&self, symbol: Option<&str>) -> PositionResult<Vec<ExchangePosition>> {
+    async fn get_positions(&self, symbol: Option<&str>) -> VirsResult<Vec<ExchangePosition>> {
         Ok(self
             .positions
             .iter()
@@ -385,7 +385,7 @@ impl ExchangePe for PaperExchangeAdapter {
             .collect())
     }
 
-    async fn get_funding_rate(&self, symbol: &str) -> PositionResult<FundingRate> {
+    async fn get_funding_rate(&self, symbol: &str) -> VirsResult<FundingRate> {
         warn!(
             exchange = %self.name,
             symbol = %symbol,
@@ -398,7 +398,7 @@ impl ExchangePe for PaperExchangeAdapter {
         })
     }
 
-    async fn place_order(&self, params: PlaceOrderParams) -> PositionResult<PositionOrder> {
+    async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<PositionOrder> {
         let order_id = Uuid::new_v4();
         let now = Utc::now();
         let is_market = params.order_type == OrderType::Market || params.price.is_none();
@@ -413,7 +413,7 @@ impl ExchangePe for PaperExchangeAdapter {
                         symbol = %params.symbol,
                         "No last price available for paper market order — returning NoData instead of 0.0"
                     );
-                    PositionEngineError::Exchange(ExchangeError::no_data(format!(
+                    VirsError::Exchange(ExchangeError::no_data(format!(
                         "No last price for paper market order on {}",
                         params.symbol
                     )))
@@ -525,12 +525,12 @@ impl ExchangePe for PaperExchangeAdapter {
         }
     }
 
-    async fn cancel_order(&self, _symbol: &str, order_id: &str) -> PositionResult<PositionOrder> {
+    async fn cancel_order(&self, _symbol: &str, order_id: &str) -> VirsResult<PositionOrder> {
         let uuid = Uuid::parse_str(order_id).map_err(|_| {
-            PositionEngineError::Exchange(ExchangeError::Internal(format!(
+            ExchangeError::Internal(format!(
                 "Invalid order ID: {}",
                 order_id
-            )))
+            ))
         })?;
         let now = Utc::now();
         match self.pending.remove(&uuid) {
@@ -556,13 +556,13 @@ impl ExchangePe for PaperExchangeAdapter {
                 created_at: pending.created_at,
                 updated_at: now,
             }),
-            None => Err(PositionEngineError::OrderNotFound {
-                order_id: order_id.to_string(),
-            }),
+            None => Err(VirsError::Exchange(ExchangeError::OrderNotFound(
+                order_id.to_string(),
+            ))),
         }
     }
 
-    async fn cancel_all_orders(&self, symbol: Option<&str>) -> PositionResult<Vec<PositionOrder>> {
+    async fn cancel_all_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<PositionOrder>> {
         let now = Utc::now();
         let keys: Vec<Uuid> = self
             .pending
@@ -600,7 +600,7 @@ impl ExchangePe for PaperExchangeAdapter {
         Ok(canceled)
     }
 
-    async fn get_open_orders(&self, symbol: Option<&str>) -> PositionResult<Vec<PositionOrder>> {
+    async fn get_open_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<PositionOrder>> {
         Ok(self
             .pending
             .iter()
@@ -633,9 +633,9 @@ impl ExchangePe for PaperExchangeAdapter {
             .collect())
     }
 
-    async fn get_order(&self, _symbol: &str, order_id: &str) -> PositionResult<PositionOrder> {
+    async fn get_order(&self, _symbol: &str, order_id: &str) -> VirsResult<PositionOrder> {
         let uuid = Uuid::parse_str(order_id).map_err(|_| {
-            PositionEngineError::Exchange(ExchangeError::Internal(format!(
+            VirsError::Exchange(ExchangeError::Internal(format!(
                 "Invalid order ID: {}",
                 order_id
             )))
@@ -663,20 +663,20 @@ impl ExchangePe for PaperExchangeAdapter {
                 created_at: o.created_at,
                 updated_at: o.created_at,
             }),
-            None => Err(PositionEngineError::OrderNotFound {
-                order_id: order_id.to_string(),
-            }),
+            None => Err(VirsError::Exchange(ExchangeError::OrderNotFound(
+                order_id.to_string(),
+            ))),
         }
     }
 
-    async fn set_leverage(&self, symbol: &str, leverage: u32) -> PositionResult<()> {
+    async fn set_leverage(&self, symbol: &str, leverage: u32) -> VirsResult<()> {
         // 保存 symbol 对应的 leverage，供 update_position_on_fill 使用
         self.configured_leverage
             .insert(symbol.to_string(), leverage);
         Ok(())
     }
 
-    async fn get_position_mode(&self) -> PositionResult<PositionMode> {
+    async fn get_position_mode(&self) -> VirsResult<PositionMode> {
         // Proxy to the real perpetual exchange when available — paper mode
         // should reflect the actual account's position mode, not a hard-coded
         // value. If no registry is attached (pure paper without a real
@@ -699,7 +699,7 @@ impl ExchangePe for PaperExchangeAdapter {
     async fn subscribe_order_updates(
         &self,
         _symbols: &[&str],
-    ) -> PositionResult<OrderUpdateStream> {
+    ) -> VirsResult<OrderUpdateStream> {
         let (tx, rx) = mpsc::channel(256);
         let mut price_tx = self.price_tx.lock().await;
         *price_tx = Some(tx);

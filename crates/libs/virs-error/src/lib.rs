@@ -1,15 +1,14 @@
 //! VIRS unified error handling crate.
 //!
-//! All domain error types (BotError, PositionEngineError, ExchangeError)
-//! are defined here. Upper layers use VirsError as the unified top-level
-//! error with automatic `#[from]` conversion from each domain type.
+//! All domain error types (BotError, ExchangeError) are defined here.
+//! Upper layers use VirsError as the unified top-level error with
+//! automatic `#[from]` conversion from each domain type.
 
 pub mod api;
 pub mod bot;
 pub mod classify;
 pub mod context;
 pub mod exchange;
-pub mod position;
 
 // Re-export all error types and result aliases at crate root
 pub use api::ApiError;
@@ -17,7 +16,6 @@ pub use bot::{BotError, BotResult};
 pub use classify::{Categorized, ErrorCategory, ErrorCode, HttpStatus, Retryable};
 pub use context::Context;
 pub use exchange::ExchangeError;
-pub use position::{PositionEngineError, PositionResult};
 
 /// Top-level unified error.
 ///
@@ -30,9 +28,6 @@ pub use position::{PositionEngineError, PositionResult};
 pub enum VirsError {
     #[error(transparent)]
     Bot(#[from] BotError),
-
-    #[error(transparent)]
-    Position(#[from] PositionEngineError),
 
     #[error(transparent)]
     Exchange(#[from] ExchangeError),
@@ -97,7 +92,6 @@ impl Retryable for VirsError {
     fn is_retryable(&self) -> bool {
         match self {
             Self::Bot(e) => e.is_retryable(),
-            Self::Position(e) => e.is_retryable(),
             Self::Exchange(e) => e.is_retryable(),
             #[cfg(feature = "sqlx")]
             Self::Database(_) => true,
@@ -110,7 +104,6 @@ impl Categorized for VirsError {
     fn category(&self) -> ErrorCategory {
         match self {
             Self::Bot(e) => e.category(),
-            Self::Position(e) => e.category(),
             Self::Exchange(e) => e.category(),
             #[cfg(feature = "sqlx")]
             Self::Database(_) => ErrorCategory::Database,
@@ -132,7 +125,6 @@ impl HttpStatus for VirsError {
     fn http_status(&self) -> u16 {
         match self {
             Self::Bot(e) => e.http_status(),
-            Self::Position(e) => e.http_status(),
             Self::Exchange(e) => e.http_status(),
             #[cfg(feature = "sqlx")]
             Self::Database(_) => 503,
@@ -149,7 +141,6 @@ impl ErrorCode for VirsError {
     fn error_code(&self) -> &'static str {
         match self {
             Self::Bot(e) => e.error_code(),
-            Self::Position(e) => e.error_code(),
             Self::Exchange(e) => e.error_code(),
             #[cfg(feature = "sqlx")]
             Self::Database(_) => "DATABASE_ERROR",

@@ -18,7 +18,7 @@ use virs_types::enums::*;
 use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_types::market::ExchangePosition;
 use virs_types::position::*;
-use virs_error::{PositionEngineError, PositionResult};
+use virs_error::{VirsError, VirsResult};
 
 use crate::persistence::PositionPersistence;
 use crate::tracker::PnlTracker;
@@ -196,7 +196,7 @@ impl PositionEngine {
     }
 
     /// 启动引擎主循环。
-    pub async fn run(&mut self) -> PositionResult<()> {
+    pub async fn run(&mut self) -> VirsResult<()> {
         // 表结构由 migrations/init.sql 统一管理，应用启动时已执行。
         // VIRS is Hedge-only. Position mode is not stored or queried at runtime —
         // the frontend wizard validates Hedge mode when credentials are saved.
@@ -229,7 +229,7 @@ impl PositionEngine {
         let cmd_rx = self
             .cmd_rx
             .take()
-            .ok_or(PositionEngineError::ChannelClosed)?;
+            .ok_or(VirsError::Http { status: 500, message: "Channel closed".to_string() })?;
         let inner = Arc::clone(&self.inner);
 
         let mut cmd_handle = tokio::spawn(command_loop(inner.clone(), cmd_rx));
@@ -268,7 +268,7 @@ impl PositionEngine {
     // 状态恢复
     // -----------------------------------------------------------------------
 
-    async fn recover_state(&self) -> PositionResult<()> {
+    async fn recover_state(&self) -> VirsResult<()> {
         let open_positions = self.inner.persistence.get_open_positions().await?;
         for pos in &open_positions {
             let key = (pos.exchange.clone(), pos.symbol.clone(), pos.side);
@@ -277,7 +277,7 @@ impl PositionEngine {
         }
 
         // 同步恢复的仓位到交易所内存状态（仅 Paper 模式需要，真实交易所空实现）
-        // 避免 sync_loop 误判"本地有但交易所没有" → 强制关闭本地仓位
+        // 避免 PE 误判"本地有但交易所没有" → 强制关闭本地仓位
         let exchange_positions: Vec<ExchangePosition> = open_positions
             .iter()
             .map(|p| ExchangePosition {
@@ -1181,7 +1181,7 @@ pub(crate) async fn handle_close_position(
                         info!(position_id = %position_id, symbol = %position.symbol, "Close order filled");
 
                         // 市价单立即成交时，直接更新仓位状态为 Closed 并发出事件
-                        // 避免等待 sync_loop 检测仓位消失（最多 10 秒延迟）
+                        // 避免等待下一次对账才发现仓位已消失
                         let key = (
                             position.exchange.clone(),
                             position.symbol.clone(),

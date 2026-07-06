@@ -12,7 +12,7 @@ use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_types::market::*;
 use virs_types::position::*;
 
-use virs_error::{ExchangeError, PositionResult};
+use virs_error::{ExchangeError, VirsResult};
 
 use crate::registry::Exchanges;
 use crate::Exchange;
@@ -167,7 +167,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         }
     }
 
-    async fn get_ticker(&self, symbol: &str) -> PositionResult<Ticker> {
+    async fn get_ticker(&self, symbol: &str) -> VirsResult<Ticker> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
@@ -187,7 +187,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         })
     }
 
-    async fn get_balance(&self) -> PositionResult<Balance> {
+    async fn get_balance(&self) -> VirsResult<Balance> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
@@ -208,7 +208,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         })
     }
 
-    async fn get_positions(&self, symbol: Option<&str>) -> PositionResult<Vec<ExchangePosition>> {
+    async fn get_positions(&self, symbol: Option<&str>) -> VirsResult<Vec<ExchangePosition>> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
@@ -216,7 +216,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         Ok(positions.iter().map(convert_exchange_position).collect())
     }
 
-    async fn get_funding_rate(&self, symbol: &str) -> PositionResult<FundingRate> {
+    async fn get_funding_rate(&self, symbol: &str) -> VirsResult<FundingRate> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
@@ -228,7 +228,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         })
     }
 
-    async fn place_order(&self, params: PlaceOrderParams) -> PositionResult<PositionOrder> {
+    async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<PositionOrder> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
@@ -250,7 +250,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         Ok(convert_order(&virs_order, &exchange_name))
     }
 
-    async fn cancel_order(&self, symbol: &str, order_id: &str) -> PositionResult<PositionOrder> {
+    async fn cancel_order(&self, symbol: &str, order_id: &str) -> VirsResult<PositionOrder> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
@@ -261,7 +261,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         Ok(convert_order(&virs_order, &exchange_name))
     }
 
-    async fn cancel_all_orders(&self, symbol: Option<&str>) -> PositionResult<Vec<PositionOrder>> {
+    async fn cancel_all_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<PositionOrder>> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
@@ -277,7 +277,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         Ok(canceled)
     }
 
-    async fn get_open_orders(&self, symbol: Option<&str>) -> PositionResult<Vec<PositionOrder>> {
+    async fn get_open_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<PositionOrder>> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
@@ -289,7 +289,7 @@ impl ExchangePe for CcxtExchangeAdapter {
             .collect())
     }
 
-    async fn get_order(&self, symbol: &str, order_id: &str) -> PositionResult<PositionOrder> {
+    async fn get_order(&self, symbol: &str, order_id: &str) -> VirsResult<PositionOrder> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
@@ -298,7 +298,7 @@ impl ExchangePe for CcxtExchangeAdapter {
         Ok(convert_order(&virs_order, &exchange_name))
     }
 
-    async fn set_leverage(&self, symbol: &str, leverage: u32) -> PositionResult<()> {
+    async fn set_leverage(&self, symbol: &str, leverage: u32) -> VirsResult<()> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
@@ -306,16 +306,16 @@ impl ExchangePe for CcxtExchangeAdapter {
         Ok(())
     }
 
-    async fn get_position_mode(&self) -> PositionResult<PositionMode> {
+    async fn get_position_mode(&self) -> VirsResult<PositionMode> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
-        // fapi returns Err for OneWay — the `?` propagates it as PositionEngineError::Exchange.
+        // fapi returns Err for OneWay — the `?` propagates it as VirsError::Exchange.
         // Ok(Hedge) is the only success path.
         ex.get_position_mode().await.map_err(Into::into)
     }
 
-    async fn subscribe_order_updates(&self, symbols: &[&str]) -> PositionResult<OrderUpdateStream> {
+    async fn subscribe_order_updates(&self, symbols: &[&str]) -> VirsResult<OrderUpdateStream> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
