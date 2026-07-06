@@ -131,7 +131,9 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
         id: None,
     };
 
-    let proxy = std::env::var("PROXY_URL").ok();
+    let proxy = std::env::var("PROXY_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty());
 
     Ok(AppConfig {
         server,
