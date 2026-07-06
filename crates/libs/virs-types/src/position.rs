@@ -210,33 +210,3 @@ pub enum EngineEvent {
         positions: Vec<crate::market::ExchangePosition>,
     },
 }
-
-/// Engine configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EngineConfig {
-    #[serde(default = "default_sync_interval")]
-    pub sync_interval_secs: u64,
-    #[serde(default = "default_poll_interval")]
-    pub poll_interval_secs: u64,
-}
-
-fn default_sync_interval() -> u64 {
-    10
-}
-fn default_poll_interval() -> u64 {
-    10
-}
-
-impl Default for EngineConfig {
-    fn default() -> Self {
-        tracing::warn!(
-            "EngineConfig::default() called — using default engine parameters. \
-             This should only happen during deserialization when config is missing. \
-             Ensure engine config is explicitly provided in production."
-        );
-        Self {
-            sync_interval_secs: default_sync_interval(),
-            poll_interval_secs: default_poll_interval(),
-        }
-    }
-}

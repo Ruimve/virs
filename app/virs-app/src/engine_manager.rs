@@ -312,9 +312,8 @@ impl EngineManager for AppEngineManager {
         };
 
         let pe_persistence = Box::new(PePersistence::new(self.db_pool.clone()));
-        let pe_config = virs_types::position::EngineConfig::default();
 
-        let mut position_engine = PositionEngine::new(pe_config, pe_exchange, pe_persistence);
+        let mut position_engine = PositionEngine::new(pe_exchange, pe_persistence);
         let pe_cmd_tx = position_engine.command_sender();
         let pe_event_sender = position_engine.event_sender();
         let grid_pe_event_rx = position_engine.subscribe_events();

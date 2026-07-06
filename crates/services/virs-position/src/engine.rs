@@ -1,12 +1,9 @@
 //! PositionEngine — position management engine.
 //!
-//! Manages positions, orders, PnL tracking via 4 parallel loops:
+//! Manages positions, orders, PnL tracking via 2 parallel loops:
 //! - command_loop: command dispatch
-//! - sync_loop: position synchronization
 //! - ws_feed_loop: WebSocket order update consumption
-//! - poll_loop: polling fallback
 
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 
 use chrono::Utc;
@@ -75,7 +72,6 @@ macro_rules! persist {
 // ============================================================================
 
 pub(crate) struct EngineInner {
-    pub(crate) config: EngineConfig,
     pub(crate) exchange: Arc<dyn ExchangePe>,
     pub(crate) persistence: Box<dyn PositionPersistence>,
     pub(crate) positions: DashMap<(String, String, PositionSide), Position>,
@@ -134,7 +130,6 @@ impl Clone for PositionEngine {
 impl PositionEngine {
     /// 创建新的 PositionEngine 实例。
     pub fn new(
-        config: EngineConfig,
         exchange: Box<dyn ExchangePe>,
         persistence: Box<dyn PositionPersistence>,
     ) -> Self {
@@ -146,7 +141,6 @@ impl PositionEngine {
             persistence,
             tracker: Mutex::new(PnlTracker::new(0.0)),
             state: RwLock::new(EngineState::Created),
-            config,
             exchange,
             event_tx,
             positions: DashMap::new(),
@@ -231,7 +225,7 @@ impl PositionEngine {
         self.inner.set_state(EngineState::Running);
         info!("Position engine started");
 
-        // 4. 启动 4 个并行循环
+        // 4. 启动 2 个并行循环：command_loop + ws_feed_loop
         let cmd_rx = self
             .cmd_rx
             .take()
@@ -239,16 +233,12 @@ impl PositionEngine {
         let inner = Arc::clone(&self.inner);
 
         let mut cmd_handle = tokio::spawn(command_loop(inner.clone(), cmd_rx));
-        let mut sync_handle = tokio::spawn(sync_loop(inner.clone()));
         let mut ws_handle = tokio::spawn(ws_feed_loop(inner.clone(), ws_feed_rx));
-        let mut poll_handle = tokio::spawn(poll_loop(inner));
 
         // Wait for any task to complete (error path)
         let _ = tokio::select! {
             r = &mut cmd_handle => r,
-            r = &mut sync_handle => r,
             r = &mut ws_handle => r,
-            r = &mut poll_handle => r,
         };
 
         // Signal all loops to stop
@@ -256,13 +246,6 @@ impl PositionEngine {
 
         // ws_feed_loop exits within ~1s via select! timeout.
         // command_loop exits when all cmd_tx senders are dropped (engine_manager handles this).
-        // sync_loop/poll_loop check is_running() on their next tick (default 10s interval),
-        // which exceeds our 5s timeout — abort them immediately since they only do
-        // read-only sync/poll operations that are safe to interrupt.
-        sync_handle.abort();
-        poll_handle.abort();
-
-        // Wait for command_loop and ws_feed_loop to finish (with timeout)
         let timeout = Duration::from_secs(5);
         let _ = tokio::time::timeout(timeout, async {
             let _ = tokio::join!(cmd_handle, ws_handle);
@@ -274,8 +257,8 @@ impl PositionEngine {
     }
 
     /// Signal the engine to stop gracefully.
-    /// Sets state to ShuttingDown, which causes sync_loop/poll_loop to break
-    /// on their next tick. command_loop exits when cmd_tx senders are dropped.
+    /// Sets state to ShuttingDown, which causes ws_feed_loop to break
+    /// on its next tick. command_loop exits when cmd_tx senders are dropped.
     pub fn stop(&self) {
         self.inner.set_state(EngineState::ShuttingDown);
         info!("Position engine stop requested");
@@ -466,198 +449,6 @@ pub(crate) async fn command_loop(
             EngineCommand::PriceTick { symbol, price } => {
                 inner.exchange.on_price_tick(&symbol, price).await;
             }
-        }
-    }
-}
-
-// ============================================================================
-// sync_loop
-// ============================================================================
-
-pub(crate) async fn sync_loop(inner: Arc<EngineInner>) {
-    let interval = tokio::time::Duration::from_secs(inner.config.sync_interval_secs);
-    let mut ticker = tokio::time::interval(interval);
-
-    loop {
-        ticker.tick().await;
-        if !inner.is_running() {
-            break;
-        }
-
-        // 1. 从交易所获取仓位，与本地比对
-        let exchange_name = inner.exchange.name().to_string();
-        match inner.exchange.get_positions(None).await {
-            Ok(exchange_positions) => {
-                let exchange_keys: std::collections::HashSet<(String, String, PositionSide)> =
-                    exchange_positions
-                        .iter()
-                        .map(|ep| (exchange_name.clone(), ep.symbol.clone(), ep.side))
-                        .collect();
-
-                for ep in &exchange_positions {
-                    let key = (exchange_name.clone(), ep.symbol.clone(), ep.side);
-                    match inner.positions.get(&key) {
-                        Some(local) => {
-                            let local_size = local.value().size;
-                            if (local_size - ep.size).abs() > 1e-8 {
-                                warn!(symbol = %ep.symbol, local_size, exchange_size = ep.size, "Position size mismatch detected");
-                            }
-                            let mut pos = local.value().clone();
-                            // 检测关键字段是否变化（用于决定是否推送 PositionUpdated 事件）
-                            let price_changed = (pos.current_price - ep.entry_price).abs() > 1e-8;
-                            let pnl_changed = (pos.unrealized_pnl - ep.unrealized_pnl).abs() > 1e-8;
-                            let liq_changed = pos.liquidation_price != ep.liquidation_price;
-                            pos.current_price = ep.entry_price;
-                            pos.unrealized_pnl = ep.unrealized_pnl;
-                            pos.liquidation_price = ep.liquidation_price;
-                            pos.updated_at = Utc::now();
-                            drop(local);
-                            persist!(
-                                inner.persistence.upsert_position(&pos),
-                                "Failed to persist position in sync_loop"
-                            );
-                            inner.positions.insert(key, pos.clone());
-                            // 仓位状态变化时推送事件
-                            if price_changed || pnl_changed || liq_changed {
-                                inner.emit_event(EngineEvent::PositionUpdated { position: pos });
-                            }
-                        }
-                        None => {
-                            let now = Utc::now();
-                            let position = Position {
-                                id: Uuid::new_v4(),
-                                strategy_id: None,
-                                exchange: exchange_name.clone(),
-                                symbol: ep.symbol.clone(),
-                                side: ep.side,
-                                status: PositionStatus::Open,
-                                size: ep.size,
-                                entry_price: ep.entry_price,
-                                current_price: ep.entry_price,
-                                leverage: ep.leverage,
-                                margin: if ep.leverage > 0 {
-                                    ep.size * ep.entry_price / ep.leverage as f64
-                                } else {
-                                    0.0
-                                },
-                                unrealized_pnl: ep.unrealized_pnl,
-                                realized_pnl: 0.0,
-                                stop_loss: None,
-                                take_profit: None,
-                                liquidation_price: ep.liquidation_price,
-                                opened_at: now,
-                                updated_at: now,
-                                closed_at: None,
-                                metadata: serde_json::Value::Null,
-                            };
-                            let new_key = (
-                                position.exchange.clone(),
-                                position.symbol.clone(),
-                                position.side,
-                            );
-                            inner.position_id_index.insert(position.id, new_key.clone());
-                            persist!(
-                                inner.persistence.upsert_position(&position),
-                                "Failed to persist new position in sync_loop"
-                            );
-                            inner.positions.insert(new_key, position.clone());
-                            // 同步发现的新仓位也需要发出事件，让 worker 和前端感知
-                            inner.emit_event(EngineEvent::PositionOpened {
-                                position: position.clone(),
-                            });
-                            inner.emit_event(EngineEvent::PositionUpdated { position });
-                        }
-                    }
-                }
-
-                // 检测本地有但交易所没有的仓位
-                let local_keys: Vec<(String, String, PositionSide)> = inner
-                    .positions
-                    .iter()
-                    .filter_map(|r| {
-                        let pos = r.value();
-                        if pos.exchange == exchange_name && pos.status != PositionStatus::Closed {
-                            Some((pos.exchange.clone(), pos.symbol.clone(), pos.side))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                for lk in &local_keys {
-                    if !exchange_keys.contains(lk) {
-                        warn!(symbol = %lk.1, side = ?lk.2, "Position exists locally but not on exchange");
-
-                        let active_order_ids: Vec<Uuid> = inner
-                            .orders
-                            .iter()
-                            .filter(|r| {
-                                let o = r.value();
-                                o.symbol == lk.1
-                                    && !matches!(
-                                        o.status,
-                                        OrderStatus::Filled
-                                            | OrderStatus::Canceled
-                                            | OrderStatus::Failed
-                                    )
-                            })
-                            .map(|r| *r.key())
-                            .collect();
-
-                        for oid in &active_order_ids {
-                            if let Err(e) =
-                                inner.exchange.cancel_order(&lk.1, &oid.to_string()).await
-                            {
-                                warn!(order_id = %oid, error = %e, "Failed to cancel active order before closing position");
-                            }
-                            if let Some(mut order) = inner.orders.get_mut(oid) {
-                                order.status = OrderStatus::Canceled;
-                            }
-                        }
-
-                        if let Some(mut pos) = inner.positions.get_mut(lk) {
-                            pos.status = PositionStatus::Closed;
-                            pos.size = 0.0;
-                            pos.closed_at = Some(Utc::now());
-                            pos.updated_at = Utc::now();
-                            let closed_pos = pos.clone();
-                            drop(pos);
-                            inner.position_id_index.remove(&closed_pos.id);
-                            inner.positions.remove(lk);
-                            persist!(
-                                inner.persistence.upsert_position(&closed_pos),
-                                "Failed to persist closed position in sync_loop"
-                            );
-                            inner.emit_event(EngineEvent::PositionClosed {
-                                position: closed_pos.clone(),
-                            });
-                            inner.emit_event(EngineEvent::PositionUpdated {
-                                position: closed_pos,
-                            });
-                        }
-                    }
-                }
-
-                inner.emit_event(EngineEvent::PositionSynced {
-                    positions: exchange_positions,
-                });
-            }
-            Err(e) => {
-                error!(error = %e, "Failed to sync positions");
-            }
-        }
-
-        // 2. 更新未实现盈亏
-        {
-            let positions: Vec<Position> =
-                inner.positions.iter().map(|r| r.value().clone()).collect();
-            let position_refs: Vec<&Position> = positions.iter().collect();
-            let current_prices: HashMap<String, f64> = positions
-                .iter()
-                .map(|p| (p.symbol.clone(), p.current_price))
-                .collect();
-
-            recover_lock(inner.tracker.lock())
-                .update_unrealized(&position_refs, &current_prices);
         }
     }
 }
@@ -993,56 +784,6 @@ pub(crate) async fn handle_ws_order_update(
                     "Failed to persist position after order fill"
                 );
             }
-        }
-    }
-}
-
-// ============================================================================
-// poll_loop
-// ============================================================================
-
-pub(crate) async fn poll_loop(inner: Arc<EngineInner>) {
-    let interval = tokio::time::Duration::from_secs(inner.config.poll_interval_secs);
-    let mut ticker = tokio::time::interval(interval);
-
-    loop {
-        ticker.tick().await;
-        if !inner.is_running() {
-            break;
-        }
-
-        // 轮询交易所订单状态
-        match inner.exchange.get_open_orders(None).await {
-            Ok(exchange_orders) => {
-                for eo in &exchange_orders {
-                    let eoid = match eo.exchange_order_id.as_deref() {
-                        Some(id) => id,
-                        None => continue,
-                    };
-                    let local_id = match inner.exchange_order_id_index.get(eoid) {
-                        Some(r) => *r.value(),
-                        None => continue,
-                    };
-                    let local = match inner.orders.get(&local_id) {
-                        Some(r) => r,
-                        None => continue,
-                    };
-
-                    if local.status != eo.status || (local.filled - eo.filled).abs() > 1e-8 {
-                        warn!(order_id = %local.id, local_status = ?local.status, exchange_status = ?eo.status, "Order status mismatch detected in poll");
-                        let mut updated = local.value().clone();
-                        updated.status = eo.status;
-                        updated.filled = eo.filled;
-                        updated.remaining = eo.remaining;
-                        updated.fill_price = eo.fill_price;
-                        updated.fee = eo.fee;
-                        updated.updated_at = Utc::now();
-                        drop(local);
-                        inner.orders.insert(updated.id, updated.clone());
-                    }
-                }
-            }
-            Err(_) => {}
         }
     }
 }
