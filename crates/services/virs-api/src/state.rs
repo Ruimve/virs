@@ -35,6 +35,11 @@ pub trait EngineManager: Send + Sync {
     /// running" for "live trading mode".
     fn paper_mode(&self) -> Option<bool>;
 
+    /// Restore error message — if `restore_if_needed` failed at boot, this
+    /// returns the error string so the API/frontend can surface it.
+    /// `None` means no restore has been attempted or it succeeded.
+    fn restore_error(&self) -> Option<String>;
+
     /// Register a symbol for paper mode price ticks
     async fn register_paper_symbol(&self, exchange: String, symbol: String);
 

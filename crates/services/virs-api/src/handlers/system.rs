@@ -10,6 +10,7 @@ use crate::state::AppState;
 pub async fn paper_status(State(state): State<AppState>) -> Result<Json<ApiResponse>, VirsError> {
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "paper_mode": state.engine_manager.paper_mode(),
+        "restore_error": state.engine_manager.restore_error(),
     }))))
 }
 

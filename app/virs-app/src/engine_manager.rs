@@ -9,7 +9,7 @@ use std::sync::{Arc, OnceLock, Mutex as StdMutex};
 
 use async_trait::async_trait;
 use tokio::sync::{broadcast, mpsc, Mutex};
-use tracing::info;
+use tracing::{error, info};
 
 use virs_api::EngineManager;
 use virs_bot::auto::types::AutoCommand;
@@ -56,7 +56,6 @@ pub struct AppEngineManager {
     orderbook_engine: Arc<OrderBookEngine>,
     encryption_key: String,
     llm_key: String,
-    #[allow(dead_code)]
     proxy: Option<String>,
 
     started: AtomicBool,
@@ -64,6 +63,10 @@ pub struct AppEngineManager {
     init_lock: Mutex<()>,
     /// Cached state — set once after init, readable without async.
     state: OnceLock<EngineState>,
+    /// Restore error — if `restore_if_needed` fails at boot, the error
+    /// message is stored here so the API can surface it to the frontend.
+    /// `None` means no restore has been attempted or it succeeded.
+    restore_error: StdMutex<Option<String>>,
 }
 
 impl AppEngineManager {
@@ -87,7 +90,185 @@ impl AppEngineManager {
             started: AtomicBool::new(false),
             init_lock: Mutex::new(()),
             state: OnceLock::new(),
+            restore_error: StdMutex::new(None),
         }
+    }
+
+    /// Inner restore logic — all failures propagate via `?`.
+    /// Called by `restore_if_needed` which wraps this in error handling.
+    async fn restore_inner(&self) -> VirsResult<()> {
+        // Check if any bots exist in DB
+        let has_bots: bool = {
+            let grid_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_grid_bots"#)
+                .fetch_one(&self.db_pool)
+                .await?;
+            let auto_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_auto_bots"#)
+                .fetch_one(&self.db_pool)
+                .await?;
+            grid_count + auto_count > 0
+        };
+
+        if !has_bots {
+            return Ok(());
+        }
+
+        // 1. Restore Exchanges from DB credentials.
+        let rows: Vec<(String, String, String, Option<String>)> = sqlx::query_as(
+            r#"SELECT exchange, encrypted_api_key, encrypted_api_secret, encrypted_passphrase
+               FROM qd_exchange_credentials"#,
+        )
+        .fetch_all(&self.db_pool)
+        .await?;
+
+        for (exchange, enc_key, enc_secret, enc_passphrase) in &rows {
+            let api_key = virs_utils::crypto::decrypt_with_key(enc_key, &self.encryption_key)
+                .map_err(|e| {
+                    virs_error::VirsError::config(format!(
+                        "Failed to decrypt API key for exchange '{}': {}",
+                        exchange, e
+                    ))
+                })?;
+            let api_secret =
+                virs_utils::crypto::decrypt_with_key(enc_secret, &self.encryption_key)
+                    .map_err(|e| {
+                        virs_error::VirsError::config(format!(
+                            "Failed to decrypt API secret for exchange '{}': {}",
+                            exchange, e
+                        ))
+                    })?;
+            let passphrase = match enc_passphrase.as_ref() {
+                Some(p) => Some(
+                    virs_utils::crypto::decrypt_with_key(p, &self.encryption_key).map_err(
+                        |e| {
+                            virs_error::VirsError::config(format!(
+                                "Failed to decrypt passphrase for exchange '{}': {}",
+                                exchange, e
+                            ))
+                        },
+                    )?,
+                ),
+                None => None,
+            };
+
+            for mt_str in &["perpetual", "spot"] {
+                let exchange_key = format!("{}:{}", exchange, mt_str);
+                if self.exchange_registry.get(&exchange_key).is_some() {
+                    continue;
+                }
+
+                let ccxt_mt = match *mt_str {
+                    "spot" => virs_ccxt::MarketType::Spot,
+                    _ => virs_ccxt::MarketType::Perpetual,
+                };
+
+                let ccxt_ex = virs_ccxt::create_exchange(
+                    exchange,
+                    &api_key,
+                    &api_secret,
+                    passphrase.as_deref(),
+                    self.proxy.as_deref(),
+                    &ccxt_mt,
+                )
+                .map_err(|e| {
+                    virs_error::VirsError::config(format!(
+                        "Failed to create exchange '{}' ({}): {}",
+                        exchange, mt_str, e
+                    ))
+                })?;
+
+                let app_mt = match *mt_str {
+                    "spot" => MarketType::Spot,
+                    _ => MarketType::Perpetual,
+                };
+                let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, app_mt);
+                self.exchange_registry.register(Box::new(adapter));
+                info!(exchange, market_type = mt_str, "Restored exchange credential");
+            }
+        }
+
+        // 2. Restore Kline/OrderBook subscriptions for running bot symbols.
+        let bot_symbols: Vec<(String, String, String)> = sqlx::query_as(
+            r#"
+            SELECT exchange, symbol, market_type FROM qd_auto_bots WHERE status = 'running'
+            UNION
+            SELECT exchange, symbol, market_type FROM qd_grid_bots WHERE status = 'running'
+            "#,
+        )
+        .fetch_all(&self.db_pool)
+        .await?;
+
+        for (exchange, symbol, market_type) in &bot_symbols {
+            let mt = match market_type.as_str() {
+                "spot" => virs_models::MarketType::Spot,
+                _ => virs_models::MarketType::Perpetual,
+            };
+            self.kline_engine
+                .subscribe(exchange, symbol, mt)
+                .await
+                .map_err(|e| {
+                    virs_error::VirsError::config(format!(
+                        "Failed to restore kline subscription for {} {} {}: {}",
+                        exchange, symbol, market_type, e
+                    ))
+                })?;
+            info!(exchange, symbol, market_type, "Restored kline subscription");
+
+            self.orderbook_engine
+                .subscribe(exchange, symbol, mt)
+                .await
+                .map_err(|e| {
+                    virs_error::VirsError::config(format!(
+                        "Failed to restore orderbook subscription for {} {} {}: {}",
+                        exchange, symbol, market_type, e
+                    ))
+                })?;
+            info!(exchange, symbol, market_type, "Restored orderbook subscription");
+        }
+
+        // 3. Determine paper mode from DB (consistency check).
+        let paper_modes: Vec<bool> = sqlx::query_scalar(
+            r#"SELECT DISTINCT paper_mode FROM (
+                SELECT paper_mode FROM qd_auto_bots WHERE status = 'running'
+                UNION ALL
+                SELECT paper_mode FROM qd_grid_bots WHERE status = 'running'
+            ) AS combined"#,
+        )
+        .fetch_all(&self.db_pool)
+        .await?;
+
+        if paper_modes.is_empty() {
+            info!("No running bots found — engines will start on first bot creation");
+            return Ok(());
+        }
+
+        if paper_modes.len() > 1 {
+            return Err(virs_error::VirsError::config(
+                "Inconsistent paper_mode values among running bots — \
+                 cannot determine engine mode. All running bots must share \
+                 the same paper_mode.",
+            ));
+        }
+
+        let paper_mode = paper_modes[0];
+
+        // 4. Start engines
+        self.ensure_started(paper_mode).await?;
+
+        Ok(())
+    }
+
+    /// Mark all running bots as 'error' in the database.
+    /// Called when restore fails to prevent stale 'running' bots from
+    /// misleading the frontend.
+    async fn mark_running_bots_as_error(&self) -> VirsResult<()> {
+        sqlx::query(r#"UPDATE qd_grid_bots SET status = 'error', stopped_at = NOW() WHERE status = 'running'"#)
+            .execute(&self.db_pool)
+            .await?;
+        sqlx::query(r#"UPDATE qd_auto_bots SET status = 'error', stopped_at = NOW() WHERE status = 'running'"#)
+            .execute(&self.db_pool)
+            .await?;
+        info!("Marked all running bots as 'error' due to restore failure");
+        Ok(())
     }
 }
 
@@ -191,6 +372,29 @@ impl EngineManager for AppEngineManager {
 
         // Paper mode price tick
         let paper_symbols: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
+
+        // Populate paper_symbols BEFORE spawning engines.
+        // If this DB query fails, ? propagates immediately — no engine tasks
+        // have been spawned yet, so there are no orphan tasks to clean up
+        // and bot status remains untouched ('running' in DB).
+        if paper_mode {
+            let paper_bots: Vec<(String, String)> = sqlx::query_as(
+                r#"SELECT DISTINCT exchange, symbol FROM (
+                    SELECT exchange, symbol FROM qd_auto_bots WHERE status = 'running'
+                    UNION ALL
+                    SELECT exchange, symbol FROM qd_grid_bots WHERE status = 'running'
+                ) AS combined"#,
+            )
+            .fetch_all(&self.db_pool)
+            .await?;
+            let mut symbols = paper_symbols.lock().await;
+            for (exchange, symbol) in paper_bots {
+                if !symbols.contains(&(exchange.clone(), symbol.clone())) {
+                    symbols.push((exchange, symbol));
+                }
+            }
+        }
+
         let paper_tick_handle: Option<tokio::task::JoinHandle<()>> = if paper_mode {
             let price_provider_for_paper: Arc<dyn PriceProvider> = grid_price_provider.clone();
             let kline_engine_for_paper = self.kline_engine.clone();
@@ -279,26 +483,6 @@ impl EngineManager for AppEngineManager {
         });
         info!("Auto trade engine started");
 
-        // Register existing running auto bot symbols for paper mode price ticks
-        if paper_mode {
-            let db = self.db_pool.clone();
-            let ps = paper_symbols.clone();
-            tokio::spawn(async move {
-                let bots: Vec<(String, String)> = sqlx::query_as(
-                    r#"SELECT DISTINCT exchange, symbol FROM qd_auto_bots WHERE status = 'running'"#
-                )
-                .fetch_all(&db)
-                .await
-                .unwrap_or_default();
-                let mut symbols = ps.lock().await;
-                for (exchange, symbol) in bots {
-                    if !symbols.contains(&(exchange.clone(), symbol.clone())) {
-                        symbols.push((exchange, symbol));
-                    }
-                }
-            });
-        }
-
         // Store state (OnceLock — set once, then readable synchronously)
         let _ = self.state.set(EngineState {
             paper_mode,
@@ -328,6 +512,10 @@ impl EngineManager for AppEngineManager {
 
     fn paper_mode(&self) -> Option<bool> {
         self.state.get().map(|s| s.paper_mode)
+    }
+
+    fn restore_error(&self) -> Option<String> {
+        self.restore_error.lock().unwrap().clone()
     }
 
     async fn register_paper_symbol(&self, exchange: String, symbol: String) {
@@ -368,158 +556,30 @@ impl EngineManager for AppEngineManager {
             return Ok(());
         }
 
-        // Check if any bots exist in DB
-        let has_bots: bool = {
-            let grid_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_grid_bots"#)
-        .fetch_one(&self.db_pool)
-        .await?;
+        // Run the actual restore logic. On any failure we:
+        // 1. Mark all running bots as 'error' in DB
+        // 2. Store the error message for API visibility
+        // 3. Return Ok(()) so the HTTP server still starts — the user can
+        //    then fix the problem (e.g. re-save credentials) and restart.
+        if let Err(e) = self.restore_inner().await {
+            error!("Service restore failed: {}", e);
 
-    let auto_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_auto_bots"#)
-        .fetch_one(&self.db_pool)
-        .await?;
+            // Mark all running bots as error so the frontend shows them
+            // as needing intervention rather than "running".
+            if let Err(db_err) = self.mark_running_bots_as_error().await {
+                error!(error = %db_err, "Failed to mark bots as error during restore failure");
+            }
 
-            grid_count + auto_count > 0
-        };
+            // Store the error for API visibility.
+            *self.restore_error.lock().unwrap() = Some(e.to_string());
 
-        if !has_bots {
+            // Do NOT propagate — let the HTTP server start so the user
+            // can access the UI and diagnose/fix the problem.
             return Ok(());
         }
 
-        // 1. Restore Exchanges from DB credentials
-        let rows: Vec<(String, String, String, Option<String>)> = sqlx::query_as(
-            r#"SELECT exchange, encrypted_api_key, encrypted_api_secret, encrypted_passphrase
-               FROM qd_exchange_credentials"#,
-        )
-        .fetch_all(&self.db_pool)
-        .await
-        .unwrap_or_default();
-
-        for (exchange, enc_key, enc_secret, enc_passphrase) in &rows {
-            let api_key = match virs_utils::crypto::decrypt_with_key(enc_key, &self.encryption_key) {
-                Ok(k) => k,
-                Err(e) => {
-                    tracing::warn!(exchange, "Failed to decrypt API key: {}", e);
-                    continue;
-                }
-            };
-            let api_secret = match virs_utils::crypto::decrypt_with_key(enc_secret, &self.encryption_key) {
-                Ok(k) => k,
-                Err(e) => {
-                    tracing::warn!(exchange, "Failed to decrypt API secret: {}", e);
-                    continue;
-                }
-            };
-            let passphrase = enc_passphrase
-                .as_ref()
-                .and_then(|p| virs_utils::crypto::decrypt_with_key(p, &self.encryption_key).ok());
-
-            // Try both market types (perpetual first, then spot)
-            for mt_str in &["perpetual", "spot"] {
-                let exchange_key = format!("{}:{}", exchange, mt_str);
-                if self.exchange_registry.get(&exchange_key).is_some() {
-                    continue; // Already registered
-                }
-
-                let ccxt_mt = match *mt_str {
-                    "spot" => virs_ccxt::MarketType::Spot,
-                    _ => virs_ccxt::MarketType::Perpetual,
-                };
-
-                if let Ok(ccxt_ex) = virs_ccxt::create_exchange(
-                    exchange,
-                    &api_key,
-                    &api_secret,
-                    passphrase.as_deref(),
-                    None,
-                    &ccxt_mt,
-                ) {
-                    let app_mt = match *mt_str {
-                        "spot" => MarketType::Spot,
-                        _ => MarketType::Perpetual,
-                    };
-                    let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, app_mt);
-                    self.exchange_registry.register(Box::new(adapter));
-                }
-            }
-        }
-
-        // 2. Restore Kline subscriptions for running bot symbols
-        let bot_symbols: Vec<(String, String, String)> = sqlx::query_as(
-            r#"
-            SELECT exchange, symbol, market_type FROM qd_auto_bots WHERE status = 'running'
-            UNION
-            SELECT exchange, symbol, market_type FROM qd_grid_bots WHERE status = 'running'
-            "#,
-        )
-        .fetch_all(&self.db_pool)
-        .await
-        .unwrap_or_default();
-
-        for (exchange, symbol, market_type) in &bot_symbols {
-            let mt = match market_type.as_str() {
-                "spot" => virs_models::MarketType::Spot,
-                _ => virs_models::MarketType::Perpetual,
-            };
-            if let Err(e) = self.kline_engine.subscribe(exchange, symbol, mt).await {
-                tracing::warn!(
-                    exchange,
-                    symbol,
-                    "Failed to restore kline subscription: {}",
-                    e
-                );
-            } else {
-                info!(exchange, symbol, market_type, "Restored kline subscription");
-            }
-            if let Err(e) = self.orderbook_engine.subscribe(exchange, symbol, mt).await {
-                tracing::warn!(
-                    exchange,
-                    symbol,
-                    "Failed to restore orderbook subscription: {}",
-                    e
-                );
-            } else {
-                info!(
-                    exchange,
-                    symbol, market_type, "Restored orderbook subscription"
-                );
-            }
-        }
-
-        // 3. Determine paper mode from DB.
-        // Query DISTINCT paper_mode among all running bots to enforce
-        // consistency. If running bots disagree on paper_mode, we refuse to
-        // start the engine rather than silently picking one — mismatched
-        // modes could route paper-trading orders to a live exchange.
-        let paper_modes: Vec<bool> = sqlx::query_scalar(
-            r#"SELECT DISTINCT paper_mode FROM (
-                SELECT paper_mode FROM qd_auto_bots WHERE status = 'running'
-                UNION ALL
-                SELECT paper_mode FROM qd_grid_bots WHERE status = 'running'
-            ) AS combined"#,
-        )
-        .fetch_all(&self.db_pool)
-        .await?;
-
-        if paper_modes.is_empty() {
-            // No running bots — nothing to restore. Engines will start lazily
-            // when the user creates or starts a bot via the API.
-            info!("No running bots found — engines will start on first bot creation");
-            return Ok(());
-        }
-
-        if paper_modes.len() > 1 {
-            return Err(virs_error::VirsError::config(
-                "Inconsistent paper_mode values among running bots — \
-                 cannot determine engine mode. All running bots must share \
-                 the same paper_mode.",
-            ));
-        }
-
-        let paper_mode = paper_modes[0];
-
-        // 4. Start engines (which will call restore_running_bots internally)
-        self.ensure_started(paper_mode).await?;
-
+        // Clear any previous restore error (e.g. from a prior failed boot).
+        *self.restore_error.lock().unwrap() = None;
         Ok(())
     }
 

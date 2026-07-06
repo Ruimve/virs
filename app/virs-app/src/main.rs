@@ -184,10 +184,11 @@ async fn main() -> VirsResult<()> {
         jwt_expiration_hours: config.server.jwt_expiration_hours,
     };
 
-    // Restore services if bots exist from previous session
-    if let Err(e) = engine_manager.restore_if_needed().await {
-        tracing::error!("Failed to restore services from previous session: {}", e);
-    }
+    // Restore services if bots exist from previous session.
+    // restore_if_needed handles its own errors internally: on failure it
+    // marks bots as 'error', stores the error message for API visibility,
+    // and returns Ok(()) so the HTTP server can still start.
+    let _ = engine_manager.restore_if_needed().await;
 
     // Build router
     let app = build_router(app_state);

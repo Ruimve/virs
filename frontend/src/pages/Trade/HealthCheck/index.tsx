@@ -180,6 +180,13 @@ const HealthCheck = () => {
         return;
       }
       const paperMode = res.data.paper_mode;
+      const restoreError = res.data.restore_error;
+      if (restoreError) {
+        updateCheck('trading', 'error', 'Restore failed', {
+          message: `Service restore failed: ${restoreError}. All bots have been marked as error. Fix the issue and restart.`,
+        });
+        return;
+      }
       if (paperMode === null) {
         updateCheck('trading', 'error', 'Engines not started', {
           message: 'Trading engines have not been started. Create or start a bot to initialize.',

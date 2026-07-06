@@ -346,6 +346,8 @@ export interface HealthStatus {
 export interface PaperModeStatus {
   /** null = engines not started (restore failed or no bots) */
   paper_mode: boolean | null;
+  /** Restore error message if restore_if_needed failed at boot */
+  restore_error: string | null;
 }
 
 // ── System Metrics types ───────────────────────────────────
