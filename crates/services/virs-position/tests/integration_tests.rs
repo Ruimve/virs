@@ -3,42 +3,8 @@
 use chrono::Utc;
 use uuid::Uuid;
 use virs_position::tracker::PnlTracker;
-use virs_types::enums::{PositionSide, PositionStatus, Side, TradeType};
-use virs_types::position::{Position, Trade};
-
-#[allow(dead_code)]
-fn make_position(
-    symbol: &str,
-    side: PositionSide,
-    size: f64,
-    entry_price: f64,
-    current_price: f64,
-    leverage: u32,
-    liquidation_price: Option<f64>,
-) -> Position {
-    Position {
-        id: Uuid::new_v4(),
-        strategy_id: None,
-        exchange: "binance".to_string(),
-        symbol: symbol.to_string(),
-        side,
-        status: PositionStatus::Open,
-        size,
-        entry_price,
-        current_price,
-        leverage,
-        margin: size * entry_price / leverage as f64,
-        unrealized_pnl: 0.0,
-        realized_pnl: 0.0,
-        stop_loss: None,
-        take_profit: None,
-        liquidation_price,
-        opened_at: Utc::now(),
-        updated_at: Utc::now(),
-        closed_at: None,
-        metadata: serde_json::Value::Null,
-    }
-}
+use virs_types::enums::{Side, TradeType};
+use virs_types::position::Trade;
 
 fn make_trade(pnl: f64) -> Trade {
     Trade {

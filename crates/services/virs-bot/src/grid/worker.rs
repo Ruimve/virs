@@ -780,27 +780,6 @@ impl GridWorker {
         None
     }
 
-    #[allow(dead_code)]
-    pub(crate) async fn cancel_level_order(&mut self, level_idx: usize, side: &str) {
-        let order_id = if side == "buy" {
-            self.levels[level_idx].buy_order_id
-        } else {
-            self.levels[level_idx].sell_order_id
-        };
-        if let Some(oid) = order_id {
-            if let Err(e) = self
-                .order_executor
-                .send_command(OrderCommand::CancelOrder {
-                    order_id: oid,
-                    symbol: self.bot.symbol.clone(),
-                })
-                .await
-            {
-                warn!(bot_id = %self.bot.id, error = %e, "Failed to send CancelOrder command");
-            }
-        }
-    }
-
     pub(crate) fn compute_unrealized_pnl(&self) -> f64 {
         if self.current_price <= 0.0 {
             return 0.0;

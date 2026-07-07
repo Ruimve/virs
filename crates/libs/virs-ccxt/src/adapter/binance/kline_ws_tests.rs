@@ -171,7 +171,6 @@ fn test_to_candle_basic() {
     let data = BinanceKlineData {
         event_type: "kline".to_string(),
         event_time: 1713900000,
-        symbol: "BTCUSDT".to_string(),
         kline: BinanceKlineInner {
             start_time: 1713900000000,
             end_time: 1713900059999,
@@ -204,7 +203,6 @@ fn test_to_candle_basic() {
     let data_closed = BinanceKlineData {
         event_type: "kline".to_string(),
         event_time: 1713900000,
-        symbol: "BTCUSDT".to_string(),
         kline: BinanceKlineInner {
             start_time: 1713900000000,
             end_time: 1713900059999,
@@ -229,7 +227,6 @@ fn test_to_candle_invalid_numbers() {
     let data = BinanceKlineData {
         event_type: "kline".to_string(),
         event_time: 1713900000,
-        symbol: "BTCUSDT".to_string(),
         kline: BinanceKlineInner {
             start_time: 1713900000000,
             end_time: 1713900059999,
@@ -260,7 +257,6 @@ fn test_ws_symbol() {
     let data = BinanceKlineData {
         event_type: "kline".to_string(),
         event_time: 1713900000,
-        symbol: "BTCUSDT".to_string(),
         kline: BinanceKlineInner {
             start_time: 1713900000000,
             end_time: 1713900059999,

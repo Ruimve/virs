@@ -45,19 +45,15 @@ impl BinanceKlineMessage {
             Some(data)
         } else if let Some(et) = self.event_type_flat.as_deref() {
             if et == "kline" {
-                let symbol = match self.symbol_flat.clone() {
-                    Some(s) => s,
-                    None => {
-                        tracing::warn!("Kline WS message missing symbol — skipping kline");
-                        return None;
-                    }
-                };
+                if self.symbol_flat.is_none() {
+                    tracing::warn!("Kline WS message missing symbol — skipping kline");
+                    return None;
+                }
                 // T8 FAIL fix: 使用实际解析到的 E 字段，而非硬编码 0
                 let event_time = self.event_time_flat.unwrap_or(0);
                 self.kline_flat.map(|kline| BinanceKlineData {
                     event_type: et.to_string(),
                     event_time,
-                    symbol,
                     kline,
                 })
             } else {
@@ -78,9 +74,6 @@ pub(crate) struct BinanceKlineData {
     pub(crate) event_type: String,
     #[serde(rename = "E")]
     pub(crate) event_time: i64,
-    #[allow(dead_code)]
-    #[serde(rename = "s")]
-    pub(crate) symbol: String,
     #[serde(rename = "k")]
     pub(crate) kline: BinanceKlineInner,
 }

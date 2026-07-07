@@ -38,7 +38,6 @@ fn binance_ws_symbol(symbol: &str) -> String {
 /// - Perpetual: b    / a    / e / E / T / s / U / u / pu
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct BinanceDepthMessage {
-    #[allow(dead_code)]
     stream: Option<String>,
     /// 组合流格式: data 字段包含完整 payload
     data: Option<serde_json::Value>,
