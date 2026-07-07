@@ -17,7 +17,7 @@ use chrono::Utc;
 use crate::auth::Signer;
 use crate::types::*;
 use crate::ExchangeClient;
-use crate::{parse_f64, parse_str, parse_u32};
+use crate::{parse_f64, parse_str};
 use virs_error::ExchangeError;
 
 use super::parse_order_book_side;
@@ -28,12 +28,41 @@ fn url(path: &str) -> String {
     format!("{BASE_URL}{path}")
 }
 
+/// 从币安 exchangeInfo 过滤器的小数值字符串（如 tickSize="0.01000000"）
+/// 推算小数位数（精度）。尾部零不计入。
+///
+/// 现货 exchangeInfo 无 pricePrecision/quantityPrecision 字段（合约专属），
+/// 必须从 PRICE_FILTER.tickSize / LOT_SIZE.stepSize 推算。
+pub(crate) fn decimal_places(s: &str) -> Option<u32> {
+    // 币安过滤器值均为纯小数字符串（如 "0.01000000"），不含科学计数法
+    let dot_pos = s.find('.')?;
+    let after_dot = &s[dot_pos + 1..];
+    let trimmed = after_dot.trim_end_matches('0');
+    if trimmed.is_empty() {
+        Some(0)
+    } else {
+        Some(trimmed.len() as u32)
+    }
+}
+
 // ---- Public endpoints ----
 
 /// GET /api/v3/ping
 pub async fn ping(client: &ExchangeClient) -> Result<bool, ExchangeError> {
     let data = client.public_get(&url("/api/v3/ping"), &[]).await?;
     Ok(!data.is_null())
+}
+
+/// GET /api/v3/time — 获取币安现货服务器时间（毫秒）
+///
+/// 用于 sync_time() 校准本地时钟偏移，避免 -1021 签名失败。
+pub async fn fetch_server_time(client: &ExchangeClient) -> Result<i64, ExchangeError> {
+    let data = client.public_get(&url("/api/v3/time"), &[]).await?;
+    data.get("serverTime")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| {
+            ExchangeError::Internal("serverTime missing in /api/v3/time response".into())
+        })
 }
 
 /// GET /api/v3/ticker/24hr
@@ -207,7 +236,7 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
             let symbol = format!("{}/{}", base, quote);
 
             let filters = s.get("filters").and_then(|f| f.as_array());
-            let (min_amount, max_amount) = filters
+            let (min_amount, max_amount, step_size) = filters
                 .map(|arr| {
                     let lot = arr
                         .iter()
@@ -215,10 +244,11 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
                     (
                         lot.and_then(|f| parse_f64(f, "minQty")),
                         lot.and_then(|f| parse_f64(f, "maxQty")),
+                        lot.and_then(|f| parse_str(f, "stepSize")),
                     )
                 })
-                .unwrap_or((None, None));
-            let (min_price, max_price) = filters
+                .unwrap_or((None, None, None));
+            let (min_price, max_price, tick_size) = filters
                 .map(|arr| {
                     let pf = arr.iter().find(|f| {
                         f.get("filterType").and_then(|v| v.as_str()) == Some("PRICE_FILTER")
@@ -226,9 +256,11 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
                     (
                         pf.and_then(|f| parse_f64(f, "minPrice")),
                         pf.and_then(|f| parse_f64(f, "maxPrice")),
+                        pf.and_then(|f| parse_str(f, "tickSize")),
                     )
                 })
-                .unwrap_or((None, None));
+                .unwrap_or((None, None, None));
+            // 现货 NOTIONAL 字段为 minNotional（合约 MIN_NOTIONAL 才用 notional）
             let min_cost = filters
                 .and_then(|arr| {
                     arr.iter().find(|f| {
@@ -238,7 +270,12 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
                             .unwrap_or(false)
                     })
                 })
-                .and_then(|f| parse_f64(f, "notional"));
+                .and_then(|f| parse_f64(f, "minNotional"));
+
+            // 现货 exchangeInfo 无 pricePrecision/quantityPrecision（合约专属）
+            // 从 PRICE_FILTER.tickSize 和 LOT_SIZE.stepSize 的小数位推算精度
+            let price_precision = tick_size.as_deref().and_then(decimal_places);
+            let amount_precision = step_size.as_deref().and_then(decimal_places);
 
             Some(MarketInfo {
                 id: parse_str(s, "symbol")?,
@@ -252,8 +289,8 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
                 min_price,
                 max_price,
                 min_cost,
-                price_precision: parse_u32(s, "pricePrecision"),
-                amount_precision: parse_u32(s, "quantityPrecision"),
+                price_precision,
+                amount_precision,
                 info: s.clone(),
             })
         })
@@ -368,6 +405,14 @@ pub async fn create_order(
     let filled = parse_f64(&data, "executedQty").ok_or_else(|| {
         ExchangeError::no_data("Order filled (executedQty) missing in exchange response".into())
     })?;
+
+    // F11: 优先使用币安响应中的时间戳，而非本地时钟
+    // 现货下单响应包含 `transactTime`（交易时间）
+    let transact_time = crate::parse_timestamp_ms(&data, "transactTime").unwrap_or_else(|| {
+        tracing::warn!("spot order response missing 'transactTime' — using local time");
+        Utc::now()
+    });
+
     Ok(CcxtOrder {
         id: parse_str(&data, "orderId")
             .ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
@@ -385,8 +430,8 @@ pub async fn create_order(
                 .ok_or_else(|| ExchangeError::no_data("status missing".into()))?,
         ),
         fee: None,
-        created_at: Some(Utc::now()),
-        updated_at: Some(Utc::now()),
+        created_at: Some(transact_time),
+        updated_at: Some(transact_time),
         info: data,
     })
 }

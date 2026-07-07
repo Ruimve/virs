@@ -176,6 +176,16 @@ impl AppEngineManager {
                     ))
                 })?;
 
+                // 同步服务器时间，校准签名时间戳偏移（非阻塞 — 失败仅告警）
+                if let Err(e) = ccxt_ex.sync_time().await {
+                    tracing::warn!(
+                        error = %e,
+                        exchange,
+                        market_type = mt_str,
+                        "Server time sync failed, using local clock (recvWindow 5000ms tolerates small drift)"
+                    );
+                }
+
                 let app_mt = match *mt_str {
                     "spot" => MarketType::Spot,
                     _ => MarketType::Perpetual,

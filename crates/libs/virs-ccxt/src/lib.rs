@@ -176,6 +176,15 @@ pub trait Exchange: Send + Sync {
         ))
     }
     async fn ping(&self) -> Result<bool, ExchangeError>;
+
+    /// 同步本地时钟与交易所服务器时间。
+    ///
+    /// 获取交易所服务器时间并计算偏移，通过 `Signer::set_time_offset` 校准签名时间戳。
+    /// 应在创建交易所实例后、首次签名请求前调用。
+    /// 失败时不应阻塞初始化 — 默认偏移 0 + recvWindow 5000ms 可容忍小漂移。
+    async fn sync_time(&self) -> Result<(), ExchangeError> {
+        Ok(())
+    }
 }
 
 /// Base HTTP client for exchange REST API calls.
@@ -185,10 +194,22 @@ pub trait Exchange: Send + Sync {
 pub struct ExchangeClient {
     client: Client,
     rate_limiter: std::sync::Arc<tokio::sync::Semaphore>,
+    /// 可选 API Key — 用于 MARKET_DATA 接口的 X-MBX-APIKEY 头
+    /// （币安鉴权类型表：MARKET_DATA = 需要有效的API-KEY）
+    api_key: Option<String>,
 }
 
 impl ExchangeClient {
     pub fn new(max_concurrent: u32, proxy_url: Option<&str>) -> Result<Self, ExchangeError> {
+        Self::with_api_key(max_concurrent, proxy_url, None)
+    }
+
+    /// 创建带 API Key 的 client，用于在 public_get 中附加 X-MBX-APIKEY 头。
+    pub fn with_api_key(
+        max_concurrent: u32,
+        proxy_url: Option<&str>,
+        api_key: Option<&str>,
+    ) -> Result<Self, ExchangeError> {
         let mut builder = Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .connect_timeout(std::time::Duration::from_secs(10))
@@ -208,6 +229,7 @@ impl ExchangeClient {
         Ok(Self {
             client,
             rate_limiter: std::sync::Arc::new(tokio::sync::Semaphore::new(max_concurrent as usize)),
+            api_key: api_key.map(|s| s.to_string()),
         })
     }
 
@@ -222,8 +244,12 @@ impl ExchangeClient {
             .await
             .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
         let display_url = build_display_url(path, params.iter().map(|(k, v)| (*k, *v)));
-        let resp = self.client.get(path).query(params).send().await?;
-        handle_response(resp, &display_url, None).await
+        let mut req = self.client.get(path).query(params);
+        // MARKET_DATA 接口需要有效的 API-KEY（仅头，无需签名）
+        if let Some(ref key) = self.api_key {
+            req = req.header("x-mbx-apikey", key);
+        }
+        handle_response(req.send().await?, &display_url, None).await
     }
 
     pub async fn signed_get(
@@ -419,13 +445,23 @@ async fn handle_response(
             let msg = extract_error_message(&json);
             return Err(match status.as_u16() {
                 401 | 403 => ExchangeError::Authentication(msg),
+                418 => ExchangeError::IpBanned(msg),
                 429 => ExchangeError::RateLimited(msg),
                 400 | 422 => ExchangeError::InvalidRequest(msg),
+                // 503 + "Unknown error" = 执行状态未知（可能已成交），不得盲目重试
+                503 if msg.contains("Unknown error") => ExchangeError::OrderStatusUnknown(msg),
                 _ => ExchangeError::Http {
                     status: status.as_u16(),
                     body: msg,
                 },
             });
+        }
+        // 非 JSON 响应体也需检测 503 "Unknown error" 与 418
+        if status.as_u16() == 503 && text.contains("Unknown error") {
+            return Err(ExchangeError::OrderStatusUnknown(text));
+        }
+        if status.as_u16() == 418 {
+            return Err(ExchangeError::IpBanned(text));
         }
         return Err(ExchangeError::Http {
             status: status.as_u16(),
@@ -541,6 +577,20 @@ pub fn parse_u32(v: &Value, field: &str) -> Option<u32> {
                 .or_else(|| f.as_str().and_then(|s| s.parse().ok()))
         })
         .map(|v| v as u32)
+}
+
+/// Parse a millisecond timestamp field from a JSON value into `DateTime<Utc>`.
+///
+/// Binance returns timestamps as integer milliseconds (e.g. `"time": 1568879328023`).
+/// This helper is used to extract `created_at`/`updated_at` from order responses
+/// instead of using local clock time (F11 fix).
+pub fn parse_timestamp_ms(v: &Value, field: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    v.get(field)
+        .and_then(|f| {
+            f.as_i64()
+                .or_else(|| f.as_str().and_then(|s| s.parse::<i64>().ok()))
+        })
+        .and_then(chrono::DateTime::from_timestamp_millis)
 }
 
 // ============================================================

@@ -64,6 +64,12 @@ pub trait Signer: Send + Sync {
     ) -> Result<SignedRequest, ExchangeError> {
         self.sign_post(path, body)
     }
+
+    /// 设置服务器时间偏移（毫秒），用于校正本地时钟与交易所服务器时间的差异。
+    /// 币安要求 timestamp 与服务器时间偏差不超过 recvWindow（默认 5000ms），
+    /// 若本地时钟漂移过大将导致 -1021 签名校验失败。
+    /// 默认实现为空操作，不支持时间同步的交易所可忽略。
+    fn set_time_offset(&self, _offset_ms: i64) {}
 }
 
 // ============================================================

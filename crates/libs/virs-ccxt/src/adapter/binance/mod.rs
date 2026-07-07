@@ -22,7 +22,7 @@ pub mod user_data_ws_api;
 use async_trait::async_trait;
 use base64::Engine;
 use ed25519_dalek::pkcs8::DecodePrivateKey;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -41,6 +41,8 @@ use virs_error::ExchangeError;
 pub struct BinanceSigner {
     api_key: String,
     api_secret: String,
+    /// 服务器时间偏移（毫秒），由 sync_time() 校准
+    time_offset_ms: AtomicI64,
 }
 
 impl BinanceSigner {
@@ -48,17 +50,27 @@ impl BinanceSigner {
         Self {
             api_key,
             api_secret,
+            time_offset_ms: AtomicI64::new(0),
         }
     }
 }
 
+/// recvWindow 常量（毫秒）— 币安默认 5000ms，显式设置以确保一致行为
+const RECV_WINDOW: &str = "5000";
+
 impl Signer for BinanceSigner {
+    fn set_time_offset(&self, offset_ms: i64) {
+        self.time_offset_ms.store(offset_ms, Ordering::Relaxed);
+    }
+
     fn sign_get(
         &self,
         _path: &str,
         query_params: &mut Vec<(String, String)>,
     ) -> Result<SignedRequest, ExchangeError> {
-        let timestamp = chrono::Utc::now().timestamp_millis();
+        let timestamp = chrono::Utc::now().timestamp_millis()
+            + self.time_offset_ms.load(Ordering::Relaxed);
+        query_params.push(("recvWindow".into(), RECV_WINDOW.into()));
         query_params.push(("timestamp".into(), timestamp.to_string()));
 
         let query_string = query_params
@@ -85,10 +97,13 @@ impl Signer for BinanceSigner {
         _path: &str,
         body: &mut serde_json::Value,
     ) -> Result<SignedRequest, ExchangeError> {
-        let mut query_params = vec![(
-            "timestamp".into(),
-            chrono::Utc::now().timestamp_millis().to_string(),
-        )];
+        let timestamp = chrono::Utc::now().timestamp_millis()
+            + self.time_offset_ms.load(Ordering::Relaxed);
+        let timestamp_str = timestamp.to_string();
+        let mut query_params = vec![
+            ("recvWindow".into(), RECV_WINDOW.into()),
+            ("timestamp".into(), timestamp_str.clone()),
+        ];
 
         let form_body = if let Some(obj) = body.as_object() {
             let mut pairs: Vec<(String, String)> = obj
@@ -102,7 +117,8 @@ impl Signer for BinanceSigner {
                     (k.clone(), val)
                 })
                 .collect();
-            pairs.push(("timestamp".into(), query_params[0].1.clone()));
+            pairs.push(("recvWindow".into(), RECV_WINDOW.into()));
+            pairs.push(("timestamp".into(), timestamp_str));
 
             let query_string = pairs
                 .iter()
@@ -142,10 +158,21 @@ impl Signer for BinanceSigner {
 /// 支持的私钥格式：
 /// - PKCS8 PEM（币安后台下载的默认格式）
 /// - base64 编码的 32 字节种子
-#[derive(Clone)]
 pub struct BinanceEd25519Signer {
     api_key: String,
     signing_key: ed25519_dalek::SigningKey,
+    /// 服务器时间偏移（毫秒），由 sync_time() 校准
+    time_offset_ms: AtomicI64,
+}
+
+impl Clone for BinanceEd25519Signer {
+    fn clone(&self) -> Self {
+        Self {
+            api_key: self.api_key.clone(),
+            signing_key: self.signing_key.clone(),
+            time_offset_ms: AtomicI64::new(self.time_offset_ms.load(Ordering::Relaxed)),
+        }
+    }
 }
 
 impl BinanceEd25519Signer {
@@ -157,6 +184,7 @@ impl BinanceEd25519Signer {
         Ok(Self {
             api_key: api_key.to_string(),
             signing_key,
+            time_offset_ms: AtomicI64::new(0),
         })
     }
 
@@ -175,6 +203,7 @@ impl BinanceEd25519Signer {
         Ok(Self {
             api_key: api_key.to_string(),
             signing_key: ed25519_dalek::SigningKey::from_bytes(&seed_arr),
+            time_offset_ms: AtomicI64::new(0),
         })
     }
 
@@ -192,12 +221,18 @@ impl BinanceEd25519Signer {
 }
 
 impl Signer for BinanceEd25519Signer {
+    fn set_time_offset(&self, offset_ms: i64) {
+        self.time_offset_ms.store(offset_ms, Ordering::Relaxed);
+    }
+
     fn sign_get(
         &self,
         _path: &str,
         query_params: &mut Vec<(String, String)>,
     ) -> Result<SignedRequest, ExchangeError> {
-        let timestamp = chrono::Utc::now().timestamp_millis();
+        let timestamp = chrono::Utc::now().timestamp_millis()
+            + self.time_offset_ms.load(Ordering::Relaxed);
+        query_params.push(("recvWindow".into(), RECV_WINDOW.into()));
         query_params.push(("timestamp".into(), timestamp.to_string()));
 
         let query_string = query_params
@@ -224,10 +259,13 @@ impl Signer for BinanceEd25519Signer {
         _path: &str,
         body: &mut serde_json::Value,
     ) -> Result<SignedRequest, ExchangeError> {
-        let mut query_params = vec![(
-            "timestamp".into(),
-            chrono::Utc::now().timestamp_millis().to_string(),
-        )];
+        let timestamp = chrono::Utc::now().timestamp_millis()
+            + self.time_offset_ms.load(Ordering::Relaxed);
+        let timestamp_str = timestamp.to_string();
+        let mut query_params = vec![
+            ("recvWindow".into(), RECV_WINDOW.into()),
+            ("timestamp".into(), timestamp_str.clone()),
+        ];
 
         let form_body = if let Some(obj) = body.as_object() {
             let mut pairs: Vec<(String, String)> = obj
@@ -241,7 +279,8 @@ impl Signer for BinanceEd25519Signer {
                     (k.clone(), val)
                 })
                 .collect();
-            pairs.push(("timestamp".into(), query_params[0].1.clone()));
+            pairs.push(("recvWindow".into(), RECV_WINDOW.into()));
+            pairs.push(("timestamp".into(), timestamp_str));
 
             let query_string = pairs
                 .iter()
@@ -330,7 +369,7 @@ impl BinanceExchange {
             MarketType::Spot => 20,
             MarketType::Perpetual => 40,
         };
-        let client = ExchangeClient::new(max_concurrent, proxy_url)?;
+        let client = ExchangeClient::with_api_key(max_concurrent, proxy_url, Some(api_key))?;
 
         // 尝试构造 Ed25519 签名器；若不是 Ed25519 格式则 fallback 到 HMAC
         let (signer, ed25519_signer) = match try_build_ed25519(api_key, api_secret) {
@@ -396,7 +435,7 @@ impl BinanceExchange {
             "LIMIT" => OrderType::Limit,
             "STOP_MARKET" | "STOP_LOSS" => OrderType::StopMarket,
             "STOP_LIMIT" | "STOP_LOSS_LIMIT" | "TAKE_PROFIT_LIMIT" => OrderType::StopLimit,
-            "TAKE_PROFIT_MARKET" => OrderType::TakeProfitMarket,
+            "TAKE_PROFIT_MARKET" | "TAKE_PROFIT" => OrderType::TakeProfitMarket,
             _ => OrderType::Market,
         }
     }
@@ -412,15 +451,17 @@ impl BinanceExchange {
     /// Convert unified OrderType to Binance spot string.
     ///
     /// 现货订单类型参考: https://developers.binance.com/docs/binance-spot-api-docs/rest-api
+    /// - StopMarket → `STOP_LOSS`（现货无 STOP_MARKET，STOP_LOSS 触发后执行 MARKET）
+    /// - TakeProfitMarket → `TAKE_PROFIT`（现货无 TAKE_PROFIT_MARKET，TAKE_PROFIT 触发后执行 MARKET）
     /// - StopLimit → `STOP_LOSS_LIMIT`（现货不支持统一的 STOP，必须区分止损/止盈，
     ///   统一枚集中 StopLimit 默认映射为止损限价单 STOP_LOSS_LIMIT）
     pub fn order_type_str(order_type: &OrderType) -> &'static str {
         match order_type {
             OrderType::Market => "MARKET",
             OrderType::Limit => "LIMIT",
-            OrderType::StopMarket => "STOP_MARKET",
+            OrderType::StopMarket => "STOP_LOSS",
             OrderType::StopLimit => "STOP_LOSS_LIMIT",
-            OrderType::TakeProfitMarket => "TAKE_PROFIT_MARKET",
+            OrderType::TakeProfitMarket => "TAKE_PROFIT",
         }
     }
 
@@ -755,14 +796,37 @@ impl Exchange for BinanceExchange {
             api::ping(&self.client).await
         }
     }
+
+    async fn sync_time(&self) -> Result<(), ExchangeError> {
+        let server_time = if self.is_perpetual() {
+            fapi::fetch_server_time(&self.client).await?
+        } else {
+            api::fetch_server_time(&self.client).await?
+        };
+        let local_time = chrono::Utc::now().timestamp_millis();
+        let offset = server_time - local_time;
+        self.signer.set_time_offset(offset);
+        info!(
+            time_offset_ms = offset,
+            market_type = ?self.market_type,
+            "Server time synced"
+        );
+        Ok(())
+    }
 }
 
 // ============================================================
 // Test modules (_tests suffix pattern)
 // ============================================================
 #[cfg(test)]
+mod api_tests;
+#[cfg(test)]
+mod kline_ws_tests;
+#[cfg(test)]
 mod mod_tests;
 #[cfg(test)]
 mod orderbook_ws_tests;
 #[cfg(test)]
 mod user_data_ws_api_tests;
+#[cfg(test)]
+mod user_data_ws_tests;

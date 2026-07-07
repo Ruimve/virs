@@ -43,6 +43,18 @@ pub async fn ping(client: &ExchangeClient) -> Result<bool, ExchangeError> {
     Ok(!data.is_null())
 }
 
+/// GET /fapi/v1/time — 获取币安合约服务器时间（毫秒）
+///
+/// 用于 sync_time() 校准本地时钟偏移，避免 -1021 签名失败。
+pub async fn fetch_server_time(client: &ExchangeClient) -> Result<i64, ExchangeError> {
+    let data = client.public_get(&url("/fapi/v1/time"), &[]).await?;
+    data.get("serverTime")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| {
+            ExchangeError::Internal("serverTime missing in /fapi/v1/time response".into())
+        })
+}
+
 /// GET /fapi/v1/ticker/24hr
 pub async fn fetch_ticker(
     client: &ExchangeClient,
@@ -163,11 +175,23 @@ pub async fn fetch_ohlcv(
 }
 
 /// GET /fapi/v1/depth
+///
+/// `limit` 合法值集合：5, 10, 20, 50, 100, 500, 1000（币安合约文档）。
+/// 传入非法值会返回 `ExchangeError::InvalidRequest`。
 pub async fn fetch_order_book(
     client: &ExchangeClient,
     symbol: &str,
     limit: u32,
 ) -> Result<CcxtOrderBook, ExchangeError> {
+    // F12: 合约 depth limit 合法值校验
+    const VALID_FUTURES_DEPTH_LIMITS: &[u32] = &[5, 10, 20, 50, 100, 500, 1000];
+    if !VALID_FUTURES_DEPTH_LIMITS.contains(&limit) {
+        return Err(ExchangeError::InvalidRequest(format!(
+            "Invalid depth limit {} for futures /fapi/v1/depth — valid values: {:?}",
+            limit, VALID_FUTURES_DEPTH_LIMITS
+        )));
+    }
+
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let data = client
         .public_get(
@@ -502,6 +526,20 @@ pub async fn create_order(
     let filled = parse_f64(&data, "executedQty").ok_or_else(|| {
         ExchangeError::no_data("Order filled (executedQty) missing in exchange response".into())
     })?;
+
+    // F11: 优先使用币安响应中的时间戳，而非本地时钟
+    // 合约下单响应包含 `time`（创建时间）和 `updateTime`（最后更新时间）
+    let created_at = crate::parse_timestamp_ms(&data, "time")
+        .or_else(|| crate::parse_timestamp_ms(&data, "updateTime"))
+        .unwrap_or_else(|| {
+            tracing::warn!("futures order response missing 'time'/'updateTime' — using local time");
+            Utc::now()
+        });
+    let updated_at = crate::parse_timestamp_ms(&data, "updateTime").unwrap_or_else(|| {
+        tracing::warn!("futures order response missing 'updateTime' — using local time");
+        Utc::now()
+    });
+
     Ok(CcxtOrder {
         id: parse_str(&data, "orderId")
             .ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
@@ -519,8 +557,8 @@ pub async fn create_order(
                 .ok_or_else(|| ExchangeError::no_data("status missing".into()))?,
         ),
         fee: None,
-        created_at: Some(Utc::now()),
-        updated_at: Some(Utc::now()),
+        created_at: Some(created_at),
+        updated_at: Some(updated_at),
         info: data,
     })
 }
@@ -771,15 +809,14 @@ pub async fn fetch_positions(
         ExchangeError::Internal("Invalid positionRisk response from Binance".into())
     })?;
 
-    let positions: Vec<Position> = arr
-        .iter()
-        .filter_map(|p| {
+    let mut positions: Vec<Position> = Vec::new();
+    for p in arr.iter() {
             let pos_amt = parse_f64(p, "positionAmt").unwrap_or_else(|| {
                 tracing::warn!("positionAmt missing — skipping entry to avoid silent position drop");
                 f64::NAN
             });
             if pos_amt.is_nan() || pos_amt == 0.0 {
-                return None;
+                continue;
             }
 
             let side = if pos_amt > 0.0 {
@@ -793,7 +830,7 @@ pub async fn fetch_positions(
                 Some(s) => s,
                 None => {
                     tracing::warn!("positionRisk symbol missing — skipping position");
-                    return None;
+                    continue;
                 }
             };
 
@@ -815,7 +852,7 @@ pub async fn fetch_positions(
                         symbol = %symbol_str,
                         "positionRisk entryPrice missing — skipping position"
                     );
-                    return None;
+                    continue;
                 }
             };
             let leverage = match parse_u32(p, "leverage") {
@@ -825,26 +862,38 @@ pub async fn fetch_positions(
                         symbol = %symbol_str,
                         "positionRisk leverage missing — skipping position"
                     );
-                    return None;
+                    continue;
                 }
             };
 
-            Some(Position {
+            // unRealizedProfit — 金融值，禁止默认 0.0（项目约束）
+            // 币安 positionRisk 响应始终包含此字段；若缺失则响应异常，返回 NoData
+            let unrealized_pnl = match parse_f64(p, "unRealizedProfit") {
+                Some(v) => v,
+                None => {
+                    tracing::error!(
+                        symbol = %symbol_str,
+                        "positionRisk unRealizedProfit missing — cannot calculate PnL"
+                    );
+                    return Err(ExchangeError::no_data(format!(
+                        "unRealizedProfit missing for symbol {} in positionRisk response",
+                        symbol_str
+                    )));
+                }
+            };
+
+            positions.push(Position {
                 symbol: crate::adapter::binance::BinanceExchange::to_unified_symbol(&symbol_str),
                 side,
                 size,
                 entry_price,
                 leverage,
-                unrealized_pnl: parse_f64(p, "unRealizedProfit").unwrap_or_else(|| {
-                    tracing::warn!("unRealizedProfit missing — defaulting to 0.0");
-                    0.0
-                }),
+                unrealized_pnl,
                 margin_mode,
                 liquidation_price: parse_f64(p, "liquidationPrice"),
                 info: p.clone(),
-            })
-        })
-        .collect();
+            });
+    }
 
     Ok(positions)
 }

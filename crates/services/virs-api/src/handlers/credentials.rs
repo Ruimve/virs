@@ -92,6 +92,15 @@ pub async fn save_credential(
     if let Ok(ccxt_ex) =
         virs_ccxt::create_exchange(exchange, api_key, api_secret, passphrase, None, &mt)
     {
+        // 同步服务器时间，校准签名时间戳偏移（非阻塞 — 失败仅告警）
+        if let Err(e) = ccxt_ex.sync_time().await {
+            tracing::warn!(
+                error = %e,
+                exchange,
+                market_type,
+                "Server time sync failed, using local clock (recvWindow 5000ms tolerates small drift)"
+            );
+        }
         let app_mt = match market_type {
             "spot" => virs_models::MarketType::Spot,
             _ => virs_models::MarketType::Perpetual,

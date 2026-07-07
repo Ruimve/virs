@@ -1,12 +1,13 @@
 //! Unit tests for lib.rs utility functions.
 //!
-//! Covers: parse_f64, parse_str, parse_u32, build_display_url,
-//! mask_signature, extract_error_message.
+//! Covers: parse_f64, parse_str, parse_u32, parse_timestamp_ms,
+//! build_display_url, mask_signature, extract_error_message.
 
 use serde_json::json;
 
 use crate::{
-    build_display_url, extract_error_message, mask_signature, parse_f64, parse_str, parse_u32,
+    build_display_url, extract_error_message, mask_signature, parse_f64, parse_str,
+    parse_timestamp_ms, parse_u32,
 };
 
 // ============================================================
@@ -225,4 +226,39 @@ fn l7_7_extract_error_no_matching_field() {
     let json = json!({"foo": "bar"});
     let msg = extract_error_message(&json);
     assert_eq!(msg, r#"{"foo":"bar"}"#);
+}
+
+// ============================================================
+// TC-L8: parse_timestamp_ms
+// ============================================================
+
+#[test]
+fn l8_1_parse_timestamp_ms_from_i64() {
+    // 2024-04-15 12:00:00 UTC = 1713182400000 ms
+    let v = json!({"time": 1713182400000i64});
+    let dt = parse_timestamp_ms(&v, "time");
+    assert!(dt.is_some());
+    let dt = dt.unwrap();
+    assert_eq!(dt.timestamp_millis(), 1713182400000);
+}
+
+#[test]
+fn l8_2_parse_timestamp_ms_from_string() {
+    let v = json!({"transactTime": "1713182400000"});
+    let dt = parse_timestamp_ms(&v, "transactTime");
+    assert!(dt.is_some());
+    let dt = dt.unwrap();
+    assert_eq!(dt.timestamp_millis(), 1713182400000);
+}
+
+#[test]
+fn l8_3_parse_timestamp_ms_missing_field() {
+    let v = json!({"other": 1});
+    assert_eq!(parse_timestamp_ms(&v, "time"), None);
+}
+
+#[test]
+fn l8_4_parse_timestamp_ms_invalid_string() {
+    let v = json!({"time": "not_a_number"});
+    assert_eq!(parse_timestamp_ms(&v, "time"), None);
 }

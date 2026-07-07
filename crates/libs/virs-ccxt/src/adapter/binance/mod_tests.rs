@@ -200,8 +200,18 @@ fn b4_6_type_take_profit_limit() {
 
 #[test]
 fn b4_7_type_take_profit_market() {
+    // 合约返回 TAKE_PROFIT_MARKET
     assert_eq!(
         BinanceExchange::parse_order_type("TAKE_PROFIT_MARKET"),
+        OrderType::TakeProfitMarket
+    );
+}
+
+#[test]
+fn b4_7b_type_take_profit_spot() {
+    // 现货返回 TAKE_PROFIT（触发后执行 MARKET）
+    assert_eq!(
+        BinanceExchange::parse_order_type("TAKE_PROFIT"),
         OrderType::TakeProfitMarket
     );
 }
@@ -247,9 +257,10 @@ fn b6_2_order_type_limit() {
 
 #[test]
 fn b6_3_order_type_stop_market() {
+    // 现货 StopMarket → STOP_LOSS（现货无 STOP_MARKET）
     assert_eq!(
         BinanceExchange::order_type_str(&OrderType::StopMarket),
-        "STOP_MARKET"
+        "STOP_LOSS"
     );
 }
 
@@ -269,8 +280,27 @@ fn b6_4_order_type_stop_limit() {
 
 #[test]
 fn b6_5_order_type_take_profit_market() {
+    // 现货 TakeProfitMarket → TAKE_PROFIT（现货无 TAKE_PROFIT_MARKET）
     assert_eq!(
         BinanceExchange::order_type_str(&OrderType::TakeProfitMarket),
+        "TAKE_PROFIT"
+    );
+}
+
+#[test]
+fn b6_6_futures_stop_market_unchanged() {
+    // 合约 StopMarket → STOP_MARKET（合约支持此枚举，不受现货修复影响）
+    assert_eq!(
+        BinanceExchange::order_type_str_futures(&OrderType::StopMarket),
+        "STOP_MARKET"
+    );
+}
+
+#[test]
+fn b6_7_futures_take_profit_market_unchanged() {
+    // 合约 TakeProfitMarket → TAKE_PROFIT_MARKET（合约支持此枚举）
+    assert_eq!(
+        BinanceExchange::order_type_str_futures(&OrderType::TakeProfitMarket),
         "TAKE_PROFIT_MARKET"
     );
 }
