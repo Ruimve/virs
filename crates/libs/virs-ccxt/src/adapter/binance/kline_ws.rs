@@ -29,6 +29,9 @@ pub(crate) struct BinanceKlineMessage {
     /// 单流格式: 顶层直接包含 kline 事件字段
     #[serde(rename = "e")]
     pub(crate) event_type_flat: Option<String>,
+    /// T8 FAIL fix: 单流格式的事件时间（E 字段），此前缺失导致 event_time 恒为 0
+    #[serde(rename = "E")]
+    pub(crate) event_time_flat: Option<i64>,
     #[serde(rename = "s")]
     pub(crate) symbol_flat: Option<String>,
     #[serde(rename = "k")]
@@ -49,9 +52,11 @@ impl BinanceKlineMessage {
                         return None;
                     }
                 };
+                // T8 FAIL fix: 使用实际解析到的 E 字段，而非硬编码 0
+                let event_time = self.event_time_flat.unwrap_or(0);
                 self.kline_flat.map(|kline| BinanceKlineData {
                     event_type: et.to_string(),
-                    event_time: 0,
+                    event_time,
                     symbol,
                     kline,
                 })

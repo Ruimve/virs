@@ -117,3 +117,82 @@ fn wa2_3_t15_set_and_get_time_offset() {
     signer.set_time_offset(-5678);
     assert_eq!(signer.get_time_offset(), -5678);
 }
+
+// ============================================================
+// TC-WA3: T15 FAIL fix — cross-instance offset sharing
+// ============================================================
+
+#[test]
+fn wa3_1_t15_clone_shares_time_offset() {
+    // T15 FAIL fix: clone() must share the same Arc<AtomicI64>,
+    // so that set_time_offset on one instance is visible to the clone.
+    let signer = test_signer();
+    let signer_clone = signer.clone();
+
+    // Set offset on original
+    signer.set_time_offset(5000);
+
+    // Clone should see the same offset (this was the FAIL: clone had independent 0)
+    assert_eq!(
+        signer_clone.get_time_offset(),
+        5000,
+        "clone must share time_offset_ms — if this fails, clone() is copying instead of sharing Arc"
+    );
+}
+
+#[test]
+fn wa3_2_t15_clone_set_on_clone_visible_to_original() {
+    // T15 FAIL fix: reverse direction — set on clone, read from original
+    let signer = test_signer();
+    let signer_clone = signer.clone();
+
+    signer_clone.set_time_offset(-3000);
+
+    assert_eq!(
+        signer.get_time_offset(),
+        -3000,
+        "original must see offset set on clone — if this fails, clone() is not sharing Arc"
+    );
+}
+
+#[test]
+fn wa3_3_t15_simulated_sync_time_updates_ws_signer() {
+    // T15 FAIL fix: simulate the real sync_time() flow:
+    // 1. Create ed25519 signer (original → ed25519_signer)
+    // 2. Clone into Arc<dyn Signer> (→ self.signer)
+    // 3. sync_time updates self.signer (via set_time_offset)
+    // 4. WS API uses ed25519_signer.clone() — must see the updated offset
+
+    let original = test_signer();
+
+    // Simulate: Arc::new(ed.clone()) → self.signer
+    let signer_arc: std::sync::Arc<dyn crate::auth::Signer> =
+        std::sync::Arc::new(original.clone());
+
+    // Simulate: self.ed25519_signer = Some(original)
+    let ed25519_signer = original;
+
+    // sync_time updates self.signer (the Arc<dyn Signer>)
+    signer_arc.set_time_offset(7000);
+
+    // WS API path: uses ed25519_signer.clone() and calls get_time_offset()
+    let ws_signer = ed25519_signer.clone();
+    assert_eq!(
+        ws_signer.get_time_offset(),
+        7000,
+        "WS API signer must see offset set through self.signer (Arc<dyn Signer>) — \
+         if this fails, the T15 FAIL is still present: sync_time only updates REST signer, \
+         WS signer has independent 0"
+    );
+
+    // Also verify build_session_logon_request uses the offset
+    let req = build_session_logon_request(&ws_signer, 1).unwrap();
+    let ts = req["params"]["timestamp"].as_i64().unwrap();
+    let local_now = chrono::Utc::now().timestamp_millis();
+    let diff = (ts - local_now).abs();
+    assert!(
+        diff > 4000 && diff < 10000,
+        "WS API timestamp should include 7000ms offset, got diff={} from local now",
+        diff
+    );
+}

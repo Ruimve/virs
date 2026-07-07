@@ -11,6 +11,7 @@ use crate::grid::ai::GridAiService;
 use crate::grid::ports::*;
 use crate::grid::types::{GridCommand, GridEvent};
 use crate::grid::worker::GridWorker;
+use virs_config::TimeConfig;
 
 /// 网格引擎
 ///
@@ -28,6 +29,8 @@ pub struct GridEngine {
     shutdown_txs: HashMap<Uuid, mpsc::Sender<()>>,
     adjust_txs: HashMap<Uuid, mpsc::Sender<()>>,
     bot_symbols: HashMap<Uuid, String>,
+    /// T12 WARN fix: 时间配置（从环境变量加载）
+    time_config: TimeConfig,
 }
 
 impl GridEngine {
@@ -39,6 +42,7 @@ impl GridEngine {
         order_executor: Arc<dyn OrderExecutor>,
         market_data_provider: Arc<dyn MarketDataProvider>,
         event_tx: broadcast::Sender<OrderEvent>,
+        time_config: TimeConfig,
     ) -> (
         Self,
         mpsc::Sender<GridCommand>,
@@ -60,6 +64,7 @@ impl GridEngine {
             shutdown_txs: HashMap::new(),
             adjust_txs: HashMap::new(),
             bot_symbols: HashMap::new(),
+            time_config,
         };
 
         (engine, cmd_tx, grid_event_tx)
@@ -133,6 +138,7 @@ impl GridEngine {
         let ai_service = self.ai_service.clone();
         let market_data_provider = self.market_data_provider.clone();
         let bot_symbol = bot.symbol.clone();
+        let time_config = self.time_config.clone();
 
         let handle = tokio::spawn(async move {
             let mut worker = GridWorker::new(
@@ -144,6 +150,7 @@ impl GridEngine {
                 market_data_provider,
                 event_rx,
                 grid_event_tx,
+                time_config,
             );
             worker.run(shutdown_rx, adjust_rx).await;
         });

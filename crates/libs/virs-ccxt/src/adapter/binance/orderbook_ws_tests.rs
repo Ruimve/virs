@@ -138,13 +138,13 @@ fn w3_1_parse_payload_spot_format() {
     });
     let result = parse_payload(&v);
     assert!(result.is_some());
-    let (bids, asks, sym, ts, last_update_id) = result.unwrap();
-    assert_eq!(bids.len(), 1);
-    assert_eq!(asks.len(), 1);
-    assert!(sym.is_none());
+    let pd = result.unwrap();
+    assert_eq!(pd.bids.len(), 1);
+    assert_eq!(pd.asks.len(), 1);
+    assert!(pd.symbol.is_none());
     // T9: spot has no event timestamp — ts=0, lastUpdateId stored separately
-    assert_eq!(ts, 0);
-    assert_eq!(last_update_id, Some(160));
+    assert_eq!(pd.timestamp_ms, 0);
+    assert_eq!(pd.last_update_id, Some(160));
 }
 
 #[test]
@@ -162,20 +162,20 @@ fn w3_2_parse_payload_perpetual_format() {
     });
     let result = parse_payload(&v);
     assert!(result.is_some());
-    let (bids, asks, sym, ts, last_update_id) = result.unwrap();
-    assert_eq!(bids.len(), 1);
-    assert_eq!(asks.len(), 1);
-    assert_eq!(sym, Some("BTCUSDT".to_string()));
-    assert_eq!(ts, 1234567890);
+    let pd = result.unwrap();
+    assert_eq!(pd.bids.len(), 1);
+    assert_eq!(pd.asks.len(), 1);
+    assert_eq!(pd.symbol, Some("BTCUSDT".to_string()));
+    assert_eq!(pd.timestamp_ms, 1234567890);
     // T9: perpetual has no lastUpdateId
-    assert_eq!(last_update_id, None);
+    assert_eq!(pd.last_update_id, None);
 }
 
 #[test]
 fn w3_3_parse_payload_no_matching_format() {
     let v = json!({"foo": "bar"});
     let result = parse_payload(&v);
-    assert_eq!(result, None);
+    assert!(result.is_none());
 }
 
 // ============================================================
@@ -195,14 +195,14 @@ fn w4_1_into_depth_combined_stream_spot() {
     let msg: BinanceDepthMessage = serde_json::from_value(raw).unwrap();
     let result = msg.into_depth();
     assert!(result.is_some());
-    let (bids, asks, stream, sym, ts, last_update_id) = result.unwrap();
-    assert_eq!(bids.len(), 1);
-    assert_eq!(asks.len(), 1);
-    assert_eq!(stream, Some("btcusdt@depth20@500ms".to_string()));
-    assert!(sym.is_none());
+    let pd = result.unwrap();
+    assert_eq!(pd.bids.len(), 1);
+    assert_eq!(pd.asks.len(), 1);
+    assert_eq!(pd.stream_name, Some("btcusdt@depth20@500ms".to_string()));
+    assert!(pd.symbol.is_none());
     // T9: spot — ts=0, lastUpdateId=Some(160)
-    assert_eq!(ts, 0);
-    assert_eq!(last_update_id, Some(160));
+    assert_eq!(pd.timestamp_ms, 0);
+    assert_eq!(pd.last_update_id, Some(160));
 }
 
 #[test]
@@ -224,14 +224,14 @@ fn w4_2_into_depth_combined_stream_perpetual() {
     let msg: BinanceDepthMessage = serde_json::from_value(raw).unwrap();
     let result = msg.into_depth();
     assert!(result.is_some());
-    let (bids, asks, stream, sym, ts, last_update_id) = result.unwrap();
-    assert_eq!(bids.len(), 1);
-    assert_eq!(asks.len(), 1);
-    assert_eq!(stream, Some("btcusdt@depth20@500ms".to_string()));
-    assert_eq!(sym, Some("BTCUSDT".to_string()));
-    assert_eq!(ts, 1234567890);
+    let pd = result.unwrap();
+    assert_eq!(pd.bids.len(), 1);
+    assert_eq!(pd.asks.len(), 1);
+    assert_eq!(pd.stream_name, Some("btcusdt@depth20@500ms".to_string()));
+    assert_eq!(pd.symbol, Some("BTCUSDT".to_string()));
+    assert_eq!(pd.timestamp_ms, 1234567890);
     // T9: perpetual — no lastUpdateId
-    assert_eq!(last_update_id, None);
+    assert_eq!(pd.last_update_id, None);
 }
 
 #[test]
@@ -244,13 +244,13 @@ fn w4_3_into_depth_single_stream_spot() {
     let msg: BinanceDepthMessage = serde_json::from_value(raw).unwrap();
     let result = msg.into_depth();
     assert!(result.is_some());
-    let (bids, asks, _stream, sym, ts, last_update_id) = result.unwrap();
-    assert_eq!(bids.len(), 1);
-    assert_eq!(asks.len(), 1);
-    assert!(sym.is_none());
+    let pd = result.unwrap();
+    assert_eq!(pd.bids.len(), 1);
+    assert_eq!(pd.asks.len(), 1);
+    assert!(pd.symbol.is_none());
     // T9: spot — ts=0, lastUpdateId=Some(160)
-    assert_eq!(ts, 0);
-    assert_eq!(last_update_id, Some(160));
+    assert_eq!(pd.timestamp_ms, 0);
+    assert_eq!(pd.last_update_id, Some(160));
 }
 
 #[test]
@@ -269,13 +269,13 @@ fn w4_4_into_depth_single_stream_perpetual() {
     let msg: BinanceDepthMessage = serde_json::from_value(raw).unwrap();
     let result = msg.into_depth();
     assert!(result.is_some());
-    let (bids, asks, _stream, sym, ts, last_update_id) = result.unwrap();
-    assert_eq!(bids.len(), 1);
-    assert_eq!(asks.len(), 1);
-    assert_eq!(sym, Some("BTCUSDT".to_string()));
-    assert_eq!(ts, 1234567890);
+    let pd = result.unwrap();
+    assert_eq!(pd.bids.len(), 1);
+    assert_eq!(pd.asks.len(), 1);
+    assert_eq!(pd.symbol, Some("BTCUSDT".to_string()));
+    assert_eq!(pd.timestamp_ms, 1234567890);
     // T9: perpetual — no lastUpdateId
-    assert_eq!(last_update_id, None);
+    assert_eq!(pd.last_update_id, None);
 }
 
 #[test]
@@ -284,5 +284,5 @@ fn w4_5_into_depth_invalid_message() {
     let raw = json!({"foo": "bar"});
     let msg: BinanceDepthMessage = serde_json::from_value(raw).unwrap();
     let result = msg.into_depth();
-    assert_eq!(result, None);
+    assert!(result.is_none());
 }

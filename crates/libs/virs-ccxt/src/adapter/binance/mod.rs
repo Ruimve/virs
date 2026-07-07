@@ -42,7 +42,8 @@ pub struct BinanceSigner {
     api_key: String,
     api_secret: String,
     /// 服务器时间偏移（毫秒），由 sync_time() 校准
-    time_offset_ms: AtomicI64,
+    /// T15: 使用 Arc<AtomicI64> 以便 signer clone 后共享同一偏移
+    time_offset_ms: Arc<AtomicI64>,
 }
 
 impl BinanceSigner {
@@ -50,7 +51,7 @@ impl BinanceSigner {
         Self {
             api_key,
             api_secret,
-            time_offset_ms: AtomicI64::new(0),
+            time_offset_ms: Arc::new(AtomicI64::new(0)),
         }
     }
 }
@@ -172,7 +173,8 @@ pub struct BinanceEd25519Signer {
     api_key: String,
     signing_key: ed25519_dalek::SigningKey,
     /// 服务器时间偏移（毫秒），由 sync_time() 校准
-    time_offset_ms: AtomicI64,
+    /// T15: 使用 Arc<AtomicI64>，clone 后共享同一偏移，确保 sync_time 更新对所有副本生效
+    time_offset_ms: Arc<AtomicI64>,
 }
 
 impl Clone for BinanceEd25519Signer {
@@ -180,7 +182,8 @@ impl Clone for BinanceEd25519Signer {
         Self {
             api_key: self.api_key.clone(),
             signing_key: self.signing_key.clone(),
-            time_offset_ms: AtomicI64::new(self.time_offset_ms.load(Ordering::Acquire)),
+            // T15: 共享同一 Arc<AtomicI64>，而非复制值到新原子
+            time_offset_ms: Arc::clone(&self.time_offset_ms),
         }
     }
 }
@@ -194,7 +197,7 @@ impl BinanceEd25519Signer {
         Ok(Self {
             api_key: api_key.to_string(),
             signing_key,
-            time_offset_ms: AtomicI64::new(0),
+            time_offset_ms: Arc::new(AtomicI64::new(0)),
         })
     }
 
@@ -213,7 +216,7 @@ impl BinanceEd25519Signer {
         Ok(Self {
             api_key: api_key.to_string(),
             signing_key: ed25519_dalek::SigningKey::from_bytes(&seed_arr),
-            time_offset_ms: AtomicI64::new(0),
+            time_offset_ms: Arc::new(AtomicI64::new(0)),
         })
     }
 
@@ -367,6 +370,8 @@ pub struct BinanceExchange {
     market_type: MarketType,
     /// T1: 标记定期时间同步是否已启动，防止重复 spawn
     time_sync_started: AtomicBool,
+    /// T1 WARN fix: 定期时间同步的运行标志，Drop 时设为 false 以停止后台 task
+    time_sync_running: Arc<AtomicBool>,
 }
 
 impl BinanceExchange {
@@ -409,6 +414,7 @@ impl BinanceExchange {
             testnet: false,
             market_type: *market_type,
             time_sync_started: AtomicBool::new(false),
+            time_sync_running: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -841,6 +847,7 @@ impl Exchange for BinanceExchange {
 
         // T1: Start periodic time sync loop (once per exchange instance)
         if !self.time_sync_started.swap(true, Ordering::SeqCst) {
+            self.time_sync_running.store(true, Ordering::Release);
             self.spawn_periodic_time_sync();
         }
 
@@ -853,10 +860,14 @@ impl BinanceExchange {
     ///
     /// This prevents clock drift from causing -1021 signature failures
     /// during long-running bot sessions (24/7 operation).
+    ///
+    /// T1 WARN fix: task checks `time_sync_running` flag and exits when set to false
+    /// (in Drop impl), preventing task leak on credential rotation.
     fn spawn_periodic_time_sync(&self) {
         let client = self.client.clone();
         let signer = self.signer.clone();
         let is_perpetual = self.is_perpetual();
+        let running = self.time_sync_running.clone();
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(TIME_SYNC_INTERVAL_SECS));
@@ -864,7 +875,17 @@ impl BinanceExchange {
             interval.tick().await;
 
             loop {
+                // T1 WARN fix: check if exchange has been dropped
+                if !running.load(Ordering::Acquire) {
+                    tracing::info!("[PeriodicSync] Exchange dropped, stopping time sync task");
+                    break;
+                }
                 interval.tick().await;
+                // Re-check after tick (in case exchange was dropped during sleep)
+                if !running.load(Ordering::Acquire) {
+                    tracing::info!("[PeriodicSync] Exchange dropped during sleep, stopping");
+                    break;
+                }
                 let result = if is_perpetual {
                     fapi::fetch_server_time(&client).await
                 } else {
@@ -898,6 +919,14 @@ impl BinanceExchange {
                 }
             }
         });
+    }
+}
+
+/// T1 WARN fix: Drop impl stops the periodic time sync task
+impl Drop for BinanceExchange {
+    fn drop(&mut self) {
+        // Signal the periodic sync task to stop
+        self.time_sync_running.store(false, Ordering::Release);
     }
 }
 

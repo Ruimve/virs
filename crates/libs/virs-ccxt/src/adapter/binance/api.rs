@@ -485,9 +485,13 @@ pub async fn cancel_order(
         remaining: amount - filled,
         status: CcxtOrderStatus::Canceled,
         fee: None,
-        created_at: crate::parse_timestamp_ms(&data, "time"),
+        created_at: crate::parse_timestamp_ms(&data, "time")
+            .or_else(|| {
+                tracing::warn!(symbol = %symbol, "cancel_order response missing 'time' — created_at is None");
+                None
+            }),
         updated_at: crate::parse_timestamp_ms(&data, "updateTime").or_else(|| {
-            tracing::warn!("cancel_order response missing 'updateTime' — using local time");
+            tracing::warn!(symbol = %symbol, "cancel_order response missing 'updateTime' — using local time");
             Some(Utc::now())
         }),
         info: data,
@@ -543,9 +547,13 @@ pub async fn fetch_order(
         remaining: amount - filled,
         status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
         fee: None,
-        created_at: crate::parse_timestamp_ms(&data, "time"),
+        created_at: crate::parse_timestamp_ms(&data, "time")
+            .or_else(|| {
+                tracing::warn!(symbol = %symbol, "fetch_order response missing 'time' — created_at is None");
+                None
+            }),
         updated_at: crate::parse_timestamp_ms(&data, "updateTime").or_else(|| {
-            tracing::warn!("fetch_order response missing 'updateTime' — using local time");
+            tracing::warn!(symbol = %symbol, "fetch_order response missing 'updateTime' — using local time");
             Some(Utc::now())
         }),
         info: data,

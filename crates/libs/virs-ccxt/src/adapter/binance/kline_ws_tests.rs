@@ -377,3 +377,67 @@ fn t8_2_delay_threshold_is_5000ms() {
     let delay_ok = local_now_ok - event_time;
     assert!(delay_ok <= KLINE_WS_DELAY_THRESHOLD_MS);
 }
+
+// ============================================================
+// T8 FAIL fix: 单流格式 event_time 解析
+// ============================================================
+
+#[test]
+fn t8_3_single_stream_event_time_parsed() {
+    // T8 FAIL fix: 单流格式（无 stream/data 包装）必须正确解析 E 字段
+    // 此前 BinanceKlineMessage 缺少 #[serde(rename = "E")] 字段，event_time 恒为 0
+    let json = r#"{
+        "e": "kline",
+        "E": 1713900000456,
+        "s": "BTCUSDT",
+        "k": {
+            "t": 1713900000000,
+            "T": 1713900059999,
+            "s": "BTCUSDT",
+            "i": "1m",
+            "o": "65000.00",
+            "h": "65100.00",
+            "l": "64900.00",
+            "c": "65050.00",
+            "v": "100.5",
+            "n": 500,
+            "x": false,
+            "q": "6532500.00"
+        }
+    }"#;
+
+    let msg: BinanceKlineMessage = serde_json::from_str(json).unwrap();
+    let data = msg.into_kline_data().unwrap();
+    // T8 FAIL: 此前这里返回 0，现在应返回实际 E 字段值
+    assert_eq!(
+        data.event_time, 1713900000456,
+        "single-stream format must parse E field — if this is 0, the T8 FAIL is still present"
+    );
+}
+
+#[test]
+fn t8_4_single_stream_event_time_missing_defaults_zero() {
+    // T8 FAIL fix: 单流格式缺少 E 字段时，回退到 0（向后兼容）
+    let json = r#"{
+        "e": "kline",
+        "s": "BTCUSDT",
+        "k": {
+            "t": 1713900000000,
+            "T": 1713900059999,
+            "s": "BTCUSDT",
+            "i": "1m",
+            "o": "65000.00",
+            "h": "65100.00",
+            "l": "64900.00",
+            "c": "65050.00",
+            "v": "100.5",
+            "n": 500,
+            "x": false,
+            "q": "6532500.00"
+        }
+    }"#;
+
+    let msg: BinanceKlineMessage = serde_json::from_str(json).unwrap();
+    let data = msg.into_kline_data().unwrap();
+    assert_eq!(data.event_time, 0, "missing E field should default to 0");
+}

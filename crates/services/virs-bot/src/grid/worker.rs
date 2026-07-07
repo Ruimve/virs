@@ -38,6 +38,8 @@ pub struct GridWorker {
     pub(crate) paused: bool,
     initial_order_range: usize,
     pending_orders: HashSet<(usize, String)>,
+    /// T12 WARN fix: 时间配置（从环境变量加载）
+    pub(crate) time_config: virs_config::TimeConfig,
 }
 
 impl GridWorker {
@@ -50,6 +52,7 @@ impl GridWorker {
         market_data_provider: Arc<dyn MarketDataProvider>,
         event_rx: broadcast::Receiver<OrderEvent>,
         grid_event_tx: broadcast::Sender<GridEvent>,
+        time_config: virs_config::TimeConfig,
     ) -> Self {
         let levels = utils::calculate_levels(&bot, 0.0);
         Self {
@@ -70,6 +73,7 @@ impl GridWorker {
             paused: false,
             initial_order_range: 3,
             pending_orders: HashSet::new(),
+            time_config,
         }
     }
 
@@ -95,8 +99,8 @@ impl GridWorker {
             if self.current_price > 0.0 {
                 break;
             }
-            warn!(bot_id = %self.bot.id, attempt, "Failed to fetch initial price, retrying in 5s...");
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            warn!(bot_id = %self.bot.id, attempt, "Failed to fetch initial price, retrying...");
+            tokio::time::sleep(std::time::Duration::from_secs(self.time_config.price_poll_interval_secs)).await;
         }
         if self.current_price <= 0.0 {
             error!(bot_id = %self.bot.id, "Failed to fetch initial price after 10 attempts");
@@ -113,7 +117,9 @@ impl GridWorker {
             self.place_initial_orders().await;
         }
 
-        let mut price_tick = tokio::time::interval(std::time::Duration::from_secs(5));
+        let mut price_tick = tokio::time::interval(
+            std::time::Duration::from_secs(self.time_config.price_poll_interval_secs)
+        );
 
         // LLM 周期性分析定时器
         let (llm_signal_tx, mut llm_signal_rx) = tokio::sync::mpsc::channel::<()>(1);

@@ -221,3 +221,32 @@ fn t5_1_funding_history_normal() {
 fn _suppress_warning() -> Side {
     Side::Buy
 }
+
+// ============================================================
+// T7 WARN fix: nextFundingTime: 0 filtering
+// ============================================================
+
+#[test]
+fn t7_1_funding_time_zero_is_epoch() {
+    // T7 WARN fix: verify that from_timestamp_millis(0) returns Some(epoch)
+    // This is the root cause — 0 is a valid timestamp, so we need explicit filtering
+    let result = chrono::DateTime::from_timestamp_millis(0);
+    assert!(result.is_some(), "timestamp 0 is a valid DateTime (epoch)");
+    assert_eq!(
+        result.unwrap(),
+        chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0).unwrap()
+    );
+}
+
+#[test]
+fn t7_2_filter_zero_before_from_timestamp_millis() {
+    // T7 WARN fix: the fix adds .filter(|&ts| ts > 0) before from_timestamp_millis
+    // This ensures nextFundingTime: 0 returns None instead of Some(epoch)
+    let raw_ts: i64 = 0;
+    let filtered = Some(raw_ts).filter(|&ts| ts > 0);
+    assert_eq!(filtered, None, "0 should be filtered out");
+
+    let valid_ts: i64 = 1700000000000;
+    let valid_filtered = Some(valid_ts).filter(|&ts| ts > 0);
+    assert_eq!(valid_filtered, Some(1700000000000));
+}

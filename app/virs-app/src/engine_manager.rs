@@ -381,6 +381,7 @@ impl EngineManager for AppEngineManager {
             grid_order_executor,
             grid_market_data_provider,
             grid_event_tx.clone(),
+            self.time_config.clone(),
         );
 
         // Paper mode price tick
