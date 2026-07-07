@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FullScreen } from './components/Transition/FullScreen';
 import { AssetLoading } from './components/Transition/Icon';
-import { AuthProvider, ProtectedRoute } from './context/AuthContext/AuthProvider';
+import { AuthProvider, AuthProtecter } from './context/AuthContext/AuthProvider';
 
 /** 加载中 */
 const Loading = lazy(() => import('./pages/Loading'));
@@ -39,27 +39,22 @@ const GridBotSystem = lazy(() => import('./pages/Trade/GridBot/System'));
 
 /** 交易 - 健康检查 */
 const HealthCheck = lazy(() => import('./pages/Trade/HealthCheck'));
-/** 交易 -系统信息 */
-
-const SuspenseWrap = ({ children }: { children: React.ReactNode }) => {
-  return <Suspense fallback={<FullScreen icon={<AssetLoading />} />}>{children}</Suspense>;
-};
 
 const App = () => {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <AuthProvider>
-          <SuspenseWrap>
+      <Suspense fallback={<FullScreen icon={<AssetLoading />} />}>
+        <BrowserRouter>
+          <AuthProvider>
             <Routes>
               <Route path="/" element={<Loading />} />
               <Route path="/login" element={<Login />} />
               <Route
                 path="/setup"
                 element={
-                  <ProtectedRoute>
+                  <AuthProtecter>
                     <SetupLayout />
-                  </ProtectedRoute>
+                  </AuthProtecter>
                 }
               >
                 <Route path="/setup/bot-type" element={<SelectBotType />} />
@@ -71,9 +66,9 @@ const App = () => {
               <Route
                 path="/trade"
                 element={
-                  <ProtectedRoute>
+                  <AuthProtecter>
                     <TradeLayout />
-                  </ProtectedRoute>
+                  </AuthProtecter>
                 }
               >
                 <Route path="/trade/auto/:botId" element={<AutoBot />}>
@@ -95,9 +90,9 @@ const App = () => {
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          </SuspenseWrap>
-        </AuthProvider>
-      </BrowserRouter>
+          </AuthProvider>
+        </BrowserRouter>
+      </Suspense>
     </ErrorBoundary>
   );
 };

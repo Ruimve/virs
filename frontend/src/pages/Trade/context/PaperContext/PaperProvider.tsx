@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { getPaperStatus } from '@/service';
 import { PaperContext } from '.';
 
@@ -11,7 +11,7 @@ export function PaperProvider({ children }: { children: ReactNode }) {
       const res = await getPaperStatus();
       if (res.success && res.data) setEnabled(res.data.paper_mode);
     } catch {
-      // ignore
+      setEnabled(null);
     }
   }, []);
 
@@ -19,5 +19,12 @@ export function PaperProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
 
-  return <PaperContext.Provider value={{ enabled, refresh }}>{children}</PaperContext.Provider>;
+  const value = useMemo(() => {
+    return {
+      enabled,
+      refresh,
+    };
+  }, [enabled, refresh]);
+
+  return <PaperContext.Provider value={value}>{children}</PaperContext.Provider>;
 }

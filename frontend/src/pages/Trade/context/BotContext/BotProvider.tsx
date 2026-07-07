@@ -1,4 +1,4 @@
-import { type ReactNode, Suspense, use } from 'react';
+import { type ReactNode, Suspense, use, useMemo } from 'react';
 import {
   getAutoBotDetail,
   getGridBotDetail,
@@ -47,7 +47,14 @@ const promiseBot = (() => {
 export const BotProviderMain = ({ children }: { children: ReactNode }) => {
   const { bot, gridLevels } = use(promiseBot);
 
-  return <BotContext.Provider value={{ bot, gridLevels }}>{children}</BotContext.Provider>;
+  const value = useMemo(() => {
+    return {
+      bot,
+      gridLevels,
+    };
+  }, [bot, gridLevels]);
+
+  return <BotContext.Provider value={value}>{children}</BotContext.Provider>;
 };
 
 export const BotProvider = ({ children }: { children: ReactNode }) => {

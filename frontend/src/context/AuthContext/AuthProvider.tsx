@@ -29,8 +29,6 @@ import {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [user, setUser] = useState<UserInfo | null>(null);
-  // 初始为 true：应用启动时会话恢复（refresh）是异步的，路由守卫在首次渲染时
-  // 必须等待恢复完成再判定 user，否则 token 仍在也会被立即重定向回登录页。
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -52,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       removeToken();
     } catch {
       setUser(null);
+      removeToken();
     } finally {
       setLoading(false);
     }
@@ -101,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 /** 路由守卫组件，替代 requireAuth 命令式跳转 */
-export function ProtectedRoute({ children }: { children: ReactNode }) {
+export function AuthProtecter({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 

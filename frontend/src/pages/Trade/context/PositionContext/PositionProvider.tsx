@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { usePositionWs, type PositionWsEvent } from '@/service/ws';
 import { useBot } from '../BotContext';
 import { PositionContext } from '.';
@@ -17,5 +17,11 @@ export const PositionProvider = ({ children }: { children: ReactNode }) => {
     setPosition(event);
   });
 
-  return <PositionContext.Provider value={{ position }}>{children}</PositionContext.Provider>;
+  const value = useMemo(() => {
+    return {
+      position,
+    };
+  }, [position]);
+
+  return <PositionContext.Provider value={value}>{children}</PositionContext.Provider>;
 };

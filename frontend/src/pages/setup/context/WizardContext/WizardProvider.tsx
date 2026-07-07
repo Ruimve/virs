@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { DEFAULT_STATE, type WizardState, type WizardStepValue } from './consts';
 import { WizardContext } from '.';
 
@@ -20,16 +20,14 @@ export const WizardProvider = ({ children }: { children: ReactNode }) => {
     }));
   }, []);
 
-  return (
-    <WizardContext.Provider
-      value={{
-        wizard,
-        updateWizard,
-        resetWizard,
-        advanceStep,
-      }}
-    >
-      {children}
-    </WizardContext.Provider>
-  );
+  const value = useMemo(() => {
+    return {
+      wizard,
+      updateWizard,
+      resetWizard,
+      advanceStep,
+    };
+  }, [wizard, updateWizard, resetWizard, advanceStep]);
+
+  return <WizardContext.Provider value={value}>{children}</WizardContext.Provider>;
 };
