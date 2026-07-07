@@ -66,8 +66,13 @@ pub struct WsOrderBookUpdate {
     pub bids: Vec<OrderBookLevel>,
     /// Top N ask levels (sorted ascending by price)
     pub asks: Vec<OrderBookLevel>,
-    /// Exchange timestamp (ms)
+    /// Exchange event timestamp (ms).
+    /// For perpetual: the `E` field (event time).
+    /// For spot: 0 (spot partial book depth has no timestamp).
     pub timestamp: i64,
+    /// Spot-only: the `lastUpdateId` field (a sequence number, NOT a timestamp).
+    /// None for perpetual updates.
+    pub last_update_id: Option<i64>,
 }
 
 /// Events emitted by an OrderBook WS client.

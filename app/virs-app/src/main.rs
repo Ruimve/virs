@@ -167,6 +167,7 @@ async fn main() -> VirsResult<()> {
         config.server.encryption_key.clone(),
         config.server.llm_key.clone(),
         config.proxy.clone(),
+        config.time.clone(),
     ));
     info!("Engine manager created (engines will start on first bot creation)");
 

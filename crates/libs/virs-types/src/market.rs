@@ -103,7 +103,7 @@ pub struct FundingRate {
 /// Funding history entry
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FundingHistoryEntry {
-    pub funding_time: i64,
+    pub funding_time: DateTime<Utc>,
     pub rate: f64,
 }
 

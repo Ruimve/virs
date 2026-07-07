@@ -223,6 +223,9 @@ impl TryFrom<CcxtTicker> for Ticker {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CcxtKline {
     pub timestamp: i64,
+    /// K线收盘时间（毫秒），来自交易所返回的 a[6] 字段。
+    /// 为 None 时由下游 `to_models_kline` 计算为 `timestamp + interval_ms - 1`。
+    pub close_time: Option<i64>,
     pub open: f64,
     pub high: f64,
     pub low: f64,
@@ -275,7 +278,7 @@ impl From<CcxtFundingRate> for FundingRate {
 /// CCXT-internal funding history entry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CcxtFundingHistoryEntry {
-    pub funding_time: i64,
+    pub funding_time: DateTime<Utc>,
     pub rate: f64,
 }
 

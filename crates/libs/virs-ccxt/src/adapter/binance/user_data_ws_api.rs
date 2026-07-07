@@ -27,6 +27,7 @@ use tracing::info;
 use virs_error::ExchangeError;
 
 use super::BinanceEd25519Signer;
+use crate::auth::Signer;
 use crate::adapter::binance::user_data_ws::BinanceOrderMessage;
 use virs_types::WsFeedEvent;
 
@@ -502,7 +503,8 @@ pub(crate) fn build_session_logon_request(
     signer: &BinanceEd25519Signer,
     id: u64,
 ) -> Result<serde_json::Value, ExchangeError> {
-    let timestamp = chrono::Utc::now().timestamp_millis();
+    // T15: Apply server time offset to timestamp for WS API signing
+    let timestamp = chrono::Utc::now().timestamp_millis() + signer.get_time_offset();
     let api_key = signer.api_key();
 
     // 按 key 字典序排列：apiKey, recvWindow, timestamp

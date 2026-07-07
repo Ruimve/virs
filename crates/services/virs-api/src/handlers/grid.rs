@@ -9,6 +9,7 @@ use serde::Deserialize;
 use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
+use crate::handlers::utils::format_duration;
 use crate::state::AppState;
 
 /// 分页查询参数
@@ -683,22 +684,6 @@ pub async fn get_stats(
         "max_profit": max_profit,
         "max_loss": max_loss,
     }))))
-}
-
-fn format_duration(ms: i64) -> String {
-    if ms <= 0 {
-        return "-".to_string();
-    }
-    let seconds = ms / 1000;
-    let minutes = seconds / 60;
-    let hours = minutes / 60;
-    if hours > 0 {
-        format!("{}h{}m", hours, minutes % 60)
-    } else if minutes > 0 {
-        format!("{}m{}s", minutes, seconds % 60)
-    } else {
-        format!("{}s", seconds)
-    }
 }
 
 pub async fn get_analysis_logs(

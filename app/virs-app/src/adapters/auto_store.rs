@@ -221,9 +221,9 @@ impl AutoStore for PgAutoStore {
         Ok(())
     }
 
-    async fn find_open_trade(&self, bot_id: Uuid) -> VirsResult<Option<(Uuid, f64, f64)>> {
-        let row: Option<(Uuid, f64, f64)> = sqlx::query_as(
-            "SELECT id, stop_loss, take_profit FROM qd_auto_trades WHERE bot_id = $1 AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
+    async fn find_open_trade(&self, bot_id: Uuid) -> VirsResult<Option<(Uuid, f64, f64, DateTime<Utc>)>> {
+        let row: Option<(Uuid, f64, f64, DateTime<Utc>)> = sqlx::query_as(
+            "SELECT id, stop_loss, take_profit, opened_at FROM qd_auto_trades WHERE bot_id = $1 AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
         )
         .bind(bot_id)
         .fetch_optional(&self.db).await?;

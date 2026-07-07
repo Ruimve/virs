@@ -143,6 +143,7 @@ pub async fn fetch_ohlcv(
                 _ => return None,
             };
             let timestamp = a[0].as_i64()?;
+            let close_time = a.get(6).and_then(|v| v.as_i64());
             let open = a[1].as_str().and_then(|s| s.parse().ok())?;
             let high = a[2].as_str().and_then(|s| s.parse().ok())?;
             let low = a[3].as_str().and_then(|s| s.parse().ok())?;
@@ -150,6 +151,7 @@ pub async fn fetch_ohlcv(
             let volume = a[5].as_str().and_then(|s| s.parse().ok())?;
             Some(CcxtKline {
                 timestamp,
+                close_time,
                 open,
                 high,
                 low,
@@ -323,7 +325,12 @@ pub async fn fetch_funding_rate(
     let next_funding_time = data
         .get("nextFundingTime")
         .and_then(|t| t.as_i64())
-        .map(|ts| chrono::DateTime::from_timestamp_millis(ts).unwrap_or_else(Utc::now));
+        .and_then(|ts| {
+            chrono::DateTime::from_timestamp_millis(ts).or_else(|| {
+                tracing::warn!(ts, "nextFundingTime timestamp invalid — returning None");
+                None
+            })
+        });
 
     Ok(CcxtFundingRate {
         symbol: symbol.to_string(),
@@ -369,9 +376,10 @@ pub async fn fetch_funding_history(
             let funding_time = item
                 .get("fundingTime")
                 .and_then(|t| t.as_i64())
+                .and_then(chrono::DateTime::from_timestamp_millis)
                 .ok_or_else(|| {
-                    tracing::warn!("fundingTime missing — returning NoData instead of 0");
-                    ExchangeError::no_data("fundingTime missing in funding history".into())
+                    tracing::warn!("fundingTime missing or invalid — returning NoData instead of 0");
+                    ExchangeError::no_data("fundingTime missing or invalid in funding history".into())
                 })?;
             let rate = parse_f64(item, "fundingRate").ok_or_else(|| {
                 tracing::warn!("fundingRate missing — returning NoData instead of 0.0");
@@ -610,8 +618,11 @@ pub async fn cancel_order(
         remaining: amount - filled,
         status: CcxtOrderStatus::Canceled,
         fee: None,
-        created_at: None,
-        updated_at: Some(Utc::now()),
+        created_at: crate::parse_timestamp_ms(&data, "time"),
+        updated_at: crate::parse_timestamp_ms(&data, "updateTime").or_else(|| {
+            tracing::warn!("cancel_order response missing 'updateTime' — using local time");
+            Some(Utc::now())
+        }),
         info: data,
     })
 }
@@ -665,8 +676,11 @@ pub async fn fetch_order(
         remaining: amount - filled,
         status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
         fee: None,
-        created_at: None,
-        updated_at: Some(Utc::now()),
+        created_at: crate::parse_timestamp_ms(&data, "time"),
+        updated_at: crate::parse_timestamp_ms(&data, "updateTime").or_else(|| {
+            tracing::warn!("fetch_order response missing 'updateTime' — using local time");
+            Some(Utc::now())
+        }),
         info: data,
     })
 }
@@ -737,8 +751,8 @@ pub async fn fetch_open_orders(
             remaining: amount - filled,
             status: crate::adapter::binance::BinanceExchange::parse_order_status(&status_str),
             fee: None,
-            created_at: None,
-            updated_at: None,
+            created_at: crate::parse_timestamp_ms(o, "time"),
+            updated_at: crate::parse_timestamp_ms(o, "updateTime"),
             info: o.clone(),
         });
     }

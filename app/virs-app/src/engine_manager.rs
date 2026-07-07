@@ -57,6 +57,8 @@ pub struct AppEngineManager {
     encryption_key: String,
     llm_key: String,
     proxy: Option<String>,
+    /// T12: 时间配置（从环境变量加载）
+    time_config: virs_config::TimeConfig,
 
     started: AtomicBool,
     /// Init lock — ensures only one caller runs the init logic.
@@ -78,6 +80,7 @@ impl AppEngineManager {
         encryption_key: String,
         llm_key: String,
         proxy: Option<String>,
+        time_config: virs_config::TimeConfig,
     ) -> Self {
         Self {
             db_pool,
@@ -87,6 +90,7 @@ impl AppEngineManager {
             encryption_key,
             llm_key,
             proxy,
+            time_config,
             started: AtomicBool::new(false),
             init_lock: Mutex::new(()),
             state: OnceLock::new(),
@@ -485,6 +489,7 @@ impl EngineManager for AppEngineManager {
             auto_market_data_provider,
             auto_order_event_tx.clone(),
             pe_event_sender.clone(),
+            self.time_config.clone(),
         );
 
         let auto_handle = tokio::spawn(async move {

@@ -1,5 +1,6 @@
 use crate::adapter::binance::kline_ws::{
     binance_ws_symbol, BinanceKlineData, BinanceKlineInner, BinanceKlineMessage, KlineWs,
+    KLINE_WS_DELAY_THRESHOLD_MS,
 };
 use crate::ws_types::KlineWsClient;
 
@@ -324,4 +325,55 @@ async fn test_subscribe_without_start() {
 
     // 客户端仍然没有运行
     assert!(!ws.is_running());
+}
+
+// ========== T8: event_time 延迟检测（2个） ==========
+
+#[test]
+fn t8_1_event_time_parsed_and_accessible() {
+    // T8: event_time (E field) must be parsed and accessible (no longer dead_code)
+    let json = r#"{
+        "stream": "btcusdt@kline_1m",
+        "data": {
+            "e": "kline",
+            "E": 1713900000123,
+            "s": "BTCUSDT",
+            "k": {
+                "t": 1713900000000,
+                "T": 1713900059999,
+                "s": "BTCUSDT",
+                "i": "1m",
+                "o": "65000.00",
+                "h": "65100.00",
+                "l": "64900.00",
+                "c": "65050.00",
+                "v": "100.5",
+                "n": 500,
+                "x": false,
+                "q": "6532500.00"
+            }
+        }
+    }"#;
+
+    let msg: BinanceKlineMessage = serde_json::from_str(json).unwrap();
+    let data = msg.into_kline_data().unwrap();
+    // event_time must be parsed correctly
+    assert_eq!(data.event_time, 1713900000123);
+}
+
+#[test]
+fn t8_2_delay_threshold_is_5000ms() {
+    // T8: The delay threshold constant must be 5000ms (5 seconds)
+    assert_eq!(KLINE_WS_DELAY_THRESHOLD_MS, 5_000);
+
+    // Verify delay calculation logic
+    let event_time = 1713900000000_i64;
+    let local_now = 1713900006000_i64; // 6 seconds later
+    let delay_ms = local_now - event_time;
+    assert!(delay_ms > KLINE_WS_DELAY_THRESHOLD_MS);
+
+    // Below threshold
+    let local_now_ok = 1713900003000_i64; // 3 seconds later
+    let delay_ok = local_now_ok - event_time;
+    assert!(delay_ok <= KLINE_WS_DELAY_THRESHOLD_MS);
 }

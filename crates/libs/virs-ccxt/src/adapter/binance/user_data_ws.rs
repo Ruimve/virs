@@ -265,7 +265,13 @@ impl ExecutionReportInner {
             price,
             amount,
             commission,
-            timestamp: DateTime::from_timestamp_millis(self.trade_time).unwrap_or_else(Utc::now),
+            timestamp: DateTime::from_timestamp_millis(self.trade_time).unwrap_or_else(|| {
+                tracing::warn!(
+                    trade_time = self.trade_time,
+                    "WS order trade_time invalid — using local time as fallback"
+                );
+                Utc::now()
+            }),
             position_side,
         })
     }

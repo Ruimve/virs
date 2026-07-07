@@ -11,6 +11,7 @@ use crate::auto::ai::AutoAiService;
 use crate::auto::ports::*;
 use crate::auto::types::AutoCommand;
 use crate::auto::worker::AutoWorker;
+use virs_config::TimeConfig;
 use virs_types::position::EngineEvent;
 
 /// 全自动交易引擎
@@ -26,6 +27,8 @@ pub struct AutoEngine {
     workers: HashMap<Uuid, tokio::task::JoinHandle<()>>,
     shutdown_txs: HashMap<Uuid, mpsc::Sender<()>>,
     bot_symbols: HashMap<Uuid, String>,
+    /// T12: 时间配置（从环境变量加载，替代硬编码常量）
+    time_config: TimeConfig,
 }
 
 impl AutoEngine {
@@ -37,6 +40,7 @@ impl AutoEngine {
         market_data_provider: Arc<dyn MarketDataProvider>,
         event_tx: broadcast::Sender<OrderEvent>,
         pe_event_tx: broadcast::Sender<EngineEvent>,
+        time_config: TimeConfig,
     ) -> (Self, mpsc::Sender<AutoCommand>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
 
@@ -52,6 +56,7 @@ impl AutoEngine {
             workers: HashMap::new(),
             shutdown_txs: HashMap::new(),
             bot_symbols: HashMap::new(),
+            time_config,
         };
 
         (engine, cmd_tx)
@@ -123,6 +128,7 @@ impl AutoEngine {
         let ai_service = self.ai_service.clone();
         let market_data_provider = self.market_data_provider.clone();
         let bot_symbol = bot.symbol.clone();
+        let time_config = self.time_config.clone();
 
         let handle = tokio::spawn(async move {
             let mut worker = AutoWorker::new(
@@ -134,6 +140,7 @@ impl AutoEngine {
                 market_data_provider,
                 event_rx,
                 pe_event_rx,
+                time_config,
             );
             worker.run(shutdown_rx).await;
         });

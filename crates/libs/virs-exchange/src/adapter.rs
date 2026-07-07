@@ -90,7 +90,7 @@ pub fn to_models_kline(
         low: ck.low,
         close: ck.close,
         volume: ck.volume,
-        close_time: ck.timestamp + interval_ms,
+        close_time: ck.close_time.unwrap_or(ck.timestamp + interval_ms - 1),
         quote_volume: ck.quote_volume.unwrap_or_else(|| {
             tracing::warn!("Kline quote_volume is None — exchange did not provide this field, defaulting to 0.0");
             0.0

@@ -64,11 +64,13 @@ impl BinanceKlineMessage {
     }
 }
 
+/// WS 消息延迟告警阈值（毫秒）
+pub(crate) const KLINE_WS_DELAY_THRESHOLD_MS: i64 = 5_000;
+
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct BinanceKlineData {
     #[serde(rename = "e")]
     pub(crate) event_type: String,
-    #[allow(dead_code)]
     #[serde(rename = "E")]
     pub(crate) event_time: i64,
     #[allow(dead_code)]
@@ -301,8 +303,22 @@ impl KlineWsClient for KlineWs {
                                         Some(Ok(tungstenite::Message::Text(text))) => {
                                             if let Ok(bmsg) = serde_json::from_str::<BinanceKlineMessage>(&text) {
                                                 if let Some(data) = bmsg.into_kline_data() {
-                                                    if data.event_type == "kline" {
-                                                        let raw_sym = data.ws_symbol().to_lowercase();
+                                                if data.event_type == "kline" {
+                                                    // T8: Detect WS message delay using event_time
+                                                    if data.event_time > 0 {
+                                                        let local_now = chrono::Utc::now().timestamp_millis();
+                                                        let delay_ms = local_now - data.event_time;
+                                                        if delay_ms > KLINE_WS_DELAY_THRESHOLD_MS {
+                                                            tracing::warn!(
+                                                                delay_ms = delay_ms,
+                                                                event_time = data.event_time,
+                                                                local_time = local_now,
+                                                                symbol = %data.kline.symbol,
+                                                                "[KlineWs] Message delay exceeds threshold"
+                                                            );
+                                                        }
+                                                    }
+                                                    let raw_sym = data.ws_symbol().to_lowercase();
                                                         let original_symbol = {
                                                             let map = symbol_map.read().await;
                                                             map.get(&raw_sym).cloned().unwrap_or_else(|| raw_sym.clone())

@@ -11,11 +11,13 @@ use crate::auto::ai::{AutoAction, AutoAiService, AutoDecision};
 use crate::auto::ports::*;
 use crate::auto::strategy;
 use crate::auto::types::AutoBotConfig;
+use virs_config::TimeConfig;
 use virs_types::enums::PositionSide;
 use virs_types::position::{EngineEvent, Position};
 
-const PENDING_ORDER_TIMEOUT: Duration = Duration::from_secs(60);
-const MAX_POSITION_DURATION: Duration = Duration::from_secs(48 * 3600);
+// T12: Constants replaced by TimeConfig (loaded from env vars)
+// const PENDING_ORDER_TIMEOUT: Duration = Duration::from_secs(60);
+// const MAX_POSITION_DURATION: Duration = Duration::from_secs(48 * 3600);
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -79,6 +81,8 @@ pub struct AutoWorker {
     /// 字段：(平仓方向 long/short, 平仓原因, 平仓时间)
     /// 重启时从 qd_auto_trades 表最近一条 closed 记录恢复
     pub(crate) last_close_event: Option<(String, String, chrono::DateTime<chrono::Utc>)>,
+    /// T12: 时间配置（从环境变量加载，替代硬编码常量）
+    pub(crate) time_config: TimeConfig,
 }
 
 impl AutoWorker {
@@ -91,6 +95,7 @@ impl AutoWorker {
         market_data_provider: Arc<dyn MarketDataProvider>,
         event_rx: broadcast::Receiver<OrderEvent>,
         pe_event_rx: broadcast::Receiver<EngineEvent>,
+        time_config: TimeConfig,
     ) -> Self {
         Self {
             bot,
@@ -115,6 +120,7 @@ impl AutoWorker {
             stop_loss: 0.0,
             take_profit: 0.0,
             last_close_event: None,
+            time_config,
         }
     }
 
@@ -262,18 +268,19 @@ impl AutoWorker {
 
     pub(crate) async fn check_pending_timeout(&mut self) {
         let now = tokio::time::Instant::now();
+        let pending_timeout = Duration::from_secs(self.time_config.pending_order_timeout_secs);
         let mut timed_out_open = false;
         let mut timed_out_close = false;
 
         if let Some(ref pending) = self.pending_open {
-            if now.duration_since(pending.sent_at) > PENDING_ORDER_TIMEOUT {
+            if now.duration_since(pending.sent_at) > pending_timeout {
                 warn!(bot_id = %self.bot.id, "Pending open order timed out, clearing");
                 self.pending_open = None;
                 timed_out_open = true;
             }
         }
         if let Some(ref pending) = self.pending_close {
-            if now.duration_since(pending.sent_at) > PENDING_ORDER_TIMEOUT {
+            if now.duration_since(pending.sent_at) > pending_timeout {
                 warn!(bot_id = %self.bot.id, "Pending close order timed out, clearing");
                 self.pending_close = None;
                 timed_out_close = true;
@@ -327,8 +334,8 @@ impl AutoWorker {
             if self.current_price > 0.0 {
                 break;
             }
-            warn!(bot_id = %self.bot.id, attempt, "Failed to fetch initial price, retrying in 5s...");
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            warn!(bot_id = %self.bot.id, attempt, "Failed to fetch initial price, retrying...");
+            tokio::time::sleep(Duration::from_secs(self.time_config.price_poll_interval_secs)).await;
         }
         if self.current_price <= 0.0 {
             error!(bot_id = %self.bot.id, "Failed to fetch initial price after 10 attempts, setting error status");
@@ -368,7 +375,7 @@ impl AutoWorker {
             .is_none()
         {
             match self.store.find_open_trade(self.bot.id).await {
-                Ok(Some((trade_id, _sl, _tp))) => {
+                Ok(Some((trade_id, _sl, _tp, _opened_at))) => {
                     warn!(
                         bot_id = %self.bot.id,
                         trade_id = %trade_id,
@@ -397,11 +404,29 @@ impl AutoWorker {
         {
             // 同时从 DB 恢复 current_trade_id（用于平仓时 UPDATE 对应的开仓记录）
             // 以及 stop_loss/take_profit（用于恢复内存中的风控边界）
+            // T11: 同时恢复 opened_at，用于计算 position_opened_at（避免重启后 48h 超时检查重置）
             match self.store.find_open_trade(self.bot.id).await {
-                Ok(Some((trade_id, sl, tp))) => {
+                Ok(Some((trade_id, sl, tp, opened_at))) => {
                     self.current_trade_id = Some(trade_id);
                     self.stop_loss = sl;
                     self.take_profit = tp;
+                    // T11: 从 DB opened_at 恢复 position_opened_at
+                    // Instant 是单调时钟，不能从 DateTime 直接构造
+                    // 通过计算 elapsed 后反推 Instant
+                    let elapsed = chrono::Utc::now().signed_duration_since(opened_at);
+                    let elapsed_secs = elapsed.num_seconds().max(0) as u64;
+                    let elapsed_dur = std::time::Duration::from_secs(elapsed_secs);
+                    self.position_opened_at =
+                        tokio::time::Instant::now().checked_sub(elapsed_dur);
+                    if self.position_opened_at.is_none() {
+                        // checked_sub 返回 None（elapsed 过大超过 Instant 范围）— fallback
+                        warn!(
+                            bot_id = %self.bot.id,
+                            elapsed_secs,
+                            "Failed to compute position_opened_at from DB opened_at, using now as fallback"
+                        );
+                        self.position_opened_at = Some(tokio::time::Instant::now());
+                    }
                 }
                 Ok(None) => {
                     error!(
@@ -423,8 +448,9 @@ impl AutoWorker {
             self.refresh_position_from_pe().await;
             // 如果主动查询已恢复，跳过事件等待循环
             if self.current_position.is_none() {
-                // 主动查询未恢复，等待 PE 事件推送（最多 15 秒）
-                let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+                // 主动查询未恢复，等待 PE 事件推送
+                let deadline = tokio::time::Instant::now()
+                    + Duration::from_secs(self.time_config.close_order_timeout_secs);
                 loop {
                     if self.current_position.is_some() {
                         break;
@@ -462,7 +488,10 @@ impl AutoWorker {
 
         // 初始 LLM 分析
         let skip_llm = if self.has_position() {
-            self.position_opened_at = Some(tokio::time::Instant::now());
+            // T11: 仅在 DB 恢复未设置时才用 Instant::now()（首次开仓场景）
+            if self.position_opened_at.is_none() {
+                self.position_opened_at = Some(tokio::time::Instant::now());
+            }
             if self.check_stop_take_profit().await {
                 self.save_position().await;
                 true
@@ -477,7 +506,9 @@ impl AutoWorker {
             self.on_llm_decision().await;
         }
 
-        let mut price_tick = tokio::time::interval(Duration::from_secs(5));
+        let mut price_tick = tokio::time::interval(
+            Duration::from_secs(self.time_config.price_poll_interval_secs)
+        );
 
         // LLM 周期性决策定时器
         let (llm_signal_tx, mut llm_signal_rx) = tokio::sync::mpsc::channel::<()>(1);
@@ -677,8 +708,9 @@ impl AutoWorker {
     }
 
     async fn check_position_timeout(&mut self) -> bool {
+        let max_duration = Duration::from_secs(self.time_config.max_position_duration_secs);
         if let Some(opened_at) = self.position_opened_at {
-            if opened_at.elapsed() > MAX_POSITION_DURATION {
+            if opened_at.elapsed() > max_duration {
                 warn!(
                     bot_id = %self.bot.id,
                     duration_secs = opened_at.elapsed().as_secs(),
@@ -862,14 +894,14 @@ impl AutoWorker {
                     elapsed_str,
                     side_cn,
                     reason_cn,
-                    closed_at.format("%Y-%m-%d %H:%M:%S")
+                    closed_at.format("%Y-%m-%d %H:%M:%S UTC")
                 )
             }
             None => "无".to_string(),
         };
 
         let ctx = strategy::PromptContext {
-            timestamp: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            timestamp: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string(),
             symbol: self.bot.symbol.clone(),
             exchange: self.bot.exchange.clone(),
             market_type: self.bot.market_type.as_str().to_string(),
@@ -1829,7 +1861,7 @@ impl AutoWorker {
             None => {
                 // 内存中无 trade_id，尝试从 DB 查找
                 match self.store.find_open_trade(self.bot.id).await {
-                    Ok(Some((tid, _sl, _tp))) => {
+                    Ok(Some((tid, _sl, _tp, _opened_at))) => {
                         if let Err(e) = self
                             .store
                             .close_trade(

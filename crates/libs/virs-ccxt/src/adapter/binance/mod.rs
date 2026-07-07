@@ -22,7 +22,7 @@ pub mod user_data_ws_api;
 use async_trait::async_trait;
 use base64::Engine;
 use ed25519_dalek::pkcs8::DecodePrivateKey;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -58,9 +58,19 @@ impl BinanceSigner {
 /// recvWindow 常量（毫秒）— 币安默认 5000ms，显式设置以确保一致行为
 const RECV_WINDOW: &str = "5000";
 
+/// T1: 定期时间同步间隔（秒）— 每小时重新校准服务器时间偏移
+const TIME_SYNC_INTERVAL_SECS: u64 = 3600;
+
+/// T1: 时间偏移告警阈值（毫秒）— 超过此值时发出 warn 日志
+const TIME_OFFSET_WARN_THRESHOLD_MS: i64 = 2_000;
+
 impl Signer for BinanceSigner {
     fn set_time_offset(&self, offset_ms: i64) {
-        self.time_offset_ms.store(offset_ms, Ordering::Relaxed);
+        self.time_offset_ms.store(offset_ms, Ordering::Release);
+    }
+
+    fn get_time_offset(&self) -> i64 {
+        self.time_offset_ms.load(Ordering::Acquire)
     }
 
     fn sign_get(
@@ -69,7 +79,7 @@ impl Signer for BinanceSigner {
         query_params: &mut Vec<(String, String)>,
     ) -> Result<SignedRequest, ExchangeError> {
         let timestamp = chrono::Utc::now().timestamp_millis()
-            + self.time_offset_ms.load(Ordering::Relaxed);
+            + self.time_offset_ms.load(Ordering::Acquire);
         query_params.push(("recvWindow".into(), RECV_WINDOW.into()));
         query_params.push(("timestamp".into(), timestamp.to_string()));
 
@@ -98,7 +108,7 @@ impl Signer for BinanceSigner {
         body: &mut serde_json::Value,
     ) -> Result<SignedRequest, ExchangeError> {
         let timestamp = chrono::Utc::now().timestamp_millis()
-            + self.time_offset_ms.load(Ordering::Relaxed);
+            + self.time_offset_ms.load(Ordering::Acquire);
         let timestamp_str = timestamp.to_string();
         let mut query_params = vec![
             ("recvWindow".into(), RECV_WINDOW.into()),
@@ -170,7 +180,7 @@ impl Clone for BinanceEd25519Signer {
         Self {
             api_key: self.api_key.clone(),
             signing_key: self.signing_key.clone(),
-            time_offset_ms: AtomicI64::new(self.time_offset_ms.load(Ordering::Relaxed)),
+            time_offset_ms: AtomicI64::new(self.time_offset_ms.load(Ordering::Acquire)),
         }
     }
 }
@@ -222,7 +232,11 @@ impl BinanceEd25519Signer {
 
 impl Signer for BinanceEd25519Signer {
     fn set_time_offset(&self, offset_ms: i64) {
-        self.time_offset_ms.store(offset_ms, Ordering::Relaxed);
+        self.time_offset_ms.store(offset_ms, Ordering::Release);
+    }
+
+    fn get_time_offset(&self) -> i64 {
+        self.time_offset_ms.load(Ordering::Acquire)
     }
 
     fn sign_get(
@@ -231,7 +245,7 @@ impl Signer for BinanceEd25519Signer {
         query_params: &mut Vec<(String, String)>,
     ) -> Result<SignedRequest, ExchangeError> {
         let timestamp = chrono::Utc::now().timestamp_millis()
-            + self.time_offset_ms.load(Ordering::Relaxed);
+            + self.time_offset_ms.load(Ordering::Acquire);
         query_params.push(("recvWindow".into(), RECV_WINDOW.into()));
         query_params.push(("timestamp".into(), timestamp.to_string()));
 
@@ -260,7 +274,7 @@ impl Signer for BinanceEd25519Signer {
         body: &mut serde_json::Value,
     ) -> Result<SignedRequest, ExchangeError> {
         let timestamp = chrono::Utc::now().timestamp_millis()
-            + self.time_offset_ms.load(Ordering::Relaxed);
+            + self.time_offset_ms.load(Ordering::Acquire);
         let timestamp_str = timestamp.to_string();
         let mut query_params = vec![
             ("recvWindow".into(), RECV_WINDOW.into()),
@@ -351,6 +365,8 @@ pub struct BinanceExchange {
     #[allow(dead_code)]
     testnet: bool,
     market_type: MarketType,
+    /// T1: 标记定期时间同步是否已启动，防止重复 spawn
+    time_sync_started: AtomicBool,
 }
 
 impl BinanceExchange {
@@ -392,6 +408,7 @@ impl BinanceExchange {
             ed25519_signer,
             testnet: false,
             market_type: *market_type,
+            time_sync_started: AtomicBool::new(false),
         })
     }
 
@@ -806,12 +823,81 @@ impl Exchange for BinanceExchange {
         let local_time = chrono::Utc::now().timestamp_millis();
         let offset = server_time - local_time;
         self.signer.set_time_offset(offset);
+
+        // T1: Log warning if offset exceeds threshold
+        if offset.abs() > TIME_OFFSET_WARN_THRESHOLD_MS {
+            tracing::warn!(
+                time_offset_ms = offset,
+                threshold_ms = TIME_OFFSET_WARN_THRESHOLD_MS,
+                "Server time offset exceeds threshold — clock drift detected"
+            );
+        }
+
         info!(
             time_offset_ms = offset,
             market_type = ?self.market_type,
             "Server time synced"
         );
+
+        // T1: Start periodic time sync loop (once per exchange instance)
+        if !self.time_sync_started.swap(true, Ordering::SeqCst) {
+            self.spawn_periodic_time_sync();
+        }
+
         Ok(())
+    }
+}
+
+impl BinanceExchange {
+    /// T1: Spawn a background task that periodically re-syncs server time.
+    ///
+    /// This prevents clock drift from causing -1021 signature failures
+    /// during long-running bot sessions (24/7 operation).
+    fn spawn_periodic_time_sync(&self) {
+        let client = self.client.clone();
+        let signer = self.signer.clone();
+        let is_perpetual = self.is_perpetual();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(TIME_SYNC_INTERVAL_SECS));
+            // Skip the first immediate tick (initial sync already done)
+            interval.tick().await;
+
+            loop {
+                interval.tick().await;
+                let result = if is_perpetual {
+                    fapi::fetch_server_time(&client).await
+                } else {
+                    api::fetch_server_time(&client).await
+                };
+                match result {
+                    Ok(server_time) => {
+                        let local_time = chrono::Utc::now().timestamp_millis();
+                        let offset = server_time - local_time;
+                        signer.set_time_offset(offset);
+
+                        if offset.abs() > TIME_OFFSET_WARN_THRESHOLD_MS {
+                            tracing::warn!(
+                                time_offset_ms = offset,
+                                threshold_ms = TIME_OFFSET_WARN_THRESHOLD_MS,
+                                "[PeriodicSync] Server time offset exceeds threshold — clock drift detected"
+                            );
+                        } else {
+                            tracing::info!(
+                                time_offset_ms = offset,
+                                "[PeriodicSync] Server time re-synced successfully"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %e,
+                            "[PeriodicSync] Failed to re-sync server time — will retry next cycle"
+                        );
+                    }
+                }
+            }
+        });
     }
 }
 

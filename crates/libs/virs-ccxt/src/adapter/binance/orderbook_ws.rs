@@ -66,7 +66,7 @@ pub(crate) struct BinanceDepthMessage {
 
 impl BinanceDepthMessage {
     /// 提取订单簿数据，兼容单流/组合流 + spot/perpetual
-    /// Returns: (bids, asks, stream_name, symbol_from_payload, timestamp_ms)
+    /// Returns: (bids, asks, stream_name, symbol_from_payload, timestamp_ms, last_update_id)
     pub(crate) fn into_depth(
         self,
     ) -> Option<(
@@ -75,24 +75,23 @@ impl BinanceDepthMessage {
         Option<String>,
         Option<String>,
         i64,
+        Option<i64>,
     )> {
         let stream = self.stream.clone();
 
         // 组合流：解析 data
         if let Some(data) = self.data {
-            if let Some((bids, asks, sym, ts)) = parse_payload(&data) {
-                return Some((bids, asks, stream, sym, ts));
+            if let Some((bids, asks, sym, ts, lui)) = parse_payload(&data) {
+                return Some((bids, asks, stream, sym, ts, lui));
             }
             return None;
         }
 
         // 单流 spot: bids/asks at top level
         if let (Some(bids), Some(asks)) = (self.bids.clone(), self.asks.clone()) {
-            let ts = self.last_update_id.unwrap_or_else(|| {
-                tracing::warn!("orderbook_ws: last_update_id is None — using 0 as fallback timestamp");
-                0
-            });
-            return Some((bids, asks, stream, None, ts));
+            let last_update_id = self.last_update_id;
+            // T9: spot has no event timestamp — use 0 and store lastUpdateId separately
+            return Some((bids, asks, stream, None, 0, last_update_id));
         }
 
         // 单流 perpetual: b/a at top level
@@ -101,7 +100,8 @@ impl BinanceDepthMessage {
                 tracing::warn!("orderbook_ws: event_time_flat is None — using 0 as fallback timestamp");
                 0
             });
-            return Some((bids, asks, stream, self.symbol_flat, ts));
+            // T9: perpetual has event_time — last_update_id is None
+            return Some((bids, asks, stream, self.symbol_flat, ts, None));
         }
 
         None
@@ -111,16 +111,14 @@ impl BinanceDepthMessage {
 /// 解析 payload（组合流的 data 字段或单流的顶层）
 pub(crate) fn parse_payload(
     v: &serde_json::Value,
-) -> Option<(Vec<[String; 2]>, Vec<[String; 2]>, Option<String>, i64)> {
+) -> Option<(Vec<[String; 2]>, Vec<[String; 2]>, Option<String>, i64, Option<i64>)> {
     // Spot format: bids/asks
     if let (Some(bids), Some(asks)) = (v.get("bids"), v.get("asks")) {
         let bids = parse_levels(bids)?;
         let asks = parse_levels(asks)?;
-        let ts = v.get("lastUpdateId").and_then(|t| t.as_i64()).unwrap_or_else(|| {
-            tracing::warn!("orderbook_ws: lastUpdateId missing in spot payload — using 0 as fallback");
-            0
-        });
-        return Some((bids, asks, None, ts));
+        let last_update_id = v.get("lastUpdateId").and_then(|t| t.as_i64());
+        // T9: spot has no event timestamp — use 0 and store lastUpdateId separately
+        return Some((bids, asks, None, 0, last_update_id));
     }
     // Perpetual format: b/a
     if let (Some(bids), Some(asks)) = (v.get("b"), v.get("a")) {
@@ -131,7 +129,8 @@ pub(crate) fn parse_payload(
             tracing::warn!("orderbook_ws: event time 'E' missing in perpetual payload — using 0 as fallback");
             0
         });
-        return Some((bids, asks, sym, ts));
+        // T9: perpetual has event_time — last_update_id is None
+        return Some((bids, asks, sym, ts, None));
     }
     None
 }
@@ -337,7 +336,7 @@ impl OrderBookWsClient for OrderBookWs {
                                     match msg {
                                         Some(Ok(tungstenite::Message::Text(text))) => {
                                             if let Ok(bmsg) = serde_json::from_str::<BinanceDepthMessage>(&text) {
-                                                if let Some((bids_raw, asks_raw, stream_name, sym_from_payload, ts)) = bmsg.into_depth() {
+                                                if let Some((bids_raw, asks_raw, stream_name, sym_from_payload, ts, last_update_id)) = bmsg.into_depth() {
                                                     // Resolve unified symbol:
                                                     // 1. Try stream name (e.g. "btcusdt@depth20@500ms" → "btcusdt")
                                                     // 2. Fall back to payload symbol (perpetual `s` field)
@@ -358,6 +357,7 @@ impl OrderBookWsClient for OrderBookWs {
                                                                     bids,
                                                                     asks,
                                                                     timestamp: ts,
+                                                                    last_update_id,
                                                                 }
                                                             )).is_err() {
                                                                 tracing::warn!("[OrderBookWs] All receivers dropped, stopping");

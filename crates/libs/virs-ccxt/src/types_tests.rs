@@ -208,11 +208,11 @@ fn t4_1_funding_rate_normal() {
 #[test]
 fn t5_1_funding_history_normal() {
     let ccxt = CcxtFundingHistoryEntry {
-        funding_time: 1700000000,
+        funding_time: chrono::DateTime::from_timestamp_millis(1700000000).unwrap(),
         rate: 0.00005,
     };
     let e: FundingHistoryEntry = ccxt.into();
-    assert_eq!(e.funding_time, 1700000000);
+    assert_eq!(e.funding_time, chrono::DateTime::from_timestamp_millis(1700000000).unwrap());
     assert!((e.rate - 0.00005).abs() < f64::EPSILON);
 }
 

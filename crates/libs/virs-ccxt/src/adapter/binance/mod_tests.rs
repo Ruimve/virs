@@ -6,7 +6,10 @@
 
 use serde_json::json;
 
-use crate::adapter::binance::{parse_order_book_side, try_build_ed25519, BinanceExchange};
+use crate::adapter::binance::{
+    parse_order_book_side, try_build_ed25519, BinanceExchange, TIME_SYNC_INTERVAL_SECS,
+    TIME_OFFSET_WARN_THRESHOLD_MS,
+};
 use crate::types::{CcxtOrderStatus, OrderType, Side};
 
 // ============================================================
@@ -382,4 +385,60 @@ fn f1_4_parse_order_book_side_empty() {
     let data = json!({"bids": [], "asks": []});
     let bids = parse_order_book_side(&data, "bids");
     assert!(bids.is_empty());
+}
+
+// ============================================================
+// TC-T1: Periodic time sync constants & initialization
+// ============================================================
+
+#[test]
+fn t1_1_time_sync_interval_is_one_hour() {
+    // T1: Periodic sync interval must be 3600 seconds (1 hour)
+    assert_eq!(TIME_SYNC_INTERVAL_SECS, 3600);
+}
+
+#[test]
+fn t1_2_time_offset_warn_threshold_is_2000ms() {
+    // T1: Offset warning threshold must be 2000ms
+    assert_eq!(TIME_OFFSET_WARN_THRESHOLD_MS, 2_000);
+}
+
+#[test]
+fn t1_3_time_sync_started_initialized_false() {
+    // T1: time_sync_started must be false on new exchange instance
+    use crate::types::MarketType;
+    let ex = BinanceExchange::new(
+        "test_key",
+        "test_secret",
+        None,
+        &MarketType::Spot,
+    )
+    .unwrap();
+    // The field is private but accessible from child module
+    assert!(!ex.time_sync_started.load(std::sync::atomic::Ordering::SeqCst));
+}
+
+#[test]
+fn t1_4_time_sync_started_swap_prevents_double_start() {
+    // T1: swap(true) returns false on first call (not yet started),
+    // true on second call (already started) — prevents duplicate spawn
+    use crate::types::MarketType;
+    let ex = BinanceExchange::new(
+        "test_key",
+        "test_secret",
+        None,
+        &MarketType::Spot,
+    )
+    .unwrap();
+    // First swap: returns old value (false), sets to true
+    let first = ex
+        .time_sync_started
+        .swap(true, std::sync::atomic::Ordering::SeqCst);
+    assert!(!first, "first swap should return false (not yet started)");
+
+    // Second swap: returns old value (true), stays true
+    let second = ex
+        .time_sync_started
+        .swap(true, std::sync::atomic::Ordering::SeqCst);
+    assert!(second, "second swap should return true (already started)");
 }

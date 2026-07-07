@@ -8,6 +8,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 dotenvy = { workspace = true }
 uuid = { workspace = true }
+tracing = { workspace = true }
 virs-error = { path = "../virs-error" }
 
 [lints]

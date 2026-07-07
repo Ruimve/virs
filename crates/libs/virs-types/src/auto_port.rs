@@ -64,8 +64,8 @@ pub trait AutoStore: Send + Sync {
     /// 更新 trade 的 stop_loss（trailing stop 调整时调用）
     async fn update_trade_stop_loss(&self, trade_id: Uuid, stop_loss: f64) -> VirsResult<()>;
     /// 查找当前未平仓的 trade 记录（重启恢复用）
-    /// 返回 (trade_id, stop_loss, take_profit) — 用于恢复内存中的风控边界
-    async fn find_open_trade(&self, bot_id: Uuid) -> VirsResult<Option<(Uuid, f64, f64)>>;
+    /// 返回 (trade_id, stop_loss, take_profit, opened_at) — 用于恢复内存中的风控边界和持仓时间
+    async fn find_open_trade(&self, bot_id: Uuid) -> VirsResult<Option<(Uuid, f64, f64, DateTime<Utc>)>>;
 
     /// 标记 trade 为孤儿状态（仅更新 status，保留开仓数据用于回溯）
     /// 用于 PE 仓位丢失但 trade 仍为 open 的场景

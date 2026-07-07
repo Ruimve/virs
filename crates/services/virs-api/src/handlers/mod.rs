@@ -11,6 +11,7 @@ pub mod market;
 pub mod response;
 pub mod system;
 pub mod user;
+pub mod utils;
 
 #[cfg(test)]
 mod ai_tests;

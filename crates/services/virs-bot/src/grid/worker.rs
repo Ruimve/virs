@@ -1083,7 +1083,7 @@ impl GridWorker {
             &self
                 .bot
                 .last_adjusted_at
-                .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
                 .unwrap_or_else(|| "N/A".to_string()),
             self.consecutive_losses,
             &current_grid_config,
