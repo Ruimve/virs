@@ -226,6 +226,7 @@ impl ExecutionReportInner {
                     Ok(_) => {
                         tracing::warn!(
                             last_fill_price = %self.last_fill_price,
+                            symbol = %self.symbol,
                             "last_fill_price is 0.0 in order_ws — using 0.0 (order may not be filled yet)"
                         );
                         0.0
