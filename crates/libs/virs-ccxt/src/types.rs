@@ -172,14 +172,12 @@ impl TryFrom<CcxtTicker> for Ticker {
     fn try_from(t: CcxtTicker) -> Result<Self, Self::Error> {
         let symbol = t.symbol.clone();
 
-        let bid = t.bid.ok_or_else(|| {
-            tracing::error!(symbol = %symbol, "Ticker bid missing");
-            ExchangeError::no_data(format!("Ticker bid missing for {}", symbol))
-        })?;
-        let ask = t.ask.ok_or_else(|| {
-            tracing::error!(symbol = %symbol, "Ticker ask missing");
-            ExchangeError::no_data(format!("Ticker ask missing for {}", symbol))
-        })?;
+        // bid/ask are optional — not all exchanges return them (e.g. Binance
+        // USD-M Futures ticker omits bidPrice/askPrice). No error, just None.
+        let bid = t.bid;
+        let ask = t.ask;
+
+        // last is mandatory — used for trading decisions and risk checks.
         let last = t.last.ok_or_else(|| {
             tracing::error!(symbol = %symbol, "Ticker last missing");
             ExchangeError::no_data(format!("Ticker last missing for {}", symbol))

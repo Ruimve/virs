@@ -6,12 +6,17 @@ use serde::{Deserialize, Serialize};
 use crate::enums::PositionSide;
 
 /// Ticker snapshot (API-layer, includes exchange field)
+///
+/// `bid`/`ask` are `Option<f64>` because not all exchanges return these fields
+/// in their ticker endpoints (e.g. Binance USD-M Futures `/fapi/v1/ticker/24hr`
+/// omits `bidPrice`/`askPrice`). `last` is always required — it is the price
+/// used for trading decisions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Ticker {
     pub symbol: String,
     pub exchange: String,
-    pub bid: f64,
-    pub ask: f64,
+    pub bid: Option<f64>,
+    pub ask: Option<f64>,
     pub last: f64,
     pub high_24h: f64,
     pub low_24h: f64,

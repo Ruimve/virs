@@ -343,8 +343,8 @@ impl ExchangePe for PaperExchangeAdapter {
         Ok(Ticker {
             symbol: symbol.to_string(),
             exchange: self.name.clone(),
-            bid: 0.0,
-            ask: 0.0,
+            bid: None,
+            ask: None,
             last: 0.0,
             high_24h: 0.0,
             low_24h: 0.0,

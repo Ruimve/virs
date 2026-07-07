@@ -46,7 +46,7 @@ fn s1_4_strategy_status_roundtrip() {
 fn s2_1_ticker_roundtrip() {
     let ticker = Ticker {
         symbol: "BTC/USDT".into(), exchange: "binance".into(),
-        bid: 99.0, ask: 101.0, last: 100.0,
+        bid: Some(99.0), ask: Some(101.0), last: 100.0,
         high_24h: 110.0, low_24h: 90.0, volume_24h: 1000.0,
         price_change_24h: 5.0, price_change_pct_24h: 5.0,
         timestamp: Utc::now(),

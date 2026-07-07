@@ -230,8 +230,8 @@ fn int_6_1_ticker_json_to_ticker_via_parse() {
     let ticker: virs_types::market::Ticker = ccxt.try_into().unwrap();
     assert_eq!(ticker.symbol, "BTC/USDT");
     assert_eq!(ticker.exchange, "binance");
-    assert_eq!(ticker.bid, 50000.0);
-    assert_eq!(ticker.ask, 50001.0);
+    assert_eq!(ticker.bid, Some(50000.0));
+    assert_eq!(ticker.ask, Some(50001.0));
     assert_eq!(ticker.last, 50000.5);
     assert_eq!(ticker.high_24h, 51000.0);
     assert_eq!(ticker.low_24h, 49000.0);
