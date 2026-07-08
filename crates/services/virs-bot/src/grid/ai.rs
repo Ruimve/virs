@@ -72,9 +72,10 @@ impl GridAiService {
     pub fn new(
         llm_resolver: Arc<dyn LlmProviderResolver>,
         credential_store: Arc<dyn CredentialStore>,
+        llm_timeout: std::time::Duration,
     ) -> Self {
         Self {
-            http_client: ai_client::create_llm_http_client(),
+            http_client: ai_client::create_llm_http_client(llm_timeout),
             llm_resolver,
             credential_store,
         }

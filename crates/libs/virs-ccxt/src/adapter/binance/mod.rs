@@ -385,12 +385,14 @@ impl BinanceExchange {
         api_secret: &str,
         proxy_url: Option<&str>,
         market_type: &MarketType,
+        http_timeout: std::time::Duration,
     ) -> Result<Self, ExchangeError> {
         let max_concurrent: u32 = match market_type {
             MarketType::Spot => 20,
             MarketType::Perpetual => 40,
         };
-        let client = ExchangeClient::with_api_key(max_concurrent, proxy_url, Some(api_key))?;
+        let client =
+            ExchangeClient::with_api_key(max_concurrent, proxy_url, Some(api_key), http_timeout)?;
 
         // 尝试构造 Ed25519 签名器；若不是 Ed25519 格式则 fallback 到 HMAC
         let (signer, ed25519_signer) = match try_build_ed25519(api_key, api_secret) {

@@ -71,6 +71,9 @@ pub struct AppState {
     pub llm_key: String,
     pub jwt_secret: String,
     pub jwt_expiration_hours: i64,
+    /// HTTP 请求超时（秒）— 从 TimeConfig.http_timeout_secs 注入，
+    /// 用于创建交易所客户端时的超时设置。
+    pub http_timeout_secs: u64,
 }
 
 impl FromRef<AppState> for sqlx::PgPool {

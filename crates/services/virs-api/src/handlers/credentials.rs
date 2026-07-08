@@ -89,9 +89,15 @@ pub async fn save_credential(
         "spot" => virs_ccxt::MarketType::Spot,
         _ => virs_ccxt::MarketType::Perpetual,
     };
-    if let Ok(ccxt_ex) =
-        virs_ccxt::create_exchange(exchange, api_key, api_secret, passphrase, None, &mt)
-    {
+    if let Ok(ccxt_ex) = virs_ccxt::create_exchange(
+        exchange,
+        api_key,
+        api_secret,
+        passphrase,
+        None,
+        &mt,
+        std::time::Duration::from_secs(state.http_timeout_secs),
+    ) {
         // 同步服务器时间，校准签名时间戳偏移（非阻塞 — 失败仅告警）
         if let Err(e) = ccxt_ex.sync_time().await {
             tracing::warn!(

@@ -57,7 +57,9 @@ pub async fn create_bot(
     let symbol = body["symbol"].as_str().unwrap_or("");
     let exchange = body["exchange"].as_str().unwrap_or("");
     let market_type = body["market_type"].as_str().unwrap_or("perpetual");
-    let leverage = body["leverage"].as_i64().unwrap_or(10) as i32;
+    let leverage = body["leverage"].as_i64().ok_or_else(|| {
+        VirsError::bad_request("leverage is required and must be greater than 0")
+    })? as i32;
     let max_position_pct = body["max_position_pct"].as_f64().unwrap_or(80.0);
     let decide_interval_secs = body["decide_interval_secs"].as_i64().unwrap_or(300) as i32;
     let name = body["name"].as_str().unwrap_or("Auto Bot");

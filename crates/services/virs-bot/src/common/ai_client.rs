@@ -74,10 +74,13 @@ pub async fn call_llm_api(
     })
 }
 
-pub fn create_llm_http_client() -> reqwest::Client {
+/// 创建 LLM HTTP 客户端。
+///
+/// `llm_timeout` — HTTP 请求总超时，从 TimeConfig.llm_timeout_secs 注入。
+pub fn create_llm_http_client(llm_timeout: std::time::Duration) -> reqwest::Client {
     reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
-        .timeout(std::time::Duration::from_secs(120))
+        .timeout(llm_timeout)
         .build()
         .unwrap_or_else(|_| reqwest::Client::new())
 }

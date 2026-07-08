@@ -33,7 +33,9 @@ pub async fn create_bot(
     let lower_price = body["lower_price"].as_f64().unwrap_or(0.0);
     let grid_profit_pct = body["grid_profit_pct"].as_f64().unwrap_or(0.5);
     let quantity_per_grid = body["quantity_per_grid"].as_f64().unwrap_or(10.0);
-    let leverage = body["leverage"].as_i64().unwrap_or(5) as i32;
+    let leverage = body["leverage"].as_i64().ok_or_else(|| {
+        VirsError::bad_request("leverage is required and must be greater than 0")
+    })? as i32;
     let name = body["name"].as_str().unwrap_or("Grid Bot");
     let paper_mode = body["paper_mode"].as_bool().ok_or_else(|| {
         VirsError::bad_request("paper_mode is required (must be true or false)")

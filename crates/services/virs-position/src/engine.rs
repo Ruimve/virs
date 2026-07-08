@@ -81,6 +81,9 @@ pub(crate) struct EngineInner {
     pub(crate) state: RwLock<EngineState>,
     pub(crate) exchange_order_id_index: DashMap<String, Uuid>,
     pub(crate) position_id_index: DashMap<Uuid, (String, String, PositionSide)>,
+    /// 平仓订单 REST 调用超时（从 TimeConfig.close_order_timeout_secs 注入）。
+    /// 防止交易所 REST 调用卡死导致 PE engine loop 阻塞。
+    pub(crate) close_order_timeout: Duration,
 }
 
 impl EngineInner {
@@ -129,9 +132,12 @@ impl Clone for PositionEngine {
 
 impl PositionEngine {
     /// 创建新的 PositionEngine 实例。
+    ///
+    /// `close_order_timeout` — 平仓订单 REST 调用超时，从 TimeConfig 注入。
     pub fn new(
         exchange: Box<dyn ExchangePe>,
         persistence: Box<dyn PositionPersistence>,
+        close_order_timeout: Duration,
     ) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel(256);
         let event_tx = broadcast::channel(256).0;
@@ -147,6 +153,7 @@ impl PositionEngine {
             orders: DashMap::new(),
             exchange_order_id_index: DashMap::new(),
             position_id_index: DashMap::new(),
+            close_order_timeout,
         };
 
         Self {
@@ -1142,10 +1149,11 @@ pub(crate) async fn handle_close_position(
     resolve_position_side_for_hedge(&mut params);
     let reduce_only = params.reduce_only;
 
-    // 加超时保护：防止交易所 REST 调用卡死导致 PE engine loop 阻塞，
+    // 超时保护：防止交易所 REST 调用卡死导致 PE engine loop 阻塞，
     // 进而无法 emit OrderFailed 事件，bot 侧 pending_close 永远等不到响应。
-    const CLOSE_ORDER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
-    match tokio::time::timeout(CLOSE_ORDER_TIMEOUT, inner.exchange.place_order(params)).await {
+    // 超时值从 TimeConfig.close_order_timeout_secs 注入，可通过环境变量配置。
+    let close_order_timeout = inner.close_order_timeout;
+    match tokio::time::timeout(close_order_timeout, inner.exchange.place_order(params)).await {
         Ok(Ok(mut order)) => {
             order.reduce_only = reduce_only;
             // 确保订单关联正确的 position_id（交易所 REST 可能不返回此字段）
@@ -1238,7 +1246,7 @@ pub(crate) async fn handle_close_position(
         Err(_elapsed) => {
             let msg = format!(
                 "Close order timed out after {}s for position {}",
-                CLOSE_ORDER_TIMEOUT.as_secs(),
+                close_order_timeout.as_secs(),
                 position_id
             );
             warn!(position_id = %position_id, "{}", msg);

@@ -172,6 +172,7 @@ impl AppEngineManager {
                     passphrase.as_deref(),
                     self.proxy.as_deref(),
                     &ccxt_mt,
+                    std::time::Duration::from_secs(self.time_config.http_timeout_secs),
                 )
                 .map_err(|e| {
                     virs_error::VirsError::config(format!(
@@ -327,7 +328,11 @@ impl EngineManager for AppEngineManager {
 
         let pe_persistence = Box::new(PePersistence::new(self.db_pool.clone()));
 
-        let mut position_engine = PositionEngine::new(pe_exchange, pe_persistence);
+        let mut position_engine = PositionEngine::new(
+            pe_exchange,
+            pe_persistence,
+            std::time::Duration::from_secs(self.time_config.close_order_timeout_secs),
+        );
         let pe_cmd_tx = position_engine.command_sender();
         let pe_event_sender = position_engine.event_sender();
         let grid_pe_event_rx = position_engine.subscribe_events();
@@ -372,6 +377,7 @@ impl EngineManager for AppEngineManager {
         let grid_ai_service = Arc::new(virs_bot::grid::ai::GridAiService::new(
             grid_llm_resolver,
             grid_credential_store,
+            std::time::Duration::from_secs(self.time_config.llm_timeout_secs),
         ));
 
         let (mut grid_engine, grid_cmd_tx, _grid_event_broadcast) = virs_bot::grid::GridEngine::new(
@@ -480,6 +486,7 @@ impl EngineManager for AppEngineManager {
         let auto_ai_service = Arc::new(virs_bot::auto::ai::AutoAiService::new(
             auto_llm_resolver,
             auto_credential_store,
+            std::time::Duration::from_secs(self.time_config.llm_timeout_secs),
         ));
 
         let (mut auto_engine, auto_cmd_tx) = virs_bot::auto::AutoEngine::new(

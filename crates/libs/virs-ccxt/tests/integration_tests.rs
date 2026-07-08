@@ -139,6 +139,7 @@ fn int_5_1_create_exchange_binance_hmac() {
         None,
         None,
         &MarketType::Spot,
+        std::time::Duration::from_secs(30),
     );
     assert!(result.is_ok());
     let exchange = result.unwrap();
@@ -157,6 +158,7 @@ fn int_5_2_create_exchange_binance_ed25519() {
         None,
         None,
         &MarketType::Perpetual,
+        std::time::Duration::from_secs(30),
     );
     assert!(result.is_ok());
     let exchange = result.unwrap();
@@ -165,7 +167,15 @@ fn int_5_2_create_exchange_binance_ed25519() {
 
 #[test]
 fn int_5_3_create_exchange_bybit_not_supported() {
-    let result = create_exchange("bybit", "key", "secret", None, None, &MarketType::Spot);
+    let result = create_exchange(
+        "bybit",
+        "key",
+        "secret",
+        None,
+        None,
+        &MarketType::Spot,
+        std::time::Duration::from_secs(30),
+    );
     assert!(result.is_err());
     match result.err().unwrap() {
         ExchangeError::NotSupported(_) => {}
@@ -175,7 +185,15 @@ fn int_5_3_create_exchange_bybit_not_supported() {
 
 #[test]
 fn int_5_4_create_exchange_okx_not_supported() {
-    let result = create_exchange("okx", "key", "secret", None, None, &MarketType::Spot);
+    let result = create_exchange(
+        "okx",
+        "key",
+        "secret",
+        None,
+        None,
+        &MarketType::Spot,
+        std::time::Duration::from_secs(30),
+    );
     assert!(result.is_err());
     match result.err().unwrap() {
         ExchangeError::NotSupported(_) => {}
@@ -185,7 +203,15 @@ fn int_5_4_create_exchange_okx_not_supported() {
 
 #[test]
 fn int_5_5_create_exchange_case_insensitive() {
-    let result = create_exchange("BINANCE", "key", "secret", None, None, &MarketType::Spot);
+    let result = create_exchange(
+        "BINANCE",
+        "key",
+        "secret",
+        None,
+        None,
+        &MarketType::Spot,
+        std::time::Duration::from_secs(30),
+    );
     assert!(result.is_ok());
 }
 

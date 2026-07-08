@@ -200,18 +200,25 @@ pub struct ExchangeClient {
 }
 
 impl ExchangeClient {
-    pub fn new(max_concurrent: u32, proxy_url: Option<&str>) -> Result<Self, ExchangeError> {
-        Self::with_api_key(max_concurrent, proxy_url, None)
+    pub fn new(
+        max_concurrent: u32,
+        proxy_url: Option<&str>,
+        http_timeout: std::time::Duration,
+    ) -> Result<Self, ExchangeError> {
+        Self::with_api_key(max_concurrent, proxy_url, None, http_timeout)
     }
 
     /// 创建带 API Key 的 client，用于在 public_get 中附加 X-MBX-APIKEY 头。
+    ///
+    /// `http_timeout` — HTTP 请求总超时，从 TimeConfig.http_timeout_secs 注入。
     pub fn with_api_key(
         max_concurrent: u32,
         proxy_url: Option<&str>,
         api_key: Option<&str>,
+        http_timeout: std::time::Duration,
     ) -> Result<Self, ExchangeError> {
         let mut builder = Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(http_timeout)
             .connect_timeout(std::time::Duration::from_secs(10))
             .pool_max_idle_per_host(10)
             .gzip(true);
@@ -533,6 +540,7 @@ pub fn create_exchange(
     _passphrase: Option<&str>,
     proxy_url: Option<&str>,
     market_type: &MarketType,
+    http_timeout: std::time::Duration,
 ) -> Result<Box<dyn Exchange>, ExchangeError> {
     match id.to_lowercase().as_str() {
         "binance" => Ok(Box::new(adapter::binance::BinanceExchange::new(
@@ -540,6 +548,7 @@ pub fn create_exchange(
             api_secret,
             proxy_url,
             market_type,
+            http_timeout,
         )?)),
         // To add Bybit/OKX, implement adapter::bybit::BybitExchange / adapter::okx::OkxExchange
         // and add the corresponding match arm here. See "Adding a New Exchange" above.

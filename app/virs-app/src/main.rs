@@ -183,6 +183,7 @@ async fn main() -> VirsResult<()> {
         llm_key: config.server.llm_key.clone(),
         jwt_secret: config.server.jwt_secret.clone(),
         jwt_expiration_hours: config.server.jwt_expiration_hours,
+        http_timeout_secs: config.time.http_timeout_secs,
     };
 
     // Restore services if bots exist from previous session.
