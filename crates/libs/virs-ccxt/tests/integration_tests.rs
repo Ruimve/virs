@@ -140,6 +140,14 @@ fn int_5_1_create_exchange_binance_hmac() {
         None,
         &MarketType::Spot,
         std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(10),
+        10,
+        1800,
+        900,
+        1,
+        60,
+        30,
+        82800,
     );
     assert!(result.is_ok());
     let exchange = result.unwrap();
@@ -159,6 +167,14 @@ fn int_5_2_create_exchange_binance_ed25519() {
         None,
         &MarketType::Perpetual,
         std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(10),
+        10,
+        1800,
+        900,
+        1,
+        60,
+        30,
+        82800,
     );
     assert!(result.is_ok());
     let exchange = result.unwrap();
@@ -175,6 +191,14 @@ fn int_5_3_create_exchange_bybit_not_supported() {
         None,
         &MarketType::Spot,
         std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(10),
+        10,
+        1800,
+        900,
+        1,
+        60,
+        30,
+        82800,
     );
     assert!(result.is_err());
     match result.err().unwrap() {
@@ -193,6 +217,14 @@ fn int_5_4_create_exchange_okx_not_supported() {
         None,
         &MarketType::Spot,
         std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(10),
+        10,
+        1800,
+        900,
+        1,
+        60,
+        30,
+        82800,
     );
     assert!(result.is_err());
     match result.err().unwrap() {
@@ -211,6 +243,14 @@ fn int_5_5_create_exchange_case_insensitive() {
         None,
         &MarketType::Spot,
         std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(10),
+        10,
+        1800,
+        900,
+        1,
+        60,
+        30,
+        82800,
     );
     assert!(result.is_ok());
 }

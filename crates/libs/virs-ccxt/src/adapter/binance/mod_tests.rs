@@ -413,6 +413,14 @@ fn t1_3_time_sync_started_initialized_false() {
         None,
         &MarketType::Spot,
         std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(10),
+        10,
+        1800,
+        900,
+        1,
+        60,
+        30,
+        82800,
     )
     .unwrap();
     // The field is private but accessible from child module
@@ -430,6 +438,14 @@ fn t1_4_time_sync_started_swap_prevents_double_start() {
         None,
         &MarketType::Spot,
         std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(10),
+        10,
+        1800,
+        900,
+        1,
+        60,
+        30,
+        82800,
     )
     .unwrap();
     // First swap: returns old value (false), sets to true
@@ -455,6 +471,14 @@ fn t1_5_drop_sets_time_sync_running_false() {
         None,
         &MarketType::Spot,
         std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(10),
+        10,
+        1800,
+        900,
+        1,
+        60,
+        30,
+        82800,
     )
     .unwrap();
     // Simulate sync_time starting the task
@@ -481,6 +505,14 @@ fn t1_6_time_sync_running_initialized_false() {
         None,
         &MarketType::Spot,
         std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(10),
+        10,
+        1800,
+        900,
+        1,
+        60,
+        30,
+        82800,
     )
     .unwrap();
     assert!(

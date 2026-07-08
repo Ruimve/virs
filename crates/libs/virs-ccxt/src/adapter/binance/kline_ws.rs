@@ -179,23 +179,35 @@ impl KlineWs {
         }
     }
 
-    pub fn new_spot(_proxy_url: Option<&str>) -> Self {
+    pub fn new_spot(
+        _proxy_url: Option<&str>,
+        reconnect_delay_secs: u64,
+        max_reconnect_delay_secs: u64,
+        ws_ping_interval_secs: u64,
+        ws_max_lifetime_secs: u64,
+    ) -> Self {
         Self::new(
             "wss://stream.binance.com/ws".to_string(),
-            1,
-            60,
-            30,
-            23 * 3600,
+            reconnect_delay_secs,
+            max_reconnect_delay_secs,
+            ws_ping_interval_secs,
+            ws_max_lifetime_secs,
         )
     }
 
-    pub fn new_perpetual(_proxy_url: Option<&str>) -> Self {
+    pub fn new_perpetual(
+        _proxy_url: Option<&str>,
+        reconnect_delay_secs: u64,
+        max_reconnect_delay_secs: u64,
+        ws_ping_interval_secs: u64,
+        ws_max_lifetime_secs: u64,
+    ) -> Self {
         Self::new(
             "wss://fstream.binance.com/market/ws".to_string(),
-            1,
-            60,
-            30,
-            23 * 3600,
+            reconnect_delay_secs,
+            max_reconnect_delay_secs,
+            ws_ping_interval_secs,
+            ws_max_lifetime_secs,
         )
     }
 }

@@ -12,22 +12,12 @@ use crate::state::AppState;
 
 /// Resolve the base URL for a known LLM provider.
 pub fn resolve_provider_base_url(provider: &str) -> Option<&'static str> {
-    match provider {
-        "deepseek" => Some("https://api.deepseek.com"),
-        "openai" => Some("https://api.openai.com/v1"),
-        "openrouter" => Some("https://openrouter.ai/api/v1"),
-        _ => None,
-    }
+    virs_types::llm::resolve_provider_base_url(provider)
 }
 
 /// Resolve the default model for a known LLM provider.
 pub fn resolve_provider_model(provider: &str) -> Option<&'static str> {
-    match provider {
-        "deepseek" => Some("deepseek-chat"),
-        "openai" => Some("gpt-4o"),
-        "openrouter" => Some("deepseek/deepseek-chat"),
-        _ => None,
-    }
+    virs_types::llm::resolve_provider_model(provider)
 }
 
 pub async fn ai_status(

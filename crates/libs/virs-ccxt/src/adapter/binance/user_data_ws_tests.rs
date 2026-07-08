@@ -354,7 +354,7 @@ fn test_to_ws_feed_event_remaining_fallback() {
 
 #[test]
 fn test_new_perpetual() {
-    let ws = UserDataWs::new_perpetual("test_listen_key".to_string());
+    let ws = UserDataWs::new_perpetual("test_listen_key".to_string(), 1, 60, 30, 82800);
     assert_eq!(
         ws.ws_url,
         "wss://fstream.binance.com/private/ws?listenKey=test_listen_key"
@@ -365,14 +365,14 @@ fn test_new_perpetual() {
 
 #[test]
 fn test_new_spot() {
-    let ws = UserDataWs::new_spot("my_key".to_string());
+    let ws = UserDataWs::new_spot("my_key".to_string(), 1, 60, 30, 82800);
     assert_eq!(ws.ws_url, "wss://stream.binance.com/ws/my_key");
     assert!(!ws.is_running());
 }
 
 #[test]
 fn test_update_listen_key() {
-    let mut ws = UserDataWs::new_perpetual("old_key".to_string());
+    let mut ws = UserDataWs::new_perpetual("old_key".to_string(), 1, 60, 30, 82800);
     assert_eq!(ws.ws_url, "wss://fstream.binance.com/private/ws?listenKey=old_key");
 
     ws.update_listen_key("new_key".to_string());

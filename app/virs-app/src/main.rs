@@ -45,7 +45,7 @@ async fn main() -> VirsResult<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                "virs_app=info,virs_market=info,virs_position=info,virs_bot=info,virs_api=info"
+                "virs_app=info,virs_bot=info,virs_position=info,virs_market=info,virs_api=info,binance_api=info"
                     .into()
             }),
         )
@@ -58,7 +58,7 @@ async fn main() -> VirsResult<()> {
     let db_pool = sqlx::postgres::PgPoolOptions::new()
         .min_connections(config.database.pool_min)
         .max_connections(config.database.pool_max)
-        .acquire_timeout(std::time::Duration::from_secs(10))
+        .acquire_timeout(std::time::Duration::from_secs(config.database.acquire_timeout_secs))
         .connect(&config.database.url)
         .await?;
     info!("Database connected");
@@ -122,11 +122,21 @@ async fn main() -> VirsResult<()> {
     };
     let kline_source = Arc::new(ExchangeKlineSource::new(exchange_registry.clone()));
     let spot_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::kline_ws::KlineWs::new_spot(config.proxy.as_deref()),
+        virs_ccxt::adapter::binance::kline_ws::KlineWs::new_spot(
+            config.proxy.as_deref(),
+            config.time.ws_reconnect_initial_delay_secs,
+            config.time.ws_reconnect_max_delay_secs,
+            config.time.ws_ping_interval_secs,
+            config.time.ws_max_lifetime_secs,
+        ),
     ));
     let perpetual_ws = Arc::new(tokio::sync::Mutex::new(
         virs_ccxt::adapter::binance::kline_ws::KlineWs::new_perpetual(
             config.proxy.as_deref(),
+            config.time.ws_reconnect_initial_delay_secs,
+            config.time.ws_reconnect_max_delay_secs,
+            config.time.ws_ping_interval_secs,
+            config.time.ws_max_lifetime_secs,
         ),
     ));
     let kline_engine = Arc::new(KlineEngine::new(
@@ -142,11 +152,19 @@ async fn main() -> VirsResult<()> {
     let ob_spot_ws = Arc::new(tokio::sync::Mutex::new(
         virs_ccxt::adapter::binance::orderbook_ws::OrderBookWs::new_spot(
             config.proxy.as_deref(),
+            config.time.ws_reconnect_initial_delay_secs,
+            config.time.ws_reconnect_max_delay_secs,
+            config.time.ws_ping_interval_secs,
+            config.time.ws_max_lifetime_secs,
         ),
     ));
     let ob_perpetual_ws = Arc::new(tokio::sync::Mutex::new(
         virs_ccxt::adapter::binance::orderbook_ws::OrderBookWs::new_perpetual(
             config.proxy.as_deref(),
+            config.time.ws_reconnect_initial_delay_secs,
+            config.time.ws_reconnect_max_delay_secs,
+            config.time.ws_ping_interval_secs,
+            config.time.ws_max_lifetime_secs,
         ),
     ));
     let orderbook_engine = Arc::new(OrderBookEngine::new(
@@ -184,6 +202,14 @@ async fn main() -> VirsResult<()> {
         jwt_secret: config.server.jwt_secret.clone(),
         jwt_expiration_hours: config.server.jwt_expiration_hours,
         http_timeout_secs: config.time.http_timeout_secs,
+        http_connect_timeout_secs: config.time.http_connect_timeout_secs,
+        http_pool_max_idle_per_host: config.time.http_pool_max_idle_per_host,
+        listenkey_keepalive_futures_secs: config.time.listenkey_keepalive_futures_secs,
+        listenkey_keepalive_spot_secs: config.time.listenkey_keepalive_spot_secs,
+        ws_reconnect_initial_delay_secs: config.time.ws_reconnect_initial_delay_secs,
+        ws_reconnect_max_delay_secs: config.time.ws_reconnect_max_delay_secs,
+        ws_ping_interval_secs: config.time.ws_ping_interval_secs,
+        ws_max_lifetime_secs: config.time.ws_max_lifetime_secs,
     };
 
     // Restore services if bots exist from previous session.

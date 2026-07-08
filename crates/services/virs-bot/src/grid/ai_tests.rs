@@ -88,7 +88,7 @@ fn g2_1_parse_decision_complete() {
         "risk_warning": "Low volatility"
     });
 
-    let decision = parse_grid_decision(&json);
+    let decision = parse_grid_decision(&json).expect("complete JSON should parse");
     assert_eq!(decision.action, "adjust_grid");
     assert_eq!(decision.reason, "Bollinger band narrowing");
     assert!((decision.confidence - 0.8).abs() < 1e-10);
@@ -104,14 +104,29 @@ fn g2_1_parse_decision_complete() {
 #[test]
 fn g2_2_parse_decision_defaults() {
     let json = serde_json::json!({});
-    let decision = parse_grid_decision(&json);
+    // leverage 缺失时应返回错误，不再使用默认值
+    let result = parse_grid_decision(&json);
+    assert!(result.is_err(), "missing leverage should return error");
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string().contains("leverage"),
+        "error should mention leverage, got: {err}"
+    );
+
+    // 验证其他字段缺失时仍有默认值（在有 leverage 的情况下）
+    let json = serde_json::json!({
+        "risk": {
+            "leverage": 5
+        }
+    });
+    let decision = parse_grid_decision(&json).expect("should parse with leverage present");
     assert_eq!(decision.action, "hold"); // default
     assert_eq!(decision.reason, "No reason provided"); // default
     assert!((decision.confidence - 0.0).abs() < 1e-10); // default — 0.0, not 0.5
     assert!((decision.upper_price - 0.0).abs() < 1e-10); // default
     assert_eq!(decision.grid_count, 0); // default — 0, not 10
     assert!((decision.grid_profit_pct - 0.0).abs() < 1e-10); // default — 0.0, not 0.5
-    assert_eq!(decision.leverage, 1); // default — 1, not 5
+    assert_eq!(decision.leverage, 5); // from JSON
     assert!((decision.quantity_per_grid - 0.0).abs() < 1e-10); // default — 0.0, not 10.0
     assert_eq!(decision.market_regime, "unknown"); // default — "unknown", not "ranging"
 }

@@ -328,16 +328,23 @@ impl UserDataWs {
     /// # 参数
     /// - `base_url`: WS 基础 URL（如 `wss://stream.binance.com/ws`）
     /// - `listen_key`: Binance User Data Stream 的 listenKey
-    pub fn new(base_url: String, listen_key: String) -> Self {
+    pub fn new(
+        base_url: String,
+        listen_key: String,
+        reconnect_delay_secs: u64,
+        max_reconnect_delay_secs: u64,
+        ws_ping_interval_secs: u64,
+        ws_max_lifetime_secs: u64,
+    ) -> Self {
         let ws_url = format!("{}/{}", base_url.trim_end_matches('/'), listen_key);
         Self {
             ws_url,
             base_url,
             use_query_params: false,
-            reconnect_delay_secs: 1,
-            max_reconnect_delay_secs: 60,
-            ws_ping_interval_secs: 30,
-            ws_max_lifetime_secs: 23 * 3600,
+            reconnect_delay_secs,
+            max_reconnect_delay_secs,
+            ws_ping_interval_secs,
+            ws_max_lifetime_secs,
             running: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -347,24 +354,43 @@ impl UserDataWs {
     /// 2026-04-23 起币安将用户数据流切流至 /private 路由，
     /// 新 URL 使用 query 形态 `wss://fstream.binance.com/private/ws?listenKey=<key>`
     /// （官方迁移公告示例格式）。
-    pub fn new_perpetual(listen_key: String) -> Self {
+    pub fn new_perpetual(
+        listen_key: String,
+        reconnect_delay_secs: u64,
+        max_reconnect_delay_secs: u64,
+        ws_ping_interval_secs: u64,
+        ws_max_lifetime_secs: u64,
+    ) -> Self {
         let base_url = "wss://fstream.binance.com/private/ws".to_string();
         let ws_url = format!("{}?listenKey={}", base_url, listen_key);
         Self {
             ws_url,
             base_url,
             use_query_params: true,
-            reconnect_delay_secs: 1,
-            max_reconnect_delay_secs: 60,
-            ws_ping_interval_secs: 30,
-            ws_max_lifetime_secs: 23 * 3600,
+            reconnect_delay_secs,
+            max_reconnect_delay_secs,
+            ws_ping_interval_secs,
+            ws_max_lifetime_secs,
             running: Arc::new(AtomicBool::new(false)),
         }
     }
 
     /// 创建现货订单 WS 客户端
-    pub fn new_spot(listen_key: String) -> Self {
-        Self::new("wss://stream.binance.com/ws".to_string(), listen_key)
+    pub fn new_spot(
+        listen_key: String,
+        reconnect_delay_secs: u64,
+        max_reconnect_delay_secs: u64,
+        ws_ping_interval_secs: u64,
+        ws_max_lifetime_secs: u64,
+    ) -> Self {
+        Self::new(
+            "wss://stream.binance.com/ws".to_string(),
+            listen_key,
+            reconnect_delay_secs,
+            max_reconnect_delay_secs,
+            ws_ping_interval_secs,
+            ws_max_lifetime_secs,
+        )
     }
 
     /// 更新 listenKey（重连时使用）

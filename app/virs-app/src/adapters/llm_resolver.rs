@@ -1,6 +1,7 @@
 //! DefaultLlmResolver — resolves LLM provider, API key, base URL, and model.
 
 use virs_types::bot::LlmProviderResolver;
+use virs_types::llm;
 use virs_error::{BotError, BotResult};
 
 /// Resolve LLM provider info from user credentials.
@@ -25,34 +26,22 @@ pub fn resolve_llm_provider(
     }
 
     // Priority: deepseek > openai > openrouter
-    if let Some((key, model)) = user_deepseek {
-        let model = model.unwrap_or_else(|| "deepseek-chat".to_string());
-        return Ok((
-            key,
-            "https://api.deepseek.com".to_string(),
-            model,
-            "deepseek".to_string(),
-        ));
-    }
-
-    if let Some((key, model)) = user_openai {
-        let model = model.unwrap_or_else(|| "gpt-4o".to_string());
-        return Ok((
-            key,
-            "https://api.openai.com/v1".to_string(),
-            model,
-            "openai".to_string(),
-        ));
-    }
-
-    if let Some((key, model)) = user_openrouter {
-        let model = model.unwrap_or_else(|| "deepseek/deepseek-chat".to_string());
-        return Ok((
-            key,
-            "https://openrouter.ai/api/v1".to_string(),
-            model,
-            "openrouter".to_string(),
-        ));
+    for (provider, creds) in [
+        ("deepseek", user_deepseek),
+        ("openai", user_openai),
+        ("openrouter", user_openrouter),
+    ] {
+        if let Some((key, model)) = creds {
+            let config = llm::get_provider_config(provider)
+                .ok_or_else(|| BotError::Llm(format!("Unknown provider: {}", provider)))?;
+            let model = model.unwrap_or_else(|| config.default_model.to_string());
+            return Ok((
+                key,
+                config.base_url.to_string(),
+                model,
+                provider.to_string(),
+            ));
+        }
     }
 
     Err(BotError::Llm("No LLM API key configured. Set AI credentials via the wizard.".to_string()))

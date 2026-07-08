@@ -246,29 +246,41 @@ impl OrderBookWs {
         }
     }
 
-    pub fn new_spot(_proxy_url: Option<&str>) -> Self {
+    pub fn new_spot(
+        _proxy_url: Option<&str>,
+        reconnect_delay_secs: u64,
+        max_reconnect_delay_secs: u64,
+        ws_ping_interval_secs: u64,
+        ws_max_lifetime_secs: u64,
+    ) -> Self {
         // Use /stream endpoint to get wrapped messages {"stream":..., "data":...}
         // This is required because spot partial book depth payloads do NOT include
         // the symbol — we must extract it from the stream name.
         Self::new(
             "wss://stream.binance.com/stream".to_string(),
-            1,
-            60,
-            30,
-            23 * 3600,
+            reconnect_delay_secs,
+            max_reconnect_delay_secs,
+            ws_ping_interval_secs,
+            ws_max_lifetime_secs,
         )
     }
 
-    pub fn new_perpetual(_proxy_url: Option<&str>) -> Self {
+    pub fn new_perpetual(
+        _proxy_url: Option<&str>,
+        reconnect_delay_secs: u64,
+        max_reconnect_delay_secs: u64,
+        ws_ping_interval_secs: u64,
+        ws_max_lifetime_secs: u64,
+    ) -> Self {
         // Use /public/stream endpoint for consistency — perpetual payloads include `s` field,
         // but using /stream simplifies symbol resolution for both market types.
         // 2026-04-23 起币安将公共高频流量切流至 /public 路由（depth/aggTrade/trade）
         Self::new(
             "wss://fstream.binance.com/public/stream".to_string(),
-            1,
-            60,
-            30,
-            23 * 3600,
+            reconnect_delay_secs,
+            max_reconnect_delay_secs,
+            ws_ping_interval_secs,
+            ws_max_lifetime_secs,
         )
     }
 }

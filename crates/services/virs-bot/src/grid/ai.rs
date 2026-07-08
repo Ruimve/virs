@@ -7,7 +7,7 @@ use crate::common::ports::CredentialStore;
 use crate::common::ports::LlmProviderResolver;
 use crate::grid::ports::GridBotConfig;
 use tracing::warn;
-use virs_error::BotResult;
+use virs_error::{BotError, BotResult};
 
 /// Grid AI 决策动作
 #[derive(Debug, Clone, PartialEq)]
@@ -102,12 +102,12 @@ impl GridAiService {
         )
         .await?;
 
-        let decision = parse_grid_decision(&result.content);
+        let decision = parse_grid_decision(&result.content)?;
         Ok((decision, result.used_model))
     }
 }
 
-pub fn parse_grid_decision(json: &serde_json::Value) -> GridAiDecision {
+pub fn parse_grid_decision(json: &serde_json::Value) -> BotResult<GridAiDecision> {
     let decision = &json["decision"];
     let grid = &json["grid"];
     let risk = &json["risk"];
@@ -148,10 +148,10 @@ pub fn parse_grid_decision(json: &serde_json::Value) -> GridAiDecision {
         0.0
     });
 
-    let leverage = risk["leverage"].as_i64().unwrap_or_else(|| {
-        warn!("LLM response missing 'risk.leverage' — defaulting to 1");
-        1
-    }) as i32;
+    // leverage 是关键交易参数，禁止使用默认值 — 缺失即报错
+    let leverage = risk["leverage"].as_i64().ok_or_else(|| {
+        BotError::llm("LLM response missing 'risk.leverage' — leverage is a required field with no default")
+    })? as i32;
     let quantity_per_grid = risk["quantity_per_grid"].as_f64().unwrap_or_else(|| {
         warn!("LLM response missing 'risk.quantity_per_grid' — defaulting to 0.0");
         0.0
@@ -173,7 +173,7 @@ pub fn parse_grid_decision(json: &serde_json::Value) -> GridAiDecision {
         .unwrap_or("No risk warning")
         .to_string();
 
-    GridAiDecision {
+    Ok(GridAiDecision {
         action: action.to_string(),
         reason,
         confidence,
@@ -186,5 +186,5 @@ pub fn parse_grid_decision(json: &serde_json::Value) -> GridAiDecision {
         market_regime,
         analysis,
         risk_warning,
-    }
+    })
 }

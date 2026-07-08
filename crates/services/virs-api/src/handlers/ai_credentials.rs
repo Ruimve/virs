@@ -307,9 +307,9 @@ pub async fn fetch_balance(
         }
     };
 
-    let balance_url = match provider.as_str() {
-        "deepseek" => "https://api.deepseek.com/user/balance",
-        _ => return Ok(Json(ApiResponse::ok(serde_json::json!({ "balances": [] })))),
+    let balance_url = match virs_types::llm::resolve_provider_balance_url(&provider) {
+        Some(url) => url,
+        None => return Ok(Json(ApiResponse::ok(serde_json::json!({ "balances": [] })))),
     };
 
     let http_client = &state.http_client;

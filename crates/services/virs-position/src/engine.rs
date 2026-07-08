@@ -48,19 +48,19 @@ fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
 }
 
 macro_rules! persist {
-    ($expr:expr, $label:expr) => {
+    ($expr:expr, $label:expr, $max_retries:expr, $base_ms:expr) => {
         let mut attempts = 0u32;
         loop {
             match $expr.await {
                 Ok(()) => break,
                 Err(e) => {
                     attempts += 1;
-                    if attempts >= 3 {
+                    if attempts >= $max_retries {
                         error!(error = %e, attempts, $label);
                         break;
                     }
                     warn!(error = %e, attempt = attempts, $label);
-                    tokio::time::sleep(std::time::Duration::from_millis(100 * attempts as u64)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis($base_ms * attempts as u64)).await;
                 }
             }
         }
@@ -84,6 +84,10 @@ pub(crate) struct EngineInner {
     /// 平仓订单 REST 调用超时（从 TimeConfig.close_order_timeout_secs 注入）。
     /// 防止交易所 REST 调用卡死导致 PE engine loop 阻塞。
     pub(crate) close_order_timeout: Duration,
+    /// persist! 宏最大重试次数（从 TimeConfig.persist_max_retries 注入）
+    pub(crate) persist_max_retries: u32,
+    /// persist! 宏重试退避基数毫秒（从 TimeConfig.persist_retry_base_ms 注入）
+    pub(crate) persist_retry_base_ms: u64,
 }
 
 impl EngineInner {
@@ -134,10 +138,14 @@ impl PositionEngine {
     /// 创建新的 PositionEngine 实例。
     ///
     /// `close_order_timeout` — 平仓订单 REST 调用超时，从 TimeConfig 注入。
+    /// `persist_max_retries` — persist! 宏最大重试次数，从 TimeConfig 注入。
+    /// `persist_retry_base_ms` — persist! 宏重试退避基数（毫秒），从 TimeConfig 注入。
     pub fn new(
         exchange: Box<dyn ExchangePe>,
         persistence: Box<dyn PositionPersistence>,
         close_order_timeout: Duration,
+        persist_max_retries: u32,
+        persist_retry_base_ms: u64,
     ) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel(256);
         let event_tx = broadcast::channel(256).0;
@@ -154,6 +162,8 @@ impl PositionEngine {
             exchange_order_id_index: DashMap::new(),
             position_id_index: DashMap::new(),
             close_order_timeout,
+            persist_max_retries,
+            persist_retry_base_ms,
         };
 
         Self {
@@ -323,7 +333,9 @@ impl PositionEngine {
                             drop(local);
                             persist!(
                                 self.inner.persistence.upsert_position(&pos),
-                                "Failed to persist position in full_sync"
+                                "Failed to persist position in full_sync",
+                                self.inner.persist_max_retries,
+                                self.inner.persist_retry_base_ms
                             );
                             self.inner.positions.insert(key, pos.clone());
                             // 发出 PositionUpdated 事件，让前端 WS 和 AutoWorker 感知仓位已恢复
@@ -368,7 +380,9 @@ impl PositionEngine {
                                 .insert(position.id, new_key.clone());
                             persist!(
                                 self.inner.persistence.upsert_position(&position),
-                                "Failed to persist new position in full_sync"
+                                "Failed to persist new position in full_sync",
+                                self.inner.persist_max_retries,
+                                self.inner.persist_retry_base_ms
                             );
                             self.inner.positions.insert(new_key, position.clone());
                             // 外部发现的仓位也发出事件
@@ -788,7 +802,9 @@ pub(crate) async fn handle_ws_order_update(
                 }
                 persist!(
                     inner.persistence.upsert_position(&position),
-                    "Failed to persist position after order fill"
+                    "Failed to persist position after order fill",
+                    inner.persist_max_retries,
+                    inner.persist_retry_base_ms
                 );
             }
         }
@@ -1033,7 +1049,9 @@ pub(crate) async fn handle_open_position(
 
             persist!(
                 inner.persistence.upsert_position(&position),
-                "Failed to persist position in open_position"
+                "Failed to persist position in open_position",
+                inner.persist_max_retries,
+                inner.persist_retry_base_ms
             );
 
             inner.emit_event(EngineEvent::PositionOpened {
@@ -1206,7 +1224,9 @@ pub(crate) async fn handle_close_position(
                             inner.positions.remove(&key);
                             persist!(
                                 inner.persistence.upsert_position(&closed_pos),
-                                "Failed to persist closed position in close_position"
+                                "Failed to persist closed position in close_position",
+                                inner.persist_max_retries,
+                                inner.persist_retry_base_ms
                             );
                             inner.emit_event(EngineEvent::PositionClosed {
                                 position: closed_pos.clone(),
@@ -1346,7 +1366,9 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
                 inner.positions.insert(key, position.clone());
                 persist!(
                     inner.persistence.upsert_position(&position),
-                    "Failed to persist auto-created position"
+                    "Failed to persist auto-created position",
+                    inner.persist_max_retries,
+                    inner.persist_retry_base_ms
                 );
                 pos_id
             }

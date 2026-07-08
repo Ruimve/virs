@@ -21,6 +21,7 @@ fn s1_1_app_config_full_roundtrip() {
             url: "postgres://localhost/virs".into(),
             pool_min: 5,
             pool_max: 50,
+            acquire_timeout_secs: 10,
         },
         admin: AdminConfig {
             username: "admin".into(),
@@ -34,6 +35,17 @@ fn s1_1_app_config_full_roundtrip() {
             close_order_timeout_secs: 15,
             http_timeout_secs: 30,
             llm_timeout_secs: 120,
+            initial_price_max_retries: 10,
+            persist_max_retries: 3,
+            persist_retry_base_ms: 100,
+            http_connect_timeout_secs: 10,
+            http_pool_max_idle_per_host: 10,
+            ws_reconnect_initial_delay_secs: 1,
+            ws_reconnect_max_delay_secs: 60,
+            ws_ping_interval_secs: 30,
+            ws_max_lifetime_secs: 82800,
+            listenkey_keepalive_futures_secs: 1800,
+            listenkey_keepalive_spot_secs: 900,
         },
         proxy: Some("http://proxy:8080".into()),
     };
@@ -84,12 +96,14 @@ fn s2_2_database_config_roundtrip() {
         url: "postgres://user:pass@localhost:5432/virs".into(),
         pool_min: 10,
         pool_max: 100,
+        acquire_timeout_secs: 15,
     };
     let json = serde_json::to_string(&config).unwrap();
     let de: DatabaseConfig = serde_json::from_str(&json).unwrap();
     assert_eq!(de.url, config.url);
     assert_eq!(de.pool_min, config.pool_min);
     assert_eq!(de.pool_max, config.pool_max);
+    assert_eq!(de.acquire_timeout_secs, config.acquire_timeout_secs);
 }
 
 #[test]

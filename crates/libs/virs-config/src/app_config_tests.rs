@@ -58,6 +58,10 @@ fn s3_1_default_constants_values() {
     assert_eq!(DEFAULT_JWT_HOURS, "24");
     assert_eq!(DEFAULT_DB_POOL_MIN, "5");
     assert_eq!(DEFAULT_DB_POOL_MAX, "50");
+    assert_eq!(DEFAULT_DB_ACQUIRE_TIMEOUT_SECS, "10");
+    assert_eq!(DEFAULT_INITIAL_PRICE_MAX_RETRIES, "10");
+    assert_eq!(DEFAULT_PERSIST_MAX_RETRIES, "3");
+    assert_eq!(DEFAULT_PERSIST_RETRY_BASE_MS, "100");
     // NOTE: ADMIN_USERNAME and ADMIN_PASSWORD no longer have defaults.
     // They must be provided via environment variables — see app_config.rs.
 }
@@ -76,6 +80,9 @@ fn t12_1_time_config_default_values() {
     assert_eq!(tc.close_order_timeout_secs, 15);
     assert_eq!(tc.http_timeout_secs, 30);
     assert_eq!(tc.llm_timeout_secs, 120);
+    assert_eq!(tc.initial_price_max_retries, 10);
+    assert_eq!(tc.persist_max_retries, 3);
+    assert_eq!(tc.persist_retry_base_ms, 100);
 }
 
 #[test]
@@ -99,6 +106,17 @@ fn t12_3_time_config_serde_roundtrip() {
         close_order_timeout_secs: 20,
         http_timeout_secs: 60,
         llm_timeout_secs: 240,
+        initial_price_max_retries: 5,
+        persist_max_retries: 2,
+        persist_retry_base_ms: 50,
+        http_connect_timeout_secs: 15,
+        http_pool_max_idle_per_host: 20,
+        ws_reconnect_initial_delay_secs: 2,
+        ws_reconnect_max_delay_secs: 120,
+        ws_ping_interval_secs: 45,
+        ws_max_lifetime_secs: 86400,
+        listenkey_keepalive_futures_secs: 1200,
+        listenkey_keepalive_spot_secs: 600,
     };
     let json = serde_json::to_string(&tc).unwrap();
     let de: TimeConfig = serde_json::from_str(&json).unwrap();

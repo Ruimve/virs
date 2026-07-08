@@ -175,7 +175,7 @@ fn int_3_2_grid_decision_parse_chain() {
         }
     });
 
-    let decision = parse_grid_decision(&json);
+    let decision = parse_grid_decision(&json).expect("JSON with leverage should parse");
     assert_eq!(decision.action, "adjust_grid");
     assert!((decision.upper_price - 110.0).abs() < 1e-10);
     assert!((decision.lower_price - 90.0).abs() < 1e-10);

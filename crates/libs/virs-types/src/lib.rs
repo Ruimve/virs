@@ -9,6 +9,7 @@ pub mod bot;
 pub mod enums;
 pub mod exchange_pe;
 pub mod grid_port;
+pub mod llm;
 pub mod market;
 pub mod position;
 

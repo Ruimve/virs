@@ -94,7 +94,8 @@ impl GridWorker {
         }
 
         // 获取初始价格
-        for attempt in 1..=10 {
+        let max_retries = self.time_config.initial_price_max_retries;
+        for attempt in 1..=max_retries {
             self.current_price = self.fetch_current_price().await;
             if self.current_price > 0.0 {
                 break;
@@ -103,7 +104,7 @@ impl GridWorker {
             tokio::time::sleep(std::time::Duration::from_secs(self.time_config.price_poll_interval_secs)).await;
         }
         if self.current_price <= 0.0 {
-            error!(bot_id = %self.bot.id, "Failed to fetch initial price after 10 attempts");
+            error!(bot_id = %self.bot.id, "Failed to fetch initial price after {} attempts", max_retries);
         }
 
         self.load_existing_trades().await;

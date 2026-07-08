@@ -372,6 +372,18 @@ pub struct BinanceExchange {
     time_sync_started: AtomicBool,
     /// T1 WARN fix: 定期时间同步的运行标志，Drop 时设为 false 以停止后台 task
     time_sync_running: Arc<AtomicBool>,
+    /// listenKey 保活间隔（秒）— 合约
+    listenkey_keepalive_futures_secs: u64,
+    /// listenKey 保活间隔（秒）— 现货
+    listenkey_keepalive_spot_secs: u64,
+    /// WS 重连初始延迟（秒）
+    ws_reconnect_initial_delay_secs: u64,
+    /// WS 重连最大延迟（秒）
+    ws_reconnect_max_delay_secs: u64,
+    /// WS ping/pong 心跳间隔（秒）
+    ws_ping_interval_secs: u64,
+    /// WS 连接最大生命周期（秒）
+    ws_max_lifetime_secs: u64,
 }
 
 impl BinanceExchange {
@@ -386,13 +398,21 @@ impl BinanceExchange {
         proxy_url: Option<&str>,
         market_type: &MarketType,
         http_timeout: std::time::Duration,
+        connect_timeout: std::time::Duration,
+        pool_max_idle_per_host: usize,
+        listenkey_keepalive_futures_secs: u64,
+        listenkey_keepalive_spot_secs: u64,
+        ws_reconnect_initial_delay_secs: u64,
+        ws_reconnect_max_delay_secs: u64,
+        ws_ping_interval_secs: u64,
+        ws_max_lifetime_secs: u64,
     ) -> Result<Self, ExchangeError> {
         let max_concurrent: u32 = match market_type {
             MarketType::Spot => 20,
             MarketType::Perpetual => 40,
         };
         let client =
-            ExchangeClient::with_api_key(max_concurrent, proxy_url, Some(api_key), http_timeout)?;
+            ExchangeClient::with_api_key(max_concurrent, proxy_url, Some(api_key), http_timeout, connect_timeout, pool_max_idle_per_host)?;
 
         // 尝试构造 Ed25519 签名器；若不是 Ed25519 格式则 fallback 到 HMAC
         let (signer, ed25519_signer) = match try_build_ed25519(api_key, api_secret) {
@@ -417,6 +437,12 @@ impl BinanceExchange {
             market_type: *market_type,
             time_sync_started: AtomicBool::new(false),
             time_sync_running: Arc::new(AtomicBool::new(false)),
+            listenkey_keepalive_futures_secs,
+            listenkey_keepalive_spot_secs,
+            ws_reconnect_initial_delay_secs,
+            ws_reconnect_max_delay_secs,
+            ws_ping_interval_secs,
+            ws_max_lifetime_secs,
         })
     }
 
@@ -749,9 +775,21 @@ impl Exchange for BinanceExchange {
 
         // 2. 按市场类型构造 UserDataWs
         let mut ws = if self.is_perpetual() {
-            user_data_ws::UserDataWs::new_perpetual(listen_key.clone())
+            user_data_ws::UserDataWs::new_perpetual(
+                listen_key.clone(),
+                self.ws_reconnect_initial_delay_secs,
+                self.ws_reconnect_max_delay_secs,
+                self.ws_ping_interval_secs,
+                self.ws_max_lifetime_secs,
+            )
         } else {
-            user_data_ws::UserDataWs::new_spot(listen_key.clone())
+            user_data_ws::UserDataWs::new_spot(
+                listen_key.clone(),
+                self.ws_reconnect_initial_delay_secs,
+                self.ws_reconnect_max_delay_secs,
+                self.ws_ping_interval_secs,
+                self.ws_max_lifetime_secs,
+            )
         };
 
         // 3. 获取 running flag 引用（keepalive task 据此判断 WS 是否已退出）
@@ -772,9 +810,9 @@ impl Exchange for BinanceExchange {
         let signer = Arc::clone(&self.signer);
         let is_perpetual = self.is_perpetual();
         let keepalive_interval = if is_perpetual {
-            Duration::from_secs(30 * 60) // 合约：30 分钟（窗口 60 分钟的 1/2）
+            Duration::from_secs(self.listenkey_keepalive_futures_secs)
         } else {
-            Duration::from_secs(15 * 60) // 现货：15 分钟（窗口 30 分钟的 1/2）
+            Duration::from_secs(self.listenkey_keepalive_spot_secs)
         };
 
         tokio::spawn(async move {

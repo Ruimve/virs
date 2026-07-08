@@ -74,6 +74,22 @@ pub struct AppState {
     /// HTTP 请求超时（秒）— 从 TimeConfig.http_timeout_secs 注入，
     /// 用于创建交易所客户端时的超时设置。
     pub http_timeout_secs: u64,
+    /// HTTP TCP 连接建立超时（秒）— 从 TimeConfig.http_connect_timeout_secs 注入
+    pub http_connect_timeout_secs: u64,
+    /// HTTP 连接池每主机最大空闲连接数 — 从 TimeConfig.http_pool_max_idle_per_host 注入
+    pub http_pool_max_idle_per_host: usize,
+    /// listenKey 保活间隔（秒）— 合约
+    pub listenkey_keepalive_futures_secs: u64,
+    /// listenKey 保活间隔（秒）— 现货
+    pub listenkey_keepalive_spot_secs: u64,
+    /// WS 重连初始延迟（秒）
+    pub ws_reconnect_initial_delay_secs: u64,
+    /// WS 重连最大延迟（秒）
+    pub ws_reconnect_max_delay_secs: u64,
+    /// WS ping/pong 心跳间隔（秒）
+    pub ws_ping_interval_secs: u64,
+    /// WS 连接最大生命周期（秒）
+    pub ws_max_lifetime_secs: u64,
 }
 
 impl FromRef<AppState> for sqlx::PgPool {

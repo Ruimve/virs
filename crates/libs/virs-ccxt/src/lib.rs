@@ -204,23 +204,29 @@ impl ExchangeClient {
         max_concurrent: u32,
         proxy_url: Option<&str>,
         http_timeout: std::time::Duration,
+        connect_timeout: std::time::Duration,
+        pool_max_idle_per_host: usize,
     ) -> Result<Self, ExchangeError> {
-        Self::with_api_key(max_concurrent, proxy_url, None, http_timeout)
+        Self::with_api_key(max_concurrent, proxy_url, None, http_timeout, connect_timeout, pool_max_idle_per_host)
     }
 
     /// 创建带 API Key 的 client，用于在 public_get 中附加 X-MBX-APIKEY 头。
     ///
     /// `http_timeout` — HTTP 请求总超时，从 TimeConfig.http_timeout_secs 注入。
+    /// `connect_timeout` — TCP 连接建立超时，从 TimeConfig.http_connect_timeout_secs 注入。
+    /// `pool_max_idle_per_host` — 每主机最大空闲连接数，从 TimeConfig.http_pool_max_idle_per_host 注入。
     pub fn with_api_key(
         max_concurrent: u32,
         proxy_url: Option<&str>,
         api_key: Option<&str>,
         http_timeout: std::time::Duration,
+        connect_timeout: std::time::Duration,
+        pool_max_idle_per_host: usize,
     ) -> Result<Self, ExchangeError> {
         let mut builder = Client::builder()
             .timeout(http_timeout)
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .pool_max_idle_per_host(10)
+            .connect_timeout(connect_timeout)
+            .pool_max_idle_per_host(pool_max_idle_per_host)
             .gzip(true);
 
         if let Some(proxy) = proxy_url {
@@ -541,6 +547,14 @@ pub fn create_exchange(
     proxy_url: Option<&str>,
     market_type: &MarketType,
     http_timeout: std::time::Duration,
+    connect_timeout: std::time::Duration,
+    pool_max_idle_per_host: usize,
+    listenkey_keepalive_futures_secs: u64,
+    listenkey_keepalive_spot_secs: u64,
+    ws_reconnect_initial_delay_secs: u64,
+    ws_reconnect_max_delay_secs: u64,
+    ws_ping_interval_secs: u64,
+    ws_max_lifetime_secs: u64,
 ) -> Result<Box<dyn Exchange>, ExchangeError> {
     match id.to_lowercase().as_str() {
         "binance" => Ok(Box::new(adapter::binance::BinanceExchange::new(
@@ -549,6 +563,14 @@ pub fn create_exchange(
             proxy_url,
             market_type,
             http_timeout,
+            connect_timeout,
+            pool_max_idle_per_host,
+            listenkey_keepalive_futures_secs,
+            listenkey_keepalive_spot_secs,
+            ws_reconnect_initial_delay_secs,
+            ws_reconnect_max_delay_secs,
+            ws_ping_interval_secs,
+            ws_max_lifetime_secs,
         )?)),
         // To add Bybit/OKX, implement adapter::bybit::BybitExchange / adapter::okx::OkxExchange
         // and add the corresponding match arm here. See "Adding a New Exchange" above.
