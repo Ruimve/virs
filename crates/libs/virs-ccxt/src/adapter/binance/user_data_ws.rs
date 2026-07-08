@@ -63,6 +63,15 @@ impl BinanceOrderMessage {
             .or_else(|| self.data.as_ref().map(|d| d.event_type.as_str()))
     }
 
+    /// 返回事件时间（币安服务器发送时刻，毫秒）
+    ///
+    /// 用于检测 WS 消息延迟（local_receive_time - event_time）。
+    /// 兼容单流格式（event_time_flat）和组合流格式（data.event_time）。
+    pub fn event_time(&self) -> Option<i64> {
+        self.event_time_flat
+            .or_else(|| self.data.as_ref().map(|d| d.event_time))
+    }
+
     /// 转换为 WsFeedEvent（消耗 self）
     pub fn to_ws_feed_event(self) -> Option<WsFeedEvent> {
         // 优先处理 ORDER_TRADE_UPDATE（合约）
@@ -83,7 +92,6 @@ impl BinanceOrderMessage {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
 pub struct BinanceExecutionReport {
     #[serde(rename = "e")]
     pub event_type: String,
@@ -284,6 +292,12 @@ impl ExecutionReportInner {
 // UserDataWs: 订单 WebSocket 客户端
 // ============================================================
 
+/// WS 消息延迟告警阈值（毫秒）
+///
+/// 订单事件比 kline 更关键（影响资金状态），阈值设为 3 秒。
+/// 延迟来源可能是网络传输、channel 堆积或客户端处理阻塞。
+pub(crate) const ORDER_WS_DELAY_THRESHOLD_MS: i64 = 3_000;
+
 /// Binance User Data Stream 订单推送客户端
 ///
 /// 连接到 Binance 的 User Data Stream（需要 listenKey），
@@ -444,6 +458,23 @@ impl UserDataWs {
                                                     .event_type()
                                                     .map(|s| s.to_string())
                                                     .unwrap_or_else(|| "unknown".to_string());
+
+                                                // 订单事件延迟检测（参照 kline_ws T8 fix）
+                                                // event_time 是币安服务器发送时刻，local_now 是本地处理时刻，
+                                                // 差值 = 网络传输 + channel 排队 + 处理等待
+                                                if let Some(et) = bmsg.event_time() {
+                                                    if et > 0 {
+                                                        let delay_ms = chrono::Utc::now().timestamp_millis() - et;
+                                                        if delay_ms > ORDER_WS_DELAY_THRESHOLD_MS {
+                                                            tracing::warn!(
+                                                                delay_ms = delay_ms,
+                                                                event_time = et,
+                                                                event_type = %event_type,
+                                                                "[UserDataWs] Order event delay exceeds threshold"
+                                                            );
+                                                        }
+                                                    }
+                                                }
 
                                                 // to_ws_feed_event() 同时处理 executionReport（现货）
                                                 // 和 ORDER_TRADE_UPDATE（合约），避免单流格式下

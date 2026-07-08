@@ -20,7 +20,6 @@ use virs_types::position::{EngineEvent, Position};
 // const MAX_POSITION_DURATION: Duration = Duration::from_secs(48 * 3600);
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub(crate) struct PendingOpen {
     pub side: String,
     pub entry_price: f64,
@@ -32,7 +31,6 @@ pub(crate) struct PendingOpen {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub(crate) struct PendingClose {
     pub side: String,
     /// 平仓原因：stop_loss/take_profit/position_timeout/llm_decision
@@ -40,6 +38,8 @@ pub(crate) struct PendingClose {
     pub close_reason: String,
     pub entry_price: f64,
     pub position_size: f64,
+    /// #14: 下单时刻的未实现盈亏，待接入滑点检测后移除此属性
+    #[allow(dead_code)]
     pub unrealized_pnl: f64,
     pub client_order_id: String,
     pub sent_at: tokio::time::Instant,
@@ -307,19 +307,22 @@ impl AutoWorker {
     }
 
     pub(crate) fn matches_pending_order(&self, client_order_id: Option<&str>) -> bool {
-        let bot_id_str = self.bot.id.to_string();
         match client_order_id {
             Some(cid) => {
-                // 必须包含 bot_id，且前缀匹配 pending 状态
+                // 精确匹配 pending 状态的 client_order_id
                 // open: "auto:{long|short}:{bot_id}"
                 // close: "auto:close:{reason}:{bot_id}"
-                if !cid.contains(&bot_id_str) {
-                    return false;
-                }
-                let is_open_cid = cid.starts_with("auto:long:") || cid.starts_with("auto:short:");
-                let is_close_cid = cid.starts_with("auto:close:");
-                (self.pending_open.is_some() && is_open_cid)
-                    || (self.pending_close.is_some() && is_close_cid)
+                let open_match = self
+                    .pending_open
+                    .as_ref()
+                    .map(|p| p.client_order_id == cid)
+                    .unwrap_or(false);
+                let close_match = self
+                    .pending_close
+                    .as_ref()
+                    .map(|p| p.client_order_id == cid)
+                    .unwrap_or(false);
+                open_match || close_match
             }
             None => false,
         }
