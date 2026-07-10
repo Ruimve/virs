@@ -380,15 +380,7 @@ const ConfigureExchange = () => {
         </button>
       </>
     );
-  }, [
-    step1Status,
-    step2Status,
-    step3Status,
-    step4Status,
-    updateWizard,
-    advanceStep,
-    navigate,
-  ]);
+  }, [step1Status, step2Status, step3Status, step4Status, updateWizard, advanceStep, navigate]);
 
   const statuses = useMemo(() => {
     return {

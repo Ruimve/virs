@@ -80,14 +80,7 @@ const ReviewLaunch = () => {
     } finally {
       setLaunching(false);
     }
-  }, [
-    wizard.bot_type,
-    wizard.bot_params,
-    wizard.exchange,
-    paperMode,
-    navigate,
-    updateWizard,
-  ]);
+  }, [wizard.bot_type, wizard.bot_params, wizard.exchange, paperMode, navigate, updateWizard]);
 
   const actions = useMemo(() => {
     return (
@@ -265,13 +258,7 @@ const ReviewLaunch = () => {
         </div>
       </div>
     );
-  }, [
-    wizard.bot_params,
-    wizard.bot_type,
-    wizard.exchange,
-    wizard.llm_model,
-    paperMode,
-  ]);
+  }, [wizard.bot_params, wizard.bot_type, wizard.exchange, wizard.llm_model, paperMode]);
 
   return (
     <Wizard

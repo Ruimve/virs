@@ -132,21 +132,18 @@ const Bot = () => {
     }
   }, []);
 
-  const loadKlines = useCallback(
-    async (exchange: string, symbol: string, tf: string) => {
-      try {
-        const res = await fetchKlines({
-          exchange,
-          symbol,
-          timeframe: tf,
-        });
-        if (res.data) setKlineData(res.data);
-      } catch (e) {
-        console.error('Failed to load kline:', e);
-      }
-    },
-    [],
-  );
+  const loadKlines = useCallback(async (exchange: string, symbol: string, tf: string) => {
+    try {
+      const res = await fetchKlines({
+        exchange,
+        symbol,
+        timeframe: tf,
+      });
+      if (res.data) setKlineData(res.data);
+    } catch (e) {
+      console.error('Failed to load kline:', e);
+    }
+  }, []);
 
   const loadKlineStable = useCallback(() => {
     if (!bot?.exchange || !bot?.symbol || !klineTimeframe) return;
