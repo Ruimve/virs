@@ -69,6 +69,7 @@ impl Persistence {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
             ON CONFLICT (exchange, symbol, side)
             DO UPDATE SET
+                id              = EXCLUDED.id,
                 strategy_id     = EXCLUDED.strategy_id,
                 status          = EXCLUDED.status,
                 size            = EXCLUDED.size,
@@ -81,6 +82,7 @@ impl Persistence {
                 stop_loss       = EXCLUDED.stop_loss,
                 take_profit     = EXCLUDED.take_profit,
                 liquidation_price = EXCLUDED.liquidation_price,
+                opened_at       = EXCLUDED.opened_at,
                 updated_at      = EXCLUDED.updated_at,
                 closed_at       = EXCLUDED.closed_at,
                 metadata        = EXCLUDED.metadata
