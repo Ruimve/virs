@@ -188,16 +188,6 @@ pub struct ExchangeClient {
 }
 
 impl ExchangeClient {
-    pub fn new(
-        max_concurrent: u32,
-        proxy_url: Option<&str>,
-        http_timeout: std::time::Duration,
-        connect_timeout: std::time::Duration,
-        pool_max_idle_per_host: usize,
-    ) -> Result<Self, ExchangeError> {
-        Self::with_api_key(max_concurrent, proxy_url, None, http_timeout, connect_timeout, pool_max_idle_per_host)
-    }
-
     /// 创建带 API Key 的 client，用于在 public_get 中附加 X-MBX-APIKEY 头。
     ///
     /// `http_timeout` — HTTP 请求总超时，从 TimeConfig.http_timeout_secs 注入。

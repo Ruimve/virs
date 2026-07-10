@@ -279,17 +279,6 @@ fn test_new_perpetual() {
         ws.ws_url,
         "wss://fstream.binance.com/private/ws?listenKey=test_listen_key"
     );
-    assert_eq!(ws.base_url, "wss://fstream.binance.com/private/ws");
-    assert!(!ws.is_running());
-}
-
-#[test]
-fn test_update_listen_key() {
-    let mut ws = UserDataWs::new_perpetual("old_key".to_string(), 1, 60, 30, 82800);
-    assert_eq!(ws.ws_url, "wss://fstream.binance.com/private/ws?listenKey=old_key");
-
-    ws.update_listen_key("new_key".to_string());
-    assert_eq!(ws.ws_url, "wss://fstream.binance.com/private/ws?listenKey=new_key");
 }
 
 // ============================================================

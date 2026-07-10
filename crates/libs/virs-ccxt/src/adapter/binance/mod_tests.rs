@@ -314,8 +314,6 @@ fn b7_1_try_build_ed25519_with_seed() {
     let seed_b64 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
     let result = try_build_ed25519("test_api_key", seed_b64);
     assert!(result.is_ok());
-    let signer = result.unwrap();
-    assert_eq!(signer.api_key(), "test_api_key");
 }
 
 #[test]

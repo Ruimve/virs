@@ -295,11 +295,6 @@ pub(crate) const ORDER_WS_DELAY_THRESHOLD_MS: i64 = 3_000;
 pub struct UserDataWs {
     /// WS URL（包含 listenKey）
     pub(crate) ws_url: String,
-    /// 基础 URL（不含 listenKey，用于重连时拼接新 listenKey）
-    pub(crate) base_url: String,
-    /// URL 格式：true=query 参数形态（?listenKey=），false=path 形态（/<listenKey>）
-    /// 永续合约 /private 路由使用 query 形态
-    use_query_params: bool,
     reconnect_delay_secs: u64,
     max_reconnect_delay_secs: u64,
     ws_ping_interval_secs: u64,
@@ -324,8 +319,6 @@ impl UserDataWs {
         let ws_url = format!("{}/{}", base_url.trim_end_matches('/'), listen_key);
         Self {
             ws_url,
-            base_url,
-            use_query_params: false,
             reconnect_delay_secs,
             max_reconnect_delay_secs,
             ws_ping_interval_secs,
@@ -350,8 +343,6 @@ impl UserDataWs {
         let ws_url = format!("{}?listenKey={}", base_url, listen_key);
         Self {
             ws_url,
-            base_url,
-            use_query_params: true,
             reconnect_delay_secs,
             max_reconnect_delay_secs,
             ws_ping_interval_secs,
@@ -360,29 +351,11 @@ impl UserDataWs {
         }
     }
 
-    /// 更新 listenKey（重连时使用）
-    pub fn update_listen_key(&mut self, listen_key: String) {
-        if self.use_query_params {
-            self.ws_url = format!("{}?listenKey={}", self.base_url.trim_end_matches('/'), listen_key);
-        } else {
-            self.ws_url = format!("{}/{}", self.base_url.trim_end_matches('/'), listen_key);
-        }
-    }
-
-    pub fn is_running(&self) -> bool {
-        self.running.load(Ordering::Relaxed)
-    }
-
     /// 返回 running flag 的引用，供外部 keepalive task 检测 WS 生命周期。
     ///
     /// WS 后台 task 退出时会将此 flag 设为 false，keepalive task 应定期检测并退出。
     pub fn running_handle(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.running)
-    }
-
-    /// 停止 WS 连接
-    pub fn stop(&self) {
-        self.running.store(false, Ordering::Relaxed);
     }
 
     /// 启动 WS 连接，将订单事件发送到 event_tx

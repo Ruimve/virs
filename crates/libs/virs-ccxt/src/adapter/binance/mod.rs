@@ -222,10 +222,6 @@ impl BinanceEd25519Signer {
         base64::engine::general_purpose::STANDARD.encode(signature.to_bytes())
     }
 
-    /// 返回 API Key
-    pub fn api_key(&self) -> &str {
-        &self.api_key
-    }
 }
 
 impl Signer for BinanceEd25519Signer {

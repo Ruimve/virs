@@ -12,9 +12,6 @@ pub struct LlmProviderConfig {
     pub balance_url: Option<&'static str>,
 }
 
-/// 已知 Provider 列表
-pub const KNOWN_PROVIDERS: &[&str] = &["deepseek", "openai", "openrouter"];
-
 /// 获取 Provider 配置
 ///
 /// 返回 `Option<&LlmProviderConfig>`，未知 provider 返回 None。

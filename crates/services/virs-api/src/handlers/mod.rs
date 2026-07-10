@@ -19,3 +19,5 @@ mod ai_tests;
 mod ai_credentials_tests;
 #[cfg(test)]
 mod response_tests;
+#[cfg(test)]
+mod utils_tests;
