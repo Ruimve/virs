@@ -173,14 +173,14 @@ impl AppEngineManager {
                     self.proxy.as_deref(),
                     &ccxt_mt,
                     std::time::Duration::from_secs(self.time_config.http_timeout_secs),
-                    std::time::Duration::from_secs(self.time_config.http_connect_timeout_secs),
-                    self.time_config.http_pool_max_idle_per_host,
-                    self.time_config.listenkey_keepalive_futures_secs,
-                    self.time_config.listenkey_keepalive_spot_secs,
-                    self.time_config.ws_reconnect_initial_delay_secs,
-                    self.time_config.ws_reconnect_max_delay_secs,
-                    self.time_config.ws_ping_interval_secs,
-                    self.time_config.ws_max_lifetime_secs,
+                    std::time::Duration::from_secs(self.time_config.http.http_connect_timeout_secs),
+                    self.time_config.http.http_pool_max_idle_per_host,
+                    self.time_config.listenkey.listenkey_keepalive_futures_secs,
+                    self.time_config.listenkey.listenkey_keepalive_spot_secs,
+                    self.time_config.ws.ws_reconnect_initial_delay_secs,
+                    self.time_config.ws.ws_reconnect_max_delay_secs,
+                    self.time_config.ws.ws_ping_interval_secs,
+                    self.time_config.ws.ws_max_lifetime_secs,
                 )
                 .map_err(|e| {
                     virs_error::VirsError::config(format!(
@@ -340,8 +340,8 @@ impl EngineManager for AppEngineManager {
             pe_exchange,
             pe_persistence,
             std::time::Duration::from_secs(self.time_config.close_order_timeout_secs),
-            self.time_config.persist_max_retries,
-            self.time_config.persist_retry_base_ms,
+            self.time_config.retry.persist_max_retries,
+            self.time_config.retry.persist_retry_base_ms,
         );
         let pe_cmd_tx = position_engine.command_sender();
         let pe_event_sender = position_engine.event_sender();

@@ -332,7 +332,7 @@ impl AutoWorker {
 
     pub async fn run(&mut self, mut shutdown_rx: tokio::sync::mpsc::Receiver<()>) {
         // 获取初始价格
-        let max_retries = self.time_config.initial_price_max_retries;
+        let max_retries = self.time_config.retry.initial_price_max_retries;
         for attempt in 1..=max_retries {
             self.current_price = self.fetch_current_price().await;
             if self.current_price > 0.0 {

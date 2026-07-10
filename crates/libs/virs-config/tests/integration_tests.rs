@@ -198,3 +198,42 @@ fn int_5_4_custom_proxy() {
     let config = load_config().unwrap();
     assert_eq!(config.proxy, Some("http://proxy:8080".into()));
 }
+
+// ============================================================
+// TC-INT-6: ENCRYPTION_KEY != LLM_KEY validation
+// ============================================================
+
+#[test]
+fn int_6_1_same_encryption_and_llm_key_rejected() {
+    let _guard = lock_env();
+    clean_env_vars();
+    std::env::set_var("ENCRYPTION_KEY", "same_key_value");
+    std::env::set_var("LLM_KEY", "same_key_value");
+    std::env::set_var("DATABASE_URL", "postgres://localhost/db");
+    std::env::set_var("ADMIN_USERNAME", "admin");
+    std::env::set_var("ADMIN_PASSWORD", "password_at_least_12_chars");
+    std::env::set_var("JWT_SECRET", "jwt_secret_at_least_32_chars_long");
+
+    let result = load_config_from_env();
+    assert!(result.is_err());
+    let err_msg = result.err().unwrap().to_string();
+    assert!(
+        err_msg.contains("ENCRYPTION_KEY and LLM_KEY must be different"),
+        "Expected key collision error, got: {}", err_msg
+    );
+}
+
+#[test]
+fn int_6_2_different_encryption_and_llm_key_accepted() {
+    let _guard = lock_env();
+    clean_env_vars();
+    std::env::set_var("ENCRYPTION_KEY", "encryption_key_value");
+    std::env::set_var("LLM_KEY", "different_llm_key_value");
+    std::env::set_var("DATABASE_URL", "postgres://localhost/db");
+    std::env::set_var("ADMIN_USERNAME", "admin");
+    std::env::set_var("ADMIN_PASSWORD", "password_at_least_12_chars");
+    std::env::set_var("JWT_SECRET", "jwt_secret_at_least_32_chars_long");
+
+    let result = load_config_from_env();
+    assert!(result.is_ok());
+}

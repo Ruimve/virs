@@ -100,10 +100,13 @@ pub struct AdminConfig {
     pub id: Option<uuid::Uuid>,
 }
 
-/// T12: Time-related configuration extracted from hardcoded constants.
+/// T12: Business time-related configuration (timeouts and intervals that affect trading logic).
 ///
 /// All values are loaded from environment variables with safe defaults.
 /// On initialization, `warn!` is logged to ensure observability.
+///
+/// Infrastructure-level config (HTTP client, WebSocket, listenKey, retry) is
+/// delegated to sub-config structs for separation of concerns.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TimeConfig {
     /// 最大持仓时长（秒）— 超过此值强制平仓。默认 48h = 172800s
@@ -118,16 +121,39 @@ pub struct TimeConfig {
     pub http_timeout_secs: u64,
     /// LLM 请求超时（秒）— AI 决策调用。默认 120s
     pub llm_timeout_secs: u64,
+    /// 重试配置 — Worker 启动价格重试 + persist! 宏 DB 持久化重试
+    pub retry: RetryConfig,
+    /// HTTP 客户端基础设施配置 — TCP 连接超时 + 连接池
+    pub http: HttpConfig,
+    /// WebSocket 基础设施配置 — 重连 / 心跳 / 生命周期
+    pub ws: WsConfig,
+    /// 币安 listenKey 保活配置 — 合约 / 现货
+    pub listenkey: ListenKeyConfig,
+}
+
+/// 重试行为配置 — 控制 Worker 启动和 DB 持久化的重试行为。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RetryConfig {
     /// 初始价格获取最大重试次数 — Worker 启动时获取初始价格的重试上限。默认 10
     pub initial_price_max_retries: u32,
     /// persist! 宏最大重试次数 — DB 持久化失败后的重试上限。默认 3
     pub persist_max_retries: u32,
     /// persist! 宏重试退避基数（毫秒）— 每次重试间隔 = base_ms × attempt。默认 100
     pub persist_retry_base_ms: u64,
-    /// HTTP TCP 连接建立超时（秒）— 与 TIME_HTTP_TIMEOUT_SECS（请求总超时）不同。默认 10
+}
+
+/// HTTP 客户端基础设施配置 — 控制 reqwest 连接池行为。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HttpConfig {
+    /// HTTP TCP 连接建立超时（秒）— 与 TimeConfig.http_timeout_secs（请求总超时）不同。默认 10
     pub http_connect_timeout_secs: u64,
     /// HTTP 连接池每主机最大空闲连接数。默认 10
     pub http_pool_max_idle_per_host: usize,
+}
+
+/// WebSocket 基础设施配置 — 控制 WS 连接的重连、心跳和生命周期。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WsConfig {
     /// WS 重连初始延迟（秒）。默认 1
     pub ws_reconnect_initial_delay_secs: u64,
     /// WS 重连最大延迟（秒）— 指数退避上限。默认 60
@@ -136,10 +162,54 @@ pub struct TimeConfig {
     pub ws_ping_interval_secs: u64,
     /// WS 连接最大生命周期（秒）— 到期后主动断开重连。默认 82800 (23h)
     pub ws_max_lifetime_secs: u64,
+}
+
+/// 币安 listenKey 保活配置 — 合约和现货的保活间隔。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ListenKeyConfig {
     /// 合约 listenKey 保活间隔（秒）— 币安窗口 60min 的 1/2。默认 1800
     pub listenkey_keepalive_futures_secs: u64,
     /// 现货 listenKey 保活间隔（秒）— 币安窗口 30min 的 1/2。默认 900
     pub listenkey_keepalive_spot_secs: u64,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            initial_price_max_retries: DEFAULT_INITIAL_PRICE_MAX_RETRIES.parse().unwrap(),
+            persist_max_retries: DEFAULT_PERSIST_MAX_RETRIES.parse().unwrap(),
+            persist_retry_base_ms: DEFAULT_PERSIST_RETRY_BASE_MS.parse().unwrap(),
+        }
+    }
+}
+
+impl Default for HttpConfig {
+    fn default() -> Self {
+        Self {
+            http_connect_timeout_secs: DEFAULT_HTTP_CONNECT_TIMEOUT_SECS.parse().unwrap(),
+            http_pool_max_idle_per_host: DEFAULT_HTTP_POOL_MAX_IDLE_PER_HOST.parse().unwrap(),
+        }
+    }
+}
+
+impl Default for WsConfig {
+    fn default() -> Self {
+        Self {
+            ws_reconnect_initial_delay_secs: DEFAULT_WS_RECONNECT_INITIAL_DELAY_SECS.parse().unwrap(),
+            ws_reconnect_max_delay_secs: DEFAULT_WS_RECONNECT_MAX_DELAY_SECS.parse().unwrap(),
+            ws_ping_interval_secs: DEFAULT_WS_PING_INTERVAL_SECS.parse().unwrap(),
+            ws_max_lifetime_secs: DEFAULT_WS_MAX_LIFETIME_SECS.parse().unwrap(),
+        }
+    }
+}
+
+impl Default for ListenKeyConfig {
+    fn default() -> Self {
+        Self {
+            listenkey_keepalive_futures_secs: DEFAULT_LISTENKEY_KEEPALIVE_FUTURES_SECS.parse().unwrap(),
+            listenkey_keepalive_spot_secs: DEFAULT_LISTENKEY_KEEPALIVE_SPOT_SECS.parse().unwrap(),
+        }
+    }
 }
 
 impl Default for TimeConfig {
@@ -155,17 +225,10 @@ impl Default for TimeConfig {
             close_order_timeout_secs: DEFAULT_CLOSE_ORDER_TIMEOUT_SECS.parse().unwrap(),
             http_timeout_secs: DEFAULT_HTTP_TIMEOUT_SECS.parse().unwrap(),
             llm_timeout_secs: DEFAULT_LLM_TIMEOUT_SECS.parse().unwrap(),
-            initial_price_max_retries: DEFAULT_INITIAL_PRICE_MAX_RETRIES.parse().unwrap(),
-            persist_max_retries: DEFAULT_PERSIST_MAX_RETRIES.parse().unwrap(),
-            persist_retry_base_ms: DEFAULT_PERSIST_RETRY_BASE_MS.parse().unwrap(),
-            http_connect_timeout_secs: DEFAULT_HTTP_CONNECT_TIMEOUT_SECS.parse().unwrap(),
-            http_pool_max_idle_per_host: DEFAULT_HTTP_POOL_MAX_IDLE_PER_HOST.parse().unwrap(),
-            ws_reconnect_initial_delay_secs: DEFAULT_WS_RECONNECT_INITIAL_DELAY_SECS.parse().unwrap(),
-            ws_reconnect_max_delay_secs: DEFAULT_WS_RECONNECT_MAX_DELAY_SECS.parse().unwrap(),
-            ws_ping_interval_secs: DEFAULT_WS_PING_INTERVAL_SECS.parse().unwrap(),
-            ws_max_lifetime_secs: DEFAULT_WS_MAX_LIFETIME_SECS.parse().unwrap(),
-            listenkey_keepalive_futures_secs: DEFAULT_LISTENKEY_KEEPALIVE_FUTURES_SECS.parse().unwrap(),
-            listenkey_keepalive_spot_secs: DEFAULT_LISTENKEY_KEEPALIVE_SPOT_SECS.parse().unwrap(),
+            retry: RetryConfig::default(),
+            http: HttpConfig::default(),
+            ws: WsConfig::default(),
+            listenkey: ListenKeyConfig::default(),
         }
     }
 }
@@ -205,6 +268,16 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
         })?,
         jwt_expiration_hours: parse_env_num(std::env::var("JWT_EXPIRATION_HOURS").ok(), DEFAULT_JWT_HOURS)?,
     };
+
+    // Security: ENCRYPTION_KEY and LLM_KEY must be different.
+    // ENCRYPTION_KEY encrypts exchange API credentials; LLM_KEY encrypts AI/LLM API credentials.
+    // Sharing the same key would break security isolation between the two credential domains.
+    if server.encryption_key == server.llm_key {
+        return Err(VirsError::config(
+            "ENCRYPTION_KEY and LLM_KEY must be different — \
+             sharing the same key breaks security isolation between exchange and LLM credential domains",
+        ));
+    }
 
     let database = DatabaseConfig {
         url: std::env::var("DATABASE_URL").map_err(|_| {
@@ -266,50 +339,58 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
             std::env::var("TIME_LLM_TIMEOUT_SECS").ok(),
             DEFAULT_LLM_TIMEOUT_SECS,
         )?,
-        initial_price_max_retries: parse_env_num(
-            std::env::var("INITIAL_PRICE_MAX_RETRIES").ok(),
-            DEFAULT_INITIAL_PRICE_MAX_RETRIES,
-        )?,
-        persist_max_retries: parse_env_num(
-            std::env::var("PERSIST_MAX_RETRIES").ok(),
-            DEFAULT_PERSIST_MAX_RETRIES,
-        )?,
-        persist_retry_base_ms: parse_env_num(
-            std::env::var("PERSIST_RETRY_BASE_MS").ok(),
-            DEFAULT_PERSIST_RETRY_BASE_MS,
-        )?,
-        http_connect_timeout_secs: parse_env_num(
-            std::env::var("HTTP_CONNECT_TIMEOUT_SECS").ok(),
-            DEFAULT_HTTP_CONNECT_TIMEOUT_SECS,
-        )?,
-        http_pool_max_idle_per_host: parse_env_num(
-            std::env::var("HTTP_POOL_MAX_IDLE_PER_HOST").ok(),
-            DEFAULT_HTTP_POOL_MAX_IDLE_PER_HOST,
-        )?,
-        ws_reconnect_initial_delay_secs: parse_env_num(
-            std::env::var("WS_RECONNECT_INITIAL_DELAY_SECS").ok(),
-            DEFAULT_WS_RECONNECT_INITIAL_DELAY_SECS,
-        )?,
-        ws_reconnect_max_delay_secs: parse_env_num(
-            std::env::var("WS_RECONNECT_MAX_DELAY_SECS").ok(),
-            DEFAULT_WS_RECONNECT_MAX_DELAY_SECS,
-        )?,
-        ws_ping_interval_secs: parse_env_num(
-            std::env::var("WS_PING_INTERVAL_SECS").ok(),
-            DEFAULT_WS_PING_INTERVAL_SECS,
-        )?,
-        ws_max_lifetime_secs: parse_env_num(
-            std::env::var("WS_MAX_LIFETIME_SECS").ok(),
-            DEFAULT_WS_MAX_LIFETIME_SECS,
-        )?,
-        listenkey_keepalive_futures_secs: parse_env_num(
-            std::env::var("LISTENKEY_KEEPALIVE_FUTURES_SECS").ok(),
-            DEFAULT_LISTENKEY_KEEPALIVE_FUTURES_SECS,
-        )?,
-        listenkey_keepalive_spot_secs: parse_env_num(
-            std::env::var("LISTENKEY_KEEPALIVE_SPOT_SECS").ok(),
-            DEFAULT_LISTENKEY_KEEPALIVE_SPOT_SECS,
-        )?,
+        retry: RetryConfig {
+            initial_price_max_retries: parse_env_num(
+                std::env::var("INITIAL_PRICE_MAX_RETRIES").ok(),
+                DEFAULT_INITIAL_PRICE_MAX_RETRIES,
+            )?,
+            persist_max_retries: parse_env_num(
+                std::env::var("PERSIST_MAX_RETRIES").ok(),
+                DEFAULT_PERSIST_MAX_RETRIES,
+            )?,
+            persist_retry_base_ms: parse_env_num(
+                std::env::var("PERSIST_RETRY_BASE_MS").ok(),
+                DEFAULT_PERSIST_RETRY_BASE_MS,
+            )?,
+        },
+        http: HttpConfig {
+            http_connect_timeout_secs: parse_env_num(
+                std::env::var("HTTP_CONNECT_TIMEOUT_SECS").ok(),
+                DEFAULT_HTTP_CONNECT_TIMEOUT_SECS,
+            )?,
+            http_pool_max_idle_per_host: parse_env_num(
+                std::env::var("HTTP_POOL_MAX_IDLE_PER_HOST").ok(),
+                DEFAULT_HTTP_POOL_MAX_IDLE_PER_HOST,
+            )?,
+        },
+        ws: WsConfig {
+            ws_reconnect_initial_delay_secs: parse_env_num(
+                std::env::var("WS_RECONNECT_INITIAL_DELAY_SECS").ok(),
+                DEFAULT_WS_RECONNECT_INITIAL_DELAY_SECS,
+            )?,
+            ws_reconnect_max_delay_secs: parse_env_num(
+                std::env::var("WS_RECONNECT_MAX_DELAY_SECS").ok(),
+                DEFAULT_WS_RECONNECT_MAX_DELAY_SECS,
+            )?,
+            ws_ping_interval_secs: parse_env_num(
+                std::env::var("WS_PING_INTERVAL_SECS").ok(),
+                DEFAULT_WS_PING_INTERVAL_SECS,
+            )?,
+            ws_max_lifetime_secs: parse_env_num(
+                std::env::var("WS_MAX_LIFETIME_SECS").ok(),
+                DEFAULT_WS_MAX_LIFETIME_SECS,
+            )?,
+        },
+        listenkey: ListenKeyConfig {
+            listenkey_keepalive_futures_secs: parse_env_num(
+                std::env::var("LISTENKEY_KEEPALIVE_FUTURES_SECS").ok(),
+                DEFAULT_LISTENKEY_KEEPALIVE_FUTURES_SECS,
+            )?,
+            listenkey_keepalive_spot_secs: parse_env_num(
+                std::env::var("LISTENKEY_KEEPALIVE_SPOT_SECS").ok(),
+                DEFAULT_LISTENKEY_KEEPALIVE_SPOT_SECS,
+            )?,
+        },
     };
 
     Ok(AppConfig {
