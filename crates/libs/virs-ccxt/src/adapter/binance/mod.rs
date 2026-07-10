@@ -755,7 +755,13 @@ impl Exchange for BinanceExchange {
             )
         })?;
         let (tx, rx) = mpsc::channel(256);
-        let ws = user_data_ws_api::UserDataWsApi::new_spot(ed25519.clone());
+        let ws = user_data_ws_api::UserDataWsApi::new_spot(
+            ed25519.clone(),
+            self.ws_reconnect_initial_delay_secs,
+            self.ws_reconnect_max_delay_secs,
+            self.ws_ping_interval_secs,
+            self.ws_max_lifetime_secs,
+        );
         ws.start(tx);
         info!("Spot order WS API started (Ed25519, userDataStream.subscribe)");
         Ok(rx)

@@ -59,15 +59,21 @@ pub struct UserDataWsApi {
 
 impl UserDataWsApi {
     /// 创建现货用户数据流 WebSocket API 客户端
-    pub fn new_spot(ed25519_signer: BinanceEd25519Signer) -> Self {
+    pub fn new_spot(
+        ed25519_signer: BinanceEd25519Signer,
+        reconnect_delay_secs: u64,
+        max_reconnect_delay_secs: u64,
+        ws_ping_interval_secs: u64,
+        ws_max_lifetime_secs: u64,
+    ) -> Self {
         Self {
             url: SPOT_WS_API_URL.to_string(),
             ed25519_signer,
-            reconnect_delay_secs: 1,
-            max_reconnect_delay_secs: 60,
-            ws_ping_interval_secs: 30,
+            reconnect_delay_secs,
+            max_reconnect_delay_secs,
+            ws_ping_interval_secs,
             user_data_ping_interval_secs: 30 * 60,
-            ws_max_lifetime_secs: 23 * 3600,
+            ws_max_lifetime_secs,
             running: Arc::new(AtomicBool::new(false)),
             request_id: Arc::new(AtomicU64::new(1)),
         }
