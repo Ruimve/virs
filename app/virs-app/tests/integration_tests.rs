@@ -11,7 +11,6 @@ use virs_app::adapters::utils::{derive_open_side, sanitize_pnl_pct};
 use virs_market::Candle;
 use virs_models::AutoBot;
 use virs_models::GridBot;
-use virs_types::auto_port::AutoMarketType;
 use virs_types::bot::{OrderEvent, OrderSide};
 use virs_types::enums::{OrderStatus, OrderType, Side, StrategyStatus, TradeType};
 use virs_types::position::{EngineEvent, PositionOrder, Trade};
@@ -25,7 +24,6 @@ fn make_grid_bot() -> GridBot {
         name: "grid-int".to_string(),
         symbol: "BTC/USDT".to_string(),
         exchange: "binance".to_string(),
-        market_type: "futures".to_string(),
         paper_mode: false,
         status: StrategyStatus::Running,
         upper_price: 120.0,
@@ -61,7 +59,6 @@ fn make_auto_bot() -> AutoBot {
         name: "auto-int".to_string(),
         symbol: "ETH/USDT".to_string(),
         exchange: "okx".to_string(),
-        market_type: "perpetual".to_string(),
         paper_mode: true,
         status: "running".to_string(),
         leverage: 10,
@@ -173,7 +170,6 @@ fn int_1_2_auto_bot_to_config_then_compare() {
     assert_eq!(config.name, bot.name);
     assert_eq!(config.symbol, bot.symbol);
     assert_eq!(config.exchange, bot.exchange);
-    assert_eq!(config.market_type, AutoMarketType::Perpetual);
     assert_eq!(config.leverage, bot.leverage);
     assert_eq!(config.max_position_pct, bot.max_position_pct);
     assert_eq!(config.decide_interval_secs, bot.decide_interval_secs);

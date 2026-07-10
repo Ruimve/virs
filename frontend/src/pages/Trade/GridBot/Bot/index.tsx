@@ -103,12 +103,11 @@ const Bot = () => {
   }, []);
 
   const loadKlines = useCallback(
-    async (exchange: string, symbol: string, market_type: string, tf: string) => {
+    async (exchange: string, symbol: string, tf: string) => {
       try {
         const res = await fetchKlines({
           exchange,
           symbol,
-          market_type,
           timeframe: tf,
         });
         if (res.data) setKlineData(res.data);
@@ -120,9 +119,9 @@ const Bot = () => {
   );
 
   const loadKlineStable = useCallback(() => {
-    if (!bot?.exchange || !bot?.symbol || !bot?.market_type || !klineTimeframe) return;
-    loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe);
-  }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines]);
+    if (!bot?.exchange || !bot?.symbol || !klineTimeframe) return;
+    loadKlines(bot?.exchange, bot?.symbol, klineTimeframe);
+  }, [bot?.exchange, bot?.symbol, klineTimeframe, loadKlines]);
 
   useEffect(() => {
     if (!bot?.id) return;
@@ -131,9 +130,9 @@ const Bot = () => {
   }, [bot?.id, loadLogs, loadTrades]);
 
   useEffect(() => {
-    if (!bot?.exchange || !bot?.symbol || !bot?.market_type || !klineTimeframe) return;
-    loadKlines(bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe);
-  }, [bot?.exchange, bot?.symbol, bot?.market_type, klineTimeframe, loadKlines]);
+    if (!bot?.exchange || !bot?.symbol || !klineTimeframe) return;
+    loadKlines(bot?.exchange, bot?.symbol, klineTimeframe);
+  }, [bot?.exchange, bot?.symbol, klineTimeframe, loadKlines]);
 
   useKlineWs(
     (event: KlineWsEvent) => {

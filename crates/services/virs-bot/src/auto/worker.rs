@@ -135,10 +135,6 @@ impl AutoWorker {
         }
     }
 
-    pub(crate) fn is_spot(&self) -> bool {
-        self.bot.market_type.is_spot()
-    }
-
     pub(crate) fn has_position(&self) -> bool {
         match &self.current_position {
             Some(p) if p.is_open() => p.size.abs() > 1e-8,
@@ -228,11 +224,7 @@ impl AutoWorker {
     pub(crate) async fn fetch_current_price(&self) -> f64 {
         match self
             .price_provider
-            .get_price(
-                &self.bot.exchange,
-                &self.bot.symbol,
-                self.bot.market_type.as_str(),
-            )
+            .get_price(&self.bot.exchange, &self.bot.symbol)
             .await
         {
             Some(price) if price > 0.0 => price,
@@ -701,11 +693,7 @@ impl AutoWorker {
     async fn fetch_current_atr(&self) -> f64 {
         let snapshot = AutoMarketSnapshot::from_base(
             self.market_data_provider
-                .get_market_snapshot(
-                    &self.bot.exchange,
-                    &self.bot.symbol,
-                    self.bot.market_type.as_str(),
-                )
+                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
                 .await,
         );
         snapshot.indicators.atr
@@ -820,11 +808,7 @@ impl AutoWorker {
     async fn build_llm_prompt(&self) -> Option<(String, String)> {
         let snapshot = AutoMarketSnapshot::from_base(
             self.market_data_provider
-                .get_market_snapshot(
-                    &self.bot.exchange,
-                    &self.bot.symbol,
-                    self.bot.market_type.as_str(),
-                )
+                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
                 .await,
         );
 
@@ -835,7 +819,7 @@ impl AutoWorker {
 
         let account = self
             .market_data_provider
-            .get_account_balance(&self.bot.exchange, self.bot.market_type.as_str())
+            .get_account_balance(&self.bot.exchange)
             .await;
         let margin_usage_rate = if account.total > 0.0 {
             account.used / account.total
@@ -908,7 +892,6 @@ impl AutoWorker {
             timestamp: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string(),
             symbol: self.bot.symbol.clone(),
             exchange: self.bot.exchange.clone(),
-            market_type: self.bot.market_type.as_str().to_string(),
             total_balance: account.total,
             available_balance: account.free,
             used_margin: account.used,
@@ -1041,12 +1024,11 @@ impl AutoWorker {
     /// 2. **pending 订单**：有待确认的订单在途，避免重复下单
     /// 3. **置信度不足**（仅开仓）：confidence < 0.6，降级为观望
     /// 4. **市场快照无效**：current_price <= 0，无法计算下单参数
-    /// 5. **现货做空**：spot 市场不支持 short
-    /// 6. **已有仓位**：避免重复开仓
-    /// 7. **冷却期**（仅开仓）：止损/止盈/LLM平仓后同方向重入限制
-    /// 8. **无仓位可平**（仅平仓）：ClosePosition 时无持仓
+    /// 5. **已有仓位**：避免重复开仓
+    /// 6. **冷却期**（仅开仓）：止损/止盈/LLM平仓后同方向重入限制
+    /// 7. **无仓位可平**（仅平仓）：ClosePosition 时无持仓
     ///
-    /// 拦截 2-8 会返回 `Some(reason)`，由调用方记录到 LLM log 的 intercept_reason
+    /// 拦截 2-7 会返回 `Some(reason)`，由调用方记录到 LLM log 的 intercept_reason
     pub(crate) async fn execute_decision(
         &mut self,
         action: &AutoAction,
@@ -1080,11 +1062,7 @@ impl AutoWorker {
 
         let snapshot = AutoMarketSnapshot::from_base(
             self.market_data_provider
-                .get_market_snapshot(
-                    &self.bot.exchange,
-                    &self.bot.symbol,
-                    self.bot.market_type.as_str(),
-                )
+                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
                 .await,
         );
 
@@ -1105,10 +1083,6 @@ impl AutoWorker {
                     _ => unreachable!(),
                 };
 
-                if side == "short" && self.is_spot() {
-                    warn!(bot_id = %self.bot.id, "Cannot open short on spot market");
-                    return Some("现货市场不支持做空".to_string());
-                }
                 if self.has_position() {
                     warn!(bot_id = %self.bot.id, side = %side, "Already has position, cannot open");
                     return Some("已有仓位，无法开仓".to_string());
@@ -1217,7 +1191,7 @@ impl AutoWorker {
     ) {
         let account = self
             .market_data_provider
-            .get_account_balance(&self.bot.exchange, self.bot.market_type.as_str())
+            .get_account_balance(&self.bot.exchange)
             .await;
 
         if account.total <= 0.0 && account.free <= 0.0 {
@@ -1244,11 +1218,7 @@ impl AutoWorker {
             return;
         }
 
-        let quantity = if self.is_spot() {
-            invest_amount / price
-        } else {
-            invest_amount * self.bot.leverage as f64 / price
-        };
+        let quantity = invest_amount * self.bot.leverage as f64 / price;
 
         // 校验最小下单量，并按 min_qty 精度处理
         let min_qty = snapshot.base.min_qty;
@@ -1654,11 +1624,7 @@ impl AutoWorker {
         let (stop_loss, take_profit) = if price_deviation > 0.005 {
             let snapshot = AutoMarketSnapshot::from_base(
                 self.market_data_provider
-                    .get_market_snapshot(
-                        &self.bot.exchange,
-                        &self.bot.symbol,
-                        self.bot.market_type.as_str(),
-                    )
+                    .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
                     .await,
             );
             let atr = if snapshot.indicators.atr > 0.0 {

@@ -4,12 +4,11 @@ import type { ApiResponse, KlineCandle, OrderBookData } from './types';
 export async function fetchKlines(params: {
   exchange: string;
   symbol: string;
-  market_type: string;
   timeframe: string;
 }): Promise<ApiResponse<KlineCandle[]>> {
-  const { exchange, symbol, market_type, timeframe } = params;
+  const { exchange, symbol, timeframe } = params;
   const res = await api.get<{ candles: KlineCandle[] }>(
-    `/market/klines?exchange=${exchange}&symbol=${symbol}&market_type=${market_type}&timeframe=${timeframe}`,
+    `/market/klines?exchange=${exchange}&symbol=${symbol}&timeframe=${timeframe}`,
   );
   if (res.success && res.data?.candles) {
     return {
@@ -32,11 +31,10 @@ export async function fetchKlines(params: {
 export async function fetchOrderBook(params: {
   exchange: string;
   symbol: string;
-  market_type: string;
 }): Promise<ApiResponse<OrderBookData>> {
-  const { exchange, symbol, market_type } = params;
+  const { exchange, symbol } = params;
   const res = await api.get<{ bids: number[][]; asks: number[][] }>(
-    `/market/orderbook?exchange=${exchange}&symbol=${symbol}&market_type=${market_type}`,
+    `/market/orderbook?exchange=${exchange}&symbol=${symbol}`,
   );
   if (res.success && res.data) {
     return {
@@ -57,12 +55,10 @@ export async function fetchOrderBook(params: {
 export async function subscribeOrderBook(params: {
   exchange: string;
   symbol: string;
-  market_type: string;
 }): Promise<ApiResponse> {
   const res = await api.post('/orderbook/subscribe', {
     exchange: params.exchange,
     symbol: params.symbol,
-    market_type: params.market_type,
   });
   return res;
 }

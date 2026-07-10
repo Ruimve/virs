@@ -59,12 +59,6 @@ fn int_8_1_exchange_position_serde_then_pnl() {
     assert!((de.unrealized_pnl_at(52000.0) - original_pnl).abs() < 0.01);
 }
 
-#[test]
-fn int_8_3_auto_market_type_from_str() {
-    use virs_types::auto_port::AutoMarketType;
-    assert!(AutoMarketType::from_str_lossy("spot").is_spot());
-}
-
 // ============================================================
 // Helpers
 // ============================================================

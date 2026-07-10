@@ -178,7 +178,7 @@ impl GridWorker {
     pub(crate) async fn fetch_current_price(&self) -> f64 {
         match self
             .price_provider
-            .get_price(&self.bot.exchange, &self.bot.symbol, &self.bot.market_type)
+            .get_price(&self.bot.exchange, &self.bot.symbol)
             .await
         {
             Some(price) if price > 0.0 => price,
@@ -952,7 +952,7 @@ impl GridWorker {
     async fn build_llm_prompt(&self) -> Option<(String, String)> {
         let snapshot = self
             .market_data_provider
-            .get_market_snapshot(&self.bot.exchange, &self.bot.symbol, &self.bot.market_type)
+            .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
             .await;
         if snapshot.current_price <= 0.0 {
             warn!(bot_id = %self.bot.id, "Market snapshot has zero price, skipping LLM decision");
@@ -1047,7 +1047,7 @@ impl GridWorker {
 
         let account = self
             .market_data_provider
-            .get_account_balance(&self.bot.exchange, &self.bot.market_type)
+            .get_account_balance(&self.bot.exchange)
             .await;
 
         let indicators: crate::common::indicators::MarketIndicators =

@@ -12,7 +12,6 @@ export async function saveCredential(params: {
   api_key: string;
   api_secret: string;
   passphrase?: string;
-  market_type?: string;
   label?: string;
 }): Promise<ApiResponse<{ id: string }>> {
   return api.post('/credentials/save', params);
@@ -44,7 +43,6 @@ export async function checkPermissions(): Promise<ApiResponse<{ permissions: Per
 
 /// GET /credentials/position-mode — query the exchange's current position mode.
 /// Returns { supported: bool, mode: "hedge"|"oneway"|null }.
-/// Spot exchanges return supported=false (position mode is perpetual-only).
 export async function fetchPositionMode(): Promise<ApiResponse<PositionModeResult>> {
   return api.get('/credentials/position-mode');
 }

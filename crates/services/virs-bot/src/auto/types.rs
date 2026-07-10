@@ -2,8 +2,8 @@
 
 use uuid::Uuid;
 
-// Re-export AutoBotConfig and AutoMarketType from virs-types
-pub use virs_types::auto_port::{AutoBotConfig, AutoMarketType};
+// Re-export AutoBotConfig from virs-types
+pub use virs_types::auto_port::AutoBotConfig;
 
 // Re-export AutoBot from virs-models (DB models, single source of truth)
 pub use virs_models::AutoBot;
@@ -49,7 +49,7 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位加密货币交易方向�
    - 1h上一根量 > 1h 20周期均量 * 0.8（趋势量能确认）
    - 15m上一根量 > 15m 20周期均量 * 0.6（入场动量确认）
 
-## 开空条件（open_short，仅合约）
+## 开空条件（open_short）
 必须同时满足：
 1. 4h趋势：EMA20 <= EMA50 或 4h MACD柱状图 < 0
 2. 1h趋势：EMA20 < EMA50 且 ADX > 20 且 价格 < EMA20
@@ -95,7 +95,6 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位加密货币交易方向�
 
 ## 关键规则
 - 宁可错过，不可做错：信号不明确时必须hold
-- 现货市场只能open_long，不能open_short
 - 优先考虑4h趋势方向，逆4h趋势不开仓
 - EMA交叉超过20根K线的信号视为过期，但若EMA间距在扩大（趋势加速），仍可作为入场依据
 
@@ -145,7 +144,6 @@ pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}
 ## 交易对与市场
 - 交易对：{symbol}
 - 交易所：{exchange}
-- 市场类型：{market_type}
 - 杠杆倍数：{leverage}
 - 最小交易数量：{min_qty}
 

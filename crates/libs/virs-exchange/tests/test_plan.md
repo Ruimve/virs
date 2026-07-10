@@ -2,17 +2,16 @@
 
 > 生成日期: 2026-07-01
 > Crate: `crates/libs/virs-exchange`
-> 状态: **70 个测试全部通过** (55 单元 + 15 集成)
+> 状态: **68 个测试全部通过** (53 单元 + 15 集成)
 
 ---
 
 ## 单元测试用例
 
-### adapter_tests.rs — CCXT 适配器转换函数 (14)
+### adapter_tests.rs — CCXT 适配器转换函数 (13)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
-| A1.1 | `a1_1_spot_to_ccxt` | Spot → Spot |
 | A1.2 | `a1_2_perpetual_to_ccxt` | Perpetual → Perpetual |
 | A2.1 | `a2_1_buy_to_ccxt` | Buy → Buy |
 | A2.2 | `a2_2_sell_to_ccxt` | Sell → Sell |
@@ -39,7 +38,7 @@
 | P1.7 | `p1_7_leverage_one_long` | lev=1, Long → entry * 0 = 0.0 |
 | P1.8 | `p1_8_leverage_one_short` | lev=1, Short → entry * 2 = 100000.0 |
 
-### pe_adapter_tests.rs — PE 适配器转换函数 (33)
+### pe_adapter_tests.rs — PE 适配器转换函数 (32)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
@@ -63,7 +62,6 @@
 | PE5.6 | `pe5_6_pending` | Pending → Pending |
 | PE6.1 | `pe6_1_long` | models Long → PE Long |
 | PE6.2 | `pe6_2_short` | models Short → PE Short |
-| PE7.1 | `pe7_1_spot` | models Spot → PE Spot |
 | PE7.2 | `pe7_2_perpetual` | models Perpetual → PE Perpetual |
 | PE8.1 | `pe8_1_order_normal` | 正常 order → PositionOrder 字段一致 |
 | PE8.2 | `pe8_2_order_no_fill_no_price` | filled=0 + price=None → fill_price=None |
@@ -107,11 +105,11 @@
 
 | 测试文件 | 被测模块 | 测试数 |
 |----------|----------|--------|
-| `src/adapter_tests.rs` | adapter.rs (6 个转换函数) | 14 |
+| `src/adapter_tests.rs` | adapter.rs (6 个转换函数) | 13 |
 | `src/paper_tests.rs` | paper.rs (compute_paper_liquidation_price) | 8 |
-| `src/pe_adapter_tests.rs` | pe_adapter.rs (12 个转换函数) | 33 |
+| `src/pe_adapter_tests.rs` | pe_adapter.rs (12 个转换函数) | 32 |
 | `tests/integration_tests.rs` | 跨模块集成 | 15 |
-| **合计** | | **70** |
+| **合计** | | **68** |
 
 ### 死代码清理记录
 

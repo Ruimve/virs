@@ -13,7 +13,6 @@ use crate::state::AppState;
 pub struct SymbolQuery {
     pub exchange: Option<String>,
     pub symbol: Option<String>,
-    pub market_type: Option<String>,
     pub timeframe: Option<String>,
 }
 
@@ -21,7 +20,6 @@ pub struct SymbolQuery {
 pub struct KlineSubscribeRequest {
     pub exchange: String,
     pub symbol: String,
-    pub market_type: Option<String>,
     pub timeframe: Option<String>,
 }
 
@@ -36,14 +34,10 @@ pub async fn kline_subscribe(
     State(state): State<AppState>,
     Json(body): Json<KlineSubscribeRequest>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let market_type_str = body.market_type.as_deref().unwrap_or("perpetual");
-    let market_type = match market_type_str {
-        "spot" => virs_models::MarketType::Spot,
-        _ => virs_models::MarketType::Perpetual,
-    };
+    let market_type = virs_models::MarketType::Perpetual;
 
     // Check exchange is registered before subscribing
-    let exchange_key = format!("{}:{}", body.exchange, market_type_str);
+    let exchange_key = format!("{}:{}", body.exchange, market_type);
     if state.exchange_registry.get(&exchange_key).is_none() {
         return Err(VirsError::bad_request(format!(
             "Exchange '{}' not registered. Please create a bot first.",
@@ -69,11 +63,7 @@ pub async fn orderbook_subscribe(
     State(state): State<AppState>,
     Json(body): Json<KlineSubscribeRequest>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let market_type_str = body.market_type.as_deref().unwrap_or("perpetual");
-    let market_type = match market_type_str {
-        "spot" => virs_models::MarketType::Spot,
-        _ => virs_models::MarketType::Perpetual,
-    };
+    let market_type = virs_models::MarketType::Perpetual;
 
     match state
         .orderbook_engine
@@ -142,7 +132,6 @@ pub async fn get_ticker(
         Some(ref s) => s,
         None => return Err(VirsError::bad_request("symbol is required")),
     };
-    let market_type = params.market_type.as_deref().unwrap_or("perpetual");
 
     // Try kline engine first for latest price
     if let Some(candles) = state
@@ -166,7 +155,7 @@ pub async fn get_ticker(
     }
 
     // Fallback to exchange ticker
-    let exchange_key = format!("{}:{}", exchange, market_type);
+    let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_ticker(symbol).await {
             Ok(ticker) => Ok(Json(ApiResponse::ok(serde_json::json!({
@@ -202,7 +191,6 @@ pub async fn get_klines(
         Some(ref s) => s,
         None => return Err(VirsError::bad_request("symbol is required")),
     };
-    let market_type = params.market_type.as_deref().unwrap_or("perpetual");
 
     // Parse requested timeframe (default 15m)
     let requested_tf = match params.timeframe.as_deref() {
@@ -239,7 +227,7 @@ pub async fn get_klines(
     }
 
     // Fallback to exchange REST API (exchange already registered above)
-    let exchange_key = format!("{}:{}", exchange, market_type);
+    let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => {
             let tf_str = match requested_tf {
@@ -286,9 +274,8 @@ pub async fn get_order_book(
         Some(ref s) => s,
         None => return Err(VirsError::bad_request("symbol is required")),
     };
-    let market_type = params.market_type.as_deref().unwrap_or("perpetual");
 
-    let exchange_key = format!("{}:{}", exchange, market_type);
+    let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_order_book(symbol, 20).await {
             Ok(ob) => Ok(Json(ApiResponse::ok(serde_json::json!({
@@ -315,9 +302,7 @@ pub async fn get_balances(
         None => return Err(VirsError::bad_request("exchange is required")),
     };
 
-    let market_type = params.market_type.as_deref().unwrap_or("perpetual");
-
-    let exchange_key = format!("{}:{}", exchange, market_type);
+    let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_balances().await {
             Ok(balances) => {
@@ -338,8 +323,8 @@ pub async fn get_balances(
             Err(e) => Err(VirsError::bad_request(format!("Balances error: {}", e))),
         },
         None => Err(VirsError::bad_request(format!(
-            "Exchange '{}' not registered for {}",
-            exchange, market_type
+            "Exchange '{}' not registered",
+            exchange
         ))),
     }
 }
@@ -353,9 +338,7 @@ pub async fn get_symbols(
         None => return Err(VirsError::bad_request("exchange is required")),
     };
 
-    let market_type = params.market_type.as_deref().unwrap_or("perpetual");
-
-    let exchange_key = format!("{}:{}", exchange, market_type);
+    let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_symbols().await {
             Ok(symbols) => Ok(Json(ApiResponse::ok(serde_json::json!({

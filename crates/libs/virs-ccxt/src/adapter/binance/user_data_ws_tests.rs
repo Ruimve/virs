@@ -1,86 +1,9 @@
 use crate::adapter::binance::user_data_ws::*;
-use crate::adapter::binance::BinanceExchange;
 use virs_types::{OrderStatus, PositionSide};
 
 // ============================================================
-// 消息解析 (5 tests)
+// 消息解析 (3 tests)
 // ============================================================
-
-#[test]
-fn test_parse_execution_report_basic() {
-    let json = r#"{
-        "e": "executionReport",
-        "E": 1713900000000,
-        "o": {
-            "s": "BTCUSDT",
-            "c": "client_123",
-            "S": "BUY",
-            "o": "LIMIT",
-            "X": "FILLED",
-            "i": 123456789,
-            "q": "1.000",
-            "z": "1.000",
-            "Q": "0.000",
-            "L": "65000.00",
-            "l": "1.000",
-            "n": "0.065",
-            "N": "USDT",
-            "T": 1713900000123,
-            "R": false,
-            "w": "CONTRACT_PRICE"
-        }
-    }"#;
-
-    let msg: BinanceOrderMessage = serde_json::from_str(json).unwrap();
-    assert!(msg.stream.is_none());
-    assert!(msg.data.is_none());
-    assert_eq!(msg.event_type_flat.as_deref(), Some("executionReport"));
-
-    let report = msg.into_execution_report().unwrap();
-    assert_eq!(report.event_type, "executionReport");
-    assert_eq!(report.order.symbol, "BTCUSDT");
-    assert_eq!(report.order.status, "FILLED");
-    assert_eq!(report.order.order_id, 123456789);
-}
-
-#[test]
-fn test_parse_execution_report_combined_stream() {
-    let json = r#"{
-        "stream": "listenKey@executionReport",
-        "data": {
-            "e": "executionReport",
-            "E": 1713900000000,
-            "o": {
-                "s": "ETHUSDT",
-                "c": "client_456",
-                "S": "SELL",
-                "o": "MARKET",
-                "X": "PARTIALLY_FILLED",
-                "i": 987654321,
-                "q": "10.000",
-                "z": "5.000",
-                "Q": "5.000",
-                "L": "3500.00",
-                "l": "5.000",
-                "n": "0.175",
-                "N": "USDT",
-                "T": 1713900000456,
-                "R": true,
-                "w": "MARK_PRICE"
-            }
-        }
-    }"#;
-
-    let msg: BinanceOrderMessage = serde_json::from_str(json).unwrap();
-    assert_eq!(msg.stream.as_deref(), Some("listenKey@executionReport"));
-    assert!(msg.data.is_some());
-
-    let report = msg.into_execution_report().unwrap();
-    assert_eq!(report.order.symbol, "ETHUSDT");
-    assert_eq!(report.order.status, "PARTIALLY_FILLED");
-    assert_eq!(report.order.side, "SELL");
-    assert!(report.order.is_reduce_only);
-}
 
 #[test]
 fn test_parse_invalid_json() {
@@ -98,9 +21,9 @@ fn test_parse_non_order_event() {
     }"#;
 
     let msg: BinanceOrderMessage = serde_json::from_str(json).unwrap();
-    let report = msg.into_execution_report();
+    let event = msg.to_ws_feed_event();
     // 没有订单数据，应该返回 None
-    assert!(report.is_none());
+    assert!(event.is_none());
 }
 
 #[test]
@@ -112,15 +35,14 @@ fn test_parse_listen_key_expired() {
     }"#;
 
     let msg: BinanceOrderMessage = serde_json::from_str(json).unwrap();
-    let report = msg.into_execution_report();
-    assert!(report.is_none());
+    let event = msg.to_ws_feed_event();
+    assert!(event.is_none());
 }
 
 #[test]
 fn test_parse_order_trade_update_single_stream() {
     // 永续合约 ORDER_TRADE_UPDATE 单流格式
-    // 之前 into_execution_report() 对单流 ORDER_TRADE_UPDATE 返回 None，
-    // 导致合约订单更新被静默丢弃。to_ws_feed_event() 应正确处理。
+    // to_ws_feed_event() 应正确处理 ORDER_TRADE_UPDATE 事件。
     let json = r#"{
         "e": "ORDER_TRADE_UPDATE",
         "E": 1713900000000,
@@ -152,10 +74,8 @@ fn test_parse_order_trade_update_single_stream() {
     }"#;
 
     let msg: BinanceOrderMessage = serde_json::from_str(json).unwrap();
-    // 单流 ORDER_TRADE_UPDATE 不应被 into_execution_report 处理
-    assert!(msg.clone().into_execution_report().is_none());
 
-    // 但 to_ws_feed_event() 应正确转换为 WsFeedEvent
+    // to_ws_feed_event() 应正确转换为 WsFeedEvent
     let event = msg.to_ws_feed_event();
     assert!(
         event.is_some(),
@@ -201,7 +121,7 @@ fn test_order_status_mapping_all_variants() {
     ];
 
     for (binance_status, expected) in cases {
-        let inner = ExecutionReportInner {
+        let inner = BinanceOrderInner {
             symbol: "BTCUSDT".to_string(),
             client_order_id: "test".to_string(),
             side: "BUY".to_string(),
@@ -323,7 +243,7 @@ fn test_to_ws_feed_event_unknown_status() {
 #[test]
 fn test_to_ws_feed_event_remaining_fallback() {
     // remaining_qty 为 None 时，使用 orig_qty - filled_qty
-    let inner = ExecutionReportInner {
+    let inner = BinanceOrderInner {
         symbol: "BTCUSDT".to_string(),
         client_order_id: "test".to_string(),
         side: "BUY".to_string(),
@@ -349,7 +269,7 @@ fn test_to_ws_feed_event_remaining_fallback() {
 }
 
 // ============================================================
-// 构造函数和状态 (3 tests)
+// 构造函数和状态 (2 tests)
 // ============================================================
 
 #[test]
@@ -360,13 +280,6 @@ fn test_new_perpetual() {
         "wss://fstream.binance.com/private/ws?listenKey=test_listen_key"
     );
     assert_eq!(ws.base_url, "wss://fstream.binance.com/private/ws");
-    assert!(!ws.is_running());
-}
-
-#[test]
-fn test_new_spot() {
-    let ws = UserDataWs::new_spot("my_key".to_string(), 1, 60, 30, 82800);
-    assert_eq!(ws.ws_url, "wss://stream.binance.com/ws/my_key");
     assert!(!ws.is_running());
 }
 
@@ -391,8 +304,8 @@ fn make_test_inner(
     last_fill_price: &str,
     last_fill_qty: &str,
     commission: &str,
-) -> ExecutionReportInner {
-    ExecutionReportInner {
+) -> BinanceOrderInner {
+    BinanceOrderInner {
         symbol: "BTCUSDT".to_string(),
         client_order_id: "test_client".to_string(),
         side: "BUY".to_string(),

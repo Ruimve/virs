@@ -79,7 +79,6 @@ pub struct KlineEngine {
     subscriptions: Arc<DashMap<String, SubscriptionEntry>>,
     symbol_index: Arc<DashMap<String, String>>,
     event_tx: broadcast::Sender<KlineEvent>,
-    spot_handler: MarketWsHandler,
     perpetual_handler: MarketWsHandler,
     started: Arc<std::sync::atomic::AtomicBool>,
 }
@@ -88,7 +87,6 @@ impl KlineEngine {
     pub fn new(
         config: KlineEngineConfig,
         source: Arc<dyn KlineSource>,
-        spot_ws: Arc<Mutex<dyn KlineWsClient>>,
         perpetual_ws: Arc<Mutex<dyn KlineWsClient>>,
     ) -> Self {
         let (event_tx, _) = broadcast::channel(config.event_channel_capacity);
@@ -100,7 +98,6 @@ impl KlineEngine {
             subscriptions: Arc::new(DashMap::new()),
             symbol_index: Arc::new(DashMap::new()),
             event_tx,
-            spot_handler: MarketWsHandler::new(spot_ws),
             perpetual_handler: MarketWsHandler::new(perpetual_ws),
             started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
@@ -132,7 +129,6 @@ impl KlineEngine {
 
         let (ws_update_tx, mut ws_update_rx) = broadcast::channel::<WsEvent>(512);
 
-        self.spot_handler.start(ws_update_tx.clone()).await;
         self.perpetual_handler.start(ws_update_tx).await;
 
         // WS update processor
@@ -334,7 +330,6 @@ impl KlineEngine {
         {
             return;
         }
-        self.spot_handler.stop().await;
         self.perpetual_handler.stop().await;
     }
 
@@ -366,14 +361,7 @@ impl KlineEngine {
         self.subscriptions.insert(key.clone(), entry);
         self.symbol_index.insert(symbol.to_string(), key);
 
-        match market_type {
-            MarketType::Spot => {
-                self.spot_handler.subscribe(symbol).await;
-            }
-            MarketType::Perpetual => {
-                self.perpetual_handler.subscribe(symbol).await;
-            }
-        }
+        self.perpetual_handler.subscribe(symbol).await;
 
         if self.config.backfill_on_start {
             GapDetector::detect_and_backfill(

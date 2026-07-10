@@ -40,10 +40,6 @@ pub async fn fetch_api_restrictions(
             .get("enableReading")
             .and_then(|v| v.as_bool())
             .unwrap_or(true),
-        enable_spot_and_margin_trading: data
-            .get("enableSpotAndMarginTrading")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
         enable_withdrawals: data
             .get("enableWithdrawals")
             .and_then(|v| v.as_bool())

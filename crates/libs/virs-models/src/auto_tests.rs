@@ -19,7 +19,6 @@ fn make_auto_bot(
         name: "test_auto".into(),
         symbol: "BTC/USDT".into(),
         exchange: "binance".into(),
-        market_type: "perpetual".into(),
         paper_mode: false,
         status: status.into(),
         leverage: 10,

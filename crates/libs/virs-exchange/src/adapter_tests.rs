@@ -17,15 +17,10 @@ use crate::adapter::{
 // ============================================================
 
 #[test]
-fn a1_1_spot_to_ccxt() {
-    assert_eq!(to_ccxt_market_type(&MarketType::Spot), virs_ccxt::MarketType::Spot);
-}
-
-#[test]
 fn a1_2_perpetual_to_ccxt() {
     assert_eq!(
         to_ccxt_market_type(&MarketType::Perpetual),
-        virs_ccxt::MarketType::Perpetual
+        MarketType::Perpetual
     );
 }
 

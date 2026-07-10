@@ -42,10 +42,9 @@ impl CcxtAdapter {
 
 // ---- Type conversion helpers ----
 
-pub fn to_ccxt_market_type(mt: &MarketType) -> virs_ccxt::MarketType {
+pub fn to_ccxt_market_type(mt: &MarketType) -> MarketType {
     match mt {
-        MarketType::Spot => virs_ccxt::MarketType::Spot,
-        MarketType::Perpetual => virs_ccxt::MarketType::Perpetual,
+        MarketType::Perpetual => MarketType::Perpetual,
     }
 }
 
@@ -343,12 +342,6 @@ impl Exchange for CcxtAdapter {
 
     async fn get_api_restrictions(&self) -> Result<virs_ccxt::ApiRestrictions, ExchangeError> {
         self.inner.fetch_api_restrictions().await
-    }
-
-    async fn start_spot_order_ws_api(
-        &self,
-    ) -> Result<tokio::sync::mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError> {
-        self.inner.start_spot_order_ws_api().await
     }
 
     async fn start_listenkey_order_ws(

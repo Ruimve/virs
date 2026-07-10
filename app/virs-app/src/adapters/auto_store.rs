@@ -9,7 +9,6 @@ use virs_error::VirsResult;
 
 use virs_models::AutoBot;
 use virs_types::auto_port::AutoBotConfig;
-use virs_types::auto_port::AutoMarketType;
 use virs_types::auto_port::*;
 
 pub struct PgAutoStore {
@@ -29,7 +28,6 @@ pub fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
         name: bot.name.clone(),
         symbol: bot.symbol.clone(),
         exchange: bot.exchange.clone(),
-        market_type: AutoMarketType::from_str_lossy(&bot.market_type),
         paper_mode: bot.paper_mode,
         leverage: bot.leverage,
         max_position_pct: bot.max_position_pct,

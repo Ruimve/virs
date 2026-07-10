@@ -19,7 +19,6 @@ fn make_grid_bot(
         name: "test_bot".into(),
         symbol: "BTC/USDT".into(),
         exchange: "binance".into(),
-        market_type: "perpetual".into(),
         paper_mode: false,
         status,
         upper_price: upper,

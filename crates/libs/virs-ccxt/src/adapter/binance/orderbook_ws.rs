@@ -7,7 +7,6 @@
 //! dynamic subscribe/unsubscribe, symbol map for unified format.
 //!
 //! Stream formats:
-//! - Spot partial book depth:    { "lastUpdateId": 160, "bids": [[p,a]], "asks": [[p,a]] }
 //! - Perpetual partial book depth: { "e":"depthUpdate", "E":..., "T":..., "s":"BTCUSDT",
 //!   "U":..., "u":..., "pu":..., "b":[[p,a]], "a":[[p,a]] }
 //! - Combined stream wrapper:    { "stream": "<name>", "data": <payload> }
@@ -33,19 +32,12 @@ fn binance_ws_symbol(symbol: &str) -> String {
 /// 1. 单流格式: 顶层直接是 payload
 /// 2. 组合流格式: {"stream":"<name>", "data": <payload>}
 ///
-/// 此外，spot 和 perpetual 的 payload 字段名不同：
-/// - Spot:      bids / asks / lastUpdateId
-/// - Perpetual: b    / a    / e / E / T / s / U / u / pu
+/// Perpetual payload 字段: b / a / e / E / T / s / U / u / pu
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct BinanceDepthMessage {
     stream: Option<String>,
     /// 组合流格式: data 字段包含完整 payload
     data: Option<serde_json::Value>,
-    /// 单流 spot 格式: 顶层 bids/asks
-    bids: Option<Vec<[String; 2]>>,
-    asks: Option<Vec<[String; 2]>>,
-    #[serde(rename = "lastUpdateId")]
-    last_update_id: Option<i64>,
     /// 单流 perpetual 格式: 顶层 b/a
     #[serde(rename = "e")]
     #[allow(dead_code)]
@@ -74,7 +66,7 @@ pub(crate) struct ParsedDepth {
 }
 
 impl BinanceDepthMessage {
-    /// 提取订单簿数据，兼容单流/组合流 + spot/perpetual
+    /// 提取订单簿数据，兼容单流/组合流
     pub(crate) fn into_depth(self) -> Option<ParsedDepth> {
         let stream = self.stream.clone();
 
@@ -89,27 +81,12 @@ impl BinanceDepthMessage {
             return None;
         }
 
-        // 单流 spot: bids/asks at top level
-        if let (Some(bids), Some(asks)) = (self.bids.clone(), self.asks.clone()) {
-            let last_update_id = self.last_update_id;
-            // T9: spot has no event timestamp — use 0 and store lastUpdateId separately
-            return Some(ParsedDepth {
-                bids,
-                asks,
-                stream_name: stream,
-                symbol: None,
-                timestamp_ms: 0,
-                last_update_id,
-            });
-        }
-
         // 单流 perpetual: b/a at top level
         if let (Some(bids), Some(asks)) = (self.bids_perp_flat, self.asks_perp_flat) {
             let ts = self.event_time_flat.unwrap_or_else(|| {
                 tracing::warn!("orderbook_ws: event_time_flat is None — using 0 as fallback timestamp");
                 0
             });
-            // T9: perpetual has event_time — last_update_id is None
             return Some(ParsedDepth {
                 bids,
                 asks,
@@ -126,21 +103,6 @@ impl BinanceDepthMessage {
 
 /// 解析 payload（组合流的 data 字段或单流的顶层）
 pub(crate) fn parse_payload(v: &serde_json::Value) -> Option<ParsedDepth> {
-    // Spot format: bids/asks
-    if let (Some(bids), Some(asks)) = (v.get("bids"), v.get("asks")) {
-        let bids = parse_levels(bids)?;
-        let asks = parse_levels(asks)?;
-        let last_update_id = v.get("lastUpdateId").and_then(|t| t.as_i64());
-        // T9: spot has no event timestamp — use 0 and store lastUpdateId separately
-        return Some(ParsedDepth {
-            bids,
-            asks,
-            stream_name: None,
-            symbol: None,
-            timestamp_ms: 0,
-            last_update_id,
-        });
-    }
     // Perpetual format: b/a
     if let (Some(bids), Some(asks)) = (v.get("b"), v.get("a")) {
         let bids = parse_levels(bids)?;
@@ -150,7 +112,6 @@ pub(crate) fn parse_payload(v: &serde_json::Value) -> Option<ParsedDepth> {
             tracing::warn!("orderbook_ws: event time 'E' missing in perpetual payload — using 0 as fallback");
             0
         });
-        // T9: perpetual has event_time — last_update_id is None
         return Some(ParsedDepth {
             bids,
             asks,
@@ -244,25 +205,6 @@ impl OrderBookWs {
             shutdown_tx: None,
             command_tx: None,
         }
-    }
-
-    pub fn new_spot(
-        _proxy_url: Option<&str>,
-        reconnect_delay_secs: u64,
-        max_reconnect_delay_secs: u64,
-        ws_ping_interval_secs: u64,
-        ws_max_lifetime_secs: u64,
-    ) -> Self {
-        // Use /stream endpoint to get wrapped messages {"stream":..., "data":...}
-        // This is required because spot partial book depth payloads do NOT include
-        // the symbol — we must extract it from the stream name.
-        Self::new(
-            "wss://stream.binance.com/stream".to_string(),
-            reconnect_delay_secs,
-            max_reconnect_delay_secs,
-            ws_ping_interval_secs,
-            ws_max_lifetime_secs,
-        )
     }
 
     pub fn new_perpetual(
@@ -582,7 +524,7 @@ async fn resolve_symbol(
         }
     }
 
-    // 3. Single-subscription fallback (spot raw payload, no stream name)
+    // 3. Single-subscription fallback (no stream name or payload symbol)
     if map.len() == 1 {
         return map.values().next().cloned();
     }

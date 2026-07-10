@@ -40,7 +40,6 @@ pub async fn create_bot(
     let paper_mode = body["paper_mode"].as_bool().ok_or_else(|| {
         VirsError::bad_request("paper_mode is required (must be true or false)")
     })?;
-    let market_type = body["market_type"].as_str().unwrap_or("perpetual");
 
     if symbol.is_empty() || exchange.is_empty() {
         return Err(VirsError::bad_request(
@@ -75,11 +74,6 @@ pub async fn create_bot(
             "leverage is required and must be greater than 0",
         ));
     }
-    if market_type != "spot" && market_type != "perpetual" {
-        return Err(VirsError::bad_request(
-            "market_type must be 'spot' or 'perpetual'",
-        ));
-    }
 
     // Enforce 1-bot-per-user limit (across all bot types)
     {
@@ -104,7 +98,7 @@ pub async fn create_bot(
     state.engine_manager.ensure_started(paper_mode).await?;
 
     // Verify exchange is registered in registry (must be done via /api/credentials/save first)
-    let exchange_key = format!("{}:{}", exchange, market_type);
+    let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
     if state.exchange_registry.get(&exchange_key).is_none() {
         return Err(VirsError::Http {
             status: 412,
@@ -113,11 +107,7 @@ pub async fn create_bot(
     }
 
     // Subscribe kline engine for this symbol (backfill + WS push)
-    let mt = match market_type {
-        "spot" => virs_models::MarketType::Spot,
-        _ => virs_models::MarketType::Perpetual,
-    };
-    state.kline_engine.subscribe(exchange, symbol, mt).await?;
+    state.kline_engine.subscribe(exchange, symbol, virs_models::MarketType::Perpetual).await?;
 
     // Register symbol for paper mode price ticks
     if paper_mode {
@@ -154,8 +144,8 @@ pub async fn create_bot(
     let id = uuid::Uuid::new_v4();
     sqlx::query(
         r#"INSERT INTO qd_grid_bots (id, user_id, name, symbol, exchange, grid_count, upper_price, lower_price,
-           grid_profit_pct, quantity_per_grid, leverage, market_type, paper_mode, initial_capital, status, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'stopped', NOW(), NOW())"#,
+           grid_profit_pct, quantity_per_grid, leverage, paper_mode, initial_capital, status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'stopped', NOW(), NOW())"#,
     )
     .bind(id)
     .bind(user_id)
@@ -168,7 +158,6 @@ pub async fn create_bot(
     .bind(grid_profit_pct)
     .bind(quantity_per_grid)
     .bind(leverage)
-    .bind(market_type)
     .bind(paper_mode)
     .bind(initial_capital)
     .execute(&state.db_pool)
@@ -193,13 +182,12 @@ pub async fn list_bots(
             String,
             String,
             String,
-            String,
             i32,
             chrono::DateTime<chrono::Utc>,
             chrono::DateTime<chrono::Utc>,
         ),
     >(
-        r#"SELECT id, name, symbol, exchange, status, market_type, leverage,
+        r#"SELECT id, name, symbol, exchange, status, leverage,
            created_at, updated_at
            FROM qd_grid_bots WHERE user_id = $1 ORDER BY created_at DESC"#,
     )
@@ -216,7 +204,6 @@ pub async fn list_bots(
                 symbol,
                 exchange,
                 status,
-                market_type,
                 leverage,
                 created_at,
                 updated_at,
@@ -227,7 +214,6 @@ pub async fn list_bots(
                     "symbol": symbol,
                     "exchange": exchange,
                     "status": status,
-                    "market_type": market_type,
                     "leverage": leverage,
                     "created_at": created_at.to_rfc3339(),
                     "updated_at": updated_at.to_rfc3339(),
@@ -350,7 +336,6 @@ pub async fn get_bot(
             "name": bot.name,
             "symbol": bot.symbol,
             "exchange": bot.exchange,
-            "market_type": bot.market_type,
             "status": bot.status,
             "is_running": bot.is_running(),
             "is_stopped": bot.is_stopped(),

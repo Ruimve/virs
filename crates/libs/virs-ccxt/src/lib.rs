@@ -145,24 +145,12 @@ pub trait Exchange: Send + Sync {
             "fetch_api_restrictions not supported".into(),
         ))
     }
-    /// 启动现货用户数据流 WebSocket API（基于 Ed25519 认证，替代废弃的 listenKey 方案）。
-    ///
-    /// 返回 `mpsc::Receiver<WsFeedEvent>`，调用方通过该 receiver 接收订单事件。
-    /// 仅当交易所支持 Ed25519 签名时可用（如 Binance 现货 + Ed25519 API Key）。
-    /// 不支持的交易所返回 `ExchangeError::NotSupported`。
-    async fn start_spot_order_ws_api(
-        &self,
-    ) -> Result<mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError> {
-        Err(ExchangeError::NotSupported(
-            "start_spot_order_ws_api not supported".into(),
-        ))
-    }
 
-    /// 启动基于 listenKey 的订单 WebSocket（合约用户数据流，或现货 HMAC 降级路径）。
+    /// 启动基于 listenKey 的订单 WebSocket（合约用户数据流）。
     ///
     /// 实现负责：
     /// 1. 调用 `create_listen_key` 获取 listenKey（若调用方未提供）
-    /// 2. 构造并启动对应交易所/市场类型的 UserDataWs
+    /// 2. 构造并启动对应交易所的 UserDataWs
     /// 3. 返回事件 receiver
     ///
     /// 调用方可通过 `listen_key_hint` 传入已缓存的 listenKey 以避免重复创建。
@@ -536,7 +524,7 @@ pub(crate) fn extract_error_message(json: &Value) -> String {
 ///
 /// | Exchange | Status |
 /// |----------|--------|
-/// | Binance  | Implemented (spot + perpetual) |
+/// | Binance  | Implemented (perpetual futures) |
 /// | Bybit    | Planned — architecture ready for quick implementation |
 /// | OKX      | Planned — architecture ready for quick implementation |
 pub fn create_exchange(
@@ -545,12 +533,10 @@ pub fn create_exchange(
     api_secret: &str,
     _passphrase: Option<&str>,
     proxy_url: Option<&str>,
-    market_type: &MarketType,
     http_timeout: std::time::Duration,
     connect_timeout: std::time::Duration,
     pool_max_idle_per_host: usize,
     listenkey_keepalive_futures_secs: u64,
-    listenkey_keepalive_spot_secs: u64,
     ws_reconnect_initial_delay_secs: u64,
     ws_reconnect_max_delay_secs: u64,
     ws_ping_interval_secs: u64,
@@ -561,12 +547,10 @@ pub fn create_exchange(
             api_key,
             api_secret,
             proxy_url,
-            market_type,
             http_timeout,
             connect_timeout,
             pool_max_idle_per_host,
             listenkey_keepalive_futures_secs,
-            listenkey_keepalive_spot_secs,
             ws_reconnect_initial_delay_secs,
             ws_reconnect_max_delay_secs,
             ws_ping_interval_secs,

@@ -21,7 +21,6 @@ fn make_bot(upper: f64, lower: f64, count: i32) -> GridBotConfig {
         name: "test".to_string(),
         symbol: "BTC/USDT".to_string(),
         exchange: "binance".to_string(),
-        market_type: "futures".to_string(),
         paper_mode: false,
         grid_count: count,
         upper_price: upper,

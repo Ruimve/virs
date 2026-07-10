@@ -299,7 +299,6 @@ pub struct ApiRestrictions {
     pub ip_not_restricted: bool,
     pub create_sub_account: bool,
     pub read_info: bool,
-    pub enable_spot_and_margin_trading: bool,
     pub enable_withdrawals: bool,
     pub enable_internal_transfer: bool,
     pub enable_futures: bool,

@@ -5,7 +5,7 @@ use chrono::Utc;
 use virs_models as models;
 use virs_types::enums::*;
 use virs_types::market::ExchangePosition;
-use virs_types::position::{PositionOrder, WsFeedEvent};
+use virs_types::position::PositionOrder;
 
 use virs_error::ExchangeError;
 
@@ -187,14 +187,6 @@ fn pe6_2_short() {
 // ============================================================
 // TC-PE7: convert_virs_market_type
 // ============================================================
-
-#[test]
-fn pe7_1_spot() {
-    assert_eq!(
-        convert_virs_market_type(&models::MarketType::Spot),
-        MarketType::Spot
-    );
-}
 
 #[test]
 fn pe7_2_perpetual() {

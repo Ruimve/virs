@@ -178,17 +178,17 @@ fn b4_3_type_stop_market() {
 }
 
 #[test]
-fn b4_4_type_stop_loss() {
+fn b4_4_type_stop() {
     assert_eq!(
-        BinanceExchange::parse_order_type("STOP_LOSS"),
-        OrderType::StopMarket
+        BinanceExchange::parse_order_type("STOP"),
+        OrderType::StopLimit
     );
 }
 
 #[test]
-fn b4_5_type_stop_loss_limit() {
+fn b4_5_type_stop_limit() {
     assert_eq!(
-        BinanceExchange::parse_order_type("STOP_LOSS_LIMIT"),
+        BinanceExchange::parse_order_type("STOP_LIMIT"),
         OrderType::StopLimit
     );
 }
@@ -211,8 +211,8 @@ fn b4_7_type_take_profit_market() {
 }
 
 #[test]
-fn b4_7b_type_take_profit_spot() {
-    // 现货返回 TAKE_PROFIT（触发后执行 MARKET）
+fn b4_7b_type_take_profit() {
+    // 合约返回 TAKE_PROFIT（触发后执行 MARKET）
     assert_eq!(
         BinanceExchange::parse_order_type("TAKE_PROFIT"),
         OrderType::TakeProfitMarket
@@ -260,50 +260,45 @@ fn b6_2_order_type_limit() {
 
 #[test]
 fn b6_3_order_type_stop_market() {
-    // 现货 StopMarket → STOP_LOSS（现货无 STOP_MARKET）
+    // 合约 StopMarket → STOP_MARKET
     assert_eq!(
         BinanceExchange::order_type_str(&OrderType::StopMarket),
-        "STOP_LOSS"
+        "STOP_MARKET"
     );
 }
 
 #[test]
 fn b6_4_order_type_stop_limit() {
-    // 现货 StopLimit → STOP_LOSS_LIMIT
-    assert_eq!(
-        BinanceExchange::order_type_str(&OrderType::StopLimit),
-        "STOP_LOSS_LIMIT"
-    );
     // 合约 StopLimit → STOP
     assert_eq!(
-        BinanceExchange::order_type_str_futures(&OrderType::StopLimit),
+        BinanceExchange::order_type_str(&OrderType::StopLimit),
         "STOP"
     );
 }
 
 #[test]
 fn b6_5_order_type_take_profit_market() {
-    // 现货 TakeProfitMarket → TAKE_PROFIT（现货无 TAKE_PROFIT_MARKET）
+    // 合约 TakeProfitMarket → TAKE_PROFIT_MARKET
     assert_eq!(
         BinanceExchange::order_type_str(&OrderType::TakeProfitMarket),
-        "TAKE_PROFIT"
+        "TAKE_PROFIT_MARKET"
     );
 }
 
 #[test]
 fn b6_6_futures_stop_market_unchanged() {
-    // 合约 StopMarket → STOP_MARKET（合约支持此枚举，不受现货修复影响）
+    // 合约 StopMarket → STOP_MARKET
     assert_eq!(
-        BinanceExchange::order_type_str_futures(&OrderType::StopMarket),
+        BinanceExchange::order_type_str(&OrderType::StopMarket),
         "STOP_MARKET"
     );
 }
 
 #[test]
 fn b6_7_futures_take_profit_market_unchanged() {
-    // 合约 TakeProfitMarket → TAKE_PROFIT_MARKET（合约支持此枚举）
+    // 合约 TakeProfitMarket → TAKE_PROFIT_MARKET
     assert_eq!(
-        BinanceExchange::order_type_str_futures(&OrderType::TakeProfitMarket),
+        BinanceExchange::order_type_str(&OrderType::TakeProfitMarket),
         "TAKE_PROFIT_MARKET"
     );
 }
@@ -406,16 +401,13 @@ fn t1_2_time_offset_warn_threshold_is_2000ms() {
 #[test]
 fn t1_3_time_sync_started_initialized_false() {
     // T1: time_sync_started must be false on new exchange instance
-    use crate::types::MarketType;
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",
         None,
-        &MarketType::Spot,
         std::time::Duration::from_secs(30),
         std::time::Duration::from_secs(10),
         10,
-        1800,
         900,
         1,
         60,
@@ -431,16 +423,13 @@ fn t1_3_time_sync_started_initialized_false() {
 fn t1_4_time_sync_started_swap_prevents_double_start() {
     // T1: swap(true) returns false on first call (not yet started),
     // true on second call (already started) — prevents duplicate spawn
-    use crate::types::MarketType;
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",
         None,
-        &MarketType::Spot,
         std::time::Duration::from_secs(30),
         std::time::Duration::from_secs(10),
         10,
-        1800,
         900,
         1,
         60,
@@ -464,16 +453,13 @@ fn t1_4_time_sync_started_swap_prevents_double_start() {
 #[test]
 fn t1_5_drop_sets_time_sync_running_false() {
     // T1 WARN fix: Drop impl must set time_sync_running to false
-    use crate::types::MarketType;
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",
         None,
-        &MarketType::Spot,
         std::time::Duration::from_secs(30),
         std::time::Duration::from_secs(10),
         10,
-        1800,
         900,
         1,
         60,
@@ -498,16 +484,13 @@ fn t1_5_drop_sets_time_sync_running_false() {
 #[test]
 fn t1_6_time_sync_running_initialized_false() {
     // T1 WARN fix: time_sync_running must be false on new instance
-    use crate::types::MarketType;
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",
         None,
-        &MarketType::Spot,
         std::time::Duration::from_secs(30),
         std::time::Duration::from_secs(10),
         10,
-        1800,
         900,
         1,
         60,

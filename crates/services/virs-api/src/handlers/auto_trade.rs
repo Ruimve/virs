@@ -56,7 +56,6 @@ pub async fn create_bot(
 
     let symbol = body["symbol"].as_str().unwrap_or("");
     let exchange = body["exchange"].as_str().unwrap_or("");
-    let market_type = body["market_type"].as_str().unwrap_or("perpetual");
     let leverage = body["leverage"].as_i64().ok_or_else(|| {
         VirsError::bad_request("leverage is required and must be greater than 0")
     })? as i32;
@@ -85,11 +84,6 @@ pub async fn create_bot(
             "max_position_pct is required and must be between 0 and 100 (exclusive)",
         ));
     }
-    if market_type != "spot" && market_type != "perpetual" {
-        return Err(VirsError::bad_request(
-            "market_type must be 'spot' or 'perpetual'",
-        ));
-    }
 
     // Enforce 1-bot-per-user limit (across all bot types)
     {
@@ -114,8 +108,7 @@ pub async fn create_bot(
     state.engine_manager.ensure_started(paper_mode).await?;
 
     // Verify exchange is registered in registry (must be done via /api/credentials/save first)
-    let market_type_str = market_type;
-    let exchange_key = format!("{}:{}", exchange, market_type_str);
+    let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
     if state.exchange_registry.get(&exchange_key).is_none() {
         return Err(VirsError::Http {
             status: 412,
@@ -124,11 +117,7 @@ pub async fn create_bot(
     }
 
     // Subscribe kline engine for this symbol (backfill + WS push)
-    let mt = match market_type_str {
-        "spot" => virs_models::MarketType::Spot,
-        _ => virs_models::MarketType::Perpetual,
-    };
-    state.kline_engine.subscribe(exchange, symbol, mt).await?;
+    state.kline_engine.subscribe(exchange, symbol, virs_models::MarketType::Perpetual).await?;
 
     // Register symbol for paper mode price ticks
     if paper_mode {
@@ -164,15 +153,14 @@ pub async fn create_bot(
 
     let id = uuid::Uuid::new_v4();
     sqlx::query(
-        r#"INSERT INTO qd_auto_bots (id, user_id, name, symbol, exchange, market_type, leverage, max_position_pct, decide_interval_secs, paper_mode, initial_capital, status, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'stopped', NOW(), NOW())"#,
+        r#"INSERT INTO qd_auto_bots (id, user_id, name, symbol, exchange, leverage, max_position_pct, decide_interval_secs, paper_mode, initial_capital, status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'stopped', NOW(), NOW())"#,
     )
     .bind(id)
     .bind(user_id)
     .bind(name)
     .bind(symbol)
     .bind(exchange)
-    .bind(market_type)
     .bind(leverage)
     .bind(max_position_pct)
     .bind(decide_interval_secs)
@@ -193,10 +181,10 @@ pub async fn list_bots(
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let bots = sqlx::query_as::<_, (
-        uuid::Uuid, String, String, String, String, String, i32, f64, i32,
+        uuid::Uuid, String, String, String, String, i32, f64, i32,
         chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>,
     )>(
-        r#"SELECT id, name, symbol, exchange, status, market_type, leverage, max_position_pct, decide_interval_secs,
+        r#"SELECT id, name, symbol, exchange, status, leverage, max_position_pct, decide_interval_secs,
            created_at, updated_at
            FROM qd_auto_bots WHERE user_id = $1 ORDER BY created_at DESC"#,
     )
@@ -213,7 +201,6 @@ pub async fn list_bots(
                 symbol,
                 exchange,
                 status,
-                market_type,
                 leverage,
                 max_position_pct,
                 decide_interval_secs,
@@ -226,7 +213,6 @@ pub async fn list_bots(
                     "symbol": symbol,
                     "exchange": exchange,
                     "status": status,
-                    "market_type": market_type,
                     "leverage": leverage,
                     "max_position_pct": max_position_pct,
                     "decide_interval_secs": decide_interval_secs,
@@ -272,7 +258,6 @@ pub async fn get_bot(
             "name": bot.name,
             "symbol": bot.symbol,
             "exchange": bot.exchange,
-            "market_type": bot.market_type,
             "status": bot.status,
             "is_running": bot.is_running(),
             "is_stopped": bot.is_stopped(),

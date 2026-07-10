@@ -26,11 +26,7 @@
 | M10.2 | `m10_2_short_profit` | Short, entry=50000, current=49000 → +1000 |
 | M10.3 | `m10_3_long_loss` | Long, entry=50000, current=49000 → -1000 |
 
-### auto_port_tests.rs — AutoMarketType 方法 (1)
-
-| ID | 测试函数 | 描述 |
-|----|---------|------|
-| AM2.1 | `am2_1_spot_is_spot` | Spot → true, Perpetual → false |
+### auto_port_tests.rs — (deleted, AutoMarketType removed)
 
 ### position_tests.rs — Position/RiskConfig 方法 (7)
 
@@ -56,9 +52,9 @@
 | S2.2 | `s2_2_balance_roundtrip` | Balance serde 往返 |
 | S2.3 | `s2_3_exchange_position_roundtrip` | ExchangePosition serde 往返 |
 | S2.5 | `s2_5_risk_config_default_roundtrip` | RiskConfig serde 往返 |
-| S4.1 | `s4_1_perpetual` | AutoMarketType::from_str_lossy("perpetual") → Perpetual |
-| S4.2 | `s4_2_spot` | AutoMarketType::from_str_lossy("spot") → Spot |
-| S4.3 | `s4_3_unknown_defaults_to_perpetual` | 未知值 → Perpetual (默认) |
+| S4.1 | `s4_1_perpetual` | (deleted — AutoMarketType removed) |
+| S4.2 | `s4_2_spot` | (deleted — AutoMarketType removed) |
+| S4.3 | `s4_3_unknown_defaults_to_perpetual` | (deleted — AutoMarketType removed) |
 
 ---
 
@@ -74,7 +70,7 @@
 | INT-6.1 | `int_6_1_default_config_valid` | RiskConfig::default() → validate Ok |
 | INT-6.2 | `int_6_2_invalid_config` | max_leverage=0 → validate Err |
 | INT-8.1 | `int_8_1_exchange_position_serde_then_pnl` | serde 往返后 unrealized_pnl_at 一致 |
-| INT-8.3 | `int_8_3_auto_market_type_from_str` | from_str_lossy("spot").is_spot() → true |
+| INT-8.3 | `int_8_3_auto_market_type_from_str` | (deleted — AutoMarketType removed) |
 
 ---
 
@@ -137,11 +133,8 @@
 | `OrderStatus::is_filled` | `virs-position/src/engine.rs` |
 | `PositionStatus::is_open` | `virs-types/src/position.rs` (Position::is_open 实现) |
 | `EngineState::is_running` | `virs-position/src/engine.rs` |
-| `Balance::compute_total` | `virs-ccxt/src/adapter/binance/api.rs`, `virs-exchange/src/paper.rs` |
+| `Balance::compute_total` | `virs-exchange/src/paper.rs` |
 | `ExchangePosition::unrealized_pnl_at` | `virs-exchange/src/paper.rs` |
-| `AutoMarketType::as_str` | `virs-bot/src/auto/worker.rs` |
-| `AutoMarketType::is_spot` | `virs-bot/src/auto/worker.rs` |
-| `AutoMarketType::from_str_lossy` | `virs-app/src/adapters/auto_store.rs` |
 | `Position::is_open` | `virs-bot/src/auto/worker.rs`, `virs-position/src/engine.rs` |
 | `Position::unrealized_pnl_at` | `virs-bot/src/auto/strategy.rs` |
 | `RiskConfig::validate` | `virs-position/src/risk.rs` |

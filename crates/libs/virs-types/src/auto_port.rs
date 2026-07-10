@@ -2,7 +2,6 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use virs_error::VirsResult;
 
@@ -119,43 +118,6 @@ pub trait AutoStore: Send + Sync {
     async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()>;
 }
 
-/// 市场类型（auto bot 专用）
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AutoMarketType {
-    #[serde(rename = "perpetual")]
-    Perpetual,
-    #[serde(rename = "spot")]
-    Spot,
-}
-
-impl AutoMarketType {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Perpetual => "perpetual",
-            Self::Spot => "spot",
-        }
-    }
-
-    pub fn is_spot(&self) -> bool {
-        self == &Self::Spot
-    }
-
-    /// Lossy parsing from a string. Unknown values default to `Perpetual`.
-    /// Used by `virs-app::adapters::auto_store` when loading bot configs from DB.
-    pub fn from_str_lossy(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "spot" => Self::Spot,
-            _ => Self::Perpetual,
-        }
-    }
-}
-
-impl std::fmt::Display for AutoMarketType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
-
 /// 自动交易 Bot 配置
 #[derive(Debug, Clone)]
 pub struct AutoBotConfig {
@@ -164,7 +126,6 @@ pub struct AutoBotConfig {
     pub name: String,
     pub symbol: String,
     pub exchange: String,
-    pub market_type: AutoMarketType,
     pub paper_mode: bool,
     pub leverage: i32,
     pub max_position_pct: f64,

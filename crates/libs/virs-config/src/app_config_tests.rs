@@ -94,7 +94,6 @@ fn t12_1_time_config_default_values() {
     assert_eq!(tc.ws.ws_max_lifetime_secs, 82800);
     // Sub-config: ListenKeyConfig
     assert_eq!(tc.listenkey.listenkey_keepalive_futures_secs, 1800);
-    assert_eq!(tc.listenkey.listenkey_keepalive_spot_secs, 900);
 }
 
 #[test]
@@ -135,7 +134,6 @@ fn t12_3_time_config_serde_roundtrip() {
         },
         listenkey: ListenKeyConfig {
             listenkey_keepalive_futures_secs: 1200,
-            listenkey_keepalive_spot_secs: 600,
         },
     };
     let json = serde_json::to_string(&tc).unwrap();

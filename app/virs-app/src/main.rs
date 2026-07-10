@@ -121,15 +121,6 @@ async fn main() -> VirsResult<()> {
         ..Default::default()
     };
     let kline_source = Arc::new(ExchangeKlineSource::new(exchange_registry.clone()));
-    let spot_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::kline_ws::KlineWs::new_spot(
-            config.proxy.as_deref(),
-            config.time.ws.ws_reconnect_initial_delay_secs,
-            config.time.ws.ws_reconnect_max_delay_secs,
-            config.time.ws.ws_ping_interval_secs,
-            config.time.ws.ws_max_lifetime_secs,
-        ),
-    ));
     let perpetual_ws = Arc::new(tokio::sync::Mutex::new(
         virs_ccxt::adapter::binance::kline_ws::KlineWs::new_perpetual(
             config.proxy.as_deref(),
@@ -142,22 +133,12 @@ async fn main() -> VirsResult<()> {
     let kline_engine = Arc::new(KlineEngine::new(
         kline_config,
         kline_source,
-        spot_ws,
         perpetual_ws,
     ));
     info!("Kline engine created (lazy — will start on first subscribe)");
 
     // ── OrderBook Engine ──
     // Created at boot but only subscribes when bots need data
-    let ob_spot_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::orderbook_ws::OrderBookWs::new_spot(
-            config.proxy.as_deref(),
-            config.time.ws.ws_reconnect_initial_delay_secs,
-            config.time.ws.ws_reconnect_max_delay_secs,
-            config.time.ws.ws_ping_interval_secs,
-            config.time.ws.ws_max_lifetime_secs,
-        ),
-    ));
     let ob_perpetual_ws = Arc::new(tokio::sync::Mutex::new(
         virs_ccxt::adapter::binance::orderbook_ws::OrderBookWs::new_perpetual(
             config.proxy.as_deref(),
@@ -169,7 +150,6 @@ async fn main() -> VirsResult<()> {
     ));
     let orderbook_engine = Arc::new(OrderBookEngine::new(
         OrderBookEngineConfig::default(),
-        ob_spot_ws,
         ob_perpetual_ws,
     ));
     info!("OrderBook engine created (lazy — will start on first subscribe)");
@@ -205,7 +185,6 @@ async fn main() -> VirsResult<()> {
         http_connect_timeout_secs: config.time.http.http_connect_timeout_secs,
         http_pool_max_idle_per_host: config.time.http.http_pool_max_idle_per_host,
         listenkey_keepalive_futures_secs: config.time.listenkey.listenkey_keepalive_futures_secs,
-        listenkey_keepalive_spot_secs: config.time.listenkey.listenkey_keepalive_spot_secs,
         ws_reconnect_initial_delay_secs: config.time.ws.ws_reconnect_initial_delay_secs,
         ws_reconnect_max_delay_secs: config.time.ws.ws_reconnect_max_delay_secs,
         ws_ping_interval_secs: config.time.ws.ws_ping_interval_secs,

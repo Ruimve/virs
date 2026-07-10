@@ -13,7 +13,7 @@ use virs_ccxt::{
 };
 use virs_error::ExchangeError;
 
-use virs_types::enums::{MarketType, OrderStatus};
+use virs_types::enums::OrderStatus;
 
 // ============================================================
 // TC-INT-1: Symbol conversion round-trip
@@ -60,34 +60,6 @@ fn int_2_1_hmac_signature_deterministic() {
 // ============================================================
 // TC-INT-4: WS order message → WsFeedEvent conversion
 // ============================================================
-
-#[test]
-fn int_4_1_execution_report_to_ws_feed_event() {
-    let raw = json!({
-        "e": "executionReport",
-        "E": 1499405658657i64,
-        "o": {
-            "s": "BTCUSDT",
-            "c": "client_order_1",
-            "S": "BUY",
-            "o": "LIMIT",
-            "X": "FILLED",
-            "i": 123456,
-            "q": "1.5",
-            "z": "1.5",
-            "L": "50000.0",
-            "l": "1.5",
-            "n": "0.075",
-            "N": "BTC",
-            "T": 1499405658657i64,
-            "R": false,
-            "w": "CONTRACT_PRICE"
-        }
-    });
-    let msg: BinanceOrderMessage = serde_json::from_value(raw).unwrap();
-    let event = msg.to_ws_feed_event();
-    assert!(event.is_some());
-}
 
 #[test]
 fn int_4_2_order_trade_update_to_ws_feed_event() {
@@ -138,11 +110,9 @@ fn int_5_1_create_exchange_binance_hmac() {
         "test_api_secret",
         None,
         None,
-        &MarketType::Spot,
         std::time::Duration::from_secs(30),
         std::time::Duration::from_secs(10),
         10,
-        1800,
         900,
         1,
         60,
@@ -165,11 +135,9 @@ fn int_5_2_create_exchange_binance_ed25519() {
         seed_b64,
         None,
         None,
-        &MarketType::Perpetual,
         std::time::Duration::from_secs(30),
         std::time::Duration::from_secs(10),
         10,
-        1800,
         900,
         1,
         60,
@@ -189,11 +157,9 @@ fn int_5_3_create_exchange_bybit_not_supported() {
         "secret",
         None,
         None,
-        &MarketType::Spot,
         std::time::Duration::from_secs(30),
         std::time::Duration::from_secs(10),
         10,
-        1800,
         900,
         1,
         60,
@@ -215,11 +181,9 @@ fn int_5_4_create_exchange_okx_not_supported() {
         "secret",
         None,
         None,
-        &MarketType::Spot,
         std::time::Duration::from_secs(30),
         std::time::Duration::from_secs(10),
         10,
-        1800,
         900,
         1,
         60,
@@ -241,11 +205,9 @@ fn int_5_5_create_exchange_case_insensitive() {
         "secret",
         None,
         None,
-        &MarketType::Spot,
         std::time::Duration::from_secs(30),
         std::time::Duration::from_secs(10),
         10,
-        1800,
         900,
         1,
         60,

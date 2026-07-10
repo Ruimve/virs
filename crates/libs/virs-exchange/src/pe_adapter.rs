@@ -98,7 +98,6 @@ pub fn convert_virs_position_side(side: &models::PositionSide) -> PositionSide {
 
 pub fn convert_virs_market_type(mt: &models::MarketType) -> MarketType {
     match mt {
-        models::MarketType::Spot => MarketType::Spot,
         models::MarketType::Perpetual => MarketType::Perpetual,
     }
 }
@@ -160,11 +159,7 @@ impl ExchangePe for CcxtExchangeAdapter {
     }
 
     fn market_type(&self) -> MarketType {
-        if let Some(ex) = self.get_perpetual_exchange() {
-            convert_virs_market_type(&ex.market_type())
-        } else {
-            MarketType::Perpetual
-        }
+        MarketType::Perpetual
     }
 
     async fn get_ticker(&self, symbol: &str) -> VirsResult<Ticker> {
@@ -319,29 +314,8 @@ impl ExchangePe for CcxtExchangeAdapter {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
-        let is_perpetual = ex.market_type() == models::MarketType::Perpetual;
 
-        // 现货优先使用 WebSocket API（Ed25519 认证，替代废弃的 listenKey 方案）
-        if !is_perpetual {
-            match ex.start_spot_order_ws_api().await {
-                Ok(ws_rx) => {
-                    info!(
-                        symbols_count = symbols.len(),
-                        "Starting spot order updates via WebSocket API (Ed25519, userDataStream.subscribe)"
-                    );
-                    return Ok(Box::pin(ReceiverStream::new(ws_rx)));
-                }
-                Err(e) => {
-                    warn!(
-                        error = %e,
-                        "Spot WebSocket API unavailable, falling back to deprecated listenKey. \
-                         Migrate to Ed25519 API Key to enable userDataStream.subscribe."
-                    );
-                }
-            }
-        }
-
-        // listenKey 路径（合约始终走这里；现货在 WS API 不可用时降级到这里）
+        // listenKey 路径（合约用户数据流）
         match ex.start_listenkey_order_ws(None).await {
             Ok(ws_rx) => {
                 info!(
@@ -355,8 +329,6 @@ impl ExchangePe for CcxtExchangeAdapter {
                     error = %e,
                     market_type = ?ex.market_type(),
                     "Failed to start listenKey order WS, order updates disabled. \
-                     For spot: /api/v3/userDataStream is deprecated by Binance; \
-                     migrate to Ed25519 API Key + WebSocket API (userDataStream.subscribe). \
                      For perpetual: check /fapi/v1/listenKey availability."
                 );
                 Err(no_exchange_error().into())

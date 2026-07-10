@@ -106,16 +106,8 @@ pub trait Exchange: Send + Sync {
     // ---- Account ----
     async fn get_api_restrictions(&self) -> Result<virs_ccxt::ApiRestrictions, ExchangeError>;
 
-    // ---- WebSocket API (现货 Ed25519 用户数据流) ----
-    /// 启动现货用户数据流 WebSocket API，返回订单事件 receiver。
-    ///
-    /// 仅当交易所支持 Ed25519 签名时可用（如 Binance 现货 + Ed25519 API Key）。
-    /// 不支持时返回 `Err`，调用方应降级到 listenKey 方案。
-    async fn start_spot_order_ws_api(
-        &self,
-    ) -> Result<tokio::sync::mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError>;
-
-    /// 启动基于 listenKey 的订单 WebSocket（合约用户数据流，或现货 HMAC 降级路径）。
+    // ---- WebSocket API ----
+    /// 启动基于 listenKey 的订单 WebSocket（合约用户数据流）。
     ///
     /// 实现内部完成 listenKey 创建/复用 + WS 客户端构造与启动，返回事件 receiver。
     /// `listen_key_hint` 传入已缓存的 listenKey 可避免重复创建。
@@ -245,11 +237,6 @@ impl Exchange for Box<dyn Exchange> {
     }
     async fn get_api_restrictions(&self) -> Result<virs_ccxt::ApiRestrictions, ExchangeError> {
         (**self).get_api_restrictions().await
-    }
-    async fn start_spot_order_ws_api(
-        &self,
-    ) -> Result<tokio::sync::mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError> {
-        (**self).start_spot_order_ws_api().await
     }
     async fn start_listenkey_order_ws(
         &self,

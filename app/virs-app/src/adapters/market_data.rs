@@ -166,7 +166,6 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         &self,
         exchange: &str,
         symbol: &str,
-        market_type: &str,
     ) -> MarketSnapshot {
         let now_ms = chrono::Utc::now().timestamp_millis();
 
@@ -214,30 +213,26 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
 
         let current_price = self.fetch_current_price(exchange, symbol, &klines_1h).await;
 
-        let exchange_key = format!("{}:{}", exchange, market_type);
-        let funding_rate = if market_type == "perpetual" {
-            if let Some(ex) = self.exchange_registry.get(&exchange_key) {
-                ex.get_funding_rate(symbol)
-                    .await
-                    .map(|fr| fr.rate)
-                    .unwrap_or_else(|e| {
-                        warn!(
-                            exchange = %exchange,
-                            symbol = %symbol,
-                            error = %e,
-                            "Funding rate fetch failed — defaulting to 0.0"
-                        );
-                        0.0
-                    })
-            } else {
-                warn!(
-                    exchange = %exchange,
-                    symbol = %symbol,
-                    "No exchange found for funding rate — defaulting to 0.0"
-                );
-                0.0
-            }
+        let exchange_key = format!("{}:perpetual", exchange);
+        let funding_rate = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+            ex.get_funding_rate(symbol)
+                .await
+                .map(|fr| fr.rate)
+                .unwrap_or_else(|e| {
+                    warn!(
+                        exchange = %exchange,
+                        symbol = %symbol,
+                        error = %e,
+                        "Funding rate fetch failed — defaulting to 0.0"
+                    );
+                    0.0
+                })
         } else {
+            warn!(
+                exchange = %exchange,
+                symbol = %symbol,
+                "No exchange found for funding rate — defaulting to 0.0"
+            );
             0.0
         };
 
@@ -283,7 +278,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         }
     }
 
-    async fn get_account_balance(&self, exchange: &str, _market_type: &str) -> AccountBalance {
+    async fn get_account_balance(&self, exchange: &str) -> AccountBalance {
         // Paper mode: use PE exchange for simulated balance
         if let Some(ref pe_ex) = self.pe_exchange {
             match pe_ex.get_balance().await {
@@ -362,7 +357,6 @@ impl AutoExchangeMarketDataProvider {
         min_count: usize,
         interval_str: &str,
         start_ms: i64,
-        market_type: &str,
         required: bool,
     ) -> Option<Vec<Kline>> {
         // Try kline engine cache first
@@ -375,7 +369,7 @@ impl AutoExchangeMarketDataProvider {
         }
 
         // Fallback to REST API
-        let exchange_key = format!("{}:{}", exchange, market_type);
+        let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key);
         match ex {
             Some(ref ex) => match ex
@@ -428,7 +422,6 @@ impl AutoExchangeMarketDataProvider {
         &self,
         exchange: &str,
         symbol: &str,
-        market_type: &str,
         klines_1h: &[Kline],
     ) -> f64 {
         if let Some(ref engine) = self.kline_engine {
@@ -444,7 +437,7 @@ impl AutoExchangeMarketDataProvider {
             }
         }
 
-        let exchange_key = format!("{}:{}", exchange, market_type);
+        let exchange_key = format!("{}:perpetual", exchange);
         if let Some(ex) = self.exchange_registry.get(&exchange_key) {
             if let Ok(t) = ex.get_ticker(symbol).await {
                 if t.last > 0.0 {
@@ -470,7 +463,6 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
         &self,
         exchange: &str,
         symbol: &str,
-        market_type: &str,
     ) -> MarketSnapshot {
         let now_ms = chrono::Utc::now().timestamp_millis();
 
@@ -482,7 +474,6 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
                 30,
                 "1h",
                 now_ms - 200 * 3600 * 1000,
-                market_type,
                 true,
             )
             .await
@@ -499,7 +490,6 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
                 50,
                 "4h",
                 now_ms - 100 * 4 * 3600 * 1000,
-                market_type,
                 false,
             )
             .await
@@ -513,46 +503,41 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
                 50,
                 "15m",
                 now_ms - 200 * 15 * 60 * 1000,
-                market_type,
                 false,
             )
             .await
             .unwrap_or_default();
 
         let current_price = self
-            .fetch_current_price(exchange, symbol, market_type, &klines_1h)
+            .fetch_current_price(exchange, symbol, &klines_1h)
             .await;
 
-        let exchange_key = format!("{}:{}", exchange, market_type);
-        let (funding_rate, funding_next_time) = if market_type == "perpetual" {
-            if let Some(ex) = self.exchange_registry.get(&exchange_key) {
-                match ex.get_funding_rate(symbol).await {
-                    Ok(fr) => {
-                        let next = fr
-                            .next_funding_time
-                            .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
-                            .unwrap_or_else(|| "N/A".to_string());
-                        (fr.rate, next)
-                    }
-                    Err(e) => {
-                        warn!(
-                            exchange = %exchange,
-                            symbol = %symbol,
-                            error = %e,
-                            "Funding rate fetch failed — defaulting to 0.0"
-                        );
-                        (0.0, "N/A".to_string())
-                    }
+        let exchange_key = format!("{}:perpetual", exchange);
+        let (funding_rate, funding_next_time) = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+            match ex.get_funding_rate(symbol).await {
+                Ok(fr) => {
+                    let next = fr
+                        .next_funding_time
+                        .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                        .unwrap_or_else(|| "N/A".to_string());
+                    (fr.rate, next)
                 }
-            } else {
-                warn!(
-                    exchange = %exchange,
-                    symbol = %symbol,
-                    "No exchange found for funding rate — defaulting to 0.0"
-                );
-                (0.0, "N/A".to_string())
+                Err(e) => {
+                    warn!(
+                        exchange = %exchange,
+                        symbol = %symbol,
+                        error = %e,
+                        "Funding rate fetch failed — defaulting to 0.0"
+                    );
+                    (0.0, "N/A".to_string())
+                }
             }
         } else {
+            warn!(
+                exchange = %exchange,
+                symbol = %symbol,
+                "No exchange found for funding rate — defaulting to 0.0"
+            );
             (0.0, "N/A".to_string())
         };
 
@@ -588,18 +573,14 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             0.0
         };
 
-        // Get liquidation price (perpetual only, when has position)
-        let liquidation_price = if market_type == "perpetual" {
-            if let Some(ex) = self.exchange_registry.get(&exchange_key) {
-                match ex.get_positions(Some(symbol)).await {
-                    Ok(positions) => positions
-                        .iter()
-                        .find(|p| p.symbol.as_str() == symbol && p.size.abs() > 0.0)
-                        .and_then(|p| p.liquidation_price),
-                    Err(_) => None,
-                }
-            } else {
-                None
+        // Get liquidation price (when has position)
+        let liquidation_price = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+            match ex.get_positions(Some(symbol)).await {
+                Ok(positions) => positions
+                    .iter()
+                    .find(|p| p.symbol.as_str() == symbol && p.size.abs() > 0.0)
+                    .and_then(|p| p.liquidation_price),
+                Err(_) => None,
             }
         } else {
             None
@@ -615,7 +596,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
         }
     }
 
-    async fn get_account_balance(&self, exchange: &str, market_type: &str) -> AccountBalance {
+    async fn get_account_balance(&self, exchange: &str) -> AccountBalance {
         // Paper mode: use PE exchange
         if let Some(ref pe_ex) = self.pe_exchange {
             match pe_ex.get_balance().await {
@@ -633,7 +614,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
         }
 
         // Real mode
-        let exchange_key = format!("{}:{}", exchange, market_type);
+        let exchange_key = format!("{}:perpetual", exchange);
         let ex = match self.exchange_registry.get(&exchange_key) {
             Some(e) => e,
             None => return AccountBalance::default(),

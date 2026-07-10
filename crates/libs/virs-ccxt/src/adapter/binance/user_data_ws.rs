@@ -17,14 +17,14 @@ use virs_types::{OrderStatus, PositionSide};
 // ============================================================
 
 /// Binance WS 推送两种格式（与 kline 一致）：
-/// 1. 单流格式: {"e":"executionReport", ...}
-/// 2. 组合流格式: {"stream":"<listenKey>@executionReport", "data":{...}}
+/// 1. 单流格式: {"e":"ORDER_TRADE_UPDATE", ...}
+/// 2. 组合流格式: {"stream":"<listenKey>", "data":{...}}
 #[derive(Debug, Clone, Deserialize)]
 pub struct BinanceOrderMessage {
     #[allow(dead_code)]
     pub(crate) stream: Option<String>,
     /// 组合流格式
-    pub(crate) data: Option<BinanceExecutionReport>,
+    pub(crate) data: Option<BinanceOrderData>,
     /// 单流格式
     #[serde(rename = "e")]
     pub(crate) event_type_flat: Option<String>,
@@ -32,31 +32,11 @@ pub struct BinanceOrderMessage {
     #[serde(rename = "E")]
     event_time_flat: Option<i64>,
     #[serde(rename = "o")]
-    order_flat: Option<ExecutionReportInner>,
+    order_flat: Option<BinanceOrderInner>,
 }
 
 impl BinanceOrderMessage {
-    /// 解析单流或组合流格式的 executionReport
-    ///
-    /// 对外暴露为 pub，供 ws_api.rs（WebSocket API 客户端）复用
-    pub fn into_execution_report(self) -> Option<BinanceExecutionReport> {
-        if let Some(data) = self.data {
-            Some(data)
-        } else if self.event_type_flat.as_deref() == Some("executionReport") {
-            self.order_flat.map(|order| BinanceExecutionReport {
-                event_type: self.event_type_flat.unwrap_or_else(|| {
-                    tracing::error!("order_ws event_type_flat is None — data corruption");
-                    "unknown".to_string()
-                }),
-                event_time: self.event_time_flat.unwrap_or(0),
-                order,
-            })
-        } else {
-            None
-        }
-    }
-
-    /// 返回事件类型（用于判断 executionReport / ORDER_TRADE_UPDATE / ACCOUNT_UPDATE）
+    /// 返回事件类型（用于判断 ORDER_TRADE_UPDATE / ACCOUNT_UPDATE）
     pub fn event_type(&self) -> Option<&str> {
         self.event_type_flat
             .as_deref()
@@ -73,8 +53,11 @@ impl BinanceOrderMessage {
     }
 
     /// 转换为 WsFeedEvent（消耗 self）
+    ///
+    /// 仅处理 ORDER_TRADE_UPDATE（合约订单更新）事件。
+    /// ACCOUNT_UPDATE 等非订单事件返回 None，由调用方处理。
     pub fn to_ws_feed_event(self) -> Option<WsFeedEvent> {
-        // 优先处理 ORDER_TRADE_UPDATE（合约）
+        // 单流 ORDER_TRADE_UPDATE（合约）
         if let Some(et) = self.event_type_flat.as_deref() {
             if et == "ORDER_TRADE_UPDATE" {
                 // ORDER_TRADE_UPDATE 的订单数据在 "o" 字段
@@ -83,29 +66,31 @@ impl BinanceOrderMessage {
                 }
             }
         }
-        // 处理 executionReport（现货）
-        if let Some(report) = self.into_execution_report() {
-            return report.order.to_ws_feed_event();
+        // 组合流 ORDER_TRADE_UPDATE（合约）
+        if let Some(data) = self.data {
+            if data.event_type == "ORDER_TRADE_UPDATE" {
+                return data.order.to_ws_feed_event();
+            }
         }
         None
     }
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct BinanceExecutionReport {
+pub struct BinanceOrderData {
     #[serde(rename = "e")]
     pub event_type: String,
     #[serde(rename = "E")]
     pub event_time: i64,
     #[serde(rename = "o")]
-    pub order: ExecutionReportInner,
+    pub order: BinanceOrderInner,
 }
 
-/// Binance executionReport 中的订单数据
+/// Binance ORDER_TRADE_UPDATE 中的订单数据
 /// 文档: https://binance-docs.github.io/apidocs/futures/en/#event-order-update
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
-pub struct ExecutionReportInner {
+pub struct BinanceOrderInner {
     /// 订单符号
     #[serde(rename = "s")]
     pub(crate) symbol: String,
@@ -162,7 +147,7 @@ pub struct ExecutionReportInner {
     pub(crate) position_side: Option<String>,
 }
 
-impl ExecutionReportInner {
+impl BinanceOrderInner {
     /// 将 Binance 订单状态映射为 Position Engine 的 OrderStatus
     pub(crate) fn to_order_status(&self) -> Option<OrderStatus> {
         match self.status.as_str() {
@@ -301,7 +286,7 @@ pub(crate) const ORDER_WS_DELAY_THRESHOLD_MS: i64 = 3_000;
 /// Binance User Data Stream 订单推送客户端
 ///
 /// 连接到 Binance 的 User Data Stream（需要 listenKey），
-/// 接收 executionReport 事件并转换为 WsFeedEvent。
+/// 接收 ORDER_TRADE_UPDATE 事件并转换为 WsFeedEvent。
 ///
 /// 连接管理参考 KlineWs：
 /// - 指数退避重连
@@ -313,7 +298,7 @@ pub struct UserDataWs {
     /// 基础 URL（不含 listenKey，用于重连时拼接新 listenKey）
     pub(crate) base_url: String,
     /// URL 格式：true=query 参数形态（?listenKey=），false=path 形态（/<listenKey>）
-    /// 永续合约 /private 路由使用 query 形态，现货 /ws 路由使用 path 形态
+    /// 永续合约 /private 路由使用 query 形态
     use_query_params: bool,
     reconnect_delay_secs: u64,
     max_reconnect_delay_secs: u64,
@@ -326,7 +311,7 @@ impl UserDataWs {
     /// 创建新的订单 WS 客户端（path 形态 URL）
     ///
     /// # 参数
-    /// - `base_url`: WS 基础 URL（如 `wss://stream.binance.com/ws`）
+    /// - `base_url`: WS 基础 URL
     /// - `listen_key`: Binance User Data Stream 的 listenKey
     pub fn new(
         base_url: String,
@@ -373,24 +358,6 @@ impl UserDataWs {
             ws_max_lifetime_secs,
             running: Arc::new(AtomicBool::new(false)),
         }
-    }
-
-    /// 创建现货订单 WS 客户端
-    pub fn new_spot(
-        listen_key: String,
-        reconnect_delay_secs: u64,
-        max_reconnect_delay_secs: u64,
-        ws_ping_interval_secs: u64,
-        ws_max_lifetime_secs: u64,
-    ) -> Self {
-        Self::new(
-            "wss://stream.binance.com/ws".to_string(),
-            listen_key,
-            reconnect_delay_secs,
-            max_reconnect_delay_secs,
-            ws_ping_interval_secs,
-            ws_max_lifetime_secs,
-        )
     }
 
     /// 更新 listenKey（重连时使用）
@@ -502,9 +469,8 @@ impl UserDataWs {
                                                     }
                                                 }
 
-                                                // to_ws_feed_event() 同时处理 executionReport（现货）
-                                                // 和 ORDER_TRADE_UPDATE（合约），避免单流格式下
-                                                // into_execution_report() 丢弃合约事件。
+                                                // to_ws_feed_event() 处理 ORDER_TRADE_UPDATE（合约）事件，
+                                                // 兼容单流和组合流格式。
                                                 if let Some(event) = bmsg.to_ws_feed_event() {
                                                     if event_tx.send(event).await.is_err() {
                                                         tracing::warn!("[UserDataWs] Event channel closed, stopping");

@@ -112,26 +112,17 @@
 |----|---------|------|
 | W1.1–W1.5 | `w1_*` | parse_levels: 标准数组/数字/空数组/非数组/元素不足 |
 | W2.1–W2.5 | `w2_*` | to_levels: 正常/amount=0/amount<0/无效数字/空输入 |
-| W3.1–W3.3 | `w3_*` | parse_payload: Spot/Perpetual/缺少字段 |
-| W4.1–W4.5 | `w4_*` | into_depth: 组合流spot/组合流perp/单流spot/单流perp/无效消息 |
+| W3.1–W3.3 | `w3_*` | parse_payload: Perpetual/缺少字段 |
+| W4.1–W4.5 | `w4_*` | into_depth: 组合流perp/单流perp/无效消息 |
 
-### adapter/binance/ws_api_tests.rs — WebSocket API (5)
+### adapter/binance/ws_api_tests.rs — (deleted, spot Ed25519 WS API removed)
 
-| ID | 测试函数 | 描述 |
-|----|---------|------|
-| WA1.1 | `wa1_1_logon_method` | JSON 包含 method="session.logon" |
-| WA1.2 | `wa1_2_logon_params` | params 包含 apiKey/recvWindow/timestamp/signature |
-| WA1.3 | `wa1_3_logon_signature_nonempty` | signature 非空 |
-| WA1.4 | `wa1_4_logon_id_preserved` | 相同输入 → 相同签名 (幂等性) |
-| WA1.5 | `wa1_5_logon_different_api_keys` | 不同 API key → 不同签名 |
-
-### adapter/binance/kline_ws.rs — 内联测试 (11)
+### adapter/binance/kline_ws.rs — 内联测试
 
 | 测试函数 | 描述 |
 |---------|------|
 | `test_binance_ws_symbol_basic` | WS symbol 基础格式 |
 | `test_ws_symbol` | WS symbol 转换 |
-| `test_new_spot` | 现货 WS URL 构建 |
 | `test_new_perpetual` | 合约 WS URL 构建 |
 | `test_parse_binance_kline_message` | 解析组合流 kline 消息 |
 | `test_parse_binance_kline_message_without_stream` | 解析单流 kline 消息 |
@@ -144,14 +135,13 @@
 
 | 测试函数 | 描述 |
 |---------|------|
-| `test_execution_report` | executionReport 解析 |
+| `test_execution_report` | (deleted — executionReport was spot-only) |
 | `test_order_trade_update` | ORDER_TRADE_UPDATE 解析 |
 | `test_order_trade_update_single_stream` | 单流 ORDER_TRADE_UPDATE |
 | `test_non_order_event` | 非订单事件 → None |
 | `test_to_ws_feed_event_order_update` | → WsFeedEvent::OrderUpdate |
 | `test_to_ws_feed_event_filled` | FILLED 状态转换 |
 | `test_to_ws_feed_event_canceled` | CANCELED 状态转换 |
-| `test_new_spot` | 现货 WS URL |
 | `test_new_perpetual` | 合约 WS URL |
 | `test_update_listen_key` | listenKey URL |
 | `test_parse_order_message_*` | 订单消息解析系列 |
@@ -168,7 +158,7 @@
 | INT-1.2 | `int_1_2_symbol_roundtrip_usdc` | ETH-USDC → ETHUSDC → ETH/USDC |
 | INT-1.3 | `int_1_3_symbol_roundtrip_btc_pair` | BNB/BTC → BNBBTC → BNB/BTC |
 | INT-2.1 | `int_2_1_hmac_signature_deterministic` | HMAC 签名幂等性 |
-| INT-4.1 | `int_4_1_execution_report_to_ws_feed_event` | executionReport → WsFeedEvent |
+| INT-4.1 | `int_4_1_execution_report_to_ws_feed_event` | (deleted — executionReport was spot-only) |
 | INT-4.2 | `int_4_2_order_trade_update_to_ws_feed_event` | ORDER_TRADE_UPDATE → WsFeedEvent |
 | INT-4.3 | `int_4_3_non_order_event_returns_none` | 非订单事件 → None |
 | INT-5.1 | `int_5_1_create_exchange_binance_hmac` | Binance + HMAC 创建成功 |

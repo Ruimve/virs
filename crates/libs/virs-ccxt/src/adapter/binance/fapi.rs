@@ -473,7 +473,7 @@ pub async fn create_order(
     let mut body = serde_json::json!({
         "symbol": native,
         "side": crate::adapter::binance::BinanceExchange::side_str(&params.side),
-        "type": crate::adapter::binance::BinanceExchange::order_type_str_futures(&params.order_type),
+        "type": crate::adapter::binance::BinanceExchange::order_type_str(&params.order_type),
         "quantity": params.amount,
     });
 

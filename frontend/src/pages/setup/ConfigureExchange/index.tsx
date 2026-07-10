@@ -12,13 +12,6 @@ import {
 import type { PermissionItem } from '../../../service';
 import { WizardStep } from '../context/WizardContext/consts';
 
-export type MarketType = 'perpetual' | 'spot';
-
-const MARKET_TYPES: Array<{ id: MarketType; label: string; desc: string }> = [
-  { id: 'perpetual', label: 'Perpetual', desc: 'USDT-M futures' },
-  { id: 'spot', label: 'Spot', desc: 'Spot trading' },
-];
-
 /**
  * 规范化 PEM 格式的 API Secret。
  *
@@ -69,7 +62,6 @@ const ConfigureExchange = () => {
   const [step1Error, setStep1Error] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
-  const [marketType, setMarketType] = useState<MarketType>(wizard.market_type);
 
   // Step 2: Connectivity + Permissions
   const [step2Status, setStep2Status] = useState<FlowStepStatus>('pending');
@@ -80,7 +72,7 @@ const ConfigureExchange = () => {
   const [step3Error, setStep3Error] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
 
-  // Step 4: Position mode (perpetual only — spot auto-skips)
+  // Step 4: Position mode
   const [step4Status, setStep4Status] = useState<FlowStepStatus>('pending');
   const [step4Error, setStep4Error] = useState<string | null>(null);
 
@@ -95,7 +87,7 @@ const ConfigureExchange = () => {
     setStep4Error(null);
   }, []);
 
-  // Step 4: Check position mode (perpetual only — spot auto-skips)
+  // Step 4: Check position mode
   const startStep4 = useCallback(async () => {
     setStep4Status('verifying');
     try {
@@ -107,9 +99,9 @@ const ConfigureExchange = () => {
       }
 
       const { supported, mode } = result.data;
-      // Spot exchanges don't support position mode — skip this step.
       if (!supported) {
-        setStep4Status('done');
+        setStep4Status('error');
+        setStep4Error('当前交易所不支持持仓模式查询，请确认账户配置。');
         return;
       }
 
@@ -185,7 +177,6 @@ const ConfigureExchange = () => {
         exchange: 'binance',
         api_key: apiKey,
         api_secret: apiSecret,
-        market_type: marketType,
         label: 'binance verification',
       });
       if (res.success) {
@@ -200,7 +191,7 @@ const ConfigureExchange = () => {
       setStep1Status('error');
       setStep1Error('Network error');
     }
-  }, [apiKey, apiSecret, marketType, startStep2]);
+  }, [apiKey, apiSecret, startStep2]);
 
   const handleApiKeyChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -217,10 +208,6 @@ const ConfigureExchange = () => {
     },
     [resetSteps],
   );
-
-  const handleSelectMarketType = useCallback((mt: MarketType) => {
-    setMarketType(mt);
-  }, []);
 
   const renderStep1 = useCallback(() => {
     const disabled = !apiKey || !apiSecret || step1Status === 'verifying';
@@ -240,27 +227,6 @@ const ConfigureExchange = () => {
           className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-accent transition-all duration-200"
           placeholder="API Secret"
         />
-        <div>
-          <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">
-            Market Type
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {MARKET_TYPES.map((mt) => (
-              <button
-                key={mt.id}
-                onClick={() => handleSelectMarketType(mt.id)}
-                className={`p-2.5 rounded-lg border text-center transition-all duration-200 ${
-                  marketType === mt.id
-                    ? 'bg-accent-light border-accent-muted text-on-base'
-                    : 'bg-surface-1 border-line-default text-on-surface-tertiary hover:bg-surface-2'
-                }`}
-              >
-                <p className="text-xs font-medium">{mt.label}</p>
-                <p className="text-[10px] text-on-surface-muted mt-0.5">{mt.desc}</p>
-              </button>
-            ))}
-          </div>
-        </div>
         {step1Status === 'error' && <p className="text-[12px] text-danger-text">{step1Error}</p>}
         <button
           onClick={startStep1}
@@ -274,12 +240,10 @@ const ConfigureExchange = () => {
   }, [
     apiKey,
     apiSecret,
-    marketType,
     step1Status,
     step1Error,
     handleApiKeyChange,
     handleApiSecretChange,
-    handleSelectMarketType,
     startStep1,
   ]);
 
@@ -405,7 +369,7 @@ const ConfigureExchange = () => {
         </button>
         <button
           onClick={() => {
-            updateWizard({ exchange: 'binance', market_type: marketType });
+            updateWizard({ exchange: 'binance' });
             advanceStep(WizardStep.ConfigureParams);
             navigate('/setup/params', { replace: true });
           }}
@@ -421,7 +385,6 @@ const ConfigureExchange = () => {
     step2Status,
     step3Status,
     step4Status,
-    marketType,
     updateWizard,
     advanceStep,
     navigate,

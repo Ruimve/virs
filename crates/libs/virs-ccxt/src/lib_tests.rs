@@ -111,20 +111,20 @@ fn l4_3_parse_u32_missing_field() {
 #[test]
 fn l5_1_build_display_url_no_params() {
     let params = std::iter::empty::<(&str, &str)>();
-    assert_eq!(build_display_url("/api/v3/ping", params), "/api/v3/ping");
+    assert_eq!(build_display_url("/fapi/v1/ping", params), "/fapi/v1/ping");
 }
 
 #[test]
 fn l5_2_build_display_url_with_params() {
     let params = [("symbol", "BTCUSDT"), ("limit", "100")].into_iter();
-    let url = build_display_url("/api/v3/depth", params);
-    assert_eq!(url, "/api/v3/depth?symbol=BTCUSDT&limit=100");
+    let url = build_display_url("/fapi/v1/depth", params);
+    assert_eq!(url, "/fapi/v1/depth?symbol=BTCUSDT&limit=100");
 }
 
 #[test]
 fn l5_3_build_display_url_masks_signature() {
     let params = [("symbol", "BTCUSDT"), ("signature", "abcdef123456")].into_iter();
-    let url = build_display_url("/api/v3/order", params);
+    let url = build_display_url("/fapi/v1/order", params);
     assert!(url.contains("***MASKED***"));
     assert!(!url.contains("abcdef123456"));
 }
@@ -133,8 +133,8 @@ fn l5_3_build_display_url_masks_signature() {
 fn l5_4_build_display_url_empty_params() {
     let params: [(&str, &str); 0] = [];
     assert_eq!(
-        build_display_url("/api/v3/ping", params.into_iter()),
-        "/api/v3/ping"
+        build_display_url("/fapi/v1/ping", params.into_iter()),
+        "/fapi/v1/ping"
     );
 }
 

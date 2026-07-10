@@ -68,10 +68,8 @@ pub struct WsOrderBookUpdate {
     pub asks: Vec<OrderBookLevel>,
     /// Exchange event timestamp (ms).
     /// For perpetual: the `E` field (event time).
-    /// For spot: 0 (spot partial book depth has no timestamp).
     pub timestamp: i64,
-    /// Spot-only: the `lastUpdateId` field (a sequence number, NOT a timestamp).
-    /// None for perpetual updates.
+    /// Always None for perpetual updates.
     pub last_update_id: Option<i64>,
 }
 

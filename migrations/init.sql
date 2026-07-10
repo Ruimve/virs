@@ -30,14 +30,13 @@ CREATE TABLE IF NOT EXISTS qd_exchange_credentials (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
     exchange TEXT NOT NULL,
-    market_type TEXT NOT NULL DEFAULT 'perpetual',
     encrypted_api_key TEXT NOT NULL,
     encrypted_api_secret TEXT NOT NULL,
     encrypted_passphrase TEXT,
     label TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(user_id, exchange, market_type)
+    UNIQUE(user_id, exchange)
 );
 
 CREATE INDEX IF NOT EXISTS idx_credentials_user ON qd_exchange_credentials(user_id);
@@ -71,7 +70,6 @@ CREATE TABLE IF NOT EXISTS qd_grid_bots (
     name TEXT NOT NULL,
     symbol TEXT NOT NULL,
     exchange TEXT NOT NULL DEFAULT 'binance',
-    market_type TEXT NOT NULL DEFAULT 'perpetual' CHECK (market_type IN ('perpetual', 'spot')),
     paper_mode BOOLEAN NOT NULL DEFAULT true,
     status TEXT NOT NULL DEFAULT 'stopped' CHECK (status IN ('draft', 'running', 'paused', 'stopped', 'error')),
 
@@ -176,7 +174,6 @@ CREATE TABLE IF NOT EXISTS qd_auto_bots (
     name TEXT NOT NULL,
     symbol TEXT NOT NULL,
     exchange TEXT NOT NULL DEFAULT 'binance',
-    market_type TEXT NOT NULL DEFAULT 'perpetual' CHECK (market_type IN ('perpetual', 'spot')),
     paper_mode BOOLEAN NOT NULL DEFAULT true,
     status TEXT NOT NULL DEFAULT 'stopped' CHECK (status IN ('draft', 'running', 'paused', 'stopped', 'error')),
 

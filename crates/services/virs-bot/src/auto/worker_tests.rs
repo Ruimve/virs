@@ -133,7 +133,7 @@ fn t11_6_checked_sub_returns_none_for_extreme_duration() {
     if result.is_none() {
         // 验证 fallback：None 时函数应返回 None（调用方负责 fallback）
         let ancient_open = chrono::DateTime::from_timestamp(0, 0).unwrap();
-        let restored = compute_position_opened_at(ancient_open);
+        let _restored = compute_position_opened_at(ancient_open);
         // Unix epoch 距今约 56 年，checked_sub 应成功（Instant 从系统启动开始）
         // 但如果 elapsed 超过系统运行时间，checked_sub 会返回 None
         // 无论如何，代码中的 fallback 会用 Instant::now()

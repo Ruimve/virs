@@ -55,7 +55,6 @@ pub struct OrderBookEngine {
     /// Reverse index: symbol → subscription key (for fast WS event lookup)
     symbol_index: Arc<DashMap<String, String>>,
     event_tx: broadcast::Sender<OrderBookEvent>,
-    spot_handler: MarketWsHandler,
     perpetual_handler: MarketWsHandler,
     started: Arc<std::sync::atomic::AtomicBool>,
 }
@@ -63,7 +62,6 @@ pub struct OrderBookEngine {
 impl OrderBookEngine {
     pub fn new(
         config: OrderBookEngineConfig,
-        spot_ws: Arc<Mutex<dyn OrderBookWsClient>>,
         perpetual_ws: Arc<Mutex<dyn OrderBookWsClient>>,
     ) -> Self {
         let (event_tx, _) = broadcast::channel(config.event_channel_capacity);
@@ -72,7 +70,6 @@ impl OrderBookEngine {
             subscriptions: Arc::new(DashMap::new()),
             symbol_index: Arc::new(DashMap::new()),
             event_tx,
-            spot_handler: MarketWsHandler::new(spot_ws),
             perpetual_handler: MarketWsHandler::new(perpetual_ws),
             started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
@@ -92,7 +89,6 @@ impl OrderBookEngine {
 
         let (ws_update_tx, mut ws_update_rx) = broadcast::channel::<WsOrderBookEvent>(512);
 
-        self.spot_handler.start(ws_update_tx.clone()).await;
         self.perpetual_handler.start(ws_update_tx).await;
 
         let event_tx = self.event_tx.clone();
@@ -151,7 +147,6 @@ impl OrderBookEngine {
         {
             return;
         }
-        self.spot_handler.stop().await;
         self.perpetual_handler.stop().await;
     }
 
@@ -159,7 +154,7 @@ impl OrderBookEngine {
         &self,
         exchange: &str,
         symbol: &str,
-        market_type: MarketType,
+        _market_type: MarketType,
     ) -> VirsResult<()> {
         // Lazy start: auto-start the engine on first subscription
         if !self.started.load(std::sync::atomic::Ordering::Relaxed) {
@@ -179,14 +174,7 @@ impl OrderBookEngine {
         self.subscriptions.insert(key.clone(), entry);
         self.symbol_index.insert(symbol.to_string(), key);
 
-        match market_type {
-            MarketType::Spot => {
-                self.spot_handler.subscribe(symbol).await;
-            }
-            MarketType::Perpetual => {
-                self.perpetual_handler.subscribe(symbol).await;
-            }
-        }
+        self.perpetual_handler.subscribe(symbol).await;
 
         Ok(())
     }

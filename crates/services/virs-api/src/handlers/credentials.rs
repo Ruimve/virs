@@ -16,20 +16,19 @@ pub async fn list_credentials(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let creds = sqlx::query_as::<_, (uuid::Uuid, String, String, String, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT id, exchange, label, market_type, created_at FROM qd_exchange_credentials WHERE user_id = $1 ORDER BY created_at DESC"#,
+    let creds = sqlx::query_as::<_, (uuid::Uuid, String, String, chrono::DateTime<chrono::Utc>)>(
+        r#"SELECT id, exchange, label, created_at FROM qd_exchange_credentials WHERE user_id = $1 ORDER BY created_at DESC"#,
     )
     .bind(user_id)
     .fetch_all(&state.db_pool)
     .await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
-        "items": creds.iter().map(|(id, exchange, label, market_type, created_at)| {
+        "items": creds.iter().map(|(id, exchange, label, created_at)| {
             serde_json::json!({
                 "id": id.to_string(),
                 "exchange": exchange,
                 "label": label,
-                "market_type": market_type,
                 "created_at": created_at.to_rfc3339(),
             })
         }).collect::<Vec<_>>()
@@ -48,7 +47,6 @@ pub async fn save_credential(
     let api_key = body["api_key"].as_str().unwrap_or("");
     let api_secret = body["api_secret"].as_str().unwrap_or("");
     let passphrase = body["passphrase"].as_str();
-    let market_type = body["market_type"].as_str().unwrap_or("perpetual");
 
     if exchange.is_empty() || api_key.is_empty() || api_secret.is_empty() {
         return Err(VirsError::bad_request(
@@ -68,9 +66,9 @@ pub async fn save_credential(
         .transpose()?;
 
     sqlx::query(
-        r#"INSERT INTO qd_exchange_credentials (id, user_id, exchange, label, encrypted_api_key, encrypted_api_secret, encrypted_passphrase, market_type, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-           ON CONFLICT (user_id, exchange, market_type)
+        r#"INSERT INTO qd_exchange_credentials (id, user_id, exchange, label, encrypted_api_key, encrypted_api_secret, encrypted_passphrase, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+           ON CONFLICT (user_id, exchange)
            DO UPDATE SET encrypted_api_key = $5, encrypted_api_secret = $6, encrypted_passphrase = $7, label = $4, updated_at = NOW()"#,
     )
     .bind(id)
@@ -80,27 +78,20 @@ pub async fn save_credential(
     .bind(&encrypted_api_key)
     .bind(&encrypted_secret)
     .bind(&encrypted_passphrase)
-    .bind(market_type)
     .execute(&state.db_pool)
     .await?;
 
     // Auto-register exchange in registry for immediate use
-    let mt = match market_type {
-        "spot" => virs_ccxt::MarketType::Spot,
-        _ => virs_ccxt::MarketType::Perpetual,
-    };
     if let Ok(ccxt_ex) = virs_ccxt::create_exchange(
         exchange,
         api_key,
         api_secret,
         passphrase,
         None,
-        &mt,
         std::time::Duration::from_secs(state.http_timeout_secs),
         std::time::Duration::from_secs(state.http_connect_timeout_secs),
         state.http_pool_max_idle_per_host,
         state.listenkey_keepalive_futures_secs,
-        state.listenkey_keepalive_spot_secs,
         state.ws_reconnect_initial_delay_secs,
         state.ws_reconnect_max_delay_secs,
         state.ws_ping_interval_secs,
@@ -111,15 +102,10 @@ pub async fn save_credential(
             tracing::warn!(
                 error = %e,
                 exchange,
-                market_type,
                 "Server time sync failed, using local clock (recvWindow 5000ms tolerates small drift)"
             );
         }
-        let app_mt = match market_type {
-            "spot" => virs_models::MarketType::Spot,
-            _ => virs_models::MarketType::Perpetual,
-        };
-        let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, app_mt);
+        let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, virs_models::MarketType::Perpetual);
         state.exchange_registry.register(Box::new(adapter));
     }
 
@@ -225,13 +211,6 @@ pub async fn check_permissions(
             }));
 
             permissions.push(serde_json::json!({
-                "name": "spot_trading",
-                "label": "Spot & Margin Trading",
-                "status": if restrictions.enable_spot_and_margin_trading { "ok" } else { "error" },
-                "detail": if restrictions.enable_spot_and_margin_trading { "Spot and margin trading enabled" } else { "Spot and margin trading disabled" }
-            }));
-
-            permissions.push(serde_json::json!({
                 "name": "futures",
                 "label": "Futures Trading",
                 "status": if restrictions.enable_futures { "ok" } else { "error" },
@@ -312,13 +291,6 @@ pub async fn verify_permissions(
             }));
 
             permissions.push(serde_json::json!({
-                "name": "spot_trading",
-                "label": "Spot & Margin Trading",
-                "status": if restrictions.enable_spot_and_margin_trading { "ok" } else { "error" },
-                "detail": if restrictions.enable_spot_and_margin_trading { "Spot and margin trading enabled" } else { "Spot and margin trading disabled" }
-            }));
-
-            permissions.push(serde_json::json!({
                 "name": "futures",
                 "label": "Futures Trading",
                 "status": if restrictions.enable_futures { "ok" } else { "error" },
@@ -367,7 +339,6 @@ pub async fn verify_permissions(
 /// Returns { supported: bool, mode: "hedge"|"oneway"|null }.
 /// - Hedge:  { supported: true, mode: "hedge" }
 /// - OneWay: { supported: true, mode: "oneway" }  (fapi returns Err for OneWay — caught here)
-/// - Spot:   { supported: false, mode: null }     (get_position_mode returns NotSupported)
 pub async fn check_position_mode(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -408,7 +379,7 @@ pub async fn check_position_mode(
                     "mode": "oneway",
                 }))))
             } else if err_str.contains("Not supported") || err_str.contains("not supported") {
-                // Spot exchanges don't support position mode.
+                // Exchange doesn't support position mode.
                 Ok(Json(ApiResponse::ok(serde_json::json!({
                     "supported": false,
                     "mode": null,
@@ -431,17 +402,17 @@ pub async fn exchange_status(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let row: Option<(String, String)> = sqlx::query_as(
-        r#"SELECT exchange, market_type FROM qd_exchange_credentials WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1"#,
+    let row: Option<(String,)> = sqlx::query_as(
+        r#"SELECT exchange FROM qd_exchange_credentials WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1"#,
     )
     .bind(user_id)
     .fetch_optional(&state.db_pool)
     .await?;
 
     match row {
-        Some((exchange, market_type)) => Ok(Json(ApiResponse::ok(serde_json::json!({
+        Some((exchange,)) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "connected": true,
-            "exchange": format!("{} ({})", exchange, market_type),
+            "exchange": exchange,
         })))),
         None => Ok(Json(ApiResponse::ok(serde_json::json!({
             "connected": false,

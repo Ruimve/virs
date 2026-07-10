@@ -137,10 +137,10 @@ pub trait CredentialStore: Send + Sync {
     ) -> BotResult<Vec<(String, String, Option<String>)>>;
 }
 
-/// Price provider trait (unified — market_type defaults to "perpetual" for grid)
+/// Price provider trait (perpetual only)
 #[async_trait]
 pub trait PriceProvider: Send + Sync {
-    async fn get_price(&self, exchange: &str, symbol: &str, market_type: &str) -> Option<f64>;
+    async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64>;
 }
 
 /// Market snapshot (unified — grid uses subset, auto uses full)
@@ -155,16 +155,15 @@ pub struct MarketSnapshot {
     pub indicators_json: serde_json::Value,
 }
 
-/// Market data provider trait (unified — market_type parameter for auto, grid passes "perpetual")
+/// Market data provider trait (perpetual only)
 #[async_trait]
 pub trait MarketDataProvider: Send + Sync {
     async fn get_market_snapshot(
         &self,
         exchange: &str,
         symbol: &str,
-        market_type: &str,
     ) -> MarketSnapshot;
-    async fn get_account_balance(&self, exchange: &str, market_type: &str) -> AccountBalance;
+    async fn get_account_balance(&self, exchange: &str) -> AccountBalance;
 }
 
 /// LLM provider resolver trait

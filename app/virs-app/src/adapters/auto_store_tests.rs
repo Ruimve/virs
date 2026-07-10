@@ -4,7 +4,6 @@ use crate::adapters::auto_store::bot_to_config;
 use chrono::Utc;
 use uuid::Uuid;
 use virs_models::AutoBot;
-use virs_types::auto_port::AutoMarketType;
 
 fn make_bot() -> AutoBot {
     AutoBot {
@@ -13,7 +12,6 @@ fn make_bot() -> AutoBot {
         name: "auto-test".to_string(),
         symbol: "ETH/USDT".to_string(),
         exchange: "okx".to_string(),
-        market_type: "perpetual".to_string(),
         paper_mode: true,
         status: "running".to_string(),
         leverage: 10,
@@ -46,18 +44,6 @@ fn a1_1_bot_to_config_basic() {
     assert_eq!(config.exchange, "okx");
     assert!(config.paper_mode);
     assert_eq!(config.leverage, 10);
-}
-
-#[test]
-fn a1_2_bot_to_config_market_type() {
-    let bot = make_bot();
-    let config = bot_to_config(&bot);
-    assert_eq!(config.market_type, AutoMarketType::Perpetual);
-
-    let mut bot2 = make_bot();
-    bot2.market_type = "spot".to_string();
-    let config2 = bot_to_config(&bot2);
-    assert_eq!(config2.market_type, AutoMarketType::Spot);
 }
 
 #[test]

@@ -28,7 +28,6 @@ pub struct GridBotConfig {
     pub name: String,
     pub symbol: String,
     pub exchange: String,
-    pub market_type: String,
     pub paper_mode: bool,
     pub grid_count: i32,
     pub upper_price: f64,

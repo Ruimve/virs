@@ -154,16 +154,11 @@ impl AppEngineManager {
                 None => None,
             };
 
-            for mt_str in &["perpetual", "spot"] {
+            for mt_str in &["perpetual"] {
                 let exchange_key = format!("{}:{}", exchange, mt_str);
                 if self.exchange_registry.get(&exchange_key).is_some() {
                     continue;
                 }
-
-                let ccxt_mt = match *mt_str {
-                    "spot" => virs_ccxt::MarketType::Spot,
-                    _ => virs_ccxt::MarketType::Perpetual,
-                };
 
                 let ccxt_ex = virs_ccxt::create_exchange(
                     exchange,
@@ -171,12 +166,10 @@ impl AppEngineManager {
                     &api_secret,
                     passphrase.as_deref(),
                     self.proxy.as_deref(),
-                    &ccxt_mt,
                     std::time::Duration::from_secs(self.time_config.http_timeout_secs),
                     std::time::Duration::from_secs(self.time_config.http.http_connect_timeout_secs),
                     self.time_config.http.http_pool_max_idle_per_host,
                     self.time_config.listenkey.listenkey_keepalive_futures_secs,
-                    self.time_config.listenkey.listenkey_keepalive_spot_secs,
                     self.time_config.ws.ws_reconnect_initial_delay_secs,
                     self.time_config.ws.ws_reconnect_max_delay_secs,
                     self.time_config.ws.ws_ping_interval_secs,
@@ -194,58 +187,51 @@ impl AppEngineManager {
                     tracing::warn!(
                         error = %e,
                         exchange,
-                        market_type = mt_str,
                         "Server time sync failed, using local clock (recvWindow 5000ms tolerates small drift)"
                     );
                 }
 
-                let app_mt = match *mt_str {
-                    "spot" => MarketType::Spot,
-                    _ => MarketType::Perpetual,
-                };
+                let app_mt = MarketType::Perpetual;
                 let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, app_mt);
                 self.exchange_registry.register(Box::new(adapter));
-                info!(exchange, market_type = mt_str, "Restored exchange credential");
+                info!(exchange, "Restored exchange credential");
             }
         }
 
         // 2. Restore Kline/OrderBook subscriptions for running bot symbols.
-        let bot_symbols: Vec<(String, String, String)> = sqlx::query_as(
+        let bot_symbols: Vec<(String, String)> = sqlx::query_as(
             r#"
-            SELECT exchange, symbol, market_type FROM qd_auto_bots WHERE status = 'running'
+            SELECT exchange, symbol FROM qd_auto_bots WHERE status = 'running'
             UNION
-            SELECT exchange, symbol, market_type FROM qd_grid_bots WHERE status = 'running'
+            SELECT exchange, symbol FROM qd_grid_bots WHERE status = 'running'
             "#,
         )
         .fetch_all(&self.db_pool)
         .await?;
 
-        for (exchange, symbol, market_type) in &bot_symbols {
-            let mt = match market_type.as_str() {
-                "spot" => virs_models::MarketType::Spot,
-                _ => virs_models::MarketType::Perpetual,
-            };
+        for (exchange, symbol) in &bot_symbols {
+            let mt = MarketType::Perpetual;
             self.kline_engine
                 .subscribe(exchange, symbol, mt)
                 .await
                 .map_err(|e| {
                     virs_error::VirsError::config(format!(
-                        "Failed to restore kline subscription for {} {} {}: {}",
-                        exchange, symbol, market_type, e
+                        "Failed to restore kline subscription for {} {}: {}",
+                        exchange, symbol, e
                     ))
                 })?;
-            info!(exchange, symbol, market_type, "Restored kline subscription");
+            info!(exchange, symbol, "Restored kline subscription");
 
             self.orderbook_engine
                 .subscribe(exchange, symbol, mt)
                 .await
                 .map_err(|e| {
                     virs_error::VirsError::config(format!(
-                        "Failed to restore orderbook subscription for {} {} {}: {}",
-                        exchange, symbol, market_type, e
+                        "Failed to restore orderbook subscription for {} {}: {}",
+                        exchange, symbol, e
                     ))
                 })?;
-            info!(exchange, symbol, market_type, "Restored orderbook subscription");
+            info!(exchange, symbol, "Restored orderbook subscription");
         }
 
         // 3. Determine paper mode from DB (consistency check).
@@ -442,7 +428,7 @@ impl EngineManager for AppEngineManager {
                     };
                     for (exchange, symbol) in symbols {
                         if let Some(price) = price_provider_for_paper
-                            .get_price(&exchange, &symbol, "perpetual")
+                            .get_price(&exchange, &symbol)
                             .await
                         {
                             if pe_cmd_tx_for_tick

@@ -52,7 +52,6 @@ fn s1_1_app_config_full_roundtrip() {
             },
             listenkey: ListenKeyConfig {
                 listenkey_keepalive_futures_secs: 1800,
-                listenkey_keepalive_spot_secs: 900,
             },
         },
         proxy: Some("http://proxy:8080".into()),

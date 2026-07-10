@@ -41,7 +41,6 @@ pub(crate) const DEFAULT_WS_MAX_LIFETIME_SECS: &str = "82800"; // 23h
 
 // listenKey keepalive default constants
 pub(crate) const DEFAULT_LISTENKEY_KEEPALIVE_FUTURES_SECS: &str = "1800"; // 30min
-pub(crate) const DEFAULT_LISTENKEY_KEEPALIVE_SPOT_SECS: &str = "900"; // 15min
 
 // ============================================================
 // Pure parsing functions (idempotent, no side effects)
@@ -127,7 +126,7 @@ pub struct TimeConfig {
     pub http: HttpConfig,
     /// WebSocket 基础设施配置 — 重连 / 心跳 / 生命周期
     pub ws: WsConfig,
-    /// 币安 listenKey 保活配置 — 合约 / 现货
+    /// 币安 listenKey 保活配置 — 合约
     pub listenkey: ListenKeyConfig,
 }
 
@@ -164,13 +163,11 @@ pub struct WsConfig {
     pub ws_max_lifetime_secs: u64,
 }
 
-/// 币安 listenKey 保活配置 — 合约和现货的保活间隔。
+/// 币安 listenKey 保活配置 — 合约保活间隔。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListenKeyConfig {
     /// 合约 listenKey 保活间隔（秒）— 币安窗口 60min 的 1/2。默认 1800
     pub listenkey_keepalive_futures_secs: u64,
-    /// 现货 listenKey 保活间隔（秒）— 币安窗口 30min 的 1/2。默认 900
-    pub listenkey_keepalive_spot_secs: u64,
 }
 
 impl Default for RetryConfig {
@@ -207,7 +204,6 @@ impl Default for ListenKeyConfig {
     fn default() -> Self {
         Self {
             listenkey_keepalive_futures_secs: DEFAULT_LISTENKEY_KEEPALIVE_FUTURES_SECS.parse().unwrap(),
-            listenkey_keepalive_spot_secs: DEFAULT_LISTENKEY_KEEPALIVE_SPOT_SECS.parse().unwrap(),
         }
     }
 }
@@ -385,10 +381,6 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
             listenkey_keepalive_futures_secs: parse_env_num(
                 std::env::var("LISTENKEY_KEEPALIVE_FUTURES_SECS").ok(),
                 DEFAULT_LISTENKEY_KEEPALIVE_FUTURES_SECS,
-            )?,
-            listenkey_keepalive_spot_secs: parse_env_num(
-                std::env::var("LISTENKEY_KEEPALIVE_SPOT_SECS").ok(),
-                DEFAULT_LISTENKEY_KEEPALIVE_SPOT_SECS,
             )?,
         },
     };

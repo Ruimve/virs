@@ -1,23 +1,18 @@
-//! Binance exchange implementation.
+//! Binance exchange implementation (perpetual futures only).
 //!
 //! API endpoints are organized by Binance's path prefixes:
-//! - `api.rs`  — /api/v3  (Spot market: ticker, klines, orders, etc.)
 //! - `sapi.rs` — /sapi/v1 (Account & funds: balance, apiRestrictions, etc.)
 //! - `fapi.rs` — /fapi/v1 (USDT-M Futures: perpetual trading, positions, funding, etc.)
 //!
-//! The `BinanceExchange` struct dispatches to the appropriate module
-//! based on `market_type` (Spot → api, Perpetual → fapi).
 //! Account endpoints (sapi) are shared across market types.
 
 use tracing::info;
 
-pub mod api;
 pub mod fapi;
 pub mod kline_ws;
 pub mod user_data_ws;
 pub mod orderbook_ws;
 pub mod sapi;
-pub mod user_data_ws_api;
 
 use async_trait::async_trait;
 use base64::Engine;
@@ -358,24 +353,19 @@ pub(crate) fn try_build_ed25519(
 
 /// Binance exchange implementation.
 ///
-/// Dispatches to `api` (spot) or `fapi` (perpetual) modules based on `market_type`.
-/// Account endpoints (`sapi`) are available regardless of market type.
+/// Binance perpetual futures exchange.
+///
+/// Dispatches to `fapi` module for all market data and trading operations.
+/// Account endpoints (`sapi`) are also available.
 pub struct BinanceExchange {
     client: ExchangeClient,
     signer: Arc<dyn Signer>,
-    /// 若配置了 Ed25519 签名器，保存引用以便 WebSocket API 客户端使用
-    ed25519_signer: Option<BinanceEd25519Signer>,
-    #[allow(dead_code)]
-    testnet: bool,
-    market_type: MarketType,
     /// T1: 标记定期时间同步是否已启动，防止重复 spawn
     time_sync_started: AtomicBool,
     /// T1 WARN fix: 定期时间同步的运行标志，Drop 时设为 false 以停止后台 task
     time_sync_running: Arc<AtomicBool>,
     /// listenKey 保活间隔（秒）— 合约
     listenkey_keepalive_futures_secs: u64,
-    /// listenKey 保活间隔（秒）— 现货
-    listenkey_keepalive_spot_secs: u64,
     /// WS 重连初始延迟（秒）
     ws_reconnect_initial_delay_secs: u64,
     /// WS 重连最大延迟（秒）
@@ -396,49 +386,38 @@ impl BinanceExchange {
         api_key: &str,
         api_secret: &str,
         proxy_url: Option<&str>,
-        market_type: &MarketType,
         http_timeout: std::time::Duration,
         connect_timeout: std::time::Duration,
         pool_max_idle_per_host: usize,
         listenkey_keepalive_futures_secs: u64,
-        listenkey_keepalive_spot_secs: u64,
         ws_reconnect_initial_delay_secs: u64,
         ws_reconnect_max_delay_secs: u64,
         ws_ping_interval_secs: u64,
         ws_max_lifetime_secs: u64,
     ) -> Result<Self, ExchangeError> {
-        let max_concurrent: u32 = match market_type {
-            MarketType::Spot => 20,
-            MarketType::Perpetual => 40,
-        };
+        let max_concurrent: u32 = 40;
         let client =
             ExchangeClient::with_api_key(max_concurrent, proxy_url, Some(api_key), http_timeout, connect_timeout, pool_max_idle_per_host)?;
 
-        // 尝试构造 Ed25519 签名器；若不是 Ed25519 格式则 fallback 到 HMAC
-        let (signer, ed25519_signer) = match try_build_ed25519(api_key, api_secret) {
+        let signer = match try_build_ed25519(api_key, api_secret) {
             Ok(ed) => {
-                let arc: Arc<dyn Signer> = Arc::new(ed.clone());
-                (arc, Some(ed))
+                let arc: Arc<dyn Signer> = Arc::new(ed);
+                arc
             }
-            Err(_) => (
+            Err(_) => {
                 Arc::new(BinanceSigner::new(
                     api_key.to_string(),
                     api_secret.to_string(),
-                )) as Arc<dyn Signer>,
-                None,
-            ),
+                )) as Arc<dyn Signer>
+            }
         };
 
         Ok(Self {
             client,
             signer,
-            ed25519_signer,
-            testnet: false,
-            market_type: *market_type,
             time_sync_started: AtomicBool::new(false),
             time_sync_running: Arc::new(AtomicBool::new(false)),
             listenkey_keepalive_futures_secs,
-            listenkey_keepalive_spot_secs,
             ws_reconnect_initial_delay_secs,
             ws_reconnect_max_delay_secs,
             ws_ping_interval_secs,
@@ -484,8 +463,8 @@ impl BinanceExchange {
         match order_type {
             "MARKET" => OrderType::Market,
             "LIMIT" => OrderType::Limit,
-            "STOP_MARKET" | "STOP_LOSS" => OrderType::StopMarket,
-            "STOP_LIMIT" | "STOP_LOSS_LIMIT" | "TAKE_PROFIT_LIMIT" => OrderType::StopLimit,
+            "STOP_MARKET" => OrderType::StopMarket,
+            "STOP" | "STOP_LIMIT" | "TAKE_PROFIT_LIMIT" => OrderType::StopLimit,
             "TAKE_PROFIT_MARKET" | "TAKE_PROFIT" => OrderType::TakeProfitMarket,
             _ => OrderType::Market,
         }
@@ -499,29 +478,11 @@ impl BinanceExchange {
         }
     }
 
-    /// Convert unified OrderType to Binance spot string.
-    ///
-    /// 现货订单类型参考: https://developers.binance.com/docs/binance-spot-api-docs/rest-api
-    /// - StopMarket → `STOP_LOSS`（现货无 STOP_MARKET，STOP_LOSS 触发后执行 MARKET）
-    /// - TakeProfitMarket → `TAKE_PROFIT`（现货无 TAKE_PROFIT_MARKET，TAKE_PROFIT 触发后执行 MARKET）
-    /// - StopLimit → `STOP_LOSS_LIMIT`（现货不支持统一的 STOP，必须区分止损/止盈，
-    ///   统一枚集中 StopLimit 默认映射为止损限价单 STOP_LOSS_LIMIT）
-    pub fn order_type_str(order_type: &OrderType) -> &'static str {
-        match order_type {
-            OrderType::Market => "MARKET",
-            OrderType::Limit => "LIMIT",
-            OrderType::StopMarket => "STOP_LOSS",
-            OrderType::StopLimit => "STOP_LOSS_LIMIT",
-            OrderType::TakeProfitMarket => "TAKE_PROFIT",
-        }
-    }
-
     /// Convert unified OrderType to Binance futures string.
     ///
     /// 合约订单类型参考: https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info
-    /// - StopLimit → `STOP`（合约使用 STOP 表示止损限价单，
-    ///   与现货的 STOP_LOSS_LIMIT 不同）
-    pub fn order_type_str_futures(order_type: &OrderType) -> &'static str {
+    /// - StopLimit → `STOP`（合约使用 STOP 表示止损限价单）
+    pub fn order_type_str(order_type: &OrderType) -> &'static str {
         match order_type {
             OrderType::Market => "MARKET",
             OrderType::Limit => "LIMIT",
@@ -530,21 +491,15 @@ impl BinanceExchange {
             OrderType::TakeProfitMarket => "TAKE_PROFIT_MARKET",
         }
     }
-
-    /// Check if this instance is configured for perpetual futures.
-    fn is_perpetual(&self) -> bool {
-        self.market_type == MarketType::Perpetual
-    }
 }
 
 // ============================================================
-// Shared parsing helpers (used by api.rs and fapi.rs)
+// Shared parsing helpers (used by fapi.rs)
 // ============================================================
 
 /// Parse order book bids/asks from exchange response.
 ///
-/// Shared between spot (`/api/v3/depth`) and perpetual (`/fapi/v1/depth`) endpoints.
-/// Both return the same JSON structure for bids/asks arrays.
+/// Used by perpetual (`/fapi/v1/depth`) endpoint.
 pub(crate) fn parse_order_book_side(data: &serde_json::Value, side: &str) -> Vec<(f64, f64)> {
     data.get(side)
         .and_then(|b| b.as_array())
@@ -568,14 +523,10 @@ impl Exchange for BinanceExchange {
         "Binance"
     }
 
-    // ---- Market data (dispatch by market_type) ----
+    // ---- Market data ----
 
     async fn fetch_ticker(&self, symbol: &str) -> Result<CcxtTicker, ExchangeError> {
-        if self.is_perpetual() {
-            fapi::fetch_ticker(&self.client, symbol).await
-        } else {
-            api::fetch_ticker(&self.client, symbol).await
-        }
+        fapi::fetch_ticker(&self.client, symbol).await
     }
 
     async fn fetch_ohlcv(
@@ -585,11 +536,7 @@ impl Exchange for BinanceExchange {
         limit: u32,
         since: Option<i64>,
     ) -> Result<Vec<CcxtKline>, ExchangeError> {
-        if self.is_perpetual() {
-            fapi::fetch_ohlcv(&self.client, symbol, timeframe, limit, since).await
-        } else {
-            api::fetch_ohlcv(&self.client, symbol, timeframe, limit, since).await
-        }
+        fapi::fetch_ohlcv(&self.client, symbol, timeframe, limit, since).await
     }
 
     async fn fetch_order_book(
@@ -597,64 +544,36 @@ impl Exchange for BinanceExchange {
         symbol: &str,
         limit: u32,
     ) -> Result<CcxtOrderBook, ExchangeError> {
-        if self.is_perpetual() {
-            fapi::fetch_order_book(&self.client, symbol, limit).await
-        } else {
-            api::fetch_order_book(&self.client, symbol, limit).await
-        }
+        fapi::fetch_order_book(&self.client, symbol, limit).await
     }
 
     async fn fetch_balance(&self) -> Result<Vec<Balance>, ExchangeError> {
-        if self.is_perpetual() {
-            fapi::fetch_balance(&self.client, self.signer.as_ref()).await
-        } else {
-            api::fetch_balance(&self.client, self.signer.as_ref()).await
-        }
+        fapi::fetch_balance(&self.client, self.signer.as_ref()).await
     }
 
     async fn fetch_markets(&self) -> Result<Vec<MarketInfo>, ExchangeError> {
-        if self.is_perpetual() {
-            fapi::fetch_markets(&self.client).await
-        } else {
-            api::fetch_markets(&self.client).await
-        }
+        fapi::fetch_markets(&self.client).await
     }
 
-    // ---- Trading (dispatch by market_type) ----
+    // ---- Trading ----
 
     async fn create_order(&self, params: PlaceOrderParams) -> Result<CcxtOrder, ExchangeError> {
-        if self.is_perpetual() {
-            fapi::create_order(&self.client, self.signer.as_ref(), params).await
-        } else {
-            api::create_order(&self.client, self.signer.as_ref(), params).await
-        }
+        fapi::create_order(&self.client, self.signer.as_ref(), params).await
     }
 
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<CcxtOrder, ExchangeError> {
-        if self.is_perpetual() {
-            fapi::cancel_order(&self.client, self.signer.as_ref(), symbol, order_id).await
-        } else {
-            api::cancel_order(&self.client, self.signer.as_ref(), symbol, order_id).await
-        }
+        fapi::cancel_order(&self.client, self.signer.as_ref(), symbol, order_id).await
     }
 
     async fn fetch_order(&self, symbol: &str, order_id: &str) -> Result<CcxtOrder, ExchangeError> {
-        if self.is_perpetual() {
-            fapi::fetch_order(&self.client, self.signer.as_ref(), symbol, order_id).await
-        } else {
-            api::fetch_order(&self.client, self.signer.as_ref(), symbol, order_id).await
-        }
+        fapi::fetch_order(&self.client, self.signer.as_ref(), symbol, order_id).await
     }
 
     async fn fetch_open_orders(
         &self,
         symbol: Option<&str>,
     ) -> Result<Vec<CcxtOrder>, ExchangeError> {
-        if self.is_perpetual() {
-            fapi::fetch_open_orders(&self.client, self.signer.as_ref(), symbol).await
-        } else {
-            api::fetch_open_orders(&self.client, self.signer.as_ref(), symbol).await
-        }
+        fapi::fetch_open_orders(&self.client, self.signer.as_ref(), symbol).await
     }
 
     // ---- Perpetual-only ----
@@ -665,39 +584,19 @@ impl Exchange for BinanceExchange {
         leverage: u32,
         margin_mode: MarginMode,
     ) -> Result<(), ExchangeError> {
-        if !self.is_perpetual() {
-            return Err(ExchangeError::NotSupported(
-                "Leverage is only supported for perpetual futures".into(),
-            ));
-        }
         fapi::set_margin_type(&self.client, self.signer.as_ref(), symbol, margin_mode).await?;
         fapi::set_leverage(&self.client, self.signer.as_ref(), symbol, leverage).await
     }
 
     async fn fetch_positions(&self, symbol: Option<&str>) -> Result<Vec<Position>, ExchangeError> {
-        if !self.is_perpetual() {
-            return Err(ExchangeError::NotSupported(
-                "Positions are only supported for perpetual futures".into(),
-            ));
-        }
         fapi::fetch_positions(&self.client, self.signer.as_ref(), symbol).await
     }
 
     async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError> {
-        if !self.is_perpetual() {
-            return Err(ExchangeError::NotSupported(
-                "Position mode is only supported for perpetual futures".into(),
-            ));
-        }
         fapi::get_position_mode(&self.client, self.signer.as_ref()).await
     }
 
     async fn fetch_funding_rate(&self, symbol: &str) -> Result<CcxtFundingRate, ExchangeError> {
-        if !self.is_perpetual() {
-            return Err(ExchangeError::NotSupported(
-                "Funding rate is only supported for perpetual futures".into(),
-            ));
-        }
         fapi::fetch_funding_rate(&self.client, symbol).await
     }
 
@@ -707,30 +606,17 @@ impl Exchange for BinanceExchange {
         start_time: i64,
         end_time: i64,
     ) -> Result<Vec<CcxtFundingHistoryEntry>, ExchangeError> {
-        if !self.is_perpetual() {
-            return Err(ExchangeError::NotSupported(
-                "Funding history is only supported for perpetual futures".into(),
-            ));
-        }
         fapi::fetch_funding_history(&self.client, symbol, start_time, end_time).await
     }
 
     // ---- User data stream ----
 
     async fn create_listen_key(&self) -> Result<String, ExchangeError> {
-        if self.is_perpetual() {
-            fapi::create_listen_key(&self.client, self.signer.as_ref()).await
-        } else {
-            api::create_listen_key(&self.client, self.signer.as_ref()).await
-        }
+        fapi::create_listen_key(&self.client, self.signer.as_ref()).await
     }
 
     async fn keepalive_listen_key(&self, listen_key: &str) -> Result<(), ExchangeError> {
-        if self.is_perpetual() {
-            fapi::keepalive_listen_key(&self.client, self.signer.as_ref(), listen_key).await
-        } else {
-            api::keepalive_listen_key(&self.client, self.signer.as_ref(), listen_key).await
-        }
+        fapi::keepalive_listen_key(&self.client, self.signer.as_ref(), listen_key).await
     }
 
     // ---- Account (sapi) ----
@@ -739,64 +625,26 @@ impl Exchange for BinanceExchange {
         sapi::fetch_api_restrictions(&self.client, self.signer.as_ref()).await
     }
 
-    // ---- WebSocket API (现货 Ed25519 用户数据流) ----
-
-    async fn start_spot_order_ws_api(&self) -> Result<mpsc::Receiver<WsFeedEvent>, ExchangeError> {
-        if self.is_perpetual() {
-            return Err(ExchangeError::NotSupported(
-                "start_spot_order_ws_api is only for spot market".into(),
-            ));
-        }
-        let ed25519 = self.ed25519_signer.as_ref().ok_or_else(|| {
-            ExchangeError::NotSupported(
-                "WebSocket API requires Ed25519 API Key; \
-                 current key is HMAC-SHA256, migrate to Ed25519 to enable userDataStream.subscribe"
-                    .into(),
-            )
-        })?;
-        let (tx, rx) = mpsc::channel(256);
-        let ws = user_data_ws_api::UserDataWsApi::new_spot(
-            ed25519.clone(),
-            self.ws_reconnect_initial_delay_secs,
-            self.ws_reconnect_max_delay_secs,
-            self.ws_ping_interval_secs,
-            self.ws_max_lifetime_secs,
-        );
-        ws.start(tx);
-        info!("Spot order WS API started (Ed25519, userDataStream.subscribe)");
-        Ok(rx)
-    }
-
-    // ---- listenKey 订单 WS（合约用户数据流 / 现货 HMAC 降级路径）----
+    // ---- listenKey 订单 WS（合约用户数据流）----
 
     async fn start_listenkey_order_ws(
         &self,
         listen_key_hint: Option<&str>,
     ) -> Result<mpsc::Receiver<WsFeedEvent>, ExchangeError> {
-        // 1. 获取 listenKey：优先使用 hint，否则按市场类型创建
+        // 1. 获取 listenKey：优先使用 hint，否则创建
         let listen_key = match listen_key_hint {
             Some(k) => k.to_string(),
             None => self.create_listen_key().await?,
         };
 
-        // 2. 按市场类型构造 UserDataWs
-        let mut ws = if self.is_perpetual() {
-            user_data_ws::UserDataWs::new_perpetual(
-                listen_key.clone(),
-                self.ws_reconnect_initial_delay_secs,
-                self.ws_reconnect_max_delay_secs,
-                self.ws_ping_interval_secs,
-                self.ws_max_lifetime_secs,
-            )
-        } else {
-            user_data_ws::UserDataWs::new_spot(
-                listen_key.clone(),
-                self.ws_reconnect_initial_delay_secs,
-                self.ws_reconnect_max_delay_secs,
-                self.ws_ping_interval_secs,
-                self.ws_max_lifetime_secs,
-            )
-        };
+        // 2. 构造合约 UserDataWs
+        let mut ws = user_data_ws::UserDataWs::new_perpetual(
+            listen_key.clone(),
+            self.ws_reconnect_initial_delay_secs,
+            self.ws_reconnect_max_delay_secs,
+            self.ws_ping_interval_secs,
+            self.ws_max_lifetime_secs,
+        );
 
         // 3. 获取 running flag 引用（keepalive task 据此判断 WS 是否已退出）
         let ws_running = ws.running_handle();
@@ -804,22 +652,14 @@ impl Exchange for BinanceExchange {
         // 4. 启动 WS 并返回 receiver
         let (tx, rx) = mpsc::channel(256);
         ws.start(tx).await;
-        info!(
-            market_type = ?self.market_type,
-            "listenKey order WS started"
-        );
+        info!("listenKey order WS started (perpetual)");
 
         // 5. spawn listenKey REST keepalive task
-        //    币安要求：现货 30 分钟内、合约 60 分钟内 keepalive 一次，否则 listenKey 失效。
+        //    币安要求：合约 60 分钟内 keepalive 一次，否则 listenKey 失效。
         //    取保守间隔（窗口的 1/2）以容忍网络抖动。
         let client = self.client.clone();
         let signer = Arc::clone(&self.signer);
-        let is_perpetual = self.is_perpetual();
-        let keepalive_interval = if is_perpetual {
-            Duration::from_secs(self.listenkey_keepalive_futures_secs)
-        } else {
-            Duration::from_secs(self.listenkey_keepalive_spot_secs)
-        };
+        let keepalive_interval = Duration::from_secs(self.listenkey_keepalive_futures_secs);
 
         tokio::spawn(async move {
             let mut tick = tokio::time::interval(keepalive_interval);
@@ -834,11 +674,7 @@ impl Exchange for BinanceExchange {
                 if !ws_running.load(Ordering::Relaxed) {
                     return;
                 }
-                let result = if is_perpetual {
-                    fapi::keepalive_listen_key(&client, signer.as_ref(), &listen_key).await
-                } else {
-                    api::keepalive_listen_key(&client, signer.as_ref(), &listen_key).await
-                };
+                let result = fapi::keepalive_listen_key(&client, signer.as_ref(), &listen_key).await;
                 match result {
                     Ok(()) => {
                     }
@@ -859,19 +695,11 @@ impl Exchange for BinanceExchange {
     // ---- Misc ----
 
     async fn ping(&self) -> Result<bool, ExchangeError> {
-        if self.is_perpetual() {
-            fapi::ping(&self.client).await
-        } else {
-            api::ping(&self.client).await
-        }
+        fapi::ping(&self.client).await
     }
 
     async fn sync_time(&self) -> Result<(), ExchangeError> {
-        let server_time = if self.is_perpetual() {
-            fapi::fetch_server_time(&self.client).await?
-        } else {
-            api::fetch_server_time(&self.client).await?
-        };
+        let server_time = fapi::fetch_server_time(&self.client).await?;
         let local_time = chrono::Utc::now().timestamp_millis();
         let offset = server_time - local_time;
         self.signer.set_time_offset(offset);
@@ -887,7 +715,6 @@ impl Exchange for BinanceExchange {
 
         info!(
             time_offset_ms = offset,
-            market_type = ?self.market_type,
             "Server time synced"
         );
 
@@ -912,7 +739,6 @@ impl BinanceExchange {
     fn spawn_periodic_time_sync(&self) {
         let client = self.client.clone();
         let signer = self.signer.clone();
-        let is_perpetual = self.is_perpetual();
         let running = self.time_sync_running.clone();
 
         tokio::spawn(async move {
@@ -932,11 +758,7 @@ impl BinanceExchange {
                     tracing::info!("[PeriodicSync] Exchange dropped during sleep, stopping");
                     break;
                 }
-                let result = if is_perpetual {
-                    fapi::fetch_server_time(&client).await
-                } else {
-                    api::fetch_server_time(&client).await
-                };
+                let result = fapi::fetch_server_time(&client).await;
                 match result {
                     Ok(server_time) => {
                         let local_time = chrono::Utc::now().timestamp_millis();
@@ -980,14 +802,10 @@ impl Drop for BinanceExchange {
 // Test modules (_tests suffix pattern)
 // ============================================================
 #[cfg(test)]
-mod api_tests;
-#[cfg(test)]
 mod kline_ws_tests;
 #[cfg(test)]
 mod mod_tests;
 #[cfg(test)]
 mod orderbook_ws_tests;
-#[cfg(test)]
-mod user_data_ws_api_tests;
 #[cfg(test)]
 mod user_data_ws_tests;

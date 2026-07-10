@@ -32,7 +32,7 @@ impl ExchangePriceProvider {
 
 #[async_trait]
 impl PriceProvider for ExchangePriceProvider {
-    async fn get_price(&self, exchange: &str, symbol: &str, market_type: &str) -> Option<f64> {
+    async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64> {
         // Try kline engine first (1m candle)
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine
@@ -48,26 +48,11 @@ impl PriceProvider for ExchangePriceProvider {
         }
 
         // Fallback to exchange ticker
-        let exchange_key = format!("{}:{}", exchange, market_type);
+        let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key)?;
         match ex.get_ticker(symbol).await {
             Ok(ticker) if ticker.last > 0.0 => Some(ticker.last),
-            _ => {
-                // Also try spot if perpetual failed
-                if market_type != "spot" {
-                    let spot_key = format!("{}:spot", exchange);
-                    if let Some(ex) = self.exchange_registry.get(&spot_key) {
-                        match ex.get_ticker(symbol).await {
-                            Ok(ticker) if ticker.last > 0.0 => Some(ticker.last),
-                            _ => None,
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
+            _ => None,
         }
     }
 }
@@ -95,7 +80,7 @@ impl AutoExchangePriceProvider {
 
 #[async_trait]
 impl PriceProvider for AutoExchangePriceProvider {
-    async fn get_price(&self, exchange: &str, symbol: &str, market_type: &str) -> Option<f64> {
+    async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64> {
         // Try kline engine first
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine
@@ -111,7 +96,7 @@ impl PriceProvider for AutoExchangePriceProvider {
         }
 
         // Fallback to exchange ticker
-        let exchange_key = format!("{}:{}", exchange, market_type);
+        let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key)?;
         match ex.get_ticker(symbol).await {
             Ok(ticker) if ticker.last > 0.0 => Some(ticker.last),

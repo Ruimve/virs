@@ -96,7 +96,6 @@ export interface BotHeaderInfo {
   name: string;
   symbol: string;
   exchange: string;
-  market_type: string;
   status: string;
   leverage: number;
 }
@@ -108,7 +107,6 @@ export interface AutoBot {
   name: string;
   symbol: string;
   exchange: string;
-  market_type: string;
   status: string;
   leverage: number;
   max_position_pct: number;
@@ -200,7 +198,6 @@ export interface GridBot {
   name: string;
   symbol: string;
   exchange: string;
-  market_type: string;
   status: string;
   leverage: number;
   initial_capital: number;

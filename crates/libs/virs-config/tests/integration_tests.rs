@@ -5,10 +5,7 @@
 
 use std::sync::Mutex;
 
-use virs_config::{
-    load_config, load_config_from_env, AdminConfig, AppConfig, DatabaseConfig,
-    ServerConfig,
-};
+use virs_config::{load_config, load_config_from_env};
 
 /// Mutex to serialize tests that modify environment variables (env is process-global).
 static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -55,7 +52,6 @@ fn clean_env_vars() {
         "WS_PING_INTERVAL_SECS",
         "WS_MAX_LIFETIME_SECS",
         "LISTENKEY_KEEPALIVE_FUTURES_SECS",
-        "LISTENKEY_KEEPALIVE_SPOT_SECS",
     ];
     for key in &keys {
         std::env::remove_var(key);

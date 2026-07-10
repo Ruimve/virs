@@ -7,7 +7,6 @@ pub struct PromptContext {
     pub timestamp: String,
     pub symbol: String,
     pub exchange: String,
-    pub market_type: String,
     pub total_balance: f64,
     pub available_balance: f64,
     pub used_margin: f64,
@@ -59,7 +58,6 @@ pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
         .replace("{timestamp}", &ctx.timestamp)
         .replace("{symbol}", &ctx.symbol)
         .replace("{exchange}", &ctx.exchange)
-        .replace("{market_type}", &ctx.market_type)
         .replace("{total_balance}", &format!("{:.2}", ctx.total_balance))
         .replace(
             "{available_balance}",

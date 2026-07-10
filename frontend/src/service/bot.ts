@@ -24,7 +24,6 @@ export async function createGridBot(params: {
   leverage?: number;
   name?: string;
   paper_mode?: boolean;
-  market_type?: string;
 }): Promise<ApiResponse<{ id: string }>> {
   return api.post('/grid/create', params);
 }
@@ -72,7 +71,6 @@ export async function getGridAnalysisLogs(
 export async function createAutoBot(params: {
   symbol: string;
   exchange: string;
-  market_type?: string;
   leverage?: number;
   decide_interval_secs?: number;
   name?: string;

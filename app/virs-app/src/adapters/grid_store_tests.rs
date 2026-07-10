@@ -13,7 +13,6 @@ fn make_bot() -> GridBot {
         name: "test-bot".to_string(),
         symbol: "BTC/USDT".to_string(),
         exchange: "binance".to_string(),
-        market_type: "futures".to_string(),
         paper_mode: false,
         status: StrategyStatus::Running,
         upper_price: 110.0,
@@ -49,7 +48,6 @@ fn g1_1_bot_to_config_basic() {
     assert_eq!(config.name, "test-bot");
     assert_eq!(config.symbol, "BTC/USDT");
     assert_eq!(config.exchange, "binance");
-    assert_eq!(config.market_type, "futures");
     assert!(!config.paper_mode);
 }
 

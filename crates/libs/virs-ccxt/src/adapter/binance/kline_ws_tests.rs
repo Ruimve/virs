@@ -287,14 +287,7 @@ fn test_binance_ws_symbol_basic() {
     assert_eq!(binance_ws_symbol("btcusdt"), "btcusdt");
 }
 
-// ========== 构造函数和状态（3个） ==========
-
-#[test]
-fn test_new_spot() {
-    let ws = KlineWs::new_spot(None, 1, 60, 30, 82800);
-    assert_eq!(ws.ws_url, "wss://stream.binance.com/ws");
-    assert!(!ws.is_running());
-}
+// ========== 构造函数和状态（2个） ==========
 
 #[test]
 fn test_new_perpetual() {
@@ -305,7 +298,7 @@ fn test_new_perpetual() {
 
 #[tokio::test]
 async fn test_subscribe_without_start() {
-    let ws = KlineWs::new_spot(None, 1, 60, 30, 82800);
+    let ws = KlineWs::new_perpetual(None, 1, 60, 30, 82800);
     assert!(!ws.is_running());
 
     // 不调用 start()，直接调用 subscribe

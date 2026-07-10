@@ -8,7 +8,6 @@ use chrono::Utc;
 use virs_exchange::Exchanges;
 use virs_models as models;
 use virs_types::enums::*;
-use virs_types::position::WsFeedEvent;
 
 use virs_error::ExchangeError;
 
@@ -45,10 +44,10 @@ fn int_1_3_position_side_consistency() {
 
 #[test]
 fn int_1_4_market_type_consistency() {
-    let models_spot = models::MarketType::Spot;
-    let pe_spot = MarketType::Spot;
-    assert_eq!(models_spot, models::MarketType::Spot);
-    assert_eq!(pe_spot, MarketType::Spot);
+    let models_perp = models::MarketType::Perpetual;
+    let pe_perp = MarketType::Perpetual;
+    assert_eq!(models_perp, models::MarketType::Perpetual);
+    assert_eq!(pe_perp, MarketType::Perpetual);
 }
 
 // ============================================================

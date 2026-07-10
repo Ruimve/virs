@@ -80,8 +80,6 @@ pub struct AppState {
     pub http_pool_max_idle_per_host: usize,
     /// listenKey 保活间隔（秒）— 合约
     pub listenkey_keepalive_futures_secs: u64,
-    /// listenKey 保活间隔（秒）— 现货
-    pub listenkey_keepalive_spot_secs: u64,
     /// WS 重连初始延迟（秒）
     pub ws_reconnect_initial_delay_secs: u64,
     /// WS 重连最大延迟（秒）

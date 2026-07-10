@@ -73,17 +73,15 @@ impl PositionStatus {
     }
 }
 
-/// Market type
+/// Market type (perpetual only — spot has been removed)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MarketType {
-    Spot,
     Perpetual,
 }
 
 impl std::fmt::Display for MarketType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MarketType::Spot => write!(f, "spot"),
             MarketType::Perpetual => write!(f, "perpetual"),
         }
     }
@@ -193,7 +191,6 @@ mod sqlx_impls {
         fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
             let s = <&str as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
             match s {
-                "spot" => Ok(MarketType::Spot),
                 "perpetual" => Ok(MarketType::Perpetual),
                 _ => Err(format!("unknown MarketType variant: {}", s).into()),
             }
@@ -212,7 +209,6 @@ mod sqlx_impls {
             buf: &mut sqlx::postgres::PgArgumentBuffer,
         ) -> sqlx::encode::IsNull {
             let s = match self {
-                MarketType::Spot => "spot",
                 MarketType::Perpetual => "perpetual",
             };
             <&str as sqlx::Encode<sqlx::Postgres>>::encode_by_ref(&s, buf)

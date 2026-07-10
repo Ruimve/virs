@@ -4,7 +4,6 @@ use chrono::Utc;
 
 use crate::enums::*;
 use crate::market::*;
-use crate::position::*;
 
 // ============================================================
 // TC-S1: Enum serde round-trip
@@ -79,24 +78,5 @@ fn s2_3_exchange_position_roundtrip() {
 // Removed: TC-S3 tested orphan method MarketType::from_str_lossy (no business
 // consumer). Method deleted.
 
-// ============================================================
-// TC-S4: AutoMarketType::from_str_lossy
-// ============================================================
-
-#[test]
-fn s4_1_perpetual() {
-    use crate::auto_port::AutoMarketType;
-    assert_eq!(AutoMarketType::from_str_lossy("perpetual"), AutoMarketType::Perpetual);
-}
-
-#[test]
-fn s4_2_spot() {
-    use crate::auto_port::AutoMarketType;
-    assert_eq!(AutoMarketType::from_str_lossy("spot"), AutoMarketType::Spot);
-}
-
-#[test]
-fn s4_3_unknown_defaults_to_perpetual() {
-    use crate::auto_port::AutoMarketType;
-    assert_eq!(AutoMarketType::from_str_lossy("unknown"), AutoMarketType::Perpetual);
-}
+// Removed: TC-S4 tested AutoMarketType::from_str_lossy — AutoMarketType enum
+// deleted as part of spot logic pruning.

@@ -35,7 +35,6 @@ const ReviewLaunch = () => {
           leverage: parseInt(botParams.leverage || '5'),
           name: `Grid ${botParams.symbol || 'Bot'}`,
           paper_mode: paperMode,
-          market_type: wizard.market_type,
         });
         if (!result.success || !result.data?.id) {
           setLaunchError(`Failed to create grid bot: ${result.error || 'Unknown error'}`);
@@ -46,7 +45,6 @@ const ReviewLaunch = () => {
         const result = await createAutoBot({
           symbol: botParams.symbol,
           exchange: wizard.exchange,
-          market_type: wizard.market_type,
           leverage: parseInt(botParams.leverage || '10'),
           decide_interval_secs: parseInt(botParams.decision_interval || '300'),
           name: `Auto ${botParams.symbol || 'Bot'}`,
@@ -86,7 +84,6 @@ const ReviewLaunch = () => {
     wizard.bot_type,
     wizard.bot_params,
     wizard.exchange,
-    wizard.market_type,
     paperMode,
     navigate,
     updateWizard,
@@ -210,12 +207,6 @@ const ReviewLaunch = () => {
             </span>
           </div>
           <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-            <span className="text-[12px] text-on-surface-tertiary">Market</span>
-            <span className="text-[12px] text-on-surface-secondary font-mono">
-              {wizard.market_type}
-            </span>
-          </div>
-          <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
             <span className="text-[12px] text-on-surface-tertiary">Symbol</span>
             <span className="text-[12px] text-on-surface-secondary font-mono">
               {botParams.symbol || '-'}
@@ -279,7 +270,6 @@ const ReviewLaunch = () => {
     wizard.bot_type,
     wizard.exchange,
     wizard.llm_model,
-    wizard.market_type,
     paperMode,
   ]);
 
