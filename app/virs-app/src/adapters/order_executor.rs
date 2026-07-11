@@ -68,7 +68,7 @@ impl OrderExecutor for PeOrderExecutor {
                 // 注意：bot 层的 client_order_id 映射到引擎层的 strategy_id。
                 // 引擎内部会把它同时保存到 Position.strategy_id（仓位归属）
                 // 和作为 client_order_id 传给交易所（订单追踪）。
-                // bot 层的 client_order_id 格式如 "auto:long:{bot_id}" 包含策略信息，可同时承担两个角色。
+                // bot 层的 client_order_id 格式如 "AOL__{timestamp}{hash}" 包含策略信息，可同时承担两个角色。
                 EngineCommand::OpenPosition {
                     exchange: String::new(), // will be resolved by engine
                     symbol,

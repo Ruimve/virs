@@ -94,7 +94,10 @@ pub struct Trade {
 #[derive(Debug, Clone, PartialEq)]
 pub enum WsFeedEvent {
     OrderUpdate {
+        /// 交易所订单 ID (币安 "i" 字段)
         exchange_order_id: String,
+        /// 客户端订单 ID (币安 "c" 字段) — 用于本地订单匹配
+        client_order_id: Option<String>,
         symbol: String,
         status: OrderStatus,
         filled: f64,

@@ -12,6 +12,7 @@ use crate::auto::ports::*;
 use crate::auto::strategy;
 use crate::auto::types::AutoBotConfig;
 use virs_config::TimeConfig;
+use virs_types::client_order_id;
 use virs_types::enums::PositionSide;
 use virs_types::position::{EngineEvent, Position};
 
@@ -302,8 +303,8 @@ impl AutoWorker {
         match client_order_id {
             Some(cid) => {
                 // 精确匹配 pending 状态的 client_order_id
-                // open: "auto:{long|short}:{bot_id}"
-                // close: "auto:close:{reason}:{bot_id}"
+                // open: "AOL__{timestamp}{hash}" / "AOS__{timestamp}{hash}"
+                // close: "ACL__{timestamp}{hash}" / "ACS__{timestamp}{hash}"
                 let open_match = self
                     .pending_open
                     .as_ref()
@@ -1308,7 +1309,7 @@ impl AutoWorker {
             }
         };
 
-        let client_order_id = format!("auto:{}:{}", side, self.bot.id);
+        let client_order_id = client_order_id::format_auto_open(self.bot.id, side);
 
         let result = self
             .order_executor
@@ -1368,7 +1369,7 @@ impl AutoWorker {
         // Use ClosePosition if we have a valid position_id, otherwise fall back to PlaceOrder
         // 注意：Uuid::nil() 视为无效（历史 bug 可能导致 nil UUID 被保存）
         if let Some(position_id) = self.bot.position_id.filter(|id| *id != Uuid::nil()) {
-            let client_order_id = format!("auto:close:{}:{}", close_reason, self.bot.id);
+            let client_order_id = client_order_id::format_auto_close(self.bot.id, &side);
 
             let result = self
                 .order_executor
@@ -1414,7 +1415,7 @@ impl AutoWorker {
                 }
             };
 
-            let client_order_id = format!("auto:close:{}:{}", close_reason, self.bot.id);
+            let client_order_id = client_order_id::format_auto_close(self.bot.id, &side);
 
             let result = self
                 .order_executor

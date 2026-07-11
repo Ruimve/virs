@@ -169,6 +169,7 @@ impl PaperExchangeAdapter {
                 if tx
                     .send(WsFeedEvent::OrderUpdate {
                         exchange_order_id: order.id.to_string(),
+                        client_order_id: order.client_order_id.clone(),
                         symbol: order.symbol.clone(),
                         status: OrderStatus::Filled,
                         filled: order.amount,
@@ -468,6 +469,7 @@ impl ExchangePe for PaperExchangeAdapter {
                 if tx
                     .send(WsFeedEvent::OrderUpdate {
                         exchange_order_id: order_id.to_string(),
+                        client_order_id: params.client_order_id.clone(),
                         symbol: params.symbol.clone(),
                         status: OrderStatus::Filled,
                         filled: params.amount,

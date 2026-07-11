@@ -7,6 +7,7 @@ use chrono::Utc;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 use uuid::Uuid;
+use virs_types::client_order_id;
 
 use crate::grid::ai::{GridAction, GridAiDecision, GridAiService};
 use crate::grid::ports::*;
@@ -337,7 +338,13 @@ impl GridWorker {
             ),
         };
 
-        let client_order_id = Some(format!("grid:{}:{}:{}", self.bot.id, level.level, key_side));
+        let position_side_str = if level.side == "sell" { "short" } else { "long" };
+        let client_order_id = Some(client_order_id::format_grid_order(
+            self.bot.id,
+            level.level,
+            !reduce_only,
+            position_side_str,
+        ));
 
         let cmd = if reduce_only {
             // Close order: use PlaceOrder with reduce_only
@@ -434,13 +441,7 @@ impl GridWorker {
     }
 
     fn parse_client_order_id(coi: &str) -> Option<(usize, String)> {
-        let parts: Vec<&str> = coi.splitn(4, ':').collect();
-        if parts.len() == 4 && parts[0] == "grid" {
-            if let Ok(level_idx) = parts[2].parse::<usize>() {
-                return Some((level_idx, parts[3].to_string()));
-            }
-        }
-        None
+        client_order_id::parse_grid_order(coi)
     }
 
     async fn on_order_filled(&mut self, order: &OrderInfo) {

@@ -1,0 +1,57 @@
+//! Binance 用户数据流事件处理器模块
+//!
+//! 每个事件类型一个独立文件，由 `dispatch_event` 统一分发。
+//! 官方文档: https://developers.binance.com/zh-CN/docs/products/derivatives-trading-usds-futures/user-data-streams
+
+pub mod account_config_update;
+pub mod account_update;
+pub mod algo_update;
+pub mod conditional_order_trigger_reject;
+pub mod grid_update;
+pub mod listen_key_expired;
+pub mod margin_call;
+pub mod order_trade_update;
+pub mod strategy_update;
+pub mod trade_lite;
+
+use virs_types::WsFeedEvent;
+
+/// 处理原始 WS 文本消息，分发到对应事件处理器。
+///
+/// 兼容两种推送格式：
+/// - 单流格式: `{"e":"ORDER_TRADE_UPDATE", ...}`
+/// - 组合流格式: `{"stream":"<listenKey>", "data":{"e":"ORDER_TRADE_UPDATE", ...}}`
+///
+/// 返回 `Some(WsFeedEvent)` 表示事件已转换为下游可消费的变体；
+/// 返回 `None` 表示事件被内部处理（日志记录）或无法识别。
+pub fn dispatch_event(text: &str) -> Option<WsFeedEvent> {
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+
+    let payload = value.get("data").unwrap_or(&value);
+    let event_type = payload
+        .get("e")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    let payload_str = payload.to_string();
+
+    match event_type {
+        "ORDER_TRADE_UPDATE" => order_trade_update::process(&payload_str),
+        "ACCOUNT_UPDATE" => account_update::process(&payload_str),
+        "MARGIN_CALL" => margin_call::process(&payload_str),
+        "ACCOUNT_CONFIG_UPDATE" => account_config_update::process(&payload_str),
+        "TRADE_LITE" => trade_lite::process(&payload_str),
+        "CONDITIONAL_ORDER_TRIGGER_REJECT" => conditional_order_trigger_reject::process(&payload_str),
+        "STRATEGY_UPDATE" => strategy_update::process(&payload_str),
+        "GRID_UPDATE" => grid_update::process(&payload_str),
+        "ALGO_UPDATE" => algo_update::process(&payload_str),
+        "listenKeyExpired" => listen_key_expired::process(&payload_str),
+        other => {
+            tracing::trace!(
+                event_type = other,
+                "[UserDataWs] 未知事件类型，忽略"
+            );
+            None
+        }
+    }
+}

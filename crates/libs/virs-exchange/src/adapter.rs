@@ -209,6 +209,7 @@ impl Exchange for CcxtAdapter {
         price: Option<f64>,
         reduce_only: Option<bool>,
         position_side: Option<PositionSide>,
+        client_order_id: Option<&str>,
     ) -> Result<Order, ExchangeError> {
         let ccxt_position_side = position_side.map(|ps| match ps {
             PositionSide::Long => virs_ccxt::PositionSide::Long,
@@ -221,7 +222,7 @@ impl Exchange for CcxtAdapter {
             amount,
             price,
             market_type: to_ccxt_market_type(&self.market_type),
-            client_order_id: None,
+            client_order_id: client_order_id.map(|s| s.to_string()),
             stop_price: None,
             time_in_force: None,
             reduce_only,

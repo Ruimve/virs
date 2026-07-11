@@ -80,6 +80,9 @@ pub(crate) struct EngineInner {
     pub(crate) tracker: Mutex<PnlTracker>,
     pub(crate) state: RwLock<EngineState>,
     pub(crate) exchange_order_id_index: DashMap<String, Uuid>,
+    /// client_order_id → order UUID 索引
+    /// 用于 WS 事件通过 client_order_id 匹配本地订单（双索引 fallback）
+    pub(crate) client_order_id_index: DashMap<String, Uuid>,
     pub(crate) position_id_index: DashMap<Uuid, (String, String, PositionSide)>,
     /// 平仓订单 REST 调用超时（从 TimeConfig.close_order_timeout_secs 注入）。
     /// 防止交易所 REST 调用卡死导致 PE engine loop 阻塞。
@@ -160,6 +163,7 @@ impl PositionEngine {
             positions: DashMap::new(),
             orders: DashMap::new(),
             exchange_order_id_index: DashMap::new(),
+            client_order_id_index: DashMap::new(),
             position_id_index: DashMap::new(),
             close_order_timeout,
             persist_max_retries,
@@ -485,6 +489,7 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
                 match event {
                     Some(WsFeedEvent::OrderUpdate {
                         exchange_order_id,
+                        client_order_id,
                         symbol,
                         status,
                         filled,
@@ -498,6 +503,7 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
                         handle_ws_order_update(
                             &inner,
                             &exchange_order_id,
+                            client_order_id.as_deref(),
                             &symbol,
                             status,
                             filled,
@@ -527,6 +533,7 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
 pub(crate) async fn handle_ws_order_update(
     inner: &Arc<EngineInner>,
     exchange_order_id: &str,
+    client_order_id: Option<&str>,
     symbol: &str,
     status: OrderStatus,
     filled: f64,
@@ -537,19 +544,52 @@ pub(crate) async fn handle_ws_order_update(
     timestamp: chrono::DateTime<Utc>,
     ws_position_side: Option<PositionSide>,
 ) {
-    // 1. 查找本地 Order
+    // 1. 查找本地 Order — 双索引匹配
     let (order_id, position_id, prev_filled, is_reduce_only) = {
+        // 优先用 exchange_order_id 匹配（精确，REST 返回后已建立）
         let order_id_opt = inner
             .exchange_order_id_index
             .get(exchange_order_id)
             .map(|r| *r.value());
+
+        // 未命中时用 client_order_id 匹配（fallback）
         let order_id = match order_id_opt {
             Some(id) => id,
             None => {
-                    warn!(exchange_order_id, "Received order update for unknown order — state may be out of sync");
+                if let Some(cid) = client_order_id {
+                    if let Some(id) = inner
+                        .client_order_id_index
+                        .get(cid)
+                        .map(|r| *r.value())
+                    {
+                        // 命中 client_order_id — 补注册 exchange_order_id 索引
+                        inner
+                            .exchange_order_id_index
+                            .insert(exchange_order_id.to_string(), id);
+                        tracing::debug!(
+                            exchange_order_id,
+                            client_order_id = cid,
+                            order_uuid = %id,
+                            "WS order matched by client_order_id — backfilling exchange_order_id_index"
+                        );
+                        id
+                    } else {
+                        warn!(
+                            exchange_order_id,
+                            client_order_id = cid,
+                            "Received order update for unknown order — dual-index miss (both exchange_order_id and client_order_id not found)"
+                        );
+                        return;
+                    }
+                } else {
+                    warn!(
+                        exchange_order_id,
+                        "Received order update for unknown order — no client_order_id available for fallback"
+                    );
                     return;
                 }
-            };
+            }
+        };
         let order = match inner.orders.get(&order_id) {
             Some(o) => o,
             None => {
@@ -866,6 +906,9 @@ pub(crate) async fn handle_open_position(
                 if let Some(ref eoid) = order.exchange_order_id {
                     inner.exchange_order_id_index.insert(eoid.clone(), order.id);
                 }
+                if let Some(ref cid) = order.client_order_id {
+                    inner.client_order_id_index.insert(cid.clone(), order.id);
+                }
                 inner.orders.insert(order.id, order.clone());
 
                 // 如果订单已成交，发出 OrderFilled 事件
@@ -1045,6 +1088,9 @@ pub(crate) async fn handle_open_position(
             if let Some(ref eoid) = order.exchange_order_id {
                 inner.exchange_order_id_index.insert(eoid.clone(), order.id);
             }
+            if let Some(ref cid) = order.client_order_id {
+                inner.client_order_id_index.insert(cid.clone(), order.id);
+            }
             inner.orders.insert(order.id, order.clone());
 
             persist!(
@@ -1178,6 +1224,9 @@ pub(crate) async fn handle_close_position(
             order.position_id = position_id;
             if let Some(ref eoid) = order.exchange_order_id {
                 inner.exchange_order_id_index.insert(eoid.clone(), order.id);
+            }
+            if let Some(ref cid) = order.client_order_id {
+                inner.client_order_id_index.insert(cid.clone(), order.id);
             }
             inner.orders.insert(order.id, order.clone());
 
@@ -1383,6 +1432,9 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
             inner.orders.insert(order.id, order.clone());
             if let Some(ref eoid) = order.exchange_order_id {
                 inner.exchange_order_id_index.insert(eoid.clone(), order.id);
+            }
+            if let Some(ref cid) = order.client_order_id {
+                inner.client_order_id_index.insert(cid.clone(), order.id);
             }
             inner.emit_event(EngineEvent::OrderPlaced {
                 order: order.clone(),

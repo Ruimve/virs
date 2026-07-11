@@ -11,6 +11,7 @@ use tracing::info;
 pub mod fapi;
 pub mod kline_ws;
 pub mod user_data_ws;
+pub mod user_data_ws_events;
 pub mod orderbook_ws;
 pub mod sapi;
 

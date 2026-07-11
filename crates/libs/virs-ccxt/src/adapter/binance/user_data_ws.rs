@@ -252,6 +252,7 @@ impl BinanceOrderInner {
 
         Some(WsFeedEvent::OrderUpdate {
             exchange_order_id: self.order_id.to_string(),
+            client_order_id: Some(self.client_order_id.clone()),
             symbol: self.symbol.clone(),
             status,
             filled,

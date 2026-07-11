@@ -240,6 +240,7 @@ impl ExchangePe for CcxtExchangeAdapter {
                 params.price,
                 reduce_only_param,
                 convert_position_side(&params.position_side),
+                params.client_order_id.as_deref(),
             )
             .await?;
         Ok(convert_order(&virs_order, &exchange_name))

@@ -67,7 +67,7 @@ pub trait Exchange: Send + Sync {
         amount: f64,
         price: Option<f64>,
     ) -> Result<Order, ExchangeError> {
-        self.place_order_with_options(symbol, side, order_type, amount, price, None, None)
+        self.place_order_with_options(symbol, side, order_type, amount, price, None, None, None)
             .await
     }
     async fn place_order_with_options(
@@ -79,6 +79,7 @@ pub trait Exchange: Send + Sync {
         price: Option<f64>,
         reduce_only: Option<bool>,
         position_side: Option<PositionSide>,
+        client_order_id: Option<&str>,
     ) -> Result<Order, ExchangeError>;
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError>;
     async fn get_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError>;
@@ -176,6 +177,7 @@ impl Exchange for Box<dyn Exchange> {
         price: Option<f64>,
         reduce_only: Option<bool>,
         position_side: Option<PositionSide>,
+        client_order_id: Option<&str>,
     ) -> Result<Order, ExchangeError> {
         (**self)
             .place_order_with_options(
@@ -186,6 +188,7 @@ impl Exchange for Box<dyn Exchange> {
                 price,
                 reduce_only,
                 position_side,
+                client_order_id,
             )
             .await
     }
