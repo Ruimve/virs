@@ -44,12 +44,6 @@ fn s1_1_app_config_full_roundtrip() {
                 http_connect_timeout_secs: 10,
                 http_pool_max_idle_per_host: 10,
             },
-            ws: WsConfig {
-                ws_reconnect_initial_delay_secs: 1,
-                ws_reconnect_max_delay_secs: 60,
-                ws_ping_interval_secs: 30,
-                ws_max_lifetime_secs: 82800,
-            },
             listenkey: ListenKeyConfig {
                 listenkey_keepalive_futures_secs: 1800,
             },

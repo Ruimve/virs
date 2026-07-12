@@ -291,25 +291,25 @@ fn test_binance_ws_symbol_basic() {
 
 #[test]
 fn test_new_perpetual() {
-    let ws = KlineWs::new_perpetual(None, 1, 60, 30, 82800);
+    let ws = KlineWs::new_perpetual(None);
     assert_eq!(ws.ws_url, "wss://fstream.binance.com/market/ws");
     assert!(!ws.is_running());
 }
 
 #[tokio::test]
 async fn test_subscribe_without_start() {
-    let ws = KlineWs::new_perpetual(None, 1, 60, 30, 82800);
+    let ws = KlineWs::new_perpetual(None);
     assert!(!ws.is_running());
 
     // 不调用 start()，直接调用 subscribe
     ws.subscribe("BTCUSDT").await;
 
     // 验证 subscriptions 包含正确的 stream name
-    let subs = ws.subscriptions.read().await;
+    let subs = ws.handler.subscriptions.read().await;
     assert!(subs.contains(&"btcusdt@kline_1m".to_string()));
 
     // 验证 symbol_map 包含映射
-    let map = ws.symbol_map.read().await;
+    let map = ws.handler.symbol_map.read().await;
     assert_eq!(map.get("btcusdt").unwrap(), "BTCUSDT");
 
     // 客户端仍然没有运行

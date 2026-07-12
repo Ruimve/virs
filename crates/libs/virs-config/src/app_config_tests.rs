@@ -87,11 +87,6 @@ fn t12_1_time_config_default_values() {
     // Sub-config: HttpConfig
     assert_eq!(tc.http.http_connect_timeout_secs, 10);
     assert_eq!(tc.http.http_pool_max_idle_per_host, 10);
-    // Sub-config: WsConfig
-    assert_eq!(tc.ws.ws_reconnect_initial_delay_secs, 1);
-    assert_eq!(tc.ws.ws_reconnect_max_delay_secs, 60);
-    assert_eq!(tc.ws.ws_ping_interval_secs, 30);
-    assert_eq!(tc.ws.ws_max_lifetime_secs, 82800);
     // Sub-config: ListenKeyConfig
     assert_eq!(tc.listenkey.listenkey_keepalive_futures_secs, 1800);
 }
@@ -125,12 +120,6 @@ fn t12_3_time_config_serde_roundtrip() {
         http: HttpConfig {
             http_connect_timeout_secs: 15,
             http_pool_max_idle_per_host: 20,
-        },
-        ws: WsConfig {
-            ws_reconnect_initial_delay_secs: 2,
-            ws_reconnect_max_delay_secs: 120,
-            ws_ping_interval_secs: 45,
-            ws_max_lifetime_secs: 86400,
         },
         listenkey: ListenKeyConfig {
             listenkey_keepalive_futures_secs: 1200,

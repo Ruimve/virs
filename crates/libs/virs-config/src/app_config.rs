@@ -33,12 +33,6 @@ pub(crate) const DEFAULT_PERSIST_RETRY_BASE_MS: &str = "100";
 pub(crate) const DEFAULT_HTTP_CONNECT_TIMEOUT_SECS: &str = "10";
 pub(crate) const DEFAULT_HTTP_POOL_MAX_IDLE_PER_HOST: &str = "10";
 
-// WebSocket default constants
-pub(crate) const DEFAULT_WS_RECONNECT_INITIAL_DELAY_SECS: &str = "1";
-pub(crate) const DEFAULT_WS_RECONNECT_MAX_DELAY_SECS: &str = "60";
-pub(crate) const DEFAULT_WS_PING_INTERVAL_SECS: &str = "30";
-pub(crate) const DEFAULT_WS_MAX_LIFETIME_SECS: &str = "82800"; // 23h
-
 // listenKey keepalive default constants
 pub(crate) const DEFAULT_LISTENKEY_KEEPALIVE_FUTURES_SECS: &str = "1800"; // 30min
 
@@ -124,8 +118,6 @@ pub struct TimeConfig {
     pub retry: RetryConfig,
     /// HTTP 客户端基础设施配置 — TCP 连接超时 + 连接池
     pub http: HttpConfig,
-    /// WebSocket 基础设施配置 — 重连 / 心跳 / 生命周期
-    pub ws: WsConfig,
     /// 币安 listenKey 保活配置 — 合约
     pub listenkey: ListenKeyConfig,
 }
@@ -148,19 +140,6 @@ pub struct HttpConfig {
     pub http_connect_timeout_secs: u64,
     /// HTTP 连接池每主机最大空闲连接数。默认 10
     pub http_pool_max_idle_per_host: usize,
-}
-
-/// WebSocket 基础设施配置 — 控制 WS 连接的重连、心跳和生命周期。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WsConfig {
-    /// WS 重连初始延迟（秒）。默认 1
-    pub ws_reconnect_initial_delay_secs: u64,
-    /// WS 重连最大延迟（秒）— 指数退避上限。默认 60
-    pub ws_reconnect_max_delay_secs: u64,
-    /// WS ping/pong 心跳间隔（秒）。默认 30
-    pub ws_ping_interval_secs: u64,
-    /// WS 连接最大生命周期（秒）— 到期后主动断开重连。默认 82800 (23h)
-    pub ws_max_lifetime_secs: u64,
 }
 
 /// 币安 listenKey 保活配置 — 合约保活间隔。
@@ -189,17 +168,6 @@ impl Default for HttpConfig {
     }
 }
 
-impl Default for WsConfig {
-    fn default() -> Self {
-        Self {
-            ws_reconnect_initial_delay_secs: DEFAULT_WS_RECONNECT_INITIAL_DELAY_SECS.parse().unwrap(),
-            ws_reconnect_max_delay_secs: DEFAULT_WS_RECONNECT_MAX_DELAY_SECS.parse().unwrap(),
-            ws_ping_interval_secs: DEFAULT_WS_PING_INTERVAL_SECS.parse().unwrap(),
-            ws_max_lifetime_secs: DEFAULT_WS_MAX_LIFETIME_SECS.parse().unwrap(),
-        }
-    }
-}
-
 impl Default for ListenKeyConfig {
     fn default() -> Self {
         Self {
@@ -223,7 +191,6 @@ impl Default for TimeConfig {
             llm_timeout_secs: DEFAULT_LLM_TIMEOUT_SECS.parse().unwrap(),
             retry: RetryConfig::default(),
             http: HttpConfig::default(),
-            ws: WsConfig::default(),
             listenkey: ListenKeyConfig::default(),
         }
     }
@@ -357,24 +324,6 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
             http_pool_max_idle_per_host: parse_env_num(
                 std::env::var("HTTP_POOL_MAX_IDLE_PER_HOST").ok(),
                 DEFAULT_HTTP_POOL_MAX_IDLE_PER_HOST,
-            )?,
-        },
-        ws: WsConfig {
-            ws_reconnect_initial_delay_secs: parse_env_num(
-                std::env::var("WS_RECONNECT_INITIAL_DELAY_SECS").ok(),
-                DEFAULT_WS_RECONNECT_INITIAL_DELAY_SECS,
-            )?,
-            ws_reconnect_max_delay_secs: parse_env_num(
-                std::env::var("WS_RECONNECT_MAX_DELAY_SECS").ok(),
-                DEFAULT_WS_RECONNECT_MAX_DELAY_SECS,
-            )?,
-            ws_ping_interval_secs: parse_env_num(
-                std::env::var("WS_PING_INTERVAL_SECS").ok(),
-                DEFAULT_WS_PING_INTERVAL_SECS,
-            )?,
-            ws_max_lifetime_secs: parse_env_num(
-                std::env::var("WS_MAX_LIFETIME_SECS").ok(),
-                DEFAULT_WS_MAX_LIFETIME_SECS,
             )?,
         },
         listenkey: ListenKeyConfig {

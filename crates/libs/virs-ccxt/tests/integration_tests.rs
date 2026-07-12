@@ -114,10 +114,6 @@ fn int_5_1_create_exchange_binance_hmac() {
         std::time::Duration::from_secs(10),
         10,
         900,
-        1,
-        60,
-        30,
-        82800,
     );
     assert!(result.is_ok());
     let exchange = result.unwrap();
@@ -139,10 +135,6 @@ fn int_5_2_create_exchange_binance_ed25519() {
         std::time::Duration::from_secs(10),
         10,
         900,
-        1,
-        60,
-        30,
-        82800,
     );
     assert!(result.is_ok());
     let exchange = result.unwrap();
@@ -161,10 +153,6 @@ fn int_5_3_create_exchange_bybit_not_supported() {
         std::time::Duration::from_secs(10),
         10,
         900,
-        1,
-        60,
-        30,
-        82800,
     );
     assert!(result.is_err());
     match result.err().unwrap() {
@@ -185,10 +173,6 @@ fn int_5_4_create_exchange_okx_not_supported() {
         std::time::Duration::from_secs(10),
         10,
         900,
-        1,
-        60,
-        30,
-        82800,
     );
     assert!(result.is_err());
     match result.err().unwrap() {
@@ -209,10 +193,6 @@ fn int_5_5_create_exchange_case_insensitive() {
         std::time::Duration::from_secs(10),
         10,
         900,
-        1,
-        60,
-        30,
-        82800,
     );
     assert!(result.is_ok());
 }

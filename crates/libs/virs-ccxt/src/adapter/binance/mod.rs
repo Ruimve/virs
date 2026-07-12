@@ -363,14 +363,6 @@ pub struct BinanceExchange {
     time_sync_running: Arc<AtomicBool>,
     /// listenKey 保活间隔（秒）— 合约
     listenkey_keepalive_futures_secs: u64,
-    /// WS 重连初始延迟（秒）
-    ws_reconnect_initial_delay_secs: u64,
-    /// WS 重连最大延迟（秒）
-    ws_reconnect_max_delay_secs: u64,
-    /// WS ping/pong 心跳间隔（秒）
-    ws_ping_interval_secs: u64,
-    /// WS 连接最大生命周期（秒）
-    ws_max_lifetime_secs: u64,
 }
 
 impl BinanceExchange {
@@ -387,10 +379,6 @@ impl BinanceExchange {
         connect_timeout: std::time::Duration,
         pool_max_idle_per_host: usize,
         listenkey_keepalive_futures_secs: u64,
-        ws_reconnect_initial_delay_secs: u64,
-        ws_reconnect_max_delay_secs: u64,
-        ws_ping_interval_secs: u64,
-        ws_max_lifetime_secs: u64,
     ) -> Result<Self, ExchangeError> {
         let max_concurrent: u32 = 40;
         let client =
@@ -415,10 +403,6 @@ impl BinanceExchange {
             time_sync_started: AtomicBool::new(false),
             time_sync_running: Arc::new(AtomicBool::new(false)),
             listenkey_keepalive_futures_secs,
-            ws_reconnect_initial_delay_secs,
-            ws_reconnect_max_delay_secs,
-            ws_ping_interval_secs,
-            ws_max_lifetime_secs,
         })
     }
 
@@ -634,13 +618,11 @@ impl Exchange for BinanceExchange {
             None => self.create_listen_key().await?,
         };
 
-        // 2. 构造合约 UserDataWs
-        let mut ws = user_data_ws::UserDataWs::new_perpetual(
+        // 2. 构造合约 UserDataWs — 传入 client + signer 供 refresh_url() 创建新 listenKey
+        let ws = user_data_ws::UserDataWs::new_perpetual(
             listen_key.clone(),
-            self.ws_reconnect_initial_delay_secs,
-            self.ws_reconnect_max_delay_secs,
-            self.ws_ping_interval_secs,
-            self.ws_max_lifetime_secs,
+            self.client.clone(),
+            Arc::clone(&self.signer),
         );
 
         // 3. 获取 running flag 引用（keepalive task 据此判断 WS 是否已退出）

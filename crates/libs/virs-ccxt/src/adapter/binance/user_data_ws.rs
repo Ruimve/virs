@@ -1,16 +1,19 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use tokio::sync::mpsc;
-use tokio_tungstenite::{connect_async, tungstenite};
+use virs_error::ExchangeError;
 
 // Re-export for convenience
 pub use virs_types::WsFeedEvent;
 use virs_types::{OrderStatus, PositionSide};
+
+use crate::adapter::binance::fapi;
+use crate::adapter::binance::user_data_ws_events::dispatch_event;
+use crate::auth::Signer;
+use crate::ws_manager::{MessageOutcome, WsHandler, WsManager, WsManagerConfig, WsManagerEvent};
+use crate::ExchangeClient;
 
 // ============================================================
 // Binance User Data Stream 消息格式
@@ -275,7 +278,7 @@ impl BinanceOrderInner {
 }
 
 // ============================================================
-// UserDataWs: 订单 WebSocket 客户端
+// UserDataWsHandler: WsHandler 实现
 // ============================================================
 
 /// WS 消息延迟告警阈值（毫秒）
@@ -284,266 +287,207 @@ impl BinanceOrderInner {
 /// 延迟来源可能是网络传输、channel 堆积或客户端处理阻塞。
 pub(crate) const ORDER_WS_DELAY_THRESHOLD_MS: i64 = 3_000;
 
+/// Binance User Data Stream 的 [`WsHandler`] 实现
+///
+/// 通过 `refresh_url()` 在每次重连前重新创建 listenKey，解决 P0 问题：
+/// 原始实现中 listenKey 过期后用旧 key 重连导致死循环。
+///
+/// 消息解析委托给 [`dispatch_event`]，统一处理 11 种事件类型。
+/// `listenKeyExpired` 事件触发 `MessageOutcome::Reconnect`，
+/// WsManager 立即断开并通过 `refresh_url()` 获取新 key。
+pub struct UserDataWsHandler {
+    /// 初始 WS URL（含初始 listenKey）
+    ws_url: String,
+    /// HTTP 客户端 — 用于 `refresh_url()` 创建新 listenKey
+    client: ExchangeClient,
+    /// 签名器 — 用于 `refresh_url()` 签名
+    signer: Arc<dyn Signer>,
+}
+
+impl UserDataWsHandler {
+    /// 创建 handler
+    ///
+    /// `ws_url` 应包含初始 listenKey，格式：`wss://fstream.binance.com/private/ws?listenKey=<key>`
+    pub fn new(ws_url: String, client: ExchangeClient, signer: Arc<dyn Signer>) -> Self {
+        Self {
+            ws_url,
+            client,
+            signer,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl WsHandler<WsFeedEvent> for UserDataWsHandler {
+    fn base_url(&self) -> &str {
+        &self.ws_url
+    }
+
+    async fn refresh_url(&self) -> Result<String, ExchangeError> {
+        // P0 修复：每次重连前创建新 listenKey，而非复用旧 key
+        let new_key = fapi::create_listen_key(&self.client, self.signer.as_ref()).await?;
+        let url = format!("wss://fstream.binance.com/private/ws?listenKey={}", new_key);
+        tracing::info!("[UserDataWs] Refreshed listenKey for reconnect");
+        Ok(url)
+    }
+
+    async fn on_message(
+        &self,
+        text: &str,
+    ) -> Result<MessageOutcome<WsFeedEvent>, ExchangeError> {
+        // 延迟检测：解析 event_time 并与本地时间对比
+        if let Ok(bmsg) = serde_json::from_str::<BinanceOrderMessage>(text) {
+            if let Some(et) = bmsg.event_time() {
+                if et > 0 {
+                    let delay_ms = chrono::Utc::now().timestamp_millis() - et;
+                    if delay_ms > ORDER_WS_DELAY_THRESHOLD_MS {
+                        let event_type = bmsg
+                            .event_type()
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| "unknown".to_string());
+                        tracing::warn!(
+                            delay_ms = delay_ms,
+                            event_time = et,
+                            event_type = %event_type,
+                            "[UserDataWs] Order event delay exceeds threshold"
+                        );
+                    }
+                }
+            }
+        }
+
+        // 委托给 dispatch_event 解析 — 支持 11 种事件类型
+        if let Some(event) = dispatch_event(text) {
+            return Ok(MessageOutcome::Continue(vec![event]));
+        }
+
+        // dispatch_event 返回 None 时，检查是否为 listenKeyExpired
+        // listen_key_expired::process() 返回 None 但记录了 error 日志
+        // 我们需要检测该事件类型并触发重连
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(text) {
+            let payload = value.get("data").unwrap_or(&value);
+            if let Some(et) = payload.get("e").and_then(|v| v.as_str()) {
+                if et == "listenKeyExpired" {
+                    tracing::warn!(
+                        "[UserDataWs] listenKey expired — requesting reconnect with fresh key"
+                    );
+                    return Ok(MessageOutcome::Reconnect);
+                }
+                if et == "serverShutdown" {
+                    tracing::warn!("[UserDataWs] Server shutdown event — requesting reconnect");
+                    return Ok(MessageOutcome::Reconnect);
+                }
+            }
+        }
+
+        // 非订单事件（ACCOUNT_UPDATE / MARGIN_CALL 等）— dispatch_event 已处理日志
+        Ok(MessageOutcome::Continue(vec![]))
+    }
+
+    async fn on_connected(&self, _is_reconnect: bool) -> Vec<String> {
+        // UserDataWs 是单流设计，无需发送 SUBSCRIBE 消息
+        vec![]
+    }
+
+    async fn on_disconnected(&self) {
+        // 无需清理 — 订阅状态由 WsManager 管理
+    }
+}
+
+// ============================================================
+// UserDataWs: 委托给 WsManager 的薄包装
+// ============================================================
+
 /// Binance User Data Stream 订单推送客户端
 ///
-/// 连接到 Binance 的 User Data Stream（需要 listenKey），
-/// 接收 ORDER_TRADE_UPDATE 事件并转换为 WsFeedEvent。
+/// 内部委托给 [`WsManager<WsFeedEvent>`]，仅保留对外 API 兼容性。
 ///
-/// 连接管理参考 KlineWs：
-/// - 指数退避重连
-/// - Ping/Pong 心跳
-/// - 最大生命周期（23 小时）
+/// 改进（对比原始实现）：
+/// - **P0 修复**：`refresh_url()` 每次重连前创建新 listenKey
+/// - **连接超时**：`connect_timeout_secs` 防止 `connect_async` 挂起
+/// - **Pong 超时**：`pong_timeout_secs` 检测半开连接
+/// - **优雅关闭**：统一 `stop()` + shutdown channel
+/// - **熔断**：`max_retries` 超限后触发 `CircuitBreakerTripped` 事件
+/// - **listenKeyExpired**：`MessageOutcome::Reconnect` 立即触发重连
 pub struct UserDataWs {
-    /// WS URL（包含 listenKey）
-    pub(crate) ws_url: String,
-    reconnect_delay_secs: u64,
-    max_reconnect_delay_secs: u64,
-    ws_ping_interval_secs: u64,
-    ws_max_lifetime_secs: u64,
-    running: Arc<AtomicBool>,
+    manager: WsManager<WsFeedEvent>,
+    /// 初始 WS URL — 保留用于测试断言
+    pub ws_url: String,
 }
 
 impl UserDataWs {
-    /// 创建新的订单 WS 客户端（path 形态 URL）
-    ///
-    /// # 参数
-    /// - `base_url`: WS 基础 URL
-    /// - `listen_key`: Binance User Data Stream 的 listenKey
-    pub fn new(
-        base_url: String,
-        listen_key: String,
-        reconnect_delay_secs: u64,
-        max_reconnect_delay_secs: u64,
-        ws_ping_interval_secs: u64,
-        ws_max_lifetime_secs: u64,
-    ) -> Self {
-        let ws_url = format!("{}/{}", base_url.trim_end_matches('/'), listen_key);
-        Self {
-            ws_url,
-            reconnect_delay_secs,
-            max_reconnect_delay_secs,
-            ws_ping_interval_secs,
-            ws_max_lifetime_secs,
-            running: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
     /// 创建永续合约订单 WS 客户端
     ///
     /// 2026-04-23 起币安将用户数据流切流至 /private 路由，
     /// 新 URL 使用 query 形态 `wss://fstream.binance.com/private/ws?listenKey=<key>`
-    /// （官方迁移公告示例格式）。
+    ///
+    /// `client` 和 `signer` 用于 `refresh_url()` 在每次重连前创建新 listenKey。
     pub fn new_perpetual(
         listen_key: String,
-        reconnect_delay_secs: u64,
-        max_reconnect_delay_secs: u64,
-        ws_ping_interval_secs: u64,
-        ws_max_lifetime_secs: u64,
+        client: ExchangeClient,
+        signer: Arc<dyn Signer>,
     ) -> Self {
         let base_url = "wss://fstream.binance.com/private/ws".to_string();
         let ws_url = format!("{}?listenKey={}", base_url, listen_key);
+
+        let handler = Arc::new(UserDataWsHandler::new(
+            ws_url.clone(),
+            client,
+            signer,
+        ));
+
+        let config = WsManagerConfig::default();
+
         Self {
+            manager: WsManager::new(config, handler),
             ws_url,
-            reconnect_delay_secs,
-            max_reconnect_delay_secs,
-            ws_ping_interval_secs,
-            ws_max_lifetime_secs,
-            running: Arc::new(AtomicBool::new(false)),
         }
     }
 
     /// 返回 running flag 的引用，供外部 keepalive task 检测 WS 生命周期。
-    ///
-    /// WS 后台 task 退出时会将此 flag 设为 false，keepalive task 应定期检测并退出。
-    pub fn running_handle(&self) -> Arc<AtomicBool> {
-        Arc::clone(&self.running)
+    pub fn running_handle(&self) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+        self.manager.running_handle()
     }
 
-    /// 启动 WS 连接，将订单事件发送到 event_tx
+    /// 启动 WS 连接，将事件发送到 event_tx
     ///
-    /// 返回后立即返回，WS 连接在后台 tokio task 中运行。
-    /// 当 WS 断开时发送 ConnectionChanged { connected: false }，
-    /// 重连成功后发送 ConnectionChanged { connected: true }。
-    pub async fn start(&mut self, event_tx: mpsc::Sender<WsFeedEvent>) {
-        if self.running.load(Ordering::Relaxed) {
-            return;
-        }
-        self.running.store(true, Ordering::Relaxed);
+    /// 内部通过 forwarder task 将 `WsManagerEvent<WsFeedEvent>` 转换为 `WsFeedEvent`：
+    /// - `Message(e)` → `e`
+    /// - `ConnectionChanged { connected, .. }` → `WsFeedEvent::ConnectionChanged { connected }`
+    /// - `CircuitBreakerTripped` → `WsFeedEvent::ConnectionChanged { connected: false }` + 日志
+    pub async fn start(&self, event_tx: mpsc::Sender<WsFeedEvent>) {
+        // WsManager 发出 WsManagerEvent<WsFeedEvent>，需要桥接到 WsFeedEvent
+        let (manager_tx, mut manager_rx) = mpsc::channel::<WsManagerEvent<WsFeedEvent>>(256);
 
-        let ws_url = self.ws_url.clone();
-        let running = self.running.clone();
-        let reconnect_delay_secs = self.reconnect_delay_secs;
-        let max_reconnect_delay_secs = self.max_reconnect_delay_secs;
-        let ws_ping_interval_secs = self.ws_ping_interval_secs;
-        let ws_max_lifetime_secs = self.ws_max_lifetime_secs;
+        // 启动 WsManager
+        self.manager.start(manager_tx).await;
 
+        // forwarder task: WsManagerEvent<WsFeedEvent> → WsFeedEvent
         tokio::spawn(async move {
-            let mut reconnect_delay = reconnect_delay_secs;
-
-            while running.load(Ordering::Relaxed) {
-                let connect_start = tokio::time::Instant::now();
-
-                match connect_async(&ws_url).await {
-                    Ok((ws_stream, _)) => {
-                        reconnect_delay = reconnect_delay_secs;
-
-                        // 发送连接恢复事件
-                        if event_tx
-                            .send(WsFeedEvent::ConnectionChanged { connected: true })
-                            .await
-                            .is_err()
-                        {
-                            tracing::warn!(
-                                "[UserDataWs] Event channel closed on connect, stopping"
-                            );
-                            running.store(false, Ordering::Relaxed);
-                            break;
-                        }
-
-                        let (mut write, mut read) = ws_stream.split();
-
-                        let ping_interval = Duration::from_secs(ws_ping_interval_secs);
-                        let mut ping_tick = tokio::time::interval(ping_interval);
-                        let max_lifetime = Duration::from_secs(ws_max_lifetime_secs);
-                        let mut running_check = tokio::time::interval(Duration::from_secs(1));
-
-                        loop {
-                            if !running.load(Ordering::Relaxed) {
-                                break;
-                            }
-
-                            if connect_start.elapsed() > max_lifetime {
-                                break;
-                            }
-
-                            tokio::select! {
-                                msg = read.next() => {
-                                    match msg {
-                                        Some(Ok(tungstenite::Message::Text(text))) => {
-                                            if let Ok(bmsg) = serde_json::from_str::<BinanceOrderMessage>(&text) {
-                                                let event_type = bmsg
-                                                    .event_type()
-                                                    .map(|s| s.to_string())
-                                                    .unwrap_or_else(|| "unknown".to_string());
-
-                                                // 订单事件延迟检测（参照 kline_ws T8 fix）
-                                                // event_time 是币安服务器发送时刻，local_now 是本地处理时刻，
-                                                // 差值 = 网络传输 + channel 排队 + 处理等待
-                                                if let Some(et) = bmsg.event_time() {
-                                                    if et > 0 {
-                                                        let delay_ms = chrono::Utc::now().timestamp_millis() - et;
-                                                        if delay_ms > ORDER_WS_DELAY_THRESHOLD_MS {
-                                                            tracing::warn!(
-                                                                delay_ms = delay_ms,
-                                                                event_time = et,
-                                                                event_type = %event_type,
-                                                                "[UserDataWs] Order event delay exceeds threshold"
-                                                            );
-                                                        }
-                                                    }
-                                                }
-
-                                                // to_ws_feed_event() 处理 ORDER_TRADE_UPDATE（合约）事件，
-                                                // 兼容单流和组合流格式。
-                                                if let Some(event) = bmsg.to_ws_feed_event() {
-                                                    if event_tx.send(event).await.is_err() {
-                                                        tracing::warn!("[UserDataWs] Event channel closed, stopping");
-                                                        running.store(false, Ordering::Relaxed);
-                                                        return;
-                                                    }
-                                                } else {
-                                                    // 非订单事件：ACCOUNT_UPDATE / listenKeyExpired /
-                                                    // serverShutdown / MARGIN_CALL / 订阅确认等
-                                                    match event_type.as_str() {
-                                                        "ACCOUNT_UPDATE" => {
-                                                        }
-                                                        "listenKeyExpired" => {
-                                                            tracing::warn!(
-                                                                "[UserDataWs] listenKey expired, will reconnect"
-                                                            );
-                                                            break;
-                                                        }
-                                                        "serverShutdown" => {
-                                                            break;
-                                                        }
-                                                        _ => {
-                                                            tracing::trace!(
-                                                                "[UserDataWs] Ignoring event type: {}",
-                                                                event_type
-                                                            );
-                                                        }
-                                                    }
-                                                }
-                                            } else {
-                                                tracing::warn!(
-                                                    "[UserDataWs] Failed to parse WS message: {}",
-                                                    &text[..text.len().min(200)]
-                                                );
-                                            }
-                                        }
-                                        Some(Ok(tungstenite::Message::Ping(data))) => {
-                                            let _ = write.send(tungstenite::Message::Pong(data)).await;
-                                        }
-                                        Some(Ok(tungstenite::Message::Close(_))) => {
-                                            tracing::warn!("[UserDataWs] Server closed connection");
-                                            break;
-                                        }
-                                        Some(Err(e)) => {
-                                            tracing::error!("[UserDataWs] Read error: {}", e);
-                                            break;
-                                        }
-                                        None => {
-                                            tracing::warn!("[UserDataWs] Stream ended");
-                                            break;
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                                _ = ping_tick.tick() => {
-                                    let ping = tungstenite::Message::Ping(vec![].into());
-                                    if write.send(ping).await.is_err() {
-                                        tracing::warn!("[UserDataWs] Ping failed, reconnecting...");
-                                        break;
-                                    }
-                                }
-                                _ = running_check.tick() => {
-                                    if !running.load(Ordering::Relaxed) {
-                                        let _ = write.send(tungstenite::Message::Close(None)).await;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        // 连接断开，发送断连事件
-                        if event_tx
-                            .send(WsFeedEvent::ConnectionChanged { connected: false })
-                            .await
-                            .is_err()
-                        {
-                            tracing::warn!(
-                                "[UserDataWs] Event channel closed on disconnect, stopping"
-                            );
-                            running.store(false, Ordering::Relaxed);
-                            break;
-                        }
+            while let Some(ev) = manager_rx.recv().await {
+                let feed_event = match ev {
+                    WsManagerEvent::Message(e) => e,
+                    WsManagerEvent::ConnectionChanged { connected, .. } => {
+                        WsFeedEvent::ConnectionChanged { connected }
                     }
-                    Err(e) => {
-                        tracing::error!("[UserDataWs] Connection failed: {}", e);
+                    WsManagerEvent::CircuitBreakerTripped { retry_count } => {
+                        tracing::error!(
+                            retry_count = retry_count,
+                            "[UserDataWs] Circuit breaker tripped — WS stopped after max retries"
+                        );
+                        WsFeedEvent::ConnectionChanged { connected: false }
                     }
-                }
-
-                if !running.load(Ordering::Relaxed) {
+                };
+                if event_tx.send(feed_event).await.is_err() {
+                    tracing::warn!("[UserDataWs] External event channel closed, stopping forwarder");
                     break;
                 }
-
-                let jitter = (reconnect_delay as f64 * 0.1 * (2.0 * rand::random::<f64>() - 1.0)) as i64;
-                let delay = (reconnect_delay as i64 + jitter).max(1) as u64;
-                tokio::time::sleep(Duration::from_secs(delay)).await;
-                reconnect_delay = (reconnect_delay * 2).min(max_reconnect_delay_secs);
             }
-
-            running.store(false, Ordering::Relaxed);
         });
+    }
+
+    /// 优雅关闭
+    pub async fn stop(&self) {
+        self.manager.stop().await;
     }
 }

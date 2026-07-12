@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use async_trait::async_trait;
-use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use tokio::sync::{broadcast, mpsc, RwLock};
-use tokio_tungstenite::{connect_async, tungstenite};
 
 // Re-export for convenience
+use crate::ws_manager::{
+    MessageOutcome, WsCommand as ManagerWsCommand, WsHandler, WsManager, WsManagerConfig,
+    WsManagerEvent,
+};
 use crate::ws_types::KlineWsClient;
 pub use crate::ws_types::{Candle, WsCandleUpdate, WsEvent};
 
@@ -137,351 +138,272 @@ impl BinanceKlineData {
     }
 }
 
-enum WsCommand {
-    Subscribe(String),
-    Unsubscribe(String),
+// ============================================================
+// KlineWsHandler: WsHandler 实现
+// ============================================================
+
+/// Binance Kline WS 的 [`WsHandler`] 实现
+///
+/// 管理动态订阅状态（`subscriptions` + `symbol_map`），
+/// 在 `on_connected` 时自动恢复所有订阅。
+///
+/// 改进（对比原始实现）：
+/// - 连接超时（10s）防止 `connect_async` 挂起
+/// - Pong 超时（90s）检测半开连接
+/// - 背压容忍：broadcast channel 满时 warn 不停止
+/// - 熔断：100 次重试后触发 CircuitBreaker
+/// - 统一 `ConnectionChanged` 事件替代 `WsEvent::Reconnected`
+/// - 退避 jitter 修正（避免截断为 0）
+pub struct KlineWsHandler {
+    ws_url: String,
+    /// 当前订阅列表 — 重连时通过 on_connected 恢复
+    pub(crate) subscriptions: Arc<RwLock<Vec<String>>>,
+    /// Binance symbol → 原始 symbol 映射
+    pub(crate) symbol_map: Arc<RwLock<HashMap<String, String>>>,
+    /// JSON-RPC 请求 ID
+    request_id: Arc<AtomicU64>,
 }
 
+impl KlineWsHandler {
+    pub fn new(ws_url: String) -> Self {
+        Self {
+            ws_url,
+            subscriptions: Arc::new(RwLock::new(Vec::new())),
+            symbol_map: Arc::new(RwLock::new(HashMap::new())),
+            request_id: Arc::new(AtomicU64::new(1)),
+        }
+    }
+}
+
+#[async_trait]
+impl WsHandler<WsEvent> for KlineWsHandler {
+    fn base_url(&self) -> &str {
+        &self.ws_url
+    }
+
+    fn supports_commands(&self) -> bool {
+        true
+    }
+
+    async fn on_message(&self, text: &str) -> Result<MessageOutcome<WsEvent>, virs_error::ExchangeError> {
+        let bmsg: BinanceKlineMessage = match serde_json::from_str(text) {
+            Ok(m) => m,
+            Err(_) => {
+                tracing::warn!(
+                    preview = &text[..text.len().min(200)],
+                    "[KlineWs] Failed to parse WS message"
+                );
+                return Ok(MessageOutcome::Continue(vec![]));
+            }
+        };
+
+        if let Some(data) = bmsg.into_kline_data() {
+            if data.event_type == "kline" {
+                // 延迟检测
+                if data.event_time > 0 {
+                    let local_now = chrono::Utc::now().timestamp_millis();
+                    let delay_ms = local_now - data.event_time;
+                    if delay_ms > KLINE_WS_DELAY_THRESHOLD_MS {
+                        tracing::warn!(
+                            delay_ms = delay_ms,
+                            event_time = data.event_time,
+                            local_time = local_now,
+                            symbol = %data.kline.symbol,
+                            "[KlineWs] Message delay exceeds threshold"
+                        );
+                    }
+                }
+
+                let raw_sym = data.ws_symbol().to_lowercase();
+                let original_symbol = {
+                    let map = self.symbol_map.read().await;
+                    map.get(&raw_sym).cloned().unwrap_or_else(|| raw_sym.clone())
+                };
+
+                let candle = match data.to_candle() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::warn!(
+                            symbol = %data.ws_symbol(),
+                            error = %e,
+                            "Failed to parse kline — skipping this candle update"
+                        );
+                        return Ok(MessageOutcome::Continue(vec![]));
+                    }
+                };
+
+                return Ok(MessageOutcome::Continue(vec![WsEvent::Candle(
+                    WsCandleUpdate {
+                        symbol: original_symbol,
+                        candle,
+                    },
+                )]));
+            }
+        } else {
+            // 订阅确认/错误响应（无 kline 数据）
+            if let Ok(resp) = serde_json::from_str::<serde_json::Value>(text) {
+                if let Some(code) = resp.get("code") {
+                    tracing::error!(
+                        id = ?resp.get("id"),
+                        code = ?code,
+                        msg = ?resp.get("msg"),
+                        "[KlineWs] Subscription rejected by Binance"
+                    );
+                } else if resp.get("result").is_some() {
+                    tracing::info!(
+                        id = ?resp.get("id"),
+                        "[KlineWs] Subscription confirmed by Binance"
+                    );
+                }
+            }
+        }
+
+        Ok(MessageOutcome::Continue(vec![]))
+    }
+
+    async fn on_connected(&self, _is_reconnect: bool) -> Vec<String> {
+        // 重连后自动恢复所有订阅
+        let subs_vec = self.subscriptions.read().await.clone();
+        if subs_vec.is_empty() {
+            return vec![];
+        }
+
+        let id = self.request_id.fetch_add(1, Ordering::Relaxed);
+        let msg = serde_json::json!({
+            "method": "SUBSCRIBE",
+            "params": subs_vec,
+            "id": id
+        });
+
+        tracing::info!(
+            id = id,
+            count = subs_vec.len(),
+            "[KlineWs] Batch subscription request sent on connect"
+        );
+
+        vec![msg.to_string()]
+    }
+
+    async fn on_disconnected(&self) {
+        // 订阅状态保留在 subscriptions 中，重连时 on_connected 恢复
+    }
+
+    async fn on_command(&self, cmd: ManagerWsCommand) -> Option<String> {
+        let (method, stream_name) = match cmd {
+            ManagerWsCommand::Subscribe(s) => ("SUBSCRIBE", s),
+            ManagerWsCommand::Unsubscribe(s) => ("UNSUBSCRIBE", s),
+        };
+
+        let id = self.request_id.fetch_add(1, Ordering::Relaxed);
+        let msg = serde_json::json!({
+            "method": method,
+            "params": [stream_name.clone()],
+            "id": id
+        });
+
+        tracing::info!(
+            id = id,
+            method = method,
+            stream = %stream_name,
+            "[KlineWs] Dynamic {} request sent",
+            method
+        );
+
+        Some(msg.to_string())
+    }
+}
+
+// ============================================================
+// KlineWs: 委托给 WsManager 的薄包装
+// ============================================================
+
+/// Binance Kline WS 客户端
+///
+/// 内部委托给 [`WsManager<WsEvent>`]，仅保留对外 API 兼容性。
+///
+/// 改进（对比原始实现）：
+/// - 连接超时（10s）防止 `connect_async` 挂起
+/// - Pong 超时（90s）检测半开连接
+/// - 背压容忍：broadcast channel 满时 warn 不停止（原始实现直接停止 WS）
+/// - 熔断：100 次重试后触发 CircuitBreaker
+/// - 统一 `ConnectionChanged` 事件
 pub struct KlineWs {
+    manager: WsManager<WsEvent>,
+    pub(crate) handler: Arc<KlineWsHandler>,
     pub(crate) ws_url: String,
-    reconnect_delay_secs: u64,
-    max_reconnect_delay_secs: u64,
-    ws_ping_interval_secs: u64,
-    ws_max_lifetime_secs: u64,
-    pub(crate) subscriptions: Arc<RwLock<Vec<String>>>,
-    pub(crate) symbol_map: Arc<RwLock<HashMap<String, String>>>,
-    running: Arc<AtomicBool>,
-    request_id: Arc<AtomicU64>,
-    shutdown_tx: Option<mpsc::Sender<()>>,
-    command_tx: Option<mpsc::UnboundedSender<WsCommand>>,
 }
 
 impl KlineWs {
-    pub fn new(
-        ws_url: String,
-        reconnect_delay_secs: u64,
-        max_reconnect_delay_secs: u64,
-        ws_ping_interval_secs: u64,
-        ws_max_lifetime_secs: u64,
-    ) -> Self {
+    pub fn new(ws_url: String) -> Self {
+        let handler = Arc::new(KlineWsHandler::new(ws_url.clone()));
+        let config = WsManagerConfig::default();
+
         Self {
+            manager: WsManager::new(config, handler.clone()),
+            handler,
             ws_url,
-            reconnect_delay_secs,
-            max_reconnect_delay_secs,
-            ws_ping_interval_secs,
-            ws_max_lifetime_secs,
-            subscriptions: Arc::new(RwLock::new(Vec::new())),
-            symbol_map: Arc::new(RwLock::new(HashMap::new())),
-            running: Arc::new(AtomicBool::new(false)),
-            request_id: Arc::new(AtomicU64::new(1)),
-            shutdown_tx: None,
-            command_tx: None,
         }
     }
 
-    pub fn new_perpetual(
-        _proxy_url: Option<&str>,
-        reconnect_delay_secs: u64,
-        max_reconnect_delay_secs: u64,
-        ws_ping_interval_secs: u64,
-        ws_max_lifetime_secs: u64,
-    ) -> Self {
-        Self::new(
-            "wss://fstream.binance.com/market/ws".to_string(),
-            reconnect_delay_secs,
-            max_reconnect_delay_secs,
-            ws_ping_interval_secs,
-            ws_max_lifetime_secs,
-        )
+    pub fn new_perpetual(_proxy_url: Option<&str>) -> Self {
+        Self::new("wss://fstream.binance.com/market/ws".to_string())
+    }
+
+    /// 返回 running flag 引用
+    pub fn running_handle(&self) -> Arc<AtomicBool> {
+        self.manager.running_handle()
     }
 }
 
 #[async_trait]
 impl KlineWsClient for KlineWs {
     async fn start(&mut self, update_tx: broadcast::Sender<WsEvent>) {
-        if self.running.load(Ordering::Relaxed) {
-            return;
-        }
-        self.running.store(true, Ordering::Relaxed);
+        // WsManager 发出 WsManagerEvent<WsEvent>，需要桥接到 broadcast<WsEvent>
+        let (manager_tx, mut manager_rx) = mpsc::channel::<WsManagerEvent<WsEvent>>(256);
 
-        let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
-        self.shutdown_tx = Some(shutdown_tx);
+        self.manager.start(manager_tx).await;
 
-        let (command_tx, mut command_rx) = mpsc::unbounded_channel::<WsCommand>();
-        self.command_tx = Some(command_tx);
-
-        let ws_url = self.ws_url.clone();
-        let subscriptions = self.subscriptions.clone();
-        let symbol_map = self.symbol_map.clone();
-        let running = self.running.clone();
-        let request_id = self.request_id.clone();
-        let reconnect_delay_secs = self.reconnect_delay_secs;
-        let max_reconnect_delay_secs = self.max_reconnect_delay_secs;
-        let ws_ping_interval_secs = self.ws_ping_interval_secs;
-        let ws_max_lifetime_secs = self.ws_max_lifetime_secs;
-
+        // forwarder task: WsManagerEvent<WsEvent> → broadcast<WsEvent>
         tokio::spawn(async move {
-            let mut reconnect_delay = reconnect_delay_secs;
-            let mut is_first_connect = true;
-
-            while running.load(Ordering::Relaxed) {
-                let connect_start = tokio::time::Instant::now();
-
-                match connect_async(&ws_url).await {
-                    Ok((ws_stream, _)) => {
-                        reconnect_delay = reconnect_delay_secs;
-
-                        if !is_first_connect {
-                            if update_tx.send(WsEvent::Reconnected).is_err() {
-                                tracing::warn!("[KlineWs] All receivers dropped, stopping");
-                                running.store(false, Ordering::Relaxed);
-                                break;
-                            }
-                        }
-                        is_first_connect = false;
-
-                        let (mut write, mut read) = ws_stream.split();
-
-                        {
-                            // Clone subscriptions and drop the read guard before
-                            // async send to avoid holding the lock across .await
-                            let subs_vec: Vec<String> = subscriptions.read().await.clone();
-                            if !subs_vec.is_empty() {
-                                let id = request_id.fetch_add(1, Ordering::Relaxed);
-                                let count = subs_vec.len();
-                                let msg = serde_json::json!({
-                                    "method": "SUBSCRIBE",
-                                    "params": subs_vec,
-                                    "id": id
-                                });
-                                if let Ok(text) = serde_json::to_string(&msg) {
-                                    match write
-                                        .send(tungstenite::Message::Text(text.into()))
-                                        .await
-                                    {
-                                        Ok(()) => {
-                                            tracing::info!(
-                                                id = id,
-                                                count = count,
-                                                "[KlineWs] Batch subscription request sent"
-                                            );
-                                        }
-                                        Err(_) => {
-                                            tracing::error!(
-                                                id = id,
-                                                "[KlineWs] Failed to send subscription message"
-                                            );
-                                            continue;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        let ping_interval = Duration::from_secs(ws_ping_interval_secs);
-                        let mut ping_tick = tokio::time::interval(ping_interval);
-                        let max_lifetime = Duration::from_secs(ws_max_lifetime_secs);
-
-                        loop {
-                            if !running.load(Ordering::Relaxed) {
-                                break;
-                            }
-
-                            if connect_start.elapsed() > max_lifetime {
-                                break;
-                            }
-
-                            tokio::select! {
-                                msg = read.next() => {
-                                    match msg {
-                                        Some(Ok(tungstenite::Message::Text(text))) => {
-                                            if let Ok(bmsg) = serde_json::from_str::<BinanceKlineMessage>(&text) {
-                                                if let Some(data) = bmsg.into_kline_data() {
-                                                if data.event_type == "kline" {
-                                                    // T8: Detect WS message delay using event_time
-                                                    if data.event_time > 0 {
-                                                        let local_now = chrono::Utc::now().timestamp_millis();
-                                                        let delay_ms = local_now - data.event_time;
-                                                        if delay_ms > KLINE_WS_DELAY_THRESHOLD_MS {
-                                                            tracing::warn!(
-                                                                delay_ms = delay_ms,
-                                                                event_time = data.event_time,
-                                                                local_time = local_now,
-                                                                symbol = %data.kline.symbol,
-                                                                "[KlineWs] Message delay exceeds threshold"
-                                                            );
-                                                        }
-                                                    }
-                                                    let raw_sym = data.ws_symbol().to_lowercase();
-                                                        let original_symbol = {
-                                                            let map = symbol_map.read().await;
-                                                            map.get(&raw_sym).cloned().unwrap_or_else(|| raw_sym.clone())
-                                                        };
-                                                        let candle = match data.to_candle() {
-                                                            Ok(c) => c,
-                                                            Err(e) => {
-                                                                tracing::warn!(
-                                                                    symbol = %data.ws_symbol(),
-                                                                    error = %e,
-                                                                    "Failed to parse kline — skipping this candle update"
-                                                                );
-                                                                continue;
-                                                            }
-                                                        };
-                                                        if update_tx.send(WsEvent::Candle(WsCandleUpdate {
-                                                            symbol: original_symbol,
-                                                            candle,
-                                                        })).is_err() {
-                                                            tracing::warn!("[KlineWs] All receivers dropped, stopping");
-                                                            running.store(false, Ordering::Relaxed);
-                                                            break;
-                                                        }
-                                                    } else {
-                                                    }
-                                                } else {
-                                                    // 订阅确认/错误响应（无 kline 数据）
-                                                    // 币安成功: {"result": null, "id": N}
-                                                    // 币安错误: {"code": 2, "msg": "..."} (合约无 id; 现货含 id)
-                                                    if let Ok(resp) =
-                                                        serde_json::from_str::<serde_json::Value>(&text)
-                                                    {
-                                                        if let Some(code) = resp.get("code") {
-                                                            tracing::error!(
-                                                                id = ?resp.get("id"),
-                                                                code = ?code,
-                                                                msg = ?resp.get("msg"),
-                                                                "[KlineWs] Subscription rejected by Binance"
-                                                            );
-                                                        } else if resp.get("result").is_some() {
-                                                            tracing::info!(
-                                                                id = ?resp.get("id"),
-                                                                "[KlineWs] Subscription confirmed by Binance"
-                                                            );
-                                                        }
-                                                    }
-                                                }
-                                            } else {
-                                                tracing::warn!("[KlineWs] Failed to parse WS message: {}", &text[..text.len().min(200)]);
-                                            }
-                                        }
-                                        Some(Ok(tungstenite::Message::Ping(data))) => {
-                                            let _ = write.send(tungstenite::Message::Pong(data)).await;
-                                        }
-                                        Some(Ok(tungstenite::Message::Close(_))) => {
-                                            tracing::warn!("[KlineWs] Server closed connection");
-                                            break;
-                                        }
-                                        Some(Err(e)) => {
-                                            tracing::error!("[KlineWs] Read error: {}", e);
-                                            break;
-                                        }
-                                        None => {
-                                            tracing::warn!("[KlineWs] Stream ended");
-                                            break;
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                                _ = ping_tick.tick() => {
-                                    let ping = tungstenite::Message::Ping(vec![].into());
-                                    if write.send(ping).await.is_err() {
-                                        tracing::warn!("[KlineWs] Ping failed, reconnecting...");
-                                        break;
-                                    }
-                                }
-                                cmd = command_rx.recv() => {
-                                    match cmd {
-                                        Some(WsCommand::Subscribe(stream_name)) => {
-                                            let id = request_id.fetch_add(1, Ordering::Relaxed);
-                                            let msg = serde_json::json!({
-                                                "method": "SUBSCRIBE",
-                                                "params": [stream_name.clone()],
-                                                "id": id
-                                            });
-                                            if let Ok(text) = serde_json::to_string(&msg) {
-                                                match write.send(tungstenite::Message::Text(text.into())).await {
-                                                    Ok(()) => {
-                                                        tracing::info!(
-                                                            id = id,
-                                                            stream = %stream_name,
-                                                            "[KlineWs] Dynamic subscribe request sent"
-                                                        );
-                                                    }
-                                                    Err(_) => {
-                                                        tracing::error!(
-                                                            id = id,
-                                                            stream = %stream_name,
-                                                            "[KlineWs] Failed to send dynamic subscribe"
-                                                        );
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        Some(WsCommand::Unsubscribe(stream_name)) => {
-                                            let id = request_id.fetch_add(1, Ordering::Relaxed);
-                                            let msg = serde_json::json!({
-                                                "method": "UNSUBSCRIBE",
-                                                "params": [stream_name.clone()],
-                                                "id": id
-                                            });
-                                            if let Ok(text) = serde_json::to_string(&msg) {
-                                                match write.send(tungstenite::Message::Text(text.into())).await {
-                                                    Ok(()) => {
-                                                        tracing::info!(
-                                                            id = id,
-                                                            stream = %stream_name,
-                                                            "[KlineWs] Dynamic unsubscribe request sent"
-                                                        );
-                                                    }
-                                                    Err(_) => {
-                                                        tracing::error!(
-                                                            id = id,
-                                                            stream = %stream_name,
-                                                            "[KlineWs] Failed to send dynamic unsubscribe"
-                                                        );
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        None => {
-                                            break;
-                                        }
-                                    }
-                                }
-                                _ = shutdown_rx.recv() => {
-                                    let _ = write.send(tungstenite::Message::Close(None)).await;
-                                    running.store(false, Ordering::Relaxed);
-                                    return;
-                                }
-                            }
-                        }
+            while let Some(ev) = manager_rx.recv().await {
+                let ws_event = match ev {
+                    WsManagerEvent::Message(e) => e,
+                    WsManagerEvent::ConnectionChanged {
+                        connected: true,
+                        is_reconnect: true,
+                    } => WsEvent::Reconnected,
+                    WsManagerEvent::ConnectionChanged {
+                        connected: true,
+                        is_reconnect: false,
+                    } => {
+                        // 首次连接不发 Reconnected
+                        continue;
                     }
-                    Err(e) => {
-                        tracing::error!("[KlineWs] Connection failed: {}", e);
+                    WsManagerEvent::ConnectionChanged {
+                        connected: false, ..
+                    } => {
+                        // 断连不发事件（原始实现也没有断连事件）
+                        continue;
                     }
-                }
-
-                if !running.load(Ordering::Relaxed) {
+                    WsManagerEvent::CircuitBreakerTripped { retry_count } => {
+                        tracing::error!(
+                            retry_count = retry_count,
+                            "[KlineWs] Circuit breaker tripped — WS stopped after max retries"
+                        );
+                        continue;
+                    }
+                };
+                // broadcast: 满时 warn 不停止（背压容忍 — 原始实现直接停止 WS）
+                if update_tx.send(ws_event).is_err() {
+                    tracing::warn!("[KlineWs] All receivers dropped, stopping forwarder");
                     break;
                 }
-
-                let jitter = (reconnect_delay as f64 * 0.1 * (2.0 * rand::random::<f64>() - 1.0)) as i64;
-                let delay = (reconnect_delay as i64 + jitter).max(1) as u64;
-                tokio::time::sleep(Duration::from_secs(delay)).await;
-                reconnect_delay = (reconnect_delay * 2).min(max_reconnect_delay_secs);
             }
-
-            running.store(false, Ordering::Relaxed);
         });
     }
 
     async fn stop(&mut self) {
-        self.running.store(false, Ordering::Relaxed);
-        if let Some(tx) = self.shutdown_tx.take() {
-            let _ = tx.send(()).await;
-        }
+        self.manager.stop().await;
     }
 
     async fn subscribe(&self, symbol: &str) {
@@ -489,17 +411,17 @@ impl KlineWsClient for KlineWs {
         let ws_sym = binance_ws_symbol(symbol);
 
         {
-            let mut map = self.symbol_map.write().await;
+            let mut map = self.handler.symbol_map.write().await;
             map.insert(ws_sym, symbol.to_string());
         }
 
-        let mut subs = self.subscriptions.write().await;
+        let mut subs = self.handler.subscriptions.write().await;
         if !subs.contains(&stream_name) {
             subs.push(stream_name.clone());
             drop(subs);
-            if let Some(tx) = &self.command_tx {
-                let _ = tx.send(WsCommand::Subscribe(stream_name));
-            }
+            self.manager
+                .send_command(ManagerWsCommand::Subscribe(stream_name))
+                .await;
         }
     }
 
@@ -508,22 +430,22 @@ impl KlineWsClient for KlineWs {
         let ws_sym = binance_ws_symbol(symbol);
 
         {
-            let mut map = self.symbol_map.write().await;
+            let mut map = self.handler.symbol_map.write().await;
             map.remove(&ws_sym);
         }
 
-        let mut subs = self.subscriptions.write().await;
+        let mut subs = self.handler.subscriptions.write().await;
         let existed = subs.iter().any(|s| s == &stream_name);
         subs.retain(|s| s != &stream_name);
         drop(subs);
         if existed {
-            if let Some(tx) = &self.command_tx {
-                let _ = tx.send(WsCommand::Unsubscribe(stream_name));
-            }
+            self.manager
+                .send_command(ManagerWsCommand::Unsubscribe(stream_name))
+                .await;
         }
     }
 
     fn is_running(&self) -> bool {
-        self.running.load(Ordering::Relaxed)
+        self.manager.is_running()
     }
 }

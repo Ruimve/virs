@@ -3,8 +3,7 @@
 //! Subscribes to `<symbol>@depth20@500ms` partial book depth streams
 //! (top 20 bid/ask levels, pushed every 500ms).
 //!
-//! Mirrors `KlineWs` architecture: reconnect with backoff,
-//! dynamic subscribe/unsubscribe, symbol map for unified format.
+//! 内部委托给 [`WsManager<WsOrderBookEvent>`]，仅保留对外 API 兼容性。
 //!
 //! Stream formats:
 //! - Perpetual partial book depth: { "e":"depthUpdate", "E":..., "T":..., "s":"BTCUSDT",
@@ -14,19 +13,23 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use async_trait::async_trait;
-use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use tokio::sync::{broadcast, mpsc, RwLock};
-use tokio_tungstenite::{connect_async, tungstenite};
 
+use crate::ws_manager::{
+    MessageOutcome, WsCommand as ManagerWsCommand, WsHandler, WsManager, WsManagerConfig,
+    WsManagerEvent,
+};
 use crate::ws_types::{OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate};
 
 fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
 }
+
+/// WS 消息延迟告警阈值（毫秒）— 订单簿推送间隔 500ms，阈值设为 2 秒
+pub(crate) const ORDERBOOK_WS_DELAY_THRESHOLD_MS: i64 = 2_000;
 
 /// Binance WS 推送两种格式（与 kline 一致）：
 /// 1. 单流格式: 顶层直接是 payload
@@ -164,289 +167,250 @@ pub(crate) fn to_levels(raw: &[[String; 2]]) -> Vec<OrderBookLevel> {
         .collect()
 }
 
-enum WsCommand {
-    Subscribe(String),
-    Unsubscribe(String),
+// ============================================================
+// OrderBookWsHandler: WsHandler 实现
+// ============================================================
+
+/// Binance OrderBook WS 的 [`WsHandler`] 实现
+///
+/// 改进（对比原始实现）：
+/// - 连接超时（10s）防止 `connect_async` 挂起
+/// - Pong 超时（90s）检测半开连接
+/// - **新增延迟检测**（P2 修复）：原始实现完全缺失，现添加 2s 阈值告警
+/// - 背压容忍：broadcast channel 满时 warn 不停止
+/// - 熔断：100 次重试后触发 CircuitBreaker
+pub struct OrderBookWsHandler {
+    ws_url: String,
+    /// 当前订阅列表 — 重连时通过 on_connected 恢复
+    pub(crate) subscriptions: Arc<RwLock<Vec<String>>>,
+    /// Binance symbol → 原始 symbol 映射
+    pub(crate) symbol_map: Arc<RwLock<HashMap<String, String>>>,
+    /// JSON-RPC 请求 ID
+    request_id: Arc<AtomicU64>,
 }
 
+impl OrderBookWsHandler {
+    pub fn new(ws_url: String) -> Self {
+        Self {
+            ws_url,
+            subscriptions: Arc::new(RwLock::new(Vec::new())),
+            symbol_map: Arc::new(RwLock::new(HashMap::new())),
+            request_id: Arc::new(AtomicU64::new(1)),
+        }
+    }
+}
+
+#[async_trait]
+impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
+    fn base_url(&self) -> &str {
+        &self.ws_url
+    }
+
+    fn supports_commands(&self) -> bool {
+        true
+    }
+
+    async fn on_message(
+        &self,
+        text: &str,
+    ) -> Result<MessageOutcome<WsOrderBookEvent>, virs_error::ExchangeError> {
+        let bmsg: BinanceDepthMessage = match serde_json::from_str(text) {
+            Ok(m) => m,
+            Err(_) => {
+                tracing::warn!(
+                    preview = &text[..text.len().min(200)],
+                    "[OrderBookWs] Failed to parse WS message"
+                );
+                return Ok(MessageOutcome::Continue(vec![]));
+            }
+        };
+
+        if let Some(pd) = bmsg.into_depth() {
+            // P2 修复：延迟检测 — 原始实现完全缺失
+            if pd.timestamp_ms > 0 {
+                let local_now = chrono::Utc::now().timestamp_millis();
+                let delay_ms = local_now - pd.timestamp_ms;
+                if delay_ms > ORDERBOOK_WS_DELAY_THRESHOLD_MS {
+                    tracing::warn!(
+                        delay_ms = delay_ms,
+                        event_time = pd.timestamp_ms,
+                        local_time = local_now,
+                        "[OrderBookWs] Message delay exceeds threshold"
+                    );
+                }
+            }
+
+            // Resolve unified symbol
+            let original_symbol =
+                resolve_symbol(pd.stream_name.as_deref(), pd.symbol.as_deref(), &self.symbol_map)
+                    .await;
+
+            if let Some(symbol) = original_symbol {
+                let bids = to_levels(&pd.bids);
+                let asks = to_levels(&pd.asks);
+                if !bids.is_empty() || !asks.is_empty() {
+                    return Ok(MessageOutcome::Continue(vec![
+                        WsOrderBookEvent::OrderBook(WsOrderBookUpdate {
+                            symbol,
+                            bids,
+                            asks,
+                            timestamp: pd.timestamp_ms,
+                            last_update_id: pd.last_update_id,
+                        }),
+                    ]));
+                }
+            }
+        } else {
+            // 订阅确认/错误响应
+            if let Ok(resp) = serde_json::from_str::<serde_json::Value>(text) {
+                if let Some(code) = resp.get("code") {
+                    tracing::error!(
+                        id = ?resp.get("id"),
+                        code = ?code,
+                        msg = ?resp.get("msg"),
+                        "[OrderBookWs] Subscription rejected by Binance"
+                    );
+                } else if resp.get("result").is_some() {
+                    tracing::info!(
+                        id = ?resp.get("id"),
+                        "[OrderBookWs] Subscription confirmed by Binance"
+                    );
+                }
+            }
+        }
+
+        Ok(MessageOutcome::Continue(vec![]))
+    }
+
+    async fn on_connected(&self, _is_reconnect: bool) -> Vec<String> {
+        let subs_vec = self.subscriptions.read().await.clone();
+        if subs_vec.is_empty() {
+            return vec![];
+        }
+
+        let id = self.request_id.fetch_add(1, Ordering::Relaxed);
+        let msg = serde_json::json!({
+            "method": "SUBSCRIBE",
+            "params": subs_vec,
+            "id": id
+        });
+
+        tracing::info!(
+            id = id,
+            count = subs_vec.len(),
+            "[OrderBookWs] Batch subscription request sent on connect"
+        );
+
+        vec![msg.to_string()]
+    }
+
+    async fn on_disconnected(&self) {
+        // 订阅状态保留在 subscriptions 中，重连时 on_connected 恢复
+    }
+
+    async fn on_command(&self, cmd: ManagerWsCommand) -> Option<String> {
+        let (method, stream_name) = match cmd {
+            ManagerWsCommand::Subscribe(s) => ("SUBSCRIBE", s),
+            ManagerWsCommand::Unsubscribe(s) => ("UNSUBSCRIBE", s),
+        };
+
+        let id = self.request_id.fetch_add(1, Ordering::Relaxed);
+        let msg = serde_json::json!({
+            "method": method,
+            "params": [stream_name.clone()],
+            "id": id
+        });
+
+        tracing::info!(
+            id = id,
+            method = method,
+            stream = %stream_name,
+            "[OrderBookWs] Dynamic {} request sent",
+            method
+        );
+
+        Some(msg.to_string())
+    }
+}
+
+// ============================================================
+// OrderBookWs: 委托给 WsManager 的薄包装
+// ============================================================
+
+/// Binance OrderBook WS 客户端
+///
+/// 内部委托给 [`WsManager<WsOrderBookEvent>`]，仅保留对外 API 兼容性。
 pub struct OrderBookWs {
-    ws_url: String,
-    reconnect_delay_secs: u64,
-    max_reconnect_delay_secs: u64,
-    ws_ping_interval_secs: u64,
-    ws_max_lifetime_secs: u64,
-    subscriptions: Arc<RwLock<Vec<String>>>,
-    /// Map: lowercase binance symbol (e.g. "btcusdt") → unified symbol (e.g. "BTC/USDT")
-    symbol_map: Arc<RwLock<HashMap<String, String>>>,
-    running: Arc<AtomicBool>,
-    request_id: Arc<AtomicU64>,
-    shutdown_tx: Option<mpsc::Sender<()>>,
-    command_tx: Option<mpsc::UnboundedSender<WsCommand>>,
+    manager: WsManager<WsOrderBookEvent>,
+    pub(crate) handler: Arc<OrderBookWsHandler>,
+    pub(crate) ws_url: String,
 }
 
 impl OrderBookWs {
-    pub fn new(
-        ws_url: String,
-        reconnect_delay_secs: u64,
-        max_reconnect_delay_secs: u64,
-        ws_ping_interval_secs: u64,
-        ws_max_lifetime_secs: u64,
-    ) -> Self {
+    pub fn new(ws_url: String) -> Self {
+        let handler = Arc::new(OrderBookWsHandler::new(ws_url.clone()));
+        let config = WsManagerConfig::default();
+
         Self {
+            manager: WsManager::new(config, handler.clone()),
+            handler,
             ws_url,
-            reconnect_delay_secs,
-            max_reconnect_delay_secs,
-            ws_ping_interval_secs,
-            ws_max_lifetime_secs,
-            subscriptions: Arc::new(RwLock::new(Vec::new())),
-            symbol_map: Arc::new(RwLock::new(HashMap::new())),
-            running: Arc::new(AtomicBool::new(false)),
-            request_id: Arc::new(AtomicU64::new(1)),
-            shutdown_tx: None,
-            command_tx: None,
         }
     }
 
-    pub fn new_perpetual(
-        _proxy_url: Option<&str>,
-        reconnect_delay_secs: u64,
-        max_reconnect_delay_secs: u64,
-        ws_ping_interval_secs: u64,
-        ws_max_lifetime_secs: u64,
-    ) -> Self {
-        // Use /public/stream endpoint for consistency — perpetual payloads include `s` field,
-        // but using /stream simplifies symbol resolution for both market types.
-        // 2026-04-23 起币安将公共高频流量切流至 /public 路由（depth/aggTrade/trade）
-        Self::new(
-            "wss://fstream.binance.com/public/stream".to_string(),
-            reconnect_delay_secs,
-            max_reconnect_delay_secs,
-            ws_ping_interval_secs,
-            ws_max_lifetime_secs,
-        )
+    pub fn new_perpetual(_proxy_url: Option<&str>) -> Self {
+        Self::new("wss://fstream.binance.com/public/stream".to_string())
+    }
+
+    pub fn running_handle(&self) -> Arc<AtomicBool> {
+        self.manager.running_handle()
     }
 }
 
 #[async_trait]
 impl OrderBookWsClient for OrderBookWs {
     async fn start(&mut self, update_tx: broadcast::Sender<WsOrderBookEvent>) {
-        if self.running.load(Ordering::Relaxed) {
-            return;
-        }
-        self.running.store(true, Ordering::Relaxed);
+        let (manager_tx, mut manager_rx) = mpsc::channel::<WsManagerEvent<WsOrderBookEvent>>(256);
 
-        let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
-        self.shutdown_tx = Some(shutdown_tx);
-
-        let (command_tx, mut command_rx) = mpsc::unbounded_channel::<WsCommand>();
-        self.command_tx = Some(command_tx);
-
-        let ws_url = self.ws_url.clone();
-        let subscriptions = self.subscriptions.clone();
-        let symbol_map = self.symbol_map.clone();
-        let running = self.running.clone();
-        let request_id = self.request_id.clone();
-        let reconnect_delay_secs = self.reconnect_delay_secs;
-        let max_reconnect_delay_secs = self.max_reconnect_delay_secs;
-        let ws_ping_interval_secs = self.ws_ping_interval_secs;
-        let ws_max_lifetime_secs = self.ws_max_lifetime_secs;
+        self.manager.start(manager_tx).await;
 
         tokio::spawn(async move {
-            let mut reconnect_delay = reconnect_delay_secs;
-            let mut is_first_connect = true;
-
-            while running.load(Ordering::Relaxed) {
-                let connect_start = tokio::time::Instant::now();
-
-                match connect_async(&ws_url).await {
-                    Ok((ws_stream, _)) => {
-                        reconnect_delay = reconnect_delay_secs;
-
-                        if !is_first_connect {
-                            if update_tx.send(WsOrderBookEvent::Reconnected).is_err() {
-                                tracing::warn!("[OrderBookWs] All receivers dropped, stopping");
-                                running.store(false, Ordering::Relaxed);
-                                break;
-                            }
-                        }
-                        is_first_connect = false;
-
-                        let (mut write, mut read) = ws_stream.split();
-
-                        // Re-subscribe existing streams on (re)connect
-                        {
-                            // Clone subscriptions and drop the read guard before
-                            // async send to avoid holding the lock across .await
-                            let subs_vec: Vec<String> = subscriptions.read().await.clone();
-                            if !subs_vec.is_empty() {
-                                let id = request_id.fetch_add(1, Ordering::Relaxed);
-                                let msg = serde_json::json!({
-                                    "method": "SUBSCRIBE",
-                                    "params": subs_vec,
-                                    "id": id
-                                });
-                                if let Ok(text) = serde_json::to_string(&msg) {
-                                    if write
-                                        .send(tungstenite::Message::Text(text.into()))
-                                        .await
-                                        .is_err()
-                                    {
-                                        tracing::error!(
-                                            "[OrderBookWs] Failed to send resubscribe"
-                                        );
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-
-                        let ping_interval = Duration::from_secs(ws_ping_interval_secs);
-                        let mut ping_tick = tokio::time::interval(ping_interval);
-                        let max_lifetime = Duration::from_secs(ws_max_lifetime_secs);
-
-                        loop {
-                            if !running.load(Ordering::Relaxed) {
-                                break;
-                            }
-
-                            if connect_start.elapsed() > max_lifetime {
-                                break;
-                            }
-
-                            tokio::select! {
-                                msg = read.next() => {
-                                    match msg {
-                                        Some(Ok(tungstenite::Message::Text(text))) => {
-                                            if let Ok(bmsg) = serde_json::from_str::<BinanceDepthMessage>(&text) {
-                                                if let Some(pd) = bmsg.into_depth() {
-                                                    // Resolve unified symbol:
-                                                    // 1. Try stream name (e.g. "btcusdt@depth20@500ms" → "btcusdt")
-                                                    // 2. Fall back to payload symbol (perpetual `s` field)
-                                                    // 3. Fall back to single-subscription map lookup
-                                                    let original_symbol = resolve_symbol(
-                                                        pd.stream_name.as_deref(),
-                                                        pd.symbol.as_deref(),
-                                                        &symbol_map,
-                                                    ).await;
-
-                                                    if let Some(symbol) = original_symbol {
-                                                        let bids = to_levels(&pd.bids);
-                                                        let asks = to_levels(&pd.asks);
-                                                        if !bids.is_empty() || !asks.is_empty() {
-                                                            if update_tx.send(WsOrderBookEvent::OrderBook(
-                                                                WsOrderBookUpdate {
-                                                                    symbol,
-                                                                    bids,
-                                                                    asks,
-                                                                    timestamp: pd.timestamp_ms,
-                                                                    last_update_id: pd.last_update_id,
-                                                                }
-                                                            )).is_err() {
-                                                                tracing::warn!("[OrderBookWs] All receivers dropped, stopping");
-                                                                running.store(false, Ordering::Relaxed);
-                                                                break;
-                                                            }
-                                                        }
-                                                    }
-                                                } else {
-                                                }
-                                            } else {
-                                                tracing::warn!(
-                                                    "[OrderBookWs] Failed to parse: {}",
-                                                    &text[..text.len().min(200)]
-                                                );
-                                            }
-                                        }
-                                        Some(Ok(tungstenite::Message::Ping(data))) => {
-                                            let _ = write.send(tungstenite::Message::Pong(data)).await;
-                                        }
-                                        Some(Ok(tungstenite::Message::Close(_))) => {
-                                            tracing::warn!("[OrderBookWs] Server closed");
-                                            break;
-                                        }
-                                        Some(Err(e)) => {
-                                            tracing::error!("[OrderBookWs] Read error: {}", e);
-                                            break;
-                                        }
-                                        None => {
-                                            tracing::warn!("[OrderBookWs] Stream ended");
-                                            break;
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                                _ = ping_tick.tick() => {
-                                    let ping = tungstenite::Message::Ping(vec![].into());
-                                    if write.send(ping).await.is_err() {
-                                        tracing::warn!("[OrderBookWs] Ping failed");
-                                        break;
-                                    }
-                                }
-                                cmd = command_rx.recv() => {
-                                    match cmd {
-                                        Some(WsCommand::Subscribe(stream_name)) => {
-                                            let id = request_id.fetch_add(1, Ordering::Relaxed);
-                                            let msg = serde_json::json!({
-                                                "method": "SUBSCRIBE",
-                                                "params": [stream_name],
-                                                "id": id
-                                            });
-                                            if let Ok(text) = serde_json::to_string(&msg) {
-                                                if write.send(tungstenite::Message::Text(text.into())).await.is_err() {
-                                                    tracing::warn!("[OrderBookWs] Subscribe send failed");
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                        Some(WsCommand::Unsubscribe(stream_name)) => {
-                                            let id = request_id.fetch_add(1, Ordering::Relaxed);
-                                            let msg = serde_json::json!({
-                                                "method": "UNSUBSCRIBE",
-                                                "params": [stream_name],
-                                                "id": id
-                                            });
-                                            if let Ok(text) = serde_json::to_string(&msg) {
-                                                if write.send(tungstenite::Message::Text(text.into())).await.is_err() {
-                                                    tracing::warn!("[OrderBookWs] Unsubscribe send failed");
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                        None => break,
-                                    }
-                                }
-                                _ = shutdown_rx.recv() => {
-                                    let _ = write.send(tungstenite::Message::Close(None)).await;
-                                    running.store(false, Ordering::Relaxed);
-                                    return;
-                                }
-                            }
-                        }
+            while let Some(ev) = manager_rx.recv().await {
+                let ws_event = match ev {
+                    WsManagerEvent::Message(e) => e,
+                    WsManagerEvent::ConnectionChanged {
+                        connected: true,
+                        is_reconnect: true,
+                    } => WsOrderBookEvent::Reconnected,
+                    WsManagerEvent::ConnectionChanged {
+                        connected: true,
+                        is_reconnect: false,
+                    } => {
+                        continue;
                     }
-                    Err(e) => {
-                        tracing::error!("[OrderBookWs] Connection failed: {}", e);
+                    WsManagerEvent::ConnectionChanged {
+                        connected: false, ..
+                    } => {
+                        continue;
                     }
-                }
-
-                if !running.load(Ordering::Relaxed) {
+                    WsManagerEvent::CircuitBreakerTripped { retry_count } => {
+                        tracing::error!(
+                            retry_count = retry_count,
+                            "[OrderBookWs] Circuit breaker tripped — WS stopped after max retries"
+                        );
+                        continue;
+                    }
+                };
+                if update_tx.send(ws_event).is_err() {
+                    tracing::warn!("[OrderBookWs] All receivers dropped, stopping forwarder");
                     break;
                 }
-
-                let jitter = (reconnect_delay as f64 * 0.1 * (2.0 * rand::random::<f64>() - 1.0)) as i64;
-                let delay = (reconnect_delay as i64 + jitter).max(1) as u64;
-                tokio::time::sleep(Duration::from_secs(delay)).await;
-                reconnect_delay = (reconnect_delay * 2).min(max_reconnect_delay_secs);
             }
-
-            running.store(false, Ordering::Relaxed);
         });
     }
 
     async fn stop(&mut self) {
-        self.running.store(false, Ordering::Relaxed);
-        if let Some(tx) = self.shutdown_tx.take() {
-            let _ = tx.send(()).await;
-        }
+        self.manager.stop().await;
     }
 
     async fn subscribe(&self, symbol: &str) {
@@ -454,17 +418,17 @@ impl OrderBookWsClient for OrderBookWs {
         let ws_sym = binance_ws_symbol(symbol);
 
         {
-            let mut map = self.symbol_map.write().await;
+            let mut map = self.handler.symbol_map.write().await;
             map.insert(ws_sym, symbol.to_string());
         }
 
-        let mut subs = self.subscriptions.write().await;
+        let mut subs = self.handler.subscriptions.write().await;
         if !subs.contains(&stream_name) {
             subs.push(stream_name.clone());
             drop(subs);
-            if let Some(tx) = &self.command_tx {
-                let _ = tx.send(WsCommand::Subscribe(stream_name));
-            }
+            self.manager
+                .send_command(ManagerWsCommand::Subscribe(stream_name))
+                .await;
         }
     }
 
@@ -473,23 +437,23 @@ impl OrderBookWsClient for OrderBookWs {
         let ws_sym = binance_ws_symbol(symbol);
 
         {
-            let mut map = self.symbol_map.write().await;
+            let mut map = self.handler.symbol_map.write().await;
             map.remove(&ws_sym);
         }
 
-        let mut subs = self.subscriptions.write().await;
+        let mut subs = self.handler.subscriptions.write().await;
         let existed = subs.iter().any(|s| s == &stream_name);
         subs.retain(|s| s != &stream_name);
         drop(subs);
         if existed {
-            if let Some(tx) = &self.command_tx {
-                let _ = tx.send(WsCommand::Unsubscribe(stream_name));
-            }
+            self.manager
+                .send_command(ManagerWsCommand::Unsubscribe(stream_name))
+                .await;
         }
     }
 
     fn is_running(&self) -> bool {
-        self.running.load(Ordering::Relaxed)
+        self.manager.is_running()
     }
 }
 

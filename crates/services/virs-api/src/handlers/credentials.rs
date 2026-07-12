@@ -92,10 +92,6 @@ pub async fn save_credential(
         std::time::Duration::from_secs(state.http_connect_timeout_secs),
         state.http_pool_max_idle_per_host,
         state.listenkey_keepalive_futures_secs,
-        state.ws_reconnect_initial_delay_secs,
-        state.ws_reconnect_max_delay_secs,
-        state.ws_ping_interval_secs,
-        state.ws_max_lifetime_secs,
     ) {
         // 同步服务器时间，校准签名时间戳偏移（非阻塞 — 失败仅告警）
         if let Err(e) = ccxt_ex.sync_time().await {

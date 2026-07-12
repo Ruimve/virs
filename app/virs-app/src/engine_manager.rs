@@ -170,10 +170,6 @@ impl AppEngineManager {
                     std::time::Duration::from_secs(self.time_config.http.http_connect_timeout_secs),
                     self.time_config.http.http_pool_max_idle_per_host,
                     self.time_config.listenkey.listenkey_keepalive_futures_secs,
-                    self.time_config.ws.ws_reconnect_initial_delay_secs,
-                    self.time_config.ws.ws_reconnect_max_delay_secs,
-                    self.time_config.ws.ws_ping_interval_secs,
-                    self.time_config.ws.ws_max_lifetime_secs,
                 )
                 .map_err(|e| {
                     virs_error::VirsError::config(format!(

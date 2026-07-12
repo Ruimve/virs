@@ -3,6 +3,7 @@
 pub mod adapter;
 pub mod auth;
 pub mod types;
+pub mod ws_manager;
 pub mod ws_types;
 
 use async_trait::async_trait;
@@ -527,10 +528,6 @@ pub fn create_exchange(
     connect_timeout: std::time::Duration,
     pool_max_idle_per_host: usize,
     listenkey_keepalive_futures_secs: u64,
-    ws_reconnect_initial_delay_secs: u64,
-    ws_reconnect_max_delay_secs: u64,
-    ws_ping_interval_secs: u64,
-    ws_max_lifetime_secs: u64,
 ) -> Result<Box<dyn Exchange>, ExchangeError> {
     match id.to_lowercase().as_str() {
         "binance" => Ok(Box::new(adapter::binance::BinanceExchange::new(
@@ -541,10 +538,6 @@ pub fn create_exchange(
             connect_timeout,
             pool_max_idle_per_host,
             listenkey_keepalive_futures_secs,
-            ws_reconnect_initial_delay_secs,
-            ws_reconnect_max_delay_secs,
-            ws_ping_interval_secs,
-            ws_max_lifetime_secs,
         )?)),
         // To add Bybit/OKX, implement adapter::bybit::BybitExchange / adapter::okx::OkxExchange
         // and add the corresponding match arm here. See "Adding a New Exchange" above.

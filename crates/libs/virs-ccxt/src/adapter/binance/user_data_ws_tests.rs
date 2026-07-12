@@ -1,4 +1,7 @@
 use crate::adapter::binance::user_data_ws::*;
+use crate::adapter::binance::BinanceSigner;
+use crate::ExchangeClient;
+use std::sync::Arc;
 use virs_types::{OrderStatus, PositionSide};
 
 // ============================================================
@@ -274,7 +277,24 @@ fn test_to_ws_feed_event_remaining_fallback() {
 
 #[test]
 fn test_new_perpetual() {
-    let ws = UserDataWs::new_perpetual("test_listen_key".to_string(), 1, 60, 30, 82800);
+    let client = ExchangeClient::with_api_key(
+        10,
+        None,
+        Some("test_api_key"),
+        std::time::Duration::from_secs(5),
+        std::time::Duration::from_secs(3),
+        10,
+    )
+    .expect("Failed to create test ExchangeClient");
+    let signer = Arc::new(BinanceSigner::new(
+        "test_api_key".to_string(),
+        "test_api_secret".to_string(),
+    ));
+    let ws = UserDataWs::new_perpetual(
+        "test_listen_key".to_string(),
+        client,
+        signer,
+    );
     assert_eq!(
         ws.ws_url,
         "wss://fstream.binance.com/private/ws?listenKey=test_listen_key"
