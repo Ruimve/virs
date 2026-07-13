@@ -122,9 +122,6 @@ export const FlowStep = memo(
             className={isEditable ? 'cursor-pointer' : ''}
             onClick={handleHeaderClick}
             onKeyDown={handleHeaderKeyDown}
-            role={isEditable ? 'button' : undefined}
-            tabIndex={isEditable ? 0 : undefined}
-            aria-expanded={isEditable ? expanded : undefined}
           >
             {indicator ?? defaultIndicator()}
           </div>
@@ -136,9 +133,6 @@ export const FlowStep = memo(
             className={`flex items-center gap-2 ${isEditable ? 'cursor-pointer group' : ''}`}
             onClick={handleHeaderClick}
             onKeyDown={handleHeaderKeyDown}
-            role={isEditable ? 'button' : undefined}
-            tabIndex={isEditable ? 0 : undefined}
-            aria-expanded={isEditable ? expanded : undefined}
           >
             <p className={`text-sm font-medium leading-7 ${titleColor()}`}>{title}</p>
             {isEditable && (

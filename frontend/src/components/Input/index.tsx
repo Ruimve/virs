@@ -19,7 +19,6 @@ export const Input = memo(({ loading = false, disabled, className = '', ...props
     <div className="relative w-full">
       <input
         disabled={isDisabled}
-        aria-busy={loading || undefined}
         className={[baseStyles, borderClass, loadingPad, className].filter(Boolean).join(' ')}
         {...props}
       />

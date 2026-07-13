@@ -35,11 +35,7 @@ export class ErrorBoundary extends ReactComponent<ErrorBoundaryProps, ErrorBound
       }
 
       return (
-        <div
-          className="min-h-screen flex items-center justify-center bg-base"
-          role="alert"
-          aria-live="assertive"
-        >
+        <div className="min-h-screen flex items-center justify-center bg-base">
           <div className="text-center p-8">
             <h1 className="text-xl font-semibold text-on-surface mb-2">Error</h1>
             <p className="text-on-surface-tertiary mb-4">

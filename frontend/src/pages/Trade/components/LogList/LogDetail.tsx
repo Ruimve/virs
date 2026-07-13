@@ -30,7 +30,7 @@ const LogDetail = ({ log, loading }: Props) => {
       <div className="min-h-screen bg-base">
         <div className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-8 h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
           <div className="flex items-center gap-3">
-            <IconBtn onClick={() => navigate(-1)} aria-label="Back">
+            <IconBtn onClick={() => navigate(-1)}>
               <ChevronLeft className="w-5 h-5" strokeWidth={2} />
             </IconBtn>
             <h1 className="text-sm font-medium text-on-surface">AI 决策详情</h1>
@@ -49,7 +49,7 @@ const LogDetail = ({ log, loading }: Props) => {
       <div className="min-h-screen bg-base">
         <div className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-8 h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
           <div className="flex items-center gap-3">
-            <IconBtn onClick={() => navigate(-1)} aria-label="Back">
+            <IconBtn onClick={() => navigate(-1)}>
               <ChevronLeft className="w-5 h-5" strokeWidth={2} />
             </IconBtn>
             <h1 className="text-sm font-medium text-on-surface">AI 决策详情</h1>
@@ -67,7 +67,7 @@ const LogDetail = ({ log, loading }: Props) => {
       {/* Top bar */}
       <div className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-8 h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
         <div className="flex items-center gap-3">
-          <IconBtn onClick={() => navigate(-1)} aria-label="Back">
+          <IconBtn onClick={() => navigate(-1)}>
             <ChevronLeft className="w-5 h-5" strokeWidth={2} />
           </IconBtn>
           <h1 className="text-sm font-medium text-on-surface">AI 决策详情</h1>

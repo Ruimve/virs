@@ -51,7 +51,6 @@ export const Button = memo(
       <button
         type={type}
         disabled={isDisabled}
-        aria-busy={loading || undefined}
         className={[baseStyles, widthClass, sizeBox, variantStyles[variant], className]
           .filter(Boolean)
           .join(' ')}

@@ -11,8 +11,4 @@ export const strokeBase = {
   stroke: 'currentColor',
   strokeLinecap: 'round' as const,
   strokeLinejoin: 'round' as const,
-  // Decorative icons are hidden from screen readers by default.
-  // Override via props (e.g. aria-hidden="false") when an icon conveys meaning.
-  'aria-hidden': true,
-  focusable: false,
 };

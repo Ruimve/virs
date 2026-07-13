@@ -183,7 +183,7 @@ const Header = () => {
               <div className="flex items-center gap-2">
                 <Logo />
               </div>
-              <IconBtn onClick={closeDrawer} aria-label="Close menu">
+              <IconBtn onClick={closeDrawer}>
                 <Close className="w-4 h-4" strokeWidth={2} />
               </IconBtn>
             </div>

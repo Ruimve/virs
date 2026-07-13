@@ -20,15 +20,7 @@ interface Props extends SVGProps<SVGSVGElement> {
 export const Icon = memo((props: Props) => {
   const { size = 56, ...rest } = props;
   return (
-    <svg
-      className="ai-thinking-icon"
-      viewBox="0 0 80 80"
-      width={size}
-      height={size}
-      role="img"
-      aria-label="AI thinking"
-      {...rest}
-    >
+    <svg className="ai-thinking-icon" viewBox="0 0 80 80" width={size} height={size} {...rest}>
       <title>AI thinking</title>
       <desc>Minimalist neural network mark with rotating arc</desc>
 

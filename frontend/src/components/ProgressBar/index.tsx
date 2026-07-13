@@ -18,15 +18,9 @@ export const ProgressBar = memo(
     const clampedPct = Math.min(Math.max(pct, 0), 100);
 
     return (
-      <div
-        className={`${heightClass} bg-surface-2/80 rounded-full overflow-hidden`}
-        role="progressbar"
-        aria-valuenow={Math.round(clampedPct)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
+      <div className={`${heightClass} bg-surface-2/80 rounded-full overflow-hidden`}>
         <div
-          className={`h-full bg-gradient-to-r ${barColor()} rounded-full transition-all duration-700 ease-out`}
+          className={`h-full bg-linear-to-r ${barColor()} rounded-full transition-all duration-700 ease-out`}
           style={{ width: `${clampedPct}%` }}
         />
       </div>

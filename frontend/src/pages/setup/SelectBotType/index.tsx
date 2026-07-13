@@ -133,8 +133,6 @@ const SelectBotType = () => {
             <div
               key={bot.id}
               onClick={() => setBotType(bot.id)}
-              role="button"
-              tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && setBotType(bot.id)}
               className={`group w-full p-5 md:p-6 rounded-xl border text-left transition-all duration-300 backdrop-blur-sm ${
                 isSelected
