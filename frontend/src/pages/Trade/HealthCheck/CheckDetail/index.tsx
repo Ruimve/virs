@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { fn } from '@/utils/default';
 import { Check, Spinner } from '@/components/Icon';
+import { Button } from '@/components/Button';
 import type { CheckItem } from '../define';
 import ResourceRow from './ResourceRow';
 
@@ -22,13 +23,10 @@ const CheckDetail = ({ item, onRetry = fn }: Props) => {
         <p className="text-[12px] text-danger-text leading-relaxed">
           {data?.message || item.detail}
         </p>
-        <button
-          onClick={onRetry}
-          className="inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:text-accent-hover transition-colors"
-        >
+        <Button variant="ghost" size="xs" responsive={false} onClick={onRetry}>
           <Spinner className="w-3 h-3" />
           Retry
-        </button>
+        </Button>
       </div>
     );
   }

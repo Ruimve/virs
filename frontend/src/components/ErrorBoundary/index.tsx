@@ -1,4 +1,5 @@
 import { Component as ReactComponent } from 'react';
+import { Button } from '@/components/Button';
 
 export class ErrorBoundary extends ReactComponent<
   { children: React.ReactNode },
@@ -17,12 +18,14 @@ export class ErrorBoundary extends ReactComponent<
           <div className="text-center p-8">
             <h1 className="text-xl font-semibold text-on-surface mb-2">Error</h1>
             <p className="text-on-surface-tertiary mb-4">{this.state.error?.message}</p>
-            <button
-              className="px-4 py-2 bg-accent/80 text-white rounded-lg hover:bg-accent-hover text-sm"
+            <Button
+              variant="primary"
+              size="small"
+              responsive={false}
               onClick={() => window.location.reload()}
             >
               Reload
-            </button>
+            </Button>
           </div>
         </div>
       );

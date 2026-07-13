@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from '@/components/Icon';
 import Badge from '@/components/Badge';
 import Card from '@/components/Card';
 import SectionTitle from '@/components/SectionTitle';
+import IconBtn from '@/components/IconBtn';
 import { actionLabel, actionVariant } from '../utils/utils';
 
 interface Props {
@@ -29,12 +30,9 @@ const LogDetail = ({ log, loading }: Props) => {
       <div className="min-h-screen bg-base">
         <div className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-8 h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-1.5 rounded-lg hover:bg-surface-2 transition-colors text-on-surface-tertiary hover:text-on-surface"
-            >
+            <IconBtn onClick={() => navigate(-1)}>
               <ChevronLeft className="w-5 h-5" strokeWidth={2} />
-            </button>
+            </IconBtn>
             <h1 className="text-sm font-medium text-on-surface">AI 决策详情</h1>
           </div>
         </div>
@@ -51,12 +49,9 @@ const LogDetail = ({ log, loading }: Props) => {
       <div className="min-h-screen bg-base">
         <div className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-8 h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-1.5 rounded-lg hover:bg-surface-2 transition-colors text-on-surface-tertiary hover:text-on-surface"
-            >
+            <IconBtn onClick={() => navigate(-1)}>
               <ChevronLeft className="w-5 h-5" strokeWidth={2} />
-            </button>
+            </IconBtn>
             <h1 className="text-sm font-medium text-on-surface">AI 决策详情</h1>
           </div>
         </div>
@@ -72,12 +67,9 @@ const LogDetail = ({ log, loading }: Props) => {
       {/* Top bar */}
       <div className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-8 h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-1.5 rounded-lg hover:bg-surface-2 transition-colors text-on-surface-tertiary hover:text-on-surface"
-          >
+          <IconBtn onClick={() => navigate(-1)}>
             <ChevronLeft className="w-5 h-5" strokeWidth={2} />
-          </button>
+          </IconBtn>
           <h1 className="text-sm font-medium text-on-surface">AI 决策详情</h1>
         </div>
       </div>
@@ -223,16 +215,16 @@ const LogDetail = ({ log, loading }: Props) => {
           {/* System Prompt (collapsible) */}
           {log.system_prompt && (
             <Card padding={false} className="overflow-hidden">
-              <button
+              <div
                 onClick={() => setShowSystemPrompt(!showSystemPrompt)}
-                className="w-full flex items-center gap-2 px-5 py-3 text-[10px] text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors"
+                className="w-full flex items-center gap-2 px-5 py-3 text-[10px] text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors cursor-pointer"
               >
                 <ChevronRight
                   className={`w-3 h-3 transition-transform ${showSystemPrompt ? 'rotate-90' : ''}`}
                   strokeWidth={2}
                 />
                 System Prompt
-              </button>
+              </div>
               {showSystemPrompt && (
                 <div className="px-5 pb-4">
                   <pre className="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
@@ -246,16 +238,16 @@ const LogDetail = ({ log, loading }: Props) => {
           {/* User Prompt (collapsible) */}
           {log.user_prompt && (
             <Card padding={false} className="overflow-hidden">
-              <button
+              <div
                 onClick={() => setShowUserPrompt(!showUserPrompt)}
-                className="w-full flex items-center gap-2 px-5 py-3 text-[10px] text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors"
+                className="w-full flex items-center gap-2 px-5 py-3 text-[10px] text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors cursor-pointer"
               >
                 <ChevronRight
                   className={`w-3 h-3 transition-transform ${showUserPrompt ? 'rotate-90' : ''}`}
                   strokeWidth={2}
                 />
                 User Prompt
-              </button>
+              </div>
               {showUserPrompt && (
                 <div className="px-5 pb-4">
                   <pre className="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">

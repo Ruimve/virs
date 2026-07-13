@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '@/components/FlowStep';
-import { Spinner, ChevronRight } from '@/components/Icon';
+import { ChevronRight, Spinner } from '@/components/Icon';
+import { Button } from '@/components/Button';
 import {
   getAiStatus,
   testAiCredential,
@@ -304,14 +305,15 @@ const HealthCheck = () => {
               </p>
             </div>
           </div>
-          <button
+          <Button
+            variant="secondary"
+            size="small"
+            responsive={false}
             onClick={runChecks}
-            disabled={running}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line-default text-on-surface-secondary text-[12px] font-medium hover:bg-surface-2 disabled:opacity-40 transition-colors"
+            loading={running}
           >
-            {running && <Spinner className="w-3.5 h-3.5" />}
             {running ? 'Running' : 'Re-run'}
-          </button>
+          </Button>
         </div>
         <div className="mt-3 h-1 w-full bg-surface-2 rounded-full overflow-hidden">
           <div
@@ -332,13 +334,10 @@ const HealthCheck = () => {
               ? `${failed} check${failed > 1 ? 's' : ''} failed — you can still continue.`
               : 'All checks passed.'}
           </p>
-          <button
-            onClick={handleContinue}
-            className="inline-flex items-center gap-1 px-6 py-2.5 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl transition-all duration-200"
-          >
+          <Button variant="primary" size="normal" responsive={false} onClick={handleContinue}>
             Continue
             <ChevronRight className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
       )}
     </div>

@@ -6,6 +6,7 @@ import Badge from '@/components/Badge';
 import StateFeedback from '@/components/StateFeedback';
 import { ChevronRight } from '@/components/Icon';
 import { actionLabel, actionVariant } from '../utils/utils';
+import { Button } from '@/components/Button';
 
 interface Props {
   logs: AnalysisLog[];
@@ -63,13 +64,15 @@ const LogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
 
       {onLoadMore && (
         <div className="text-center pt-2">
-          <button
+          <Button
+            variant="ghost"
+            size="xs"
+            responsive={false}
             onClick={onLoadMore}
             disabled={loading}
-            className="px-4 py-2 rounded-lg text-xs font-medium text-on-surface-tertiary hover:text-on-surface hover:bg-surface-2 transition-colors disabled:opacity-50"
           >
             {loading ? '加载中...' : '加载更多'}
-          </button>
+          </Button>
         </div>
       )}
     </div>

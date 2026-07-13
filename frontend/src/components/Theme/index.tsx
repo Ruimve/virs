@@ -1,11 +1,10 @@
 import { useTheme } from './useTheme';
+import IconBtn from '@/components/IconBtn';
+
 const Theme = () => {
   const { isDark, toggleTheme } = useTheme();
   return (
-    <button
-      onClick={toggleTheme}
-      className="p-2 rounded-lg text-on-surface-tertiary hover:text-on-surface-secondary hover:bg-surface-2 transition-colors"
-    >
+    <IconBtn onClick={toggleTheme} size="sm">
       {isDark ? (
         <svg
           className="w-4 h-4"
@@ -35,7 +34,7 @@ const Theme = () => {
           />
         </svg>
       )}
-    </button>
+    </IconBtn>
   );
 };
 

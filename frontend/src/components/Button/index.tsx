@@ -1,44 +1,34 @@
 import { memo, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Spinner } from '@/components/Icon';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'error';
-export type ButtonSize = 'small' | 'normal';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'error' | 'accent-outline';
+export type ButtonSize = 'xs' | 'small' | 'normal';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  /**
-   * Preset style variant:
-   * - primary: blue accent background with white text (default)
-   * - secondary: light surface background with border
-   * - ghost: transparent background, text-only
-   * - error: danger red background with white text
-   */
   variant?: ButtonVariant;
-  /**
-   * Button size preset:
-   * - normal: standard padding & text (default)
-   * - small: compact padding & smaller text
-   */
   size?: ButtonSize;
-  /** Show loading spinner and disable interaction */
   loading?: boolean;
-  /** Full width on mobile, auto on sm+ screens (default: true) */
   responsive?: boolean;
   children?: ReactNode;
 }
 
 const baseStyles =
-  'inline-flex items-center justify-center gap-2 rounded-xl transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed';
+  'inline-flex items-center justify-center gap-2 rounded-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed select-none';
 
 const variantStyles: Record<ButtonVariant, string> = {
-  primary: 'bg-accent/80 hover:bg-accent-hover text-white font-medium',
+  primary:
+    'bg-accent hover:bg-accent-hover text-white font-medium shadow-sm shadow-accent/10 hover:shadow-accent/20',
   secondary: 'bg-surface-2 hover:bg-surface-3 text-on-surface-secondary border border-line-default',
-  ghost: 'text-on-surface-tertiary hover:text-on-surface-secondary',
-  error: 'bg-danger/80 hover:bg-danger text-white font-medium',
+  ghost: 'text-on-surface-tertiary hover:text-on-surface-secondary hover:bg-surface-2/50',
+  error: 'bg-danger hover:bg-danger-hover text-white font-medium',
+  'accent-outline':
+    'bg-accent-light border border-accent-muted text-accent hover:bg-accent-muted font-medium',
 };
 
 const sizeStyles: Record<ButtonSize, { box: string; spinner: string }> = {
-  normal: { box: 'px-6 py-2.5 text-sm', spinner: 'w-4 h-4' },
+  xs: { box: 'px-2.5 py-1 text-[11px]', spinner: 'w-3 h-3' },
   small: { box: 'px-3.5 py-1.5 text-xs', spinner: 'w-3.5 h-3.5' },
+  normal: { box: 'px-5 py-2.5 text-sm', spinner: 'w-4 h-4' },
 };
 
 export const Button = memo(

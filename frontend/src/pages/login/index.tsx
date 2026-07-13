@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { login } from '@/context/AuthContext/auth';
 import { InfoCircle } from '@/components/Icon';
 import { Input } from '@/components/Input';
+import { Button } from '@/components/Button';
 import Logo from '@/components/Logo';
 
 const Login = () => {
@@ -76,13 +77,9 @@ const Login = () => {
             disabled={loading}
           />
           {errorMessage}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3.5 px-4 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-muted focus:ring-offset-2 focus:ring-offset-base disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-accent/10 hover:shadow-accent/20 hover:shadow-xl"
-          >
+          <Button type="submit" variant="primary" loading={loading} responsive>
             {loading ? 'Signing in...' : 'Sign in'}
-          </button>
+          </Button>
         </form>
 
         {/* Footer */}

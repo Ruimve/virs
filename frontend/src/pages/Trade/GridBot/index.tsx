@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { startGridBot, stopGridBot, deleteGridBot } from '@/service/bot';
 import { useBot } from '../context/BotContext';
 import { useHeader, type ItemConfig } from '../Layout/Header/HeaderContext';
+import { Button } from '@/components/Button';
 
 const GridBot = () => {
   const navigate = useNavigate();
@@ -92,12 +93,14 @@ const GridBot = () => {
     return (
       <div className="h-screen bg-base flex flex-col items-center justify-center relative gap-4">
         <div className="text-on-surface-tertiary text-sm">{'机器人不存在或加载失败'}</div>
-        <button
+        <Button
+          variant="secondary"
+          size="small"
+          responsive={false}
           onClick={() => navigate('/setup/bot-type', { replace: true })}
-          className="px-4 py-2 text-xs font-medium border border-line-default rounded-lg text-on-surface-tertiary hover:bg-surface-2 transition-colors"
         >
           创建新机器人
-        </button>
+        </Button>
       </div>
     );
   }

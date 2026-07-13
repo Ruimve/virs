@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import Logo from '@/components/Logo';
 import Theme from '@/components/Theme';
 import { Close, Flame, ShieldCheck } from '@/components/Icon';
+import IconBtn from '@/components/IconBtn';
 import { useHeader } from './HeaderContext';
 import { usePaper } from '../../context/PaperContext';
 import { useBot } from '../../context/BotContext';
@@ -127,17 +128,17 @@ const Header = () => {
         {/* Center: tabs (desktop) — pill style with smooth indicator */}
         <div className="hidden md:flex items-center justify-center flex-1 gap-0.5">
           {tabs.map((tab) => (
-            <button
+            <div
               key={tab.key}
               onClick={() => tab.onClick(tab.key)}
-              className={`px-4 py-1.5 rounded-lg text-[11px] font-medium tracking-wide transition-all duration-200 ${
+              className={`px-4 py-1.5 rounded-lg text-[11px] font-medium tracking-wide transition-all duration-200 cursor-pointer ${
                 activeTab === tab.key
                   ? 'bg-accent-light text-accent shadow-sm'
                   : 'text-on-surface-tertiary hover:text-on-surface-secondary hover:bg-surface-2/50'
               }`}
             >
               {tab.label}
-            </button>
+            </div>
           ))}
         </div>
 
@@ -145,12 +146,12 @@ const Header = () => {
         <div className="hidden md:flex items-center gap-1.5 pr-6 shrink-0">
           {actions.map((action) => {
             return (
-              <button
+              <div
                 onClick={() => action.onClick(action.key)}
-                className={`px-3 py-1.5 rounded-lg text-[11px] font-medium tracking-wide transition-colors duration-200 ${action.className || ''}`}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-medium tracking-wide transition-colors duration-200 cursor-pointer ${action.className || ''}`}
               >
                 {action.label}
-              </button>
+              </div>
             );
           })}
           <Theme />
@@ -182,12 +183,9 @@ const Header = () => {
               <div className="flex items-center gap-2">
                 <Logo />
               </div>
-              <button
-                onClick={closeDrawer}
-                className="p-1.5 rounded-lg hover:bg-surface-2 text-on-surface-tertiary transition-colors"
-              >
+              <IconBtn onClick={closeDrawer}>
                 <Close className="w-4 h-4" strokeWidth={2} />
-              </button>
+              </IconBtn>
             </div>
 
             {/* Navigation section */}
@@ -198,20 +196,20 @@ const Header = () => {
                 </p>
               </div>
               {tabs.map((tab) => (
-                <button
+                <div
                   key={tab.key}
                   onClick={() => {
                     tab.onClick(tab.key);
                     closeDrawer();
                   }}
-                  className={`w-full text-left px-5 py-2.5 text-[12px] font-medium tracking-wide transition-colors ${
+                  className={`w-full text-left px-5 py-2.5 text-[12px] font-medium tracking-wide transition-colors cursor-pointer ${
                     activeTab === tab.key
                       ? 'text-accent bg-accent-light border-r-2 border-accent'
                       : 'text-on-surface-secondary hover:bg-surface-2/50 hover:text-on-surface'
                   }`}
                 >
                   {tab.label}
-                </button>
+                </div>
               ))}
             </div>
 
@@ -225,15 +223,15 @@ const Header = () => {
               <div className="space-y-1">
                 {actions.map((action) => {
                   return (
-                    <button
+                    <div
                       onClick={() => {
                         action.onClick!(action.key);
                         closeDrawer();
                       }}
-                      className={`w-full px-3 py-2 rounded-lg text-[11px] font-medium transition-colors ${action.className || ''}`}
+                      className={`w-full px-3 py-2 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${action.className || ''}`}
                     >
                       {action.label}
-                    </button>
+                    </div>
                   );
                 })}
               </div>

@@ -104,7 +104,10 @@ const SelectBotType = () => {
             <p className="text-xs text-on-surface-tertiary mb-3">
               每个账号只能创建一个机器人，请先删除已有机器人。
             </p>
-            <button
+            <Button
+              variant="accent-outline"
+              size="small"
+              responsive={false}
               onClick={() => {
                 if (existingBot?.bot_type === 'auto') {
                   navigate(`/trade/auto/${existingBot?.id}/bot`, { replace: true });
@@ -112,10 +115,9 @@ const SelectBotType = () => {
                   navigate(`/trade/grid/${existingBot?.id}/bot`, { replace: true });
                 }
               }}
-              className="px-4 py-2 text-xs font-medium bg-accent-light border border-accent-muted text-accent hover:bg-accent-muted rounded-lg transition-colors"
             >
               查看已有机器人
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -128,9 +130,12 @@ const SelectBotType = () => {
         {BOT_TYPES.map((bot) => {
           const isSelected = botType === bot.id;
           return (
-            <button
+            <div
               key={bot.id}
               onClick={() => setBotType(bot.id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && setBotType(bot.id)}
               className={`group w-full p-5 md:p-6 rounded-xl border text-left transition-all duration-300 backdrop-blur-sm ${
                 isSelected
                   ? `bg-gradient-to-br ${bot.selectedBg} ${bot.selectedBorder} shadow-lg ${bot.glowColor}`
@@ -183,7 +188,7 @@ const SelectBotType = () => {
                   </div>
                 )}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
