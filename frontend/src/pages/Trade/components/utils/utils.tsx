@@ -98,7 +98,9 @@ export const pnlColor = (v: number): string =>
   v > 0 ? 'text-success-text' : v < 0 ? 'text-danger-text' : 'text-on-surface';
 
 /** Maps an AI action to a Badge variant — replaces neutral+className override pattern */
-export const actionVariant = (action: string | undefined): 'success' | 'danger' | 'warning' | 'info' | 'neutral' => {
+export const actionVariant = (
+  action: string | undefined,
+): 'success' | 'danger' | 'warning' | 'info' | 'neutral' => {
   if (!action) return 'neutral';
   const map: Record<string, 'success' | 'danger' | 'warning' | 'info' | 'neutral'> = {
     open_long: 'success',
