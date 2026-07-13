@@ -3,7 +3,7 @@ import { login } from '@/context/AuthContext/auth';
 import { InfoCircle } from '@/components/Icon';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
-import Logo from '@/components/Logo';
+import { Logo } from '@/components/Logo';
 
 const Login = () => {
   const [username, setUsername] = useState('');

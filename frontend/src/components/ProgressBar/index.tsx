@@ -6,7 +6,7 @@ interface ProgressBarProps {
   thresholds?: { warning: number; danger: number };
 }
 
-const ProgressBar = memo(
+export const ProgressBar = memo(
   ({ pct, size = 'md', thresholds = { warning: 75, danger: 90 } }: ProgressBarProps) => {
     const barColor = () => {
       if (pct >= thresholds.danger) return 'from-danger/80 to-danger';
@@ -25,5 +25,3 @@ const ProgressBar = memo(
     );
   },
 );
-
-export default ProgressBar;

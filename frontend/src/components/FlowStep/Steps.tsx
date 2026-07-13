@@ -21,7 +21,7 @@ export interface FlowStepsProps {
   onToggles?: Record<string, (expanded: boolean) => void>;
 }
 
-const FlowSteps = memo(({ steps, statuses, summaries, onToggles }: FlowStepsProps) => {
+export const FlowSteps = memo(({ steps, statuses, summaries, onToggles }: FlowStepsProps) => {
   return (
     <div className="space-y-1">
       {steps.map((config, index) => {
@@ -49,5 +49,3 @@ const FlowSteps = memo(({ steps, statuses, summaries, onToggles }: FlowStepsProp
     </div>
   );
 });
-
-export { FlowSteps };

@@ -8,7 +8,7 @@ interface StatProps {
   sub?: string; // optional sub text below value
 }
 
-const Stat = memo(({ label, children, highlight, color, sub }: StatProps) => (
+export const Stat = memo(({ label, children, highlight, color, sub }: StatProps) => (
   <div className="min-w-0">
     <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary mb-0.5">
       {label}
@@ -21,5 +21,3 @@ const Stat = memo(({ label, children, highlight, color, sub }: StatProps) => (
     {sub && <div className="text-[10px] text-on-surface-muted mt-0.5">{sub}</div>}
   </div>
 ));
-
-export default Stat;

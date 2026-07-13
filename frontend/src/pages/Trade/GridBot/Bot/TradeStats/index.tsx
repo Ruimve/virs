@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { getGridStats, type GridBotStats } from '@/service';
-import Stat from '@/components/Stat';
-import SectionTitle from '@/components/SectionTitle';
+import { Stat } from '@/components/Stat';
+import { SectionTitle } from '@/components/SectionTitle';
 
 interface Props {
   botId: string;

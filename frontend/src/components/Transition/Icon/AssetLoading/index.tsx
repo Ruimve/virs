@@ -16,7 +16,7 @@ interface Props extends SVGProps<SVGSVGElement> {
   size?: number;
 }
 
-const Icon = memo((props: Props) => {
+export const Icon = memo((props: Props) => {
   const { size = 56, ...rest } = props;
   return (
     <svg
@@ -65,5 +65,3 @@ const Icon = memo((props: Props) => {
     </svg>
   );
 });
-
-export { Icon };

@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 import type { GridBot } from '@/service/types';
-import Stat from '@/components/Stat';
+import { Stat } from '@/components/Stat';
 import { pnlColor } from '../../../components/utils/utils';
 import { useBot } from '../../../context/BotContext';
 

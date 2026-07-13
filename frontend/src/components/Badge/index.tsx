@@ -1,8 +1,8 @@
 import { memo, type ReactNode } from 'react';
 
-type BadgeVariant = 'success' | 'danger' | 'warning' | 'info' | 'neutral';
+export type BadgeVariant = 'success' | 'danger' | 'warning' | 'info' | 'neutral';
 
-interface BadgeProps {
+export interface BadgeProps {
   variant: BadgeVariant;
   children: ReactNode;
   size?: 'xs' | 'sm';
@@ -17,7 +17,7 @@ const variantClasses: Record<BadgeVariant, string> = {
   neutral: 'bg-surface-2 text-on-surface-tertiary',
 };
 
-const Badge = memo(({ variant, children, size = 'xs', className = '' }: BadgeProps) => {
+export const Badge = memo(({ variant, children, size = 'xs', className = '' }: BadgeProps) => {
   const sizeClass = size === 'sm' ? 'text-[11px] px-2 py-0.5' : 'text-[10px] px-1.5 py-0.5';
   return (
     <span
@@ -27,6 +27,3 @@ const Badge = memo(({ variant, children, size = 'xs', className = '' }: BadgePro
     </span>
   );
 });
-
-export default Badge;
-export type { BadgeVariant, BadgeProps };

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import Logo from '@/components/Logo';
-import Theme from '@/components/Theme';
+import { Logo } from '@/components/Logo';
+import { Theme } from '@/components/Theme';
 import { Check } from '@/components/Icon';
 import { TOTAL_SETUP_STEPS } from '../../context/WizardContext/consts';
 import { useWizard } from '../../context/WizardContext';

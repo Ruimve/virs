@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { getSystemInfo } from '@/service/system';
 import type { SystemInfo as SystemInfoData } from '@/service/types';
-import Card from '@/components/Card';
-import ProgressBar from '@/components/ProgressBar';
+import { Card } from '@/components/Card';
+import { ProgressBar } from '@/components/ProgressBar';
 import { usageColor } from '@/components/ProgressBar/utils';
-import StateFeedback from '@/components/StateFeedback';
+import { StateFeedback } from '@/components/StateFeedback';
 
 // -- Utility functions --
 

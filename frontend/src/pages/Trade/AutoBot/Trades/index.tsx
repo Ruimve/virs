@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getAutoTrades, type AutoTrade } from '@/service';
 import { TradeLoading } from '@/components/Transition/Icon';
-import Badge from '@/components/Badge';
-import StateFeedback from '@/components/StateFeedback';
-import Pagination from '@/components/Pagination';
+import { Badge } from '@/components/Badge';
+import { StateFeedback } from '@/components/StateFeedback';
+import { Pagination } from '@/components/Pagination';
 import { formatPnl } from '../../components/utils/utils';
 
 const PAGE_SIZE = 20;

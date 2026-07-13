@@ -1,7 +1,7 @@
-import Logo from '@/components/Logo';
-import Theme from '@/components/Theme';
+import { Logo } from '@/components/Logo';
+import { Theme } from '@/components/Theme';
 
-const Header = () => {
+export const Header = () => {
   return (
     <div className="relative z-10 flex items-center h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
       {/* Left: logo (clickable on mobile to open drawer) + bot info */}
@@ -24,5 +24,3 @@ const Header = () => {
     </div>
   );
 };
-
-export default Header;

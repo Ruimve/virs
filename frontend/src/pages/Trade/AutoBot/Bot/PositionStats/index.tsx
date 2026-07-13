@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 import type { AutoBot } from '@/service/types';
-import Stat from '@/components/Stat';
+import { Stat } from '@/components/Stat';
 import { usePositionContext } from '../../../context/PositionContext';
 import { pnlColor } from '../../../components/utils/utils';
 

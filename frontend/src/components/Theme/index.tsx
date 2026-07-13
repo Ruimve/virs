@@ -1,7 +1,7 @@
 import { useTheme } from './useTheme';
-import IconBtn from '@/components/IconBtn';
+import { IconBtn } from '@/components/IconBtn';
 
-const Theme = () => {
+export const Theme = () => {
   const { isDark, toggleTheme } = useTheme();
   return (
     <IconBtn onClick={toggleTheme} size="sm">
@@ -37,5 +37,3 @@ const Theme = () => {
     </IconBtn>
   );
 };
-
-export default Theme;

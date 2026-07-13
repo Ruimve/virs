@@ -5,8 +5,8 @@ import { Button } from '@/components/Button';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
 import { createGridBot, createAutoBot, startGridBot, startAutoBot } from '../../../service';
-import KeyValueRow from '@/components/KeyValueRow';
-import SectionTitle from '@/components/SectionTitle';
+import { KeyValueRow } from '@/components/KeyValueRow';
+import { SectionTitle } from '@/components/SectionTitle';
 import { WizardStep } from '../context/WizardContext/consts';
 
 const ReviewLaunch = () => {

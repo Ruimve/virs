@@ -1,11 +1,11 @@
 import { memo, type ReactNode } from 'react';
-import Header from './Header';
+import { Header } from './Header';
 
 interface Props {
   header?: boolean;
   icon: ReactNode;
 }
-const FullScreen = memo((props: Props) => {
+export const FullScreen = memo((props: Props) => {
   const { header = false, icon } = props;
   return (
     <div className="h-dvh bg-base flex flex-col relative overflow-hidden">
@@ -18,5 +18,3 @@ const FullScreen = memo((props: Props) => {
     </div>
   );
 });
-
-export { FullScreen };

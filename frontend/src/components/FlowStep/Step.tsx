@@ -16,7 +16,7 @@ export interface FlowStepProps {
   children?: ReactNode;
 }
 
-const FlowStep = memo(
+export const FlowStep = memo(
   ({
     step,
     title,
@@ -143,5 +143,3 @@ const FlowStep = memo(
     );
   },
 );
-
-export { FlowStep };

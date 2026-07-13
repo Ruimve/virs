@@ -2,9 +2,9 @@ import { getGridTrades, type GridTrade } from '@/service';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { TradeLoading } from '@/components/Transition/Icon';
-import Badge from '@/components/Badge';
-import StateFeedback from '@/components/StateFeedback';
-import Pagination from '@/components/Pagination';
+import { Badge } from '@/components/Badge';
+import { StateFeedback } from '@/components/StateFeedback';
+import { Pagination } from '@/components/Pagination';
 import { formatPnlShort } from '../../components/utils/utils';
 
 const PAGE_SIZE = 20;

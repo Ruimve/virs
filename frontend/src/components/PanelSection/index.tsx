@@ -8,7 +8,7 @@ interface PanelSectionProps {
   emptyText?: string;
 }
 
-const PanelSection = memo(
+export const PanelSection = memo(
   ({ title, count, children, empty, emptyText = '暂无数据' }: PanelSectionProps) => (
     <div className="flex flex-col min-h-0">
       <div className="flex items-center justify-between px-3 py-2 border-b border-line-subtle shrink-0">
@@ -29,5 +29,3 @@ const PanelSection = memo(
     </div>
   ),
 );
-
-export default PanelSection;

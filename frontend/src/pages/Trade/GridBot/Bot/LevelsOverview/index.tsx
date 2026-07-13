@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import type { GridLevelInfo } from '@/service';
-import PanelSection from '@/components/PanelSection';
-import Badge from '@/components/Badge';
+import { PanelSection } from '@/components/PanelSection';
+import { Badge } from '@/components/Badge';
 import { formatSmart } from '../../../components/utils/utils';
 
 interface Props {

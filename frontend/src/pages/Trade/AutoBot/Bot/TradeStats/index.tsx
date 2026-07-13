@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { getAutoStats, type AutoBotStats } from '@/service';
-import Stat from '@/components/Stat';
-import SectionTitle from '@/components/SectionTitle';
+import { Stat } from '@/components/Stat';
+import { SectionTitle } from '@/components/SectionTitle';
 import { formatVolume } from '../../../components/utils/utils';
 
 interface Props {

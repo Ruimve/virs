@@ -2,8 +2,8 @@ import { memo, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service/types';
 import { Warning } from '@/components/Icon';
-import Badge from '@/components/Badge';
-import SectionTitle from '@/components/SectionTitle';
+import { Badge } from '@/components/Badge';
+import { SectionTitle } from '@/components/SectionTitle';
 import { actionColor, actionLabel, confidenceColor } from '../utils/utils';
 
 interface Props {

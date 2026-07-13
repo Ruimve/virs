@@ -1,6 +1,6 @@
 import { memo, type ReactNode } from 'react';
 
-interface CardProps {
+export interface CardProps {
   children: ReactNode;
   title?: string;
   icon?: ReactNode;
@@ -9,7 +9,7 @@ interface CardProps {
   className?: string;
 }
 
-const Card = memo(
+export const Card = memo(
   ({ children, title, icon, padding = true, border = 'default', className = '' }: CardProps) => {
     const borderClass = border === 'subtle' ? 'border-line-subtle' : 'border-line-default';
     return (
@@ -29,5 +29,3 @@ const Card = memo(
     );
   },
 );
-
-export default Card;

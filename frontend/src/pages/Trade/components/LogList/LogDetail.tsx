@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service/types';
 import { AiThinking } from '@/components/Transition/Icon';
 import { ChevronLeft, ChevronRight } from '@/components/Icon';
-import Badge from '@/components/Badge';
-import Card from '@/components/Card';
-import SectionTitle from '@/components/SectionTitle';
-import IconBtn from '@/components/IconBtn';
+import { Badge } from '@/components/Badge';
+import { Card } from '@/components/Card';
+import { SectionTitle } from '@/components/SectionTitle';
+import { IconBtn } from '@/components/IconBtn';
 import { actionLabel, actionVariant } from '../utils/utils';
 
 interface Props {

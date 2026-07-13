@@ -1,8 +1,8 @@
 import { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service';
-import PanelSection from '@/components/PanelSection';
-import Badge from '@/components/Badge';
+import { PanelSection } from '@/components/PanelSection';
+import { Badge } from '@/components/Badge';
 import { actionVariant, actionLabel } from '../../../components/utils/utils';
 
 interface Props {

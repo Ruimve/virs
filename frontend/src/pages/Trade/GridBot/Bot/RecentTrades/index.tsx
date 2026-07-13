@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { getGridTrades, type GridTrade } from '@/service';
-import PanelSection from '@/components/PanelSection';
-import Badge from '@/components/Badge';
+import { PanelSection } from '@/components/PanelSection';
+import { Badge } from '@/components/Badge';
 import { formatPnlShort, pnlColor } from '../../../components/utils/utils';
 
 interface Props {

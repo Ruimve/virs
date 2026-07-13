@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { formatSmart } from '../../components/utils/utils';
-import Badge from '@/components/Badge';
-import StateFeedback from '@/components/StateFeedback';
+import { Badge } from '@/components/Badge';
+import { StateFeedback } from '@/components/StateFeedback';
 
 interface GridLevelInfo {
   level: number;

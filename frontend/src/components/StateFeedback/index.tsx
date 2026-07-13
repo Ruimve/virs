@@ -7,7 +7,7 @@ interface StateFeedbackProps {
   icon?: ReactNode;
 }
 
-const StateFeedback = memo(({ type, text, icon }: StateFeedbackProps) => {
+export const StateFeedback = memo(({ type, text, icon }: StateFeedbackProps) => {
   if (type === 'center-loading') {
     return (
       <div className="h-full flex items-center justify-center">
@@ -38,5 +38,3 @@ const StateFeedback = memo(({ type, text, icon }: StateFeedbackProps) => {
     </div>
   );
 });
-
-export default StateFeedback;

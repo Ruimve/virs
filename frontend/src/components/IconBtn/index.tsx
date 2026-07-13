@@ -1,6 +1,6 @@
 import { memo, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
-interface IconBtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface IconBtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
   /** Size preset (default: md) */
   size?: 'sm' | 'md';
@@ -15,7 +15,7 @@ const sizeStyles = {
  * Minimal icon-only button for toolbars and nav headers.
  * Renders a <button> for accessibility but visually compact.
  */
-const IconBtn = memo(({ children, size = 'md', className = '', ...props }: IconBtnProps) => (
+export const IconBtn = memo(({ children, size = 'md', className = '', ...props }: IconBtnProps) => (
   <button
     type="button"
     className={`inline-flex items-center justify-center rounded-lg text-on-surface-tertiary hover:text-on-surface hover:bg-surface-2 transition-colors ${sizeStyles[size]} ${className}`}
@@ -24,5 +24,3 @@ const IconBtn = memo(({ children, size = 'md', className = '', ...props }: IconB
     {children}
   </button>
 ));
-
-export default IconBtn;
