@@ -1,16 +1,27 @@
 import { memo, type ReactNode } from 'react';
 
-interface PanelSectionProps {
+export interface PanelSectionProps {
   title: string;
   count?: number;
   children: ReactNode;
   empty?: boolean;
   emptyText?: string;
+  className?: string;
+  /** Set to false to disable the divide-y separator between items. Default: true */
+  divided?: boolean;
 }
 
 export const PanelSection = memo(
-  ({ title, count, children, empty, emptyText = '暂无数据' }: PanelSectionProps) => (
-    <div className="flex flex-col min-h-0">
+  ({
+    title,
+    count,
+    children,
+    empty,
+    emptyText = '暂无数据',
+    className = '',
+    divided = true,
+  }: PanelSectionProps) => (
+    <div className={`flex flex-col min-h-0 ${className}`}>
       <div className="flex items-center justify-between px-3 py-2 border-b border-line-subtle shrink-0">
         <span className="text-[11px] uppercase tracking-wider text-on-surface-tertiary font-medium">
           {title}
@@ -23,7 +34,7 @@ export const PanelSection = memo(
         {empty ? (
           <div className="text-center py-6 text-sm text-on-surface-tertiary">{emptyText}</div>
         ) : (
-          <div className="divide-y divide-line-subtle">{children}</div>
+          <div className={divided ? 'divide-y divide-line-subtle' : ''}>{children}</div>
         )}
       </div>
     </div>

@@ -66,7 +66,7 @@ const Login = () => {
             onChange={(e) => setUsername(e.target.value)}
             placeholder="Username"
             autoComplete="username"
-            disabled={loading}
+            loading={loading}
           />
           <Input
             type="password"
@@ -74,7 +74,7 @@ const Login = () => {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
             autoComplete="current-password"
-            disabled={loading}
+            loading={loading}
           />
           {errorMessage}
           <Button type="submit" variant="primary" loading={loading} className="sm:w-full">

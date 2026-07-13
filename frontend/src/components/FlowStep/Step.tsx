@@ -56,6 +56,14 @@ export const FlowStep = memo(
       onToggle?.(next);
     };
 
+    const handleHeaderKeyDown = (e: React.KeyboardEvent) => {
+      if (!isEditable) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleHeaderClick();
+      }
+    };
+
     const shouldShowLine = showLine !== undefined ? showLine : !isCollapsed;
 
     const defaultIndicator = (): ReactNode => {
@@ -110,7 +118,14 @@ export const FlowStep = memo(
     return (
       <div className="flex gap-3">
         <div className="flex flex-col items-center">
-          <div className={isEditable ? 'cursor-pointer' : ''} onClick={handleHeaderClick}>
+          <div
+            className={isEditable ? 'cursor-pointer' : ''}
+            onClick={handleHeaderClick}
+            onKeyDown={handleHeaderKeyDown}
+            role={isEditable ? 'button' : undefined}
+            tabIndex={isEditable ? 0 : undefined}
+            aria-expanded={isEditable ? expanded : undefined}
+          >
             {indicator ?? defaultIndicator()}
           </div>
           {shouldShowLine && <div className="w-px flex-1 min-h-[16px] bg-line-default mt-1" />}
@@ -120,6 +135,10 @@ export const FlowStep = memo(
           <div
             className={`flex items-center gap-2 ${isEditable ? 'cursor-pointer group' : ''}`}
             onClick={handleHeaderClick}
+            onKeyDown={handleHeaderKeyDown}
+            role={isEditable ? 'button' : undefined}
+            tabIndex={isEditable ? 0 : undefined}
+            aria-expanded={isEditable ? expanded : undefined}
           >
             <p className={`text-sm font-medium leading-7 ${titleColor()}`}>{title}</p>
             {isEditable && (

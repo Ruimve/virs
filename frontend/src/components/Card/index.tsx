@@ -5,16 +5,21 @@ export interface CardProps {
   title?: string;
   icon?: ReactNode;
   padding?: boolean;
-  border?: 'subtle' | 'default';
+  border?: 'subtle' | 'default' | 'none';
   className?: string;
 }
 
 export const Card = memo(
   ({ children, title, icon, padding = true, border = 'default', className = '' }: CardProps) => {
-    const borderClass = border === 'subtle' ? 'border-line-subtle' : 'border-line-default';
+    const borderClass =
+      border === 'none'
+        ? ''
+        : border === 'subtle'
+          ? 'border-line-subtle border'
+          : 'border-line-default border';
     return (
       <div
-        className={`bg-surface-1 rounded-xl ${borderClass} border shadow-sm ${padding ? 'p-4' : ''} ${className}`}
+        className={`bg-surface-1 rounded-xl ${borderClass} shadow-sm ${padding ? 'p-4' : ''} ${className}`}
       >
         {title && (
           <div className="flex items-center gap-2 mb-3">

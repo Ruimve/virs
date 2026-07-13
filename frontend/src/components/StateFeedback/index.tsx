@@ -1,16 +1,17 @@
 import { memo, type ReactNode } from 'react';
 import { Spinner } from '@/components/Icon';
 
-interface StateFeedbackProps {
+export interface StateFeedbackProps {
   type: 'loading' | 'empty' | 'error' | 'center-loading';
   text?: string;
+  /** Custom icon — only used when type is 'loading'. Ignored by other types. */
   icon?: ReactNode;
 }
 
 export const StateFeedback = memo(({ type, text, icon }: StateFeedbackProps) => {
   if (type === 'center-loading') {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full flex items-center justify-center" role="status" aria-live="polite">
         <Spinner className="h-6 w-6 text-on-surface-tertiary" />
       </div>
     );
@@ -18,7 +19,11 @@ export const StateFeedback = memo(({ type, text, icon }: StateFeedbackProps) => 
 
   if (type === 'loading') {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-4 text-on-surface-tertiary text-xs">
+      <div
+        className="flex flex-col items-center justify-center py-16 gap-4 text-on-surface-tertiary text-xs"
+        role="status"
+        aria-live="polite"
+      >
         {icon || <Spinner className="h-6 w-6" />}
         <span className="tracking-wider">{text || '加载中'}</span>
       </div>
@@ -33,7 +38,11 @@ export const StateFeedback = memo(({ type, text, icon }: StateFeedbackProps) => 
 
   // error
   return (
-    <div className="h-full flex items-center justify-center text-danger-text text-sm">
+    <div
+      className="h-full flex items-center justify-center text-danger-text text-sm"
+      role="alert"
+      aria-live="assertive"
+    >
       {text || '发生错误'}
     </div>
   );

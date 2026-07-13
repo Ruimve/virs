@@ -21,6 +21,7 @@ const LevelsOverview = ({ gridLevels }: Props) => {
       count={gridLevels.length}
       empty={gridLevels.length === 0}
       emptyText="暂无网格数据"
+      divided={false}
     >
       <>
         {/* 统计摘要 */}

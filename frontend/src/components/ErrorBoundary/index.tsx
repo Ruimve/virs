@@ -1,23 +1,52 @@
-import { Component as ReactComponent } from 'react';
+import { Component as ReactComponent, type ReactNode } from 'react';
 import { Button } from '@/components/Button';
 
-export class ErrorBoundary extends ReactComponent<
-  { children: React.ReactNode },
-  { hasError: boolean; error: Error | null }
-> {
-  state = { hasError: false, error: null as Error | null };
+export interface ErrorBoundaryProps {
+  children: React.ReactNode;
+  /** Custom fallback render function. Receives the error and a reset callback. */
+  fallback?: (error: Error, reset: () => void) => ReactNode;
+}
 
-  static getDerivedStateFromError(error: Error) {
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+export class ErrorBoundary extends ReactComponent<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
 
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Log to console for production debugging — wire up Sentry/other reporting here
+    console.error('[ErrorBoundary]', error, errorInfo.componentStack);
+  }
+
+  reset = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
   render() {
-    if (this.state.hasError) {
+    if (this.state.hasError && this.state.error) {
+      if (this.props.fallback) {
+        return this.props.fallback(this.state.error, this.reset);
+      }
+
       return (
-        <div className="min-h-screen flex items-center justify-center bg-base">
+        <div
+          className="min-h-screen flex items-center justify-center bg-base"
+          role="alert"
+          aria-live="assertive"
+        >
           <div className="text-center p-8">
             <h1 className="text-xl font-semibold text-on-surface mb-2">Error</h1>
-            <p className="text-on-surface-tertiary mb-4">{this.state.error?.message}</p>
+            <p className="text-on-surface-tertiary mb-4">
+              {import.meta.env.PROD
+                ? 'Something went wrong. Please reload the page.'
+                : this.state.error.message}
+            </p>
             <Button
               variant="primary"
               size="small"

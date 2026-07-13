@@ -30,13 +30,13 @@
 }
 
 /* 外圈轨道（静态、淡） */
-.ring-track {
+.ai-thinking-icon .ring-track {
   stroke-width: 1;
   opacity: 0.12;
 }
 
 /* 外圈旋转弧 */
-.ring-arc {
+.ai-thinking-icon .ring-arc {
   stroke-width: 1.5;
   transform-origin: center;
   transform-box: fill-box;
@@ -102,7 +102,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ring-arc,
+  .ai-thinking-icon .ring-arc,
   .neuron-core,
   .neuron-node {
     animation: none;

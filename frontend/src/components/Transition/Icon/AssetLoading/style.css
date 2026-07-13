@@ -20,13 +20,13 @@
 }
 
 /* 外圈轨道（静态、淡） */
-.ring-track {
+.load-assets-icon .ring-track {
   stroke-width: 1;
   opacity: 0.12;
 }
 
 /* 外圈旋转弧 */
-.ring-arc {
+.load-assets-icon .ring-arc {
   stroke-width: 1.5;
   transform-origin: center;
   transform-box: fill-box;
@@ -71,7 +71,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ring-arc,
+  .load-assets-icon .ring-arc,
   .ring-dotted,
   .v-mark {
     animation: none;

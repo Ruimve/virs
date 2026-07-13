@@ -65,6 +65,26 @@ function getVisibleRangeWidth() {
   return 100;
 }
 
+/** Set visible range to last N candles with 1/8 right padding */
+function applyVisibleRange(chart: IChartApi | undefined, dataLength: number) {
+  if (!chart) return;
+  const visibleWidth = getVisibleRangeWidth();
+  if (dataLength > visibleWidth) {
+    chart.timeScale().setVisibleLogicalRange({
+      from: dataLength - visibleWidth,
+      to: dataLength - 1 + visibleWidth / 8,
+    });
+  } else if (dataLength > 1) {
+    const lastIdx = dataLength - 1;
+    chart.timeScale().setVisibleLogicalRange({
+      from: 0,
+      to: lastIdx + lastIdx / 8,
+    });
+  } else {
+    chart.timeScale().fitContent();
+  }
+}
+
 // ── Component ─────────────────────────────────────────────
 
 const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineChart(
@@ -74,6 +94,11 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
   const chartRef = useRef<IChartApi | undefined>(undefined);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | undefined>(undefined);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | undefined>(undefined);
+  // Minimal structural type — we only need detach() for cleanup.
+  // The full ISeriesMarkersPluginApi<Time> is not exported from lightweight-charts,
+  // and ReturnType<typeof createSeriesMarkers> uses <unknown> which causes variance issues.
+  const markersPluginRef = useRef<{ detach: () => void } | null>(null);
+  const overlaySeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
   const initializedRef = useRef(false);
 
   // 主题感知颜色（在初始化时读取一次，避免每帧调用 getComputedStyle）
@@ -131,43 +156,61 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     chartRef.current = c;
   }, []);
 
-  // ── Initial setup on mount ─────────────────────────────
+  // ── Single effect: init + data + markers + overlays ────
+  // Merged from two effects to prevent:
+  // 1. Double setData on mount (both effects ran)
+  // 2. createSeriesMarkers leak (no ref saved for detach)
+  // 3. Overlays not updating (Effect 2 didn't include overlays dep)
 
   useEffect(() => {
     const chart = chartRef.current;
-    if (!chart || initializedRef.current) return;
-    initializedRef.current = true;
+    if (!chart || data.length === 0) return;
 
-    // Determine time scale settings based on data density
-    let timeVisible = true;
-    const secondsVisible = false;
-    if (data.length >= 2) {
-      const firstTime = data[0].time;
-      const lastTime = data[data.length - 1].time;
-      const spanHours = (lastTime - firstTime) / 3600;
-      if (spanHours > 2160) {
-        timeVisible = false;
+    const isFirstInit = !initializedRef.current;
+
+    if (isFirstInit) {
+      initializedRef.current = true;
+      readChartColors();
+
+      // Determine time scale settings based on data density
+      let timeVisible = true;
+      const secondsVisible = false;
+      if (data.length >= 2) {
+        const spanHours = (data[data.length - 1].time - data[0].time) / 3600;
+        if (spanHours > 2160) timeVisible = false;
+      }
+      chart.applyOptions({ timeScale: { timeVisible, secondsVisible } });
+
+      const c = colorsRef.current;
+
+      // Create candlestick series
+      const candleSeries = chart.addSeries(CandlestickSeries, {
+        upColor: c.up,
+        downColor: c.down,
+        borderDownColor: c.down,
+        borderUpColor: c.up,
+        wickDownColor: c.down,
+        wickUpColor: c.up,
+      });
+      candleSeriesRef.current = candleSeries;
+
+      // Create volume series (only if volume data exists)
+      if (data[0].volume !== undefined) {
+        const volumeSeries = chart.addSeries(HistogramSeries, {
+          priceFormat: { type: 'volume' },
+          priceScaleId: 'volume',
+        });
+        chart.priceScale('volume').applyOptions({
+          scaleMargins: { top: 0.8, bottom: 0 },
+        });
+        volumeSeriesRef.current = volumeSeries;
       }
     }
 
-    chart.applyOptions({
-      timeScale: { timeVisible, secondsVisible },
-    });
-
-    // 读取主题色（仅在初始化时读取一次）
-    readChartColors();
     const c = colorsRef.current;
+    const candleSeries = candleSeriesRef.current!;
 
-    const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: c.up,
-      downColor: c.down,
-      borderDownColor: c.down,
-      borderUpColor: c.up,
-      wickDownColor: c.down,
-      wickUpColor: c.up,
-    });
-    candleSeriesRef.current = candleSeries;
-
+    // Set candlestick data (both init and update)
     const chartData: CandlestickData[] = data.map((item) => ({
       time: toLocaleTime(item.time),
       open: item.open,
@@ -175,33 +218,11 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       low: item.low,
       close: item.close,
     }));
-
     candleSeries.setData(chartData);
 
-    // Update time format based on data span
-    if (data.length >= 2) {
-      const firstTime = data[0].time;
-      const lastTime = data[data.length - 1].time;
-      const spanHours = (lastTime - firstTime) / 3600;
-      const newTimeVisible = spanHours <= 2160;
-      if (newTimeVisible !== timeVisible) {
-        chart.applyOptions({
-          timeScale: { timeVisible: newTimeVisible },
-        });
-      }
-    }
-
-    // Volume series
-    if (data.length > 0 && data[0].volume !== undefined) {
-      const volumeSeries = chart.addSeries(HistogramSeries, {
-        priceFormat: { type: 'volume' },
-        priceScaleId: 'volume',
-      });
-
-      chart.priceScale('volume').applyOptions({
-        scaleMargins: { top: 0.8, bottom: 0 },
-      });
-
+    // Set volume data
+    const volumeSeries = volumeSeriesRef.current;
+    if (volumeSeries) {
       volumeSeries.setData(
         data.map((item) => ({
           time: toLocaleTime(item.time),
@@ -209,12 +230,15 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
           color: item.close >= item.open ? c.upVolume : c.downVolume,
         })),
       );
-
-      volumeSeriesRef.current = volumeSeries;
     }
 
+    // ── Markers: detach old, create new ──────────────────
+    if (markersPluginRef.current) {
+      markersPluginRef.current.detach();
+      markersPluginRef.current = null;
+    }
     if (markers && markers.length > 0) {
-      createSeriesMarkers(
+      markersPluginRef.current = createSeriesMarkers(
         candleSeries,
         markers.map((m) => ({
           time: toLocaleTime(m.time),
@@ -226,7 +250,11 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       );
     }
 
-    // Render overlay lines
+    // ── Overlays: remove old, create new ─────────────────
+    for (const series of overlaySeriesRef.current) {
+      chart.removeSeries(series);
+    }
+    overlaySeriesRef.current = [];
     if (overlays && overlays.length > 0) {
       for (const overlay of overlays) {
         const lineSeries = chart.addSeries(LineSeries, {
@@ -236,94 +264,19 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
           lastValueVisible: false,
           priceLineVisible: false,
         });
-
         lineSeries.setData(
           overlay.data.map((d) => ({
             time: toLocaleTime(d.time),
             value: d.value,
           })),
         );
+        overlaySeriesRef.current.push(lineSeries);
       }
     }
 
-    // Show the last N candles with 1/8 right padding for future candles
-    // 电脑端 100 根，手机端 50 根
-    const rangeWidth = getVisibleRangeWidth();
-    if (data.length > rangeWidth) {
-      chart.timeScale().setVisibleLogicalRange({
-        from: data.length - rangeWidth,
-        to: data.length - 1 + rangeWidth / 8,
-      });
-    } else if (data.length > 1) {
-      const rangeWidth = data.length - 1;
-      chart.timeScale().setVisibleLogicalRange({
-        from: 0,
-        to: rangeWidth + rangeWidth / 8,
-      });
-    } else {
-      chart.timeScale().fitContent();
-    }
+    // Set visible range
+    applyVisibleRange(chart, data.length);
   }, [data, markers, overlays, readChartColors]);
-
-  // ── Full data replacement (timeframe change, etc.) ─────
-
-  useEffect(() => {
-    const candleSeries = candleSeriesRef.current;
-    if (!candleSeries || data.length === 0) return;
-
-    // Only call setData when the entire dataset changes (not WS updates)
-    const chartData: CandlestickData[] = data.map((item) => ({
-      time: toLocaleTime(item.time),
-      open: item.open,
-      high: item.high,
-      low: item.low,
-      close: item.close,
-    }));
-
-    candleSeries.setData(chartData);
-
-    // Also update volume series
-    const volumeSeries = volumeSeriesRef.current;
-    if (volumeSeries) {
-      const c = colorsRef.current;
-      volumeSeries.setData(
-        data.map((item) => ({
-          time: toLocaleTime(item.time),
-          value: item.volume || 0,
-          color: item.close >= item.open ? c.upVolume : c.downVolume,
-        })),
-      );
-    }
-
-    if (markers && markers.length > 0) {
-      createSeriesMarkers(
-        candleSeries,
-        markers.map((m) => ({
-          time: toLocaleTime(m.time),
-          position: m.position,
-          color: m.color,
-          shape: m.shape,
-          text: m.text,
-        })),
-      );
-    }
-
-    // Fit to last N candles with 1/8 right padding
-    // 电脑端 100 根，手机端 50 根
-    const rangeWidth = getVisibleRangeWidth();
-    if (data.length > rangeWidth) {
-      chartRef.current?.timeScale().setVisibleLogicalRange({
-        from: data.length - rangeWidth,
-        to: data.length - 1 + rangeWidth / 8,
-      });
-    } else if (data.length > 1) {
-      const rangeWidth = data.length - 1;
-      chartRef.current?.timeScale().setVisibleLogicalRange({
-        from: 0,
-        to: rangeWidth + rangeWidth / 8,
-      });
-    }
-  }, [data, markers]);
 
   return <ReactChart onLoad={setChart} height={height} />;
 });

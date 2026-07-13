@@ -1,6 +1,6 @@
 import { memo } from 'react';
 
-interface ProgressBarProps {
+export interface ProgressBarProps {
   pct: number;
   size?: 'sm' | 'md';
   thresholds?: { warning: number; danger: number };
@@ -14,12 +14,20 @@ export const ProgressBar = memo(
       return 'from-success/80 to-success';
     };
     const heightClass = size === 'sm' ? 'h-1' : 'h-1.5';
+    // Clamp to [0, 100] to handle negative or out-of-range values
+    const clampedPct = Math.min(Math.max(pct, 0), 100);
 
     return (
-      <div className={`${heightClass} bg-surface-2/80 rounded-full overflow-hidden`}>
+      <div
+        className={`${heightClass} bg-surface-2/80 rounded-full overflow-hidden`}
+        role="progressbar"
+        aria-valuenow={Math.round(clampedPct)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
         <div
           className={`h-full bg-gradient-to-r ${barColor()} rounded-full transition-all duration-700 ease-out`}
-          style={{ width: `${Math.min(pct, 100)}%` }}
+          style={{ width: `${clampedPct}%` }}
         />
       </div>
     );

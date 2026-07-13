@@ -12,12 +12,15 @@ const baseStyles =
 export const Input = memo(({ loading = false, disabled, className = '', ...props }: InputProps) => {
   const isDisabled = disabled || loading;
   const borderClass = loading ? 'border-accent-muted' : 'border-line-strong';
+  // Add right padding when loading so the spinner doesn't overlap text
+  const loadingPad = loading ? 'pr-10' : '';
 
   return (
     <div className="relative w-full">
       <input
         disabled={isDisabled}
-        className={[baseStyles, borderClass, className].filter(Boolean).join(' ')}
+        aria-busy={loading || undefined}
+        className={[baseStyles, borderClass, loadingPad, className].filter(Boolean).join(' ')}
         {...props}
       />
       {loading && (

@@ -4,7 +4,7 @@ import { IconBtn } from '@/components/Button/IconBtn';
 export const Theme = () => {
   const { isDark, toggleTheme } = useTheme();
   return (
-    <IconBtn onClick={toggleTheme} size="sm">
+    <IconBtn onClick={toggleTheme} size="sm" aria-label="Toggle theme">
       {isDark ? (
         <svg
           className="w-4 h-4"
@@ -12,6 +12,8 @@ export const Theme = () => {
           viewBox="0 0 24 24"
           stroke="currentColor"
           strokeWidth="2"
+          aria-hidden="true"
+          focusable="false"
         >
           <path
             strokeLinecap="round"
@@ -26,6 +28,8 @@ export const Theme = () => {
           viewBox="0 0 24 24"
           stroke="currentColor"
           strokeWidth="2"
+          aria-hidden="true"
+          focusable="false"
         >
           <path
             strokeLinecap="round"
