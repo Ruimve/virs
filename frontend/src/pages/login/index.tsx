@@ -77,7 +77,7 @@ const Login = () => {
             disabled={loading}
           />
           {errorMessage}
-          <Button type="submit" variant="primary" loading={loading} responsive>
+          <Button type="submit" variant="primary" loading={loading} className="sm:w-full">
             {loading ? 'Signing in...' : 'Sign in'}
           </Button>
         </form>
