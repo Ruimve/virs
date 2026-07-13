@@ -1,5 +1,7 @@
 import { memo } from 'react';
 import { formatSmart } from '../../components/utils/utils';
+import Badge from '@/components/Badge';
+import StateFeedback from '@/components/StateFeedback';
 
 interface GridLevelInfo {
   level: number;
@@ -21,7 +23,7 @@ interface GridLevelsTabProps {
 
 const GridLevelsTab = ({ gridLevels }: GridLevelsTabProps) => {
   if (gridLevels.length === 0) {
-    return <div className="text-center py-12 text-on-surface-tertiary text-sm">暂无网格数据</div>;
+    return <StateFeedback type="empty" text="暂无网格数据" />;
   }
 
   return (
@@ -51,11 +53,9 @@ const GridLevelsTab = ({ gridLevels }: GridLevelsTabProps) => {
                 >
                   <td className="px-4 py-2 text-on-surface-secondary font-mono">{level.level}</td>
                   <td className="px-3 py-2 text-center">
-                    <span
-                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${level.side === 'buy' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'}`}
-                    >
+                    <Badge variant={level.side === 'buy' ? 'success' : 'danger'}>
                       {level.side === 'buy' ? '多' : '空'}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="px-3 py-2 text-success-text text-right font-mono">
                     {level.buy_price.toFixed(2)}

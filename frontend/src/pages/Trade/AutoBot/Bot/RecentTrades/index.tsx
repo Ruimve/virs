@@ -1,91 +1,73 @@
 import { memo } from 'react';
 import type { AutoTrade } from '@/service';
-import { formatTime, formatSmart } from '../../../components/utils/utils';
+import PanelSection from '@/components/PanelSection';
+import Badge from '@/components/Badge';
+import { formatTime, formatSmart, pnlColor } from '../../../components/utils/utils';
 
 interface Props {
   trades: AutoTrade[];
 }
 
-const pnlColor = (v: number) =>
-  v > 0 ? 'text-success-text' : v < 0 ? 'text-danger-text' : 'text-on-surface';
-
 const RecentTrades = ({ trades }: Props) => {
   const recent = trades.slice(0, 10);
 
   return (
-    <div className="flex flex-col min-h-0">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-line-subtle shrink-0">
-        <span className="text-[11px] uppercase tracking-wider text-on-surface-tertiary font-medium">
-          最近交易
-        </span>
-        <span className="text-[11px] font-mono tabular-nums text-on-surface-muted">
-          {trades.length}
-        </span>
-      </div>
-      <div className="flex-1 overflow-y-auto">
-        {recent.length === 0 ? (
-          <div className="text-center py-6 text-sm text-on-surface-tertiary">暂无交易</div>
-        ) : (
-          <div className="divide-y divide-line-subtle">
-            {recent.map((trade) => (
-              <div key={trade.id} className="px-3 py-2">
-                {/* 第一行：方向 + 开平仓价 + 时间 */}
-                <div className="flex items-center gap-2 mb-1">
-                  <span
-                    className={`text-[11px] font-medium px-1.5 py-0.5 rounded shrink-0 ${trade.open_side === 'buy' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'}`}
-                  >
-                    {trade.open_side === 'buy' ? '多' : '空'}
-                  </span>
-                  <span className="text-sm font-mono tabular-nums text-on-surface">
-                    {trade.open_price.toFixed(2)}
-                  </span>
-                  <span className="text-[11px] text-on-surface-muted">→</span>
-                  <span className="text-sm font-mono tabular-nums text-on-surface">
-                    {trade.close_price?.toFixed(2) ?? '-'}
-                  </span>
-                  <span className="text-[11px] text-on-surface-muted ml-auto font-mono tabular-nums">
-                    {formatTime(trade.closed_at || trade.opened_at)}
-                  </span>
-                </div>
-                {/* 第二行：数量 + SL/TP + 盈亏 */}
-                <div className="flex items-center gap-3 text-[11px] flex-wrap">
-                  <span className="text-on-surface-tertiary">
-                    量{' '}
-                    <span className="font-mono tabular-nums text-on-surface">
-                      {formatSmart(trade.open_quantity)}
-                    </span>
-                  </span>
-                  {trade.stop_loss > 0 && (
-                    <span className="text-danger-text/80">
-                      SL{' '}
-                      <span className="font-mono tabular-nums">{trade.stop_loss.toFixed(2)}</span>
-                    </span>
-                  )}
-                  {trade.take_profit > 0 && (
-                    <span className="text-success-text/80">
-                      TP{' '}
-                      <span className="font-mono tabular-nums">{trade.take_profit.toFixed(2)}</span>
-                    </span>
-                  )}
-                  {trade.status === 'closed' && (
-                    <span className={`ml-auto ${pnlColor(trade.pnl)}`}>
-                      盈亏{' '}
-                      <span className="font-mono tabular-nums">
-                        {trade.pnl >= 0 ? '+' : ''}
-                        {trade.pnl.toFixed(4)}
-                      </span>
-                    </span>
-                  )}
-                  {trade.status === 'open' && (
-                    <span className="text-warning-text ml-auto">持仓中</span>
-                  )}
-                </div>
-              </div>
-            ))}
+    <PanelSection
+      title="最近交易"
+      count={trades.length}
+      empty={recent.length === 0}
+      emptyText="暂无交易"
+    >
+      {recent.map((trade) => (
+        <div key={trade.id} className="px-3 py-2">
+          {/* First row: direction + prices + time */}
+          <div className="flex items-center gap-2 mb-1">
+            <Badge variant={trade.open_side === 'buy' ? 'success' : 'danger'} size="sm">
+              {trade.open_side === 'buy' ? '多' : '空'}
+            </Badge>
+            <span className="text-sm font-mono tabular-nums text-on-surface">
+              {trade.open_price.toFixed(2)}
+            </span>
+            <span className="text-[11px] text-on-surface-muted">→</span>
+            <span className="text-sm font-mono tabular-nums text-on-surface">
+              {trade.close_price?.toFixed(2) ?? '-'}
+            </span>
+            <span className="text-[11px] text-on-surface-muted ml-auto font-mono tabular-nums">
+              {formatTime(trade.closed_at || trade.opened_at)}
+            </span>
           </div>
-        )}
-      </div>
-    </div>
+          {/* Second row: qty + SL/TP + PnL */}
+          <div className="flex items-center gap-3 text-[11px] flex-wrap">
+            <span className="text-on-surface-tertiary">
+              量{' '}
+              <span className="font-mono tabular-nums text-on-surface">
+                {formatSmart(trade.open_quantity)}
+              </span>
+            </span>
+            {trade.stop_loss > 0 && (
+              <span className="text-danger-text/80">
+                SL <span className="font-mono tabular-nums">{trade.stop_loss.toFixed(2)}</span>
+              </span>
+            )}
+            {trade.take_profit > 0 && (
+              <span className="text-success-text/80">
+                TP <span className="font-mono tabular-nums">{trade.take_profit.toFixed(2)}</span>
+              </span>
+            )}
+            {trade.status === 'closed' && (
+              <span className={`ml-auto ${pnlColor(trade.pnl)}`}>
+                盈亏{' '}
+                <span className="font-mono tabular-nums">
+                  {trade.pnl >= 0 ? '+' : ''}
+                  {trade.pnl.toFixed(4)}
+                </span>
+              </span>
+            )}
+            {trade.status === 'open' && <span className="text-warning-text ml-auto">持仓中</span>}
+          </div>
+        </div>
+      ))}
+    </PanelSection>
   );
 };
 

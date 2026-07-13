@@ -1,5 +1,7 @@
 import { memo, useMemo } from 'react';
 import type { GridBot } from '@/service/types';
+import Stat from '@/components/Stat';
+import { pnlColor } from '../../../components/utils/utils';
 import { useBot } from '../../../context/BotContext';
 
 interface Props {
@@ -13,9 +15,6 @@ interface Props {
 // Label:        text-[11px] uppercase tracking-wider text-on-surface-tertiary
 // Sub text:     text-[10px] text-on-surface-muted
 // ────────────────────────────────────────────────────────
-
-const pnlColor = (v: number) =>
-  v > 0 ? 'text-success-text' : v < 0 ? 'text-danger-text' : 'text-on-surface';
 
 const PositionStats = ({ bot, latestPrice }: Props) => {
   const { gridLevels } = useBot();
@@ -160,15 +159,5 @@ const PositionStats = ({ bot, latestPrice }: Props) => {
     </div>
   );
 };
-
-/** 统一字段组件：label + value */
-const Stat = ({ label, children }: { label: string; children: React.ReactNode }) => (
-  <div className="min-w-0">
-    <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary mb-0.5">
-      {label}
-    </div>
-    <div className="text-sm font-mono tabular-nums truncate">{children}</div>
-  </div>
-);
 
 export default memo(PositionStats);

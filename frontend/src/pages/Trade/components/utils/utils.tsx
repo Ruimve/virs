@@ -92,3 +92,32 @@ export const tradeTypeColor = (t: string) => {
   if (t === 'take_profit') return 'text-success-text';
   return 'text-on-surface-tertiary';
 };
+
+/** Returns a Tailwind text color class for P&L values */
+export const pnlColor = (v: number): string =>
+  v > 0 ? 'text-success-text' : v < 0 ? 'text-danger-text' : 'text-on-surface';
+
+/** Maps an AI action to a Badge variant — replaces neutral+className override pattern */
+export const actionVariant = (action: string | undefined): 'success' | 'danger' | 'warning' | 'info' | 'neutral' => {
+  if (!action) return 'neutral';
+  const map: Record<string, 'success' | 'danger' | 'warning' | 'info' | 'neutral'> = {
+    open_long: 'success',
+    open_short: 'danger',
+    close_position: 'info',
+    hold: 'neutral',
+    reduce_position: 'warning',
+    cancel_order: 'neutral',
+    adjust_grid: 'info',
+    pause_grid: 'danger',
+    resume_grid: 'success',
+  };
+  return map[action] || 'neutral';
+};
+
+/** Format volume with K/M/B suffixes (most complete version) */
+export function formatVolume(v: number): string {
+  if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(2)}B`;
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(2)}K`;
+  return v.toFixed(2);
+}

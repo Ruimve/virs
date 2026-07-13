@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service/types';
 import { AiThinking } from '@/components/Transition/Icon';
 import { ChevronLeft, ChevronRight } from '@/components/Icon';
-import { actionColor, actionLabel } from '../utils/utils';
+import Badge from '@/components/Badge';
+import Card from '@/components/Card';
+import SectionTitle from '@/components/SectionTitle';
+import { actionLabel, actionVariant } from '../utils/utils';
 
 interface Props {
   log: AnalysisLog;
@@ -82,20 +85,18 @@ const LogDetail = ({ log, loading }: Props) => {
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-6">
         <div className="space-y-4">
           {/* Header */}
-          <div className="bg-surface-1 rounded-xl border border-line-default p-5 shadow-sm">
+          <Card>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 {decision && (
-                  <span
-                    className={`text-xs font-medium px-2 py-0.5 rounded ${actionColor(decision.action)}`}
-                  >
+                  <Badge variant={actionVariant(decision.action)} size="sm">
                     {actionLabel(decision.action)}
-                  </span>
+                  </Badge>
                 )}
                 {log.status === 'failed' && (
-                  <span className="text-xs font-medium px-2 py-0.5 rounded bg-danger-bg text-danger-text">
+                  <Badge variant="danger" size="sm">
                     失败
-                  </span>
+                  </Badge>
                 )}
               </div>
               <span className="text-[11px] text-on-surface-tertiary">
@@ -115,40 +116,34 @@ const LogDetail = ({ log, loading }: Props) => {
                 </span>
               </div>
             )}
-          </div>
+          </Card>
 
           {/* Decision */}
           {decision && (
-            <div className="bg-surface-1 rounded-xl border border-line-default p-5 shadow-sm">
-              <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-2">
-                决策
-              </div>
+            <Card>
+              <SectionTitle className="mb-2">决策</SectionTitle>
               {decision.reason && (
                 <p className="text-xs text-on-surface-secondary leading-relaxed">
                   {decision.reason}
                 </p>
               )}
-            </div>
+            </Card>
           )}
 
           {/* Analysis */}
           {log.result?.analysis && (
-            <div className="bg-surface-1 rounded-xl border border-line-default p-5 shadow-sm">
-              <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-2">
-                AI 分析
-              </div>
+            <Card>
+              <SectionTitle className="mb-2">AI 分析</SectionTitle>
               <p className="text-xs text-on-surface-secondary leading-relaxed whitespace-pre-wrap">
                 {log.result.analysis}
               </p>
-            </div>
+            </Card>
           )}
 
           {/* Market */}
           {log.result?.market && (
-            <div className="bg-surface-1 rounded-xl border border-line-default p-5 shadow-sm">
-              <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-2">
-                市场状态
-              </div>
+            <Card>
+              <SectionTitle className="mb-2">市场状态</SectionTitle>
               <div className="space-y-1">
                 {log.result.market.market_regime && (
                   <span
@@ -176,15 +171,13 @@ const LogDetail = ({ log, loading }: Props) => {
                   <p className="text-xs text-accent">事件影响: {log.result.market.event_impact}</p>
                 )}
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Grid params (for grid bot) */}
           {log.result?.grid && (log.result.grid.upper_price || log.result.grid.lower_price) && (
-            <div className="bg-surface-1 rounded-xl border border-line-default p-5 shadow-sm">
-              <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-2">
-                网格参数
-              </div>
+            <Card>
+              <SectionTitle className="mb-2">网格参数</SectionTitle>
               <div className="flex flex-wrap gap-3 text-xs text-on-surface-secondary">
                 {log.result.grid.upper_price && <span>上界 {log.result.grid.upper_price}</span>}
                 {log.result.grid.lower_price && <span>下界 {log.result.grid.lower_price}</span>}
@@ -193,22 +186,20 @@ const LogDetail = ({ log, loading }: Props) => {
                   <span>利润率 {log.result.grid.grid_profit_pct}%</span>
                 )}
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Risk params (for grid bot) */}
           {log.result?.risk && (log.result.risk.leverage || log.result.risk.quantity_per_grid) && (
-            <div className="bg-surface-1 rounded-xl border border-line-default p-5 shadow-sm">
-              <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-2">
-                风控参数
-              </div>
+            <Card>
+              <SectionTitle className="mb-2">风控参数</SectionTitle>
               <div className="flex flex-wrap gap-3 text-xs text-on-surface-secondary">
                 {log.result.risk.leverage && <span>杠杆 {log.result.risk.leverage}x</span>}
                 {log.result.risk.quantity_per_grid && (
                   <span>每格 {log.result.risk.quantity_per_grid} USDT</span>
                 )}
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Risk warning */}
@@ -231,7 +222,7 @@ const LogDetail = ({ log, loading }: Props) => {
 
           {/* System Prompt (collapsible) */}
           {log.system_prompt && (
-            <div className="bg-surface-1 rounded-xl border border-line-default shadow-sm overflow-hidden">
+            <Card padding={false} className="overflow-hidden">
               <button
                 onClick={() => setShowSystemPrompt(!showSystemPrompt)}
                 className="w-full flex items-center gap-2 px-5 py-3 text-[10px] text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors"
@@ -249,12 +240,12 @@ const LogDetail = ({ log, loading }: Props) => {
                   </pre>
                 </div>
               )}
-            </div>
+            </Card>
           )}
 
           {/* User Prompt (collapsible) */}
           {log.user_prompt && (
-            <div className="bg-surface-1 rounded-xl border border-line-default shadow-sm overflow-hidden">
+            <Card padding={false} className="overflow-hidden">
               <button
                 onClick={() => setShowUserPrompt(!showUserPrompt)}
                 className="w-full flex items-center gap-2 px-5 py-3 text-[10px] text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors"
@@ -272,33 +263,29 @@ const LogDetail = ({ log, loading }: Props) => {
                   </pre>
                 </div>
               )}
-            </div>
+            </Card>
           )}
 
           {/* Raw LLM Response */}
           {log.result?.raw_llm_response && (
-            <div className="bg-surface-1 rounded-xl border border-line-default p-5 shadow-sm">
-              <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-2">
-                LLM 原始响应
-              </div>
+            <Card>
+              <SectionTitle className="mb-2">LLM 原始响应</SectionTitle>
               <pre className="text-[11px] text-accent bg-accent/5 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-accent/10">
                 {typeof log.result.raw_llm_response === 'string'
                   ? log.result.raw_llm_response
                   : JSON.stringify(log.result.raw_llm_response, null, 2)}
               </pre>
-            </div>
+            </Card>
           )}
 
           {/* Full result JSON */}
           {log.result && !log.result.raw_llm_response && (
-            <div className="bg-surface-1 rounded-xl border border-line-default p-5 shadow-sm">
-              <div className="text-[10px] text-on-surface-tertiary uppercase tracking-wider mb-2">
-                完整结果
-              </div>
+            <Card>
+              <SectionTitle className="mb-2">完整结果</SectionTitle>
               <pre className="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
                 {JSON.stringify(log.result, null, 2)}
               </pre>
-            </div>
+            </Card>
           )}
         </div>
       </div>

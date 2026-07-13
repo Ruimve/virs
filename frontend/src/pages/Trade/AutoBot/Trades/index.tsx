@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getAutoTrades, type AutoTrade } from '@/service';
 import { TradeLoading } from '@/components/Transition/Icon';
+import Badge from '@/components/Badge';
+import StateFeedback from '@/components/StateFeedback';
+import Pagination from '@/components/Pagination';
 import { formatPnl } from '../../components/utils/utils';
 
 const PAGE_SIZE = 20;
@@ -51,16 +54,18 @@ const Trades = () => {
                   className="flex items-center justify-between px-5 py-3 hover:bg-surface-2/50"
                 >
                   <div className="flex items-center gap-3">
-                    <span
-                      className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                    <Badge
+                      variant={
                         t.status === 'open'
-                          ? 'text-warning-text'
+                          ? 'warning'
                           : t.close_reason === 'stop_loss'
-                            ? 'text-danger-text'
+                            ? 'danger'
                             : t.close_reason === 'take_profit'
-                              ? 'text-success-text'
-                              : 'text-on-surface-tertiary'
-                      } bg-surface-2`}
+                              ? 'success'
+                              : t.close_reason === 'llm_decision'
+                                ? 'info'
+                                : 'warning'
+                      }
                     >
                       {t.status === 'open'
                         ? '持仓中'
@@ -73,7 +78,7 @@ const Trades = () => {
                               : t.close_reason === 'llm_decision'
                                 ? 'LLM平仓'
                                 : '已平仓'}
-                    </span>
+                    </Badge>
                     <div>
                       <div className="text-xs text-on-surface font-mono">
                         {t.open_side === 'buy' ? '开多' : '开空'} {t.open_quantity.toFixed(6)} @{' '}
@@ -117,37 +122,19 @@ const Trades = () => {
           </div>
 
           {/* 分页 */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-5 py-3 border-t border-line-subtle text-xs">
-              <span className="text-on-surface-tertiary">
-                共 {total} 条 · 第 {page}/{totalPages} 页
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => loadTrades(page - 1)}
-                  disabled={page <= 1 || loading}
-                  className="px-2 py-1 rounded border border-line-default text-on-surface-secondary disabled:opacity-40 hover:bg-surface-2"
-                >
-                  上一页
-                </button>
-                <button
-                  onClick={() => loadTrades(page + 1)}
-                  disabled={page >= totalPages || loading}
-                  className="px-2 py-1 rounded border border-line-default text-on-surface-secondary disabled:opacity-40 hover:bg-surface-2"
-                >
-                  下一页
-                </button>
-              </div>
-            </div>
-          )}
+          <Pagination
+            total={total}
+            page={page}
+            totalPages={totalPages}
+            loading={loading}
+            onPrev={() => loadTrades(page - 1)}
+            onNext={() => loadTrades(page + 1)}
+          />
         </div>
       ) : loading ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-4 text-on-surface-tertiary text-xs">
-          <TradeLoading size={40} />
-          <span className="tracking-wider">交易记录加载中</span>
-        </div>
+        <StateFeedback type="loading" text="交易记录加载中" icon={<TradeLoading size={40} />} />
       ) : (
-        <div className="text-center py-12 text-on-surface-tertiary text-xs">暂无交易记录</div>
+        <StateFeedback type="empty" text="暂无交易记录" />
       )}
     </div>
   );

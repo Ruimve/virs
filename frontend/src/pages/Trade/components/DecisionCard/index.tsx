@@ -2,6 +2,8 @@ import { memo, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service/types';
 import { Warning } from '@/components/Icon';
+import Badge from '@/components/Badge';
+import SectionTitle from '@/components/SectionTitle';
 import { actionColor, actionLabel, confidenceColor } from '../utils/utils';
 
 interface Props {
@@ -40,9 +42,7 @@ const DecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
       <div className="px-4 py-3 border-b border-line-subtle">
         {/* 标题行 */}
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[11px] uppercase tracking-wider text-on-surface-tertiary font-medium">
-            AI 决策
-          </span>
+          <SectionTitle>AI 决策</SectionTitle>
         </div>
       </div>
     );
@@ -55,9 +55,7 @@ const DecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
     >
       {/* 标题行 */}
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] uppercase tracking-wider text-on-surface-tertiary font-medium">
-          AI 决策
-        </span>
+        <SectionTitle>AI 决策</SectionTitle>
         <span className="text-[11px] font-mono tabular-nums text-on-surface-muted">
           {createdAt}
         </span>
@@ -76,9 +74,9 @@ const DecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
           </span>
         )}
         {log.status === 'failed' && (
-          <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-danger-bg text-danger-text">
+          <Badge variant="danger" size="sm">
             失败
-          </span>
+          </Badge>
         )}
         {market?.regime && (
           <span className="text-[11px] text-on-surface-tertiary ml-auto">

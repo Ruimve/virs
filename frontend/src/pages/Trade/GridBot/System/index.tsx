@@ -1,7 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { getSystemInfo } from '@/service/system';
 import type { SystemInfo as SystemInfoData } from '@/service/types';
-import { Spinner } from '@/components/Icon';
+import Card from '@/components/Card';
+import ProgressBar from '@/components/ProgressBar';
+import { usageColor } from '@/components/ProgressBar/utils';
+import StateFeedback from '@/components/StateFeedback';
 
 // ── 工具函数 ────────────────────────────────────────────────
 
@@ -27,45 +30,6 @@ function formatUptime(secs: number): string {
   parts.push(`${mins}分钟`);
   return parts.join(' ');
 }
-
-function usageColor(pct: number): string {
-  if (pct >= 90) return 'text-danger-text';
-  if (pct >= 70) return 'text-warning-text';
-  return 'text-success-text';
-}
-
-function barColor(pct: number): string {
-  if (pct >= 90) return 'bg-danger';
-  if (pct >= 70) return 'bg-warning';
-  return 'bg-success';
-}
-
-interface ProgressBarProps {
-  pct: number;
-}
-
-const ProgressBar = ({ pct }: ProgressBarProps) => (
-  <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
-    <div
-      className={`h-full ${barColor(pct)} rounded-full transition-all duration-500`}
-      style={{ width: `${Math.min(pct, 100)}%` }}
-    />
-  </div>
-);
-
-// ── 卡片组件 ────────────────────────────────────────────────
-
-interface CardProps {
-  title: string;
-  children: React.ReactNode;
-}
-
-const Card = ({ title, children }: CardProps) => (
-  <div className="bg-surface-1 border border-line-subtle rounded-xl p-4">
-    <h3 className="text-xs font-medium text-on-surface-tertiary mb-3">{title}</h3>
-    {children}
-  </div>
-);
 
 // ── 主组件 ──────────────────────────────────────────────────
 
@@ -128,19 +92,11 @@ const System = () => {
   }, [loadInfo]);
 
   if (error) {
-    return (
-      <div className="h-full flex items-center justify-center text-danger-text text-sm">
-        {error}
-      </div>
-    );
+    return <StateFeedback type="error" text={error} />;
   }
 
   if (!info) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <Spinner className="h-6 w-6 text-on-surface-tertiary" />
-      </div>
-    );
+    return <StateFeedback type="center-loading" />;
   }
 
   const cpuPct = info.cpu.usage_pct;

@@ -1,7 +1,9 @@
 import { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service';
-import { actionColor, actionLabel } from '../../../components/utils/utils';
+import PanelSection from '@/components/PanelSection';
+import Badge from '@/components/Badge';
+import { actionVariant, actionLabel } from '../../../components/utils/utils';
 
 interface Props {
   logs: AnalysisLog[];
@@ -20,55 +22,42 @@ const RecentDecisions = ({ logs, botId, botType = 'auto' }: Props) => {
   };
 
   return (
-    <div className="flex flex-col min-h-0">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-line-subtle shrink-0">
-        <span className="text-[11px] uppercase tracking-wider text-on-surface-tertiary font-medium">
-          最近决策
-        </span>
-        <span className="text-[11px] font-mono tabular-nums text-on-surface-muted">
-          {logs.length}
-        </span>
-      </div>
-      <div className="flex-1 overflow-y-auto">
-        {recent.length === 0 ? (
-          <div className="text-center py-6 text-sm text-on-surface-tertiary">暂无决策</div>
-        ) : (
-          <div className="divide-y divide-line-subtle">
-            {recent.map((log) => {
-              const decision = getDecision(log);
-              return (
-                <div
-                  key={log.id}
-                  onClick={() => navigate(`/trade/${botType}/${botId}/log/${log.id}`)}
-                  className="px-3 py-2 hover:bg-surface-2/50 cursor-pointer transition-colors"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    {decision && (
-                      <span
-                        className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${actionColor(decision.action!)}`}
-                      >
-                        {actionLabel(decision.action!)}
-                      </span>
-                    )}
-                    {log.status === 'failed' && (
-                      <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-danger-bg text-danger-text">
-                        失败
-                      </span>
-                    )}
-                    <span className="text-[11px] text-on-surface-muted ml-auto font-mono tabular-nums">
-                      {new Date(log.created_at).toLocaleTimeString('zh-CN', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+    <PanelSection
+      title="最近决策"
+      count={logs.length}
+      empty={recent.length === 0}
+      emptyText="暂无决策"
+    >
+      {recent.map((log) => {
+        const decision = getDecision(log);
+        return (
+          <div
+            key={log.id}
+            onClick={() => navigate(`/trade/${botType}/${botId}/log/${log.id}`)}
+            className="px-3 py-2 hover:bg-surface-2/50 cursor-pointer transition-colors"
+          >
+            <div className="flex items-center gap-2 mb-1">
+              {decision && (
+                <Badge variant={actionVariant(decision.action!)} size="sm">
+                  {actionLabel(decision.action!)}
+                </Badge>
+              )}
+              {log.status === 'failed' && (
+                <Badge variant="danger" size="sm">
+                  失败
+                </Badge>
+              )}
+              <span className="text-[11px] text-on-surface-muted ml-auto font-mono tabular-nums">
+                {new Date(log.created_at).toLocaleTimeString('zh-CN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+            </div>
           </div>
-        )}
-      </div>
-    </div>
+        );
+      })}
+    </PanelSection>
   );
 };
 

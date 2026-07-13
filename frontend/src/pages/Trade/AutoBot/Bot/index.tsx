@@ -19,10 +19,11 @@ import RecentDecisions from './RecentDecisions';
 import RecentTrades from './RecentTrades';
 
 /**
- * WS 价格更新 rAF 节流 + 价格变化检查。
+ * WS price update rAF throttle + price change check.
  *
- * 合并同一动画帧内的多次价格推送为一次 setState，且仅当价格真正变化时
- * 才触发重渲染。避免高频 WS 心跳导致的 Bot 整树 reconciliation。
+ * Merges multiple price pushes within the same animation frame into a single setState,
+ * and only triggers re-render when the price actually changes.
+ * Avoids high-frequency WS heartbeat causing Bot full-tree reconciliation.
  */
 const useRafThrottledPrice = () => {
   const [latestPrice, setLatestPrice] = useState(0);
@@ -48,11 +49,11 @@ const useRafThrottledPrice = () => {
 };
 
 /**
- * 把交易记录转换为 K线图 markers。
- * 开仓（open_side=buy）→ 绿色向上箭头，位于 K线下方
- * 开仓（open_side=sell）→ 红色向下箭头，位于 K线上方
- * 平仓（close_side=buy）→ 绿色向上箭头
- * 平仓（close_side=sell）→ 红色向下箭头
+ * Convert trade records to Kline chart markers.
+ * Open (open_side=buy) -> green up arrow, below bar
+ * Open (open_side=sell) -> red down arrow, above bar
+ * Close (close_side=buy) -> green up arrow
+ * Close (close_side=sell) -> red down arrow
  */
 function tradesToMarkers(trades: AutoTrade[]) {
   const markers: Array<{
@@ -63,7 +64,6 @@ function tradesToMarkers(trades: AutoTrade[]) {
     text: string;
   }> = [];
 
-  // 价格简化为 k 单位（如 59000 → 59.0k），减少 marker text 宽度避免重叠
   const fmtPrice = (p: number) => {
     if (!p) return '';
     return p >= 1000 ? `${(p / 1000).toFixed(1)}k` : p.toFixed(2);
@@ -74,7 +74,6 @@ function tradesToMarkers(trades: AutoTrade[]) {
   const downColor = cs.getPropertyValue('--chart-down').trim() || '#ef4444';
 
   for (const t of trades) {
-    // 开仓 marker
     const openTime = Math.floor(new Date(t.opened_at).getTime() / 1000);
     const openIsBuy = t.open_side === 'buy';
     markers.push({
@@ -85,7 +84,6 @@ function tradesToMarkers(trades: AutoTrade[]) {
       text: fmtPrice(t.open_price),
     });
 
-    // 平仓 marker（仅已平仓记录）
     if (t.status === 'closed' && t.closed_at && t.close_side) {
       const closeTime = Math.floor(new Date(t.closed_at).getTime() / 1000);
       const closeIsBuy = t.close_side === 'buy';
@@ -124,7 +122,6 @@ const Bot = () => {
 
   const loadTrades = useCallback(async (botId: string) => {
     try {
-      // 获取最近 50 条用于 K 线 markers
       const res = await getAutoTrades(botId, 1, 50);
       if (res.data?.trades) setAutoTrades(res.data.trades);
     } catch (e) {
@@ -167,9 +164,7 @@ const Bot = () => {
       if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return;
       const c = event.candle;
       if (!c) return;
-      // 更新最新价（rAF 节流）
       updateLatestPrice(c.close);
-      // Update chart directly via series.update() — no re-render
       chartRef.current?.update(c);
     },
     loadKlineStable,
@@ -183,18 +178,18 @@ const Bot = () => {
 
   return (
     <div className="h-full flex flex-col lg:flex-row">
-      {/* 主区域：状态栏 + AI决策 + 交易统计 + 底部行情折叠 */}
+      {/* Main area: position stats + AI decision + trade stats + bottom market panel */}
       <div className="flex flex-col h-full lg:flex-1 lg:min-h-0 overflow-y-auto relative mb-9">
-        {/* 仓位状态 */}
+        {/* Position stats */}
         <PositionStats bot={autoBot} latestPrice={latestPrice} />
 
-        {/* AI 决策卡片 */}
+        {/* AI decision card */}
         <DecisionCard log={latestDecision} botId={autoBot?.id} botType="auto" />
 
-        {/* 历史交易统计 */}
+        {/* Historical trade stats */}
         <TradeStats botId={autoBot?.id} />
 
-        {/* 底部行情折叠面板（K线图） */}
+        {/* Bottom market collapsible panel (Kline chart) */}
         <div className="fixed bottom-0 left-0 right-0">
           <StickyMarket
             klineData={klineData}
@@ -207,9 +202,9 @@ const Bot = () => {
         </div>
       </div>
 
-      {/* 右侧侧边栏：最近决策 + 最近成交 */}
-      <div className="hidden lg:flex w-72 xl:w-80 border-l border-line-subtle flex-col">
-        <div className="flex flex-col h-full divide-y divide-line-subtle">
+      {/* Right sidebar: recent decisions + recent trades */}
+      <div className="hidden lg:flex w-72 xl:w-80 border-l border-line-subtle/50 flex-col bg-surface-1/20">
+        <div className="flex flex-col h-full divide-y divide-line-subtle/50">
           <div className="flex-1 min-h-0">
             <RecentDecisions logs={logs} botId={autoBot?.id} botType={'auto'} />
           </div>

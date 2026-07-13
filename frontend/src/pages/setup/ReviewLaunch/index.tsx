@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useState, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Flame } from '@/components/Icon';
+import { ShieldCheck, Flame, Warning } from '@/components/Icon';
 import { Button } from '@/components/Button';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
 import { createGridBot, createAutoBot, startGridBot, startAutoBot } from '../../../service';
+import KeyValueRow from '@/components/KeyValueRow';
+import SectionTitle from '@/components/SectionTitle';
 import { WizardStep } from '../context/WizardContext/consts';
 
 const ReviewLaunch = () => {
@@ -105,68 +107,102 @@ const ReviewLaunch = () => {
 
   const tradeMode = useMemo(() => {
     return (
-      <div className="p-4 rounded-xl border border-line-default bg-surface-1">
-        <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-3">
-          Trading Mode
-        </p>
+      <div className="rounded-xl border border-line-subtle bg-surface-1/50 p-5">
+        <SectionTitle className="mb-4">Trading Mode</SectionTitle>
         <div className="flex flex-col sm:flex-row gap-3">
+          {/* Paper mode card */}
           <div
             onClick={() => setPaperMode(true)}
-            className={`flex-1 p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer ${
+            className={`flex-1 p-5 rounded-xl border text-left transition-all duration-300 cursor-pointer backdrop-blur-sm ${
               paperMode
-                ? 'bg-accent-light border-accent-muted ring-1 ring-accent-muted'
-                : 'bg-surface-1 border-line-default hover:bg-surface-2'
+                ? 'bg-info/[0.06] border-info/30 shadow-md shadow-info/5'
+                : 'bg-surface-1/40 border-line-default hover:bg-surface-2/40 hover:border-line-strong'
             }`}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3.5">
               <div
-                className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  paperMode ? 'bg-accent-muted text-accent' : 'bg-surface-2 text-on-surface-faint'
+                className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                  paperMode ? 'bg-info/[0.12] text-info' : 'bg-surface-2/50 text-on-surface-faint'
                 }`}
               >
-                <ShieldCheck className="w-4 h-4" strokeWidth={2} />
+                <ShieldCheck className="w-5 h-5" strokeWidth={1.8} />
               </div>
-              <div>
+              <div className="flex-1">
                 <p
-                  className={`text-sm font-medium ${paperMode ? 'text-on-base' : 'text-on-surface-tertiary'}`}
+                  className={`text-sm font-medium transition-colors duration-200 ${
+                    paperMode ? 'text-on-base' : 'text-on-surface-tertiary'
+                  }`}
                 >
                   Paper Trading
                 </p>
-                <p className="text-xs text-on-surface-muted mt-0.5">
+                <p className="text-xs text-on-surface-muted mt-1 leading-relaxed">
                   Simulated orders, no real funds at risk
                 </p>
               </div>
+              {paperMode && (
+                <div className="shrink-0 w-5 h-5 rounded-full bg-info flex items-center justify-center mt-0.5">
+                  <svg
+                    className="w-3 h-3 text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={3}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Real mode card */}
           <div
             onClick={() => setPaperMode(false)}
-            className={`flex-1 p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer ${
+            className={`flex-1 p-5 rounded-xl border text-left transition-all duration-300 cursor-pointer backdrop-blur-sm ${
               !paperMode
-                ? 'bg-warning-bg border-warning-border ring-1 ring-warning/20'
-                : 'bg-surface-1 border-line-default hover:bg-surface-2'
+                ? 'bg-warning/[0.06] border-warning-border animate-border-pulse shadow-md shadow-warning/5'
+                : 'bg-surface-1/40 border-line-default hover:bg-surface-2/40 hover:border-line-strong'
             }`}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3.5">
               <div
-                className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ${
                   !paperMode
-                    ? 'bg-warning/20 text-warning-text'
-                    : 'bg-surface-2 text-on-surface-faint'
+                    ? 'bg-warning/[0.15] text-warning-text'
+                    : 'bg-surface-2/50 text-on-surface-faint'
                 }`}
               >
-                <Flame className="w-4 h-4" strokeWidth={2} />
+                <Flame className="w-5 h-5" strokeWidth={1.8} />
               </div>
-              <div>
+              <div className="flex-1">
                 <p
-                  className={`text-sm font-medium ${!paperMode ? 'text-on-base' : 'text-on-surface-tertiary'}`}
+                  className={`text-sm font-medium transition-colors duration-200 ${
+                    !paperMode ? 'text-on-base' : 'text-on-surface-tertiary'
+                  }`}
                 >
                   Real Trading
                 </p>
-                <p className="text-xs text-on-surface-muted mt-0.5">Live orders with real funds</p>
+                <p className="text-xs text-on-surface-muted mt-1 leading-relaxed">
+                  Live orders with real funds
+                </p>
               </div>
+              {paperMode && (
+                <div className="shrink-0 w-5 h-5 rounded-full bg-surface-2/50 flex items-center justify-center mt-0.5" />
+              )}
             </div>
           </div>
         </div>
+
+        {/* Real mode warning */}
+        {!paperMode && (
+          <div className="mt-3 flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg bg-warning/[0.06] border border-warning-border/50">
+            <Warning className="w-4 h-4 text-warning-text shrink-0 mt-0.5" strokeWidth={1.8} />
+            <p className="text-xs text-warning-text leading-relaxed">
+              Real trading involves genuine financial risk. Ensure your configuration is correct
+              before launching.
+            </p>
+          </div>
+        )}
       </div>
     );
   }, [paperMode]);
@@ -174,80 +210,45 @@ const ReviewLaunch = () => {
   const summary = useMemo(() => {
     const isGrid = wizard.bot_type === 'grid';
     const botParams = wizard.bot_params;
+    const rows = [
+      { label: 'Exchange', value: wizard.exchange },
+      { label: 'Strategy', value: isGrid ? 'Grid Bot' : 'Auto Bot' },
+      { label: 'Symbol', value: botParams.symbol || '-' },
+      { label: 'AI Model', value: wizard.llm_model },
+      ...(isGrid
+        ? [
+            { label: 'Grid Levels', value: botParams.grid_levels || '-' },
+            {
+              label: 'Price Range',
+              value: `${botParams.lower_price || '-'} ~ ${botParams.upper_price || '-'}`,
+            },
+            { label: 'Investment', value: `${botParams.investment || '-'} USDT` },
+          ]
+        : []),
+      { label: 'Leverage', value: `${botParams.leverage || '-'}x` },
+      ...(!isGrid
+        ? [{ label: 'Decision Interval', value: `${botParams.decision_interval || '300'}s` }]
+        : []),
+      {
+        label: 'Mode',
+        value: paperMode ? 'Paper' : 'Real',
+        valueClass: paperMode ? 'text-info' : 'text-warning-text',
+      },
+    ];
+
     return (
-      <div className="p-4 rounded-xl bg-surface-1 border border-line-default">
-        <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-3">
-          Summary
-        </p>
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-            <span className="text-[12px] text-on-surface-tertiary">Exchange</span>
-            <span className="text-[12px] text-on-surface-secondary font-mono">
-              {wizard.exchange}
-            </span>
-          </div>
-          <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-            <span className="text-[12px] text-on-surface-tertiary">Strategy</span>
-            <span className="text-[12px] text-on-surface-secondary font-mono">
-              {isGrid ? 'Grid Bot' : 'Auto Bot'}
-            </span>
-          </div>
-          <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-            <span className="text-[12px] text-on-surface-tertiary">Symbol</span>
-            <span className="text-[12px] text-on-surface-secondary font-mono">
-              {botParams.symbol || '-'}
-            </span>
-          </div>
-          <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-            <span className="text-[12px] text-on-surface-tertiary">AI Model</span>
-            <span className="text-[12px] text-on-surface-secondary font-mono">
-              {wizard.llm_model}
-            </span>
-          </div>
-          {isGrid && (
-            <>
-              <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-                <span className="text-[12px] text-on-surface-tertiary">Grid Levels</span>
-                <span className="text-[12px] text-on-surface-secondary font-mono">
-                  {botParams.grid_levels || '-'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-                <span className="text-[12px] text-on-surface-tertiary">Price Range</span>
-                <span className="text-[12px] text-on-surface-secondary font-mono">
-                  {botParams.lower_price || '-'} ~ {botParams.upper_price || '-'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-                <span className="text-[12px] text-on-surface-tertiary">Investment</span>
-                <span className="text-[12px] text-on-surface-secondary font-mono">
-                  {botParams.investment || '-'} USDT
-                </span>
-              </div>
-            </>
-          )}
-          <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-            <span className="text-[12px] text-on-surface-tertiary">Leverage</span>
-            <span className="text-[12px] text-on-surface-secondary font-mono">
-              {botParams.leverage || '-'}x
-            </span>
-          </div>
-          {!isGrid && (
-            <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-              <span className="text-[12px] text-on-surface-tertiary">Decision Interval</span>
-              <span className="text-[12px] text-on-surface-secondary font-mono">
-                {botParams.decision_interval || '300'}s
-              </span>
-            </div>
-          )}
-          <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-            <span className="text-[12px] text-on-surface-tertiary">Mode</span>
-            <span
-              className={`text-[12px] font-mono font-medium ${paperMode ? 'text-accent' : 'text-warning-text'}`}
-            >
-              {paperMode ? 'Paper' : 'Real'}
-            </span>
-          </div>
+      <div className="rounded-xl bg-surface-1/50 border border-line-subtle p-5">
+        <SectionTitle className="mb-4">Summary</SectionTitle>
+        <div className="space-y-0">
+          {rows.map((row, i) => (
+            <KeyValueRow
+              key={row.label}
+              label={row.label}
+              value={row.value}
+              valueColor={row.valueClass}
+              border={i !== rows.length - 1}
+            />
+          ))}
         </div>
       </div>
     );
@@ -260,7 +261,7 @@ const ReviewLaunch = () => {
       subtitle="Confirm your configuration and launch the bot"
       actions={actions}
     >
-      <div className="space-y-6">
+      <div className="space-y-5">
         {/* Trading Mode */}
         {tradeMode}
 
@@ -269,7 +270,7 @@ const ReviewLaunch = () => {
 
         {/* Launch error */}
         {launchError && (
-          <div className="p-3 bg-danger-bg border border-danger-border rounded-xl text-sm text-danger-text">
+          <div className="animate-error-enter p-3.5 bg-danger-bg border border-danger-border rounded-xl text-sm text-danger-text">
             {launchError}
           </div>
         )}

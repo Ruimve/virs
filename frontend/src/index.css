@@ -121,66 +121,66 @@
   --shadow-sticky: 0 -4px 12px rgba(0, 0, 0, 0.06);
 }
 
-/* ===== 暗色主题 ===== */
+/* ===== 暗色主题 — "Terminal Luxe" ===== */
 .dark {
-  /* Surface */
-  --bg-base: #0a0a0f;
-  --bg-base-secondary: #0d0d14;
-  --bg-surface-1: #16161e;
-  --bg-surface-2: #1e1e2a;
-  --bg-surface-3: #2a2a3a;
+  /* Surface — deeper, more saturated */
+  --bg-base: #08090d;
+  --bg-base-secondary: #0c0e14;
+  --bg-surface-1: #12141c;
+  --bg-surface-2: #1a1d28;
+  --bg-surface-3: #242736;
 
-  /* Text */
-  --text-on-base: rgba(255, 255, 255, 0.92);
-  --text-on-surface: rgba(255, 255, 255, 0.82);
+  /* Text — slightly warmer whites */
+  --text-on-base: rgba(255, 255, 255, 0.95);
+  --text-on-surface: rgba(255, 255, 255, 0.85);
   --text-on-surface-secondary: rgba(255, 255, 255, 0.62);
-  --text-on-surface-tertiary: rgba(255, 255, 255, 0.48);
-  --text-on-surface-muted: rgba(255, 255, 255, 0.32);
-  --text-on-surface-faint: rgba(255, 255, 255, 0.22);
-  --text-placeholder: rgba(255, 255, 255, 0.32);
+  --text-on-surface-tertiary: rgba(255, 255, 255, 0.42);
+  --text-on-surface-muted: rgba(255, 255, 255, 0.28);
+  --text-on-surface-faint: rgba(255, 255, 255, 0.16);
+  --text-placeholder: rgba(255, 255, 255, 0.28);
 
   /* Border */
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-default: rgba(255, 255, 255, 0.1);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --border-emphasis: rgba(255, 255, 255, 0.2);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --border-emphasis: rgba(255, 255, 255, 0.18);
 
-  /* Accent */
-  --color-accent-val: #6366f1;
-  --color-accent-hover-val: #818cf8;
-  --color-accent-light-val: rgba(99, 102, 241, 0.15);
-  --color-accent-muted-val: rgba(99, 102, 241, 0.3);
+  /* Accent — distinctive blue-violet */
+  --color-accent-val: #7c6aef;
+  --color-accent-hover-val: #9185f0;
+  --color-accent-light-val: rgba(124, 106, 239, 0.12);
+  --color-accent-muted-val: rgba(124, 106, 239, 0.25);
 
-  /* Success (emerald) */
-  --color-success-val: #34d399;
-  --color-success-text-val: #34d399;
-  --color-success-bg-val: rgba(52, 211, 153, 0.12);
-  --color-success-border-val: rgba(52, 211, 153, 0.3);
+  /* Success (emerald — slightly more saturated) */
+  --color-success-val: #2dd4a0;
+  --color-success-text-val: #2dd4a0;
+  --color-success-bg-val: rgba(45, 212, 160, 0.1);
+  --color-success-border-val: rgba(45, 212, 160, 0.25);
 
   /* Warning (amber) */
   --color-warning-val: #fbbf24;
   --color-warning-text-val: #fbbf24;
-  --color-warning-bg-val: rgba(251, 191, 36, 0.12);
-  --color-warning-border-val: rgba(251, 191, 36, 0.3);
+  --color-warning-bg-val: rgba(251, 191, 36, 0.1);
+  --color-warning-border-val: rgba(251, 191, 36, 0.25);
 
-  /* Danger (red) */
-  --color-danger-val: #f87171;
-  --color-danger-text-val: #f87171;
-  --color-danger-bg-val: rgba(248, 113, 113, 0.12);
-  --color-danger-border-val: rgba(248, 113, 113, 0.3);
+  /* Danger (red — slightly more saturated) */
+  --color-danger-val: #f47171;
+  --color-danger-text-val: #f47171;
+  --color-danger-bg-val: rgba(244, 113, 113, 0.1);
+  --color-danger-border-val: rgba(244, 113, 113, 0.25);
 
   /* Info (sky/blue) */
   --color-info-val: #38bdf8;
   --color-info-text-val: #38bdf8;
-  --color-info-bg-val: rgba(56, 189, 248, 0.12);
-  --color-info-border-val: rgba(56, 189, 248, 0.3);
+  --color-info-bg-val: rgba(56, 189, 248, 0.1);
+  --color-info-border-val: rgba(56, 189, 248, 0.25);
 
-  /* Chart —— 暗色主题下的图表色 */
-  --chart-up-volume: rgba(52, 211, 153, 0.3);
-  --chart-down-volume: rgba(248, 113, 113, 0.3);
+  /* Chart — dark theme chart colors */
+  --chart-up-volume: rgba(45, 212, 160, 0.3);
+  --chart-down-volume: rgba(244, 113, 113, 0.3);
 
-  /* Elevation —— 暗色阴影 */
-  --shadow-sticky: 0 -4px 12px rgba(0, 0, 0, 0.4);
+  /* Elevation — dark shadow */
+  --shadow-sticky: 0 -4px 16px rgba(0, 0, 0, 0.5);
 }
 
 /* ===== 全局字体 ===== */
@@ -416,5 +416,138 @@ tbody tr:hover {
   }
   50% {
     background-position: 100% 50%;
+  }
+}
+
+/* ===== Terminal Luxe — additional animations ===== */
+@keyframes subtle-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(124, 106, 239, 0);
+  }
+  50% {
+    box-shadow: 0 0 12px 2px rgba(124, 106, 239, 0.15);
+  }
+}
+
+@keyframes border-pulse {
+  0%,
+  100% {
+    border-color: rgba(251, 191, 36, 0.3);
+  }
+  50% {
+    border-color: rgba(251, 191, 36, 0.6);
+  }
+}
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes error-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes error-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.animate-subtle-pulse {
+  animation: subtle-pulse 2s ease-in-out infinite;
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+.animate-border-pulse {
+  animation: border-pulse 2s ease-in-out infinite;
+}
+
+.animate-gradient-shift {
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease infinite;
+}
+
+.animate-error-enter {
+  animation: error-enter 0.3s ease-out both;
+}
+
+/* Terminal grid background pattern */
+.terminal-grid-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* ===== Component Layer — shared utility classes ===== */
+@layer components {
+  .section-title {
+    @apply text-[11px] uppercase tracking-wider text-on-surface-tertiary font-medium;
+  }
+
+  .data-value {
+    @apply text-sm font-mono tabular-nums;
+  }
+
+  .hero-value {
+    @apply text-xl font-mono font-semibold tabular-nums text-on-surface;
+  }
+
+  .mono-label {
+    @apply text-[11px] font-mono tabular-nums;
   }
 }

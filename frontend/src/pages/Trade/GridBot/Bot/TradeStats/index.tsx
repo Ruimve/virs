@@ -1,5 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { getGridStats, type GridBotStats } from '@/service';
+import Stat from '@/components/Stat';
+import SectionTitle from '@/components/SectionTitle';
 
 interface Props {
   botId: string;
@@ -101,20 +103,18 @@ const TradeStats = ({ botId }: Props) => {
 
   return (
     <div className="px-4 py-3 border-b border-line-subtle">
-      <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary font-medium mb-2">
-        历史交易统计
-      </div>
+      <SectionTitle className="mb-2">历史交易统计</SectionTitle>
       <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-3">
         {items.map((item) => (
-          <div key={item.label} className="min-w-0">
-            <div className="text-[11px] text-on-surface-tertiary mb-0.5">{item.label}</div>
-            <div
-              className={`font-mono tabular-nums ${item.highlight ? 'text-base font-semibold' : 'text-sm'} ${item.color}`}
-            >
-              {item.value}
-            </div>
-            {item.sub && <div className="text-[10px] text-on-surface-muted mt-0.5">{item.sub}</div>}
-          </div>
+          <Stat
+            key={item.label}
+            label={item.label}
+            highlight={item.highlight}
+            color={item.color}
+            sub={item.sub}
+          >
+            {item.value}
+          </Stat>
         ))}
       </div>
     </div>

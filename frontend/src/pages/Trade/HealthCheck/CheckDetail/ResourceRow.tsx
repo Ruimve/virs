@@ -1,11 +1,6 @@
 import { memo } from 'react';
 import MiniBar from './MiniBar';
-
-const pctColor = (pct: number): string => {
-  if (pct >= 90) return 'text-danger-text';
-  if (pct >= 75) return 'text-warning-text';
-  return 'text-success-text';
-};
+import { usageColor } from '@/components/ProgressBar/utils';
 
 interface Props {
   label: string;
@@ -17,7 +12,7 @@ const ResourceRow = ({ label, pct, hint }: Props) => (
   <div>
     <div className="flex items-baseline justify-between mb-1">
       <span className="text-[11px] text-on-surface-tertiary">{label}</span>
-      <span className={`text-[11px] font-mono font-medium ${pctColor(pct)}`}>
+      <span className={`text-[11px] font-mono font-medium ${usageColor(pct)}`}>
         {pct.toFixed(0)}%
       </span>
     </div>

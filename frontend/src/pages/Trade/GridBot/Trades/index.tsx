@@ -2,6 +2,9 @@ import { getGridTrades, type GridTrade } from '@/service';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { TradeLoading } from '@/components/Transition/Icon';
+import Badge from '@/components/Badge';
+import StateFeedback from '@/components/StateFeedback';
+import Pagination from '@/components/Pagination';
 import { formatPnlShort } from '../../components/utils/utils';
 
 const PAGE_SIZE = 20;
@@ -62,11 +65,9 @@ const Trades = () => {
                     {t.grid_level}
                   </td>
                   <td className="px-3 py-2">
-                    <span
-                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${t.open_side === 'buy' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'}`}
-                    >
+                    <Badge variant={t.open_side === 'buy' ? 'success' : 'danger'}>
                       {t.open_side === 'buy' ? '买入' : '卖出'}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="px-3 py-2 text-on-surface font-mono text-right">
                     {t.open_price.toFixed(2)}
@@ -76,11 +77,9 @@ const Trades = () => {
                   </td>
                   <td className="px-3 py-2">
                     {t.close_side ? (
-                      <span
-                        className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${t.close_side === 'buy' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'}`}
-                      >
+                      <Badge variant={t.close_side === 'buy' ? 'success' : 'danger'}>
                         {t.close_side === 'buy' ? '买入' : '卖出'}
-                      </span>
+                      </Badge>
                     ) : (
                       <span className="text-on-surface-faint">-</span>
                     )}
@@ -93,17 +92,13 @@ const Trades = () => {
                   </td>
                   <td className="px-3 py-2 text-right">{formatPnlShort(t.pnl)}</td>
                   <td className="px-3 py-2">
-                    <span
-                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                        t.status === 'closed'
-                          ? 'bg-success-bg text-success-text'
-                          : t.status === 'open'
-                            ? 'bg-info-bg text-info-text'
-                            : 'bg-surface-2 text-on-surface-tertiary'
-                      }`}
+                    <Badge
+                      variant={
+                        t.status === 'closed' ? 'info' : t.status === 'open' ? 'warning' : 'neutral'
+                      }
                     >
                       {t.status === 'closed' ? '已平' : t.status === 'open' ? '持仓' : t.status}
-                    </span>
+                    </Badge>
                   </td>
                 </tr>
               ))}
@@ -111,37 +106,19 @@ const Trades = () => {
           </table>
 
           {/* 分页 */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-5 py-3 border-t border-line-subtle text-xs">
-              <span className="text-on-surface-tertiary">
-                共 {total} 条 · 第 {page}/{totalPages} 页
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => loadTrades(page - 1)}
-                  disabled={page <= 1 || loading}
-                  className="px-2 py-1 rounded border border-line-default text-on-surface-secondary disabled:opacity-40 hover:bg-surface-2"
-                >
-                  上一页
-                </button>
-                <button
-                  onClick={() => loadTrades(page + 1)}
-                  disabled={page >= totalPages || loading}
-                  className="px-2 py-1 rounded border border-line-default text-on-surface-secondary disabled:opacity-40 hover:bg-surface-2"
-                >
-                  下一页
-                </button>
-              </div>
-            </div>
-          )}
+          <Pagination
+            total={total}
+            page={page}
+            totalPages={totalPages}
+            loading={loading}
+            onPrev={() => loadTrades(page - 1)}
+            onNext={() => loadTrades(page + 1)}
+          />
         </div>
       ) : loading ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-4 text-on-surface-tertiary text-xs">
-          <TradeLoading size={40} />
-          <span className="tracking-wider">交易记录加载中</span>
-        </div>
+        <StateFeedback type="loading" text="交易记录加载中" icon={<TradeLoading size={40} />} />
       ) : (
-        <div className="text-center py-12 text-on-surface-tertiary text-xs">暂无交易记录</div>
+        <StateFeedback type="empty" text="暂无交易记录" />
       )}
     </div>
   );
