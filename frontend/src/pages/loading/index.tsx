@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';
 import { findActiveBot } from '@/service';
 import { AssetLoading } from '@/components/Transition/Icon';
 
@@ -27,7 +26,6 @@ const STAGE_ORDER: Stage[] = ['auth', 'session', 'routing'];
 
 const Loading = () => {
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
   const [stage, setStage] = useState<Stage>('auth');
 
   const startStage = useCallback(async () => {
@@ -47,14 +45,8 @@ const Loading = () => {
 
   // 会话恢复就绪后，依据登录状态与活跃 bot 做路由决策
   useEffect(() => {
-    if (loading) return;
-    if (!user) {
-      navigate('/login', { replace: true });
-      return;
-    }
-
     startStage();
-  }, [user, loading, startStage, navigate]);
+  }, [startStage, navigate]);
 
   const stageOrders = useMemo(() => {
     const currentIdx = STAGE_ORDER.indexOf(stage);

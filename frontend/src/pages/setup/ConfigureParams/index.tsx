@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizardGuard, useWizard } from '../context/WizardContext';
 import { WizardStep } from '../context/WizardContext/consts';
+import { Input } from '@/components/Input';
+import { Button } from '@/components/Button';
 
 // Grid bot parameters
 const GRID_PARAMS = [
@@ -71,6 +73,7 @@ const AUTO_PARAMS = [
 
 const ConfigureParams = () => {
   const navigate = useNavigate();
+  const [isPending, startTransition] = useTransition();
   const { wizard, updateWizard, advanceStep } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.ConfigureParams);
 
@@ -81,31 +84,32 @@ const ConfigureParams = () => {
     return isGrid ? GRID_PARAMS : AUTO_PARAMS;
   }, [wizard.bot_type]);
 
+  const handleBack = useCallback(() => {
+    navigate('/setup/exchange', { replace: true });
+  }, [navigate]);
+
+  const handleContinue = useCallback(() => {
+    updateWizard({ bot_params: values });
+    advanceStep(WizardStep.ReviewLaunch);
+    startTransition(() => {
+      navigate('/setup/review', { replace: true });
+    });
+  }, [values, updateWizard, advanceStep, navigate]);
+
   const actions = useMemo(() => {
     const disabled = params.filter((p) => p.required).some((p) => !values[p.key]);
 
     return (
       <>
-        <button
-          onClick={() => navigate('/setup/exchange', { replace: true })}
-          className="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
-        >
+        <Button variant="ghost" onClick={handleBack}>
           Back
-        </button>
-        <button
-          onClick={() => {
-            updateWizard({ bot_params: values });
-            advanceStep(WizardStep.ReviewLaunch);
-            navigate('/setup/review', { replace: true });
-          }}
-          disabled={disabled}
-          className="w-full sm:w-auto sm:px-6 py-2.5 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
-        >
+        </Button>
+        <Button onClick={handleContinue} disabled={disabled} loading={isPending}>
           Continue
-        </button>
+        </Button>
       </>
     );
-  }, [params, values, updateWizard, advanceStep, navigate]);
+  }, [params, values, isPending, handleBack, handleContinue]);
 
   return (
     <Wizard
@@ -121,13 +125,12 @@ const ConfigureParams = () => {
               {param.label}
               {param.required && <span className="text-accent/60 ml-1">*</span>}
             </label>
-            <input
+            <Input
               type={param.type}
               value={values[param.key] ?? ''}
               onChange={(e) => {
                 setValues((prev) => ({ ...prev, [param.key]: e.target.value }));
               }}
-              className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-accent transition-all duration-200"
               placeholder={param.placeholder}
             />
           </div>

@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Spinner, ShieldCheck, Flame } from '@/components/Icon';
+import { ShieldCheck, Flame } from '@/components/Icon';
+import { Button } from '@/components/Button';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
 import { createGridBot, createAutoBot, startGridBot, startAutoBot } from '../../../service';
@@ -8,6 +9,7 @@ import { WizardStep } from '../context/WizardContext/consts';
 
 const ReviewLaunch = () => {
   const navigate = useNavigate();
+  const [isPending, startTransition] = useTransition();
   const { wizard, updateWizard } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.ReviewLaunch);
 
@@ -74,7 +76,9 @@ const ReviewLaunch = () => {
 
       // Step 3: Navigate to health check
       updateWizard({ paper_mode: paperMode, bot_id: botId });
-      navigate(`/trade/${wizard.bot_type}/${botId}/health`, { replace: true });
+      startTransition(() => {
+        navigate(`/trade/${wizard.bot_type}/${botId}/health`, { replace: true });
+      });
     } catch (err) {
       setLaunchError(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -82,33 +86,22 @@ const ReviewLaunch = () => {
     }
   }, [wizard.bot_type, wizard.bot_params, wizard.exchange, paperMode, navigate, updateWizard]);
 
+  const handleBack = useCallback(() => {
+    navigate('/setup/params', { replace: true });
+  }, [navigate]);
+
   const actions = useMemo(() => {
     return (
       <>
-        <button
-          onClick={() => navigate('/setup/params', { replace: true })}
-          disabled={launching}
-          className="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200 disabled:opacity-30"
-        >
+        <Button variant="ghost" onClick={handleBack} disabled={launching}>
           Back
-        </button>
-        <button
-          onClick={handleLaunch}
-          disabled={launching}
-          className="w-full sm:w-auto sm:px-6 py-2.5 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
-        >
-          {launching ? (
-            <span className="flex items-center justify-center gap-2">
-              <Spinner className="w-4 h-4" />
-              Launching...
-            </span>
-          ) : (
-            'Launch Bot'
-          )}
-        </button>
+        </Button>
+        <Button variant="primary" onClick={handleLaunch} loading={launching || isPending}>
+          {launching ? 'Launching...' : 'Launch Bot'}
+        </Button>
       </>
     );
-  }, [launching, handleLaunch, navigate]);
+  }, [launching, isPending, handleBack, handleLaunch]);
 
   const tradeMode = useMemo(() => {
     return (
@@ -117,9 +110,9 @@ const ReviewLaunch = () => {
           Trading Mode
         </p>
         <div className="flex flex-col sm:flex-row gap-3">
-          <button
+          <div
             onClick={() => setPaperMode(true)}
-            className={`flex-1 p-4 rounded-xl border text-left transition-all duration-200 ${
+            className={`flex-1 p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer ${
               paperMode
                 ? 'bg-accent-light border-accent-muted ring-1 ring-accent-muted'
                 : 'bg-surface-1 border-line-default hover:bg-surface-2'
@@ -144,10 +137,10 @@ const ReviewLaunch = () => {
                 </p>
               </div>
             </div>
-          </button>
-          <button
+          </div>
+          <div
             onClick={() => setPaperMode(false)}
-            className={`flex-1 p-4 rounded-xl border text-left transition-all duration-200 ${
+            className={`flex-1 p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer ${
               !paperMode
                 ? 'bg-warning-bg border-warning-border ring-1 ring-warning/20'
                 : 'bg-surface-1 border-line-default hover:bg-surface-2'
@@ -172,7 +165,7 @@ const ReviewLaunch = () => {
                 <p className="text-xs text-on-surface-muted mt-0.5">Live orders with real funds</p>
               </div>
             </div>
-          </button>
+          </div>
         </div>
       </div>
     );

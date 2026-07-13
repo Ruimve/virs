@@ -132,7 +132,7 @@ export function useWsHook<T>(
 
   const stableStateChange = useCallback(() => {
     setConnected(inst.ws?.readyState === WebSocket.OPEN);
-  }, []);
+  }, [inst.ws?.readyState]);
 
   // ── Mount/unmount lifecycle ────────────────────────────
   // Dependencies are intentionally empty — all inputs are stable refs.

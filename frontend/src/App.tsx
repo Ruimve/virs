@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FullScreen } from './components/Transition/FullScreen';
 import { AssetLoading } from './components/Transition/Icon';
-import { AuthProvider, AuthProtecter } from './context/AuthContext/AuthProvider';
+import { AuthProvider } from './context/AuthContext/AuthProvider';
 
 /** 加载中 */
 const Loading = lazy(() => import('./pages/Loading'));
@@ -45,52 +45,57 @@ const App = () => {
     <ErrorBoundary>
       <Suspense fallback={<FullScreen icon={<AssetLoading />} />}>
         <BrowserRouter>
-          <AuthProvider>
-            <Routes>
-              <Route path="/" element={<Loading />} />
-              <Route path="/login" element={<Login />} />
-              <Route
-                path="/setup"
-                element={
-                  <AuthProtecter>
-                    <SetupLayout />
-                  </AuthProtecter>
-                }
-              >
-                <Route path="/setup/bot-type" element={<SelectBotType />} />
-                <Route path="/setup/llm" element={<ConfigureLlm />} />
-                <Route path="/setup/exchange" element={<ConfigureExchange />} />
-                <Route path="/setup/params" element={<ConfigureParams />} />
-                <Route path="/setup/review" element={<ReviewLaunch />} />
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <AuthProvider>
+                  <Loading />
+                </AuthProvider>
+              }
+            />
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/setup"
+              element={
+                <AuthProvider>
+                  <SetupLayout />
+                </AuthProvider>
+              }
+            >
+              <Route path="/setup/bot-type" element={<SelectBotType />} />
+              <Route path="/setup/llm" element={<ConfigureLlm />} />
+              <Route path="/setup/exchange" element={<ConfigureExchange />} />
+              <Route path="/setup/params" element={<ConfigureParams />} />
+              <Route path="/setup/review" element={<ReviewLaunch />} />
+            </Route>
+            <Route
+              path="/trade"
+              element={
+                <AuthProvider>
+                  <TradeLayout />
+                </AuthProvider>
+              }
+            >
+              <Route path="/trade/auto/:botId" element={<AutoBot />}>
+                <Route path="/trade/auto/:botId/bot" element={<AutoBotMain />} />
+                <Route path="/trade/auto/:botId/log" element={<AutoBotLog />} />
+                <Route path="/trade/auto/:botId/log/:logId" element={<AutoBotLogDetail />} />
+                <Route path="/trade/auto/:botId/trades" element={<AutoBotTrades />} />
+                <Route path="/trade/auto/:botId/system" element={<AutoBotSystem />} />
               </Route>
-              <Route
-                path="/trade"
-                element={
-                  <AuthProtecter>
-                    <TradeLayout />
-                  </AuthProtecter>
-                }
-              >
-                <Route path="/trade/auto/:botId" element={<AutoBot />}>
-                  <Route path="/trade/auto/:botId/bot" element={<AutoBotMain />} />
-                  <Route path="/trade/auto/:botId/log" element={<AutoBotLog />} />
-                  <Route path="/trade/auto/:botId/log/:logId" element={<AutoBotLogDetail />} />
-                  <Route path="/trade/auto/:botId/trades" element={<AutoBotTrades />} />
-                  <Route path="/trade/auto/:botId/system" element={<AutoBotSystem />} />
-                </Route>
-                <Route path="/trade/grid/:botId" element={<GridBot />}>
-                  <Route path="/trade/grid/:botId/bot" element={<GridBotMain />} />
-                  <Route path="/trade/grid/:botId/log" element={<GridBotLog />} />
-                  <Route path="/trade/grid/:botId/log/:logId" element={<GridBotLogDetail />} />
-                  <Route path="/trade/grid/:botId/trades" element={<GridBotTrades />} />
-                  <Route path="/trade/grid/:botId/levels" element={<GridBotLevels />} />
-                  <Route path="/trade/grid/:botId/system" element={<GridBotSystem />} />
-                </Route>
-                <Route path="/trade/:botType/:botId/health" element={<HealthCheck />} />
+              <Route path="/trade/grid/:botId" element={<GridBot />}>
+                <Route path="/trade/grid/:botId/bot" element={<GridBotMain />} />
+                <Route path="/trade/grid/:botId/log" element={<GridBotLog />} />
+                <Route path="/trade/grid/:botId/log/:logId" element={<GridBotLogDetail />} />
+                <Route path="/trade/grid/:botId/trades" element={<GridBotTrades />} />
+                <Route path="/trade/grid/:botId/levels" element={<GridBotLevels />} />
+                <Route path="/trade/grid/:botId/system" element={<GridBotSystem />} />
               </Route>
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </AuthProvider>
+              <Route path="/trade/:botType/:botId/health" element={<HealthCheck />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </BrowserRouter>
       </Suspense>
     </ErrorBoundary>

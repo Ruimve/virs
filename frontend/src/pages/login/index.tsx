@@ -1,37 +1,27 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';
-import { Spinner, InfoCircle } from '@/components/Icon';
+import { login } from '@/context/AuthContext/auth';
+import { InfoCircle } from '@/components/Icon';
+import { Input } from '@/components/Input';
 
 const Login = () => {
-  const navigate = useNavigate();
-  const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = useCallback(
-    async (e: React.SubmitEvent, uname: string, pwd: string) => {
-      e.preventDefault();
+  const handleSubmit = useCallback(async (e: React.SubmitEvent, uname: string, pwd: string) => {
+    e.preventDefault();
 
-      setError('');
-      setLoading(true);
-      try {
-        const result = await login(uname, pwd);
-        if (result.success) {
-          navigate('/setup/bot-type', { replace: true });
-          return;
-        }
-        setError(result.error || 'Login failed');
-      } catch {
-        setError('Network error, please try again');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [navigate, login],
-  );
+    setError('');
+    setLoading(true);
+    try {
+      await login(uname, pwd);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const errorMessage = useMemo(() => {
     if (error) {
@@ -63,44 +53,29 @@ const Login = () => {
         </div>
 
         <form onSubmit={(e) => handleSubmit(e, username, password)} className="space-y-5">
+          <Input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Username"
+            autoComplete="username"
+            disabled={loading}
+          />
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            autoComplete="current-password"
+            disabled={loading}
+          />
           {errorMessage}
-          <div>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-3 bg-surface-2 border border-line-strong rounded-xl text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-accent focus:bg-surface-3 transition-all duration-200"
-              placeholder="Username"
-              autoComplete="username"
-              disabled={loading}
-            />
-          </div>
-
-          <div>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-surface-2 border border-line-strong rounded-xl text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-accent focus:bg-surface-3 transition-all duration-200"
-              placeholder="Password"
-              autoComplete="current-password"
-              disabled={loading}
-            />
-          </div>
-
           <button
             type="submit"
             disabled={loading}
             className="w-full py-3 px-4 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-muted focus:ring-offset-2 focus:ring-offset-base disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
           >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <Spinner className="w-4 h-4" />
-                Signing in...
-              </span>
-            ) : (
-              'Sign in'
-            )}
+            {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
       </div>

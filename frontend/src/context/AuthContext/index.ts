@@ -3,17 +3,8 @@ import type { UserInfo } from '@/service';
 
 export const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
 
-export interface LoginResult {
-  success: boolean;
-  error?: string;
-}
-
 export interface AuthContextType {
   user: UserInfo | null;
-  loading: boolean;
-  login: (username: string, password: string) => Promise<LoginResult>;
-  logout: () => void;
-  refresh: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);

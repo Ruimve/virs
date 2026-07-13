@@ -1,7 +1,8 @@
-import { useState, useCallback, type ReactNode, useMemo } from 'react';
+import { useState, useCallback, type ReactNode, useMemo, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wizard } from '../context/WizardContext/Wizard';
-import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '../../../components/FlowStep';
+import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '@/components/FlowStep';
+import { Input } from '@/components/Input';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
 import {
   saveCredential,
@@ -11,6 +12,7 @@ import {
 } from '../../../service';
 import type { PermissionItem } from '../../../service';
 import { WizardStep } from '../context/WizardContext/consts';
+import { Button } from '@/components/Button';
 
 /**
  * 规范化 PEM 格式的 API Secret。
@@ -54,6 +56,7 @@ const normalizePemSecret = (raw: string): string => {
 
 const ConfigureExchange = () => {
   const navigate = useNavigate();
+  const [isPending, startTransition] = useTransition();
   const { wizard, updateWizard, advanceStep } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.SelectExchange);
 
@@ -212,29 +215,18 @@ const ConfigureExchange = () => {
   const renderStep1 = useCallback(() => {
     const disabled = !apiKey || !apiSecret || step1Status === 'verifying';
     return (
-      <div className="space-y-3">
-        <input
-          type="text"
-          value={apiKey}
-          onChange={handleApiKeyChange}
-          className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-accent transition-all duration-200"
-          placeholder="API Key"
-        />
-        <input
+      <div className="space-y-3 flex flex-col justify-start">
+        <Input type="text" value={apiKey} onChange={handleApiKeyChange} placeholder="API Key" />
+        <Input
           type="password"
           value={apiSecret}
           onChange={handleApiSecretChange}
-          className="w-full px-4 py-2.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none focus:border-accent transition-all duration-200"
           placeholder="API Secret"
         />
         {step1Status === 'error' && <p className="text-[12px] text-danger-text">{step1Error}</p>}
-        <button
-          onClick={startStep1}
-          disabled={disabled}
-          className="px-4 py-2 text-[12px] bg-accent-muted border border-accent-muted rounded-lg text-accent hover:bg-accent-muted disabled:opacity-30 transition-all duration-200"
-        >
+        <Button size="small" onClick={startStep1} disabled={disabled}>
           {step1Status === 'verifying' ? 'Verifying...' : 'Verify'}
-        </button>
+        </Button>
       </div>
     );
   }, [
@@ -312,12 +304,9 @@ const ConfigureExchange = () => {
             <p className="text-[12px] text-danger-text">
               {step4Error || 'Position mode check failed'}
             </p>
-            <button
-              onClick={startStep4}
-              className="px-3 py-1.5 text-[11px] bg-surface-2 border border-line-strong rounded-lg text-on-surface-secondary hover:bg-surface-1 transition-all duration-200"
-            >
+            <Button size="small" onClick={startStep4}>
               重新验证
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -353,6 +342,18 @@ const ConfigureExchange = () => {
     [renderStep1, renderStep2, renderStep3, renderStep4],
   );
 
+  const handleBack = useCallback(() => {
+    navigate('/setup/llm', { replace: true });
+  }, [navigate]);
+
+  const handleContinue = useCallback(() => {
+    updateWizard({ exchange: 'binance' });
+    advanceStep(WizardStep.ConfigureParams);
+    startTransition(() => {
+      navigate('/setup/params', { replace: true });
+    });
+  }, [updateWizard, advanceStep, navigate]);
+
   const actions = useMemo(() => {
     const disabled =
       step1Status !== 'done' ||
@@ -361,26 +362,15 @@ const ConfigureExchange = () => {
       step4Status !== 'done';
     return (
       <>
-        <button
-          onClick={() => navigate('/setup/llm', { replace: true })}
-          className="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
-        >
+        <Button variant="ghost" onClick={handleBack}>
           Back
-        </button>
-        <button
-          onClick={() => {
-            updateWizard({ exchange: 'binance' });
-            advanceStep(WizardStep.ConfigureParams);
-            navigate('/setup/params', { replace: true });
-          }}
-          disabled={disabled}
-          className="w-full sm:w-auto sm:px-6 py-2.5 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
-        >
+        </Button>
+        <Button onClick={handleContinue} disabled={disabled} loading={isPending}>
           Continue
-        </button>
+        </Button>
       </>
     );
-  }, [step1Status, step2Status, step3Status, step4Status, updateWizard, advanceStep, navigate]);
+  }, [step1Status, step2Status, step3Status, step4Status, isPending, handleBack, handleContinue]);
 
   const statuses = useMemo(() => {
     return {

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, type ReactNode, useMemo } from 'react';
+import { useState, useCallback, useRef, type ReactNode, useMemo, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   saveAiCredential,
@@ -9,13 +9,15 @@ import {
   type BalanceInfo,
 } from '@/service';
 import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '@/components/FlowStep';
-import { LlmLoading } from '@/components/Transition/Icon';
+import { Input } from '@/components/Input';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
 import { WizardStep } from '../context/WizardContext/consts';
+import { Button } from '@/components/Button';
 
 const ConfigureLlm = () => {
   const navigate = useNavigate();
+  const [isPending, startTransition] = useTransition();
   const { wizard, updateWizard, advanceStep } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.ConfigureLlm);
 
@@ -113,7 +115,6 @@ const ConfigureLlm = () => {
 
   // Fetch models via backend proxy (after save)
   const fetchModels = useCallback(async () => {
-    setModelsLoading(true);
     try {
       const result = await fetchAiModels();
       if (result.success) {
@@ -128,14 +129,10 @@ const ConfigureLlm = () => {
           });
         }
       } else {
-        setStep1Error(result.error || 'Failed to fetch models');
-        setStep1Status('error');
+        throw new Error(result.error || 'Failed to fetch models');
       }
-    } catch {
-      setStep1Error('Network error');
-      setStep1Status('error');
-    } finally {
-      setModelsLoading(false);
+    } catch (e) {
+      throw new Error((e as Error)?.message || 'Network error');
     }
   }, []);
 
@@ -150,16 +147,23 @@ const ConfigureLlm = () => {
       // Debounce: save then fetch models
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(async () => {
-        const saveResult = await saveAiCredential({
-          provider: 'deepseek',
-          api_key: inputValue,
-          is_default: true,
-        });
-        if (saveResult.success) {
-          fetchModels();
-        } else {
-          setStep1Error(saveResult.error || 'Failed to save API key');
+        try {
+          setModelsLoading(true);
+          const saveResult = await saveAiCredential({
+            provider: 'deepseek',
+            api_key: inputValue,
+            is_default: true,
+          });
+          if (saveResult.success) {
+            await fetchModels();
+          } else {
+            throw new Error(saveResult.error || 'Failed to save API key');
+          }
+        } catch (e) {
+          setStep1Error((e as Error)?.message || 'Network error');
           setStep1Status('error');
+        } finally {
+          setModelsLoading(false);
         }
       }, 600);
     },
@@ -173,26 +177,14 @@ const ConfigureLlm = () => {
   const renderStep1 = useCallback(() => {
     const disabled = !apiKey || !model || step1Status === 'verifying' || modelsLoading;
     return (
-      <div className="space-y-3">
-        <div className="relative">
-          <input
-            type="password"
-            value={apiKey}
-            onChange={handleKeyChange}
-            disabled={modelsLoading}
-            className={`w-full px-4 py-2.5 bg-surface-2 border rounded-lg text-sm text-on-base placeholder-placeholder focus:outline-none transition-all duration-200 ${
-              modelsLoading
-                ? 'border-accent-muted opacity-60'
-                : 'border-line-strong focus:border-accent'
-            }`}
-            placeholder="API Key"
-          />
-          {modelsLoading && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2">
-              <LlmLoading size={16} />
-            </div>
-          )}
-        </div>
+      <div className="space-y-3 flex flex-col justify-start">
+        <Input
+          type="password"
+          value={apiKey}
+          onChange={handleKeyChange}
+          loading={modelsLoading}
+          placeholder="API Key"
+        />
         {models.length > 0 && (
           <div>
             <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">
@@ -200,29 +192,25 @@ const ConfigureLlm = () => {
             </p>
             <div className="flex flex-wrap gap-1.5">
               {models.map((m) => (
-                <button
+                <div
                   key={m.id}
                   onClick={() => handleSelectModel(m.id)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] border transition-all duration-200 ${
+                  className={`px-2.5 py-1 rounded-md text-[11px] border transition-all duration-200 cursor-pointer ${
                     model === m.id
                       ? 'bg-accent-light border-accent-muted text-on-surface'
                       : 'bg-surface-1 border-line-default text-on-surface-tertiary hover:bg-surface-2'
                   }`}
                 >
                   {m.id}
-                </button>
+                </div>
               ))}
             </div>
           </div>
         )}
         {step1Error && <p className="text-[12px] text-danger-text">{step1Error}</p>}
-        <button
-          onClick={startStep1}
-          disabled={disabled}
-          className="px-4 py-2 text-[12px] bg-accent-muted border border-accent-muted rounded-lg text-accent hover:bg-accent-muted disabled:opacity-30 transition-all duration-200"
-        >
+        <Button size="small" onClick={startStep1} disabled={disabled}>
           {step1Status === 'verifying' ? 'Verifying...' : 'Verify'}
-        </button>
+        </Button>
       </div>
     );
   }, [
@@ -294,33 +282,34 @@ const ConfigureLlm = () => {
     [renderStep1, renderStep2, renderStep3],
   );
 
+  const handleBack = useCallback(() => {
+    navigate('/setup/bot-type', { replace: true });
+  }, [navigate]);
+
+  const handleContinue = useCallback(() => {
+    updateWizard({
+      llm_provider: 'deepseek',
+      llm_model: model,
+    });
+    advanceStep(WizardStep.SelectExchange);
+    startTransition(() => {
+      navigate('/setup/exchange', { replace: true });
+    });
+  }, [model, updateWizard, advanceStep, navigate]);
+
   const actions = useMemo(() => {
     const disabled = step1Status !== 'done' || step2Status !== 'done' || step3Status !== 'done';
     return (
       <>
-        <button
-          onClick={() => navigate('/setup/bot-type', { replace: true })}
-          className="w-full sm:w-auto sm:px-5 py-2.5 text-sm text-on-surface-tertiary hover:text-on-surface-secondary rounded-xl transition-colors duration-200"
-        >
+        <Button variant="ghost" onClick={handleBack}>
           Back
-        </button>
-        <button
-          onClick={() => {
-            updateWizard({
-              llm_provider: 'deepseek',
-              llm_model: model,
-            });
-            advanceStep(WizardStep.SelectExchange);
-            navigate('/setup/exchange', { replace: true });
-          }}
-          disabled={disabled}
-          className="w-full sm:w-auto sm:px-6 py-2.5 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
-        >
+        </Button>
+        <Button variant="primary" onClick={handleContinue} disabled={disabled} loading={isPending}>
           Continue
-        </button>
+        </Button>
       </>
     );
-  }, [step1Status, step2Status, step3Status, model, updateWizard, advanceStep, navigate]);
+  }, [step1Status, step2Status, step3Status, isPending, handleBack, handleContinue]);
 
   const statuses = useMemo(
     () => ({

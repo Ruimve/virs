@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, InfoCircle } from '@/components/Icon';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard } from '../context/WizardContext';
 import { findActiveBot } from '../../../service';
 import { WizardStep } from '../context/WizardContext/consts';
+import { Button } from '@/components/Button';
 
 const BOT_TYPES = [
   {
@@ -27,6 +28,7 @@ const BOT_TYPES = [
 
 const SelectBotType = () => {
   const navigate = useNavigate();
+  const [isPending, startTransition] = useTransition();
   const { wizard, updateWizard, advanceStep } = useWizard();
   const [botType, setBotType] = useState<'grid' | 'auto'>(wizard.bot_type);
   const [existingBot, setExistingBot] = useState<{ id: string; bot_type: string } | null>(null);
@@ -150,21 +152,21 @@ const SelectBotType = () => {
     );
   }, [botType]);
 
+  const handleContinue = useCallback(() => {
+    updateWizard({ bot_type: botType });
+    advanceStep(WizardStep.ConfigureLlm);
+    startTransition(() => {
+      navigate('/setup/llm', { replace: true });
+    });
+  }, [botType, updateWizard, advanceStep, navigate]);
+
   const actions = useMemo(() => {
     return (
-      <button
-        onClick={() => {
-          updateWizard({ bot_type: botType });
-          advanceStep(WizardStep.ConfigureLlm);
-          navigate('/setup/llm', { replace: true });
-        }}
-        disabled={!!existingBot}
-        className="w-full sm:w-auto sm:px-6 py-2.5 bg-accent/80 hover:bg-accent-hover text-white text-sm font-medium rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
-      >
+      <Button variant="primary" onClick={handleContinue} loading={isPending}>
         Continue
-      </button>
+      </Button>
     );
-  }, [botType, existingBot, updateWizard, advanceStep, navigate]);
+  }, [isPending, handleContinue]);
 
   return (
     <Wizard
