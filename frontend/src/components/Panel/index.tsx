@@ -1,6 +1,6 @@
 import { memo, type ReactNode } from 'react';
 
-export interface PanelSectionProps {
+export interface PanelProps {
   title: string;
   count?: number;
   children: ReactNode;
@@ -11,7 +11,7 @@ export interface PanelSectionProps {
   divided?: boolean;
 }
 
-export const PanelSection = memo(
+export const Panel = memo(
   ({
     title,
     count,
@@ -20,7 +20,7 @@ export const PanelSection = memo(
     emptyText = '暂无数据',
     className = '',
     divided = true,
-  }: PanelSectionProps) => (
+  }: PanelProps) => (
     <div className={`flex flex-col min-h-0 ${className}`}>
       <div className="flex items-center justify-between px-3 py-2 border-b border-line-subtle shrink-0">
         <span className="text-[11px] uppercase tracking-wider text-on-surface-tertiary font-medium">

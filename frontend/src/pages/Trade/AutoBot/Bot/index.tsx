@@ -11,12 +11,12 @@ import {
 import { useKlineWs, type KlineWsEvent } from '@/service/ws';
 import type { KlineChartHandle } from '@/components/Chart/KlineChart';
 import { useBot } from '../../context/BotContext';
-import DecisionCard from '../../components/DecisionCard';
-import TradeStats from './TradeStats';
-import StickyMarket from '../../components/StickyMarket';
-import PositionStats from './PositionStats';
-import RecentDecisions from './RecentDecisions';
-import RecentTrades from './RecentTrades';
+import { DecisionCard } from '../../components/DecisionCard';
+import { TradeStats } from './TradeStats';
+import { StickyMarket } from '../../components/StickyMarket';
+import { PositionStats } from './PositionStats';
+import { RecentDecisions } from './RecentDecisions';
+import { RecentTrades } from './RecentTrades';
 
 /**
  * WS price update rAF throttle + price change check.

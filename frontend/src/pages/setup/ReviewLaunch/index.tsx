@@ -5,7 +5,7 @@ import { Button } from '@/components/Button';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
 import { createGridBot, createAutoBot, startGridBot, startAutoBot } from '../../../service';
-import { SectionTitle } from '@/components/SectionTitle';
+import { Title } from '@/components/Title';
 import { WizardStep } from '../context/WizardContext/consts';
 
 const ReviewLaunch = () => {
@@ -107,7 +107,7 @@ const ReviewLaunch = () => {
   const tradeMode = useMemo(() => {
     return (
       <div className="rounded-xl border border-line-subtle bg-surface-1/50 p-5">
-        <SectionTitle className="mb-4">Trading Mode</SectionTitle>
+        <Title className="mb-4">Trading Mode</Title>
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Paper mode card */}
           <div
@@ -237,7 +237,7 @@ const ReviewLaunch = () => {
 
     return (
       <div className="rounded-xl bg-surface-1/50 border border-line-subtle p-5">
-        <SectionTitle className="mb-4">Summary</SectionTitle>
+        <Title className="mb-4">Summary</Title>
         <div className="space-y-0">
           {rows.map((row, i) => (
             <div

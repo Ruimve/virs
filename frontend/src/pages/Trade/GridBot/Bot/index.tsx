@@ -12,12 +12,12 @@ import {
 import { useKlineWs } from '@/service/ws';
 import type { KlineChartHandle } from '@/components/Chart/KlineChart';
 import { useBot } from '../../context/BotContext';
-import DecisionCard from '../../components/DecisionCard';
-import StickyMarket from '../../components/StickyMarket';
-import TradeStats from './TradeStats';
-import LevelsOverview from './LevelsOverview';
-import RecentTrades from './RecentTrades';
-import PositionStats from './PositionStats';
+import { DecisionCard } from '../../components/DecisionCard';
+import { StickyMarket } from '../../components/StickyMarket';
+import { TradeStats } from './TradeStats';
+import { LevelsOverview } from './LevelsOverview';
+import { RecentTrades } from './RecentTrades';
+import { PositionStats } from './PositionStats';
 
 /**
  * WS 价格更新 rAF 节流 + 价格变化检查。

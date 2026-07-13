@@ -5,7 +5,7 @@ import { AiThinking } from '@/components/Transition/Icon';
 import { ChevronLeft, ChevronRight } from '@/components/Icon';
 import { Badge } from '@/components/Badge';
 import { Card } from '@/components/Card';
-import { SectionTitle } from '@/components/SectionTitle';
+import { Title } from '@/components/Title';
 import { IconBtn } from '@/components/Button/IconBtn';
 import { actionLabel, actionVariant } from '../utils/utils';
 
@@ -113,7 +113,7 @@ const LogDetail = ({ log, loading }: Props) => {
           {/* Decision */}
           {decision && (
             <Card>
-              <SectionTitle className="mb-2">决策</SectionTitle>
+              <Title className="mb-2">决策</Title>
               {decision.reason && (
                 <p className="text-xs text-on-surface-secondary leading-relaxed">
                   {decision.reason}
@@ -125,7 +125,7 @@ const LogDetail = ({ log, loading }: Props) => {
           {/* Analysis */}
           {log.result?.analysis && (
             <Card>
-              <SectionTitle className="mb-2">AI 分析</SectionTitle>
+              <Title className="mb-2">AI 分析</Title>
               <p className="text-xs text-on-surface-secondary leading-relaxed whitespace-pre-wrap">
                 {log.result.analysis}
               </p>
@@ -135,7 +135,7 @@ const LogDetail = ({ log, loading }: Props) => {
           {/* Market */}
           {log.result?.market && (
             <Card>
-              <SectionTitle className="mb-2">市场状态</SectionTitle>
+              <Title className="mb-2">市场状态</Title>
               <div className="space-y-1">
                 {log.result.market.market_regime && (
                   <span
@@ -169,7 +169,7 @@ const LogDetail = ({ log, loading }: Props) => {
           {/* Grid params (for grid bot) */}
           {log.result?.grid && (log.result.grid.upper_price || log.result.grid.lower_price) && (
             <Card>
-              <SectionTitle className="mb-2">网格参数</SectionTitle>
+              <Title className="mb-2">网格参数</Title>
               <div className="flex flex-wrap gap-3 text-xs text-on-surface-secondary">
                 {log.result.grid.upper_price && <span>上界 {log.result.grid.upper_price}</span>}
                 {log.result.grid.lower_price && <span>下界 {log.result.grid.lower_price}</span>}
@@ -184,7 +184,7 @@ const LogDetail = ({ log, loading }: Props) => {
           {/* Risk params (for grid bot) */}
           {log.result?.risk && (log.result.risk.leverage || log.result.risk.quantity_per_grid) && (
             <Card>
-              <SectionTitle className="mb-2">风控参数</SectionTitle>
+              <Title className="mb-2">风控参数</Title>
               <div className="flex flex-wrap gap-3 text-xs text-on-surface-secondary">
                 {log.result.risk.leverage && <span>杠杆 {log.result.risk.leverage}x</span>}
                 {log.result.risk.quantity_per_grid && (
@@ -261,7 +261,7 @@ const LogDetail = ({ log, loading }: Props) => {
           {/* Raw LLM Response */}
           {log.result?.raw_llm_response && (
             <Card>
-              <SectionTitle className="mb-2">LLM 原始响应</SectionTitle>
+              <Title className="mb-2">LLM 原始响应</Title>
               <pre className="text-[11px] text-accent bg-accent/5 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-accent/10">
                 {typeof log.result.raw_llm_response === 'string'
                   ? log.result.raw_llm_response
@@ -273,7 +273,7 @@ const LogDetail = ({ log, loading }: Props) => {
           {/* Full result JSON */}
           {log.result && !log.result.raw_llm_response && (
             <Card>
-              <SectionTitle className="mb-2">完整结果</SectionTitle>
+              <Title className="mb-2">完整结果</Title>
               <pre className="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
                 {JSON.stringify(log.result, null, 2)}
               </pre>

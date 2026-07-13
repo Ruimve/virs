@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
 import type { GridBot } from '@/service/types';
 import { Stat } from '@/components/Stat';
-import { FlashPrice } from '@/components/FlashPrice';
+import { FlashPrice } from '../../../components/FlashPrice';
 import { pnlColor } from '../../../components/utils/utils';
 import { useBot } from '../../../context/BotContext';
 
@@ -17,7 +17,7 @@ interface Props {
 // Sub text:     text-[10px] text-on-surface-muted
 // ────────────────────────────────────────────────────────
 
-const PositionStats = ({ bot, latestPrice }: Props) => {
+export const PositionStats = memo(({ bot, latestPrice }: Props) => {
   const { gridLevels } = useBot();
   const b = bot;
   const filledCount = Math.min(b.grid_filled_count, b.grid_count);
@@ -159,6 +159,4 @@ const PositionStats = ({ bot, latestPrice }: Props) => {
       </div>
     </div>
   );
-};
-
-export default memo(PositionStats);
+});

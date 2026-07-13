@@ -1,6 +1,6 @@
 import { memo } from 'react';
-import { ProgressBar } from '@/components/ProgressBar';
+import { Progress } from '@/components/Progress';
 
-const MiniBar = ({ pct }: { pct: number }) => <ProgressBar pct={pct} size="sm" />;
+const MiniBar = ({ pct }: { pct: number }) => <Progress pct={pct} size="sm" />;
 
 export default memo(MiniBar);

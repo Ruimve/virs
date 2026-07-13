@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import type { GridLevelInfo } from '@/service';
-import { PanelSection } from '@/components/PanelSection';
+import { Panel } from '@/components/Panel';
 import { Badge } from '@/components/Badge';
 import { formatSmart } from '../../../components/utils/utils';
 
@@ -8,7 +8,7 @@ interface Props {
   gridLevels: GridLevelInfo[];
 }
 
-const LevelsOverview = ({ gridLevels }: Props) => {
+export const LevelsOverview = memo(({ gridLevels }: Props) => {
   const holding = gridLevels.filter((l) => Math.abs(l.hold_quantity) > 0);
   const closed = gridLevels.filter(
     (l) => l.buy_filled && l.sell_filled && Math.abs(l.hold_quantity) === 0,
@@ -16,7 +16,7 @@ const LevelsOverview = ({ gridLevels }: Props) => {
   const waiting = gridLevels.length - holding.length - closed.length;
 
   return (
-    <PanelSection
+    <Panel
       title="网格层级"
       count={gridLevels.length}
       empty={gridLevels.length === 0}
@@ -78,8 +78,6 @@ const LevelsOverview = ({ gridLevels }: Props) => {
           })}
         </div>
       </>
-    </PanelSection>
+    </Panel>
   );
-};
-
-export default memo(LevelsOverview);
+});

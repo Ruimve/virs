@@ -59,7 +59,7 @@ Props: { label: string; value: ReactNode; sub?: string; color?: string; highligh
 | `GridBot/Bot/RecentTrades/index.tsx`    | "最近成交" |
 | `GridBot/Bot/LevelsOverview/index.tsx`  | "网格层级" |
 
-**建议：** 抽取 `src/components/PanelSection/index.tsx`
+**建议：** 抽取 `src/components/Panel/index.tsx`
 
 ```
 Props: { title: string; count?: number; children: ReactNode; empty?: boolean; emptyText?: string }
@@ -185,13 +185,13 @@ Props: { type: 'loading' | 'empty' | 'error'; text?: string; icon?: ReactNode }
 
 | 文件                                      | 组件名                                          | barColor 函数                |
 | ----------------------------------------- | ----------------------------------------------- | ---------------------------- |
-| `AutoBot/System/index.tsx`                | `ProgressBar` (L47-54)                          | `barColor(pct)` — 阈值 90/70 |
+| `AutoBot/System/index.tsx`                | `Progress` (L47-54)                          | `barColor(pct)` — 阈值 90/70 |
 | `HealthCheck/CheckDetail/MiniBar.tsx`     | `MiniBar` (L9-16)                               | `pctBar(pct)` — 阈值 90/75   |
 | `HealthCheck/CheckDetail/ResourceRow.tsx` | 使用 MiniBar，另有 `pctColor(pct)` — 阈值 90/75 |
 
 **差异：** 阈值不一致（70 vs 75），尺寸不同（`h-1.5` vs `h-1`）
 
-**建议：** 抽取 `src/components/ProgressBar/index.tsx`
+**建议：** 抽取 `src/components/Progress/index.tsx`
 
 ```
 Props: { pct: number; size?: 'sm' | 'md'; thresholds?: { warning: number; danger: number } }
@@ -291,7 +291,7 @@ Props: { label: string; value: ReactNode; valueColor?: string }
 
 **差异：** 字号 11px vs 10px，有无 `font-medium`，有无 `tracking-wider`
 
-**建议：** 统一为一种，抽取为 Tailwind `@layer components` 的 `.section-title` 工具类，或封装 `SectionTitle` 组件
+**建议：** 统一为一种，抽取为 Tailwind `@layer components` 的 `.section-title` 工具类，或封装 `Title` 组件
 
 ---
 
@@ -340,15 +340,15 @@ gap:
 | #   | 组件名          | 路径                                     | 替代文件数 | 优先级 |
 | --- | --------------- | ---------------------------------------- | ---------- | ------ |
 | 1   | `Stat`          | `src/components/Stat/index.tsx`          | 6          | **高** |
-| 2   | `PanelSection`  | `src/components/PanelSection/index.tsx`  | 4          | **高** |
+| 2   | `Panel`  | `src/components/Panel/index.tsx`  | 4          | **高** |
 | 3   | `Badge`         | `src/components/Badge/index.tsx`         | 10+        | **高** |
 | 4   | `Card`          | `src/components/Card/index.tsx`          | 10+        | **高** |
 | 5   | `StateFeedback` | `src/components/StateFeedback/index.tsx` | 7          | **高** |
 | 6   | `KeyValueRow`   | `src/components/KeyValueRow/index.tsx`   | 12+        | 中     |
-| 7   | `ProgressBar`   | `src/components/ProgressBar/index.tsx`   | 3          | 中     |
+| 7   | `Progress`   | `src/components/Progress/index.tsx`   | 3          | 中     |
 | 8   | `Pagination`    | `src/components/Pagination/index.tsx`    | 2          | 中     |
 | 9   | `Table`         | `src/components/Table/index.tsx`         | 2          | 低     |
-| 10  | `SectionTitle`  | `src/components/SectionTitle/index.tsx`  | 15+        | 中     |
+| 10  | `Title`  | `src/components/Title/index.tsx`  | 15+        | 中     |
 
 ---
 
@@ -358,7 +358,7 @@ gap:
 | ------------------- | -------------------------------------------- | -------------------------- |
 | `pnlColor(v)`       | `src/pages/Trade/components/utils/utils.tsx` | 4 处重复定义               |
 | `formatVolume(v)`   | 同上                                         | 2 处重复定义（取更完整版） |
-| `barColor/pctColor` | 同上（或放入 ProgressBar 组件内部）          | 3 处不同阈值               |
+| `barColor/pctColor` | 同上（或放入 Progress 组件内部）          | 3 处不同阈值               |
 
 ---
 
@@ -401,6 +401,6 @@ gap:
 3. `Card` 组件 — 统一 3 种 Card 样式变体
 4. `pnlColor` / `formatVolume` 工具函数统一
 
-**Phase 2（短期 — 影响舒适度）：** 5. `PanelSection` 组件 — 4 处侧边栏面板统一 6. `StateFeedback` 组件 — 7 处 loading/empty 状态统一 7. `KeyValueRow` 组件 — ReviewLaunch 等 12+ 处键值对统一 8. 全局 CSS layer 工具类 — `section-title`、`data-value`
+**Phase 2（短期 — 影响舒适度）：** 5. `Panel` 组件 — 4 处侧边栏面板统一 6. `StateFeedback` 组件 — 7 处 loading/empty 状态统一 7. `KeyValueRow` 组件 — ReviewLaunch 等 12+ 处键值对统一 8. 全局 CSS layer 工具类 — `section-title`、`data-value`
 
-**Phase 3（中期 — 锦上添花）：** 9. `ProgressBar` 组件 — 统一阈值和样式 10. `Pagination` 组件 — 2 处分页统一 11. `Table` 组件 — 2 处表格结构统一
+**Phase 3（中期 — 锦上添花）：** 9. `Progress` 组件 — 统一阈值和样式 10. `Pagination` 组件 — 2 处分页统一 11. `Table` 组件 — 2 处表格结构统一

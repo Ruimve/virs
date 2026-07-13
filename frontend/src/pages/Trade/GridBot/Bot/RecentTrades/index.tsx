@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from 'react';
 import { getGridTrades, type GridTrade } from '@/service';
-import { PanelSection } from '@/components/PanelSection';
+import { Panel } from '@/components/Panel';
 import { Badge } from '@/components/Badge';
 import { formatPnlShort, pnlColor } from '../../../components/utils/utils';
 
@@ -9,7 +9,7 @@ interface Props {
 }
 
 /** 网格机器人最近成交卡片（右侧栏） */
-const RecentTrades = ({ botId }: Props) => {
+export const RecentTrades = memo(({ botId }: Props) => {
   const [trades, setTrades] = useState<GridTrade[]>([]);
   const [, setLoading] = useState(true);
 
@@ -34,7 +34,7 @@ const RecentTrades = ({ botId }: Props) => {
   const recent = trades.slice(0, 5);
 
   return (
-    <PanelSection
+    <Panel
       title="最近成交"
       count={trades.length}
       empty={recent.length === 0}
@@ -65,8 +65,6 @@ const RecentTrades = ({ botId }: Props) => {
           </div>
         </div>
       ))}
-    </PanelSection>
+    </Panel>
   );
-};
-
-export default memo(RecentTrades);
+});

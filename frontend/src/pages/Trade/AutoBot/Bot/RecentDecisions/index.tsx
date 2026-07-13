@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service';
-import { PanelSection } from '@/components/PanelSection';
+import { Panel } from '@/components/Panel';
 import { Badge } from '@/components/Badge';
 import { actionVariant, actionLabel } from '../../../components/utils/utils';
 
@@ -11,7 +11,7 @@ interface Props {
   botType?: 'auto' | 'grid';
 }
 
-const RecentDecisions = ({ logs, botId, botType = 'auto' }: Props) => {
+export const RecentDecisions = memo(({ logs, botId, botType = 'auto' }: Props) => {
   const navigate = useNavigate();
   const recent = logs.slice(0, 5);
 
@@ -22,7 +22,7 @@ const RecentDecisions = ({ logs, botId, botType = 'auto' }: Props) => {
   };
 
   return (
-    <PanelSection
+    <Panel
       title="最近决策"
       count={logs.length}
       empty={recent.length === 0}
@@ -57,8 +57,6 @@ const RecentDecisions = ({ logs, botId, botType = 'auto' }: Props) => {
           </div>
         );
       })}
-    </PanelSection>
+    </Panel>
   );
-};
-
-export default memo(RecentDecisions);
+});

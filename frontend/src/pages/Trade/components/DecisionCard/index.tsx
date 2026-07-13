@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service/types';
 import { Warning } from '@/components/Icon';
 import { Badge } from '@/components/Badge';
-import { SectionTitle } from '@/components/SectionTitle';
+import { Title } from '@/components/Title';
 import { actionColor, actionLabel, confidenceColor } from '../utils/utils';
 
 interface Props {
@@ -12,7 +12,7 @@ interface Props {
   botType?: 'auto' | 'grid';
 }
 
-const DecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
+export const DecisionCard = memo(({ log, botId, botType = 'auto' }: Props) => {
   const navigate = useNavigate();
 
   const handleClick = useCallback(() => {
@@ -42,7 +42,7 @@ const DecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
       <div className="px-4 py-3 border-b border-line-subtle">
         {/* 标题行 */}
         <div className="flex items-center justify-between mb-2">
-          <SectionTitle>AI 决策</SectionTitle>
+          <Title>AI 决策</Title>
         </div>
       </div>
     );
@@ -55,7 +55,7 @@ const DecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
     >
       {/* 标题行 */}
       <div className="flex items-center justify-between mb-2">
-        <SectionTitle>AI 决策</SectionTitle>
+        <Title>AI 决策</Title>
         <span className="text-[11px] font-mono tabular-nums text-on-surface-muted">
           {createdAt}
         </span>
@@ -108,6 +108,4 @@ const DecisionCard = ({ log, botId, botType = 'auto' }: Props) => {
       )}
     </div>
   );
-};
-
-export default memo(DecisionCard);
+});

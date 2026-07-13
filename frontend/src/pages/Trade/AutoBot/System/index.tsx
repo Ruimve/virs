@@ -2,8 +2,8 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { getSystemInfo } from '@/service/system';
 import type { SystemInfo as SystemInfoData } from '@/service/types';
 import { Card } from '@/components/Card';
-import { ProgressBar } from '@/components/ProgressBar';
-import { usageColor } from '@/components/ProgressBar/utils';
+import { Progress } from '@/components/Progress';
+import { usageColor } from '@/components/Progress/utils';
 import { StateFeedback } from '@/components/StateFeedback';
 
 // -- Utility functions --
@@ -222,7 +222,7 @@ const System = () => {
                   {cpuPct.toFixed(1)}%
                 </span>
               </div>
-              <ProgressBar pct={cpuPct} />
+              <Progress pct={cpuPct} />
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-[11px] text-on-surface-tertiary">核心数</span>
@@ -256,7 +256,7 @@ const System = () => {
                   {memPct.toFixed(1)}%
                 </span>
               </div>
-              <ProgressBar pct={memPct} />
+              <Progress pct={memPct} />
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-[11px] text-on-surface-tertiary">已用 / 总量</span>
@@ -295,7 +295,7 @@ const System = () => {
                     {value.toFixed(2)}
                   </span>
                 </div>
-                <ProgressBar pct={Math.min(loadPct, 100)} />
+                <Progress pct={Math.min(loadPct, 100)} />
                 <div className="text-[10px] text-on-surface-faint mt-1 text-right font-mono tabular-nums">
                   {loadPct.toFixed(0)}% 核心
                 </div>
@@ -318,7 +318,7 @@ const System = () => {
                   {disk.usage_pct.toFixed(1)}%
                 </span>
               </div>
-              <ProgressBar pct={disk.usage_pct} />
+              <Progress pct={disk.usage_pct} />
               <div className="text-[10px] text-on-surface-faint mt-1 font-mono tabular-nums">
                 {formatBytes(disk.used_bytes)} / {formatBytes(disk.total_bytes)}
               </div>

@@ -1,14 +1,14 @@
 import { memo, useEffect, useState } from 'react';
 import { getAutoStats, type AutoBotStats } from '@/service';
 import { Stat } from '@/components/Stat';
-import { SectionTitle } from '@/components/SectionTitle';
+import { Title } from '@/components/Title';
 import { formatVolume } from '../../../components/utils/utils';
 
 interface Props {
   botId: string;
 }
 
-const TradeStats = ({ botId }: Props) => {
+export const TradeStats = memo(({ botId }: Props) => {
   const [stats, setStats] = useState<AutoBotStats | null>(null);
 
   useEffect(() => {
@@ -103,7 +103,7 @@ const TradeStats = ({ botId }: Props) => {
 
   return (
     <div className="px-4 py-3 border-b border-line-subtle">
-      <SectionTitle className="mb-2">历史交易统计</SectionTitle>
+      <Title className="mb-2">历史交易统计</Title>
       <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-3">
         {items.map((item) => (
           <Stat
@@ -119,6 +119,4 @@ const TradeStats = ({ botId }: Props) => {
       </div>
     </div>
   );
-};
-
-export default memo(TradeStats);
+});

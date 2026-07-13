@@ -1,8 +1,8 @@
 import { memo, useMemo } from 'react';
 import type { AutoBot } from '@/service/types';
 import { Stat } from '@/components/Stat';
-import { FlashPrice } from '@/components/FlashPrice';
 import { usePositionContext } from '../../../context/PositionContext';
+import { FlashPrice } from '../../../components/FlashPrice';
 import { pnlColor } from '../../../components/utils/utils';
 
 interface Props {
@@ -17,7 +17,7 @@ interface Props {
 // Sub text:     text-[10px] text-on-surface-muted
 // ────────────────────────────────────────────────────────
 
-const PositionStats = ({ bot, latestPrice }: Props) => {
+export const PositionStats = memo(({ bot, latestPrice }: Props) => {
   const { position } = usePositionContext();
 
   const hasPosition = useMemo(
@@ -164,6 +164,4 @@ const PositionStats = ({ bot, latestPrice }: Props) => {
       </div>
     </div>
   );
-};
-
-export default memo(PositionStats);
+});

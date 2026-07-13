@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import MiniBar from './MiniBar';
-import { usageColor } from '@/components/ProgressBar/utils';
+import { usageColor } from '@/components/Progress/utils';
 
 interface Props {
   label: string;

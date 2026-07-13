@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import type { AutoTrade } from '@/service';
-import { PanelSection } from '@/components/PanelSection';
+import { Panel } from '@/components/Panel';
 import { Badge } from '@/components/Badge';
 import { formatTime, formatSmart, pnlColor } from '../../../components/utils/utils';
 
@@ -8,11 +8,11 @@ interface Props {
   trades: AutoTrade[];
 }
 
-const RecentTrades = ({ trades }: Props) => {
+export const RecentTrades = memo(({ trades }: Props) => {
   const recent = trades.slice(0, 10);
 
   return (
-    <PanelSection
+    <Panel
       title="最近交易"
       count={trades.length}
       empty={recent.length === 0}
@@ -67,8 +67,6 @@ const RecentTrades = ({ trades }: Props) => {
           </div>
         </div>
       ))}
-    </PanelSection>
+    </Panel>
   );
-};
-
-export default memo(RecentTrades);
+});

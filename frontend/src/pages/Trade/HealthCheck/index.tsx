@@ -273,7 +273,7 @@ const HealthCheck = () => {
       ? 'All systems operational'
       : `${failed} of ${total} checks failed`;
   const progressPct = total > 0 ? (settled / total) * 100 : 0;
-  const progressBar =
+  const Progress =
     running || settled < total ? 'bg-accent' : failed > 0 ? 'bg-warning' : 'bg-success';
 
   return (
@@ -317,7 +317,7 @@ const HealthCheck = () => {
         </div>
         <div className="mt-3 h-1 w-full bg-surface-2 rounded-full overflow-hidden">
           <div
-            className={`h-full ${progressBar} rounded-full transition-all duration-500`}
+            className={`h-full ${Progress} rounded-full transition-all duration-500`}
             style={{ width: `${progressPct}%` }}
           />
         </div>
