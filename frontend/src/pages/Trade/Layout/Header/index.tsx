@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { Logo } from '@/components/Logo';
 import { Theme } from '@/components/Theme';
 import { Close, Flame, ShieldCheck } from '@/components/Icon';
-import { IconBtn } from '@/components/IconBtn';
+import { IconBtn } from '@/components/Button/IconBtn';
 import { useHeader } from './HeaderContext';
 import { usePaper } from '../../context/PaperContext';
 import { useBot } from '../../context/BotContext';

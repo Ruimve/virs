@@ -2,6 +2,7 @@ import { memo, useMemo, useState, type RefObject } from 'react';
 import type { KlineCandle } from '@/service';
 import KlineChart, { type KlineChartHandle } from '@/components/Chart/KlineChart';
 import { TradeLoading } from '@/components/Transition/Icon';
+import { FlashPrice } from '@/components/FlashPrice';
 
 interface ChartMarker {
   time: number;
@@ -104,11 +105,7 @@ const StickyMarket = ({
       >
         <div className="flex items-center gap-2 sm:gap-3 text-xs flex-nowrap min-w-0 overflow-hidden">
           <span className="text-on-surface-tertiary shrink-0">行情</span>
-          {latestPrice > 0 && (
-            <span className="text-on-surface font-mono font-medium shrink-0">
-              {latestPrice.toFixed(2)}
-            </span>
-          )}
+          {latestPrice > 0 && <FlashPrice price={latestPrice} className="text-on-surface" />}
           {summary.changePct !== 0 && (
             <span className={`font-mono text-[11px] shrink-0 ${changeColor}`}>
               {changeSign}

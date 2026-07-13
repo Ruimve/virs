@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react';
 import type { AutoBot } from '@/service/types';
 import { Stat } from '@/components/Stat';
+import { FlashPrice } from '@/components/FlashPrice';
 import { usePositionContext } from '../../../context/PositionContext';
 import { pnlColor } from '../../../components/utils/utils';
 
@@ -88,7 +89,7 @@ const PositionStats = ({ bot, latestPrice }: Props) => {
       {/* ── 第二区：仓位 + 行情 ── */}
       <div className="px-4 py-2 border-t border-line-subtle/50 grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-1.5">
         <Stat label="最新价">
-          <span className="text-on-surface">{latestPrice > 0 ? latestPrice.toFixed(2) : '-'}</span>
+          <FlashPrice price={latestPrice} className="text-on-surface" />
         </Stat>
         <Stat label="持仓方向">
           {hasPosition ? (

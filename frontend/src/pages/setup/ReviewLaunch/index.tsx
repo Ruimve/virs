@@ -5,7 +5,6 @@ import { Button } from '@/components/Button';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
 import { createGridBot, createAutoBot, startGridBot, startAutoBot } from '../../../service';
-import { KeyValueRow } from '@/components/KeyValueRow';
 import { SectionTitle } from '@/components/SectionTitle';
 import { WizardStep } from '../context/WizardContext/consts';
 
@@ -241,13 +240,16 @@ const ReviewLaunch = () => {
         <SectionTitle className="mb-4">Summary</SectionTitle>
         <div className="space-y-0">
           {rows.map((row, i) => (
-            <KeyValueRow
-              key={row.label}
-              label={row.label}
-              value={row.value}
-              valueColor={row.valueClass}
-              border={i !== rows.length - 1}
-            />
+            <div
+              className={`flex items-center justify-between px-4 py-3 ${i !== rows.length - 1 ? 'border-b border-line-subtle/50' : ''}`}
+            >
+              <span className="text-[12px] text-on-surface-tertiary">{row.label}</span>
+              <span
+                className={`text-[12px] font-mono tabular-nums ${row.valueClass || 'text-on-surface-secondary'}`}
+              >
+                {row.value}
+              </span>
+            </div>
           ))}
         </div>
       </div>

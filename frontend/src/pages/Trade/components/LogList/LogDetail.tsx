@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight } from '@/components/Icon';
 import { Badge } from '@/components/Badge';
 import { Card } from '@/components/Card';
 import { SectionTitle } from '@/components/SectionTitle';
-import { IconBtn } from '@/components/IconBtn';
+import { IconBtn } from '@/components/Button/IconBtn';
 import { actionLabel, actionVariant } from '../utils/utils';
 
 interface Props {

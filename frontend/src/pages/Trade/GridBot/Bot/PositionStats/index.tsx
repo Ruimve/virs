@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react';
 import type { GridBot } from '@/service/types';
 import { Stat } from '@/components/Stat';
+import { FlashPrice } from '@/components/FlashPrice';
 import { pnlColor } from '../../../components/utils/utils';
 import { useBot } from '../../../context/BotContext';
 
@@ -96,7 +97,7 @@ const PositionStats = ({ bot, latestPrice }: Props) => {
       {/* ── 第二区：网格 + 行情 ── */}
       <div className="px-4 py-2 border-t border-line-subtle/50 grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-1.5">
         <Stat label="最新价">
-          <span className="text-on-surface">{latestPrice > 0 ? latestPrice.toFixed(2) : '-'}</span>
+          <FlashPrice price={latestPrice} className="text-on-surface" />
         </Stat>
         <Stat label="累计盈亏">
           <span className={pnlColor(totalPnl)}>

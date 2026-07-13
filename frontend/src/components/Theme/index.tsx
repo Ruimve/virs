@@ -1,5 +1,5 @@
 import { useTheme } from './useTheme';
-import { IconBtn } from '@/components/IconBtn';
+import { IconBtn } from '@/components/Button/IconBtn';
 
 export const Theme = () => {
   const { isDark, toggleTheme } = useTheme();
