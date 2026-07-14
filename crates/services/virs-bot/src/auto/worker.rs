@@ -1,5 +1,3 @@
-//! Auto worker — individual auto trading bot execution.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,9 +14,6 @@ use virs_types::client_order_id;
 use virs_types::enums::PositionSide;
 use virs_types::position::{EngineEvent, Position};
 
-// T12: Constants replaced by TimeConfig (loaded from env vars)
-// const PENDING_ORDER_TIMEOUT: Duration = Duration::from_secs(60);
-// const MAX_POSITION_DURATION: Duration = Duration::from_secs(48 * 3600);
 
 #[derive(Debug)]
 pub(crate) struct PendingOpen {
@@ -34,19 +29,19 @@ pub(crate) struct PendingOpen {
 #[derive(Debug)]
 pub(crate) struct PendingClose {
     pub side: String,
-    /// 平仓原因：stop_loss/take_profit/position_timeout/llm_decision
-    /// 由代码逻辑决定（不由 LLM 决定），用于冷却期判断和 DB 记录
+
+
     pub close_reason: String,
     pub entry_price: f64,
     pub position_size: f64,
-    /// #14: 下单时刻的未实现盈亏，待接入滑点检测后移除此属性
+
     #[allow(dead_code)]
     pub unrealized_pnl: f64,
     pub client_order_id: String,
     pub sent_at: tokio::time::Instant,
 }
 
-/// 全自动交易 Worker
+
 pub struct AutoWorker {
     pub(crate) bot: AutoBotConfig,
     price_provider: Arc<dyn PriceProvider>,
@@ -63,26 +58,23 @@ pub struct AutoWorker {
     pub(crate) pending_close: Option<PendingClose>,
     pub(crate) position_opened_at: Option<tokio::time::Instant>,
     pub(crate) trailing_stop_dirty: bool,
-    /// 当前仓位缓存，从 PE 事件更新
+
     pub(crate) current_position: Option<Position>,
-    /// 当前开仓 trade 记录 ID（开仓时 INSERT 返回，平仓时 UPDATE 用）
+
     pub(crate) current_trade_id: Option<Uuid>,
-    /// 当前 LLM 决策日志 ID（handle_llm_result 创建 log 时返回，执行回填时 UPDATE 用）
-    /// - 拦截时：UPDATE 设置 intercept_reason + status='intercepted'
-    /// - 开仓订单成交：UPDATE 设置 execution_status='open'
-    /// - 平仓订单成交：UPDATE 设置 execution_status='close'
+
+
     pub(crate) current_log_id: Option<Uuid>,
-    /// 当前开仓手续费（平仓时计算总手续费用）
+
     pub(crate) current_open_fee: f64,
-    /// 当前仓位的风控边界（内存态，开仓时由 LLM 决策写入，trailing stop 更新 stop_loss；
-    /// 重启时从 qd_auto_trades 表的 open 记录恢复；平仓后清零）
+
+
     pub(crate) stop_loss: f64,
     pub(crate) take_profit: f64,
-    /// 最近一次平仓事件（用于冷却期判断和 LLM 上下文反思）
-    /// 字段：(平仓方向 long/short, 平仓原因, 平仓时间)
-    /// 重启时从 qd_auto_trades 表最近一条 closed 记录恢复
+
+
     pub(crate) last_close_event: Option<(String, String, chrono::DateTime<chrono::Utc>)>,
-    /// T12: 时间配置（从环境变量加载，替代硬编码常量）
+
     pub(crate) time_config: TimeConfig,
 }
 
@@ -125,7 +117,7 @@ impl AutoWorker {
         }
     }
 
-    /// 当前仓位方向（"long"/"short"/"none"）
+
     pub(crate) fn current_side_str(&self) -> String {
         match &self.current_position {
             Some(p) if p.is_open() => match p.side {
@@ -147,13 +139,7 @@ impl AutoWorker {
         self.pending_open.is_some() || self.pending_close.is_some()
     }
 
-    /// 检查开仓冷却期。
-    /// 规则（按平仓原因分级，绝对时间，不受 decide_interval_secs 影响）：
-    ///   - stop_loss：同方向冷却 30 分钟（防止趋势初期反复扫损）
-    ///   - take_profit：同方向冷却 15 分钟（防止追高/追低）
-    ///   - trend_reversal：反方向冷却 15 分钟（等待新趋势结构形成）
-    ///   - 其他（position_timeout/risk_management/llm_decision）：双向冷却 15 分钟
-    ///     返回 Some(剩余秒数) 表示仍在冷却中，None 表示可以开仓。
+
     pub(crate) fn cooldown_remaining_secs(&self, new_side: &str) -> Option<i64> {
         let (closed_side, reason, closed_at) = self.last_close_event.as_ref()?;
         let elapsed = chrono::Utc::now().signed_duration_since(*closed_at);
@@ -168,8 +154,7 @@ impl AutoWorker {
         }
     }
 
-    /// 直接查询 PositionEngine 当前 Open 仓位，刷新 current_position 缓存。
-    /// 防止 PE broadcast 事件丢失导致缓存失效 → 重复开仓。
+
     pub(crate) async fn refresh_position_from_pe(&mut self) {
         match self
             .order_executor
@@ -179,7 +164,7 @@ impl AutoWorker {
             Ok(Some(pe_pos))
                 if pe_pos.is_open() && pe_pos.size.abs() > 1e-8 =>
             {
-                // PE 有开仓但本地缓存为空 → 恢复
+
                 let was_empty = !self.has_position();
                 if was_empty {
                     warn!(
@@ -190,7 +175,7 @@ impl AutoWorker {
                         "Position cache was empty but PE has open position — recovered to prevent duplicate open"
                     );
                 }
-                // 恢复 position_id（如果丢失）
+
                 if self.bot.position_id.is_none() || self.bot.position_id == Some(Uuid::nil()) {
                     self.bot.position_id = Some(pe_pos.id);
                     if let Err(e) = self
@@ -204,10 +189,10 @@ impl AutoWorker {
                 self.current_position = Some(pe_pos);
             }
             Ok(Some(_)) => {
-                // PE 有仓位但非 Open（Opening/Closing）→ 不更新缓存，保持现状
+
             }
             Ok(None) => {
-                // PE 确认无开仓 → 清空缓存（防止幽灵仓位）
+
                 if self.has_position() {
                     warn!(
                         bot_id = %self.bot.id,
@@ -280,7 +265,7 @@ impl AutoWorker {
             }
         }
 
-        // 回填 LLM log 执行状态（仅 LLM 决策触发的订单才有 log_id）
+
         if timed_out_open || timed_out_close {
             if let Some(log_id) = self.current_log_id.take() {
                 let exec_status = if timed_out_open {
@@ -302,9 +287,8 @@ impl AutoWorker {
     pub(crate) fn matches_pending_order(&self, client_order_id: Option<&str>) -> bool {
         match client_order_id {
             Some(cid) => {
-                // 精确匹配 pending 状态的 client_order_id
-                // open: "AOL__{timestamp}{hash}" / "AOS__{timestamp}{hash}"
-                // close: "ACL__{timestamp}{hash}" / "ACS__{timestamp}{hash}"
+
+
                 let open_match = self
                     .pending_open
                     .as_ref()
@@ -321,10 +305,9 @@ impl AutoWorker {
         }
     }
 
-    // ── 主运行循环 ──────────────────────────────────────────
 
     pub async fn run(&mut self, mut shutdown_rx: tokio::sync::mpsc::Receiver<()>) {
-        // 获取初始价格
+
         let max_retries = self.time_config.retry.initial_price_max_retries;
         for attempt in 1..=max_retries {
             self.current_price = self.fetch_current_price().await;
@@ -342,7 +325,7 @@ impl AutoWorker {
             return;
         }
 
-        // 加载连续亏损次数
+
         match self.store.load_consecutive_losses(self.bot.id).await {
             Ok(losses) => {
                 self.consecutive_losses = losses;
@@ -352,7 +335,7 @@ impl AutoWorker {
             }
         }
 
-        // 恢复最近平仓事件（用于冷却期判断；即使当前无仓位也需要恢复，防止重启后立即重入）
+
         match self.store.find_last_closed_trade(self.bot.id).await {
             Ok(Some((side, close_reason, closed_at))) => {
                 self.last_close_event = Some((side.clone(), close_reason.clone(), closed_at));
@@ -363,8 +346,7 @@ impl AutoWorker {
             }
         }
 
-        // 孤儿 trade 检测：bot.position_id 为空但 qd_auto_trades 仍有 open 记录
-        // 这种情况通常由 PE 仓位丢失/重启超时导致，标记为 orphaned（保留开仓数据用于回溯）
+
         if self
             .bot
             .position_id
@@ -383,7 +365,7 @@ impl AutoWorker {
                     }
                 }
                 Ok(None) => {
-                    // 无 open trade，正常状态
+
                 }
                 Err(e) => {
                     warn!(bot_id = %self.bot.id, error = %e, "Failed to check orphaned trade");
@@ -391,32 +373,29 @@ impl AutoWorker {
             }
         }
 
-        // 如果 bot 有 position_id，等待 PE 推送仓位事件以恢复 current_position
-        // 这确保重启后能立即获取仓位状态，不会错过止损止盈检查
+
         if self
             .bot
             .position_id
             .filter(|id| *id != Uuid::nil())
             .is_some()
         {
-            // 同时从 DB 恢复 current_trade_id（用于平仓时 UPDATE 对应的开仓记录）
-            // 以及 stop_loss/take_profit（用于恢复内存中的风控边界）
-            // T11: 同时恢复 opened_at，用于计算 position_opened_at（避免重启后 48h 超时检查重置）
+
+
             match self.store.find_open_trade(self.bot.id).await {
                 Ok(Some((trade_id, sl, tp, opened_at))) => {
                     self.current_trade_id = Some(trade_id);
                     self.stop_loss = sl;
                     self.take_profit = tp;
-                    // T11: 从 DB opened_at 恢复 position_opened_at
-                    // Instant 是单调时钟，不能从 DateTime 直接构造
-                    // 通过计算 elapsed 后反推 Instant
+
+
                     let elapsed = chrono::Utc::now().signed_duration_since(opened_at);
                     let elapsed_secs = elapsed.num_seconds().max(0) as u64;
                     let elapsed_dur = std::time::Duration::from_secs(elapsed_secs);
                     self.position_opened_at =
                         tokio::time::Instant::now().checked_sub(elapsed_dur);
                     if self.position_opened_at.is_none() {
-                        // checked_sub 返回 None（elapsed 过大超过 Instant 范围）— fallback
+
                         warn!(
                             bot_id = %self.bot.id,
                             elapsed_secs,
@@ -441,11 +420,11 @@ impl AutoWorker {
                     );
                 }
             }
-            // 主动从 PE 查询仓位状态（不依赖事件推送，避免 full_sync 只发出 PositionSynced 导致超时）
+
             self.refresh_position_from_pe().await;
-            // 如果主动查询已恢复，跳过事件等待循环
+
             if self.current_position.is_none() {
-                // 主动查询未恢复，等待 PE 事件推送
+
                 let deadline = tokio::time::Instant::now()
                     + Duration::from_secs(self.time_config.close_order_timeout_secs);
                 loop {
@@ -483,9 +462,9 @@ impl AutoWorker {
             }
         }
 
-        // 初始 LLM 分析
+
         let skip_llm = if self.has_position() {
-            // T11: 仅在 DB 恢复未设置时才用 Instant::now()（首次开仓场景）
+
             if self.position_opened_at.is_none() {
                 self.position_opened_at = Some(tokio::time::Instant::now());
             }
@@ -507,7 +486,7 @@ impl AutoWorker {
             Duration::from_secs(self.time_config.price_poll_interval_secs)
         );
 
-        // LLM 周期性决策定时器
+
         let (llm_signal_tx, mut llm_signal_rx) = tokio::sync::mpsc::channel::<()>(1);
         {
             let interval_secs = self.bot.decide_interval_secs.max(60) as u64;
@@ -523,7 +502,7 @@ impl AutoWorker {
             });
         }
 
-        // 主事件循环
+
         loop {
             tokio::select! {
                 _ = shutdown_rx.recv() => {
@@ -568,7 +547,6 @@ impl AutoWorker {
         self.save_stats().await;
     }
 
-    // ── 价格 tick 处理 ──────────────────────────────────────
 
     pub(crate) async fn on_price_tick(&mut self) {
         if self.current_price <= 0.0 {
@@ -577,7 +555,7 @@ impl AutoWorker {
 
         self.check_pending_timeout().await;
 
-        // 有 pending 订单时，跳过止损止盈检查，避免在订单未确认时重复触发
+
         if self.pending_open.is_some() || self.pending_close.is_some() {
             return;
         }
@@ -624,7 +602,7 @@ impl AutoWorker {
         };
 
         if should_close {
-            // 分别判断止损和止盈是否触发
+
             let stop_triggered = self.stop_loss > 0.0
                 && ((side == "long" && self.current_price <= self.stop_loss)
                     || (side == "short" && self.current_price >= self.stop_loss));
@@ -632,13 +610,13 @@ impl AutoWorker {
                 && ((side == "long" && self.current_price >= self.take_profit)
                     || (side == "short" && self.current_price <= self.take_profit));
 
-            // 同时触发时优先止盈（盈利出场优先，对策略和心理影响更小）
+
             let close_reason = if take_triggered {
                 "take_profit"
             } else if stop_triggered {
                 "stop_loss"
             } else {
-                // 理论上不会走到这里（should_close=true 但两者都没触发）
+
                 "stop_loss"
             };
             info!(
@@ -679,7 +657,7 @@ impl AutoWorker {
         if new_stop != self.stop_loss {
             self.stop_loss = new_stop;
             self.trailing_stop_dirty = true;
-            // 同步更新 trade 维度的 stop_loss（异步执行，失败仅记录日志）
+
             if let Some(trade_id) = self.current_trade_id {
                 let store = self.store.clone();
                 tokio::spawn(async move {
@@ -716,7 +694,6 @@ impl AutoWorker {
         false
     }
 
-    // ── LLM 决策 ────────────────────────────────────────────
 
     pub(crate) async fn on_llm_decision(&mut self) {
         if self.is_pending() {
@@ -724,8 +701,7 @@ impl AutoWorker {
             return;
         }
 
-        // 决策前直接查询 PE 仓位，刷新 current_position 缓存。
-        // 防止 PE 事件丢失（broadcast lag）导致缓存为空 → 误判"无仓位" → 重复开仓。
+
         self.refresh_position_from_pe().await;
 
         if !self
@@ -761,15 +737,15 @@ impl AutoWorker {
             )
             .await;
 
-        // 保存 log_id 供后续 apply_pending_open/apply_pending_close 回填 execution_status / intercept_reason
+
         self.current_log_id = log_id;
 
-        // 执行决策，若被拦截则 UPDATE LLM log 设置 intercept_reason + execution_status
+
         let intercept_reason = self.execute_decision(&action, decision.as_ref()).await;
         if let Some(reason) = intercept_reason {
             warn!(bot_id = %self.bot.id, action = %action.as_str(), intercept_reason = %reason, "Decision intercepted");
             if let Some(log_id) = self.current_log_id {
-                // 拦截时根据 action 类型设置 execution_status
+
                 let exec_status = match action {
                     AutoAction::OpenLong | AutoAction::OpenShort => "open_failed",
                     AutoAction::ClosePosition => "close_failed",
@@ -783,10 +759,10 @@ impl AutoWorker {
                     error!(bot_id = %self.bot.id, error = %e, "Failed to update intercept log");
                 }
             }
-            // 拦截后清空 log_id，避免被后续操作误更新
+
             self.current_log_id = None;
         } else if matches!(action, AutoAction::Hold) {
-            // Hold 决策：回填 execution_status='hold'
+
             if let Some(log_id) = self.current_log_id {
                 if let Err(e) = self
                     .store
@@ -853,8 +829,7 @@ impl AutoWorker {
             "无持仓".to_string()
         };
 
-        // 构造最近平仓事件描述（用于 LLM 反思，避免反复扫损）
-        // 基于 close_reason（代码逻辑字段）：stop_loss/take_profit/position_timeout/llm_decision
+
         let recent_close_info = match &self.last_close_event {
             Some((side, close_reason, closed_at)) => {
                 let side_cn = match side.as_str() {
@@ -1016,20 +991,7 @@ impl AutoWorker {
         }
     }
 
-    /// 执行 LLM 决策。
-    /// 返回 `Some(拦截原因)` 表示决策被代码拦截（未执行），`None` 表示已执行或无需执行。
-    /// 拦截原因会被记录到 LLM log 的 intercept_reason 字段供前端展示。
-    ///
-    /// ## 拦截顺序（从早到晚，前序拦截后不再检查后续）
-    /// 1. **Hold 决策**：LLM 决策为观望，直接返回（非拦截，无日志）
-    /// 2. **pending 订单**：有待确认的订单在途，避免重复下单
-    /// 3. **置信度不足**（仅开仓）：confidence < 0.6，降级为观望
-    /// 4. **市场快照无效**：current_price <= 0，无法计算下单参数
-    /// 5. **已有仓位**：避免重复开仓
-    /// 6. **冷却期**（仅开仓）：止损/止盈/LLM平仓后同方向重入限制
-    /// 7. **无仓位可平**（仅平仓）：ClosePosition 时无持仓
-    ///
-    /// 拦截 2-7 会返回 `Some(reason)`，由调用方记录到 LLM log 的 intercept_reason
+
     pub(crate) async fn execute_decision(
         &mut self,
         action: &AutoAction,
@@ -1088,7 +1050,7 @@ impl AutoWorker {
                     warn!(bot_id = %self.bot.id, side = %side, "Already has position, cannot open");
                     return Some("已有仓位，无法开仓".to_string());
                 }
-                // 冷却期检查：防止止损/止盈后立即同方向重入被反弹扫损
+
                 if let Some(remaining) = self.cooldown_remaining_secs(side) {
                     let (closed_side, close_reason, closed_at) =
                         match self.last_close_event.as_ref() {
@@ -1127,8 +1089,8 @@ impl AutoWorker {
                     ));
                 }
                 self.open_position(side, decision, &snapshot).await;
-                // 订单发送失败检测：open_position 成功会设置 pending_open
-                // 失败时回填 intercept_reason + execution_status='open_failed'（在 on_llm_decision 中处理）
+
+
                 if self.pending_open.is_none() {
                     return Some("开仓订单发送失败".to_string());
                 }
@@ -1139,9 +1101,9 @@ impl AutoWorker {
                     warn!(bot_id = %self.bot.id, "No position to close");
                     return Some("无仓位可平".to_string());
                 }
-                // LLM 决策平仓：close_reason 固定为 llm_decision（不由 LLM 决定原因文本）
+
                 self.close_position("llm_decision").await;
-                // 订单发送失败检测：close_position 成功会设置 pending_close
+
                 if self.pending_close.is_none() {
                     return Some("平仓订单发送失败".to_string());
                 }
@@ -1159,8 +1121,7 @@ impl AutoWorker {
             self.bot.market_regime = Some(regime.clone());
         }
 
-        // market_regime 是交易决策的关键参数，不得使用默认值。
-        // 若 market_regime 为 None，跳过 AI 分析更新以避免写入错误的 regime。
+
         let regime = match self.bot.market_regime.as_deref() {
             Some(r) => r,
             None => {
@@ -1169,7 +1130,7 @@ impl AutoWorker {
             }
         };
 
-        // 杠杆由用户配置决定（create 接口），不在运行时动态调整
+
         if let Err(e) = self
             .store
             .update_ai_analysis(
@@ -1221,10 +1182,10 @@ impl AutoWorker {
 
         let quantity = invest_amount * self.bot.leverage as f64 / price;
 
-        // 校验最小下单量，并按 min_qty 精度处理
+
         let min_qty = snapshot.base.min_qty;
         let quantity = if min_qty > 0.0 && quantity < min_qty {
-            // 如果计算出的数量小于最小下单量，直接使用 min_qty 开单
+
             warn!(
                 bot_id = %self.bot.id,
                 quantity, min_qty, invest_amount, price,
@@ -1232,16 +1193,13 @@ impl AutoWorker {
             );
             min_qty
         } else if min_qty > 0.0 {
-            // 向下取整到 min_qty 的倍数，避免交易所拒绝
+
             (quantity / min_qty).floor() * min_qty
         } else {
             quantity
         };
 
-        // 止损止盈价格来源策略：
-        //   ① 优先采用 LLM 在决策中返回的 SL/TP（基于市场结构判断）
-        //   ② LLM 未返回或方向不合法（多头 sl>=price / tp<=price，空头反之）时回退到代码公式
-        //   ③ 公式兜底：1.5×ATR 止损，3.0×ATR 止盈
+
         let formula_sl = strategy::compute_stop_loss(price, side, atr);
         let formula_tp = strategy::compute_take_profit(price, side, atr);
 
@@ -1274,7 +1232,7 @@ impl AutoWorker {
             (None, _) => (formula_tp, "formula"),
         };
 
-        // 盈亏比校验：若 < 1.0 则使用公式兜底（防止 LLM 给出不合理 SL/TP）
+
         let rr_ratio = match side {
             "long" => (take_profit - price) / (price - stop_loss).max(1e-9),
             "short" => (price - take_profit) / (stop_loss - price).max(1e-9),
@@ -1352,9 +1310,7 @@ impl AutoWorker {
         }
     }
 
-    /// 平仓入口。
-    /// - `close_reason`: 平仓原因（stop_loss/take_profit/position_timeout/llm_decision）
-    ///   由代码逻辑决定（不由 LLM 决定），用于冷却期判断和 DB 记录
+
     pub(crate) async fn close_position(&mut self, close_reason: &str) {
         if !self.has_position() {
             return;
@@ -1366,8 +1322,7 @@ impl AutoWorker {
             None => (0.0, 0.0, 0.0),
         };
 
-        // Use ClosePosition if we have a valid position_id, otherwise fall back to PlaceOrder
-        // 注意：Uuid::nil() 视为无效（历史 bug 可能导致 nil UUID 被保存）
+
         if let Some(position_id) = self.bot.position_id.filter(|id| *id != Uuid::nil()) {
             let client_order_id = client_order_id::format_auto_close(self.bot.id, &side);
 
@@ -1405,7 +1360,7 @@ impl AutoWorker {
                 }
             }
         } else {
-            // Fallback: use PlaceOrder with reduce_only when position_id is not available
+
             let (order_side, position_side) = match side.as_str() {
                 "long" => (OrderSide::Sell, Some(BotPositionSide::Long)),
                 "short" => (OrderSide::Buy, Some(BotPositionSide::Short)),
@@ -1458,26 +1413,24 @@ impl AutoWorker {
         }
     }
 
-    // ── 订单事件处理 ────────────────────────────────────────
 
-    /// 处理 PositionEngine 事件，维护 current_position 缓存
     pub(crate) async fn on_pe_event(&mut self, event: EngineEvent) {
         match event {
             EngineEvent::PositionUpdated { position } => {
-                // 只关心本 bot 的 symbol 且 position_id 匹配
+
                 if position.symbol != self.bot.symbol {
                     return;
                 }
                 let is_ours = match self.bot.position_id {
                     Some(pid) if pid != Uuid::nil() => pid == position.id,
-                    // position_id 还没建立时，按 symbol + Open 状态匹配
+
                     _ => position.is_open(),
                 };
                 if !is_ours {
                     return;
                 }
-                // 如果 position_id 还没建立，从 PositionUpdated 事件中恢复
-                // 这可以处理 PositionOpened 事件丢失（broadcast lag）的场景
+
+
                 if self.bot.position_id.is_none() || self.bot.position_id == Some(Uuid::nil()) {
                     self.bot.position_id = Some(position.id);
                     if let Err(e) = self
@@ -1497,7 +1450,7 @@ impl AutoWorker {
                 if let Some(pid) = self.bot.position_id {
                     if pid == position.id {
                         self.current_position = None;
-                        // 清空 position_id 并持久化，避免重启后尝试恢复已关闭的仓位
+
                         self.bot.position_id = None;
                         if let Err(e) = self
                             .store
@@ -1513,7 +1466,7 @@ impl AutoWorker {
                 if position.symbol != self.bot.symbol {
                     return;
                 }
-                // 开仓事件到达后，记录 position_id 并缓存
+
                 if self.bot.position_id.is_none() || self.bot.position_id == Some(Uuid::nil()) {
                     self.bot.position_id = Some(position.id);
                     if let Err(e) = self
@@ -1537,7 +1490,7 @@ impl AutoWorker {
                     return;
                 }
 
-                // Track position_id from order events
+
                 if order.position_id.is_some() && self.bot.position_id.is_none() {
                     self.bot.position_id = order.position_id;
                 }
@@ -1546,8 +1499,8 @@ impl AutoWorker {
                     .fill_price
                     .or(order.request_price)
                     .unwrap_or_else(|| {
-                        // Using current_price as fallback for fill_price can cause
-                        // PnL miscalculation if the price has moved since fill.
+
+
                         warn!(
                             order_id = %order.id,
                             "Order has no fill_price and no request_price — \
@@ -1573,7 +1526,7 @@ impl AutoWorker {
                 order_id: _,
                 reason,
             } if self.pending_open.is_some() || self.pending_close.is_some() => {
-                    // 记录是开仓还是平仓失败（rollback 前判断）
+
                     let was_open = self.pending_open.is_some();
                     warn!(
                         bot_id = %self.bot.id,
@@ -1583,8 +1536,8 @@ impl AutoWorker {
                     );
                     self.rollback_pending_open();
                     self.rollback_pending_close();
-                    // 回填 LLM log 执行状态（仅 LLM 决策触发的订单才有 log_id）
-                    // 止盈止损/超时触发的平仓 current_log_id 为 None，不会误回填
+
+
                     if let Some(log_id) = self.current_log_id.take() {
                         let exec_status = if was_open {
                             "open_failed"
@@ -1655,7 +1608,7 @@ impl AutoWorker {
             "Open order confirmed, applying position state"
         );
 
-        // 仓位实时状态由 PE 通过 PositionUpdated 事件维护，这里只更新内存中的风控参数
+
         self.stop_loss = stop_loss;
         self.take_profit = take_profit;
         self.position_opened_at = Some(tokio::time::Instant::now());
@@ -1678,8 +1631,8 @@ impl AutoWorker {
                 return;
             }
         };
-        // 开仓时 INSERT 一条 status='open' 的 trade 记录，保存 trade_id 和 open_fee
-        // 同时记录本次交易的风控边界（SL/TP）到 trade 维度，便于审计与前端展示
+
+
         self.current_open_fee = fee;
         match self
             .store
@@ -1716,7 +1669,7 @@ impl AutoWorker {
             );
         }
 
-        // 回填 LLM 日志执行状态：开仓成功
+
         if let Some(log_id) = self.current_log_id.take() {
             if let Err(e) = self
                 .store
@@ -1740,7 +1693,7 @@ impl AutoWorker {
             pending.position_size
         };
 
-        // 平仓 PnL = 价格差收益 - 开仓手续费 - 平仓手续费
+
         let gross_pnl = match pending.side.as_str() {
             "long" => (fill_price - pending.entry_price) * actual_qty,
             "short" => (pending.entry_price - fill_price) * actual_qty,
@@ -1783,8 +1736,7 @@ impl AutoWorker {
         self.current_position = None;
         self.position_opened_at = None;
 
-        // 记录最近平仓事件（用于冷却期判断和 LLM 上下文反思）
-        // 字段：(开仓方向, 平仓原因 close_reason, 平仓时间)
+
         self.last_close_event = Some((
             pending.side.clone(),
             pending.close_reason.clone(),
@@ -1802,10 +1754,10 @@ impl AutoWorker {
                 return;
             }
         };
-        // close_reason 直接使用 pending.close_reason（已为合法值）
+
         let close_reason = &pending.close_reason;
 
-        // 平仓时 UPDATE 对应的开仓 trade 记录
+
         let trade_id = self.current_trade_id.take();
         match trade_id {
             Some(tid) => {
@@ -1830,7 +1782,7 @@ impl AutoWorker {
                 }
             }
             None => {
-                // 内存中无 trade_id，尝试从 DB 查找
+
                 match self.store.find_open_trade(self.bot.id).await {
                     Ok(Some((tid, _sl, _tp, _opened_at))) => {
                         if let Err(e) = self
@@ -1883,11 +1835,10 @@ impl AutoWorker {
             }
         }
 
-        // 重置开仓手续费缓存
+
         self.current_open_fee = 0.0;
 
-        // 回填 LLM 日志执行状态：平仓成功
-        // 注：close_reason 不回填到此表，已记录在 qd_auto_trades.close_reason
+
         if let Some(log_id) = self.current_log_id.take() {
             if let Err(e) = self
                 .store

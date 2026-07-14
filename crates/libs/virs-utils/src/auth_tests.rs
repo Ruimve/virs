@@ -1,10 +1,5 @@
-//! Unit tests for auth.rs JWT functions.
-
 use crate::auth::{decode_jwt, encode_jwt, Claims};
 
-// ============================================================
-// TC-A1: Claims::new
-// ============================================================
 
 #[test]
 fn a1_1_normal_construction() {
@@ -22,9 +17,6 @@ fn a1_2_zero_expiry() {
     assert_eq!(claims.exp, claims.iat);
 }
 
-// ============================================================
-// TC-A2: encode_jwt / decode_jwt round-trip
-// ============================================================
 
 #[test]
 fn a4_1_normal_roundtrip() {
@@ -37,7 +29,7 @@ fn a4_1_normal_roundtrip() {
     assert_eq!(decoded.username, claims.username);
     assert_eq!(decoded.role, claims.role);
     assert_eq!(decoded.exp, claims.exp);
-    // iat is overwritten by encode_jwt to current time
+
     assert!(decoded.iat >= claims.iat);
 }
 

@@ -1,8 +1,3 @@
-//! Binance 用户数据流事件处理器模块
-//!
-//! 每个事件类型一个独立文件，由 `dispatch_event` 统一分发。
-//! 官方文档: https://developers.binance.com/zh-CN/docs/products/derivatives-trading-usds-futures/user-data-streams
-
 pub mod account_config_update;
 pub mod account_update;
 pub mod algo_update;
@@ -16,14 +11,7 @@ pub mod trade_lite;
 
 use virs_types::WsFeedEvent;
 
-/// 处理原始 WS 文本消息，分发到对应事件处理器。
-///
-/// 兼容两种推送格式：
-/// - 单流格式: `{"e":"ORDER_TRADE_UPDATE", ...}`
-/// - 组合流格式: `{"stream":"<listenKey>", "data":{"e":"ORDER_TRADE_UPDATE", ...}}`
-///
-/// 返回 `Some(WsFeedEvent)` 表示事件已转换为下游可消费的变体；
-/// 返回 `None` 表示事件被内部处理（日志记录）或无法识别。
+
 pub fn dispatch_event(text: &str) -> Option<WsFeedEvent> {
     let value: serde_json::Value = serde_json::from_str(text).ok()?;
 

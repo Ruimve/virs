@@ -1,23 +1,8 @@
-//! Integration tests for virs-models.
-//!
-//! Tests cross-struct computation chains, serde round-trips with method calls,
-//! and business logic consistency.
-
 use chrono::Utc;
 use uuid::Uuid;
 
 use virs_models::*;
 
-// ============================================================
-// TC-INT-1: User struct (no transformation methods; API handler serializes directly)
-// ============================================================
-// Note: User struct is used by auth handler via sqlx::FromRow. No conversion
-// method is needed — the handler constructs the JSON response inline.
-// Removed tests for the deleted User::to_response() method.
-
-// ============================================================
-// TC-INT-2: GridBot computation chain
-// ============================================================
 
 #[test]
 fn int_2_1_spacing_and_return_pct() {
@@ -95,15 +80,12 @@ fn int_2_2_invalid_config_negative_spacing() {
         started_at: None,
         stopped_at: None,
     };
-    // upper < lower → negative spacing
+
     assert!(bot.grid_spacing() < 0.0);
     assert!(!bot.is_running());
     assert!(bot.is_stopped());
 }
 
-// ============================================================
-// TC-INT-3: AutoBot statistics chain
-// ============================================================
 
 #[test]
 fn int_3_1_win_plus_loss_equals_100() {
@@ -180,16 +162,6 @@ fn int_3_2_negative_return() {
     assert!(!bot.is_running());
 }
 
-// ============================================================
-// TC-INT-4: Order struct (no judgment methods; business code uses raw status)
-// ============================================================
-// Note: Order is a transient API-layer type. Status judgments (is_filled, etc.)
-// are handled by virs_types::PositionOrder in the engine layer, not here.
-// Removed tests for the deleted Order::is_filled/is_open/is_canceled/fill_rate/is_buy/is_sell methods.
-
-// ============================================================
-// TC-INT-5: serde round-trip with method calls
-// ============================================================
 
 #[test]
 fn int_5_1_grid_bot_serde_then_methods() {

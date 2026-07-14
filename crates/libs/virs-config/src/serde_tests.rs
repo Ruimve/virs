@@ -1,10 +1,5 @@
-//! Serde serialization/deserialization round-trip tests for all config types.
-
 use crate::app_config::*;
 
-// ============================================================
-// TC-S1: AppConfig serde round-trip
-// ============================================================
 
 #[test]
 fn s1_1_app_config_full_roundtrip() {
@@ -67,9 +62,6 @@ fn s1_1_app_config_full_roundtrip() {
     assert_eq!(deserialized.proxy, config.proxy);
 }
 
-// ============================================================
-// TC-S2: Sub-config serde round-trips
-// ============================================================
 
 #[test]
 fn s2_1_server_config_roundtrip() {

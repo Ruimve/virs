@@ -93,11 +93,11 @@ export const tradeTypeColor = (t: string) => {
   return 'text-on-surface-tertiary';
 };
 
-/** Returns a Tailwind text color class for P&L values */
+
 export const pnlColor = (v: number): string =>
   v > 0 ? 'text-success-text' : v < 0 ? 'text-danger-text' : 'text-on-surface';
 
-/** Maps an AI action to a Badge variant — replaces neutral+className override pattern */
+
 export const actionVariant = (
   action: string | undefined,
 ): 'success' | 'danger' | 'warning' | 'info' | 'neutral' => {
@@ -116,7 +116,7 @@ export const actionVariant = (
   return map[action] || 'neutral';
 };
 
-/** Format volume with K/M/B suffixes (most complete version) */
+
 export function formatVolume(v: number): string {
   if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(2)}B`;
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;

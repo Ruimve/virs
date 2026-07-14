@@ -11,7 +11,6 @@ import type {
   AnalysisLogsPage,
 } from './types';
 
-// ── Grid Bot ──────────────────────────────────────────────
 
 export async function createGridBot(params: {
   symbol: string;
@@ -66,7 +65,6 @@ export async function getGridAnalysisLogs(
   );
 }
 
-// ── Auto Bot ──────────────────────────────────────────────
 
 export async function createAutoBot(params: {
   symbol: string;
@@ -117,7 +115,6 @@ export async function getAutoAnalysisLogs(
   );
 }
 
-// ── Bot discovery ─────────────────────────────────────────
 
 export async function findActiveBot(): Promise<BotSummary | null> {
   try {
@@ -134,7 +131,7 @@ export async function findActiveBot(): Promise<BotSummary | null> {
       return { id: bot.id, bot_type: 'grid' };
     }
   } catch {
-    // ignore
+
   }
   return null;
 }

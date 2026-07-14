@@ -10,19 +10,13 @@ interface Props {
   latestPrice: number;
 }
 
-// ── 字体规范（全页面统一） ──────────────────────────────
-// Hero value:   text-xl font-mono font-semibold tabular-nums (20px)
-// Primary value: text-sm font-mono tabular-nums (14px)
-// Label:        text-caption uppercase tracking-wider text-on-surface-tertiary
-// Sub text:     text-2xs text-on-surface-muted
-// ────────────────────────────────────────────────────────
 
 export const PositionStats = memo(({ bot, latestPrice }: Props) => {
   const { gridLevels } = useBot();
   const b = bot;
   const filledCount = Math.min(b.grid_filled_count, b.grid_count);
 
-  // ── 前端实时计算未实现盈亏（基于 grid levels + 最新价） ──
+
   const { unrealizedPnl, usedMargin } = useMemo(() => {
     if (!gridLevels || gridLevels.length === 0 || latestPrice <= 0) {
       return { unrealizedPnl: 0, usedMargin: 0 };
@@ -32,11 +26,11 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
     for (const level of gridLevels) {
       const qty = Math.abs(level.hold_quantity);
       if (qty <= 0) continue;
-      // 持仓方向：buy=多，sell=空
+
       const dir = level.side === 'buy' ? 1 : -1;
       const avgPrice = level.avg_buy_price > 0 ? level.avg_buy_price : level.buy_price;
       pnl += (latestPrice - avgPrice) * qty * dir;
-      // 保证金 = 持仓价值 / 杠杆
+
       margin += (qty * avgPrice) / b.leverage;
     }
     return { unrealizedPnl: pnl, usedMargin: margin };
@@ -48,9 +42,9 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
 
   return (
     <div className="border-b border-line-subtle">
-      {/* ── 第一区：账户概览（Hero） ── */}
+      {}
       <div className="px-4 py-3 flex items-center gap-6">
-        {/* 账户余额 - Hero number */}
+        {}
         <div className="shrink-0">
           <div className="text-caption uppercase tracking-wider text-on-surface-tertiary mb-0.5">
             账户余额
@@ -60,10 +54,10 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
           </div>
         </div>
 
-        {/* 分隔线 */}
+        {}
         <div className="h-10 w-px bg-line-subtle shrink-0" />
 
-        {/* 保证金三列 */}
+        {}
         <div className="flex items-center gap-5 flex-1 min-w-0">
           <div>
             <div className="text-caption uppercase tracking-wider text-on-surface-tertiary mb-0.5">
@@ -94,7 +88,7 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
         </div>
       </div>
 
-      {/* ── 第二区：网格 + 行情 ── */}
+      {}
       <div className="px-4 py-2 border-t border-line-subtle/50 grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-1.5">
         <Stat label="最新价">
           <FlashPrice price={latestPrice} className="text-on-surface" />
@@ -126,7 +120,7 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
         </Stat>
       </div>
 
-      {/* ── 第三区：Bot 配置 ── */}
+      {}
       <div className="px-4 py-2 border-t border-line-subtle/50 grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-1.5">
         <Stat label="杠杆">
           <span className="text-on-surface">{b.leverage}x</span>

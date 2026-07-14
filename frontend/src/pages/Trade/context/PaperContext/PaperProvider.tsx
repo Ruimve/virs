@@ -3,7 +3,7 @@ import { getPaperStatus } from '@/service';
 import { PaperContext } from '.';
 
 export function PaperProvider({ children }: { children: ReactNode }) {
-  // null = engines not started yet (unknown mode), NOT the same as live trading
+
   const [enabled, setEnabled] = useState<boolean | null>(null);
 
   const refresh = useCallback(async () => {

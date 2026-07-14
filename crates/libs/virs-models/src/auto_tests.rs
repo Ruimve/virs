@@ -1,5 +1,3 @@
-//! Unit tests for auto.rs AutoBot methods.
-
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -42,9 +40,6 @@ fn make_auto_bot(
     }
 }
 
-// ============================================================
-// TC-A1: win_rate
-// ============================================================
 
 #[test]
 fn a1_1_seventy_percent() {
@@ -64,9 +59,6 @@ fn a1_3_zero_trades_division_protection() {
     assert!((bot.win_rate() - 0.0).abs() < 0.01);
 }
 
-// ============================================================
-// TC-A2: loss_rate
-// ============================================================
 
 #[test]
 fn a2_1_thirty_percent() {
@@ -80,9 +72,6 @@ fn a2_2_zero_trades_division_protection() {
     assert!((bot.loss_rate() - 0.0).abs() < 0.01);
 }
 
-// ============================================================
-// TC-A3: total_return_pct
-// ============================================================
 
 #[test]
 fn a3_1_positive_return() {
@@ -102,9 +91,6 @@ fn a3_3_zero_capital_division_protection() {
     assert!((bot.total_return_pct() - 0.0).abs() < 0.01);
 }
 
-// ============================================================
-// TC-A4: is_running
-// ============================================================
 
 #[test]
 fn a4_1_running_status() {
@@ -118,9 +104,6 @@ fn a4_2_stopped_status() {
     assert!(!bot.is_running());
 }
 
-// ============================================================
-// TC-A5: is_stopped
-// ============================================================
 
 #[test]
 fn a5_1_stopped_status() {

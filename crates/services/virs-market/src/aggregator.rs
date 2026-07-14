@@ -1,5 +1,3 @@
-//! Kline aggregator — aggregates 1m candles into higher timeframes.
-
 use super::cache::SymbolCache;
 use super::types::{align_open_time, Candle, Timeframe};
 
@@ -153,7 +151,7 @@ impl Aggregator {
     }
 }
 
-/// Create a higher-timeframe candle from a 1m candle.
+
 pub fn candle_from_1m(base: &Candle, timeframe: Timeframe) -> Candle {
     let tf_ms = timeframe.ms();
     let aligned_open_time = (base.open_time / tf_ms) * tf_ms;

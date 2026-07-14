@@ -18,7 +18,7 @@ import { useHeader } from '../Layout/Header/HeaderContext';
 import type { CheckData, CheckItem, CheckKey } from './define';
 import CheckDetail from './CheckDetail';
 
-// ── 检查项初始配置 ──────────────────────────────────────────
+
 const INITIAL_CHECKS: CheckItem[] = [
   {
     key: 'llm',
@@ -73,7 +73,6 @@ const HealthCheck = () => {
     [],
   );
 
-  // ── 单项检查逻辑（每项独立可重试）──────────────────────────
 
   const runLlmCheck = useCallback(async () => {
     updateCheck('llm', 'verifying', '');
@@ -210,7 +209,7 @@ const HealthCheck = () => {
     trading: runTradingCheck,
   };
 
-  // 并行执行所有检查（替代原有的串行 + setTimeout 模拟）
+
   const runChecks = useCallback(async () => {
     setRunning(true);
     await Promise.allSettled([
@@ -229,10 +228,9 @@ const HealthCheck = () => {
 
   useEffect(() => {
     runChecks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
-  // ── 派生状态 ──────────────────────────────────────────────
 
   const total = checks.length;
   const passed = checks.filter((c) => c.status === 'done').length;
@@ -259,7 +257,6 @@ const HealthCheck = () => {
     navigate(`/trade/${param.botType}/${bot?.id}`, { replace: true });
   };
 
-  // ── 概览状态 ──────────────────────────────────────────────
 
   const tone = running ? 'accent' : failed === 0 ? 'success' : 'warning';
   const toneClasses: Record<string, string> = {
@@ -278,7 +275,7 @@ const HealthCheck = () => {
 
   return (
     <div className="max-w-lg mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-6">
-      {/* 标题 */}
+      {}
       <div className="mb-6">
         <h2 className="text-xl md:text-2xl font-extralight tracking-wide text-on-base">
           Health Check
@@ -288,7 +285,7 @@ const HealthCheck = () => {
         </p>
       </div>
 
-      {/* 概览卡片 */}
+      {}
       <div className="mb-6 rounded-xl border border-line-subtle bg-surface-1 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -323,10 +320,10 @@ const HealthCheck = () => {
         </div>
       </div>
 
-      {/* 检查步骤 */}
+      {}
       <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
 
-      {/* 继续操作 */}
+      {}
       {allDone && (
         <div className="mt-6 flex items-center justify-between">
           <p className="text-xs text-on-surface-tertiary">

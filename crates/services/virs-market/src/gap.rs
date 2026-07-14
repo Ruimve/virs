@@ -1,5 +1,3 @@
-//! Gap detector — detects and backfills gaps in kline data.
-
 use std::sync::Arc;
 
 use tokio::sync::Mutex;

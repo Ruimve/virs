@@ -6,12 +6,7 @@ export interface LogoProps {
   onClick?: () => void;
 }
 
-/**
- * VIRS Logo — flowing gradient text that shifts continuously.
- * Matches the global indigo/violet accent palette.
- *
- * When `onClick` is provided, the span becomes keyboard-accessible
- */
+
 export const Logo = memo(({ className = '', onClick = fn }: LogoProps) => {
   return (
     <span

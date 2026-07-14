@@ -1,11 +1,3 @@
-//! Binance exchange implementation (perpetual futures only).
-//!
-//! API endpoints are organized by Binance's path prefixes:
-//! - `sapi.rs` — /sapi/v1 (Account & funds: balance, apiRestrictions, etc.)
-//! - `fapi.rs` — /fapi/v1 (USDT-M Futures: perpetual trading, positions, funding, etc.)
-//!
-//! Account endpoints (sapi) are shared across market types.
-
 use tracing::info;
 
 pub mod fapi;
@@ -29,16 +21,12 @@ use virs_types::WsFeedEvent;
 use crate::{Exchange, ExchangeClient};
 use virs_error::ExchangeError;
 
-// ============================================================
-// Binance Signer (HMAC-SHA256 via query string)
-// ============================================================
 
-/// Binance HMAC-SHA256 request signer (legacy, used with HMAC API Keys).
 pub struct BinanceSigner {
     api_key: String,
     api_secret: String,
-    /// 服务器时间偏移（毫秒），由 sync_time() 校准
-    /// T15: 使用 Arc<AtomicI64> 以便 signer clone 后共享同一偏移
+
+
     time_offset_ms: Arc<AtomicI64>,
 }
 
@@ -52,13 +40,13 @@ impl BinanceSigner {
     }
 }
 
-/// recvWindow 常量（毫秒）— 币安默认 5000ms，显式设置以确保一致行为
+
 const RECV_WINDOW: &str = "5000";
 
-/// T1: 定期时间同步间隔（秒）— 每小时重新校准服务器时间偏移
+
 const TIME_SYNC_INTERVAL_SECS: u64 = 3600;
 
-/// T1: 时间偏移告警阈值（毫秒）— 超过此值时发出 warn 日志
+
 const TIME_OFFSET_WARN_THRESHOLD_MS: i64 = 2_000;
 
 impl Signer for BinanceSigner {
@@ -153,23 +141,12 @@ impl Signer for BinanceSigner {
     }
 }
 
-// ============================================================
-// Binance Ed25519 Signer (for Ed25519 API Keys — required by WebSocket API)
-// ============================================================
 
-/// Binance Ed25519 request signer.
-///
-/// 用于替代 HMAC-SHA256 的签名方式，币安推荐用于 WebSocket API 的 userDataStream.subscribe。
-/// 签名输出为 base64 编码（币安 REST/WebSocket API 的 Ed25519 签名格式）。
-///
-/// 支持的私钥格式：
-/// - PKCS8 PEM（币安后台下载的默认格式）
-/// - base64 编码的 32 字节种子
 pub struct BinanceEd25519Signer {
     api_key: String,
     signing_key: ed25519_dalek::SigningKey,
-    /// 服务器时间偏移（毫秒），由 sync_time() 校准
-    /// T15: 使用 Arc<AtomicI64>，clone 后共享同一偏移，确保 sync_time 更新对所有副本生效
+
+
     time_offset_ms: Arc<AtomicI64>,
 }
 
@@ -178,14 +155,14 @@ impl Clone for BinanceEd25519Signer {
         Self {
             api_key: self.api_key.clone(),
             signing_key: self.signing_key.clone(),
-            // T15: 共享同一 Arc<AtomicI64>，而非复制值到新原子
+
             time_offset_ms: Arc::clone(&self.time_offset_ms),
         }
     }
 }
 
 impl BinanceEd25519Signer {
-    /// 从 PKCS8 PEM 格式私钥创建
+
     pub fn from_pem(api_key: &str, pem: &str) -> Result<Self, ExchangeError> {
         let signing_key = ed25519_dalek::SigningKey::from_pkcs8_pem(pem).map_err(|e| {
             ExchangeError::Internal(format!("Invalid Ed25519 PEM private key: {}", e))
@@ -197,7 +174,7 @@ impl BinanceEd25519Signer {
         })
     }
 
-    /// 从 base64 编码的 32 字节种子创建
+
     pub fn from_seed_b64(api_key: &str, seed_b64: &str) -> Result<Self, ExchangeError> {
         let seed = base64::engine::general_purpose::STANDARD
             .decode(seed_b64.trim())
@@ -216,7 +193,7 @@ impl BinanceEd25519Signer {
         })
     }
 
-    /// 对消息签名，返回 base64 编码的签名
+
     pub fn sign_message(&self, message: &str) -> String {
         use ed25519_dalek::Signer;
         let signature = self.signing_key.sign(message.as_bytes());
@@ -317,10 +294,7 @@ impl Signer for BinanceEd25519Signer {
     }
 }
 
-/// 尝试根据 api_secret 格式构造 Ed25519 签名器：
-/// - 以 `-----BEGIN` 开头 → Ed25519 PEM
-/// - base64 解码后为 32 字节 → Ed25519 seed
-/// - 其他 → 返回 Err（调用方 fallback 到 HMAC）
+
 pub(crate) fn try_build_ed25519(
     api_key: &str,
     api_secret: &str,
@@ -344,33 +318,21 @@ pub(crate) fn try_build_ed25519(
     }
 }
 
-// ============================================================
-// Binance Exchange
-// ============================================================
 
-/// Binance exchange implementation.
-///
-/// Binance perpetual futures exchange.
-///
-/// Dispatches to `fapi` module for all market data and trading operations.
-/// Account endpoints (`sapi`) are also available.
 pub struct BinanceExchange {
     client: ExchangeClient,
     signer: Arc<dyn Signer>,
-    /// T1: 标记定期时间同步是否已启动，防止重复 spawn
+
     time_sync_started: AtomicBool,
-    /// T1 WARN fix: 定期时间同步的运行标志，Drop 时设为 false 以停止后台 task
+
     time_sync_running: Arc<AtomicBool>,
-    /// listenKey 保活间隔（秒）— 合约
+
     listenkey_keepalive_futures_secs: u64,
 }
 
 impl BinanceExchange {
-    /// Create a new Binance exchange instance.
-    ///
-    /// 根据 `api_secret` 格式自动选择签名器：
-    /// - Ed25519 PEM / base64 seed → `BinanceEd25519Signer`（支持 WebSocket API）
-    /// - 其他 → `BinanceSigner`（HMAC-SHA256，向后兼容）
+
+
     pub fn new(
         api_key: &str,
         api_secret: &str,
@@ -406,12 +368,12 @@ impl BinanceExchange {
         })
     }
 
-    /// Convert unified symbol (e.g. "BTC/USDT") to Binance format (e.g. "BTCUSDT").
+
     pub fn to_native_symbol(symbol: &str) -> String {
         symbol.replace(['/', '-'], "")
     }
 
-    /// Convert Binance symbol to unified format.
+
     pub fn to_unified_symbol(native: &str) -> String {
         let quotes = [
             "USDT", "USDC", "BUSD", "BTC", "ETH", "BNB", "EUR", "GBP", "TRY", "BRL", "ARS",
@@ -426,7 +388,7 @@ impl BinanceExchange {
         native.to_string()
     }
 
-    /// Parse Binance order status string to unified CcxtOrderStatus.
+
     pub fn parse_order_status(status: &str) -> CcxtOrderStatus {
         match status {
             "NEW" => CcxtOrderStatus::Open,
@@ -439,7 +401,7 @@ impl BinanceExchange {
         }
     }
 
-    /// Parse Binance order type string to unified OrderType.
+
     pub fn parse_order_type(order_type: &str) -> OrderType {
         match order_type {
             "MARKET" => OrderType::Market,
@@ -451,7 +413,7 @@ impl BinanceExchange {
         }
     }
 
-    /// Convert unified Side to Binance string.
+
     pub fn side_str(side: &Side) -> &'static str {
         match side {
             Side::Buy => "BUY",
@@ -459,10 +421,7 @@ impl BinanceExchange {
         }
     }
 
-    /// Convert unified OrderType to Binance futures string.
-    ///
-    /// 合约订单类型参考: https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info
-    /// - StopLimit → `STOP`（合约使用 STOP 表示止损限价单）
+
     pub fn order_type_str(order_type: &OrderType) -> &'static str {
         match order_type {
             OrderType::Market => "MARKET",
@@ -474,13 +433,7 @@ impl BinanceExchange {
     }
 }
 
-// ============================================================
-// Shared parsing helpers (used by fapi.rs)
-// ============================================================
 
-/// Parse order book bids/asks from exchange response.
-///
-/// Used by perpetual (`/fapi/v1/depth`) endpoint.
 pub(crate) fn parse_order_book_side(data: &serde_json::Value, side: &str) -> Vec<(f64, f64)> {
     data.get(side)
         .and_then(|b| b.as_array())
@@ -504,7 +457,6 @@ impl Exchange for BinanceExchange {
         "Binance"
     }
 
-    // ---- Market data ----
 
     async fn fetch_ticker(&self, symbol: &str) -> Result<CcxtTicker, ExchangeError> {
         fapi::fetch_ticker(&self.client, symbol).await
@@ -536,7 +488,6 @@ impl Exchange for BinanceExchange {
         fapi::fetch_markets(&self.client).await
     }
 
-    // ---- Trading ----
 
     async fn create_order(&self, params: PlaceOrderParams) -> Result<CcxtOrder, ExchangeError> {
         fapi::create_order(&self.client, self.signer.as_ref(), params).await
@@ -557,7 +508,6 @@ impl Exchange for BinanceExchange {
         fapi::fetch_open_orders(&self.client, self.signer.as_ref(), symbol).await
     }
 
-    // ---- Perpetual-only ----
 
     async fn set_leverage(
         &self,
@@ -590,7 +540,6 @@ impl Exchange for BinanceExchange {
         fapi::fetch_funding_history(&self.client, symbol, start_time, end_time).await
     }
 
-    // ---- User data stream ----
 
     async fn create_listen_key(&self) -> Result<String, ExchangeError> {
         fapi::create_listen_key(&self.client, self.signer.as_ref()).await
@@ -600,54 +549,46 @@ impl Exchange for BinanceExchange {
         fapi::keepalive_listen_key(&self.client, self.signer.as_ref(), listen_key).await
     }
 
-    // ---- Account (sapi) ----
 
     async fn fetch_api_restrictions(&self) -> Result<ApiRestrictions, ExchangeError> {
         sapi::fetch_api_restrictions(&self.client, self.signer.as_ref()).await
     }
 
-    // ---- listenKey 订单 WS（合约用户数据流）----
 
     async fn start_listenkey_order_ws(
         &self,
         listen_key_hint: Option<&str>,
     ) -> Result<mpsc::Receiver<WsFeedEvent>, ExchangeError> {
-        // 1. 获取 listenKey：优先使用 hint，否则创建
+
         let listen_key = match listen_key_hint {
             Some(k) => k.to_string(),
             None => self.create_listen_key().await?,
         };
 
-        // 2. 构造合约 UserDataWs — 传入 client + signer 供 refresh_url() 创建新 listenKey
+
         let ws = user_data_ws::UserDataWs::new_perpetual(
             listen_key,
             self.client.clone(),
             Arc::clone(&self.signer),
         );
 
-        // 3. 获取 running flag 和共享 listenKey 句柄
+
         let ws_running = ws.running_handle();
         let listen_key_handle = ws.listen_key_handle();
 
-        // 4. 启动 WS 并返回 receiver
+
         let (tx, rx) = mpsc::channel(256);
         ws.start(tx).await;
         info!("listenKey order WS started (perpetual)");
 
-        // 5. spawn listenKey REST keepalive task
-        //    币安要求：合约 60 分钟内 keepalive 一次，否则 listenKey 失效。
-        //    取保守间隔（窗口的 1/2）以容忍网络抖动。
-        //
-        //    listenKey 通过 Arc<RwLock<String>> 与 refresh_url() 共享：
-        //    每次重连时 refresh_url() 创建新 key 并更新共享状态，
-        //    keepalive task 每次 tick 从共享状态读取最新 key 进行 PUT 续期。
+
         let client = self.client.clone();
         let signer = Arc::clone(&self.signer);
         let keepalive_interval = Duration::from_secs(self.listenkey_keepalive_futures_secs);
 
         tokio::spawn(async move {
             let mut tick = tokio::time::interval(keepalive_interval);
-            // 跳过第一次立即触发（WS 刚启动，listenKey 刚创建，无需立即 keepalive）
+
             tick.tick().await;
 
             loop {
@@ -658,7 +599,7 @@ impl Exchange for BinanceExchange {
                 if !ws_running.load(Ordering::Relaxed) {
                     return;
                 }
-                // 从共享状态读取最新 listenKey（refresh_url 重连后可能已更新）
+
                 let current_key = listen_key_handle
                     .read()
                     .expect("listenKey RwLock poisoned")
@@ -681,7 +622,6 @@ impl Exchange for BinanceExchange {
         Ok(rx)
     }
 
-    // ---- Misc ----
 
     async fn ping(&self) -> Result<bool, ExchangeError> {
         fapi::ping(&self.client).await
@@ -693,7 +633,7 @@ impl Exchange for BinanceExchange {
         let offset = server_time - local_time;
         self.signer.set_time_offset(offset);
 
-        // T1: Log warning if offset exceeds threshold
+
         if offset.abs() > TIME_OFFSET_WARN_THRESHOLD_MS {
             tracing::warn!(
                 time_offset_ms = offset,
@@ -707,7 +647,7 @@ impl Exchange for BinanceExchange {
             "Server time synced"
         );
 
-        // T1: Start periodic time sync loop (once per exchange instance)
+
         if !self.time_sync_started.swap(true, Ordering::SeqCst) {
             self.time_sync_running.store(true, Ordering::Release);
             self.spawn_periodic_time_sync();
@@ -718,13 +658,8 @@ impl Exchange for BinanceExchange {
 }
 
 impl BinanceExchange {
-    /// T1: Spawn a background task that periodically re-syncs server time.
-    ///
-    /// This prevents clock drift from causing -1021 signature failures
-    /// during long-running bot sessions (24/7 operation).
-    ///
-    /// T1 WARN fix: task checks `time_sync_running` flag and exits when set to false
-    /// (in Drop impl), preventing task leak on credential rotation.
+
+
     fn spawn_periodic_time_sync(&self) {
         let client = self.client.clone();
         let signer = self.signer.clone();
@@ -732,17 +667,17 @@ impl BinanceExchange {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(TIME_SYNC_INTERVAL_SECS));
-            // Skip the first immediate tick (initial sync already done)
+
             interval.tick().await;
 
             loop {
-                // T1 WARN fix: check if exchange has been dropped
+
                 if !running.load(Ordering::Acquire) {
                     tracing::info!("[PeriodicSync] Exchange dropped, stopping time sync task");
                     break;
                 }
                 interval.tick().await;
-                // Re-check after tick (in case exchange was dropped during sleep)
+
                 if !running.load(Ordering::Acquire) {
                     tracing::info!("[PeriodicSync] Exchange dropped during sleep, stopping");
                     break;
@@ -779,17 +714,15 @@ impl BinanceExchange {
     }
 }
 
-/// T1 WARN fix: Drop impl stops the periodic time sync task
+
 impl Drop for BinanceExchange {
     fn drop(&mut self) {
-        // Signal the periodic sync task to stop
+
         self.time_sync_running.store(false, Ordering::Release);
     }
 }
 
-// ============================================================
-// Test modules (_tests suffix pattern)
-// ============================================================
+
 #[cfg(test)]
 mod kline_ws_tests;
 #[cfg(test)]

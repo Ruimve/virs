@@ -1,8 +1,3 @@
-//! Integration tests for virs-ccxt.
-//!
-//! Tests cross-module interactions and end-to-end data flow pipelines
-//! using only the crate's public API.
-
 use serde_json::json;
 
 use virs_ccxt::{
@@ -15,9 +10,6 @@ use virs_error::ExchangeError;
 
 use virs_types::enums::OrderStatus;
 
-// ============================================================
-// TC-INT-1: Symbol conversion round-trip
-// ============================================================
 
 #[test]
 fn int_1_1_symbol_roundtrip_usdt() {
@@ -43,9 +35,6 @@ fn int_1_3_symbol_roundtrip_btc_pair() {
     assert_eq!(unified, "BNB/BTC");
 }
 
-// ============================================================
-// TC-INT-2: Signing → URL building pipeline (via public API)
-// ============================================================
 
 #[test]
 fn int_2_1_hmac_signature_deterministic() {
@@ -57,9 +46,6 @@ fn int_2_1_hmac_signature_deterministic() {
     assert_eq!(sig1.len(), 64);
 }
 
-// ============================================================
-// TC-INT-4: WS order message → WsFeedEvent conversion
-// ============================================================
 
 #[test]
 fn int_4_2_order_trade_update_to_ws_feed_event() {
@@ -98,9 +84,6 @@ fn int_4_3_non_order_event_returns_none() {
     assert_eq!(event, None);
 }
 
-// ============================================================
-// TC-INT-5: create_exchange factory
-// ============================================================
 
 #[test]
 fn int_5_1_create_exchange_binance_hmac() {
@@ -123,7 +106,7 @@ fn int_5_1_create_exchange_binance_hmac() {
 
 #[test]
 fn int_5_2_create_exchange_binance_ed25519() {
-    // 32-byte zero seed in base64
+
     let seed_b64 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
     let result = create_exchange(
         "binance",
@@ -197,13 +180,10 @@ fn int_5_5_create_exchange_case_insensitive() {
     assert!(result.is_ok());
 }
 
-// ============================================================
-// TC-INT-6: Type conversion chain (REST response simulation)
-// ============================================================
 
 #[test]
 fn int_6_1_ticker_json_to_ticker_via_parse() {
-    // Simulate parsing a Binance ticker REST response
+
     let raw = json!({
         "symbol": "BTCUSDT",
         "bidPrice": "50000.0",
@@ -250,7 +230,7 @@ fn int_6_1_ticker_json_to_ticker_via_parse() {
 
 #[test]
 fn int_6_2_order_status_chain() {
-    // Simulate parsing Binance order status string → CcxtOrderStatus → OrderStatus
+
     let binance_status = "PARTIALLY_FILLED";
     let ccxt_status = BinanceExchange::parse_order_status(binance_status);
     assert_eq!(ccxt_status, CcxtOrderStatus::PartiallyFilled);
@@ -269,9 +249,6 @@ fn int_6_3_order_status_expired_to_canceled_chain() {
     assert_eq!(app_status, OrderStatus::Canceled);
 }
 
-// ============================================================
-// TC-INT-7: Symbol + order type mapping chain
-// ============================================================
 
 #[test]
 fn int_7_1_order_type_roundtrip() {
@@ -300,13 +277,10 @@ fn int_7_2_side_roundtrip() {
     assert_eq!(BinanceExchange::side_str(&Side::Sell), "SELL");
 }
 
-// ============================================================
-// TC-INT-8: Parse functions used in business logic simulation
-// ============================================================
 
 #[test]
 fn int_8_1_parse_f64_used_in_ticker_conversion() {
-    // Verify that parse_f64 correctly extracts fields from Binance response
+
     let raw = json!({"price": "0.00012345"});
     let val = parse_f64(&raw, "price");
     assert_eq!(val, Some(0.00012345));

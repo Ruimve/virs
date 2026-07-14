@@ -34,14 +34,14 @@ const Log = () => {
     [bot?.id],
   );
 
-  // 首次加载
+
   useEffect(() => {
     loadLogs(1, false);
   }, [loadLogs]);
 
   const hasMore = logs.length < total;
 
-  // 上拉加载：IntersectionObserver
+
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el) return;
@@ -64,7 +64,7 @@ const Log = () => {
     <div className="h-full overflow-y-auto max-w-5xl mx-auto">
       <AILogList logs={logs} loading={loading} botType="auto" botId={bot.id} />
 
-      {/* 上拉加载 sentinel */}
+      {}
       <div
         ref={sentinelRef}
         className="h-12 flex items-center justify-center text-xs text-on-surface-tertiary"

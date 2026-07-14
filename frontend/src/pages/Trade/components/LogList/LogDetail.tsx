@@ -64,7 +64,7 @@ const LogDetail = ({ log, loading }: Props) => {
 
   return (
     <div className="h-full overflow-y-auto bg-base">
-      {/* Top bar */}
+      {}
       <div className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-8 h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <IconBtn onClick={() => navigate(-1)}>
@@ -76,7 +76,7 @@ const LogDetail = ({ log, loading }: Props) => {
 
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-6">
         <div className="space-y-4">
-          {/* Header */}
+          {}
           <Card>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -110,7 +110,7 @@ const LogDetail = ({ log, loading }: Props) => {
             )}
           </Card>
 
-          {/* Decision */}
+          {}
           {decision && (
             <Card>
               <Title className="mb-2">决策</Title>
@@ -122,7 +122,7 @@ const LogDetail = ({ log, loading }: Props) => {
             </Card>
           )}
 
-          {/* Analysis */}
+          {}
           {log.result?.analysis && (
             <Card>
               <Title className="mb-2">AI 分析</Title>
@@ -132,7 +132,7 @@ const LogDetail = ({ log, loading }: Props) => {
             </Card>
           )}
 
-          {/* Market */}
+          {}
           {log.result?.market && (
             <Card>
               <Title className="mb-2">市场状态</Title>
@@ -166,7 +166,7 @@ const LogDetail = ({ log, loading }: Props) => {
             </Card>
           )}
 
-          {/* Grid params (for grid bot) */}
+          {}
           {log.result?.grid && (log.result.grid.upper_price || log.result.grid.lower_price) && (
             <Card>
               <Title className="mb-2">网格参数</Title>
@@ -181,7 +181,7 @@ const LogDetail = ({ log, loading }: Props) => {
             </Card>
           )}
 
-          {/* Risk params (for grid bot) */}
+          {}
           {log.result?.risk && (log.result.risk.leverage || log.result.risk.quantity_per_grid) && (
             <Card>
               <Title className="mb-2">风控参数</Title>
@@ -194,7 +194,7 @@ const LogDetail = ({ log, loading }: Props) => {
             </Card>
           )}
 
-          {/* Risk warning */}
+          {}
           {log.result?.risk_warning && log.result.risk_warning !== 'none' && (
             <div className="bg-warning/5 rounded-xl border border-warning-border p-5">
               <div className="text-2xs text-warning-text uppercase tracking-wider mb-2">
@@ -204,7 +204,7 @@ const LogDetail = ({ log, loading }: Props) => {
             </div>
           )}
 
-          {/* Error */}
+          {}
           {log.error && (
             <div className="bg-danger/5 rounded-xl border border-danger-border p-5">
               <div className="text-2xs text-danger-text uppercase tracking-wider mb-2">错误</div>
@@ -212,7 +212,7 @@ const LogDetail = ({ log, loading }: Props) => {
             </div>
           )}
 
-          {/* System Prompt (collapsible) */}
+          {}
           {log.system_prompt && (
             <Card padding={false} className="overflow-hidden">
               <div
@@ -235,7 +235,7 @@ const LogDetail = ({ log, loading }: Props) => {
             </Card>
           )}
 
-          {/* User Prompt (collapsible) */}
+          {}
           {log.user_prompt && (
             <Card padding={false} className="overflow-hidden">
               <div
@@ -258,7 +258,7 @@ const LogDetail = ({ log, loading }: Props) => {
             </Card>
           )}
 
-          {/* Raw LLM Response */}
+          {}
           {log.result?.raw_llm_response && (
             <Card>
               <Title className="mb-2">LLM 原始响应</Title>
@@ -270,7 +270,7 @@ const LogDetail = ({ log, loading }: Props) => {
             </Card>
           )}
 
-          {/* Full result JSON */}
+          {}
           {log.result && !log.result.raw_llm_response && (
             <Card>
               <Title className="mb-2">完整结果</Title>

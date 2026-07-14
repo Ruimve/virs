@@ -1,5 +1,3 @@
-//! Grid engine — manages grid bot lifecycle.
-
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -13,9 +11,7 @@ use crate::grid::types::{GridCommand, GridEvent};
 use crate::grid::worker::GridWorker;
 use virs_config::TimeConfig;
 
-/// 网格引擎
-///
-/// 管理所有网格 bot 的生命周期，包括启动、停止、暂停、恢复、删除和调整。
+
 pub struct GridEngine {
     store: Arc<dyn GridStore>,
     ai_service: Arc<GridAiService>,
@@ -29,12 +25,12 @@ pub struct GridEngine {
     shutdown_txs: HashMap<Uuid, mpsc::Sender<()>>,
     adjust_txs: HashMap<Uuid, mpsc::Sender<()>>,
     bot_symbols: HashMap<Uuid, String>,
-    /// T12 WARN fix: 时间配置（从环境变量加载）
+
     time_config: TimeConfig,
 }
 
 impl GridEngine {
-    /// 创建 GridEngine 实例，返回 (engine, command_sender, event_sender)
+
     pub fn new(
         store: Arc<dyn GridStore>,
         ai_service: Arc<GridAiService>,
@@ -70,7 +66,7 @@ impl GridEngine {
         (engine, cmd_tx, grid_event_tx)
     }
 
-    /// 启动引擎主循环
+
     pub async fn run(&mut self) {
         let mut cmd_rx = match self.cmd_rx.take() {
             Some(rx) => rx,

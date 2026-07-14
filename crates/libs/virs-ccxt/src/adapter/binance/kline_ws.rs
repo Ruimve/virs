@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use tokio::sync::{broadcast, mpsc, RwLock};
 
-// Re-export for convenience
+
 use crate::ws_manager::{
     MessageOutcome, WsCommand as ManagerWsCommand, WsHandler, WsManager, WsManagerConfig,
     WsManagerEvent,
@@ -18,19 +18,17 @@ pub(crate) fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
 }
 
-/// Binance WS 推送两种格式：
-/// 1. 单流格式: {"e":"kline", "s":"BTCUSDT", "k":{...}}
-/// 2. 组合流格式: {"stream":"btcusdt@kline_1m", "data":{"e":"kline","k":{...}}}
+
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct BinanceKlineMessage {
     #[allow(dead_code)]
     pub(crate) stream: Option<String>,
-    /// 组合流格式: data 字段包含完整的 kline 事件
+
     pub(crate) data: Option<BinanceKlineData>,
-    /// 单流格式: 顶层直接包含 kline 事件字段
+
     #[serde(rename = "e")]
     pub(crate) event_type_flat: Option<String>,
-    /// T8 FAIL fix: 单流格式的事件时间（E 字段），此前缺失导致 event_time 恒为 0
+
     #[serde(rename = "E")]
     pub(crate) event_time_flat: Option<i64>,
     #[serde(rename = "s")]
@@ -40,7 +38,7 @@ pub(crate) struct BinanceKlineMessage {
 }
 
 impl BinanceKlineMessage {
-    /// 提取 kline 数据，兼容单流和组合流两种格式
+
     pub(crate) fn into_kline_data(self) -> Option<BinanceKlineData> {
         if let Some(data) = self.data {
             Some(data)
@@ -50,7 +48,7 @@ impl BinanceKlineMessage {
                     tracing::warn!("Kline WS message missing symbol — skipping kline");
                     return None;
                 }
-                // T8 FAIL fix: 使用实际解析到的 E 字段，而非硬编码 0
+
                 let event_time = self.event_time_flat.unwrap_or(0);
                 self.kline_flat.map(|kline| BinanceKlineData {
                     event_type: et.to_string(),
@@ -66,7 +64,7 @@ impl BinanceKlineMessage {
     }
 }
 
-/// WS 消息延迟告警阈值（毫秒）
+
 pub(crate) const KLINE_WS_DELAY_THRESHOLD_MS: i64 = 5_000;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -138,29 +136,14 @@ impl BinanceKlineData {
     }
 }
 
-// ============================================================
-// KlineWsHandler: WsHandler 实现
-// ============================================================
 
-/// Binance Kline WS 的 [`WsHandler`] 实现
-///
-/// 管理动态订阅状态（`subscriptions` + `symbol_map`），
-/// 在 `on_connected` 时自动恢复所有订阅。
-///
-/// 改进（对比原始实现）：
-/// - 连接超时（10s）防止 `connect_async` 挂起
-/// - Pong 超时（90s）检测半开连接
-/// - 背压容忍：broadcast channel 满时 warn 不停止
-/// - 熔断：100 次重试后触发 CircuitBreaker
-/// - 统一 `ConnectionChanged` 事件替代 `WsEvent::Reconnected`
-/// - 退避 jitter 修正（避免截断为 0）
 pub struct KlineWsHandler {
     ws_url: String,
-    /// 当前订阅列表 — 重连时通过 on_connected 恢复
+
     pub(crate) subscriptions: Arc<RwLock<Vec<String>>>,
-    /// Binance symbol → 原始 symbol 映射
+
     pub(crate) symbol_map: Arc<RwLock<HashMap<String, String>>>,
-    /// JSON-RPC 请求 ID
+
     request_id: Arc<AtomicU64>,
 }
 
@@ -199,7 +182,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
 
         if let Some(data) = bmsg.into_kline_data() {
             if data.event_type == "kline" {
-                // 延迟检测
+
                 if data.event_time > 0 {
                     let local_now = chrono::Utc::now().timestamp_millis();
                     let delay_ms = local_now - data.event_time;
@@ -240,7 +223,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
                 )]));
             }
         } else {
-            // 订阅确认/错误响应（无 kline 数据）
+
             if let Ok(resp) = serde_json::from_str::<serde_json::Value>(text) {
                 if let Some(code) = resp.get("code") {
                     tracing::error!(
@@ -262,7 +245,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
     }
 
     async fn on_connected(&self, _is_reconnect: bool) -> Vec<String> {
-        // 重连后自动恢复所有订阅
+
         let subs_vec = self.subscriptions.read().await.clone();
         if subs_vec.is_empty() {
             return vec![];
@@ -285,7 +268,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
     }
 
     async fn on_disconnected(&self) {
-        // 订阅状态保留在 subscriptions 中，重连时 on_connected 恢复
+
     }
 
     async fn on_command(&self, cmd: ManagerWsCommand) -> Option<String> {
@@ -313,20 +296,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
     }
 }
 
-// ============================================================
-// KlineWs: 委托给 WsManager 的薄包装
-// ============================================================
 
-/// Binance Kline WS 客户端
-///
-/// 内部委托给 [`WsManager<WsEvent>`]，仅保留对外 API 兼容性。
-///
-/// 改进（对比原始实现）：
-/// - 连接超时（10s）防止 `connect_async` 挂起
-/// - Pong 超时（90s）检测半开连接
-/// - 背压容忍：broadcast channel 满时 warn 不停止（原始实现直接停止 WS）
-/// - 熔断：100 次重试后触发 CircuitBreaker
-/// - 统一 `ConnectionChanged` 事件
 pub struct KlineWs {
     manager: WsManager<WsEvent>,
     pub(crate) handler: Arc<KlineWsHandler>,
@@ -349,7 +319,7 @@ impl KlineWs {
         Self::new("wss://fstream.binance.com/market/ws".to_string())
     }
 
-    /// 返回 running flag 引用
+
     pub fn running_handle(&self) -> Arc<AtomicBool> {
         self.manager.running_handle()
     }
@@ -358,12 +328,12 @@ impl KlineWs {
 #[async_trait]
 impl KlineWsClient for KlineWs {
     async fn start(&mut self, update_tx: broadcast::Sender<WsEvent>) {
-        // WsManager 发出 WsManagerEvent<WsEvent>，需要桥接到 broadcast<WsEvent>
+
         let (manager_tx, mut manager_rx) = mpsc::channel::<WsManagerEvent<WsEvent>>(256);
 
         self.manager.start(manager_tx).await;
 
-        // forwarder task: WsManagerEvent<WsEvent> → broadcast<WsEvent>
+
         tokio::spawn(async move {
             while let Some(ev) = manager_rx.recv().await {
                 let ws_event = match ev {
@@ -376,13 +346,13 @@ impl KlineWsClient for KlineWs {
                         connected: true,
                         is_reconnect: false,
                     } => {
-                        // 首次连接不发 Reconnected
+
                         continue;
                     }
                     WsManagerEvent::ConnectionChanged {
                         connected: false, ..
                     } => {
-                        // 断连不发事件（原始实现也没有断连事件）
+
                         continue;
                     }
                     WsManagerEvent::CircuitBreakerTripped { retry_count } => {
@@ -393,7 +363,7 @@ impl KlineWsClient for KlineWs {
                         continue;
                     }
                 };
-                // broadcast: 满时 warn 不停止（背压容忍 — 原始实现直接停止 WS）
+
                 if update_tx.send(ws_event).is_err() {
                     tracing::warn!("[KlineWs] All receivers dropped, stopping forwarder");
                     break;

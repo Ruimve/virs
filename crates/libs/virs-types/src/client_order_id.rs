@@ -1,22 +1,7 @@
-//! 统一 client_order_id 格式化与解析模块
-//!
-//! 格式: `{F1}{F2}{F3}{F4}{YYYYMMDDHHmmss}{HASH}` 共 27 字符
-//!
-//! | 位置 | 字段 | 含义 |
-//! |------|------|------|
-//! | F1 (1字符) | Bot 类型 | A=Auto, G=Grid |
-//! | F2 (1字符) | 操作 | O=Open(开仓), C=Close(平仓) |
-//! | F3 (1字符) | 方向 | L=Long, S=Short |
-//! | F4 (2字符) | 网格层级 | 01-99, 非网格用 `__` |
-//! | 日期 (14字符) | 下单时间 | YYYYMMDDHHmmss |
-//! | HASH (8字符) | 唯一哈希 | 基于 bot_id + nanos 的 8 位 hex |
-//!
-//! 约束: 总长 27 字符 ≤ 36 (币安限制), 字符集 `[A-Z0-9_]`
-
 use chrono::Utc;
 use uuid::Uuid;
 
-/// 生成 8 字符 hex 哈希，基于 bot_id 和当前纳秒时间戳
+
 fn generate_hash(bot_id: Uuid) -> String {
     let nanos = Utc::now().timestamp_nanos_opt().unwrap_or(0) as u32;
     let bytes = bot_id.as_bytes();
@@ -34,14 +19,12 @@ fn generate_hash(bot_id: Uuid) -> String {
     )
 }
 
-/// 生成时间戳字符串 YYYYMMDDHHmmss
+
 fn timestamp_str() -> String {
     Utc::now().format("%Y%m%d%H%M%S").to_string()
 }
 
-/// 生成 Auto bot 开仓的 client_order_id
-///
-/// `side` 为 "long" 或 "short"
+
 pub fn format_auto_open(bot_id: Uuid, side: &str) -> String {
     let f3 = match side {
         "long" => "L",
@@ -51,9 +34,7 @@ pub fn format_auto_open(bot_id: Uuid, side: &str) -> String {
     format!("AO{}__{}{}", f3, timestamp_str(), generate_hash(bot_id))
 }
 
-/// 生成 Auto bot 平仓的 client_order_id
-///
-/// `side` 为 "long" 或 "short" (持仓方向)
+
 pub fn format_auto_close(bot_id: Uuid, side: &str) -> String {
     let f3 = match side {
         "long" => "L",
@@ -63,11 +44,7 @@ pub fn format_auto_close(bot_id: Uuid, side: &str) -> String {
     format!("AC{}__{}{}", f3, timestamp_str(), generate_hash(bot_id))
 }
 
-/// 生成 Grid bot 订单的 client_order_id
-///
-/// `level` 为网格层级 (1-99)
-/// `is_open` 为 true=开仓, false=平仓
-/// `position_side` 为 "long" 或 "short"
+
 pub fn format_grid_order(bot_id: Uuid, level: i32, is_open: bool, position_side: &str) -> String {
     let f2 = if is_open { "O" } else { "C" };
     let f3 = match position_side {
@@ -85,13 +62,7 @@ pub fn format_grid_order(bot_id: Uuid, level: i32, is_open: bool, position_side:
     )
 }
 
-/// Grid worker 解析 client_order_id，提取 (level, "buy"/"sell")
-///
-/// 从 (Open/Close, Long/Short) 推导订单方向:
-/// - Open Long → buy
-/// - Close Long → sell
-/// - Open Short → sell
-/// - Close Short → buy
+
 pub fn parse_grid_order(coi: &str) -> Option<(usize, String)> {
     if coi.len() < 5 || !coi.starts_with('G') {
         return None;
@@ -196,7 +167,7 @@ mod tests {
             let cid = format_auto_open(bot_id, "long");
             cids.insert(cid);
         }
-        // 纳秒精度足够保证 1000 次生成不碰撞
+
         assert_eq!(cids.len(), 1000, "client_order_id should be unique");
     }
 

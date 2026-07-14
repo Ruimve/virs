@@ -1,8 +1,3 @@
-//! KlineEngine — market data collection and aggregation engine.
-//!
-//! Manages WebSocket subscriptions, candle aggregation, gap detection,
-//! and provides real-time kline data for all timeframes.
-
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -131,13 +126,13 @@ impl KlineEngine {
 
         self.perpetual_handler.start(ws_update_tx).await;
 
-        // WS update processor
+
         tokio::spawn(async move {
             while started.load(std::sync::atomic::Ordering::Relaxed) {
                 match ws_update_rx.recv().await {
                     Ok(WsEvent::Reconnected) => {
-                        // Collect needed data and drop the DashMap Ref guard before
-                        // async operations to avoid holding the guard across `.await`.
+
+
                         let entries: Vec<_> = subscriptions
                             .iter()
                             .map(|e| {
@@ -271,15 +266,14 @@ impl KlineEngine {
 
         });
 
-        // Gap checker
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
 
             while gap_check_started.load(std::sync::atomic::Ordering::Relaxed) {
                 interval.tick().await;
 
-                // Collect needed data and drop the DashMap Ref guard before
-                // async operations to avoid holding the guard across `.await`.
+
                 let entries: Vec<_> = gap_check_subscriptions
                     .iter()
                     .map(|e| {
@@ -339,7 +333,7 @@ impl KlineEngine {
         symbol: &str,
         market_type: MarketType,
     ) -> VirsResult<()> {
-        // Lazy start: auto-start the engine on first subscription
+
         if !self.started.load(std::sync::atomic::Ordering::Relaxed) {
             self.start().await;
         }

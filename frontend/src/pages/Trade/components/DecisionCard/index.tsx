@@ -40,7 +40,7 @@ export const DecisionCard = memo(({ log, botId, botType = 'auto' }: Props) => {
   if (!log) {
     return (
       <div className="px-4 py-3 border-b border-line-subtle">
-        {/* 标题行 */}
+        {}
         <div className="flex items-center justify-between mb-2">
           <Title>AI 决策</Title>
         </div>
@@ -53,7 +53,7 @@ export const DecisionCard = memo(({ log, botId, botType = 'auto' }: Props) => {
       onClick={handleClick}
       className="px-4 py-3 border-b border-line-subtle cursor-pointer hover:bg-surface-2/30 transition-colors"
     >
-      {/* 标题行 */}
+      {}
       <div className="flex items-center justify-between mb-2">
         <Title>AI 决策</Title>
         <span className="text-caption font-mono tabular-nums text-on-surface-muted">
@@ -61,7 +61,7 @@ export const DecisionCard = memo(({ log, botId, botType = 'auto' }: Props) => {
         </span>
       </div>
 
-      {/* Action + Confidence */}
+      {}
       <div className="flex items-center gap-2 mb-2">
         <span
           className={`text-sm font-medium px-2 py-0.5 rounded border ${actionColor(decision?.action)}`}
@@ -85,14 +85,14 @@ export const DecisionCard = memo(({ log, botId, botType = 'auto' }: Props) => {
         )}
       </div>
 
-      {/* Reason */}
+      {}
       {decision?.reason && (
         <p className="text-sm text-on-surface-secondary leading-relaxed line-clamp-3">
           {decision?.reason}
         </p>
       )}
 
-      {/* Risk Warning */}
+      {}
       {riskWarning && (
         <div className="mt-2 flex items-start gap-1.5 text-caption text-warning-text">
           <Warning className="w-3.5 h-3.5 mt-0.5 shrink-0" strokeWidth={2} />
@@ -100,7 +100,7 @@ export const DecisionCard = memo(({ log, botId, botType = 'auto' }: Props) => {
         </div>
       )}
 
-      {/* LLM Model */}
+      {}
       {log.llm_model && (
         <div className="mt-2 text-caption text-on-surface-muted">
           模型 <span className="font-mono tabular-nums">{log.llm_model}</span>

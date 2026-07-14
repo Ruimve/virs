@@ -19,12 +19,7 @@ import { LevelsOverview } from './LevelsOverview';
 import { RecentTrades } from './RecentTrades';
 import { PositionStats } from './PositionStats';
 
-/**
- * WS 价格更新 rAF 节流 + 价格变化检查。
- *
- * 合并同一动画帧内的多次价格推送为一次 setState，且仅当价格真正变化时
- * 才触发重渲染。避免高频 WS 心跳导致的 Bot 整树 reconciliation。
- */
+
 const useRafThrottledPrice = () => {
   const [latestPrice, setLatestPrice] = useState(0);
   const rafRef = useRef<number | undefined>(undefined);
@@ -48,11 +43,7 @@ const useRafThrottledPrice = () => {
   return { latestPrice, update };
 };
 
-/**
- * 把网格交易记录转换为 K线图 markers。
- * 买入（open_side=buy）→ 绿色向上箭头，位于 K线下方
- * 卖出（open_side=sell）→ 红色向下箭头，位于 K线上方
- */
+
 function tradesToMarkers(trades: GridTrade[]) {
   const cs = getComputedStyle(document.documentElement);
   const upColor = cs.getPropertyValue('--chart-up').trim() || '#10b981';
@@ -94,7 +85,7 @@ const Bot = () => {
 
   const loadTrades = useCallback(async (botId: string) => {
     try {
-      // 获取最近 50 条用于 K 线 markers
+
       const res = await getGridTrades(botId, 1, 50);
       if (res.data?.trades) setGridTrades(res.data.trades);
     } catch (e) {
@@ -137,9 +128,9 @@ const Bot = () => {
       if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return;
       const c = event.candle;
       if (!c) return;
-      // 更新最新价（rAF 节流）
+
       updateLatestPrice(c.close);
-      // Update chart directly via series.update() — no re-render
+
       chartRef.current?.update(c);
     },
     loadKlineStable,
@@ -152,18 +143,18 @@ const Bot = () => {
 
   return (
     <div className="h-full flex flex-col lg:flex-row">
-      {/* 主区域：状态栏 + AI决策 + 交易统计 + 底部行情折叠 */}
+      {}
       <div className="flex flex-col h-full lg:flex-1 lg:min-h-0 overflow-y-auto relative mb-9">
-        {/* 网格状态 */}
+        {}
         <PositionStats bot={gridBot} latestPrice={latestPrice} />
 
-        {/* AI 决策卡片 */}
+        {}
         <DecisionCard log={latestDecision} botId={gridBot?.id} botType="grid" />
 
-        {/* 历史交易统计 */}
+        {}
         <TradeStats botId={gridBot?.id} />
 
-        {/* 底部行情折叠面板（K线图） */}
+        {}
         <div className="fixed bottom-0 left-0 right-0">
           <StickyMarket
             klineData={klineData}
@@ -176,7 +167,7 @@ const Bot = () => {
         </div>
       </div>
 
-      {/* 右侧侧边栏：网格层级概览 + 最近成交 */}
+      {}
       <div className="hidden lg:flex w-72 xl:w-80 border-l border-line-subtle flex-col">
         <div className="flex flex-col h-full divide-y divide-line-subtle">
           <div className="flex-1 min-h-0">

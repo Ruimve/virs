@@ -1,24 +1,3 @@
-//! Binance USDT-M Futures REST API (/fapi/v1, /fapi/v2, /fapi/v3) — perpetual futures.
-//!
-//! Endpoints:
-//! - GET  /fapi/v1/ping
-//! - GET  /fapi/v1/ticker/24hr
-//! - GET  /fapi/v1/klines
-//! - GET  /fapi/v1/depth
-//! - GET  /fapi/v1/exchangeInfo
-//! - GET  /fapi/v3/balance
-//! - GET  /fapi/v1/order
-//! - GET  /fapi/v1/openOrders
-//! - POST /fapi/v1/order
-//! - POST /fapi/v1/marginType
-//! - POST /fapi/v1/leverage
-//! - GET  /fapi/v2/positionRisk
-//! - GET  /fapi/v1/positionSide/dual
-//! - GET  /fapi/v1/premiumIndex
-//! - GET  /fapi/v1/fundingRate
-//! - POST /fapi/v1/listenKey
-//! - PUT  /fapi/v1/listenKey
-
 use chrono::Utc;
 
 use crate::auth::Signer;
@@ -35,17 +14,13 @@ fn url(path: &str) -> String {
     format!("{BASE_URL}{path}")
 }
 
-// ---- Public endpoints ----
 
-/// GET /fapi/v1/ping
 pub async fn ping(client: &ExchangeClient) -> Result<bool, ExchangeError> {
     let data = client.public_get(&url("/fapi/v1/ping"), &[]).await?;
     Ok(!data.is_null())
 }
 
-/// GET /fapi/v1/time — 获取币安合约服务器时间（毫秒）
-///
-/// 用于 sync_time() 校准本地时钟偏移，避免 -1021 签名失败。
+
 pub async fn fetch_server_time(client: &ExchangeClient) -> Result<i64, ExchangeError> {
     let data = client.public_get(&url("/fapi/v1/time"), &[]).await?;
     data.get("serverTime")
@@ -55,7 +30,7 @@ pub async fn fetch_server_time(client: &ExchangeClient) -> Result<i64, ExchangeE
         })
 }
 
-/// GET /fapi/v1/ticker/24hr
+
 pub async fn fetch_ticker(
     client: &ExchangeClient,
     symbol: &str,
@@ -93,7 +68,7 @@ pub async fn fetch_ticker(
     })
 }
 
-/// GET /fapi/v1/klines
+
 pub async fn fetch_ohlcv(
     client: &ExchangeClient,
     symbol: &str,
@@ -176,16 +151,13 @@ pub async fn fetch_ohlcv(
     Ok(klines)
 }
 
-/// GET /fapi/v1/depth
-///
-/// `limit` 合法值集合：5, 10, 20, 50, 100, 500, 1000（币安合约文档）。
-/// 传入非法值会返回 `ExchangeError::InvalidRequest`。
+
 pub async fn fetch_order_book(
     client: &ExchangeClient,
     symbol: &str,
     limit: u32,
 ) -> Result<CcxtOrderBook, ExchangeError> {
-    // F12: 合约 depth limit 合法值校验
+
     const VALID_FUTURES_DEPTH_LIMITS: &[u32] = &[5, 10, 20, 50, 100, 500, 1000];
     if !VALID_FUTURES_DEPTH_LIMITS.contains(&limit) {
         return Err(ExchangeError::InvalidRequest(format!(
@@ -221,7 +193,7 @@ pub async fn fetch_order_book(
     })
 }
 
-/// GET /fapi/v1/exchangeInfo
+
 pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, ExchangeError> {
     let data = client
         .public_get(&url("/fapi/v1/exchangeInfo"), &[])
@@ -305,7 +277,7 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
     Ok(markets)
 }
 
-/// GET /fapi/v1/premiumIndex — funding rate
+
 pub async fn fetch_funding_rate(
     client: &ExchangeClient,
     symbol: &str,
@@ -325,7 +297,7 @@ pub async fn fetch_funding_rate(
     let next_funding_time = data
         .get("nextFundingTime")
         .and_then(|t| t.as_i64())
-        // T7 WARN fix: nextFundingTime: 0 表示无下次资金费率时间，应返回 None 而非 Some(epoch)
+
         .filter(|&ts| ts > 0)
         .and_then(|ts| {
             chrono::DateTime::from_timestamp_millis(ts).or_else(|| {
@@ -342,7 +314,7 @@ pub async fn fetch_funding_rate(
     })
 }
 
-/// GET /fapi/v1/fundingRate — funding rate history
+
 pub async fn fetch_funding_history(
     client: &ExchangeClient,
     symbol: &str,
@@ -408,9 +380,7 @@ pub async fn fetch_funding_history(
     Ok(all_entries)
 }
 
-// ---- Authenticated endpoints ----
 
-/// GET /fapi/v3/balance — futures account balances
 pub async fn fetch_balance(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -463,7 +433,7 @@ pub async fn fetch_balance(
     Ok(result)
 }
 
-/// POST /fapi/v1/order — create futures order
+
 pub async fn create_order(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -499,9 +469,7 @@ pub async fn create_order(
         body["newClientOrderId"] = serde_json::json!(client_id);
     }
 
-    // Perpetual: positionSide is mandatory in Hedge mode.
-    // OneWay mode (positionSide=BOTH) is not supported — the caller must
-    // resolve Long/Short before placing the order.
+
     let position_side = match (&params.side, &params.position_side) {
         (Side::Buy, Some(PositionSide::Long)) => "LONG",
         (Side::Sell, Some(PositionSide::Short)) => "SHORT",
@@ -517,7 +485,7 @@ pub async fn create_order(
     };
     body["positionSide"] = serde_json::json!(position_side);
 
-    // reduceOnly is still valid in Hedge mode (marks a close order).
+
     if let Some(reduce) = params.reduce_only {
         if reduce {
             body["reduceOnly"] = serde_json::json!(true);
@@ -528,8 +496,7 @@ pub async fn create_order(
         .signed_post(signer, &url("/fapi/v1/order"), body)
         .await?;
 
-    // Critical numeric fields MUST be present — propagate errors instead of
-    // silently defaulting to 0.0 (C4 issue fix).
+
     let amount = parse_f64(&data, "origQty").ok_or_else(|| {
         ExchangeError::no_data("Order amount (origQty) missing in exchange response".into())
     })?;
@@ -537,8 +504,7 @@ pub async fn create_order(
         ExchangeError::no_data("Order filled (executedQty) missing in exchange response".into())
     })?;
 
-    // F11: 优先使用币安响应中的时间戳，而非本地时钟
-    // 合约下单响应包含 `time`（创建时间）和 `updateTime`（最后更新时间）
+
     let created_at = crate::parse_timestamp_ms(&data, "time")
         .or_else(|| crate::parse_timestamp_ms(&data, "updateTime"))
         .unwrap_or_else(|| {
@@ -573,7 +539,7 @@ pub async fn create_order(
     })
 }
 
-/// DELETE /fapi/v1/order — cancel futures order
+
 pub async fn cancel_order(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -594,8 +560,8 @@ pub async fn cancel_order(
         parse_str(&data, "side").ok_or_else(|| ExchangeError::no_data("side missing".into()))?;
     let type_str =
         parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data("type missing".into()))?;
-    // Critical numeric fields MUST be present — propagate errors instead of
-    // silently defaulting to 0.0 (C4 issue fix).
+
+
     let amount = parse_f64(&data, "origQty").ok_or_else(|| {
         ExchangeError::no_data("Order amount (origQty) missing in exchange response".into())
     })?;
@@ -633,7 +599,7 @@ pub async fn cancel_order(
     })
 }
 
-/// GET /fapi/v1/order — fetch futures order
+
 pub async fn fetch_order(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -656,8 +622,8 @@ pub async fn fetch_order(
         parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data("type missing".into()))?;
     let status_str = parse_str(&data, "status")
         .ok_or_else(|| ExchangeError::no_data("status missing".into()))?;
-    // Critical numeric fields MUST be present — propagate errors instead of
-    // silently defaulting to 0.0 (C4 issue fix).
+
+
     let amount = parse_f64(&data, "origQty").ok_or_else(|| {
         ExchangeError::no_data("Order amount (origQty) missing in exchange response".into())
     })?;
@@ -695,7 +661,7 @@ pub async fn fetch_order(
     })
 }
 
-/// GET /fapi/v1/openOrders — fetch open futures orders
+
 pub async fn fetch_open_orders(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -717,8 +683,8 @@ pub async fn fetch_open_orders(
     let arr = data.as_array().cloned().unwrap_or_default();
     let mut orders: Vec<CcxtOrder> = Vec::with_capacity(arr.len());
     for o in &arr {
-        // Skip orders missing required identifier string fields (lenient parsing,
-        // matching the previous filter_map behavior).
+
+
         let Some(side_str) = parse_str(o, "side") else {
             continue;
         };
@@ -735,8 +701,7 @@ pub async fn fetch_open_orders(
             continue;
         };
 
-        // Critical numeric fields MUST be present — propagate errors instead of
-        // silently defaulting to 0.0 (C4 issue fix).
+
         let amount = parse_f64(o, "origQty").ok_or_else(|| {
             ExchangeError::no_data("Order amount (origQty) missing in exchange response".into())
         })?;
@@ -770,7 +735,7 @@ pub async fn fetch_open_orders(
     Ok(orders)
 }
 
-/// POST /fapi/v1/marginType — set margin type (CROSSED / ISOLATED)
+
 pub async fn set_margin_type(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -786,14 +751,14 @@ pub async fn set_margin_type(
         "symbol": native,
         "marginType": margin_type_str,
     });
-    // Ignore errors — may return "No need to change" if already set
+
     let _ = client
         .signed_post(signer, &url("/fapi/v1/marginType"), body)
         .await;
     Ok(())
 }
 
-/// POST /fapi/v1/leverage — set leverage
+
 pub async fn set_leverage(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -811,7 +776,7 @@ pub async fn set_leverage(
     Ok(())
 }
 
-/// GET /fapi/v2/positionRisk — fetch open positions
+
 pub async fn fetch_positions(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -867,8 +832,7 @@ pub async fn fetch_positions(
                 _ => MarginMode::Cross,
             };
 
-            // entryPrice / leverage are critical fields; if either is missing
-            // the position record is unusable, so log and skip it.
+
             let entry_price = match parse_f64(p, "entryPrice") {
                 Some(v) => v,
                 None => {
@@ -890,8 +854,7 @@ pub async fn fetch_positions(
                 }
             };
 
-            // unRealizedProfit — 金融值，禁止默认 0.0（项目约束）
-            // 币安 positionRisk 响应始终包含此字段；若缺失则响应异常，返回 NoData
+
             let unrealized_pnl = match parse_f64(p, "unRealizedProfit") {
                 Some(v) => v,
                 None => {
@@ -922,11 +885,7 @@ pub async fn fetch_positions(
     Ok(positions)
 }
 
-/// GET /fapi/v1/positionSide/dual — get position mode.
-/// Returns `Ok(Hedge)` when the exchange is in Hedge mode.
-/// Returns `Err` when the exchange is in OneWay mode — VIRS does not support
-/// OneWay. The `check_position_mode` API endpoint catches this error to
-/// report "oneway" to the frontend wizard.
+
 pub async fn get_position_mode(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -952,7 +911,7 @@ pub async fn get_position_mode(
     }
 }
 
-/// POST /fapi/v1/listenKey — create listen key for futures user data stream
+
 pub async fn create_listen_key(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -967,7 +926,7 @@ pub async fn create_listen_key(
         .ok_or_else(|| ExchangeError::Internal("listenKey missing in response".into()))
 }
 
-/// PUT /fapi/v1/listenKey — keepalive listen key
+
 pub async fn keepalive_listen_key(
     client: &ExchangeClient,
     signer: &dyn Signer,

@@ -3,16 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { findActiveBot } from '@/service';
 import { AssetLoading } from '@/components/Transition/Icon';
 
-/**
- * Loading —— 应用启动加载页。
- *
- * 设计原则：
- *  1. 真实状态驱动：阶段切换由实际异步操作触发，无 mock 进度
- *  2. 视觉连贯：复用 AssetLoading 图标，与全局过渡页统一语言
- *  3. 极简留白：单一 accent 主色，黑白主题自适应
- *
- * 认证会话由 AuthProvider 统一恢复，本页只读取 useAuth() 状态做路由决策。
- */
 
 type Stage = 'auth' | 'session' | 'routing';
 
@@ -43,7 +33,7 @@ const Loading = () => {
     }
   }, [navigate]);
 
-  // 会话恢复就绪后，依据登录状态与活跃 bot 做路由决策
+
   useEffect(() => {
     startStage();
   }, [startStage, navigate]);
@@ -67,20 +57,20 @@ const Loading = () => {
 
   return (
     <div className="loading-page min-h-dvh bg-base flex flex-col items-center justify-center relative overflow-hidden">
-      {/* 氛围层：accent glow + 极淡量化网格 */}
+      {}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[640px] h-[640px] rounded-full bg-accent/5 blur-[140px]" />
         <div className="loading-grid absolute inset-0 opacity-[0.04]" />
       </div>
 
-      {/* 主体 */}
+      {}
       <div className="relative flex flex-col items-center">
-        {/* 加载图标 */}
+        {}
         <div className="loading-icon-wrap mb-8">
           <AssetLoading size={112} />
         </div>
 
-        {/* 品牌字标 */}
+        {}
         <h1 className="loading-brand text-[22px] font-extralight tracking-[0.5em] text-on-base mb-2 select-none pl-[0.5em]">
           VIRS
         </h1>
@@ -88,12 +78,12 @@ const Loading = () => {
           Quantitative Trading
         </p>
 
-        {/* 阶段指示器 */}
+        {}
         <div className="flex flex-col items-center gap-5">
-          {/* 三点阶段指示 */}
+          {}
           <div className="flex items-center gap-2.5">{stageOrders}</div>
 
-          {/* 当前状态文字（淡入淡出） */}
+          {}
           <div className="relative overflow-hidden">
             <span
               key={stage}

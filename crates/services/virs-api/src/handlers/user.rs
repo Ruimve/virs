@@ -1,5 +1,3 @@
-//! User management handlers.
-
 use axum::{
     extract::State,
     http::HeaderMap,

@@ -24,7 +24,7 @@ export const LevelsOverview = memo(({ gridLevels }: Props) => {
       divided={false}
     >
       <>
-        {/* 统计摘要 */}
+        {}
         <div className="grid grid-cols-3 gap-2 px-3 py-2 border-b border-line-subtle">
           <div className="text-center">
             <div className="text-sm font-mono tabular-nums font-medium text-success-text">
@@ -45,7 +45,7 @@ export const LevelsOverview = memo(({ gridLevels }: Props) => {
             <div className="text-caption text-on-surface-tertiary">等待</div>
           </div>
         </div>
-        {/* 层级列表 */}
+        {}
         <div className="divide-y divide-line-subtle">
           {gridLevels.slice(0, 20).map((level) => {
             const isHolding = Math.abs(level.hold_quantity) > 0;

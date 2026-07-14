@@ -16,7 +16,7 @@ export const WizardContext = createContext<WizardContextType>({
   resetWizard: () => {},
 });
 
-// ── 向导步骤守卫：直接访问非首页时跳转首页 ──
+
 export const useWizardGuard = (currentStep: WizardStepValue, requiredStep: WizardStepValue) => {
   const navigate = useNavigate();
   useEffect(() => {

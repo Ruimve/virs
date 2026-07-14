@@ -1,6 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 
-// ── Generic WebSocket infrastructure ───────────────────────
 
 export interface WsInstance<T> {
   ws: WebSocket | null;
@@ -8,9 +7,9 @@ export interface WsInstance<T> {
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   reconnectAttempts: number;
   reconnectCallbacks: Set<() => void>;
-  /** State-change callbacks — each hook registers its own setConnected */
+
   stateChangeCallbacks: Set<() => void>;
-  /** Reference count — how many hooks are currently mounted */
+
   refCount: number;
 }
 
@@ -34,9 +33,8 @@ export function connectWs<T>(
   getUrl: () => string,
   parse: (raw: string) => T | null,
 ) {
-  // Guard: only block if a connection is already OPEN or CONNECTING.
-  // CLOSING/CLOSED states are allowed to proceed (old ws onclose will be a no-op
-  // because inst.ws is reassigned before the old callback fires).
+
+
   if (inst.ws && inst.ws.readyState < WebSocket.CLOSING) return;
 
   try {
@@ -60,7 +58,7 @@ export function connectWs<T>(
     ws.onclose = () => {
       inst.ws = null;
       inst.stateChangeCallbacks.forEach((cb) => cb());
-      // Only auto-reconnect if there are still active consumers
+
       if (inst.refCount > 0) {
         const delay = Math.min(
           BASE_RECONNECT_MS * Math.pow(2, inst.reconnectAttempts),
@@ -106,7 +104,7 @@ export function useWsHook<T>(
   onEvent: (event: T) => void,
   onReconnect?: () => void,
 ): { connected: boolean } {
-  // ── Stable refs for callbacks ──────────────────────────
+
 
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
@@ -114,7 +112,6 @@ export function useWsHook<T>(
   const onReconnectRef = useRef(onReconnect);
   onReconnectRef.current = onReconnect;
 
-  // ── Stable callback references (never recreated) ───────
 
   const stableListener = useCallback((event: T) => {
     onEventRef.current(event);
@@ -124,9 +121,6 @@ export function useWsHook<T>(
     onReconnectRef.current?.();
   }, []);
 
-  // ── Reactive connected state ───────────────────────────
-  // Reads inst.ws?.readyState at CALL TIME, not at creation time.
-  // Empty deps: inst is a stable module-level reference, setConnected is stable from useState.
 
   const [connected, setConnected] = useState(() => inst.ws?.readyState === WebSocket.OPEN);
 
@@ -134,9 +128,6 @@ export function useWsHook<T>(
     setConnected(inst.ws?.readyState === WebSocket.OPEN);
   }, [inst.ws?.readyState]);
 
-  // ── Mount/unmount lifecycle ────────────────────────────
-  // Dependencies are intentionally empty — all inputs are stable refs.
-  // getUrl/parse are captured once on mount (they are module-level constants).
 
   useEffect(() => {
     inst.refCount++;
@@ -144,7 +135,7 @@ export function useWsHook<T>(
     inst.reconnectCallbacks.add(stableReconnect);
     inst.stateChangeCallbacks.add(stableStateChange);
 
-    // Connect if not already connected
+
     if (!inst.ws || inst.ws.readyState === WebSocket.CLOSED) {
       inst.reconnectAttempts = 0;
       connectWs(inst, getUrl, parse);
@@ -158,13 +149,13 @@ export function useWsHook<T>(
       inst.stateChangeCallbacks.delete(stableStateChange);
       inst.refCount--;
 
-      // Only disconnect when no consumers remain
+
       if (inst.refCount <= 0) {
         disconnectWs(inst);
         setConnected(false);
       }
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   return { connected };
 }

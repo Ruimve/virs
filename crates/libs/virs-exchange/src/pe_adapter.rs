@@ -1,5 +1,3 @@
-//! CcxtExchangeAdapter — adapts Exchanges to Position Engine's ExchangePe trait.
-
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -17,7 +15,7 @@ use virs_error::{ExchangeError, VirsResult};
 use crate::registry::Exchanges;
 use crate::Exchange;
 
-/// Adapter: Exchanges → Position Engine ExchangePe trait
+
 pub struct CcxtExchangeAdapter {
     registry: Arc<Exchanges>,
     cached_name: String,
@@ -45,7 +43,6 @@ impl CcxtExchangeAdapter {
     }
 }
 
-// ---- Type conversion helpers ----
 
 pub fn convert_side(side: &models::Side) -> Side {
     match side {
@@ -228,8 +225,8 @@ impl ExchangePe for CcxtExchangeAdapter {
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
         let exchange_name = ex.name().to_string();
-        // Hedge mode: position_side is always Some (resolved by caller or engine).
-        // reduce_only is passed through directly — Binance supports reduceOnly + positionSide.
+
+
         let reduce_only_param = if params.reduce_only { Some(true) } else { None };
         let virs_order = ex
             .place_order_with_options(
@@ -306,8 +303,8 @@ impl ExchangePe for CcxtExchangeAdapter {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
-        // fapi returns Err for OneWay — the `?` propagates it as VirsError::Exchange.
-        // Ok(Hedge) is the only success path.
+
+
         ex.get_position_mode().await.map_err(Into::into)
     }
 
@@ -316,7 +313,7 @@ impl ExchangePe for CcxtExchangeAdapter {
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
 
-        // listenKey 路径（合约用户数据流）
+
         match ex.start_listenkey_order_ws(None).await {
             Ok(ws_rx) => {
                 info!(

@@ -1,5 +1,3 @@
-//! Grid AI service.
-
 use std::sync::Arc;
 
 use crate::common::ai_client;
@@ -9,7 +7,7 @@ use crate::grid::ports::GridBotConfig;
 use tracing::warn;
 use virs_error::{BotError, BotResult};
 
-/// Grid AI 决策动作
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum GridAction {
     Hold,
@@ -44,7 +42,7 @@ impl GridAction {
     }
 }
 
-/// Grid AI 决策结果
+
 #[derive(Debug, Clone)]
 pub struct GridAiDecision {
     pub action: String,
@@ -61,7 +59,7 @@ pub struct GridAiDecision {
     pub risk_warning: String,
 }
 
-/// Grid AI 服务
+
 pub struct GridAiService {
     http_client: reqwest::Client,
     llm_resolver: Arc<dyn LlmProviderResolver>,
@@ -81,7 +79,7 @@ impl GridAiService {
         }
     }
 
-    /// 执行 AI 分析
+
     pub async fn analyze(
         &self,
         bot: &GridBotConfig,
@@ -129,8 +127,7 @@ pub fn parse_grid_decision(json: &serde_json::Value) -> BotResult<GridAiDecision
         })
         .clamp(0.0, 1.0);
 
-    // Grid price bounds are critical — 0.0 means invalid grid range.
-    // Log at warn level so operators can detect incomplete LLM responses.
+
     let upper_price = grid["upper_price"].as_f64().unwrap_or_else(|| {
         warn!("LLM response missing 'grid.upper_price' — grid range is invalid (0.0)");
         0.0
@@ -148,7 +145,7 @@ pub fn parse_grid_decision(json: &serde_json::Value) -> BotResult<GridAiDecision
         0.0
     });
 
-    // leverage 是关键交易参数，禁止使用默认值 — 缺失即报错
+
     let leverage = risk["leverage"].as_i64().ok_or_else(|| {
         BotError::llm("LLM response missing 'risk.leverage' — leverage is a required field with no default")
     })? as i32;

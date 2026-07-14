@@ -1,14 +1,8 @@
-//! DefaultLlmResolver — resolves LLM provider, API key, base URL, and model.
-
 use virs_types::bot::LlmProviderResolver;
 use virs_types::llm;
 use virs_error::{BotError, BotResult};
 
-/// Resolve LLM provider info from user credentials.
-///
-/// Priority: deepseek > openai > openrouter.
-///
-/// Returns (api_key, base_url, model, provider_name).
+
 pub fn resolve_llm_provider(
     user_credentials: &[(String, String, Option<String>)],
 ) -> BotResult<(String, String, String, String)> {
@@ -25,7 +19,7 @@ pub fn resolve_llm_provider(
         }
     }
 
-    // Priority: deepseek > openai > openrouter
+
     for (provider, creds) in [
         ("deepseek", user_deepseek),
         ("openai", user_openai),
@@ -57,7 +51,7 @@ impl DefaultLlmResolver {
 
 impl LlmProviderResolver for DefaultLlmResolver {
     fn is_available(&self) -> bool {
-        // No system-level keys; availability depends on user credentials saved via the wizard.
+
         false
     }
 

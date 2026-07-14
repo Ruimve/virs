@@ -1,8 +1,3 @@
-//! Adapters — connect external services to virs-bot ports.
-//!
-//! All adapters are implemented here in virs-app (the composition root)
-//! because only virs-app has access to all crate dependencies.
-
 pub mod auto_store;
 mod credential_store;
 pub mod grid_store;

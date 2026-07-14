@@ -18,7 +18,7 @@ const Detail = () => {
         const logs = res?.data?.items || [];
         if (logs?.length > 0) {
           const found = logs?.find((l: AnalysisLog) => l.id === params.logId);
-          // 找不到目标 log 时，回退到最新一条（page_size=1 时即返回最新 log）
+
           setLog(found ?? logs[0]);
         }
       } catch (e) {

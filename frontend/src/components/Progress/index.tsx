@@ -14,7 +14,7 @@ export const Progress = memo(
       return 'from-success/80 to-success';
     };
     const heightClass = size === 'sm' ? 'h-1' : 'h-1.5';
-    // Clamp to [0, 100] to handle negative or out-of-range values
+
     const clampedPct = Math.min(Math.max(pct, 0), 100);
 
     return (

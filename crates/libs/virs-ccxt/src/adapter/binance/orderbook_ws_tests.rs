@@ -1,7 +1,3 @@
-//! Unit tests for adapter/binance/orderbook_ws.rs parsing functions.
-//!
-//! Covers: parse_levels, to_levels, parse_payload, BinanceDepthMessage::into_depth.
-
 use serde_json::json;
 
 use crate::adapter::binance::orderbook_ws::{
@@ -9,9 +5,6 @@ use crate::adapter::binance::orderbook_ws::{
 };
 use crate::ws_types::OrderBookLevel;
 
-// ============================================================
-// TC-W1: parse_levels
-// ============================================================
 
 #[test]
 fn w1_1_parse_levels_standard() {
@@ -33,7 +26,7 @@ fn w1_2_parse_levels_numeric_elements() {
     assert!(result.is_some());
     let levels = result.unwrap();
     assert_eq!(levels.len(), 1);
-    // Numbers should be converted to strings
+
     assert!((levels[0][0].parse::<f64>().unwrap() - 50000.0).abs() < 0.001);
 }
 
@@ -53,15 +46,12 @@ fn w1_4_parse_levels_not_array() {
 
 #[test]
 fn w1_5_parse_levels_short_element() {
-    // Element with only 1 item → should return None
+
     let v = json!([["50000.0"]]);
     let result = parse_levels(&v);
     assert_eq!(result, None);
 }
 
-// ============================================================
-// TC-W2: to_levels
-// ============================================================
 
 #[test]
 fn w2_1_to_levels_normal() {
@@ -125,9 +115,6 @@ fn w2_5_to_levels_empty() {
     assert!(levels.is_empty());
 }
 
-// ============================================================
-// TC-W3: parse_payload
-// ============================================================
 
 #[test]
 fn w3_2_parse_payload_perpetual_format() {
@@ -149,7 +136,7 @@ fn w3_2_parse_payload_perpetual_format() {
     assert_eq!(pd.asks.len(), 1);
     assert_eq!(pd.symbol, Some("BTCUSDT".to_string()));
     assert_eq!(pd.timestamp_ms, 1234567890);
-    // T9: perpetual has no lastUpdateId
+
     assert_eq!(pd.last_update_id, None);
 }
 
@@ -160,9 +147,6 @@ fn w3_3_parse_payload_no_matching_format() {
     assert!(result.is_none());
 }
 
-// ============================================================
-// TC-W4: BinanceDepthMessage::into_depth
-// ============================================================
 
 #[test]
 fn w4_2_into_depth_combined_stream_perpetual() {
@@ -189,7 +173,7 @@ fn w4_2_into_depth_combined_stream_perpetual() {
     assert_eq!(pd.stream_name, Some("btcusdt@depth20@500ms".to_string()));
     assert_eq!(pd.symbol, Some("BTCUSDT".to_string()));
     assert_eq!(pd.timestamp_ms, 1234567890);
-    // T9: perpetual — no lastUpdateId
+
     assert_eq!(pd.last_update_id, None);
 }
 
@@ -214,13 +198,13 @@ fn w4_4_into_depth_single_stream_perpetual() {
     assert_eq!(pd.asks.len(), 1);
     assert_eq!(pd.symbol, Some("BTCUSDT".to_string()));
     assert_eq!(pd.timestamp_ms, 1234567890);
-    // T9: perpetual — no lastUpdateId
+
     assert_eq!(pd.last_update_id, None);
 }
 
 #[test]
 fn w4_5_into_depth_invalid_message() {
-    // A message with neither data nor b/a
+
     let raw = json!({"foo": "bar"});
     let msg: BinanceDepthMessage = serde_json::from_value(raw).unwrap();
     let result = msg.into_depth();

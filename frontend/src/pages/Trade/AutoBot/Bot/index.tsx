@@ -18,13 +18,7 @@ import { PositionStats } from './PositionStats';
 import { RecentDecisions } from './RecentDecisions';
 import { RecentTrades } from './RecentTrades';
 
-/**
- * WS price update rAF throttle + price change check.
- *
- * Merges multiple price pushes within the same animation frame into a single setState,
- * and only triggers re-render when the price actually changes.
- * Avoids high-frequency WS heartbeat causing Bot full-tree reconciliation.
- */
+
 const useRafThrottledPrice = () => {
   const [latestPrice, setLatestPrice] = useState(0);
   const rafRef = useRef<number | undefined>(undefined);
@@ -48,13 +42,7 @@ const useRafThrottledPrice = () => {
   return { latestPrice, update };
 };
 
-/**
- * Convert trade records to Kline chart markers.
- * Open (open_side=buy) -> green up arrow, below bar
- * Open (open_side=sell) -> red down arrow, above bar
- * Close (close_side=buy) -> green up arrow
- * Close (close_side=sell) -> red down arrow
- */
+
 function tradesToMarkers(trades: AutoTrade[]) {
   const markers: Array<{
     time: number;
@@ -178,18 +166,18 @@ const Bot = () => {
 
   return (
     <div className="h-full flex flex-col lg:flex-row">
-      {/* Main area: position stats + AI decision + trade stats + bottom market panel */}
+      {}
       <div className="flex flex-col h-full lg:flex-1 lg:min-h-0 overflow-y-auto relative mb-9">
-        {/* Position stats */}
+        {}
         <PositionStats bot={autoBot} latestPrice={latestPrice} />
 
-        {/* AI decision card */}
+        {}
         <DecisionCard log={latestDecision} botId={autoBot?.id} botType="auto" />
 
-        {/* Historical trade stats */}
+        {}
         <TradeStats botId={autoBot?.id} />
 
-        {/* Bottom market collapsible panel (Kline chart) */}
+        {}
         <div className="fixed bottom-0 left-0 right-0">
           <StickyMarket
             klineData={klineData}
@@ -202,7 +190,7 @@ const Bot = () => {
         </div>
       </div>
 
-      {/* Right sidebar: recent decisions + recent trades */}
+      {}
       <div className="hidden lg:flex w-72 xl:w-80 border-l border-line-subtle/50 flex-col bg-surface-1/20">
         <div className="flex flex-col h-full divide-y divide-line-subtle/50">
           <div className="flex-1 min-h-0">

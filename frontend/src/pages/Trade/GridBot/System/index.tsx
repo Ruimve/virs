@@ -6,7 +6,6 @@ import { Progress } from '@/components/Progress';
 import { usageColor } from '@/components/Progress/utils';
 import { StateFeedback } from '@/components/StateFeedback';
 
-// ── 工具函数 ────────────────────────────────────────────────
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -31,9 +30,7 @@ function formatUptime(secs: number): string {
   return parts.join(' ');
 }
 
-// ── 主组件 ──────────────────────────────────────────────────
 
-// 保存上次网络采样，用于计算速率
 interface NetSample {
   total_rx: number;
   total_tx: number;
@@ -43,7 +40,7 @@ interface NetSample {
 const System = () => {
   const [info, setInfo] = useState<SystemInfoData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // 网络速率：name → bytes/s
+
   const [netRates, setNetRates] = useState<Record<string, { rx: number; tx: number }>>({});
   const lastNetSample = useRef<Record<string, NetSample>>({});
 
@@ -54,7 +51,7 @@ const System = () => {
         setInfo(res.data);
         setError(null);
 
-        // 计算网络速率
+
         const now = Date.now();
         const newRates: Record<string, { rx: number; tx: number }> = {};
         const newSample: Record<string, NetSample> = {};
@@ -104,7 +101,7 @@ const System = () => {
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
-      {/* 系统概览 */}
+      {}
       <Card title="系统概览">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           <div>
@@ -128,7 +125,7 @@ const System = () => {
         </div>
       </Card>
 
-      {/* CPU & 内存 */}
+      {}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card title="CPU">
           <div className="space-y-3">
@@ -189,7 +186,7 @@ const System = () => {
         </Card>
       </div>
 
-      {/* 系统负载 */}
+      {}
       <Card title="系统负载（1 / 5 / 15 分钟）">
         <div className="grid grid-cols-3 gap-3">
           {[
@@ -197,7 +194,7 @@ const System = () => {
             { label: '5 分钟', value: info.load_average.five },
             { label: '15 分钟', value: info.load_average.fifteen },
           ].map(({ label, value }) => {
-            // 负载相对核心数的百分比：>100% 表示过载
+
             const loadPct = info.cpu.core_count > 0 ? (value / info.cpu.core_count) * 100 : 0;
             return (
               <div key={label}>
@@ -217,7 +214,7 @@ const System = () => {
         </div>
       </Card>
 
-      {/* 磁盘 */}
+      {}
       <Card title="磁盘">
         <div className="space-y-3">
           {info.disks.map((disk, i) => (
@@ -239,7 +236,7 @@ const System = () => {
         </div>
       </Card>
 
-      {/* 网络 */}
+      {}
       <Card title="网络">
         <div className="space-y-2">
           {info.network.length === 0 ? (

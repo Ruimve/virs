@@ -6,7 +6,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use rand::RngCore;
 use virs_error::{VirsError, VirsResult};
 
-/// Encrypt a string using AES-256-GCM.
+
 pub fn encrypt(plaintext: &str, key: &[u8; 32]) -> VirsResult<String> {
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|e| VirsError::crypto(format!("Cipher init error: {:?}", e)))?;
@@ -24,7 +24,7 @@ pub fn encrypt(plaintext: &str, key: &[u8; 32]) -> VirsResult<String> {
     Ok(BASE64.encode(&combined))
 }
 
-/// Decrypt a string using AES-256-GCM.
+
 pub fn decrypt(encoded: &str, key: &[u8; 32]) -> VirsResult<String> {
     let combined = BASE64
         .decode(encoded)
@@ -45,7 +45,7 @@ pub fn decrypt(encoded: &str, key: &[u8; 32]) -> VirsResult<String> {
         .map_err(|e| VirsError::crypto(format!("UTF-8 decode error: {}", e)))
 }
 
-/// Derive a 32-byte key from a secret string.
+
 pub fn derive_key(secret: &str) -> [u8; 32] {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
@@ -56,17 +56,13 @@ pub fn derive_key(secret: &str) -> [u8; 32] {
     key
 }
 
-/// Hash a password using bcrypt.
+
 pub fn hash_password(password: &str) -> VirsResult<String> {
     bcrypt::hash(password, bcrypt::DEFAULT_COST)
         .map_err(|e| VirsError::crypto(format!("Hash error: {}", e)))
 }
 
-/// Verify a password against a bcrypt hash.
-///
-/// Returns `false` on verification failure or hash corruption.
-/// Hash corruption is logged at `error!` level so operators can diagnose
-/// why authentication is failing (e.g., database field was truncated).
+
 pub fn verify_password(password: &str, hash: &str) -> bool {
     bcrypt::verify(password, hash).unwrap_or_else(|e| {
         tracing::error!(error = %e, "bcrypt verify error — hash may be corrupted or malformed");
@@ -74,13 +70,13 @@ pub fn verify_password(password: &str, hash: &str) -> bool {
     })
 }
 
-/// Encrypt a string using a secret string (derives key internally).
+
 pub fn encrypt_with_key(plaintext: &str, secret: &str) -> VirsResult<String> {
     let key = derive_key(secret);
     encrypt(plaintext, &key)
 }
 
-/// Decrypt a string using a secret string (derives key internally).
+
 pub fn decrypt_with_key(encoded: &str, secret: &str) -> VirsResult<String> {
     let key = derive_key(secret);
     decrypt(encoded, &key)

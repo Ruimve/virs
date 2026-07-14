@@ -33,7 +33,7 @@ export const Wizard = ({ step, title, subtitle, children, actions }: WizardLayou
         </div>
       </div>
 
-      {/* Bottom actions */}
+      {}
       {actions && (
         <div className="shrink-0 z-10 px-4 md:px-8 h-auto md:h-20 py-3 md:py-0 border-t border-line-subtle bg-base flex items-center">
           <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 sm:justify-end w-full">

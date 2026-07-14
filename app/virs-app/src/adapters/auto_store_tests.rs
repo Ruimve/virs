@@ -1,5 +1,3 @@
-//! Unit tests for adapters/auto_store.rs
-
 use crate::adapters::auto_store::bot_to_config;
 use chrono::Utc;
 use uuid::Uuid;

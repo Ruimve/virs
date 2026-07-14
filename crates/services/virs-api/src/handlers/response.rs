@@ -1,8 +1,6 @@
-//! Common API response types.
-
 use virs_error::VirsError;
 
-/// API response wrapper — always uses serde_json::Value for data.
+
 #[derive(serde::Serialize)]
 pub struct ApiResponse {
     pub success: bool,
@@ -20,10 +18,7 @@ impl ApiResponse {
     }
 }
 
-/// Extract user_id from JWT in Authorization header.
-/// Shared by all handlers that need user identity.
-///
-/// `jwt_secret` is validated at startup and passed via AppState — no env read at request time.
+
 pub fn extract_user_id(
     headers: &axum::http::HeaderMap,
     jwt_secret: &str,

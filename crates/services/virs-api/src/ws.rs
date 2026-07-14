@@ -1,5 +1,3 @@
-//! WebSocket handlers for real-time data push.
-
 use axum::{
     extract::{
         ws::{Message, WebSocket},
@@ -11,14 +9,6 @@ use std::sync::Arc;
 
 use crate::state::AppState;
 
-// ============================================================
-// Wire DTOs for WebSocket messages.
-//
-// These structs derive `Serialize` so handlers can call
-// `serde_json::to_string(&msg)` directly, avoiding the previous
-// two-pass serialization (`json!` -> Value -> to_string).
-// Field names are kept identical (snake_case) for frontend compat.
-// ============================================================
 
 #[derive(serde::Serialize)]
 pub struct KlineWsMsg<'a> {
@@ -55,15 +45,14 @@ pub struct PositionWsMsg<'a> {
 pub struct OrderBookWsMsg<'a> {
     exchange: &'a str,
     symbol: &'a str,
-    // Each level serializes as a JSON array `[price, amount]`,
-    // matching the previous `json!([l.price, l.amount])` output.
+
+
     bids: Vec<[f64; 2]>,
     asks: Vec<[f64; 2]>,
     timestamp: i64,
 }
 
-/// Map a `PositionSide` to its wire string (lowercase, matches the old
-/// `format!("{:?}", side).to_lowercase()` output).
+
 fn position_side_str(side: &virs_types::PositionSide) -> &'static str {
     match side {
         virs_types::PositionSide::Long => "long",
@@ -71,8 +60,7 @@ fn position_side_str(side: &virs_types::PositionSide) -> &'static str {
     }
 }
 
-/// Map a `PositionStatus` to its wire string (lowercase, matches the old
-/// `format!("{:?}", status).to_lowercase()` output).
+
 fn position_status_str(status: &virs_types::PositionStatus) -> &'static str {
     match status {
         virs_types::PositionStatus::Empty => "empty",
@@ -83,8 +71,7 @@ fn position_status_str(status: &virs_types::PositionStatus) -> &'static str {
     }
 }
 
-/// Build the WebSocket wire message for a `Position` update.
-/// Used by position_ws_handler for real-time position updates.
+
 pub fn position_to_ws_json(pos: &virs_types::Position) -> PositionWsMsg<'_> {
     PositionWsMsg {
         msg_type: "position_updated",
@@ -107,8 +94,7 @@ pub fn position_to_ws_json(pos: &virs_types::Position) -> PositionWsMsg<'_> {
     }
 }
 
-/// Build the WebSocket wire message for a `KlineEvent`.
-/// Used by kline_ws_handler for real-time kline updates.
+
 pub fn kline_event_to_json(event: &virs_market::KlineEvent) -> KlineWsMsg<'_> {
     KlineWsMsg {
         exchange: &event.exchange,
@@ -123,8 +109,7 @@ pub fn kline_event_to_json(event: &virs_market::KlineEvent) -> KlineWsMsg<'_> {
     }
 }
 
-/// Build the WebSocket wire message for an `OrderBookEvent`.
-/// Used by orderbook_ws_handler for real-time order book updates.
+
 pub fn orderbook_event_to_json(event: &virs_market::OrderBookEvent) -> OrderBookWsMsg<'_> {
     OrderBookWsMsg {
         exchange: &event.exchange,
@@ -135,7 +120,7 @@ pub fn orderbook_event_to_json(event: &virs_market::OrderBookEvent) -> OrderBook
     }
 }
 
-/// WebSocket handler for real-time kline data from KlineEngine.
+
 pub async fn kline_ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
@@ -146,7 +131,7 @@ pub async fn kline_ws_handler(
 async fn handle_kline_ws(mut socket: WebSocket, kline_engine: Arc<virs_market::KlineEngine>) {
     let mut rx = kline_engine.subscribe_events();
 
-    // 客户端可订阅指定 timeframe，未指定时推送全部（向后兼容）
+
     let mut timeframe_filter: Option<String> = None;
 
     loop {
@@ -154,7 +139,7 @@ async fn handle_kline_ws(mut socket: WebSocket, kline_engine: Arc<virs_market::K
             msg = rx.recv() => {
                 match msg {
                     Ok(event) => {
-                        // 按 timeframe 过滤；用 as_str() 避免 format! 分配
+
                         if let Some(ref tf) = timeframe_filter {
                             if event.timeframe.as_str() != tf.as_str() {
                                 continue;
@@ -175,7 +160,7 @@ async fn handle_kline_ws(mut socket: WebSocket, kline_engine: Arc<virs_market::K
             msg = socket.recv() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
-                        // 解析客户端订阅消息：{"action":"subscribe","timeframe":"15m"}
+
                         if let Ok(req) = serde_json::from_str::<serde_json::Value>(&text) {
                             if req.get("action").and_then(|v| v.as_str()) == Some("subscribe") {
                                 if let Some(tf) = req.get("timeframe").and_then(|v| v.as_str()) {
@@ -194,7 +179,7 @@ async fn handle_kline_ws(mut socket: WebSocket, kline_engine: Arc<virs_market::K
     }
 }
 
-/// WebSocket handler for real-time order book data from OrderBookEngine.
+
 pub async fn orderbook_ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
@@ -208,8 +193,7 @@ async fn handle_orderbook_ws(
 ) {
     let mut rx = orderbook_engine.subscribe_events();
 
-    // 客户端订阅的 symbol 集合；为空时推送全部（向后兼容）
-    // select! 不会并发执行两个分支，所以直接用局部变量即可，无需 Mutex
+
     let mut subscribed_symbols: std::collections::HashSet<String> =
         std::collections::HashSet::new();
 
@@ -218,7 +202,7 @@ async fn handle_orderbook_ws(
             msg = rx.recv() => {
                 match msg {
                     Ok(event) => {
-                        // 若客户端已订阅指定 symbol，则按 symbol 过滤
+
                         if !subscribed_symbols.is_empty()
                             && !subscribed_symbols.contains(&event.symbol)
                         {
@@ -239,8 +223,8 @@ async fn handle_orderbook_ws(
             msg = socket.recv() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
-                        // 解析客户端订阅消息：
-                        // {"action":"subscribe","symbol":"BTCUSDT"}
+
+
                         if let Ok(req) = serde_json::from_str::<serde_json::Value>(&text) {
                             if req.get("action").and_then(|v| v.as_str()) == Some("subscribe") {
                                 if let Some(sym) = req.get("symbol").and_then(|v| v.as_str()) {
@@ -261,8 +245,7 @@ async fn handle_orderbook_ws(
     }
 }
 
-/// WebSocket handler for real-time position updates from PositionEngine.
-/// 客户端连接后发送 {"action":"subscribe","symbol":"BTCUSDT"} 订阅指定 symbol 的仓位更新。
+
 pub async fn position_ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
@@ -271,7 +254,7 @@ pub async fn position_ws_handler(
 }
 
 async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
-    // 订阅 PE 事件
+
     let mut pe_rx = match state.engine_manager.pe_event_subscribe() {
         Some(rx) => rx,
         None => {
@@ -286,20 +269,19 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
         }
     };
 
-    // 客户端订阅的 symbol 集合
-    // select! 不会并发执行两个分支，所以直接用局部变量即可，无需 Mutex
+
     let mut subscribed_symbols: std::collections::HashSet<String> =
         std::collections::HashSet::new();
 
-    // 主循环：select! 同时处理 PE 事件和客户端消息
+
     loop {
         tokio::select! {
             msg = pe_rx.recv() => {
                 match msg {
                     Ok(event) => {
                         if let virs_types::position::EngineEvent::PositionUpdated { position } = event {
-                            // 若客户端已订阅指定 symbol，则按 symbol 过滤；
-                            // 空集合时推送全部（与 kline/orderbook handler 语义一致）
+
+
                             if !subscribed_symbols.is_empty()
                                 && !subscribed_symbols.contains(&position.symbol)
                             { continue; }
@@ -324,7 +306,7 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
                                 if let Some(sym) = req.get("symbol").and_then(|v| v.as_str()) {
                                     subscribed_symbols.insert(sym.to_string());
 
-                                    // 订阅时立即推送当前仓位快照，避免首次显示空仓
+
                                     let positions = state.engine_manager.get_positions_by_symbol(sym);
                                     for pos in positions {
                                         let msg = position_to_ws_json(&pos);

@@ -1,5 +1,3 @@
-//! Unit tests for adapter.rs type conversion functions.
-
 use chrono::Utc;
 
 use virs_ccxt::{CcxtKline, CcxtOrder, CcxtOrderStatus, OrderFee};
@@ -12,9 +10,6 @@ use crate::adapter::{
     to_models_order,
 };
 
-// ============================================================
-// TC-A1: to_ccxt_market_type
-// ============================================================
 
 #[test]
 fn a1_2_perpetual_to_ccxt() {
@@ -24,9 +19,6 @@ fn a1_2_perpetual_to_ccxt() {
     );
 }
 
-// ============================================================
-// TC-A2: to_ccxt_side
-// ============================================================
 
 #[test]
 fn a2_1_buy_to_ccxt() {
@@ -38,9 +30,6 @@ fn a2_2_sell_to_ccxt() {
     assert_eq!(to_ccxt_side(&Side::Sell), virs_ccxt::Side::Sell);
 }
 
-// ============================================================
-// TC-A3: to_ccxt_order_type
-// ============================================================
 
 #[test]
 fn a3_1_market_to_ccxt() {
@@ -70,9 +59,6 @@ fn a3_5_take_profit_market_to_ccxt() {
     );
 }
 
-// ============================================================
-// TC-A4: to_models_kline
-// ============================================================
 
 #[test]
 fn a4_1_kline_normal_conversion() {
@@ -99,7 +85,7 @@ fn a4_1_kline_normal_conversion() {
     assert_eq!(kline.symbol, "BTC/USDT");
     assert_eq!(kline.exchange, "binance");
     assert_eq!(kline.interval, "1m");
-    // close_time = timestamp + 60000 - 1 (1m interval, Binance format: open + tf - 1)
+
     assert_eq!(kline.close_time, 1700000000000 + 60_000 - 1);
 }
 
@@ -115,17 +101,17 @@ fn a4_2_kline_exchange_field() {
     assert_eq!(kline.exchange, "okx");
     assert_eq!(kline.symbol, "ETH/USDC");
     assert_eq!(kline.interval, "1h");
-    // None → 0.0
+
     assert_eq!(kline.quote_volume, 0.0);
     assert_eq!(kline.trades, 0);
-    // close_time = timestamp + 3_600_000 - 1 (1h interval, Binance format: open + tf - 1)
+
     assert_eq!(kline.close_time, 100 + 3_600_000 - 1);
 }
 
 #[test]
 fn a4_3_kline_close_time_binance_format() {
-    // T3: close_time must be open_time + interval_ms - 1 (Binance official format)
-    // e.g. 1m kline: open=12:00:00.000, close=12:00:59.999
+
+
     let intervals: &[(&str, i64)] = &[
         ("1m", 60_000),
         ("5m", 300_000),
@@ -155,7 +141,7 @@ fn a4_3_kline_close_time_binance_format() {
             "close_time mismatch for interval {}",
             interval
         );
-        // Verify the invariant: close_time - open_time = interval_ms - 1
+
         assert_eq!(
             kline.close_time - kline.open_time,
             tf_ms - 1,
@@ -167,10 +153,10 @@ fn a4_3_kline_close_time_binance_format() {
 
 #[test]
 fn a4_4_kline_close_time_from_exchange() {
-    // T4: When exchange provides close_time (a[6]), use it directly
+
     let ck = CcxtKline {
         timestamp: 1700000000000,
-        close_time: Some(1700000059000), // Exchange-provided close_time (different from computed)
+        close_time: Some(1700000059000),
         open: 50000.0,
         high: 51000.0,
         low: 49000.0,
@@ -180,14 +166,11 @@ fn a4_4_kline_close_time_from_exchange() {
         trades: Some(5000),
     };
     let kline = to_models_kline(ck, "BTC/USDT", "binance", "1m");
-    // Should use the exchange-provided close_time, not the computed one
+
     assert_eq!(kline.close_time, 1700000059000);
     assert_ne!(kline.close_time, 1700000000000 + 60_000 - 1);
 }
 
-// ============================================================
-// TC-A5: to_models_balance
-// ============================================================
 
 #[test]
 fn a5_1_balance_normal() {
@@ -204,9 +187,6 @@ fn a5_1_balance_normal() {
     assert_eq!(balance.total, 15000.0);
 }
 
-// ============================================================
-// TC-A6: to_models_order
-// ============================================================
 
 #[test]
 fn a6_1_order_normal() {

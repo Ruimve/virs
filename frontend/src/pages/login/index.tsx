@@ -39,7 +39,7 @@ const Login = () => {
 
   return (
     <div className="min-h-screen bg-base flex items-center justify-center relative overflow-hidden terminal-grid-bg">
-      {/* Ambient gradient orbs */}
+      {}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-accent/[0.03] blur-[160px]" />
         <div className="absolute top-1/4 right-1/4 w-[300px] h-[300px] rounded-full bg-accent/[0.02] blur-[120px]" />
@@ -47,7 +47,7 @@ const Login = () => {
       </div>
 
       <div className="w-full max-w-sm px-6 relative z-10">
-        {/* Logo area */}
+        {}
         <div className="text-center mb-14">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-accent/15 to-accent-muted/10 border border-accent-muted/30 mb-7 backdrop-blur-sm">
             <span className="text-3xl font-extralight tracking-[0.3em] text-on-base">V</span>
@@ -58,7 +58,7 @@ const Login = () => {
           </p>
         </div>
 
-        {/* Login form */}
+        {}
         <form onSubmit={(e) => handleSubmit(e, username, password)} className="space-y-5">
           <Input
             type="text"
@@ -82,7 +82,7 @@ const Login = () => {
           </Button>
         </form>
 
-        {/* Footer */}
+        {}
         <div className="mt-12 text-center">
           <p className="text-2xs tracking-[0.2em] text-on-surface-faint uppercase">
             Quantitative Trading System

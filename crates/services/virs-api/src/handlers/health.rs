@@ -1,5 +1,3 @@
-//! Health check handler.
-
 use axum::Json;
 use virs_error::VirsError;
 

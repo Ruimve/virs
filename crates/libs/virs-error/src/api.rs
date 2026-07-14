@@ -1,11 +1,9 @@
-//! HTTP API error response — used by virs-api handlers.
-
 use serde::Serialize;
 
 use crate::classify::{Categorized, ErrorCode, HttpStatus, Retryable};
 use crate::VirsError;
 
-/// Unified API error response body.
+
 #[derive(Debug, Serialize)]
 pub struct ApiError {
     pub success: bool,
@@ -19,7 +17,7 @@ pub struct ApiError {
 impl From<VirsError> for ApiError {
     fn from(e: VirsError) -> Self {
         let status = e.http_status();
-        // 5xx errors: do not leak internal details to the client
+
         let message = if status >= 500 {
             "Internal server error".to_string()
         } else {

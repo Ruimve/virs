@@ -1,16 +1,9 @@
-//! Market data types: Ticker, Kline, OrderBook, Balance, etc.
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::enums::PositionSide;
 
-/// Ticker snapshot (API-layer, includes exchange field)
-///
-/// `bid`/`ask` are `Option<f64>` because not all exchanges return these fields
-/// in their ticker endpoints (e.g. Binance USD-M Futures `/fapi/v1/ticker/24hr`
-/// omits `bidPrice`/`askPrice`). `last` is always required — it is the price
-/// used for trading decisions.
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Ticker {
     pub symbol: String,
@@ -26,7 +19,7 @@ pub struct Ticker {
     pub timestamp: DateTime<Utc>,
 }
 
-/// Kline / candlestick data
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Kline {
     pub open_time: i64,
@@ -43,7 +36,7 @@ pub struct Kline {
     pub interval: String,
 }
 
-/// Order book
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OrderBook {
     pub symbol: String,
@@ -52,7 +45,7 @@ pub struct OrderBook {
     pub timestamp: DateTime<Utc>,
 }
 
-/// Account balance
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Balance {
     pub asset: String,
@@ -62,13 +55,13 @@ pub struct Balance {
 }
 
 impl Balance {
-    /// Computes total from free + used.
+
     pub fn compute_total(&self) -> f64 {
         self.free + self.used
     }
 }
 
-/// Exchange position info
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExchangePosition {
     pub symbol: String,
@@ -81,9 +74,8 @@ pub struct ExchangePosition {
 }
 
 impl ExchangePosition {
-    /// Computes unrealized PnL at a given current price.
-    /// Long: (current - entry) * size
-    /// Short: (entry - current) * size
+
+
     pub fn unrealized_pnl_at(&self, current_price: f64) -> f64 {
         match self.side {
             PositionSide::Long => (current_price - self.entry_price) * self.size,
@@ -92,7 +84,7 @@ impl ExchangePosition {
     }
 }
 
-/// Funding rate
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FundingRate {
     pub symbol: String,
@@ -100,11 +92,9 @@ pub struct FundingRate {
     pub next_funding_time: Option<DateTime<Utc>>,
 }
 
-/// Funding history entry
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FundingHistoryEntry {
     pub funding_time: DateTime<Utc>,
     pub rate: f64,
 }
-
-

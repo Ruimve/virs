@@ -1,11 +1,6 @@
-//! Unit tests for market.rs methods.
-
 use crate::enums::PositionSide;
 use crate::market::{Balance, ExchangePosition};
 
-// ============================================================
-// TC-M1: Balance::compute_total
-// ============================================================
 
 #[test]
 fn m1_1_normal_total() {
@@ -19,9 +14,6 @@ fn m1_2_zero_total() {
     assert!((balance.compute_total() - 0.0).abs() < 0.01);
 }
 
-// ============================================================
-// TC-M10: ExchangePosition::unrealized_pnl_at
-// ============================================================
 
 #[test]
 fn m10_1_long_profit() {
@@ -41,9 +33,6 @@ fn m10_3_long_loss() {
     assert!((pos.unrealized_pnl_at(49000.0) - (-1000.0)).abs() < 0.01);
 }
 
-// ============================================================
-// Helpers
-// ============================================================
 
 fn make_exchange_position(side: PositionSide, entry: f64, size: f64) -> ExchangePosition {
     ExchangePosition {

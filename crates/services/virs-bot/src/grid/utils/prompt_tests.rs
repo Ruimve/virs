@@ -1,5 +1,3 @@
-//! Unit tests for grid/utils/prompt.rs
-
 use crate::grid::utils::prompt::format_bars_outside;
 
 #[test]

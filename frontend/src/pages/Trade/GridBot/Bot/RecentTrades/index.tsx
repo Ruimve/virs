@@ -8,7 +8,7 @@ interface Props {
   botId: string;
 }
 
-/** 网格机器人最近成交卡片（右侧栏） */
+
 export const RecentTrades = memo(({ botId }: Props) => {
   const [trades, setTrades] = useState<GridTrade[]>([]);
   const [, setLoading] = useState(true);

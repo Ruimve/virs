@@ -1,8 +1,6 @@
-//! Bot-layer error type — migrated from virs-types.
-
 use crate::classify::{ErrorCategory, Retryable, Categorized, HttpStatus, ErrorCode};
 
-/// Bot-layer error type
+
 #[derive(Debug, thiserror::Error)]
 pub enum BotError {
     #[error("Order execution failed: {0}")]
@@ -11,8 +9,8 @@ pub enum BotError {
     Credential(String),
     #[error("LLM error: {0}")]
     Llm(String),
-    /// LLM HTTP request transport error (network/timeout/decode failure from reqwest).
-    /// Classified as retryable network error so transient failures can be retried.
+
+
     #[cfg(feature = "reqwest")]
     #[error("LLM request error: {0}")]
     Reqwest(#[from] reqwest::Error),
@@ -24,7 +22,7 @@ impl BotError {
     }
 }
 
-/// Bot-layer result type
+
 pub type BotResult<T> = std::result::Result<T, BotError>;
 
 impl Retryable for BotError {

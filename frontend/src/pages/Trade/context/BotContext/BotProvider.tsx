@@ -15,17 +15,17 @@ type Bot = {
   gridLevels: GridLevelInfo[];
 };
 
-// 数据获取函数，返回 Promise<{ bot, gridLevels? }>
+
 const fetchBot = (botType: string, botId: string): Promise<Bot> => {
   if (!botId) {
-    // 没有 botId 时，返回一个空数据（或抛出错误，视业务而定）
+
     return Promise.resolve({ bot: null, gridLevels: [] });
   }
 
   if (botType === 'auto') {
     return getAutoBotDetail(botId).then((res) => ({
       bot: res?.data?.bot || null,
-      gridLevels: [], // auto 类型没有 gridLevels
+      gridLevels: [],
     }));
   } else if (botType === 'grid') {
     return getGridBotDetail(botId).then((res) => ({
@@ -33,7 +33,7 @@ const fetchBot = (botType: string, botId: string): Promise<Bot> => {
       gridLevels: res?.data?.grid_levels || [],
     }));
   } else {
-    // 未知类型，返回空数据
+
     return Promise.resolve({ bot: null, gridLevels: [] });
   }
 };

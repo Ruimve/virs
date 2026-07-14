@@ -21,7 +21,7 @@ interface CollapsibleMarketPanelProps {
   latestPrice: number;
 }
 
-/** 格式化成交量：大数缩写 */
+
 function formatVolume(v: number): string {
   if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(2)}B`;
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
@@ -29,18 +29,14 @@ function formatVolume(v: number): string {
   return v.toFixed(2);
 }
 
-/**
- * 从 K线数据计算 24h 行情摘要：
- * 涨跌幅、最高、最低、成交量。
- * 取最近 24h 内的 K线（按 timeframe 估算条数）。
- */
+
 function useMarketSummary(klineData: KlineCandle[], timeframe: string) {
   return useMemo(() => {
     if (klineData.length === 0) {
       return { changePct: 0, high: 0, low: 0, volume: 0 };
     }
 
-    // 根据 timeframe 估算 24h 内的 K线条数
+
     const tfHours: Record<string, number> = {
       '1m': 1 / 60,
       '5m': 5 / 60,
@@ -99,7 +95,7 @@ export const StickyMarket = memo(
 
     return (
       <div className="bg-base border-t border-line-default shadow-(--shadow-sticky)] shrink-0">
-        {/* 折叠头部：行情摘要（最新价 + 24h涨跌 + 高/低/量） */}
+        {}
         <div
           onClick={() => setExpanded(!expanded)}
           className="w-full flex items-center justify-between gap-2 px-4 py-2 hover:bg-surface-2/50 transition-colors cursor-pointer"
@@ -150,10 +146,10 @@ export const StickyMarket = memo(
           </div>
         </div>
 
-        {/* 展开内容：K线图（固定高度，独占整个区域） */}
+        {}
         {expanded && (
           <div className="flex flex-col border-t border-line-subtle">
-            {/* 时间周期切换 */}
+            {}
             <div className="flex items-center gap-1 px-4 pt-2 pb-1 shrink-0">
               {['1m', '5m', '15m', '1h', '4h', '1d'].map((tf) => (
                 <div
@@ -169,7 +165,7 @@ export const StickyMarket = memo(
                 </div>
               ))}
             </div>
-            {/* K线图：固定高度，避免超出容器 */}
+            {}
             <div className="px-2 pb-2">{Chart}</div>
           </div>
         )}

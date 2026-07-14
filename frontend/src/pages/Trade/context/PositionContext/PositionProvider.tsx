@@ -9,7 +9,7 @@ export const PositionProvider = ({ children }: { children: ReactNode }) => {
 
   usePositionWs(bot?.symbol, (event) => {
     if (event.symbol !== bot?.symbol) return;
-    // 仓位关闭后清空 state，避免残留 closed 数据
+
     if (event.status === 'closed' || event.size <= 0) {
       setPosition(null);
       return;

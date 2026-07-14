@@ -1,9 +1,3 @@
-//! Unit tests for adapter/binance/mod.rs mapping functions.
-//!
-//! Covers: to_native_symbol, to_unified_symbol, parse_order_status,
-//! parse_order_type, side_str, order_type_str, try_build_ed25519,
-//! parse_order_book_side (shared).
-
 use serde_json::json;
 
 use crate::adapter::binance::{
@@ -12,9 +6,6 @@ use crate::adapter::binance::{
 };
 use crate::types::{CcxtOrderStatus, OrderType, Side};
 
-// ============================================================
-// TC-B1: to_native_symbol
-// ============================================================
 
 #[test]
 fn b1_1_native_symbol_with_slash() {
@@ -41,9 +32,6 @@ fn b1_5_native_symbol_empty() {
     assert_eq!(BinanceExchange::to_native_symbol(""), "");
 }
 
-// ============================================================
-// TC-B2: to_unified_symbol
-// ============================================================
 
 #[test]
 fn b2_1_unified_symbol_usdt() {
@@ -72,13 +60,10 @@ fn b2_5_unified_symbol_unknown_quote() {
 
 #[test]
 fn b2_6_unified_symbol_only_quote() {
-    // "USDT" → base is empty → returns as-is
+
     assert_eq!(BinanceExchange::to_unified_symbol("USDT"), "USDT");
 }
 
-// ============================================================
-// TC-B3: parse_order_status
-// ============================================================
 
 #[test]
 fn b3_1_status_new() {
@@ -152,9 +137,6 @@ fn b3_9_status_unknown_defaults_to_open() {
     );
 }
 
-// ============================================================
-// TC-B4: parse_order_type
-// ============================================================
 
 #[test]
 fn b4_1_type_market() {
@@ -203,7 +185,7 @@ fn b4_6_type_take_profit_limit() {
 
 #[test]
 fn b4_7_type_take_profit_market() {
-    // 合约返回 TAKE_PROFIT_MARKET
+
     assert_eq!(
         BinanceExchange::parse_order_type("TAKE_PROFIT_MARKET"),
         OrderType::TakeProfitMarket
@@ -212,7 +194,7 @@ fn b4_7_type_take_profit_market() {
 
 #[test]
 fn b4_7b_type_take_profit() {
-    // 合约返回 TAKE_PROFIT（触发后执行 MARKET）
+
     assert_eq!(
         BinanceExchange::parse_order_type("TAKE_PROFIT"),
         OrderType::TakeProfitMarket
@@ -227,9 +209,6 @@ fn b4_8_type_unknown_defaults_to_market() {
     );
 }
 
-// ============================================================
-// TC-B5: side_str
-// ============================================================
 
 #[test]
 fn b5_1_side_buy() {
@@ -241,9 +220,6 @@ fn b5_2_side_sell() {
     assert_eq!(BinanceExchange::side_str(&Side::Sell), "SELL");
 }
 
-// ============================================================
-// TC-B6: order_type_str
-// ============================================================
 
 #[test]
 fn b6_1_order_type_market() {
@@ -260,7 +236,7 @@ fn b6_2_order_type_limit() {
 
 #[test]
 fn b6_3_order_type_stop_market() {
-    // 合约 StopMarket → STOP_MARKET
+
     assert_eq!(
         BinanceExchange::order_type_str(&OrderType::StopMarket),
         "STOP_MARKET"
@@ -269,7 +245,7 @@ fn b6_3_order_type_stop_market() {
 
 #[test]
 fn b6_4_order_type_stop_limit() {
-    // 合约 StopLimit → STOP
+
     assert_eq!(
         BinanceExchange::order_type_str(&OrderType::StopLimit),
         "STOP"
@@ -278,7 +254,7 @@ fn b6_4_order_type_stop_limit() {
 
 #[test]
 fn b6_5_order_type_take_profit_market() {
-    // 合约 TakeProfitMarket → TAKE_PROFIT_MARKET
+
     assert_eq!(
         BinanceExchange::order_type_str(&OrderType::TakeProfitMarket),
         "TAKE_PROFIT_MARKET"
@@ -287,7 +263,7 @@ fn b6_5_order_type_take_profit_market() {
 
 #[test]
 fn b6_6_futures_stop_market_unchanged() {
-    // 合约 StopMarket → STOP_MARKET
+
     assert_eq!(
         BinanceExchange::order_type_str(&OrderType::StopMarket),
         "STOP_MARKET"
@@ -296,21 +272,18 @@ fn b6_6_futures_stop_market_unchanged() {
 
 #[test]
 fn b6_7_futures_take_profit_market_unchanged() {
-    // 合约 TakeProfitMarket → TAKE_PROFIT_MARKET
+
     assert_eq!(
         BinanceExchange::order_type_str(&OrderType::TakeProfitMarket),
         "TAKE_PROFIT_MARKET"
     );
 }
 
-// ============================================================
-// TC-B7: try_build_ed25519
-// ============================================================
 
 #[test]
 fn b7_1_try_build_ed25519_with_seed() {
-    // A valid 32-byte base64 seed
-    // "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" is 32 zero bytes in base64
+
+
     let seed_b64 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
     let result = try_build_ed25519("test_api_key", seed_b64);
     assert!(result.is_ok());
@@ -318,8 +291,8 @@ fn b7_1_try_build_ed25519_with_seed() {
 
 #[test]
 fn b7_2_try_build_ed25519_with_pem() {
-    // Generate a minimal valid PKCS8 PEM key for ed25519
-    // This is a well-known test key
+
+
     let pem = "-----BEGIN PRIVATE KEY-----\n\
                MC4CAQAwBQYDK2VwBCIEIHTrQ7Yvl4pKl3jY6DLv0DqgjFLf7tAfFGD7T0rJ1y3J\n\
                -----END PRIVATE KEY-----";
@@ -329,7 +302,7 @@ fn b7_2_try_build_ed25519_with_pem() {
 
 #[test]
 fn b7_3_try_build_ed25519_wrong_byte_count() {
-    // 16 bytes in base64 (not 32) → should fail
+
     let wrong_b64 = "AAAAAAAAAAAAAAAAAAAAAA==";
     let result = try_build_ed25519("key", wrong_b64);
     assert!(result.is_err());
@@ -337,14 +310,11 @@ fn b7_3_try_build_ed25519_wrong_byte_count() {
 
 #[test]
 fn b7_4_try_build_ed25519_not_base64() {
-    // Not valid base64, not PEM → should fail (HMAC fallback)
+
     let result = try_build_ed25519("key", "this_is_not_base64_or_pem!");
     assert!(result.is_err());
 }
 
-// ============================================================
-// TC-F1: parse_order_book_side (shared function)
-// ============================================================
 
 #[test]
 fn f1_1_parse_order_book_side_bids() {
@@ -380,25 +350,22 @@ fn f1_4_parse_order_book_side_empty() {
     assert!(bids.is_empty());
 }
 
-// ============================================================
-// TC-T1: Periodic time sync constants & initialization
-// ============================================================
 
 #[test]
 fn t1_1_time_sync_interval_is_one_hour() {
-    // T1: Periodic sync interval must be 3600 seconds (1 hour)
+
     assert_eq!(TIME_SYNC_INTERVAL_SECS, 3600);
 }
 
 #[test]
 fn t1_2_time_offset_warn_threshold_is_2000ms() {
-    // T1: Offset warning threshold must be 2000ms
+
     assert_eq!(TIME_OFFSET_WARN_THRESHOLD_MS, 2_000);
 }
 
 #[test]
 fn t1_3_time_sync_started_initialized_false() {
-    // T1: time_sync_started must be false on new exchange instance
+
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",
@@ -409,14 +376,14 @@ fn t1_3_time_sync_started_initialized_false() {
         900,
     )
     .unwrap();
-    // The field is private but accessible from child module
+
     assert!(!ex.time_sync_started.load(std::sync::atomic::Ordering::SeqCst));
 }
 
 #[test]
 fn t1_4_time_sync_started_swap_prevents_double_start() {
-    // T1: swap(true) returns false on first call (not yet started),
-    // true on second call (already started) — prevents duplicate spawn
+
+
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",
@@ -427,13 +394,13 @@ fn t1_4_time_sync_started_swap_prevents_double_start() {
         900,
     )
     .unwrap();
-    // First swap: returns old value (false), sets to true
+
     let first = ex
         .time_sync_started
         .swap(true, std::sync::atomic::Ordering::SeqCst);
     assert!(!first, "first swap should return false (not yet started)");
 
-    // Second swap: returns old value (true), stays true
+
     let second = ex
         .time_sync_started
         .swap(true, std::sync::atomic::Ordering::SeqCst);
@@ -442,7 +409,7 @@ fn t1_4_time_sync_started_swap_prevents_double_start() {
 
 #[test]
 fn t1_5_drop_sets_time_sync_running_false() {
-    // T1 WARN fix: Drop impl must set time_sync_running to false
+
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",
@@ -453,7 +420,7 @@ fn t1_5_drop_sets_time_sync_running_false() {
         900,
     )
     .unwrap();
-    // Simulate sync_time starting the task
+
     ex.time_sync_running
         .store(true, std::sync::atomic::Ordering::Release);
     assert!(
@@ -461,15 +428,15 @@ fn t1_5_drop_sets_time_sync_running_false() {
             .load(std::sync::atomic::Ordering::Acquire),
         "should be true after sync_time"
     );
-    // Drop the exchange — should set running to false
+
     drop(ex);
-    // Can't check after drop (field is gone), but the Drop impl ran without panic
-    // The test verifies Drop doesn't panic and the mechanism is in place
+
+
 }
 
 #[test]
 fn t1_6_time_sync_running_initialized_false() {
-    // T1 WARN fix: time_sync_running must be false on new instance
+
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",

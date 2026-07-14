@@ -1,10 +1,8 @@
-//! Grid bot types.
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// 单个网格层的状态
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GridLevel {
     pub level: i32,
@@ -24,7 +22,7 @@ pub struct GridLevel {
 }
 
 impl GridLevel {
-    /// 创建重置后的层级副本，用于买卖周期完成后重新挂单
+
     pub fn reset_for_relist(&self) -> GridLevel {
         GridLevel {
             level: self.level,
@@ -45,7 +43,7 @@ impl GridLevel {
     }
 }
 
-/// 网格运行状态快照
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GridState {
     pub bot_id: Uuid,
@@ -60,7 +58,7 @@ pub struct GridState {
     pub last_tick_at: DateTime<Utc>,
 }
 
-/// 网格引擎命令
+
 #[derive(Debug)]
 pub enum GridCommand {
     StartBot { bot_id: Uuid },
@@ -68,7 +66,7 @@ pub enum GridCommand {
     DeleteBot { bot_id: Uuid, close_position: bool },
 }
 
-/// 网格引擎事件
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GridEvent {
     BotStarted {
@@ -106,7 +104,7 @@ pub enum GridEvent {
     },
 }
 
-/// 默认系统 Prompt
+
 pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位专业的加密货币量化网格交易分析师。基于实时数据、当前网格与仓位，判断市场状态并给出严谨的JSON操作指令。
 
 ## 多周期框架
@@ -225,7 +223,7 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位专业的加密货币量�
   "risk_warning": "主要风险提示(100字内)"
 }"#;
 
-/// 默认用户 Prompt 模板
+
 pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}
 
 ## 账户资产

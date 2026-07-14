@@ -1,8 +1,5 @@
-//! Unit tests for grid/ai.rs
-
 use crate::grid::ai::{parse_grid_decision, GridAction};
 
-// ── GridAction::from_str ───────────────────────────────────
 
 #[test]
 fn g1_1_action_from_str_adjust() {
@@ -43,7 +40,6 @@ fn g1_5_action_from_str_hold() {
     assert_eq!(result, GridAction::Hold);
 }
 
-// ── GridAction::as_str ─────────────────────────────────────
 
 #[test]
 fn g1_6_action_as_str_all_variants() {
@@ -61,7 +57,6 @@ fn g1_6_action_as_str_all_variants() {
     assert_eq!(GridAction::ReducePosition.as_str(), "reduce_position");
 }
 
-// ── parse_grid_decision ────────────────────────────────────
 
 #[test]
 fn g2_1_parse_decision_complete() {
@@ -104,7 +99,7 @@ fn g2_1_parse_decision_complete() {
 #[test]
 fn g2_2_parse_decision_defaults() {
     let json = serde_json::json!({});
-    // leverage 缺失时应返回错误，不再使用默认值
+
     let result = parse_grid_decision(&json);
     assert!(result.is_err(), "missing leverage should return error");
     let err = result.unwrap_err();
@@ -113,20 +108,20 @@ fn g2_2_parse_decision_defaults() {
         "error should mention leverage, got: {err}"
     );
 
-    // 验证其他字段缺失时仍有默认值（在有 leverage 的情况下）
+
     let json = serde_json::json!({
         "risk": {
             "leverage": 5
         }
     });
     let decision = parse_grid_decision(&json).expect("should parse with leverage present");
-    assert_eq!(decision.action, "hold"); // default
-    assert_eq!(decision.reason, "No reason provided"); // default
-    assert!((decision.confidence - 0.0).abs() < 1e-10); // default — 0.0, not 0.5
-    assert!((decision.upper_price - 0.0).abs() < 1e-10); // default
-    assert_eq!(decision.grid_count, 0); // default — 0, not 10
-    assert!((decision.grid_profit_pct - 0.0).abs() < 1e-10); // default — 0.0, not 0.5
-    assert_eq!(decision.leverage, 5); // from JSON
-    assert!((decision.quantity_per_grid - 0.0).abs() < 1e-10); // default — 0.0, not 10.0
-    assert_eq!(decision.market_regime, "unknown"); // default — "unknown", not "ranging"
+    assert_eq!(decision.action, "hold");
+    assert_eq!(decision.reason, "No reason provided");
+    assert!((decision.confidence - 0.0).abs() < 1e-10);
+    assert!((decision.upper_price - 0.0).abs() < 1e-10);
+    assert_eq!(decision.grid_count, 0);
+    assert!((decision.grid_profit_pct - 0.0).abs() < 1e-10);
+    assert_eq!(decision.leverage, 5);
+    assert!((decision.quantity_per_grid - 0.0).abs() < 1e-10);
+    assert_eq!(decision.market_regime, "unknown");
 }

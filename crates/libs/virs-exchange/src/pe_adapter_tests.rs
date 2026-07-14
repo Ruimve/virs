@@ -1,5 +1,3 @@
-//! Unit tests for pe_adapter.rs conversion functions.
-
 use chrono::Utc;
 
 use virs_models as models;
@@ -15,9 +13,6 @@ use crate::pe_adapter::{
     convert_virs_position_side, no_exchange_error,
 };
 
-// ============================================================
-// TC-PE1: convert_side
-// ============================================================
 
 #[test]
 fn pe1_1_buy() {
@@ -29,9 +24,6 @@ fn pe1_2_sell() {
     assert_eq!(convert_side(&models::Side::Sell), Side::Sell);
 }
 
-// ============================================================
-// TC-PE2: convert_to_models_side
-// ============================================================
 
 #[test]
 fn pe2_1_buy() {
@@ -43,9 +35,6 @@ fn pe2_2_sell() {
     assert_eq!(convert_to_models_side(&Side::Sell), models::Side::Sell);
 }
 
-// ============================================================
-// TC-PE3: convert_position_side (PE PositionSide → models PositionSide)
-// ============================================================
 
 #[test]
 fn pe3_1_long() {
@@ -68,9 +57,6 @@ fn pe3_4_none() {
     assert_eq!(convert_position_side(&None), None);
 }
 
-// ============================================================
-// TC-PE4: convert_order_type (PE OrderType → models OrderType)
-// ============================================================
 
 #[test]
 fn pe4_1_market() {
@@ -112,9 +98,6 @@ fn pe4_5_take_profit_market() {
     );
 }
 
-// ============================================================
-// TC-PE5: convert_order_status
-// ============================================================
 
 #[test]
 fn pe5_1_open() {
@@ -164,9 +147,6 @@ fn pe5_6_pending() {
     );
 }
 
-// ============================================================
-// TC-PE6: convert_virs_position_side
-// ============================================================
 
 #[test]
 fn pe6_1_long() {
@@ -184,9 +164,6 @@ fn pe6_2_short() {
     );
 }
 
-// ============================================================
-// TC-PE7: convert_virs_market_type
-// ============================================================
 
 #[test]
 fn pe7_2_perpetual() {
@@ -196,9 +173,6 @@ fn pe7_2_perpetual() {
     );
 }
 
-// ============================================================
-// TC-PE8: convert_order
-// ============================================================
 
 #[test]
 fn pe8_1_order_normal() {
@@ -228,7 +202,7 @@ fn pe8_1_order_normal() {
     assert_eq!(po.side, Side::Buy);
     assert_eq!(po.order_type, OrderType::Limit);
     assert_eq!(po.request_price, Some(50000.0));
-    assert_eq!(po.fill_price, Some(50000.0)); // filled > 0 → Some(price)
+    assert_eq!(po.fill_price, Some(50000.0));
     assert_eq!(po.amount, 1.0);
     assert_eq!(po.filled, 0.5);
     assert_eq!(po.remaining, 0.5);
@@ -262,13 +236,10 @@ fn pe8_2_order_no_fill_no_price() {
     let po = convert_order(&mo, "binance");
     assert_eq!(po.client_order_id, None);
     assert_eq!(po.request_price, None);
-    assert_eq!(po.fill_price, None); // filled == 0 → None
+    assert_eq!(po.fill_price, None);
     assert_eq!(po.status, OrderStatus::Open);
 }
 
-// ============================================================
-// TC-PE9: convert_exchange_position
-// ============================================================
 
 #[test]
 fn pe9_1_position_normal() {
@@ -307,9 +278,6 @@ fn pe9_2_position_no_liquidation() {
     assert_eq!(result.side, PositionSide::Short);
 }
 
-// ============================================================
-// TC-PE11: no_exchange_error
-// ============================================================
 
 #[test]
 fn pe11_1_no_exchange_error() {

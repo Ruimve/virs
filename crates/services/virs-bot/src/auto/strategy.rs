@@ -1,8 +1,6 @@
-//! Auto trading strategy — prompt rendering, stop loss, take profit, leverage computation.
-
 use crate::common::indicators::MarketIndicators;
 
-/// Prompt rendering context
+
 pub struct PromptContext {
     pub timestamp: String,
     pub symbol: String,
@@ -15,9 +13,8 @@ pub struct PromptContext {
     pub position_info: String,
     pub position_duration: String,
     pub stop_take_profit_info: String,
-    /// 最近平仓事件描述（用于 LLM 反思，避免反复扫损）
-    /// 形如："5 分钟前平多，原因：stop_loss @ 65000.00"
-    /// 为空时填充"无"
+
+
     pub recent_close_info: String,
     pub funding_rate: f64,
     pub funding_next_time: String,
@@ -31,7 +28,7 @@ pub struct PromptContext {
     pub min_qty: f64,
 }
 
-/// Render user prompt from template and context.
+
 pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
     let h1_ema_cross = if ctx.ind.ema20 > ctx.ind.ema50 {
         "金叉(多头)"
@@ -159,9 +156,7 @@ pub fn render_prompt(template: &str, ctx: &PromptContext) -> String {
         .replace("{min_qty}", &format!("{:.6}", ctx.min_qty))
 }
 
-/// Format position info for prompt.
-/// Uses `Position::unrealized_pnl_at` to avoid inline PnL duplication.
-/// Note: pnl_pct kept as PnL/notional (strategy prompt semantics), not ROI.
+
 pub fn format_position_info(
     position: &virs_types::position::Position,
     current_side: Option<&str>,
@@ -184,7 +179,7 @@ pub fn format_position_info(
     }
 }
 
-/// Format stop/take profit info for prompt.
+
 pub fn format_stop_take_profit(stop_loss: f64, take_profit: f64) -> String {
     if stop_loss <= 0.0 && take_profit <= 0.0 {
         return "未设置".to_string();
@@ -202,7 +197,7 @@ pub fn format_stop_take_profit(stop_loss: f64, take_profit: f64) -> String {
     s
 }
 
-/// Compute stop loss price.
+
 pub fn compute_stop_loss(entry_price: f64, side: &str, atr: f64) -> f64 {
     if atr <= 0.0 || entry_price <= 0.0 {
         return entry_price * 0.97;
@@ -214,7 +209,7 @@ pub fn compute_stop_loss(entry_price: f64, side: &str, atr: f64) -> f64 {
     }
 }
 
-/// Compute take profit price.
+
 pub fn compute_take_profit(entry_price: f64, side: &str, atr: f64) -> f64 {
     if atr <= 0.0 || entry_price <= 0.0 {
         return entry_price * 1.06;
@@ -226,7 +221,7 @@ pub fn compute_take_profit(entry_price: f64, side: &str, atr: f64) -> f64 {
     }
 }
 
-/// Compute trailing stop price.
+
 pub fn compute_trailing_stop(
     entry_price: f64,
     current_price: f64,
@@ -272,7 +267,7 @@ pub fn compute_trailing_stop(
     }
 }
 
-/// Compute position percentage based on ADX, consecutive losses, and funding rate.
+
 pub fn compute_position_pct(adx: f64, consecutive_losses: i32, funding_rate: f64) -> f64 {
     let base: f64 = if adx >= 25.0 {
         80.0
@@ -294,14 +289,7 @@ pub fn compute_position_pct(adx: f64, consecutive_losses: i32, funding_rate: f64
     after_funding.clamp(10.0, 100.0)
 }
 
-/// Compute cooldown duration in seconds based on close reason and direction.
-///
-/// Rules:
-/// - stop_loss + same direction → 1800s (30min, prevent re-entering losing direction)
-/// - stop_loss + opposite direction → 0s (trend reversal, allow entry)
-/// - take_profit + same direction → 900s (15min, avoid chasing)
-/// - take_profit + opposite direction → 0s
-/// - llm_decision / position_timeout / unknown → 900s (15min, conservative)
+
 pub fn compute_cooldown_secs(closed_side: &str, reason: &str, new_side: &str) -> i64 {
     match reason {
         "stop_loss" => {

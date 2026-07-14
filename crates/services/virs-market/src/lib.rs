@@ -1,9 +1,3 @@
-//! virs-market — market data collection and aggregation service.
-//!
-//! Provides KlineEngine for real-time kline data via WebSocket,
-//! automatic gap detection and backfill, and multi-timeframe aggregation.
-//! Also provides OrderBookEngine for real-time order book streaming.
-
 pub mod aggregator;
 pub mod cache;
 pub mod engine;
@@ -12,7 +6,7 @@ pub mod orderbook_engine;
 pub mod source;
 pub mod types;
 
-// Re-export key types for convenience
+
 pub use engine::KlineEngine;
 pub use gap::ContinuityReport;
 pub use orderbook_engine::OrderBookEngine;

@@ -15,7 +15,7 @@ export const RecentTrades = memo(({ trades }: Props) => {
     <Panel title="最近交易" count={trades.length} empty={recent.length === 0} emptyText="暂无交易">
       {recent.map((trade) => (
         <div key={trade.id} className="px-3 py-2">
-          {/* First row: direction + prices + time */}
+          {}
           <div className="flex items-center gap-2 mb-1">
             <Badge variant={trade.open_side === 'buy' ? 'success' : 'danger'} size="sm">
               {trade.open_side === 'buy' ? '多' : '空'}
@@ -31,7 +31,7 @@ export const RecentTrades = memo(({ trades }: Props) => {
               {formatTime(trade.closed_at || trade.opened_at)}
             </span>
           </div>
-          {/* Second row: qty + SL/TP + PnL */}
+          {}
           <div className="flex items-center gap-3 text-caption flex-wrap">
             <span className="text-on-surface-tertiary">
               量{' '}

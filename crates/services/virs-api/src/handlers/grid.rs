@@ -1,5 +1,3 @@
-//! Grid bot API handlers.
-
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
@@ -12,7 +10,7 @@ use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::handlers::utils::format_duration;
 use crate::state::AppState;
 
-/// 分页查询参数
+
 #[derive(Debug, Deserialize)]
 pub struct TradesQuery {
     pub page: Option<u32>,
@@ -47,8 +45,7 @@ pub async fn create_bot(
         ));
     }
 
-    // Validate critical trading parameters — no silent defaults for values
-    // that can cause financial loss if wrong.
+
     if upper_price <= 0.0 {
         return Err(VirsError::bad_request(
             "upper_price is required and must be greater than 0",
@@ -75,7 +72,7 @@ pub async fn create_bot(
         ));
     }
 
-    // Enforce 1-bot-per-user limit (across all bot types)
+
     {
         let grid_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM qd_grid_bots WHERE user_id = $1")
@@ -94,10 +91,10 @@ pub async fn create_bot(
         }
     }
 
-    // Ensure engines are started (lazy init on first bot creation)
+
     state.engine_manager.ensure_started(paper_mode).await?;
 
-    // Verify exchange is registered in registry (must be done via /api/credentials/save first)
+
     let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
     if state.exchange_registry.get(&exchange_key).is_none() {
         return Err(VirsError::Http {
@@ -106,10 +103,10 @@ pub async fn create_bot(
         });
     }
 
-    // Subscribe kline engine for this symbol (backfill + WS push)
+
     state.kline_engine.subscribe(exchange, symbol, virs_models::MarketType::Perpetual).await?;
 
-    // Register symbol for paper mode price ticks
+
     if paper_mode {
         state
             .engine_manager
@@ -117,8 +114,7 @@ pub async fn create_bot(
             .await;
     }
 
-    // 从交易所获取真实账户余额，初始化 initial_capital
-    // paper 模式 fallback 10000，真实交易 fallback 0（避免误判可用资金导致超额下单）
+
     let fallback = if paper_mode { 10000.0 } else { 0.0 };
     let initial_capital = match state.exchange_registry.get(&exchange_key) {
         Some(ex) => {
@@ -235,7 +231,7 @@ pub async fn get_bot(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    // 单次查询获取完整 GridBot，使用模型方法计算派生指标（total_return_pct/grid_spacing/is_running/is_stopped）
+
     let bot = sqlx::query_as::<_, virs_models::GridBot>(
         "SELECT * FROM qd_grid_bots WHERE id = $1 AND user_id = $2",
     )
@@ -251,7 +247,7 @@ pub async fn get_bot(
         }
     };
 
-    // Parse grid levels from JSON
+
     let grid_levels: Vec<serde_json::Value> = bot
         .grid_levels_json
         .as_ref()
@@ -261,7 +257,7 @@ pub async fn get_bot(
             Vec::new()
         });
 
-    // Query: recent trades
+
     let trades_rows = sqlx::query_as::<
         _,
         (
@@ -380,7 +376,7 @@ pub async fn start_bot(
     Ok(Json(ApiResponse::ok(serde_json::json!({"started": true}))))
 }
 
-/// 从交易对符号中提取计价货币（如 "BTC/USDT" → "USDT"，"BTCUSDT" → "USDT"）
+
 fn extract_quote_asset(symbol: &str) -> String {
     if let Some(idx) = symbol.find('/') {
         return symbol[idx + 1..].to_uppercase();
@@ -415,7 +411,7 @@ pub async fn delete_bot(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    // 引擎运行中：发 DeleteBot 命令清理内存状态和平仓
+
     if let Some(tx) = state.engine_manager.grid_cmd_tx() {
         tx.send(virs_bot::grid::types::GridCommand::DeleteBot {
             bot_id: id,
@@ -427,9 +423,9 @@ pub async fn delete_bot(
             message: "Failed to send command to grid engine".into(),
         })?;
     } else {
-        // 引擎未运行（bot 处于 stopped 状态，无运行实例需清理）—— 直接删 DB
+
     }
-    // Delete from database
+
     let result = sqlx::query(r#"DELETE FROM qd_grid_bots WHERE id = $1"#)
         .bind(id)
         .execute(&state.db_pool)
@@ -452,7 +448,7 @@ pub async fn get_trades(
     let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
     let offset = (page - 1) * page_size;
 
-    // 查询总数
+
     let total: i64 = sqlx::query_scalar::<_, i64>(
         r#"SELECT COUNT(*) FROM qd_grid_trades WHERE bot_id = $1 AND user_id = $2"#,
     )
@@ -461,7 +457,7 @@ pub async fn get_trades(
     .fetch_one(&state.db_pool)
     .await?;
 
-    // 查询分页数据（完整字段）
+
     let trades = sqlx::query_as::<
         _,
         (
@@ -517,7 +513,7 @@ pub async fn get_trades(
     }))))
 }
 
-/// 网格机器人统计接口（基于全量 trades 计算统计指标）
+
 pub async fn get_stats(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -525,7 +521,7 @@ pub async fn get_stats(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    // 拉取全量已平仓 trades（按时间正序），用于计算统计指标
+
     let trades = sqlx::query_as::<_, (f64, f64, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT pnl, pnl_pct, opened_at
            FROM qd_grid_trades WHERE bot_id = $1 AND user_id = $2 AND status = 'closed'
@@ -536,7 +532,7 @@ pub async fn get_stats(
     .fetch_all(&state.db_pool)
     .await?;
 
-    // 读取 bot 汇总字段
+
     let bot_stats = sqlx::query_as::<_, (f64, f64, i32, i32)>(
         r#"SELECT total_pnl, unrealized_pnl, total_trades, grid_filled_count FROM qd_grid_bots WHERE id = $1"#,
     )
@@ -549,11 +545,11 @@ pub async fn get_stats(
         None => (0.0f64, 0.0f64, 0i32, 0i32),
     };
 
-    // 累计已实现 PnL（从 trades 重新计算，确保一致性）
+
     let realized_pnl: f64 = trades.iter().map(|t| t.0).sum();
     let net_pnl = realized_pnl + unrealized_pnl;
 
-    // 胜率（基于已平仓 trades）
+
     let win_trades = trades.iter().filter(|t| t.0 > 0.0).count() as i32;
     let loss_trades = trades.iter().filter(|t| t.0 < 0.0).count() as i32;
     let closed_count = trades.len() as i32;
@@ -563,7 +559,7 @@ pub async fn get_stats(
         0.0
     };
 
-    // 盈亏比 = 平均盈利 / 平均亏损
+
     let profits: Vec<f64> = trades.iter().filter(|t| t.0 > 0.0).map(|t| t.0).collect();
     let losses: Vec<f64> = trades.iter().filter(|t| t.0 < 0.0).map(|t| t.0).collect();
     let avg_profit = if !profits.is_empty() {
@@ -584,7 +580,7 @@ pub async fn get_stats(
         0.0
     };
 
-    // 最大回撤（基于累计 PnL 峰值）
+
     let mut cumulative = 0.0f64;
     let mut peak = 0.0f64;
     let mut max_drawdown = 0.0f64;
@@ -599,7 +595,7 @@ pub async fn get_stats(
         }
     }
 
-    // 平均持仓时间（开仓到平仓的时间差）— grid_trades 无 closed_at 字段，使用 opened_at 间隔估算
+
     let avg_hold_time = if trades.len() > 1 {
         let mut total_diff_ms = 0i64;
         let mut count = 0i64;
@@ -619,7 +615,7 @@ pub async fn get_stats(
         "-".to_string()
     };
 
-    // 连胜/连亏
+
     let mut max_win_streak = 0i32;
     let mut max_loss_streak = 0i32;
     let mut current_win = 0i32;
@@ -640,14 +636,14 @@ pub async fn get_stats(
         }
     }
 
-    // 平均盈亏（每笔交易）
+
     let avg_pnl = if !trades.is_empty() {
         realized_pnl / trades.len() as f64
     } else {
         0.0
     };
 
-    // 最大单笔盈利 / 亏损
+
     let max_profit: f64 = trades.iter().map(|t| t.0).fold(0.0f64, |a, b| a.max(b));
     let max_loss: f64 = trades.iter().map(|t| t.0).fold(0.0f64, |a, b| a.min(b));
 
@@ -685,7 +681,7 @@ pub async fn get_analysis_logs(
     let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
     let offset = (page - 1) * page_size;
 
-    // 查询总数
+
     let total: i64 = sqlx::query_scalar::<_, i64>(
         r#"SELECT COUNT(*) FROM qd_grid_analysis_logs l
            JOIN qd_grid_bots b ON l.bot_id = b.id

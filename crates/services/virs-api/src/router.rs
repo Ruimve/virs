@@ -1,5 +1,3 @@
-//! API router — route definitions and SPA fallback.
-
 use axum::{
     http::{header, StatusCode, Uri},
     response::{Html, IntoResponse, Response},
@@ -11,21 +9,21 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::handlers;
 use crate::state::AppState;
 
-/// 构建 API 路由
+
 pub fn build_router(state: AppState) -> Router {
     Router::new()
-        // Health (public)
+
         .route("/api/health", get(handlers::health::health_check))
-        // Auth (public)
+
         .route("/api/user/login", post(handlers::auth::login))
         .route("/api/user/logout", post(handlers::auth::logout))
         .route("/api/user/info", get(handlers::auth::get_user_info))
-        // Users (authenticated)
+
         .route("/api/users/list", get(handlers::user::list_users))
         .route("/api/users/create", post(handlers::user::create_user))
         .route("/api/users/update", put(handlers::user::update_user))
         .route("/api/users/delete", delete(handlers::user::delete_user))
-        // Market (public — market data is read-only)
+
         .route("/api/market/ticker", get(handlers::market::get_ticker))
         .route("/api/market/klines", get(handlers::market::get_klines))
         .route(
@@ -34,18 +32,18 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/market/balances", get(handlers::market::get_balances))
         .route("/api/market/symbols", get(handlers::market::get_symbols))
-        // Kline Engine (public)
+
         .route(
             "/api/kline/subscribe",
             post(handlers::market::kline_subscribe),
         )
         .route("/api/kline/data", get(handlers::market::kline_data))
-        // OrderBook Engine (public)
+
         .route(
             "/api/orderbook/subscribe",
             post(handlers::market::orderbook_subscribe),
         )
-        // Credentials (authenticated)
+
         .route(
             "/api/credentials/list",
             get(handlers::credentials::list_credentials),
@@ -78,7 +76,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/credentials/status",
             get(handlers::credentials::exchange_status),
         )
-        // AI (authenticated)
+
         .route("/api/ai/status", get(handlers::ai::ai_status))
         .route("/api/ai/optimize", post(handlers::ai::optimize))
         .route("/api/ai/explain", post(handlers::ai::explain))
@@ -86,7 +84,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/ai/recommend-strategy",
             post(handlers::ai::recommend_strategy),
         )
-        // AI Credentials (authenticated)
+
         .route(
             "/api/ai-credentials/list",
             get(handlers::ai_credentials::list_credentials),
@@ -111,7 +109,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/ai-credentials/balance",
             get(handlers::ai_credentials::fetch_balance),
         )
-        // Grid Bot (authenticated)
+
         .route("/api/grid/create", post(handlers::grid::create_bot))
         .route("/api/grid/list", get(handlers::grid::list_bots))
         .route(
@@ -124,7 +122,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/grid/{id}/delete", delete(handlers::grid::delete_bot))
         .route("/api/grid/{id}/trades", get(handlers::grid::get_trades))
         .route("/api/grid/{id}/stats", get(handlers::grid::get_stats))
-        // Auto Bot (authenticated)
+
         .route("/api/auto/create", post(handlers::auto_trade::create_bot))
         .route("/api/auto/list", get(handlers::auto_trade::list_bots))
         .route(
@@ -146,13 +144,13 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::auto_trade::get_trades),
         )
         .route("/api/auto/{id}/stats", get(handlers::auto_trade::get_stats))
-        // System (authenticated)
+
         .route(
             "/api/system/paper/status",
             get(handlers::system::paper_status),
         )
         .route("/api/system/info", get(handlers::system::system_info))
-        // WebSocket (public)
+
         .route("/ws/kline", get(crate::ws::kline_ws_handler))
         .route("/ws/orderbook", get(crate::ws::orderbook_ws_handler))
         .route("/ws/position", get(crate::ws::position_ws_handler))

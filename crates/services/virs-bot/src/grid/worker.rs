@@ -1,5 +1,3 @@
-//! Grid worker — individual grid bot execution.
-
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -14,13 +12,13 @@ use crate::grid::ports::*;
 use crate::grid::types::{GridEvent, GridLevel, GridState};
 use crate::grid::utils;
 
-/// 挂单方向
+
 pub enum OrderDir {
     Buy,
     Sell,
 }
 
-/// 单个网格 bot 的执行 worker
+
 pub struct GridWorker {
     pub(crate) bot: GridBotConfig,
     price_provider: Arc<dyn PriceProvider>,
@@ -39,7 +37,7 @@ pub struct GridWorker {
     pub(crate) paused: bool,
     initial_order_range: usize,
     pending_orders: HashSet<(usize, String)>,
-    /// T12 WARN fix: 时间配置（从环境变量加载）
+
     pub(crate) time_config: virs_config::TimeConfig,
 }
 
@@ -78,7 +76,6 @@ impl GridWorker {
         }
     }
 
-    // ── 主运行循环 ──────────────────────────────────────────
 
     pub async fn run(
         &mut self,
@@ -94,7 +91,7 @@ impl GridWorker {
             }
         }
 
-        // 获取初始价格
+
         let max_retries = self.time_config.retry.initial_price_max_retries;
         for attempt in 1..=max_retries {
             self.current_price = self.fetch_current_price().await;
@@ -110,7 +107,7 @@ impl GridWorker {
 
         self.load_existing_trades().await;
 
-        // 若网格参数为空，触发初始 LLM 分析
+
         if self.bot.upper_price <= 0.0 || self.bot.lower_price <= 0.0 || self.levels.is_empty() {
             self.on_llm_decision().await;
         }
@@ -123,7 +120,7 @@ impl GridWorker {
             std::time::Duration::from_secs(self.time_config.price_poll_interval_secs)
         );
 
-        // LLM 周期性分析定时器
+
         let (llm_signal_tx, mut llm_signal_rx) = tokio::sync::mpsc::channel::<()>(1);
         if self.bot.dynamic_adjust {
             let interval_secs = self.bot.adjust_interval_secs.max(60) as u64;
@@ -139,7 +136,7 @@ impl GridWorker {
             });
         }
 
-        // 主事件循环
+
         loop {
             tokio::select! {
                 _ = shutdown_rx.recv() => {
@@ -187,14 +184,13 @@ impl GridWorker {
         }
     }
 
-    // ── 价格 tick 处理 ──────────────────────────────────────
 
     pub(crate) async fn on_price_tick(&mut self) {
         if self.current_price <= 0.0 {
             return;
         }
 
-        // buy 层开仓
+
         let levels = self.filter_levels(|l| {
             l.side == "buy"
                 && self.current_price < l.buy_price
@@ -203,7 +199,7 @@ impl GridWorker {
         });
         self.place_orders_for_levels(&levels, OrderDir::Buy).await;
 
-        // sell 层开仓
+
         let levels = self.filter_levels(|l| {
             l.side == "sell"
                 && l.sell_price > self.current_price
@@ -212,7 +208,7 @@ impl GridWorker {
         });
         self.place_orders_for_levels(&levels, OrderDir::Sell).await;
 
-        // buy 层平仓
+
         let levels = self.filter_levels(|l| {
             l.side == "buy"
                 && l.hold_quantity > 0.0
@@ -221,7 +217,7 @@ impl GridWorker {
         });
         self.place_orders_for_levels(&levels, OrderDir::Sell).await;
 
-        // sell 层平仓
+
         let levels = self.filter_levels(|l| {
             l.side == "sell"
                 && l.hold_quantity < 0.0
@@ -233,7 +229,6 @@ impl GridWorker {
         self.broadcast_state();
     }
 
-    // ── 挂单逻辑 ────────────────────────────────────────────
 
     pub(crate) async fn place_initial_orders(&mut self) {
         if self.current_price <= 0.0 {
@@ -244,7 +239,7 @@ impl GridWorker {
         let current_level_idx = self.find_level_by_price(self.current_price);
         let range = self.initial_order_range;
 
-        // buy 层初始买单
+
         let levels: Vec<GridLevel> = self
             .levels
             .iter()
@@ -260,7 +255,7 @@ impl GridWorker {
             .collect();
         self.place_orders_for_levels(&levels, OrderDir::Buy).await;
 
-        // sell 层初始卖单
+
         let levels: Vec<GridLevel> = self
             .levels
             .iter()
@@ -276,7 +271,7 @@ impl GridWorker {
             .collect();
         self.place_orders_for_levels(&levels, OrderDir::Sell).await;
 
-        // 为已有持仓的层级挂平仓单
+
         let close_levels: Vec<GridLevel> = self
             .levels
             .iter()
@@ -347,7 +342,7 @@ impl GridWorker {
         ));
 
         let cmd = if reduce_only {
-            // Close order: use PlaceOrder with reduce_only
+
             OrderCommand::PlaceOrder {
                 symbol: self.bot.symbol.clone(),
                 side,
@@ -359,7 +354,7 @@ impl GridWorker {
                 client_order_id,
             }
         } else {
-            // Open order: use OpenPosition
+
             OrderCommand::OpenPosition {
                 symbol: self.bot.symbol.clone(),
                 side: position_side,
@@ -388,7 +383,6 @@ impl GridWorker {
         self.place_order(level, &OrderDir::Sell).await;
     }
 
-    // ── 订单事件处理 ────────────────────────────────────────
 
     pub(crate) async fn on_order_event(&mut self, event: OrderEvent) {
         match event {
@@ -628,7 +622,6 @@ impl GridWorker {
         }
     }
 
-    // ── 历史交易加载 ────────────────────────────────────────
 
     pub(crate) async fn load_existing_trades(&mut self) {
         let mut trades = match self.store.load_trades(self.bot.id).await {
@@ -714,7 +707,6 @@ impl GridWorker {
         }
     }
 
-    // ── 辅助方法 ────────────────────────────────────────────
 
     pub(crate) fn grid_spacing(&self) -> f64 {
         if self.levels.len() > 1 {
@@ -909,7 +901,6 @@ impl GridWorker {
         }
     }
 
-    // ── LLM 决策 ────────────────────────────────────────────
 
     pub(crate) async fn on_llm_decision(&mut self) {
         let is_initial =
@@ -1242,7 +1233,7 @@ impl GridWorker {
     ) -> bool {
         let mut structure_changed = false;
 
-        // 非结构参数始终应用
+
         if !d.market_regime.is_empty() {
             self.bot.market_regime = Some(d.market_regime.clone());
         }
@@ -1327,7 +1318,6 @@ impl GridWorker {
         GridAction::Hold
     }
 
-    // ── 网格调整 ────────────────────────────────────────────
 
     pub async fn on_adjust_signal(&mut self) {
         match self.store.load_bot(self.bot.id).await {
@@ -1494,9 +1484,7 @@ impl GridWorker {
     }
 }
 
-// ── 持仓计算辅助函数 ────────────────────────────────────────
 
-/// 将一笔成交应用到网格层级的持仓状态
 fn apply_fill_to_level(level: &mut GridLevel, trade_side: &str, price: f64, quantity: f64) {
     let is_buy = trade_side == "buy";
     if level.side == "buy" {
@@ -1540,7 +1528,7 @@ fn apply_fill_to_level(level: &mut GridLevel, trade_side: &str, price: f64, quan
     }
 }
 
-/// 计算平仓成交的已实现盈亏
+
 fn calculate_fill_pnl(
     level_side: &str,
     trade_side: &str,
@@ -1559,7 +1547,7 @@ fn calculate_fill_pnl(
     }
 }
 
-/// 判断成交方向是否为平仓操作
+
 fn is_close_trade(level_side: &str, trade_side: &str) -> bool {
     if level_side == "buy" {
         trade_side == "sell"
@@ -1568,7 +1556,7 @@ fn is_close_trade(level_side: &str, trade_side: &str) -> bool {
     }
 }
 
-/// 构建网格配置的文本描述
+
 fn format_grid_config(
     grid_status: &str,
     upper_price: f64,

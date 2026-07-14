@@ -1,15 +1,9 @@
-//! Application-level trading types.
-//!
-//! These types represent the API-layer view of orders, positions, etc.
-//! They differ from the Position Engine's internal types (PositionOrder, etc.)
-//! by being simpler and focused on API responses.
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use virs_types::enums::*;
 
-/// API-level order representation.
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Order {
     pub id: String,

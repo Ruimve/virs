@@ -31,7 +31,7 @@ export const FlowStep = memo(
   }: FlowStepProps) => {
     const [expanded, setExpanded] = useState(false);
 
-    // Auto-expand when status becomes active/verifying/error, auto-collapse when done
+
     useEffect(() => {
       if (status === 'active' || status === 'verifying' || status === 'error') {
         setExpanded(true);

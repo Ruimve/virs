@@ -40,8 +40,8 @@ pub struct GridBot {
 }
 
 impl GridBot {
-    /// Calculate the price spacing between grid levels.
-    /// Returns 0.0 if grid_count is zero (division-by-zero protection).
+
+
     pub fn grid_spacing(&self) -> f64 {
         if self.grid_count <= 0 {
             0.0
@@ -50,18 +50,17 @@ impl GridBot {
         }
     }
 
-    /// Returns true if the bot is currently running.
+
     pub fn is_running(&self) -> bool {
         self.status == StrategyStatus::Running
     }
 
-    /// Returns true if the bot has been stopped.
+
     pub fn is_stopped(&self) -> bool {
         self.status == StrategyStatus::Stopped
     }
 
-    /// Calculate total return as a percentage of initial capital.
-    /// Returns 0.0 if initial_capital is zero (division-by-zero protection).
+
     pub fn total_return_pct(&self) -> f64 {
         if self.initial_capital == 0.0 {
             0.0

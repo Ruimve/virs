@@ -1,8 +1,6 @@
-//! CCXT-style unified exchange error types — migrated from virs-ccxt.
-
 use crate::classify::{ErrorCategory, Retryable, Categorized, HttpStatus, ErrorCode};
 
-/// Unified exchange error type, similar to CCXT's error hierarchy.
+
 #[derive(Debug, thiserror::Error)]
 pub enum ExchangeError {
     #[error("Network error: {0}")]
@@ -35,13 +33,11 @@ pub enum ExchangeError {
     #[error("HTTP error {status}: {body}")]
     Http { status: u16, body: String },
 
-    /// 下单请求返回 503 "Unknown error" — 执行状态未知（可能已成交）。
-    /// 必须先通过 fetch_order 或 WebSocket 回报确认，不得盲目重试。
+
     #[error("Order status unknown (may have been filled): {0}")]
     OrderStatusUnknown(String),
 
-    /// IP 被币安封禁（HTTP 418）— 收到 429 后继续访问导致。
-    /// 封禁时间从 2 分钟到 3 天，频繁违反会累进延长。
+
     #[error("IP banned by exchange: {0}")]
     IpBanned(String),
 
@@ -50,8 +46,8 @@ pub enum ExchangeError {
 }
 
 impl ExchangeError {
-    /// Create a "no data available" error — used when the exchange returns
-    /// empty results and we must NOT return mock/fake data.
+
+
     pub fn no_data(context: String) -> Self {
         Self::NoData(context)
     }
@@ -79,9 +75,9 @@ impl Retryable for ExchangeError {
             Self::Network(_) => true,
             Self::RateLimited(_) => true,
             Self::Http { status, .. } => *status >= 500,
-            // OrderStatusUnknown: 请求可能已成交，盲目重试会导致重复下单
+
             Self::OrderStatusUnknown(_) => false,
-            // IpBanned: IP 被封禁，重试只会延长封禁时间
+
             Self::IpBanned(_) => false,
             _ => false,
         }

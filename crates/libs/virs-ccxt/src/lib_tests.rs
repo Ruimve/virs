@@ -1,8 +1,3 @@
-//! Unit tests for lib.rs utility functions.
-//!
-//! Covers: parse_f64, parse_str, parse_u32, parse_timestamp_ms,
-//! build_display_url, mask_signature, extract_error_message.
-
 use serde_json::json;
 
 use crate::{
@@ -10,9 +5,6 @@ use crate::{
     parse_timestamp_ms, parse_u32,
 };
 
-// ============================================================
-// TC-L1: parse_f64
-// ============================================================
 
 #[test]
 fn l1_1_parse_f64_from_number() {
@@ -50,9 +42,6 @@ fn l1_6_parse_f64_from_integer() {
     assert_eq!(parse_f64(&v, "price"), Some(42.0));
 }
 
-// ============================================================
-// TC-L2: parse_str
-// ============================================================
 
 #[test]
 fn l2_1_parse_str_from_string() {
@@ -71,7 +60,7 @@ fn l2_3_parse_str_from_f64() {
     let v = json!({"price": 2.5});
     let result = parse_str(&v, "price");
     assert!(result.is_some());
-    // f64 → string may have float representation differences, so just check it parses back
+
     let s = result.unwrap();
     assert!((s.parse::<f64>().unwrap() - 2.5).abs() < 0.001);
 }
@@ -82,9 +71,6 @@ fn l2_4_parse_str_missing_field() {
     assert_eq!(parse_str(&v, "symbol"), None);
 }
 
-// ============================================================
-// TC-L4: parse_u32
-// ============================================================
 
 #[test]
 fn l4_1_parse_u32_from_u64() {
@@ -104,9 +90,6 @@ fn l4_3_parse_u32_missing_field() {
     assert_eq!(parse_u32(&v, "leverage"), None);
 }
 
-// ============================================================
-// TC-L5: build_display_url
-// ============================================================
 
 #[test]
 fn l5_1_build_display_url_no_params() {
@@ -138,9 +121,6 @@ fn l5_4_build_display_url_empty_params() {
     );
 }
 
-// ============================================================
-// TC-L6: mask_signature
-// ============================================================
 
 #[test]
 fn l6_1_mask_signature_basic() {
@@ -168,16 +148,13 @@ fn l6_3_mask_signature_no_signature() {
 
 #[test]
 fn l6_4_mask_signature_multiple_signatures() {
-    // Only the first signature= occurrence is masked
+
     let body = "signature=aaa&signature=bbb";
     let masked = mask_signature(body);
     assert!(masked.contains("***MASKED***"));
     assert!(masked.contains("bbb"));
 }
 
-// ============================================================
-// TC-L7: extract_error_message
-// ============================================================
 
 #[test]
 fn l7_1_extract_error_msg_with_code() {
@@ -228,13 +205,10 @@ fn l7_7_extract_error_no_matching_field() {
     assert_eq!(msg, r#"{"foo":"bar"}"#);
 }
 
-// ============================================================
-// TC-L8: parse_timestamp_ms
-// ============================================================
 
 #[test]
 fn l8_1_parse_timestamp_ms_from_i64() {
-    // 2024-04-15 12:00:00 UTC = 1713182400000 ms
+
     let v = json!({"time": 1713182400000i64});
     let dt = parse_timestamp_ms(&v, "time");
     assert!(dt.is_some());

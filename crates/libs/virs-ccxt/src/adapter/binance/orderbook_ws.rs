@@ -1,15 +1,3 @@
-//! Binance order book WebSocket client.
-//!
-//! Subscribes to `<symbol>@depth20@500ms` partial book depth streams
-//! (top 20 bid/ask levels, pushed every 500ms).
-//!
-//! 内部委托给 [`WsManager<WsOrderBookEvent>`]，仅保留对外 API 兼容性。
-//!
-//! Stream formats:
-//! - Perpetual partial book depth: { "e":"depthUpdate", "E":..., "T":..., "s":"BTCUSDT",
-//!   "U":..., "u":..., "pu":..., "b":[[p,a]], "a":[[p,a]] }
-//! - Combined stream wrapper:    { "stream": "<name>", "data": <payload> }
-
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -28,20 +16,16 @@ fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
 }
 
-/// WS 消息延迟告警阈值（毫秒）— 订单簿推送间隔 500ms，阈值设为 2 秒
+
 pub(crate) const ORDERBOOK_WS_DELAY_THRESHOLD_MS: i64 = 2_000;
 
-/// Binance WS 推送两种格式（与 kline 一致）：
-/// 1. 单流格式: 顶层直接是 payload
-/// 2. 组合流格式: {"stream":"<name>", "data": <payload>}
-///
-/// Perpetual payload 字段: b / a / e / E / T / s / U / u / pu
+
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct BinanceDepthMessage {
     stream: Option<String>,
-    /// 组合流格式: data 字段包含完整 payload
+
     data: Option<serde_json::Value>,
-    /// 单流 perpetual 格式: 顶层 b/a
+
     #[serde(rename = "e")]
     #[allow(dead_code)]
     event_type_flat: Option<String>,
@@ -58,7 +42,7 @@ pub(crate) struct BinanceDepthMessage {
     asks_perp_flat: Option<Vec<[String; 2]>>,
 }
 
-/// T9 WARN fix: 替代 6-tuple 的命名结构体，避免 bids/asks、stream/symbol 位置混淆
+
 pub(crate) struct ParsedDepth {
     pub bids: Vec<[String; 2]>,
     pub asks: Vec<[String; 2]>,
@@ -69,11 +53,11 @@ pub(crate) struct ParsedDepth {
 }
 
 impl BinanceDepthMessage {
-    /// 提取订单簿数据，兼容单流/组合流
+
     pub(crate) fn into_depth(self) -> Option<ParsedDepth> {
         let stream = self.stream.clone();
 
-        // 组合流：解析 data
+
         if let Some(data) = self.data {
             if let Some(pd) = parse_payload(&data) {
                 return Some(ParsedDepth {
@@ -84,7 +68,7 @@ impl BinanceDepthMessage {
             return None;
         }
 
-        // 单流 perpetual: b/a at top level
+
         if let (Some(bids), Some(asks)) = (self.bids_perp_flat, self.asks_perp_flat) {
             let ts = self.event_time_flat.unwrap_or_else(|| {
                 tracing::warn!("orderbook_ws: event_time_flat is None — using 0 as fallback timestamp");
@@ -104,9 +88,9 @@ impl BinanceDepthMessage {
     }
 }
 
-/// 解析 payload（组合流的 data 字段或单流的顶层）
+
 pub(crate) fn parse_payload(v: &serde_json::Value) -> Option<ParsedDepth> {
-    // Perpetual format: b/a
+
     if let (Some(bids), Some(asks)) = (v.get("b"), v.get("a")) {
         let bids = parse_levels(bids)?;
         let asks = parse_levels(asks)?;
@@ -137,7 +121,7 @@ pub(crate) fn parse_levels(v: &serde_json::Value) -> Option<Vec<[String; 2]>> {
         }
         let p = pair[0].as_str().or_else(|| pair[0].as_f64().map(|_| ""))?;
         let a = pair[1].as_str().or_else(|| pair[1].as_f64().map(|_| ""))?;
-        // If numbers, convert to string via serde_json
+
         let p = if p.is_empty() {
             pair[0].as_f64().map(|n| n.to_string())?
         } else {
@@ -167,25 +151,14 @@ pub(crate) fn to_levels(raw: &[[String; 2]]) -> Vec<OrderBookLevel> {
         .collect()
 }
 
-// ============================================================
-// OrderBookWsHandler: WsHandler 实现
-// ============================================================
 
-/// Binance OrderBook WS 的 [`WsHandler`] 实现
-///
-/// 改进（对比原始实现）：
-/// - 连接超时（10s）防止 `connect_async` 挂起
-/// - Pong 超时（90s）检测半开连接
-/// - **新增延迟检测**（P2 修复）：原始实现完全缺失，现添加 2s 阈值告警
-/// - 背压容忍：broadcast channel 满时 warn 不停止
-/// - 熔断：100 次重试后触发 CircuitBreaker
 pub struct OrderBookWsHandler {
     ws_url: String,
-    /// 当前订阅列表 — 重连时通过 on_connected 恢复
+
     pub(crate) subscriptions: Arc<RwLock<Vec<String>>>,
-    /// Binance symbol → 原始 symbol 映射
+
     pub(crate) symbol_map: Arc<RwLock<HashMap<String, String>>>,
-    /// JSON-RPC 请求 ID
+
     request_id: Arc<AtomicU64>,
 }
 
@@ -226,7 +199,7 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
         };
 
         if let Some(pd) = bmsg.into_depth() {
-            // P2 修复：延迟检测 — 原始实现完全缺失
+
             if pd.timestamp_ms > 0 {
                 let local_now = chrono::Utc::now().timestamp_millis();
                 let delay_ms = local_now - pd.timestamp_ms;
@@ -240,7 +213,7 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
                 }
             }
 
-            // Resolve unified symbol
+
             let original_symbol =
                 resolve_symbol(pd.stream_name.as_deref(), pd.symbol.as_deref(), &self.symbol_map)
                     .await;
@@ -261,7 +234,7 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
                 }
             }
         } else {
-            // 订阅确认/错误响应
+
             if let Ok(resp) = serde_json::from_str::<serde_json::Value>(text) {
                 if let Some(code) = resp.get("code") {
                     tracing::error!(
@@ -305,7 +278,7 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
     }
 
     async fn on_disconnected(&self) {
-        // 订阅状态保留在 subscriptions 中，重连时 on_connected 恢复
+
     }
 
     async fn on_command(&self, cmd: ManagerWsCommand) -> Option<String> {
@@ -333,13 +306,7 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
     }
 }
 
-// ============================================================
-// OrderBookWs: 委托给 WsManager 的薄包装
-// ============================================================
 
-/// Binance OrderBook WS 客户端
-///
-/// 内部委托给 [`WsManager<WsOrderBookEvent>`]，仅保留对外 API 兼容性。
 pub struct OrderBookWs {
     manager: WsManager<WsOrderBookEvent>,
     pub(crate) handler: Arc<OrderBookWsHandler>,
@@ -457,12 +424,7 @@ impl OrderBookWsClient for OrderBookWs {
     }
 }
 
-/// Resolve unified symbol from stream name, payload symbol, or symbol_map.
-///
-/// Resolution order:
-/// 1. Stream name (e.g. "btcusdt@depth20@500ms" → "btcusdt" → lookup in map)
-/// 2. Payload symbol (perpetual `s` field, e.g. "BTCUSDT" → lowercase → lookup)
-/// 3. Single-subscription fallback (if only one symbol subscribed)
+
 async fn resolve_symbol(
     stream_name: Option<&str>,
     sym_from_payload: Option<&str>,
@@ -470,7 +432,7 @@ async fn resolve_symbol(
 ) -> Option<String> {
     let map = symbol_map.read().await;
 
-    // 1. Try stream name: "btcusdt@depth20@500ms" → "btcusdt"
+
     if let Some(stream) = stream_name {
         if let Some(symbol_part) = stream.split('@').next() {
             let key = symbol_part.to_lowercase();
@@ -480,7 +442,7 @@ async fn resolve_symbol(
         }
     }
 
-    // 2. Try payload symbol (perpetual `s` field)
+
     if let Some(s) = sym_from_payload {
         let key = s.to_lowercase();
         if let Some(unified) = map.get(&key) {
@@ -488,7 +450,7 @@ async fn resolve_symbol(
         }
     }
 
-    // 3. Single-subscription fallback (no stream name or payload symbol)
+
     if map.len() == 1 {
         return map.values().next().cloned();
     }

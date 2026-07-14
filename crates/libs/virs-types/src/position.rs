@@ -1,12 +1,10 @@
-//! Position engine types: Position, Order, Trade, EngineCommand, EngineEvent, etc.
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::enums::*;
 
-/// Position
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Position {
     pub id: Uuid,
@@ -36,9 +34,7 @@ impl Position {
         self.status.is_open()
     }
 
-    /// Computes unrealized PnL at a given current price.
-    /// Long: (current - entry) * size
-    /// Short: (entry - current) * size
+
     pub fn unrealized_pnl_at(&self, current_price: f64) -> f64 {
         match self.side {
             PositionSide::Long => (current_price - self.entry_price) * self.size,
@@ -47,7 +43,7 @@ impl Position {
     }
 }
 
-/// Order (position engine)
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PositionOrder {
     pub id: Uuid,
@@ -72,7 +68,7 @@ pub struct PositionOrder {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Trade record
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Trade {
     pub id: Uuid,
@@ -90,13 +86,13 @@ pub struct Trade {
     pub created_at: DateTime<Utc>,
 }
 
-/// WebSocket feed event
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum WsFeedEvent {
     OrderUpdate {
-        /// 交易所订单 ID (币安 "i" 字段)
+
         exchange_order_id: String,
-        /// 客户端订单 ID (币安 "c" 字段) — 用于本地订单匹配
+
         client_order_id: Option<String>,
         symbol: String,
         status: OrderStatus,
@@ -113,7 +109,7 @@ pub enum WsFeedEvent {
     },
 }
 
-/// Place order parameters
+
 #[derive(Debug, Clone)]
 pub struct PlaceOrderParams {
     pub symbol: String,
@@ -127,7 +123,7 @@ pub struct PlaceOrderParams {
     pub client_order_id: Option<String>,
 }
 
-/// Engine command
+
 #[derive(Debug, Clone)]
 pub enum EngineCommand {
     OpenPosition {
@@ -168,7 +164,7 @@ pub enum EngineCommand {
     },
 }
 
-/// Engine event
+
 #[derive(Debug, Clone)]
 pub enum EngineEvent {
     PositionOpened {
@@ -182,8 +178,8 @@ pub enum EngineEvent {
         stop_loss: Option<f64>,
         take_profit: Option<f64>,
     },
-    /// 仓位实时状态更新（来自 WS ORDER_TRADE_UPDATE 或订单成交处理）
-    /// 推送给前端订阅 /ws/position 的客户端
+
+
     PositionUpdated {
         position: Position,
     },

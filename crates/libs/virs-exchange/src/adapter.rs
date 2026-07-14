@@ -1,5 +1,3 @@
-//! CcxtAdapter — wraps a ccxt Exchange into the application's Exchange trait.
-
 use async_trait::async_trait;
 use virs_ccxt::{self, Exchange as CcxtExchange, PlaceOrderParams};
 use virs_error::ExchangeError;
@@ -7,7 +5,7 @@ use virs_models::*;
 
 use crate::Exchange;
 
-/// Adapter that wraps a ccxt Exchange into the application's Exchange trait.
+
 pub struct CcxtAdapter {
     inner: Box<dyn CcxtExchange>,
     market_type: MarketType,
@@ -40,7 +38,6 @@ impl CcxtAdapter {
     }
 }
 
-// ---- Type conversion helpers ----
 
 pub fn to_ccxt_market_type(mt: &MarketType) -> MarketType {
     match mt {
@@ -310,8 +307,8 @@ impl Exchange for CcxtAdapter {
     }
 
     async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError> {
-        // fapi returns Err for OneWay — the `?` propagates it.
-        // Ok(Hedge) is the only success path.
+
+
         self.inner.get_position_mode().await
     }
 

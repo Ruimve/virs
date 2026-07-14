@@ -11,7 +11,7 @@ export const WizardStep = {
 
 export type WizardStepValue = (typeof WizardStep)[keyof typeof WizardStep];
 
-// ── 向导状态 ──
+
 export interface WizardState {
   current_step: WizardStepValue;
   exchange: string;

@@ -8,26 +8,17 @@ export interface ReactChartProps {
   secondsVisible?: boolean;
 }
 
-/**
- * Base chart container — handles chart creation, resize, and cleanup.
- * Passes the IChartApi instance back via `onLoad` callback so the parent
- * can create series and set data.
- *
- * Chart creation and option updates are split into separate effects so that
- * changing `timeVisible`/`secondsVisible` calls `chart.applyOptions()` instead
- * of destroying and recreating the entire chart (which would lose all series
- * data and user interaction state).
- */
+
 function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | undefined>(undefined);
 
-  // ── Effect 1: Create chart (runs once) ────────────────
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    // Read theme-aware CSS variables for chart colors
+
     const cs = getComputedStyle(el);
     const bgBase = cs.getPropertyValue('--bg-base').trim() || '#ffffff';
     const textOnSurfaceTertiary =
@@ -78,10 +69,10 @@ function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartP
       chartRef.current = undefined;
       onLoad(undefined);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [onLoad]);
 
-  // ── Effect 2: Apply time scale options (runs on mount + when options change) ──
+
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;

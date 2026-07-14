@@ -1,5 +1,3 @@
-//! Technical indicators using talib-rs.
-
 use talib_rs::{ma_type::MaType, math_operator, momentum, overlap, volatility};
 use tracing::warn;
 use virs_models::Kline;
@@ -303,7 +301,7 @@ pub fn volume_sma_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     sum / period as f64
 }
 
-/// Count consecutive bars outside Bollinger Band.
+
 pub fn compute_bars_outside_band(klines: &[Kline], bb_upper: f64, bb_lower: f64) -> i32 {
     let mut count: i32 = 0;
     for k in klines.iter().rev() {
@@ -318,7 +316,7 @@ pub fn compute_bars_outside_band(klines: &[Kline], bb_upper: f64, bb_lower: f64)
     count
 }
 
-/// Find nearest round number (support/resistance level).
+
 pub fn find_round_number(price: f64, upward: bool) -> f64 {
     if price <= 0.0 {
         return 0.0;
@@ -342,10 +340,10 @@ pub fn find_round_number(price: f64, upward: bool) -> f64 {
     }
 }
 
-/// 市场指标汇总
+
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct MarketIndicators {
-    // 1h 主周期
+
     pub current_price: f64,
     pub rsi: f64,
     pub atr: f64,
@@ -378,7 +376,7 @@ pub struct MarketIndicators {
     pub h1_ema_gap_trend: String,
     pub h1_high_50: f64,
     pub h1_low_50: f64,
-    // 15m 快周期
+
     pub m15_current_price: f64,
     pub m15_rsi: f64,
     pub m15_macd: f64,
@@ -396,7 +394,7 @@ pub struct MarketIndicators {
     pub m15_ema_cross_bars_ago: i32,
     pub m15_high_50: f64,
     pub m15_low_50: f64,
-    // 4h 慢周期
+
     pub h4_ema20: f64,
     pub h4_ema50: f64,
     pub h4_adx: f64,
@@ -405,12 +403,12 @@ pub struct MarketIndicators {
     pub h4_macd: f64,
     pub h4_macd_signal: f64,
     pub h4_macd_histogram: f64,
-    // 资金费率
+
     pub funding_rate: f64,
     pub funding_next_time: String,
 }
 
-/// 计算多周期市场指标
+
 pub fn compute_market_indicators(
     klines_1h: &[Kline],
     klines_4h: &[Kline],
@@ -532,7 +530,7 @@ pub fn compute_market_indicators(
     }
     .to_string();
 
-    // 4h
+
     let h4_last = klines_4h.len().saturating_sub(1);
     let h4_ema20 = if !klines_4h.is_empty() {
         ema_at(klines_4h, h4_last, 20)
@@ -575,7 +573,7 @@ pub fn compute_market_indicators(
         0.0
     };
 
-    // 15m
+
     let m15_last = klines_15m.len().saturating_sub(1);
     let m15_current_price = klines_15m.last().map(|k| k.close).unwrap_or(current_price);
     let m15_rsi = if !klines_15m.is_empty() {

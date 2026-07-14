@@ -1,5 +1,3 @@
-// ── API response types ──────────────────────────────────────
-
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
@@ -15,7 +13,6 @@ export interface PaginatedResponse<T> {
   total_pages: number;
 }
 
-// ── User types ──────────────────────────────────────────────
 
 export interface UserInfo {
   id: string;
@@ -29,7 +26,6 @@ export interface LoginResponse {
   user: UserInfo;
 }
 
-// ── Plugin types ────────────────────────────────────────────
 
 export interface PluginParam {
   name: string;
@@ -49,7 +45,6 @@ export interface Plugin {
   required_timeframes?: string[];
 }
 
-// ── AI types ────────────────────────────────────────────────
 
 export interface AiGeneratedParam {
   name: string;
@@ -69,7 +64,6 @@ export interface AiGenerateResult {
   model: string;
 }
 
-// ── Credentials types ───────────────────────────────────────
 
 export interface PermissionItem {
   name: string;
@@ -84,7 +78,6 @@ export interface PositionModeResult {
   message?: string;
 }
 
-// ── Bot common ──────────────────────────────────────────────
 
 export interface BotSummary {
   id: string;
@@ -100,7 +93,6 @@ export interface BotHeaderInfo {
   leverage: number;
 }
 
-// ── Auto Bot types ──────────────────────────────────────────
 
 export interface AutoBot {
   id: string;
@@ -127,30 +119,30 @@ export interface AutoTrade {
   bot_id: string;
   symbol: string;
   exchange: string;
-  // 开仓
+
   open_side: string;
   open_price: number;
   open_quantity: number;
   open_order_id: string | null;
   open_fee: number;
   opened_at: string;
-  // 平仓（未平仓时为 null）
+
   close_side: string | null;
   close_price: number | null;
   close_quantity: number | null;
   close_order_id: string | null;
   close_fee: number;
   closed_at: string | null;
-  // 盈亏
+
   pnl: number;
   pnl_pct: number;
-  // 风控边界（开仓时记录，trailing stop 更新时覆盖 stop_loss）
+
   stop_loss: number;
   take_profit: number;
-  // 触发源与平仓原因
+
   trigger_source: string;
   close_reason: string | null;
-  // 状态
+
   status: string;
 }
 
@@ -191,7 +183,6 @@ export interface AutoBotStats {
   net_pnl_after_fee: number;
 }
 
-// ── Grid Bot types ──────────────────────────────────────────
 
 export interface GridBot {
   id: string;
@@ -281,7 +272,6 @@ export interface GridBotStats {
   max_loss: number;
 }
 
-// ── Analysis types ──────────────────────────────────────────
 
 export interface AnalysisLog {
   id: string;
@@ -312,7 +302,6 @@ export interface AnalysisLog {
   created_at: string;
 }
 
-// ── Market types ────────────────────────────────────────────
 
 export interface KlineCandle {
   time: number;
@@ -333,7 +322,6 @@ export interface OrderBookData {
   asks: OrderBookEntry[];
 }
 
-// ── System types ────────────────────────────────────────────
 
 export interface HealthStatus {
   status: string;
@@ -341,13 +329,12 @@ export interface HealthStatus {
 }
 
 export interface PaperModeStatus {
-  /** null = engines not started (restore failed or no bots) */
+
   paper_mode: boolean | null;
-  /** Restore error message if restore_if_needed failed at boot */
+
   restore_error: string | null;
 }
 
-// ── System Metrics types ───────────────────────────────────
 
 export interface CpuInfo {
   usage_pct: number;

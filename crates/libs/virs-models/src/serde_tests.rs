@@ -1,5 +1,3 @@
-//! Serde serialization/deserialization round-trip tests for all model types.
-
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -7,9 +5,6 @@ use virs_types::enums::*;
 
 use crate::{AutoBot, GridBot, GridTrade, Order, StrategyStatus};
 
-// ============================================================
-// TC-S1: Order serde round-trip
-// ============================================================
 
 #[test]
 fn s1_1_order_roundtrip() {
@@ -36,9 +31,6 @@ fn s1_1_order_roundtrip() {
     assert_eq!(de, order);
 }
 
-// ============================================================
-// TC-S3: GridBot / GridTrade serde
-// ============================================================
 
 #[test]
 fn s3_1_grid_bot_roundtrip() {
@@ -116,9 +108,6 @@ fn s3_2_grid_trade_roundtrip() {
     assert_eq!(de.status, trade.status);
 }
 
-// ============================================================
-// TC-S4: AutoBot serde
-// ============================================================
 
 #[test]
 fn s4_1_auto_bot_roundtrip() {

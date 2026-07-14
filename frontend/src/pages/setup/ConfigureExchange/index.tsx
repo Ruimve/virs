@@ -14,21 +14,10 @@ import type { PermissionItem } from '../../../service';
 import { WizardStep } from '../context/WizardContext/consts';
 import { Button } from '@/components/Button';
 
-/**
- * 规范化 PEM 格式的 API Secret。
- *
- * 用户从文本编辑器或浏览器复制 PEM 时，换行符 `\n` 经常会被替换成空格，
- * 导致后端 `from_pkcs8_pem` 解析失败。此函数检测 PEM 格式并还原换行符。
- *
- * 处理逻辑：
- * - 检测 `-----BEGIN ... PRIVATE KEY-----` 和 `-----END ... PRIVATE KEY-----` 标记
- * - header / base64 内容 / footer 之间的空格替换为 `\n`
- * - base64 内容内部如果是单行（无空格），保持原样（合法的单行 PEM）
- * - 非 PEM 格式（HMAC secret、base64 seed）原样返回
- */
+
 const normalizePemSecret = (raw: string): string => {
   const value = raw.trim();
-  // 必须同时包含 BEGIN 和 END 标记才视为 PEM
+
   const beginIdx = value.search(/-----BEGIN [A-Z ]*PRIVATE KEY-----/);
   const endIdx = value.search(/-----END [A-Z ]*PRIVATE KEY-----/);
   if (beginIdx === -1 || endIdx === -1 || beginIdx >= endIdx) {
@@ -37,16 +26,16 @@ const normalizePemSecret = (raw: string): string => {
 
   const header = value.slice(beginIdx, value.indexOf('-----', beginIdx + 10) + 5);
   const footer = value.slice(endIdx, value.indexOf('-----', endIdx + 8) + 5);
-  // header 和 footer 之间的内容（base64 体）
+
   const bodyStart = value.indexOf(header) + header.length;
   const bodyEnd = value.indexOf(footer);
   const body = value.slice(bodyStart, bodyEnd).trim();
 
-  // 如果 body 本身包含换行，保留原样
+
   if (body.includes('\n')) {
     return `${header}\n${body}\n${footer}`;
   }
-  // 单行 body：尝试按 64 字符宽度重新分行（OpenSSL 默认输出格式）
+
   const lines: string[] = [];
   for (let i = 0; i < body.length; i += 64) {
     lines.push(body.slice(i, i + 64));
@@ -60,22 +49,22 @@ const ConfigureExchange = () => {
   const { wizard, updateWizard, advanceStep } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.SelectExchange);
 
-  // Step 1: API credentials
+
   const [step1Status, setStep1Status] = useState<FlowStepStatus>('active');
   const [step1Error, setStep1Error] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
 
-  // Step 2: Connectivity + Permissions
+
   const [step2Status, setStep2Status] = useState<FlowStepStatus>('pending');
   const [step2Error, setStep2Error] = useState<string | null>(null);
 
-  // Step 3: Permissions
+
   const [step3Status, setStep3Status] = useState<FlowStepStatus>('pending');
   const [step3Error, setStep3Error] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
 
-  // Step 4: Position mode
+
   const [step4Status, setStep4Status] = useState<FlowStepStatus>('pending');
   const [step4Error, setStep4Error] = useState<string | null>(null);
 
@@ -90,7 +79,7 @@ const ConfigureExchange = () => {
     setStep4Error(null);
   }, []);
 
-  // Step 4: Check position mode
+
   const startStep4 = useCallback(async () => {
     setStep4Status('verifying');
     try {
@@ -113,7 +102,7 @@ const ConfigureExchange = () => {
         return;
       }
 
-      // OneWay — block: user must switch to Hedge mode in Binance APP.
+
       setStep4Status('error');
       setStep4Error(
         '当前为单向持仓模式。请在 Binance APP > 合约 > 设置 > 持仓模式 中切换到双向持仓后重新验证。',
@@ -124,7 +113,7 @@ const ConfigureExchange = () => {
     }
   }, []);
 
-  // Check permissions via apiRestrictions
+
   const startStep3 = useCallback(async () => {
     setStep3Status('verifying');
     try {
@@ -151,7 +140,7 @@ const ConfigureExchange = () => {
     }
   }, [startStep4]);
 
-  // Test connectivity only (ping) — uses saved credentials from registry
+
   const startStep2 = useCallback(async () => {
     setStep2Status('verifying');
     try {
@@ -170,7 +159,7 @@ const ConfigureExchange = () => {
     }
   }, [startStep3]);
 
-  // Verify: Step 1 save → done, then auto-start Step 2
+
   const startStep1 = useCallback(async () => {
     setStep1Status('verifying');
     setStep1Error('');

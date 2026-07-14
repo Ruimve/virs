@@ -1,14 +1,3 @@
-//! OrderBookEngine — real-time order book streaming engine.
-//!
-//! Manages WebSocket subscriptions to exchange order book streams,
-//! caches the latest snapshot per symbol, and broadcasts updates
-//! to all subscribers via a tokio broadcast channel.
-//!
-//! Architecture mirrors KlineEngine but is simpler:
-//! - No aggregation (order book is a snapshot, not a time series)
-//! - No gap detection / backfill (each WS message is a complete top-N snapshot)
-//! - No persistence (order book state is ephemeral)
-
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -52,7 +41,7 @@ impl MarketWsHandler {
 
 pub struct OrderBookEngine {
     subscriptions: Arc<DashMap<String, SubscriptionEntry>>,
-    /// Reverse index: symbol → subscription key (for fast WS event lookup)
+
     symbol_index: Arc<DashMap<String, String>>,
     event_tx: broadcast::Sender<OrderBookEvent>,
     perpetual_handler: MarketWsHandler,
@@ -96,7 +85,7 @@ impl OrderBookEngine {
         let symbol_index = self.symbol_index.clone();
         let started = self.started.clone();
 
-        // WS update processor
+
         tokio::spawn(async move {
             while started.load(std::sync::atomic::Ordering::Relaxed) {
                 match ws_update_rx.recv().await {
@@ -156,7 +145,7 @@ impl OrderBookEngine {
         symbol: &str,
         _market_type: MarketType,
     ) -> VirsResult<()> {
-        // Lazy start: auto-start the engine on first subscription
+
         if !self.started.load(std::sync::atomic::Ordering::Relaxed) {
             self.start().await;
         }

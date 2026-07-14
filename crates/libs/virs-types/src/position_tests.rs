@@ -1,14 +1,9 @@
-//! Unit tests for position.rs methods.
-
 use chrono::Utc;
 use uuid::Uuid;
 
 use crate::enums::*;
 use crate::position::Position;
 
-// ============================================================
-// TC-P1: Position::is_open
-// ============================================================
 
 #[test]
 fn p1_1_open_is_open() {
@@ -16,9 +11,6 @@ fn p1_1_open_is_open() {
     assert!(pos.is_open());
 }
 
-// ============================================================
-// TC-P6: Position::unrealized_pnl_at
-// ============================================================
 
 #[test]
 fn p6_1_long_pnl() {
@@ -38,9 +30,6 @@ fn p6_2_short_pnl() {
     assert!((pos.unrealized_pnl_at(49000.0) - 1000.0).abs() < 0.01);
 }
 
-// ============================================================
-// Helpers
-// ============================================================
 
 fn make_position(status: PositionStatus) -> Position {
     Position {

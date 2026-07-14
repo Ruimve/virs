@@ -1,5 +1,3 @@
-//! Symbol cache — per-symbol multi-timeframe candle buffer.
-
 use std::collections::{HashMap, VecDeque};
 
 use super::types::{Candle, Timeframe};

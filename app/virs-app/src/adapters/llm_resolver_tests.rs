@@ -1,5 +1,3 @@
-//! Unit tests for adapters/llm_resolver.rs
-
 use crate::adapters::llm_resolver::resolve_llm_provider;
 
 #[test]
@@ -53,7 +51,7 @@ fn l1_4_resolve_no_key_error() {
 
 #[test]
 fn l1_5_resolve_deepseek_priority_over_openai() {
-    // When both deepseek and openai credentials exist, deepseek wins
+
     let creds = vec![
         ("openai".to_string(), "openai-key".to_string(), None),
         ("deepseek".to_string(), "deepseek-key".to_string(), None),

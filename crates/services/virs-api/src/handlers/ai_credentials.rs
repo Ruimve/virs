@@ -1,5 +1,3 @@
-//! AI credentials handlers.
-
 use axum::{
     extract::State,
     http::HeaderMap,
@@ -11,8 +9,7 @@ use crate::handlers::ai::{resolve_provider_base_url, resolve_provider_model};
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
-/// Parse the /models API response into a list of model objects.
-/// Extracts id and owned_by from each model in the data array.
+
 pub fn parse_models_response(data: &serde_json::Value) -> Vec<serde_json::Value> {
     data["data"]
         .as_array()
@@ -29,8 +26,7 @@ pub fn parse_models_response(data: &serde_json::Value) -> Vec<serde_json::Value>
         .unwrap_or_default()
 }
 
-/// Parse the balance API response into a list of balance objects.
-/// Checks balance_infos first, then falls back to data array.
+
 pub fn parse_balance_response(data: &serde_json::Value) -> Vec<serde_json::Value> {
     data["balance_infos"]
         .as_array()
@@ -102,7 +98,7 @@ pub async fn save_credential(
 
     let id = uuid::Uuid::new_v4();
 
-    // Encrypt API key with AES-256-GCM
+
     let encrypted_key =
         virs_utils::crypto::encrypt_with_key(api_key, &state.llm_key)?;
 
@@ -143,14 +139,14 @@ pub async fn delete_credential(
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
 
-/// GET /api/ai-credentials/test — test LLM connectivity using saved credentials.
+
 pub async fn test_credential(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    // Decrypt saved credential
+
     let row: Option<(String, String)> = sqlx::query_as(
         r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials WHERE user_id = $1 AND is_default = true ORDER BY created_at DESC LIMIT 1"#,
     )
@@ -207,7 +203,7 @@ pub async fn test_credential(
     }
 }
 
-/// GET /api/ai-credentials/models — fetch available models from LLM provider using saved credentials.
+
 pub async fn fetch_models(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -280,7 +276,7 @@ pub async fn fetch_models(
     }
 }
 
-/// GET /api/ai-credentials/balance — fetch account balance from LLM provider using saved credentials.
+
 pub async fn fetch_balance(
     State(state): State<AppState>,
     headers: HeaderMap,

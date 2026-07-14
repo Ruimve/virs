@@ -1,12 +1,5 @@
-//! Unit tests for errors.rs.
-//!
-//! Covers: ExchangeError::no_data.
-
 use virs_error::ExchangeError;
 
-// ============================================================
-// TC-E2: ExchangeError::no_data
-// ============================================================
 
 #[test]
 fn e2_1_no_data_construction() {

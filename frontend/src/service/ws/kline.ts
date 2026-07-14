@@ -20,7 +20,6 @@ export interface KlineWsEventRaw {
   event_type: 'Update' | 'Closed' | 'Backfilled';
 }
 
-// ── Kline event type (aligned with backend KlineEngine) ───
 
 export interface KlineWsEvent {
   exchange: string;
@@ -37,7 +36,6 @@ export interface KlineWsEvent {
   event_type: 'Update' | 'Closed' | 'Backfilled';
 }
 
-// ── Kline WebSocket ────────────────────────────────────────
 
 const klineInst = createWsInstance<KlineWsEvent>();
 
@@ -65,11 +63,7 @@ const parseKlineWs = (raw: string): KlineWsEvent | null => {
   }
 };
 
-/**
- * 订阅 Kline WebSocket。
- * 支持传入 timeframe，后端将只推送该周期的数据，节省约 83% 带宽。
- * 切换 timeframe 时会自动发送新的订阅消息，无需重连。
- */
+
 export function useKlineWs(
   onEvent: (event: KlineWsEvent) => void,
   onReconnect?: () => void,
@@ -77,7 +71,7 @@ export function useKlineWs(
 ): { connected: boolean } {
   const { connected } = useWsHook(klineInst, getKlineWsUrl, parseKlineWs, onEvent, onReconnect);
 
-  // 当 timeframe 变化时，发送订阅消息给后端
+
   useEffect(() => {
     if (!connected) return;
     const ws = klineInst.ws;

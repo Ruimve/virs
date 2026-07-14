@@ -1,14 +1,12 @@
-//! Auto trading bot types.
-
 use uuid::Uuid;
 
-// Re-export AutoBotConfig from virs-types
+
 pub use virs_types::auto_port::AutoBotConfig;
 
-// Re-export AutoBot from virs-models (DB models, single source of truth)
+
 pub use virs_models::AutoBot;
 
-/// 自动交易引擎命令
+
 #[derive(Debug)]
 pub enum AutoCommand {
     StartBot { bot_id: Uuid },
@@ -16,7 +14,7 @@ pub enum AutoCommand {
     DeleteBot { bot_id: Uuid, close_position: bool },
 }
 
-/// 默认系统 Prompt
+
 pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位加密货币交易方向判断引擎。你的唯一职责是：基于多周期技术指标，判断当前应该做多、做空、平仓还是观望。
 
 ## 你的职责边界
@@ -132,7 +130,7 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位加密货币交易方向�
 - 价格必须为正数，且 stop_loss < entry_price < take_profit（多头）/ take_profit < entry_price < stop_loss（空头）
 - 平仓原因由代码逻辑自动判定（止损/止盈/持仓超时/LLM决策），LLM 不需要返回"#;
 
-/// 默认用户 Prompt 模板
+
 pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}
 
 ## 账户资产

@@ -1,5 +1,3 @@
-//! Unit tests for crypto.rs functions.
-
 use base64::Engine as _;
 
 use crate::crypto::{
@@ -7,9 +5,6 @@ use crate::crypto::{
     verify_password,
 };
 
-// ============================================================
-// TC-C1: derive_key
-// ============================================================
 
 #[test]
 fn c1_1_deterministic() {
@@ -31,9 +26,6 @@ fn c1_3_output_length_32() {
     assert_eq!(key.len(), 32);
 }
 
-// ============================================================
-// TC-C2: encrypt / decrypt round-trip
-// ============================================================
 
 #[test]
 fn c2_1_normal_roundtrip() {
@@ -69,7 +61,7 @@ fn c2_4_invalid_base64_fails() {
 #[test]
 fn c2_5_short_ciphertext_fails() {
     let key = derive_key("test_secret");
-    // Base64 of 5 bytes — less than 12 byte nonce
+
     let short = base64::engine::general_purpose::STANDARD.encode(b"hello");
     assert!(decrypt(&short, &key).is_err());
 }

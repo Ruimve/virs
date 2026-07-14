@@ -1,7 +1,7 @@
 import { forwardRef, memo } from 'react';
 import { strokeBase, type IconProps } from '../define';
 
-/** 三角警告（Heroicons outline exclamation-triangle） */
+
 export const Warning = memo(
   forwardRef<SVGSVGElement, IconProps>((props, ref) => (
     <svg ref={ref} {...strokeBase} {...props}>

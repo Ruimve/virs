@@ -6,7 +6,6 @@ import { Progress } from '@/components/Progress';
 import { usageColor } from '@/components/Progress/utils';
 import { StateFeedback } from '@/components/StateFeedback';
 
-// -- Utility functions --
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -31,7 +30,6 @@ function formatUptime(secs: number): string {
   return parts.join(' ');
 }
 
-// -- Sub-components --
 
 interface MiniSparkProps {
   active: boolean;
@@ -67,7 +65,6 @@ const MiniSpark = ({ active, direction }: MiniSparkProps) => {
   );
 };
 
-// -- Resource icon components --
 
 const CpuIcon = () => (
   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
@@ -111,7 +108,6 @@ const LoadIcon = () => (
   </svg>
 );
 
-// -- Main component --
 
 interface NetSample {
   total_rx: number;
@@ -181,7 +177,7 @@ const System = () => {
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
-      {/* System Overview */}
+      {}
       <Card title="系统概览" icon={<CpuIcon />}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           <div>
@@ -209,7 +205,7 @@ const System = () => {
         </div>
       </Card>
 
-      {/* CPU & Memory */}
+      {}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card title="CPU" icon={<CpuIcon />}>
           <div className="space-y-3">
@@ -276,7 +272,7 @@ const System = () => {
         </Card>
       </div>
 
-      {/* System Load */}
+      {}
       <Card title="系统负载（1 / 5 / 15 分钟）" icon={<LoadIcon />}>
         <div className="grid grid-cols-3 gap-4">
           {[
@@ -305,7 +301,7 @@ const System = () => {
         </div>
       </Card>
 
-      {/* Disk */}
+      {}
       <Card title="磁盘" icon={<DiskIcon />}>
         <div className="space-y-3">
           {info.disks.map((disk, i) => (
@@ -327,7 +323,7 @@ const System = () => {
         </div>
       </Card>
 
-      {/* Network */}
+      {}
       <Card title="网络" icon={<NetIcon />}>
         <div className="space-y-2">
           {info.network.length === 0 ? (

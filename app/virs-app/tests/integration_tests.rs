@@ -1,5 +1,3 @@
-//! Integration tests for virs-app adapters — cross-module chain tests.
-
 use chrono::Utc;
 use uuid::Uuid;
 use virs_app::adapters::auto_store::bot_to_config as auto_bot_to_config;
@@ -15,7 +13,6 @@ use virs_types::bot::{OrderEvent, OrderSide};
 use virs_types::enums::{OrderStatus, OrderType, Side, StrategyStatus, TradeType};
 use virs_types::position::{EngineEvent, PositionOrder, Trade};
 
-// ── helpers ───────────────────────────────────────────────
 
 fn make_grid_bot() -> GridBot {
     GridBot {
@@ -140,7 +137,6 @@ fn make_trade() -> Trade {
     }
 }
 
-// ── INT-1: bot_to_config 跨模块一致性 ─────────────────────
 
 #[test]
 fn int_1_1_grid_bot_to_config_then_compare() {
@@ -181,7 +177,6 @@ fn int_1_2_auto_bot_to_config_then_compare() {
     assert_eq!(config.loss_trades, bot.loss_trades);
 }
 
-// ── INT-2: candle_to_kline + utils 链路 ───────────────────
 
 #[test]
 fn int_2_1_candle_to_kline_preserves_ohlcv() {
@@ -200,7 +195,7 @@ fn int_2_1_candle_to_kline_preserves_ohlcv() {
 
 #[test]
 fn int_2_2_sanitize_then_derive_chain() {
-    // Simulate close_trade flow: sanitize pnl_pct then derive open_side
+
     let raw_pnl_pct = f64::NAN;
     let close_side = "buy";
     let sanitized = sanitize_pnl_pct(raw_pnl_pct);
@@ -209,11 +204,10 @@ fn int_2_2_sanitize_then_derive_chain() {
     assert_eq!(open_side, "sell");
 }
 
-// ── INT-3: LLM 解析优先级链 ───────────────────────────────
 
 #[test]
 fn int_3_1_llm_resolve_priority_chain() {
-    // deepseek wins over openai and openrouter
+
     let creds = vec![
         ("openai".to_string(), "oai-key".to_string(), None),
         ("deepseek".to_string(), "ds-key".to_string(), None),
@@ -223,7 +217,7 @@ fn int_3_1_llm_resolve_priority_chain() {
     assert_eq!(key, "ds-key");
     assert_eq!(provider, "deepseek");
 
-    // Remove deepseek → openai wins
+
     let creds2 = vec![
         ("openai".to_string(), "oai-key".to_string(), None),
         ("openrouter".to_string(), "or-key".to_string(), None),
@@ -232,7 +226,7 @@ fn int_3_1_llm_resolve_priority_chain() {
     assert_eq!(key2, "oai-key");
     assert_eq!(provider2, "openai");
 
-    // Remove openai → openrouter wins
+
     let creds3 = vec![
         ("openrouter".to_string(), "or-key".to_string(), None),
     ];
@@ -243,7 +237,7 @@ fn int_3_1_llm_resolve_priority_chain() {
 
 #[test]
 fn int_3_2_llm_resolve_user_model_override() {
-    // User specifies a custom model
+
     let creds = vec![
         (
             "deepseek".to_string(),
@@ -262,7 +256,6 @@ fn int_3_2_llm_resolve_user_model_override() {
     assert_eq!(provider, "deepseek");
 }
 
-// ── INT-4: 事件转换链 ─────────────────────────────────────
 
 #[test]
 fn int_4_1_convert_event_order_placed_filled() {
@@ -320,7 +313,6 @@ fn int_4_2_convert_event_canceled_failed() {
     }
 }
 
-// ── INT-5: utils 全覆盖 ───────────────────────────────────
 
 #[test]
 fn int_5_1_sanitize_all_pnl_cases() {
@@ -335,28 +327,27 @@ fn int_5_1_sanitize_all_pnl_cases() {
 fn int_5_2_derive_open_side_all_cases() {
     assert_eq!(derive_open_side("buy"), "sell");
     assert_eq!(derive_open_side("sell"), "buy");
-    // unknown strings default to "buy"
+
     assert_eq!(derive_open_side("unknown"), "buy");
     assert_eq!(derive_open_side(""), "buy");
 }
 
-// ── INT-6: 跨模块一致性 ───────────────────────────────────
 
 #[test]
 fn int_6_1_grid_auto_bot_to_config_consistency() {
-    // Both conversions are independent — running one doesn't affect the other
+
     let grid_bot = make_grid_bot();
     let auto_bot = make_auto_bot();
 
     let grid_config = grid_bot_to_config(&grid_bot);
     let auto_config = auto_bot_to_config(&auto_bot);
 
-    // Grid config should not have auto fields and vice versa
+
     assert_eq!(grid_config.name, "grid-int");
     assert_eq!(auto_config.name, "auto-int");
     assert_ne!(grid_config.symbol, auto_config.symbol);
 
-    // IDs are preserved independently
+
     assert_eq!(grid_config.id, grid_bot.id);
     assert_eq!(auto_config.id, auto_bot.id);
     assert_ne!(grid_config.id, auto_config.id);
@@ -364,17 +355,17 @@ fn int_6_1_grid_auto_bot_to_config_consistency() {
 
 #[test]
 fn int_6_2_llm_resolve_default_models() {
-    // deepseek default model
+
     let creds_ds = vec![("deepseek".to_string(), "key".to_string(), None)];
     let (_, _, model, _) = resolve_llm_provider(&creds_ds).unwrap();
     assert_eq!(model, "deepseek-chat");
 
-    // openai default model
+
     let creds_oai = vec![("openai".to_string(), "key".to_string(), None)];
     let (_, _, model, _) = resolve_llm_provider(&creds_oai).unwrap();
     assert_eq!(model, "gpt-4o");
 
-    // openrouter default model
+
     let creds_or = vec![("openrouter".to_string(), "key".to_string(), None)];
     let (_, _, model, _) = resolve_llm_provider(&creds_or).unwrap();
     assert_eq!(model, "deepseek/deepseek-chat");

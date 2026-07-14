@@ -1,36 +1,26 @@
-//! Core enumerations used across the VIRS platform.
-
 use serde::{Deserialize, Serialize};
 
-/// Trade direction
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Side {
     Buy,
     Sell,
 }
 
-/// Position side (hedge mode only — OneWay is not supported).
-/// A Binance futures account must be switched to Hedge mode before use;
-/// `PositionSide::Both` (OneWay semantics) is intentionally absent so that
-/// the type system forbids the silent PnL-miscalculation path that existed
-/// when Both was a valid variant.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PositionSide {
     Long,
     Short,
 }
 
-/// Position mode — Hedge only. OneWay is not supported by VIRS.
-/// When `get_position_mode` reads OneWay from the exchange, it returns
-/// `ExchangeError::InvalidRequest` rather than `Ok(OneWay)`.
-/// The only consumer that catches this error is the `check_position_mode`
-/// API endpoint, which reports "oneway" to the frontend wizard.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PositionMode {
     Hedge,
 }
 
-/// Order type
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum OrderType {
     Limit,
@@ -40,7 +30,7 @@ pub enum OrderType {
     TakeProfitMarket,
 }
 
-/// Order status
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum OrderStatus {
     Pending,
@@ -57,7 +47,7 @@ impl OrderStatus {
     }
 }
 
-/// Position status
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PositionStatus {
     Empty,
@@ -73,7 +63,7 @@ impl PositionStatus {
     }
 }
 
-/// Market type (perpetual only — spot has been removed)
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MarketType {
     Perpetual,
@@ -87,7 +77,7 @@ impl std::fmt::Display for MarketType {
     }
 }
 
-/// Engine state
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EngineState {
     Created,
@@ -102,14 +92,14 @@ impl EngineState {
     }
 }
 
-/// Trade type (open vs close)
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TradeType {
     Open,
     Close,
 }
 
-/// Strategy status (for grid bots)
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[cfg_attr(feature = "sqlx", sqlx(type_name = "text", rename_all = "lowercase"))]
@@ -122,7 +112,7 @@ pub enum StrategyStatus {
     Error,
 }
 
-// sqlx Type implementations for enums that need DB mapping
+
 #[cfg(feature = "sqlx")]
 mod sqlx_impls {
     use super::*;

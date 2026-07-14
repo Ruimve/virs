@@ -1,5 +1,3 @@
-//! Price providers — Exchanges + KlineEngine backed price lookups.
-
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -9,7 +7,6 @@ use virs_market::KlineEngine;
 use virs_market::Timeframe;
 use virs_types::bot::PriceProvider;
 
-// ── Grid PriceProvider ──
 
 pub struct ExchangePriceProvider {
     exchange_registry: Arc<Exchanges>,
@@ -33,7 +30,7 @@ impl ExchangePriceProvider {
 #[async_trait]
 impl PriceProvider for ExchangePriceProvider {
     async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64> {
-        // Try kline engine first (1m candle)
+
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine
                 .get_klines_async(exchange, symbol, Timeframe::M1)
@@ -47,7 +44,7 @@ impl PriceProvider for ExchangePriceProvider {
             }
         }
 
-        // Fallback to exchange ticker
+
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key)?;
         match ex.get_ticker(symbol).await {
@@ -57,7 +54,6 @@ impl PriceProvider for ExchangePriceProvider {
     }
 }
 
-// ── Auto PriceProvider ──
 
 pub struct AutoExchangePriceProvider {
     exchange_registry: Arc<Exchanges>,
@@ -81,7 +77,7 @@ impl AutoExchangePriceProvider {
 #[async_trait]
 impl PriceProvider for AutoExchangePriceProvider {
     async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64> {
-        // Try kline engine first
+
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine
                 .get_klines_async(exchange, symbol, Timeframe::M1)
@@ -95,7 +91,7 @@ impl PriceProvider for AutoExchangePriceProvider {
             }
         }
 
-        // Fallback to exchange ticker
+
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key)?;
         match ex.get_ticker(symbol).await {

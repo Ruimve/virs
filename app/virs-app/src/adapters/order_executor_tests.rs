@@ -1,5 +1,3 @@
-//! Unit tests for adapters/order_executor.rs
-
 use crate::adapters::order_executor::convert_pe_event;
 use chrono::Utc;
 use uuid::Uuid;
@@ -139,7 +137,7 @@ fn o1_5_convert_risk_alert() {
 
 #[test]
 fn o1_6_convert_position_opened_none() {
-    // PositionOpened is not mapped to OrderEvent → None
+
     let pos = virs_types::position::Position {
         id: Uuid::new_v4(),
         strategy_id: None,

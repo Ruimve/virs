@@ -1,9 +1,3 @@
-//! Position persistence layer — PostgreSQL implementation.
-//!
-//! 仅保留 `pe_positions` 表用于引擎重启后快速恢复内存仓位状态。
-//! 订单（pe_orders）、成交（pe_trades）、PnL 快照（pe_pnl_snapshots）、事件（pe_events）
-//! 已删除：业务数据由 `qd_auto_trades`/`qd_grid_trades` 承载，引擎运行时状态在内存中维护。
-
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -12,21 +6,15 @@ use virs_types::enums::{PositionSide, PositionStatus};
 use virs_types::position::Position;
 use virs_error::VirsResult;
 
-// ============================================================================
-// PositionPersistence trait
-// ============================================================================
 
 #[async_trait::async_trait]
 pub trait PositionPersistence: Send + Sync {
-    /// 写入/更新仓位。
+
     async fn upsert_position(&self, pos: &Position) -> VirsResult<()>;
-    /// 获取所有未平仓仓位（用于重启恢复）。
+
     async fn get_open_positions(&self) -> VirsResult<Vec<Position>>;
 }
 
-// ============================================================================
-// Persistence
-// ============================================================================
 
 pub struct Persistence {
     db: PgPool,
@@ -50,9 +38,7 @@ impl PositionPersistence for Persistence {
 }
 
 impl Persistence {
-    // ===================================================================
-    // Position CRUD
-    // ===================================================================
+
 
     async fn upsert_position_impl(&self, pos: &Position) -> VirsResult<()> {
         let side_str = format!("{:?}", pos.side);
@@ -129,9 +115,6 @@ impl Persistence {
     }
 }
 
-// ============================================================================
-// 内部 Row 类型
-// ============================================================================
 
 #[derive(Debug, sqlx::FromRow)]
 struct PositionRow {

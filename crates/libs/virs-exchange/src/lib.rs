@@ -1,26 +1,15 @@
-//! Exchange adapter layer.
-//!
-//! This crate provides:
-//! - Application-level `Exchange` trait (wrapping ccxt)
-//! - `CcxtAdapter` — adapts ccxt Exchange to application Exchange trait
-//! - `Exchanges` — registry for named exchange instances
-//! - `PaperExchangeAdapter` — paper trading adapter for Position Engine
-//! - `CcxtExchangeAdapter` — real exchange adapter for Position Engine
-
 pub mod adapter;
 pub mod paper;
 pub mod pe_adapter;
 pub mod registry;
 
-// Re-export key types
+
 pub use adapter::CcxtAdapter;
 pub use paper::PaperExchangeAdapter;
 pub use pe_adapter::CcxtExchangeAdapter;
 pub use registry::Exchanges;
 
-// ============================================================
-// Test modules (_tests suffix pattern)
-// ============================================================
+
 #[cfg(test)]
 mod adapter_tests;
 #[cfg(test)]
@@ -32,14 +21,13 @@ use async_trait::async_trait;
 use virs_error::ExchangeError;
 use virs_models::*;
 
-/// Unified exchange trait — adapter to the ccxt layer.
-/// All exchange implementations must implement this trait.
+
 #[async_trait]
 pub trait Exchange: Send + Sync {
     fn name(&self) -> &str;
     fn market_type(&self) -> MarketType;
 
-    // ---- Market Data ----
+
     async fn get_ticker(&self, symbol: &str) -> Result<Ticker, ExchangeError>;
     async fn get_klines(
         &self,
@@ -58,7 +46,7 @@ pub trait Exchange: Send + Sync {
     async fn get_order_book(&self, symbol: &str, depth: u32) -> Result<OrderBook, ExchangeError>;
     async fn get_balances(&self) -> Result<Vec<Balance>, ExchangeError>;
 
-    // ---- Trading ----
+
     async fn place_order(
         &self,
         symbol: &str,
@@ -85,12 +73,12 @@ pub trait Exchange: Send + Sync {
     async fn get_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError>;
     async fn get_open_orders(&self, symbol: Option<&str>) -> Result<Vec<Order>, ExchangeError>;
 
-    // ---- Market Info ----
+
     async fn get_symbols(&self) -> Result<Vec<String>, ExchangeError>;
     async fn get_min_qty(&self, symbol: &str) -> Result<f64, ExchangeError>;
     async fn ping(&self) -> Result<bool, ExchangeError>;
 
-    // ---- Perpetual Contracts ----
+
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> Result<(), ExchangeError>;
     async fn get_positions(&self, symbol: Option<&str>) -> Result<Vec<ExchangePosition>, ExchangeError>;
     async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError>;
@@ -104,15 +92,10 @@ pub trait Exchange: Send + Sync {
     async fn create_listen_key(&self) -> Result<String, ExchangeError>;
     async fn keepalive_listen_key(&self, listen_key: &str) -> Result<(), ExchangeError>;
 
-    // ---- Account ----
+
     async fn get_api_restrictions(&self) -> Result<virs_ccxt::ApiRestrictions, ExchangeError>;
 
-    // ---- WebSocket API ----
-    /// 启动基于 listenKey 的订单 WebSocket（合约用户数据流）。
-    ///
-    /// 实现内部完成 listenKey 创建/复用 + WS 客户端构造与启动，返回事件 receiver。
-    /// `listen_key_hint` 传入已缓存的 listenKey 可避免重复创建。
-    /// 不支持时返回 `Err`。
+
     async fn start_listenkey_order_ws(
         &self,
         listen_key_hint: Option<&str>,

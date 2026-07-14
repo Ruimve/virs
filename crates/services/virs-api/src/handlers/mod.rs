@@ -1,5 +1,3 @@
-//! API handlers — re-exports all handler modules.
-
 pub mod ai;
 pub mod ai_credentials;
 pub mod auth;

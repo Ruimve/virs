@@ -1,5 +1,3 @@
-//! Integration tests for virs-bot — cross-module chain verification.
-
 use virs_bot::auto::ai::{AutoAction, AutoDecision};
 use virs_bot::auto::strategy::{
     compute_cooldown_secs, compute_position_pct, compute_stop_loss, compute_take_profit,
@@ -12,7 +10,6 @@ use virs_bot::grid::utils::prompt::format_bars_outside;
 use uuid::Uuid;
 use virs_types::grid_port::GridBotConfig;
 
-// ── helpers ────────────────────────────────────────────────
 
 fn make_bot(upper: f64, lower: f64, count: i32) -> GridBotConfig {
     GridBotConfig {
@@ -37,11 +34,10 @@ fn make_bot(upper: f64, lower: f64, count: i32) -> GridBotConfig {
     }
 }
 
-// ── INT-1: Strategy chain ──────────────────────────────────
 
 #[test]
 fn int_1_1_stop_loss_take_profit_consistency() {
-    // For a long position: stop_loss < entry < take_profit
+
     let entry = 100.0;
     let atr = 2.0;
     let sl = compute_stop_loss(entry, "long", atr);
@@ -53,19 +49,19 @@ fn int_1_1_stop_loss_take_profit_consistency() {
 
 #[test]
 fn int_1_2_trailing_stop_never_worsens() {
-    // Trailing stop should only move in favorable direction
+
     let entry = 100.0;
     let atr = 2.0;
     let initial_stop = compute_stop_loss(entry, "long", atr);
 
-    // Price moves up significantly
+
     let new_stop_1 = compute_trailing_stop(entry, 105.0, "long", atr, initial_stop);
     assert!(
         new_stop_1 >= initial_stop,
         "trailing stop should never decrease"
     );
 
-    // Price moves up more — trailing should not worsen
+
     let new_stop_2 = compute_trailing_stop(entry, 103.0, "long", atr, new_stop_1);
     assert!(
         new_stop_2 >= new_stop_1,
@@ -75,17 +71,16 @@ fn int_1_2_trailing_stop_never_worsens() {
 
 #[test]
 fn int_1_3_position_pct_full_chain() {
-    // Simulate the full risk management chain:
-    // High ADX → base 80%, 2 consecutive losses → *0.5, high funding → *0.5
-    let pct = compute_position_pct(30.0, 2, 0.003);
-    assert_eq!(pct, 20.0); // 80 * 0.5 * 0.5 = 20
 
-    // After cooldown, fewer losses → higher position
+
+    let pct = compute_position_pct(30.0, 2, 0.003);
+    assert_eq!(pct, 20.0);
+
+
     let pct_after = compute_position_pct(30.0, 0, 0.0);
     assert_eq!(pct_after, 80.0);
 }
 
-// ── INT-2: Auto AI chain ───────────────────────────────────
 
 #[test]
 fn int_2_1_auto_action_roundtrip() {
@@ -98,7 +93,7 @@ fn int_2_1_auto_action_roundtrip() {
     ];
     for action_str in actions {
         let action = AutoAction::from_str(action_str);
-        // from_str → as_str should be consistent for known actions
+
         if action_str == "unknown_action" {
             assert_eq!(action, AutoAction::Hold);
             assert_eq!(action.as_str(), "hold");
@@ -126,21 +121,20 @@ fn int_2_2_auto_decision_json_roundtrip() {
     let decision = AutoDecision::from_json(&json);
     assert_eq!(decision.action, AutoAction::OpenLong);
 
-    // Verify the action can round-trip back to string
+
     assert_eq!(decision.action.as_str(), "open_long");
 
-    // Stop loss and take profit should be consistent with strategy calculations
+
     if let (Some(sl), Some(tp)) = (decision.stop_loss, decision.take_profit) {
         let computed_sl = compute_stop_loss(100000.0, "long", 2000.0);
         let computed_tp = compute_take_profit(100000.0, "long", 2000.0);
         assert!(sl < 100000.0, "stop_loss below entry");
         assert!(tp > 100000.0, "take_profit above entry");
-        // Computed values should also be consistent
+
         assert!(computed_sl < computed_tp);
     }
 }
 
-// ── INT-3: Grid AI chain ───────────────────────────────────
 
 #[test]
 fn int_3_1_grid_action_roundtrip() {
@@ -179,19 +173,18 @@ fn int_3_2_grid_decision_parse_chain() {
     assert!((decision.upper_price - 110.0).abs() < 1e-10);
     assert!((decision.lower_price - 90.0).abs() < 1e-10);
 
-    // Use the parsed prices to create a bot config and calculate levels
+
     let bot = make_bot(decision.upper_price, decision.lower_price, decision.grid_count);
     let levels = calculate_levels(&bot, 100.0);
     assert_eq!(levels.len(), 10);
 
-    // Verify all levels have valid buy/sell sides
+
     for level in &levels {
         assert!(level.side == "buy" || level.side == "sell");
         assert!(level.sell_price > level.buy_price);
     }
 }
 
-// ── INT-4: Grid lifecycle chain ────────────────────────────
 
 #[test]
 fn int_4_1_calculate_levels_then_reset() {
@@ -199,7 +192,7 @@ fn int_4_1_calculate_levels_then_reset() {
     let levels = calculate_levels(&bot, 100.0);
     assert_eq!(levels.len(), 5);
 
-    // Simulate trading: fill some orders
+
     let traded: Vec<GridLevel> = levels
         .iter()
         .map(|l| {
@@ -211,7 +204,7 @@ fn int_4_1_calculate_levels_then_reset() {
         })
         .collect();
 
-    // Reset for relist
+
     let reset: Vec<GridLevel> = traded
         .iter()
         .map(|l| l.reset_for_relist())
@@ -221,14 +214,14 @@ fn int_4_1_calculate_levels_then_reset() {
         assert!(!level.buy_filled);
         assert!((level.hold_quantity - 0.0).abs() < 1e-10);
         assert!(level.buy_order_id.is_none());
-        // Config preserved
+
         assert!(level.sell_price > level.buy_price);
     }
 }
 
 #[test]
 fn int_4_2_format_stop_take_with_position_pct() {
-    // Simulate risk management: compute position, then format SL/TP for display
+
     let pct = compute_position_pct(25.0, 0, 0.0);
     assert_eq!(pct, 80.0);
 
@@ -240,25 +233,22 @@ fn int_4_2_format_stop_take_with_position_pct() {
     assert!(display.contains("止盈"));
 }
 
-// ── INT-5: Cooldown + position chain ───────────────────────
 
 #[test]
 fn int_5_1_cooldown_then_position_pct() {
-    // After a stop_loss on same side, cooldown applies
-    let cooldown = compute_cooldown_secs("long", "stop_loss", "long");
-    assert_eq!(cooldown, 1800); // 30 min
 
-    // During cooldown, position would be 0% (no new trade)
-    // After cooldown, position is computed normally
+    let cooldown = compute_cooldown_secs("long", "stop_loss", "long");
+    assert_eq!(cooldown, 1800);
+
+
     let pct = compute_position_pct(25.0, 0, 0.0);
     assert_eq!(pct, 80.0);
 
-    // After stop_loss with consecutive losses, position is reduced
+
     let pct_after_loss = compute_position_pct(25.0, 2, 0.0);
-    assert_eq!(pct_after_loss, 40.0); // 80 * 0.5
+    assert_eq!(pct_after_loss, 40.0);
 }
 
-// ── INT-6: format_bars_outside usage ───────────────────────
 
 #[test]
 fn int_6_1_format_bars_outside_all_cases() {

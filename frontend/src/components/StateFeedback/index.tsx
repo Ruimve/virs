@@ -4,7 +4,7 @@ import { Spinner } from '@/components/Icon';
 export interface StateFeedbackProps {
   type: 'loading' | 'empty' | 'error' | 'center-loading';
   text?: string;
-  /** Custom icon — only used when type is 'loading'. Ignored by other types. */
+
   icon?: ReactNode;
 }
 
@@ -32,7 +32,7 @@ export const StateFeedback = memo(({ type, text, icon }: StateFeedbackProps) => 
     );
   }
 
-  // error
+
   return (
     <div className="h-full flex items-center justify-center text-danger-text text-sm">
       {text || '发生错误'}

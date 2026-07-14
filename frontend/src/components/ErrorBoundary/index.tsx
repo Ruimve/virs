@@ -3,7 +3,7 @@ import { Button } from '@/components/Button';
 
 export interface ErrorBoundaryProps {
   children: React.ReactNode;
-  /** Custom fallback render function. Receives the error and a reset callback. */
+
   fallback?: (error: Error, reset: () => void) => ReactNode;
 }
 
@@ -20,7 +20,7 @@ export class ErrorBoundary extends ReactComponent<ErrorBoundaryProps, ErrorBound
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Log to console for production debugging — wire up Sentry/other reporting here
+
     console.error('[ErrorBoundary]', error, errorInfo.componentStack);
   }
 

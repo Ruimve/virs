@@ -7,7 +7,7 @@ export interface PanelProps {
   empty?: boolean;
   emptyText?: string;
   className?: string;
-  /** Set to false to disable the divide-y separator between items. Default: true */
+
   divided?: boolean;
 }
 

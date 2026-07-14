@@ -1,5 +1,3 @@
-//! Market data providers — kline fetching, indicator computation, balance queries.
-
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -12,7 +10,7 @@ use virs_models::Kline;
 use virs_types::bot::{AccountBalance, MarketDataProvider, MarketSnapshot};
 use virs_types::exchange_pe::ExchangePe;
 
-/// Convert a virs-market Candle to virs-models Kline.
+
 pub fn candle_to_kline(c: &virs_market::Candle) -> Kline {
     Kline {
         open_time: c.open_time,
@@ -30,7 +28,6 @@ pub fn candle_to_kline(c: &virs_market::Candle) -> Kline {
     }
 }
 
-// ── Grid MarketDataProvider ──
 
 pub struct ExchangeMarketDataProvider {
     exchange_registry: Arc<Exchanges>,
@@ -67,7 +64,7 @@ impl ExchangeMarketDataProvider {
         start_ms: i64,
         required: bool,
     ) -> Option<Vec<Kline>> {
-        // Try kline engine cache first
+
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine.get_klines_async(exchange, symbol, timeframe).await {
                 if candles.len() >= min_count {
@@ -76,7 +73,7 @@ impl ExchangeMarketDataProvider {
             }
         }
 
-        // Fallback to REST API
+
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key);
         match ex {
@@ -279,7 +276,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
     }
 
     async fn get_account_balance(&self, exchange: &str) -> AccountBalance {
-        // Paper mode: use PE exchange for simulated balance
+
         if let Some(ref pe_ex) = self.pe_exchange {
             match pe_ex.get_balance().await {
                 Ok(b) => {
@@ -295,7 +292,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             }
         }
 
-        // Real mode: use Exchanges
+
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = match self.exchange_registry.get(&exchange_key) {
             Some(e) => e,
@@ -322,7 +319,6 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
     }
 }
 
-// ── Auto MarketDataProvider ──
 
 pub struct AutoExchangeMarketDataProvider {
     exchange_registry: Arc<Exchanges>,
@@ -359,7 +355,7 @@ impl AutoExchangeMarketDataProvider {
         start_ms: i64,
         required: bool,
     ) -> Option<Vec<Kline>> {
-        // Try kline engine cache first
+
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine.get_klines_async(exchange, symbol, timeframe).await {
                 if candles.len() >= min_count {
@@ -368,7 +364,7 @@ impl AutoExchangeMarketDataProvider {
             }
         }
 
-        // Fallback to REST API
+
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key);
         match ex {
@@ -555,7 +551,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             ind.current_price
         };
 
-        // Get min qty
+
         let min_qty = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
             match ex.get_min_qty(symbol).await {
                 Ok(q) => q,
@@ -573,7 +569,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             0.0
         };
 
-        // Get liquidation price (when has position)
+
         let liquidation_price = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
             match ex.get_positions(Some(symbol)).await {
                 Ok(positions) => positions
@@ -597,7 +593,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
     }
 
     async fn get_account_balance(&self, exchange: &str) -> AccountBalance {
-        // Paper mode: use PE exchange
+
         if let Some(ref pe_ex) = self.pe_exchange {
             match pe_ex.get_balance().await {
                 Ok(b) => {
@@ -613,7 +609,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             }
         }
 
-        // Real mode
+
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = match self.exchange_registry.get(&exchange_key) {
             Some(e) => e,

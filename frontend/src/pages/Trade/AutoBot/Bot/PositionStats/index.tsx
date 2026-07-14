@@ -10,12 +10,6 @@ interface Props {
   latestPrice: number;
 }
 
-// ── 字体规范（全页面统一） ──────────────────────────────
-// Hero value:   text-xl font-mono font-semibold tabular-nums (20px)
-// Primary value: text-sm font-mono tabular-nums (14px)
-// Label:        text-caption uppercase tracking-wider text-on-surface-tertiary
-// Sub text:     text-2xs text-on-surface-muted
-// ────────────────────────────────────────────────────────
 
 export const PositionStats = memo(({ bot, latestPrice }: Props) => {
   const { position } = usePositionContext();
@@ -25,7 +19,7 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
     [position],
   );
 
-  // ── 前端实时计算（不依赖 position WS 的 pnl 字段） ──
+
   const unrealizedPnl = useMemo(() => {
     if (!hasPosition || latestPrice <= 0) return 0;
     const dir = position!.side === 'long' ? 1 : -1;
@@ -42,9 +36,9 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
 
   return (
     <div className="border-b border-line-subtle">
-      {/* ── 第一区：账户概览（Hero） ── */}
+      {}
       <div className="px-4 py-3 flex items-center gap-6">
-        {/* 账户余额 - Hero number */}
+        {}
         <div className="shrink-0">
           <div className="text-caption uppercase tracking-wider text-on-surface-tertiary mb-0.5">
             账户余额
@@ -54,10 +48,10 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
           </div>
         </div>
 
-        {/* 分隔线 */}
+        {}
         <div className="h-10 w-px bg-line-subtle shrink-0" />
 
-        {/* 保证金三列 */}
+        {}
         <div className="flex items-center gap-5 flex-1 min-w-0">
           <div>
             <div className="text-caption uppercase tracking-wider text-on-surface-tertiary mb-0.5">
@@ -86,7 +80,7 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
         </div>
       </div>
 
-      {/* ── 第二区：仓位 + 行情 ── */}
+      {}
       <div className="px-4 py-2 border-t border-line-subtle/50 grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-1.5">
         <Stat label="最新价">
           <FlashPrice price={latestPrice} className="text-on-surface" />
@@ -133,7 +127,7 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
         </Stat>
       </div>
 
-      {/* ── 第三区：Bot 配置 ── */}
+      {}
       <div className="px-4 py-2 border-t border-line-subtle/50 grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-1.5">
         <Stat label="杠杆">
           <span className="text-on-surface">{bot.leverage}x</span>

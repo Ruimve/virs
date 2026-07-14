@@ -4,9 +4,6 @@ use crate::ExchangeClient;
 use std::sync::Arc;
 use virs_types::{OrderStatus, PositionSide};
 
-// ============================================================
-// 消息解析 (3 tests)
-// ============================================================
 
 #[test]
 fn test_parse_invalid_json() {
@@ -16,7 +13,7 @@ fn test_parse_invalid_json() {
 
 #[test]
 fn test_parse_non_order_event() {
-    // ACCOUNT_UPDATE 事件没有 "o" 字段
+
     let json = r#"{
         "e": "ACCOUNT_UPDATE",
         "E": 1713900000000,
@@ -25,13 +22,13 @@ fn test_parse_non_order_event() {
 
     let msg: BinanceOrderMessage = serde_json::from_str(json).unwrap();
     let event = msg.to_ws_feed_event();
-    // 没有订单数据，应该返回 None
+
     assert!(event.is_none());
 }
 
 #[test]
 fn test_parse_listen_key_expired() {
-    // listenKey 过期事件
+
     let json = r#"{
         "e": "listenKeyExpired",
         "E": 1713900000000
@@ -44,8 +41,8 @@ fn test_parse_listen_key_expired() {
 
 #[test]
 fn test_parse_order_trade_update_single_stream() {
-    // 永续合约 ORDER_TRADE_UPDATE 单流格式
-    // to_ws_feed_event() 应正确处理 ORDER_TRADE_UPDATE 事件。
+
+
     let json = r#"{
         "e": "ORDER_TRADE_UPDATE",
         "E": 1713900000000,
@@ -78,7 +75,7 @@ fn test_parse_order_trade_update_single_stream() {
 
     let msg: BinanceOrderMessage = serde_json::from_str(json).unwrap();
 
-    // to_ws_feed_event() 应正确转换为 WsFeedEvent
+
     let event = msg.to_ws_feed_event();
     assert!(
         event.is_some(),
@@ -106,9 +103,6 @@ fn test_parse_order_trade_update_single_stream() {
     }
 }
 
-// ============================================================
-// 状态映射 (6 tests)
-// ============================================================
 
 #[test]
 fn test_order_status_mapping_all_variants() {
@@ -154,11 +148,7 @@ fn test_order_status_mapping_all_variants() {
     }
 }
 
-// ============================================================
-// WsFeedEvent 转换 (5 tests)
-// ============================================================
 
-/// 辅助函数：从 WsFeedEvent 中提取 OrderUpdate 字段
 fn unwrap_order_update(
     event: WsFeedEvent,
 ) -> (String, String, OrderStatus, f64, f64, f64, f64, f64) {
@@ -245,7 +235,7 @@ fn test_to_ws_feed_event_unknown_status() {
 
 #[test]
 fn test_to_ws_feed_event_remaining_fallback() {
-    // remaining_qty 为 None 时，使用 orig_qty - filled_qty
+
     let inner = BinanceOrderInner {
         symbol: "BTCUSDT".to_string(),
         client_order_id: "test".to_string(),
@@ -255,7 +245,7 @@ fn test_to_ws_feed_event_remaining_fallback() {
         order_id: 123456789,
         orig_qty: "10.0".to_string(),
         filled_qty: "3.0".to_string(),
-        remaining_qty: None, // None -> fallback
+        remaining_qty: None,
         last_fill_price: "65000.00".to_string(),
         avg_fill_price: None,
         last_fill_qty: "3.0".to_string(),
@@ -271,9 +261,6 @@ fn test_to_ws_feed_event_remaining_fallback() {
     assert!((remaining - 7.0).abs() < 0.001, "remaining = 10 - 3 = 7");
 }
 
-// ============================================================
-// 构造函数和状态 (2 tests)
-// ============================================================
 
 #[test]
 fn test_new_perpetual() {
@@ -301,9 +288,6 @@ fn test_new_perpetual() {
     );
 }
 
-// ============================================================
-// 辅助函数
-// ============================================================
 
 fn make_test_inner(
     status: &str,

@@ -1,9 +1,3 @@
-//! PositionEngine — position management engine.
-//!
-//! Manages positions, orders, PnL tracking via 2 parallel loops:
-//! - command_loop: command dispatch
-//! - ws_feed_loop: WebSocket order update consumption
-
 use std::sync::{Arc, Mutex, RwLock};
 
 use chrono::Utc;
@@ -23,18 +17,7 @@ use virs_error::{VirsError, VirsResult};
 use crate::persistence::PositionPersistence;
 use crate::tracker::PnlTracker;
 
-/// Recover from lock poisoning by accessing the inner data anyway.
-///
-/// **WARNING**: Lock poisoning means a thread panicked while holding the lock,
-/// and the protected data may be in an inconsistent state. In a trading system,
-/// continuing with stale/inconsistent state can lead to duplicate orders
-/// or balance errors.
-///
-/// We log at `error!` level so monitoring can detect this and trigger an alert.
-/// The engine should be restarted as soon as possible after lock poisoning.
-///
-/// This function PANICS on lock poisoning — returning dirty data is more
-/// dangerous than crashing in a trading system.
+
 fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
     lock.unwrap_or_else(|_| {
         error!(
@@ -67,9 +50,6 @@ macro_rules! persist {
     };
 }
 
-// ============================================================================
-// EngineInner
-// ============================================================================
 
 pub(crate) struct EngineInner {
     pub(crate) exchange: Arc<dyn ExchangePe>,
@@ -80,16 +60,16 @@ pub(crate) struct EngineInner {
     pub(crate) tracker: Mutex<PnlTracker>,
     pub(crate) state: RwLock<EngineState>,
     pub(crate) exchange_order_id_index: DashMap<String, Uuid>,
-    /// client_order_id → order UUID 索引
-    /// 用于 WS 事件通过 client_order_id 匹配本地订单（双索引 fallback）
+
+
     pub(crate) client_order_id_index: DashMap<String, Uuid>,
     pub(crate) position_id_index: DashMap<Uuid, (String, String, PositionSide)>,
-    /// 平仓订单 REST 调用超时（从 TimeConfig.close_order_timeout_secs 注入）。
-    /// 防止交易所 REST 调用卡死导致 PE engine loop 阻塞。
+
+
     pub(crate) close_order_timeout: Duration,
-    /// persist! 宏最大重试次数（从 TimeConfig.persist_max_retries 注入）
+
     pub(crate) persist_max_retries: u32,
-    /// persist! 宏重试退避基数毫秒（从 TimeConfig.persist_retry_base_ms 注入）
+
     pub(crate) persist_retry_base_ms: u64,
 }
 
@@ -115,9 +95,6 @@ impl EngineInner {
     }
 }
 
-// ============================================================================
-// PositionEngine
-// ============================================================================
 
 pub struct PositionEngine {
     inner: Arc<EngineInner>,
@@ -126,8 +103,8 @@ pub struct PositionEngine {
 }
 
 impl Clone for PositionEngine {
-    /// 手动实现 Clone：cmd_rx 不可克隆，clone 时置为 None。
-    /// cmd_rx 仅在 run() 中 take() 一次使用，clone 出的实例仅用于查询，不需要 cmd_rx。
+
+
     fn clone(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -138,11 +115,8 @@ impl Clone for PositionEngine {
 }
 
 impl PositionEngine {
-    /// 创建新的 PositionEngine 实例。
-    ///
-    /// `close_order_timeout` — 平仓订单 REST 调用超时，从 TimeConfig 注入。
-    /// `persist_max_retries` — persist! 宏最大重试次数，从 TimeConfig 注入。
-    /// `persist_retry_base_ms` — persist! 宏重试退避基数（毫秒），从 TimeConfig 注入。
+
+
     pub fn new(
         exchange: Box<dyn ExchangePe>,
         persistence: Box<dyn PositionPersistence>,
@@ -177,22 +151,22 @@ impl PositionEngine {
         }
     }
 
-    /// 获取命令发送端。
+
     pub fn command_sender(&self) -> mpsc::Sender<EngineCommand> {
         self.cmd_tx.clone()
     }
 
-    /// 订阅引擎事件。
+
     pub fn subscribe_events(&self) -> broadcast::Receiver<EngineEvent> {
         self.inner.event_tx.subscribe()
     }
 
-    /// 获取事件广播器的 sender（用于 EngineManager 暴露给 API 层订阅）
+
     pub fn event_sender(&self) -> broadcast::Sender<EngineEvent> {
         self.inner.event_tx.clone()
     }
 
-    /// 获取所有仓位。
+
     pub fn get_all_positions(&self) -> Vec<Position> {
         self.inner
             .positions
@@ -201,7 +175,7 @@ impl PositionEngine {
             .collect()
     }
 
-    /// 按 symbol 查询当前 Open 状态的仓位（用于 bot 决策前直接查询，避免事件缓存失效）。
+
     pub fn get_open_position_by_symbol(&self, symbol: &str) -> Option<Position> {
         self.inner
             .positions
@@ -211,23 +185,18 @@ impl PositionEngine {
             .next()
     }
 
-    /// 获取内部 Exchange 的共享引用。
+
     pub fn exchange(&self) -> Arc<dyn ExchangePe> {
         Arc::clone(&self.inner.exchange)
     }
 
-    /// 启动引擎主循环。
-    pub async fn run(&mut self) -> VirsResult<()> {
-        // 表结构由 migrations/init.sql 统一管理，应用启动时已执行。
-        // VIRS is Hedge-only. Position mode is not stored or queried at runtime —
-        // the frontend wizard validates Hedge mode when credentials are saved.
-        // resolve_position_side_for_hedge auto-resolves position_side for callers
-        // that omit it (e.g. grid bot PlaceOrder).
 
-        // 1. 从数据库恢复状态
+    pub async fn run(&mut self) -> VirsResult<()> {
+
+
         self.recover_state().await?;
 
-        // 2. 订阅 WebSocket 成交回报
+
         let symbols: Vec<String> = self
             .inner
             .positions
@@ -242,11 +211,11 @@ impl PositionEngine {
             .subscribe_order_updates(&unique_symbol_refs)
             .await?;
 
-        // 3. 设置状态为 Running
+
         self.inner.set_state(EngineState::Running);
         info!("Position engine started");
 
-        // 4. 启动 2 个并行循环：command_loop + ws_feed_loop
+
         let cmd_rx = self
             .cmd_rx
             .take()
@@ -256,17 +225,16 @@ impl PositionEngine {
         let mut cmd_handle = tokio::spawn(command_loop(inner.clone(), cmd_rx));
         let mut ws_handle = tokio::spawn(ws_feed_loop(inner.clone(), ws_feed_rx));
 
-        // Wait for any task to complete (error path)
+
         let _ = tokio::select! {
             r = &mut cmd_handle => r,
             r = &mut ws_handle => r,
         };
 
-        // Signal all loops to stop
+
         self.inner.set_state(EngineState::ShuttingDown);
 
-        // ws_feed_loop exits within ~1s via select! timeout.
-        // command_loop exits when all cmd_tx senders are dropped (engine_manager handles this).
+
         let timeout = Duration::from_secs(5);
         let _ = tokio::time::timeout(timeout, async {
             let _ = tokio::join!(cmd_handle, ws_handle);
@@ -277,17 +245,12 @@ impl PositionEngine {
         Ok(())
     }
 
-    /// Signal the engine to stop gracefully.
-    /// Sets state to ShuttingDown, which causes ws_feed_loop to break
-    /// on its next tick. command_loop exits when cmd_tx senders are dropped.
+
     pub fn stop(&self) {
         self.inner.set_state(EngineState::ShuttingDown);
         info!("Position engine stop requested");
     }
 
-    // -----------------------------------------------------------------------
-    // 状态恢复
-    // -----------------------------------------------------------------------
 
     async fn recover_state(&self) -> VirsResult<()> {
         let open_positions = self.inner.persistence.get_open_positions().await?;
@@ -297,8 +260,7 @@ impl PositionEngine {
             self.inner.positions.insert(key, pos.clone());
         }
 
-        // 同步恢复的仓位到交易所内存状态（仅 Paper 模式需要，真实交易所空实现）
-        // 避免 PE 误判"本地有但交易所没有" → 强制关闭本地仓位
+
         let exchange_positions: Vec<ExchangePosition> = open_positions
             .iter()
             .map(|p| ExchangePosition {
@@ -342,7 +304,7 @@ impl PositionEngine {
                                 self.inner.persist_retry_base_ms
                             );
                             self.inner.positions.insert(key, pos.clone());
-                            // 发出 PositionUpdated 事件，让前端 WS 和 AutoWorker 感知仓位已恢复
+
                             self.inner
                                 .emit_event(EngineEvent::PositionUpdated { position: pos });
                         }
@@ -389,7 +351,7 @@ impl PositionEngine {
                                 self.inner.persist_retry_base_ms
                             );
                             self.inner.positions.insert(new_key, position.clone());
-                            // 外部发现的仓位也发出事件
+
                             self.inner.emit_event(EngineEvent::PositionOpened {
                                 position: position.clone(),
                             });
@@ -409,9 +371,6 @@ impl PositionEngine {
     }
 }
 
-// ============================================================================
-// command_loop
-// ============================================================================
 
 pub(crate) async fn command_loop(
     inner: Arc<EngineInner>,
@@ -478,9 +437,6 @@ pub(crate) async fn command_loop(
     }
 }
 
-// ============================================================================
-// ws_feed_loop
-// ============================================================================
 
 pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdateStream) {
     loop {
@@ -529,7 +485,7 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
     }
 }
 
-/// 处理 WebSocket 订单更新。
+
 pub(crate) async fn handle_ws_order_update(
     inner: &Arc<EngineInner>,
     exchange_order_id: &str,
@@ -544,15 +500,15 @@ pub(crate) async fn handle_ws_order_update(
     timestamp: chrono::DateTime<Utc>,
     ws_position_side: Option<PositionSide>,
 ) {
-    // 1. 查找本地 Order — 双索引匹配
+
     let (order_id, position_id, prev_filled, is_reduce_only) = {
-        // 优先用 exchange_order_id 匹配（精确，REST 返回后已建立）
+
         let order_id_opt = inner
             .exchange_order_id_index
             .get(exchange_order_id)
             .map(|r| *r.value());
 
-        // 未命中时用 client_order_id 匹配（fallback）
+
         let order_id = match order_id_opt {
             Some(id) => id,
             None => {
@@ -562,7 +518,7 @@ pub(crate) async fn handle_ws_order_update(
                         .get(cid)
                         .map(|r| *r.value())
                     {
-                        // 命中 client_order_id — 补注册 exchange_order_id 索引
+
                         inner
                             .exchange_order_id_index
                             .insert(exchange_order_id.to_string(), id);
@@ -609,14 +565,13 @@ pub(crate) async fn handle_ws_order_update(
         (order.id, order.position_id, order.filled, is_reduce_only)
     };
 
-    // Cache the position key once; it is stable for the lifetime of this call
-    // (only removed at the very end when a position fully closes).
+
     let pos_key_opt = inner
         .position_id_index
         .get(&position_id)
         .map(|r| r.value().clone());
 
-    // WS position_side mismatch check (uses cached key).
+
     if let Some(ref ws_ps) = ws_position_side {
         if let Some(ref pos_key) = pos_key_opt {
             let pos_side = &pos_key.2;
@@ -626,7 +581,7 @@ pub(crate) async fn handle_ws_order_update(
         }
     }
 
-    // 2. 更新 Order
+
     {
         if let Some(mut order) = inner.orders.get_mut(&order_id) {
             order.filled = filled;
@@ -639,8 +594,7 @@ pub(crate) async fn handle_ws_order_update(
         }
     }
 
-    // Clone the current order state once for reuse in trade event emission
-    // and position update below. The order is not modified after step 2.
+
     let current_order_opt = if matches!(
         status,
         OrderStatus::PartiallyFilled | OrderStatus::Filled
@@ -650,7 +604,7 @@ pub(crate) async fn handle_ws_order_update(
         None
     };
 
-    // 3. 部分成交或完全成交时创建 Trade 记录
+
     if matches!(status, OrderStatus::PartiallyFilled | OrderStatus::Filled) {
         let trade_fill = filled - prev_filled;
 
@@ -696,8 +650,7 @@ pub(crate) async fn handle_ws_order_update(
                 }
             };
 
-            // Validate price — a 0.0 price indicates WS data anomaly.
-            // Skip Trade construction to prevent 0.0 price propagation (same as REST path).
+
             if price <= 0.0 {
                 error!(
                     order_id = %order_id,
@@ -783,7 +736,7 @@ pub(crate) async fn handle_ws_order_update(
         }
     }
 
-    // 4. 订单完全成交时更新仓位
+
     if status.is_filled() {
         let pos_entry = match &pos_key_opt {
             Some(key) => inner.positions.get(key).map(|r| r.value().clone()),
@@ -851,9 +804,6 @@ pub(crate) async fn handle_ws_order_update(
     }
 }
 
-// ============================================================================
-// 命令处理函数
-// ============================================================================
 
 pub(crate) async fn handle_open_position(
     inner: &Arc<EngineInner>,
@@ -876,7 +826,7 @@ pub(crate) async fn handle_open_position(
     };
     let key = (exchange_name.clone(), symbol.clone(), side);
 
-    // If position already exists, append order to it (e.g. grid multi-level orders)
+
     if let Some(existing) = inner.positions.get(&key) {
         let position_id = existing.id;
         drop(existing);
@@ -911,7 +861,7 @@ pub(crate) async fn handle_open_position(
                 }
                 inner.orders.insert(order.id, order.clone());
 
-                // 如果订单已成交，发出 OrderFilled 事件
+
                 if order.filled > 0.0 {
                     match order.fill_price.filter(|p| *p > 0.0) {
                         Some(fill_price) => {
@@ -957,7 +907,7 @@ pub(crate) async fn handle_open_position(
         return;
     }
 
-    // Leverage is a critical trading parameter — must not be 0.
+
     if leverage == 0 {
         let msg = "leverage must be > 0".to_string();
         error!(symbol = %symbol, "open_position rejected: leverage is 0");
@@ -1034,13 +984,12 @@ pub(crate) async fn handle_open_position(
     match inner.exchange.place_order(params).await {
         Ok(mut order) => {
             order.reduce_only = reduce_only;
-            // 确保订单关联正确的 position_id（交易所 REST 可能不返回此字段）
+
             order.position_id = position_id;
             position.status = PositionStatus::Open;
             position.size = order.filled;
-            // fill_price is critical — a filled order without fill_price indicates
-            // a data integrity issue. Using 0.0 would cause zero-cost positions,
-            // infinite leverage capacity, and explosive PnL errors.
+
+
             let fill_price = if order.filled > 0.0 {
                 match order.fill_price {
                     Some(p) if p > 0.0 => p,
@@ -1051,17 +1000,15 @@ pub(crate) async fn handle_open_position(
                             "Order is filled but has no valid fill_price — \
                              refusing to update position to prevent data corruption."
                         );
-                        // Rollback: position was set to Open at line 1456, but
-                        // we cannot confirm a valid fill_price. Revert to Opening
-                        // to prevent a zero-cost Open position from entering the system.
+
+
                         position.status = PositionStatus::Opening;
                         return;
                     }
                 }
             } else {
-                // Order is not filled — entry_price is unknown.
-                // Using 0.0 would produce a zero-cost position, which is incorrect.
-                // Skip position update entirely; the order will be picked up when it fills.
+
+
                 match order.fill_price {
                     Some(p) if p > 0.0 => p,
                     _ => {
@@ -1107,8 +1054,7 @@ pub(crate) async fn handle_open_position(
                 position: position.clone(),
             });
 
-            // 如果订单已成交（市价单立即成交），发出 OrderFilled 事件
-            // 这是 AutoWorker 等待的事件，用于确认开仓并记录交易
+
             if order.filled > 0.0 {
                 match order.fill_price.filter(|p| *p > 0.0) {
                     Some(fill_price) => {
@@ -1213,14 +1159,12 @@ pub(crate) async fn handle_close_position(
     resolve_position_side_for_hedge(&mut params);
     let reduce_only = params.reduce_only;
 
-    // 超时保护：防止交易所 REST 调用卡死导致 PE engine loop 阻塞，
-    // 进而无法 emit OrderFailed 事件，bot 侧 pending_close 永远等不到响应。
-    // 超时值从 TimeConfig.close_order_timeout_secs 注入，可通过环境变量配置。
+
     let close_order_timeout = inner.close_order_timeout;
     match tokio::time::timeout(close_order_timeout, inner.exchange.place_order(params)).await {
         Ok(Ok(mut order)) => {
             order.reduce_only = reduce_only;
-            // 确保订单关联正确的 position_id（交易所 REST 可能不返回此字段）
+
             order.position_id = position_id;
             if let Some(ref eoid) = order.exchange_order_id {
                 inner.exchange_order_id_index.insert(eoid.clone(), order.id);
@@ -1230,7 +1174,7 @@ pub(crate) async fn handle_close_position(
             }
             inner.orders.insert(order.id, order.clone());
 
-            // 如果订单已成交，发出 OrderFilled 事件
+
             if order.filled > 0.0 {
                 match order.fill_price.filter(|p| *p > 0.0) {
                     Some(fill_price) => {
@@ -1255,8 +1199,7 @@ pub(crate) async fn handle_close_position(
                         });
                         info!(position_id = %position_id, symbol = %position.symbol, "Close order filled");
 
-                        // 市价单立即成交时，直接更新仓位状态为 Closed 并发出事件
-                        // 避免等待下一次对账才发现仓位已消失
+
                         let key = (
                             position.exchange.clone(),
                             position.symbol.clone(),
@@ -1354,10 +1297,7 @@ pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol:
     }
 }
 
-/// Resolves `position_side` from the order `side` + `reduce_only` when the
-/// caller omitted it. VIRS is Hedge-only — this is the only valid inference.
-/// Clears `reduce_only` afterwards: Binance Hedge mode uses positionSide
-/// (not reduceOnly) for position management, so reduceOnly is unnecessary.
+
 pub(crate) fn resolve_position_side_for_hedge(params: &mut PlaceOrderParams) {
     if params.position_side.is_none() {
         params.position_side = match (&params.side, params.reduce_only) {
@@ -1373,19 +1313,19 @@ pub(crate) fn resolve_position_side_for_hedge(params: &mut PlaceOrderParams) {
 pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: PlaceOrderParams) {
     resolve_position_side_for_hedge(&mut params);
 
-    // Auto-create position if not provided (e.g. from Grid bot PlaceOrder)
+
     let position_id = match params.position_id {
         Some(pid) => pid,
         None => {
             let pos_id = Uuid::new_v4();
-            // resolve_position_side_for_hedge has already resolved position_side
-            // from side+reduce_only. If it's still None here, that's a bug.
+
+
             let position_side = params.position_side
                 .expect("position_side must be resolved by resolve_position_side_for_hedge");
             let exchange_name = inner.exchange.name().to_string();
             let key = (exchange_name.clone(), params.symbol.clone(), position_side);
 
-            // Reuse existing position if one already exists for this key
+
             if let Some(existing) = inner.positions.get(&key) {
                 existing.id
             } else {

@@ -1,5 +1,3 @@
-//! Exchanges — manages named exchange instances.
-
 use crate::Exchange;
 use dashmap::DashMap;
 use std::sync::Arc;

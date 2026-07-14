@@ -4,7 +4,6 @@ use crate::adapter::binance::kline_ws::{
 };
 use crate::ws_types::KlineWsClient;
 
-// ========== 消息解析（5个） ==========
 
 #[test]
 fn test_parse_binance_kline_message() {
@@ -48,7 +47,7 @@ fn test_parse_binance_kline_message() {
     assert!(!data.kline.closed);
     assert_eq!(data.kline.quote_volume, "6532500.00");
 
-    // Closed kline assertion (merged from test_parse_binance_kline_closed)
+
     let json_closed = r#"{
         "stream": "btcusdt@kline_1m",
         "data": {
@@ -75,7 +74,7 @@ fn test_parse_binance_kline_message() {
     let data_closed = msg_closed.data.unwrap();
     assert!(data_closed.kline.closed);
 
-    // 单流格式（无 stream/data 包装）
+
     let json_flat = r#"{
         "e": "kline",
         "E": 1713900000,
@@ -159,12 +158,11 @@ fn test_parse_non_kline_event() {
         }
     }"#;
 
-    // trade 事件没有 "k" 字段，反序列化应该失败
+
     let result: Result<BinanceKlineMessage, _> = serde_json::from_str(json);
     assert!(result.is_err());
 }
 
-// ========== Candle 转换（4个） ==========
 
 #[test]
 fn test_to_candle_basic() {
@@ -199,7 +197,7 @@ fn test_to_candle_basic() {
     assert_eq!(candle.trades, 500);
     assert!(!candle.closed);
 
-    // Closed candle assertion (merged from test_to_candle_closed)
+
     let data_closed = BinanceKlineData {
         event_type: "kline".to_string(),
         event_time: 1713900000,
@@ -276,18 +274,16 @@ fn test_ws_symbol() {
     assert_eq!(data.ws_symbol(), "BTCUSDT");
 }
 
-// ========== Symbol 转换（3个） ==========
 
 #[test]
 fn test_binance_ws_symbol_basic() {
     assert_eq!(binance_ws_symbol("BTCUSDT"), "btcusdt");
-    // With slash (merged from test_binance_ws_symbol_with_slash)
+
     assert_eq!(binance_ws_symbol("BTC/USDT"), "btcusdt");
-    // Already lowercase (merged from test_binance_ws_symbol_lowercase)
+
     assert_eq!(binance_ws_symbol("btcusdt"), "btcusdt");
 }
 
-// ========== 构造函数和状态（2个） ==========
 
 #[test]
 fn test_new_perpetual() {
@@ -301,26 +297,25 @@ async fn test_subscribe_without_start() {
     let ws = KlineWs::new_perpetual(None);
     assert!(!ws.is_running());
 
-    // 不调用 start()，直接调用 subscribe
+
     ws.subscribe("BTCUSDT").await;
 
-    // 验证 subscriptions 包含正确的 stream name
+
     let subs = ws.handler.subscriptions.read().await;
     assert!(subs.contains(&"btcusdt@kline_1m".to_string()));
 
-    // 验证 symbol_map 包含映射
+
     let map = ws.handler.symbol_map.read().await;
     assert_eq!(map.get("btcusdt").unwrap(), "BTCUSDT");
 
-    // 客户端仍然没有运行
+
     assert!(!ws.is_running());
 }
 
-// ========== T8: event_time 延迟检测（2个） ==========
 
 #[test]
 fn t8_1_event_time_parsed_and_accessible() {
-    // T8: event_time (E field) must be parsed and accessible (no longer dead_code)
+
     let json = r#"{
         "stream": "btcusdt@kline_1m",
         "data": {
@@ -346,35 +341,32 @@ fn t8_1_event_time_parsed_and_accessible() {
 
     let msg: BinanceKlineMessage = serde_json::from_str(json).unwrap();
     let data = msg.into_kline_data().unwrap();
-    // event_time must be parsed correctly
+
     assert_eq!(data.event_time, 1713900000123);
 }
 
 #[test]
 fn t8_2_delay_threshold_is_5000ms() {
-    // T8: The delay threshold constant must be 5000ms (5 seconds)
+
     assert_eq!(KLINE_WS_DELAY_THRESHOLD_MS, 5_000);
 
-    // Verify delay calculation logic
+
     let event_time = 1713900000000_i64;
-    let local_now = 1713900006000_i64; // 6 seconds later
+    let local_now = 1713900006000_i64;
     let delay_ms = local_now - event_time;
     assert!(delay_ms > KLINE_WS_DELAY_THRESHOLD_MS);
 
-    // Below threshold
-    let local_now_ok = 1713900003000_i64; // 3 seconds later
+
+    let local_now_ok = 1713900003000_i64;
     let delay_ok = local_now_ok - event_time;
     assert!(delay_ok <= KLINE_WS_DELAY_THRESHOLD_MS);
 }
 
-// ============================================================
-// T8 FAIL fix: 单流格式 event_time 解析
-// ============================================================
 
 #[test]
 fn t8_3_single_stream_event_time_parsed() {
-    // T8 FAIL fix: 单流格式（无 stream/data 包装）必须正确解析 E 字段
-    // 此前 BinanceKlineMessage 缺少 #[serde(rename = "E")] 字段，event_time 恒为 0
+
+
     let json = r#"{
         "e": "kline",
         "E": 1713900000456,
@@ -397,7 +389,7 @@ fn t8_3_single_stream_event_time_parsed() {
 
     let msg: BinanceKlineMessage = serde_json::from_str(json).unwrap();
     let data = msg.into_kline_data().unwrap();
-    // T8 FAIL: 此前这里返回 0，现在应返回实际 E 字段值
+
     assert_eq!(
         data.event_time, 1713900000456,
         "single-stream format must parse E field — if this is 0, the T8 FAIL is still present"
@@ -406,7 +398,7 @@ fn t8_3_single_stream_event_time_parsed() {
 
 #[test]
 fn t8_4_single_stream_event_time_missing_defaults_zero() {
-    // T8 FAIL fix: 单流格式缺少 E 字段时，回退到 0（向后兼容）
+
     let json = r#"{
         "e": "kline",
         "s": "BTCUSDT",

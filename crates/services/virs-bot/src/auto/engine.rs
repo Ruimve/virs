@@ -1,5 +1,3 @@
-//! Auto engine — manages auto trading bot lifecycle.
-
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -14,7 +12,7 @@ use crate::auto::worker::AutoWorker;
 use virs_config::TimeConfig;
 use virs_types::position::EngineEvent;
 
-/// 全自动交易引擎
+
 pub struct AutoEngine {
     store: Arc<dyn AutoStore>,
     ai_service: Arc<AutoAiService>,
@@ -27,7 +25,7 @@ pub struct AutoEngine {
     workers: HashMap<Uuid, tokio::task::JoinHandle<()>>,
     shutdown_txs: HashMap<Uuid, mpsc::Sender<()>>,
     bot_symbols: HashMap<Uuid, String>,
-    /// T12: 时间配置（从环境变量加载，替代硬编码常量）
+
     time_config: TimeConfig,
 }
 

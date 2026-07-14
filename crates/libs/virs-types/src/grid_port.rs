@@ -1,11 +1,9 @@
-//! Grid bot port definitions — trait and associated types.
-
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use virs_error::VirsResult;
 
-/// 网格交易记录
+
 #[derive(Debug, Clone)]
 pub struct GridTradeRecord {
     pub id: Uuid,
@@ -20,7 +18,7 @@ pub struct GridTradeRecord {
     pub opened_at: DateTime<Utc>,
 }
 
-/// 网格 Bot 配置
+
 #[derive(Debug, Clone)]
 pub struct GridBotConfig {
     pub id: Uuid,
@@ -43,7 +41,7 @@ pub struct GridBotConfig {
     pub last_adjusted_at: Option<DateTime<Utc>>,
 }
 
-/// 网格数据存储端口
+
 #[async_trait]
 pub trait GridStore: Send + Sync {
     async fn load_running_bots(&self) -> VirsResult<Vec<GridBotConfig>>;

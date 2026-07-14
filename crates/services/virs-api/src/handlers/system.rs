@@ -1,5 +1,3 @@
-//! System-level handlers — paper mode, engine status, system metrics.
-
 use axum::{extract::State, Json};
 use sysinfo::{Disks, Networks, System};
 use virs_error::VirsError;
@@ -14,20 +12,20 @@ pub async fn paper_status(State(state): State<AppState>) -> Result<Json<ApiRespo
     }))))
 }
 
-/// 系统性能信息：CPU、内存、磁盘、网络、运行时长、负载、进程数
+
 pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
-    // CPU 使用率需要两次刷新之间的差值才能得到真实值
+
     let mut sys = System::new_all();
     sys.refresh_cpu_all();
     tokio::time::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL).await;
     sys.refresh_cpu_all();
 
-    // 内存、Swap 等即时信息
+
     sys.refresh_memory();
 
     let networks = Networks::new_with_refreshed_list();
 
-    // CPU
+
     let cpu_usage = if !sys.cpus().is_empty() {
         let total: f32 = sys.cpus().iter().map(|c| c.cpu_usage()).sum();
         total / sys.cpus().len() as f32
@@ -40,14 +38,14 @@ pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
         .first()
         .map(|c| c.brand().to_string())
         .unwrap_or(String::new());
-    // CPU 主频（MHz）
+
     let cpu_frequency_mhz = sys
         .cpus()
         .first()
         .map(|c| c.frequency())
         .unwrap_or(0);
 
-    // 内存
+
     let total_memory = sys.total_memory();
     let used_memory = sys.used_memory();
     let memory_usage = if total_memory > 0 {
@@ -56,17 +54,17 @@ pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
         0.0
     };
 
-    // 交换分区
+
     let total_swap = sys.total_swap();
     let used_swap = sys.used_swap();
 
-    // 系统负载（1/5/15 分钟）— 仅 Linux/macOS 有意义，Windows 返回 0
+
     let load_avg = System::load_average();
 
-    // 进程数
+
     let process_count = sys.processes().len();
 
-    // 磁盘
+
     let disks_info = Disks::new_with_refreshed_list();
     let disks: Vec<serde_json::Value> = disks_info
         .list()
@@ -84,9 +82,7 @@ pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
         })
         .collect();
 
-    // 网络：返回累计字节数和 IP 地址，速率由前端两次采样差值计算
-    // 过滤规则：① 排除已知虚拟接口前缀 ② 必须有可用 IP（排除 IPv4 link-local 169.254/16 和 IPv6 fe80::/10）
-    //           这样无网线连接的雷雳桥接 enX、无 IP 的 ap1/vmenet0 等都会被过滤掉
+
     let net_interfaces: Vec<serde_json::Value> = networks
         .list()
         .iter()
@@ -103,10 +99,10 @@ pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
         })
         .collect();
 
-    // 系统运行时长
+
     let uptime_secs = System::uptime();
 
-    // 主机名
+
     let host_name = System::host_name().unwrap_or(String::new());
     let os_name = System::name().unwrap_or(String::new());
     let os_version = System::os_version().unwrap_or(String::new());
@@ -142,36 +138,34 @@ pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
     }))))
 }
 
-/// 判断是否为物理网卡或容器主接口。
-/// 排除回环、Docker 网桥、veth 虚拟网卡、CNI/flannel 等容器网络虚拟接口，
-/// 以及 macOS 上的 AP/vmenet/vlan 等虚拟接口。
+
 fn is_physical_interface(name: &str) -> bool {
-    // 排除回环
+
     if name == "lo" {
         return false;
     }
-    // 排除 Docker 相关虚拟接口
+
     let docker_prefixes = [
-        "docker",  // docker0
-        "br-",     // br-xxx (docker custom bridge)
-        "veth",    // vethxxx (container veth pair)
-        "cni",     // cni0, cni-xxx (Kubernetes CNI)
-        "flannel", // flannel.1
-        "calico",  // calico
-        "tunl",    // tunl0 (calico)
-        "kube",    // kube-ipvs0
-        "virbr",   // libvirt bridge
-        "utun",    // macOS utun
-        "awdl",    // macOS awdl
-        "llw",     // macOS llw
-        "anpi",    // macOS anpi
-        "bridge",  // bridge0
-        "p2p",     // p2p0
-        "gif",     // gif0
-        "stf",     // stf0
-        "ap",      // ap1 (macOS WiFi AP 虚拟接口)
-        "vmenet",  // vmenet0 (Parallels/VirtualBox 虚拟机网络)
-        "vlan",    // vlan1 (VLAN 虚拟接口)
+        "docker",
+        "br-",
+        "veth",
+        "cni",
+        "flannel",
+        "calico",
+        "tunl",
+        "kube",
+        "virbr",
+        "utun",
+        "awdl",
+        "llw",
+        "anpi",
+        "bridge",
+        "p2p",
+        "gif",
+        "stf",
+        "ap",
+        "vmenet",
+        "vlan",
     ];
     if docker_prefixes.iter().any(|p| name.starts_with(p)) {
         return false;
@@ -179,14 +173,13 @@ fn is_physical_interface(name: &str) -> bool {
     true
 }
 
-/// 判断接口是否有可用 IP 地址（排除 IPv4 link-local 169.254/16 和 IPv6 fe80::/10）。
-/// 用于过滤掉无网线连接的雷雳桥接 enX 等无实际网络的接口。
+
 fn has_usable_ip(data: &sysinfo::NetworkData) -> bool {
     data.ip_networks().iter().any(|ip_net| {
         match ip_net.addr {
             std::net::IpAddr::V4(v4) => {
                 let octets = v4.octets();
-                // 排除 169.254.0.0/16 (IPv4 link-local)
+
                 !(octets[0] == 169 && octets[1] == 254)
             }
             std::net::IpAddr::V6(v6) => !v6.is_unicast_link_local(),

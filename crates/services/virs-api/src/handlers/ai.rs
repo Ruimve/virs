@@ -1,5 +1,3 @@
-//! AI analysis handlers.
-
 use axum::{
     extract::State,
     http::HeaderMap,
@@ -10,12 +8,12 @@ use virs_error::{VirsError, VirsResult};
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
-/// Resolve the base URL for a known LLM provider.
+
 pub fn resolve_provider_base_url(provider: &str) -> Option<&'static str> {
     virs_types::llm::resolve_provider_base_url(provider)
 }
 
-/// Resolve the default model for a known LLM provider.
+
 pub fn resolve_provider_model(provider: &str) -> Option<&'static str> {
     virs_types::llm::resolve_provider_model(provider)
 }
@@ -26,7 +24,7 @@ pub async fn ai_status(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    // Check if any AI credentials are configured
+
     let rows: Vec<String> =
         sqlx::query_scalar(r#"SELECT DISTINCT provider FROM qd_ai_credentials"#)
             .fetch_all(&state.db_pool)
@@ -54,7 +52,7 @@ pub async fn optimize(
         return Err(VirsError::bad_request("symbol is required"));
     }
 
-    // Fetch market data for context
+
     let current_price = fetch_price_from_kline(&state, exchange, symbol).await?;
 
     let system_prompt = r#"You are a trading strategy optimizer. Analyze the given market data and provide optimization suggestions.
@@ -196,7 +194,7 @@ async fn call_llm_with_fallback(
     system_prompt: &str,
     user_prompt: &str,
 ) -> VirsResult<serde_json::Value> {
-    // Try to find AI credentials from database
+
     let row: Option<(String, String)> = sqlx::query_as(
         r#"SELECT provider, encrypted_api_key
            FROM qd_ai_credentials ORDER BY created_at DESC LIMIT 1"#,

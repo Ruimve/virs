@@ -1,26 +1,24 @@
-//! Auth handlers — login, logout, user info.
-
 use axum::{extract::State, Json};
 use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
-/// Login request
+
 #[derive(serde::Deserialize)]
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
 }
 
-/// Login response
+
 #[derive(serde::Serialize)]
 pub struct LoginResponse {
     pub token: String,
     pub user: UserInfo,
 }
 
-/// User info in response
+
 #[derive(serde::Serialize)]
 pub struct UserInfo {
     pub id: uuid::Uuid,
@@ -34,7 +32,7 @@ pub async fn login(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    // Query user from database
+
     let row = sqlx::query_as::<_, (uuid::Uuid, String, String, String, Option<String>, bool)>(
         r#"SELECT id, username, password_hash, role, email, is_active FROM qd_users WHERE username = $1"#,
     )
@@ -61,8 +59,7 @@ pub async fn login(
         return Err(VirsError::unauthorized("Invalid credentials"));
     }
 
-    // Generate JWT token — jwt_secret and expiration are validated at startup
-    // and passed via AppState, no env read at request time.
+
     let secret = &state.jwt_secret;
     let expiration_hours: i64 = state.jwt_expiration_hours;
 

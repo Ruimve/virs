@@ -11,10 +11,9 @@ import {
 import ReactChart from './ReactChart';
 import { toLocaleTime } from './ReactChart/locale/zh_CN';
 
-// ── Public API exposed via ref ────────────────────────────
 
 export interface KlineChartHandle {
-  /** Update the last candle (or append a new one) via series.update() — no re-render */
+
   update: (candle: {
     time: number;
     open: number;
@@ -25,7 +24,6 @@ export interface KlineChartHandle {
   }) => void;
 }
 
-// ── Props ─────────────────────────────────────────────────
 
 interface OverlayLine {
   name: string;
@@ -55,9 +53,9 @@ interface KlineChartProps {
   overlays?: OverlayLine[];
 }
 
-// 移动端断点（与 Tailwind md 一致）
+
 const MOBILE_BREAKPOINT = 768;
-// 可视区域 K 线根数：电脑端 100，手机端 50
+
 function getVisibleRangeWidth() {
   if (typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT) {
     return 50;
@@ -65,7 +63,7 @@ function getVisibleRangeWidth() {
   return 100;
 }
 
-/** Set visible range to last N candles with 1/8 right padding */
+
 function applyVisibleRange(chart: IChartApi | undefined, dataLength: number) {
   if (!chart) return;
   const visibleWidth = getVisibleRangeWidth();
@@ -85,7 +83,6 @@ function applyVisibleRange(chart: IChartApi | undefined, dataLength: number) {
   }
 }
 
-// ── Component ─────────────────────────────────────────────
 
 const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineChart(
   { data, height, markers, overlays },
@@ -94,14 +91,13 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
   const chartRef = useRef<IChartApi | undefined>(undefined);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | undefined>(undefined);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | undefined>(undefined);
-  // Minimal structural type — we only need detach() for cleanup.
-  // The full ISeriesMarkersPluginApi<Time> is not exported from lightweight-charts,
-  // and ReturnType<typeof createSeriesMarkers> uses <unknown> which causes variance issues.
+
+
   const markersPluginRef = useRef<{ detach: () => void } | null>(null);
   const overlaySeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
   const initializedRef = useRef(false);
 
-  // 主题感知颜色（在初始化时读取一次，避免每帧调用 getComputedStyle）
+
   const colorsRef = useRef({
     up: '',
     upVolume: '',
@@ -119,7 +115,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     };
   }, []);
 
-  // ── Expose imperative API ──────────────────────────────
 
   useImperativeHandle(
     ref,
@@ -137,7 +132,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
         };
         candleSeries.update(bar);
 
-        // Also update volume series if present
+
         const volumeSeries = volumeSeriesRef.current;
         if (volumeSeries && candle.volume !== undefined) {
           const c = colorsRef.current;
@@ -156,11 +151,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     chartRef.current = c;
   }, []);
 
-  // ── Single effect: init + data + markers + overlays ────
-  // Merged from two effects to prevent:
-  // 1. Double setData on mount (both effects ran)
-  // 2. createSeriesMarkers leak (no ref saved for detach)
-  // 3. Overlays not updating (Effect 2 didn't include overlays dep)
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -172,7 +162,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       initializedRef.current = true;
       readChartColors();
 
-      // Determine time scale settings based on data density
+
       let timeVisible = true;
       const secondsVisible = false;
       if (data.length >= 2) {
@@ -183,7 +173,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
 
       const c = colorsRef.current;
 
-      // Create candlestick series
+
       const candleSeries = chart.addSeries(CandlestickSeries, {
         upColor: c.up,
         downColor: c.down,
@@ -194,7 +184,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       });
       candleSeriesRef.current = candleSeries;
 
-      // Create volume series (only if volume data exists)
+
       if (data[0].volume !== undefined) {
         const volumeSeries = chart.addSeries(HistogramSeries, {
           priceFormat: { type: 'volume' },
@@ -210,7 +200,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     const c = colorsRef.current;
     const candleSeries = candleSeriesRef.current!;
 
-    // Set candlestick data (both init and update)
+
     const chartData: CandlestickData[] = data.map((item) => ({
       time: toLocaleTime(item.time),
       open: item.open,
@@ -220,7 +210,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     }));
     candleSeries.setData(chartData);
 
-    // Set volume data
+
     const volumeSeries = volumeSeriesRef.current;
     if (volumeSeries) {
       volumeSeries.setData(
@@ -232,7 +222,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       );
     }
 
-    // ── Markers: detach old, create new ──────────────────
+
     if (markersPluginRef.current) {
       markersPluginRef.current.detach();
       markersPluginRef.current = null;
@@ -250,7 +240,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       );
     }
 
-    // ── Overlays: remove old, create new ─────────────────
+
     for (const series of overlaySeriesRef.current) {
       chart.removeSeries(series);
     }
@@ -274,7 +264,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       }
     }
 
-    // Set visible range
+
     applyVisibleRange(chart, data.length);
   }, [data, markers, overlays, readChartColors]);
 

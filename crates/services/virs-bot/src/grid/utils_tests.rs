@@ -1,5 +1,3 @@
-//! Unit tests for grid/utils/mod.rs
-
 use crate::grid::utils::calculate_levels;
 use uuid::Uuid;
 use virs_types::grid_port::GridBotConfig;
@@ -32,7 +30,7 @@ fn u1_1_calculate_levels_basic() {
     let bot = make_bot(110.0, 90.0, 10, 0.5, 100.0);
     let levels = calculate_levels(&bot, 100.0);
     assert_eq!(levels.len(), 10);
-    // step = (110 - 90) / (10 + 1) = 20/11 ≈ 1.818
+
     let step = (110.0 - 90.0) / 11.0;
     let first_price = 90.0 + step;
     assert!((levels[0].price - first_price).abs() < 1e-10);
@@ -57,7 +55,7 @@ fn u1_3_calculate_levels_zero_count() {
 fn u1_4_calculate_levels_side_assignment() {
     let bot = make_bot(110.0, 90.0, 10, 0.5, 100.0);
     let levels = calculate_levels(&bot, 100.0);
-    // Prices below 100.0 → "buy", at or above → "sell"
+
     for level in &levels {
         if level.price < 100.0 {
             assert_eq!(level.side, "buy");
@@ -71,7 +69,7 @@ fn u1_4_calculate_levels_side_assignment() {
 fn u1_5_calculate_levels_sell_price() {
     let bot = make_bot(110.0, 90.0, 5, 1.0, 100.0);
     let levels = calculate_levels(&bot, 100.0);
-    let grid_profit_mult = 1.0 + 1.0 / 100.0; // 1.01
+    let grid_profit_mult = 1.0 + 1.0 / 100.0;
     for level in &levels {
         assert!((level.sell_price - level.price * grid_profit_mult).abs() < 1e-10);
     }
@@ -81,7 +79,7 @@ fn u1_5_calculate_levels_sell_price() {
 fn u1_6_calculate_levels_uses_current_price_for_qty() {
     let bot = make_bot(110.0, 90.0, 5, 0.5, 100.0);
     let levels = calculate_levels(&bot, 100.0);
-    // quantity = qty_per_grid / current_price = 100 / 100 = 1.0
+
     for level in &levels {
         assert!((level.quantity - 1.0).abs() < 1e-10);
     }

@@ -84,14 +84,14 @@ const Header = () => {
 
   return (
     <>
-      {/* Header bar — slimmer (h-12) */}
+      {}
       <div className="relative z-10 flex items-center h-12 md:h-12 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
-        {/* Left: logo + status + mode */}
+        {}
         <div className="flex items-center gap-2.5 pl-3 md:pl-6 shrink-0">
           <Logo onClick={openDrawer} className="md:hidden" />
           <Logo className="hidden md:block" />
 
-          {/* Status badge */}
+          {}
           <span
             className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium tracking-wide ${sc.bg} ${
               sc.pulse ? 'animate-subtle-pulse' : ''
@@ -101,7 +101,7 @@ const Header = () => {
             {sc.text}
           </span>
 
-          {/* Paper/Live mode indicator — distinct pill */}
+          {}
           {paperEnabled !== null && (
             <span
               className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium tracking-wide ${
@@ -119,13 +119,13 @@ const Header = () => {
             </span>
           )}
 
-          {/* Symbol + leverage */}
+          {}
           <span className="text-caption text-on-surface-tertiary font-mono tabular-nums">
             {bot?.symbol || ''} &middot; {bot?.leverage || ''}x
           </span>
         </div>
 
-        {/* Center: tabs (desktop) — pill style with smooth indicator */}
+        {}
         <div className="hidden md:flex items-center justify-center flex-1 gap-0.5">
           {tabs.map((tab) => (
             <div
@@ -142,7 +142,7 @@ const Header = () => {
           ))}
         </div>
 
-        {/* Right: actions (desktop) */}
+        {}
         <div className="hidden md:flex items-center gap-1.5 pr-6 shrink-0">
           {actions.map((action) => {
             return (
@@ -157,13 +157,13 @@ const Header = () => {
           <Theme />
         </div>
 
-        {/* Right: theme toggle (mobile) */}
+        {}
         <div className="md:hidden flex items-center pr-3 ml-auto shrink-0">
           <Theme />
         </div>
       </div>
 
-      {/* Mobile drawer overlay */}
+      {}
       {drawerOpen && (
         <>
           <div
@@ -178,7 +178,7 @@ const Header = () => {
               drawerClosing ? 'animate-drawer-out' : 'animate-drawer-in'
             }`}
           >
-            {/* Drawer header */}
+            {}
             <div className="flex items-center justify-between px-4 h-12 border-b border-line-subtle shrink-0">
               <div className="flex items-center gap-2">
                 <Logo />
@@ -188,7 +188,7 @@ const Header = () => {
               </IconBtn>
             </div>
 
-            {/* Navigation section */}
+            {}
             <div className="flex-1 overflow-y-auto py-2">
               <div className="px-4 py-1.5">
                 <p className="text-2xs uppercase tracking-[0.15em] text-on-surface-faint font-medium">
@@ -213,7 +213,7 @@ const Header = () => {
               ))}
             </div>
 
-            {/* Actions section */}
+            {}
             <div className="border-t border-line-subtle py-3 px-4 shrink-0">
               <div className="mb-2">
                 <p className="text-2xs uppercase tracking-[0.15em] text-on-surface-faint font-medium">

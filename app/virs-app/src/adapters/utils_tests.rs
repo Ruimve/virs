@@ -1,8 +1,5 @@
-//! Unit tests for adapters/utils.rs
-
 use crate::adapters::utils::{derive_open_side, sanitize_pnl_pct};
 
-// ── sanitize_pnl_pct ───────────────────────────────────────
 
 #[test]
 fn u1_1_sanitize_pnl_pct_normal() {
@@ -28,7 +25,6 @@ fn u1_4_sanitize_pnl_pct_negative() {
     assert!((result - (-0.25)).abs() < 1e-10);
 }
 
-// ── derive_open_side ───────────────────────────────────────
 
 #[test]
 fn u2_1_derive_open_side_buy() {

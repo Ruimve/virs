@@ -5,13 +5,13 @@ import { FullScreen } from './components/Transition/FullScreen';
 import { AssetLoading } from './components/Transition/Icon';
 import { AuthProvider } from './context/AuthContext/AuthProvider';
 
-/** 加载中 */
+
 const Loading = lazy(() => import('./pages/Loading'));
 
-/** 登录 */
+
 const Login = lazy(() => import('./pages/Login'));
 
-/** 向导 */
+
 const SetupLayout = lazy(() => import('./pages/Setup/Layout'));
 const SelectBotType = lazy(() => import('./pages/Setup/SelectBotType'));
 const ConfigureLlm = lazy(() => import('./pages/Setup/ConfigureLlm'));
@@ -19,16 +19,16 @@ const ConfigureExchange = lazy(() => import('./pages/Setup/ConfigureExchange'));
 const ConfigureParams = lazy(() => import('./pages/Setup/ConfigureParams'));
 const ReviewLaunch = lazy(() => import('./pages/Setup/ReviewLaunch'));
 
-/** 交易 */
+
 const TradeLayout = lazy(() => import('./pages/Trade/Layout'));
-/** 交易 - 自动交易 */
+
 const AutoBot = lazy(() => import('./pages/Trade/AutoBot'));
 const AutoBotMain = lazy(() => import('./pages/Trade/AutoBot/Bot'));
 const AutoBotLog = lazy(() => import('./pages/Trade/AutoBot/Log'));
 const AutoBotLogDetail = lazy(() => import('./pages/Trade/AutoBot/Log/Detail'));
 const AutoBotTrades = lazy(() => import('./pages/Trade/AutoBot/Trades'));
 const AutoBotSystem = lazy(() => import('./pages/Trade/AutoBot/System'));
-/** 交易 - 网格交易 */
+
 const GridBot = lazy(() => import('./pages/Trade/GridBot'));
 const GridBotMain = lazy(() => import('./pages/Trade/GridBot/Bot'));
 const GridBotLog = lazy(() => import('./pages/Trade/GridBot/Log'));
@@ -37,7 +37,7 @@ const GridBotTrades = lazy(() => import('./pages/Trade/GridBot/Trades'));
 const GridBotLevels = lazy(() => import('./pages/Trade/GridBot/Levels'));
 const GridBotSystem = lazy(() => import('./pages/Trade/GridBot/System'));
 
-/** 交易 - 健康检查 */
+
 const HealthCheck = lazy(() => import('./pages/Trade/HealthCheck'));
 
 const App = () => {

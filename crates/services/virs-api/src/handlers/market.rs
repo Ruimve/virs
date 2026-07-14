@@ -1,5 +1,3 @@
-//! Market data handlers.
-
 use axum::{
     extract::{Query, State},
     Json,
@@ -36,7 +34,7 @@ pub async fn kline_subscribe(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let market_type = virs_models::MarketType::Perpetual;
 
-    // Check exchange is registered before subscribing
+
     let exchange_key = format!("{}:{}", body.exchange, market_type);
     if state.exchange_registry.get(&exchange_key).is_none() {
         return Err(VirsError::bad_request(format!(
@@ -133,7 +131,7 @@ pub async fn get_ticker(
         None => return Err(VirsError::bad_request("symbol is required")),
     };
 
-    // Try kline engine first for latest price
+
     if let Some(candles) = state
         .kline_engine
         .get_klines_async(exchange, symbol, virs_market::Timeframe::M1)
@@ -154,7 +152,7 @@ pub async fn get_ticker(
         }
     }
 
-    // Fallback to exchange ticker
+
     let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_ticker(symbol).await {
@@ -192,7 +190,7 @@ pub async fn get_klines(
         None => return Err(VirsError::bad_request("symbol is required")),
     };
 
-    // Parse requested timeframe (default 15m)
+
     let requested_tf = match params.timeframe.as_deref() {
         Some("1m") => virs_market::Timeframe::M1,
         Some("5m") => virs_market::Timeframe::M5,
@@ -203,7 +201,7 @@ pub async fn get_klines(
         _ => virs_market::Timeframe::M15,
     };
 
-    // Try kline engine cache — prefer requested timeframe
+
     if let Some(candles) = state
         .kline_engine
         .get_klines_async(exchange, symbol, requested_tf)
@@ -226,7 +224,7 @@ pub async fn get_klines(
         }
     }
 
-    // Fallback to exchange REST API (exchange already registered above)
+
     let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => {

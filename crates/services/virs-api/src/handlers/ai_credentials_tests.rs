@@ -1,11 +1,6 @@
-//! Unit tests for handlers/ai_credentials.rs parsing functions.
-
 use crate::handlers::ai_credentials::{parse_balance_response, parse_models_response};
 use serde_json::json;
 
-// ============================================================
-// TC-AC1: parse_models_response
-// ============================================================
 
 #[test]
 fn ac1_1_normal_models() {
@@ -36,9 +31,6 @@ fn ac1_3_no_data_field() {
     assert!(models.is_empty());
 }
 
-// ============================================================
-// TC-AC2: parse_balance_response
-// ============================================================
 
 #[test]
 fn ac2_1_balance_infos() {

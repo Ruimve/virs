@@ -1,14 +1,8 @@
-//! Error classification traits and ErrorCategory enum.
-//!
-//! Every domain error type implements these traits so that upper layers
-//! (HTTP handlers, retry loops, alerting) can make uniform decisions
-//! without knowing the concrete error variant.
-
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-/// Broad error category for aggregation / alerting / HTTP mapping.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCategory {
@@ -39,22 +33,22 @@ impl fmt::Display for ErrorCategory {
     }
 }
 
-/// Whether the operation can be retried (transient failure).
+
 pub trait Retryable {
     fn is_retryable(&self) -> bool;
 }
 
-/// Categorical classification for alerting / metrics.
+
 pub trait Categorized {
     fn category(&self) -> ErrorCategory;
 }
 
-/// HTTP status code mapping (used by `IntoResponse`).
+
 pub trait HttpStatus {
     fn http_status(&self) -> u16;
 }
 
-/// Stable error code for frontend / API consumers.
+
 pub trait ErrorCode {
     fn error_code(&self) -> &'static str;
 }

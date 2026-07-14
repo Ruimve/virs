@@ -1,8 +1,3 @@
-//! Paper Exchange Adapter
-//!
-//! Paper mode adapter implementing the Position Engine Exchange trait.
-//! Market orders fill immediately, Limit orders wait for price trigger.
-
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -23,7 +18,7 @@ use virs_error::{ExchangeError, VirsError, VirsResult};
 
 use crate::registry::Exchanges;
 
-/// Paper pending order
+
 #[derive(Debug, Clone)]
 struct PaperPendingOrder {
     id: Uuid,
@@ -38,12 +33,10 @@ struct PaperPendingOrder {
     created_at: chrono::DateTime<Utc>,
 }
 
-/// Paper position — reuses `ExchangePosition` from `virs-types` so that
-/// `unrealized_pnl_at` / `pnl_pct_at` are shared with the rest of the codebase
-/// instead of being duplicated here.
+
 type PaperPosition = ExchangePosition;
 
-/// Paper Exchange Adapter
+
 pub struct PaperExchangeAdapter {
     name: String,
     market_type: MarketType,
@@ -54,13 +47,11 @@ pub struct PaperExchangeAdapter {
     last_prices: Arc<DashMap<String, f64>>,
     exchange_registry: Option<Arc<Exchanges>>,
     balance_initialized: Arc<AtomicBool>,
-    /// 每个 symbol 配置的杠杆（由 set_leverage 设置，供 update_position_on_fill 使用）
+
     configured_leverage: Arc<DashMap<String, u32>>,
 }
 
-/// Paper 模式简化强平价计算（忽略维持保证金率）：
-/// - 多头：entry_price * (1 - 1/leverage)
-/// - 空头：entry_price * (1 + 1/leverage)
+
 pub fn compute_paper_liquidation_price(
     entry_price: f64,
     side: PositionSide,
@@ -162,7 +153,7 @@ impl PaperExchangeAdapter {
         for order in &triggered {
             self.pending.remove(&order.id);
             self.update_position_on_fill(order, current_price).await;
-            // Paper 模式按 maker 费率计算手续费（限价单）
+
             let fee = current_price * order.amount * 0.0002;
             let tx = self.price_tx.lock().await;
             if let Some(ref tx) = *tx {
@@ -191,7 +182,7 @@ impl PaperExchangeAdapter {
     }
 
     async fn update_position_on_fill(&self, order: &PaperPendingOrder, fill_price: f64) {
-        // Hedge mode requires position_side — None is an irrecoverable caller bug.
+
         let position_side = match order.position_side {
             Some(ps) => ps,
             None => {
@@ -205,12 +196,11 @@ impl PaperExchangeAdapter {
             }
         };
         let key = format!("{}:{:?}", order.symbol, position_side);
-        // Hedge mode: size is always an absolute value. Direction is carried
-        // by position_side (the key), not by the sign of size.
+
+
         let size_delta = order.amount;
-        // Leverage must be explicitly configured via set_leverage.
-        // Default to 1 (no leverage) — never 20, as high leverage can cause
-        // irreversible liquidation if the caller forgets to set it.
+
+
         let leverage: u32 = self
             .configured_leverage
             .get(&order.symbol)
@@ -234,15 +224,13 @@ impl PaperExchangeAdapter {
             (Side::Buy, PositionSide::Short) => false,
         };
 
-        // ── 1. 保存旧仓位状态（用于计算 realized_pnl，必须在更新前读取） ──
+
         let old_pos_info = self
             .positions
             .get(&key)
             .map(|p| (p.side, p.entry_price, p.size));
 
-        // ── 2. 计算 realized_pnl（仅平仓时有已实现盈亏） ──
-        // Hedge 模式下 Long/Short 分键，不会出现同一 key 的反转，
-        // 超量平仓钳制到 0 而非反转 side。
+
         let realized_pnl: f64 = match (&old_pos_info, is_opening) {
             (Some((side, entry, old_size)), false) => {
                 let closed = order.amount.min(*old_size);
@@ -254,11 +242,11 @@ impl PaperExchangeAdapter {
             _ => 0.0,
         };
 
-        // ── 3. 更新仓位 ──
+
         match self.positions.get_mut(&key) {
             Some(mut pos) => {
                 if is_opening {
-                    // 加仓：加权平均入场价
+
                     let old_size = pos.size;
                     let new_size = old_size + size_delta;
                     let total_cost = pos.entry_price * old_size + fill_price * size_delta;
@@ -268,14 +256,14 @@ impl PaperExchangeAdapter {
                     pos.liquidation_price =
                         compute_paper_liquidation_price(pos.entry_price, pos.side, leverage);
                 } else {
-                    // 平仓：减少 size
+
                     let new_size = pos.size - size_delta;
                     if new_size < 1e-8 {
-                        // 全部平仓（含超量平仓钳制到 0）
+
                         drop(pos);
                         self.positions.remove(&key);
                     } else {
-                        // 部分平仓：入场价不变
+
                         pos.size = new_size;
                         pos.leverage = leverage;
                         pos.liquidation_price =
@@ -284,7 +272,7 @@ impl PaperExchangeAdapter {
                 }
             }
             None => {
-                // 新建仓位：side 直接取 position_side
+
                 let liq_price = compute_paper_liquidation_price(fill_price, position_side, leverage);
                 self.positions.insert(
                     key.clone(),
@@ -301,14 +289,14 @@ impl PaperExchangeAdapter {
             }
         }
 
-        // ── 4. 更新余额 ──
+
         let mut balance = self.balance.lock().await;
 
         if is_opening {
             balance.used += margin;
             balance.free -= margin;
         } else {
-            // 平仓：释放保证金 + 已实现盈亏
+
             let margin_release = margin.min(balance.used);
             balance.used -= margin_release;
             balance.free += margin_release + realized_pnl;
@@ -434,7 +422,7 @@ impl ExchangePe for PaperExchangeAdapter {
             self.update_position_on_fill(&pending_for_fill, fill_price)
                 .await;
 
-            // Paper 模式按 taker 费率计算手续费（计价货币 USDT）
+
             let fee = fill_price * params.amount * 0.0005;
 
             let order = PositionOrder {
@@ -672,17 +660,15 @@ impl ExchangePe for PaperExchangeAdapter {
     }
 
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> VirsResult<()> {
-        // 保存 symbol 对应的 leverage，供 update_position_on_fill 使用
+
         self.configured_leverage
             .insert(symbol.to_string(), leverage);
         Ok(())
     }
 
     async fn get_position_mode(&self) -> VirsResult<PositionMode> {
-        // Proxy to the real perpetual exchange when available — paper mode
-        // should reflect the actual account's position mode, not a hard-coded
-        // value. If no registry is attached (pure paper without a real
-        // exchange), default to Hedge.
+
+
         let registry = match &self.exchange_registry {
             Some(r) => r.clone(),
             None => return Ok(PositionMode::Hedge),
@@ -712,11 +698,10 @@ impl ExchangePe for PaperExchangeAdapter {
         PaperExchangeAdapter::on_price_tick(self, symbol, price).await;
     }
 
-    /// Paper 模式从 DB 恢复仓位到内存。
-    /// 进程重启后 Paper 的 `positions` 内存丢失，需由 PE 在 recover_state 时调用此方法恢复。
+
     async fn restore_positions(&self, positions: Vec<ExchangePosition>) {
         for pos in positions {
-            // 跳过 size 为 0 的无效仓位
+
             if pos.size.abs() < 1e-8 {
                 continue;
             }
@@ -733,7 +718,7 @@ impl ExchangePe for PaperExchangeAdapter {
                     liquidation_price: pos.liquidation_price,
                 },
             );
-            // 同步 entry_price 作为 last_price（避免后续下单 fill_price=0）
+
             self.last_prices.insert(pos.symbol.clone(), pos.entry_price);
         }
     }

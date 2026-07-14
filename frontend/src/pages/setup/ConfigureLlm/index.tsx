@@ -21,7 +21,7 @@ const ConfigureLlm = () => {
   const { wizard, updateWizard, advanceStep } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.ConfigureLlm);
 
-  // Step 1: API Key + Model
+
   const [step1Status, setStep1Status] = useState<FlowStepStatus>('active');
   const [step1Error, setStep1Error] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
@@ -29,18 +29,18 @@ const ConfigureLlm = () => {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [model, setModel] = useState(wizard.llm_model);
 
-  // Step 2: Connectivity
+
   const [step2Status, setStep2Status] = useState<FlowStepStatus>('pending');
   const [step2Error, setStep2Error] = useState<string | null>(null);
 
-  // Step 3: Account Info (balance)
+
   const [step3Status, setStep3Status] = useState<FlowStepStatus>('pending');
   const [step3Error, setStep3Error] = useState<string | null>(null);
   const [balance, setBalance] = useState<BalanceInfo | null>(null);
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 重置步骤状态
+
   const resetSteps = useCallback(() => {
     setStep1Status('active');
     setStep1Error(null);
@@ -50,7 +50,7 @@ const ConfigureLlm = () => {
     setStep3Error(null);
   }, []);
 
-  // Fetch balance via backend proxy (uses saved credentials)
+
   const startStep3 = useCallback(async () => {
     setStep3Status('verifying');
     try {
@@ -71,7 +71,7 @@ const ConfigureLlm = () => {
     }
   }, []);
 
-  // Test connectivity via backend (uses saved credentials)
+
   const startStep2 = useCallback(async () => {
     setStep2Status('verifying');
     try {
@@ -113,7 +113,7 @@ const ConfigureLlm = () => {
     }
   }, [apiKey, model, startStep2]);
 
-  // Fetch models via backend proxy (after save)
+
   const fetchModels = useCallback(async () => {
     try {
       const result = await fetchAiModels();
@@ -144,7 +144,7 @@ const ConfigureLlm = () => {
 
       resetSteps();
 
-      // Debounce: save then fetch models
+
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(async () => {
         try {

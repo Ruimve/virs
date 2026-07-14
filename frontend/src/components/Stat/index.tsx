@@ -3,9 +3,9 @@ import { memo, type ReactNode } from 'react';
 interface StatProps {
   label: string;
   children: ReactNode;
-  highlight?: boolean; // if true, uses text-base font-semibold
-  color?: string; // extra color class for value
-  sub?: string; // optional sub text below value
+  highlight?: boolean;
+  color?: string;
+  sub?: string;
 }
 
 export const Stat = memo(({ label, children, highlight, color, sub }: StatProps) => (

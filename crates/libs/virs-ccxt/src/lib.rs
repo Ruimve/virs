@@ -1,5 +1,3 @@
-//! CCXT-style unified exchange API layer.
-
 pub mod adapter;
 pub mod auth;
 pub mod types;
@@ -14,14 +12,14 @@ use tokio::sync::mpsc;
 use auth::Signer;
 use virs_error::ExchangeError;
 
-// Re-export shared types from virs-types (via types module)
+
 pub use types::{
     ApiRestrictions,
     Balance,
     CcxtFundingHistoryEntry,
     CcxtFundingRate,
     CcxtKline,
-    // CCXT-internal types
+
     CcxtOrder,
     CcxtOrderBook,
     CcxtOrderStatus,
@@ -40,15 +38,11 @@ pub use types::{
     PositionMode,
     PositionSide,
     Side,
-    // Shared types (re-exported from virs-types)
+
     Ticker,
 };
 
-/// Unified exchange trait — the core abstraction following CCXT's design.
-///
-/// Methods return CCXT-internal types (CcxtTicker, CcxtOrder, etc.) which
-/// carry raw exchange data (`info` field). The CcxtAdapter in virs-exchange
-/// converts these to application-level types via `From` impls.
+
 #[async_trait]
 pub trait Exchange: Send + Sync {
     fn id(&self) -> &str;
@@ -147,15 +141,7 @@ pub trait Exchange: Send + Sync {
         ))
     }
 
-    /// 启动基于 listenKey 的订单 WebSocket（合约用户数据流）。
-    ///
-    /// 实现负责：
-    /// 1. 调用 `create_listen_key` 获取 listenKey（若调用方未提供）
-    /// 2. 构造并启动对应交易所的 UserDataWs
-    /// 3. 返回事件 receiver
-    ///
-    /// 调用方可通过 `listen_key_hint` 传入已缓存的 listenKey 以避免重复创建。
-    /// 不支持的交易所返回 `ExchangeError::NotSupported`。
+
     async fn start_listenkey_order_ws(
         &self,
         _listen_key_hint: Option<&str>,
@@ -166,34 +152,25 @@ pub trait Exchange: Send + Sync {
     }
     async fn ping(&self) -> Result<bool, ExchangeError>;
 
-    /// 同步本地时钟与交易所服务器时间。
-    ///
-    /// 获取交易所服务器时间并计算偏移，通过 `Signer::set_time_offset` 校准签名时间戳。
-    /// 应在创建交易所实例后、首次签名请求前调用。
-    /// 失败时不应阻塞初始化 — 默认偏移 0 + recvWindow 5000ms 可容忍小漂移。
+
     async fn sync_time(&self) -> Result<(), ExchangeError> {
         Ok(())
     }
 }
 
-/// Base HTTP client for exchange REST API calls.
-///
-/// `Clone` 是廉价操作（内部全为 `Arc`），允许在后台 keepalive task 中持有副本。
+
 #[derive(Clone)]
 pub struct ExchangeClient {
     client: Client,
     rate_limiter: std::sync::Arc<tokio::sync::Semaphore>,
-    /// 可选 API Key — 用于 MARKET_DATA 接口的 X-MBX-APIKEY 头
-    /// （币安鉴权类型表：MARKET_DATA = 需要有效的API-KEY）
+
+
     api_key: Option<String>,
 }
 
 impl ExchangeClient {
-    /// 创建带 API Key 的 client，用于在 public_get 中附加 X-MBX-APIKEY 头。
-    ///
-    /// `http_timeout` — HTTP 请求总超时，从 TimeConfig.http_timeout_secs 注入。
-    /// `connect_timeout` — TCP 连接建立超时，从 TimeConfig.http_connect_timeout_secs 注入。
-    /// `pool_max_idle_per_host` — 每主机最大空闲连接数，从 TimeConfig.http_pool_max_idle_per_host 注入。
+
+
     pub fn with_api_key(
         max_concurrent: u32,
         proxy_url: Option<&str>,
@@ -237,7 +214,7 @@ impl ExchangeClient {
             .map_err(|e| ExchangeError::Internal(format!("Rate limiter error: {}", e)))?;
         let display_url = build_display_url(path, params.iter().map(|(k, v)| (*k, *v)));
         let mut req = self.client.get(path).query(params);
-        // MARKET_DATA 接口需要有效的 API-KEY（仅头，无需签名）
+
         if let Some(ref key) = self.api_key {
             req = req.header("x-mbx-apikey", key);
         }
@@ -349,11 +326,7 @@ impl ExchangeClient {
         handle_response(req.send().await?, path, display_body.as_deref()).await
     }
 
-    /// Signed DELETE request.
-    ///
-    /// Binance DELETE endpoints (e.g. cancel order) sign parameters via query
-    /// string, identical to GET. We reuse `sign_get` for the signature and
-    /// issue the request with the DELETE HTTP method.
+
     pub async fn signed_delete(
         &self,
         signer: &dyn Signer,
@@ -386,7 +359,7 @@ impl ExchangeClient {
     }
 }
 
-/// Build a display URL from path and query params, masking `signature` for safe logging.
+
 pub(crate) fn build_display_url<'a>(
     path: &str,
     params: impl Iterator<Item = (&'a str, &'a str)>,
@@ -406,7 +379,7 @@ pub(crate) fn build_display_url<'a>(
     url
 }
 
-/// Mask `signature=XXX` in a URL-encoded body string for safe logging.
+
 pub(crate) fn mask_signature(s: &str) -> String {
     if let Some(idx) = s.find("signature=") {
         let before = &s[..idx];
@@ -440,7 +413,7 @@ async fn handle_response(
                 418 => ExchangeError::IpBanned(msg),
                 429 => ExchangeError::RateLimited(msg),
                 400 | 422 => ExchangeError::InvalidRequest(msg),
-                // 503 + "Unknown error" = 执行状态未知（可能已成交），不得盲目重试
+
                 503 if msg.contains("Unknown error") => ExchangeError::OrderStatusUnknown(msg),
                 _ => ExchangeError::Http {
                     status: status.as_u16(),
@@ -448,7 +421,7 @@ async fn handle_response(
                 },
             });
         }
-        // 非 JSON 响应体也需检测 503 "Unknown error" 与 418
+
         if status.as_u16() == 503 && text.contains("Unknown error") {
             return Err(ExchangeError::OrderStatusUnknown(text));
         }
@@ -496,28 +469,7 @@ pub(crate) fn extract_error_message(json: &Value) -> String {
     json.to_string()
 }
 
-/// Create an exchange instance by name and market type.
-///
-/// # Adding a New Exchange
-///
-/// To add support for a new exchange (e.g., Bybit, OKX), follow these steps:
-///
-/// 1. Create a new module under `adapter/` (e.g., `adapter/bybit/mod.rs`)
-/// 2. Implement the `Exchange` trait for your exchange struct
-/// 3. Add the module to `adapter/mod.rs`
-/// 4. Add a match arm in this function
-///
-/// The adapter pattern ensures each exchange implementation is fully isolated.
-/// All exchange-specific logic (REST signing, WS parsing, error mapping) lives
-/// in its own module, sharing only the unified `Exchange` trait interface.
-///
-/// # Current Support
-///
-/// | Exchange | Status |
-/// |----------|--------|
-/// | Binance  | Implemented (perpetual futures) |
-/// | Bybit    | Planned — architecture ready for quick implementation |
-/// | OKX      | Planned — architecture ready for quick implementation |
+
 pub fn create_exchange(
     id: &str,
     api_key: &str,
@@ -539,10 +491,8 @@ pub fn create_exchange(
             pool_max_idle_per_host,
             listenkey_keepalive_futures_secs,
         )?)),
-        // To add Bybit/OKX, implement adapter::bybit::BybitExchange / adapter::okx::OkxExchange
-        // and add the corresponding match arm here. See "Adding a New Exchange" above.
-        // "bybit" => Ok(Box::new(adapter::bybit::BybitExchange::new(...)?)),
-        // "okx" => Ok(Box::new(adapter::okx::OkxExchange::new(...)?)),
+
+
         _ => Err(ExchangeError::NotSupported(format!(
             "Exchange '{}' is not supported. Currently implemented: binance. \
              Planned (architecture ready): bybit, okx. \
@@ -577,11 +527,7 @@ pub fn parse_u32(v: &Value, field: &str) -> Option<u32> {
         .map(|v| v as u32)
 }
 
-/// Parse a millisecond timestamp field from a JSON value into `DateTime<Utc>`.
-///
-/// Binance returns timestamps as integer milliseconds (e.g. `"time": 1568879328023`).
-/// This helper is used to extract `created_at`/`updated_at` from order responses
-/// instead of using local clock time (F11 fix).
+
 pub fn parse_timestamp_ms(v: &Value, field: &str) -> Option<chrono::DateTime<chrono::Utc>> {
     v.get(field)
         .and_then(|f| {
@@ -591,9 +537,7 @@ pub fn parse_timestamp_ms(v: &Value, field: &str) -> Option<chrono::DateTime<chr
         .and_then(chrono::DateTime::from_timestamp_millis)
 }
 
-// ============================================================
-// Test modules (_tests suffix pattern)
-// ============================================================
+
 #[cfg(test)]
 mod auth_tests;
 #[cfg(test)]

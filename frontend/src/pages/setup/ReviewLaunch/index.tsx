@@ -25,7 +25,7 @@ const ReviewLaunch = () => {
     const isGrid = wizard.bot_type === 'grid';
     const botParams = wizard.bot_params;
     try {
-      // Step 1: Create bot
+
       let botId: string;
       if (isGrid) {
         const result = await createGridBot({
@@ -60,7 +60,7 @@ const ReviewLaunch = () => {
         botId = result.data.id;
       }
 
-      // Step 2: Start bot
+
       if (isGrid) {
         const result = await startGridBot(botId);
         if (!result.success) {
@@ -75,7 +75,7 @@ const ReviewLaunch = () => {
         }
       }
 
-      // Step 3: Navigate to health check
+
       updateWizard({ paper_mode: paperMode, bot_id: botId });
       startTransition(() => {
         navigate(`/trade/${wizard.bot_type}/${botId}/health`, { replace: true });
@@ -109,7 +109,7 @@ const ReviewLaunch = () => {
       <div className="rounded-xl border border-line-subtle bg-surface-1/50 p-5">
         <Title className="mb-4">Trading Mode</Title>
         <div className="flex flex-col sm:flex-row gap-3">
-          {/* Paper mode card */}
+          {}
           <div
             onClick={() => setPaperMode(true)}
             className={`flex-1 p-5 rounded-xl border text-left transition-all duration-300 cursor-pointer backdrop-blur-sm ${
@@ -154,7 +154,7 @@ const ReviewLaunch = () => {
             </div>
           </div>
 
-          {/* Real mode card */}
+          {}
           <div
             onClick={() => setPaperMode(false)}
             className={`flex-1 p-5 rounded-xl border text-left transition-all duration-300 cursor-pointer backdrop-blur-sm ${
@@ -192,7 +192,7 @@ const ReviewLaunch = () => {
           </div>
         </div>
 
-        {/* Real mode warning */}
+        {}
         {!paperMode && (
           <div className="mt-3 flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg bg-warning/[0.06] border border-warning-border/50">
             <Warning className="w-4 h-4 text-warning-text shrink-0 mt-0.5" strokeWidth={1.8} />
@@ -264,13 +264,13 @@ const ReviewLaunch = () => {
       actions={actions}
     >
       <div className="space-y-5">
-        {/* Trading Mode */}
+        {}
         {tradeMode}
 
-        {/* Summary */}
+        {}
         {summary}
 
-        {/* Launch error */}
+        {}
         {launchError && (
           <div className="animate-error-enter p-3.5 bg-danger-bg border border-danger-border rounded-xl text-sm text-danger-text">
             {launchError}

@@ -1,5 +1,3 @@
-//! Grid utility modules.
-
 pub mod prompt;
 
 #[cfg(test)]
@@ -8,7 +6,7 @@ mod prompt_tests;
 use crate::grid::ports::GridBotConfig;
 use crate::grid::types::GridLevel;
 
-/// 根据网格参数计算所有层级价格（线性等距分布）
+
 pub fn calculate_levels(bot: &GridBotConfig, current_price: f64) -> Vec<GridLevel> {
     let effective_price = if current_price > 0.0 {
         current_price

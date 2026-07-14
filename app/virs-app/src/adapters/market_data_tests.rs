@@ -1,5 +1,3 @@
-//! Unit tests for adapters/market_data.rs
-
 use crate::adapters::market_data::candle_to_kline;
 use virs_market::Candle;
 
@@ -65,8 +63,8 @@ fn m1_3_candle_to_kline_zero_values() {
 fn m1_4_candle_to_kline_metadata_empty() {
     let c = make_candle();
     let k = candle_to_kline(&c);
-    // candle_to_kline does not set symbol/exchange/interval from Candle
-    // (Candle doesn't have those fields, they're set by caller)
+
+
     assert!(k.symbol.is_empty());
     assert!(k.exchange.is_empty());
     assert!(k.interval.is_empty());

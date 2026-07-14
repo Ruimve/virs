@@ -1,5 +1,3 @@
-//! Unit tests for grid/types.rs
-
 use crate::grid::types::GridLevel;
 use uuid::Uuid;
 

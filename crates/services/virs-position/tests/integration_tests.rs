@@ -1,5 +1,3 @@
-//! Integration tests for virs-position — cross-module chain verification.
-
 use chrono::Utc;
 use uuid::Uuid;
 use virs_position::tracker::PnlTracker;
@@ -24,18 +22,17 @@ fn make_trade(pnl: f64) -> Trade {
     }
 }
 
-// ── INT-5: Tracker record → snapshot chain ─────────────────
 
 #[test]
 fn int_5_1_tracker_record_then_snapshot() {
     let mut tracker = PnlTracker::new(10000.0);
 
-    // Record trades
+
     tracker.record_trade(&make_trade(100.0));
     tracker.record_trade(&make_trade(-50.0));
     tracker.record_trade(&make_trade(200.0));
 
     let snapshot = tracker.snapshot(0.0);
-    // realized = 100 - 50 + 200 = 250, equity = 10000 + 250 = 10250
+
     assert!((snapshot.equity - 10250.0).abs() < 1e-10);
 }

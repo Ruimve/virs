@@ -1,34 +1,29 @@
-//! Integration tests for virs-config.
-//!
-//! Tests load_config() end-to-end with controlled environment variables,
-//! and cross-module config construction pipelines.
-
 use std::sync::Mutex;
 
 use virs_config::{load_config, load_config_from_env};
 
-/// Mutex to serialize tests that modify environment variables (env is process-global).
+
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
-/// Helper: acquire the env lock, recovering from poisoned state if a prior test panicked.
+
 fn lock_env() -> std::sync::MutexGuard<'static, ()> {
     ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// Helper: set required env vars for load_config to succeed.
+
 fn set_required_env_vars() {
     std::env::set_var("ENCRYPTION_KEY", "test_encryption_key");
     std::env::set_var("LLM_KEY", "test_llm_key");
     std::env::set_var("DATABASE_URL", "postgres://localhost/virs_test");
-    // ADMIN_USERNAME and ADMIN_PASSWORD are required (no defaults).
-    // ADMIN_PASSWORD must be at least 12 characters.
+
+
     std::env::set_var("ADMIN_USERNAME", "test_admin");
     std::env::set_var("ADMIN_PASSWORD", "test_password_at_least_12_chars");
-    // JWT_SECRET is required for token signing/verification.
+
     std::env::set_var("JWT_SECRET", "test_jwt_secret_at_least_32_chars_long");
 }
 
-/// Helper: remove all config-related env vars to ensure a clean state.
+
 fn clean_env_vars() {
     let keys = [
         "ENCRYPTION_KEY", "LLM_KEY", "DATABASE_URL",
@@ -58,9 +53,6 @@ fn clean_env_vars() {
     }
 }
 
-// ============================================================
-// TC-INT-1: load_config minimal required env vars
-// ============================================================
 
 #[test]
 fn int_1_1_load_config_minimal_required() {
@@ -113,9 +105,6 @@ fn int_1_4_load_config_missing_database_url() {
     assert!(result.err().unwrap().to_string().contains("DATABASE_URL"));
 }
 
-// ============================================================
-// TC-INT-2: load_config default values
-// ============================================================
 
 #[test]
 fn int_2_1_default_port() {
@@ -158,9 +147,6 @@ fn int_2_5_default_db_pool() {
     assert_eq!(config.database.pool_max, 50);
 }
 
-// ============================================================
-// TC-INT-5: load_config custom values
-// ============================================================
 
 #[test]
 fn int_5_1_custom_port() {
@@ -195,9 +181,6 @@ fn int_5_4_custom_proxy() {
     assert_eq!(config.proxy, Some("http://proxy:8080".into()));
 }
 
-// ============================================================
-// TC-INT-6: ENCRYPTION_KEY != LLM_KEY validation
-// ============================================================
 
 #[test]
 fn int_6_1_same_encryption_and_llm_key_rejected() {

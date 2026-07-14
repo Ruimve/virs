@@ -1,5 +1,3 @@
-//! Exchange credentials handlers.
-
 use axum::{
     extract::State,
     http::HeaderMap,
@@ -56,7 +54,7 @@ pub async fn save_credential(
 
     let id = uuid::Uuid::new_v4();
 
-    // Encrypt sensitive fields with AES-256-GCM
+
     let encrypted_api_key =
         virs_utils::crypto::encrypt_with_key(api_key, &state.encryption_key)?;
     let encrypted_secret =
@@ -81,7 +79,7 @@ pub async fn save_credential(
     .execute(&state.db_pool)
     .await?;
 
-    // Auto-register exchange in registry for immediate use
+
     if let Ok(ccxt_ex) = virs_ccxt::create_exchange(
         exchange,
         api_key,
@@ -93,7 +91,7 @@ pub async fn save_credential(
         state.http_pool_max_idle_per_host,
         state.listenkey_keepalive_futures_secs,
     ) {
-        // 同步服务器时间，校准签名时间戳偏移（非阻塞 — 失败仅告警）
+
         if let Err(e) = ccxt_ex.sync_time().await {
             tracing::warn!(
                 error = %e,
@@ -126,8 +124,7 @@ pub async fn delete_credential(
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
 
-/// POST /api/credentials/test — test connectivity only (ping).
-/// Uses the exchange already registered in the registry (saved by save_credential).
+
 pub async fn test_credential(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -164,8 +161,7 @@ pub async fn test_credential(
     }
 }
 
-/// POST /api/credentials/check-permissions — check API key permissions via /sapi/v1/account/apiRestrictions.
-/// Uses the exchange already registered in the registry (saved by save_credential).
+
 pub async fn check_permissions(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -191,13 +187,11 @@ pub async fn check_permissions(
         }
     };
 
-    // Call apiRestrictions
+
     match exchange.get_api_restrictions().await {
         Ok(restrictions) => {
             let mut permissions = Vec::new();
 
-            // Note: "connectivity" is NOT included here — it's already checked
-            // by the separate /test (ping) endpoint in Step 2.
 
             permissions.push(serde_json::json!({
                 "name": "read_info",
@@ -249,8 +243,7 @@ pub async fn check_permissions(
     }
 }
 
-/// POST /api/credentials/verify — verify API key permissions via apiRestrictions.
-/// Uses the exchange already registered in the registry (saved by save_credential).
+
 pub async fn verify_permissions(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -271,13 +264,11 @@ pub async fn verify_permissions(
         }
     };
 
-    // Call apiRestrictions
+
     match exchange.get_api_restrictions().await {
         Ok(restrictions) => {
             let mut permissions = Vec::new();
 
-            // Note: "connectivity" is NOT included here — it's already checked
-            // by the separate /test (ping) endpoint.
 
             permissions.push(serde_json::json!({
                 "name": "read_info",
@@ -331,10 +322,7 @@ pub async fn verify_permissions(
     }
 }
 
-/// GET /api/credentials/position-mode — query the exchange's current position mode.
-/// Returns { supported: bool, mode: "hedge"|"oneway"|null }.
-/// - Hedge:  { supported: true, mode: "hedge" }
-/// - OneWay: { supported: true, mode: "oneway" }  (fapi returns Err for OneWay — caught here)
+
 pub async fn check_position_mode(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -359,7 +347,7 @@ pub async fn check_position_mode(
 
     match exchange.get_position_mode().await {
         Ok(_) => {
-            // Only Hedge reaches Ok — fapi returns Err for OneWay.
+
             Ok(Json(ApiResponse::ok(serde_json::json!({
                 "supported": true,
                 "mode": "hedge",
@@ -367,15 +355,15 @@ pub async fn check_position_mode(
         }
         Err(e) => {
             let err_str = format!("{}", e);
-            // OneWay mode — fapi returns InvalidRequest with "OneWay" in the message.
-            // Report it to the frontend so the wizard can block.
+
+
             if err_str.contains("OneWay") || err_str.contains("oneway") {
                 Ok(Json(ApiResponse::ok(serde_json::json!({
                     "supported": true,
                     "mode": "oneway",
                 }))))
             } else if err_str.contains("Not supported") || err_str.contains("not supported") {
-                // Exchange doesn't support position mode.
+
                 Ok(Json(ApiResponse::ok(serde_json::json!({
                     "supported": false,
                     "mode": null,
@@ -391,7 +379,7 @@ pub async fn check_position_mode(
     }
 }
 
-/// GET /api/credentials/status — check if user has exchange credentials configured
+
 pub async fn exchange_status(
     State(state): State<AppState>,
     headers: HeaderMap,

@@ -1,5 +1,3 @@
-//! PgCredentialStore — PostgreSQL-backed credential store.
-
 use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;

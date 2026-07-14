@@ -1,13 +1,8 @@
-//! Serde serialization/deserialization round-trip tests.
-
 use chrono::Utc;
 
 use crate::enums::*;
 use crate::market::*;
 
-// ============================================================
-// TC-S1: Enum serde round-trip
-// ============================================================
 
 #[test]
 fn s1_1_side_roundtrip() {
@@ -37,9 +32,6 @@ fn s1_4_strategy_status_roundtrip() {
     assert_eq!(de, StrategyStatus::Running);
 }
 
-// ============================================================
-// TC-S2: Struct serde round-trip
-// ============================================================
 
 #[test]
 fn s2_1_ticker_roundtrip() {
@@ -74,9 +66,3 @@ fn s2_3_exchange_position_roundtrip() {
     let de: ExchangePosition = serde_json::from_str(&json).unwrap();
     assert_eq!(de, pos);
 }
-
-// Removed: TC-S3 tested orphan method MarketType::from_str_lossy (no business
-// consumer). Method deleted.
-
-// Removed: TC-S4 tested AutoMarketType::from_str_lossy — AutoMarketType enum
-// deleted as part of spot logic pruning.

@@ -1,17 +1,9 @@
-//! Unit tests for types.rs From/TryFrom implementations.
-//!
-//! Covers: CcxtOrderStatus→OrderStatus, CcxtTicker→Ticker, CcxtOrderBook→OrderBook,
-//! CcxtFundingRate→FundingRate, CcxtFundingHistoryEntry→FundingHistoryEntry.
-
 use chrono::Utc;
 
 use crate::types::*;
 use virs_types::enums::{OrderStatus, Side};
 use virs_types::market::{FundingHistoryEntry, FundingRate, OrderBook, Ticker};
 
-// ============================================================
-// TC-T1: CcxtOrderStatus → OrderStatus
-// ============================================================
 
 #[test]
 fn t1_1_open_to_open() {
@@ -55,9 +47,6 @@ fn t1_7_rejected_maps_to_failed() {
     assert_eq!(status, OrderStatus::Failed);
 }
 
-// ============================================================
-// TC-T2: CcxtTicker → Ticker
-// ============================================================
 
 #[test]
 fn t2_1_ticker_all_fields() {
@@ -145,9 +134,6 @@ fn t2_3_ticker_timestamp_none_uses_now() {
     assert!(ticker.timestamp <= after);
 }
 
-// ============================================================
-// TC-T3: CcxtOrderBook → OrderBook
-// ============================================================
 
 #[test]
 fn t3_1_order_book_normal() {
@@ -182,9 +168,6 @@ fn t3_2_order_book_timestamp_none() {
     assert!(ob.timestamp <= after);
 }
 
-// ============================================================
-// TC-T4: CcxtFundingRate → FundingRate
-// ============================================================
 
 #[test]
 fn t4_1_funding_rate_normal() {
@@ -201,9 +184,6 @@ fn t4_1_funding_rate_normal() {
     assert_eq!(fr.next_funding_time, Some(now));
 }
 
-// ============================================================
-// TC-T5: CcxtFundingHistoryEntry → FundingHistoryEntry
-// ============================================================
 
 #[test]
 fn t5_1_funding_history_normal() {
@@ -216,20 +196,17 @@ fn t5_1_funding_history_normal() {
     assert!((e.rate - 0.00005).abs() < f64::EPSILON);
 }
 
-// Suppress unused import warning for Side (used in type scope but not directly in tests)
+
 #[allow(dead_code)]
 fn _suppress_warning() -> Side {
     Side::Buy
 }
 
-// ============================================================
-// T7 WARN fix: nextFundingTime: 0 filtering
-// ============================================================
 
 #[test]
 fn t7_1_funding_time_zero_is_epoch() {
-    // T7 WARN fix: verify that from_timestamp_millis(0) returns Some(epoch)
-    // This is the root cause — 0 is a valid timestamp, so we need explicit filtering
+
+
     let result = chrono::DateTime::from_timestamp_millis(0);
     assert!(result.is_some(), "timestamp 0 is a valid DateTime (epoch)");
     assert_eq!(
@@ -240,8 +217,8 @@ fn t7_1_funding_time_zero_is_epoch() {
 
 #[test]
 fn t7_2_filter_zero_before_from_timestamp_millis() {
-    // T7 WARN fix: the fix adds .filter(|&ts| ts > 0) before from_timestamp_millis
-    // This ensures nextFundingTime: 0 returns None instead of Some(epoch)
+
+
     let raw_ts: i64 = 0;
     let filtered = Some(raw_ts).filter(|&ts| ts > 0);
     assert_eq!(filtered, None, "0 should be filtered out");

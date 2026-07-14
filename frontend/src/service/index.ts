@@ -1,4 +1,3 @@
-// Service layer — unified exports
 export { api, getToken, setToken, removeToken } from './client';
 export { login, logout, getUserInfo } from './auth';
 export { fetchPlugins, validateScript, getAiStatus, generateStrategy } from './ai';

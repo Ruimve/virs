@@ -1,5 +1,3 @@
-//! PeOrderExecutor — executes orders through the Position Engine.
-
 use async_trait::async_trait;
 use tokio::sync::broadcast;
 use tracing::warn;
@@ -25,7 +23,7 @@ impl PeOrderExecutor {
         mut engine_event_rx: broadcast::Receiver<EngineEvent>,
         engine: PositionEngine,
     ) -> Self {
-        // Bridge: EngineEvent → OrderEvent
+
         tokio::spawn(async move {
             loop {
                 match engine_event_rx.recv().await {
@@ -65,12 +63,10 @@ impl OrderExecutor for PeOrderExecutor {
                 take_profit,
                 client_order_id,
             } => {
-                // 注意：bot 层的 client_order_id 映射到引擎层的 strategy_id。
-                // 引擎内部会把它同时保存到 Position.strategy_id（仓位归属）
-                // 和作为 client_order_id 传给交易所（订单追踪）。
-                // bot 层的 client_order_id 格式如 "AOL__{timestamp}{hash}" 包含策略信息，可同时承担两个角色。
+
+
                 EngineCommand::OpenPosition {
-                    exchange: String::new(), // will be resolved by engine
+                    exchange: String::new(),
                     symbol,
                     side: match side {
                         BotPositionSide::Long => PositionSide::Long,
@@ -163,7 +159,7 @@ impl OrderExecutor for PeOrderExecutor {
     }
 }
 
-/// Convert a Position Engine event to a bot-layer OrderEvent.
+
 pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
     match event {
         EngineEvent::OrderPlaced { order } => Some(OrderEvent::OrderPlaced {

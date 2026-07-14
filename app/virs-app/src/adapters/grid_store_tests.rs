@@ -1,5 +1,3 @@
-//! Unit tests for adapters/grid_store.rs
-
 use crate::adapters::grid_store::bot_to_config;
 use chrono::Utc;
 use uuid::Uuid;

@@ -1,5 +1,3 @@
-//! PgGridStore — PostgreSQL implementation of GridStore.
-
 use async_trait::async_trait;
 use sqlx::PgPool;
 use tracing::warn;

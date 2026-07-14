@@ -1,23 +1,19 @@
-//! Market data types for virs-market service.
-//!
-//! Re-exports core types from virs-ccxt and defines market-service-specific types.
-
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use virs_error::VirsResult;
 
-// Re-export kline types from ccxt
+
 pub use virs_ccxt::ws_types::{Candle, KlineWsClient, WsCandleUpdate, WsEvent};
 
-// Re-export order book types from ccxt
+
 pub use virs_ccxt::ws_types::{
     OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate,
 };
 
-// Re-export MarketType from virs-types
+
 pub use virs_types::enums::MarketType;
 
-/// Timeframe enum — defines supported candle intervals.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Timeframe {
     #[serde(rename = "1m")]
@@ -79,7 +75,7 @@ impl fmt::Display for Timeframe {
     }
 }
 
-/// Kline event emitted by KlineEngine.
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KlineEvent {
     pub exchange: String,
@@ -96,7 +92,7 @@ pub enum KlineEventType {
     Backfilled,
 }
 
-/// KlineEngine configuration.
+
 #[derive(Debug, Clone)]
 pub struct KlineEngineConfig {
     pub reconnect_delay_secs: u64,
@@ -122,7 +118,7 @@ impl Default for KlineEngineConfig {
     }
 }
 
-/// Kline data source — fetches klines from exchange REST API.
+
 #[async_trait::async_trait]
 pub trait KlineSource: Send + Sync {
     async fn fetch_klines(
@@ -136,7 +132,7 @@ pub trait KlineSource: Send + Sync {
     ) -> VirsResult<Vec<Candle>>;
 }
 
-/// Kline persistence — saves/loads candles to/from storage.
+
 #[async_trait::async_trait]
 pub trait KlinePersistence: Send + Sync {
     async fn save_candles(
@@ -156,12 +152,7 @@ pub fn align_open_time(open_time: i64, timeframe: Timeframe) -> i64 {
     (open_time / timeframe.ms()) * timeframe.ms()
 }
 
-// ============================================================
-// OrderBook engine types
-// ============================================================
 
-/// OrderBook event emitted by OrderBookEngine.
-/// Mirrors KlineEvent structure but for order book snapshots.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrderBookEvent {
     pub exchange: String,
@@ -171,7 +162,7 @@ pub struct OrderBookEvent {
     pub timestamp: i64,
 }
 
-/// OrderBookEngine configuration.
+
 #[derive(Debug, Clone)]
 pub struct OrderBookEngineConfig {
     pub event_channel_capacity: usize,

@@ -1,8 +1,3 @@
-//! Binance Wallet & Account REST API (/sapi/v1) — account management, funds, API restrictions.
-//!
-//! Endpoints:
-//! - GET /sapi/v1/account/apiRestrictions
-
 use crate::auth::Signer;
 use crate::types::*;
 use crate::ExchangeClient;
@@ -14,7 +9,7 @@ fn url(path: &str) -> String {
     format!("{BASE_URL}{path}")
 }
 
-/// GET /sapi/v1/account/apiRestrictions — fetch API key restrictions.
+
 pub async fn fetch_api_restrictions(
     client: &ExchangeClient,
     signer: &dyn Signer,

@@ -1,9 +1,3 @@
-//! EngineManager — lazy initialization of trading engines.
-//!
-//! Engines (Position, Grid, Auto) are NOT started at application boot.
-//! Instead, they are started when the first bot is created after the wizard,
-//! using the exchange credentials provided by the user.
-
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock, Mutex as StdMutex};
 
@@ -25,30 +19,30 @@ use virs_types::position::{EngineCommand, EngineEvent};
 
 use crate::adapters::*;
 
-/// Inner state — populated on first `ensure_started` call.
+
 struct EngineState {
     paper_mode: bool,
     grid_cmd_tx: StdMutex<Option<mpsc::Sender<GridCommand>>>,
     auto_cmd_tx: StdMutex<Option<mpsc::Sender<AutoCommand>>>,
-    /// Position Engine 事件广播器（用于 /ws/position 推送）
-    /// shutdown 时 take() 丢弃，使 /ws/position handler 收到 broadcast Closed
+
+
     pe_event_tx: StdMutex<Option<broadcast::Sender<EngineEvent>>>,
-    /// Position Engine 共享引用（用于查询当前仓位快照）
-    /// shutdown 时 take() 丢弃，释放 cmd_tx clone + Arc<EngineInner> 引用
+
+
     position_engine: StdMutex<Option<PositionEngine>>,
-    /// Symbols that need price ticks in paper mode (exchange, symbol)
+
     paper_symbols: Arc<Mutex<Vec<(String, String)>>>,
-    /// JoinHandle for paper mode price tick task
+
     paper_tick_handle: StdMutex<Option<tokio::task::JoinHandle<()>>>,
-    /// JoinHandle for PositionEngine run loop
+
     pe_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    /// JoinHandle for GridEngine run loop
+
     grid_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    /// JoinHandle for AutoEngine run loop
+
     auto_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
-/// Application-level engine manager.
+
 pub struct AppEngineManager {
     db_pool: sqlx::PgPool,
     exchange_registry: Arc<Exchanges>,
@@ -57,17 +51,16 @@ pub struct AppEngineManager {
     encryption_key: String,
     llm_key: String,
     proxy: Option<String>,
-    /// T12: 时间配置（从环境变量加载）
+
     time_config: virs_config::TimeConfig,
 
     started: AtomicBool,
-    /// Init lock — ensures only one caller runs the init logic.
+
     init_lock: Mutex<()>,
-    /// Cached state — set once after init, readable without async.
+
     state: OnceLock<EngineState>,
-    /// Restore error — if `restore_if_needed` fails at boot, the error
-    /// message is stored here so the API can surface it to the frontend.
-    /// `None` means no restore has been attempted or it succeeded.
+
+
     restore_error: StdMutex<Option<String>>,
 }
 
@@ -98,10 +91,9 @@ impl AppEngineManager {
         }
     }
 
-    /// Inner restore logic — all failures propagate via `?`.
-    /// Called by `restore_if_needed` which wraps this in error handling.
+
     async fn restore_inner(&self) -> VirsResult<()> {
-        // Check if any bots exist in DB
+
         let has_bots: bool = {
             let grid_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_grid_bots"#)
                 .fetch_one(&self.db_pool)
@@ -116,7 +108,7 @@ impl AppEngineManager {
             return Ok(());
         }
 
-        // 1. Restore Exchanges from DB credentials.
+
         let rows: Vec<(String, String, String, Option<String>)> = sqlx::query_as(
             r#"SELECT exchange, encrypted_api_key, encrypted_api_secret, encrypted_passphrase
                FROM qd_exchange_credentials"#,
@@ -178,7 +170,7 @@ impl AppEngineManager {
                     ))
                 })?;
 
-                // 同步服务器时间，校准签名时间戳偏移（非阻塞 — 失败仅告警）
+
                 if let Err(e) = ccxt_ex.sync_time().await {
                     tracing::warn!(
                         error = %e,
@@ -194,7 +186,7 @@ impl AppEngineManager {
             }
         }
 
-        // 2. Restore Kline/OrderBook subscriptions for running bot symbols.
+
         let bot_symbols: Vec<(String, String)> = sqlx::query_as(
             r#"
             SELECT exchange, symbol FROM qd_auto_bots WHERE status = 'running'
@@ -230,7 +222,7 @@ impl AppEngineManager {
             info!(exchange, symbol, "Restored orderbook subscription");
         }
 
-        // 3. Determine paper mode from DB (consistency check).
+
         let paper_modes: Vec<bool> = sqlx::query_scalar(
             r#"SELECT DISTINCT paper_mode FROM (
                 SELECT paper_mode FROM qd_auto_bots WHERE status = 'running'
@@ -256,15 +248,13 @@ impl AppEngineManager {
 
         let paper_mode = paper_modes[0];
 
-        // 4. Start engines
+
         self.ensure_started(paper_mode).await?;
 
         Ok(())
     }
 
-    /// Mark all running bots as 'error' in the database.
-    /// Called when restore fails to prevent stale 'running' bots from
-    /// misleading the frontend.
+
     async fn mark_running_bots_as_error(&self) -> VirsResult<()> {
         sqlx::query(r#"UPDATE qd_grid_bots SET status = 'error', stopped_at = NOW() WHERE status = 'running'"#)
             .execute(&self.db_pool)
@@ -280,21 +270,21 @@ impl AppEngineManager {
 #[async_trait]
 impl EngineManager for AppEngineManager {
     async fn ensure_started(&self, paper_mode: bool) -> VirsResult<()> {
-        // Fast path — already started
+
         if self.started.load(Ordering::SeqCst) {
             return Ok(());
         }
 
         let _guard = self.init_lock.lock().await;
 
-        // Double-check after acquiring lock
+
         if self.state.get().is_some() {
             return Ok(());
         }
 
         info!("Starting trading engines (paper_mode={})...", paper_mode);
 
-        // ── Position Engine ──
+
         let pe_exchange: Box<dyn ExchangePe> = if paper_mode {
             let initial_balance = {
                 let temp_adapter = CcxtExchangeAdapter::new(self.exchange_registry.clone());
@@ -330,7 +320,7 @@ impl EngineManager for AppEngineManager {
         let grid_pe_event_rx = position_engine.subscribe_events();
         let auto_pe_event_rx = position_engine.subscribe_events();
         let pe_exchange_ref = position_engine.exchange();
-        // 保存 clone 用于后续查询当前仓位快照（/ws/position subscribe 时推送）
+
         let position_engine_clone = position_engine.clone();
 
         let pe_handle = tokio::spawn(async move {
@@ -340,7 +330,7 @@ impl EngineManager for AppEngineManager {
         });
         info!("Position Engine started (paper={})", paper_mode);
 
-        // ── Grid Engine ──
+
         let (grid_event_tx, _grid_event_rx) = tokio::sync::broadcast::channel(256);
 
         let grid_store = Arc::new(PgGridStore::new(self.db_pool.clone()));
@@ -382,13 +372,10 @@ impl EngineManager for AppEngineManager {
             self.time_config.clone(),
         );
 
-        // Paper mode price tick
+
         let paper_symbols: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
 
-        // Populate paper_symbols BEFORE spawning engines.
-        // If this DB query fails, ? propagates immediately — no engine tasks
-        // have been spawned yet, so there are no orphan tasks to clean up
-        // and bot status remains untouched ('running' in DB).
+
         if paper_mode {
             let paper_bots: Vec<(String, String)> = sqlx::query_as(
                 r#"SELECT DISTINCT exchange, symbol FROM (
@@ -450,7 +437,7 @@ impl EngineManager for AppEngineManager {
         });
         info!("Grid engine started");
 
-        // ── Auto Trade Engine ──
+
         let auto_store = Arc::new(PgAutoStore::new(self.db_pool.clone()));
         let auto_price_provider = Arc::new(
             AutoExchangePriceProvider::new(self.exchange_registry.clone())
@@ -497,7 +484,7 @@ impl EngineManager for AppEngineManager {
         });
         info!("Auto trade engine started");
 
-        // Store state (OnceLock — set once, then readable synchronously)
+
         let _ = self.state.set(EngineState {
             paper_mode,
             grid_cmd_tx: StdMutex::new(Some(grid_cmd_tx)),
@@ -565,34 +552,28 @@ impl EngineManager for AppEngineManager {
     }
 
     async fn restore_if_needed(&self) -> VirsResult<()> {
-        // Already started — nothing to do
+
         if self.started.load(Ordering::SeqCst) {
             return Ok(());
         }
 
-        // Run the actual restore logic. On any failure we:
-        // 1. Mark all running bots as 'error' in DB
-        // 2. Store the error message for API visibility
-        // 3. Return Ok(()) so the HTTP server still starts — the user can
-        //    then fix the problem (e.g. re-save credentials) and restart.
+
         if let Err(e) = self.restore_inner().await {
             error!("Service restore failed: {}", e);
 
-            // Mark all running bots as error so the frontend shows them
-            // as needing intervention rather than "running".
+
             if let Err(db_err) = self.mark_running_bots_as_error().await {
                 error!(error = %db_err, "Failed to mark bots as error during restore failure");
             }
 
-            // Store the error for API visibility.
+
             *self.restore_error.lock().unwrap() = Some(e.to_string());
 
-            // Do NOT propagate — let the HTTP server start so the user
-            // can access the UI and diagnose/fix the problem.
+
             return Ok(());
         }
 
-        // Clear any previous restore error (e.g. from a prior failed boot).
+
         *self.restore_error.lock().unwrap() = None;
         Ok(())
     }
@@ -601,27 +582,25 @@ impl EngineManager for AppEngineManager {
         if let Some(state) = self.state.get() {
             info!("Shutting down trading engines...");
 
-            // 1. Signal PositionEngine to stop (sets ShuttingDown state)
-            //    Take position_engine clone to call stop(), then drop its cmd_tx
+
             let pe_opt = state.position_engine.lock().unwrap().take();
             if let Some(pe) = &pe_opt {
                 pe.stop();
             }
 
-            // 2. Abort paper price tick task (holds pe_cmd_tx clone)
+
             if let Some(handle) = state.paper_tick_handle.lock().unwrap().take() {
                 handle.abort();
             }
 
-            // 3. Drop command senders to trigger grid/auto cmd_loop exit
-            //    (recv() returns None when all senders are dropped)
+
             drop(state.grid_cmd_tx.lock().unwrap().take());
             drop(state.auto_cmd_tx.lock().unwrap().take());
 
-            // 4. Drop pe_event_tx so /ws/position handlers see broadcast Closed
+
             drop(state.pe_event_tx.lock().unwrap().take());
 
-            // 5. Take JoinHandles and await all three in parallel (with timeout)
+
             let pe_handle = state.pe_handle.lock().await.take();
             let grid_handle = state.grid_handle.lock().await.take();
             let auto_handle = state.auto_handle.lock().await.take();
@@ -634,8 +613,7 @@ impl EngineManager for AppEngineManager {
                 tokio::join!(pe_fut, grid_fut, auto_fut);
             }).await;
 
-            // 6. Drop pe_opt — releases the last cmd_tx clone (other than
-            //    the one inside the run() task, which is dropped when run() returns)
+
             drop(pe_opt);
 
             info!("All trading engines stopped");

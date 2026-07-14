@@ -1,8 +1,3 @@
-//! Integration tests for virs-api.
-//!
-//! Tests cross-module computation chains, serde round-trips with extracted
-//! function calls, and business logic consistency.
-
 use chrono::Utc;
 use uuid::Uuid;
 use virs_api::handlers::ai::{resolve_provider_base_url, resolve_provider_model};
@@ -15,13 +10,10 @@ use virs_market::types::{KlineEvent, KlineEventType, Timeframe};
 use virs_types::enums::{PositionSide, PositionStatus};
 use virs_types::position::Position;
 
-// ============================================================
-// TC-INT-1: Provider resolution consistency
-// ============================================================
 
 #[test]
 fn int_1_1_provider_url_model_consistency() {
-    // For every known provider, both URL and model should resolve
+
     for provider in &["deepseek", "openai", "openrouter"] {
         let url = resolve_provider_base_url(provider);
         let model = resolve_provider_model(provider);
@@ -32,16 +24,13 @@ fn int_1_1_provider_url_model_consistency() {
 
 #[test]
 fn int_1_2_known_provider_roundtrip() {
-    // Known provider → URL + model both non-None
+
     let url = resolve_provider_base_url("deepseek").unwrap();
     let model = resolve_provider_model("deepseek").unwrap();
     assert!(url.starts_with("https://"));
     assert!(!model.is_empty());
 }
 
-// ============================================================
-// TC-INT-2: Position serde + WS JSON chain
-// ============================================================
 
 #[test]
 fn int_2_1_position_serde_then_ws_json() {
@@ -52,7 +41,7 @@ fn int_2_1_position_serde_then_ws_json() {
     assert_eq!(json["side"], "long");
     assert_eq!(json["stop_loss"], 45000.0);
 
-    // Verify the JSON is serializable
+
     let serialized = serde_json::to_string(&json).unwrap();
     assert!(serialized.contains("position_updated"));
 }
@@ -86,9 +75,6 @@ fn int_2_2_kline_event_to_json_chain() {
     assert_eq!(json["event_type"], "Closed");
 }
 
-// ============================================================
-// TC-INT-3: ApiResponse serde chain
-// ============================================================
 
 #[test]
 fn int_3_1_api_response_ok_then_serialize() {
@@ -108,13 +94,10 @@ fn int_3_2_api_error_from_virs_error_then_serialize() {
     assert_eq!(json["message"], "operation failed");
 }
 
-// ============================================================
-// TC-INT-4: API response parsing chains
-// ============================================================
 
 #[test]
 fn int_4_1_models_response_parse_chain() {
-    // Simulate a realistic /models API response
+
     let api_response = serde_json::json!({
         "object": "list",
         "data": [
@@ -128,7 +111,7 @@ fn int_4_1_models_response_parse_chain() {
     assert_eq!(models[0]["owned_by"], "deepseek");
     assert_eq!(models[1]["id"], "deepseek-reasoner");
 
-    // Verify each model can be serialized to a response
+
     for m in &models {
         let resp = ApiResponse::ok(m.clone());
         let json = serde_json::to_value(&resp).unwrap();
@@ -138,7 +121,7 @@ fn int_4_1_models_response_parse_chain() {
 
 #[test]
 fn int_4_2_balance_response_parse_chain() {
-    // Simulate a realistic balance API response (DeepSeek format)
+
     let api_response = serde_json::json!({
         "is_available": true,
         "balance_infos": [
@@ -150,16 +133,13 @@ fn int_4_2_balance_response_parse_chain() {
     assert_eq!(balances[0]["total_balance"], "10.50");
     assert_eq!(balances[0]["currency"], "USD");
 
-    // Wrap in ApiResponse and verify serialization
+
     let resp = ApiResponse::ok(serde_json::json!({"balances": balances}));
     let json = serde_json::to_value(&resp).unwrap();
     assert_eq!(json["success"], true);
     assert_eq!(json["data"]["balances"][0]["total_balance"], "10.50");
 }
 
-// ============================================================
-// Helpers
-// ============================================================
 
 fn make_position(side: PositionSide, stop_loss: Option<f64>) -> Position {
     Position {

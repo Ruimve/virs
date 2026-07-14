@@ -1,5 +1,3 @@
-//! PgAutoStore — PostgreSQL implementation of AutoStore.
-
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
@@ -241,8 +239,8 @@ impl AutoStore for PgAutoStore {
         &self,
         bot_id: Uuid,
     ) -> VirsResult<Option<(String, String, DateTime<Utc>)>> {
-        // close_reason：stop_loss/take_profit/position_timeout/llm_decision
-        // 用于冷却期判断
+
+
         let row: Option<(String, String, DateTime<Utc>)> = sqlx::query_as(
             r#"SELECT open_side, close_reason, closed_at
                FROM qd_auto_trades
@@ -345,7 +343,7 @@ impl AutoStore for PgAutoStore {
         execution_status: &str,
         intercept_reason: Option<&str>,
     ) -> VirsResult<()> {
-        // 拦截时同步更新 status='intercepted'，便于前端按状态筛选
+
         let status = if intercept_reason.is_some() {
             "intercepted"
         } else {

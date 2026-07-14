@@ -1,10 +1,3 @@
-//! VIRS App — Application entry point.
-//!
-//! Initializes the API server with lazy engine startup.
-//! Trading engines (Position, Grid, Auto) are NOT started at boot.
-//! They are started when the first bot is created after the wizard,
-//! using the exchange credentials provided by the user.
-
 use std::sync::Arc;
 
 use tracing::info;
@@ -22,7 +15,7 @@ use virs_market::{
 
 #[tokio::main]
 async fn main() -> VirsResult<()> {
-    // Load config
+
     let mut config = load_config()?;
 
     if config.server.encryption_key
@@ -41,7 +34,7 @@ async fn main() -> VirsResult<()> {
         tracing::warn!("WARNING: Using default JWT_SECRET. Change this in production!");
     }
 
-    // Initialize tracing
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
@@ -54,7 +47,7 @@ async fn main() -> VirsResult<()> {
     info!("VIRS starting up...");
     info!("Version: {}", env!("CARGO_PKG_VERSION"));
 
-    // Database connection
+
     let db_pool = sqlx::postgres::PgPoolOptions::new()
         .min_connections(config.database.pool_min)
         .max_connections(config.database.pool_max)
@@ -63,7 +56,7 @@ async fn main() -> VirsResult<()> {
         .await?;
     info!("Database connected");
 
-    // Run migrations
+
     let init_sql = std::fs::read_to_string("migrations/init.sql")
         .or_else(|_| {
             let exe_dir = std::env::current_exe()?;
@@ -78,7 +71,7 @@ async fn main() -> VirsResult<()> {
     sqlx::raw_sql(&init_sql).execute(&db_pool).await?;
     info!("Database migrations applied");
 
-    // Create admin user if not exists
+
     let admin_exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM qd_users WHERE username = $1)")
             .bind(&config.admin.username)
@@ -110,12 +103,11 @@ async fn main() -> VirsResult<()> {
     };
     config.admin.id = Some(admin_id);
 
-    // Create exchange registry (empty — populated when user saves credentials)
+
     let exchange_registry = Arc::new(Exchanges::new());
     info!("Exchange registry initialized (empty — will be populated on first credential save)");
 
-    // ── Kline Engine ──
-    // Created at boot but only subscribes when bots need data
+
     let kline_config = KlineEngineConfig {
         proxy_url: config.proxy.clone(),
         ..Default::default()
@@ -133,8 +125,7 @@ async fn main() -> VirsResult<()> {
     ));
     info!("Kline engine created (lazy — will start on first subscribe)");
 
-    // ── OrderBook Engine ──
-    // Created at boot but only subscribes when bots need data
+
     let ob_perpetual_ws = Arc::new(tokio::sync::Mutex::new(
         virs_ccxt::adapter::binance::orderbook_ws::OrderBookWs::new_perpetual(
             config.proxy.as_deref(),
@@ -146,9 +137,7 @@ async fn main() -> VirsResult<()> {
     ));
     info!("OrderBook engine created (lazy — will start on first subscribe)");
 
-    // ── Engine Manager (lazy) ──
-    // Position/Grid/Auto engines are NOT started here.
-    // They will be started when the first bot is created via API.
+
     let engine_manager = Arc::new(AppEngineManager::new(
         db_pool.clone(),
         exchange_registry.clone(),
@@ -161,7 +150,7 @@ async fn main() -> VirsResult<()> {
     ));
     info!("Engine manager created (engines will start on first bot creation)");
 
-    // Build app state
+
     let app_state = AppState {
         db_pool: db_pool.clone(),
         engine_manager: engine_manager.clone(),
@@ -179,16 +168,13 @@ async fn main() -> VirsResult<()> {
         listenkey_keepalive_futures_secs: config.time.listenkey.listenkey_keepalive_futures_secs,
     };
 
-    // Restore services if bots exist from previous session.
-    // restore_if_needed handles its own errors internally: on failure it
-    // marks bots as 'error', stores the error message for API visibility,
-    // and returns Ok(()) so the HTTP server can still start.
+
     let _ = engine_manager.restore_if_needed().await;
 
-    // Build router
+
     let app = build_router(app_state);
 
-    // Start server
+
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
@@ -203,9 +189,7 @@ async fn main() -> VirsResult<()> {
     .await
     .context("axum server error")?;
 
-    // === Graceful shutdown of engines ===
-    // Order matters: stop trading engines first (they consume market data),
-    // then stop market data engines (their broadcast senders become unused).
+
     info!("Shutting down trading engines...");
     engine_manager.shutdown().await;
 

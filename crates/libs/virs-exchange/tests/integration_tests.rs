@@ -1,8 +1,3 @@
-//! Integration tests for virs-exchange.
-//!
-//! Tests cross-module type conversion round-trips, paper exchange operations,
-//! registry management, and error handling pipelines.
-
 use chrono::Utc;
 
 use virs_exchange::Exchanges;
@@ -11,13 +6,10 @@ use virs_types::enums::*;
 
 use virs_error::ExchangeError;
 
-// ============================================================
-// TC-INT-1: Type conversion round-trips
-// ============================================================
 
 #[test]
 fn int_1_1_side_roundtrip() {
-    // app Side → ccxt Side → app Side
+
     let original = Side::Buy;
     let ccxt = virs_ccxt::Side::Buy;
     assert_eq!(original, Side::Buy);
@@ -26,7 +18,7 @@ fn int_1_1_side_roundtrip() {
 
 #[test]
 fn int_1_2_order_type_roundtrip() {
-    // OrderType → models::OrderType → check consistency
+
     let ot = OrderType::Limit;
     let models_ot = models::OrderType::Limit;
     assert_eq!(ot, OrderType::Limit);
@@ -35,7 +27,7 @@ fn int_1_2_order_type_roundtrip() {
 
 #[test]
 fn int_1_3_position_side_consistency() {
-    // models::PositionSide ↔ PositionSide consistency
+
     let models_long = models::PositionSide::Long;
     let pe_long = PositionSide::Long;
     assert_eq!(models_long, models::PositionSide::Long);
@@ -50,9 +42,6 @@ fn int_1_4_market_type_consistency() {
     assert_eq!(pe_perp, MarketType::Perpetual);
 }
 
-// ============================================================
-// TC-INT-2: Paper exchange basic operations
-// ============================================================
 
 #[tokio::test]
 async fn int_2_1_paper_exchange_creation_and_balance() {
@@ -82,7 +71,7 @@ async fn int_2_2_paper_market_order_updates_balance() {
         50000.0,
     );
 
-    // Set a price tick so market orders can fill
+
     paper.on_price_tick("BTC/USDT", 50000.0).await;
 
     let params = PlaceOrderParams {
@@ -100,26 +89,23 @@ async fn int_2_2_paper_market_order_updates_balance() {
     assert_eq!(order.status, OrderStatus::Filled);
     assert_eq!(order.filled, 0.1);
 
-    // Balance should reflect margin used (50000 * 0.1 / 20 = 250 USDT margin with default leverage 20)
+
     let balance = paper.get_balance().await.unwrap();
     assert!(balance.used > 0.0, "used balance should be > 0 after opening position");
     assert!(balance.free < 50000.0, "free balance should be < initial after opening position");
 
-    // Position should exist
+
     let positions = paper.get_positions(Some("BTC/USDT")).await.unwrap();
     assert_eq!(positions.len(), 1);
     assert_eq!(positions[0].side, PositionSide::Long);
     assert!((positions[0].size - 0.1).abs() < 1e-8);
 }
 
-// ============================================================
-// TC-INT-3: Registry operations
-// ============================================================
 
 #[test]
 fn int_3_1_registry_register_and_get() {
     let registry = Exchanges::new();
-    // Registry starts empty
+
     assert!(registry.get("nonexistent").is_none());
 }
 
@@ -136,9 +122,6 @@ fn int_3_3_registry_list_names() {
     assert!(names.is_empty());
 }
 
-// ============================================================
-// TC-INT-4: Error handling pipeline
-// ============================================================
 
 #[test]
 fn int_4_1_no_exchange_error() {
@@ -151,14 +134,6 @@ fn int_4_1_no_exchange_error() {
     }
 }
 
-// ============================================================
-// TC-INT-5: WsFeedEvent — no longer needs conversion
-// (virs-ccxt now uses virs_types::WsFeedEvent directly)
-// ============================================================
-
-// ============================================================
-// TC-INT-6: Full data flow — order and position conversion
-// ============================================================
 
 #[test]
 fn int_6_1_order_conversion_full_chain() {

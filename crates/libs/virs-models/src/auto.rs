@@ -33,8 +33,8 @@ pub struct AutoBot {
 }
 
 impl AutoBot {
-    /// Calculate win rate as a percentage (win_trades / total_trades * 100).
-    /// Returns 0.0 if total_trades is zero (division-by-zero protection).
+
+
     pub fn win_rate(&self) -> f64 {
         if self.total_trades <= 0 {
             0.0
@@ -43,8 +43,7 @@ impl AutoBot {
         }
     }
 
-    /// Calculate loss rate as a percentage (loss_trades / total_trades * 100).
-    /// Returns 0.0 if total_trades is zero (division-by-zero protection).
+
     pub fn loss_rate(&self) -> f64 {
         if self.total_trades <= 0 {
             0.0
@@ -53,8 +52,7 @@ impl AutoBot {
         }
     }
 
-    /// Calculate total return as a percentage of initial capital.
-    /// Returns 0.0 if initial_capital is zero (division-by-zero protection).
+
     pub fn total_return_pct(&self) -> f64 {
         if self.initial_capital == 0.0 {
             0.0
@@ -63,12 +61,12 @@ impl AutoBot {
         }
     }
 
-    /// Returns true if the bot is currently running (status == "running").
+
     pub fn is_running(&self) -> bool {
         self.status == "running"
     }
 
-    /// Returns true if the bot has been stopped (status == "stopped").
+
     pub fn is_stopped(&self) -> bool {
         self.status == "stopped"
     }

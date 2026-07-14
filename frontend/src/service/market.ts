@@ -48,10 +48,7 @@ export async function fetchOrderBook(params: {
   return { success: false, error: res.error || '获取订单簿失败' };
 }
 
-/**
- * 订阅订单簿实时流。
- * 后端重启后，订阅会丢失，前端需要重新订阅以确保 WS 推送恢复。
- */
+
 export async function subscribeOrderBook(params: {
   exchange: string;
   symbol: string;

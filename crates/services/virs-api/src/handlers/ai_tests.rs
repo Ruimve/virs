@@ -1,10 +1,5 @@
-//! Unit tests for handlers/ai.rs provider resolution functions.
-
 use crate::handlers::ai::{resolve_provider_base_url, resolve_provider_model};
 
-// ============================================================
-// TC-AI1: resolve_provider_base_url
-// ============================================================
 
 #[test]
 fn ai1_1_deepseek_url() {
@@ -26,9 +21,6 @@ fn ai1_4_unknown_url() {
     assert_eq!(resolve_provider_base_url("unknown"), None);
 }
 
-// ============================================================
-// TC-AI2: resolve_provider_model
-// ============================================================
 
 #[test]
 fn ai2_1_deepseek_model() {

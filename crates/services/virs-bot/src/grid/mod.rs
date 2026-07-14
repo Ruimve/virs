@@ -1,5 +1,3 @@
-//! Grid trading bot module.
-
 pub mod adapters;
 pub mod ai;
 pub mod engine;

@@ -1,5 +1,3 @@
-//! Auto AI service — LLM decision for auto trading.
-
 use std::sync::Arc;
 
 use tracing::warn;
@@ -9,7 +7,7 @@ use crate::common::ai_client;
 use crate::common::ports::{CredentialStore, LlmProviderResolver};
 use virs_error::BotResult;
 
-/// Auto trading action
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum AutoAction {
     OpenLong,
@@ -46,15 +44,15 @@ impl AutoAction {
     }
 }
 
-/// Auto trading AI decision result
+
 #[derive(Debug, Clone)]
 pub struct AutoDecision {
     pub action: AutoAction,
     pub reason: String,
     pub confidence: f64,
-    /// LLM 返回的止损价（仅 open_long/open_short 时有效，其他动作为 None 或 0）
+
     pub stop_loss: Option<f64>,
-    /// LLM 返回的止盈价（仅 open_long/open_short 时有效，其他动作为 None 或 0）
+
     pub take_profit: Option<f64>,
     pub market_regime: Option<String>,
     pub funding_rate_warning: Option<String>,
@@ -84,7 +82,7 @@ impl AutoDecision {
             })
             .clamp(0.0, 1.0);
 
-        // 解析 SL/TP：LLM 应在 open_long/open_short 时返回正数价格；其他动作或异常时为 None
+
         let stop_loss = decision["stop_loss"].as_f64().filter(|v| *v > 0.0);
         let take_profit = decision["take_profit"].as_f64().filter(|v| *v > 0.0);
 
@@ -121,7 +119,7 @@ impl AutoDecision {
     }
 }
 
-/// Auto AI 服务
+
 pub struct AutoAiService {
     http_client: reqwest::Client,
     llm_resolver: Arc<dyn LlmProviderResolver>,

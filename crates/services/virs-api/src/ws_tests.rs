@@ -1,5 +1,3 @@
-//! Unit tests for ws.rs JSON conversion functions.
-
 use crate::ws::{kline_event_to_json, orderbook_event_to_json, position_to_ws_json};
 use chrono::Utc;
 use uuid::Uuid;
@@ -8,16 +6,11 @@ use virs_market::types::{KlineEvent, KlineEventType, OrderBookEvent, Timeframe};
 use virs_types::enums::{PositionSide, PositionStatus};
 use virs_types::position::Position;
 
-/// Serialize a wire DTO to a `serde_json::Value` for assertions.
-/// The production handlers serialize directly to a string (single pass);
-/// tests re-serialize to a Value only to index into the JSON tree.
+
 fn ws_value<T: serde::Serialize>(v: T) -> serde_json::Value {
     serde_json::to_value(v).unwrap()
 }
 
-// ============================================================
-// TC-W1: position_to_ws_json
-// ============================================================
 
 #[test]
 fn w1_1_position_all_fields() {
@@ -50,9 +43,6 @@ fn w1_3_position_type_field() {
     assert_eq!(json["type"], "position_updated");
 }
 
-// ============================================================
-// TC-W2: kline_event_to_json
-// ============================================================
 
 #[test]
 fn w2_1_kline_normal() {
@@ -81,9 +71,6 @@ fn w2_3_kline_timeframe_format() {
     assert_eq!(json["timeframe"], "1m");
 }
 
-// ============================================================
-// TC-W3: orderbook_event_to_json
-// ============================================================
 
 #[test]
 fn w3_1_orderbook_normal() {
@@ -121,9 +108,6 @@ fn w3_3_orderbook_level_format() {
     assert_eq!(first_bid[1], 1.5);
 }
 
-// ============================================================
-// Helpers
-// ============================================================
 
 fn make_position(side: PositionSide, status: PositionStatus, stop_loss: Option<f64>) -> Position {
     Position {

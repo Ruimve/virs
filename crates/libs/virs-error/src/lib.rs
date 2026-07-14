@@ -1,29 +1,17 @@
-//! VIRS unified error handling crate.
-//!
-//! All domain error types (BotError, ExchangeError) are defined here.
-//! Upper layers use VirsError as the unified top-level error with
-//! automatic `#[from]` conversion from each domain type.
-
 pub mod api;
 pub mod bot;
 pub mod classify;
 pub mod context;
 pub mod exchange;
 
-// Re-export all error types and result aliases at crate root
+
 pub use api::ApiError;
 pub use bot::{BotError, BotResult};
 pub use classify::{Categorized, ErrorCategory, ErrorCode, HttpStatus, Retryable};
 pub use context::Context;
 pub use exchange::ExchangeError;
 
-/// Top-level unified error.
-///
-/// Each domain error converts into VirsError via `#[from]`, so `?` works
-/// seamlessly across crate boundaries. Callers can `match` on the domain
-/// variant for fine-grained handling, or propagate upward to an
-/// application boundary (HTTP handler, CLI main, etc.) where
-/// `IntoResponse` / `is_retryable()` make the final decision.
+
 #[derive(Debug, thiserror::Error)]
 pub enum VirsError {
     #[error(transparent)]
@@ -32,26 +20,24 @@ pub enum VirsError {
     #[error(transparent)]
     Exchange(#[from] ExchangeError),
 
-    /// Database error — classified as retryable, 503, category=database.
+
     #[cfg(feature = "sqlx")]
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
-    /// Generic HTTP-level error (validation, auth, not-found, conflict, etc.)
-    /// used by API handlers for request-level failures that don't map to a
-    /// specific domain error type.
+
     #[error("{message}")]
     Http { status: u16, message: String },
 
-    /// Configuration loading or validation error.
+
     #[error("Config error: {0}")]
     Config(String),
 
-    /// Authentication / JWT error.
+
     #[error("Auth error: {0}")]
     Auth(String),
 
-    /// Cryptographic operation error (encrypt/decrypt/hash).
+
     #[error("Crypto error: {0}")]
     Crypto(String),
 
@@ -83,10 +69,9 @@ impl VirsError {
     }
 }
 
-/// Unified result type for the entire VIRS platform.
+
 pub type VirsResult<T> = std::result::Result<T, VirsError>;
 
-// ---- Trait delegations on VirsError ----
 
 impl Retryable for VirsError {
     fn is_retryable(&self) -> bool {

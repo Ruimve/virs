@@ -1,12 +1,3 @@
-//! Shared utility functions for API handlers.
-
-/// Format a duration in milliseconds as a human-readable string.
-///
-/// Examples:
-/// - `0` or negative → `"-"`
-/// - `5000` → `"5s"`
-/// - `65000` → `"1m5s"`
-/// - `3661000` → `"1h1m"`
 pub fn format_duration(ms: i64) -> String {
     if ms <= 0 {
         return "-".to_string();
@@ -22,5 +13,3 @@ pub fn format_duration(ms: i64) -> String {
         format!("{}s", seconds)
     }
 }
-
-
