@@ -14,11 +14,13 @@ use crate::ws_manager::{
 use crate::ws_types::KlineWsClient;
 pub use crate::ws_types::{Candle, WsCandleUpdate, WsEvent};
 
+// 统一交易对格式转为币安WS小写格式，如 BTC/USDT → btcusdt
 pub(crate) fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
 }
 
 
+// 币安K线WS消息，兼容组合流({"stream":..,"data":{..}})和扁平格式({"e":"kline","E":..,"k":{..}})
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct BinanceKlineMessage {
     #[allow(dead_code)]
@@ -39,6 +41,7 @@ pub(crate) struct BinanceKlineMessage {
 
 impl BinanceKlineMessage {
 
+    // 统一两种消息格式为 BinanceKlineData；优先取组合流的 data，否则用扁平字段拼装
     pub(crate) fn into_kline_data(self) -> Option<BinanceKlineData> {
         if let Some(data) = self.data {
             Some(data)
@@ -65,8 +68,10 @@ impl BinanceKlineMessage {
 }
 
 
+// K线WS消息延迟阈值：超过5秒告警
 pub(crate) const KLINE_WS_DELAY_THRESHOLD_MS: i64 = 5_000;
 
+// K线消息外层：e=事件类型, E=事件时间, k=K线内层数据
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct BinanceKlineData {
     #[serde(rename = "e")]
@@ -77,6 +82,7 @@ pub(crate) struct BinanceKlineData {
     pub(crate) kline: BinanceKlineInner,
 }
 
+// K线内层字段映射：t/T=起止时间, s=symbol, i=interval, o/h/l/c=OHLC, v=volume, q=quote_volume, n=trades, x=closed
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct BinanceKlineInner {
     #[serde(rename = "t")]
@@ -107,6 +113,7 @@ pub(crate) struct BinanceKlineInner {
 }
 
 impl BinanceKlineData {
+    // 将原始字段解析为 Candle 结构；任一OHLCV字段解析失败则返回 NoData
     pub(crate) fn to_candle(&self) -> Result<Candle, virs_error::ExchangeError> {
         let symbol = &self.kline.symbol;
         let parse = |field: &str, raw: &str| -> Result<f64, virs_error::ExchangeError> {
@@ -131,17 +138,20 @@ impl BinanceKlineData {
         })
     }
 
+    // 返回消息内层的 ws_symbol（用于反查原始统一格式）
     pub(crate) fn ws_symbol(&self) -> &str {
         &self.kline.symbol
     }
 }
 
 
+// K线WS处理器：维护订阅列表与 symbol 映射，实现 WsHandler 接口
 pub struct KlineWsHandler {
     ws_url: String,
 
     pub(crate) subscriptions: Arc<RwLock<Vec<String>>>,
 
+    // ws_symbol → 原始统一格式 symbol 的反查表
     pub(crate) symbol_map: Arc<RwLock<HashMap<String, String>>>,
 
     request_id: Arc<AtomicU64>,
@@ -183,6 +193,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
         if let Some(data) = bmsg.into_kline_data() {
             if data.event_type == "kline" {
 
+                // 延迟检测：本地时间与事件时间差超过阈值则告警
                 if data.event_time > 0 {
                     let local_now = chrono::Utc::now().timestamp_millis();
                     let delay_ms = local_now - data.event_time;
@@ -197,6 +208,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
                     }
                 }
 
+                // symbol 反查：把 ws_symbol 还原为原始统一格式
                 let raw_sym = data.ws_symbol().to_lowercase();
                 let original_symbol = {
                     let map = self.symbol_map.read().await;
@@ -246,6 +258,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
 
     async fn on_connected(&self, _is_reconnect: bool) -> Vec<String> {
 
+        // 连接建立后批量发送订阅：{"method":"SUBSCRIBE","params":[...],"id":N}
         let subs_vec = self.subscriptions.read().await.clone();
         if subs_vec.is_empty() {
             return vec![];
@@ -271,6 +284,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
 
     }
 
+    // 动态订阅/退订命令转 JSON：{"method":"SUBSCRIBE|UNSUBSCRIBE","params":[stream],"id":N}
     async fn on_command(&self, cmd: ManagerWsCommand) -> Option<String> {
         let (method, stream_name) = match cmd {
             ManagerWsCommand::Subscribe(s) => ("SUBSCRIBE", s),
@@ -297,6 +311,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
 }
 
 
+// K线WS客户端，封装 WsManager 与 KlineWsHandler
 pub struct KlineWs {
     manager: WsManager<WsEvent>,
     pub(crate) handler: Arc<KlineWsHandler>,
@@ -315,6 +330,7 @@ impl KlineWs {
         }
     }
 
+    // 永续合约K线WS：wss://fstream.binance.com/market/ws
     pub fn new_perpetual(_proxy_url: Option<&str>) -> Self {
         Self::new("wss://fstream.binance.com/market/ws".to_string())
     }
@@ -329,6 +345,7 @@ impl KlineWs {
 impl KlineWsClient for KlineWs {
     async fn start(&mut self, update_tx: broadcast::Sender<WsEvent>) {
 
+        // 转发 WsManager 事件为 WsEvent 并广播给上层
         let (manager_tx, mut manager_rx) = mpsc::channel::<WsManagerEvent<WsEvent>>(256);
 
         self.manager.start(manager_tx).await;
@@ -347,12 +364,14 @@ impl KlineWsClient for KlineWs {
                         is_reconnect: false,
                     } => {
 
+                        // 首次连接成功，不向上层广播
                         continue;
                     }
                     WsManagerEvent::ConnectionChanged {
                         connected: false, ..
                     } => {
 
+                        // 断连由重连事件覆盖，此处忽略
                         continue;
                     }
                     WsManagerEvent::CircuitBreakerTripped { retry_count } => {
@@ -377,6 +396,7 @@ impl KlineWsClient for KlineWs {
     }
 
     async fn subscribe(&self, symbol: &str) {
+        // stream 名称：{symbol}@kline_1m，symbol 经 binance_ws_symbol 处理
         let stream_name = format!("{}@kline_1m", binance_ws_symbol(symbol));
         let ws_sym = binance_ws_symbol(symbol);
 
@@ -396,6 +416,7 @@ impl KlineWsClient for KlineWs {
     }
 
     async fn unsubscribe(&self, symbol: &str) {
+        // stream 名称：{symbol}@kline_1m
         let stream_name = format!("{}@kline_1m", binance_ws_symbol(symbol));
         let ws_sym = binance_ws_symbol(symbol);
 

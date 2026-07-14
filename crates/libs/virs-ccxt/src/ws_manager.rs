@@ -9,6 +9,7 @@ use tokio_tungstenite::{connect_async, tungstenite};
 use virs_error::ExchangeError;
 
 
+// 动态订阅/退订命令
 #[derive(Debug, Clone)]
 pub enum WsCommand {
     Subscribe(String),
@@ -16,6 +17,7 @@ pub enum WsCommand {
 }
 
 
+// 消息处理结果：Continue 继续运行并产出事件，Reconnect 请求重连
 #[derive(Debug, Clone)]
 pub enum MessageOutcome<T: Send + Clone + 'static> {
 
@@ -25,6 +27,7 @@ pub enum MessageOutcome<T: Send + Clone + 'static> {
 }
 
 
+// WS管理器事件：Message 消息、ConnectionChanged 连接状态变化、CircuitBreakerTripped 熔断
 #[derive(Debug, Clone)]
 pub enum WsManagerEvent<T: Send + Clone + 'static> {
 
@@ -41,27 +44,29 @@ pub enum WsManagerEvent<T: Send + Clone + 'static> {
 }
 
 
+// PING 间隔：30秒
 pub const WS_PING_INTERVAL_SECS: u64 = 30;
 
-
+// PONG 超时：90秒无消息则强制重连
 pub const WS_PONG_TIMEOUT_SECS: u64 = 90;
 
-
+// 连接超时：10秒
 pub const WS_CONNECT_TIMEOUT_SECS: u64 = 10;
 
-
+// 重连初始退避：1秒
 pub const WS_RECONNECT_INITIAL_DELAY_SECS: u64 = 1;
 
-
+// 重连最大退避：60秒
 pub const WS_RECONNECT_MAX_DELAY_SECS: u64 = 60;
 
-
+// 连接最大存活：23小时（82800秒），到期主动重连
 pub const WS_MAX_LIFETIME_SECS: u64 = 82_800;
 
-
+// 最大重连次数：超过则熔断
 pub const WS_MAX_RETRIES: u64 = 100;
 
 
+// WS管理器配置
 #[derive(Debug, Clone)]
 pub struct WsManagerConfig {
     ping_interval_secs: u64,
@@ -111,38 +116,47 @@ impl Default for WsManagerConfig {
 }
 
 
+// WS消息处理器接口：由各业务 Handler 实现以解析消息、生成订阅等
 #[async_trait]
 pub trait WsHandler<T: Send + Clone + 'static>: Send + Sync {
 
 
+    // 返回连接 URL
     fn base_url(&self) -> &str;
 
 
+    // 是否支持动态订阅/退订命令，默认 false
     fn supports_commands(&self) -> bool {
         false
     }
 
 
+    // 重连时刷新 URL（如 listenKey 场景需重新获取），默认返回 base_url
     async fn refresh_url(&self) -> Result<String, ExchangeError> {
         Ok(self.base_url().to_string())
     }
 
 
+    // 消息解析，返回 MessageOutcome
     async fn on_message(&self, text: &str) -> Result<MessageOutcome<T>, ExchangeError>;
 
 
+    // 连接后发送的初始订阅消息列表
     async fn on_connected(&self, is_reconnect: bool) -> Vec<String>;
 
 
+    // 断连回调
     async fn on_disconnected(&self);
 
 
+    // 动态订阅命令转 JSON 文本，不支持时返回 None
     async fn on_command(&self, _cmd: WsCommand) -> Option<String> {
         None
     }
 }
 
 
+// WS生命周期管理：连接/重连/指数退避/熔断
 pub struct WsManager<T: Send + Clone + 'static> {
     config: WsManagerConfig,
     handler: Arc<dyn WsHandler<T>>,
@@ -172,6 +186,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
 
 
     pub async fn start(&self, event_tx: mpsc::Sender<WsManagerEvent<T>>) {
+        // 防止重复启动
         if self
             .running
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -183,6 +198,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
         *self.shutdown_tx.lock().await = Some(shutdown_tx);
 
+        // 仅在 handler 支持动态订阅时建立命令通道
         let mut command_rx = if self.handler.supports_commands() {
             let (tx, rx) = mpsc::unbounded_channel::<WsCommand>();
             *self.command_tx.lock().await = Some(tx);
@@ -204,6 +220,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                 let connect_start = tokio::time::Instant::now();
 
 
+                // 重连前刷新 URL（如 listenKey 场景）
                 let ws_url = match handler.refresh_url().await {
                     Ok(url) => url,
                     Err(e) => {
@@ -227,6 +244,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                 };
 
 
+                // 带超时的连接尝试
                 let connect_result = tokio::time::timeout(
                     Duration::from_secs(config.connect_timeout_secs),
                     connect_async(&ws_url),
@@ -235,6 +253,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
 
                 match connect_result {
                     Ok(Ok((ws_stream, _))) => {
+                        // 连接成功：重置退避与重试计数
                         reconnect_delay = config.reconnect_initial_delay_secs;
                         retry_count.store(0, Ordering::Relaxed);
 
@@ -258,6 +277,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                         let (mut write, mut read) = ws_stream.split();
 
 
+                        // 发送初始订阅消息
                         let connect_msgs = handler.on_connected(is_reconnect).await;
                         let mut write_ok = true;
                         for msg in &connect_msgs {
@@ -281,12 +301,14 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                             let mut last_msg_time = tokio::time::Instant::now();
 
 
+                        // 主事件循环：读消息/发PING/处理命令/监听关闭
                         loop {
                             if !running.load(Ordering::Relaxed) {
                                 break;
                             }
 
 
+                            // 连接达到最大存活时间，主动重连
                             if connect_start.elapsed() > max_lifetime {
                                 tracing::info!(
                                     "[WsManager] Max lifetime ({}s) reached, reconnecting",
@@ -296,6 +318,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                             }
 
 
+                            // PONG 超时：长时间无消息则强制重连
                             if last_msg_time.elapsed()
                                 > Duration::from_secs(config.pong_timeout_secs)
                             {
@@ -456,6 +479,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
     }
 
 
+    // 发送动态订阅/退订命令
     pub async fn send_command(&self, cmd: WsCommand) {
         if let Some(tx) = self.command_tx.lock().await.as_ref() {
             let _ = tx.send(cmd);
@@ -473,6 +497,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
     }
 
 
+    // 指数退避+抖动：超过最大重连次数则熔断；返回 false 表示停止重连
     async fn do_backoff(
         running: &Arc<AtomicBool>,
         retry_count: &Arc<AtomicU64>,
@@ -485,6 +510,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         }
 
 
+        // 熔断检查：超过最大重连次数则触发熔断并停止
         if config.max_retries > 0 {
             let retries = retry_count.fetch_add(1, Ordering::Relaxed) + 1;
             if retries >= config.max_retries {
@@ -501,10 +527,12 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         }
 
 
+        // 指数退避 + 20% 随机抖动，避免雪崩
         let jitter = rand::random::<f64>() * *reconnect_delay as f64 * 0.2;
         let delay = *reconnect_delay as f64 + jitter;
         tokio::time::sleep(Duration::from_secs_f64(delay)).await;
 
+        // 退避时间翻倍，上限为 reconnect_max_delay_secs
         *reconnect_delay = (*reconnect_delay * 2).min(config.reconnect_max_delay_secs);
 
         running.load(Ordering::Relaxed)

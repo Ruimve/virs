@@ -236,6 +236,10 @@ impl Exchange for CcxtAdapter {
         Ok(to_models_order(co))
     }
 
+    async fn cancel_all_orders(&self, symbol: &str) -> Result<(), ExchangeError> {
+        self.inner.cancel_all_orders(symbol).await
+    }
+
     async fn get_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError> {
         let co = self.inner.fetch_order(symbol, order_id).await?;
         Ok(to_models_order(co))

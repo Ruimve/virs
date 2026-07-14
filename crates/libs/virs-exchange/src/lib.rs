@@ -70,6 +70,7 @@ pub trait Exchange: Send + Sync {
         client_order_id: Option<&str>,
     ) -> Result<Order, ExchangeError>;
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError>;
+    async fn cancel_all_orders(&self, symbol: &str) -> Result<(), ExchangeError>;
     async fn get_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError>;
     async fn get_open_orders(&self, symbol: Option<&str>) -> Result<Vec<Order>, ExchangeError>;
 
@@ -177,6 +178,9 @@ impl Exchange for Box<dyn Exchange> {
     }
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError> {
         (**self).cancel_order(symbol, order_id).await
+    }
+    async fn cancel_all_orders(&self, symbol: &str) -> Result<(), ExchangeError> {
+        (**self).cancel_all_orders(symbol).await
     }
     async fn get_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError> {
         (**self).get_order(symbol, order_id).await

@@ -146,7 +146,6 @@ pub struct CcxtTicker {
     pub quote_volume: Option<f64>,
     pub open: Option<f64>,
     pub close: Option<f64>,
-    pub previous_close: Option<f64>,
     pub price_change: Option<f64>,
     pub price_change_pct: Option<f64>,
     pub timestamp: Option<DateTime<Utc>>,
