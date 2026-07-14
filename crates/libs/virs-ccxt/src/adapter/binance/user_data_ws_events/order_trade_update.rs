@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use virs_types::{OrderStatus, PositionSide, WsFeedEvent};
 
+use crate::types::{CcxtOrder, CcxtOrderStatus, ExecutionType as CcxtExecutionType};
+
 
 // 执行类型枚举(NEW/TRADE/CANCELED/CALCULATED/EXPIRED/AMENDMENT)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -170,6 +172,12 @@ pub struct OrderTradeUpdateData {
 
     #[serde(rename = "er")]
     pub expiry_reason: Option<String>,  // er→过期原因
+
+    #[serde(rename = "si")]
+    pub si: Option<i64>,  // si→忽略
+
+    #[serde(rename = "ss")]
+    pub ss: Option<i64>,  // ss→忽略
 }
 
 impl OrderTradeUpdateData {
@@ -351,6 +359,82 @@ impl OrderTradeUpdateData {
             timestamp,
             position_side,
         })
+    }
+
+    // 转换为 CcxtOrder，字段类型与币安原生返回保持一致
+    pub fn to_ccxt_order(&self) -> CcxtOrder {
+        let side = match self.side.as_str() {
+            "BUY" => virs_types::Side::Buy,
+            _ => virs_types::Side::Sell,
+        };
+
+        let order_type = crate::adapter::binance::BinanceExchange::parse_order_type(&self.order_type);
+
+        let position_side = self
+            .position_side
+            .as_deref()
+            .and_then(|ps| match ps {
+                "LONG" => Some(PositionSide::Long),
+                "SHORT" => Some(PositionSide::Short),
+                _ => None,
+            })
+            .unwrap_or(PositionSide::Long);
+
+        let status = CcxtOrderStatus::from_str(&self.status);
+
+        let execution_type = CcxtExecutionType::from_str(&self.execution_type);
+
+        CcxtOrder {
+            order_id: self.order_id,
+            client_order_id: self.client_order_id.clone(),
+            symbol: self.symbol.clone(),
+            side,
+            order_type,
+            position_side,
+            original_order_type: self
+                .original_order_type
+                .clone()
+                .unwrap_or_default(),
+            status,
+            execution_type,
+            orig_qty: self.orig_qty.clone(),
+            original_price: self.original_price.clone(),
+            avg_fill_price: self
+                .avg_fill_price
+                .clone()
+                .unwrap_or_default(),
+            filled_qty: self.filled_qty.clone(),
+            last_fill_qty: self.last_fill_qty.clone(),
+            last_fill_price: self.last_fill_price.clone(),
+            stop_price: self.stop_price.clone(),
+            commission: self.commission.clone(),
+            commission_asset: self.commission_asset.clone(),
+            realized_pnl: self
+                .realized_pnl
+                .clone()
+                .unwrap_or_default(),
+            reduce_only: self.is_reduce_only,
+            is_maker: self.is_maker,
+            close_position: self.is_close_all,
+            time_in_force: self.time_in_force.clone(),
+            working_type: self
+                .working_type
+                .clone()
+                .unwrap_or_default(),
+            bids_notional: self.bids_notional.clone(),
+            ask_notional: self.ask_notional.clone(),
+            activation_price: self.activation_price.clone(),
+            callback_rate: self.callback_rate.clone(),
+            price_protection: self.price_protection.unwrap_or(false),
+            stp_mode: self.stp_mode.clone(),
+            price_match_mode: self.price_match_mode.clone(),
+            gtd_auto_cancel_time: self.gtd_auto_cancel_time,
+            expiry_reason: self.expiry_reason.clone(),
+            si: self.si.unwrap_or(0),
+            ss: self.ss.unwrap_or(0),
+            trade_time: self.trade_time,
+            trade_id: self.trade_id,
+        }
     }
 }
 

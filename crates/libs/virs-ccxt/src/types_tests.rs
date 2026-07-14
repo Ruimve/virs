@@ -6,8 +6,8 @@ use virs_types::market::{FundingHistoryEntry, FundingRate, OrderBook, Ticker};
 
 
 #[test]
-fn t1_1_open_to_open() {
-    let status: OrderStatus = CcxtOrderStatus::Open.into();
+fn t1_1_new_to_open() {
+    let status: OrderStatus = CcxtOrderStatus::New.into();
     assert_eq!(status, OrderStatus::Open);
 }
 
@@ -36,15 +36,9 @@ fn t1_5_expired_maps_to_canceled() {
 }
 
 #[test]
-fn t1_6_failed() {
-    let status: OrderStatus = CcxtOrderStatus::Failed.into();
-    assert_eq!(status, OrderStatus::Failed);
-}
-
-#[test]
-fn t1_7_rejected_maps_to_failed() {
-    let status: OrderStatus = CcxtOrderStatus::Rejected.into();
-    assert_eq!(status, OrderStatus::Failed);
+fn t1_6_expired_in_match_maps_to_canceled() {
+    let status: OrderStatus = CcxtOrderStatus::ExpiredInMatch.into();
+    assert_eq!(status, OrderStatus::Canceled);
 }
 
 

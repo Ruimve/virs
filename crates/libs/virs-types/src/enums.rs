@@ -3,14 +3,18 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Side {
+    #[serde(rename = "BUY")]
     Buy,
+    #[serde(rename = "SELL")]
     Sell,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PositionSide {
+    #[serde(rename = "LONG")]
     Long,
+    #[serde(rename = "SHORT")]
     Short,
 }
 
@@ -23,11 +27,22 @@ pub enum PositionMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum OrderType {
-    Limit,
-    Market,
-    StopMarket,
-    StopLimit,
-    TakeProfitMarket,
+    #[serde(rename = "LIMIT")]
+    Limit,               // 限价单
+    #[serde(rename = "MARKET")]
+    Market,              // 市价单
+    #[serde(rename = "STOP")]
+    Stop,                // 止损限价单
+    #[serde(rename = "STOP_MARKET")]
+    StopMarket,          // 止损市价单
+    #[serde(rename = "TAKE_PROFIT")]
+    TakeProfit,          // 止盈限价单
+    #[serde(rename = "TAKE_PROFIT_MARKET")]
+    TakeProfitMarket,    // 止盈市价单
+    #[serde(rename = "TRAILING_STOP_MARKET")]
+    TrailingStopMarket,  // 跟踪止损单
+    #[serde(rename = "LIQUIDATION")]
+    Liquidation,         // 爆仓
 }
 
 

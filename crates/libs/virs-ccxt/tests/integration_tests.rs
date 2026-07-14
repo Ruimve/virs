@@ -242,7 +242,7 @@ fn int_6_2_order_status_chain() {
 fn int_6_3_order_status_expired_to_canceled_chain() {
     let binance_status = "EXPIRED";
     let ccxt_status = BinanceExchange::parse_order_status(binance_status);
-    assert_eq!(ccxt_status, CcxtOrderStatus::Canceled);
+    assert_eq!(ccxt_status, CcxtOrderStatus::Expired);
 
     let app_status: OrderStatus = ccxt_status.into();
     assert_eq!(app_status, OrderStatus::Canceled);
@@ -256,9 +256,11 @@ fn int_7_1_order_type_roundtrip() {
     let types = vec![
         OrderType::Market,
         OrderType::Limit,
+        OrderType::Stop,
         OrderType::StopMarket,
-        OrderType::StopLimit,
+        OrderType::TakeProfit,
         OrderType::TakeProfitMarket,
+        OrderType::TrailingStopMarket,
     ];
 
     for ot in &types {

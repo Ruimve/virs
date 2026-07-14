@@ -431,16 +431,16 @@ impl BinanceExchange {
         native.to_string()
     }
 
-    // 币安状态码映射: NEW→Open, FILLED→Filled, CANCELED→Canceled等
+    // 币安状态码映射: 与官方文档对齐
     pub fn parse_order_status(status: &str) -> CcxtOrderStatus {
         match status {
-            "NEW" => CcxtOrderStatus::Open,
+            "NEW" => CcxtOrderStatus::New,
             "PARTIALLY_FILLED" => CcxtOrderStatus::PartiallyFilled,
             "FILLED" => CcxtOrderStatus::Filled,
-            "CANCELED" | "CANCELLED" | "EXPIRED" | "EXPIRED_IN_MATCH" => CcxtOrderStatus::Canceled,
-            "REJECTED" => CcxtOrderStatus::Rejected,
-            "PENDING_CANCEL" => CcxtOrderStatus::Open,
-            _ => CcxtOrderStatus::Open,
+            "CANCELED" | "CANCELLED" => CcxtOrderStatus::Canceled,
+            "EXPIRED" => CcxtOrderStatus::Expired,
+            "EXPIRED_IN_MATCH" => CcxtOrderStatus::ExpiredInMatch,
+            _ => CcxtOrderStatus::New,
         }
     }
 
@@ -449,9 +449,12 @@ impl BinanceExchange {
         match order_type {
             "MARKET" => OrderType::Market,
             "LIMIT" => OrderType::Limit,
+            "STOP" => OrderType::Stop,
             "STOP_MARKET" => OrderType::StopMarket,
-            "STOP" | "STOP_LIMIT" | "TAKE_PROFIT_LIMIT" => OrderType::StopLimit,
-            "TAKE_PROFIT_MARKET" | "TAKE_PROFIT" => OrderType::TakeProfitMarket,
+            "TAKE_PROFIT" => OrderType::TakeProfit,
+            "TAKE_PROFIT_MARKET" => OrderType::TakeProfitMarket,
+            "TRAILING_STOP_MARKET" => OrderType::TrailingStopMarket,
+            "LIQUIDATION" => OrderType::Liquidation,
             _ => OrderType::Market,
         }
     }
@@ -469,9 +472,12 @@ impl BinanceExchange {
         match order_type {
             OrderType::Market => "MARKET",
             OrderType::Limit => "LIMIT",
+            OrderType::Stop => "STOP",
             OrderType::StopMarket => "STOP_MARKET",
-            OrderType::StopLimit => "STOP",
+            OrderType::TakeProfit => "TAKE_PROFIT",
             OrderType::TakeProfitMarket => "TAKE_PROFIT_MARKET",
+            OrderType::TrailingStopMarket => "TRAILING_STOP_MARKET",
+            OrderType::Liquidation => "LIQUIDATION",
         }
     }
 }
@@ -536,13 +542,13 @@ impl Exchange for BinanceExchange {
         fapi::fetch_markets(&self.client).await
     }
 
-    // 创建订单: POST /fapi/v1/order (签名)
-    async fn create_order(&self, params: PlaceOrderParams) -> Result<CcxtOrder, ExchangeError> {
+    // 创建订单: POST /fapi/v1/order (签名)，只返回 orderId + clientOrderId
+    async fn create_order(&self, params: PlaceOrderParams) -> Result<OrderResult, ExchangeError> {
         fapi::create_order(&self.client, self.signer.as_ref(), params).await
     }
 
-    // 撤销订单: DELETE /fapi/v1/order (签名)
-    async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<CcxtOrder, ExchangeError> {
+    // 撤销订单: DELETE /fapi/v1/order (签名)，只返回 orderId + clientOrderId
+    async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<OrderResult, ExchangeError> {
         fapi::cancel_order(&self.client, self.signer.as_ref(), symbol, order_id).await
     }
 

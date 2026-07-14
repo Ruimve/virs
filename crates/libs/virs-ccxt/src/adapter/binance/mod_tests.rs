@@ -69,7 +69,7 @@ fn b2_6_unified_symbol_only_quote() {
 fn b3_1_status_new() {
     assert_eq!(
         BinanceExchange::parse_order_status("NEW"),
-        CcxtOrderStatus::Open
+        CcxtOrderStatus::New
     );
 }
 
@@ -109,31 +109,23 @@ fn b3_5_status_cancelled_variant() {
 fn b3_6_status_expired() {
     assert_eq!(
         BinanceExchange::parse_order_status("EXPIRED"),
-        CcxtOrderStatus::Canceled
+        CcxtOrderStatus::Expired
     );
 }
 
 #[test]
-fn b3_7_status_rejected() {
+fn b3_7_status_expired_in_match() {
     assert_eq!(
-        BinanceExchange::parse_order_status("REJECTED"),
-        CcxtOrderStatus::Rejected
+        BinanceExchange::parse_order_status("EXPIRED_IN_MATCH"),
+        CcxtOrderStatus::ExpiredInMatch
     );
 }
 
 #[test]
-fn b3_8_status_pending_cancel() {
-    assert_eq!(
-        BinanceExchange::parse_order_status("PENDING_CANCEL"),
-        CcxtOrderStatus::Open
-    );
-}
-
-#[test]
-fn b3_9_status_unknown_defaults_to_open() {
+fn b3_8_status_unknown_defaults_to_new() {
     assert_eq!(
         BinanceExchange::parse_order_status("UNKNOWN"),
-        CcxtOrderStatus::Open
+        CcxtOrderStatus::New
     );
 }
 
@@ -163,23 +155,23 @@ fn b4_3_type_stop_market() {
 fn b4_4_type_stop() {
     assert_eq!(
         BinanceExchange::parse_order_type("STOP"),
-        OrderType::StopLimit
+        OrderType::Stop
     );
 }
 
 #[test]
-fn b4_5_type_stop_limit() {
+fn b4_5_type_trailing_stop_market() {
     assert_eq!(
-        BinanceExchange::parse_order_type("STOP_LIMIT"),
-        OrderType::StopLimit
+        BinanceExchange::parse_order_type("TRAILING_STOP_MARKET"),
+        OrderType::TrailingStopMarket
     );
 }
 
 #[test]
-fn b4_6_type_take_profit_limit() {
+fn b4_6_type_liquidation() {
     assert_eq!(
-        BinanceExchange::parse_order_type("TAKE_PROFIT_LIMIT"),
-        OrderType::StopLimit
+        BinanceExchange::parse_order_type("LIQUIDATION"),
+        OrderType::Liquidation
     );
 }
 
@@ -194,10 +186,9 @@ fn b4_7_type_take_profit_market() {
 
 #[test]
 fn b4_7b_type_take_profit() {
-
     assert_eq!(
         BinanceExchange::parse_order_type("TAKE_PROFIT"),
-        OrderType::TakeProfitMarket
+        OrderType::TakeProfit
     );
 }
 
@@ -244,10 +235,9 @@ fn b6_3_order_type_stop_market() {
 }
 
 #[test]
-fn b6_4_order_type_stop_limit() {
-
+fn b6_4_order_type_stop() {
     assert_eq!(
-        BinanceExchange::order_type_str(&OrderType::StopLimit),
+        BinanceExchange::order_type_str(&OrderType::Stop),
         "STOP"
     );
 }
@@ -272,10 +262,33 @@ fn b6_6_futures_stop_market_unchanged() {
 
 #[test]
 fn b6_7_futures_take_profit_market_unchanged() {
-
     assert_eq!(
         BinanceExchange::order_type_str(&OrderType::TakeProfitMarket),
         "TAKE_PROFIT_MARKET"
+    );
+}
+
+#[test]
+fn b6_8_order_type_take_profit() {
+    assert_eq!(
+        BinanceExchange::order_type_str(&OrderType::TakeProfit),
+        "TAKE_PROFIT"
+    );
+}
+
+#[test]
+fn b6_9_order_type_trailing_stop_market() {
+    assert_eq!(
+        BinanceExchange::order_type_str(&OrderType::TrailingStopMarket),
+        "TRAILING_STOP_MARKET"
+    );
+}
+
+#[test]
+fn b6_10_order_type_liquidation() {
+    assert_eq!(
+        BinanceExchange::order_type_str(&OrderType::Liquidation),
+        "LIQUIDATION"
     );
 }
 

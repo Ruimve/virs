@@ -511,7 +511,7 @@ pub async fn create_order(
     client: &ExchangeClient,
     signer: &dyn Signer,
     params: PlaceOrderParams,
-) -> Result<CcxtOrder, ExchangeError> {
+) -> Result<OrderResult, ExchangeError> {
     // 转换为币安原生交易对符号
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(&params.symbol);
     // 构建请求体基础字段: 交易对、方向、类型、数量
@@ -577,49 +577,15 @@ pub async fn create_order(
         .signed_post(signer, &url("/fapi/v1/order"), body)
         .await?;
 
+    // 只提取 orderId + clientOrderId，完整订单数据由 WS ORDER_TRADE_UPDATE 推送
+    let order_id = parse_str(&data, "orderId")
+        .ok_or_else(|| ExchangeError::no_data("orderId missing in create_order response".into()))?;
+    let client_order_id = parse_str(&data, "clientOrderId")
+        .unwrap_or_default();
 
-    // 解析订单数量与已成交数量
-    let amount = parse_f64(&data, "origQty").ok_or_else(|| {
-        ExchangeError::no_data("Order amount (origQty) missing in exchange response".into())
-    })?;
-    let filled = parse_f64(&data, "executedQty").ok_or_else(|| {
-        ExchangeError::no_data("Order filled (executedQty) missing in exchange response".into())
-    })?;
-
-
-    // 创建时间优先用 time，缺失则回退 updateTime，再缺失用本地时间
-    let created_at = crate::parse_timestamp_ms(&data, "time")
-        .or_else(|| crate::parse_timestamp_ms(&data, "updateTime"))
-        .unwrap_or_else(|| {
-            tracing::warn!(symbol = %params.symbol, "futures order response missing 'time'/'updateTime' — using local time");
-            Utc::now()
-        });
-    // 更新时间用 updateTime
-    let updated_at = crate::parse_timestamp_ms(&data, "updateTime").unwrap_or_else(|| {
-        tracing::warn!(symbol = %params.symbol, "futures order response missing 'updateTime' — using local time");
-        Utc::now()
-    });
-
-    Ok(CcxtOrder {
-        id: parse_str(&data, "orderId")
-            .ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
-        client_order_id: parse_str(&data, "clientOrderId"),
-        symbol: params.symbol,
-        side: params.side,
-        order_type: params.order_type,
-        price: parse_f64(&data, "price"),
-        amount,
-        cost: None,
-        filled,
-        remaining: amount - filled,
-        status: crate::adapter::binance::BinanceExchange::parse_order_status(
-            &parse_str(&data, "status")
-                .ok_or_else(|| ExchangeError::no_data("status missing".into()))?,
-        ),
-        fee: None,
-        created_at: Some(created_at),
-        updated_at: Some(updated_at),
-        info: data,
+    Ok(OrderResult {
+        order_id,
+        client_order_id,
     })
 }
 
@@ -633,7 +599,7 @@ pub async fn cancel_order(
     signer: &dyn Signer,
     symbol: &str,
     order_id: &str,
-) -> Result<CcxtOrder, ExchangeError> {
+) -> Result<OrderResult, ExchangeError> {
     // 转换为币安原生交易对符号
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let params = vec![
@@ -645,44 +611,15 @@ pub async fn cancel_order(
         .signed_delete(signer, &url("/fapi/v1/order"), params)
         .await?;
 
-    // 解析方向与类型字符串
-    let side_str =
-        parse_str(&data, "side").ok_or_else(|| ExchangeError::no_data("side missing".into()))?;
-    let type_str =
-        parse_str(&data, "type").ok_or_else(|| ExchangeError::no_data("type missing".into()))?;
+    // 只提取 orderId + clientOrderId，完整订单数据由 WS ORDER_TRADE_UPDATE 推送
+    let order_id = parse_str(&data, "orderId")
+        .ok_or_else(|| ExchangeError::no_data("orderId missing in cancel_order response".into()))?;
+    let client_order_id = parse_str(&data, "clientOrderId")
+        .unwrap_or_default();
 
-
-    // 解析原始数量与已成交数量
-    let amount = parse_f64(&data, "origQty").ok_or_else(|| {
-        ExchangeError::no_data("Order amount (origQty) missing in exchange response".into())
-    })?;
-    let filled = parse_f64(&data, "executedQty").ok_or_else(|| {
-        ExchangeError::no_data("Order filled (executedQty) missing in exchange response".into())
-    })?;
-    Ok(CcxtOrder {
-        id: parse_str(&data, "orderId")
-            .ok_or_else(|| ExchangeError::no_data("orderId missing".into()))?,
-        client_order_id: parse_str(&data, "clientOrderId"),
-        symbol: symbol.to_string(),
-        side: if side_str == "BUY" {
-            Side::Buy
-        } else {
-            Side::Sell
-        },
-        order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&type_str),
-        price: parse_f64(&data, "price"),
-        amount,
-        cost: None,
-        filled,
-        remaining: amount - filled,
-        status: CcxtOrderStatus::Canceled,
-        fee: None,
-        created_at: None,
-        updated_at: Some(crate::parse_timestamp_ms(&data, "updateTime").unwrap_or_else(|| {
-            tracing::warn!(symbol = %symbol, "cancel_order response missing 'updateTime' — using local time");
-            Utc::now()
-        })),
-        info: data,
+    Ok(OrderResult {
+        order_id,
+        client_order_id,
     })
 }
 

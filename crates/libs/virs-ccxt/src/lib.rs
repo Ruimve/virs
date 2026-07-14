@@ -30,8 +30,10 @@ pub use types::{
     MarginMode,
     MarketInfo,
     MarketType,
+    ExecutionType,
     OrderBook,
     OrderFee,
+    OrderResult,
     OrderStatus,
     OrderType,
     PlaceOrderParams,
@@ -106,8 +108,8 @@ pub trait Exchange: Send + Sync {
     ) -> Result<CcxtOrderBook, ExchangeError>;
     async fn fetch_balance(&self) -> Result<Vec<Balance>, ExchangeError>;
     async fn fetch_markets(&self) -> Result<Vec<MarketInfo>, ExchangeError>;
-    async fn create_order(&self, params: PlaceOrderParams) -> Result<CcxtOrder, ExchangeError>;
-    async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<CcxtOrder, ExchangeError>;
+    async fn create_order(&self, params: PlaceOrderParams) -> Result<OrderResult, ExchangeError>;
+    async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<OrderResult, ExchangeError>;
     async fn cancel_all_orders(&self, symbol: &str) -> Result<(), ExchangeError>;
     async fn set_leverage(
         &self,
