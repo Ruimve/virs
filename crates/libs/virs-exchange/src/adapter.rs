@@ -240,16 +240,6 @@ impl Exchange for CcxtAdapter {
         self.inner.cancel_all_orders(symbol).await
     }
 
-    async fn get_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError> {
-        let co = self.inner.fetch_order(symbol, order_id).await?;
-        Ok(to_models_order(co))
-    }
-
-    async fn get_open_orders(&self, symbol: Option<&str>) -> Result<Vec<Order>, ExchangeError> {
-        let cos = self.inner.fetch_open_orders(symbol).await?;
-        Ok(cos.into_iter().map(to_models_order).collect())
-    }
-
     async fn get_symbols(&self) -> Result<Vec<String>, ExchangeError> {
         let markets = self.get_markets_cached().await?;
         let ccxt_mt = to_ccxt_market_type(&self.market_type);

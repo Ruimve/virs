@@ -109,11 +109,6 @@ pub trait Exchange: Send + Sync {
     async fn create_order(&self, params: PlaceOrderParams) -> Result<CcxtOrder, ExchangeError>;
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<CcxtOrder, ExchangeError>;
     async fn cancel_all_orders(&self, symbol: &str) -> Result<(), ExchangeError>;
-    async fn fetch_order(&self, symbol: &str, order_id: &str) -> Result<CcxtOrder, ExchangeError>;
-    async fn fetch_open_orders(
-        &self,
-        symbol: Option<&str>,
-    ) -> Result<Vec<CcxtOrder>, ExchangeError>;
     async fn set_leverage(
         &self,
         symbol: &str,

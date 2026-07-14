@@ -285,28 +285,6 @@ impl ExchangePe for CcxtExchangeAdapter {
         Ok(Vec::new())
     }
 
-    // 查询挂单
-    async fn get_open_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<PositionOrder>> {
-        let ex = self
-            .get_perpetual_exchange()
-            .ok_or_else(no_exchange_error)?;
-        let exchange_name = ex.name().to_string();
-        let orders = ex.get_open_orders(symbol).await?;
-        Ok(orders
-            .iter()
-            .map(|o| convert_order(o, &exchange_name))
-            .collect())
-    }
-
-    // 查询单个订单
-    async fn get_order(&self, symbol: &str, order_id: &str) -> VirsResult<PositionOrder> {
-        let ex = self
-            .get_perpetual_exchange()
-            .ok_or_else(no_exchange_error)?;
-        let exchange_name = ex.name().to_string();
-        let virs_order = ex.get_order(symbol, order_id).await?;
-        Ok(convert_order(&virs_order, &exchange_name))
-    }
 
     // 设置杠杆 → POST /fapi/v1/leverage
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> VirsResult<()> {

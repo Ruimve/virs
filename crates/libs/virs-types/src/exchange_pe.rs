@@ -28,8 +28,6 @@ pub trait ExchangePe: Send + Sync {
     async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<PositionOrder>;
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> VirsResult<PositionOrder>;
     async fn cancel_all_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<PositionOrder>>;
-    async fn get_open_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<PositionOrder>>;
-    async fn get_order(&self, symbol: &str, order_id: &str) -> VirsResult<PositionOrder>;
 
 
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> VirsResult<()>;

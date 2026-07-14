@@ -551,19 +551,6 @@ impl Exchange for BinanceExchange {
         fapi::cancel_all_orders(&self.client, self.signer.as_ref(), symbol).await
     }
 
-    // 查询订单: GET /fapi/v1/order (签名)
-    async fn fetch_order(&self, symbol: &str, order_id: &str) -> Result<CcxtOrder, ExchangeError> {
-        fapi::fetch_order(&self.client, self.signer.as_ref(), symbol, order_id).await
-    }
-
-    // 查询当前挂单: GET /fapi/v1/openOrders (签名)
-    async fn fetch_open_orders(
-        &self,
-        symbol: Option<&str>,
-    ) -> Result<Vec<CcxtOrder>, ExchangeError> {
-        fapi::fetch_open_orders(&self.client, self.signer.as_ref(), symbol).await
-    }
-
     // 设置杠杆: 先POST /fapi/v1/marginType 再POST /fapi/v1/leverage (签名)
     async fn set_leverage(
         &self,
