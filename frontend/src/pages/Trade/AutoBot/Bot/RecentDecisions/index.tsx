@@ -22,12 +22,7 @@ export const RecentDecisions = memo(({ logs, botId, botType = 'auto' }: Props) =
   };
 
   return (
-    <Panel
-      title="最近决策"
-      count={logs.length}
-      empty={recent.length === 0}
-      emptyText="暂无决策"
-    >
+    <Panel title="最近决策" count={logs.length} empty={recent.length === 0} emptyText="暂无决策">
       {recent.map((log) => {
         const decision = getDecision(log);
         return (
@@ -47,7 +42,7 @@ export const RecentDecisions = memo(({ logs, botId, botType = 'auto' }: Props) =
                   失败
                 </Badge>
               )}
-              <span className="text-[11px] text-on-surface-muted ml-auto font-mono tabular-nums">
+              <span className="text-caption text-on-surface-muted ml-auto font-mono tabular-nums">
                 {new Date(log.created_at).toLocaleTimeString('zh-CN', {
                   hour: '2-digit',
                   minute: '2-digit',

@@ -56,7 +56,7 @@ export const DecisionCard = memo(({ log, botId, botType = 'auto' }: Props) => {
       {/* 标题行 */}
       <div className="flex items-center justify-between mb-2">
         <Title>AI 决策</Title>
-        <span className="text-[11px] font-mono tabular-nums text-on-surface-muted">
+        <span className="text-caption font-mono tabular-nums text-on-surface-muted">
           {createdAt}
         </span>
       </div>
@@ -79,7 +79,7 @@ export const DecisionCard = memo(({ log, botId, botType = 'auto' }: Props) => {
           </Badge>
         )}
         {market?.regime && (
-          <span className="text-[11px] text-on-surface-tertiary ml-auto">
+          <span className="text-caption text-on-surface-tertiary ml-auto">
             市况 <span className="text-on-surface font-mono tabular-nums">{market?.regime}</span>
           </span>
         )}
@@ -94,7 +94,7 @@ export const DecisionCard = memo(({ log, botId, botType = 'auto' }: Props) => {
 
       {/* Risk Warning */}
       {riskWarning && (
-        <div className="mt-2 flex items-start gap-1.5 text-[11px] text-warning-text">
+        <div className="mt-2 flex items-start gap-1.5 text-caption text-warning-text">
           <Warning className="w-3.5 h-3.5 mt-0.5 shrink-0" strokeWidth={2} />
           <span className="line-clamp-2">{riskWarning}</span>
         </div>
@@ -102,7 +102,7 @@ export const DecisionCard = memo(({ log, botId, botType = 'auto' }: Props) => {
 
       {/* LLM Model */}
       {log.llm_model && (
-        <div className="mt-2 text-[11px] text-on-surface-muted">
+        <div className="mt-2 text-caption text-on-surface-muted">
           模型 <span className="font-mono tabular-nums">{log.llm_model}</span>
         </div>
       )}

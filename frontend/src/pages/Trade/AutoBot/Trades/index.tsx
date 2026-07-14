@@ -90,7 +90,7 @@ const Trades = () => {
                           </span>
                         )}
                       </div>
-                      <div className="text-[10px] text-on-surface-tertiary mt-0.5">
+                      <div className="text-2xs text-on-surface-tertiary mt-0.5">
                         {new Date(t.opened_at).toLocaleString('zh-CN')}
                         {isClosed && t.closed_at && (
                           <span className="ml-1">
@@ -110,7 +110,7 @@ const Trades = () => {
                     <div className="text-right">
                       {formatPnl(t.pnl)}
                       {t.pnl_pct !== 0 && (
-                        <div className="text-[10px] text-on-surface-tertiary font-mono">
+                        <div className="text-2xs text-on-surface-tertiary font-mono">
                           {t.pnl_pct.toFixed(2)} %
                         </div>
                       )}

@@ -91,17 +91,17 @@ const LogDetail = ({ log, loading }: Props) => {
                   </Badge>
                 )}
               </div>
-              <span className="text-[11px] text-on-surface-tertiary">
+              <span className="text-caption text-on-surface-tertiary">
                 {new Date(log.created_at).toLocaleString('zh-CN')}
               </span>
             </div>
             {log.llm_model && (
-              <div className="text-[11px] text-on-surface-tertiary mb-2">
+              <div className="text-caption text-on-surface-tertiary mb-2">
                 模型: <span className="text-accent font-mono">{log.llm_model}</span>
               </div>
             )}
             {decision?.confidence != null && (
-              <div className="text-[11px] text-on-surface-tertiary">
+              <div className="text-caption text-on-surface-tertiary">
                 置信度:{' '}
                 <span className="text-on-surface-secondary font-mono">
                   {(decision.confidence * 100).toFixed(0)}%
@@ -197,7 +197,7 @@ const LogDetail = ({ log, loading }: Props) => {
           {/* Risk warning */}
           {log.result?.risk_warning && log.result.risk_warning !== 'none' && (
             <div className="bg-warning/5 rounded-xl border border-warning-border p-5">
-              <div className="text-[10px] text-warning-text uppercase tracking-wider mb-2">
+              <div className="text-2xs text-warning-text uppercase tracking-wider mb-2">
                 风险提示
               </div>
               <p className="text-xs text-warning-text">{log.result.risk_warning}</p>
@@ -207,7 +207,7 @@ const LogDetail = ({ log, loading }: Props) => {
           {/* Error */}
           {log.error && (
             <div className="bg-danger/5 rounded-xl border border-danger-border p-5">
-              <div className="text-[10px] text-danger-text uppercase tracking-wider mb-2">错误</div>
+              <div className="text-2xs text-danger-text uppercase tracking-wider mb-2">错误</div>
               <pre className="text-xs text-danger-text whitespace-pre-wrap">{log.error}</pre>
             </div>
           )}
@@ -217,7 +217,7 @@ const LogDetail = ({ log, loading }: Props) => {
             <Card padding={false} className="overflow-hidden">
               <div
                 onClick={() => setShowSystemPrompt(!showSystemPrompt)}
-                className="w-full flex items-center gap-2 px-5 py-3 text-[10px] text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors cursor-pointer"
+                className="w-full flex items-center gap-2 px-5 py-3 text-2xs text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors cursor-pointer"
               >
                 <ChevronRight
                   className={`w-3 h-3 transition-transform ${showSystemPrompt ? 'rotate-90' : ''}`}
@@ -227,7 +227,7 @@ const LogDetail = ({ log, loading }: Props) => {
               </div>
               {showSystemPrompt && (
                 <div className="px-5 pb-4">
-                  <pre className="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
+                  <pre className="text-caption text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
                     {log.system_prompt}
                   </pre>
                 </div>
@@ -240,7 +240,7 @@ const LogDetail = ({ log, loading }: Props) => {
             <Card padding={false} className="overflow-hidden">
               <div
                 onClick={() => setShowUserPrompt(!showUserPrompt)}
-                className="w-full flex items-center gap-2 px-5 py-3 text-[10px] text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors cursor-pointer"
+                className="w-full flex items-center gap-2 px-5 py-3 text-2xs text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors cursor-pointer"
               >
                 <ChevronRight
                   className={`w-3 h-3 transition-transform ${showUserPrompt ? 'rotate-90' : ''}`}
@@ -250,7 +250,7 @@ const LogDetail = ({ log, loading }: Props) => {
               </div>
               {showUserPrompt && (
                 <div className="px-5 pb-4">
-                  <pre className="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
+                  <pre className="text-caption text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
                     {log.user_prompt}
                   </pre>
                 </div>
@@ -262,7 +262,7 @@ const LogDetail = ({ log, loading }: Props) => {
           {log.result?.raw_llm_response && (
             <Card>
               <Title className="mb-2">LLM 原始响应</Title>
-              <pre className="text-[11px] text-accent bg-accent/5 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-accent/10">
+              <pre className="text-caption text-accent bg-accent/5 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-accent/10">
                 {typeof log.result.raw_llm_response === 'string'
                   ? log.result.raw_llm_response
                   : JSON.stringify(log.result.raw_llm_response, null, 2)}
@@ -274,7 +274,7 @@ const LogDetail = ({ log, loading }: Props) => {
           {log.result && !log.result.raw_llm_response && (
             <Card>
               <Title className="mb-2">完整结果</Title>
-              <pre className="text-[11px] text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
+              <pre className="text-caption text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
                 {JSON.stringify(log.result, null, 2)}
               </pre>
             </Card>

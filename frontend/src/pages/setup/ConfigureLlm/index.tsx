@@ -187,7 +187,7 @@ const ConfigureLlm = () => {
         />
         {models.length > 0 && (
           <div>
-            <p className="text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">
+            <p className="text-caption tracking-[0.15em] text-on-surface-muted uppercase mb-2">
               Model
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -195,7 +195,7 @@ const ConfigureLlm = () => {
                 <div
                   key={m.id}
                   onClick={() => handleSelectModel(m.id)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] border transition-all duration-200 cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-md text-caption border transition-all duration-200 cursor-pointer ${
                     model === m.id
                       ? 'bg-accent-light border-accent-muted text-on-surface'
                       : 'bg-surface-1 border-line-default text-on-surface-tertiary hover:bg-surface-2'
@@ -207,7 +207,7 @@ const ConfigureLlm = () => {
             </div>
           </div>
         )}
-        {step1Error && <p className="text-[12px] text-danger-text">{step1Error}</p>}
+        {step1Error && <p className="text-xs text-danger-text">{step1Error}</p>}
         <Button size="small" onClick={startStep1} disabled={disabled}>
           {step1Status === 'verifying' ? 'Verifying...' : 'Verify'}
         </Button>
@@ -229,12 +229,12 @@ const ConfigureLlm = () => {
     return (
       <div className="space-y-2">
         {step2Status === 'verifying' && (
-          <p className="text-[12px] text-on-surface-tertiary">
+          <p className="text-xs text-on-surface-tertiary">
             Testing connection to DeepSeek API...
           </p>
         )}
         {step2Status === 'error' && (
-          <p className="text-[12px] text-danger-text">{step2Error || 'Connection failed'}</p>
+          <p className="text-xs text-danger-text">{step2Error || 'Connection failed'}</p>
         )}
       </div>
     );
@@ -245,14 +245,14 @@ const ConfigureLlm = () => {
       <div className="space-y-3">
         {balance && (
           <div className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg">
-            <span className="text-[12px] text-on-surface-tertiary">Balance</span>
-            <span className="text-[12px] text-on-surface-secondary font-mono">
+            <span className="text-xs text-on-surface-tertiary">Balance</span>
+            <span className="text-xs text-on-surface-secondary font-mono">
               {balance.total_balance} {balance.currency}
             </span>
           </div>
         )}
         {step3Status === 'error' && (
-          <p className="text-[12px] text-danger-text">{step3Error || 'Connection failed'}</p>
+          <p className="text-xs text-danger-text">{step3Error || 'Connection failed'}</p>
         )}
       </div>
     );

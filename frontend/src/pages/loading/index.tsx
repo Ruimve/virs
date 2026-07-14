@@ -84,7 +84,7 @@ const Loading = () => {
         <h1 className="loading-brand text-[22px] font-extralight tracking-[0.5em] text-on-base mb-2 select-none pl-[0.5em]">
           VIRS
         </h1>
-        <p className="text-[10px] tracking-[0.32em] text-on-surface-muted mb-8 select-none pl-[0.32em] uppercase">
+        <p className="text-2xs tracking-[0.32em] text-on-surface-muted mb-8 select-none pl-[0.32em] uppercase">
           Quantitative Trading
         </p>
 
@@ -97,7 +97,7 @@ const Loading = () => {
           <div className="relative overflow-hidden">
             <span
               key={stage}
-              className="loading-stage-text text-[11px] tracking-[0.2em] text-on-surface-tertiary uppercase font-mono"
+              className="loading-stage-text text-caption tracking-[0.2em] text-on-surface-tertiary uppercase font-mono"
             >
               {STAGE_LABEL[stage]}
             </span>

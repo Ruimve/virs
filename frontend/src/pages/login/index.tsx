@@ -53,7 +53,7 @@ const Login = () => {
             <span className="text-3xl font-extralight tracking-[0.3em] text-on-base">V</span>
           </div>
           <Logo className="block text-3xl mb-2" />
-          <p className="text-[11px] tracking-[0.25em] text-on-surface-muted font-medium uppercase">
+          <p className="text-caption tracking-[0.25em] text-on-surface-muted font-medium uppercase">
             Quantitative Trading System
           </p>
         </div>
@@ -84,7 +84,7 @@ const Login = () => {
 
         {/* Footer */}
         <div className="mt-12 text-center">
-          <p className="text-[10px] tracking-[0.2em] text-on-surface-faint uppercase">
+          <p className="text-2xs tracking-[0.2em] text-on-surface-faint uppercase">
             Quantitative Trading System
           </p>
         </div>

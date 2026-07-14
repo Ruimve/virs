@@ -30,19 +30,19 @@ export const LevelsOverview = memo(({ gridLevels }: Props) => {
             <div className="text-sm font-mono tabular-nums font-medium text-success-text">
               {holding.length}
             </div>
-            <div className="text-[11px] text-on-surface-tertiary">持仓</div>
+            <div className="text-caption text-on-surface-tertiary">持仓</div>
           </div>
           <div className="text-center">
             <div className="text-sm font-mono tabular-nums font-medium text-on-surface-muted">
               {closed.length}
             </div>
-            <div className="text-[11px] text-on-surface-tertiary">已平</div>
+            <div className="text-caption text-on-surface-tertiary">已平</div>
           </div>
           <div className="text-center">
             <div className="text-sm font-mono tabular-nums font-medium text-on-surface-faint">
               {waiting}
             </div>
-            <div className="text-[11px] text-on-surface-tertiary">等待</div>
+            <div className="text-caption text-on-surface-tertiary">等待</div>
           </div>
         </div>
         {/* 层级列表 */}
@@ -63,7 +63,7 @@ export const LevelsOverview = memo(({ gridLevels }: Props) => {
                   {level.buy_price.toFixed(2)} → {level.sell_price.toFixed(2)}
                 </span>
                 {isHolding && (
-                  <span className="text-success-text font-mono tabular-nums text-[11px] shrink-0">
+                  <span className="text-success-text font-mono tabular-nums text-caption shrink-0">
                     {formatSmart(Math.abs(level.hold_quantity))}
                   </span>
                 )}

@@ -169,7 +169,7 @@ const SelectBotType = () => {
                     {bot.features.map((f) => (
                       <span
                         key={f}
-                        className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all duration-200 ${
+                        className={`px-2.5 py-1 rounded-full text-caption font-medium transition-all duration-200 ${
                           isSelected
                             ? 'bg-surface-3/60 text-on-surface-secondary'
                             : 'bg-surface-2/50 text-on-surface-faint'

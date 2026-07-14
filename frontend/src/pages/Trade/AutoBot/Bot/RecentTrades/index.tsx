@@ -12,12 +12,7 @@ export const RecentTrades = memo(({ trades }: Props) => {
   const recent = trades.slice(0, 10);
 
   return (
-    <Panel
-      title="最近交易"
-      count={trades.length}
-      empty={recent.length === 0}
-      emptyText="暂无交易"
-    >
+    <Panel title="最近交易" count={trades.length} empty={recent.length === 0} emptyText="暂无交易">
       {recent.map((trade) => (
         <div key={trade.id} className="px-3 py-2">
           {/* First row: direction + prices + time */}
@@ -28,16 +23,16 @@ export const RecentTrades = memo(({ trades }: Props) => {
             <span className="text-sm font-mono tabular-nums text-on-surface">
               {trade.open_price.toFixed(2)}
             </span>
-            <span className="text-[11px] text-on-surface-muted">→</span>
+            <span className="text-caption text-on-surface-muted">→</span>
             <span className="text-sm font-mono tabular-nums text-on-surface">
               {trade.close_price?.toFixed(2) ?? '-'}
             </span>
-            <span className="text-[11px] text-on-surface-muted ml-auto font-mono tabular-nums">
+            <span className="text-caption text-on-surface-muted ml-auto font-mono tabular-nums">
               {formatTime(trade.closed_at || trade.opened_at)}
             </span>
           </div>
           {/* Second row: qty + SL/TP + PnL */}
-          <div className="flex items-center gap-3 text-[11px] flex-wrap">
+          <div className="flex items-center gap-3 text-caption flex-wrap">
             <span className="text-on-surface-tertiary">
               量{' '}
               <span className="font-mono tabular-nums text-on-surface">

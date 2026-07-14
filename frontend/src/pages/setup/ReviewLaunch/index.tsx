@@ -243,9 +243,9 @@ const ReviewLaunch = () => {
             <div
               className={`flex items-center justify-between px-4 py-3 ${i !== rows.length - 1 ? 'border-b border-line-subtle/50' : ''}`}
             >
-              <span className="text-[12px] text-on-surface-tertiary">{row.label}</span>
+              <span className="text-xs text-on-surface-tertiary">{row.label}</span>
               <span
-                className={`text-[12px] font-mono tabular-nums ${row.valueClass || 'text-on-surface-secondary'}`}
+                className={`text-xs font-mono tabular-nums ${row.valueClass || 'text-on-surface-secondary'}`}
               >
                 {row.value}
               </span>

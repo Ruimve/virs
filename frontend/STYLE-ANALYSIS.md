@@ -185,7 +185,7 @@ Props: { type: 'loading' | 'empty' | 'error'; text?: string; icon?: ReactNode }
 
 | 文件                                      | 组件名                                          | barColor 函数                |
 | ----------------------------------------- | ----------------------------------------------- | ---------------------------- |
-| `AutoBot/System/index.tsx`                | `Progress` (L47-54)                          | `barColor(pct)` — 阈值 90/70 |
+| `AutoBot/System/index.tsx`                | `Progress` (L47-54)                             | `barColor(pct)` — 阈值 90/70 |
 | `HealthCheck/CheckDetail/MiniBar.tsx`     | `MiniBar` (L9-16)                               | `pctBar(pct)` — 阈值 90/75   |
 | `HealthCheck/CheckDetail/ResourceRow.tsx` | 使用 MiniBar，另有 `pctColor(pct)` — 阈值 90/75 |
 
@@ -340,15 +340,15 @@ gap:
 | #   | 组件名          | 路径                                     | 替代文件数 | 优先级 |
 | --- | --------------- | ---------------------------------------- | ---------- | ------ |
 | 1   | `Stat`          | `src/components/Stat/index.tsx`          | 6          | **高** |
-| 2   | `Panel`  | `src/components/Panel/index.tsx`  | 4          | **高** |
+| 2   | `Panel`         | `src/components/Panel/index.tsx`         | 4          | **高** |
 | 3   | `Badge`         | `src/components/Badge/index.tsx`         | 10+        | **高** |
 | 4   | `Card`          | `src/components/Card/index.tsx`          | 10+        | **高** |
 | 5   | `StateFeedback` | `src/components/StateFeedback/index.tsx` | 7          | **高** |
 | 6   | `KeyValueRow`   | `src/components/KeyValueRow/index.tsx`   | 12+        | 中     |
-| 7   | `Progress`   | `src/components/Progress/index.tsx`   | 3          | 中     |
+| 7   | `Progress`      | `src/components/Progress/index.tsx`      | 3          | 中     |
 | 8   | `Pagination`    | `src/components/Pagination/index.tsx`    | 2          | 中     |
 | 9   | `Table`         | `src/components/Table/index.tsx`         | 2          | 低     |
-| 10  | `Title`  | `src/components/Title/index.tsx`  | 15+        | 中     |
+| 10  | `Title`         | `src/components/Title/index.tsx`         | 15+        | 中     |
 
 ---
 
@@ -358,7 +358,7 @@ gap:
 | ------------------- | -------------------------------------------- | -------------------------- |
 | `pnlColor(v)`       | `src/pages/Trade/components/utils/utils.tsx` | 4 处重复定义               |
 | `formatVolume(v)`   | 同上                                         | 2 处重复定义（取更完整版） |
-| `barColor/pctColor` | 同上（或放入 Progress 组件内部）          | 3 处不同阈值               |
+| `barColor/pctColor` | 同上（或放入 Progress 组件内部）             | 3 处不同阈值               |
 
 ---
 

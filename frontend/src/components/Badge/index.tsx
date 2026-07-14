@@ -18,7 +18,7 @@ const variantClasses: Record<BadgeVariant, string> = {
 };
 
 export const Badge = memo(({ variant, children, size = 'xs', className = '' }: BadgeProps) => {
-  const sizeClass = size === 'sm' ? 'text-[11px] px-2 py-0.5' : 'text-[10px] px-1.5 py-0.5';
+  const sizeClass = size === 'sm' ? 'text-caption px-2 py-0.5' : 'text-2xs px-1.5 py-0.5';
   return (
     <span
       className={`inline-block ${sizeClass} rounded font-medium shrink-0 ${variantClasses[variant]} ${className}`}

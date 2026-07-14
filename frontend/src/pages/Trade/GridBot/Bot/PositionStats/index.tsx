@@ -13,8 +13,8 @@ interface Props {
 // ── 字体规范（全页面统一） ──────────────────────────────
 // Hero value:   text-xl font-mono font-semibold tabular-nums (20px)
 // Primary value: text-sm font-mono tabular-nums (14px)
-// Label:        text-[11px] uppercase tracking-wider text-on-surface-tertiary
-// Sub text:     text-[10px] text-on-surface-muted
+// Label:        text-caption uppercase tracking-wider text-on-surface-tertiary
+// Sub text:     text-2xs text-on-surface-muted
 // ────────────────────────────────────────────────────────
 
 export const PositionStats = memo(({ bot, latestPrice }: Props) => {
@@ -52,7 +52,7 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
       <div className="px-4 py-3 flex items-center gap-6">
         {/* 账户余额 - Hero number */}
         <div className="shrink-0">
-          <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary mb-0.5">
+          <div className="text-caption uppercase tracking-wider text-on-surface-tertiary mb-0.5">
             账户余额
           </div>
           <div className="text-xl font-mono font-semibold tabular-nums text-on-surface">
@@ -66,7 +66,7 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
         {/* 保证金三列 */}
         <div className="flex items-center gap-5 flex-1 min-w-0">
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary mb-0.5">
+            <div className="text-caption uppercase tracking-wider text-on-surface-tertiary mb-0.5">
               已用保证金
             </div>
             <div className="text-sm font-mono tabular-nums text-on-surface">
@@ -74,7 +74,7 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
             </div>
           </div>
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary mb-0.5">
+            <div className="text-caption uppercase tracking-wider text-on-surface-tertiary mb-0.5">
               剩余保证金
             </div>
             <div className="text-sm font-mono tabular-nums text-on-surface">
@@ -82,7 +82,7 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
             </div>
           </div>
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary mb-0.5">
+            <div className="text-caption uppercase tracking-wider text-on-surface-tertiary mb-0.5">
               未实现盈亏
             </div>
             <div className={`text-sm font-mono tabular-nums ${pnlColor(unrealizedPnl)}`}>

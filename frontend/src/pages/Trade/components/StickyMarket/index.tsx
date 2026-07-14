@@ -108,7 +108,7 @@ export const StickyMarket = memo(
             <span className="text-on-surface-tertiary shrink-0">行情</span>
             {latestPrice > 0 && <FlashPrice price={latestPrice} className="text-on-surface" />}
             {summary.changePct !== 0 && (
-              <span className={`font-mono text-[11px] shrink-0 ${changeColor}`}>
+              <span className={`font-mono text-caption shrink-0 ${changeColor}`}>
                 {changeSign}
                 {summary.changePct.toFixed(2)}%
               </span>
@@ -116,15 +116,15 @@ export const StickyMarket = memo(
             {summary.high > 0 && (
               <>
                 <span className="hidden md:block w-px h-3 bg-line-subtle shrink-0" />
-                <span className="hidden md:flex items-center gap-1 text-on-surface-tertiary text-[11px] shrink-0">
+                <span className="hidden md:flex items-center gap-1 text-on-surface-tertiary text-caption shrink-0">
                   24H 高{' '}
                   <span className="text-on-surface font-mono">{summary.high.toFixed(2)}</span>
                 </span>
-                <span className="hidden md:flex items-center gap-1 text-on-surface-tertiary text-[11px] shrink-0">
+                <span className="hidden md:flex items-center gap-1 text-on-surface-tertiary text-caption shrink-0">
                   低 <span className="text-on-surface font-mono">{summary.low.toFixed(2)}</span>
                 </span>
                 {summary.volume > 0 && (
-                  <span className="hidden lg:flex items-center gap-1 text-on-surface-tertiary text-[11px] shrink-0">
+                  <span className="hidden lg:flex items-center gap-1 text-on-surface-tertiary text-caption shrink-0">
                     量{' '}
                     <span className="text-on-surface font-mono">
                       {formatVolume(summary.volume)}
@@ -135,7 +135,7 @@ export const StickyMarket = memo(
             )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            <span className="hidden sm:inline text-[10px] text-on-surface-muted">
+            <span className="hidden sm:inline text-2xs text-on-surface-muted">
               {expanded ? '收起' : '展开'}
             </span>
             <svg
@@ -159,7 +159,7 @@ export const StickyMarket = memo(
                 <div
                   key={tf}
                   onClick={() => onTimeframeChange(tf)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+                  className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors cursor-pointer ${
                     klineTimeframe === tf
                       ? 'bg-accent-light text-accent'
                       : 'text-on-surface-tertiary hover:text-on-surface hover:bg-surface-2'

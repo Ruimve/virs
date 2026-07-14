@@ -155,7 +155,7 @@ const System = () => {
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-on-surface-tertiary">型号</span>
-              <span className="text-on-surface text-[10px] truncate ml-2">{info.cpu.brand}</span>
+              <span className="text-on-surface text-2xs truncate ml-2">{info.cpu.brand}</span>
             </div>
           </div>
         </Card>
@@ -208,7 +208,7 @@ const System = () => {
                   </span>
                 </div>
                 <Progress pct={Math.min(loadPct, 100)} />
-                <div className="text-[10px] text-on-surface-tertiary mt-1 text-right font-mono">
+                <div className="text-2xs text-on-surface-tertiary mt-1 text-right font-mono">
                   {loadPct.toFixed(0)}% 核心
                 </div>
               </div>
@@ -229,7 +229,7 @@ const System = () => {
                 </span>
               </div>
               <Progress pct={disk.usage_pct} />
-              <div className="flex justify-between text-[10px] text-on-surface-tertiary mt-1">
+              <div className="flex justify-between text-2xs text-on-surface-tertiary mt-1">
                 <span className="font-mono">
                   {formatBytes(disk.used_bytes)} / {formatBytes(disk.total_bytes)}
                 </span>
@@ -267,7 +267,7 @@ const System = () => {
                     </div>
                   </div>
                   {net.ips.length > 0 && (
-                    <div className="text-[10px] text-on-surface-tertiary mt-0.5 font-mono truncate">
+                    <div className="text-2xs text-on-surface-tertiary mt-0.5 font-mono truncate">
                       {net.ips.join(', ')}
                     </div>
                   )}

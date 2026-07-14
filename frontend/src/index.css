@@ -53,6 +53,10 @@
   --color-info-text: var(--color-info-text-val);
   --color-info-bg: var(--color-info-bg-val);
   --color-info-border: var(--color-info-border-val);
+
+  /* Font size tokens —— 补充原生刻度以下的语义字号 */
+  --text-2xs: 0.625rem;     /* 10px — micro / sub-text */
+  --text-caption: 0.6875rem; /* 11px — label / caption（核心 token） */
 }
 
 /* ===== 亮色主题 (默认) ===== */
@@ -536,7 +540,7 @@ tbody tr:hover {
 /* ===== Component Layer — shared utility classes ===== */
 @layer components {
   .section-title {
-    @apply text-[11px] uppercase tracking-wider text-on-surface-tertiary font-medium;
+    @apply text-caption uppercase tracking-wider text-on-surface-tertiary font-medium;
   }
 
   .data-value {
@@ -548,6 +552,6 @@ tbody tr:hover {
   }
 
   .mono-label {
-    @apply text-[11px] font-mono tabular-nums;
+    @apply text-caption font-mono tabular-nums;
   }
 }

@@ -185,25 +185,25 @@ const System = () => {
       <Card title="系统概览" icon={<CpuIcon />}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           <div>
-            <div className="text-[11px] text-on-surface-tertiary mb-1">主机名</div>
+            <div className="text-caption text-on-surface-tertiary mb-1">主机名</div>
             <div className="text-on-surface font-mono tabular-nums truncate">
               {info.host_name || '-'}
             </div>
           </div>
           <div>
-            <div className="text-[11px] text-on-surface-tertiary mb-1">操作系统</div>
+            <div className="text-caption text-on-surface-tertiary mb-1">操作系统</div>
             <div className="text-on-surface">
               {info.os_name} {info.os_version}
             </div>
           </div>
           <div>
-            <div className="text-[11px] text-on-surface-tertiary mb-1">运行时长</div>
+            <div className="text-caption text-on-surface-tertiary mb-1">运行时长</div>
             <div className="text-on-surface font-mono tabular-nums">
               {formatUptime(info.uptime_secs)}
             </div>
           </div>
           <div>
-            <div className="text-[11px] text-on-surface-tertiary mb-1">进程数</div>
+            <div className="text-caption text-on-surface-tertiary mb-1">进程数</div>
             <div className="text-on-surface font-mono tabular-nums">{info.process_count}</div>
           </div>
         </div>
@@ -215,7 +215,7 @@ const System = () => {
           <div className="space-y-3">
             <div>
               <div className="flex items-baseline justify-between mb-1.5">
-                <span className="text-[11px] text-on-surface-tertiary">使用率</span>
+                <span className="text-caption text-on-surface-tertiary">使用率</span>
                 <span
                   className={`text-lg font-mono font-semibold tabular-nums ${usageColor(cpuPct)}`}
                 >
@@ -225,11 +225,11 @@ const System = () => {
               <Progress pct={cpuPct} />
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-[11px] text-on-surface-tertiary">核心数</span>
+              <span className="text-caption text-on-surface-tertiary">核心数</span>
               <span className="text-on-surface font-mono tabular-nums">{info.cpu.core_count}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-[11px] text-on-surface-tertiary">主频</span>
+              <span className="text-caption text-on-surface-tertiary">主频</span>
               <span className="text-on-surface font-mono tabular-nums">
                 {info.cpu.frequency_mhz > 0
                   ? `${(info.cpu.frequency_mhz / 1000).toFixed(2)} GHz`
@@ -237,8 +237,8 @@ const System = () => {
               </span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-[11px] text-on-surface-tertiary">型号</span>
-              <span className="text-on-surface text-[10px] truncate ml-2 max-w-[180px]">
+              <span className="text-caption text-on-surface-tertiary">型号</span>
+              <span className="text-on-surface text-2xs truncate ml-2 max-w-[180px]">
                 {info.cpu.brand}
               </span>
             </div>
@@ -249,7 +249,7 @@ const System = () => {
           <div className="space-y-3">
             <div>
               <div className="flex items-baseline justify-between mb-1.5">
-                <span className="text-[11px] text-on-surface-tertiary">使用率</span>
+                <span className="text-caption text-on-surface-tertiary">使用率</span>
                 <span
                   className={`text-lg font-mono font-semibold tabular-nums ${usageColor(memPct)}`}
                 >
@@ -259,14 +259,14 @@ const System = () => {
               <Progress pct={memPct} />
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-[11px] text-on-surface-tertiary">已用 / 总量</span>
+              <span className="text-caption text-on-surface-tertiary">已用 / 总量</span>
               <span className="text-on-surface font-mono tabular-nums">
                 {formatBytes(info.memory.used_bytes)} / {formatBytes(info.memory.total_bytes)}
               </span>
             </div>
             {info.swap.total_bytes > 0 && (
               <div className="flex justify-between text-xs">
-                <span className="text-[11px] text-on-surface-tertiary">Swap</span>
+                <span className="text-caption text-on-surface-tertiary">Swap</span>
                 <span className="text-on-surface font-mono tabular-nums">
                   {formatBytes(info.swap.used_bytes)} / {formatBytes(info.swap.total_bytes)}
                 </span>
@@ -288,7 +288,7 @@ const System = () => {
             return (
               <div key={label}>
                 <div className="flex items-baseline justify-between mb-1.5">
-                  <span className="text-[11px] text-on-surface-tertiary">{label}</span>
+                  <span className="text-caption text-on-surface-tertiary">{label}</span>
                   <span
                     className={`text-lg font-mono font-semibold tabular-nums ${usageColor(loadPct)}`}
                   >
@@ -296,7 +296,7 @@ const System = () => {
                   </span>
                 </div>
                 <Progress pct={Math.min(loadPct, 100)} />
-                <div className="text-[10px] text-on-surface-faint mt-1 text-right font-mono tabular-nums">
+                <div className="text-2xs text-on-surface-faint mt-1 text-right font-mono tabular-nums">
                   {loadPct.toFixed(0)}% 核心
                 </div>
               </div>
@@ -319,7 +319,7 @@ const System = () => {
                 </span>
               </div>
               <Progress pct={disk.usage_pct} />
-              <div className="text-[10px] text-on-surface-faint mt-1 font-mono tabular-nums">
+              <div className="text-2xs text-on-surface-faint mt-1 font-mono tabular-nums">
                 {formatBytes(disk.used_bytes)} / {formatBytes(disk.total_bytes)}
               </div>
             </div>
@@ -350,13 +350,13 @@ const System = () => {
                     </span>
                     <div className="flex-1 flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <span className="text-on-surface-muted text-[11px]">
+                        <span className="text-on-surface-muted text-caption">
                           ↓{' '}
                           <span className="text-success-text font-mono tabular-nums">
                             {rate ? formatRate(rate.rx) : '-'}
                           </span>
                         </span>
-                        <span className="text-on-surface-muted text-[11px]">
+                        <span className="text-on-surface-muted text-caption">
                           ↑{' '}
                           <span className="text-info-text font-mono tabular-nums">
                             {rate ? formatRate(rate.tx) : '-'}
@@ -367,7 +367,7 @@ const System = () => {
                     </div>
                   </div>
                   {net.ips.length > 0 && (
-                    <div className="text-[10px] text-on-surface-faint mt-1 font-mono tabular-nums truncate pl-16">
+                    <div className="text-2xs text-on-surface-faint mt-1 font-mono tabular-nums truncate pl-16">
                       {net.ips.join(', ')}
                     </div>
                   )}

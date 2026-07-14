@@ -23,11 +23,11 @@ export const Panel = memo(
   }: PanelProps) => (
     <div className={`flex flex-col min-h-0 ${className}`}>
       <div className="flex items-center justify-between px-3 py-2 border-b border-line-subtle shrink-0">
-        <span className="text-[11px] uppercase tracking-wider text-on-surface-tertiary font-medium">
+        <span className="text-caption uppercase tracking-wider text-on-surface-tertiary font-medium">
           {title}
         </span>
         {count !== undefined && (
-          <span className="text-[11px] font-mono tabular-nums text-on-surface-muted">{count}</span>
+          <span className="text-caption font-mono tabular-nums text-on-surface-muted">{count}</span>
         )}
       </div>
       <div className="flex-1 overflow-y-auto">

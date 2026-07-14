@@ -121,7 +121,7 @@ const ConfigureParams = () => {
       <div className="space-y-4">
         {params.map((param) => (
           <div key={param.key}>
-            <label className="block text-[11px] tracking-[0.15em] text-on-surface-muted uppercase mb-2">
+            <label className="block text-caption tracking-[0.15em] text-on-surface-muted uppercase mb-2">
               {param.label}
               {param.required && <span className="text-accent/60 ml-1">*</span>}
             </label>

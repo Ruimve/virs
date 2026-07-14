@@ -68,7 +68,7 @@ export const FlowStep = memo(
 
     const defaultIndicator = (): ReactNode => {
       const stepContent =
-        typeof step === 'number' ? <span className="text-[11px]">{step}</span> : step;
+        typeof step === 'number' ? <span className="text-caption">{step}</span> : step;
 
       switch (status) {
         case 'pending':
@@ -136,18 +136,18 @@ export const FlowStep = memo(
           >
             <p className={`text-sm font-medium leading-7 ${titleColor()}`}>{title}</p>
             {isEditable && (
-              <span className="text-[10px] text-on-surface-muted group-hover:text-on-surface-tertiary transition-colors">
+              <span className="text-2xs text-on-surface-muted group-hover:text-on-surface-tertiary transition-colors">
                 {expanded ? 'collapse' : 'edit'}
               </span>
             )}
           </div>
 
           {description && (status !== 'done' || expanded) && (
-            <p className="text-[12px] text-on-surface-muted -mt-1 mb-1">{description}</p>
+            <p className="text-xs text-on-surface-muted -mt-1 mb-1">{description}</p>
           )}
 
           {isCollapsed && summary && (
-            <div className="text-[12px] text-on-surface-muted -mt-1">{summary}</div>
+            <div className="text-xs text-on-surface-muted -mt-1">{summary}</div>
           )}
 
           {showContent && <div className="mt-2">{children}</div>}

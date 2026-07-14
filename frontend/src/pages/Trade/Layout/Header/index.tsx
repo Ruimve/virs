@@ -93,7 +93,7 @@ const Header = () => {
 
           {/* Status badge */}
           <span
-            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium tracking-wide ${sc.bg} ${
+            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium tracking-wide ${sc.bg} ${
               sc.pulse ? 'animate-subtle-pulse' : ''
             }`}
           >
@@ -104,7 +104,7 @@ const Header = () => {
           {/* Paper/Live mode indicator — distinct pill */}
           {paperEnabled !== null && (
             <span
-              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium tracking-wide ${
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium tracking-wide ${
                 paperEnabled
                   ? 'bg-info/[0.08] text-info border border-info/20'
                   : 'bg-warning/[0.08] text-warning-text border border-warning/20'
@@ -120,7 +120,7 @@ const Header = () => {
           )}
 
           {/* Symbol + leverage */}
-          <span className="text-[11px] text-on-surface-tertiary font-mono tabular-nums">
+          <span className="text-caption text-on-surface-tertiary font-mono tabular-nums">
             {bot?.symbol || ''} &middot; {bot?.leverage || ''}x
           </span>
         </div>
@@ -131,7 +131,7 @@ const Header = () => {
             <div
               key={tab.key}
               onClick={() => tab.onClick(tab.key)}
-              className={`px-4 py-1.5 rounded-lg text-[11px] font-medium tracking-wide transition-all duration-200 cursor-pointer ${
+              className={`px-4 py-1.5 rounded-lg text-caption font-medium tracking-wide transition-all duration-200 cursor-pointer ${
                 activeTab === tab.key
                   ? 'bg-accent-light text-accent shadow-sm'
                   : 'text-on-surface-tertiary hover:text-on-surface-secondary hover:bg-surface-2/50'
@@ -148,7 +148,7 @@ const Header = () => {
             return (
               <div
                 onClick={() => action.onClick(action.key)}
-                className={`px-3 py-1.5 rounded-lg text-[11px] font-medium tracking-wide transition-colors duration-200 cursor-pointer ${action.className || ''}`}
+                className={`px-3 py-1.5 rounded-lg text-caption font-medium tracking-wide transition-colors duration-200 cursor-pointer ${action.className || ''}`}
               >
                 {action.label}
               </div>
@@ -191,7 +191,7 @@ const Header = () => {
             {/* Navigation section */}
             <div className="flex-1 overflow-y-auto py-2">
               <div className="px-4 py-1.5">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-on-surface-faint font-medium">
+                <p className="text-2xs uppercase tracking-[0.15em] text-on-surface-faint font-medium">
                   Navigation
                 </p>
               </div>
@@ -202,7 +202,7 @@ const Header = () => {
                     tab.onClick(tab.key);
                     closeDrawer();
                   }}
-                  className={`w-full text-left px-5 py-2.5 text-[12px] font-medium tracking-wide transition-colors cursor-pointer ${
+                  className={`w-full text-left px-5 py-2.5 text-xs font-medium tracking-wide transition-colors cursor-pointer ${
                     activeTab === tab.key
                       ? 'text-accent bg-accent-light border-r-2 border-accent'
                       : 'text-on-surface-secondary hover:bg-surface-2/50 hover:text-on-surface'
@@ -216,7 +216,7 @@ const Header = () => {
             {/* Actions section */}
             <div className="border-t border-line-subtle py-3 px-4 shrink-0">
               <div className="mb-2">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-on-surface-faint font-medium">
+                <p className="text-2xs uppercase tracking-[0.15em] text-on-surface-faint font-medium">
                   Actions
                 </p>
               </div>
@@ -228,7 +228,7 @@ const Header = () => {
                         action.onClick!(action.key);
                         closeDrawer();
                       }}
-                      className={`w-full px-3 py-2 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${action.className || ''}`}
+                      className={`w-full px-3 py-2 rounded-lg text-caption font-medium transition-colors cursor-pointer ${action.className || ''}`}
                     >
                       {action.label}
                     </div>

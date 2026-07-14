@@ -293,14 +293,14 @@ const HealthCheck = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span
-              className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium ${toneClasses[tone]}`}
+              className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-caption font-medium ${toneClasses[tone]}`}
             >
               {running && <Spinner className="w-3 h-3" />}
               {running ? 'Running' : failed === 0 ? 'Operational' : 'Issues'}
             </span>
             <div>
               <p className="text-sm font-medium text-on-surface">{headline}</p>
-              <p className="text-[12px] text-on-surface-tertiary mt-0.5">
+              <p className="text-xs text-on-surface-tertiary mt-0.5">
                 {passed} of {total} checks passed
               </p>
             </div>
@@ -329,7 +329,7 @@ const HealthCheck = () => {
       {/* 继续操作 */}
       {allDone && (
         <div className="mt-6 flex items-center justify-between">
-          <p className="text-[12px] text-on-surface-tertiary">
+          <p className="text-xs text-on-surface-tertiary">
             {failed > 0
               ? `${failed} check${failed > 1 ? 's' : ''} failed — you can still continue.`
               : 'All checks passed.'}

@@ -52,7 +52,7 @@ const LogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
                   </Badge>
                 )}
                 {log.status === 'failed' && <Badge variant="danger">失败</Badge>}
-                <span className="text-[11px] text-on-surface-tertiary">
+                <span className="text-caption text-on-surface-tertiary">
                   {new Date(log.created_at).toLocaleString('zh-CN')}
                 </span>
               </div>

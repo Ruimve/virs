@@ -223,7 +223,7 @@ const ConfigureExchange = () => {
           onChange={handleApiSecretChange}
           placeholder="API Secret"
         />
-        {step1Status === 'error' && <p className="text-[12px] text-danger-text">{step1Error}</p>}
+        {step1Status === 'error' && <p className="text-xs text-danger-text">{step1Error}</p>}
         <Button size="small" onClick={startStep1} disabled={disabled}>
           {step1Status === 'verifying' ? 'Verifying...' : 'Verify'}
         </Button>
@@ -243,10 +243,10 @@ const ConfigureExchange = () => {
     return (
       <div className="space-y-2">
         {step2Status === 'verifying' && (
-          <p className="text-[12px] text-on-surface-tertiary">Testing connection to Binance...</p>
+          <p className="text-xs text-on-surface-tertiary">Testing connection to Binance...</p>
         )}
         {step2Status === 'error' && (
-          <p className="text-[12px] text-danger-text">{step2Error || 'Connection failed'}</p>
+          <p className="text-xs text-danger-text">{step2Error || 'Connection failed'}</p>
         )}
       </div>
     );
@@ -267,11 +267,11 @@ const ConfigureExchange = () => {
             className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg"
           >
             <div className="flex items-center gap-2">
-              <span className="text-[12px]">{renderStatusIcon(p.status)}</span>
-              <span className="text-[12px] text-on-surface-tertiary">{p.label}</span>
+              <span className="text-xs">{renderStatusIcon(p.status)}</span>
+              <span className="text-xs text-on-surface-tertiary">{p.label}</span>
             </div>
             <span
-              className={`text-[11px] ${
+              className={`text-caption ${
                 p.status === 'ok'
                   ? 'text-on-surface-muted'
                   : p.status === 'warn'
@@ -284,7 +284,7 @@ const ConfigureExchange = () => {
           </div>
         ))}
         {step3Status === 'error' && (
-          <p className="text-[12px] text-danger-text">{step3Error || 'Connection failed'}</p>
+          <p className="text-xs text-danger-text">{step3Error || 'Connection failed'}</p>
         )}
       </div>
     );
@@ -294,14 +294,14 @@ const ConfigureExchange = () => {
     return (
       <div className="space-y-2">
         {step4Status === 'verifying' && (
-          <p className="text-[12px] text-on-surface-tertiary">Checking position mode...</p>
+          <p className="text-xs text-on-surface-tertiary">Checking position mode...</p>
         )}
         {step4Status === 'done' && (
-          <p className="text-[12px] text-success-text">双向持仓模式 (Hedge Mode) ✓</p>
+          <p className="text-xs text-success-text">双向持仓模式 (Hedge Mode) ✓</p>
         )}
         {step4Status === 'error' && (
           <div className="space-y-1">
-            <p className="text-[12px] text-danger-text">
+            <p className="text-xs text-danger-text">
               {step4Error || 'Position mode check failed'}
             </p>
             <Button size="small" onClick={startStep4}>

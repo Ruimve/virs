@@ -26,7 +26,7 @@ const variantStyles: Record<ButtonVariant, string> = {
 };
 
 const sizeStyles: Record<ButtonSize, { box: string; spinner: string }> = {
-  xs: { box: 'px-2.5 py-1 text-[11px]', spinner: 'w-3 h-3' },
+  xs: { box: 'px-2.5 py-1 text-caption', spinner: 'w-3 h-3' },
   small: { box: 'px-3.5 py-1.5 text-xs', spinner: 'w-3.5 h-3.5' },
   normal: { box: 'px-5 py-2.5 text-sm', spinner: 'w-4 h-4' },
 };

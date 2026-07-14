@@ -20,7 +20,7 @@ const Header = () => {
       return (
         <div key={i} className="flex items-center gap-2">
           <div
-            className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-medium transition-all duration-300 ${
+            className={`w-7 h-7 rounded-full flex items-center justify-center text-caption font-medium transition-all duration-300 ${
               isActive
                 ? 'bg-accent/80 text-white'
                 : isCompleted
@@ -47,7 +47,7 @@ const Header = () => {
 
       {/* Center: tabs (desktop) */}
       <div className="flex items-center justify-center flex-1 gap-2">
-        <span className="text-[11px] text-on-surface-tertiary md:hidden">{simpleSteps}</span>
+        <span className="text-caption text-on-surface-tertiary md:hidden">{simpleSteps}</span>
         <div className="hidden md:flex items-center gap-2">{fullSteps}</div>
       </div>
       {/* Right: actions (desktop) */}

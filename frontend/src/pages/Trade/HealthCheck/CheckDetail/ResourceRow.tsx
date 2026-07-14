@@ -11,13 +11,13 @@ interface Props {
 const ResourceRow = ({ label, pct, hint }: Props) => (
   <div>
     <div className="flex items-baseline justify-between mb-1">
-      <span className="text-[11px] text-on-surface-tertiary">{label}</span>
-      <span className={`text-[11px] font-mono font-medium ${usageColor(pct)}`}>
+      <span className="text-caption text-on-surface-tertiary">{label}</span>
+      <span className={`text-caption font-mono font-medium ${usageColor(pct)}`}>
         {pct.toFixed(0)}%
       </span>
     </div>
     <MiniBar pct={pct} />
-    {hint && <span className="text-[10px] text-on-surface-muted mt-0.5 block">{hint}</span>}
+    {hint && <span className="text-2xs text-on-surface-muted mt-0.5 block">{hint}</span>}
   </div>
 );
 

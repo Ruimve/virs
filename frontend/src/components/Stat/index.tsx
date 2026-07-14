@@ -10,7 +10,7 @@ interface StatProps {
 
 export const Stat = memo(({ label, children, highlight, color, sub }: StatProps) => (
   <div className="min-w-0">
-    <div className="text-[11px] uppercase tracking-wider text-on-surface-tertiary mb-0.5">
+    <div className="text-caption uppercase tracking-wider text-on-surface-tertiary mb-0.5">
       {label}
     </div>
     <div
@@ -18,6 +18,6 @@ export const Stat = memo(({ label, children, highlight, color, sub }: StatProps)
     >
       {children}
     </div>
-    {sub && <div className="text-[10px] text-on-surface-muted mt-0.5">{sub}</div>}
+    {sub && <div className="text-2xs text-on-surface-muted mt-0.5">{sub}</div>}
   </div>
 ));
