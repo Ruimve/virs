@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -292,6 +292,9 @@ pub(crate) const ORDER_WS_DELAY_THRESHOLD_MS: i64 = 3_000;
 /// 通过 `refresh_url()` 在每次重连前重新创建 listenKey，解决 P0 问题：
 /// 原始实现中 listenKey 过期后用旧 key 重连导致死循环。
 ///
+/// `current_key` 通过 `Arc<RwLock<String>>` 与外部 keepalive task 共享，
+/// 确保 `refresh_url()` 创建新 key 后，keepalive task 能续期正确的 key。
+///
 /// 消息解析委托给 [`dispatch_event`]，统一处理 11 种事件类型。
 /// `listenKeyExpired` 事件触发 `MessageOutcome::Reconnect`，
 /// WsManager 立即断开并通过 `refresh_url()` 获取新 key。
@@ -302,17 +305,27 @@ pub struct UserDataWsHandler {
     client: ExchangeClient,
     /// 签名器 — 用于 `refresh_url()` 签名
     signer: Arc<dyn Signer>,
+    /// 共享 listenKey — keepalive task 和 `refresh_url()` 通过此字段同步
+    current_key: Arc<RwLock<String>>,
 }
 
 impl UserDataWsHandler {
     /// 创建 handler
     ///
     /// `ws_url` 应包含初始 listenKey，格式：`wss://fstream.binance.com/private/ws?listenKey=<key>`
-    pub fn new(ws_url: String, client: ExchangeClient, signer: Arc<dyn Signer>) -> Self {
+    ///
+    /// `current_key` 是共享 listenKey 句柄，`refresh_url()` 更新后 keepalive task 可读取最新值。
+    pub fn new(
+        ws_url: String,
+        client: ExchangeClient,
+        signer: Arc<dyn Signer>,
+        current_key: Arc<RwLock<String>>,
+    ) -> Self {
         Self {
             ws_url,
             client,
             signer,
+            current_key,
         }
     }
 }
@@ -326,6 +339,10 @@ impl WsHandler<WsFeedEvent> for UserDataWsHandler {
     async fn refresh_url(&self) -> Result<String, ExchangeError> {
         // P0 修复：每次重连前创建新 listenKey，而非复用旧 key
         let new_key = fapi::create_listen_key(&self.client, self.signer.as_ref()).await?;
+        // 更新共享 listenKey，使 keepalive task 续期新 key 而非已失效的旧 key
+        *self.current_key
+            .write()
+            .expect("listenKey RwLock poisoned") = new_key.clone();
         let url = format!("wss://fstream.binance.com/private/ws?listenKey={}", new_key);
         tracing::info!("[UserDataWs] Refreshed listenKey for reconnect");
         Ok(url)
@@ -409,10 +426,13 @@ impl WsHandler<WsFeedEvent> for UserDataWsHandler {
 /// - **优雅关闭**：统一 `stop()` + shutdown channel
 /// - **熔断**：`max_retries` 超限后触发 `CircuitBreakerTripped` 事件
 /// - **listenKeyExpired**：`MessageOutcome::Reconnect` 立即触发重连
+/// - **listenKey 共享**：`Arc<RwLock<String>>` 使 keepalive task 与 `refresh_url()` 同步
 pub struct UserDataWs {
     manager: WsManager<WsFeedEvent>,
     /// 初始 WS URL — 保留用于测试断言
     pub ws_url: String,
+    /// 共享 listenKey — keepalive task 通过 `listen_key_handle()` 读取最新值
+    current_key: Arc<RwLock<String>>,
 }
 
 impl UserDataWs {
@@ -422,6 +442,8 @@ impl UserDataWs {
     /// 新 URL 使用 query 形态 `wss://fstream.binance.com/private/ws?listenKey=<key>`
     ///
     /// `client` 和 `signer` 用于 `refresh_url()` 在每次重连前创建新 listenKey。
+    /// 内部创建 `Arc<RwLock<String>>` 共享 listenKey，使 keepalive task 能读取
+    /// `refresh_url()` 更新后的最新 key。
     pub fn new_perpetual(
         listen_key: String,
         client: ExchangeClient,
@@ -430,10 +452,13 @@ impl UserDataWs {
         let base_url = "wss://fstream.binance.com/private/ws".to_string();
         let ws_url = format!("{}?listenKey={}", base_url, listen_key);
 
+        let current_key = Arc::new(RwLock::new(listen_key));
+
         let handler = Arc::new(UserDataWsHandler::new(
             ws_url.clone(),
             client,
             signer,
+            Arc::clone(&current_key),
         ));
 
         let config = WsManagerConfig::default();
@@ -441,12 +466,21 @@ impl UserDataWs {
         Self {
             manager: WsManager::new(config, handler),
             ws_url,
+            current_key,
         }
     }
 
     /// 返回 running flag 的引用，供外部 keepalive task 检测 WS 生命周期。
     pub fn running_handle(&self) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
         self.manager.running_handle()
+    }
+
+    /// 返回共享 listenKey 的句柄，供外部 keepalive task 读取最新值。
+    ///
+    /// `refresh_url()` 在每次重连前创建新 listenKey 并更新此共享状态，
+    /// keepalive task 每次 tick 时从此处读取当前 listenKey 进行 PUT 续期。
+    pub fn listen_key_handle(&self) -> Arc<RwLock<String>> {
+        Arc::clone(&self.current_key)
     }
 
     /// 启动 WS 连接，将事件发送到 event_tx

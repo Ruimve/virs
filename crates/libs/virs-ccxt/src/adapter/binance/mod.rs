@@ -620,13 +620,14 @@ impl Exchange for BinanceExchange {
 
         // 2. 构造合约 UserDataWs — 传入 client + signer 供 refresh_url() 创建新 listenKey
         let ws = user_data_ws::UserDataWs::new_perpetual(
-            listen_key.clone(),
+            listen_key,
             self.client.clone(),
             Arc::clone(&self.signer),
         );
 
-        // 3. 获取 running flag 引用（keepalive task 据此判断 WS 是否已退出）
+        // 3. 获取 running flag 和共享 listenKey 句柄
         let ws_running = ws.running_handle();
+        let listen_key_handle = ws.listen_key_handle();
 
         // 4. 启动 WS 并返回 receiver
         let (tx, rx) = mpsc::channel(256);
@@ -636,6 +637,10 @@ impl Exchange for BinanceExchange {
         // 5. spawn listenKey REST keepalive task
         //    币安要求：合约 60 分钟内 keepalive 一次，否则 listenKey 失效。
         //    取保守间隔（窗口的 1/2）以容忍网络抖动。
+        //
+        //    listenKey 通过 Arc<RwLock<String>> 与 refresh_url() 共享：
+        //    每次重连时 refresh_url() 创建新 key 并更新共享状态，
+        //    keepalive task 每次 tick 从共享状态读取最新 key 进行 PUT 续期。
         let client = self.client.clone();
         let signer = Arc::clone(&self.signer);
         let keepalive_interval = Duration::from_secs(self.listenkey_keepalive_futures_secs);
@@ -653,10 +658,15 @@ impl Exchange for BinanceExchange {
                 if !ws_running.load(Ordering::Relaxed) {
                     return;
                 }
-                let result = fapi::keepalive_listen_key(&client, signer.as_ref(), &listen_key).await;
+                // 从共享状态读取最新 listenKey（refresh_url 重连后可能已更新）
+                let current_key = listen_key_handle
+                    .read()
+                    .expect("listenKey RwLock poisoned")
+                    .clone();
+                let result =
+                    fapi::keepalive_listen_key(&client, signer.as_ref(), &current_key).await;
                 match result {
-                    Ok(()) => {
-                    }
+                    Ok(()) => {}
                     Err(e) => {
                         tracing::warn!(
                             error = %e,
