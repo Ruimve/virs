@@ -13,6 +13,7 @@ use virs_types::enums::*;
 use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_types::market::*;
 use virs_types::position::*;
+use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderResult};
 
 use virs_error::{ExchangeError, VirsError, VirsResult};
 
@@ -155,22 +156,49 @@ impl PaperExchangeAdapter {
             self.update_position_on_fill(order, current_price).await;
 
             let fee = current_price * order.amount * 0.0002;
+            let ccxt_order = CcxtOrder {
+                order_id: order.id.to_string().parse().unwrap_or(0),
+                client_order_id: order.client_order_id.clone().unwrap_or_default(),
+                symbol: order.symbol.clone(),
+                side: order.side,
+                order_type: order.order_type,
+                position_side: order.position_side.unwrap_or(virs_types::PositionSide::Long),
+                original_order_type: format!("{:?}", order.order_type),
+                status: CcxtOrderStatus::Filled,
+                execution_type: ExecutionType::Trade,
+                orig_qty: order.amount.to_string(),
+                original_price: order.price.map(|p| p.to_string()).unwrap_or_default(),
+                avg_fill_price: current_price.to_string(),
+                filled_qty: order.amount.to_string(),
+                last_fill_qty: order.amount.to_string(),
+                last_fill_price: current_price.to_string(),
+                stop_price: None,
+                commission: fee.to_string(),
+                commission_asset: "USDT".to_string(),
+                realized_pnl: "0".to_string(),
+                reduce_only: order.reduce_only,
+                is_maker: true,
+                close_position: None,
+                time_in_force: "GTC".to_string(),
+                working_type: "CONTRACT_PRICE".to_string(),
+                bids_notional: None,
+                ask_notional: None,
+                activation_price: None,
+                callback_rate: None,
+                price_protection: false,
+                stp_mode: None,
+                price_match_mode: None,
+                gtd_auto_cancel_time: None,
+                expiry_reason: None,
+                si: 0,
+                ss: 0,
+                trade_time: chrono::Utc::now().timestamp_millis(),
+                trade_id: 0,
+            };
             let tx = self.price_tx.lock().await;
             if let Some(ref tx) = *tx {
                 if tx
-                    .send(WsFeedEvent::OrderUpdate {
-                        exchange_order_id: order.id.to_string(),
-                        client_order_id: order.client_order_id.clone(),
-                        symbol: order.symbol.clone(),
-                        status: OrderStatus::Filled,
-                        filled: order.amount,
-                        remaining: 0.0,
-                        price: current_price,
-                        amount: order.amount,
-                        commission: fee,
-                        timestamp: Utc::now(),
-                        position_side: order.position_side,
-                    })
+                    .send(WsFeedEvent::OrderUpdate { order: ccxt_order })
                     .await
                     .is_err()
                 {
@@ -387,7 +415,7 @@ impl ExchangePe for PaperExchangeAdapter {
         })
     }
 
-    async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<PositionOrder> {
+    async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<OrderResult> {
         let order_id = Uuid::new_v4();
         let now = Utc::now();
         let is_market = params.order_type == OrderType::Market || params.price.is_none();
@@ -425,56 +453,65 @@ impl ExchangePe for PaperExchangeAdapter {
 
             let fee = fill_price * params.amount * 0.0005;
 
-            let order = PositionOrder {
-                id: order_id,
-                position_id: params.position_id.unwrap_or(Uuid::nil()),
-                exchange_order_id: Some(order_id.to_string()),
-                client_order_id: params.client_order_id.clone(),
-                exchange: self.name.clone(),
+            let order_result = OrderResult {
+                order_id: order_id.to_string(),
+                client_order_id: params
+                    .client_order_id
+                    .clone()
+                    .unwrap_or_else(|| order_id.to_string()),
+            };
+
+            let ccxt_order = CcxtOrder {
+                order_id: order_id.to_string().parse().unwrap_or(0),
+                client_order_id: params.client_order_id.clone().unwrap_or_default(),
                 symbol: params.symbol.clone(),
                 side: params.side,
                 order_type: params.order_type,
-                request_price: params.price,
-                fill_price: if fill_price > 0.0 {
-                    Some(fill_price)
-                } else {
-                    None
-                },
-                amount: params.amount,
-                filled: params.amount,
-                remaining: 0.0,
-                status: OrderStatus::Filled,
+                position_side: params.position_side.unwrap_or(virs_types::PositionSide::Long),
+                original_order_type: format!("{:?}", params.order_type),
+                status: CcxtOrderStatus::Filled,
+                execution_type: ExecutionType::Trade,
+                orig_qty: params.amount.to_string(),
+                original_price: params.price.map(|p| p.to_string()).unwrap_or_default(),
+                avg_fill_price: fill_price.to_string(),
+                filled_qty: params.amount.to_string(),
+                last_fill_qty: params.amount.to_string(),
+                last_fill_price: fill_price.to_string(),
+                stop_price: None,
+                commission: fee.to_string(),
+                commission_asset: "USDT".to_string(),
+                realized_pnl: "0".to_string(),
                 reduce_only: params.reduce_only,
-                fee,
-                fee_currency: "USDT".to_string(),
-                slippage: None,
-                created_at: now,
-                updated_at: now,
+                is_maker: false,
+                close_position: None,
+                time_in_force: "GTC".to_string(),
+                working_type: "CONTRACT_PRICE".to_string(),
+                bids_notional: None,
+                ask_notional: None,
+                activation_price: None,
+                callback_rate: None,
+                price_protection: false,
+                stp_mode: None,
+                price_match_mode: None,
+                gtd_auto_cancel_time: None,
+                expiry_reason: None,
+                si: 0,
+                ss: 0,
+                trade_time: chrono::Utc::now().timestamp_millis(),
+                trade_id: 0,
             };
 
             let tx = self.price_tx.lock().await;
             if let Some(ref tx) = *tx {
                 if tx
-                    .send(WsFeedEvent::OrderUpdate {
-                        exchange_order_id: order_id.to_string(),
-                        client_order_id: params.client_order_id.clone(),
-                        symbol: params.symbol.clone(),
-                        status: OrderStatus::Filled,
-                        filled: params.amount,
-                        remaining: 0.0,
-                        price: fill_price,
-                        amount: params.amount,
-                        commission: fee,
-                        timestamp: Utc::now(),
-                        position_side: params.position_side,
-                    })
+                    .send(WsFeedEvent::OrderUpdate { order: ccxt_order })
                     .await
                     .is_err()
                 {
                     warn!(order_id = %order_id, symbol = %params.symbol, "Paper WsFeedEvent::OrderUpdate send failed — receiver dropped, event lost");
                 }
             }
-            Ok(order)
+            Ok(order_result)
         } else {
             let pending = PaperPendingOrder {
                 id: order_id,
@@ -489,62 +526,29 @@ impl ExchangePe for PaperExchangeAdapter {
                 created_at: now,
             };
             self.pending.insert(order_id, pending);
-            let order = PositionOrder {
-                id: order_id,
-                position_id: params.position_id.unwrap_or(Uuid::nil()),
-                exchange_order_id: Some(order_id.to_string()),
-                client_order_id: params.client_order_id,
-                exchange: self.name.clone(),
-                symbol: params.symbol.clone(),
-                side: params.side,
-                order_type: params.order_type,
-                request_price: params.price,
-                fill_price: None,
-                amount: params.amount,
-                filled: 0.0,
-                remaining: params.amount,
-                status: OrderStatus::Open,
-                reduce_only: params.reduce_only,
-                fee: 0.0,
-                fee_currency: "USDT".to_string(),
-                slippage: None,
-                created_at: now,
-                updated_at: now,
+            // 限价单挂单未成交，不发送 WS 推送
+            let order_result = OrderResult {
+                order_id: order_id.to_string(),
+                client_order_id: params
+                    .client_order_id
+                    .clone()
+                    .unwrap_or_else(|| order_id.to_string()),
             };
-            Ok(order)
+            Ok(order_result)
         }
     }
 
-    async fn cancel_order(&self, _symbol: &str, order_id: &str) -> VirsResult<PositionOrder> {
+    async fn cancel_order(&self, _symbol: &str, order_id: &str) -> VirsResult<OrderResult> {
         let uuid = Uuid::parse_str(order_id).map_err(|_| {
             ExchangeError::Internal(format!(
                 "Invalid order ID: {}",
                 order_id
             ))
         })?;
-        let now = Utc::now();
         match self.pending.remove(&uuid) {
-            Some((_, pending)) => Ok(PositionOrder {
-                id: uuid,
-                position_id: Uuid::nil(),
-                exchange_order_id: Some(uuid.to_string()),
-                client_order_id: pending.client_order_id,
-                exchange: self.name.clone(),
-                symbol: pending.symbol,
-                side: pending.side,
-                order_type: pending.order_type,
-                request_price: pending.price,
-                fill_price: None,
-                amount: pending.amount,
-                filled: 0.0,
-                remaining: pending.amount,
-                status: OrderStatus::Canceled,
-                reduce_only: pending.reduce_only,
-                fee: 0.0,
-                fee_currency: "USDT".to_string(),
-                slippage: None,
-                created_at: pending.created_at,
-                updated_at: now,
+            Some((_, pending)) => Ok(OrderResult {
+                order_id: order_id.to_string(),
+                client_order_id: pending.client_order_id.unwrap_or_default(),
             }),
             None => Err(VirsError::Exchange(ExchangeError::OrderNotFound(
                 order_id.to_string(),
@@ -552,8 +556,7 @@ impl ExchangePe for PaperExchangeAdapter {
         }
     }
 
-    async fn cancel_all_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<PositionOrder>> {
-        let now = Utc::now();
+    async fn cancel_all_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<OrderResult>> {
         let keys: Vec<Uuid> = self
             .pending
             .iter()
@@ -563,27 +566,9 @@ impl ExchangePe for PaperExchangeAdapter {
         let mut canceled = Vec::new();
         for key in keys {
             if let Some((_, pending)) = self.pending.remove(&key) {
-                canceled.push(PositionOrder {
-                    id: key,
-                    position_id: Uuid::nil(),
-                    exchange_order_id: Some(key.to_string()),
-                    client_order_id: pending.client_order_id,
-                    exchange: self.name.clone(),
-                    symbol: pending.symbol,
-                    side: pending.side,
-                    order_type: pending.order_type,
-                    request_price: pending.price,
-                    fill_price: None,
-                    amount: pending.amount,
-                    filled: 0.0,
-                    remaining: pending.amount,
-                    status: OrderStatus::Canceled,
-                    reduce_only: pending.reduce_only,
-                    fee: 0.0,
-                    fee_currency: "USDT".to_string(),
-                    slippage: None,
-                    created_at: pending.created_at,
-                    updated_at: now,
+                canceled.push(OrderResult {
+                    order_id: key.to_string(),
+                    client_order_id: pending.client_order_id.unwrap_or_default(),
                 });
             }
         }

@@ -1,14 +1,11 @@
-use chrono::Utc;
-
 use virs_models as models;
 use virs_types::enums::*;
 use virs_types::market::ExchangePosition;
-use virs_types::position::PositionOrder;
 
 use virs_error::ExchangeError;
 
 use crate::pe_adapter::{
-    convert_exchange_position, convert_order, convert_order_status, convert_order_type,
+    convert_exchange_position, convert_order_status, convert_order_type,
     convert_position_side, convert_side, convert_to_models_side, convert_virs_market_type,
     convert_virs_position_side, no_exchange_error,
 };
@@ -79,14 +76,6 @@ fn pe4_3_stop_market() {
     assert_eq!(
         convert_order_type(&OrderType::StopMarket),
         models::OrderType::StopMarket
-    );
-}
-
-#[test]
-fn pe4_4_stop_limit() {
-    assert_eq!(
-        convert_order_type(&OrderType::StopLimit),
-        models::OrderType::StopLimit
     );
 }
 
@@ -171,73 +160,6 @@ fn pe7_2_perpetual() {
         convert_virs_market_type(&models::MarketType::Perpetual),
         MarketType::Perpetual
     );
-}
-
-
-#[test]
-fn pe8_1_order_normal() {
-    let now = Utc::now();
-    let mo = models::Order {
-        id: "order_123".into(),
-        client_order_id: Some("client_456".into()),
-        symbol: "BTC/USDT".into(),
-        side: models::Side::Buy,
-        order_type: models::OrderType::Limit,
-        price: Some(50000.0),
-        amount: 1.0,
-        cost: Some(50000.0),
-        filled: 0.5,
-        remaining: 0.5,
-        status: models::OrderStatus::PartiallyFilled,
-        fee: 0.075,
-        fee_currency: "BTC".into(),
-        created_at: now,
-        updated_at: now,
-    };
-    let po: PositionOrder = convert_order(&mo, "binance");
-    assert_eq!(po.exchange_order_id, Some("order_123".into()));
-    assert_eq!(po.client_order_id, Some("client_456".into()));
-    assert_eq!(po.exchange, "binance");
-    assert_eq!(po.symbol, "BTC/USDT");
-    assert_eq!(po.side, Side::Buy);
-    assert_eq!(po.order_type, OrderType::Limit);
-    assert_eq!(po.request_price, Some(50000.0));
-    assert_eq!(po.fill_price, Some(50000.0));
-    assert_eq!(po.amount, 1.0);
-    assert_eq!(po.filled, 0.5);
-    assert_eq!(po.remaining, 0.5);
-    assert_eq!(po.status, OrderStatus::PartiallyFilled);
-    assert_eq!(po.fee, 0.075);
-    assert_eq!(po.fee_currency, "BTC");
-    assert_eq!(po.created_at, now);
-    assert_eq!(po.updated_at, now);
-}
-
-#[test]
-fn pe8_2_order_no_fill_no_price() {
-    let now = Utc::now();
-    let mo = models::Order {
-        id: "order_789".into(),
-        client_order_id: None,
-        symbol: "ETH/USDT".into(),
-        side: models::Side::Sell,
-        order_type: models::OrderType::Market,
-        price: None,
-        amount: 2.0,
-        cost: None,
-        filled: 0.0,
-        remaining: 2.0,
-        status: models::OrderStatus::Open,
-        fee: 0.0,
-        fee_currency: "".into(),
-        created_at: now,
-        updated_at: now,
-    };
-    let po = convert_order(&mo, "binance");
-    assert_eq!(po.client_order_id, None);
-    assert_eq!(po.request_price, None);
-    assert_eq!(po.fill_price, None);
-    assert_eq!(po.status, OrderStatus::Open);
 }
 
 

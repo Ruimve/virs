@@ -2,7 +2,7 @@ use crate::adapter::binance::user_data_ws::*;
 use crate::adapter::binance::BinanceSigner;
 use crate::ExchangeClient;
 use std::sync::Arc;
-use virs_types::{OrderStatus, PositionSide};
+use virs_types::{CcxtOrder, CcxtOrderStatus, OrderStatus, PositionSide};
 
 
 #[test]
@@ -82,22 +82,16 @@ fn test_parse_order_trade_update_single_stream() {
         "ORDER_TRADE_UPDATE should produce WsFeedEvent"
     );
 
-    if let Some(WsFeedEvent::OrderUpdate {
-        exchange_order_id,
-        symbol,
-        status,
-        filled,
-        remaining,
-        position_side,
-        ..
-    }) = event
-    {
-        assert_eq!(exchange_order_id, "123456789");
-        assert_eq!(symbol, "BTCUSDT");
-        assert_eq!(status, OrderStatus::Filled);
+    if let Some(WsFeedEvent::OrderUpdate { order }) = event {
+        assert_eq!(order.order_id, 123456789);
+        assert_eq!(order.symbol, "BTCUSDT");
+        assert_eq!(order.status, CcxtOrderStatus::Filled);
+        let filled: f64 = order.filled_qty.parse().unwrap();
         assert!((filled - 0.002).abs() < 0.0001);
+        let amount: f64 = order.orig_qty.parse().unwrap();
+        let remaining = (amount - filled).max(0.0);
         assert!((remaining - 0.0).abs() < 0.0001);
-        assert_eq!(position_side, Some(PositionSide::Short));
+        assert_eq!(order.position_side, PositionSide::Short);
     } else {
         panic!("Expected OrderUpdate event");
     }
@@ -149,30 +143,9 @@ fn test_order_status_mapping_all_variants() {
 }
 
 
-fn unwrap_order_update(
-    event: WsFeedEvent,
-) -> (String, String, OrderStatus, f64, f64, f64, f64, f64) {
+fn unwrap_order_update(event: WsFeedEvent) -> CcxtOrder {
     match event {
-        WsFeedEvent::OrderUpdate {
-            exchange_order_id,
-            symbol,
-            status,
-            filled,
-            remaining,
-            price,
-            amount,
-            commission,
-            ..
-        } => (
-            exchange_order_id,
-            symbol,
-            status,
-            filled,
-            remaining,
-            price,
-            amount,
-            commission,
-        ),
+        WsFeedEvent::OrderUpdate { order } => order,
         WsFeedEvent::ConnectionChanged { .. } => {
             panic!("Expected OrderUpdate, got ConnectionChanged")
         }
@@ -183,16 +156,20 @@ fn unwrap_order_update(
 fn test_to_ws_feed_event_filled() {
     let inner = make_test_inner("FILLED", "1.0", "1.0", "0.0", "65000.00", "1.0", "0.065");
     let event = inner.to_ws_feed_event().unwrap();
-    let (exchange_order_id, symbol, status, filled, remaining, price, amount, commission) =
-        unwrap_order_update(event);
+    let order = unwrap_order_update(event);
 
-    assert_eq!(exchange_order_id, "123456789");
-    assert_eq!(symbol, "BTCUSDT");
-    assert_eq!(status, OrderStatus::Filled);
+    assert_eq!(order.order_id, 123456789);
+    assert_eq!(order.symbol, "BTCUSDT");
+    assert_eq!(order.status, CcxtOrderStatus::Filled);
+    let filled: f64 = order.filled_qty.parse().unwrap();
     assert!((filled - 1.0).abs() < 0.001);
+    let amount: f64 = order.orig_qty.parse().unwrap();
+    let remaining = (amount - filled).max(0.0);
     assert!((remaining - 0.0).abs() < 0.001);
+    let price: f64 = order.last_fill_price.parse().unwrap();
     assert!((price - 65000.0).abs() < 0.001);
     assert!((amount - 1.0).abs() < 0.001);
+    let commission: f64 = order.commission.parse().unwrap();
     assert!((commission - 0.065).abs() < 0.001);
 }
 
@@ -208,10 +185,13 @@ fn test_to_ws_feed_event_partially_filled() {
         "0.175",
     );
     let event = inner.to_ws_feed_event().unwrap();
-    let (_, _, status, filled, remaining, _, _, _) = unwrap_order_update(event);
+    let order = unwrap_order_update(event);
 
-    assert_eq!(status, OrderStatus::PartiallyFilled);
+    assert_eq!(order.status, CcxtOrderStatus::PartiallyFilled);
+    let filled: f64 = order.filled_qty.parse().unwrap();
     assert!((filled - 5.0).abs() < 0.001);
+    let amount: f64 = order.orig_qty.parse().unwrap();
+    let remaining = (amount - filled).max(0.0);
     assert!((remaining - 5.0).abs() < 0.001);
 }
 
@@ -219,10 +199,13 @@ fn test_to_ws_feed_event_partially_filled() {
 fn test_to_ws_feed_event_new_order() {
     let inner = make_test_inner("NEW", "1.0", "0.0", "1.0", "0.00", "0.0", "0.0");
     let event = inner.to_ws_feed_event().unwrap();
-    let (_, _, status, filled, remaining, _, _, _) = unwrap_order_update(event);
+    let order = unwrap_order_update(event);
 
-    assert_eq!(status, OrderStatus::Open);
+    assert_eq!(order.status, CcxtOrderStatus::New);
+    let filled: f64 = order.filled_qty.parse().unwrap();
     assert!((filled - 0.0).abs() < 0.001);
+    let amount: f64 = order.orig_qty.parse().unwrap();
+    let remaining = (amount - filled).max(0.0);
     assert!((remaining - 1.0).abs() < 0.001);
 }
 
@@ -257,7 +240,10 @@ fn test_to_ws_feed_event_remaining_fallback() {
         position_side: None,
     };
     let event = inner.to_ws_feed_event().unwrap();
-    let (_, _, _, _, remaining, _, _, _) = unwrap_order_update(event);
+    let order = unwrap_order_update(event);
+    let amount: f64 = order.orig_qty.parse().unwrap();
+    let filled: f64 = order.filled_qty.parse().unwrap();
+    let remaining = (amount - filled).max(0.0);
     assert!((remaining - 7.0).abs() < 0.001, "remaining = 10 - 3 = 7");
 }
 

@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::ccxt_order::{CcxtOrder, OrderResult};
 use crate::enums::*;
 
 
@@ -45,31 +46,6 @@ impl Position {
 
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PositionOrder {
-    pub id: Uuid,
-    pub position_id: Uuid,
-    pub exchange_order_id: Option<String>,
-    pub client_order_id: Option<String>,
-    pub exchange: String,
-    pub symbol: String,
-    pub side: Side,
-    pub order_type: OrderType,
-    pub request_price: Option<f64>,
-    pub fill_price: Option<f64>,
-    pub amount: f64,
-    pub filled: f64,
-    pub remaining: f64,
-    pub status: OrderStatus,
-    pub reduce_only: bool,
-    pub fee: f64,
-    pub fee_currency: String,
-    pub slippage: Option<f64>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Trade {
     pub id: Uuid,
     pub position_id: Uuid,
@@ -90,19 +66,7 @@ pub struct Trade {
 #[derive(Debug, Clone, PartialEq)]
 pub enum WsFeedEvent {
     OrderUpdate {
-
-        exchange_order_id: String,
-
-        client_order_id: Option<String>,
-        symbol: String,
-        status: OrderStatus,
-        filled: f64,
-        remaining: f64,
-        price: f64,
-        amount: f64,
-        commission: f64,
-        timestamp: DateTime<Utc>,
-        position_side: Option<PositionSide>,
+        order: CcxtOrder,
     },
     ConnectionChanged {
         connected: bool,
@@ -121,6 +85,18 @@ pub struct PlaceOrderParams {
     pub position_side: Option<PositionSide>,
     pub position_id: Option<Uuid>,
     pub client_order_id: Option<String>,
+}
+
+
+// 下单预注册: client_order_id 先存入内存，REST + WS 双确认后才存入 orders
+#[derive(Debug, Clone)]
+pub struct PendingOrder {
+    pub client_order_id: String,
+    pub params: PlaceOrderParams,
+    pub rest_result: Option<OrderResult>,
+    pub ws_order: Option<CcxtOrder>,
+    pub position_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
 }
 
 
@@ -149,7 +125,7 @@ pub enum EngineCommand {
         params: PlaceOrderParams,
     },
     CancelOrder {
-        order_id: Uuid,
+        client_order_id: String,
     },
     CancelAllOrders {
         position_id: Option<Uuid>,
@@ -184,21 +160,21 @@ pub enum EngineEvent {
         position: Position,
     },
     OrderPlaced {
-        order: PositionOrder,
+        order: CcxtOrder,
     },
     OrderFilled {
-        order: PositionOrder,
+        order: CcxtOrder,
         trade: Trade,
     },
     OrderPartiallyFilled {
-        order: PositionOrder,
+        order: CcxtOrder,
         trade: Trade,
     },
     OrderCanceled {
-        order: PositionOrder,
+        order: CcxtOrder,
     },
     OrderFailed {
-        order_id: Uuid,
+        client_order_id: String,
         reason: String,
     },
     RiskAlert {

@@ -53,13 +53,8 @@ pub fn to_ccxt_side(side: &Side) -> virs_ccxt::Side {
 }
 
 pub fn to_ccxt_order_type(ot: &OrderType) -> virs_ccxt::OrderType {
-    match ot {
-        OrderType::Market => virs_ccxt::OrderType::Market,
-        OrderType::Limit => virs_ccxt::OrderType::Limit,
-        OrderType::StopMarket => virs_ccxt::OrderType::StopMarket,
-        OrderType::StopLimit => virs_ccxt::OrderType::StopLimit,
-        OrderType::TakeProfitMarket => virs_ccxt::OrderType::TakeProfitMarket,
-    }
+    // models::OrderType 与 virs_ccxt::OrderType 均为 virs_types::enums::OrderType 的重新导出，类型一致
+    *ot
 }
 
 pub fn to_models_kline(
@@ -110,30 +105,23 @@ pub fn to_models_balance(cb: virs_ccxt::Balance) -> Balance {
     }
 }
 
-pub fn to_models_order(co: virs_ccxt::CcxtOrder) -> Order {
-    let fee_info = co.fee.as_ref();
+pub fn to_models_order(result: virs_ccxt::OrderResult) -> Order {
     Order {
-        id: co.id,
-        client_order_id: co.client_order_id,
-        symbol: co.symbol,
-        side: co.side,
-        order_type: co.order_type,
-        price: co.price,
-        amount: co.amount,
-        cost: co.cost,
-        filled: co.filled,
-        remaining: co.remaining,
-        status: co.status.into(),
-        fee: fee_info.map(|f| f.cost).unwrap_or_else(|| {
-            tracing::warn!("Order fee info is None — defaulting to 0.0");
-            0.0
-        }),
-        fee_currency: fee_info.map(|f| f.currency.clone()).unwrap_or_else(|| {
-            tracing::warn!("Order fee_currency missing — defaulting to empty string");
-            String::new()
-        }),
-        created_at: co.created_at.unwrap_or_else(chrono::Utc::now),
-        updated_at: co.updated_at.unwrap_or_else(chrono::Utc::now),
+        id: result.order_id,
+        client_order_id: Some(result.client_order_id),
+        symbol: String::new(),
+        side: Side::Buy,
+        order_type: OrderType::Market,
+        price: None,
+        amount: 0.0,
+        cost: None,
+        filled: 0.0,
+        remaining: 0.0,
+        status: OrderStatus::Pending,
+        fee: 0.0,
+        fee_currency: String::new(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
     }
 }
 
@@ -227,13 +215,13 @@ impl Exchange for CcxtAdapter {
             margin_mode: None,
             position_side: ccxt_position_side,
         };
-        let co = self.inner.create_order(params).await?;
-        Ok(to_models_order(co))
+        let result = self.inner.create_order(params).await?;
+        Ok(to_models_order(result))
     }
 
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError> {
-        let co = self.inner.cancel_order(symbol, order_id).await?;
-        Ok(to_models_order(co))
+        let result = self.inner.cancel_order(symbol, order_id).await?;
+        Ok(to_models_order(result))
     }
 
     async fn cancel_all_orders(&self, symbol: &str) -> Result<(), ExchangeError> {

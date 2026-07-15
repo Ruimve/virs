@@ -1,6 +1,4 @@
-use chrono::Utc;
-
-use virs_ccxt::{CcxtKline, CcxtOrder, CcxtOrderStatus, OrderFee};
+use virs_ccxt::{CcxtKline, OrderResult};
 use virs_models::Order;
 use virs_types::enums::*;
 use virs_types::market::{Balance, Kline};
@@ -44,11 +42,6 @@ fn a3_2_limit_to_ccxt() {
 #[test]
 fn a3_3_stop_market_to_ccxt() {
     assert_eq!(to_ccxt_order_type(&OrderType::StopMarket), virs_ccxt::OrderType::StopMarket);
-}
-
-#[test]
-fn a3_4_stop_limit_to_ccxt() {
-    assert_eq!(to_ccxt_order_type(&OrderType::StopLimit), virs_ccxt::OrderType::StopLimit);
 }
 
 #[test]
@@ -190,70 +183,30 @@ fn a5_1_balance_normal() {
 
 #[test]
 fn a6_1_order_normal() {
-    let now = Utc::now();
-    let co = CcxtOrder {
-        id: "order_123".into(),
-        client_order_id: Some("client_456".into()),
-        symbol: "BTC/USDT".into(),
-        side: Side::Buy,
-        order_type: OrderType::Limit,
-        price: Some(50000.0),
-        amount: 1.0,
-        cost: Some(50000.0),
-        filled: 0.5,
-        remaining: 0.5,
-        status: CcxtOrderStatus::PartiallyFilled,
-        fee: Some(OrderFee {
-            cost: 0.075,
-            currency: "BTC".into(),
-            rate: Some(0.001),
-        }),
-        created_at: Some(now),
-        updated_at: Some(now),
-        info: serde_json::json!({}),
+    let result = OrderResult {
+        order_id: "order_123".into(),
+        client_order_id: "client_456".into(),
     };
-    let order: Order = to_models_order(co);
+    let order: Order = to_models_order(result);
     assert_eq!(order.id, "order_123");
     assert_eq!(order.client_order_id, Some("client_456".into()));
-    assert_eq!(order.symbol, "BTC/USDT");
     assert_eq!(order.side, Side::Buy);
-    assert_eq!(order.order_type, OrderType::Limit);
-    assert_eq!(order.price, Some(50000.0));
-    assert_eq!(order.amount, 1.0);
-    assert_eq!(order.cost, Some(50000.0));
-    assert_eq!(order.filled, 0.5);
-    assert_eq!(order.remaining, 0.5);
-    assert_eq!(order.status, OrderStatus::PartiallyFilled);
-    assert_eq!(order.fee, 0.075);
-    assert_eq!(order.fee_currency, "BTC");
-    assert_eq!(order.created_at, now);
-    assert_eq!(order.updated_at, now);
+    assert_eq!(order.order_type, OrderType::Market);
+    assert_eq!(order.status, OrderStatus::Pending);
 }
 
 #[test]
-fn a6_2_order_optional_fields_none() {
-    let co = CcxtOrder {
-        id: "order_789".into(),
-        client_order_id: None,
-        symbol: "ETH/USDT".into(),
-        side: Side::Sell,
-        order_type: OrderType::Market,
-        price: None,
-        amount: 2.0,
-        cost: None,
-        filled: 2.0,
-        remaining: 0.0,
-        status: CcxtOrderStatus::Filled,
-        fee: None,
-        created_at: None,
-        updated_at: None,
-        info: serde_json::json!({}),
+fn a6_2_order_empty_client_order_id() {
+    let result = OrderResult {
+        order_id: "order_789".into(),
+        client_order_id: String::new(),
     };
-    let order: Order = to_models_order(co);
-    assert_eq!(order.client_order_id, None);
+    let order: Order = to_models_order(result);
+    assert_eq!(order.id, "order_789");
+    assert_eq!(order.client_order_id, Some(String::new()));
     assert_eq!(order.price, None);
     assert_eq!(order.cost, None);
     assert_eq!(order.fee, 0.0);
     assert_eq!(order.fee_currency, "");
-    assert_eq!(order.status, OrderStatus::Filled);
+    assert_eq!(order.status, OrderStatus::Pending);
 }

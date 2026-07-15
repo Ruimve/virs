@@ -2,31 +2,49 @@ use crate::adapters::order_executor::convert_pe_event;
 use chrono::Utc;
 use uuid::Uuid;
 use virs_types::bot::{OrderEvent, OrderSide};
-use virs_types::enums::{OrderStatus, OrderType, Side, TradeType};
-use virs_types::position::{EngineEvent, PositionOrder, Trade};
+use virs_types::enums::{OrderType, PositionSide, Side, TradeType};
+use virs_types::position::{EngineEvent, Trade};
+use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType};
 
-fn make_order(side: Side) -> PositionOrder {
-    PositionOrder {
-        id: Uuid::new_v4(),
-        position_id: Uuid::new_v4(),
-        exchange_order_id: Some("EX123".to_string()),
-        client_order_id: Some("CL456".to_string()),
-        exchange: "binance".to_string(),
+fn make_order(side: Side) -> CcxtOrder {
+    CcxtOrder {
+        order_id: 123,
+        client_order_id: "CL456".to_string(),
         symbol: "BTC/USDT".to_string(),
         side,
         order_type: OrderType::Limit,
-        request_price: Some(100.0),
-        fill_price: Some(101.0),
-        amount: 1.0,
-        filled: 1.0,
-        remaining: 0.0,
-        status: OrderStatus::Filled,
+        position_side: PositionSide::Long,
+        original_order_type: "LIMIT".to_string(),
+        status: CcxtOrderStatus::Filled,
+        execution_type: ExecutionType::Trade,
+        orig_qty: "1.0".to_string(),
+        original_price: "100.0".to_string(),
+        avg_fill_price: "101.0".to_string(),
+        filled_qty: "1.0".to_string(),
+        last_fill_qty: "1.0".to_string(),
+        last_fill_price: "101.0".to_string(),
+        stop_price: None,
+        commission: "0.1".to_string(),
+        commission_asset: "USDT".to_string(),
+        realized_pnl: "0".to_string(),
         reduce_only: false,
-        fee: 0.1,
-        fee_currency: "USDT".to_string(),
-        slippage: Some(0.5),
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
+        is_maker: false,
+        close_position: None,
+        time_in_force: "GTC".to_string(),
+        working_type: "CONTRACT_PRICE".to_string(),
+        bids_notional: None,
+        ask_notional: None,
+        activation_price: None,
+        callback_rate: None,
+        price_protection: false,
+        stp_mode: None,
+        price_match_mode: None,
+        gtd_auto_cancel_time: None,
+        expiry_reason: None,
+        si: 0,
+        ss: 0,
+        trade_time: 0,
+        trade_id: 0,
     }
 }
 
@@ -84,7 +102,7 @@ fn o1_2_convert_order_filled() {
 #[test]
 fn o1_3_convert_order_canceled() {
     let order = make_order(Side::Buy);
-    let order_id = order.id;
+    let order_id = Uuid::from_u128(order.order_id as u128);
     let event = EngineEvent::OrderCanceled { order };
     let result = convert_pe_event(event);
     assert!(result.is_some());
@@ -102,16 +120,14 @@ fn o1_3_convert_order_canceled() {
 
 #[test]
 fn o1_4_convert_order_failed() {
-    let oid = Uuid::new_v4();
     let event = EngineEvent::OrderFailed {
-        order_id: oid,
+        client_order_id: "CL456".to_string(),
         reason: "Insufficient balance".to_string(),
     };
     let result = convert_pe_event(event);
     assert!(result.is_some());
     match result.unwrap() {
-        OrderEvent::OrderFailed { order_id, reason } => {
-            assert_eq!(order_id, oid);
+        OrderEvent::OrderFailed { order_id: _, reason } => {
             assert_eq!(reason, "Insufficient balance");
         }
         _ => panic!("Expected OrderFailed"),

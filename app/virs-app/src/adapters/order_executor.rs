@@ -10,6 +10,8 @@ use virs_types::bot::{
 use virs_error::{BotError, BotResult};
 use virs_types::enums::{OrderType, PositionSide, Side};
 use virs_types::position::*;
+use virs_types::CcxtOrder;
+use uuid::Uuid;
 
 pub struct PeOrderExecutor {
     cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,
@@ -138,7 +140,9 @@ impl OrderExecutor for PeOrderExecutor {
             OrderCommand::CancelOrder {
                 order_id,
                 symbol: _,
-            } => EngineCommand::CancelOrder { order_id },
+            } => EngineCommand::CancelOrder {
+                client_order_id: order_id.to_string(),
+            },
             OrderCommand::CancelAllOrders { symbol } => EngineCommand::CancelAllOrders {
                 position_id: None,
                 symbol,
@@ -163,45 +167,39 @@ impl OrderExecutor for PeOrderExecutor {
 pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
     match event {
         EngineEvent::OrderPlaced { order } => Some(OrderEvent::OrderPlaced {
-            order: OrderInfo {
-                id: order.id,
-                position_id: Some(order.position_id),
-                symbol: order.symbol.clone(),
-                side: match order.side {
-                    Side::Buy => OrderSide::Buy,
-                    Side::Sell => OrderSide::Sell,
-                },
-                fill_price: order.fill_price,
-                request_price: order.request_price,
-                filled: order.filled,
-                client_order_id: order.client_order_id.clone(),
-                fee: order.fee,
-            },
+            order: ccxt_order_to_order_info(&order),
         }),
         EngineEvent::OrderFilled { order, .. } => Some(OrderEvent::OrderFilled {
-            order: OrderInfo {
-                id: order.id,
-                position_id: Some(order.position_id),
-                symbol: order.symbol.clone(),
-                side: match order.side {
-                    Side::Buy => OrderSide::Buy,
-                    Side::Sell => OrderSide::Sell,
-                },
-                fill_price: order.fill_price,
-                request_price: order.request_price,
-                filled: order.filled,
-                client_order_id: order.client_order_id.clone(),
-                fee: order.fee,
-            },
+            order: ccxt_order_to_order_info(&order),
         }),
         EngineEvent::OrderCanceled { order } => Some(OrderEvent::OrderCanceled {
-            order_id: order.id,
+            order_id: Uuid::from_u128(order.order_id as u128),
             symbol: Some(order.symbol.clone()),
         }),
-        EngineEvent::OrderFailed { order_id, reason } => {
-            Some(OrderEvent::OrderFailed { order_id, reason })
+        EngineEvent::OrderFailed { client_order_id: _, reason } => {
+            Some(OrderEvent::OrderFailed {
+                order_id: Uuid::new_v4(),
+                reason,
+            })
         }
         EngineEvent::RiskAlert { level, message } => Some(OrderEvent::RiskAlert { level, message }),
         _ => None,
+    }
+}
+
+fn ccxt_order_to_order_info(order: &CcxtOrder) -> OrderInfo {
+    OrderInfo {
+        id: Uuid::from_u128(order.order_id as u128),
+        position_id: None,
+        symbol: order.symbol.clone(),
+        side: match order.side {
+            Side::Buy => OrderSide::Buy,
+            Side::Sell => OrderSide::Sell,
+        },
+        fill_price: order.avg_fill_price.parse::<f64>().ok(),
+        request_price: order.original_price.parse::<f64>().ok(),
+        filled: order.filled_qty.parse::<f64>().unwrap_or(0.0),
+        client_order_id: Some(order.client_order_id.clone()),
+        fee: order.commission.parse::<f64>().unwrap_or(0.0),
     }
 }

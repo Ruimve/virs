@@ -5,6 +5,7 @@ use futures_core::Stream;
 
 use virs_error::VirsResult;
 
+use crate::ccxt_order::OrderResult;
 use crate::enums::*;
 use crate::market::*;
 use crate::position::*;
@@ -25,9 +26,9 @@ pub trait ExchangePe: Send + Sync {
     async fn get_funding_rate(&self, symbol: &str) -> VirsResult<FundingRate>;
 
 
-    async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<PositionOrder>;
-    async fn cancel_order(&self, symbol: &str, order_id: &str) -> VirsResult<PositionOrder>;
-    async fn cancel_all_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<PositionOrder>>;
+    async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<OrderResult>;
+    async fn cancel_order(&self, symbol: &str, order_id: &str) -> VirsResult<OrderResult>;
+    async fn cancel_all_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<OrderResult>>;
 
 
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> VirsResult<()>;

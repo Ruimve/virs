@@ -1,6 +1,5 @@
-use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use virs_types::{OrderStatus, PositionSide, WsFeedEvent};
+use virs_types::{PositionSide, WsFeedEvent};
 
 use crate::types::{CcxtOrder, CcxtOrderStatus, ExecutionType as CcxtExecutionType};
 
@@ -182,30 +181,6 @@ pub struct OrderTradeUpdateData {
 
 impl OrderTradeUpdateData {
 
-    // 订单状态映射: NEW→Open, PARTIALLY_FILLED→PartiallyFilled, FILLED→Filled,
-    // CANCELED/EXPIRED/EXPIRED_IN_MATCH→Canceled, REJECTED→Failed
-    fn to_order_status(&self) -> Option<OrderStatus> {
-        match self.status.as_str() {
-            "NEW" => Some(OrderStatus::Open),
-            "PARTIALLY_FILLED" => Some(OrderStatus::PartiallyFilled),
-            "FILLED" => Some(OrderStatus::Filled),
-            "CANCELED" => Some(OrderStatus::Canceled),
-            "EXPIRED" => Some(OrderStatus::Canceled),
-            "EXPIRED_IN_MATCH" => Some(OrderStatus::Canceled),
-            "REJECTED" => Some(OrderStatus::Failed),
-            _ => None,
-        }
-    }
-
-    // 解析持仓方向 LONG/SHORT
-    fn to_position_side(&self) -> Option<PositionSide> {
-        self.position_side.as_ref().and_then(|ps| match ps.as_str() {
-            "LONG" => Some(PositionSide::Long),
-            "SHORT" => Some(PositionSide::Short),
-            _ => None,
-        })
-    }
-
     // 是否强平: execution_type=="CALCULATED"且client_order_id以"autoclose-"开头
     pub fn is_liquidation(&self) -> bool {
         self.execution_type == "CALCULATED" && self.client_order_id.starts_with("autoclose-")
@@ -216,12 +191,8 @@ impl OrderTradeUpdateData {
         self.execution_type == "CALCULATED" && self.client_order_id == "adl_autoclose"
     }
 
-    // 转换为WsFeedEvent::OrderUpdate，价格优先用avg_fill_price，回退last_fill_price
+    // 转换为WsFeedEvent::OrderUpdate
     pub fn to_ws_feed_event(&self) -> Option<WsFeedEvent> {
-        let status = self.to_order_status()?;
-        let execution_type = ExecutionType::from_str(&self.execution_type);
-        let position_side = self.to_position_side();
-
         // 检测强平和ADL事件并记录日志
         if self.is_liquidation() {
             tracing::error!(
@@ -239,126 +210,8 @@ impl OrderTradeUpdateData {
             );
         }
 
-        // 解析已成交数量，失败则跳过事件
-        let filled = self.filled_qty.parse::<f64>().unwrap_or_else(|e| {
-            tracing::error!(
-                filled_qty = %self.filled_qty,
-                error = %e,
-                "解析 filled_qty 失败 — 跳过事件以避免 0.0 传播"
-            );
-            f64::NAN
-        });
-        if filled.is_nan() {
-            return None;
-        }
-
-        // 解析原始订单数量，失败则跳过事件
-        let amount = self.orig_qty.parse::<f64>().unwrap_or_else(|e| {
-            tracing::error!(
-                orig_qty = %self.orig_qty,
-                error = %e,
-                "解析 orig_qty 失败 — 跳过事件以避免 0.0 传播"
-            );
-            f64::NAN
-        });
-        if amount.is_nan() {
-            return None;
-        }
-
-        // 剩余数量 = 原始数量 - 已成交数量
-        let remaining = (amount - filled).max(0.0);
-
-        // 成交价: 优先avg_fill_price，回退last_fill_price
-        let price = match self
-            .avg_fill_price
-            .as_ref()
-            .and_then(|s| s.parse::<f64>().ok())
-            .filter(|&p| p > 0.0)
-        {
-            Some(p) => p,
-            None => match self.last_fill_price.parse::<f64>() {
-                Ok(p) if p > 0.0 => p,
-                Ok(_) => {
-                    tracing::warn!(
-                        last_fill_price = %self.last_fill_price,
-                        symbol = %self.symbol,
-                        "last_fill_price 为 0.0 — 订单可能尚未成交"
-                    );
-                    0.0
-                }
-                Err(e) => {
-                    tracing::error!(
-                        last_fill_price = %self.last_fill_price,
-                        error = %e,
-                        "解析 last_fill_price 失败 — 跳过事件以避免 0.0 传播"
-                    );
-                    return None;
-                }
-            },
-        };
-
-        // 手续费，解析失败则跳过事件
-        let commission = match self.commission.parse::<f64>() {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::error!(
-                    commission = %self.commission,
-                    error = %e,
-                    "解析 commission 失败 — 跳过事件以避免 0.0 传播"
-                );
-                return None;
-            }
-        };
-
-        // 以下字段待WsFeedEvent扩展后传递到下游
-        let last_fill_qty = self.last_fill_qty.parse::<f64>().unwrap_or(0.0);
-
-        let realized_pnl = self
-            .realized_pnl
-            .as_ref()
-            .and_then(|s| s.parse::<f64>().ok())
-            .unwrap_or(0.0);
-
-        let trade_id = if self.trade_id > 0 {
-            Some(self.trade_id)
-        } else {
-            None
-        };
-
-        let timestamp = DateTime::from_timestamp_millis(self.trade_time).unwrap_or_else(|| {
-            tracing::warn!(
-                trade_time = self.trade_time,
-                symbol = %self.symbol,
-                order_id = self.order_id,
-                "WS order trade_time 无效 — 使用本地时间作为 fallback"
-            );
-            Utc::now()
-        });
-
-        tracing::debug!(
-            client_order_id = %self.client_order_id,
-            execution_type = ?execution_type,
-            last_fill_qty = last_fill_qty,
-            realized_pnl = realized_pnl,
-            trade_id = ?trade_id,
-            is_reduce_only = self.is_reduce_only,
-            is_maker = self.is_maker,
-            "ORDER_TRADE_UPDATE 额外字段（待 WsFeedEvent 扩展后传递到下游）"
-        );
-
-        Some(WsFeedEvent::OrderUpdate {
-            exchange_order_id: self.order_id.to_string(),
-            client_order_id: Some(self.client_order_id.clone()),
-            symbol: self.symbol.clone(),
-            status,
-            filled,
-            remaining,
-            price,
-            amount,
-            commission,
-            timestamp,
-            position_side,
-        })
+        let ccxt_order = self.to_ccxt_order();
+        Some(WsFeedEvent::OrderUpdate { order: ccxt_order })
     }
 
     // 转换为 CcxtOrder，字段类型与币安原生返回保持一致

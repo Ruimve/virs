@@ -1,13 +1,14 @@
 use std::sync::{Arc, RwLock};
 
-use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use tokio::sync::mpsc;
 use virs_error::ExchangeError;
 
 
 pub use virs_types::WsFeedEvent;
-use virs_types::{OrderStatus, PositionSide};
+use virs_types::{
+    CcxtOrder, CcxtOrderStatus, ExecutionType, OrderStatus, PositionSide, Side,
+};
 
 use crate::adapter::binance::fapi;
 use crate::adapter::binance::user_data_ws_events::dispatch_event;
@@ -161,116 +162,61 @@ impl BinanceOrderInner {
 
     // 转换为WsFeedEvent::OrderUpdate
     pub fn to_ws_feed_event(&self) -> Option<WsFeedEvent> {
-        let status = self.to_order_status()?;
+        // 状态检查: 未知状态则跳过事件
+        self.to_order_status()?;
 
-        // 解析持仓方向 LONG/SHORT
-        let position_side = self
-            .position_side
-            .as_ref()
-            .and_then(|ps| match ps.as_str() {
-                "LONG" => Some(PositionSide::Long),
-                "SHORT" => Some(PositionSide::Short),
-                _ => None,
-            });
-
-        // 解析已成交数量，失败则跳过事件
-        let filled = self.filled_qty.parse::<f64>().unwrap_or_else(|e| {
-            tracing::error!(
-                filled_qty = %self.filled_qty,
-                error = %e,
-                "Failed to parse filled_qty in order_ws — skipping event to avoid 0.0 propagation"
-            );
-            f64::NAN
-        });
-        if filled.is_nan() {
-            return None;
-        }
-
-        // 解析原始订单数量，失败则跳过事件
-        let amount = self.orig_qty.parse::<f64>().unwrap_or_else(|e| {
-            tracing::error!(
-                orig_qty = %self.orig_qty,
-                error = %e,
-                "Failed to parse orig_qty in order_ws — skipping event to avoid 0.0 propagation"
-            );
-            f64::NAN
-        });
-        if amount.is_nan() {
-            return None;
-        }
-
-        // 剩余数量: 优先用交易所返回值，否则用 orig_qty - filled_qty
-        let remaining = self
-            .remaining_qty
-            .as_ref()
-            .and_then(|q| q.parse().ok())
-            .unwrap_or_else(|| (amount - filled).max(0.0));
-
-        // 成交价: 优先用avg_fill_price，回退last_fill_price
-        let price = self
-            .avg_fill_price
-            .as_ref()
-            .and_then(|s| s.parse::<f64>().ok())
-            .filter(|&p| p > 0.0)
-            .unwrap_or_else(|| {
-                match self.last_fill_price.parse::<f64>() {
-                    Ok(p) if p > 0.0 => p,
-                    Ok(_) => {
-                        tracing::warn!(
-                            last_fill_price = %self.last_fill_price,
-                            symbol = %self.symbol,
-                            "last_fill_price is 0.0 in order_ws — using 0.0 (order may not be filled yet)"
-                        );
-                        0.0
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            last_fill_price = %self.last_fill_price,
-                            error = %e,
-                            "Failed to parse last_fill_price in order_ws — skipping event to avoid 0.0 price propagation"
-                        );
-                        return f64::NAN;
-                    }
-                }
-            });
-        if price.is_nan() {
-            return None;
-        }
-
-        // 手续费，解析失败则跳过事件
-        let commission = match self.commission.parse::<f64>() {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::error!(
-                    commission = %self.commission,
-                    error = %e,
-                    "Failed to parse commission in order_ws — skipping event to avoid 0.0 propagation"
-                );
-                return None;
-            }
+        let ccxt_order = CcxtOrder {
+            order_id: self.order_id,
+            client_order_id: self.client_order_id.clone(),
+            symbol: self.symbol.clone(),
+            side: match self.side.as_str() {
+                "BUY" => Side::Buy,
+                _ => Side::Sell,
+            },
+            order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&self.order_type),
+            position_side: self
+                .position_side
+                .as_deref()
+                .and_then(|ps| match ps {
+                    "LONG" => Some(PositionSide::Long),
+                    "SHORT" => Some(PositionSide::Short),
+                    _ => None,
+                })
+                .unwrap_or(PositionSide::Long),
+            original_order_type: String::new(),
+            status: CcxtOrderStatus::from_str(&self.status),
+            execution_type: ExecutionType::from_str(""),
+            orig_qty: self.orig_qty.clone(),
+            original_price: String::new(),
+            avg_fill_price: self.avg_fill_price.clone().unwrap_or_default(),
+            filled_qty: self.filled_qty.clone(),
+            last_fill_qty: self.last_fill_qty.clone(),
+            last_fill_price: self.last_fill_price.clone(),
+            stop_price: None,
+            commission: self.commission.clone(),
+            commission_asset: self.commission_asset.clone(),
+            realized_pnl: String::new(),
+            reduce_only: self.is_reduce_only,
+            is_maker: false,
+            close_position: None,
+            time_in_force: String::new(),
+            working_type: self.working_type.clone(),
+            bids_notional: None,
+            ask_notional: None,
+            activation_price: None,
+            callback_rate: None,
+            price_protection: false,
+            stp_mode: None,
+            price_match_mode: None,
+            gtd_auto_cancel_time: None,
+            expiry_reason: None,
+            si: 0,
+            ss: 0,
+            trade_time: self.trade_time,
+            trade_id: 0,
         };
 
-        Some(WsFeedEvent::OrderUpdate {
-            exchange_order_id: self.order_id.to_string(),
-            client_order_id: Some(self.client_order_id.clone()),
-            symbol: self.symbol.clone(),
-            status,
-            filled,
-            remaining,
-            price,
-            amount,
-            commission,
-            timestamp: DateTime::from_timestamp_millis(self.trade_time).unwrap_or_else(|| {
-                tracing::warn!(
-                    trade_time = self.trade_time,
-                    symbol = %self.symbol,
-                    order_id = %self.order_id,
-                    "WS order trade_time invalid — using local time as fallback"
-                );
-                Utc::now()
-            }),
-            position_side,
-        })
+        Some(WsFeedEvent::OrderUpdate { order: ccxt_order })
     }
 }
 

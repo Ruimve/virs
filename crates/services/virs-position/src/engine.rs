@@ -12,6 +12,7 @@ use virs_types::enums::*;
 use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_types::market::ExchangePosition;
 use virs_types::position::*;
+use virs_types::CcxtOrder;
 use virs_error::{VirsError, VirsResult};
 
 use crate::persistence::PositionPersistence;
@@ -55,21 +56,16 @@ pub(crate) struct EngineInner {
     pub(crate) exchange: Arc<dyn ExchangePe>,
     pub(crate) persistence: Box<dyn PositionPersistence>,
     pub(crate) positions: DashMap<(String, String, PositionSide), Position>,
-    pub(crate) orders: DashMap<Uuid, PositionOrder>,
+    pub(crate) orders: DashMap<String, CcxtOrder>,
+    pub(crate) pending_orders: DashMap<String, PendingOrder>,
+    pub(crate) order_position: DashMap<String, Uuid>,
     pub(crate) event_tx: broadcast::Sender<EngineEvent>,
     pub(crate) tracker: Mutex<PnlTracker>,
     pub(crate) state: RwLock<EngineState>,
-    pub(crate) exchange_order_id_index: DashMap<String, Uuid>,
-
-
-    pub(crate) client_order_id_index: DashMap<String, Uuid>,
     pub(crate) position_id_index: DashMap<Uuid, (String, String, PositionSide)>,
-
-
+    #[allow(dead_code)]
     pub(crate) close_order_timeout: Duration,
-
     pub(crate) persist_max_retries: u32,
-
     pub(crate) persist_retry_base_ms: u64,
 }
 
@@ -103,8 +99,6 @@ pub struct PositionEngine {
 }
 
 impl Clone for PositionEngine {
-
-
     fn clone(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -115,8 +109,6 @@ impl Clone for PositionEngine {
 }
 
 impl PositionEngine {
-
-
     pub fn new(
         exchange: Box<dyn ExchangePe>,
         persistence: Box<dyn PositionPersistence>,
@@ -136,8 +128,8 @@ impl PositionEngine {
             event_tx,
             positions: DashMap::new(),
             orders: DashMap::new(),
-            exchange_order_id_index: DashMap::new(),
-            client_order_id_index: DashMap::new(),
+            pending_orders: DashMap::new(),
+            order_position: DashMap::new(),
             position_id_index: DashMap::new(),
             close_order_timeout,
             persist_max_retries,
@@ -192,10 +184,7 @@ impl PositionEngine {
 
 
     pub async fn run(&mut self) -> VirsResult<()> {
-
-
         self.recover_state().await?;
-
 
         let symbols: Vec<String> = self
             .inner
@@ -211,10 +200,8 @@ impl PositionEngine {
             .subscribe_order_updates(&unique_symbol_refs)
             .await?;
 
-
         self.inner.set_state(EngineState::Running);
         info!("Position engine started");
-
 
         let cmd_rx = self
             .cmd_rx
@@ -225,15 +212,12 @@ impl PositionEngine {
         let mut cmd_handle = tokio::spawn(command_loop(inner.clone(), cmd_rx));
         let mut ws_handle = tokio::spawn(ws_feed_loop(inner.clone(), ws_feed_rx));
 
-
         let _ = tokio::select! {
             r = &mut cmd_handle => r,
             r = &mut ws_handle => r,
         };
 
-
         self.inner.set_state(EngineState::ShuttingDown);
-
 
         let timeout = Duration::from_secs(5);
         let _ = tokio::time::timeout(timeout, async {
@@ -259,7 +243,6 @@ impl PositionEngine {
             self.inner.position_id_index.insert(pos.id, key.clone());
             self.inner.positions.insert(key, pos.clone());
         }
-
 
         let exchange_positions: Vec<ExchangePosition> = open_positions
             .iter()
@@ -418,8 +401,8 @@ pub(crate) async fn command_loop(
             EngineCommand::PlaceOrder { params } => {
                 handle_place_order(&inner, params).await;
             }
-            EngineCommand::CancelOrder { order_id } => {
-                handle_cancel_order(&inner, order_id).await;
+            EngineCommand::CancelOrder { client_order_id } => {
+                handle_cancel_order(&inner, client_order_id).await;
             }
             EngineCommand::CancelAllOrders {
                 position_id,
@@ -443,34 +426,8 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
         tokio::select! {
             event = ws_rx.next() => {
                 match event {
-                    Some(WsFeedEvent::OrderUpdate {
-                        exchange_order_id,
-                        client_order_id,
-                        symbol,
-                        status,
-                        filled,
-                        remaining,
-                        price,
-                        amount,
-                        commission,
-                        timestamp,
-                        position_side,
-                    }) => {
-                        handle_ws_order_update(
-                            &inner,
-                            &exchange_order_id,
-                            client_order_id.as_deref(),
-                            &symbol,
-                            status,
-                            filled,
-                            remaining,
-                            price,
-                            amount,
-                            commission,
-                            timestamp,
-                            position_side,
-                        )
-                        .await;
+                    Some(WsFeedEvent::OrderUpdate { order }) => {
+                        handle_ws_order_update(&inner, order).await;
                     }
                     Some(WsFeedEvent::ConnectionChanged { .. }) => {}
                     None => break,
@@ -486,315 +443,302 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
 }
 
 
-pub(crate) async fn handle_ws_order_update(
-    inner: &Arc<EngineInner>,
-    exchange_order_id: &str,
-    client_order_id: Option<&str>,
-    symbol: &str,
-    status: OrderStatus,
-    filled: f64,
-    remaining: f64,
-    price: f64,
-    amount: f64,
-    commission: f64,
-    timestamp: chrono::DateTime<Utc>,
-    ws_position_side: Option<PositionSide>,
-) {
+pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: CcxtOrder) {
+    let client_order_id = ws_order.client_order_id.clone();
+    let order_status: OrderStatus = ws_order.status.clone().into();
+    let filled: f64 = ws_order.filled_qty.parse().unwrap_or(0.0);
+    let avg_price: f64 = ws_order.avg_fill_price.parse().unwrap_or(0.0);
+    let commission: f64 = ws_order.commission.parse().unwrap_or(0.0);
+    let realized_pnl: f64 = ws_order.realized_pnl.parse().unwrap_or(0.0);
+    let is_reduce_only = ws_order.reduce_only
+        || matches!(
+            (&ws_order.side, &ws_order.position_side),
+            (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short)
+        );
+    let timestamp =
+        chrono::DateTime::from_timestamp_millis(ws_order.trade_time).unwrap_or_else(Utc::now);
 
-    let (order_id, position_id, prev_filled, is_reduce_only) = {
+    // 1. 检查 pending_orders 中是否有此 client_order_id
+    if let Some(mut pending) = inner.pending_orders.get_mut(&client_order_id) {
+        pending.ws_order = Some(ws_order.clone());
 
-        let order_id_opt = inner
-            .exchange_order_id_index
-            .get(exchange_order_id)
-            .map(|r| *r.value());
-
-
-        let order_id = match order_id_opt {
-            Some(id) => id,
-            None => {
-                if let Some(cid) = client_order_id {
-                    if let Some(id) = inner
-                        .client_order_id_index
-                        .get(cid)
-                        .map(|r| *r.value())
-                    {
-
-                        inner
-                            .exchange_order_id_index
-                            .insert(exchange_order_id.to_string(), id);
-                        tracing::debug!(
-                            exchange_order_id,
-                            client_order_id = cid,
-                            order_uuid = %id,
-                            "WS order matched by client_order_id — backfilling exchange_order_id_index"
-                        );
-                        id
-                    } else {
-                        warn!(
-                            exchange_order_id,
-                            client_order_id = cid,
-                            "Received order update for unknown order — dual-index miss (both exchange_order_id and client_order_id not found)"
-                        );
-                        return;
-                    }
-                } else {
-                    warn!(
-                        exchange_order_id,
-                        "Received order update for unknown order — no client_order_id available for fallback"
-                    );
-                    return;
-                }
-            }
-        };
-        let order = match inner.orders.get(&order_id) {
-            Some(o) => o,
-            None => {
-                warn!(exchange_order_id, "Order index points to missing order — state inconsistency detected");
-                return;
-            }
-        };
-
-        let is_reduce_only = order.reduce_only || {
-            if let Some(ref ws_ps) = ws_position_side {
-                matches!((&order.side, ws_ps), (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short))
-            } else {
-                false
-            }
-        };
-
-        (order.id, order.position_id, order.filled, is_reduce_only)
-    };
-
-
-    let pos_key_opt = inner
-        .position_id_index
-        .get(&position_id)
-        .map(|r| r.value().clone());
-
-
-    if let Some(ref ws_ps) = ws_position_side {
-        if let Some(ref pos_key) = pos_key_opt {
-            let pos_side = &pos_key.2;
-            if pos_side != ws_ps {
-                warn!(exchange_order_id, order_id = %order_id, ws_position_side = ?ws_ps, local_position_side = ?pos_side, "WS position_side mismatch");
-            }
+        // 双确认：检查 rest_result 是否也存在
+        if pending.rest_result.is_some() {
+            let position_id = pending.position_id;
+            drop(pending);
+            finalize_pending_order(inner, &client_order_id, ws_order, position_id).await;
         }
+        // REST 还没返回，WS 数据暂存 pending，等 REST 到达后再处理
+        return;
     }
 
+    // 2. 如果不在 pending，检查 orders 中是否已存在（后续 WS 更新）
+    if let Some(mut existing) = inner.orders.get_mut(&client_order_id) {
+        let prev_filled: f64 = existing.filled_qty.parse().unwrap_or(0.0);
+        *existing = ws_order.clone();
+        drop(existing);
+
+        let trade_fill = filled - prev_filled;
+        if trade_fill > 0.0
+            && (order_status == OrderStatus::Filled
+                || order_status == OrderStatus::PartiallyFilled)
+        {
+            let position_id = inner
+                .order_position
+                .get(&client_order_id)
+                .map(|r| *r.value());
+            process_order_fill(
+                inner,
+                &ws_order,
+                &client_order_id,
+                position_id,
+                filled,
+                trade_fill,
+                avg_price,
+                commission,
+                realized_pnl,
+                is_reduce_only,
+                timestamp,
+                order_status,
+            )
+            .await;
+        }
+
+        // 处理取消终态
+        if order_status == OrderStatus::Canceled {
+            if let Some((_, order)) = inner.orders.remove(&client_order_id) {
+                inner.order_position.remove(&client_order_id);
+                inner.emit_event(EngineEvent::OrderCanceled { order });
+            }
+        }
+        return;
+    }
+
+    // 3. 既不在 pending 也不在 orders，忽略
+    warn!(client_order_id = %client_order_id, "WS order update for unknown order, ignoring");
+}
+
+
+/// 双确认成功后，将订单从 pending 移入 orders，并处理后续事件（成交/取消/放置）。
+async fn finalize_pending_order(
+    inner: &Arc<EngineInner>,
+    client_order_id: &str,
+    ws_order: CcxtOrder,
+    position_id: Option<Uuid>,
+) {
+    inner.pending_orders.remove(client_order_id);
+    inner
+        .orders
+        .insert(client_order_id.to_string(), ws_order.clone());
+    if let Some(pid) = position_id {
+        inner
+            .order_position
+            .insert(client_order_id.to_string(), pid);
+    }
+
+    let order_status: OrderStatus = ws_order.status.clone().into();
+    let filled: f64 = ws_order.filled_qty.parse().unwrap_or(0.0);
+    let avg_price: f64 = ws_order.avg_fill_price.parse().unwrap_or(0.0);
+    let commission: f64 = ws_order.commission.parse().unwrap_or(0.0);
+    let realized_pnl: f64 = ws_order.realized_pnl.parse().unwrap_or(0.0);
+    let is_reduce_only = ws_order.reduce_only
+        || matches!(
+            (&ws_order.side, &ws_order.position_side),
+            (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short)
+        );
+    let timestamp =
+        chrono::DateTime::from_timestamp_millis(ws_order.trade_time).unwrap_or_else(Utc::now);
+
+    if order_status == OrderStatus::Filled || order_status == OrderStatus::PartiallyFilled {
+        if filled > 0.0 {
+            // prev_filled = 0（首次确认）
+            process_order_fill(
+                inner,
+                &ws_order,
+                client_order_id,
+                position_id,
+                filled,
+                filled,
+                avg_price,
+                commission,
+                realized_pnl,
+                is_reduce_only,
+                timestamp,
+                order_status,
+            )
+            .await;
+        } else {
+            inner.emit_event(EngineEvent::OrderPlaced { order: ws_order });
+        }
+    } else if order_status == OrderStatus::Canceled {
+        inner.emit_event(EngineEvent::OrderCanceled {
+            order: ws_order.clone(),
+        });
+        inner.orders.remove(client_order_id);
+        inner.order_position.remove(client_order_id);
+    } else {
+        inner.emit_event(EngineEvent::OrderPlaced { order: ws_order });
+    }
+}
+
+
+/// 处理订单成交：构造 Trade、更新仓位、emit 成交事件。
+async fn process_order_fill(
+    inner: &Arc<EngineInner>,
+    ws_order: &CcxtOrder,
+    client_order_id: &str,
+    position_id: Option<Uuid>,
+    filled: f64,
+    trade_fill: f64,
+    avg_price: f64,
+    commission: f64,
+    _realized_pnl: f64,
+    is_reduce_only: bool,
+    timestamp: chrono::DateTime<Utc>,
+    order_status: OrderStatus,
+) {
+    let pos_key_opt = position_id.and_then(|pid| {
+        inner
+            .position_id_index
+            .get(&pid)
+            .map(|r| r.value().clone())
+    });
+
+    // 计算 pnl、trade_side、trade_type
+    let (pnl, trade_side, trade_type) = match &pos_key_opt {
+        Some(key) => {
+            let pos_entry = inner.positions.get(key);
+            match pos_entry {
+                Some(pe) => {
+                    let pos = pe.value();
+                    if is_reduce_only {
+                        let p = match pos.side {
+                            PositionSide::Long => (avg_price - pos.entry_price) * trade_fill,
+                            PositionSide::Short => (pos.entry_price - avg_price) * trade_fill,
+                        };
+                        let side = match pos.side {
+                            PositionSide::Long => Side::Sell,
+                            PositionSide::Short => Side::Buy,
+                        };
+                        (p, side, TradeType::Close)
+                    } else {
+                        let side = match pos.side {
+                            PositionSide::Long => Side::Buy,
+                            PositionSide::Short => Side::Sell,
+                        };
+                        (0.0, side, TradeType::Open)
+                    }
+                }
+                None => (0.0, Side::Buy, TradeType::Open),
+            }
+        }
+        None => (0.0, Side::Buy, TradeType::Open),
+    };
+
+    if avg_price <= 0.0 {
+        error!(
+            client_order_id = %client_order_id,
+            symbol = %ws_order.symbol,
+            price = avg_price,
+            "WS order update has invalid price (<=0.0) — skipping Trade record to prevent 0.0 price propagation"
+        );
+        return;
+    }
+
+    let trade = Trade {
+        id: Uuid::new_v4(),
+        position_id: position_id.unwrap_or(Uuid::nil()),
+        order_id: Uuid::nil(),
+        exchange: inner.exchange.name().to_string(),
+        symbol: ws_order.symbol.clone(),
+        side: trade_side,
+        price: avg_price,
+        amount: trade_fill,
+        fee: commission,
+        fee_currency: ws_order.commission_asset.clone(),
+        pnl,
+        trade_type,
+        created_at: timestamp,
+    };
 
     {
-        if let Some(mut order) = inner.orders.get_mut(&order_id) {
-            order.filled = filled;
-            order.remaining = remaining;
-            order.fill_price = Some(price);
-            order.fee = commission;
-            order.status = status;
-            order.updated_at = timestamp;
-            drop(order);
-        }
+        recover_lock(inner.tracker.lock()).record_trade(&trade);
     }
 
-
-    let current_order_opt = if matches!(
-        status,
-        OrderStatus::PartiallyFilled | OrderStatus::Filled
-    ) {
-        inner.orders.get(&order_id).map(|r| r.value().clone())
-    } else {
-        None
-    };
-
-
-    if matches!(status, OrderStatus::PartiallyFilled | OrderStatus::Filled) {
-        let trade_fill = filled - prev_filled;
-
-        if trade_fill < 0.0 {
-            warn!(order_id = %order_id, prev_filled, new_filled = filled, "WS order update out of order: filled decreased");
-            return;
-        }
-
-        if trade_fill > 0.0 {
-            let (pnl, trade_side) = {
-                match &pos_key_opt {
-                    Some(key) => {
-                        let pos_entry = inner.positions.get(key);
-                        match pos_entry {
-                            Some(pe) => {
-                                let pos = pe.value();
-                                if is_reduce_only {
-                                    let p = match pos.side {
-                                        PositionSide::Long => {
-                                            (price - pos.entry_price) * trade_fill
-                                        }
-                                        PositionSide::Short => {
-                                            (pos.entry_price - price) * trade_fill
-                                        }
-                                    };
-                                    let side = match pos.side {
-                                        PositionSide::Long => Side::Sell,
-                                        PositionSide::Short => Side::Buy,
-                                    };
-                                    (p, side)
-                                } else {
-                                    let side = match pos.side {
-                                        PositionSide::Long => Side::Buy,
-                                        PositionSide::Short => Side::Sell,
-                                    };
-                                    (0.0, side)
-                                }
-                            }
-                            None => (0.0, Side::Buy),
-                        }
-                    }
-                    None => (0.0, Side::Buy),
-                }
-            };
-
-
-            if price <= 0.0 {
-                error!(
-                    order_id = %order_id,
-                    symbol = %symbol,
-                    price = price,
-                    "WS order update has invalid price (<=0.0) — skipping Trade record to prevent 0.0 price propagation"
-                );
-                return;
-            }
-
-            let trade = Trade {
-                id: Uuid::new_v4(),
-                position_id,
-                order_id,
-                exchange: inner.exchange.name().to_string(),
-                symbol: symbol.to_string(),
-                side: trade_side,
-                price,
-                amount: trade_fill,
-                fee: commission,
-                fee_currency: String::new(),
-                pnl,
-                trade_type: if is_reduce_only {
-                    TradeType::Close
-                } else {
-                    TradeType::Open
-                },
-                created_at: timestamp,
-            };
-
-            {
-                recover_lock(inner.tracker.lock()).record_trade(&trade);
-            }
-
-            if pnl != 0.0 {
-                if let Some(key) = &pos_key_opt {
-                    if let Some(mut pos) = inner.positions.get_mut(key) {
-                        pos.realized_pnl += pnl;
-                    }
-                }
-            }
-
-            let current_order = current_order_opt
-                .clone()
-                .unwrap_or_else(|| PositionOrder {
-                    id: order_id,
-                    position_id,
-                    exchange_order_id: Some(exchange_order_id.to_string()),
-                    client_order_id: None,
-                    exchange: inner.exchange.name().to_string(),
-                    symbol: symbol.to_string(),
-                    side: Side::Buy,
-                    order_type: OrderType::Market,
-                    request_price: None,
-                    fill_price: Some(price),
-                    amount,
-                    filled,
-                    remaining,
-                    status,
-                    reduce_only: false,
-                    fee: commission,
-                    fee_currency: String::new(),
-                    slippage: None,
-                    created_at: timestamp,
-                    updated_at: timestamp,
-                });
-
-            match status {
-                OrderStatus::Filled => {
-                    inner.emit_event(EngineEvent::OrderFilled {
-                        order: current_order,
-                        trade: trade.clone(),
-                    });
-                }
-                OrderStatus::PartiallyFilled => {
-                    inner.emit_event(EngineEvent::OrderPartiallyFilled {
-                        order: current_order,
-                        trade,
-                    });
-                }
-                _ => {}
+    if pnl != 0.0 {
+        if let Some(key) = &pos_key_opt {
+            if let Some(mut pos) = inner.positions.get_mut(key) {
+                pos.realized_pnl += pnl;
             }
         }
     }
 
+    match order_status {
+        OrderStatus::Filled => {
+            inner.emit_event(EngineEvent::OrderFilled {
+                order: ws_order.clone(),
+                trade: trade.clone(),
+            });
+        }
+        OrderStatus::PartiallyFilled => {
+            inner.emit_event(EngineEvent::OrderPartiallyFilled {
+                order: ws_order.clone(),
+                trade: trade.clone(),
+            });
+        }
+        _ => {}
+    }
 
-    if status.is_filled() {
-        let pos_entry = match &pos_key_opt {
-            Some(key) => inner.positions.get(key).map(|r| r.value().clone()),
-            None => None,
-        };
-
-        if let Some(mut position) = pos_entry {
-            let order = current_order_opt.clone();
-
-            if let Some(order) = order {
+    // 仓位更新（只在完全成交时）
+    if order_status.is_filled() {
+        if let Some(key) = &pos_key_opt {
+            let pos_entry = inner.positions.get(key).map(|r| r.value().clone());
+            if let Some(mut position) = pos_entry {
                 if is_reduce_only {
-                    position.size -= order.filled;
+                    position.size -= filled;
                     if position.size.abs() < 1e-8 {
                         position.size = 0.0;
                         position.status = PositionStatus::Closed;
                         position.closed_at = Some(timestamp);
-                        inner.emit_event(EngineEvent::PositionClosed {
-                            position: position.clone(),
-                        });
-                        inner.emit_event(EngineEvent::PositionUpdated {
-                            position: position.clone(),
-                        });
                     } else {
                         position.status = PositionStatus::Open;
-                        inner.emit_event(EngineEvent::PositionUpdated {
-                            position: position.clone(),
-                        });
                     }
                 } else {
                     let old_size = position.size;
-                    position.size += order.filled;
-                    if let Some(fp) = order.fill_price {
+                    position.size += filled;
+                    if avg_price > 0.0 {
                         if old_size > 0.0 && position.entry_price > 0.0 {
-                            let total_cost = position.entry_price * old_size + fp * order.filled;
+                            let total_cost =
+                                position.entry_price * old_size + avg_price * filled;
                             position.entry_price = total_cost / position.size;
                         } else {
-                            position.entry_price = fp;
+                            position.entry_price = avg_price;
                         }
-                        position.current_price = fp;
+                        position.current_price = avg_price;
                     }
                     position.status = PositionStatus::Open;
                 }
-
                 position.updated_at = timestamp;
-                let key = (
-                    position.exchange.clone(),
-                    position.symbol.clone(),
-                    position.side,
-                );
+                let pos_clone = position.clone();
 
-                if position.status == PositionStatus::Closed {
-                    inner.position_id_index.remove(&position.id);
-                    inner.positions.remove(&key);
+                if pos_clone.status == PositionStatus::Closed {
+                    inner.position_id_index.remove(&pos_clone.id);
+                    inner.positions.remove(key);
+                    inner.emit_event(EngineEvent::PositionClosed {
+                        position: pos_clone.clone(),
+                    });
+                    inner.emit_event(EngineEvent::PositionUpdated {
+                        position: pos_clone.clone(),
+                    });
                 } else {
-                    inner.positions.insert(key, position.clone());
+                    inner.positions.insert(key.clone(), pos_clone.clone());
+                    inner.emit_event(EngineEvent::PositionUpdated {
+                        position: pos_clone.clone(),
+                    });
                 }
+
                 persist!(
-                    inner.persistence.upsert_position(&position),
+                    inner.persistence.upsert_position(&pos_clone),
                     "Failed to persist position after order fill",
                     inner.persist_max_retries,
                     inner.persist_retry_base_ms
@@ -826,7 +770,7 @@ pub(crate) async fn handle_open_position(
     };
     let key = (exchange_name.clone(), symbol.clone(), side);
 
-
+    // 如果仓位已存在，直接下单
     if let Some(existing) = inner.positions.get(&key) {
         let position_id = existing.id;
         drop(existing);
@@ -836,7 +780,7 @@ pub(crate) async fn handle_open_position(
             PositionSide::Short => Side::Sell,
         };
 
-        let mut params = PlaceOrderParams {
+        let params = PlaceOrderParams {
             symbol: symbol.clone(),
             side: resolved_side,
             order_type,
@@ -847,72 +791,17 @@ pub(crate) async fn handle_open_position(
             position_id: Some(position_id),
             client_order_id: strategy_id.clone(),
         };
-        resolve_position_side_for_hedge(&mut params);
-        let reduce_only = params.reduce_only;
-
-        match inner.exchange.place_order(params).await {
-            Ok(mut order) => {
-                order.reduce_only = reduce_only;
-                if let Some(ref eoid) = order.exchange_order_id {
-                    inner.exchange_order_id_index.insert(eoid.clone(), order.id);
-                }
-                if let Some(ref cid) = order.client_order_id {
-                    inner.client_order_id_index.insert(cid.clone(), order.id);
-                }
-                inner.orders.insert(order.id, order.clone());
-
-
-                if order.filled > 0.0 {
-                    match order.fill_price.filter(|p| *p > 0.0) {
-                        Some(fill_price) => {
-                            let trade = Trade {
-                                id: Uuid::new_v4(),
-                                position_id,
-                                order_id: order.id,
-                                exchange: exchange_name.clone(),
-                                symbol: symbol.clone(),
-                                side: resolved_side,
-                                price: fill_price,
-                                amount: order.filled,
-                                fee: order.fee,
-                                fee_currency: order.fee_currency.clone(),
-                                pnl: 0.0,
-                                trade_type: TradeType::Open,
-                                created_at: Utc::now(),
-                            };
-                            inner.emit_event(EngineEvent::OrderFilled {
-                                order: order.clone(),
-                                trade,
-                            });
-                        }
-                        None => {
-                            error!(order_id = %order.id, "Order filled but no valid fill_price — skipping Trade record to prevent 0.0 price propagation");
-                        }
-                    }
-                } else {
-                    inner.emit_event(EngineEvent::OrderPlaced {
-                        order: order.clone(),
-                    });
-                }
-            }
-            Err(e) => {
-                let msg = format!("Failed to place order: {}", e);
-                error!(error = %e, symbol = %symbol, "Failed to place order for existing position");
-                inner.emit_event(EngineEvent::OrderFailed {
-                    order_id: position_id,
-                    reason: msg,
-                });
-            }
-        }
+        handle_place_order(inner, params).await;
         return;
     }
 
-
+    // 仓位不存在，创建新仓位
     if leverage == 0 {
         let msg = "leverage must be > 0".to_string();
         error!(symbol = %symbol, "open_position rejected: leverage is 0");
+        let client_order_id = Uuid::new_v4().to_string();
         inner.emit_event(EngineEvent::OrderFailed {
-            order_id: Uuid::nil(),
+            client_order_id,
             reason: msg,
         });
         return;
@@ -928,18 +817,17 @@ pub(crate) async fn handle_open_position(
                 leverage, symbol, e
             ),
         });
+        let client_order_id = Uuid::new_v4().to_string();
         inner.emit_event(EngineEvent::OrderFailed {
-            order_id: Uuid::nil(),
+            client_order_id,
             reason: msg,
         });
         return;
     }
 
-    let lev = leverage;
-
     let now = Utc::now();
     let position_id = Uuid::new_v4();
-    let mut position = Position {
+    let position = Position {
         id: position_id,
         strategy_id: strategy_id.clone(),
         exchange: exchange_name.clone(),
@@ -949,7 +837,7 @@ pub(crate) async fn handle_open_position(
         size: 0.0,
         entry_price: 0.0,
         current_price: 0.0,
-        leverage: lev,
+        leverage,
         margin: 0.0,
         unrealized_pnl: 0.0,
         realized_pnl: 0.0,
@@ -962,12 +850,25 @@ pub(crate) async fn handle_open_position(
         metadata: serde_json::Value::Null,
     };
 
+    inner.position_id_index.insert(position.id, key.clone());
+    inner.positions.insert(key, position.clone());
+    persist!(
+        inner.persistence.upsert_position(&position),
+        "Failed to persist position in open_position",
+        inner.persist_max_retries,
+        inner.persist_retry_base_ms
+    );
+    inner.emit_event(EngineEvent::PositionOpened {
+        position: position.clone(),
+    });
+    inner.emit_event(EngineEvent::PositionUpdated { position });
+
     let resolved_side = match side {
         PositionSide::Long => Side::Buy,
         PositionSide::Short => Side::Sell,
     };
 
-    let mut params = PlaceOrderParams {
+    let params = PlaceOrderParams {
         symbol: symbol.clone(),
         side: resolved_side,
         order_type,
@@ -978,128 +879,9 @@ pub(crate) async fn handle_open_position(
         position_id: Some(position_id),
         client_order_id: strategy_id.clone(),
     };
-    resolve_position_side_for_hedge(&mut params);
-    let reduce_only = params.reduce_only;
-
-    match inner.exchange.place_order(params).await {
-        Ok(mut order) => {
-            order.reduce_only = reduce_only;
-
-            order.position_id = position_id;
-            position.status = PositionStatus::Open;
-            position.size = order.filled;
-
-
-            let fill_price = if order.filled > 0.0 {
-                match order.fill_price {
-                    Some(p) if p > 0.0 => p,
-                    _ => {
-                        error!(
-                            order_id = %order.id,
-                            filled = order.filled,
-                            "Order is filled but has no valid fill_price — \
-                             refusing to update position to prevent data corruption."
-                        );
-
-
-                        position.status = PositionStatus::Opening;
-                        return;
-                    }
-                }
-            } else {
-
-
-                match order.fill_price {
-                    Some(p) if p > 0.0 => p,
-                    _ => {
-                        tracing::warn!(
-                            order_id = %order.id,
-                            filled = order.filled,
-                            "Order is not filled and has no fill_price — skipping position update to prevent zero-cost position"
-                        );
-                        position.status = PositionStatus::Opening;
-                        return;
-                    }
-                }
-            };
-            position.entry_price = fill_price;
-            position.current_price = position.entry_price;
-            position.margin = if lev > 0 {
-                position.size * position.entry_price / lev as f64
-            } else {
-                0.0
-            };
-
-            inner.position_id_index.insert(position.id, key.clone());
-            inner.positions.insert(key, position.clone());
-            if let Some(ref eoid) = order.exchange_order_id {
-                inner.exchange_order_id_index.insert(eoid.clone(), order.id);
-            }
-            if let Some(ref cid) = order.client_order_id {
-                inner.client_order_id_index.insert(cid.clone(), order.id);
-            }
-            inner.orders.insert(order.id, order.clone());
-
-            persist!(
-                inner.persistence.upsert_position(&position),
-                "Failed to persist position in open_position",
-                inner.persist_max_retries,
-                inner.persist_retry_base_ms
-            );
-
-            inner.emit_event(EngineEvent::PositionOpened {
-                position: position.clone(),
-            });
-            inner.emit_event(EngineEvent::PositionUpdated {
-                position: position.clone(),
-            });
-
-
-            if order.filled > 0.0 {
-                match order.fill_price.filter(|p| *p > 0.0) {
-                    Some(fill_price) => {
-                        let trade = Trade {
-                            id: Uuid::new_v4(),
-                            position_id,
-                            order_id: order.id,
-                            exchange: exchange_name.clone(),
-                            symbol: symbol.clone(),
-                            side: resolved_side,
-                            price: fill_price,
-                            amount: order.filled,
-                            fee: order.fee,
-                            fee_currency: order.fee_currency.clone(),
-                            pnl: 0.0,
-                            trade_type: TradeType::Open,
-                            created_at: Utc::now(),
-                        };
-                        inner.emit_event(EngineEvent::OrderFilled {
-                            order: order.clone(),
-                            trade,
-                        });
-                        info!(position_id = %position.id, symbol = %symbol, side = ?side, size = order.filled, "Position opened and filled");
-                    }
-                    None => {
-                        error!(order_id = %order.id, "Order filled but no valid fill_price — skipping Trade record to prevent 0.0 price propagation");
-                    }
-                }
-            } else {
-                inner.emit_event(EngineEvent::OrderPlaced {
-                    order: order.clone(),
-                });
-                info!(position_id = %position.id, symbol = %symbol, side = ?side, "Position opened, order pending");
-            }
-        }
-        Err(e) => {
-            let msg = format!("Failed to place order: {}", e);
-            error!(error = %e, symbol = %symbol, "Failed to place opening order");
-            inner.emit_event(EngineEvent::OrderFailed {
-                order_id: position_id,
-                reason: msg,
-            });
-        }
-    }
+    handle_place_order(inner, params).await;
 }
+
 
 pub(crate) async fn handle_close_position(
     inner: &Arc<EngineInner>,
@@ -1124,8 +906,9 @@ pub(crate) async fn handle_close_position(
         None => {
             let msg = format!("Position not found: {}", position_id);
             warn!(msg);
+            let client_order_id = Uuid::new_v4().to_string();
             inner.emit_event(EngineEvent::OrderFailed {
-                order_id: Uuid::nil(),
+                client_order_id,
                 reason: msg,
             });
             return;
@@ -1133,8 +916,9 @@ pub(crate) async fn handle_close_position(
     };
 
     if position.size == 0.0 {
+        let client_order_id = Uuid::new_v4().to_string();
         inner.emit_event(EngineEvent::OrderFailed {
-            order_id: Uuid::nil(),
+            client_order_id,
             reason: format!("Position {} has zero size", position_id),
         });
         return;
@@ -1145,7 +929,7 @@ pub(crate) async fn handle_close_position(
         PositionSide::Short => Side::Buy,
     };
 
-    let mut params = PlaceOrderParams {
+    let params = PlaceOrderParams {
         symbol: position.symbol.clone(),
         side: close_side,
         order_type,
@@ -1156,119 +940,21 @@ pub(crate) async fn handle_close_position(
         position_id: Some(position.id),
         client_order_id: strategy_id.clone(),
     };
-    resolve_position_side_for_hedge(&mut params);
-    let reduce_only = params.reduce_only;
 
-
-    let close_order_timeout = inner.close_order_timeout;
-    match tokio::time::timeout(close_order_timeout, inner.exchange.place_order(params)).await {
-        Ok(Ok(mut order)) => {
-            order.reduce_only = reduce_only;
-
-            order.position_id = position_id;
-            if let Some(ref eoid) = order.exchange_order_id {
-                inner.exchange_order_id_index.insert(eoid.clone(), order.id);
-            }
-            if let Some(ref cid) = order.client_order_id {
-                inner.client_order_id_index.insert(cid.clone(), order.id);
-            }
-            inner.orders.insert(order.id, order.clone());
-
-
-            if order.filled > 0.0 {
-                match order.fill_price.filter(|p| *p > 0.0) {
-                    Some(fill_price) => {
-                        let trade = Trade {
-                            id: Uuid::new_v4(),
-                            position_id,
-                            order_id: order.id,
-                            exchange: position.exchange.clone(),
-                            symbol: position.symbol.clone(),
-                            side: close_side,
-                            price: fill_price,
-                            amount: order.filled,
-                            fee: order.fee,
-                            fee_currency: order.fee_currency.clone(),
-                            pnl: 0.0,
-                            trade_type: TradeType::Close,
-                            created_at: Utc::now(),
-                        };
-                        inner.emit_event(EngineEvent::OrderFilled {
-                            order: order.clone(),
-                            trade,
-                        });
-                        info!(position_id = %position_id, symbol = %position.symbol, "Close order filled");
-
-
-                        let key = (
-                            position.exchange.clone(),
-                            position.symbol.clone(),
-                            position.side,
-                        );
-                        if let Some(mut pos) = inner.positions.get_mut(&key) {
-                            pos.size = 0.0;
-                            pos.status = PositionStatus::Closed;
-                            pos.closed_at = Some(Utc::now());
-                            pos.updated_at = Utc::now();
-                            let closed_pos = pos.clone();
-                            drop(pos);
-                            inner.position_id_index.remove(&closed_pos.id);
-                            inner.positions.remove(&key);
-                            persist!(
-                                inner.persistence.upsert_position(&closed_pos),
-                                "Failed to persist closed position in close_position",
-                                inner.persist_max_retries,
-                                inner.persist_retry_base_ms
-                            );
-                            inner.emit_event(EngineEvent::PositionClosed {
-                                position: closed_pos.clone(),
-                            });
-                            inner.emit_event(EngineEvent::PositionUpdated {
-                                position: closed_pos,
-                            });
-                        }
-                    }
-                    None => {
-                        error!(order_id = %order.id, "Close order filled but no valid fill_price — skipping Trade record to prevent 0.0 price propagation");
-                    }
-                }
-            } else {
-                inner.emit_event(EngineEvent::OrderPlaced { order });
-                info!(position_id = %position_id, symbol = %position.symbol, "Close order placed");
-            }
-
-            let key = (
-                position.exchange.clone(),
-                position.symbol.clone(),
-                position.side,
-            );
-            if let Some(mut pos) = inner.positions.get_mut(&key) {
-                pos.status = PositionStatus::Closing;
-                pos.updated_at = Utc::now();
-            }
-        }
-        Ok(Err(e)) => {
-            let msg = format!("Failed to place close order: {}", e);
-            error!(error = %e, position_id = %position_id, "Failed to place close order");
-            inner.emit_event(EngineEvent::OrderFailed {
-                order_id: Uuid::nil(),
-                reason: msg,
-            });
-        }
-        Err(_elapsed) => {
-            let msg = format!(
-                "Close order timed out after {}s for position {}",
-                close_order_timeout.as_secs(),
-                position_id
-            );
-            warn!(position_id = %position_id, "{}", msg);
-            inner.emit_event(EngineEvent::OrderFailed {
-                order_id: Uuid::nil(),
-                reason: msg,
-            });
-        }
+    // 将仓位状态改为 Closing
+    let key = (
+        position.exchange.clone(),
+        position.symbol.clone(),
+        position.side,
+    );
+    if let Some(mut pos) = inner.positions.get_mut(&key) {
+        pos.status = PositionStatus::Closing;
+        pos.updated_at = Utc::now();
     }
+
+    handle_place_order(inner, params).await;
 }
+
 
 pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol: &str) {
     handle_cancel_all_orders(inner, None, Some(symbol.to_string())).await;
@@ -1310,21 +996,20 @@ pub(crate) fn resolve_position_side_for_hedge(params: &mut PlaceOrderParams) {
     params.reduce_only = false;
 }
 
+
 pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: PlaceOrderParams) {
     resolve_position_side_for_hedge(&mut params);
 
-
+    // 解析 position_id
     let position_id = match params.position_id {
         Some(pid) => pid,
         None => {
             let pos_id = Uuid::new_v4();
-
-
-            let position_side = params.position_side
+            let position_side = params
+                .position_side
                 .expect("position_side must be resolved by resolve_position_side_for_hedge");
             let exchange_name = inner.exchange.name().to_string();
             let key = (exchange_name.clone(), params.symbol.clone(), position_side);
-
 
             if let Some(existing) = inner.positions.get(&key) {
                 existing.id
@@ -1365,81 +1050,102 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
     };
     params.position_id = Some(position_id);
 
-    match inner.exchange.place_order(params.clone()).await {
-        Ok(mut order) => {
-            order.position_id = position_id;
-            order.reduce_only = params.reduce_only;
-            inner.orders.insert(order.id, order.clone());
-            if let Some(ref eoid) = order.exchange_order_id {
-                inner.exchange_order_id_index.insert(eoid.clone(), order.id);
+    // 生成 client_order_id
+    let client_order_id = params
+        .client_order_id
+        .clone()
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    params.client_order_id = Some(client_order_id.clone());
+
+    // Pre-register: 先存入 pending
+    inner.pending_orders.insert(
+        client_order_id.clone(),
+        PendingOrder {
+            client_order_id: client_order_id.clone(),
+            params: params.clone(),
+            rest_result: None,
+            ws_order: None,
+            position_id: Some(position_id),
+            created_at: Utc::now(),
+        },
+    );
+
+    // 调用 REST（params 在此处 move）
+    let symbol_for_error = params.symbol.clone();
+    match inner.exchange.place_order(params).await {
+        Ok(result) => {
+            // 填入 rest_result
+            if let Some(mut pending) = inner.pending_orders.get_mut(&client_order_id) {
+                pending.rest_result = Some(result);
+                drop(pending);
             }
-            if let Some(ref cid) = order.client_order_id {
-                inner.client_order_id_index.insert(cid.clone(), order.id);
+
+            // 检查 WS 是否已到达
+            let ws_order = inner
+                .pending_orders
+                .get(&client_order_id)
+                .and_then(|p| p.ws_order.clone());
+
+            if let Some(ws_order) = ws_order {
+                // 双确认成功，移除 pending，存入 orders
+                finalize_pending_order(inner, &client_order_id, ws_order, Some(position_id))
+                    .await;
             }
-            inner.emit_event(EngineEvent::OrderPlaced {
-                order: order.clone(),
-            });
+            // 如果 WS 未到达，等待 WS 回调处理
         }
         Err(e) => {
+            inner.pending_orders.remove(&client_order_id);
             let msg = format!("Failed to place order: {}", e);
-            error!(error = %e, symbol = %params.symbol, "Failed to place order");
+            error!(error = %e, symbol = %symbol_for_error, "Failed to place order");
             inner.emit_event(EngineEvent::OrderFailed {
-                order_id: Uuid::nil(),
+                client_order_id,
                 reason: msg,
             });
         }
     }
 }
 
-pub(crate) async fn handle_cancel_order(inner: &Arc<EngineInner>, order_id: Uuid) {
-    let order = inner.orders.get(&order_id).map(|r| r.value().clone());
-    let order = match order {
-        Some(o) => o,
-        None => {
-            let msg = format!("Order not found: {}", order_id);
-            warn!(msg);
-            inner.emit_event(EngineEvent::OrderFailed {
-                order_id,
-                reason: msg,
-            });
-            return;
+
+pub(crate) async fn handle_cancel_order(inner: &Arc<EngineInner>, client_order_id: String) {
+    // 从 orders 中获取订单信息
+    let (symbol, exchange_order_id) = {
+        let order = inner.orders.get(&client_order_id);
+        match order {
+            Some(o) => (o.symbol.clone(), o.order_id.to_string()),
+            None => {
+                // 可能在 pending 中
+                if let Some(pending) = inner.pending_orders.get(&client_order_id) {
+                    if let Some(rest_result) = &pending.rest_result {
+                        // 用 REST 返回的 order_id 撤单
+                        (pending.params.symbol.clone(), rest_result.order_id.clone())
+                    } else {
+                        warn!(client_order_id = %client_order_id, "Cancel order: order not yet placed");
+                        return;
+                    }
+                } else {
+                    warn!(client_order_id = %client_order_id, "Cancel order: order not found");
+                    return;
+                }
+            }
         }
     };
 
-    let exchange_order_id = match &order.exchange_order_id {
-        Some(id) => id.clone(),
-        None => {
-            inner.emit_event(EngineEvent::OrderFailed {
-                order_id,
-                reason: format!("Order {} has no exchange_order_id", order_id),
-            });
-            return;
-        }
-    };
-
-    match inner
-        .exchange
-        .cancel_order(&order.symbol, &exchange_order_id)
-        .await
-    {
-        Ok(cancelled_order) => {
-            inner
-                .orders
-                .insert(cancelled_order.id, cancelled_order.clone());
-            inner.emit_event(EngineEvent::OrderCanceled {
-                order: cancelled_order,
-            });
+    match inner.exchange.cancel_order(&symbol, &exchange_order_id).await {
+        Ok(_result) => {
+            // WS 会推送 CANCELED 状态
+            // 可以立即从 orders 中移除或等待 WS
         }
         Err(e) => {
             let msg = format!("Failed to cancel order: {}", e);
-            error!(error = %e, order_id = %order_id, "Failed to cancel order");
+            error!(error = %e, client_order_id = %client_order_id, "Cancel order failed");
             inner.emit_event(EngineEvent::OrderFailed {
-                order_id,
+                client_order_id,
                 reason: msg,
             });
         }
     }
 }
+
 
 pub(crate) async fn handle_cancel_all_orders(
     inner: &Arc<EngineInner>,
@@ -1463,12 +1169,18 @@ pub(crate) async fn handle_cancel_all_orders(
         .cancel_all_orders(target_symbol.as_deref())
         .await
     {
-        Ok(cancelled_orders) => {
-            for order in &cancelled_orders {
-                inner.orders.insert(order.id, order.clone());
-                inner.emit_event(EngineEvent::OrderCanceled {
-                    order: order.clone(),
-                });
+        Ok(results) => {
+            for result in &results {
+                let cid = &result.client_order_id;
+                // 从 orders 中查找 CcxtOrder
+                if let Some((_, order)) = inner.orders.remove(cid) {
+                    inner.order_position.remove(cid);
+                    inner.emit_event(EngineEvent::OrderCanceled { order });
+                } else {
+                    // 可能在 pending 中
+                    inner.pending_orders.remove(cid);
+                    // 没有 CcxtOrder，无法 emit OrderCanceled，等待 WS 推送
+                }
             }
         }
         Err(e) => {

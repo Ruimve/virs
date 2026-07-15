@@ -10,8 +10,9 @@ use virs_market::Candle;
 use virs_models::AutoBot;
 use virs_models::GridBot;
 use virs_types::bot::{OrderEvent, OrderSide};
-use virs_types::enums::{OrderStatus, OrderType, Side, StrategyStatus, TradeType};
-use virs_types::position::{EngineEvent, PositionOrder, Trade};
+use virs_types::enums::{OrderType, PositionSide, Side, StrategyStatus, TradeType};
+use virs_types::position::{EngineEvent, Trade};
+use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType};
 
 
 fn make_grid_bot() -> GridBot {
@@ -94,28 +95,45 @@ fn make_candle() -> Candle {
     }
 }
 
-fn make_order(side: Side) -> PositionOrder {
-    PositionOrder {
-        id: Uuid::new_v4(),
-        position_id: Uuid::new_v4(),
-        exchange_order_id: Some("EX999".to_string()),
-        client_order_id: Some("CL999".to_string()),
-        exchange: "binance".to_string(),
+fn make_order(side: Side) -> CcxtOrder {
+    CcxtOrder {
+        order_id: 999,
+        client_order_id: "CL999".to_string(),
         symbol: "BTC/USDT".to_string(),
         side,
         order_type: OrderType::Limit,
-        request_price: Some(42000.0),
-        fill_price: Some(42100.0),
-        amount: 2.0,
-        filled: 2.0,
-        remaining: 0.0,
-        status: OrderStatus::Filled,
+        position_side: PositionSide::Long,
+        original_order_type: "LIMIT".to_string(),
+        status: CcxtOrderStatus::Filled,
+        execution_type: ExecutionType::Trade,
+        orig_qty: "2.0".to_string(),
+        original_price: "42000.0".to_string(),
+        avg_fill_price: "42100.0".to_string(),
+        filled_qty: "2.0".to_string(),
+        last_fill_qty: "2.0".to_string(),
+        last_fill_price: "42100.0".to_string(),
+        stop_price: None,
+        commission: "0.2".to_string(),
+        commission_asset: "USDT".to_string(),
+        realized_pnl: "0".to_string(),
         reduce_only: false,
-        fee: 0.2,
-        fee_currency: "USDT".to_string(),
-        slippage: Some(1.0),
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
+        is_maker: false,
+        close_position: None,
+        time_in_force: "GTC".to_string(),
+        working_type: "CONTRACT_PRICE".to_string(),
+        bids_notional: None,
+        ask_notional: None,
+        activation_price: None,
+        callback_rate: None,
+        price_protection: false,
+        stp_mode: None,
+        price_match_mode: None,
+        gtd_auto_cancel_time: None,
+        expiry_reason: None,
+        si: 0,
+        ss: 0,
+        trade_time: 0,
+        trade_id: 0,
     }
 }
 
@@ -260,7 +278,7 @@ fn int_3_2_llm_resolve_user_model_override() {
 #[test]
 fn int_4_1_convert_event_order_placed_filled() {
     let order = make_order(Side::Buy);
-    let order_id = order.id;
+    let expected_id = Uuid::from_u128(order.order_id as u128);
     let event1 = EngineEvent::OrderPlaced {
         order: order.clone(),
     };
@@ -274,7 +292,7 @@ fn int_4_1_convert_event_order_placed_filled() {
     let result2 = convert_pe_event(event2);
     match result2.unwrap() {
         OrderEvent::OrderFilled { order } => {
-            assert_eq!(order.id, order_id);
+            assert_eq!(order.id, expected_id);
             assert_eq!(order.side, OrderSide::Buy);
         }
         _ => panic!("Expected OrderFilled"),
@@ -284,7 +302,7 @@ fn int_4_1_convert_event_order_placed_filled() {
 #[test]
 fn int_4_2_convert_event_canceled_failed() {
     let order = make_order(Side::Sell);
-    let order_id = order.id;
+    let expected_id = Uuid::from_u128(order.order_id as u128);
     let event1 = EngineEvent::OrderCanceled { order };
     let result1 = convert_pe_event(event1);
     match result1.unwrap() {
@@ -292,21 +310,19 @@ fn int_4_2_convert_event_canceled_failed() {
             order_id: id,
             symbol,
         } => {
-            assert_eq!(id, order_id);
+            assert_eq!(id, expected_id);
             assert_eq!(symbol.as_deref(), Some("BTC/USDT"));
         }
         _ => panic!("Expected OrderCanceled"),
     }
 
-    let oid = Uuid::new_v4();
     let event2 = EngineEvent::OrderFailed {
-        order_id: oid,
+        client_order_id: "CL999".to_string(),
         reason: "timeout".to_string(),
     };
     let result2 = convert_pe_event(event2);
     match result2.unwrap() {
-        OrderEvent::OrderFailed { order_id, reason } => {
-            assert_eq!(order_id, oid);
+        OrderEvent::OrderFailed { order_id: _, reason } => {
             assert_eq!(reason, "timeout");
         }
         _ => panic!("Expected OrderFailed"),

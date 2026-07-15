@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use virs_models as models;
 use virs_types::enums::*;
 use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_types::market::*;
 use virs_types::position::*;
+use virs_types::OrderResult;
 
 use virs_error::{ExchangeError, VirsResult};
 
@@ -75,7 +76,7 @@ pub fn convert_order_type(ot: &OrderType) -> models::OrderType {
         OrderType::Market => models::OrderType::Market,
         OrderType::StopMarket => models::OrderType::StopMarket,
         OrderType::TakeProfitMarket => models::OrderType::TakeProfitMarket,
-        OrderType::StopLimit => models::OrderType::StopLimit,
+        _ => models::OrderType::Market, // Stop/TakeProfit/TrailingStopMarket/Liquidation 暂无对应
     }
 }
 
@@ -102,41 +103,6 @@ pub fn convert_virs_position_side(side: &models::PositionSide) -> PositionSide {
 pub fn convert_virs_market_type(mt: &models::MarketType) -> MarketType {
     match mt {
         models::MarketType::Perpetual => MarketType::Perpetual,
-    }
-}
-
-// 将 models::Order 转换为 PositionOrder；解析失败时生成新 UUID
-pub fn convert_order(o: &models::Order, exchange_name: &str) -> PositionOrder {
-    PositionOrder {
-        id: uuid::Uuid::parse_str(&o.id).unwrap_or_else(|e| {
-            error!(order_id = %o.id, error = %e, "Failed to parse order UUID — generating new UUID (order identity will be lost)");
-            uuid::Uuid::new_v4()
-        }),
-        position_id: uuid::Uuid::nil(),
-        exchange_order_id: Some(o.id.clone()),
-        client_order_id: o.client_order_id.clone(),
-        exchange: exchange_name.to_string(),
-        symbol: o.symbol.clone(),
-        side: convert_side(&o.side),
-        order_type: match o.order_type {
-            models::OrderType::Limit => OrderType::Limit,
-            models::OrderType::Market => OrderType::Market,
-            models::OrderType::StopMarket => OrderType::StopMarket,
-            models::OrderType::StopLimit => OrderType::StopLimit,
-            models::OrderType::TakeProfitMarket => OrderType::TakeProfitMarket,
-        },
-        request_price: o.price,
-        fill_price: if o.filled > 0.0 { o.price } else { None },
-        amount: o.amount,
-        filled: o.filled,
-        remaining: o.remaining,
-        status: convert_order_status(&o.status),
-        reduce_only: false,
-        fee: o.fee,
-        fee_currency: o.fee_currency.clone(),
-        slippage: None,
-        created_at: o.created_at,
-        updated_at: o.updated_at,
     }
 }
 
@@ -235,14 +201,8 @@ impl ExchangePe for CcxtExchangeAdapter {
     }
 
     // 下单 → Exchange.place_order_with_options() → POST /fapi/v1/order
-    async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<PositionOrder> {
-        let ex = self
-            .get_perpetual_exchange()
-            .ok_or_else(no_exchange_error)?;
-        let exchange_name = ex.name().to_string();
-
-
-        // reduce_only 仅在 true 时传递，避免影响普通下单
+    async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<OrderResult> {
+        let ex = self.get_perpetual_exchange().ok_or_else(no_exchange_error)?;
         let reduce_only_param = if params.reduce_only { Some(true) } else { None };
         let virs_order = ex
             .place_order_with_options(
@@ -256,23 +216,24 @@ impl ExchangePe for CcxtExchangeAdapter {
                 params.client_order_id.as_deref(),
             )
             .await?;
-        Ok(convert_order(&virs_order, &exchange_name))
+        Ok(OrderResult {
+            order_id: virs_order.id,
+            client_order_id: virs_order.client_order_id.unwrap_or_default(),
+        })
     }
 
     // 撤单 → Exchange.cancel_order() → DELETE /fapi/v1/order
-    async fn cancel_order(&self, symbol: &str, order_id: &str) -> VirsResult<PositionOrder> {
-        let ex = self
-            .get_perpetual_exchange()
-            .ok_or_else(no_exchange_error)?;
-        let exchange_name = ex.name().to_string();
-        let virs_order = ex
-            .cancel_order(symbol, order_id)
-            .await?;
-        Ok(convert_order(&virs_order, &exchange_name))
+    async fn cancel_order(&self, symbol: &str, order_id: &str) -> VirsResult<OrderResult> {
+        let ex = self.get_perpetual_exchange().ok_or_else(no_exchange_error)?;
+        let virs_order = ex.cancel_order(symbol, order_id).await?;
+        Ok(OrderResult {
+            order_id: virs_order.id,
+            client_order_id: virs_order.client_order_id.unwrap_or_default(),
+        })
     }
 
     // 全部撤单: DELETE /fapi/v1/allOpenOrders (签名)，symbol 必填
-    async fn cancel_all_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<PositionOrder>> {
+    async fn cancel_all_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<OrderResult>> {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;

@@ -1,5 +1,6 @@
 pub mod auto_port;
 pub mod bot;
+pub mod ccxt_order;
 pub mod client_order_id;
 pub mod enums;
 pub mod exchange_pe;
@@ -10,6 +11,7 @@ pub mod position;
 
 
 pub use bot::*;
+pub use ccxt_order::*;
 pub use enums::*;
 pub use market::*;
 pub use position::*;
