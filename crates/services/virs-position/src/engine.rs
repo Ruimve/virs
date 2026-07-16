@@ -450,11 +450,11 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
     let avg_price: f64 = ws_order.avg_fill_price.parse().unwrap_or(0.0);
     let commission: f64 = ws_order.commission.parse().unwrap_or(0.0);
     let realized_pnl: f64 = ws_order.realized_pnl.parse().unwrap_or(0.0);
-    let is_reduce_only = ws_order.reduce_only
-        || matches!(
-            (&ws_order.side, &ws_order.position_side),
-            (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short)
-        );
+    // Hedge 模式下 reduce_only 无意义，开平仓由 side + position_side 组合判断
+    let is_close = matches!(
+        (&ws_order.side, &ws_order.position_side),
+        (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short)
+    );
     let timestamp =
         chrono::DateTime::from_timestamp_millis(ws_order.trade_time).unwrap_or_else(Utc::now);
 
@@ -478,6 +478,14 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
         *existing = ws_order.clone();
         drop(existing);
 
+        // 持久化订单更新到 DB
+        persist!(
+            inner.persistence.upsert_order(&ws_order),
+            "upsert_order",
+            3,
+            100
+        );
+
         let trade_fill = filled - prev_filled;
         if trade_fill > 0.0
             && (order_status == OrderStatus::Filled
@@ -497,7 +505,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
                 avg_price,
                 commission,
                 realized_pnl,
-                is_reduce_only,
+                is_close,
                 timestamp,
                 order_status,
             )
@@ -536,16 +544,24 @@ async fn finalize_pending_order(
             .insert(client_order_id.to_string(), pid);
     }
 
+    // 持久化订单到 DB
+    persist!(
+        inner.persistence.upsert_order(&ws_order),
+        "upsert_order",
+        3,
+        100
+    );
+
     let order_status: OrderStatus = ws_order.status.clone().into();
     let filled: f64 = ws_order.filled_qty.parse().unwrap_or(0.0);
     let avg_price: f64 = ws_order.avg_fill_price.parse().unwrap_or(0.0);
     let commission: f64 = ws_order.commission.parse().unwrap_or(0.0);
     let realized_pnl: f64 = ws_order.realized_pnl.parse().unwrap_or(0.0);
-    let is_reduce_only = ws_order.reduce_only
-        || matches!(
-            (&ws_order.side, &ws_order.position_side),
-            (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short)
-        );
+    // Hedge 模式下 reduce_only 无意义，开平仓由 side + position_side 组合判断
+    let is_close = matches!(
+        (&ws_order.side, &ws_order.position_side),
+        (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short)
+    );
     let timestamp =
         chrono::DateTime::from_timestamp_millis(ws_order.trade_time).unwrap_or_else(Utc::now);
 
@@ -562,7 +578,7 @@ async fn finalize_pending_order(
                 avg_price,
                 commission,
                 realized_pnl,
-                is_reduce_only,
+                is_close,
                 timestamp,
                 order_status,
             )
@@ -592,8 +608,8 @@ async fn process_order_fill(
     trade_fill: f64,
     avg_price: f64,
     commission: f64,
-    _realized_pnl: f64,
-    is_reduce_only: bool,
+    realized_pnl: f64,
+    is_close: bool,
     timestamp: chrono::DateTime<Utc>,
     order_status: OrderStatus,
 ) {
@@ -604,23 +620,19 @@ async fn process_order_fill(
             .map(|r| r.value().clone())
     });
 
-    // 计算 pnl、trade_side、trade_type
+    // 使用 Binance 推送的 rp 作为已实现盈亏，开仓时 rp=0
     let (pnl, trade_side, trade_type) = match &pos_key_opt {
         Some(key) => {
             let pos_entry = inner.positions.get(key);
             match pos_entry {
                 Some(pe) => {
                     let pos = pe.value();
-                    if is_reduce_only {
-                        let p = match pos.side {
-                            PositionSide::Long => (avg_price - pos.entry_price) * trade_fill,
-                            PositionSide::Short => (pos.entry_price - avg_price) * trade_fill,
-                        };
+                    if is_close {
                         let side = match pos.side {
                             PositionSide::Long => Side::Sell,
                             PositionSide::Short => Side::Buy,
                         };
-                        (p, side, TradeType::Close)
+                        (realized_pnl, side, TradeType::Close)
                     } else {
                         let side = match pos.side {
                             PositionSide::Long => Side::Buy,
@@ -694,7 +706,7 @@ async fn process_order_fill(
         if let Some(key) = &pos_key_opt {
             let pos_entry = inner.positions.get(key).map(|r| r.value().clone());
             if let Some(mut position) = pos_entry {
-                if is_reduce_only {
+                if is_close {
                     position.size -= filled;
                     if position.size.abs() < 1e-8 {
                         position.size = 0.0;
