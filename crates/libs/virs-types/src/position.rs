@@ -123,9 +123,6 @@ pub enum EngineCommand {
     PlaceOrder {
         params: PlaceOrderParams,
     },
-    CancelOrder {
-        client_order_id: String,
-    },
     CancelAllOrders {
         position_id: Option<Uuid>,
         symbol: Option<String>,

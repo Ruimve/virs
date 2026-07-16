@@ -72,10 +72,6 @@ pub enum OrderCommand {
         position_id: Option<Uuid>,
         client_order_id: Option<String>,
     },
-    CancelOrder {
-        order_id: Uuid,
-        symbol: String,
-    },
     CancelAllOrders {
         symbol: Option<String>,
     },

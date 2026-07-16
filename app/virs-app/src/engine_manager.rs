@@ -311,7 +311,6 @@ impl EngineManager for AppEngineManager {
         let mut position_engine = PositionEngine::new(
             pe_exchange,
             pe_persistence,
-            std::time::Duration::from_secs(self.time_config.close_order_timeout_secs),
             self.time_config.retry.persist_max_retries,
             self.time_config.retry.persist_retry_base_ms,
         );

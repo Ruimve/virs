@@ -63,8 +63,6 @@ pub(crate) struct EngineInner {
     pub(crate) tracker: Mutex<PnlTracker>,
     pub(crate) state: RwLock<EngineState>,
     pub(crate) position_id_index: DashMap<Uuid, (String, String, PositionSide)>,
-    #[allow(dead_code)]
-    pub(crate) close_order_timeout: Duration,
     pub(crate) persist_max_retries: u32,
     pub(crate) persist_retry_base_ms: u64,
 }
@@ -112,7 +110,6 @@ impl PositionEngine {
     pub fn new(
         exchange: Box<dyn ExchangePe>,
         persistence: Box<dyn PositionPersistence>,
-        close_order_timeout: Duration,
         persist_max_retries: u32,
         persist_retry_base_ms: u64,
     ) -> Self {
@@ -131,7 +128,6 @@ impl PositionEngine {
             pending_orders: DashMap::new(),
             order_position: DashMap::new(),
             position_id_index: DashMap::new(),
-            close_order_timeout,
             persist_max_retries,
             persist_retry_base_ms,
         };
@@ -261,6 +257,43 @@ impl PositionEngine {
             self.inner
                 .orders
                 .insert(order.client_order_id.clone(), order.clone());
+
+            // NEW 开仓订单（无成交）对应的 Opening 仓位不会被聚合 SQL 恢复
+            // 需手动创建，否则 WS 成交时 position_id_index 查不到 key，仓位更新被跳过
+            let is_open_order = matches!(
+                (&order.side, &order.position_side),
+                (Side::Buy, PositionSide::Long) | (Side::Sell, PositionSide::Short)
+            );
+            if is_open_order {
+                let key = (exchange_name.clone(), order.symbol.clone(), order.position_side);
+                if !self.inner.positions.contains_key(&key) {
+                    let now = Utc::now();
+                    let position = Position {
+                        id: pos_id,
+                        strategy_id: None,
+                        exchange: exchange_name.clone(),
+                        symbol: order.symbol.clone(),
+                        side: order.position_side,
+                        status: PositionStatus::Opening,
+                        size: 0.0,
+                        entry_price: 0.0,
+                        current_price: 0.0,
+                        leverage: 0,
+                        margin: 0.0,
+                        unrealized_pnl: 0.0,
+                        realized_pnl: 0.0,
+                        stop_loss: None,
+                        take_profit: None,
+                        liquidation_price: None,
+                        opened_at: now,
+                        updated_at: now,
+                        closed_at: None,
+                        metadata: serde_json::Value::Null,
+                    };
+                    self.inner.position_id_index.insert(pos_id, key.clone());
+                    self.inner.positions.insert(key, position);
+                }
+            }
         }
 
         // 3. 恢复仓位到交易所适配器
@@ -410,9 +443,6 @@ pub(crate) async fn command_loop(
             }
             EngineCommand::PlaceOrder { params } => {
                 handle_place_order(&inner, params).await;
-            }
-            EngineCommand::CancelOrder { client_order_id } => {
-                handle_cancel_order(&inner, client_order_id).await;
             }
             EngineCommand::CancelAllOrders {
                 position_id,
@@ -760,6 +790,10 @@ async fn process_order_fill(
                 }
             }
         }
+
+        // 已成交订单终态清理：避免 orders / order_position 无限增长
+        inner.orders.remove(client_order_id);
+        inner.order_position.remove(client_order_id);
     }
 }
 
@@ -1094,47 +1128,25 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
             inner.pending_orders.remove(&client_order_id);
             let msg = format!("Failed to place order: {}", e);
             error!(error = %e, symbol = %symbol_for_error, "Failed to place order");
-            inner.emit_event(EngineEvent::OrderFailed {
-                client_order_id,
-                reason: msg,
-            });
-        }
-    }
-}
 
-
-pub(crate) async fn handle_cancel_order(inner: &Arc<EngineInner>, client_order_id: String) {
-    // 从 orders 中获取订单信息
-    let (symbol, exchange_order_id) = {
-        let order = inner.orders.get(&client_order_id);
-        match order {
-            Some(o) => (o.symbol.clone(), o.order_id.to_string()),
-            None => {
-                // 可能在 pending 中
-                if let Some(pending) = inner.pending_orders.get(&client_order_id) {
-                    if let Some(rest_result) = &pending.rest_result {
-                        // 用 REST 返回的 order_id 撤单
-                        (pending.params.symbol.clone(), rest_result.order_id.clone())
-                    } else {
-                        warn!(client_order_id = %client_order_id, "Cancel order: order not yet placed");
-                        return;
-                    }
-                } else {
-                    warn!(client_order_id = %client_order_id, "Cancel order: order not found");
-                    return;
+            // 回滚幽灵 Opening 仓位：place_order 失败后，若仓位仍为 Opening + size=0，说明无订单成功下达
+            let pos_key = inner
+                .position_id_index
+                .get(&position_id)
+                .map(|r| r.value().clone());
+            if let Some(key) = pos_key {
+                let should_remove = inner
+                    .positions
+                    .get(&key)
+                    .map(|p| p.status == PositionStatus::Opening && p.size == 0.0)
+                    .unwrap_or(false);
+                if should_remove {
+                    inner.positions.remove(&key);
+                    inner.position_id_index.remove(&position_id);
+                    warn!(position_id = %position_id, "Removed ghost Opening position after place_order failure");
                 }
             }
-        }
-    };
 
-    match inner.exchange.cancel_order(&symbol, &exchange_order_id).await {
-        Ok(_result) => {
-            // WS 会推送 CANCELED 状态
-            // 可以立即从 orders 中移除或等待 WS
-        }
-        Err(e) => {
-            let msg = format!("Failed to cancel order: {}", e);
-            error!(error = %e, client_order_id = %client_order_id, "Cancel order failed");
             inner.emit_event(EngineEvent::OrderFailed {
                 client_order_id,
                 reason: msg,

@@ -155,7 +155,7 @@ impl AutoWorker {
     }
 
 
-    pub(crate) async fn refresh_position_from_pe(&mut self) {
+    pub(crate) async fn refresh_position_from_pe(&mut self) -> bool {
         match self
             .order_executor
             .query_open_position(&self.bot.symbol)
@@ -187,9 +187,10 @@ impl AutoWorker {
                     }
                 }
                 self.current_position = Some(pe_pos);
+                true
             }
             Ok(Some(_)) => {
-
+                true
             }
             Ok(None) => {
 
@@ -200,9 +201,11 @@ impl AutoWorker {
                     );
                     self.current_position = None;
                 }
+                true
             }
             Err(e) => {
                 warn!(bot_id = %self.bot.id, error = %e, "Failed to query PE for position, relying on cached state");
+                false
             }
         }
     }
@@ -347,18 +350,25 @@ impl AutoWorker {
         }
 
 
-        if self
-            .bot
-            .position_id
-            .filter(|id| *id != Uuid::nil())
-            .is_none()
+        // 先从 PE 查询当前仓位，可能恢复 position_id（PE 已从 pe_orders 聚合恢复）
+        // 避免在 PE 有仓位时误判为孤儿 trade
+        let pe_ok = self.refresh_position_from_pe().await;
+
+        // 仅在 PE 查询成功且确认无仓位时才检测孤儿 trade
+        // PE 报错时跳过，避免误标
+        if pe_ok
+            && self
+                .bot
+                .position_id
+                .filter(|id| *id != Uuid::nil())
+                .is_none()
         {
             match self.store.find_open_trade(self.bot.id).await {
                 Ok(Some((client_order_id, _sl, _tp, _opened_at))) => {
                     warn!(
                         bot_id = %self.bot.id,
                         client_order_id = %client_order_id,
-                        "Orphaned trade detected: open trade exists but bot.position_id is empty, marking as orphaned"
+                        "Orphaned trade detected: open trade exists but bot.position_id is empty and PE confirms no position, marking as orphaned"
                     );
                     if let Err(e) = self.store.mark_trade_orphaned(&client_order_id).await {
                         warn!(bot_id = %self.bot.id, client_order_id = %client_order_id, error = %e, "Failed to mark trade as orphaned");
@@ -420,8 +430,6 @@ impl AutoWorker {
                     );
                 }
             }
-
-            self.refresh_position_from_pe().await;
 
             if self.current_position.is_none() {
 
@@ -1446,19 +1454,22 @@ impl AutoWorker {
                 if position.symbol != self.bot.symbol {
                     return;
                 }
-                if let Some(pid) = self.bot.position_id {
-                    if pid == position.id {
-                        self.current_position = None;
+                let is_ours = match self.bot.position_id.filter(|id| *id != Uuid::nil()) {
+                    Some(pid) => pid == position.id,
+                    None => self.current_position.is_some(),
+                };
+                if !is_ours {
+                    return;
+                }
+                self.current_position = None;
 
-                        self.bot.position_id = None;
-                        if let Err(e) = self
-                            .store
-                            .update_position(self.bot.id, self.bot.position_id)
-                            .await
-                        {
-                            warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
-                        }
-                    }
+                self.bot.position_id = None;
+                if let Err(e) = self
+                    .store
+                    .update_position(self.bot.id, self.bot.position_id)
+                    .await
+                {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
                 }
             }
             EngineEvent::PositionOpened { position } => {
@@ -1490,7 +1501,9 @@ impl AutoWorker {
                 }
 
 
-                if order.position_id.is_some() && self.bot.position_id.is_none() {
+                if order.position_id.filter(|id| *id != Uuid::nil()).is_some()
+                    && self.bot.position_id.filter(|id| *id != Uuid::nil()).is_none()
+                {
                     self.bot.position_id = order.position_id;
                 }
 

@@ -135,12 +135,6 @@ impl OrderExecutor for PeOrderExecutor {
                     client_order_id,
                 },
             },
-            OrderCommand::CancelOrder {
-                order_id,
-                symbol: _,
-            } => EngineCommand::CancelOrder {
-                client_order_id: order_id.to_string(),
-            },
             OrderCommand::CancelAllOrders { symbol } => EngineCommand::CancelAllOrders {
                 position_id: None,
                 symbol,
