@@ -124,7 +124,7 @@ pub struct CcxtOrder {
     pub realized_pnl: String,                // 该交易实现盈亏
 
     // --- 订单属性 ---
-    pub reduce_only: bool,                   // 是否仅减仓
+    pub reduce_only: bool,                   // 是否仅减仓 (exchange-native 字段, 业务层不使用)
     pub is_maker: bool,                      // 是否为挂单成交
     pub close_position: Option<bool>,        // 是否为触发平仓单 (仅在条件订单情况下推送)
     pub time_in_force: String,               // 有效方式 (GTC/IOC/FOK/GTX)

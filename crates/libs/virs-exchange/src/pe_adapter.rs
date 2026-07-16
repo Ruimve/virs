@@ -203,7 +203,6 @@ impl ExchangePe for CcxtExchangeAdapter {
     // 下单 → Exchange.place_order_with_options() → POST /fapi/v1/order
     async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<OrderResult> {
         let ex = self.get_perpetual_exchange().ok_or_else(no_exchange_error)?;
-        let reduce_only_param = if params.reduce_only { Some(true) } else { None };
         let virs_order = ex
             .place_order_with_options(
                 &params.symbol,
@@ -211,7 +210,6 @@ impl ExchangePe for CcxtExchangeAdapter {
                 convert_order_type(&params.order_type),
                 params.amount,
                 params.price,
-                reduce_only_param,
                 convert_position_side(&params.position_side),
                 params.client_order_id.as_deref(),
             )

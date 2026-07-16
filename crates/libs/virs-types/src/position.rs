@@ -81,7 +81,6 @@ pub struct PlaceOrderParams {
     pub order_type: OrderType,
     pub amount: f64,
     pub price: Option<f64>,
-    pub reduce_only: bool,
     pub position_side: Option<PositionSide>,
     pub position_id: Option<Uuid>,
     pub client_order_id: Option<String>,

@@ -344,7 +344,7 @@ CREATE TABLE IF NOT EXISTS pe_orders (
     realized_pnl        TEXT NOT NULL DEFAULT '0',   -- rp 该交易实现盈亏
 
     -- 订单属性
-    reduce_only         BOOLEAN NOT NULL DEFAULT FALSE, -- R 是否仅减仓
+    reduce_only         BOOLEAN NOT NULL DEFAULT FALSE, -- R 是否仅减仓 (exchange-native, 业务层不使用)
     is_maker            BOOLEAN NOT NULL DEFAULT FALSE, -- m 是否为挂单成交
     close_position      BOOLEAN,                     -- cp 是否为触发平仓单
     time_in_force       TEXT NOT NULL DEFAULT 'GTC', -- f  有效方式

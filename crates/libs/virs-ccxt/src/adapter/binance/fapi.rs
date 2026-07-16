@@ -565,14 +565,6 @@ pub async fn create_order(
     };
     body["positionSide"] = serde_json::json!(position_side);
 
-
-    // 仅减仓标记，仅对单向模式有效，双向模式下由 positionSide 决定
-    if let Some(reduce) = params.reduce_only {
-        if reduce {
-            body["reduceOnly"] = serde_json::json!(true);
-        }
-    }
-
     let data = client
         .signed_post(signer, &url("/fapi/v1/order"), body)
         .await?;

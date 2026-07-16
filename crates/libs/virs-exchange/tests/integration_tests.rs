@@ -80,7 +80,6 @@ async fn int_2_2_paper_market_order_updates_balance() {
         price: None,
         position_id: None,
         client_order_id: None,
-        reduce_only: false,
         position_side: Some(PositionSide::Long),
     };
     let order = paper.place_order(params).await.unwrap();

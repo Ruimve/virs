@@ -134,7 +134,7 @@ pub struct OrderTradeUpdateData {
     pub is_maker: bool,  // m→是否为maker
 
     #[serde(rename = "R")]
-    pub is_reduce_only: bool,  // R→是否仅减仓
+    pub reduce_only: bool,  // R→是否仅减仓 (exchange-native, 业务层不使用)
 
     #[serde(rename = "wt")]
     pub working_type: Option<String>,  // wt→工作类型
@@ -266,7 +266,7 @@ impl OrderTradeUpdateData {
                 .realized_pnl
                 .clone()
                 .unwrap_or_default(),
-            reduce_only: self.is_reduce_only,
+            reduce_only: self.reduce_only,
             is_maker: self.is_maker,
             close_position: self.is_close_all,
             time_in_force: self.time_in_force.clone(),

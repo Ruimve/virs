@@ -450,7 +450,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
     let avg_price: f64 = ws_order.avg_fill_price.parse().unwrap_or(0.0);
     let commission: f64 = ws_order.commission.parse().unwrap_or(0.0);
     let realized_pnl: f64 = ws_order.realized_pnl.parse().unwrap_or(0.0);
-    // Hedge 模式下 reduce_only 无意义，开平仓由 side + position_side 组合判断
+    // Hedge 模式下开平仓由 side + position_side 组合判断
     let is_close = matches!(
         (&ws_order.side, &ws_order.position_side),
         (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short)
@@ -557,7 +557,7 @@ async fn finalize_pending_order(
     let avg_price: f64 = ws_order.avg_fill_price.parse().unwrap_or(0.0);
     let commission: f64 = ws_order.commission.parse().unwrap_or(0.0);
     let realized_pnl: f64 = ws_order.realized_pnl.parse().unwrap_or(0.0);
-    // Hedge 模式下 reduce_only 无意义，开平仓由 side + position_side 组合判断
+    // Hedge 模式下开平仓由 side + position_side 组合判断
     let is_close = matches!(
         (&ws_order.side, &ws_order.position_side),
         (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short)
@@ -798,7 +798,6 @@ pub(crate) async fn handle_open_position(
             order_type,
             amount: size,
             price,
-            reduce_only: false,
             position_side: Some(side),
             position_id: Some(position_id),
             client_order_id: strategy_id.clone(),
@@ -886,7 +885,6 @@ pub(crate) async fn handle_open_position(
         order_type,
         amount: size,
         price,
-        reduce_only: false,
         position_side: Some(side),
         position_id: Some(position_id),
         client_order_id: strategy_id.clone(),
@@ -947,7 +945,6 @@ pub(crate) async fn handle_close_position(
         order_type,
         amount: position.size,
         price,
-        reduce_only: true,
         position_side: Some(position.side),
         position_id: Some(position.id),
         client_order_id: strategy_id.clone(),
@@ -998,14 +995,11 @@ pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol:
 
 pub(crate) fn resolve_position_side_for_hedge(params: &mut PlaceOrderParams) {
     if params.position_side.is_none() {
-        params.position_side = match (&params.side, params.reduce_only) {
-            (Side::Buy, false) => Some(PositionSide::Long),
-            (Side::Sell, false) => Some(PositionSide::Short),
-            (Side::Sell, true) => Some(PositionSide::Long),
-            (Side::Buy, true) => Some(PositionSide::Short),
+        params.position_side = match &params.side {
+            Side::Buy => Some(PositionSide::Long),
+            Side::Sell => Some(PositionSide::Short),
         };
     }
-    params.reduce_only = false;
 }
 
 

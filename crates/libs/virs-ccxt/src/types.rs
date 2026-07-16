@@ -44,7 +44,6 @@ pub struct PlaceOrderParams {
     pub client_order_id: Option<String>,
     pub stop_price: Option<f64>,
     pub time_in_force: Option<TimeInForce>,
-    pub reduce_only: Option<bool>,
     pub leverage: Option<u32>,
     pub margin_mode: Option<MarginMode>,
     pub position_side: Option<PositionSide>,

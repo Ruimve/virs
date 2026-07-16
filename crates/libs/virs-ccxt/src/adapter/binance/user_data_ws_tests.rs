@@ -128,7 +128,7 @@ fn test_order_status_mapping_all_variants() {
             commission: "0.0".to_string(),
             commission_asset: "USDT".to_string(),
             trade_time: 0,
-            is_reduce_only: false,
+            reduce_only: false,
             working_type: "CONTRACT_PRICE".to_string(),
             position_side: None,
         };
@@ -235,7 +235,7 @@ fn test_to_ws_feed_event_remaining_fallback() {
         commission: "0.195".to_string(),
         commission_asset: "USDT".to_string(),
         trade_time: 1713900000123,
-        is_reduce_only: false,
+        reduce_only: false,
         working_type: "CONTRACT_PRICE".to_string(),
         position_side: None,
     };
@@ -300,7 +300,7 @@ fn make_test_inner(
         commission: commission.to_string(),
         commission_asset: "USDT".to_string(),
         trade_time: 1713900000123,
-        is_reduce_only: false,
+        reduce_only: false,
         working_type: "CONTRACT_PRICE".to_string(),
         position_side: None,
     }

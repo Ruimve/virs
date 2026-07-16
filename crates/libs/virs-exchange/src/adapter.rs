@@ -192,7 +192,6 @@ impl Exchange for CcxtAdapter {
         order_type: OrderType,
         amount: f64,
         price: Option<f64>,
-        reduce_only: Option<bool>,
         position_side: Option<PositionSide>,
         client_order_id: Option<&str>,
     ) -> Result<Order, ExchangeError> {
@@ -210,7 +209,6 @@ impl Exchange for CcxtAdapter {
             client_order_id: client_order_id.map(|s| s.to_string()),
             stop_price: None,
             time_in_force: None,
-            reduce_only,
             leverage: None,
             margin_mode: None,
             position_side: ccxt_position_side,

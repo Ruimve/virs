@@ -68,7 +68,6 @@ pub enum OrderCommand {
         side: OrderSide,
         amount: f64,
         price: Option<f64>,
-        reduce_only: bool,
         position_side: Option<BotPositionSide>,
         position_id: Option<Uuid>,
         client_order_id: Option<String>,

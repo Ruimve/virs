@@ -124,7 +124,7 @@ pub struct AlgoOrder {
     pub price_protection: bool,
 
     #[serde(rename = "R")]
-    pub is_reduce_only: bool,
+    pub reduce_only: bool,
 
     #[serde(rename = "tt")]
     pub trigger_time: i64,

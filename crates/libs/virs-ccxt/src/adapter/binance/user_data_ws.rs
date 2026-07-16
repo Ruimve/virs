@@ -135,7 +135,7 @@ pub struct BinanceOrderInner {
     pub(crate) trade_time: i64,  // T→成交时间(ms)
 
     #[serde(rename = "R")]
-    pub(crate) is_reduce_only: bool,  // R→是否仅减仓
+    pub(crate) reduce_only: bool,  // R→是否仅减仓 (exchange-native)
 
     #[serde(rename = "w")]
     pub(crate) working_type: String,  // w→工作类型(逐仓/全仓)
@@ -196,7 +196,7 @@ impl BinanceOrderInner {
             commission: self.commission.clone(),
             commission_asset: self.commission_asset.clone(),
             realized_pnl: String::new(),
-            reduce_only: self.is_reduce_only,
+            reduce_only: self.reduce_only,
             is_maker: false,
             close_position: None,
             time_in_force: String::new(),

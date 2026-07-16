@@ -110,7 +110,6 @@ impl OrderExecutor for PeOrderExecutor {
                 side,
                 amount,
                 price,
-                reduce_only,
                 position_side,
                 position_id,
                 client_order_id,
@@ -128,7 +127,6 @@ impl OrderExecutor for PeOrderExecutor {
                     },
                     amount,
                     price,
-                    reduce_only,
                     position_side: position_side.map(|ps| match ps {
                         BotPositionSide::Long => PositionSide::Long,
                         BotPositionSide::Short => PositionSide::Short,

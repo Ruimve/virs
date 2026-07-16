@@ -318,7 +318,7 @@ impl GridWorker {
             return;
         }
 
-        let (amount, reduce_only, position_side) = match (dir, level.side.as_str()) {
+        let (amount, is_close, position_side) = match (dir, level.side.as_str()) {
             (OrderDir::Buy, "sell") => (
                 level.hold_quantity.abs().min(level.quantity),
                 true,
@@ -337,18 +337,17 @@ impl GridWorker {
         let client_order_id = Some(client_order_id::format_grid_order(
             self.bot.id,
             level.level,
-            !reduce_only,
+            !is_close,
             position_side_str,
         ));
 
-        let cmd = if reduce_only {
+        let cmd = if is_close {
 
             OrderCommand::PlaceOrder {
                 symbol: self.bot.symbol.clone(),
                 side,
                 amount,
                 price: Some(price),
-                reduce_only: true,
                 position_side: Some(position_side),
                 position_id: None,
                 client_order_id,

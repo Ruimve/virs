@@ -1379,7 +1379,6 @@ impl AutoWorker {
                     side: order_side,
                     amount: position_size,
                     price: None,
-                    reduce_only: true,
                     position_side,
                     position_id: None,
                     client_order_id: Some(client_order_id.clone()),
