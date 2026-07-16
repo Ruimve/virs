@@ -15,7 +15,7 @@ use virs_types::position::*;
 use virs_types::CcxtOrder;
 use virs_error::{VirsError, VirsResult};
 
-use crate::persistence::PositionPersistence;
+use crate::persistence::{position_uuid_v5, PositionPersistence};
 use crate::tracker::PnlTracker;
 
 
@@ -237,14 +237,34 @@ impl PositionEngine {
 
 
     async fn recover_state(&self) -> VirsResult<()> {
-        let open_positions = self.inner.persistence.get_open_positions().await?;
-        for pos in &open_positions {
+        let exchange_name = self.inner.exchange.name().to_string();
+
+        // 1. 从 pe_orders 聚合恢复仓位
+        let positions = self
+            .inner
+            .persistence
+            .get_positions_from_orders(&exchange_name)
+            .await?;
+        for pos in &positions {
             let key = (pos.exchange.clone(), pos.symbol.clone(), pos.side);
             self.inner.position_id_index.insert(pos.id, key.clone());
             self.inner.positions.insert(key, pos.clone());
         }
 
-        let exchange_positions: Vec<ExchangePosition> = open_positions
+        // 2. 恢复活跃订单和 order_position 映射
+        let active_orders = self.inner.persistence.get_active_orders().await?;
+        for order in &active_orders {
+            let pos_id = position_uuid_v5(&exchange_name, &order.symbol, order.position_side);
+            self.inner
+                .order_position
+                .insert(order.client_order_id.clone(), pos_id);
+            self.inner
+                .orders
+                .insert(order.client_order_id.clone(), order.clone());
+        }
+
+        // 3. 恢复仓位到交易所适配器
+        let exchange_positions: Vec<ExchangePosition> = positions
             .iter()
             .map(|p| ExchangePosition {
                 symbol: p.symbol.clone(),
@@ -261,6 +281,7 @@ impl PositionEngine {
             .restore_positions(exchange_positions)
             .await;
 
+        // 4. 与交易所全量同步（修正 leverage / current_price / unrealized_pnl 等）
         self.full_sync().await;
         Ok(())
     }
@@ -278,14 +299,9 @@ impl PositionEngine {
                             pos.current_price = ep.entry_price;
                             pos.unrealized_pnl = ep.unrealized_pnl;
                             pos.liquidation_price = ep.liquidation_price;
+                            pos.leverage = ep.leverage;
                             pos.updated_at = Utc::now();
                             drop(local);
-                            persist!(
-                                self.inner.persistence.upsert_position(&pos),
-                                "Failed to persist position in full_sync",
-                                self.inner.persist_max_retries,
-                                self.inner.persist_retry_base_ms
-                            );
                             self.inner.positions.insert(key, pos.clone());
 
                             self.inner
@@ -294,7 +310,7 @@ impl PositionEngine {
                         None => {
                             let now = Utc::now();
                             let position = Position {
-                                id: Uuid::new_v4(),
+                                id: position_uuid_v5(&exchange_name, &ep.symbol, ep.side),
                                 strategy_id: None,
                                 exchange: exchange_name.clone(),
                                 symbol: ep.symbol.clone(),
@@ -327,12 +343,6 @@ impl PositionEngine {
                             self.inner
                                 .position_id_index
                                 .insert(position.id, new_key.clone());
-                            persist!(
-                                self.inner.persistence.upsert_position(&position),
-                                "Failed to persist new position in full_sync",
-                                self.inner.persist_max_retries,
-                                self.inner.persist_retry_base_ms
-                            );
                             self.inner.positions.insert(new_key, position.clone());
 
                             self.inner.emit_event(EngineEvent::PositionOpened {
@@ -482,8 +492,8 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
         persist!(
             inner.persistence.upsert_order(&ws_order),
             "upsert_order",
-            3,
-            100
+            inner.persist_max_retries,
+            inner.persist_retry_base_ms
         );
 
         let trade_fill = filled - prev_filled;
@@ -548,8 +558,8 @@ async fn finalize_pending_order(
     persist!(
         inner.persistence.upsert_order(&ws_order),
         "upsert_order",
-        3,
-        100
+        inner.persist_max_retries,
+        inner.persist_retry_base_ms
     );
 
     let order_status: OrderStatus = ws_order.status.clone().into();
@@ -748,13 +758,6 @@ async fn process_order_fill(
                         position: pos_clone.clone(),
                     });
                 }
-
-                persist!(
-                    inner.persistence.upsert_position(&pos_clone),
-                    "Failed to persist position after order fill",
-                    inner.persist_max_retries,
-                    inner.persist_retry_base_ms
-                );
             }
         }
     }
@@ -837,7 +840,7 @@ pub(crate) async fn handle_open_position(
     }
 
     let now = Utc::now();
-    let position_id = Uuid::new_v4();
+    let position_id = position_uuid_v5(&exchange_name, &symbol, side);
     let position = Position {
         id: position_id,
         strategy_id: strategy_id.clone(),
@@ -863,12 +866,6 @@ pub(crate) async fn handle_open_position(
 
     inner.position_id_index.insert(position.id, key.clone());
     inner.positions.insert(key, position.clone());
-    persist!(
-        inner.persistence.upsert_position(&position),
-        "Failed to persist position in open_position",
-        inner.persist_max_retries,
-        inner.persist_retry_base_ms
-    );
     inner.emit_event(EngineEvent::PositionOpened {
         position: position.clone(),
     });
@@ -1010,11 +1007,11 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
     let position_id = match params.position_id {
         Some(pid) => pid,
         None => {
-            let pos_id = Uuid::new_v4();
             let position_side = params
                 .position_side
                 .expect("position_side must be resolved by resolve_position_side_for_hedge");
             let exchange_name = inner.exchange.name().to_string();
+            let pos_id = position_uuid_v5(&exchange_name, &params.symbol, position_side);
             let key = (exchange_name.clone(), params.symbol.clone(), position_side);
 
             if let Some(existing) = inner.positions.get(&key) {
@@ -1044,12 +1041,6 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
                 };
                 inner.position_id_index.insert(pos_id, key.clone());
                 inner.positions.insert(key, position.clone());
-                persist!(
-                    inner.persistence.upsert_position(&position),
-                    "Failed to persist auto-created position",
-                    inner.persist_max_retries,
-                    inner.persist_retry_base_ms
-                );
                 pos_id
             }
         }

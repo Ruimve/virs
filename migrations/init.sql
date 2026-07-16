@@ -250,36 +250,10 @@ CREATE TABLE IF NOT EXISTS qd_auto_analysis_logs (
 CREATE INDEX IF NOT EXISTS idx_auto_analysis_logs_bot ON qd_auto_analysis_logs(bot_id, created_at DESC);
 
 -- ============================================================
--- Position Engine (pe_positions)
+-- Position Engine (pe_orders)
 -- ============================================================
--- pe_positions: 引擎重启后快速恢复内存仓位状态
 -- pe_orders: 订单完整生命周期持久化，按 client_order_id 更新
-
-CREATE TABLE IF NOT EXISTS pe_positions (
-    id              UUID PRIMARY KEY,
-    strategy_id     TEXT,
-    exchange        TEXT NOT NULL,
-    symbol          TEXT NOT NULL,
-    side            TEXT NOT NULL CHECK (side IN ('Long', 'Short')),
-    status          TEXT NOT NULL,
-    size            DOUBLE PRECISION NOT NULL,
-    entry_price     DOUBLE PRECISION NOT NULL,
-    current_price   DOUBLE PRECISION NOT NULL,
-    leverage        INT NOT NULL,
-    margin          DOUBLE PRECISION NOT NULL,
-    unrealized_pnl  DOUBLE PRECISION NOT NULL,
-    realized_pnl    DOUBLE PRECISION NOT NULL,
-    stop_loss       DOUBLE PRECISION,
-    take_profit     DOUBLE PRECISION,
-    liquidation_price DOUBLE PRECISION,
-    opened_at       TIMESTAMPTZ NOT NULL,
-    updated_at      TIMESTAMPTZ NOT NULL,
-    closed_at       TIMESTAMPTZ,
-    metadata        JSONB NOT NULL DEFAULT '{}',
-    UNIQUE (exchange, symbol, side)
-);
-
-CREATE INDEX IF NOT EXISTS idx_pe_positions_status ON pe_positions (status);
+-- 仓位状态从 pe_orders 聚合派生，不再使用 pe_positions 表
 
 -- ============================================================
 -- Position Engine Orders (pe_orders)
