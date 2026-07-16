@@ -110,42 +110,30 @@ CREATE TABLE IF NOT EXISTS qd_grid_bots (
 CREATE INDEX IF NOT EXISTS idx_grid_bots_user ON qd_grid_bots(user_id);
 CREATE INDEX IF NOT EXISTS idx_grid_bots_status ON qd_grid_bots(status);
 
--- Grid Trades（开/平仓对）
-CREATE TABLE IF NOT EXISTS qd_grid_trades (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    bot_id UUID NOT NULL REFERENCES qd_grid_bots(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
-    symbol TEXT NOT NULL,
-    exchange TEXT NOT NULL,
-    grid_level INT NOT NULL,
+-- Grid Order Context（业务上下文，价格/数量/pnl 从 pe_orders 取）
+CREATE TABLE IF NOT EXISTS pe_grid_order_context (
+    client_order_id        TEXT PRIMARY KEY REFERENCES pe_orders(client_order_id) ON DELETE CASCADE,
+    bot_id                 UUID NOT NULL REFERENCES qd_grid_bots(id) ON DELETE CASCADE,
+    user_id                UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
+    symbol                 TEXT NOT NULL,
+    exchange               TEXT NOT NULL,
+    grid_level             INT NOT NULL,
 
-    -- 开仓
-    open_side TEXT NOT NULL CHECK (open_side IN ('buy', 'sell')),
-    open_price DOUBLE PRECISION NOT NULL,
-    open_quantity DOUBLE PRECISION NOT NULL,
-    open_order_id TEXT,
-    opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- 订单角色: open=开仓, close=平仓
+    order_role             TEXT NOT NULL CHECK (order_role IN ('open', 'close')),
 
-    -- 平仓（未平仓时为 NULL）
-    close_side TEXT CHECK (close_side IN ('buy', 'sell')),
-    close_price DOUBLE PRECISION,
-    close_quantity DOUBLE PRECISION,
-    close_order_id TEXT,
-    closed_at TIMESTAMPTZ,
+    -- 配对状态: open=持仓中, closed=已平仓, orphaned=孤儿记录
+    status                 TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'orphaned')),
 
-    -- 盈亏
-    pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
-    pnl_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
+    -- 配对关联: close 行指向 open 行的 client_order_id
+    paired_client_order_id TEXT REFERENCES pe_grid_order_context(client_order_id),
 
-    -- 状态：open=持仓中, closed=已平仓, orphaned=孤儿记录（无对应开仓）
-    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'orphaned')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_grid_trades_bot ON qd_grid_trades(bot_id);
-CREATE INDEX IF NOT EXISTS idx_grid_trades_user ON qd_grid_trades(user_id);
-CREATE INDEX IF NOT EXISTS idx_grid_trades_status ON qd_grid_trades(bot_id, status);
-CREATE INDEX IF NOT EXISTS idx_grid_trades_created ON qd_grid_trades(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_grid_ctx_bot ON pe_grid_order_context(bot_id, status);
+CREATE INDEX IF NOT EXISTS idx_grid_ctx_pair ON pe_grid_order_context(paired_client_order_id);
+CREATE INDEX IF NOT EXISTS idx_grid_ctx_level ON pe_grid_order_context(bot_id, grid_level, status);
 
 -- Grid LLM 分析日志
 CREATE TABLE IF NOT EXISTS qd_grid_analysis_logs (
@@ -209,50 +197,33 @@ CREATE TABLE IF NOT EXISTS qd_auto_bots (
 CREATE INDEX IF NOT EXISTS idx_auto_bots_user ON qd_auto_bots(user_id);
 CREATE INDEX IF NOT EXISTS idx_auto_bots_status ON qd_auto_bots(status);
 
--- Auto Trades（开/平仓对模型，与 qd_grid_trades 语义一致）
-CREATE TABLE IF NOT EXISTS qd_auto_trades (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    bot_id UUID NOT NULL REFERENCES qd_auto_bots(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
-    symbol TEXT NOT NULL,
-    exchange TEXT NOT NULL,
+-- Auto Order Context（业务上下文，价格/数量/pnl 从 pe_orders 取）
+CREATE TABLE IF NOT EXISTS pe_auto_order_context (
+    client_order_id        TEXT PRIMARY KEY REFERENCES pe_orders(client_order_id) ON DELETE CASCADE,
+    bot_id                 UUID NOT NULL REFERENCES qd_auto_bots(id) ON DELETE CASCADE,
+    user_id                UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
+    symbol                 TEXT NOT NULL,
+    exchange               TEXT NOT NULL,
 
-    -- 开仓
-    open_side TEXT NOT NULL CHECK (open_side IN ('buy', 'sell')),
-    open_price DOUBLE PRECISION NOT NULL,
-    open_quantity DOUBLE PRECISION NOT NULL,
-    open_order_id TEXT,
-    open_fee DOUBLE PRECISION NOT NULL DEFAULT 0,
-    opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- 订单角色: open=开仓, close=平仓
+    order_role             TEXT NOT NULL CHECK (order_role IN ('open', 'close')),
 
-    -- 平仓（未平仓时为 NULL）
-    close_side TEXT CHECK (close_side IN ('buy', 'sell')),
-    close_price DOUBLE PRECISION,
-    close_quantity DOUBLE PRECISION,
-    close_order_id TEXT,
-    close_fee DOUBLE PRECISION NOT NULL DEFAULT 0,
-    closed_at TIMESTAMPTZ,
+    -- 配对状态: open=持仓中, closed=已平仓, orphaned=孤儿记录
+    status                 TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'orphaned')),
 
-    -- 盈亏（平仓后填入：pnl = gross_pnl - open_fee - close_fee）
-    pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
-    pnl_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
+    -- 配对关联: close 行指向 open 行的 client_order_id
+    paired_client_order_id TEXT REFERENCES pe_auto_order_context(client_order_id),
 
-    -- 风控边界（开仓时记录，trailing stop 更新时覆盖，用于审计与前端展示）
-    stop_loss DOUBLE PRECISION NOT NULL DEFAULT 0,
-    take_profit DOUBLE PRECISION NOT NULL DEFAULT 0,
+    -- Auto 专属字段
+    stop_loss              DOUBLE PRECISION NOT NULL DEFAULT 0,
+    take_profit            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    close_reason           TEXT CHECK (close_reason IS NULL OR close_reason IN ('stop_loss', 'take_profit', 'position_timeout', 'llm_decision')),
 
-    -- 平仓原因：stop_loss/take_profit/position_timeout/llm_decision
-    -- 由代码逻辑决定（不由 LLM 决定），用于冷却期判断和前端展示
-    close_reason TEXT CHECK (close_reason IS NULL OR close_reason IN ('stop_loss', 'take_profit', 'position_timeout', 'llm_decision')),
-
-    -- 状态：open=持仓中, closed=已平仓, orphaned=孤儿记录（无对应开仓）
-    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'orphaned')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_auto_trades_bot ON qd_auto_trades(bot_id, opened_at DESC);
-CREATE INDEX IF NOT EXISTS idx_auto_trades_user ON qd_auto_trades(user_id);
-CREATE INDEX IF NOT EXISTS idx_auto_trades_status ON qd_auto_trades(bot_id, status);
+CREATE INDEX IF NOT EXISTS idx_auto_ctx_bot ON pe_auto_order_context(bot_id, status);
+CREATE INDEX IF NOT EXISTS idx_auto_ctx_pair ON pe_auto_order_context(paired_client_order_id);
 
 -- Auto LLM 分析日志
 CREATE TABLE IF NOT EXISTS qd_auto_analysis_logs (
@@ -269,7 +240,7 @@ CREATE TABLE IF NOT EXISTS qd_auto_analysis_logs (
     -- 执行回填字段（在订单成交/拦截发生时回填）
     -- intercept_reason: LLM 决策被代码拦截时的原因（如冷却期/置信度不足）
     -- execution_status: open=开仓成功, open_failed=开仓失败, close=平仓成功, close_failed=平仓失败, hold=观望
-    -- 注：close_reason 不在此表，已记录在 qd_auto_trades.close_reason
+    -- 注：close_reason 不在此表，已记录在 pe_auto_order_context.close_reason
     intercept_reason TEXT,
     execution_status TEXT CHECK (execution_status IS NULL OR execution_status IN ('open', 'open_failed', 'close', 'close_failed', 'hold')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

@@ -261,7 +261,8 @@ pub async fn get_bot(
     let trades_rows = sqlx::query_as::<
         _,
         (
-            uuid::Uuid,
+            String,
+            Option<String>,
             i32,
             String,
             f64,
@@ -270,15 +271,31 @@ pub async fn get_bot(
             Option<f64>,
             Option<f64>,
             f64,
-            f64,
-            String,
             chrono::DateTime<chrono::Utc>,
             Option<chrono::DateTime<chrono::Utc>>,
+            String,
         ),
     >(
-        r#"SELECT id, grid_level, open_side, open_price, open_quantity,
-           close_side, close_price, close_quantity, pnl, pnl_pct, status, opened_at, closed_at
-           FROM qd_grid_trades WHERE bot_id = $1 ORDER BY opened_at DESC LIMIT 50"#,
+        r#"SELECT
+             open_ctx.client_order_id AS open_client_order_id,
+             close_ctx.client_order_id AS close_client_order_id,
+             open_ctx.grid_level,
+             LOWER(open_ord.side) AS open_side,
+             open_ord.avg_fill_price::float AS open_price,
+             open_ord.filled_qty::float AS open_quantity,
+             CASE WHEN close_ord.side IS NOT NULL THEN LOWER(close_ord.side) END AS close_side,
+             close_ord.avg_fill_price::float AS close_price,
+             close_ord.filled_qty::float AS close_quantity,
+             COALESCE(close_ord.realized_pnl::float, 0) AS pnl,
+             open_ctx.created_at AS opened_at,
+             close_ctx.created_at AS closed_at,
+             open_ctx.status
+           FROM pe_grid_order_context open_ctx
+           JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+           LEFT JOIN pe_grid_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
+           LEFT JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+           WHERE open_ctx.bot_id = $1 AND open_ctx.order_role = 'open'
+           ORDER BY open_ctx.created_at DESC LIMIT 50"#,
     )
     .bind(id)
     .fetch_all(&state.db_pool)
@@ -292,7 +309,8 @@ pub async fn get_bot(
         .iter()
         .map(
             |(
-                tid,
+                open_cid,
+                _close_cid,
                 level,
                 side,
                 open_p,
@@ -301,13 +319,17 @@ pub async fn get_bot(
                 close_p,
                 close_qty,
                 pnl,
-                pnl_pct,
-                t_status,
                 opened_at,
                 closed_at,
+                t_status,
             )| {
+                let pnl_pct = if *open_p > 0.0 && *open_qty > 0.0 {
+                    pnl / (open_p * open_qty) * 100.0
+                } else {
+                    0.0
+                };
                 serde_json::json!({
-                    "id": tid.to_string(),
+                    "id": open_cid,
                     "bot_id": id.to_string(),
                     "grid_level": level,
                     "open_side": side,
@@ -450,7 +472,7 @@ pub async fn get_trades(
 
 
     let total: i64 = sqlx::query_scalar::<_, i64>(
-        r#"SELECT COUNT(*) FROM qd_grid_trades WHERE bot_id = $1 AND user_id = $2"#,
+        r#"SELECT COUNT(*) FROM pe_grid_order_context WHERE bot_id = $1 AND user_id = $2 AND order_role = 'open'"#,
     )
     .bind(id)
     .bind(user_id)
@@ -461,7 +483,8 @@ pub async fn get_trades(
     let trades = sqlx::query_as::<
         _,
         (
-            uuid::Uuid,
+            String,
+            Option<String>,
             i32,
             String,
             f64,
@@ -470,16 +493,31 @@ pub async fn get_trades(
             Option<f64>,
             Option<f64>,
             f64,
-            f64,
-            String,
             chrono::DateTime<chrono::Utc>,
             Option<chrono::DateTime<chrono::Utc>>,
+            String,
         ),
     >(
-        r#"SELECT id, grid_level, open_side, open_price, open_quantity,
-           close_side, close_price, close_quantity, pnl, pnl_pct, status, opened_at, closed_at
-           FROM qd_grid_trades WHERE bot_id = $1 AND user_id = $2
-           ORDER BY opened_at DESC LIMIT $3 OFFSET $4"#,
+        r#"SELECT
+             open_ctx.client_order_id AS open_client_order_id,
+             close_ctx.client_order_id AS close_client_order_id,
+             open_ctx.grid_level,
+             LOWER(open_ord.side) AS open_side,
+             open_ord.avg_fill_price::float AS open_price,
+             open_ord.filled_qty::float AS open_quantity,
+             CASE WHEN close_ord.side IS NOT NULL THEN LOWER(close_ord.side) END AS close_side,
+             close_ord.avg_fill_price::float AS close_price,
+             close_ord.filled_qty::float AS close_quantity,
+             COALESCE(close_ord.realized_pnl::float, 0) AS pnl,
+             open_ctx.created_at AS opened_at,
+             close_ctx.created_at AS closed_at,
+             open_ctx.status
+           FROM pe_grid_order_context open_ctx
+           JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+           LEFT JOIN pe_grid_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
+           LEFT JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+           WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.order_role = 'open'
+           ORDER BY open_ctx.created_at DESC LIMIT $3 OFFSET $4"#,
     )
     .bind(id)
     .bind(user_id)
@@ -489,9 +527,14 @@ pub async fn get_trades(
     .await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
-        "trades": trades.iter().map(|(tid, level, open_side, open_p, open_qty, close_side, close_p, close_qty, pnl, pnl_pct, status, opened_at, closed_at)| {
+        "trades": trades.iter().map(|(open_cid, _close_cid, level, open_side, open_p, open_qty, close_side, close_p, close_qty, pnl, opened_at, closed_at, status)| {
+            let pnl_pct = if *open_p > 0.0 && *open_qty > 0.0 {
+                pnl / (open_p * open_qty) * 100.0
+            } else {
+                0.0
+            };
             serde_json::json!({
-                "id": tid.to_string(),
+                "id": open_cid,
                 "bot_id": id.to_string(),
                 "grid_level": level,
                 "open_side": open_side,
@@ -522,10 +565,14 @@ pub async fn get_stats(
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
 
-    let trades = sqlx::query_as::<_, (f64, f64, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT pnl, pnl_pct, opened_at
-           FROM qd_grid_trades WHERE bot_id = $1 AND user_id = $2 AND status = 'closed'
-           ORDER BY opened_at ASC"#,
+    let trades = sqlx::query_as::<_, (f64, chrono::DateTime<chrono::Utc>)>(
+        r#"SELECT COALESCE(close_ord.realized_pnl::float, 0) AS pnl, open_ctx.created_at AS opened_at
+           FROM pe_grid_order_context open_ctx
+           JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+           JOIN pe_grid_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id AND close_ctx.order_role = 'close'
+           JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+           WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.status = 'closed'
+           ORDER BY open_ctx.created_at ASC"#,
     )
     .bind(id)
     .bind(user_id)
@@ -600,7 +647,7 @@ pub async fn get_stats(
         let mut total_diff_ms = 0i64;
         let mut count = 0i64;
         for i in 1..trades.len() {
-            let diff = trades[i].2.timestamp_millis() - trades[i - 1].2.timestamp_millis();
+            let diff = trades[i].1.timestamp_millis() - trades[i - 1].1.timestamp_millis();
             if diff > 0 {
                 total_diff_ms += diff;
                 count += 1;

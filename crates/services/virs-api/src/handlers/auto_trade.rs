@@ -21,24 +21,22 @@ pub struct TradesQuery {
 
 #[derive(Debug, FromRow)]
 struct AutoTradeRow {
-    id: uuid::Uuid,
+    open_client_order_id: String,
+    close_client_order_id: Option<String>,
     bot_id: uuid::Uuid,
     symbol: String,
     exchange: String,
     open_side: String,
     open_price: f64,
     open_quantity: f64,
-    open_order_id: Option<String>,
     open_fee: f64,
     opened_at: chrono::DateTime<chrono::Utc>,
     close_side: Option<String>,
     close_price: Option<f64>,
     close_quantity: Option<f64>,
-    close_order_id: Option<String>,
     close_fee: f64,
     closed_at: Option<chrono::DateTime<chrono::Utc>>,
     pnl: f64,
-    pnl_pct: f64,
     stop_loss: f64,
     take_profit: f64,
     close_reason: Option<String>,
@@ -366,7 +364,7 @@ pub async fn get_trades(
 
 
     let total: i64 = sqlx::query_scalar::<_, i64>(
-        r#"SELECT COUNT(*) FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2"#,
+        r#"SELECT COUNT(*) FROM pe_auto_order_context WHERE bot_id = $1 AND user_id = $2 AND order_role = 'open'"#,
     )
     .bind(id)
     .bind(user_id)
@@ -375,13 +373,33 @@ pub async fn get_trades(
 
 
     let trades = sqlx::query_as::<_, AutoTradeRow>(
-        r#"SELECT id, bot_id, symbol, exchange,
-                  open_side, open_price, open_quantity, open_order_id, open_fee, opened_at,
-                  close_side, close_price, close_quantity, close_order_id, close_fee, closed_at,
-                  pnl, pnl_pct, stop_loss, take_profit,
-                  close_reason, status
-           FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2
-           ORDER BY opened_at DESC LIMIT $3 OFFSET $4"#,
+        r#"SELECT
+             open_ctx.client_order_id AS open_client_order_id,
+             close_ctx.client_order_id AS close_client_order_id,
+             open_ctx.bot_id,
+             open_ctx.symbol,
+             open_ctx.exchange,
+             LOWER(open_ord.side) AS open_side,
+             open_ord.avg_fill_price::float AS open_price,
+             open_ord.filled_qty::float AS open_quantity,
+             open_ord.commission::float AS open_fee,
+             open_ctx.created_at AS opened_at,
+             CASE WHEN close_ord.side IS NOT NULL THEN LOWER(close_ord.side) END AS close_side,
+             close_ord.avg_fill_price::float AS close_price,
+             close_ord.filled_qty::float AS close_quantity,
+             COALESCE(close_ord.commission::float, 0) AS close_fee,
+             close_ctx.created_at AS closed_at,
+             COALESCE(close_ord.realized_pnl::float, 0) AS pnl,
+             open_ctx.stop_loss,
+             open_ctx.take_profit,
+             close_ctx.close_reason,
+             open_ctx.status
+           FROM pe_auto_order_context open_ctx
+           JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+           LEFT JOIN pe_auto_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
+           LEFT JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+           WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.order_role = 'open'
+           ORDER BY open_ctx.created_at DESC LIMIT $3 OFFSET $4"#,
     )
     .bind(id)
     .bind(user_id)
@@ -392,25 +410,30 @@ pub async fn get_trades(
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "trades": trades.iter().map(|t| {
+            let pnl_pct = if t.open_price > 0.0 && t.open_quantity > 0.0 {
+                t.pnl / (t.open_price * t.open_quantity) * 100.0
+            } else {
+                0.0
+            };
             serde_json::json!({
-                "id": t.id.to_string(),
+                "id": t.open_client_order_id,
                 "bot_id": t.bot_id.to_string(),
                 "symbol": t.symbol,
                 "exchange": t.exchange,
                 "open_side": t.open_side,
                 "open_price": t.open_price,
                 "open_quantity": t.open_quantity,
-                "open_order_id": t.open_order_id,
+                "open_order_id": t.open_client_order_id,
                 "open_fee": t.open_fee,
                 "opened_at": t.opened_at.to_rfc3339(),
                 "close_side": t.close_side,
                 "close_price": t.close_price,
                 "close_quantity": t.close_quantity,
-                "close_order_id": t.close_order_id,
+                "close_order_id": t.close_client_order_id,
                 "close_fee": t.close_fee,
-                "closed_at": t.closed_at.map(|t| t.to_rfc3339()),
+                "closed_at": t.closed_at.map(|c| c.to_rfc3339()),
                 "pnl": t.pnl,
-                "pnl_pct": t.pnl_pct,
+                "pnl_pct": pnl_pct,
                 "stop_loss": t.stop_loss,
                 "take_profit": t.take_profit,
                 "close_reason": t.close_reason,
@@ -439,14 +462,24 @@ pub async fn get_stats(
             f64,
             f64,
             f64,
-            f64,
             chrono::DateTime<chrono::Utc>,
             chrono::DateTime<chrono::Utc>,
         ),
     >(
-        r#"SELECT open_price, open_quantity, open_fee, close_fee, pnl, pnl_pct, opened_at, closed_at
-           FROM qd_auto_trades WHERE bot_id = $1 AND user_id = $2 AND status = 'closed'
-           ORDER BY closed_at ASC"#,
+        r#"SELECT
+             open_ord.avg_fill_price::float AS open_price,
+             open_ord.filled_qty::float AS open_quantity,
+             open_ord.commission::float AS open_fee,
+             COALESCE(close_ord.commission::float, 0) AS close_fee,
+             COALESCE(close_ord.realized_pnl::float, 0) AS pnl,
+             open_ctx.created_at AS opened_at,
+             close_ctx.created_at AS closed_at
+           FROM pe_auto_order_context open_ctx
+           JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+           JOIN pe_auto_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id AND close_ctx.order_role = 'close'
+           JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+           WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.status = 'closed'
+           ORDER BY close_ctx.created_at ASC"#,
     )
     .bind(id)
     .bind(user_id)
@@ -507,7 +540,7 @@ pub async fn get_stats(
     let mut total_hold_ms = 0i64;
     let mut pair_count = 0i64;
     for t in &trades {
-        let hold_ms = t.7.timestamp_millis() - t.6.timestamp_millis();
+        let hold_ms = t.6.timestamp_millis() - t.5.timestamp_millis();
         if hold_ms > 0 {
             total_hold_ms += hold_ms;
             pair_count += 1;

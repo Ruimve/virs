@@ -50,7 +50,6 @@
 | S2.3 | `s2_3_login_request_deserialize` | LoginRequest 反序列化 |
 | S2.4 | `s2_4_create_user_request_with_role_none` | CreateUserRequest (role=None) 反序列化 |
 | S3.1 | `s3_1_grid_bot_roundtrip` | GridBot serde 往返 |
-| S3.2 | `s3_2_grid_trade_roundtrip` | GridTrade serde 往返 |
 | S4.1 | `s4_1_auto_bot_roundtrip` | AutoBot serde 往返 |
 | S4.2 | `s4_2_auto_trade_roundtrip` | AutoTrade serde 往返 |
 

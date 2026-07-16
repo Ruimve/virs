@@ -472,42 +472,33 @@ impl GridWorker {
         self.update_consecutive_losses(pnl);
 
         if is_open {
-            if let Some(trade_id) = self
-                .record_open_trade(level_num, side_str, price, order.filled, order.id)
-                .await
-            {
-                self.levels[idx].trade_id = Some(trade_id);
+            let client_order_id = order
+                .client_order_id
+                .as_deref()
+                .unwrap_or("unknown");
+            if self.record_open_trade(level_num, client_order_id).await {
+                self.levels[idx].open_client_order_id = Some(client_order_id.to_string());
             }
         } else {
-            let trade_id = if let Some(tid) = self.levels[idx].trade_id {
-                Some(tid)
-            } else {
-                self.store
-                    .find_open_trade(self.bot.id, level_num)
-                    .await
-                    .ok()
-                    .flatten()
-            };
-            if let Some(tid) = trade_id {
-                self.record_close_trade(
-                    tid,
-                    level_num,
-                    side_str,
-                    price,
-                    order.filled,
-                    entry_price,
-                    pnl,
-                    order.id,
-                )
-                .await;
+            let close_client_order_id = order
+                .client_order_id
+                .as_deref()
+                .unwrap_or("unknown");
+            let open_client_order_id =
+                if let Some(ref oid) = self.levels[idx].open_client_order_id {
+                    Some(oid.clone())
+                } else {
+                    self.store
+                        .find_open_trade(self.bot.id, level_num)
+                        .await
+                        .ok()
+                        .flatten()
+                };
+            if let Some(open_oid) = open_client_order_id {
+                self.record_close_trade(open_oid, close_client_order_id, level_num)
+                    .await;
             } else {
                 warn!(bot_id = %self.bot.id, level = level_num, side = %side_str, price, quantity = order.filled, pnl, "No open trade found for close, recording as orphaned");
-                let pnl_pct = if entry_price > 0.0 && order.filled > 0.0 {
-                    pnl / (entry_price * order.filled) * 100.0
-                } else {
-                    0.0
-                };
-                let order_id_str = order.id.to_string();
                 if let Err(e) = self
                     .store
                     .record_orphaned_close_trade(
@@ -516,19 +507,14 @@ impl GridWorker {
                         &self.bot.symbol,
                         &self.bot.exchange,
                         level_num,
-                        side_str,
-                        price,
-                        order.filled,
-                        Some(&order_id_str),
-                        pnl,
-                        pnl_pct,
+                        close_client_order_id,
                     )
                     .await
                 {
                     warn!(bot_id = %self.bot.id, error = %e, "Failed to record orphaned close trade");
                 }
             }
-            self.levels[idx].trade_id = None;
+            self.levels[idx].open_client_order_id = None;
         }
 
         self.place_reverse_order_if_cycle_complete(idx, &level_side, side_str, hold)
@@ -678,9 +664,13 @@ impl GridWorker {
 
         for trade in &trades {
             if trade.close_side.is_none() {
-                if let Some(level_idx) = self.find_level_by_price_within(trade.open_price, max_dist)
+                if let Some(level_idx) = self
+                    .levels
+                    .iter()
+                    .position(|l| l.level == trade.grid_level)
                 {
-                    self.levels[level_idx].trade_id = Some(trade.id);
+                    self.levels[level_idx].open_client_order_id =
+                        Some(trade.open_client_order_id.clone());
                 }
             }
         }
@@ -829,15 +819,7 @@ impl GridWorker {
         }
     }
 
-    async fn record_open_trade(
-        &self,
-        level: i32,
-        side: &str,
-        price: f64,
-        quantity: f64,
-        order_id: Uuid,
-    ) -> Option<Uuid> {
-        let order_id_str = order_id.to_string();
+    async fn record_open_trade(&self, level: i32, client_order_id: &str) -> bool {
         match self
             .store
             .record_open_trade(
@@ -846,57 +828,35 @@ impl GridWorker {
                 &self.bot.symbol,
                 &self.bot.exchange,
                 level,
-                side,
-                price,
-                quantity,
-                Some(&order_id_str),
+                client_order_id,
             )
             .await
         {
-            Ok(trade_id) => {
-                info!(bot_id = %self.bot.id, level, trade_id = %trade_id, "Open trade recorded");
-                Some(trade_id)
+            Ok(()) => {
+                info!(bot_id = %self.bot.id, level, client_order_id, "Open trade recorded");
+                true
             }
             Err(e) => {
                 warn!(bot_id = %self.bot.id, level, error = %e, "Failed to record open trade");
-                None
+                false
             }
         }
     }
 
     async fn record_close_trade(
         &self,
-        trade_id: Uuid,
+        open_client_order_id: String,
+        close_client_order_id: &str,
         level: i32,
-        side: &str,
-        price: f64,
-        quantity: f64,
-        entry_price: f64,
-        pnl: f64,
-        order_id: Uuid,
     ) {
-        let pnl_pct = if entry_price > 0.0 && quantity > 0.0 {
-            pnl / (entry_price * quantity) * 100.0
-        } else {
-            0.0
-        };
-        let order_id_str = order_id.to_string();
         if let Err(e) = self
             .store
-            .close_trade(
-                trade_id,
-                side,
-                price,
-                quantity,
-                Some(&order_id_str),
-                pnl,
-                pnl_pct,
-            )
+            .close_trade(&open_client_order_id, close_client_order_id)
             .await
         {
-            warn!(bot_id = %self.bot.id, level, trade_id = %trade_id, error = %e, "Failed to close trade record");
+            warn!(bot_id = %self.bot.id, level, open_client_order_id = %open_client_order_id, error = %e, "Failed to close trade record");
         } else {
-            info!(bot_id = %self.bot.id, level, trade_id = %trade_id, pnl, "Close trade recorded");
+            info!(bot_id = %self.bot.id, level, open_client_order_id = %open_client_order_id, "Close trade recorded");
         }
     }
 
@@ -1465,7 +1425,7 @@ impl GridWorker {
                     level.buy_filled = false;
                     level.sell_filled = false;
                     level.last_fill_price = None;
-                    level.trade_id = None;
+                    level.open_client_order_id = None;
                     level.buy_order_id = None;
                     level.sell_order_id = None;
                 } else {
@@ -1474,7 +1434,7 @@ impl GridWorker {
                     level.buy_filled = old.buy_filled;
                     level.sell_filled = old.sell_filled;
                     level.last_fill_price = old.last_fill_price;
-                    level.trade_id = old.trade_id;
+                    level.open_client_order_id = old.open_client_order_id.clone();
                 }
             }
         }

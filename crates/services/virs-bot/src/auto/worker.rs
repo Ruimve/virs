@@ -61,7 +61,7 @@ pub struct AutoWorker {
 
     pub(crate) current_position: Option<Position>,
 
-    pub(crate) current_trade_id: Option<Uuid>,
+    pub(crate) current_open_client_order_id: Option<String>,
 
 
     pub(crate) current_log_id: Option<Uuid>,
@@ -107,7 +107,7 @@ impl AutoWorker {
             position_opened_at: None,
             trailing_stop_dirty: false,
             current_position: None,
-            current_trade_id: None,
+            current_open_client_order_id: None,
             current_log_id: None,
             current_open_fee: 0.0,
             stop_loss: 0.0,
@@ -354,14 +354,14 @@ impl AutoWorker {
             .is_none()
         {
             match self.store.find_open_trade(self.bot.id).await {
-                Ok(Some((trade_id, _sl, _tp, _opened_at))) => {
+                Ok(Some((client_order_id, _sl, _tp, _opened_at))) => {
                     warn!(
                         bot_id = %self.bot.id,
-                        trade_id = %trade_id,
+                        client_order_id = %client_order_id,
                         "Orphaned trade detected: open trade exists but bot.position_id is empty, marking as orphaned"
                     );
-                    if let Err(e) = self.store.mark_trade_orphaned(trade_id).await {
-                        warn!(bot_id = %self.bot.id, trade_id = %trade_id, error = %e, "Failed to mark trade as orphaned");
+                    if let Err(e) = self.store.mark_trade_orphaned(&client_order_id).await {
+                        warn!(bot_id = %self.bot.id, client_order_id = %client_order_id, error = %e, "Failed to mark trade as orphaned");
                     }
                 }
                 Ok(None) => {
@@ -383,8 +383,8 @@ impl AutoWorker {
 
 
             match self.store.find_open_trade(self.bot.id).await {
-                Ok(Some((trade_id, sl, tp, opened_at))) => {
-                    self.current_trade_id = Some(trade_id);
+                Ok(Some((client_order_id, sl, tp, opened_at))) => {
+                    self.current_open_client_order_id = Some(client_order_id);
                     self.stop_loss = sl;
                     self.take_profit = tp;
 
@@ -658,11 +658,11 @@ impl AutoWorker {
             self.stop_loss = new_stop;
             self.trailing_stop_dirty = true;
 
-            if let Some(trade_id) = self.current_trade_id {
+            if let Some(client_order_id) = self.current_open_client_order_id.clone() {
                 let store = self.store.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = store.update_trade_stop_loss(trade_id, new_stop).await {
-                        warn!(trade_id = %trade_id, error = %e, "Failed to update trade stop_loss");
+                    if let Err(e) = store.update_trade_stop_loss(&client_order_id, new_stop).await {
+                        warn!(client_order_id = %client_order_id, error = %e, "Failed to update trade stop_loss");
                     }
                 });
             }
@@ -1622,17 +1622,9 @@ impl AutoWorker {
                 return;
             }
         };
-        let trade_side = match pending.side.as_str() {
-            "long" => "buy",
-            "short" => "sell",
-            _ => {
-                error!(side = %pending.side, "Unknown pending side — skipping trade record");
-                return;
-            }
-        };
-
 
         self.current_open_fee = fee;
+        let client_order_id = pending.client_order_id.clone();
         match self
             .store
             .record_open_trade(
@@ -1640,19 +1632,15 @@ impl AutoWorker {
                 self.bot.user_id,
                 &self.bot.symbol,
                 &self.bot.exchange,
-                trade_side,
-                fill_price,
-                actual_qty,
-                fee,
-                None,
+                &client_order_id,
                 stop_loss,
                 take_profit,
             )
             .await
         {
-            Ok(trade_id) => {
-                self.current_trade_id = Some(trade_id);
-                info!(bot_id = %self.bot.id, trade_id = %trade_id, trade_type, stop_loss, take_profit, "Open trade recorded");
+            Ok(()) => {
+                info!(bot_id = %self.bot.id, client_order_id = %client_order_id, trade_type, stop_loss, take_profit, "Open trade recorded");
+                self.current_open_client_order_id = Some(client_order_id);
             }
             Err(e) => {
                 error!(bot_id = %self.bot.id, error = %e, "Failed to record open trade");
@@ -1713,7 +1701,7 @@ impl AutoWorker {
         info!(
             bot_id = %self.bot.id, side = %pending.side,
             entry_price = pending.entry_price, close_price = fill_price,
-            quantity = actual_qty, realized_pnl,
+            quantity = actual_qty, realized_pnl, pnl_pct,
             close_reason = %pending.close_reason,
             open_fee = self.current_open_fee, close_fee = fee, total_fee,
             "Position closed"
@@ -1745,63 +1733,34 @@ impl AutoWorker {
         self.save_position().await;
         self.save_stats().await;
 
-        let close_side = match pending.side.as_str() {
-            "long" => "sell",
-            "short" => "buy",
-            _ => {
-                error!(side = %pending.side, "Unknown pending side — skipping trade record");
-                return;
-            }
-        };
-
         let close_reason = &pending.close_reason;
+        let close_client_order_id = pending.client_order_id.clone();
 
-
-        let trade_id = self.current_trade_id.take();
-        match trade_id {
-            Some(tid) => {
+        let open_client_order_id = self.current_open_client_order_id.take();
+        match open_client_order_id {
+            Some(open_oid) => {
                 if let Err(e) = self
                     .store
-                    .close_trade(
-                        tid,
-                        close_side,
-                        fill_price,
-                        actual_qty,
-                        None,
-                        fee,
-                        realized_pnl,
-                        pnl_pct,
-                        close_reason,
-                    )
+                    .close_trade(&open_oid, &close_client_order_id, close_reason)
                     .await
                 {
-                    error!(bot_id = %self.bot.id, trade_id = %tid, error = %e, "Failed to close trade record");
+                    error!(bot_id = %self.bot.id, open_client_order_id = %open_oid, error = %e, "Failed to close trade record");
                 } else {
-                    info!(bot_id = %self.bot.id, trade_id = %tid, realized_pnl, "Close trade recorded");
+                    info!(bot_id = %self.bot.id, open_client_order_id = %open_oid, realized_pnl, "Close trade recorded");
                 }
             }
             None => {
 
                 match self.store.find_open_trade(self.bot.id).await {
-                    Ok(Some((tid, _sl, _tp, _opened_at))) => {
+                    Ok(Some((open_oid, _sl, _tp, _opened_at))) => {
                         if let Err(e) = self
                             .store
-                            .close_trade(
-                                tid,
-                                close_side,
-                                fill_price,
-                                actual_qty,
-                                None,
-                                fee,
-                                realized_pnl,
-                                pnl_pct,
-                                close_reason,
-                            )
+                            .close_trade(&open_oid, &close_client_order_id, close_reason)
                             .await
                         {
-                            error!(bot_id = %self.bot.id, trade_id = %tid, error = %e, "Failed to close trade record (recovered)");
+                            error!(bot_id = %self.bot.id, open_client_order_id = %open_oid, error = %e, "Failed to close trade record (recovered)");
                         } else {
-                            info!(bot_id = %self.bot.id, trade_id = %tid, "Close trade recorded (recovered from DB)");
+                            info!(bot_id = %self.bot.id, open_client_order_id = %open_oid, "Close trade recorded (recovered from DB)");
                         }
                     }
                     Ok(None) => {
@@ -1813,13 +1772,7 @@ impl AutoWorker {
                                 self.bot.user_id,
                                 &self.bot.symbol,
                                 &self.bot.exchange,
-                                close_side,
-                                fill_price,
-                                actual_qty,
-                                None,
-                                fee,
-                                realized_pnl,
-                                pnl_pct,
+                                &close_client_order_id,
                                 close_reason,
                             )
                             .await

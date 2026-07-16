@@ -16,7 +16,7 @@ fn make_level() -> GridLevel {
         hold_quantity: 1.5,
         avg_buy_price: 104.5,
         last_fill_price: Some(105.0),
-        trade_id: Some(Uuid::new_v4()),
+        open_client_order_id: Some("test-order-id".to_string()),
     }
 }
 
@@ -31,7 +31,7 @@ fn t1_1_reset_for_relist_clears_state() {
     assert!((reset.hold_quantity - 0.0).abs() < 1e-10);
     assert!((reset.avg_buy_price - 0.0).abs() < 1e-10);
     assert!(reset.last_fill_price.is_none());
-    assert!(reset.trade_id.is_none());
+    assert!(reset.open_client_order_id.is_none());
 }
 
 #[test]

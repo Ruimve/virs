@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use tracing::warn;
 use uuid::Uuid;
@@ -59,26 +60,71 @@ impl GridStore for PgGridStore {
     }
 
     async fn load_trades(&self, bot_id: Uuid) -> VirsResult<Vec<GridTradeRecord>> {
-        let trades: Vec<virs_models::GridTrade> =
-            sqlx::query_as("SELECT * FROM qd_grid_trades WHERE bot_id = $1 ORDER BY opened_at ASC")
-                .bind(bot_id)
-                .fetch_all(&self.db)
-                .await?;
+        let rows: Vec<(
+            String,
+            Option<String>,
+            i32,
+            String,
+            f64,
+            f64,
+            Option<String>,
+            Option<f64>,
+            Option<f64>,
+            f64,
+            DateTime<Utc>,
+        )> = sqlx::query_as(
+            r#"SELECT
+                  open_ctx.client_order_id AS open_client_order_id,
+                  close_ctx.client_order_id AS close_client_order_id,
+                  open_ctx.grid_level,
+                  LOWER(open_ord.side) AS open_side,
+                  open_ord.avg_fill_price::float AS open_price,
+                  open_ord.filled_qty::float AS open_quantity,
+                  CASE WHEN close_ord.side IS NOT NULL THEN LOWER(close_ord.side) END AS close_side,
+                  close_ord.avg_fill_price::float AS close_price,
+                  close_ord.filled_qty::float AS close_quantity,
+                  COALESCE(close_ord.realized_pnl::float, 0) AS pnl,
+                  open_ctx.created_at AS opened_at
+               FROM pe_grid_order_context open_ctx
+               JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+               LEFT JOIN pe_grid_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
+               LEFT JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+               WHERE open_ctx.bot_id = $1 AND open_ctx.order_role = 'open'
+               ORDER BY open_ctx.created_at ASC"#,
+        )
+        .bind(bot_id)
+        .fetch_all(&self.db)
+        .await?;
 
-        Ok(trades
+        Ok(rows
             .into_iter()
-            .map(|t| GridTradeRecord {
-                id: t.id,
-                grid_level: t.grid_level,
-                open_side: t.open_side,
-                open_price: t.open_price,
-                open_quantity: t.open_quantity,
-                close_side: t.close_side,
-                close_price: t.close_price,
-                close_quantity: t.close_quantity,
-                pnl: t.pnl,
-                opened_at: t.opened_at,
-            })
+            .map(
+                |(
+                    open_client_order_id,
+                    close_client_order_id,
+                    grid_level,
+                    open_side,
+                    open_price,
+                    open_quantity,
+                    close_side,
+                    close_price,
+                    close_quantity,
+                    pnl,
+                    opened_at,
+                )| GridTradeRecord {
+                    open_client_order_id,
+                    close_client_order_id,
+                    grid_level,
+                    open_side,
+                    open_price,
+                    open_quantity,
+                    close_side,
+                    close_price,
+                    close_quantity,
+                    pnl,
+                    opened_at,
+                },
+            )
             .collect())
     }
 
@@ -89,63 +135,66 @@ impl GridStore for PgGridStore {
         symbol: &str,
         exchange: &str,
         grid_level: i32,
-        open_side: &str,
-        open_price: f64,
-        open_quantity: f64,
-        open_order_id: Option<&str>,
-    ) -> VirsResult<Uuid> {
-        let row: (Uuid,) = sqlx::query_as(
-            r#"INSERT INTO qd_grid_trades (bot_id, user_id, symbol, exchange, grid_level, open_side, open_price, open_quantity, open_order_id, status)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open')
-               RETURNING id"#,
+        client_order_id: &str,
+    ) -> VirsResult<()> {
+        sqlx::query(
+            r#"INSERT INTO pe_grid_order_context
+               (client_order_id, bot_id, user_id, symbol, exchange, grid_level, order_role, status)
+               VALUES ($1, $2, $3, $4, $5, $6, 'open', 'open')"#,
         )
-        .bind(bot_id).bind(user_id).bind(symbol).bind(exchange)
-        .bind(grid_level).bind(open_side).bind(open_price).bind(open_quantity)
-        .bind(open_order_id)
-        .fetch_one(&self.db).await?;
-        Ok(row.0)
+        .bind(client_order_id)
+        .bind(bot_id)
+        .bind(user_id)
+        .bind(symbol)
+        .bind(exchange)
+        .bind(grid_level)
+        .execute(&self.db)
+        .await?;
+        Ok(())
     }
 
     async fn close_trade(
         &self,
-        trade_id: Uuid,
-        close_side: &str,
-        close_price: f64,
-        close_quantity: f64,
-        close_order_id: Option<&str>,
-        pnl: f64,
-        pnl_pct: f64,
+        open_client_order_id: &str,
+        close_client_order_id: &str,
     ) -> VirsResult<()> {
-        let pnl_pct = crate::adapters::utils::sanitize_pnl_pct(pnl_pct);
         let result = sqlx::query(
-            r#"UPDATE qd_grid_trades SET
-               close_side = $2, close_price = $3, close_quantity = $4,
-               close_order_id = $5, closed_at = NOW(),
-               pnl = $6, pnl_pct = $7, status = 'closed'
-               WHERE id = $1 AND status = 'open'"#,
+            r#"UPDATE pe_grid_order_context SET status = 'closed'
+               WHERE client_order_id = $1 AND order_role = 'open' AND status = 'open'"#,
         )
-        .bind(trade_id)
-        .bind(close_side)
-        .bind(close_price)
-        .bind(close_quantity)
-        .bind(close_order_id)
-        .bind(pnl)
-        .bind(pnl_pct)
+        .bind(open_client_order_id)
         .execute(&self.db)
         .await?;
 
         if result.rows_affected() == 0 {
-            warn!(trade_id = %trade_id, "close_trade: no open trade found");
+            warn!(open_client_order_id = %open_client_order_id, "close_trade: no open trade found");
         }
+
+        sqlx::query(
+            r#"INSERT INTO pe_grid_order_context
+               (client_order_id, bot_id, user_id, symbol, exchange, grid_level, order_role, status, paired_client_order_id)
+               SELECT $1, bot_id, user_id, symbol, exchange, grid_level, 'close', 'closed', client_order_id
+               FROM pe_grid_order_context
+               WHERE client_order_id = $2 AND order_role = 'open'"#,
+        )
+        .bind(close_client_order_id)
+        .bind(open_client_order_id)
+        .execute(&self.db)
+        .await?;
+
         Ok(())
     }
 
-    async fn find_open_trade(&self, bot_id: Uuid, grid_level: i32) -> VirsResult<Option<Uuid>> {
-        let row: Option<(Uuid,)> = sqlx::query_as(
-            "SELECT id FROM qd_grid_trades WHERE bot_id = $1 AND grid_level = $2 AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
+    async fn find_open_trade(&self, bot_id: Uuid, grid_level: i32) -> VirsResult<Option<String>> {
+        let row: Option<(String,)> = sqlx::query_as(
+            r#"SELECT client_order_id FROM pe_grid_order_context
+               WHERE bot_id = $1 AND grid_level = $2 AND order_role = 'open' AND status = 'open'
+               ORDER BY created_at DESC LIMIT 1"#,
         )
-        .bind(bot_id).bind(grid_level)
-        .fetch_optional(&self.db).await?;
+        .bind(bot_id)
+        .bind(grid_level)
+        .fetch_optional(&self.db)
+        .await?;
         Ok(row.map(|r| r.0))
     }
 
@@ -156,25 +205,22 @@ impl GridStore for PgGridStore {
         symbol: &str,
         exchange: &str,
         grid_level: i32,
-        close_side: &str,
-        close_price: f64,
-        close_quantity: f64,
-        close_order_id: Option<&str>,
-        pnl: f64,
-        pnl_pct: f64,
-    ) -> VirsResult<Uuid> {
-        let open_side = crate::adapters::utils::derive_open_side(close_side);
-        let pnl_pct = crate::adapters::utils::sanitize_pnl_pct(pnl_pct);
-        let row: (Uuid,) = sqlx::query_as(
-            r#"INSERT INTO qd_grid_trades (bot_id, user_id, symbol, exchange, grid_level, open_side, open_price, open_quantity, close_side, close_price, close_quantity, close_order_id, closed_at, pnl, pnl_pct, status)
-               VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, NOW(), $12, $13, 'orphaned')
-               RETURNING id"#,
+        close_client_order_id: &str,
+    ) -> VirsResult<()> {
+        sqlx::query(
+            r#"INSERT INTO pe_grid_order_context
+               (client_order_id, bot_id, user_id, symbol, exchange, grid_level, order_role, status)
+               VALUES ($1, $2, $3, $4, $5, $6, 'close', 'orphaned')"#,
         )
-        .bind(bot_id).bind(user_id).bind(symbol).bind(exchange).bind(grid_level)
-        .bind(open_side).bind(close_quantity).bind(close_side).bind(close_price)
-        .bind(close_quantity).bind(close_order_id).bind(pnl).bind(pnl_pct)
-        .fetch_one(&self.db).await?;
-        Ok(row.0)
+        .bind(close_client_order_id)
+        .bind(bot_id)
+        .bind(user_id)
+        .bind(symbol)
+        .bind(exchange)
+        .bind(grid_level)
+        .execute(&self.db)
+        .await?;
+        Ok(())
     }
 
     async fn save_stats(

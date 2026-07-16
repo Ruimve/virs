@@ -4,9 +4,11 @@ use uuid::Uuid;
 use virs_error::VirsResult;
 
 
+/// Grid 交易记录 — 从 pe_orders + pe_grid_order_context 联查派生
 #[derive(Debug, Clone)]
 pub struct GridTradeRecord {
-    pub id: Uuid,
+    pub open_client_order_id: String,
+    pub close_client_order_id: Option<String>,
     pub grid_level: i32,
     pub open_side: String,
     pub open_price: f64,
@@ -46,7 +48,11 @@ pub struct GridBotConfig {
 pub trait GridStore: Send + Sync {
     async fn load_running_bots(&self) -> VirsResult<Vec<GridBotConfig>>;
     async fn load_bot(&self, bot_id: Uuid) -> VirsResult<Option<GridBotConfig>>;
+
+    /// 加载交易记录 — JOIN pe_orders + pe_grid_order_context
     async fn load_trades(&self, bot_id: Uuid) -> VirsResult<Vec<GridTradeRecord>>;
+
+    /// 记录开仓 context — INSERT pe_grid_order_context (order_role='open', status='open')
     async fn record_open_trade(
         &self,
         bot_id: Uuid,
@@ -54,22 +60,24 @@ pub trait GridStore: Send + Sync {
         symbol: &str,
         exchange: &str,
         grid_level: i32,
-        open_side: &str,
-        open_price: f64,
-        open_quantity: f64,
-        open_order_id: Option<&str>,
-    ) -> VirsResult<Uuid>;
+        client_order_id: &str,
+    ) -> VirsResult<()>;
+
+    /// 记录平仓 context — UPDATE open row status='closed' + INSERT close row
     async fn close_trade(
         &self,
-        trade_id: Uuid,
-        close_side: &str,
-        close_price: f64,
-        close_quantity: f64,
-        close_order_id: Option<&str>,
-        pnl: f64,
-        pnl_pct: f64,
+        open_client_order_id: &str,
+        close_client_order_id: &str,
     ) -> VirsResult<()>;
-    async fn find_open_trade(&self, bot_id: Uuid, grid_level: i32) -> VirsResult<Option<Uuid>>;
+
+    /// 查找 open 状态的开仓 client_order_id
+    async fn find_open_trade(
+        &self,
+        bot_id: Uuid,
+        grid_level: i32,
+    ) -> VirsResult<Option<String>>;
+
+    /// 记录孤儿平仓 — INSERT close context row, status='orphaned'
     async fn record_orphaned_close_trade(
         &self,
         bot_id: Uuid,
@@ -77,13 +85,9 @@ pub trait GridStore: Send + Sync {
         symbol: &str,
         exchange: &str,
         grid_level: i32,
-        close_side: &str,
-        close_price: f64,
-        close_quantity: f64,
-        close_order_id: Option<&str>,
-        pnl: f64,
-        pnl_pct: f64,
-    ) -> VirsResult<Uuid>;
+        close_client_order_id: &str,
+    ) -> VirsResult<()>;
+
     async fn save_stats(
         &self,
         bot_id: Uuid,

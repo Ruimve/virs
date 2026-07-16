@@ -4,7 +4,7 @@ pub mod trading;
 
 
 pub use auto::AutoBot;
-pub use grid::{GridBot, GridTrade};
+pub use grid::GridBot;
 pub use trading::Order;
 pub use virs_types::enums::*;
 pub use virs_types::market::*;

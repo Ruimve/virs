@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use virs_types::enums::*;
 
-use crate::{AutoBot, GridBot, GridTrade, Order, StrategyStatus};
+use crate::{AutoBot, GridBot, Order, StrategyStatus};
 
 
 #[test]
@@ -74,38 +74,6 @@ fn s3_1_grid_bot_roundtrip() {
     assert_eq!(de.grid_count, bot.grid_count);
     assert_eq!(de.status, bot.status);
     assert_eq!(de.total_pnl, bot.total_pnl);
-}
-
-#[test]
-fn s3_2_grid_trade_roundtrip() {
-    let now = Utc::now();
-    let trade = GridTrade {
-        id: Uuid::nil(),
-        bot_id: Uuid::nil(),
-        user_id: Uuid::nil(),
-        symbol: "BTC/USDT".into(),
-        exchange: "binance".into(),
-        grid_level: 3,
-        open_side: "buy".into(),
-        open_price: 45000.0,
-        open_quantity: 0.1,
-        open_order_id: Some("order_1".into()),
-        opened_at: now,
-        close_side: Some("sell".into()),
-        close_price: Some(46000.0),
-        close_quantity: Some(0.1),
-        close_order_id: Some("order_2".into()),
-        closed_at: Some(now),
-        pnl: 10.0,
-        pnl_pct: 2.2,
-        status: "closed".into(),
-        created_at: now,
-    };
-    let json = serde_json::to_string(&trade).unwrap();
-    let de: GridTrade = serde_json::from_str(&json).unwrap();
-    assert_eq!(de.open_price, trade.open_price);
-    assert_eq!(de.pnl, trade.pnl);
-    assert_eq!(de.status, trade.status);
 }
 
 

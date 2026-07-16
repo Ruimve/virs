@@ -146,106 +146,67 @@ impl AutoStore for PgAutoStore {
         user_id: Uuid,
         symbol: &str,
         exchange: &str,
-        open_side: &str,
-        open_price: f64,
-        open_quantity: f64,
-        open_fee: f64,
-        open_order_id: Option<&str>,
+        client_order_id: &str,
         stop_loss: f64,
         take_profit: f64,
-    ) -> VirsResult<Uuid> {
-        let row: (Uuid,) = sqlx::query_as(
-            r#"INSERT INTO qd_auto_trades
-               (bot_id, user_id, symbol, exchange, open_side, open_price, open_quantity,
-                open_order_id, open_fee, stop_loss, take_profit, status)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'open')
-               RETURNING id"#,
+    ) -> VirsResult<()> {
+        sqlx::query(
+            r#"INSERT INTO pe_auto_order_context
+               (client_order_id, bot_id, user_id, symbol, exchange, order_role, status, stop_loss, take_profit)
+               VALUES ($1, $2, $3, $4, $5, 'open', 'open', $6, $7)"#,
         )
+        .bind(client_order_id)
         .bind(bot_id)
         .bind(user_id)
         .bind(symbol)
         .bind(exchange)
-        .bind(open_side)
-        .bind(open_price)
-        .bind(open_quantity)
-        .bind(open_order_id)
-        .bind(open_fee)
         .bind(stop_loss)
         .bind(take_profit)
-        .fetch_one(&self.db)
+        .execute(&self.db)
         .await?;
-        Ok(row.0)
+        Ok(())
     }
 
     async fn close_trade(
         &self,
-        trade_id: Uuid,
-        close_side: &str,
-        close_price: f64,
-        close_quantity: f64,
-        close_order_id: Option<&str>,
-        close_fee: f64,
-        pnl: f64,
-        pnl_pct: f64,
+        open_client_order_id: &str,
+        close_client_order_id: &str,
         close_reason: &str,
     ) -> VirsResult<()> {
-        let pnl_pct = crate::adapters::utils::sanitize_pnl_pct(pnl_pct);
         let result = sqlx::query(
-            r#"UPDATE qd_auto_trades SET
-               close_side = $2, close_price = $3, close_quantity = $4,
-               close_order_id = $5, close_fee = $6, closed_at = NOW(),
-               pnl = $7, pnl_pct = $8,
-               close_reason = $9,
-               status = 'closed'
-               WHERE id = $1 AND status = 'open'"#,
+            r#"UPDATE pe_auto_order_context SET status = 'closed'
+               WHERE client_order_id = $1 AND order_role = 'open' AND status = 'open'"#,
         )
-        .bind(trade_id)
-        .bind(close_side)
-        .bind(close_price)
-        .bind(close_quantity)
-        .bind(close_order_id)
-        .bind(close_fee)
-        .bind(pnl)
-        .bind(pnl_pct)
-        .bind(close_reason)
+        .bind(open_client_order_id)
         .execute(&self.db)
         .await?;
 
         if result.rows_affected() == 0 {
-            warn!(trade_id = %trade_id, "close_trade: no open trade found");
+            warn!(open_client_order_id = %open_client_order_id, "close_trade: no open trade found");
         }
-        Ok(())
-    }
 
-    async fn find_open_trade(&self, bot_id: Uuid) -> VirsResult<Option<(Uuid, f64, f64, DateTime<Utc>)>> {
-        let row: Option<(Uuid, f64, f64, DateTime<Utc>)> = sqlx::query_as(
-            "SELECT id, stop_loss, take_profit, opened_at FROM qd_auto_trades WHERE bot_id = $1 AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
-        )
-        .bind(bot_id)
-        .fetch_optional(&self.db).await?;
-        Ok(row)
-    }
-
-    async fn mark_trade_orphaned(&self, trade_id: Uuid) -> VirsResult<()> {
         sqlx::query(
-            "UPDATE qd_auto_trades SET status = 'orphaned', closed_at = NOW() WHERE id = $1 AND status = 'open'",
+            r#"INSERT INTO pe_auto_order_context
+               (client_order_id, bot_id, user_id, symbol, exchange, order_role, status, paired_client_order_id, close_reason)
+               SELECT $1, bot_id, user_id, symbol, exchange, 'close', 'closed', client_order_id, $2
+               FROM pe_auto_order_context
+               WHERE client_order_id = $3 AND order_role = 'open'"#,
         )
-        .bind(trade_id)
-        .execute(&self.db).await?;
+        .bind(close_client_order_id)
+        .bind(close_reason)
+        .bind(open_client_order_id)
+        .execute(&self.db)
+        .await?;
+
         Ok(())
     }
 
-    async fn find_last_closed_trade(
-        &self,
-        bot_id: Uuid,
-    ) -> VirsResult<Option<(String, String, DateTime<Utc>)>> {
-
-
-        let row: Option<(String, String, DateTime<Utc>)> = sqlx::query_as(
-            r#"SELECT open_side, close_reason, closed_at
-               FROM qd_auto_trades
-               WHERE bot_id = $1 AND status = 'closed'
-               ORDER BY closed_at DESC LIMIT 1"#,
+    async fn find_open_trade(&self, bot_id: Uuid) -> VirsResult<Option<(String, f64, f64, DateTime<Utc>)>> {
+        let row: Option<(String, f64, f64, DateTime<Utc>)> = sqlx::query_as(
+            r#"SELECT client_order_id, stop_loss, take_profit, created_at
+               FROM pe_auto_order_context
+               WHERE bot_id = $1 AND order_role = 'open' AND status = 'open'
+               ORDER BY created_at DESC LIMIT 1"#,
         )
         .bind(bot_id)
         .fetch_optional(&self.db)
@@ -253,11 +214,43 @@ impl AutoStore for PgAutoStore {
         Ok(row)
     }
 
-    async fn update_trade_stop_loss(&self, trade_id: Uuid, stop_loss: f64) -> VirsResult<()> {
+    async fn mark_trade_orphaned(&self, client_order_id: &str) -> VirsResult<()> {
         sqlx::query(
-            r#"UPDATE qd_auto_trades SET stop_loss = $2 WHERE id = $1 AND status = 'open'"#,
+            r#"UPDATE pe_auto_order_context SET status = 'orphaned'
+               WHERE client_order_id = $1 AND status = 'open'"#,
         )
-        .bind(trade_id)
+        .bind(client_order_id)
+        .execute(&self.db)
+        .await?;
+        Ok(())
+    }
+
+    async fn find_last_closed_trade(
+        &self,
+        bot_id: Uuid,
+    ) -> VirsResult<Option<(String, String, DateTime<Utc>)>> {
+        let row: Option<(String, String, DateTime<Utc>)> = sqlx::query_as(
+            r#"SELECT LOWER(open_ord.position_side) AS open_side,
+                      COALESCE(close_ctx.close_reason, '') AS close_reason,
+                      close_ctx.created_at
+               FROM pe_auto_order_context close_ctx
+               JOIN pe_auto_order_context open_ctx ON open_ctx.client_order_id = close_ctx.paired_client_order_id
+               JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+               WHERE close_ctx.bot_id = $1 AND close_ctx.order_role = 'close' AND close_ctx.status = 'closed'
+               ORDER BY close_ctx.created_at DESC LIMIT 1"#,
+        )
+        .bind(bot_id)
+        .fetch_optional(&self.db)
+        .await?;
+        Ok(row)
+    }
+
+    async fn update_trade_stop_loss(&self, client_order_id: &str, stop_loss: f64) -> VirsResult<()> {
+        sqlx::query(
+            r#"UPDATE pe_auto_order_context SET stop_loss = $2
+               WHERE client_order_id = $1 AND status = 'open'"#,
+        )
+        .bind(client_order_id)
         .bind(stop_loss)
         .execute(&self.db)
         .await?;
@@ -269,46 +262,23 @@ impl AutoStore for PgAutoStore {
         user_id: Uuid,
         symbol: &str,
         exchange: &str,
-        close_side: &str,
-        close_price: f64,
-        close_quantity: f64,
-        close_order_id: Option<&str>,
-        close_fee: f64,
-        pnl: f64,
-        pnl_pct: f64,
+        close_client_order_id: &str,
         close_reason: &str,
-    ) -> VirsResult<Uuid> {
-        let open_side = crate::adapters::utils::derive_open_side(close_side);
-        let pnl_pct = crate::adapters::utils::sanitize_pnl_pct(pnl_pct);
-        let row: (Uuid,) = sqlx::query_as(
-            r#"INSERT INTO qd_auto_trades
-               (bot_id, user_id, symbol, exchange,
-                open_side, open_price, open_quantity, open_fee,
-                close_side, close_price, close_quantity, close_order_id, close_fee, closed_at,
-                pnl, pnl_pct, close_reason, status)
-               VALUES ($1, $2, $3, $4,
-                       $5, 0, $6, 0,
-                       $7, $8, $9, $10, $11, NOW(),
-                       $12, $13, $14, 'orphaned')
-               RETURNING id"#,
+    ) -> VirsResult<()> {
+        sqlx::query(
+            r#"INSERT INTO pe_auto_order_context
+               (client_order_id, bot_id, user_id, symbol, exchange, order_role, status, close_reason)
+               VALUES ($1, $2, $3, $4, $5, 'close', 'orphaned', $6)"#,
         )
+        .bind(close_client_order_id)
         .bind(bot_id)
         .bind(user_id)
         .bind(symbol)
         .bind(exchange)
-        .bind(open_side)
-        .bind(close_quantity)
-        .bind(close_side)
-        .bind(close_price)
-        .bind(close_quantity)
-        .bind(close_order_id)
-        .bind(close_fee)
-        .bind(pnl)
-        .bind(pnl_pct)
         .bind(close_reason)
-        .fetch_one(&self.db)
+        .execute(&self.db)
         .await?;
-        Ok(row.0)
+        Ok(())
     }
 
     async fn save_analysis_log(
@@ -367,9 +337,11 @@ impl AutoStore for PgAutoStore {
 
     async fn load_consecutive_losses(&self, bot_id: Uuid) -> VirsResult<i32> {
         let pnl_rows: Vec<(f64,)> = sqlx::query_as(
-            r#"SELECT pnl FROM qd_auto_trades
-               WHERE bot_id = $1 AND status = 'closed'
-               ORDER BY closed_at DESC LIMIT 20"#,
+            r#"SELECT close_ord.realized_pnl::float AS pnl
+               FROM pe_auto_order_context close_ctx
+               JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+               WHERE close_ctx.bot_id = $1 AND close_ctx.order_role = 'close' AND close_ctx.status = 'closed'
+               ORDER BY close_ctx.created_at DESC LIMIT 20"#,
         )
         .bind(bot_id)
         .fetch_all(&self.db)

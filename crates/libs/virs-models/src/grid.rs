@@ -69,27 +69,3 @@ impl GridBot {
         }
     }
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct GridTrade {
-    pub id: Uuid,
-    pub bot_id: Uuid,
-    pub user_id: Uuid,
-    pub symbol: String,
-    pub exchange: String,
-    pub grid_level: i32,
-    pub open_side: String,
-    pub open_price: f64,
-    pub open_quantity: f64,
-    pub open_order_id: Option<String>,
-    pub opened_at: DateTime<Utc>,
-    pub close_side: Option<String>,
-    pub close_price: Option<f64>,
-    pub close_quantity: Option<f64>,
-    pub close_order_id: Option<String>,
-    pub closed_at: Option<DateTime<Utc>>,
-    pub pnl: f64,
-    pub pnl_pct: f64,
-    pub status: String,
-    pub created_at: DateTime<Utc>,
-}
