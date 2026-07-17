@@ -279,7 +279,6 @@ impl Exchange for CcxtAdapter {
                 },
                 quantity: p.quantity,
                 entry_price: p.entry_price,
-                leverage: p.leverage,
             })
             .collect())
     }

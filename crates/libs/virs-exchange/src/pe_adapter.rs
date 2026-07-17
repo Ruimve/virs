@@ -113,7 +113,6 @@ pub fn convert_exchange_position(ep: &models::ExchangePosition) -> ExchangePosit
         side: convert_virs_position_side(&ep.side),
         quantity: ep.quantity,
         entry_price: ep.entry_price,
-        leverage: ep.leverage,
     }
 }
 

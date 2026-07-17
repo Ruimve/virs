@@ -68,7 +68,6 @@ pub struct ExchangePosition {
     pub side: PositionSide,
     pub quantity: f64,
     pub entry_price: f64,
-    pub leverage: u32,
 }
 
 impl ExchangePosition {

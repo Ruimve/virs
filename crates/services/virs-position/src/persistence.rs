@@ -286,7 +286,6 @@ impl AggregatedPositionRow {
             status: PositionStatus::Open,
             quantity: self.quantity,
             entry_price: self.entry_price,
-            leverage: 0,
             realized_pnl: self.realized_pnl,
             stop_loss: None,
             take_profit: None,

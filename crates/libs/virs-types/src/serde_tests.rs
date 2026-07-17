@@ -59,7 +59,7 @@ fn s2_2_balance_roundtrip() {
 fn s2_3_exchange_position_roundtrip() {
     let pos = ExchangePosition {
         symbol: "BTC/USDT".into(), side: PositionSide::Long,
-        quantity: 1.0, entry_price: 50000.0, leverage: 10,
+        quantity: 1.0, entry_price: 50000.0,
     };
     let json = serde_json::to_string(&pos).unwrap();
     let de: ExchangePosition = serde_json::from_str(&json).unwrap();

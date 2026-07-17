@@ -73,7 +73,6 @@ fn g2_1_parse_decision_complete() {
             "grid_profit_pct": 0.5
         },
         "risk": {
-            "leverage": 5,
             "quantity_per_grid": 100.0
         },
         "market": {
@@ -91,7 +90,6 @@ fn g2_1_parse_decision_complete() {
     assert!((decision.lower_price - 90.0).abs() < 1e-10);
     assert_eq!(decision.grid_count, 10);
     assert!((decision.grid_profit_pct - 0.5).abs() < 1e-10);
-    assert_eq!(decision.leverage, 5);
     assert!((decision.quantity_per_grid - 100.0).abs() < 1e-10);
     assert_eq!(decision.market_regime, "ranging");
 }
@@ -100,28 +98,13 @@ fn g2_1_parse_decision_complete() {
 fn g2_2_parse_decision_defaults() {
     let json = serde_json::json!({});
 
-    let result = parse_grid_decision(&json);
-    assert!(result.is_err(), "missing leverage should return error");
-    let err = result.unwrap_err();
-    assert!(
-        err.to_string().contains("leverage"),
-        "error should mention leverage, got: {err}"
-    );
-
-
-    let json = serde_json::json!({
-        "risk": {
-            "leverage": 5
-        }
-    });
-    let decision = parse_grid_decision(&json).expect("should parse with leverage present");
+    let decision = parse_grid_decision(&json).expect("empty JSON should parse with defaults");
     assert_eq!(decision.action, "hold");
     assert_eq!(decision.reason, "No reason provided");
     assert!((decision.confidence - 0.0).abs() < 1e-10);
     assert!((decision.upper_price - 0.0).abs() < 1e-10);
     assert_eq!(decision.grid_count, 0);
     assert!((decision.grid_profit_pct - 0.0).abs() < 1e-10);
-    assert_eq!(decision.leverage, 5);
     assert!((decision.quantity_per_grid - 0.0).abs() < 1e-10);
     assert_eq!(decision.market_regime, "unknown");
 }

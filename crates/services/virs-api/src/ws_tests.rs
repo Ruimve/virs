@@ -23,7 +23,6 @@ fn w1_1_position_all_fields() {
     assert_eq!(json["status"], "open");
     assert_eq!(json["quantity"], 1.0);
     assert_eq!(json["entry_price"], 50000.0);
-    assert_eq!(json["leverage"], 10);
     assert_eq!(json["stop_loss"], 45000.0);
 }
 
@@ -117,7 +116,6 @@ fn make_position(side: PositionSide, status: PositionStatus, stop_loss: Option<f
         status,
         quantity: 1.0,
         entry_price: 50000.0,
-        leverage: 10,
         realized_pnl: 0.0,
         stop_loss,
         take_profit: None,

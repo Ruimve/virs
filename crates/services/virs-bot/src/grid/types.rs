@@ -207,7 +207,6 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位专业的加密货币量�
     "grid_profit_pct": 数字（每格利润率%）
   },
   "risk": {
-    "leverage": 数字（杠杆）,
     "quantity_per_grid": 数字（每格数量，USDT）
   },
   "cancel": {

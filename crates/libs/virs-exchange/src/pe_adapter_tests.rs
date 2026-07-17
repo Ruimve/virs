@@ -170,14 +170,12 @@ fn pe9_1_position_normal() {
         side: models::PositionSide::Long,
         quantity: 1.0,
         entry_price: 50000.0,
-        leverage: 10,
     };
     let result: ExchangePosition = convert_exchange_position(&ep);
     assert_eq!(result.symbol, "BTC/USDT");
     assert_eq!(result.side, PositionSide::Long);
     assert_eq!(result.quantity, 1.0);
     assert_eq!(result.entry_price, 50000.0);
-    assert_eq!(result.leverage, 10);
 }
 
 #[test]
@@ -187,7 +185,6 @@ fn pe9_2_position_no_liquidation() {
         side: models::PositionSide::Short,
         quantity: 5.0,
         entry_price: 3000.0,
-        leverage: 5,
     };
     let result = convert_exchange_position(&ep);
     assert_eq!(result.side, PositionSide::Short);

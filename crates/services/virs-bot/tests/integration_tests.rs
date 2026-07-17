@@ -163,12 +163,11 @@ fn int_3_2_grid_decision_parse_chain() {
             "grid_profit_pct": 0.5
         },
         "risk": {
-            "leverage": 5,
             "quantity_per_grid": 50.0
         }
     });
 
-    let decision = parse_grid_decision(&json).expect("JSON with leverage should parse");
+    let decision = parse_grid_decision(&json).expect("JSON should parse");
     assert_eq!(decision.action, "adjust_grid");
     assert!((decision.upper_price - 110.0).abs() < 1e-10);
     assert!((decision.lower_price - 90.0).abs() < 1e-10);

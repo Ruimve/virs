@@ -1053,7 +1053,7 @@ impl GridWorker {
                 let result = serde_json::json!({
                     "decision": { "action": d.action, "reason": d.reason, "confidence": d.confidence },
                     "grid": { "upper_price": d.upper_price, "lower_price": d.lower_price, "grid_count": d.grid_count, "grid_profit_pct": d.grid_profit_pct },
-                    "risk": { "leverage": d.leverage, "quantity_per_grid": d.quantity_per_grid },
+                    "risk": { "quantity_per_grid": d.quantity_per_grid },
                     "market": { "market_regime": d.market_regime },
                     "analysis": d.analysis,
                     "risk_warning": d.risk_warning,
@@ -1195,9 +1195,6 @@ impl GridWorker {
 
         if !d.market_regime.is_empty() {
             self.bot.market_regime = Some(d.market_regime.clone());
-        }
-        if d.leverage > 0 {
-            self.bot.leverage = d.leverage;
         }
         if d.quantity_per_grid > 0.0 {
             self.bot.quantity_per_grid = d.quantity_per_grid.max(1.0);

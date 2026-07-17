@@ -25,7 +25,7 @@ fn int_1_2_short_position_pnl_chain() {
 fn int_3_1_exchange_position_pnl_chain() {
     let pos = ExchangePosition {
         symbol: "BTC/USDT".into(), side: PositionSide::Long,
-        quantity: 1.0, entry_price: 50000.0, leverage: 10,
+        quantity: 1.0, entry_price: 50000.0,
     };
     assert!((pos.unrealized_pnl_at(51000.0) - 1000.0).abs() < 0.01);
 }
@@ -35,7 +35,7 @@ fn int_3_1_exchange_position_pnl_chain() {
 fn int_8_1_exchange_position_serde_then_pnl() {
     let pos = ExchangePosition {
         symbol: "BTC/USDT".into(), side: PositionSide::Long,
-        quantity: 2.0, entry_price: 50000.0, leverage: 10,
+        quantity: 2.0, entry_price: 50000.0,
     };
     let original_pnl = pos.unrealized_pnl_at(52000.0);
     let json = serde_json::to_string(&pos).unwrap();
@@ -50,7 +50,6 @@ fn make_position(side: PositionSide, entry: f64, quantity: f64) -> Position {
         exchange: "binance".into(), symbol: "BTC/USDT".into(),
         side, status: PositionStatus::Open,
         quantity, entry_price: entry,
-        leverage: 10,
         realized_pnl: 0.0,
         stop_loss: None, take_profit: None,
         client_order_id: None,

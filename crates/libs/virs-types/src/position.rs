@@ -15,7 +15,6 @@ pub struct Position {
     pub status: PositionStatus,
     pub quantity: f64,
     pub entry_price: f64,
-    pub leverage: u32,
     pub realized_pnl: f64,
     pub stop_loss: Option<f64>,
     pub take_profit: Option<f64>,

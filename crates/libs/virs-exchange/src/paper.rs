@@ -262,7 +262,6 @@ impl PaperExchangeAdapter {
                     let total_cost = pos.entry_price * old_qty + fill_price * size_delta;
                     pos.quantity = new_qty;
                     pos.entry_price = total_cost / new_qty;
-                    pos.leverage = leverage;
                 } else {
 
                     let new_qty = pos.quantity - size_delta;
@@ -273,7 +272,6 @@ impl PaperExchangeAdapter {
                     } else {
 
                         pos.quantity = new_qty;
-                        pos.leverage = leverage;
                     }
                 }
             }
@@ -286,7 +284,6 @@ impl PaperExchangeAdapter {
                         side: position_side,
                         quantity: size_delta,
                         entry_price: fill_price,
-                        leverage,
                     },
                 );
             }
@@ -359,7 +356,6 @@ impl ExchangePe for PaperExchangeAdapter {
                     side: pos.side,
                     quantity: pos.quantity,
                     entry_price: pos.entry_price,
-                    leverage: pos.leverage,
                 }
             })
             .collect())
@@ -587,7 +583,6 @@ impl ExchangePe for PaperExchangeAdapter {
                     side: pos.side,
                     quantity: pos.quantity,
                     entry_price: pos.entry_price,
-                    leverage: pos.leverage,
                 },
             );
 

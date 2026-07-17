@@ -138,7 +138,6 @@ fn int_6_2_position_conversion_full_chain() {
         side: models::PositionSide::Short,
         quantity: 2.0,
         entry_price: 45000.0,
-        leverage: 20,
     };
 
     let result = virs_exchange::pe_adapter::convert_exchange_position(&ep);
@@ -146,5 +145,4 @@ fn int_6_2_position_conversion_full_chain() {
     assert_eq!(result.side, PositionSide::Short);
     assert_eq!(result.quantity, 2.0);
     assert_eq!(result.entry_price, 45000.0);
-    assert_eq!(result.leverage, 20);
 }

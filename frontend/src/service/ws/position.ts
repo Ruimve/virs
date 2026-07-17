@@ -9,7 +9,6 @@ export interface PositionWsEventRaw {
   status: string;
   quantity: number;
   entry_price: number;
-  leverage: number;
   realized_pnl: number;
   stop_loss: number | null;
   take_profit: number | null;
@@ -26,7 +25,6 @@ export interface PositionWsEvent {
   status: string;
   quantity: number;
   entryPrice: number;
-  leverage: number;
   realizedPnl: number;
   stopLoss: number | null;
   takeProfit: number | null;
@@ -53,7 +51,6 @@ const parsePositionWs = (raw: string): PositionWsEvent | null => {
       status: json.status,
       quantity: json.quantity,
       entryPrice: json.entry_price,
-      leverage: json.leverage,
       realizedPnl: json.realized_pnl,
       stopLoss: json.stop_loss,
       takeProfit: json.take_profit,

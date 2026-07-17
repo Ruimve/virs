@@ -25,7 +25,7 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
   }, [hasPosition, position, latestPrice]);
 
   const usedMargin = hasPosition
-    ? (position!.quantity * position!.entryPrice) / position!.leverage
+    ? (position!.quantity * position!.entryPrice) / bot.leverage
     : 0;
   const accountBalance = bot.initial_capital + bot.total_pnl + unrealizedPnl;
   const freeMargin = accountBalance - usedMargin;

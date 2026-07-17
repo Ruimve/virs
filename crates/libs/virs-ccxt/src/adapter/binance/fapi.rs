@@ -766,18 +766,6 @@ pub async fn fetch_positions(
                     continue;
                 }
             };
-            // 杠杆倍数，缺失则跳过
-            let leverage = match parse_u32(p, "leverage") {
-                Some(v) => v,
-                None => {
-                    tracing::warn!(
-                        symbol = %symbol_str,
-                        "positionRisk leverage missing — skipping position"
-                    );
-                    continue;
-                }
-            };
-
 
             positions.push(Position {
                 // 转回统一格式符号 (如 BTCUSDT -> BTC/USDT)
@@ -785,7 +773,6 @@ pub async fn fetch_positions(
                 side,
                 quantity: size,
                 entry_price,
-                leverage,
                 margin_mode,
                 info: p.clone(),
             });

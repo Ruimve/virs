@@ -150,7 +150,6 @@ fn make_position(side: PositionSide, stop_loss: Option<f64>) -> Position {
         status: PositionStatus::Open,
         quantity: 1.0,
         entry_price: 50000.0,
-        leverage: 10,
         realized_pnl: 0.0,
         stop_loss,
         take_profit: None,

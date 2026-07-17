@@ -273,7 +273,6 @@ impl PositionEngine {
                         status: PositionStatus::Opening,
                         quantity: 0.0,
                         entry_price: 0.0,
-                        leverage: 0,
                         realized_pnl: 0.0,
                         stop_loss: None,
                         take_profit: None,
@@ -296,7 +295,6 @@ impl PositionEngine {
                 side: p.side,
                 quantity: p.quantity,
                 entry_price: p.entry_price,
-                leverage: p.leverage,
             })
             .collect();
         self.inner
@@ -789,7 +787,6 @@ pub(crate) async fn handle_open_position(
         status: PositionStatus::Opening,
         quantity: 0.0,
         entry_price: 0.0,
-        leverage,
         realized_pnl: 0.0,
         stop_loss,
         take_profit,
@@ -960,7 +957,6 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
                     status: PositionStatus::Opening,
                     quantity: 0.0,
                     entry_price: 0.0,
-                    leverage: 1,
                     realized_pnl: 0.0,
                     stop_loss: None,
                     take_profit: None,

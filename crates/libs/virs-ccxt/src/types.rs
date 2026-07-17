@@ -82,7 +82,6 @@ pub struct Position {
     pub side: PositionSide,
     pub quantity: f64,
     pub entry_price: f64,
-    pub leverage: u32,
     pub margin_mode: MarginMode,
     pub info: serde_json::Value,
 }

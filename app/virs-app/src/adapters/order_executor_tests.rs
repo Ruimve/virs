@@ -162,7 +162,6 @@ fn o1_6_convert_position_opened_none() {
         status: virs_types::enums::PositionStatus::Open,
         quantity: 1.0,
         entry_price: 100.0,
-        leverage: 10,
         realized_pnl: 0.0,
         stop_loss: None,
         take_profit: None,

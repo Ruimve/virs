@@ -5,7 +5,7 @@ use crate::common::ports::CredentialStore;
 use crate::common::ports::LlmProviderResolver;
 use crate::grid::ports::GridBotConfig;
 use tracing::warn;
-use virs_error::{BotError, BotResult};
+use virs_error::BotResult;
 
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,7 +52,6 @@ pub struct GridAiDecision {
     pub lower_price: f64,
     pub grid_count: i32,
     pub grid_profit_pct: f64,
-    pub leverage: i32,
     pub quantity_per_grid: f64,
     pub market_regime: String,
     pub analysis: String,
@@ -146,9 +145,6 @@ pub fn parse_grid_decision(json: &serde_json::Value) -> BotResult<GridAiDecision
     });
 
 
-    let leverage = risk["leverage"].as_i64().ok_or_else(|| {
-        BotError::llm("LLM response missing 'risk.leverage' — leverage is a required field with no default")
-    })? as i32;
     let quantity_per_grid = risk["quantity_per_grid"].as_f64().unwrap_or_else(|| {
         warn!("LLM response missing 'risk.quantity_per_grid' — defaulting to 0.0");
         0.0
@@ -178,7 +174,6 @@ pub fn parse_grid_decision(json: &serde_json::Value) -> BotResult<GridAiDecision
         lower_price,
         grid_count,
         grid_profit_pct,
-        leverage,
         quantity_per_grid,
         market_regime,
         analysis,

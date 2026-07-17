@@ -40,6 +40,5 @@ fn make_exchange_position(side: PositionSide, entry: f64, quantity: f64) -> Exch
         side,
         quantity,
         entry_price: entry,
-        leverage: 10,
     }
 }

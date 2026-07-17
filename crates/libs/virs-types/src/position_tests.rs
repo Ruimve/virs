@@ -40,7 +40,6 @@ fn make_position(status: PositionStatus) -> Position {
         status,
         quantity: 1.0,
         entry_price: 50000.0,
-        leverage: 10,
         realized_pnl: 0.0,
         stop_loss: None,
         take_profit: None,
