@@ -36,7 +36,6 @@ impl MarketWsHandler {
         let ws = self.ws.lock().await;
         ws.subscribe(symbol).await;
     }
-
 }
 
 pub struct OrderBookEngine {
@@ -85,12 +84,10 @@ impl OrderBookEngine {
         let symbol_index = self.symbol_index.clone();
         let started = self.started.clone();
 
-
         tokio::spawn(async move {
             while started.load(std::sync::atomic::Ordering::Relaxed) {
                 match ws_update_rx.recv().await {
-                    Ok(WsOrderBookEvent::Reconnected) => {
-                    }
+                    Ok(WsOrderBookEvent::Reconnected) => {}
                     Ok(WsOrderBookEvent::OrderBook(update)) => {
                         let symbol = update.symbol;
                         let sub_key = match symbol_index.get(&symbol).map(|r| r.value().clone()) {
@@ -125,7 +122,6 @@ impl OrderBookEngine {
                     }
                 }
             }
-
         });
     }
 
@@ -145,7 +141,6 @@ impl OrderBookEngine {
         symbol: &str,
         _market_type: MarketType,
     ) -> VirsResult<()> {
-
         if !self.started.load(std::sync::atomic::Ordering::Relaxed) {
             self.start().await;
         }
@@ -167,5 +162,4 @@ impl OrderBookEngine {
 
         Ok(())
     }
-
 }

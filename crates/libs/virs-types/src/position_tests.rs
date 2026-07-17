@@ -46,6 +46,5 @@ fn make_position(status: PositionStatus) -> Position {
         client_order_id: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
-        closed_at: None,
     }
 }

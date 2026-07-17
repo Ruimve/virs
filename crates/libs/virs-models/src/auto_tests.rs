@@ -40,7 +40,6 @@ fn make_auto_bot(
     }
 }
 
-
 #[test]
 fn a1_1_seventy_percent() {
     let bot = make_auto_bot("running", 10, 7, 3, 0.0, 10000.0);
@@ -59,7 +58,6 @@ fn a1_3_zero_trades_division_protection() {
     assert!((bot.win_rate() - 0.0).abs() < 0.01);
 }
 
-
 #[test]
 fn a2_1_thirty_percent() {
     let bot = make_auto_bot("running", 10, 7, 3, 0.0, 10000.0);
@@ -71,7 +69,6 @@ fn a2_2_zero_trades_division_protection() {
     let bot = make_auto_bot("running", 0, 0, 0, 0.0, 10000.0);
     assert!((bot.loss_rate() - 0.0).abs() < 0.01);
 }
-
 
 #[test]
 fn a3_1_positive_return() {
@@ -91,7 +88,6 @@ fn a3_3_zero_capital_division_protection() {
     assert!((bot.total_return_pct() - 0.0).abs() < 0.01);
 }
 
-
 #[test]
 fn a4_1_running_status() {
     let bot = make_auto_bot("running", 0, 0, 0, 0.0, 10000.0);
@@ -103,7 +99,6 @@ fn a4_2_stopped_status() {
     let bot = make_auto_bot("stopped", 0, 0, 0, 0.0, 10000.0);
     assert!(!bot.is_running());
 }
-
 
 #[test]
 fn a5_1_stopped_status() {

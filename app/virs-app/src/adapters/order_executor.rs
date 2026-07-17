@@ -2,16 +2,15 @@ use async_trait::async_trait;
 use tokio::sync::broadcast;
 use tracing::warn;
 
+use uuid::Uuid;
+use virs_error::{BotError, BotResult};
 use virs_position::PositionEngine;
 use virs_types::bot::{
-    BotPositionSide, OrderCommand, OrderEvent, OrderExecutor, OrderInfo,
-    OrderSide,
+    BotPositionSide, OrderCommand, OrderEvent, OrderExecutor, OrderInfo, OrderSide,
 };
-use virs_error::{BotError, BotResult};
 use virs_types::enums::{OrderType, PositionSide, Side};
 use virs_types::position::*;
 use virs_types::CcxtOrder;
-use uuid::Uuid;
 
 pub struct PeOrderExecutor {
     cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,
@@ -25,7 +24,6 @@ impl PeOrderExecutor {
         mut engine_event_rx: broadcast::Receiver<EngineEvent>,
         engine: PositionEngine,
     ) -> Self {
-
         tokio::spawn(async move {
             loop {
                 match engine_event_rx.recv().await {
@@ -64,33 +62,29 @@ impl OrderExecutor for PeOrderExecutor {
                 stop_loss,
                 take_profit,
                 client_order_id,
-            } => {
-
-
-                EngineCommand::OpenPosition {
-                    exchange: String::new(),
-                    symbol,
-                    side: match side {
-                        BotPositionSide::Long => PositionSide::Long,
-                        BotPositionSide::Short => PositionSide::Short,
-                    },
-                    order_side: match order_side {
-                        OrderSide::Buy => Side::Buy,
-                        OrderSide::Sell => Side::Sell,
-                    },
-                    quantity: amount,
-                    leverage,
-                    order_type: if price.is_some() {
-                        OrderType::Limit
-                    } else {
-                        OrderType::Market
-                    },
-                    price,
-                    stop_loss,
-                    take_profit,
-                    client_order_id,
-                }
-            }
+            } => EngineCommand::OpenPosition {
+                exchange: String::new(),
+                symbol,
+                side: match side {
+                    BotPositionSide::Long => PositionSide::Long,
+                    BotPositionSide::Short => PositionSide::Short,
+                },
+                order_side: match order_side {
+                    OrderSide::Buy => Side::Buy,
+                    OrderSide::Sell => Side::Sell,
+                },
+                quantity: amount,
+                leverage,
+                order_type: if price.is_some() {
+                    OrderType::Limit
+                } else {
+                    OrderType::Market
+                },
+                price,
+                stop_loss,
+                take_profit,
+                client_order_id,
+            },
             OrderCommand::ClosePosition {
                 position_id,
                 price,
@@ -155,7 +149,6 @@ impl OrderExecutor for PeOrderExecutor {
     }
 }
 
-
 pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
     match event {
         EngineEvent::OrderPlaced { order } => Some(OrderEvent::OrderPlaced {
@@ -168,12 +161,13 @@ pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
             order_id: Uuid::from_u128(order.order_id as u128),
             symbol: Some(order.symbol.clone()),
         }),
-        EngineEvent::OrderFailed { client_order_id: _, reason } => {
-            Some(OrderEvent::OrderFailed {
-                order_id: Uuid::new_v4(),
-                reason,
-            })
-        }
+        EngineEvent::OrderFailed {
+            client_order_id: _,
+            reason,
+        } => Some(OrderEvent::OrderFailed {
+            order_id: Uuid::new_v4(),
+            reason,
+        }),
         EngineEvent::RiskAlert { level, message } => Some(OrderEvent::RiskAlert { level, message }),
         _ => None,
     }

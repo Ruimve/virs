@@ -16,7 +16,6 @@ use virs_error::{ExchangeError, VirsResult};
 use crate::registry::Exchanges;
 use crate::Exchange;
 
-
 // PE适配器：实现 ExchangePe trait，从 registry 查找已注册的永续合约 Exchange
 pub struct CcxtExchangeAdapter {
     registry: Arc<Exchanges>,
@@ -45,7 +44,6 @@ impl CcxtExchangeAdapter {
         None
     }
 }
-
 
 // 以下为 models::Side 与 virs_types::Side 等类型互转的辅助函数
 pub fn convert_side(side: &models::Side) -> Side {
@@ -199,7 +197,9 @@ impl ExchangePe for CcxtExchangeAdapter {
 
     // 下单 → Exchange.place_order_with_options() → POST /fapi/v1/order
     async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<OrderResult> {
-        let ex = self.get_perpetual_exchange().ok_or_else(no_exchange_error)?;
+        let ex = self
+            .get_perpetual_exchange()
+            .ok_or_else(no_exchange_error)?;
         let virs_order = ex
             .place_order_with_options(
                 &params.symbol,
@@ -219,7 +219,9 @@ impl ExchangePe for CcxtExchangeAdapter {
 
     // 撤单 → Exchange.cancel_order() → DELETE /fapi/v1/order
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> VirsResult<OrderResult> {
-        let ex = self.get_perpetual_exchange().ok_or_else(no_exchange_error)?;
+        let ex = self
+            .get_perpetual_exchange()
+            .ok_or_else(no_exchange_error)?;
         let virs_order = ex.cancel_order(symbol, order_id).await?;
         Ok(OrderResult {
             order_id: virs_order.id,
@@ -241,7 +243,6 @@ impl ExchangePe for CcxtExchangeAdapter {
         Ok(Vec::new())
     }
 
-
     // 设置杠杆 → POST /fapi/v1/leverage
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> VirsResult<()> {
         let ex = self
@@ -257,7 +258,6 @@ impl ExchangePe for CcxtExchangeAdapter {
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
 
-
         ex.get_position_mode().await.map_err(Into::into)
     }
 
@@ -266,7 +266,6 @@ impl ExchangePe for CcxtExchangeAdapter {
         let ex = self
             .get_perpetual_exchange()
             .ok_or_else(no_exchange_error)?;
-
 
         match ex.start_listenkey_order_ws(None).await {
             Ok(ws_rx) => {

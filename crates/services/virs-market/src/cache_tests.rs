@@ -16,7 +16,6 @@ fn make_candle(open_time: i64, close: f64, closed: bool) -> Candle {
     }
 }
 
-
 #[test]
 fn c1_1_update_and_get() {
     let mut cache = SymbolCache::new();
@@ -66,7 +65,6 @@ fn c1_4_max_size_eviction() {
     assert_eq!(klines[0].open_time, 5 * 60_000);
 }
 
-
 #[test]
 fn c2_1_close_candle() {
     let mut cache = SymbolCache::new();
@@ -85,7 +83,6 @@ fn c2_2_last_closed_1m() {
     assert_eq!(last_closed.open_time, 1_700_000_000_000);
     assert!(last_closed.closed);
 }
-
 
 #[test]
 fn c3_1_replace_timeframe() {

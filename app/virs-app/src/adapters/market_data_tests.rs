@@ -64,7 +64,6 @@ fn m1_4_candle_to_kline_metadata_empty() {
     let c = make_candle();
     let k = candle_to_kline(&c);
 
-
     assert!(k.symbol.is_empty());
     assert!(k.exchange.is_empty());
     assert!(k.interval.is_empty());

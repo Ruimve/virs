@@ -6,16 +6,15 @@ pub mod orderbook_engine;
 pub mod source;
 pub mod types;
 
-
 pub use engine::KlineEngine;
 pub use gap::ContinuityReport;
 pub use orderbook_engine::OrderBookEngine;
 pub use source::ExchangeKlineSource;
 pub use types::{
-    align_open_time, subscription_key, Candle, KlineEngineConfig, KlineEvent,
-    KlineEventType, KlinePersistence, KlineSource, KlineWsClient, MarketType,
-    OrderBookEngineConfig, OrderBookEvent, OrderBookLevel, OrderBookWsClient, Timeframe,
-    WsCandleUpdate, WsEvent, WsOrderBookEvent, WsOrderBookUpdate,
+    align_open_time, subscription_key, Candle, KlineEngineConfig, KlineEvent, KlineEventType,
+    KlinePersistence, KlineSource, KlineWsClient, MarketType, OrderBookEngineConfig,
+    OrderBookEvent, OrderBookLevel, OrderBookWsClient, Timeframe, WsCandleUpdate, WsEvent,
+    WsOrderBookEvent, WsOrderBookUpdate,
 };
 
 #[cfg(test)]

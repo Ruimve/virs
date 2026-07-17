@@ -5,7 +5,6 @@ use crate::crypto::{
     verify_password,
 };
 
-
 #[test]
 fn c1_1_deterministic() {
     let key1 = derive_key("my_secret");
@@ -25,7 +24,6 @@ fn c1_3_output_length_32() {
     let key = derive_key("any_secret");
     assert_eq!(key.len(), 32);
 }
-
 
 #[test]
 fn c2_1_normal_roundtrip() {

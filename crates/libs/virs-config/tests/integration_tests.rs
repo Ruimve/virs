@@ -2,20 +2,16 @@ use std::sync::Mutex;
 
 use virs_config::{load_config, load_config_from_env};
 
-
 static ENV_LOCK: Mutex<()> = Mutex::new(());
-
 
 fn lock_env() -> std::sync::MutexGuard<'static, ()> {
     ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-
 fn set_required_env_vars() {
     std::env::set_var("ENCRYPTION_KEY", "test_encryption_key");
     std::env::set_var("LLM_KEY", "test_llm_key");
     std::env::set_var("DATABASE_URL", "postgres://localhost/virs_test");
-
 
     std::env::set_var("ADMIN_USERNAME", "test_admin");
     std::env::set_var("ADMIN_PASSWORD", "test_password_at_least_12_chars");
@@ -23,13 +19,20 @@ fn set_required_env_vars() {
     std::env::set_var("JWT_SECRET", "test_jwt_secret_at_least_32_chars_long");
 }
 
-
 fn clean_env_vars() {
     let keys = [
-        "ENCRYPTION_KEY", "LLM_KEY", "DATABASE_URL",
-        "HOST", "PORT", "JWT_EXPIRATION_HOURS", "JWT_SECRET",
-        "DB_POOL_MIN", "DB_POOL_MAX", "DB_ACQUIRE_TIMEOUT_SECS",
-        "ADMIN_USERNAME", "ADMIN_PASSWORD",
+        "ENCRYPTION_KEY",
+        "LLM_KEY",
+        "DATABASE_URL",
+        "HOST",
+        "PORT",
+        "JWT_EXPIRATION_HOURS",
+        "JWT_SECRET",
+        "DB_POOL_MIN",
+        "DB_POOL_MAX",
+        "DB_ACQUIRE_TIMEOUT_SECS",
+        "ADMIN_USERNAME",
+        "ADMIN_PASSWORD",
         "PROXY_URL",
         "TIME_MAX_POSITION_DURATION_SECS",
         "TIME_PENDING_ORDER_TIMEOUT_SECS",
@@ -52,7 +55,6 @@ fn clean_env_vars() {
         std::env::remove_var(key);
     }
 }
-
 
 #[test]
 fn int_1_1_load_config_minimal_required() {
@@ -105,7 +107,6 @@ fn int_1_4_load_config_missing_database_url() {
     assert!(result.err().unwrap().to_string().contains("DATABASE_URL"));
 }
 
-
 #[test]
 fn int_2_1_default_port() {
     let _guard = lock_env();
@@ -147,7 +148,6 @@ fn int_2_5_default_db_pool() {
     assert_eq!(config.database.pool_max, 50);
 }
 
-
 #[test]
 fn int_5_1_custom_port() {
     let _guard = lock_env();
@@ -181,7 +181,6 @@ fn int_5_4_custom_proxy() {
     assert_eq!(config.proxy, Some("http://proxy:8080".into()));
 }
 
-
 #[test]
 fn int_6_1_same_encryption_and_llm_key_rejected() {
     let _guard = lock_env();
@@ -198,7 +197,8 @@ fn int_6_1_same_encryption_and_llm_key_rejected() {
     let err_msg = result.err().unwrap().to_string();
     assert!(
         err_msg.contains("ENCRYPTION_KEY and LLM_KEY must be different"),
-        "Expected key collision error, got: {}", err_msg
+        "Expected key collision error, got: {}",
+        err_msg
     );
 }
 

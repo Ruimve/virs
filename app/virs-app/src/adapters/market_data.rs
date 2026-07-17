@@ -10,7 +10,6 @@ use virs_models::Kline;
 use virs_types::bot::{AccountBalance, MarketDataProvider, MarketSnapshot};
 use virs_types::exchange_pe::ExchangePe;
 
-
 pub fn candle_to_kline(c: &virs_market::Candle) -> Kline {
     Kline {
         open_time: c.open_time,
@@ -27,7 +26,6 @@ pub fn candle_to_kline(c: &virs_market::Candle) -> Kline {
         interval: String::new(),
     }
 }
-
 
 pub struct ExchangeMarketDataProvider {
     exchange_registry: Arc<Exchanges>,
@@ -64,7 +62,6 @@ impl ExchangeMarketDataProvider {
         start_ms: i64,
         required: bool,
     ) -> Option<Vec<Kline>> {
-
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine.get_klines_async(exchange, symbol, timeframe).await {
                 if candles.len() >= min_count {
@@ -72,7 +69,6 @@ impl ExchangeMarketDataProvider {
                 }
             }
         }
-
 
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key);
@@ -159,11 +155,7 @@ impl ExchangeMarketDataProvider {
 
 #[async_trait]
 impl MarketDataProvider for ExchangeMarketDataProvider {
-    async fn get_market_snapshot(
-        &self,
-        exchange: &str,
-        symbol: &str,
-    ) -> MarketSnapshot {
+    async fn get_market_snapshot(&self, exchange: &str, symbol: &str) -> MarketSnapshot {
         let now_ms = chrono::Utc::now().timestamp_millis();
 
         let klines_1h = match self
@@ -275,7 +267,6 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
     }
 
     async fn get_account_balance(&self, exchange: &str) -> AccountBalance {
-
         if let Some(ref pe_ex) = self.pe_exchange {
             match pe_ex.get_balance().await {
                 Ok(b) => {
@@ -290,7 +281,6 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
                 }
             }
         }
-
 
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = match self.exchange_registry.get(&exchange_key) {
@@ -317,7 +307,6 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         }
     }
 }
-
 
 pub struct AutoExchangeMarketDataProvider {
     exchange_registry: Arc<Exchanges>,
@@ -354,7 +343,6 @@ impl AutoExchangeMarketDataProvider {
         start_ms: i64,
         required: bool,
     ) -> Option<Vec<Kline>> {
-
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine.get_klines_async(exchange, symbol, timeframe).await {
                 if candles.len() >= min_count {
@@ -362,7 +350,6 @@ impl AutoExchangeMarketDataProvider {
                 }
             }
         }
-
 
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key);
@@ -413,12 +400,7 @@ impl AutoExchangeMarketDataProvider {
         }
     }
 
-    async fn fetch_current_price(
-        &self,
-        exchange: &str,
-        symbol: &str,
-        klines_1h: &[Kline],
-    ) -> f64 {
+    async fn fetch_current_price(&self, exchange: &str, symbol: &str, klines_1h: &[Kline]) -> f64 {
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine
                 .get_klines_async(exchange, symbol, Timeframe::M1)
@@ -454,11 +436,7 @@ impl AutoExchangeMarketDataProvider {
 
 #[async_trait]
 impl MarketDataProvider for AutoExchangeMarketDataProvider {
-    async fn get_market_snapshot(
-        &self,
-        exchange: &str,
-        symbol: &str,
-    ) -> MarketSnapshot {
+    async fn get_market_snapshot(&self, exchange: &str, symbol: &str) -> MarketSnapshot {
         let now_ms = chrono::Utc::now().timestamp_millis();
 
         let klines_1h = match self
@@ -503,38 +481,37 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             .await
             .unwrap_or_default();
 
-        let current_price = self
-            .fetch_current_price(exchange, symbol, &klines_1h)
-            .await;
+        let current_price = self.fetch_current_price(exchange, symbol, &klines_1h).await;
 
         let exchange_key = format!("{}:perpetual", exchange);
-        let (funding_rate, funding_next_time) = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
-            match ex.get_funding_rate(symbol).await {
-                Ok(fr) => {
-                    let next = fr
-                        .next_funding_time
-                        .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
-                        .unwrap_or_else(|| "N/A".to_string());
-                    (fr.rate, next)
+        let (funding_rate, funding_next_time) =
+            if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+                match ex.get_funding_rate(symbol).await {
+                    Ok(fr) => {
+                        let next = fr
+                            .next_funding_time
+                            .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                            .unwrap_or_else(|| "N/A".to_string());
+                        (fr.rate, next)
+                    }
+                    Err(e) => {
+                        warn!(
+                            exchange = %exchange,
+                            symbol = %symbol,
+                            error = %e,
+                            "Funding rate fetch failed — defaulting to 0.0"
+                        );
+                        (0.0, "N/A".to_string())
+                    }
                 }
-                Err(e) => {
-                    warn!(
-                        exchange = %exchange,
-                        symbol = %symbol,
-                        error = %e,
-                        "Funding rate fetch failed — defaulting to 0.0"
-                    );
-                    (0.0, "N/A".to_string())
-                }
-            }
-        } else {
-            warn!(
-                exchange = %exchange,
-                symbol = %symbol,
-                "No exchange found for funding rate — defaulting to 0.0"
-            );
-            (0.0, "N/A".to_string())
-        };
+            } else {
+                warn!(
+                    exchange = %exchange,
+                    symbol = %symbol,
+                    "No exchange found for funding rate — defaulting to 0.0"
+                );
+                (0.0, "N/A".to_string())
+            };
 
         let ind = virs_bot::common::indicators::compute_market_indicators(
             &klines_1h,
@@ -549,7 +526,6 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
         } else {
             ind.current_price
         };
-
 
         let min_qty = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
             match ex.get_min_qty(symbol).await {
@@ -568,7 +544,6 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             0.0
         };
 
-
         MarketSnapshot {
             current_price: effective_price,
             funding_rate,
@@ -579,7 +554,6 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
     }
 
     async fn get_account_balance(&self, exchange: &str) -> AccountBalance {
-
         if let Some(ref pe_ex) = self.pe_exchange {
             match pe_ex.get_balance().await {
                 Ok(b) => {
@@ -594,7 +568,6 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
                 }
             }
         }
-
 
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = match self.exchange_registry.get(&exchange_key) {

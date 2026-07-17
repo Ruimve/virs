@@ -30,11 +30,7 @@ fn l1_2_resolve_openai_user_cred() {
 
 #[test]
 fn l1_3_resolve_openrouter_user_cred() {
-    let creds = vec![(
-        "openrouter".to_string(),
-        "user-or-key".to_string(),
-        None,
-    )];
+    let creds = vec![("openrouter".to_string(), "user-or-key".to_string(), None)];
     let (key, url, model, provider) = resolve_llm_provider(&creds).unwrap();
     assert_eq!(key, "user-or-key");
     assert_eq!(url, "https://openrouter.ai/api/v1");
@@ -51,7 +47,6 @@ fn l1_4_resolve_no_key_error() {
 
 #[test]
 fn l1_5_resolve_deepseek_priority_over_openai() {
-
     let creds = vec![
         ("openai".to_string(), "openai-key".to_string(), None),
         ("deepseek".to_string(), "deepseek-key".to_string(), None),

@@ -11,7 +11,6 @@ use crate::grid::types::{GridCommand, GridEvent};
 use crate::grid::worker::GridWorker;
 use virs_config::TimeConfig;
 
-
 pub struct GridEngine {
     store: Arc<dyn GridStore>,
     ai_service: Arc<GridAiService>,
@@ -30,7 +29,6 @@ pub struct GridEngine {
 }
 
 impl GridEngine {
-
     pub fn new(
         store: Arc<dyn GridStore>,
         ai_service: Arc<GridAiService>,
@@ -65,7 +63,6 @@ impl GridEngine {
 
         (engine, cmd_tx, grid_event_tx)
     }
-
 
     pub async fn run(&mut self) {
         let mut cmd_rx = match self.cmd_rx.take() {

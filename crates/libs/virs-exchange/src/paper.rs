@@ -19,7 +19,6 @@ use virs_error::{ExchangeError, VirsError, VirsResult};
 
 use crate::registry::Exchanges;
 
-
 #[derive(Debug, Clone)]
 struct PaperPendingOrder {
     id: Uuid,
@@ -32,9 +31,7 @@ struct PaperPendingOrder {
     client_order_id: Option<String>,
 }
 
-
 type PaperPosition = ExchangePosition;
-
 
 pub struct PaperExchangeAdapter {
     name: String,
@@ -49,7 +46,6 @@ pub struct PaperExchangeAdapter {
 
     configured_leverage: Arc<DashMap<String, u32>>,
 }
-
 
 impl PaperExchangeAdapter {
     pub fn new(name: &str, market_type: MarketType, initial_balance: f64) -> Self {
@@ -145,7 +141,9 @@ impl PaperExchangeAdapter {
                 symbol: order.symbol.clone(),
                 side: order.side,
                 order_type: order.order_type,
-                position_side: order.position_side.unwrap_or(virs_types::PositionSide::Long),
+                position_side: order
+                    .position_side
+                    .unwrap_or(virs_types::PositionSide::Long),
                 original_order_type: format!("{:?}", order.order_type),
                 status: CcxtOrderStatus::Filled,
                 execution_type: ExecutionType::Trade,
@@ -192,7 +190,6 @@ impl PaperExchangeAdapter {
     }
 
     async fn update_position_on_fill(&self, order: &PaperPendingOrder, fill_price: f64) {
-
         let position_side = match order.position_side {
             Some(ps) => ps,
             None => {
@@ -207,9 +204,7 @@ impl PaperExchangeAdapter {
         };
         let key = format!("{}:{:?}", order.symbol, position_side);
 
-
         let size_delta = order.amount;
-
 
         let leverage: u32 = self
             .configured_leverage
@@ -234,12 +229,10 @@ impl PaperExchangeAdapter {
             (Side::Buy, PositionSide::Short) => false,
         };
 
-
         let old_pos_info = self
             .positions
             .get(&key)
             .map(|p| (p.side, p.entry_price, p.quantity));
-
 
         let realized_pnl: f64 = match (&old_pos_info, is_opening) {
             (Some((side, entry, old_qty)), false) => {
@@ -252,31 +245,25 @@ impl PaperExchangeAdapter {
             _ => 0.0,
         };
 
-
         match self.positions.get_mut(&key) {
             Some(mut pos) => {
                 if is_opening {
-
                     let old_qty = pos.quantity;
                     let new_qty = old_qty + size_delta;
                     let total_cost = pos.entry_price * old_qty + fill_price * size_delta;
                     pos.quantity = new_qty;
                     pos.entry_price = total_cost / new_qty;
                 } else {
-
                     let new_qty = pos.quantity - size_delta;
                     if new_qty < 1e-8 {
-
                         drop(pos);
                         self.positions.remove(&key);
                     } else {
-
                         pos.quantity = new_qty;
                     }
                 }
             }
             None => {
-
                 self.positions.insert(
                     key.clone(),
                     PaperPosition {
@@ -289,14 +276,12 @@ impl PaperExchangeAdapter {
             }
         }
 
-
         let mut balance = self.balance.lock().await;
 
         if is_opening {
             balance.used += margin;
             balance.free -= margin;
         } else {
-
             let margin_release = margin.min(balance.used);
             balance.used -= margin_release;
             balance.free += margin_release + realized_pnl;
@@ -406,7 +391,6 @@ impl ExchangePe for PaperExchangeAdapter {
             self.update_position_on_fill(&pending_for_fill, fill_price)
                 .await;
 
-
             let fee = fill_price * params.amount * 0.0005;
 
             let order_result = OrderResult {
@@ -423,7 +407,9 @@ impl ExchangePe for PaperExchangeAdapter {
                 symbol: params.symbol.clone(),
                 side: params.side,
                 order_type: params.order_type,
-                position_side: params.position_side.unwrap_or(virs_types::PositionSide::Long),
+                position_side: params
+                    .position_side
+                    .unwrap_or(virs_types::PositionSide::Long),
                 original_order_type: format!("{:?}", params.order_type),
                 status: CcxtOrderStatus::Filled,
                 execution_type: ExecutionType::Trade,
@@ -493,12 +479,8 @@ impl ExchangePe for PaperExchangeAdapter {
     }
 
     async fn cancel_order(&self, _symbol: &str, order_id: &str) -> VirsResult<OrderResult> {
-        let uuid = Uuid::parse_str(order_id).map_err(|_| {
-            ExchangeError::Internal(format!(
-                "Invalid order ID: {}",
-                order_id
-            ))
-        })?;
+        let uuid = Uuid::parse_str(order_id)
+            .map_err(|_| ExchangeError::Internal(format!("Invalid order ID: {}", order_id)))?;
         match self.pending.remove(&uuid) {
             Some((_, pending)) => Ok(OrderResult {
                 order_id: order_id.to_string(),
@@ -530,15 +512,12 @@ impl ExchangePe for PaperExchangeAdapter {
     }
 
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> VirsResult<()> {
-
         self.configured_leverage
             .insert(symbol.to_string(), leverage);
         Ok(())
     }
 
     async fn get_position_mode(&self) -> VirsResult<PositionMode> {
-
-
         let registry = match &self.exchange_registry {
             Some(r) => r.clone(),
             None => return Ok(PositionMode::Hedge),
@@ -554,10 +533,7 @@ impl ExchangePe for PaperExchangeAdapter {
         }
     }
 
-    async fn subscribe_order_updates(
-        &self,
-        _symbols: &[&str],
-    ) -> VirsResult<OrderUpdateStream> {
+    async fn subscribe_order_updates(&self, _symbols: &[&str]) -> VirsResult<OrderUpdateStream> {
         let (tx, rx) = mpsc::channel(256);
         let mut price_tx = self.price_tx.lock().await;
         *price_tx = Some(tx);
@@ -568,10 +544,8 @@ impl ExchangePe for PaperExchangeAdapter {
         PaperExchangeAdapter::on_price_tick(self, symbol, price).await;
     }
 
-
     async fn restore_positions(&self, positions: Vec<ExchangePosition>) {
         for pos in positions {
-
             if pos.quantity.abs() < 1e-8 {
                 continue;
             }

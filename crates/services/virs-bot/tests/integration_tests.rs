@@ -1,3 +1,4 @@
+use uuid::Uuid;
 use virs_bot::auto::ai::{AutoAction, AutoDecision};
 use virs_bot::auto::strategy::{
     compute_cooldown_secs, compute_position_pct, compute_stop_loss, compute_take_profit,
@@ -7,9 +8,7 @@ use virs_bot::grid::ai::{parse_grid_decision, GridAction};
 use virs_bot::grid::types::GridLevel;
 use virs_bot::grid::utils::calculate_levels;
 use virs_bot::grid::utils::prompt::format_bars_outside;
-use uuid::Uuid;
 use virs_types::grid_port::GridBotConfig;
-
 
 fn make_bot(upper: f64, lower: f64, count: i32) -> GridBotConfig {
     GridBotConfig {
@@ -34,10 +33,8 @@ fn make_bot(upper: f64, lower: f64, count: i32) -> GridBotConfig {
     }
 }
 
-
 #[test]
 fn int_1_1_stop_loss_take_profit_consistency() {
-
     let entry = 100.0;
     let atr = 2.0;
     let sl = compute_stop_loss(entry, "long", atr);
@@ -49,18 +46,15 @@ fn int_1_1_stop_loss_take_profit_consistency() {
 
 #[test]
 fn int_1_2_trailing_stop_never_worsens() {
-
     let entry = 100.0;
     let atr = 2.0;
     let initial_stop = compute_stop_loss(entry, "long", atr);
-
 
     let new_stop_1 = compute_trailing_stop(entry, 105.0, "long", atr, initial_stop);
     assert!(
         new_stop_1 >= initial_stop,
         "trailing stop should never decrease"
     );
-
 
     let new_stop_2 = compute_trailing_stop(entry, 103.0, "long", atr, new_stop_1);
     assert!(
@@ -71,16 +65,12 @@ fn int_1_2_trailing_stop_never_worsens() {
 
 #[test]
 fn int_1_3_position_pct_full_chain() {
-
-
     let pct = compute_position_pct(30.0, 2, 0.003);
     assert_eq!(pct, 20.0);
-
 
     let pct_after = compute_position_pct(30.0, 0, 0.0);
     assert_eq!(pct_after, 80.0);
 }
-
 
 #[test]
 fn int_2_1_auto_action_roundtrip() {
@@ -121,9 +111,7 @@ fn int_2_2_auto_decision_json_roundtrip() {
     let decision = AutoDecision::from_json(&json);
     assert_eq!(decision.action, AutoAction::OpenLong);
 
-
     assert_eq!(decision.action.as_str(), "open_long");
-
 
     if let (Some(sl), Some(tp)) = (decision.stop_loss, decision.take_profit) {
         let computed_sl = compute_stop_loss(100000.0, "long", 2000.0);
@@ -134,7 +122,6 @@ fn int_2_2_auto_decision_json_roundtrip() {
         assert!(computed_sl < computed_tp);
     }
 }
-
 
 #[test]
 fn int_3_1_grid_action_roundtrip() {
@@ -172,11 +159,13 @@ fn int_3_2_grid_decision_parse_chain() {
     assert!((decision.upper_price - 110.0).abs() < 1e-10);
     assert!((decision.lower_price - 90.0).abs() < 1e-10);
 
-
-    let bot = make_bot(decision.upper_price, decision.lower_price, decision.grid_count);
+    let bot = make_bot(
+        decision.upper_price,
+        decision.lower_price,
+        decision.grid_count,
+    );
     let levels = calculate_levels(&bot, 100.0);
     assert_eq!(levels.len(), 10);
-
 
     for level in &levels {
         assert!(level.side == "buy" || level.side == "sell");
@@ -184,13 +173,11 @@ fn int_3_2_grid_decision_parse_chain() {
     }
 }
 
-
 #[test]
 fn int_4_1_calculate_levels_then_reset() {
     let bot = make_bot(110.0, 90.0, 5);
     let levels = calculate_levels(&bot, 100.0);
     assert_eq!(levels.len(), 5);
-
 
     let traded: Vec<GridLevel> = levels
         .iter()
@@ -203,11 +190,7 @@ fn int_4_1_calculate_levels_then_reset() {
         })
         .collect();
 
-
-    let reset: Vec<GridLevel> = traded
-        .iter()
-        .map(|l| l.reset_for_relist())
-        .collect();
+    let reset: Vec<GridLevel> = traded.iter().map(|l| l.reset_for_relist()).collect();
 
     for level in &reset {
         assert!(!level.buy_filled);
@@ -220,7 +203,6 @@ fn int_4_1_calculate_levels_then_reset() {
 
 #[test]
 fn int_4_2_format_stop_take_with_position_pct() {
-
     let pct = compute_position_pct(25.0, 0, 0.0);
     assert_eq!(pct, 80.0);
 
@@ -232,22 +214,17 @@ fn int_4_2_format_stop_take_with_position_pct() {
     assert!(display.contains("止盈"));
 }
 
-
 #[test]
 fn int_5_1_cooldown_then_position_pct() {
-
     let cooldown = compute_cooldown_secs("long", "stop_loss", "long");
     assert_eq!(cooldown, 1800);
-
 
     let pct = compute_position_pct(25.0, 0, 0.0);
     assert_eq!(pct, 80.0);
 
-
     let pct_after_loss = compute_position_pct(25.0, 2, 0.0);
     assert_eq!(pct_after_loss, 40.0);
 }
-
 
 #[test]
 fn int_6_1_format_bars_outside_all_cases() {

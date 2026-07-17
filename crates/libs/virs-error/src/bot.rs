@@ -1,5 +1,4 @@
-use crate::classify::{ErrorCategory, Retryable, Categorized, HttpStatus, ErrorCode};
-
+use crate::classify::{Categorized, ErrorCategory, ErrorCode, HttpStatus, Retryable};
 
 #[derive(Debug, thiserror::Error)]
 pub enum BotError {
@@ -9,7 +8,6 @@ pub enum BotError {
     Credential(String),
     #[error("LLM error: {0}")]
     Llm(String),
-
 
     #[cfg(feature = "reqwest")]
     #[error("LLM request error: {0}")]
@@ -21,7 +19,6 @@ impl BotError {
         Self::Llm(msg.into())
     }
 }
-
 
 pub type BotResult<T> = std::result::Result<T, BotError>;
 

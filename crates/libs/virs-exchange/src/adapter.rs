@@ -5,7 +5,6 @@ use virs_models::*;
 
 use crate::Exchange;
 
-
 pub struct CcxtAdapter {
     inner: Box<dyn CcxtExchange>,
     market_type: MarketType,
@@ -37,7 +36,6 @@ impl CcxtAdapter {
         Ok(markets)
     }
 }
-
 
 pub fn to_ccxt_market_type(mt: &MarketType) -> MarketType {
     match mt {
@@ -267,7 +265,10 @@ impl Exchange for CcxtAdapter {
             .await
     }
 
-    async fn get_positions(&self, symbol: Option<&str>) -> Result<Vec<ExchangePosition>, ExchangeError> {
+    async fn get_positions(
+        &self,
+        symbol: Option<&str>,
+    ) -> Result<Vec<ExchangePosition>, ExchangeError> {
         let positions = self.inner.fetch_positions(symbol).await?;
         Ok(positions
             .into_iter()
@@ -284,8 +285,6 @@ impl Exchange for CcxtAdapter {
     }
 
     async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError> {
-
-
         self.inner.get_position_mode().await
     }
 

@@ -45,7 +45,6 @@ fn make_grid_bot(
     }
 }
 
-
 #[test]
 fn g1_1_normal_spacing() {
     let bot = make_grid_bot(50000.0, 40000.0, 10, StrategyStatus::Running, 0.0, 10000.0);
@@ -64,7 +63,6 @@ fn g1_3_zero_grid_count() {
     assert!((bot.grid_spacing() - 0.0).abs() < 0.01);
 }
 
-
 #[test]
 fn g3_1_running_status() {
     let bot = make_grid_bot(50000.0, 40000.0, 10, StrategyStatus::Running, 0.0, 10000.0);
@@ -76,7 +74,6 @@ fn g3_2_stopped_status() {
     let bot = make_grid_bot(50000.0, 40000.0, 10, StrategyStatus::Stopped, 0.0, 10000.0);
     assert!(!bot.is_running());
 }
-
 
 #[test]
 fn g4_1_stopped_status() {
@@ -90,10 +87,16 @@ fn g4_2_running_status() {
     assert!(!bot.is_stopped());
 }
 
-
 #[test]
 fn g5_1_positive_return() {
-    let bot = make_grid_bot(50000.0, 40000.0, 10, StrategyStatus::Running, 500.0, 10000.0);
+    let bot = make_grid_bot(
+        50000.0,
+        40000.0,
+        10,
+        StrategyStatus::Running,
+        500.0,
+        10000.0,
+    );
     assert!((bot.total_return_pct() - 5.0).abs() < 0.01);
 }
 

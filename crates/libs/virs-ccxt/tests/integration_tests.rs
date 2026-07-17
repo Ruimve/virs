@@ -10,7 +10,6 @@ use virs_error::ExchangeError;
 
 use virs_types::enums::OrderStatus;
 
-
 #[test]
 fn int_1_1_symbol_roundtrip_usdt() {
     let native = BinanceExchange::to_native_symbol("BTC/USDT");
@@ -35,7 +34,6 @@ fn int_1_3_symbol_roundtrip_btc_pair() {
     assert_eq!(unified, "BNB/BTC");
 }
 
-
 #[test]
 fn int_2_1_hmac_signature_deterministic() {
     let key = "test_secret_key";
@@ -45,7 +43,6 @@ fn int_2_1_hmac_signature_deterministic() {
     assert_eq!(sig1, sig2);
     assert_eq!(sig1.len(), 64);
 }
-
 
 #[test]
 fn int_4_2_order_trade_update_dispatch() {
@@ -90,7 +87,6 @@ fn int_4_3_non_order_event_returns_none() {
     assert!(event.is_none());
 }
 
-
 #[test]
 fn int_5_1_create_exchange_binance_hmac() {
     let result = create_exchange(
@@ -112,7 +108,6 @@ fn int_5_1_create_exchange_binance_hmac() {
 
 #[test]
 fn int_5_2_create_exchange_binance_ed25519() {
-
     let seed_b64 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
     let result = create_exchange(
         "binance",
@@ -186,10 +181,8 @@ fn int_5_5_create_exchange_case_insensitive() {
     assert!(result.is_ok());
 }
 
-
 #[test]
 fn int_6_1_ticker_json_to_ticker_via_parse() {
-
     let raw = json!({
         "symbol": "BTCUSDT",
         "bidPrice": "50000.0",
@@ -235,7 +228,6 @@ fn int_6_1_ticker_json_to_ticker_via_parse() {
 
 #[test]
 fn int_6_2_order_status_chain() {
-
     let binance_status = "PARTIALLY_FILLED";
     let ccxt_status = BinanceExchange::parse_order_status(binance_status);
     assert_eq!(ccxt_status, CcxtOrderStatus::PartiallyFilled);
@@ -253,7 +245,6 @@ fn int_6_3_order_status_expired_to_canceled_chain() {
     let app_status: OrderStatus = ccxt_status.into();
     assert_eq!(app_status, OrderStatus::Canceled);
 }
-
 
 #[test]
 fn int_7_1_order_type_roundtrip() {
@@ -284,10 +275,8 @@ fn int_7_2_side_roundtrip() {
     assert_eq!(BinanceExchange::side_str(&Side::Sell), "SELL");
 }
 
-
 #[test]
 fn int_8_1_parse_f64_used_in_ticker_conversion() {
-
     let raw = json!({"price": "0.00012345"});
     let val = parse_f64(&raw, "price");
     assert_eq!(val, Some(0.00012345));

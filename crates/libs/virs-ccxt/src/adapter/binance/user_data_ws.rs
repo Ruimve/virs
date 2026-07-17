@@ -4,7 +4,6 @@ use serde::Deserialize;
 use tokio::sync::mpsc;
 use virs_error::ExchangeError;
 
-
 pub use virs_types::WsFeedEvent;
 
 use crate::adapter::binance::fapi;
@@ -13,7 +12,6 @@ use crate::auth::Signer;
 use crate::ws_manager::{MessageOutcome, WsHandler, WsManager, WsManagerConfig, WsManagerEvent};
 use crate::ExchangeClient;
 
-
 // Binance用户数据WebSocket消息，兼容两种格式：
 // 组合流: {"stream":...,"data":{"e":"...",...}}
 // 扁平流: {"e":"...","E":...,"o":{...}}
@@ -21,13 +19,13 @@ use crate::ExchangeClient;
 //       本结构仅用于延迟检测（event_type/event_time），不再解析订单字段。
 #[derive(Debug, Clone, Deserialize)]
 pub struct BinanceOrderMessage {
-    pub(crate) data: Option<BinanceOrderData>,  // 组合流内层事件数据
+    pub(crate) data: Option<BinanceOrderData>, // 组合流内层事件数据
 
     #[serde(rename = "e")]
-    pub(crate) event_type_flat: Option<String>,  // 扁平流的事件类型
+    pub(crate) event_type_flat: Option<String>, // 扁平流的事件类型
 
     #[serde(rename = "E")]
-    event_time_flat: Option<i64>,  // 扁平流的事件时间(ms)
+    event_time_flat: Option<i64>, // 扁平流的事件时间(ms)
 }
 
 impl BinanceOrderMessage {
@@ -49,30 +47,26 @@ impl BinanceOrderMessage {
 #[derive(Debug, Clone, Deserialize)]
 pub struct BinanceOrderData {
     #[serde(rename = "e")]
-    pub event_type: String,  // e→事件类型
+    pub event_type: String, // e→事件类型
     #[serde(rename = "E")]
-    pub event_time: i64,  // E→事件时间(ms)
+    pub event_time: i64, // E→事件时间(ms)
 }
-
 
 // 延迟阈值: 事件时间超过本地时间3秒视为延迟
 pub(crate) const ORDER_WS_DELAY_THRESHOLD_MS: i64 = 3_000;
 
-
 // 用户数据WebSocket处理器，管理listenKey和消息分发
 pub struct UserDataWsHandler {
+    ws_url: String, // WebSocket连接URL
 
-    ws_url: String,  // WebSocket连接URL
+    client: ExchangeClient, // 交易所客户端(用于创建listenKey)
 
-    client: ExchangeClient,  // 交易所客户端(用于创建listenKey)
+    signer: Arc<dyn Signer>, // 签名器
 
-    signer: Arc<dyn Signer>,  // 签名器
-
-    current_key: Arc<RwLock<String>>,  // 当前listenKey(共享给重连逻辑)
+    current_key: Arc<RwLock<String>>, // 当前listenKey(共享给重连逻辑)
 }
 
 impl UserDataWsHandler {
-
     // 构造处理器
     pub fn new(
         ws_url: String,
@@ -101,19 +95,14 @@ impl WsHandler<WsFeedEvent> for UserDataWsHandler {
         let new_key = fapi::create_listen_key(&self.client, self.signer.as_ref()).await?;
 
         // 更新共享的current_key
-        *self.current_key
-            .write()
-            .expect("listenKey RwLock poisoned") = new_key.clone();
+        *self.current_key.write().expect("listenKey RwLock poisoned") = new_key.clone();
         let url = format!("wss://fstream.binance.com/private/ws?listenKey={}", new_key);
         tracing::info!("[UserDataWs] Refreshed listenKey for reconnect");
         Ok(url)
     }
 
     // 收到消息: 先做延迟检测(阈值3秒)，再dispatch_event分发，最后检查listenKeyExpired和serverShutdown
-    async fn on_message(
-        &self,
-        text: &str,
-    ) -> Result<MessageOutcome<WsFeedEvent>, ExchangeError> {
+    async fn on_message(&self, text: &str) -> Result<MessageOutcome<WsFeedEvent>, ExchangeError> {
         // 延迟检测: 比较事件时间与本地时间
         if let Ok(bmsg) = serde_json::from_str::<BinanceOrderMessage>(text) {
             if let Some(et) = bmsg.event_time() {
@@ -166,23 +155,19 @@ impl WsHandler<WsFeedEvent> for UserDataWsHandler {
         vec![]
     }
 
-    async fn on_disconnected(&self) {
-
-    }
+    async fn on_disconnected(&self) {}
 }
-
 
 // 用户数据WebSocket封装，管理连接生命周期和事件转发
 pub struct UserDataWs {
-    manager: WsManager<WsFeedEvent>,  // WS连接管理器
+    manager: WsManager<WsFeedEvent>, // WS连接管理器
 
-    pub ws_url: String,  // 连接URL: wss://fstream.binance.com/private/ws?listenKey=xxx
+    pub ws_url: String, // 连接URL: wss://fstream.binance.com/private/ws?listenKey=xxx
 
-    current_key: Arc<RwLock<String>>,  // 当前listenKey
+    current_key: Arc<RwLock<String>>, // 当前listenKey
 }
 
 impl UserDataWs {
-
     // 构造永续合约用户数据WS，URL格式: wss://fstream.binance.com/private/ws?listenKey=xxx
     pub fn new_perpetual(
         listen_key: String,
@@ -245,7 +230,9 @@ impl UserDataWs {
                     }
                 };
                 if event_tx.send(feed_event).await.is_err() {
-                    tracing::warn!("[UserDataWs] External event channel closed, stopping forwarder");
+                    tracing::warn!(
+                        "[UserDataWs] External event channel closed, stopping forwarder"
+                    );
                     break;
                 }
             }

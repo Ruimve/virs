@@ -72,7 +72,6 @@ pub async fn call_llm_api(
     })
 }
 
-
 pub fn create_llm_http_client(llm_timeout: std::time::Duration) -> reqwest::Client {
     reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))

@@ -15,25 +15,17 @@ use virs_market::{
 
 #[tokio::main]
 async fn main() -> VirsResult<()> {
-
     let mut config = load_config()?;
 
-    if config.server.encryption_key
-        == "change-me-to-a-random-64-char-string-in-production"
-    {
+    if config.server.encryption_key == "change-me-to-a-random-64-char-string-in-production" {
         tracing::warn!("WARNING: Using default ENCRYPTION_KEY. Change this in production!");
     }
-    if config.server.llm_key
-        == "change-me-to-a-random-64-char-string-in-production"
-    {
+    if config.server.llm_key == "change-me-to-a-random-64-char-string-in-production" {
         tracing::warn!("WARNING: Using default LLM_KEY. Change this in production!");
     }
-    if config.server.jwt_secret
-        == "change-me-to-a-random-32-char-or-longer-string-in-production"
-    {
+    if config.server.jwt_secret == "change-me-to-a-random-32-char-or-longer-string-in-production" {
         tracing::warn!("WARNING: Using default JWT_SECRET. Change this in production!");
     }
-
 
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -47,15 +39,15 @@ async fn main() -> VirsResult<()> {
     info!("VIRS starting up...");
     info!("Version: {}", env!("CARGO_PKG_VERSION"));
 
-
     let db_pool = sqlx::postgres::PgPoolOptions::new()
         .min_connections(config.database.pool_min)
         .max_connections(config.database.pool_max)
-        .acquire_timeout(std::time::Duration::from_secs(config.database.acquire_timeout_secs))
+        .acquire_timeout(std::time::Duration::from_secs(
+            config.database.acquire_timeout_secs,
+        ))
         .connect(&config.database.url)
         .await?;
     info!("Database connected");
-
 
     let init_sql = std::fs::read_to_string("migrations/init.sql")
         .or_else(|_| {
@@ -70,7 +62,6 @@ async fn main() -> VirsResult<()> {
         .context("Failed to read migrations/init.sql: ensure the migrations directory is accessible from the working directory, next to the executable, or at /app/migrations/")?;
     sqlx::raw_sql(&init_sql).execute(&db_pool).await?;
     info!("Database migrations applied");
-
 
     let admin_exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM qd_users WHERE username = $1)")
@@ -103,10 +94,8 @@ async fn main() -> VirsResult<()> {
     };
     config.admin.id = Some(admin_id);
 
-
     let exchange_registry = Arc::new(Exchanges::new());
     info!("Exchange registry initialized (empty — will be populated on first credential save)");
-
 
     let kline_config = KlineEngineConfig {
         proxy_url: config.proxy.clone(),
@@ -114,17 +103,10 @@ async fn main() -> VirsResult<()> {
     };
     let kline_source = Arc::new(ExchangeKlineSource::new(exchange_registry.clone()));
     let perpetual_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::kline_ws::KlineWs::new_perpetual(
-            config.proxy.as_deref(),
-        ),
+        virs_ccxt::adapter::binance::kline_ws::KlineWs::new_perpetual(config.proxy.as_deref()),
     ));
-    let kline_engine = Arc::new(KlineEngine::new(
-        kline_config,
-        kline_source,
-        perpetual_ws,
-    ));
+    let kline_engine = Arc::new(KlineEngine::new(kline_config, kline_source, perpetual_ws));
     info!("Kline engine created (lazy — will start on first subscribe)");
-
 
     let ob_perpetual_ws = Arc::new(tokio::sync::Mutex::new(
         virs_ccxt::adapter::binance::orderbook_ws::OrderBookWs::new_perpetual(
@@ -137,7 +119,6 @@ async fn main() -> VirsResult<()> {
     ));
     info!("OrderBook engine created (lazy — will start on first subscribe)");
 
-
     let engine_manager = Arc::new(AppEngineManager::new(
         db_pool.clone(),
         exchange_registry.clone(),
@@ -149,7 +130,6 @@ async fn main() -> VirsResult<()> {
         config.time.clone(),
     ));
     info!("Engine manager created (engines will start on first bot creation)");
-
 
     let app_state = AppState {
         db_pool: db_pool.clone(),
@@ -168,12 +148,9 @@ async fn main() -> VirsResult<()> {
         listenkey_keepalive_futures_secs: config.time.listenkey.listenkey_keepalive_futures_secs,
     };
 
-
     let _ = engine_manager.restore_if_needed().await;
 
-
     let app = build_router(app_state);
-
 
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr)
@@ -188,7 +165,6 @@ async fn main() -> VirsResult<()> {
     .with_graceful_shutdown(shutdown_signal())
     .await
     .context("axum server error")?;
-
 
     info!("Shutting down trading engines...");
     engine_manager.shutdown().await;

@@ -2,11 +2,8 @@ use reqwest::header::{HeaderMap, HeaderValue};
 
 use crate::auth::{hmac_sha256_hex, insert_header, make_header};
 
-
 #[test]
 fn a1_1_hmac_sha256_hex_known_vector() {
-
-
     let key = "NhqPtmdSJYdKjVHjA7PZj4Mge3R5YNiP1e3UZjInClVN65XAbvqqM6A7H5fATj0j";
     let msg = "symbol=LTCBTC&side=BUY&type=LIMIT&timeInForce=GTC&quantity=1&price=0.1&recvWindow=5000&timestamp=1499827319559";
     let sig = hmac_sha256_hex(key, msg);
@@ -47,7 +44,6 @@ fn a1_5_hmac_sha256_hex_different_inputs() {
     assert_ne!(sig1, sig2);
 }
 
-
 #[test]
 fn a3_1_make_header_valid_ascii() {
     let result = make_header("x-mbx-apikey", "abcdef123456");
@@ -58,11 +54,9 @@ fn a3_1_make_header_valid_ascii() {
 
 #[test]
 fn a3_2_make_header_invalid_chars() {
-
     let result = make_header("x-custom", "bad\nvalue");
     assert!(result.is_err());
 }
-
 
 #[test]
 fn a4_1_insert_header_success() {

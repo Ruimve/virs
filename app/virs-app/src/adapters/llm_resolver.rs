@@ -1,7 +1,6 @@
+use virs_error::{BotError, BotResult};
 use virs_types::bot::LlmProviderResolver;
 use virs_types::llm;
-use virs_error::{BotError, BotResult};
-
 
 pub fn resolve_llm_provider(
     user_credentials: &[(String, String, Option<String>)],
@@ -18,7 +17,6 @@ pub fn resolve_llm_provider(
             _ => {}
         }
     }
-
 
     for (provider, creds) in [
         ("deepseek", user_deepseek),
@@ -38,7 +36,9 @@ pub fn resolve_llm_provider(
         }
     }
 
-    Err(BotError::Llm("No LLM API key configured. Set AI credentials via the wizard.".to_string()))
+    Err(BotError::Llm(
+        "No LLM API key configured. Set AI credentials via the wizard.".to_string(),
+    ))
 }
 
 pub struct DefaultLlmResolver;
@@ -51,7 +51,6 @@ impl DefaultLlmResolver {
 
 impl LlmProviderResolver for DefaultLlmResolver {
     fn is_available(&self) -> bool {
-
         false
     }
 

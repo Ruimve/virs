@@ -5,7 +5,6 @@ use crate::{
     parse_timestamp_ms, parse_u32,
 };
 
-
 #[test]
 fn l1_1_parse_f64_from_number() {
     let v = json!({"price": 12345.67});
@@ -42,7 +41,6 @@ fn l1_6_parse_f64_from_integer() {
     assert_eq!(parse_f64(&v, "price"), Some(42.0));
 }
 
-
 #[test]
 fn l2_1_parse_str_from_string() {
     let v = json!({"symbol": "BTCUSDT"});
@@ -71,7 +69,6 @@ fn l2_4_parse_str_missing_field() {
     assert_eq!(parse_str(&v, "symbol"), None);
 }
 
-
 #[test]
 fn l4_1_parse_u32_from_u64() {
     let v = json!({"leverage": 10});
@@ -89,7 +86,6 @@ fn l4_3_parse_u32_missing_field() {
     let v = json!({"other": 1});
     assert_eq!(parse_u32(&v, "leverage"), None);
 }
-
 
 #[test]
 fn l5_1_build_display_url_no_params() {
@@ -121,7 +117,6 @@ fn l5_4_build_display_url_empty_params() {
     );
 }
 
-
 #[test]
 fn l6_1_mask_signature_basic() {
     let body = "symbol=BTCUSDT&signature=abcdef123456";
@@ -148,13 +143,11 @@ fn l6_3_mask_signature_no_signature() {
 
 #[test]
 fn l6_4_mask_signature_multiple_signatures() {
-
     let body = "signature=aaa&signature=bbb";
     let masked = mask_signature(body);
     assert!(masked.contains("***MASKED***"));
     assert!(masked.contains("bbb"));
 }
-
 
 #[test]
 fn l7_1_extract_error_msg_with_code() {
@@ -205,10 +198,8 @@ fn l7_7_extract_error_no_matching_field() {
     assert_eq!(msg, r#"{"foo":"bar"}"#);
 }
 
-
 #[test]
 fn l8_1_parse_timestamp_ms_from_i64() {
-
     let v = json!({"time": 1713182400000i64});
     let dt = parse_timestamp_ms(&v, "time");
     assert!(dt.is_some());

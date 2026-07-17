@@ -11,7 +11,6 @@ fn url(path: &str) -> String {
     format!("{BASE_URL}{path}")
 }
 
-
 // API权限查询 (签名，现货域名)
 // GET /sapi/v1/account/apiRestrictions - 查询当前 API Key 的各项权限开关
 pub async fn fetch_api_restrictions(

@@ -33,8 +33,6 @@ pub struct AutoBot {
 }
 
 impl AutoBot {
-
-
     pub fn win_rate(&self) -> f64 {
         if self.total_trades <= 0 {
             0.0
@@ -42,7 +40,6 @@ impl AutoBot {
             self.win_trades as f64 / self.total_trades as f64 * 100.0
         }
     }
-
 
     pub fn loss_rate(&self) -> f64 {
         if self.total_trades <= 0 {
@@ -52,7 +49,6 @@ impl AutoBot {
         }
     }
 
-
     pub fn total_return_pct(&self) -> f64 {
         if self.initial_capital == 0.0 {
             0.0
@@ -61,11 +57,9 @@ impl AutoBot {
         }
     }
 
-
     pub fn is_running(&self) -> bool {
         self.status == "running"
     }
-
 
     pub fn is_stopped(&self) -> bool {
         self.status == "stopped"

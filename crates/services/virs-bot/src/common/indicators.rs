@@ -43,19 +43,15 @@ pub fn sma_at_from(series: &[f64], idx: usize, period: usize) -> f64 {
         warn!(indicator = "sma_at_from", error = %e, "TA-Lib SMA calculation failed — returning empty series");
         Vec::new()
     });
-    result
-        .get(mapped_idx)
-        .copied()
-        .unwrap_or_else(|| {
-            result.last().copied().unwrap_or_else(|| {
-                warn!(
-                    indicator = "sma_at_from",
-                    idx,
-                    "Insufficient data for indicator calculation — defaulting to 0.0"
-                );
-                0.0
-            })
+    result.get(mapped_idx).copied().unwrap_or_else(|| {
+        result.last().copied().unwrap_or_else(|| {
+            warn!(
+                indicator = "sma_at_from",
+                idx, "Insufficient data for indicator calculation — defaulting to 0.0"
+            );
+            0.0
         })
+    })
 }
 
 #[inline(always)]
@@ -70,8 +66,7 @@ pub fn ema_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     result.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "ema_at",
-            idx,
-            "Insufficient data for indicator calculation — defaulting to 0.0"
+            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
         );
         0.0
     })
@@ -101,8 +96,7 @@ pub fn macd_at(klines: &[Kline], idx: usize, fast: usize, slow: usize) -> f64 {
     macd.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "macd_at",
-            idx,
-            "Insufficient data for indicator calculation — defaulting to 0.0"
+            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
         );
         0.0
     })
@@ -126,8 +120,7 @@ pub fn macd_signal_at(
     sig.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "macd_signal_at",
-            idx,
-            "Insufficient data for indicator calculation — defaulting to 0.0"
+            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
         );
         0.0
     })
@@ -147,24 +140,21 @@ pub fn bbands_at(klines: &[Kline], idx: usize, period: usize, std_dev: f64) -> (
         upper.get(idx).copied().unwrap_or_else(|| {
             warn!(
                 indicator = "bbands_at.upper",
-                idx,
-                "Insufficient data for indicator calculation — defaulting to 0.0"
+                idx, "Insufficient data for indicator calculation — defaulting to 0.0"
             );
             0.0
         }),
         middle.get(idx).copied().unwrap_or_else(|| {
             warn!(
                 indicator = "bbands_at.middle",
-                idx,
-                "Insufficient data for indicator calculation — defaulting to 0.0"
+                idx, "Insufficient data for indicator calculation — defaulting to 0.0"
             );
             0.0
         }),
         lower.get(idx).copied().unwrap_or_else(|| {
             warn!(
                 indicator = "bbands_at.lower",
-                idx,
-                "Insufficient data for indicator calculation — defaulting to 0.0"
+                idx, "Insufficient data for indicator calculation — defaulting to 0.0"
             );
             0.0
         }),
@@ -184,8 +174,7 @@ pub fn atr_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     result.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "atr_at",
-            idx,
-            "Insufficient data for indicator calculation — defaulting to 0.0"
+            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
         );
         0.0
     })
@@ -204,8 +193,7 @@ pub fn adx_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     result.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "adx_at",
-            idx,
-            "Insufficient data for indicator calculation — defaulting to 0.0"
+            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
         );
         0.0
     })
@@ -229,16 +217,14 @@ pub fn macd_histogram_at(
     let m = macd.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "macd_histogram_at.macd",
-            idx,
-            "Insufficient data for indicator calculation — defaulting to 0.0"
+            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
         );
         0.0
     });
     let s = sig.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "macd_histogram_at.signal",
-            idx,
-            "Insufficient data for indicator calculation — defaulting to 0.0"
+            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
         );
         0.0
     });
@@ -266,8 +252,7 @@ pub fn highest_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     result.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "highest_at",
-            idx,
-            "Insufficient data for indicator calculation — defaulting to 0.0"
+            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
         );
         0.0
     })
@@ -285,8 +270,7 @@ pub fn lowest_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     result.get(idx).copied().unwrap_or_else(|| {
         warn!(
             indicator = "lowest_at",
-            idx,
-            "Insufficient data for indicator calculation — defaulting to 0.0"
+            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
         );
         0.0
     })
@@ -301,7 +285,6 @@ pub fn volume_sma_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
     sum / period as f64
 }
 
-
 pub fn compute_bars_outside_band(klines: &[Kline], bb_upper: f64, bb_lower: f64) -> i32 {
     let mut count: i32 = 0;
     for k in klines.iter().rev() {
@@ -315,7 +298,6 @@ pub fn compute_bars_outside_band(klines: &[Kline], bb_upper: f64, bb_lower: f64)
     }
     count
 }
-
 
 pub fn find_round_number(price: f64, upward: bool) -> f64 {
     if price <= 0.0 {
@@ -340,10 +322,8 @@ pub fn find_round_number(price: f64, upward: bool) -> f64 {
     }
 }
 
-
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct MarketIndicators {
-
     pub current_price: f64,
     pub rsi: f64,
     pub atr: f64,
@@ -408,7 +388,6 @@ pub struct MarketIndicators {
     pub funding_next_time: String,
 }
 
-
 pub fn compute_market_indicators(
     klines_1h: &[Kline],
     klines_4h: &[Kline],
@@ -465,14 +444,17 @@ pub fn compute_market_indicators(
         0.0
     };
 
-    let h1_candle_body = klines_1h.last().map(|k| k.close - k.open).unwrap_or_else(|| {
-        warn!(
-            indicator = "h1_candle_body",
-            len = klines_1h.len(),
-            "Insufficient data for indicator calculation — defaulting to 0.0"
-        );
-        0.0
-    });
+    let h1_candle_body = klines_1h
+        .last()
+        .map(|k| k.close - k.open)
+        .unwrap_or_else(|| {
+            warn!(
+                indicator = "h1_candle_body",
+                len = klines_1h.len(),
+                "Insufficient data for indicator calculation — defaulting to 0.0"
+            );
+            0.0
+        });
     let h1_bars_outside_band = compute_bars_outside_band(klines_1h, bb_upper, bb_lower);
     let h1_bandwidth_5bars_ago = if last_idx >= 5 {
         bbands_width_at(klines_1h, last_idx.saturating_sub(5), 20, 2.0)
@@ -530,7 +512,6 @@ pub fn compute_market_indicators(
     }
     .to_string();
 
-
     let h4_last = klines_4h.len().saturating_sub(1);
     let h4_ema20 = if !klines_4h.is_empty() {
         ema_at(klines_4h, h4_last, 20)
@@ -572,7 +553,6 @@ pub fn compute_market_indicators(
     } else {
         0.0
     };
-
 
     let m15_last = klines_15m.len().saturating_sub(1);
     let m15_current_price = klines_15m.last().map(|k| k.close).unwrap_or(current_price);

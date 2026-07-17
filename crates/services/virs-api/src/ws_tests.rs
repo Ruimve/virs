@@ -122,7 +122,6 @@ fn make_position(side: PositionSide, status: PositionStatus, stop_loss: Option<f
         client_order_id: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
-        closed_at: None,
     }
 }
 

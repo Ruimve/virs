@@ -2,10 +2,10 @@ use tracing::info;
 
 pub mod fapi;
 pub mod kline_ws;
-pub mod user_data_ws;
-pub mod user_data_ws_events;
 pub mod orderbook_ws;
 pub mod sapi;
+pub mod user_data_ws;
+pub mod user_data_ws_events;
 
 use async_trait::async_trait;
 use base64::Engine;
@@ -17,10 +17,9 @@ use tokio::sync::mpsc;
 
 use crate::auth::{hmac_sha256_hex, insert_header, SignedRequest, Signer};
 use crate::types::*;
-use virs_types::WsFeedEvent;
 use crate::{Exchange, ExchangeClient};
 use virs_error::ExchangeError;
-
+use virs_types::WsFeedEvent;
 
 // 币安 HMAC-SHA256 签名器
 pub struct BinanceSigner {
@@ -73,8 +72,8 @@ impl Signer for BinanceSigner {
         query_params: &mut Vec<(String, String)>,
     ) -> Result<SignedRequest, ExchangeError> {
         // 计算校正后的时间戳
-        let timestamp = chrono::Utc::now().timestamp_millis()
-            + self.time_offset_ms.load(Ordering::Acquire);
+        let timestamp =
+            chrono::Utc::now().timestamp_millis() + self.time_offset_ms.load(Ordering::Acquire);
         query_params.push(("recvWindow".into(), RECV_WINDOW.into()));
         query_params.push(("timestamp".into(), timestamp.to_string()));
 
@@ -104,8 +103,8 @@ impl Signer for BinanceSigner {
         _path: &str,
         body: &mut serde_json::Value,
     ) -> Result<SignedRequest, ExchangeError> {
-        let timestamp = chrono::Utc::now().timestamp_millis()
-            + self.time_offset_ms.load(Ordering::Acquire);
+        let timestamp =
+            chrono::Utc::now().timestamp_millis() + self.time_offset_ms.load(Ordering::Acquire);
         let timestamp_str = timestamp.to_string();
         let mut query_params = vec![
             ("recvWindow".into(), RECV_WINDOW.into()),
@@ -160,7 +159,6 @@ impl Signer for BinanceSigner {
     }
 }
 
-
 // 币安 Ed25519 签名器(比HMAC更安全)
 pub struct BinanceEd25519Signer {
     api_key: String,
@@ -182,7 +180,6 @@ impl Clone for BinanceEd25519Signer {
 }
 
 impl BinanceEd25519Signer {
-
     // 从PEM格式私钥创建
     pub fn from_pem(api_key: &str, pem: &str) -> Result<Self, ExchangeError> {
         let signing_key = ed25519_dalek::SigningKey::from_pkcs8_pem(pem).map_err(|e| {
@@ -220,7 +217,6 @@ impl BinanceEd25519Signer {
         let signature = self.signing_key.sign(message.as_bytes());
         base64::engine::general_purpose::STANDARD.encode(signature.to_bytes())
     }
-
 }
 
 impl Signer for BinanceEd25519Signer {
@@ -238,8 +234,8 @@ impl Signer for BinanceEd25519Signer {
         _path: &str,
         query_params: &mut Vec<(String, String)>,
     ) -> Result<SignedRequest, ExchangeError> {
-        let timestamp = chrono::Utc::now().timestamp_millis()
-            + self.time_offset_ms.load(Ordering::Acquire);
+        let timestamp =
+            chrono::Utc::now().timestamp_millis() + self.time_offset_ms.load(Ordering::Acquire);
         query_params.push(("recvWindow".into(), RECV_WINDOW.into()));
         query_params.push(("timestamp".into(), timestamp.to_string()));
 
@@ -268,8 +264,8 @@ impl Signer for BinanceEd25519Signer {
         _path: &str,
         body: &mut serde_json::Value,
     ) -> Result<SignedRequest, ExchangeError> {
-        let timestamp = chrono::Utc::now().timestamp_millis()
-            + self.time_offset_ms.load(Ordering::Acquire);
+        let timestamp =
+            chrono::Utc::now().timestamp_millis() + self.time_offset_ms.load(Ordering::Acquire);
         let timestamp_str = timestamp.to_string();
         let mut query_params = vec![
             ("recvWindow".into(), RECV_WINDOW.into()),
@@ -328,7 +324,6 @@ impl Signer for BinanceEd25519Signer {
     }
 }
 
-
 // 自动检测api_secret格式：PEM→Ed25519，Base64解码为32字节→Ed25519，其他→回退到HMAC
 pub(crate) fn try_build_ed25519(
     api_key: &str,
@@ -357,7 +352,6 @@ pub(crate) fn try_build_ed25519(
     }
 }
 
-
 // 币安交易所适配器
 pub struct BinanceExchange {
     client: ExchangeClient,
@@ -373,7 +367,6 @@ pub struct BinanceExchange {
 }
 
 impl BinanceExchange {
-
     // 创建实例，优先尝试Ed25519签名器，失败回退到HMAC
     pub fn new(
         api_key: &str,
@@ -385,8 +378,14 @@ impl BinanceExchange {
         listenkey_keepalive_futures_secs: u64,
     ) -> Result<Self, ExchangeError> {
         let max_concurrent: u32 = 40;
-        let client =
-            ExchangeClient::with_api_key(max_concurrent, proxy_url, Some(api_key), http_timeout, connect_timeout, pool_max_idle_per_host)?;
+        let client = ExchangeClient::with_api_key(
+            max_concurrent,
+            proxy_url,
+            Some(api_key),
+            http_timeout,
+            connect_timeout,
+            pool_max_idle_per_host,
+        )?;
 
         // 优先尝试Ed25519，失败则回退到HMAC
         let signer = match try_build_ed25519(api_key, api_secret) {
@@ -394,12 +393,10 @@ impl BinanceExchange {
                 let arc: Arc<dyn Signer> = Arc::new(ed);
                 arc
             }
-            Err(_) => {
-                Arc::new(BinanceSigner::new(
-                    api_key.to_string(),
-                    api_secret.to_string(),
-                )) as Arc<dyn Signer>
-            }
+            Err(_) => Arc::new(BinanceSigner::new(
+                api_key.to_string(),
+                api_secret.to_string(),
+            )) as Arc<dyn Signer>,
         };
 
         Ok(Self {
@@ -482,7 +479,6 @@ impl BinanceExchange {
     }
 }
 
-
 // 解析订单簿bids/asks数组，每项[price, qty]
 pub(crate) fn parse_order_book_side(data: &serde_json::Value, side: &str) -> Vec<(f64, f64)> {
     data.get(side)
@@ -548,7 +544,11 @@ impl Exchange for BinanceExchange {
     }
 
     // 撤销订单: DELETE /fapi/v1/order (签名)，只返回 orderId + clientOrderId
-    async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<OrderResult, ExchangeError> {
+    async fn cancel_order(
+        &self,
+        symbol: &str,
+        order_id: &str,
+    ) -> Result<OrderResult, ExchangeError> {
         fapi::cancel_order(&self.client, self.signer.as_ref(), symbol, order_id).await
     }
 
@@ -611,7 +611,6 @@ impl Exchange for BinanceExchange {
         &self,
         listen_key_hint: Option<&str>,
     ) -> Result<mpsc::Receiver<WsFeedEvent>, ExchangeError> {
-
         // 获取或创建listenKey
         let listen_key = match listen_key_hint {
             Some(k) => k.to_string(),
@@ -697,10 +696,7 @@ impl Exchange for BinanceExchange {
             );
         }
 
-        info!(
-            time_offset_ms = offset,
-            "Server time synced"
-        );
+        info!(time_offset_ms = offset, "Server time synced");
 
         // 首次同步时启动周期性时间同步任务
         if !self.time_sync_started.swap(true, Ordering::SeqCst) {
@@ -713,7 +709,6 @@ impl Exchange for BinanceExchange {
 }
 
 impl BinanceExchange {
-
     // 周期性时间同步(每小时)，防止时钟漂移
     fn spawn_periodic_time_sync(&self) {
         let client = self.client.clone();
@@ -770,7 +765,6 @@ impl BinanceExchange {
     }
 }
 
-
 // Drop时停止周期性时间同步任务
 impl Drop for BinanceExchange {
     fn drop(&mut self) {
@@ -778,7 +772,6 @@ impl Drop for BinanceExchange {
         self.time_sync_running.store(false, Ordering::Release);
     }
 }
-
 
 #[cfg(test)]
 mod kline_ws_tests;

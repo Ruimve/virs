@@ -1,11 +1,9 @@
 use serde::Deserialize;
 use virs_types::WsFeedEvent;
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct AccountConfigUpdateEvent {
-
     #[serde(rename = "e")]
     pub event_type: String,
 
@@ -22,11 +20,9 @@ pub struct AccountConfigUpdateEvent {
     pub account_info: Option<AccountInfo>,
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct AccountConfig {
-
     #[serde(rename = "s")]
     pub symbol: String,
 
@@ -34,15 +30,12 @@ pub struct AccountConfig {
     pub leverage: u32,
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct AccountInfo {
-
     #[serde(rename = "j")]
     pub multi_assets_mode: bool,
 }
-
 
 pub fn process(json: &str) -> Option<WsFeedEvent> {
     let event: AccountConfigUpdateEvent = match serde_json::from_str(json) {

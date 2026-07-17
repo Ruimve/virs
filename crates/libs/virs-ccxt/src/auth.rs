@@ -10,7 +10,6 @@ type HmacSha256 = Hmac<Sha256>;
 // 签名后的请求，包含 headers(x-mbx-apikey)、query_params(含timestamp/recvWindow/signature)、body(POST时为form-urlencoded字符串)
 #[derive(Debug, Clone)]
 pub struct SignedRequest {
-
     pub headers: HeaderMap,
 
     pub query_params: Vec<(String, String)>,
@@ -30,7 +29,6 @@ impl Default for SignedRequest {
 
 // 交易所签名接口，sign_get用于GET/DELETE，sign_post用于POST/PUT
 pub trait Signer: Send + Sync {
-
     // 签名 GET/DELETE 请求，在 query_params 中追加签名参数
     fn sign_get(
         &self,

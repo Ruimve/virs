@@ -2,11 +2,10 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use virs_error::VirsResult;
 use virs_types::enums::{PositionSide, PositionStatus};
 use virs_types::position::Position;
 use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderType, Side};
-use virs_error::VirsResult;
-
 
 /// 根据 (exchange, symbol, side) 生成确定性 UUID v5
 /// 同一仓位在重启前后获得相同 ID，保证 bot.position_id 引用有效
@@ -19,7 +18,6 @@ pub fn position_uuid_v5(exchange: &str, symbol: &str, side: PositionSide) -> Uui
     Uuid::new_v5(&Uuid::NAMESPACE_URL, key.as_bytes())
 }
 
-
 #[async_trait::async_trait]
 pub trait PositionPersistence: Send + Sync {
     /// 从 pe_orders 聚合派生当前持仓，用于重启恢复
@@ -29,7 +27,6 @@ pub trait PositionPersistence: Send + Sync {
 
     async fn get_active_orders(&self) -> VirsResult<Vec<CcxtOrder>>;
 }
-
 
 pub struct Persistence {
     db: PgPool,
@@ -97,7 +94,10 @@ impl Persistence {
         .fetch_all(&self.db)
         .await?;
 
-        Ok(rows.into_iter().filter_map(|r| r.into_position(exchange)).collect())
+        Ok(rows
+            .into_iter()
+            .filter_map(|r| r.into_position(exchange))
+            .collect())
     }
 
     async fn upsert_order_impl(&self, order: &CcxtOrder) -> VirsResult<()> {
@@ -252,10 +252,12 @@ impl Persistence {
         .fetch_all(&self.db)
         .await?;
 
-        Ok(rows.into_iter().filter_map(|r| r.into_ccxt_order()).collect())
+        Ok(rows
+            .into_iter()
+            .filter_map(|r| r.into_ccxt_order())
+            .collect())
     }
 }
-
 
 #[derive(Debug, sqlx::FromRow)]
 struct AggregatedPositionRow {
@@ -292,11 +294,9 @@ impl AggregatedPositionRow {
             client_order_id: None,
             created_at,
             updated_at: now,
-            closed_at: None,
         })
     }
 }
-
 
 #[derive(Debug, sqlx::FromRow)]
 struct OrderRow {

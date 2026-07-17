@@ -1,6 +1,5 @@
 use crate::app_config::*;
 
-
 #[test]
 fn s1_1_app_config_full_roundtrip() {
     let config = AppConfig {
@@ -51,7 +50,10 @@ fn s1_1_app_config_full_roundtrip() {
 
     assert_eq!(deserialized.server.host, config.server.host);
     assert_eq!(deserialized.server.port, config.server.port);
-    assert_eq!(deserialized.server.encryption_key, config.server.encryption_key);
+    assert_eq!(
+        deserialized.server.encryption_key,
+        config.server.encryption_key
+    );
     assert_eq!(deserialized.server.llm_key, config.server.llm_key);
     assert_eq!(deserialized.server.jwt_secret, config.server.jwt_secret);
     assert_eq!(deserialized.database.url, config.database.url);
@@ -61,7 +63,6 @@ fn s1_1_app_config_full_roundtrip() {
     assert_eq!(deserialized.admin.id, config.admin.id);
     assert_eq!(deserialized.proxy, config.proxy);
 }
-
 
 #[test]
 fn s2_1_server_config_roundtrip() {

@@ -1,10 +1,8 @@
 use serde::Deserialize;
 use virs_types::WsFeedEvent;
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AlgoStatus {
-
     New,
 
     Canceled,
@@ -37,11 +35,9 @@ impl AlgoStatus {
     }
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct AlgoUpdateEvent {
-
     #[serde(rename = "e")]
     pub event_type: String,
 
@@ -55,11 +51,9 @@ pub struct AlgoUpdateEvent {
     pub algo_order: AlgoOrder,
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct AlgoOrder {
-
     #[serde(rename = "caid")]
     pub client_algo_id: String,
 
@@ -135,7 +129,6 @@ pub struct AlgoOrder {
     #[serde(rename = "rm")]
     pub failed_reason: String,
 }
-
 
 pub fn process(json: &str) -> Option<WsFeedEvent> {
     let event: AlgoUpdateEvent = match serde_json::from_str(json) {

@@ -126,13 +126,10 @@ impl KlineEngine {
 
         self.perpetual_handler.start(ws_update_tx).await;
 
-
         tokio::spawn(async move {
             while started.load(std::sync::atomic::Ordering::Relaxed) {
                 match ws_update_rx.recv().await {
                     Ok(WsEvent::Reconnected) => {
-
-
                         let entries: Vec<_> = subscriptions
                             .iter()
                             .map(|e| {
@@ -205,13 +202,16 @@ impl KlineEngine {
                         };
 
                         if event_tx.receiver_count() > 0 {
-                            if event_tx.send(KlineEvent {
-                                exchange: exchange.clone(),
-                                symbol: symbol.clone(),
-                                timeframe: Timeframe::M1,
-                                candle: candle_1m.clone(),
-                                event_type,
-                            }).is_err() {
+                            if event_tx
+                                .send(KlineEvent {
+                                    exchange: exchange.clone(),
+                                    symbol: symbol.clone(),
+                                    timeframe: Timeframe::M1,
+                                    candle: candle_1m.clone(),
+                                    event_type,
+                                })
+                                .is_err()
+                            {
                                 tracing::debug!(
                                     exchange = %exchange,
                                     symbol = %symbol,
@@ -225,13 +225,16 @@ impl KlineEngine {
                                 } else {
                                     KlineEventType::Update
                                 };
-                                if event_tx.send(KlineEvent {
-                                    exchange: exchange.clone(),
-                                    symbol: symbol.clone(),
-                                    timeframe: tf,
-                                    candle,
-                                    event_type: ht_event_type,
-                                }).is_err() {
+                                if event_tx
+                                    .send(KlineEvent {
+                                        exchange: exchange.clone(),
+                                        symbol: symbol.clone(),
+                                        timeframe: tf,
+                                        candle,
+                                        event_type: ht_event_type,
+                                    })
+                                    .is_err()
+                                {
                                     tracing::debug!(
                                         exchange = %exchange,
                                         symbol = %symbol,
@@ -263,16 +266,13 @@ impl KlineEngine {
                     }
                 }
             }
-
         });
-
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
 
             while gap_check_started.load(std::sync::atomic::Ordering::Relaxed) {
                 interval.tick().await;
-
 
                 let entries: Vec<_> = gap_check_subscriptions
                     .iter()
@@ -287,8 +287,7 @@ impl KlineEngine {
                     })
                     .collect();
                 for (exchange, symbol, cache, market_type) in entries {
-                    let report =
-                        GapDetector::check_continuity(&exchange, &symbol, &cache).await;
+                    let report = GapDetector::check_continuity(&exchange, &symbol, &cache).await;
 
                     if !report.is_continuous {
                         match GapDetector::detect_and_backfill(
@@ -333,7 +332,6 @@ impl KlineEngine {
         symbol: &str,
         market_type: MarketType,
     ) -> VirsResult<()> {
-
         if !self.started.load(std::sync::atomic::Ordering::Relaxed) {
             self.start().await;
         }

@@ -8,7 +8,6 @@ use crate::adapter::{
     to_models_order,
 };
 
-
 #[test]
 fn a1_2_perpetual_to_ccxt() {
     assert_eq!(
@@ -16,7 +15,6 @@ fn a1_2_perpetual_to_ccxt() {
         MarketType::Perpetual
     );
 }
-
 
 #[test]
 fn a2_1_buy_to_ccxt() {
@@ -28,20 +26,28 @@ fn a2_2_sell_to_ccxt() {
     assert_eq!(to_ccxt_side(&Side::Sell), virs_ccxt::Side::Sell);
 }
 
-
 #[test]
 fn a3_1_market_to_ccxt() {
-    assert_eq!(to_ccxt_order_type(&OrderType::Market), virs_ccxt::OrderType::Market);
+    assert_eq!(
+        to_ccxt_order_type(&OrderType::Market),
+        virs_ccxt::OrderType::Market
+    );
 }
 
 #[test]
 fn a3_2_limit_to_ccxt() {
-    assert_eq!(to_ccxt_order_type(&OrderType::Limit), virs_ccxt::OrderType::Limit);
+    assert_eq!(
+        to_ccxt_order_type(&OrderType::Limit),
+        virs_ccxt::OrderType::Limit
+    );
 }
 
 #[test]
 fn a3_3_stop_market_to_ccxt() {
-    assert_eq!(to_ccxt_order_type(&OrderType::StopMarket), virs_ccxt::OrderType::StopMarket);
+    assert_eq!(
+        to_ccxt_order_type(&OrderType::StopMarket),
+        virs_ccxt::OrderType::StopMarket
+    );
 }
 
 #[test]
@@ -51,7 +57,6 @@ fn a3_5_take_profit_market_to_ccxt() {
         virs_ccxt::OrderType::TakeProfitMarket
     );
 }
-
 
 #[test]
 fn a4_1_kline_normal_conversion() {
@@ -87,8 +92,13 @@ fn a4_2_kline_exchange_field() {
     let ck = CcxtKline {
         timestamp: 100,
         close_time: None,
-        open: 1.0, high: 2.0, low: 0.5, close: 1.5,
-        volume: 10.0, quote_volume: None, trades: None,
+        open: 1.0,
+        high: 2.0,
+        low: 0.5,
+        close: 1.5,
+        volume: 10.0,
+        quote_volume: None,
+        trades: None,
     };
     let kline = to_models_kline(ck, "ETH/USDC", "okx", "1h");
     assert_eq!(kline.exchange, "okx");
@@ -103,8 +113,6 @@ fn a4_2_kline_exchange_field() {
 
 #[test]
 fn a4_3_kline_close_time_binance_format() {
-
-
     let intervals: &[(&str, i64)] = &[
         ("1m", 60_000),
         ("5m", 300_000),
@@ -146,7 +154,6 @@ fn a4_3_kline_close_time_binance_format() {
 
 #[test]
 fn a4_4_kline_close_time_from_exchange() {
-
     let ck = CcxtKline {
         timestamp: 1700000000000,
         close_time: Some(1700000059000),
@@ -164,7 +171,6 @@ fn a4_4_kline_close_time_from_exchange() {
     assert_ne!(kline.close_time, 1700000000000 + 60_000 - 1);
 }
 
-
 #[test]
 fn a5_1_balance_normal() {
     let cb = Balance {
@@ -179,7 +185,6 @@ fn a5_1_balance_normal() {
     assert_eq!(balance.used, 5000.0);
     assert_eq!(balance.total, 15000.0);
 }
-
 
 #[test]
 fn a6_1_order_normal() {

@@ -14,7 +14,6 @@ use virs_types::client_order_id;
 use virs_types::enums::PositionSide;
 use virs_types::position::{EngineEvent, Position};
 
-
 #[derive(Debug)]
 pub(crate) struct PendingOpen {
     pub side: String,
@@ -30,14 +29,12 @@ pub(crate) struct PendingOpen {
 pub(crate) struct PendingClose {
     pub side: String,
 
-
     pub close_reason: String,
     pub entry_price: f64,
     pub position_size: f64,
     pub client_order_id: String,
     pub sent_at: tokio::time::Instant,
 }
-
 
 pub struct AutoWorker {
     pub(crate) bot: AutoBotConfig,
@@ -60,15 +57,12 @@ pub struct AutoWorker {
 
     pub(crate) current_open_client_order_id: Option<String>,
 
-
     pub(crate) current_log_id: Option<Uuid>,
 
     pub(crate) current_open_fee: f64,
 
-
     pub(crate) stop_loss: f64,
     pub(crate) take_profit: f64,
-
 
     pub(crate) last_close_event: Option<(String, String, chrono::DateTime<chrono::Utc>)>,
 
@@ -114,7 +108,6 @@ impl AutoWorker {
         }
     }
 
-
     pub(crate) fn current_side_str(&self) -> String {
         match &self.current_position {
             Some(p) if p.is_open() => match p.side {
@@ -136,7 +129,6 @@ impl AutoWorker {
         self.pending_open.is_some() || self.pending_close.is_some()
     }
 
-
     pub(crate) fn cooldown_remaining_secs(&self, new_side: &str) -> Option<i64> {
         let (closed_side, reason, closed_at) = self.last_close_event.as_ref()?;
         let elapsed = chrono::Utc::now().signed_duration_since(*closed_at);
@@ -151,17 +143,13 @@ impl AutoWorker {
         }
     }
 
-
     pub(crate) async fn refresh_position_from_pe(&mut self) -> bool {
         match self
             .order_executor
             .query_open_position(&self.bot.symbol)
             .await
         {
-            Ok(Some(pe_pos))
-                if pe_pos.is_open() && pe_pos.quantity.abs() > 1e-8 =>
-            {
-
+            Ok(Some(pe_pos)) if pe_pos.is_open() && pe_pos.quantity.abs() > 1e-8 => {
                 let was_empty = !self.has_position();
                 if was_empty {
                     warn!(
@@ -186,11 +174,8 @@ impl AutoWorker {
                 self.current_position = Some(pe_pos);
                 true
             }
-            Ok(Some(_)) => {
-                true
-            }
+            Ok(Some(_)) => true,
             Ok(None) => {
-
                 if self.has_position() {
                     warn!(
                         bot_id = %self.bot.id,
@@ -265,7 +250,6 @@ impl AutoWorker {
             }
         }
 
-
         if timed_out_open || timed_out_close {
             if let Some(log_id) = self.current_log_id.take() {
                 let exec_status = if timed_out_open {
@@ -287,8 +271,6 @@ impl AutoWorker {
     pub(crate) fn matches_pending_order(&self, client_order_id: Option<&str>) -> bool {
         match client_order_id {
             Some(cid) => {
-
-
                 let open_match = self
                     .pending_open
                     .as_ref()
@@ -305,9 +287,7 @@ impl AutoWorker {
         }
     }
 
-
     pub async fn run(&mut self, mut shutdown_rx: tokio::sync::mpsc::Receiver<()>) {
-
         let max_retries = self.time_config.retry.initial_price_max_retries;
         for attempt in 1..=max_retries {
             self.current_price = self.fetch_current_price().await;
@@ -315,7 +295,10 @@ impl AutoWorker {
                 break;
             }
             warn!(bot_id = %self.bot.id, attempt, "Failed to fetch initial price, retrying...");
-            tokio::time::sleep(Duration::from_secs(self.time_config.price_poll_interval_secs)).await;
+            tokio::time::sleep(Duration::from_secs(
+                self.time_config.price_poll_interval_secs,
+            ))
+            .await;
         }
         if self.current_price <= 0.0 {
             error!(bot_id = %self.bot.id, "Failed to fetch initial price after {} attempts, setting error status", max_retries);
@@ -324,7 +307,6 @@ impl AutoWorker {
             }
             return;
         }
-
 
         match self.store.load_consecutive_losses(self.bot.id).await {
             Ok(losses) => {
@@ -335,7 +317,6 @@ impl AutoWorker {
             }
         }
 
-
         match self.store.find_last_closed_trade(self.bot.id).await {
             Ok(Some((side, close_reason, closed_at))) => {
                 self.last_close_event = Some((side.clone(), close_reason.clone(), closed_at));
@@ -345,7 +326,6 @@ impl AutoWorker {
                 warn!(bot_id = %self.bot.id, error = %e, "Failed to load last closed trade");
             }
         }
-
 
         // 先从 PE 查询当前仓位，可能恢复 position_id（PE 已从 pe_orders 聚合恢复）
         // 避免在 PE 有仓位时误判为孤儿 trade
@@ -371,15 +351,12 @@ impl AutoWorker {
                         warn!(bot_id = %self.bot.id, client_order_id = %client_order_id, error = %e, "Failed to mark trade as orphaned");
                     }
                 }
-                Ok(None) => {
-
-                }
+                Ok(None) => {}
                 Err(e) => {
                     warn!(bot_id = %self.bot.id, error = %e, "Failed to check orphaned trade");
                 }
             }
         }
-
 
         if self
             .bot
@@ -387,22 +364,17 @@ impl AutoWorker {
             .filter(|id| *id != Uuid::nil())
             .is_some()
         {
-
-
             match self.store.find_open_trade(self.bot.id).await {
                 Ok(Some((client_order_id, sl, tp, opened_at))) => {
                     self.current_open_client_order_id = Some(client_order_id);
                     self.stop_loss = sl;
                     self.take_profit = tp;
 
-
                     let elapsed = chrono::Utc::now().signed_duration_since(opened_at);
                     let elapsed_secs = elapsed.num_seconds().max(0) as u64;
                     let elapsed_dur = std::time::Duration::from_secs(elapsed_secs);
-                    self.position_opened_at =
-                        tokio::time::Instant::now().checked_sub(elapsed_dur);
+                    self.position_opened_at = tokio::time::Instant::now().checked_sub(elapsed_dur);
                     if self.position_opened_at.is_none() {
-
                         warn!(
                             bot_id = %self.bot.id,
                             elapsed_secs,
@@ -429,7 +401,6 @@ impl AutoWorker {
             }
 
             if self.current_position.is_none() {
-
                 let deadline = tokio::time::Instant::now()
                     + Duration::from_secs(self.time_config.close_order_timeout_secs);
                 loop {
@@ -467,9 +438,7 @@ impl AutoWorker {
             }
         }
 
-
         let skip_llm = if self.has_position() {
-
             if self.position_opened_at.is_none() {
                 self.position_opened_at = Some(tokio::time::Instant::now());
             }
@@ -487,10 +456,9 @@ impl AutoWorker {
             self.on_llm_decision().await;
         }
 
-        let mut price_tick = tokio::time::interval(
-            Duration::from_secs(self.time_config.price_poll_interval_secs)
-        );
-
+        let mut price_tick = tokio::time::interval(Duration::from_secs(
+            self.time_config.price_poll_interval_secs,
+        ));
 
         let (llm_signal_tx, mut llm_signal_rx) = tokio::sync::mpsc::channel::<()>(1);
         {
@@ -506,7 +474,6 @@ impl AutoWorker {
                 }
             });
         }
-
 
         loop {
             tokio::select! {
@@ -552,14 +519,12 @@ impl AutoWorker {
         self.save_stats().await;
     }
 
-
     pub(crate) async fn on_price_tick(&mut self) {
         if self.current_price <= 0.0 {
             return;
         }
 
         self.check_pending_timeout().await;
-
 
         if self.pending_open.is_some() || self.pending_close.is_some() {
             return;
@@ -607,7 +572,6 @@ impl AutoWorker {
         };
 
         if should_close {
-
             let stop_triggered = self.stop_loss > 0.0
                 && ((side == "long" && self.current_price <= self.stop_loss)
                     || (side == "short" && self.current_price >= self.stop_loss));
@@ -615,13 +579,11 @@ impl AutoWorker {
                 && ((side == "long" && self.current_price >= self.take_profit)
                     || (side == "short" && self.current_price <= self.take_profit));
 
-
             let close_reason = if take_triggered {
                 "take_profit"
             } else if stop_triggered {
                 "stop_loss"
             } else {
-
                 "stop_loss"
             };
             info!(
@@ -666,7 +628,10 @@ impl AutoWorker {
             if let Some(client_order_id) = self.current_open_client_order_id.clone() {
                 let store = self.store.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = store.update_trade_stop_loss(&client_order_id, new_stop).await {
+                    if let Err(e) = store
+                        .update_trade_stop_loss(&client_order_id, new_stop)
+                        .await
+                    {
                         warn!(client_order_id = %client_order_id, error = %e, "Failed to update trade stop_loss");
                     }
                 });
@@ -699,13 +664,11 @@ impl AutoWorker {
         false
     }
 
-
     pub(crate) async fn on_llm_decision(&mut self) {
         if self.is_pending() {
             warn!(bot_id = %self.bot.id, "Pending order in progress, skipping LLM decision");
             return;
         }
-
 
         self.refresh_position_from_pe().await;
 
@@ -742,15 +705,12 @@ impl AutoWorker {
             )
             .await;
 
-
         self.current_log_id = log_id;
-
 
         let intercept_reason = self.execute_decision(&action, decision.as_ref()).await;
         if let Some(reason) = intercept_reason {
             warn!(bot_id = %self.bot.id, action = %action.as_str(), intercept_reason = %reason, "Decision intercepted");
             if let Some(log_id) = self.current_log_id {
-
                 let exec_status = match action {
                     AutoAction::OpenLong | AutoAction::OpenShort => "open_failed",
                     AutoAction::ClosePosition => "close_failed",
@@ -767,7 +727,6 @@ impl AutoWorker {
 
             self.current_log_id = None;
         } else if matches!(action, AutoAction::Hold) {
-
             if let Some(log_id) = self.current_log_id {
                 if let Err(e) = self
                     .store
@@ -834,7 +793,6 @@ impl AutoWorker {
             "无持仓".to_string()
         };
 
-
         let recent_close_info = match &self.last_close_event {
             Some((side, close_reason, closed_at)) => {
                 let side_cn = match side.as_str() {
@@ -870,7 +828,9 @@ impl AutoWorker {
         };
 
         let ctx = strategy::PromptContext {
-            timestamp: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+            timestamp: chrono::Utc::now()
+                .format("%Y-%m-%d %H:%M:%S UTC")
+                .to_string(),
             symbol: self.bot.symbol.clone(),
             exchange: self.bot.exchange.clone(),
             total_balance: account.total,
@@ -941,7 +901,9 @@ impl AutoWorker {
                     if let Some(obj) = result.as_object_mut() {
                         obj.insert("raw_llm_response".to_string(), raw_llm_response.clone());
                     } else {
-                        tracing::error!("LLM result is not a JSON object — cannot insert raw_llm_response");
+                        tracing::error!(
+                            "LLM result is not a JSON object — cannot insert raw_llm_response"
+                        );
                     }
                 }
                 let log_id = self
@@ -995,7 +957,6 @@ impl AutoWorker {
             }
         }
     }
-
 
     pub(crate) async fn execute_decision(
         &mut self,
@@ -1057,19 +1018,21 @@ impl AutoWorker {
                 }
 
                 if let Some(remaining) = self.cooldown_remaining_secs(side) {
-                    let (closed_side, close_reason, closed_at) =
-                        match self.last_close_event.as_ref() {
-                            Some(ev) => ev,
-                            None => {
-                                error!(
-                                    bot_id = %self.bot.id,
-                                    side = %side,
-                                    remaining_secs = remaining,
-                                    "In cooldown but last_close_event is None — data inconsistency, skipping open"
-                                );
-                                return Some("冷却期中但关闭事件丢失，无法开仓".to_string());
-                            }
-                        };
+                    let (closed_side, close_reason, closed_at) = match self
+                        .last_close_event
+                        .as_ref()
+                    {
+                        Some(ev) => ev,
+                        None => {
+                            error!(
+                                bot_id = %self.bot.id,
+                                side = %side,
+                                remaining_secs = remaining,
+                                "In cooldown but last_close_event is None — data inconsistency, skipping open"
+                            );
+                            return Some("冷却期中但关闭事件丢失，无法开仓".to_string());
+                        }
+                    };
                     warn!(
                         bot_id = %self.bot.id,
                         new_side = %side,
@@ -1094,7 +1057,6 @@ impl AutoWorker {
                     ));
                 }
                 self.open_position(side, decision, &snapshot).await;
-
 
                 if self.pending_open.is_none() {
                     return Some("开仓订单发送失败".to_string());
@@ -1126,7 +1088,6 @@ impl AutoWorker {
             self.bot.market_regime = Some(regime.clone());
         }
 
-
         let regime = match self.bot.market_regime.as_deref() {
             Some(r) => r,
             None => {
@@ -1134,7 +1095,6 @@ impl AutoWorker {
                 return;
             }
         };
-
 
         if let Err(e) = self
             .store
@@ -1187,10 +1147,8 @@ impl AutoWorker {
 
         let quantity = invest_amount * self.bot.leverage as f64 / price;
 
-
         let min_qty = snapshot.base.min_qty;
         let quantity = if min_qty > 0.0 && quantity < min_qty {
-
             warn!(
                 bot_id = %self.bot.id,
                 quantity, min_qty, invest_amount, price,
@@ -1198,12 +1156,10 @@ impl AutoWorker {
             );
             min_qty
         } else if min_qty > 0.0 {
-
             (quantity / min_qty).floor() * min_qty
         } else {
             quantity
         };
-
 
         let formula_sl = strategy::compute_stop_loss(price, side, atr);
         let formula_tp = strategy::compute_take_profit(price, side, atr);
@@ -1236,7 +1192,6 @@ impl AutoWorker {
             }
             (None, _) => (formula_tp, "formula"),
         };
-
 
         let rr_ratio = match side {
             "long" => (take_profit - price) / (price - stop_loss).max(1e-9),
@@ -1315,7 +1270,6 @@ impl AutoWorker {
         }
     }
 
-
     pub(crate) async fn close_position(&mut self, close_reason: &str) {
         if !self.has_position() {
             return;
@@ -1326,7 +1280,6 @@ impl AutoWorker {
             Some(p) => (p.entry_price, p.quantity),
             None => (0.0, 0.0),
         };
-
 
         if let Some(position_id) = self.bot.position_id.filter(|id| *id != Uuid::nil()) {
             let client_order_id = client_order_id::format_auto_close(self.bot.id, &side);
@@ -1364,7 +1317,6 @@ impl AutoWorker {
                 }
             }
         } else {
-
             let (order_side, position_side) = match side.as_str() {
                 "long" => (OrderSide::Sell, Some(BotPositionSide::Long)),
                 "short" => (OrderSide::Buy, Some(BotPositionSide::Short)),
@@ -1415,11 +1367,9 @@ impl AutoWorker {
         }
     }
 
-
     pub(crate) async fn on_pe_event(&mut self, event: EngineEvent) {
         match event {
             EngineEvent::PositionUpdated { position } => {
-
                 if position.symbol != self.bot.symbol {
                     return;
                 }
@@ -1431,7 +1381,6 @@ impl AutoWorker {
                 if !is_ours {
                     return;
                 }
-
 
                 if self.bot.position_id.is_none() || self.bot.position_id == Some(Uuid::nil()) {
                     self.bot.position_id = Some(position.id);
@@ -1495,26 +1444,24 @@ impl AutoWorker {
                     return;
                 }
 
-
                 if order.position_id.filter(|id| *id != Uuid::nil()).is_some()
-                    && self.bot.position_id.filter(|id| *id != Uuid::nil()).is_none()
+                    && self
+                        .bot
+                        .position_id
+                        .filter(|id| *id != Uuid::nil())
+                        .is_none()
                 {
                     self.bot.position_id = order.position_id;
                 }
 
-                let fill_price = order
-                    .fill_price
-                    .or(order.request_price)
-                    .unwrap_or_else(|| {
-
-
-                        warn!(
-                            order_id = %order.id,
-                            "Order has no fill_price and no request_price — \
-                             using current_price as fallback (PnL may be inaccurate)"
-                        );
-                        self.current_price
-                    });
+                let fill_price = order.fill_price.or(order.request_price).unwrap_or_else(|| {
+                    warn!(
+                        order_id = %order.id,
+                        "Order has no fill_price and no request_price — \
+                         using current_price as fallback (PnL may be inaccurate)"
+                    );
+                    self.current_price
+                });
                 let filled_qty = if order.filled > 0.0 {
                     order.filled
                 } else {
@@ -1533,32 +1480,30 @@ impl AutoWorker {
                 order_id: _,
                 reason,
             } if self.pending_open.is_some() || self.pending_close.is_some() => {
+                let was_open = self.pending_open.is_some();
+                warn!(
+                    bot_id = %self.bot.id,
+                    reason = %reason,
+                    was_open,
+                    "Order failed, rolling back pending state"
+                );
+                self.rollback_pending_open();
+                self.rollback_pending_close();
 
-                    let was_open = self.pending_open.is_some();
-                    warn!(
-                        bot_id = %self.bot.id,
-                        reason = %reason,
-                        was_open,
-                        "Order failed, rolling back pending state"
-                    );
-                    self.rollback_pending_open();
-                    self.rollback_pending_close();
-
-
-                    if let Some(log_id) = self.current_log_id.take() {
-                        let exec_status = if was_open {
-                            "open_failed"
-                        } else {
-                            "close_failed"
-                        };
-                        if let Err(e) = self
-                            .store
-                            .update_analysis_log_execution(log_id, exec_status, Some(&reason))
-                            .await
-                        {
-                            error!(bot_id = %self.bot.id, error = %e, "Failed to update log on order failed");
-                        }
+                if let Some(log_id) = self.current_log_id.take() {
+                    let exec_status = if was_open {
+                        "open_failed"
+                    } else {
+                        "close_failed"
+                    };
+                    if let Err(e) = self
+                        .store
+                        .update_analysis_log_execution(log_id, exec_status, Some(&reason))
+                        .await
+                    {
+                        error!(bot_id = %self.bot.id, error = %e, "Failed to update log on order failed");
                     }
+                }
             }
             _ => {}
         }
@@ -1615,7 +1560,6 @@ impl AutoWorker {
             "Open order confirmed, applying position state"
         );
 
-
         self.stop_loss = stop_loss;
         self.take_profit = take_profit;
         self.position_opened_at = Some(tokio::time::Instant::now());
@@ -1664,7 +1608,6 @@ impl AutoWorker {
             );
         }
 
-
         if let Some(log_id) = self.current_log_id.take() {
             if let Err(e) = self
                 .store
@@ -1687,7 +1630,6 @@ impl AutoWorker {
         } else {
             pending.position_size
         };
-
 
         let gross_pnl = match pending.side.as_str() {
             "long" => (fill_price - pending.entry_price) * actual_qty,
@@ -1731,7 +1673,6 @@ impl AutoWorker {
         self.current_position = None;
         self.position_opened_at = None;
 
-
         self.last_close_event = Some((
             pending.side.clone(),
             pending.close_reason.clone(),
@@ -1757,47 +1698,42 @@ impl AutoWorker {
                     info!(bot_id = %self.bot.id, open_client_order_id = %open_oid, realized_pnl, "Close trade recorded");
                 }
             }
-            None => {
-
-                match self.store.find_open_trade(self.bot.id).await {
-                    Ok(Some((open_oid, _sl, _tp, _opened_at))) => {
-                        if let Err(e) = self
-                            .store
-                            .close_trade(&open_oid, &close_client_order_id, close_reason)
-                            .await
-                        {
-                            error!(bot_id = %self.bot.id, open_client_order_id = %open_oid, error = %e, "Failed to close trade record (recovered)");
-                        } else {
-                            info!(bot_id = %self.bot.id, open_client_order_id = %open_oid, "Close trade recorded (recovered from DB)");
-                        }
-                    }
-                    Ok(None) => {
-                        warn!(bot_id = %self.bot.id, "No open trade found for close, recording as orphaned");
-                        if let Err(e) = self
-                            .store
-                            .record_orphaned_close_trade(
-                                self.bot.id,
-                                self.bot.user_id,
-                                &self.bot.symbol,
-                                &self.bot.exchange,
-                                &close_client_order_id,
-                                close_reason,
-                            )
-                            .await
-                        {
-                            warn!(bot_id = %self.bot.id, error = %e, "Failed to record orphaned close trade");
-                        }
-                    }
-                    Err(e) => {
-                        error!(bot_id = %self.bot.id, error = %e, "Failed to find open trade for close");
+            None => match self.store.find_open_trade(self.bot.id).await {
+                Ok(Some((open_oid, _sl, _tp, _opened_at))) => {
+                    if let Err(e) = self
+                        .store
+                        .close_trade(&open_oid, &close_client_order_id, close_reason)
+                        .await
+                    {
+                        error!(bot_id = %self.bot.id, open_client_order_id = %open_oid, error = %e, "Failed to close trade record (recovered)");
+                    } else {
+                        info!(bot_id = %self.bot.id, open_client_order_id = %open_oid, "Close trade recorded (recovered from DB)");
                     }
                 }
-            }
+                Ok(None) => {
+                    warn!(bot_id = %self.bot.id, "No open trade found for close, recording as orphaned");
+                    if let Err(e) = self
+                        .store
+                        .record_orphaned_close_trade(
+                            self.bot.id,
+                            self.bot.user_id,
+                            &self.bot.symbol,
+                            &self.bot.exchange,
+                            &close_client_order_id,
+                            close_reason,
+                        )
+                        .await
+                    {
+                        warn!(bot_id = %self.bot.id, error = %e, "Failed to record orphaned close trade");
+                    }
+                }
+                Err(e) => {
+                    error!(bot_id = %self.bot.id, error = %e, "Failed to find open trade for close");
+                }
+            },
         }
 
-
         self.current_open_fee = 0.0;
-
 
         if let Some(log_id) = self.current_log_id.take() {
             if let Err(e) = self

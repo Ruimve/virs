@@ -8,7 +8,6 @@ use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite};
 use virs_error::ExchangeError;
 
-
 // 动态订阅/退订命令
 #[derive(Debug, Clone)]
 pub enum WsCommand {
@@ -16,33 +15,23 @@ pub enum WsCommand {
     Unsubscribe(String),
 }
 
-
 // 消息处理结果：Continue 继续运行并产出事件，Reconnect 请求重连
 #[derive(Debug, Clone)]
 pub enum MessageOutcome<T: Send + Clone + 'static> {
-
     Continue(Vec<T>),
 
     Reconnect,
 }
 
-
 // WS管理器事件：Message 消息、ConnectionChanged 连接状态变化、CircuitBreakerTripped 熔断
 #[derive(Debug, Clone)]
 pub enum WsManagerEvent<T: Send + Clone + 'static> {
-
     Message(T),
 
-
-    ConnectionChanged {
-        connected: bool,
-        is_reconnect: bool,
-    },
-
+    ConnectionChanged { connected: bool, is_reconnect: bool },
 
     CircuitBreakerTripped { retry_count: u64 },
 }
-
 
 // PING 间隔：30秒
 pub const WS_PING_INTERVAL_SECS: u64 = 30;
@@ -65,7 +54,6 @@ pub const WS_MAX_LIFETIME_SECS: u64 = 82_800;
 // 最大重连次数：超过则熔断
 pub const WS_MAX_RETRIES: u64 = 100;
 
-
 // WS管理器配置
 #[derive(Debug, Clone)]
 pub struct WsManagerConfig {
@@ -79,20 +67,17 @@ pub struct WsManagerConfig {
 }
 
 impl WsManagerConfig {
-
     #[cfg(test)]
     pub fn with_pong_timeout(mut self, secs: u64) -> Self {
         self.pong_timeout_secs = secs;
         self
     }
 
-
     #[cfg(test)]
     pub fn with_max_retries(mut self, n: u64) -> Self {
         self.max_retries = n;
         self
     }
-
 
     #[cfg(test)]
     pub fn with_connect_timeout(mut self, secs: u64) -> Self {
@@ -115,46 +100,36 @@ impl Default for WsManagerConfig {
     }
 }
 
-
 // WS消息处理器接口：由各业务 Handler 实现以解析消息、生成订阅等
 #[async_trait]
 pub trait WsHandler<T: Send + Clone + 'static>: Send + Sync {
-
-
     // 返回连接 URL
     fn base_url(&self) -> &str;
-
 
     // 是否支持动态订阅/退订命令，默认 false
     fn supports_commands(&self) -> bool {
         false
     }
 
-
     // 重连时刷新 URL（如 listenKey 场景需重新获取），默认返回 base_url
     async fn refresh_url(&self) -> Result<String, ExchangeError> {
         Ok(self.base_url().to_string())
     }
 
-
     // 消息解析，返回 MessageOutcome
     async fn on_message(&self, text: &str) -> Result<MessageOutcome<T>, ExchangeError>;
-
 
     // 连接后发送的初始订阅消息列表
     async fn on_connected(&self, is_reconnect: bool) -> Vec<String>;
 
-
     // 断连回调
     async fn on_disconnected(&self);
-
 
     // 动态订阅命令转 JSON 文本，不支持时返回 None
     async fn on_command(&self, _cmd: WsCommand) -> Option<String> {
         None
     }
 }
-
 
 // WS生命周期管理：连接/重连/指数退避/熔断
 pub struct WsManager<T: Send + Clone + 'static> {
@@ -167,7 +142,6 @@ pub struct WsManager<T: Send + Clone + 'static> {
 }
 
 impl<T: Send + Clone + 'static> WsManager<T> {
-
     pub fn new(config: WsManagerConfig, handler: Arc<dyn WsHandler<T>>) -> Self {
         Self {
             config,
@@ -179,11 +153,9 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         }
     }
 
-
     pub fn running_handle(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.running)
     }
-
 
     pub async fn start(&self, event_tx: mpsc::Sender<WsManagerEvent<T>>) {
         // 防止重复启动
@@ -219,7 +191,6 @@ impl<T: Send + Clone + 'static> WsManager<T> {
             while running.load(Ordering::Relaxed) {
                 let connect_start = tokio::time::Instant::now();
 
-
                 // 重连前刷新 URL（如 listenKey 场景）
                 let ws_url = match handler.refresh_url().await {
                     Ok(url) => url,
@@ -243,7 +214,6 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                     }
                 };
 
-
                 // 带超时的连接尝试
                 let connect_result = tokio::time::timeout(
                     Duration::from_secs(config.connect_timeout_secs),
@@ -266,16 +236,13 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                             .await
                             .is_err()
                         {
-                            tracing::warn!(
-                                "[WsManager] Event channel closed on connect, stopping"
-                            );
+                            tracing::warn!("[WsManager] Event channel closed on connect, stopping");
                             running.store(false, Ordering::Relaxed);
                             break;
                         }
                         is_first_connect = false;
 
                         let (mut write, mut read) = ws_stream.split();
-
 
                         // 发送初始订阅消息
                         let connect_msgs = handler.on_connected(is_reconnect).await;
@@ -300,129 +267,125 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                             let max_lifetime = Duration::from_secs(config.max_lifetime_secs);
                             let mut last_msg_time = tokio::time::Instant::now();
 
+                            // 主事件循环：读消息/发PING/处理命令/监听关闭
+                            loop {
+                                if !running.load(Ordering::Relaxed) {
+                                    break;
+                                }
 
-                        // 主事件循环：读消息/发PING/处理命令/监听关闭
-                        loop {
-                            if !running.load(Ordering::Relaxed) {
-                                break;
-                            }
+                                // 连接达到最大存活时间，主动重连
+                                if connect_start.elapsed() > max_lifetime {
+                                    tracing::info!(
+                                        "[WsManager] Max lifetime ({}s) reached, reconnecting",
+                                        config.max_lifetime_secs
+                                    );
+                                    break;
+                                }
 
-
-                            // 连接达到最大存活时间，主动重连
-                            if connect_start.elapsed() > max_lifetime {
-                                tracing::info!(
-                                    "[WsManager] Max lifetime ({}s) reached, reconnecting",
-                                    config.max_lifetime_secs
-                                );
-                                break;
-                            }
-
-
-                            // PONG 超时：长时间无消息则强制重连
-                            if last_msg_time.elapsed()
-                                > Duration::from_secs(config.pong_timeout_secs)
-                            {
-                                tracing::warn!(
+                                // PONG 超时：长时间无消息则强制重连
+                                if last_msg_time.elapsed()
+                                    > Duration::from_secs(config.pong_timeout_secs)
+                                {
+                                    tracing::warn!(
                                     pong_timeout_secs = config.pong_timeout_secs,
                                     "[WsManager] No message received within pong timeout, forcing reconnect"
                                 );
-                                break;
-                            }
+                                    break;
+                                }
 
-                            tokio::select! {
-                                msg = read.next() => {
-                                    last_msg_time = tokio::time::Instant::now();
+                                tokio::select! {
+                                    msg = read.next() => {
+                                        last_msg_time = tokio::time::Instant::now();
 
-                                    match msg {
-                                        Some(Ok(tungstenite::Message::Text(text))) => {
-                                            match handler.on_message(&text).await {
-                                                Ok(MessageOutcome::Continue(events)) => {
-                                                    for ev in events {
-                                                        if event_tx.send(WsManagerEvent::Message(ev)).await.is_err() {
-                                                            tracing::warn!(
-                                                                "[WsManager] Event channel closed — stopping WS"
-                                                            );
-                                                            running.store(false, Ordering::Relaxed);
-                                                            break;
+                                        match msg {
+                                            Some(Ok(tungstenite::Message::Text(text))) => {
+                                                match handler.on_message(&text).await {
+                                                    Ok(MessageOutcome::Continue(events)) => {
+                                                        for ev in events {
+                                                            if event_tx.send(WsManagerEvent::Message(ev)).await.is_err() {
+                                                                tracing::warn!(
+                                                                    "[WsManager] Event channel closed — stopping WS"
+                                                                );
+                                                                running.store(false, Ordering::Relaxed);
+                                                                break;
+                                                            }
                                                         }
                                                     }
-                                                }
-                                                Ok(MessageOutcome::Reconnect) => {
-                                                    tracing::info!(
-                                                        "[WsManager] Handler requested reconnect"
-                                                    );
-                                                    break;
-                                                }
-                                                Err(e) => {
-                                                    tracing::warn!(
-                                                        error = %e,
-                                                        msg_preview = &text[..text.len().min(200)],
-                                                        "[WsManager] on_message error — skipping, WS continues"
-                                                    );
+                                                    Ok(MessageOutcome::Reconnect) => {
+                                                        tracing::info!(
+                                                            "[WsManager] Handler requested reconnect"
+                                                        );
+                                                        break;
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::warn!(
+                                                            error = %e,
+                                                            msg_preview = &text[..text.len().min(200)],
+                                                            "[WsManager] on_message error — skipping, WS continues"
+                                                        );
+                                                    }
                                                 }
                                             }
-                                        }
-                                        Some(Ok(tungstenite::Message::Ping(data))) => {
-                                            let _ = write.send(tungstenite::Message::Pong(data)).await;
-                                        }
-                                        Some(Ok(tungstenite::Message::Pong(_))) => {}
-                                        Some(Ok(tungstenite::Message::Close(_))) => {
-                                            tracing::warn!("[WsManager] Server closed connection");
-                                            break;
-                                        }
-                                        Some(Ok(tungstenite::Message::Binary(_))) => {}
-                                        Some(Ok(tungstenite::Message::Frame(_))) => {}
-                                        Some(Err(e)) => {
-                                            tracing::error!(error = %e, "[WsManager] Read error");
-                                            break;
-                                        }
-                                        None => {
-                                            tracing::warn!("[WsManager] Stream ended");
-                                            break;
-                                        }
-                                    }
-                                }
-                                _ = ping_tick.tick() => {
-                                    let ping = tungstenite::Message::Ping(vec![].into());
-                                    if write.send(ping).await.is_err() {
-                                        tracing::warn!("[WsManager] Ping failed, reconnecting");
-                                        break;
-                                    }
-                                }
-                                cmd = async {
-                                    match &mut command_rx {
-                                        Some(rx) => rx.recv().await,
-                                        None => std::future::pending().await
-                                    }
-                                } => {
-                                    if let Some(cmd) = cmd {
-                                        if let Some(msg) = handler.on_command(cmd).await {
-                                            if write
-                                                .send(tungstenite::Message::Text(msg.into()))
-                                                .await
-                                                .is_err()
-                                            {
-                                                tracing::warn!(
-                                                    "[WsManager] Command send failed, reconnecting"
-                                                );
+                                            Some(Ok(tungstenite::Message::Ping(data))) => {
+                                                let _ = write.send(tungstenite::Message::Pong(data)).await;
+                                            }
+                                            Some(Ok(tungstenite::Message::Pong(_))) => {}
+                                            Some(Ok(tungstenite::Message::Close(_))) => {
+                                                tracing::warn!("[WsManager] Server closed connection");
+                                                break;
+                                            }
+                                            Some(Ok(tungstenite::Message::Binary(_))) => {}
+                                            Some(Ok(tungstenite::Message::Frame(_))) => {}
+                                            Some(Err(e)) => {
+                                                tracing::error!(error = %e, "[WsManager] Read error");
+                                                break;
+                                            }
+                                            None => {
+                                                tracing::warn!("[WsManager] Stream ended");
                                                 break;
                                             }
                                         }
-                                    } else {
-                                        break;
                                     }
-                                }
-                                _ = shutdown_rx.recv() => {
-                                    tracing::info!("[WsManager] Shutdown signal received, closing");
-                                    let _ = write.send(tungstenite::Message::Close(None)).await;
-                                    running.store(false, Ordering::Relaxed);
-                                    handler.on_disconnected().await;
-                                    return;
+                                    _ = ping_tick.tick() => {
+                                        let ping = tungstenite::Message::Ping(vec![].into());
+                                        if write.send(ping).await.is_err() {
+                                            tracing::warn!("[WsManager] Ping failed, reconnecting");
+                                            break;
+                                        }
+                                    }
+                                    cmd = async {
+                                        match &mut command_rx {
+                                            Some(rx) => rx.recv().await,
+                                            None => std::future::pending().await
+                                        }
+                                    } => {
+                                        if let Some(cmd) = cmd {
+                                            if let Some(msg) = handler.on_command(cmd).await {
+                                                if write
+                                                    .send(tungstenite::Message::Text(msg.into()))
+                                                    .await
+                                                    .is_err()
+                                                {
+                                                    tracing::warn!(
+                                                        "[WsManager] Command send failed, reconnecting"
+                                                    );
+                                                    break;
+                                                }
+                                            }
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                    _ = shutdown_rx.recv() => {
+                                        tracing::info!("[WsManager] Shutdown signal received, closing");
+                                        let _ = write.send(tungstenite::Message::Close(None)).await;
+                                        running.store(false, Ordering::Relaxed);
+                                        handler.on_disconnected().await;
+                                        return;
+                                    }
                                 }
                             }
                         }
-                        }
-
 
                         handler.on_disconnected().await;
 
@@ -452,7 +415,6 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                     }
                 }
 
-
                 if !Self::do_backoff(
                     &running,
                     &retry_count,
@@ -470,14 +432,12 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         });
     }
 
-
     pub async fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
         if let Some(tx) = self.shutdown_tx.lock().await.take() {
             let _ = tx.send(()).await;
         }
     }
-
 
     // 发送动态订阅/退订命令
     pub async fn send_command(&self, cmd: WsCommand) {
@@ -486,16 +446,13 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         }
     }
 
-
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::Relaxed)
     }
 
-
     pub fn retry_count(&self) -> u64 {
         self.retry_count.load(Ordering::Relaxed)
     }
-
 
     // 指数退避+抖动：超过最大重连次数则熔断；返回 false 表示停止重连
     async fn do_backoff(
@@ -509,7 +466,6 @@ impl<T: Send + Clone + 'static> WsManager<T> {
             return false;
         }
 
-
         // 熔断检查：超过最大重连次数则触发熔断并停止
         if config.max_retries > 0 {
             let retries = retry_count.fetch_add(1, Ordering::Relaxed) + 1;
@@ -520,12 +476,13 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                     "[WsManager] Max retries exceeded — circuit breaker tripped"
                 );
                 let _ = event_tx
-                    .send(WsManagerEvent::CircuitBreakerTripped { retry_count: retries })
+                    .send(WsManagerEvent::CircuitBreakerTripped {
+                        retry_count: retries,
+                    })
                     .await;
                 return false;
             }
         }
-
 
         // 指数退避 + 20% 随机抖动，避免雪崩
         let jitter = rand::random::<f64>() * *reconnect_delay as f64 * 0.2;

@@ -6,7 +6,6 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use tokio::sync::{broadcast, mpsc, RwLock};
 
-
 use crate::ws_manager::{
     MessageOutcome, WsCommand as ManagerWsCommand, WsHandler, WsManager, WsManagerConfig,
     WsManagerEvent,
@@ -18,7 +17,6 @@ pub use crate::ws_types::{Candle, WsCandleUpdate, WsEvent};
 pub(crate) fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
 }
-
 
 // 币安K线WS消息，兼容组合流({"stream":..,"data":{..}})和扁平格式({"e":"kline","E":..,"k":{..}})
 #[derive(Debug, Clone, Deserialize)]
@@ -40,7 +38,6 @@ pub(crate) struct BinanceKlineMessage {
 }
 
 impl BinanceKlineMessage {
-
     // 统一两种消息格式为 BinanceKlineData；优先取组合流的 data，否则用扁平字段拼装
     pub(crate) fn into_kline_data(self) -> Option<BinanceKlineData> {
         if let Some(data) = self.data {
@@ -66,7 +63,6 @@ impl BinanceKlineMessage {
         }
     }
 }
-
 
 // K线WS消息延迟阈值：超过5秒告警
 pub(crate) const KLINE_WS_DELAY_THRESHOLD_MS: i64 = 5_000;
@@ -144,7 +140,6 @@ impl BinanceKlineData {
     }
 }
 
-
 // K线WS处理器：维护订阅列表与 symbol 映射，实现 WsHandler 接口
 pub struct KlineWsHandler {
     ws_url: String,
@@ -178,7 +173,10 @@ impl WsHandler<WsEvent> for KlineWsHandler {
         true
     }
 
-    async fn on_message(&self, text: &str) -> Result<MessageOutcome<WsEvent>, virs_error::ExchangeError> {
+    async fn on_message(
+        &self,
+        text: &str,
+    ) -> Result<MessageOutcome<WsEvent>, virs_error::ExchangeError> {
         let bmsg: BinanceKlineMessage = match serde_json::from_str(text) {
             Ok(m) => m,
             Err(_) => {
@@ -192,7 +190,6 @@ impl WsHandler<WsEvent> for KlineWsHandler {
 
         if let Some(data) = bmsg.into_kline_data() {
             if data.event_type == "kline" {
-
                 // 延迟检测：本地时间与事件时间差超过阈值则告警
                 if data.event_time > 0 {
                     let local_now = chrono::Utc::now().timestamp_millis();
@@ -212,7 +209,9 @@ impl WsHandler<WsEvent> for KlineWsHandler {
                 let raw_sym = data.ws_symbol().to_lowercase();
                 let original_symbol = {
                     let map = self.symbol_map.read().await;
-                    map.get(&raw_sym).cloned().unwrap_or_else(|| raw_sym.clone())
+                    map.get(&raw_sym)
+                        .cloned()
+                        .unwrap_or_else(|| raw_sym.clone())
                 };
 
                 let candle = match data.to_candle() {
@@ -235,7 +234,6 @@ impl WsHandler<WsEvent> for KlineWsHandler {
                 )]));
             }
         } else {
-
             if let Ok(resp) = serde_json::from_str::<serde_json::Value>(text) {
                 if let Some(code) = resp.get("code") {
                     tracing::error!(
@@ -257,7 +255,6 @@ impl WsHandler<WsEvent> for KlineWsHandler {
     }
 
     async fn on_connected(&self, _is_reconnect: bool) -> Vec<String> {
-
         // 连接建立后批量发送订阅：{"method":"SUBSCRIBE","params":[...],"id":N}
         let subs_vec = self.subscriptions.read().await.clone();
         if subs_vec.is_empty() {
@@ -280,9 +277,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
         vec![msg.to_string()]
     }
 
-    async fn on_disconnected(&self) {
-
-    }
+    async fn on_disconnected(&self) {}
 
     // 动态订阅/退订命令转 JSON：{"method":"SUBSCRIBE|UNSUBSCRIBE","params":[stream],"id":N}
     async fn on_command(&self, cmd: ManagerWsCommand) -> Option<String> {
@@ -310,7 +305,6 @@ impl WsHandler<WsEvent> for KlineWsHandler {
     }
 }
 
-
 // K线WS客户端，封装 WsManager 与 KlineWsHandler
 pub struct KlineWs {
     manager: WsManager<WsEvent>,
@@ -335,7 +329,6 @@ impl KlineWs {
         Self::new("wss://fstream.binance.com/market/ws".to_string())
     }
 
-
     pub fn running_handle(&self) -> Arc<AtomicBool> {
         self.manager.running_handle()
     }
@@ -344,12 +337,10 @@ impl KlineWs {
 #[async_trait]
 impl KlineWsClient for KlineWs {
     async fn start(&mut self, update_tx: broadcast::Sender<WsEvent>) {
-
         // 转发 WsManager 事件为 WsEvent 并广播给上层
         let (manager_tx, mut manager_rx) = mpsc::channel::<WsManagerEvent<WsEvent>>(256);
 
         self.manager.start(manager_tx).await;
-
 
         tokio::spawn(async move {
             while let Some(ev) = manager_rx.recv().await {
@@ -363,14 +354,12 @@ impl KlineWsClient for KlineWs {
                         connected: true,
                         is_reconnect: false,
                     } => {
-
                         // 首次连接成功，不向上层广播
                         continue;
                     }
                     WsManagerEvent::ConnectionChanged {
                         connected: false, ..
                     } => {
-
                         // 断连由重连事件覆盖，此处忽略
                         continue;
                     }

@@ -5,7 +5,6 @@ use crate::adapter::binance::orderbook_ws::{
 };
 use crate::ws_types::OrderBookLevel;
 
-
 #[test]
 fn w1_1_parse_levels_standard() {
     let v = json!([["50000.0", "1.5"], ["49999.0", "2.0"]]);
@@ -46,12 +45,10 @@ fn w1_4_parse_levels_not_array() {
 
 #[test]
 fn w1_5_parse_levels_short_element() {
-
     let v = json!([["50000.0"]]);
     let result = parse_levels(&v);
     assert_eq!(result, None);
 }
-
 
 #[test]
 fn w2_1_to_levels_normal() {
@@ -115,7 +112,6 @@ fn w2_5_to_levels_empty() {
     assert!(levels.is_empty());
 }
 
-
 #[test]
 fn w3_2_parse_payload_perpetual_format() {
     let v = json!({
@@ -146,7 +142,6 @@ fn w3_3_parse_payload_no_matching_format() {
     let result = parse_payload(&v);
     assert!(result.is_none());
 }
-
 
 #[test]
 fn w4_2_into_depth_combined_stream_perpetual() {
@@ -204,7 +199,6 @@ fn w4_4_into_depth_single_stream_perpetual() {
 
 #[test]
 fn w4_5_into_depth_invalid_message() {
-
     let raw = json!({"foo": "bar"});
     let msg: BinanceDepthMessage = serde_json::from_value(raw).unwrap();
     let result = msg.into_depth();

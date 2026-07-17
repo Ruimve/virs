@@ -1,6 +1,5 @@
 use crate::auth::{decode_jwt, encode_jwt, Claims};
 
-
 #[test]
 fn a1_1_normal_construction() {
     let claims = Claims::new("user-123", "admin", "admin", 3600);
@@ -16,7 +15,6 @@ fn a1_2_zero_expiry() {
     let claims = Claims::new("user-456", "trader", "user", 0);
     assert_eq!(claims.exp, claims.iat);
 }
-
 
 #[test]
 fn a4_1_normal_roundtrip() {

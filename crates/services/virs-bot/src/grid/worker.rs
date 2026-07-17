@@ -12,12 +12,10 @@ use crate::grid::ports::*;
 use crate::grid::types::{GridEvent, GridLevel, GridState};
 use crate::grid::utils;
 
-
 pub enum OrderDir {
     Buy,
     Sell,
 }
-
 
 pub struct GridWorker {
     pub(crate) bot: GridBotConfig,
@@ -76,7 +74,6 @@ impl GridWorker {
         }
     }
 
-
     pub async fn run(
         &mut self,
         mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
@@ -91,7 +88,6 @@ impl GridWorker {
             }
         }
 
-
         let max_retries = self.time_config.retry.initial_price_max_retries;
         for attempt in 1..=max_retries {
             self.current_price = self.fetch_current_price().await;
@@ -99,14 +95,16 @@ impl GridWorker {
                 break;
             }
             warn!(bot_id = %self.bot.id, attempt, "Failed to fetch initial price, retrying...");
-            tokio::time::sleep(std::time::Duration::from_secs(self.time_config.price_poll_interval_secs)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(
+                self.time_config.price_poll_interval_secs,
+            ))
+            .await;
         }
         if self.current_price <= 0.0 {
             error!(bot_id = %self.bot.id, "Failed to fetch initial price after {} attempts", max_retries);
         }
 
         self.load_existing_trades().await;
-
 
         if self.bot.upper_price <= 0.0 || self.bot.lower_price <= 0.0 || self.levels.is_empty() {
             self.on_llm_decision().await;
@@ -116,10 +114,9 @@ impl GridWorker {
             self.place_initial_orders().await;
         }
 
-        let mut price_tick = tokio::time::interval(
-            std::time::Duration::from_secs(self.time_config.price_poll_interval_secs)
-        );
-
+        let mut price_tick = tokio::time::interval(std::time::Duration::from_secs(
+            self.time_config.price_poll_interval_secs,
+        ));
 
         let (llm_signal_tx, mut llm_signal_rx) = tokio::sync::mpsc::channel::<()>(1);
         if self.bot.dynamic_adjust {
@@ -135,7 +132,6 @@ impl GridWorker {
                 }
             });
         }
-
 
         loop {
             tokio::select! {
@@ -184,12 +180,10 @@ impl GridWorker {
         }
     }
 
-
     pub(crate) async fn on_price_tick(&mut self) {
         if self.current_price <= 0.0 {
             return;
         }
-
 
         let levels = self.filter_levels(|l| {
             l.side == "buy"
@@ -199,7 +193,6 @@ impl GridWorker {
         });
         self.place_orders_for_levels(&levels, OrderDir::Buy).await;
 
-
         let levels = self.filter_levels(|l| {
             l.side == "sell"
                 && l.sell_price > self.current_price
@@ -208,7 +201,6 @@ impl GridWorker {
         });
         self.place_orders_for_levels(&levels, OrderDir::Sell).await;
 
-
         let levels = self.filter_levels(|l| {
             l.side == "buy"
                 && l.hold_quantity > 0.0
@@ -216,7 +208,6 @@ impl GridWorker {
                 && l.sell_order_id.is_none()
         });
         self.place_orders_for_levels(&levels, OrderDir::Sell).await;
-
 
         let levels = self.filter_levels(|l| {
             l.side == "sell"
@@ -229,7 +220,6 @@ impl GridWorker {
         self.broadcast_state();
     }
 
-
     pub(crate) async fn place_initial_orders(&mut self) {
         if self.current_price <= 0.0 {
             warn!(bot_id = %self.bot.id, "No current price, skipping initial orders");
@@ -238,7 +228,6 @@ impl GridWorker {
 
         let current_level_idx = self.find_level_by_price(self.current_price);
         let range = self.initial_order_range;
-
 
         let levels: Vec<GridLevel> = self
             .levels
@@ -255,7 +244,6 @@ impl GridWorker {
             .collect();
         self.place_orders_for_levels(&levels, OrderDir::Buy).await;
 
-
         let levels: Vec<GridLevel> = self
             .levels
             .iter()
@@ -270,7 +258,6 @@ impl GridWorker {
             .map(|(_, l)| l.clone())
             .collect();
         self.place_orders_for_levels(&levels, OrderDir::Sell).await;
-
 
         let close_levels: Vec<GridLevel> = self
             .levels
@@ -333,7 +320,11 @@ impl GridWorker {
             ),
         };
 
-        let position_side_str = if level.side == "sell" { "short" } else { "long" };
+        let position_side_str = if level.side == "sell" {
+            "short"
+        } else {
+            "long"
+        };
         let client_order_id = Some(client_order_id::format_grid_order(
             self.bot.id,
             level.level,
@@ -342,7 +333,6 @@ impl GridWorker {
         ));
 
         let cmd = if is_close {
-
             OrderCommand::PlaceOrder {
                 symbol: self.bot.symbol.clone(),
                 side,
@@ -353,7 +343,6 @@ impl GridWorker {
                 client_order_id,
             }
         } else {
-
             OrderCommand::OpenPosition {
                 symbol: self.bot.symbol.clone(),
                 side: position_side,
@@ -381,7 +370,6 @@ impl GridWorker {
     pub(crate) async fn place_sell_order(&mut self, level: &GridLevel) {
         self.place_order(level, &OrderDir::Sell).await;
     }
-
 
     pub(crate) async fn on_order_event(&mut self, event: OrderEvent) {
         match event {
@@ -472,28 +460,22 @@ impl GridWorker {
         self.update_consecutive_losses(pnl);
 
         if is_open {
-            let client_order_id = order
-                .client_order_id
-                .as_deref()
-                .unwrap_or("unknown");
+            let client_order_id = order.client_order_id.as_deref().unwrap_or("unknown");
             if self.record_open_trade(level_num, client_order_id).await {
                 self.levels[idx].open_client_order_id = Some(client_order_id.to_string());
             }
         } else {
-            let close_client_order_id = order
-                .client_order_id
-                .as_deref()
-                .unwrap_or("unknown");
-            let open_client_order_id =
-                if let Some(ref oid) = self.levels[idx].open_client_order_id {
-                    Some(oid.clone())
-                } else {
-                    self.store
-                        .find_open_trade(self.bot.id, level_num)
-                        .await
-                        .ok()
-                        .flatten()
-                };
+            let close_client_order_id = order.client_order_id.as_deref().unwrap_or("unknown");
+            let open_client_order_id = if let Some(ref oid) = self.levels[idx].open_client_order_id
+            {
+                Some(oid.clone())
+            } else {
+                self.store
+                    .find_open_trade(self.bot.id, level_num)
+                    .await
+                    .ok()
+                    .flatten()
+            };
             if let Some(open_oid) = open_client_order_id {
                 self.record_close_trade(open_oid, close_client_order_id, level_num)
                     .await;
@@ -607,7 +589,6 @@ impl GridWorker {
         }
     }
 
-
     pub(crate) async fn load_existing_trades(&mut self) {
         let mut trades = match self.store.load_trades(self.bot.id).await {
             Ok(t) => t,
@@ -664,10 +645,8 @@ impl GridWorker {
 
         for trade in &trades {
             if trade.close_side.is_none() {
-                if let Some(level_idx) = self
-                    .levels
-                    .iter()
-                    .position(|l| l.level == trade.grid_level)
+                if let Some(level_idx) =
+                    self.levels.iter().position(|l| l.level == trade.grid_level)
                 {
                     self.levels[level_idx].open_client_order_id =
                         Some(trade.open_client_order_id.clone());
@@ -695,7 +674,6 @@ impl GridWorker {
             }
         }
     }
-
 
     pub(crate) fn grid_spacing(&self) -> f64 {
         if self.levels.len() > 1 {
@@ -738,7 +716,9 @@ impl GridWorker {
             .map(|(i, l)| (i, (l.price - price).abs()))
             .min_by(|a, b| {
                 if a.1.is_nan() || b.1.is_nan() {
-                    tracing::warn!("NaN detected in grid level price comparison — treating as equal");
+                    tracing::warn!(
+                        "NaN detected in grid level price comparison — treating as equal"
+                    );
                     std::cmp::Ordering::Equal
                 } else {
                     a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
@@ -859,7 +839,6 @@ impl GridWorker {
             info!(bot_id = %self.bot.id, level, open_client_order_id = %open_client_order_id, "Close trade recorded");
         }
     }
-
 
     pub(crate) async fn on_llm_decision(&mut self) {
         let is_initial =
@@ -1192,7 +1171,6 @@ impl GridWorker {
     ) -> bool {
         let mut structure_changed = false;
 
-
         if !d.market_regime.is_empty() {
             self.bot.market_regime = Some(d.market_regime.clone());
         }
@@ -1273,7 +1251,6 @@ impl GridWorker {
         }
         GridAction::Hold
     }
-
 
     pub async fn on_adjust_signal(&mut self) {
         match self.store.load_bot(self.bot.id).await {
@@ -1440,7 +1417,6 @@ impl GridWorker {
     }
 }
 
-
 fn apply_fill_to_level(level: &mut GridLevel, trade_side: &str, price: f64, quantity: f64) {
     let is_buy = trade_side == "buy";
     if level.side == "buy" {
@@ -1484,7 +1460,6 @@ fn apply_fill_to_level(level: &mut GridLevel, trade_side: &str, price: f64, quan
     }
 }
 
-
 fn calculate_fill_pnl(
     level_side: &str,
     trade_side: &str,
@@ -1503,7 +1478,6 @@ fn calculate_fill_pnl(
     }
 }
 
-
 fn is_close_trade(level_side: &str, trade_side: &str) -> bool {
     if level_side == "buy" {
         trade_side == "sell"
@@ -1511,7 +1485,6 @@ fn is_close_trade(level_side: &str, trade_side: &str) -> bool {
         trade_side == "buy"
     }
 }
-
 
 fn format_grid_config(
     grid_status: &str,

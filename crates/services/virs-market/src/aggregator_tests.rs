@@ -1,7 +1,6 @@
 use crate::aggregator::{candle_from_1m, Aggregator};
 use crate::types::{align_open_time, Candle, Timeframe};
 
-
 const BASE: i64 = 1_700_000_040_000;
 
 fn make_1m(open_time: i64, open: f64, high: f64, low: f64, close: f64, closed: bool) -> Candle {
@@ -19,7 +18,6 @@ fn make_1m(open_time: i64, open: f64, high: f64, low: f64, close: f64, closed: b
     }
 }
 
-
 #[test]
 fn a1_1_candle_from_1m_basic() {
     let base = make_1m(BASE, 100.0, 105.0, 95.0, 102.0, true);
@@ -34,7 +32,6 @@ fn a1_1_candle_from_1m_basic() {
 
 #[test]
 fn a1_2_candle_from_1m_align() {
-
     let base = make_1m(BASE, 100.0, 105.0, 95.0, 102.0, true);
     let result = candle_from_1m(&base, Timeframe::M5);
     let expected_open = align_open_time(BASE, Timeframe::M5);
@@ -49,10 +46,8 @@ fn a1_3_candle_from_1m_closed_false() {
     assert!(!result.closed);
 }
 
-
 #[test]
 fn a2_1_is_last_1m_in_group_m5() {
-
     let group_start = align_open_time(BASE, Timeframe::M5);
     let fifth = make_1m(group_start + 4 * 60_000, 100.0, 100.0, 100.0, 100.0, true);
     assert!(Aggregator::is_last_1m_in_group(&fifth, Timeframe::M5));
@@ -60,7 +55,6 @@ fn a2_1_is_last_1m_in_group_m5() {
 
 #[test]
 fn a2_2_is_last_1m_not_last() {
-
     let group_start = align_open_time(BASE, Timeframe::M5);
     let third = make_1m(group_start + 2 * 60_000, 100.0, 100.0, 100.0, 100.0, true);
     assert!(!Aggregator::is_last_1m_in_group(&third, Timeframe::M5));
@@ -68,7 +62,6 @@ fn a2_2_is_last_1m_not_last() {
 
 #[test]
 fn a2_3_is_last_1m_in_group_h1() {
-
     let group_start = align_open_time(BASE, Timeframe::H1);
     let sixtieth = make_1m(group_start + 59 * 60_000, 100.0, 100.0, 100.0, 100.0, true);
     assert!(Aggregator::is_last_1m_in_group(&sixtieth, Timeframe::H1));
@@ -76,12 +69,10 @@ fn a2_3_is_last_1m_in_group_h1() {
 
 #[test]
 fn a2_4_is_last_1m_exact_boundary() {
-
     let group_start = align_open_time(BASE, Timeframe::M5);
     let first = make_1m(group_start, 100.0, 100.0, 100.0, 100.0, true);
     assert!(!Aggregator::is_last_1m_in_group(&first, Timeframe::M5));
 }
-
 
 #[test]
 fn a3_1_aggregate_empty() {
@@ -104,7 +95,14 @@ fn a3_3_aggregate_m5_full() {
     let candles: Vec<Candle> = (0..5)
         .map(|i| {
             let price = 100.0 + i as f64;
-            make_1m(start + i * 60_000, price, price + 2.0, price - 2.0, price + 1.0, true)
+            make_1m(
+                start + i * 60_000,
+                price,
+                price + 2.0,
+                price - 2.0,
+                price + 1.0,
+                true,
+            )
         })
         .collect();
 
@@ -124,7 +122,14 @@ fn a3_4_aggregate_m5_partial() {
     let candles: Vec<Candle> = (0..3)
         .map(|i| {
             let price = 100.0 + i as f64;
-            make_1m(start + i * 60_000, price, price + 1.0, price - 1.0, price, true)
+            make_1m(
+                start + i * 60_000,
+                price,
+                price + 1.0,
+                price - 1.0,
+                price,
+                true,
+            )
         })
         .collect();
 
@@ -140,7 +145,14 @@ fn a3_5_aggregate_multi_group() {
     let candles: Vec<Candle> = (0..7)
         .map(|i| {
             let price = 100.0 + i as f64;
-            make_1m(start + i * 60_000, price, price + 1.0, price - 1.0, price, true)
+            make_1m(
+                start + i * 60_000,
+                price,
+                price + 1.0,
+                price - 1.0,
+                price,
+                true,
+            )
         })
         .collect();
 

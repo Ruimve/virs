@@ -4,13 +4,11 @@ pub mod classify;
 pub mod context;
 pub mod exchange;
 
-
 pub use api::ApiError;
 pub use bot::{BotError, BotResult};
 pub use classify::{Categorized, ErrorCategory, ErrorCode, HttpStatus, Retryable};
 pub use context::Context;
 pub use exchange::ExchangeError;
-
 
 #[derive(Debug, thiserror::Error)]
 pub enum VirsError {
@@ -20,23 +18,18 @@ pub enum VirsError {
     #[error(transparent)]
     Exchange(#[from] ExchangeError),
 
-
     #[cfg(feature = "sqlx")]
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
-
     #[error("{message}")]
     Http { status: u16, message: String },
-
 
     #[error("Config error: {0}")]
     Config(String),
 
-
     #[error("Auth error: {0}")]
     Auth(String),
-
 
     #[error("Crypto error: {0}")]
     Crypto(String),
@@ -47,16 +40,28 @@ pub enum VirsError {
 
 impl VirsError {
     pub fn bad_request(msg: impl Into<String>) -> Self {
-        Self::Http { status: 400, message: msg.into() }
+        Self::Http {
+            status: 400,
+            message: msg.into(),
+        }
     }
     pub fn unauthorized(msg: impl Into<String>) -> Self {
-        Self::Http { status: 401, message: msg.into() }
+        Self::Http {
+            status: 401,
+            message: msg.into(),
+        }
     }
     pub fn not_found(msg: impl Into<String>) -> Self {
-        Self::Http { status: 404, message: msg.into() }
+        Self::Http {
+            status: 404,
+            message: msg.into(),
+        }
     }
     pub fn conflict(msg: impl Into<String>) -> Self {
-        Self::Http { status: 409, message: msg.into() }
+        Self::Http {
+            status: 409,
+            message: msg.into(),
+        }
     }
     pub fn config(msg: impl Into<String>) -> Self {
         Self::Config(msg.into())
@@ -69,9 +74,7 @@ impl VirsError {
     }
 }
 
-
 pub type VirsResult<T> = std::result::Result<T, VirsError>;
-
 
 impl Retryable for VirsError {
     fn is_retryable(&self) -> bool {
@@ -80,7 +83,11 @@ impl Retryable for VirsError {
             Self::Exchange(e) => e.is_retryable(),
             #[cfg(feature = "sqlx")]
             Self::Database(_) => true,
-            Self::Config(_) | Self::Auth(_) | Self::Crypto(_) | Self::Http { .. } | Self::Other(_) => false,
+            Self::Config(_)
+            | Self::Auth(_)
+            | Self::Crypto(_)
+            | Self::Http { .. }
+            | Self::Other(_) => false,
         }
     }
 }

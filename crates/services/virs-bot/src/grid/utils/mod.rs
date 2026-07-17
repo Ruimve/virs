@@ -6,7 +6,6 @@ mod prompt_tests;
 use crate::grid::ports::GridBotConfig;
 use crate::grid::types::GridLevel;
 
-
 pub fn calculate_levels(bot: &GridBotConfig, current_price: f64) -> Vec<GridLevel> {
     let effective_price = if current_price > 0.0 {
         current_price

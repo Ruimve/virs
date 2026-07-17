@@ -21,7 +21,6 @@ pub struct Position {
     pub client_order_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub closed_at: Option<DateTime<Utc>>,
 }
 
 impl Position {

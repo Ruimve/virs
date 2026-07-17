@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Candle {
     pub open_time: i64,
@@ -38,13 +37,11 @@ pub trait KlineWsClient: Send + Sync {
     fn is_running(&self) -> bool;
 }
 
-
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct OrderBookLevel {
     pub price: f64,
     pub amount: f64,
 }
-
 
 #[derive(Debug, Clone)]
 pub struct WsOrderBookUpdate {
@@ -54,19 +51,16 @@ pub struct WsOrderBookUpdate {
 
     pub asks: Vec<OrderBookLevel>,
 
-
     pub timestamp: i64,
 
     pub last_update_id: Option<i64>,
 }
-
 
 #[derive(Debug, Clone)]
 pub enum WsOrderBookEvent {
     OrderBook(WsOrderBookUpdate),
     Reconnected,
 }
-
 
 #[async_trait]
 pub trait OrderBookWsClient: Send + Sync {

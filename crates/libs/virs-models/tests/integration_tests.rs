@@ -3,7 +3,6 @@ use uuid::Uuid;
 
 use virs_models::*;
 
-
 #[test]
 fn int_2_1_spacing_and_return_pct() {
     let now = Utc::now();
@@ -86,7 +85,6 @@ fn int_2_2_invalid_config_negative_spacing() {
     assert!(bot.is_stopped());
 }
 
-
 #[test]
 fn int_3_1_win_plus_loss_equals_100() {
     let now = Utc::now();
@@ -161,7 +159,6 @@ fn int_3_2_negative_return() {
     assert!(bot.is_stopped());
     assert!(!bot.is_running());
 }
-
 
 #[test]
 fn int_5_1_grid_bot_serde_then_methods() {

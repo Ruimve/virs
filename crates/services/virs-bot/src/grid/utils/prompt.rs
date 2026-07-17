@@ -1,7 +1,6 @@
 use crate::common::indicators::MarketIndicators;
 use crate::grid::types::DEFAULT_USER_PROMPT_TEMPLATE;
 
-
 pub fn render_user_prompt(
     indicators: &MarketIndicators,
     total_balance: f64,
@@ -40,7 +39,6 @@ pub fn render_user_prompt(
     prompt = prompt.replace("{funding_next_time}", &indicators.funding_next_time);
     prompt = prompt.replace("{event_flag}", if event_flag { "true" } else { "false" });
     prompt = prompt.replace("{event_description}", event_description);
-
 
     prompt = prompt.replace(
         "{h1_current_price}",
@@ -85,7 +83,6 @@ pub fn render_user_prompt(
         &format!("{:.2}", indicators.nearest_round_down),
     );
 
-
     prompt = prompt.replace(
         "{m15_current_price}",
         &format!("{:.2}", indicators.m15_current_price),
@@ -106,7 +103,6 @@ pub fn render_user_prompt(
     );
     prompt = prompt.replace("{m15_ema20}", &format!("{:.2}", indicators.m15_ema20));
     prompt = prompt.replace("{m15_ema50}", &format!("{:.2}", indicators.m15_ema50));
-
 
     prompt = prompt.replace("{h4_ema20}", &format!("{:.2}", indicators.h4_ema20));
     prompt = prompt.replace("{h4_ema50}", &format!("{:.2}", indicators.h4_ema50));

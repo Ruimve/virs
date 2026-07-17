@@ -1,6 +1,5 @@
 use virs_error::ExchangeError;
 
-
 #[test]
 fn e2_1_no_data_construction() {
     let err = ExchangeError::no_data("No ticker found for BTC/USDT".to_string());

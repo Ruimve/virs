@@ -201,7 +201,10 @@ impl AutoStore for PgAutoStore {
         Ok(())
     }
 
-    async fn find_open_trade(&self, bot_id: Uuid) -> VirsResult<Option<(String, f64, f64, DateTime<Utc>)>> {
+    async fn find_open_trade(
+        &self,
+        bot_id: Uuid,
+    ) -> VirsResult<Option<(String, f64, f64, DateTime<Utc>)>> {
         let row: Option<(String, f64, f64, DateTime<Utc>)> = sqlx::query_as(
             r#"SELECT client_order_id, stop_loss, take_profit, created_at
                FROM pe_auto_order_context
@@ -245,7 +248,11 @@ impl AutoStore for PgAutoStore {
         Ok(row)
     }
 
-    async fn update_trade_stop_loss(&self, client_order_id: &str, stop_loss: f64) -> VirsResult<()> {
+    async fn update_trade_stop_loss(
+        &self,
+        client_order_id: &str,
+        stop_loss: f64,
+    ) -> VirsResult<()> {
         sqlx::query(
             r#"UPDATE pe_auto_order_context SET stop_loss = $2
                WHERE client_order_id = $1 AND status = 'open'"#,
@@ -313,7 +320,6 @@ impl AutoStore for PgAutoStore {
         execution_status: &str,
         intercept_reason: Option<&str>,
     ) -> VirsResult<()> {
-
         let status = if intercept_reason.is_some() {
             "intercepted"
         } else {

@@ -12,38 +12,12 @@ use tokio::sync::mpsc;
 use auth::Signer;
 use virs_error::ExchangeError;
 
-
 pub use types::{
-    ApiRestrictions,
-    Balance,
-    CcxtFundingHistoryEntry,
-    CcxtFundingRate,
-    CcxtKline,
-
-    CcxtOrder,
-    CcxtOrderBook,
-    CcxtOrderStatus,
-    CcxtTicker,
-    FundingHistoryEntry,
-    FundingRate,
-    Kline,
-    MarginMode,
-    MarketInfo,
-    MarketType,
-    ExecutionType,
-    OrderBook,
-    OrderFee,
-    OrderResult,
-    OrderStatus,
-    OrderType,
-    PlaceOrderParams,
-    PositionMode,
-    PositionSide,
-    Side,
-
-    Ticker,
+    ApiRestrictions, Balance, CcxtFundingHistoryEntry, CcxtFundingRate, CcxtKline, CcxtOrder,
+    CcxtOrderBook, CcxtOrderStatus, CcxtTicker, ExecutionType, FundingHistoryEntry, FundingRate,
+    Kline, MarginMode, MarketInfo, MarketType, OrderBook, OrderFee, OrderResult, OrderStatus,
+    OrderType, PlaceOrderParams, PositionMode, PositionSide, Side, Ticker,
 };
-
 
 #[async_trait]
 pub trait Exchange: Send + Sync {
@@ -109,7 +83,11 @@ pub trait Exchange: Send + Sync {
     async fn fetch_balance(&self) -> Result<Vec<Balance>, ExchangeError>;
     async fn fetch_markets(&self) -> Result<Vec<MarketInfo>, ExchangeError>;
     async fn create_order(&self, params: PlaceOrderParams) -> Result<OrderResult, ExchangeError>;
-    async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<OrderResult, ExchangeError>;
+    async fn cancel_order(
+        &self,
+        symbol: &str,
+        order_id: &str,
+    ) -> Result<OrderResult, ExchangeError>;
     async fn cancel_all_orders(&self, symbol: &str) -> Result<(), ExchangeError>;
     async fn set_leverage(
         &self,
@@ -139,7 +117,6 @@ pub trait Exchange: Send + Sync {
         ))
     }
 
-
     async fn start_listenkey_order_ws(
         &self,
         _listen_key_hint: Option<&str>,
@@ -150,25 +127,20 @@ pub trait Exchange: Send + Sync {
     }
     async fn ping(&self) -> Result<bool, ExchangeError>;
 
-
     async fn sync_time(&self) -> Result<(), ExchangeError> {
         Ok(())
     }
 }
-
 
 #[derive(Clone)]
 pub struct ExchangeClient {
     client: Client,
     rate_limiter: std::sync::Arc<tokio::sync::Semaphore>,
 
-
     api_key: Option<String>,
 }
 
 impl ExchangeClient {
-
-
     pub fn with_api_key(
         max_concurrent: u32,
         proxy_url: Option<&str>,
@@ -324,7 +296,6 @@ impl ExchangeClient {
         handle_response(req.send().await?, path, display_body.as_deref()).await
     }
 
-
     pub async fn signed_delete(
         &self,
         signer: &dyn Signer,
@@ -357,7 +328,6 @@ impl ExchangeClient {
     }
 }
 
-
 pub(crate) fn build_display_url<'a>(
     path: &str,
     params: impl Iterator<Item = (&'a str, &'a str)>,
@@ -376,7 +346,6 @@ pub(crate) fn build_display_url<'a>(
     }
     url
 }
-
 
 pub(crate) fn mask_signature(s: &str) -> String {
     if let Some(idx) = s.find("signature=") {
@@ -467,7 +436,6 @@ pub(crate) fn extract_error_message(json: &Value) -> String {
     json.to_string()
 }
 
-
 pub fn create_exchange(
     id: &str,
     api_key: &str,
@@ -489,7 +457,6 @@ pub fn create_exchange(
             pool_max_idle_per_host,
             listenkey_keepalive_futures_secs,
         )?)),
-
 
         _ => Err(ExchangeError::NotSupported(format!(
             "Exchange '{}' is not supported. Currently implemented: binance. \
@@ -525,7 +492,6 @@ pub fn parse_u32(v: &Value, field: &str) -> Option<u32> {
         .map(|v| v as u32)
 }
 
-
 pub fn parse_timestamp_ms(v: &Value, field: &str) -> Option<chrono::DateTime<chrono::Utc>> {
     v.get(field)
         .and_then(|f| {
@@ -534,7 +500,6 @@ pub fn parse_timestamp_ms(v: &Value, field: &str) -> Option<chrono::DateTime<chr
         })
         .and_then(chrono::DateTime::from_timestamp_millis)
 }
-
 
 #[cfg(test)]
 mod auth_tests;

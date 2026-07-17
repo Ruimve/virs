@@ -1,11 +1,9 @@
 use serde::Deserialize;
 use virs_types::WsFeedEvent;
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct MarginCallEvent {
-
     #[serde(rename = "e")]
     pub event_type: String,
 
@@ -19,11 +17,9 @@ pub struct MarginCallEvent {
     pub positions: Vec<MarginCallPosition>,
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct MarginCallPosition {
-
     #[serde(rename = "s")]
     pub symbol: String,
 
@@ -48,7 +44,6 @@ pub struct MarginCallPosition {
     #[serde(rename = "mm")]
     pub maintenance_margin: String,
 }
-
 
 pub fn process(json: &str) -> Option<WsFeedEvent> {
     let event: MarginCallEvent = match serde_json::from_str(json) {

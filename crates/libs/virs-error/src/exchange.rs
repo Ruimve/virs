@@ -1,5 +1,4 @@
-use crate::classify::{ErrorCategory, Retryable, Categorized, HttpStatus, ErrorCode};
-
+use crate::classify::{Categorized, ErrorCategory, ErrorCode, HttpStatus, Retryable};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExchangeError {
@@ -33,10 +32,8 @@ pub enum ExchangeError {
     #[error("HTTP error {status}: {body}")]
     Http { status: u16, body: String },
 
-
     #[error("Order status unknown (may have been filled): {0}")]
     OrderStatusUnknown(String),
-
 
     #[error("IP banned by exchange: {0}")]
     IpBanned(String),
@@ -46,8 +43,6 @@ pub enum ExchangeError {
 }
 
 impl ExchangeError {
-
-
     pub fn no_data(context: String) -> Self {
         Self::NoData(context)
     }

@@ -8,15 +8,14 @@ use tokio::sync::{broadcast, mpsc};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+use virs_error::{VirsError, VirsResult};
 use virs_types::enums::*;
 use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_types::market::ExchangePosition;
 use virs_types::position::*;
 use virs_types::CcxtOrder;
-use virs_error::{VirsError, VirsResult};
 
 use crate::persistence::{position_uuid_v5, PositionPersistence};
-
 
 fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
     lock.unwrap_or_else(|_| {
@@ -49,7 +48,6 @@ macro_rules! persist {
         }
     };
 }
-
 
 pub(crate) struct EngineInner {
     pub(crate) exchange: Arc<dyn ExchangePe>,
@@ -86,7 +84,6 @@ impl EngineInner {
         *recover_lock(self.state.read())
     }
 }
-
 
 pub struct PositionEngine {
     inner: Arc<EngineInner>,
@@ -136,21 +133,17 @@ impl PositionEngine {
         }
     }
 
-
     pub fn command_sender(&self) -> mpsc::Sender<EngineCommand> {
         self.cmd_tx.clone()
     }
-
 
     pub fn subscribe_events(&self) -> broadcast::Receiver<EngineEvent> {
         self.inner.event_tx.subscribe()
     }
 
-
     pub fn event_sender(&self) -> broadcast::Sender<EngineEvent> {
         self.inner.event_tx.clone()
     }
-
 
     pub fn get_all_positions(&self) -> Vec<Position> {
         self.inner
@@ -159,7 +152,6 @@ impl PositionEngine {
             .map(|r| r.value().clone())
             .collect()
     }
-
 
     pub fn get_open_position_by_symbol(&self, symbol: &str) -> Option<Position> {
         self.inner
@@ -170,11 +162,9 @@ impl PositionEngine {
             .next()
     }
 
-
     pub fn exchange(&self) -> Arc<dyn ExchangePe> {
         Arc::clone(&self.inner.exchange)
     }
-
 
     pub async fn run(&mut self) -> VirsResult<()> {
         self.recover_state().await?;
@@ -196,10 +186,10 @@ impl PositionEngine {
         self.inner.set_state(EngineState::Running);
         info!("Position engine started");
 
-        let cmd_rx = self
-            .cmd_rx
-            .take()
-            .ok_or(VirsError::Http { status: 500, message: "Channel closed".to_string() })?;
+        let cmd_rx = self.cmd_rx.take().ok_or(VirsError::Http {
+            status: 500,
+            message: "Channel closed".to_string(),
+        })?;
         let inner = Arc::clone(&self.inner);
 
         let mut cmd_handle = tokio::spawn(command_loop(inner.clone(), cmd_rx));
@@ -215,19 +205,18 @@ impl PositionEngine {
         let timeout = Duration::from_secs(5);
         let _ = tokio::time::timeout(timeout, async {
             let _ = tokio::join!(cmd_handle, ws_handle);
-        }).await;
+        })
+        .await;
 
         self.inner.set_state(EngineState::Stopped);
         info!("Position engine stopped");
         Ok(())
     }
 
-
     pub fn stop(&self) {
         self.inner.set_state(EngineState::ShuttingDown);
         info!("Position engine stop requested");
     }
-
 
     async fn recover_state(&self) -> VirsResult<()> {
         let exchange_name = self.inner.exchange.name().to_string();
@@ -262,7 +251,11 @@ impl PositionEngine {
                 (Side::Buy, PositionSide::Long) | (Side::Sell, PositionSide::Short)
             );
             if is_open_order {
-                let key = (exchange_name.clone(), order.symbol.clone(), order.position_side);
+                let key = (
+                    exchange_name.clone(),
+                    order.symbol.clone(),
+                    order.position_side,
+                );
                 if !self.inner.positions.contains_key(&key) {
                     let now = Utc::now();
                     let position = Position {
@@ -279,7 +272,6 @@ impl PositionEngine {
                         client_order_id: Some(order.client_order_id.clone()),
                         created_at: now,
                         updated_at: now,
-                        closed_at: None,
                     };
                     self.inner.position_id_index.insert(pos_id, key.clone());
                     self.inner.positions.insert(key, position);
@@ -305,7 +297,6 @@ impl PositionEngine {
         Ok(())
     }
 }
-
 
 pub(crate) async fn command_loop(
     inner: Arc<EngineInner>,
@@ -348,7 +339,8 @@ pub(crate) async fn command_loop(
                 price,
                 client_order_id,
             } => {
-                handle_close_position(&inner, position_id, order_type, price, client_order_id).await;
+                handle_close_position(&inner, position_id, order_type, price, client_order_id)
+                    .await;
             }
             EngineCommand::PlaceOrder { params } => {
                 handle_place_order(&inner, params).await;
@@ -368,7 +360,6 @@ pub(crate) async fn command_loop(
         }
     }
 }
-
 
 pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdateStream) {
     loop {
@@ -390,7 +381,6 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
         }
     }
 }
-
 
 pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: CcxtOrder) {
     let client_order_id = ws_order.client_order_id.clone();
@@ -437,8 +427,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
 
         let trade_fill = filled - prev_filled;
         if trade_fill > 0.0
-            && (order_status == OrderStatus::Filled
-                || order_status == OrderStatus::PartiallyFilled)
+            && (order_status == OrderStatus::Filled || order_status == OrderStatus::PartiallyFilled)
         {
             let position_id = inner
                 .order_position
@@ -474,7 +463,6 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
     // 3. 既不在 pending 也不在 orders，忽略
     warn!(client_order_id = %client_order_id, "WS order update for unknown order, ignoring");
 }
-
 
 /// 双确认成功后，将订单从 pending 移入 orders，并处理后续事件（成交/取消/放置）。
 async fn finalize_pending_order(
@@ -546,7 +534,6 @@ async fn finalize_pending_order(
     }
 }
 
-
 /// 处理订单成交：构造 Trade、更新仓位、emit 成交事件。
 async fn process_order_fill(
     inner: &Arc<EngineInner>,
@@ -562,12 +549,8 @@ async fn process_order_fill(
     timestamp: chrono::DateTime<Utc>,
     order_status: OrderStatus,
 ) {
-    let pos_key_opt = position_id.and_then(|pid| {
-        inner
-            .position_id_index
-            .get(&pid)
-            .map(|r| r.value().clone())
-    });
+    let pos_key_opt =
+        position_id.and_then(|pid| inner.position_id_index.get(&pid).map(|r| r.value().clone()));
 
     // 使用 Binance 推送的 rp 作为已实现盈亏，开仓时 rp=0
     let (pnl, trade_side, trade_type) = match &pos_key_opt {
@@ -656,7 +639,6 @@ async fn process_order_fill(
                     if position.quantity.abs() < 1e-8 {
                         position.quantity = 0.0;
                         position.status = PositionStatus::Closed;
-                        position.closed_at = Some(timestamp);
                     } else {
                         position.status = PositionStatus::Open;
                     }
@@ -665,8 +647,7 @@ async fn process_order_fill(
                     position.quantity += filled;
                     if avg_price > 0.0 {
                         if old_qty > 0.0 && position.entry_price > 0.0 {
-                            let total_cost =
-                                position.entry_price * old_qty + avg_price * filled;
+                            let total_cost = position.entry_price * old_qty + avg_price * filled;
                             position.entry_price = total_cost / position.quantity;
                         } else {
                             position.entry_price = avg_price;
@@ -700,7 +681,6 @@ async fn process_order_fill(
         inner.order_position.remove(client_order_id);
     }
 }
-
 
 pub(crate) async fn handle_open_position(
     inner: &Arc<EngineInner>,
@@ -793,7 +773,6 @@ pub(crate) async fn handle_open_position(
         client_order_id: client_order_id.clone(),
         created_at: now,
         updated_at: now,
-        closed_at: None,
     };
 
     inner.position_id_index.insert(position.id, key.clone());
@@ -820,7 +799,6 @@ pub(crate) async fn handle_open_position(
     };
     handle_place_order(inner, params).await;
 }
-
 
 pub(crate) async fn handle_close_position(
     inner: &Arc<EngineInner>,
@@ -893,7 +871,6 @@ pub(crate) async fn handle_close_position(
     handle_place_order(inner, params).await;
 }
 
-
 pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol: &str) {
     handle_cancel_all_orders(inner, None, Some(symbol.to_string())).await;
 
@@ -921,7 +898,6 @@ pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol:
     }
 }
 
-
 pub(crate) fn resolve_position_side_for_hedge(params: &mut PlaceOrderParams) {
     if params.position_side.is_none() {
         params.position_side = match &params.side {
@@ -930,7 +906,6 @@ pub(crate) fn resolve_position_side_for_hedge(params: &mut PlaceOrderParams) {
         };
     }
 }
-
 
 pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: PlaceOrderParams) {
     resolve_position_side_for_hedge(&mut params);
@@ -963,7 +938,6 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
                     client_order_id: params.client_order_id.clone(),
                     created_at: Utc::now(),
                     updated_at: Utc::now(),
-                    closed_at: None,
                 };
                 inner.position_id_index.insert(pos_id, key.clone());
                 inner.positions.insert(key, position.clone());
@@ -1011,8 +985,7 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
 
             if let Some(ws_order) = ws_order {
                 // 双确认成功，移除 pending，存入 orders
-                finalize_pending_order(inner, &client_order_id, ws_order, Some(position_id))
-                    .await;
+                finalize_pending_order(inner, &client_order_id, ws_order, Some(position_id)).await;
             }
             // 如果 WS 未到达，等待 WS 回调处理
         }
@@ -1046,7 +1019,6 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
         }
     }
 }
-
 
 pub(crate) async fn handle_cancel_all_orders(
     inner: &Arc<EngineInner>,

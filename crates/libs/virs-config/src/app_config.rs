@@ -2,14 +2,12 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use virs_error::{VirsError, VirsResult};
 
-
 pub(crate) const DEFAULT_HOST: &str = "0.0.0.0";
 pub(crate) const DEFAULT_PORT: &str = "8080";
 pub(crate) const DEFAULT_JWT_HOURS: &str = "24";
 pub(crate) const DEFAULT_DB_POOL_MIN: &str = "5";
 pub(crate) const DEFAULT_DB_POOL_MAX: &str = "50";
 pub(crate) const DEFAULT_DB_ACQUIRE_TIMEOUT_SECS: &str = "10";
-
 
 pub(crate) const DEFAULT_MAX_POSITION_DURATION_SECS: &str = "172800";
 pub(crate) const DEFAULT_PENDING_ORDER_TIMEOUT_SECS: &str = "60";
@@ -18,18 +16,14 @@ pub(crate) const DEFAULT_CLOSE_ORDER_TIMEOUT_SECS: &str = "15";
 pub(crate) const DEFAULT_HTTP_TIMEOUT_SECS: &str = "30";
 pub(crate) const DEFAULT_LLM_TIMEOUT_SECS: &str = "120";
 
-
 pub(crate) const DEFAULT_INITIAL_PRICE_MAX_RETRIES: &str = "10";
 pub(crate) const DEFAULT_PERSIST_MAX_RETRIES: &str = "3";
 pub(crate) const DEFAULT_PERSIST_RETRY_BASE_MS: &str = "100";
 
-
 pub(crate) const DEFAULT_HTTP_CONNECT_TIMEOUT_SECS: &str = "10";
 pub(crate) const DEFAULT_HTTP_POOL_MAX_IDLE_PER_HOST: &str = "10";
 
-
 pub(crate) const DEFAULT_LISTENKEY_KEEPALIVE_FUTURES_SECS: &str = "1800";
-
 
 pub(crate) fn parse_env_num<T: FromStr>(value: Option<String>, default: &str) -> VirsResult<T>
 where
@@ -39,7 +33,6 @@ where
     s.parse::<T>()
         .map_err(|e| VirsError::config(format!("Failed to parse '{}': {}", s, e)))
 }
-
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -77,10 +70,8 @@ pub struct AdminConfig {
     pub id: Option<uuid::Uuid>,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TimeConfig {
-
     pub max_position_duration_secs: u64,
 
     pub pending_order_timeout_secs: u64,
@@ -100,10 +91,8 @@ pub struct TimeConfig {
     pub listenkey: ListenKeyConfig,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RetryConfig {
-
     pub initial_price_max_retries: u32,
 
     pub persist_max_retries: u32,
@@ -111,19 +100,15 @@ pub struct RetryConfig {
     pub persist_retry_base_ms: u64,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HttpConfig {
-
     pub http_connect_timeout_secs: u64,
 
     pub http_pool_max_idle_per_host: usize,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListenKeyConfig {
-
     pub listenkey_keepalive_futures_secs: u64,
 }
 
@@ -149,7 +134,9 @@ impl Default for HttpConfig {
 impl Default for ListenKeyConfig {
     fn default() -> Self {
         Self {
-            listenkey_keepalive_futures_secs: DEFAULT_LISTENKEY_KEEPALIVE_FUTURES_SECS.parse().unwrap(),
+            listenkey_keepalive_futures_secs: DEFAULT_LISTENKEY_KEEPALIVE_FUTURES_SECS
+                .parse()
+                .unwrap(),
         }
     }
 }
@@ -174,30 +161,26 @@ impl Default for TimeConfig {
     }
 }
 
-
 pub fn load_config() -> VirsResult<AppConfig> {
     dotenvy::dotenv().ok();
     load_config_from_env()
 }
 
-
 pub fn load_config_from_env() -> VirsResult<AppConfig> {
-
     let server = ServerConfig {
         host: std::env::var("HOST").unwrap_or_else(|_| DEFAULT_HOST.into()),
         port: parse_env_num(std::env::var("PORT").ok(), DEFAULT_PORT)?,
-        encryption_key: std::env::var("ENCRYPTION_KEY").map_err(|_| {
-            VirsError::config("ENCRYPTION_KEY environment variable is required")
-        })?,
-        llm_key: std::env::var("LLM_KEY").map_err(|_| {
-            VirsError::config("LLM_KEY environment variable is required")
-        })?,
-        jwt_secret: std::env::var("JWT_SECRET").map_err(|_| {
-            VirsError::config("JWT_SECRET environment variable is required")
-        })?,
-        jwt_expiration_hours: parse_env_num(std::env::var("JWT_EXPIRATION_HOURS").ok(), DEFAULT_JWT_HOURS)?,
+        encryption_key: std::env::var("ENCRYPTION_KEY")
+            .map_err(|_| VirsError::config("ENCRYPTION_KEY environment variable is required"))?,
+        llm_key: std::env::var("LLM_KEY")
+            .map_err(|_| VirsError::config("LLM_KEY environment variable is required"))?,
+        jwt_secret: std::env::var("JWT_SECRET")
+            .map_err(|_| VirsError::config("JWT_SECRET environment variable is required"))?,
+        jwt_expiration_hours: parse_env_num(
+            std::env::var("JWT_EXPIRATION_HOURS").ok(),
+            DEFAULT_JWT_HOURS,
+        )?,
     };
-
 
     if server.encryption_key == server.llm_key {
         return Err(VirsError::config(
@@ -207,9 +190,8 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
     }
 
     let database = DatabaseConfig {
-        url: std::env::var("DATABASE_URL").map_err(|_| {
-            VirsError::config("DATABASE_URL environment variable is required")
-        })?,
+        url: std::env::var("DATABASE_URL")
+            .map_err(|_| VirsError::config("DATABASE_URL environment variable is required"))?,
         pool_min: parse_env_num(std::env::var("DB_POOL_MIN").ok(), DEFAULT_DB_POOL_MIN)?,
         pool_max: parse_env_num(std::env::var("DB_POOL_MAX").ok(), DEFAULT_DB_POOL_MAX)?,
         acquire_timeout_secs: parse_env_num(
@@ -219,9 +201,8 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
     };
 
     let admin = AdminConfig {
-        username: std::env::var("ADMIN_USERNAME").map_err(|_| {
-            VirsError::config("ADMIN_USERNAME environment variable is required")
-        })?,
+        username: std::env::var("ADMIN_USERNAME")
+            .map_err(|_| VirsError::config("ADMIN_USERNAME environment variable is required"))?,
         password: {
             let pwd = std::env::var("ADMIN_PASSWORD").map_err(|_| {
                 VirsError::config("ADMIN_PASSWORD environment variable is required")
@@ -239,7 +220,6 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
     let proxy = std::env::var("PROXY_URL")
         .ok()
         .filter(|s| !s.trim().is_empty());
-
 
     let time = TimeConfig {
         max_position_duration_secs: parse_env_num(

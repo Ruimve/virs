@@ -4,7 +4,6 @@ use virs_utils::crypto::{
     verify_password,
 };
 
-
 #[test]
 fn int_1_1_derive_key_encrypt_decrypt_chain() {
     let secret = "integration_test_secret";
@@ -28,7 +27,6 @@ fn int_1_2_encrypt_with_key_decrypt_with_key_chain() {
     assert_eq!(decrypted, plaintext);
 }
 
-
 #[test]
 fn int_2_1_claims_new_encode_decode_chain() {
     let claims = Claims::new("user-int-1", "trader", "user", 3600);
@@ -48,11 +46,9 @@ fn int_2_2_expired_claims_lifecycle() {
 
     claims.exp = chrono::Utc::now().timestamp() - 100;
 
-
     let token = encode_jwt(&claims, "secret").unwrap();
     assert!(decode_jwt(&token, "secret").is_err());
 }
-
 
 #[test]
 fn int_3_1_hash_then_verify_correct_password() {
@@ -67,12 +63,10 @@ fn int_3_2_hash_then_verify_wrong_password() {
     assert!(!verify_password("wrong_password", &hash));
 }
 
-
 #[test]
 fn int_4_1_tampered_ciphertext_decrypt_fails() {
     let key = derive_key("test_secret");
     let encrypted = encrypt("secret data", &key).unwrap();
-
 
     let mut tampered = encrypted.chars().collect::<Vec<_>>();
     if tampered.len() > 5 {
@@ -87,7 +81,6 @@ fn int_4_1_tampered_ciphertext_decrypt_fails() {
 fn int_4_2_tampered_token_decode_fails() {
     let claims = Claims::new("user-1", "test", "user", 3600);
     let token = encode_jwt(&claims, "secret").unwrap();
-
 
     let tampered = token.replace('a', "b");
 

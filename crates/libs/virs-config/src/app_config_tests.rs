@@ -1,6 +1,5 @@
 use crate::app_config::*;
 
-
 #[test]
 fn c3_1_parse_env_num_with_value() {
     let result: Result<u16, _> = parse_env_num(Some("8080".into()), "80");
@@ -40,7 +39,6 @@ fn c3_5_parse_env_num_type_safety() {
     assert_eq!(r_i64, -5i64);
 }
 
-
 #[test]
 fn s3_1_default_constants_values() {
     assert_eq!(DEFAULT_HOST, "0.0.0.0");
@@ -52,14 +50,10 @@ fn s3_1_default_constants_values() {
     assert_eq!(DEFAULT_INITIAL_PRICE_MAX_RETRIES, "10");
     assert_eq!(DEFAULT_PERSIST_MAX_RETRIES, "3");
     assert_eq!(DEFAULT_PERSIST_RETRY_BASE_MS, "100");
-
-
 }
-
 
 #[test]
 fn t12_1_time_config_default_values() {
-
     let tc = TimeConfig::default();
     assert_eq!(tc.max_position_duration_secs, 172800, "48h = 172800s");
     assert_eq!(tc.pending_order_timeout_secs, 60);
@@ -80,7 +74,6 @@ fn t12_1_time_config_default_values() {
 
 #[test]
 fn t12_2_time_config_default_constants() {
-
     assert_eq!(DEFAULT_MAX_POSITION_DURATION_SECS, "172800");
     assert_eq!(DEFAULT_PENDING_ORDER_TIMEOUT_SECS, "60");
     assert_eq!(DEFAULT_PRICE_POLL_INTERVAL_SECS, "5");
@@ -91,7 +84,6 @@ fn t12_2_time_config_default_constants() {
 
 #[test]
 fn t12_3_time_config_serde_roundtrip() {
-
     let tc = TimeConfig {
         max_position_duration_secs: 3600,
         pending_order_timeout_secs: 30,
@@ -119,7 +111,6 @@ fn t12_3_time_config_serde_roundtrip() {
 
 #[test]
 fn t12_4_time_config_clone_and_eq() {
-
     let tc1 = TimeConfig::default();
     let tc2 = tc1.clone();
     assert_eq!(tc1, tc2);
@@ -127,7 +118,6 @@ fn t12_4_time_config_clone_and_eq() {
 
 #[test]
 fn t12_5_time_config_max_position_duration_is_48h() {
-
     let tc = TimeConfig::default();
     let hours = tc.max_position_duration_secs / 3600;
     assert_eq!(hours, 48, "MAX_POSITION_DURATION must be 48 hours");

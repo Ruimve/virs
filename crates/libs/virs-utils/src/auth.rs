@@ -12,7 +12,6 @@ pub struct Claims {
 }
 
 impl Claims {
-
     pub fn new(sub: &str, username: &str, role: &str, exp_secs: i64) -> Self {
         let now = chrono::Utc::now().timestamp();
         Self {

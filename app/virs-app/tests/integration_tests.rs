@@ -14,7 +14,6 @@ use virs_types::enums::{OrderType, PositionSide, Side, StrategyStatus, TradeType
 use virs_types::position::{EngineEvent, Trade};
 use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType};
 
-
 fn make_grid_bot() -> GridBot {
     GridBot {
         id: Uuid::new_v4(),
@@ -155,7 +154,6 @@ fn make_trade() -> Trade {
     }
 }
 
-
 #[test]
 fn int_1_1_grid_bot_to_config_then_compare() {
     let bot = make_grid_bot();
@@ -195,7 +193,6 @@ fn int_1_2_auto_bot_to_config_then_compare() {
     assert_eq!(config.loss_trades, bot.loss_trades);
 }
 
-
 #[test]
 fn int_2_1_candle_to_kline_preserves_ohlcv() {
     let c = make_candle();
@@ -213,7 +210,6 @@ fn int_2_1_candle_to_kline_preserves_ohlcv() {
 
 #[test]
 fn int_2_2_sanitize_then_derive_chain() {
-
     let raw_pnl_pct = f64::NAN;
     let close_side = "buy";
     let sanitized = sanitize_pnl_pct(raw_pnl_pct);
@@ -222,10 +218,8 @@ fn int_2_2_sanitize_then_derive_chain() {
     assert_eq!(open_side, "sell");
 }
 
-
 #[test]
 fn int_3_1_llm_resolve_priority_chain() {
-
     let creds = vec![
         ("openai".to_string(), "oai-key".to_string(), None),
         ("deepseek".to_string(), "ds-key".to_string(), None),
@@ -235,7 +229,6 @@ fn int_3_1_llm_resolve_priority_chain() {
     assert_eq!(key, "ds-key");
     assert_eq!(provider, "deepseek");
 
-
     let creds2 = vec![
         ("openai".to_string(), "oai-key".to_string(), None),
         ("openrouter".to_string(), "or-key".to_string(), None),
@@ -244,10 +237,7 @@ fn int_3_1_llm_resolve_priority_chain() {
     assert_eq!(key2, "oai-key");
     assert_eq!(provider2, "openai");
 
-
-    let creds3 = vec![
-        ("openrouter".to_string(), "or-key".to_string(), None),
-    ];
+    let creds3 = vec![("openrouter".to_string(), "or-key".to_string(), None)];
     let (key3, _, _, provider3) = resolve_llm_provider(&creds3).unwrap();
     assert_eq!(key3, "or-key");
     assert_eq!(provider3, "openrouter");
@@ -255,7 +245,6 @@ fn int_3_1_llm_resolve_priority_chain() {
 
 #[test]
 fn int_3_2_llm_resolve_user_model_override() {
-
     let creds = vec![
         (
             "deepseek".to_string(),
@@ -273,7 +262,6 @@ fn int_3_2_llm_resolve_user_model_override() {
     assert_eq!(model, "deepseek-reasoner");
     assert_eq!(provider, "deepseek");
 }
-
 
 #[test]
 fn int_4_1_convert_event_order_placed_filled() {
@@ -322,13 +310,15 @@ fn int_4_2_convert_event_canceled_failed() {
     };
     let result2 = convert_pe_event(event2);
     match result2.unwrap() {
-        OrderEvent::OrderFailed { order_id: _, reason } => {
+        OrderEvent::OrderFailed {
+            order_id: _,
+            reason,
+        } => {
             assert_eq!(reason, "timeout");
         }
         _ => panic!("Expected OrderFailed"),
     }
 }
-
 
 #[test]
 fn int_5_1_sanitize_all_pnl_cases() {
@@ -348,21 +338,17 @@ fn int_5_2_derive_open_side_all_cases() {
     assert_eq!(derive_open_side(""), "buy");
 }
 
-
 #[test]
 fn int_6_1_grid_auto_bot_to_config_consistency() {
-
     let grid_bot = make_grid_bot();
     let auto_bot = make_auto_bot();
 
     let grid_config = grid_bot_to_config(&grid_bot);
     let auto_config = auto_bot_to_config(&auto_bot);
 
-
     assert_eq!(grid_config.name, "grid-int");
     assert_eq!(auto_config.name, "auto-int");
     assert_ne!(grid_config.symbol, auto_config.symbol);
-
 
     assert_eq!(grid_config.id, grid_bot.id);
     assert_eq!(auto_config.id, auto_bot.id);
@@ -371,16 +357,13 @@ fn int_6_1_grid_auto_bot_to_config_consistency() {
 
 #[test]
 fn int_6_2_llm_resolve_default_models() {
-
     let creds_ds = vec![("deepseek".to_string(), "key".to_string(), None)];
     let (_, _, model, _) = resolve_llm_provider(&creds_ds).unwrap();
     assert_eq!(model, "deepseek-chat");
 
-
     let creds_oai = vec![("openai".to_string(), "key".to_string(), None)];
     let (_, _, model, _) = resolve_llm_provider(&creds_oai).unwrap();
     assert_eq!(model, "gpt-4o");
-
 
     let creds_or = vec![("openrouter".to_string(), "key".to_string(), None)];
     let (_, _, model, _) = resolve_llm_provider(&creds_or).unwrap();

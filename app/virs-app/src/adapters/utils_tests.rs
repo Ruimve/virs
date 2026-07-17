@@ -1,6 +1,5 @@
 use crate::adapters::utils::{derive_open_side, sanitize_pnl_pct};
 
-
 #[test]
 fn u1_1_sanitize_pnl_pct_normal() {
     let result = sanitize_pnl_pct(0.15);
@@ -24,7 +23,6 @@ fn u1_4_sanitize_pnl_pct_negative() {
     let result = sanitize_pnl_pct(-0.25);
     assert!((result - (-0.25)).abs() < 1e-10);
 }
-
 
 #[test]
 fn u2_1_derive_open_side_buy() {

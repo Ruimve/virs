@@ -3,12 +3,10 @@ pub mod paper;
 pub mod pe_adapter;
 pub mod registry;
 
-
 pub use adapter::CcxtAdapter;
 pub use paper::PaperExchangeAdapter;
 pub use pe_adapter::CcxtExchangeAdapter;
 pub use registry::Exchanges;
-
 
 #[cfg(test)]
 mod adapter_tests;
@@ -19,12 +17,10 @@ use async_trait::async_trait;
 use virs_error::ExchangeError;
 use virs_models::*;
 
-
 #[async_trait]
 pub trait Exchange: Send + Sync {
     fn name(&self) -> &str;
     fn market_type(&self) -> MarketType;
-
 
     async fn get_ticker(&self, symbol: &str) -> Result<Ticker, ExchangeError>;
     async fn get_klines(
@@ -43,7 +39,6 @@ pub trait Exchange: Send + Sync {
     ) -> Result<Vec<Kline>, ExchangeError>;
     async fn get_order_book(&self, symbol: &str, depth: u32) -> Result<OrderBook, ExchangeError>;
     async fn get_balances(&self) -> Result<Vec<Balance>, ExchangeError>;
-
 
     async fn place_order(
         &self,
@@ -69,14 +64,15 @@ pub trait Exchange: Send + Sync {
     async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError>;
     async fn cancel_all_orders(&self, symbol: &str) -> Result<(), ExchangeError>;
 
-
     async fn get_symbols(&self) -> Result<Vec<String>, ExchangeError>;
     async fn get_min_qty(&self, symbol: &str) -> Result<f64, ExchangeError>;
     async fn ping(&self) -> Result<bool, ExchangeError>;
 
-
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> Result<(), ExchangeError>;
-    async fn get_positions(&self, symbol: Option<&str>) -> Result<Vec<ExchangePosition>, ExchangeError>;
+    async fn get_positions(
+        &self,
+        symbol: Option<&str>,
+    ) -> Result<Vec<ExchangePosition>, ExchangeError>;
     async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError>;
     async fn get_funding_rate(&self, symbol: &str) -> Result<FundingRate, ExchangeError>;
     async fn get_funding_history(
@@ -88,9 +84,7 @@ pub trait Exchange: Send + Sync {
     async fn create_listen_key(&self) -> Result<String, ExchangeError>;
     async fn keepalive_listen_key(&self, listen_key: &str) -> Result<(), ExchangeError>;
 
-
     async fn get_api_restrictions(&self) -> Result<virs_ccxt::ApiRestrictions, ExchangeError>;
-
 
     async fn start_listenkey_order_ws(
         &self,
@@ -187,7 +181,10 @@ impl Exchange for Box<dyn Exchange> {
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> Result<(), ExchangeError> {
         (**self).set_leverage(symbol, leverage).await
     }
-    async fn get_positions(&self, symbol: Option<&str>) -> Result<Vec<ExchangePosition>, ExchangeError> {
+    async fn get_positions(
+        &self,
+        symbol: Option<&str>,
+    ) -> Result<Vec<ExchangePosition>, ExchangeError> {
         (**self).get_positions(symbol).await
     }
     async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError> {

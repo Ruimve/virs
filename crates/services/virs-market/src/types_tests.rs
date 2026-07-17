@@ -1,6 +1,5 @@
 use crate::types::*;
 
-
 #[test]
 fn t1_1_timeframe_all_count() {
     let all = Timeframe::all();
@@ -41,7 +40,6 @@ fn t1_7_timeframe_display() {
     assert_eq!(format!("{}", Timeframe::D1), "1d");
 }
 
-
 #[test]
 fn t2_1_subscription_key_basic() {
     let key = subscription_key("binance", "BTC/USDT");
@@ -54,10 +52,8 @@ fn t2_2_subscription_key_case() {
     assert_eq!(key, "binance:BTC/USDT");
 }
 
-
 #[test]
 fn t3_1_align_open_time_m1() {
-
     let base = (1700000000500_i64 / 60_000) * 60_000;
     let aligned = align_open_time(1700000000500, Timeframe::M1);
     assert_eq!(aligned, base);
@@ -66,21 +62,18 @@ fn t3_1_align_open_time_m1() {
 
 #[test]
 fn t3_2_align_open_time_h1() {
-
     let aligned = align_open_time(1700001234567, Timeframe::H1);
     assert_eq!(aligned % 3_600_000, 0);
 }
 
 #[test]
 fn t3_3_align_open_time_d1() {
-
     let aligned = align_open_time(1700001234567, Timeframe::D1);
     assert_eq!(aligned % 86_400_000, 0);
 }
 
 #[test]
 fn t3_4_align_open_time_exact() {
-
     let exact = 1_700_000_040_000;
     assert_eq!(exact % 60_000, 0);
     let aligned = align_open_time(exact, Timeframe::M1);

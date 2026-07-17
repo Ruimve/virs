@@ -5,11 +5,10 @@ use virs_types::market::ExchangePosition;
 use virs_error::ExchangeError;
 
 use crate::pe_adapter::{
-    convert_exchange_position, convert_order_status, convert_order_type,
-    convert_position_side, convert_side, convert_to_models_side, convert_virs_market_type,
-    convert_virs_position_side, no_exchange_error,
+    convert_exchange_position, convert_order_status, convert_order_type, convert_position_side,
+    convert_side, convert_to_models_side, convert_virs_market_type, convert_virs_position_side,
+    no_exchange_error,
 };
-
 
 #[test]
 fn pe1_1_buy() {
@@ -21,7 +20,6 @@ fn pe1_2_sell() {
     assert_eq!(convert_side(&models::Side::Sell), Side::Sell);
 }
 
-
 #[test]
 fn pe2_1_buy() {
     assert_eq!(convert_to_models_side(&Side::Buy), models::Side::Buy);
@@ -31,7 +29,6 @@ fn pe2_1_buy() {
 fn pe2_2_sell() {
     assert_eq!(convert_to_models_side(&Side::Sell), models::Side::Sell);
 }
-
 
 #[test]
 fn pe3_1_long() {
@@ -53,7 +50,6 @@ fn pe3_2_short() {
 fn pe3_4_none() {
     assert_eq!(convert_position_side(&None), None);
 }
-
 
 #[test]
 fn pe4_1_market() {
@@ -86,7 +82,6 @@ fn pe4_5_take_profit_market() {
         models::OrderType::TakeProfitMarket
     );
 }
-
 
 #[test]
 fn pe5_1_open() {
@@ -136,7 +131,6 @@ fn pe5_6_pending() {
     );
 }
 
-
 #[test]
 fn pe6_1_long() {
     assert_eq!(
@@ -153,7 +147,6 @@ fn pe6_2_short() {
     );
 }
 
-
 #[test]
 fn pe7_2_perpetual() {
     assert_eq!(
@@ -161,7 +154,6 @@ fn pe7_2_perpetual() {
         MarketType::Perpetual
     );
 }
-
 
 #[test]
 fn pe9_1_position_normal() {
@@ -189,7 +181,6 @@ fn pe9_2_position_no_liquidation() {
     let result = convert_exchange_position(&ep);
     assert_eq!(result.side, PositionSide::Short);
 }
-
 
 #[test]
 fn pe11_1_no_exchange_error() {

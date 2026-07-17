@@ -1,11 +1,10 @@
 use serde_json::json;
 
 use crate::adapter::binance::{
-    parse_order_book_side, try_build_ed25519, BinanceExchange, TIME_SYNC_INTERVAL_SECS,
-    TIME_OFFSET_WARN_THRESHOLD_MS,
+    parse_order_book_side, try_build_ed25519, BinanceExchange, TIME_OFFSET_WARN_THRESHOLD_MS,
+    TIME_SYNC_INTERVAL_SECS,
 };
 use crate::types::{CcxtOrderStatus, OrderType, Side};
-
 
 #[test]
 fn b1_1_native_symbol_with_slash() {
@@ -31,7 +30,6 @@ fn b1_4_native_symbol_eth_usdc() {
 fn b1_5_native_symbol_empty() {
     assert_eq!(BinanceExchange::to_native_symbol(""), "");
 }
-
 
 #[test]
 fn b2_1_unified_symbol_usdt() {
@@ -60,10 +58,8 @@ fn b2_5_unified_symbol_unknown_quote() {
 
 #[test]
 fn b2_6_unified_symbol_only_quote() {
-
     assert_eq!(BinanceExchange::to_unified_symbol("USDT"), "USDT");
 }
-
 
 #[test]
 fn b3_1_status_new() {
@@ -129,7 +125,6 @@ fn b3_8_status_unknown_defaults_to_new() {
     );
 }
 
-
 #[test]
 fn b4_1_type_market() {
     assert_eq!(
@@ -153,10 +148,7 @@ fn b4_3_type_stop_market() {
 
 #[test]
 fn b4_4_type_stop() {
-    assert_eq!(
-        BinanceExchange::parse_order_type("STOP"),
-        OrderType::Stop
-    );
+    assert_eq!(BinanceExchange::parse_order_type("STOP"), OrderType::Stop);
 }
 
 #[test]
@@ -177,7 +169,6 @@ fn b4_6_type_liquidation() {
 
 #[test]
 fn b4_7_type_take_profit_market() {
-
     assert_eq!(
         BinanceExchange::parse_order_type("TAKE_PROFIT_MARKET"),
         OrderType::TakeProfitMarket
@@ -200,7 +191,6 @@ fn b4_8_type_unknown_defaults_to_market() {
     );
 }
 
-
 #[test]
 fn b5_1_side_buy() {
     assert_eq!(BinanceExchange::side_str(&Side::Buy), "BUY");
@@ -210,7 +200,6 @@ fn b5_1_side_buy() {
 fn b5_2_side_sell() {
     assert_eq!(BinanceExchange::side_str(&Side::Sell), "SELL");
 }
-
 
 #[test]
 fn b6_1_order_type_market() {
@@ -227,7 +216,6 @@ fn b6_2_order_type_limit() {
 
 #[test]
 fn b6_3_order_type_stop_market() {
-
     assert_eq!(
         BinanceExchange::order_type_str(&OrderType::StopMarket),
         "STOP_MARKET"
@@ -236,15 +224,11 @@ fn b6_3_order_type_stop_market() {
 
 #[test]
 fn b6_4_order_type_stop() {
-    assert_eq!(
-        BinanceExchange::order_type_str(&OrderType::Stop),
-        "STOP"
-    );
+    assert_eq!(BinanceExchange::order_type_str(&OrderType::Stop), "STOP");
 }
 
 #[test]
 fn b6_5_order_type_take_profit_market() {
-
     assert_eq!(
         BinanceExchange::order_type_str(&OrderType::TakeProfitMarket),
         "TAKE_PROFIT_MARKET"
@@ -253,7 +237,6 @@ fn b6_5_order_type_take_profit_market() {
 
 #[test]
 fn b6_6_futures_stop_market_unchanged() {
-
     assert_eq!(
         BinanceExchange::order_type_str(&OrderType::StopMarket),
         "STOP_MARKET"
@@ -292,11 +275,8 @@ fn b6_10_order_type_liquidation() {
     );
 }
 
-
 #[test]
 fn b7_1_try_build_ed25519_with_seed() {
-
-
     let seed_b64 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
     let result = try_build_ed25519("test_api_key", seed_b64);
     assert!(result.is_ok());
@@ -304,8 +284,6 @@ fn b7_1_try_build_ed25519_with_seed() {
 
 #[test]
 fn b7_2_try_build_ed25519_with_pem() {
-
-
     let pem = "-----BEGIN PRIVATE KEY-----\n\
                MC4CAQAwBQYDK2VwBCIEIHTrQ7Yvl4pKl3jY6DLv0DqgjFLf7tAfFGD7T0rJ1y3J\n\
                -----END PRIVATE KEY-----";
@@ -315,7 +293,6 @@ fn b7_2_try_build_ed25519_with_pem() {
 
 #[test]
 fn b7_3_try_build_ed25519_wrong_byte_count() {
-
     let wrong_b64 = "AAAAAAAAAAAAAAAAAAAAAA==";
     let result = try_build_ed25519("key", wrong_b64);
     assert!(result.is_err());
@@ -323,11 +300,9 @@ fn b7_3_try_build_ed25519_wrong_byte_count() {
 
 #[test]
 fn b7_4_try_build_ed25519_not_base64() {
-
     let result = try_build_ed25519("key", "this_is_not_base64_or_pem!");
     assert!(result.is_err());
 }
-
 
 #[test]
 fn f1_1_parse_order_book_side_bids() {
@@ -363,22 +338,18 @@ fn f1_4_parse_order_book_side_empty() {
     assert!(bids.is_empty());
 }
 
-
 #[test]
 fn t1_1_time_sync_interval_is_one_hour() {
-
     assert_eq!(TIME_SYNC_INTERVAL_SECS, 3600);
 }
 
 #[test]
 fn t1_2_time_offset_warn_threshold_is_2000ms() {
-
     assert_eq!(TIME_OFFSET_WARN_THRESHOLD_MS, 2_000);
 }
 
 #[test]
 fn t1_3_time_sync_started_initialized_false() {
-
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",
@@ -390,13 +361,13 @@ fn t1_3_time_sync_started_initialized_false() {
     )
     .unwrap();
 
-    assert!(!ex.time_sync_started.load(std::sync::atomic::Ordering::SeqCst));
+    assert!(!ex
+        .time_sync_started
+        .load(std::sync::atomic::Ordering::SeqCst));
 }
 
 #[test]
 fn t1_4_time_sync_started_swap_prevents_double_start() {
-
-
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",
@@ -413,7 +384,6 @@ fn t1_4_time_sync_started_swap_prevents_double_start() {
         .swap(true, std::sync::atomic::Ordering::SeqCst);
     assert!(!first, "first swap should return false (not yet started)");
 
-
     let second = ex
         .time_sync_started
         .swap(true, std::sync::atomic::Ordering::SeqCst);
@@ -422,7 +392,6 @@ fn t1_4_time_sync_started_swap_prevents_double_start() {
 
 #[test]
 fn t1_5_drop_sets_time_sync_running_false() {
-
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",
@@ -443,13 +412,10 @@ fn t1_5_drop_sets_time_sync_running_false() {
     );
 
     drop(ex);
-
-
 }
 
 #[test]
 fn t1_6_time_sync_running_initialized_false() {
-
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",

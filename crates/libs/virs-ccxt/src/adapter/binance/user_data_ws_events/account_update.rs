@@ -1,11 +1,9 @@
 use serde::Deserialize;
 use virs_types::WsFeedEvent;
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct AccountUpdateEvent {
-
     #[serde(rename = "e")]
     pub event_type: String,
 
@@ -19,11 +17,9 @@ pub struct AccountUpdateEvent {
     pub update_data: AccountUpdateData,
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct AccountUpdateData {
-
     #[serde(rename = "m")]
     pub reason_type: String,
 
@@ -34,11 +30,9 @@ pub struct AccountUpdateData {
     pub positions: Vec<AccountPosition>,
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct AccountBalance {
-
     #[serde(rename = "a")]
     pub asset: String,
 
@@ -52,11 +46,9 @@ pub struct AccountBalance {
     pub balance_change: String,
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct AccountPosition {
-
     #[serde(rename = "s")]
     pub symbol: String,
 
@@ -84,7 +76,6 @@ pub struct AccountPosition {
     #[serde(rename = "ps")]
     pub position_side: String,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AccountUpdateReason {
@@ -133,7 +124,6 @@ impl AccountUpdateReason {
     }
 }
 
-
 pub fn process(json: &str) -> Option<WsFeedEvent> {
     let event: AccountUpdateEvent = match serde_json::from_str(json) {
         Ok(e) => e,
@@ -148,7 +138,6 @@ pub fn process(json: &str) -> Option<WsFeedEvent> {
     };
 
     let reason = AccountUpdateReason::from_str(&event.update_data.reason_type);
-
 
     if reason == AccountUpdateReason::FundingFee {
         for b in &event.update_data.balances {
@@ -165,7 +154,6 @@ pub fn process(json: &str) -> Option<WsFeedEvent> {
         }
     }
 
-
     for p in &event.update_data.positions {
         tracing::debug!(
             symbol = %p.symbol,
@@ -178,7 +166,6 @@ pub fn process(json: &str) -> Option<WsFeedEvent> {
             "ACCOUNT_UPDATE 持仓变更"
         );
     }
-
 
     None
 }

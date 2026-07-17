@@ -17,10 +17,8 @@ fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
 }
 
-
 // 订单簿WS消息延迟阈值：超过2秒告警
 pub(crate) const ORDERBOOK_WS_DELAY_THRESHOLD_MS: i64 = 2_000;
-
 
 // 币安深度WS消息，兼容组合流({"stream":..,"data":{..}})和扁平格式
 // 字段映射：b=bids, a=asks, s=symbol, E=event_time
@@ -46,7 +44,6 @@ pub(crate) struct BinanceDepthMessage {
     asks_perp_flat: Option<Vec<[String; 2]>>,
 }
 
-
 // 解析后的深度数据：bids/asks + 来源 stream/symbol + 时间戳
 pub(crate) struct ParsedDepth {
     pub bids: Vec<[String; 2]>,
@@ -58,11 +55,9 @@ pub(crate) struct ParsedDepth {
 }
 
 impl BinanceDepthMessage {
-
     // 统一两种消息格式为 ParsedDepth；优先组合流 data，其次扁平字段
     pub(crate) fn into_depth(self) -> Option<ParsedDepth> {
         let stream = self.stream.clone();
-
 
         // 组合流：解析 data 内层 payload
         if let Some(data) = self.data {
@@ -75,11 +70,12 @@ impl BinanceDepthMessage {
             return None;
         }
 
-
         // 扁平格式：直接取 b/a/s/E
         if let (Some(bids), Some(asks)) = (self.bids_perp_flat, self.asks_perp_flat) {
             let ts = self.event_time_flat.unwrap_or_else(|| {
-                tracing::warn!("orderbook_ws: event_time_flat is None — using 0 as fallback timestamp");
+                tracing::warn!(
+                    "orderbook_ws: event_time_flat is None — using 0 as fallback timestamp"
+                );
                 0
             });
             return Some(ParsedDepth {
@@ -96,16 +92,16 @@ impl BinanceDepthMessage {
     }
 }
 
-
 // 解析组合流 data 内层 payload，提取 b/a/s/E
 pub(crate) fn parse_payload(v: &serde_json::Value) -> Option<ParsedDepth> {
-
     if let (Some(bids), Some(asks)) = (v.get("b"), v.get("a")) {
         let bids = parse_levels(bids)?;
         let asks = parse_levels(asks)?;
         let sym = v.get("s").and_then(|s| s.as_str()).map(String::from);
         let ts = v.get("E").and_then(|t| t.as_i64()).unwrap_or_else(|| {
-            tracing::warn!("orderbook_ws: event time 'E' missing in perpetual payload — using 0 as fallback");
+            tracing::warn!(
+                "orderbook_ws: event time 'E' missing in perpetual payload — using 0 as fallback"
+            );
             0
         });
         return Some(ParsedDepth {
@@ -162,7 +158,6 @@ pub(crate) fn to_levels(raw: &[[String; 2]]) -> Vec<OrderBookLevel> {
         .collect()
 }
 
-
 // 订单簿WS处理器：维护订阅列表与 symbol 映射，实现 WsHandler 接口
 pub struct OrderBookWsHandler {
     ws_url: String,
@@ -212,7 +207,6 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
         };
 
         if let Some(pd) = bmsg.into_depth() {
-
             // 延迟检测：本地时间与事件时间差超过阈值则告警
             if pd.timestamp_ms > 0 {
                 let local_now = chrono::Utc::now().timestamp_millis();
@@ -227,29 +221,30 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
                 }
             }
 
-
             // symbol 反查：优先 stream_name，其次 payload 的 s 字段，最后单订阅兜底
-            let original_symbol =
-                resolve_symbol(pd.stream_name.as_deref(), pd.symbol.as_deref(), &self.symbol_map)
-                    .await;
+            let original_symbol = resolve_symbol(
+                pd.stream_name.as_deref(),
+                pd.symbol.as_deref(),
+                &self.symbol_map,
+            )
+            .await;
 
             if let Some(symbol) = original_symbol {
                 let bids = to_levels(&pd.bids);
                 let asks = to_levels(&pd.asks);
                 if !bids.is_empty() || !asks.is_empty() {
-                    return Ok(MessageOutcome::Continue(vec![
-                        WsOrderBookEvent::OrderBook(WsOrderBookUpdate {
+                    return Ok(MessageOutcome::Continue(vec![WsOrderBookEvent::OrderBook(
+                        WsOrderBookUpdate {
                             symbol,
                             bids,
                             asks,
                             timestamp: pd.timestamp_ms,
                             last_update_id: pd.last_update_id,
-                        }),
-                    ]));
+                        },
+                    )]));
                 }
             }
         } else {
-
             if let Ok(resp) = serde_json::from_str::<serde_json::Value>(text) {
                 if let Some(code) = resp.get("code") {
                     tracing::error!(
@@ -293,9 +288,7 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
         vec![msg.to_string()]
     }
 
-    async fn on_disconnected(&self) {
-
-    }
+    async fn on_disconnected(&self) {}
 
     // 动态订阅/退订命令转 JSON：{"method":"SUBSCRIBE|UNSUBSCRIBE","params":[stream],"id":N}
     async fn on_command(&self, cmd: ManagerWsCommand) -> Option<String> {
@@ -322,7 +315,6 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
         Some(msg.to_string())
     }
 }
-
 
 // 订单簿WS客户端，封装 WsManager 与 OrderBookWsHandler
 pub struct OrderBookWs {
@@ -448,7 +440,6 @@ impl OrderBookWsClient for OrderBookWs {
     }
 }
 
-
 // symbol 反查：优先从 stream_name 提取 @ 前部分，其次从 payload 的 s 字段，最后单订阅兜底
 async fn resolve_symbol(
     stream_name: Option<&str>,
@@ -456,7 +447,6 @@ async fn resolve_symbol(
     symbol_map: &Arc<RwLock<HashMap<String, String>>>,
 ) -> Option<String> {
     let map = symbol_map.read().await;
-
 
     // 优先：从 stream_name 的 @ 前部分反查
     if let Some(stream) = stream_name {
@@ -468,7 +458,6 @@ async fn resolve_symbol(
         }
     }
 
-
     // 其次：从 payload 的 s 字段反查
     if let Some(s) = sym_from_payload {
         let key = s.to_lowercase();
@@ -476,7 +465,6 @@ async fn resolve_symbol(
             return Some(unified.clone());
         }
     }
-
 
     // 兜底：仅订阅单个 symbol 时直接返回
     if map.len() == 1 {

@@ -4,7 +4,6 @@ use crate::adapter::binance::kline_ws::{
 };
 use crate::ws_types::KlineWsClient;
 
-
 #[test]
 fn test_parse_binance_kline_message() {
     let json = r#"{
@@ -47,7 +46,6 @@ fn test_parse_binance_kline_message() {
     assert!(!data.kline.closed);
     assert_eq!(data.kline.quote_volume, "6532500.00");
 
-
     let json_closed = r#"{
         "stream": "btcusdt@kline_1m",
         "data": {
@@ -73,7 +71,6 @@ fn test_parse_binance_kline_message() {
     let msg_closed: BinanceKlineMessage = serde_json::from_str(json_closed).unwrap();
     let data_closed = msg_closed.data.unwrap();
     assert!(data_closed.kline.closed);
-
 
     let json_flat = r#"{
         "e": "kline",
@@ -158,11 +155,9 @@ fn test_parse_non_kline_event() {
         }
     }"#;
 
-
     let result: Result<BinanceKlineMessage, _> = serde_json::from_str(json);
     assert!(result.is_err());
 }
-
 
 #[test]
 fn test_to_candle_basic() {
@@ -196,7 +191,6 @@ fn test_to_candle_basic() {
     assert!((candle.quote_volume - 6532500.0).abs() < f64::EPSILON);
     assert_eq!(candle.trades, 500);
     assert!(!candle.closed);
-
 
     let data_closed = BinanceKlineData {
         event_type: "kline".to_string(),
@@ -242,7 +236,10 @@ fn test_to_candle_invalid_numbers() {
     };
 
     let result = data.to_candle();
-    assert!(result.is_err(), "invalid OHLCV fields must return Err, not 0.0");
+    assert!(
+        result.is_err(),
+        "invalid OHLCV fields must return Err, not 0.0"
+    );
     let err = result.unwrap_err();
     assert!(
         matches!(err, virs_error::ExchangeError::NoData(_)),
@@ -274,7 +271,6 @@ fn test_ws_symbol() {
     assert_eq!(data.ws_symbol(), "BTCUSDT");
 }
 
-
 #[test]
 fn test_binance_ws_symbol_basic() {
     assert_eq!(binance_ws_symbol("BTCUSDT"), "btcusdt");
@@ -283,7 +279,6 @@ fn test_binance_ws_symbol_basic() {
 
     assert_eq!(binance_ws_symbol("btcusdt"), "btcusdt");
 }
-
 
 #[test]
 fn test_new_perpetual() {
@@ -297,25 +292,19 @@ async fn test_subscribe_without_start() {
     let ws = KlineWs::new_perpetual(None);
     assert!(!ws.is_running());
 
-
     ws.subscribe("BTCUSDT").await;
-
 
     let subs = ws.handler.subscriptions.read().await;
     assert!(subs.contains(&"btcusdt@kline_1m".to_string()));
 
-
     let map = ws.handler.symbol_map.read().await;
     assert_eq!(map.get("btcusdt").unwrap(), "BTCUSDT");
-
 
     assert!(!ws.is_running());
 }
 
-
 #[test]
 fn t8_1_event_time_parsed_and_accessible() {
-
     let json = r#"{
         "stream": "btcusdt@kline_1m",
         "data": {
@@ -347,26 +336,20 @@ fn t8_1_event_time_parsed_and_accessible() {
 
 #[test]
 fn t8_2_delay_threshold_is_5000ms() {
-
     assert_eq!(KLINE_WS_DELAY_THRESHOLD_MS, 5_000);
-
 
     let event_time = 1713900000000_i64;
     let local_now = 1713900006000_i64;
     let delay_ms = local_now - event_time;
     assert!(delay_ms > KLINE_WS_DELAY_THRESHOLD_MS);
 
-
     let local_now_ok = 1713900003000_i64;
     let delay_ok = local_now_ok - event_time;
     assert!(delay_ok <= KLINE_WS_DELAY_THRESHOLD_MS);
 }
 
-
 #[test]
 fn t8_3_single_stream_event_time_parsed() {
-
-
     let json = r#"{
         "e": "kline",
         "E": 1713900000456,
@@ -398,7 +381,6 @@ fn t8_3_single_stream_event_time_parsed() {
 
 #[test]
 fn t8_4_single_stream_event_time_missing_defaults_zero() {
-
     let json = r#"{
         "e": "kline",
         "s": "BTCUSDT",

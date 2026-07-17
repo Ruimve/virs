@@ -7,7 +7,6 @@ use crate::grid::ports::GridBotConfig;
 use tracing::warn;
 use virs_error::BotResult;
 
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum GridAction {
     Hold,
@@ -42,7 +41,6 @@ impl GridAction {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct GridAiDecision {
     pub action: String,
@@ -57,7 +55,6 @@ pub struct GridAiDecision {
     pub analysis: String,
     pub risk_warning: String,
 }
-
 
 pub struct GridAiService {
     http_client: reqwest::Client,
@@ -77,7 +74,6 @@ impl GridAiService {
             credential_store,
         }
     }
-
 
     pub async fn analyze(
         &self,
@@ -126,7 +122,6 @@ pub fn parse_grid_decision(json: &serde_json::Value) -> BotResult<GridAiDecision
         })
         .clamp(0.0, 1.0);
 
-
     let upper_price = grid["upper_price"].as_f64().unwrap_or_else(|| {
         warn!("LLM response missing 'grid.upper_price' — grid range is invalid (0.0)");
         0.0
@@ -143,7 +138,6 @@ pub fn parse_grid_decision(json: &serde_json::Value) -> BotResult<GridAiDecision
         warn!("LLM response missing 'grid.grid_profit_pct' — defaulting to 0.0");
         0.0
     });
-
 
     let quantity_per_grid = risk["quantity_per_grid"].as_f64().unwrap_or_else(|| {
         warn!("LLM response missing 'risk.quantity_per_grid' — defaulting to 0.0");

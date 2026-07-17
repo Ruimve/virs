@@ -3,16 +3,12 @@ use serde::{Deserialize, Serialize};
 use virs_error::ExchangeError;
 
 // 从 virs-types 重导出 (CcxtOrder 等类型已移至 virs-types 避免循环依赖)
-pub use virs_types::{
-    CcxtOrder, CcxtOrderStatus, ExecutionType, OrderResult,
-};
-
+pub use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderResult};
 
 pub use virs_types::enums::{MarketType, OrderStatus, OrderType, PositionMode, PositionSide, Side};
 pub use virs_types::market::{
     Balance, ExchangePosition, FundingHistoryEntry, FundingRate, Kline, OrderBook, Ticker,
 };
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MarketInfo {
@@ -32,7 +28,6 @@ pub struct MarketInfo {
     pub info: serde_json::Value,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct PlaceOrderParams {
     pub symbol: String,
@@ -49,7 +44,6 @@ pub struct PlaceOrderParams {
     pub position_side: Option<PositionSide>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum MarginMode {
@@ -57,14 +51,12 @@ pub enum MarginMode {
     Isolated,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrderFee {
     pub cost: f64,
     pub currency: String,
     pub rate: Option<f64>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -75,7 +67,6 @@ pub enum TimeInForce {
     Poc,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Position {
     pub symbol: String,
@@ -85,7 +76,6 @@ pub struct Position {
     pub margin_mode: MarginMode,
     pub info: serde_json::Value,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CcxtTicker {
@@ -112,10 +102,8 @@ impl TryFrom<CcxtTicker> for Ticker {
     fn try_from(t: CcxtTicker) -> Result<Self, Self::Error> {
         let symbol = t.symbol.clone();
 
-
         let bid = t.bid;
         let ask = t.ask;
-
 
         let last = t.last.ok_or_else(|| {
             tracing::error!(symbol = %symbol, "Ticker last missing");
@@ -139,7 +127,10 @@ impl TryFrom<CcxtTicker> for Ticker {
         })?;
         let price_change_pct_24h = t.price_change_pct.ok_or_else(|| {
             tracing::warn!(symbol = %symbol, "Ticker price_change_pct_24h missing");
-            ExchangeError::no_data(format!("Ticker price_change_pct_24h missing for {}", symbol))
+            ExchangeError::no_data(format!(
+                "Ticker price_change_pct_24h missing for {}",
+                symbol
+            ))
         })?;
 
         Ok(Ticker {
@@ -158,11 +149,9 @@ impl TryFrom<CcxtTicker> for Ticker {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CcxtKline {
     pub timestamp: i64,
-
 
     pub close_time: Option<i64>,
     pub open: f64,
@@ -173,7 +162,6 @@ pub struct CcxtKline {
     pub quote_volume: Option<f64>,
     pub trades: Option<i64>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CcxtOrderBook {
@@ -195,7 +183,6 @@ impl From<CcxtOrderBook> for OrderBook {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CcxtFundingRate {
     pub symbol: String,
@@ -214,7 +201,6 @@ impl From<CcxtFundingRate> for FundingRate {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CcxtFundingHistoryEntry {
     pub funding_time: DateTime<Utc>,
@@ -229,7 +215,6 @@ impl From<CcxtFundingHistoryEntry> for FundingHistoryEntry {
         }
     }
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiRestrictions {

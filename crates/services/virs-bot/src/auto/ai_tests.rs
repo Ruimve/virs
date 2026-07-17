@@ -1,6 +1,5 @@
 use crate::auto::ai::{AutoAction, AutoDecision};
 
-
 #[test]
 fn a1_1_action_from_str_open_long() {
     assert_eq!(AutoAction::from_str("open_long"), AutoAction::OpenLong);
@@ -29,7 +28,6 @@ fn a1_5_action_from_str_unknown() {
     assert_eq!(AutoAction::from_str("unknown"), AutoAction::Hold);
 }
 
-
 #[test]
 fn a2_1_action_as_str_all_variants() {
     assert_eq!(AutoAction::OpenLong.as_str(), "open_long");
@@ -37,7 +35,6 @@ fn a2_1_action_as_str_all_variants() {
     assert_eq!(AutoAction::ClosePosition.as_str(), "close_position");
     assert_eq!(AutoAction::Hold.as_str(), "hold");
 }
-
 
 #[test]
 fn a3_1_decision_from_json_complete() {

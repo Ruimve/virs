@@ -40,8 +40,6 @@ pub struct GridBot {
 }
 
 impl GridBot {
-
-
     pub fn grid_spacing(&self) -> f64 {
         if self.grid_count <= 0 {
             0.0
@@ -50,16 +48,13 @@ impl GridBot {
         }
     }
 
-
     pub fn is_running(&self) -> bool {
         self.status == StrategyStatus::Running
     }
 
-
     pub fn is_stopped(&self) -> bool {
         self.status == StrategyStatus::Stopped
     }
-
 
     pub fn total_return_pct(&self) -> f64 {
         if self.initial_capital == 0.0 {

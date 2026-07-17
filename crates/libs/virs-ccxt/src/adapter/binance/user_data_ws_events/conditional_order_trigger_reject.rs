@@ -1,11 +1,9 @@
 use serde::Deserialize;
 use virs_types::WsFeedEvent;
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct ConditionalOrderTriggerRejectEvent {
-
     #[serde(rename = "e")]
     pub event_type: String,
 
@@ -19,11 +17,9 @@ pub struct ConditionalOrderTriggerRejectEvent {
     pub order_reject: OrderReject,
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct OrderReject {
-
     #[serde(rename = "s")]
     pub symbol: String,
 
@@ -33,7 +29,6 @@ pub struct OrderReject {
     #[serde(rename = "r")]
     pub reject_reason: String,
 }
-
 
 pub fn process(json: &str) -> Option<WsFeedEvent> {
     let event: ConditionalOrderTriggerRejectEvent = match serde_json::from_str(json) {

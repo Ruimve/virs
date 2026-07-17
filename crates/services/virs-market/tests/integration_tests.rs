@@ -1,10 +1,7 @@
 use virs_market::aggregator::{candle_from_1m, Aggregator};
 use virs_market::cache::SymbolCache;
 use virs_market::source::timeframe_str_to_ms;
-use virs_market::{
-    align_open_time, subscription_key, Candle, Timeframe,
-};
-
+use virs_market::{align_open_time, subscription_key, Candle, Timeframe};
 
 const BASE: i64 = 1_700_000_040_000;
 
@@ -23,10 +20,8 @@ fn make_1m(open_time: i64, open: f64, high: f64, low: f64, close: f64, closed: b
     }
 }
 
-
 #[test]
 fn int_1_2_align_then_aggregate() {
-
     let start = align_open_time(BASE, Timeframe::M5);
     let candles: Vec<Candle> = (0..5)
         .map(|i| make_1m(start + i * 60_000, 100.0, 101.0, 99.0, 100.0, true))
@@ -37,10 +32,8 @@ fn int_1_2_align_then_aggregate() {
     assert_eq!(result[0].close_time, start + Timeframe::M5.ms() - 1);
 }
 
-
 #[test]
 fn int_2_1_candle_from_1m_then_aggregate() {
-
     let start = align_open_time(BASE, Timeframe::M5);
     let c1 = make_1m(start, 100.0, 102.0, 98.0, 101.0, true);
     let from_1m = candle_from_1m(&c1, Timeframe::M5);
@@ -55,7 +48,16 @@ fn int_2_1_candle_from_1m_then_aggregate() {
 fn int_2_2_aggregate_then_cache_update() {
     let start = align_open_time(BASE, Timeframe::M5);
     let candles: Vec<Candle> = (0..5)
-        .map(|i| make_1m(start + i * 60_000, 100.0 + i as f64, 101.0, 99.0, 100.0 + i as f64, true))
+        .map(|i| {
+            make_1m(
+                start + i * 60_000,
+                100.0 + i as f64,
+                101.0,
+                99.0,
+                100.0 + i as f64,
+                true,
+            )
+        })
         .collect();
     let aggregated = Aggregator::aggregate_1m_to_timeframe(&candles, Timeframe::M5);
 
@@ -68,7 +70,6 @@ fn int_2_2_aggregate_then_cache_update() {
     assert_eq!(klines[0].open_time, start);
 }
 
-
 #[test]
 fn int_3_1_subscription_key_then_check() {
     let key1 = subscription_key("binance", "BTC/USDT");
@@ -80,7 +81,6 @@ fn int_3_1_subscription_key_then_check() {
 
 #[test]
 fn int_3_2_align_multi_timeframe() {
-
     let time = BASE + 123_456;
     let m1 = align_open_time(time, Timeframe::M1);
     let m5 = align_open_time(time, Timeframe::M5);
@@ -96,14 +96,11 @@ fn int_3_2_align_multi_timeframe() {
     assert_eq!(d1 % 86_400_000, 0);
 }
 
-
 #[test]
 fn int_5_1_gap_detection_logic() {
-
     let start = align_open_time(BASE, Timeframe::M5);
     let c1 = make_1m(start, 100.0, 101.0, 99.0, 100.5, true);
     let c3 = make_1m(start + 2 * 60_000, 100.5, 102.0, 100.0, 101.0, true);
-
 
     let candles = vec![c1, c3];
     let aggregated = Aggregator::aggregate_1m_to_timeframe(&candles, Timeframe::M5);
@@ -114,12 +111,18 @@ fn int_5_1_gap_detection_logic() {
 
 #[test]
 fn int_5_2_aggregate_full_day_to_d1() {
-
     let start = align_open_time(BASE, Timeframe::D1);
     let candles: Vec<Candle> = (0..1440)
         .map(|i| {
             let price = 100.0 + (i as f64) * 0.01;
-            make_1m(start + i * 60_000, price, price + 0.5, price - 0.5, price + 0.01, true)
+            make_1m(
+                start + i * 60_000,
+                price,
+                price + 0.5,
+                price - 0.5,
+                price + 0.01,
+                true,
+            )
         })
         .collect();
 
@@ -130,7 +133,6 @@ fn int_5_2_aggregate_full_day_to_d1() {
     assert_eq!(result[0].volume, 1440.0 * 100.0);
     assert!(result[0].closed);
 }
-
 
 #[test]
 fn int_6_1_timeframe_str_to_ms() {

@@ -2,7 +2,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GridLevel {
     pub level: i32,
@@ -22,7 +21,6 @@ pub struct GridLevel {
 }
 
 impl GridLevel {
-
     pub fn reset_for_relist(&self) -> GridLevel {
         GridLevel {
             level: self.level,
@@ -43,7 +41,6 @@ impl GridLevel {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GridState {
     pub bot_id: Uuid,
@@ -58,14 +55,12 @@ pub struct GridState {
     pub last_tick_at: DateTime<Utc>,
 }
 
-
 #[derive(Debug)]
 pub enum GridCommand {
     StartBot { bot_id: Uuid },
     StopBot { bot_id: Uuid },
     DeleteBot { bot_id: Uuid, close_position: bool },
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GridEvent {
@@ -103,7 +98,6 @@ pub enum GridEvent {
         state: GridState,
     },
 }
-
 
 pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位专业的加密货币量化网格交易分析师。基于实时数据、当前网格与仓位，判断市场状态并给出严谨的JSON操作指令。
 
@@ -221,7 +215,6 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一位专业的加密货币量�
   "analysis": "多周期信号、区间逻辑、风险(300字内)",
   "risk_warning": "主要风险提示(100字内)"
 }"#;
-
 
 pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}
 

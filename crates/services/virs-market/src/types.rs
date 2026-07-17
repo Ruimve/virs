@@ -2,17 +2,13 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use virs_error::VirsResult;
 
-
 pub use virs_ccxt::ws_types::{Candle, KlineWsClient, WsCandleUpdate, WsEvent};
-
 
 pub use virs_ccxt::ws_types::{
     OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate,
 };
 
-
 pub use virs_types::enums::MarketType;
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Timeframe {
@@ -75,7 +71,6 @@ impl fmt::Display for Timeframe {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KlineEvent {
     pub exchange: String,
@@ -91,7 +86,6 @@ pub enum KlineEventType {
     Closed,
     Backfilled,
 }
-
 
 #[derive(Debug, Clone)]
 pub struct KlineEngineConfig {
@@ -118,7 +112,6 @@ impl Default for KlineEngineConfig {
     }
 }
 
-
 #[async_trait::async_trait]
 pub trait KlineSource: Send + Sync {
     async fn fetch_klines(
@@ -131,7 +124,6 @@ pub trait KlineSource: Send + Sync {
         market_type: Option<MarketType>,
     ) -> VirsResult<Vec<Candle>>;
 }
-
 
 #[async_trait::async_trait]
 pub trait KlinePersistence: Send + Sync {
@@ -152,7 +144,6 @@ pub fn align_open_time(open_time: i64, timeframe: Timeframe) -> i64 {
     (open_time / timeframe.ms()) * timeframe.ms()
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrderBookEvent {
     pub exchange: String,
@@ -161,7 +152,6 @@ pub struct OrderBookEvent {
     pub asks: Vec<OrderBookLevel>,
     pub timestamp: i64,
 }
-
 
 #[derive(Debug, Clone)]
 pub struct OrderBookEngineConfig {

@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock, Mutex as StdMutex};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 
 use async_trait::async_trait;
 use tokio::sync::{broadcast, mpsc, Mutex};
@@ -8,8 +8,8 @@ use tracing::{error, info};
 use virs_api::EngineManager;
 use virs_bot::auto::types::AutoCommand;
 use virs_bot::grid::types::GridCommand;
-use virs_exchange::{CcxtExchangeAdapter, Exchanges, PaperExchangeAdapter};
 use virs_error::VirsResult;
+use virs_exchange::{CcxtExchangeAdapter, Exchanges, PaperExchangeAdapter};
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
 use virs_types::bot::{OrderEvent, PriceProvider};
@@ -19,15 +19,12 @@ use virs_types::position::{EngineCommand, EngineEvent};
 
 use crate::adapters::*;
 
-
 struct EngineState {
     paper_mode: bool,
     grid_cmd_tx: StdMutex<Option<mpsc::Sender<GridCommand>>>,
     auto_cmd_tx: StdMutex<Option<mpsc::Sender<AutoCommand>>>,
 
-
     pe_event_tx: StdMutex<Option<broadcast::Sender<EngineEvent>>>,
-
 
     position_engine: StdMutex<Option<PositionEngine>>,
 
@@ -41,7 +38,6 @@ struct EngineState {
 
     auto_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
-
 
 pub struct AppEngineManager {
     db_pool: sqlx::PgPool,
@@ -59,7 +55,6 @@ pub struct AppEngineManager {
     init_lock: Mutex<()>,
 
     state: OnceLock<EngineState>,
-
 
     restore_error: StdMutex<Option<String>>,
 }
@@ -91,9 +86,7 @@ impl AppEngineManager {
         }
     }
 
-
     async fn restore_inner(&self) -> VirsResult<()> {
-
         let has_bots: bool = {
             let grid_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_grid_bots"#)
                 .fetch_one(&self.db_pool)
@@ -107,7 +100,6 @@ impl AppEngineManager {
         if !has_bots {
             return Ok(());
         }
-
 
         let rows: Vec<(String, String, String, Option<String>)> = sqlx::query_as(
             r#"SELECT exchange, encrypted_api_key, encrypted_api_secret, encrypted_passphrase
@@ -124,24 +116,21 @@ impl AppEngineManager {
                         exchange, e
                     ))
                 })?;
-            let api_secret =
-                virs_utils::crypto::decrypt_with_key(enc_secret, &self.encryption_key)
-                    .map_err(|e| {
-                        virs_error::VirsError::config(format!(
-                            "Failed to decrypt API secret for exchange '{}': {}",
-                            exchange, e
-                        ))
-                    })?;
+            let api_secret = virs_utils::crypto::decrypt_with_key(enc_secret, &self.encryption_key)
+                .map_err(|e| {
+                    virs_error::VirsError::config(format!(
+                        "Failed to decrypt API secret for exchange '{}': {}",
+                        exchange, e
+                    ))
+                })?;
             let passphrase = match enc_passphrase.as_ref() {
                 Some(p) => Some(
-                    virs_utils::crypto::decrypt_with_key(p, &self.encryption_key).map_err(
-                        |e| {
-                            virs_error::VirsError::config(format!(
-                                "Failed to decrypt passphrase for exchange '{}': {}",
-                                exchange, e
-                            ))
-                        },
-                    )?,
+                    virs_utils::crypto::decrypt_with_key(p, &self.encryption_key).map_err(|e| {
+                        virs_error::VirsError::config(format!(
+                            "Failed to decrypt passphrase for exchange '{}': {}",
+                            exchange, e
+                        ))
+                    })?,
                 ),
                 None => None,
             };
@@ -170,7 +159,6 @@ impl AppEngineManager {
                     ))
                 })?;
 
-
                 if let Err(e) = ccxt_ex.sync_time().await {
                     tracing::warn!(
                         error = %e,
@@ -185,7 +173,6 @@ impl AppEngineManager {
                 info!(exchange, "Restored exchange credential");
             }
         }
-
 
         let bot_symbols: Vec<(String, String)> = sqlx::query_as(
             r#"
@@ -222,7 +209,6 @@ impl AppEngineManager {
             info!(exchange, symbol, "Restored orderbook subscription");
         }
 
-
         let paper_modes: Vec<bool> = sqlx::query_scalar(
             r#"SELECT DISTINCT paper_mode FROM (
                 SELECT paper_mode FROM qd_auto_bots WHERE status = 'running'
@@ -248,12 +234,10 @@ impl AppEngineManager {
 
         let paper_mode = paper_modes[0];
 
-
         self.ensure_started(paper_mode).await?;
 
         Ok(())
     }
-
 
     async fn mark_running_bots_as_error(&self) -> VirsResult<()> {
         sqlx::query(r#"UPDATE qd_grid_bots SET status = 'error', stopped_at = NOW() WHERE status = 'running'"#)
@@ -270,13 +254,11 @@ impl AppEngineManager {
 #[async_trait]
 impl EngineManager for AppEngineManager {
     async fn ensure_started(&self, paper_mode: bool) -> VirsResult<()> {
-
         if self.started.load(Ordering::SeqCst) {
             return Ok(());
         }
 
         let _guard = self.init_lock.lock().await;
-
 
         if self.state.get().is_some() {
             return Ok(());
@@ -284,14 +266,11 @@ impl EngineManager for AppEngineManager {
 
         info!("Starting trading engines (paper_mode={})...", paper_mode);
 
-
         let pe_exchange: Box<dyn ExchangePe> = if paper_mode {
             let initial_balance = {
                 let temp_adapter = CcxtExchangeAdapter::new(self.exchange_registry.clone());
                 match temp_adapter.get_balance().await {
-                    Ok(b) => {
-                        b.total
-                    }
+                    Ok(b) => b.total,
                     Err(e) => {
                         tracing::warn!(error = %e, "Paper mode: failed to fetch real balance, using 0");
                         0.0
@@ -328,7 +307,6 @@ impl EngineManager for AppEngineManager {
             }
         });
         info!("Position Engine started (paper={})", paper_mode);
-
 
         let (grid_event_tx, _grid_event_rx) = tokio::sync::broadcast::channel(256);
 
@@ -371,9 +349,7 @@ impl EngineManager for AppEngineManager {
             self.time_config.clone(),
         );
 
-
         let paper_symbols: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
-
 
         if paper_mode {
             let paper_bots: Vec<(String, String)> = sqlx::query_as(
@@ -409,9 +385,8 @@ impl EngineManager for AppEngineManager {
                         kline_symbols.into_iter().map(|(e, s, _)| (e, s)).collect()
                     };
                     for (exchange, symbol) in symbols {
-                        if let Some(price) = price_provider_for_paper
-                            .get_price(&exchange, &symbol)
-                            .await
+                        if let Some(price) =
+                            price_provider_for_paper.get_price(&exchange, &symbol).await
                         {
                             if pe_cmd_tx_for_tick
                                 .send(EngineCommand::PriceTick {
@@ -435,7 +410,6 @@ impl EngineManager for AppEngineManager {
             grid_engine.run().await;
         });
         info!("Grid engine started");
-
 
         let auto_store = Arc::new(PgAutoStore::new(self.db_pool.clone()));
         let auto_price_provider = Arc::new(
@@ -483,7 +457,6 @@ impl EngineManager for AppEngineManager {
         });
         info!("Auto trade engine started");
 
-
         let _ = self.state.set(EngineState {
             paper_mode,
             grid_cmd_tx: StdMutex::new(Some(grid_cmd_tx)),
@@ -503,11 +476,15 @@ impl EngineManager for AppEngineManager {
     }
 
     fn grid_cmd_tx(&self) -> Option<mpsc::Sender<GridCommand>> {
-        self.state.get().and_then(|s| s.grid_cmd_tx.lock().unwrap().clone())
+        self.state
+            .get()
+            .and_then(|s| s.grid_cmd_tx.lock().unwrap().clone())
     }
 
     fn auto_cmd_tx(&self) -> Option<mpsc::Sender<AutoCommand>> {
-        self.state.get().and_then(|s| s.auto_cmd_tx.lock().unwrap().clone())
+        self.state
+            .get()
+            .and_then(|s| s.auto_cmd_tx.lock().unwrap().clone())
     }
 
     fn paper_mode(&self) -> Option<bool> {
@@ -528,9 +505,13 @@ impl EngineManager for AppEngineManager {
     }
 
     fn pe_event_subscribe(&self) -> Option<broadcast::Receiver<EngineEvent>> {
-        self.state
-            .get()
-            .and_then(|s| s.pe_event_tx.lock().unwrap().as_ref().map(|tx| tx.subscribe()))
+        self.state.get().and_then(|s| {
+            s.pe_event_tx
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map(|tx| tx.subscribe())
+        })
     }
 
     fn get_positions_by_symbol(&self, symbol: &str) -> Vec<virs_types::position::Position> {
@@ -551,27 +532,21 @@ impl EngineManager for AppEngineManager {
     }
 
     async fn restore_if_needed(&self) -> VirsResult<()> {
-
         if self.started.load(Ordering::SeqCst) {
             return Ok(());
         }
 
-
         if let Err(e) = self.restore_inner().await {
             error!("Service restore failed: {}", e);
-
 
             if let Err(db_err) = self.mark_running_bots_as_error().await {
                 error!(error = %db_err, "Failed to mark bots as error during restore failure");
             }
 
-
             *self.restore_error.lock().unwrap() = Some(e.to_string());
-
 
             return Ok(());
         }
-
 
         *self.restore_error.lock().unwrap() = None;
         Ok(())
@@ -581,24 +556,19 @@ impl EngineManager for AppEngineManager {
         if let Some(state) = self.state.get() {
             info!("Shutting down trading engines...");
 
-
             let pe_opt = state.position_engine.lock().unwrap().take();
             if let Some(pe) = &pe_opt {
                 pe.stop();
             }
 
-
             if let Some(handle) = state.paper_tick_handle.lock().unwrap().take() {
                 handle.abort();
             }
 
-
             drop(state.grid_cmd_tx.lock().unwrap().take());
             drop(state.auto_cmd_tx.lock().unwrap().take());
 
-
             drop(state.pe_event_tx.lock().unwrap().take());
-
 
             let pe_handle = state.pe_handle.lock().await.take();
             let grid_handle = state.grid_handle.lock().await.take();
@@ -606,12 +576,24 @@ impl EngineManager for AppEngineManager {
 
             let timeout = std::time::Duration::from_secs(5);
             let _ = tokio::time::timeout(timeout, async {
-                let pe_fut = async { if let Some(h) = pe_handle { let _ = h.await; } };
-                let grid_fut = async { if let Some(h) = grid_handle { let _ = h.await; } };
-                let auto_fut = async { if let Some(h) = auto_handle { let _ = h.await; } };
+                let pe_fut = async {
+                    if let Some(h) = pe_handle {
+                        let _ = h.await;
+                    }
+                };
+                let grid_fut = async {
+                    if let Some(h) = grid_handle {
+                        let _ = h.await;
+                    }
+                };
+                let auto_fut = async {
+                    if let Some(h) = auto_handle {
+                        let _ = h.await;
+                    }
+                };
                 tokio::join!(pe_fut, grid_fut, auto_fut);
-            }).await;
-
+            })
+            .await;
 
             drop(pe_opt);
 

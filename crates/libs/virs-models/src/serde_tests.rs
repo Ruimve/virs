@@ -5,7 +5,6 @@ use virs_types::enums::*;
 
 use crate::{AutoBot, GridBot, Order, StrategyStatus};
 
-
 #[test]
 fn s1_1_order_roundtrip() {
     let now = Utc::now();
@@ -30,7 +29,6 @@ fn s1_1_order_roundtrip() {
     let de: Order = serde_json::from_str(&json).unwrap();
     assert_eq!(de, order);
 }
-
 
 #[test]
 fn s3_1_grid_bot_roundtrip() {
@@ -75,7 +73,6 @@ fn s3_1_grid_bot_roundtrip() {
     assert_eq!(de.status, bot.status);
     assert_eq!(de.total_pnl, bot.total_pnl);
 }
-
 
 #[test]
 fn s4_1_auto_bot_roundtrip() {

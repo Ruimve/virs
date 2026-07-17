@@ -7,7 +7,6 @@ use crate::common::ai_client;
 use crate::common::ports::{CredentialStore, LlmProviderResolver};
 use virs_error::BotResult;
 
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum AutoAction {
     OpenLong,
@@ -43,7 +42,6 @@ impl AutoAction {
         }
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct AutoDecision {
@@ -82,7 +80,6 @@ impl AutoDecision {
             })
             .clamp(0.0, 1.0);
 
-
         let stop_loss = decision["stop_loss"].as_f64().filter(|v| *v > 0.0);
         let take_profit = decision["take_profit"].as_f64().filter(|v| *v > 0.0);
 
@@ -118,7 +115,6 @@ impl AutoDecision {
         }
     }
 }
-
 
 pub struct AutoAiService {
     http_client: reqwest::Client,

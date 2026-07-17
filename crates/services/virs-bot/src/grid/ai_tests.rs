@@ -1,6 +1,5 @@
 use crate::grid::ai::{parse_grid_decision, GridAction};
 
-
 #[test]
 fn g1_1_action_from_str_adjust() {
     let result = GridAction::from_str("adjust_grid", 100.0, 90.0);
@@ -40,7 +39,6 @@ fn g1_5_action_from_str_hold() {
     assert_eq!(result, GridAction::Hold);
 }
 
-
 #[test]
 fn g1_6_action_as_str_all_variants() {
     assert_eq!(GridAction::Hold.as_str(), "hold");
@@ -56,7 +54,6 @@ fn g1_6_action_as_str_all_variants() {
     assert_eq!(GridAction::RunGrid.as_str(), "run_grid");
     assert_eq!(GridAction::ReducePosition.as_str(), "reduce_position");
 }
-
 
 #[test]
 fn g2_1_parse_decision_complete() {

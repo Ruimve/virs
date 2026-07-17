@@ -3,7 +3,6 @@ use serde::Serialize;
 use crate::classify::{Categorized, ErrorCode, HttpStatus, Retryable};
 use crate::VirsError;
 
-
 #[derive(Debug, Serialize)]
 pub struct ApiError {
     pub success: bool,

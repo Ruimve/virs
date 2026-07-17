@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use virs_types::enums::*;
 
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Order {
     pub id: String,

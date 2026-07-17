@@ -4,10 +4,8 @@ use virs_types::enums::*;
 
 use virs_error::ExchangeError;
 
-
 #[test]
 fn int_1_1_side_roundtrip() {
-
     let original = Side::Buy;
     let ccxt = virs_ccxt::Side::Buy;
     assert_eq!(original, Side::Buy);
@@ -16,7 +14,6 @@ fn int_1_1_side_roundtrip() {
 
 #[test]
 fn int_1_2_order_type_roundtrip() {
-
     let ot = OrderType::Limit;
     let models_ot = models::OrderType::Limit;
     assert_eq!(ot, OrderType::Limit);
@@ -25,7 +22,6 @@ fn int_1_2_order_type_roundtrip() {
 
 #[test]
 fn int_1_3_position_side_consistency() {
-
     let models_long = models::PositionSide::Long;
     let pe_long = PositionSide::Long;
     assert_eq!(models_long, models::PositionSide::Long);
@@ -40,15 +36,11 @@ fn int_1_4_market_type_consistency() {
     assert_eq!(pe_perp, MarketType::Perpetual);
 }
 
-
 #[tokio::test]
 async fn int_2_1_paper_exchange_creation_and_balance() {
     use virs_types::exchange_pe::ExchangePe;
-    let paper = virs_exchange::paper::PaperExchangeAdapter::new(
-        "binance",
-        MarketType::Perpetual,
-        100000.0,
-    );
+    let paper =
+        virs_exchange::paper::PaperExchangeAdapter::new("binance", MarketType::Perpetual, 100000.0);
     assert_eq!(paper.name(), "binance");
     assert_eq!(paper.market_type(), MarketType::Perpetual);
 
@@ -63,12 +55,8 @@ async fn int_2_1_paper_exchange_creation_and_balance() {
 async fn int_2_2_paper_market_order_updates_balance() {
     use virs_types::exchange_pe::ExchangePe;
     use virs_types::position::PlaceOrderParams;
-    let paper = virs_exchange::paper::PaperExchangeAdapter::new(
-        "binance",
-        MarketType::Perpetual,
-        50000.0,
-    );
-
+    let paper =
+        virs_exchange::paper::PaperExchangeAdapter::new("binance", MarketType::Perpetual, 50000.0);
 
     paper.on_price_tick("BTC/USDT", 50000.0).await;
 
@@ -83,20 +71,26 @@ async fn int_2_2_paper_market_order_updates_balance() {
         position_side: Some(PositionSide::Long),
     };
     let order = paper.place_order(params).await.unwrap();
-    assert!(!order.order_id.is_empty(), "place_order should return a non-empty order_id");
-
+    assert!(
+        !order.order_id.is_empty(),
+        "place_order should return a non-empty order_id"
+    );
 
     let balance = paper.get_balance().await.unwrap();
-    assert!(balance.used > 0.0, "used balance should be > 0 after opening position");
-    assert!(balance.free < 50000.0, "free balance should be < initial after opening position");
-
+    assert!(
+        balance.used > 0.0,
+        "used balance should be > 0 after opening position"
+    );
+    assert!(
+        balance.free < 50000.0,
+        "free balance should be < initial after opening position"
+    );
 
     let positions = paper.get_positions(Some("BTC/USDT")).await.unwrap();
     assert_eq!(positions.len(), 1);
     assert_eq!(positions[0].side, PositionSide::Long);
     assert!((positions[0].quantity - 0.1).abs() < 1e-8);
 }
-
 
 #[test]
 fn int_3_1_registry_register_and_get() {
@@ -118,7 +112,6 @@ fn int_3_3_registry_list_names() {
     assert!(names.is_empty());
 }
 
-
 #[test]
 fn int_4_1_no_exchange_error() {
     let err = virs_exchange::pe_adapter::no_exchange_error();
@@ -129,7 +122,6 @@ fn int_4_1_no_exchange_error() {
         _ => panic!("Expected Internal variant"),
     }
 }
-
 
 #[test]
 fn int_6_2_position_conversion_full_chain() {

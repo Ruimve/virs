@@ -7,7 +7,6 @@ use virs_market::KlineEngine;
 use virs_market::Timeframe;
 use virs_types::bot::PriceProvider;
 
-
 pub struct ExchangePriceProvider {
     exchange_registry: Arc<Exchanges>,
     kline_engine: Option<Arc<KlineEngine>>,
@@ -30,7 +29,6 @@ impl ExchangePriceProvider {
 #[async_trait]
 impl PriceProvider for ExchangePriceProvider {
     async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64> {
-
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine
                 .get_klines_async(exchange, symbol, Timeframe::M1)
@@ -44,7 +42,6 @@ impl PriceProvider for ExchangePriceProvider {
             }
         }
 
-
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key)?;
         match ex.get_ticker(symbol).await {
@@ -53,7 +50,6 @@ impl PriceProvider for ExchangePriceProvider {
         }
     }
 }
-
 
 pub struct AutoExchangePriceProvider {
     exchange_registry: Arc<Exchanges>,
@@ -77,7 +73,6 @@ impl AutoExchangePriceProvider {
 #[async_trait]
 impl PriceProvider for AutoExchangePriceProvider {
     async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64> {
-
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine
                 .get_klines_async(exchange, symbol, Timeframe::M1)
@@ -90,7 +85,6 @@ impl PriceProvider for AutoExchangePriceProvider {
                 }
             }
         }
-
 
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = self.exchange_registry.get(&exchange_key)?;

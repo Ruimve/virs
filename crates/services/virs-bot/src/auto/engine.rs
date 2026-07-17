@@ -12,7 +12,6 @@ use crate::auto::worker::AutoWorker;
 use virs_config::TimeConfig;
 use virs_types::position::EngineEvent;
 
-
 pub struct AutoEngine {
     store: Arc<dyn AutoStore>,
     ai_service: Arc<AutoAiService>,

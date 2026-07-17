@@ -3,18 +3,16 @@ use virs_types::{PositionSide, WsFeedEvent};
 
 use crate::types::{CcxtOrder, CcxtOrderStatus, ExecutionType as CcxtExecutionType};
 
-
 // 执行类型枚举(NEW/TRADE/CANCELED/CALCULATED/EXPIRED/AMENDMENT)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecutionType {
-
     New,
 
     Trade,
 
     Canceled,
 
-    Calculated,  // CALCULATED类型为强平事件
+    Calculated, // CALCULATED类型为强平事件
 
     Expired,
 
@@ -43,144 +41,139 @@ impl ExecutionType {
     }
 }
 
-
 // ORDER_TRADE_UPDATE事件外层结构
 #[derive(Debug, Clone, Deserialize)]
 pub struct OrderTradeUpdateEvent {
-
     #[serde(rename = "e")]
-    pub event_type: String,  // e→事件类型
+    pub event_type: String, // e→事件类型
 
     #[serde(rename = "E")]
-    pub event_time: i64,  // E→事件时间(ms)
+    pub event_time: i64, // E→事件时间(ms)
 
     #[serde(rename = "T")]
-    pub transaction_time: i64,  // T→事务时间(ms)
+    pub transaction_time: i64, // T→事务时间(ms)
 
     #[serde(rename = "o")]
-    pub order: OrderTradeUpdateData,  // o→订单成交详情
+    pub order: OrderTradeUpdateData, // o→订单成交详情
 }
-
 
 // 订单成交详情，字段映射见各字段注释
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct OrderTradeUpdateData {
-
     #[serde(rename = "s")]
-    pub symbol: String,  // s→交易对
+    pub symbol: String, // s→交易对
 
     #[serde(rename = "c")]
-    pub client_order_id: String,  // c→客户端订单ID
+    pub client_order_id: String, // c→客户端订单ID
 
     #[serde(rename = "S")]
-    pub side: String,  // S→买卖方向
+    pub side: String, // S→买卖方向
 
     #[serde(rename = "o")]
-    pub order_type: String,  // o→订单类型
+    pub order_type: String, // o→订单类型
 
     #[serde(rename = "f")]
-    pub time_in_force: String,  // f→有效期类型
+    pub time_in_force: String, // f→有效期类型
 
     #[serde(rename = "q")]
-    pub orig_qty: String,  // q→原始数量
+    pub orig_qty: String, // q→原始数量
 
     #[serde(rename = "p")]
-    pub original_price: String,  // p→原始价格
+    pub original_price: String, // p→原始价格
 
     #[serde(rename = "ap")]
-    pub avg_fill_price: Option<String>,  // ap→平均成交价
+    pub avg_fill_price: Option<String>, // ap→平均成交价
 
     #[serde(rename = "sp")]
-    pub stop_price: Option<String>,  // sp→触发价格
+    pub stop_price: Option<String>, // sp→触发价格
 
     #[serde(rename = "x")]
-    pub execution_type: String,  // x→执行类型
+    pub execution_type: String, // x→执行类型
 
     #[serde(rename = "X")]
-    pub status: String,  // X→订单状态
+    pub status: String, // X→订单状态
 
     #[serde(rename = "i")]
-    pub order_id: i64,  // i→订单ID
+    pub order_id: i64, // i→订单ID
 
     #[serde(rename = "l")]
-    pub last_fill_qty: String,  // l→最新成交数量
+    pub last_fill_qty: String, // l→最新成交数量
 
     #[serde(rename = "z")]
-    pub filled_qty: String,  // z→累计成交数量
+    pub filled_qty: String, // z→累计成交数量
 
     #[serde(rename = "L")]
-    pub last_fill_price: String,  // L→最新成交价
+    pub last_fill_price: String, // L→最新成交价
 
     #[serde(rename = "N")]
-    pub commission_asset: String,  // N→手续费资产
+    pub commission_asset: String, // N→手续费资产
 
     #[serde(rename = "n")]
-    pub commission: String,  // n→手续费
+    pub commission: String, // n→手续费
 
     #[serde(rename = "T")]
-    pub trade_time: i64,  // T→成交时间(ms)
+    pub trade_time: i64, // T→成交时间(ms)
 
     #[serde(rename = "t")]
-    pub trade_id: i64,  // t→成交ID
+    pub trade_id: i64, // t→成交ID
 
     #[serde(rename = "b")]
-    pub bids_notional: Option<String>,  // b→买方名义价值
+    pub bids_notional: Option<String>, // b→买方名义价值
 
     #[serde(rename = "a")]
-    pub ask_notional: Option<String>,  // a→卖方名义价值
+    pub ask_notional: Option<String>, // a→卖方名义价值
 
     #[serde(rename = "m")]
-    pub is_maker: bool,  // m→是否为maker
+    pub is_maker: bool, // m→是否为maker
 
     #[serde(rename = "R")]
-    pub reduce_only: bool,  // R→是否仅减仓 (exchange-native, 业务层不使用)
+    pub reduce_only: bool, // R→是否仅减仓 (exchange-native, 业务层不使用)
 
     #[serde(rename = "wt")]
-    pub working_type: Option<String>,  // wt→工作类型
+    pub working_type: Option<String>, // wt→工作类型
 
     #[serde(rename = "ot")]
-    pub original_order_type: Option<String>,  // ot→原始订单类型
+    pub original_order_type: Option<String>, // ot→原始订单类型
 
     #[serde(rename = "ps")]
-    pub position_side: Option<String>,  // ps→持仓方向
+    pub position_side: Option<String>, // ps→持仓方向
 
     #[serde(rename = "cp")]
-    pub is_close_all: Option<bool>,  // cp→是否全部平仓
+    pub is_close_all: Option<bool>, // cp→是否全部平仓
 
     #[serde(rename = "AP")]
-    pub activation_price: Option<String>,  // AP→触发价格(追踪止损)
+    pub activation_price: Option<String>, // AP→触发价格(追踪止损)
 
     #[serde(rename = "cr")]
-    pub callback_rate: Option<String>,  // cr→回调比率
+    pub callback_rate: Option<String>, // cr→回调比率
 
     #[serde(rename = "pP")]
-    pub price_protection: Option<bool>,  // pP→价格保护
+    pub price_protection: Option<bool>, // pP→价格保护
 
     #[serde(rename = "rp")]
-    pub realized_pnl: Option<String>,  // rp→已实现盈亏
+    pub realized_pnl: Option<String>, // rp→已实现盈亏
 
     #[serde(rename = "V")]
-    pub stp_mode: Option<String>,  // V→STP模式
+    pub stp_mode: Option<String>, // V→STP模式
 
     #[serde(rename = "pm")]
-    pub price_match_mode: Option<String>,  // pm→价格匹配模式
+    pub price_match_mode: Option<String>, // pm→价格匹配模式
 
     #[serde(rename = "gtd")]
-    pub gtd_auto_cancel_time: Option<i64>,  // gtd→GTD自动撤单时间
+    pub gtd_auto_cancel_time: Option<i64>, // gtd→GTD自动撤单时间
 
     #[serde(rename = "er")]
-    pub expiry_reason: Option<String>,  // er→过期原因
+    pub expiry_reason: Option<String>, // er→过期原因
 
     #[serde(rename = "si")]
-    pub si: Option<i64>,  // si→忽略
+    pub si: Option<i64>, // si→忽略
 
     #[serde(rename = "ss")]
-    pub ss: Option<i64>,  // ss→忽略
+    pub ss: Option<i64>, // ss→忽略
 }
 
 impl OrderTradeUpdateData {
-
     // 是否强平: execution_type=="CALCULATED"且client_order_id以"autoclose-"开头
     pub fn is_liquidation(&self) -> bool {
         self.execution_type == "CALCULATED" && self.client_order_id.starts_with("autoclose-")
@@ -221,7 +214,8 @@ impl OrderTradeUpdateData {
             _ => virs_types::Side::Sell,
         };
 
-        let order_type = crate::adapter::binance::BinanceExchange::parse_order_type(&self.order_type);
+        let order_type =
+            crate::adapter::binance::BinanceExchange::parse_order_type(&self.order_type);
 
         let position_side = self
             .position_side
@@ -244,36 +238,24 @@ impl OrderTradeUpdateData {
             side,
             order_type,
             position_side,
-            original_order_type: self
-                .original_order_type
-                .clone()
-                .unwrap_or_default(),
+            original_order_type: self.original_order_type.clone().unwrap_or_default(),
             status,
             execution_type,
             orig_qty: self.orig_qty.clone(),
             original_price: self.original_price.clone(),
-            avg_fill_price: self
-                .avg_fill_price
-                .clone()
-                .unwrap_or_default(),
+            avg_fill_price: self.avg_fill_price.clone().unwrap_or_default(),
             filled_qty: self.filled_qty.clone(),
             last_fill_qty: self.last_fill_qty.clone(),
             last_fill_price: self.last_fill_price.clone(),
             stop_price: self.stop_price.clone(),
             commission: self.commission.clone(),
             commission_asset: self.commission_asset.clone(),
-            realized_pnl: self
-                .realized_pnl
-                .clone()
-                .unwrap_or_default(),
+            realized_pnl: self.realized_pnl.clone().unwrap_or_default(),
             reduce_only: self.reduce_only,
             is_maker: self.is_maker,
             close_position: self.is_close_all,
             time_in_force: self.time_in_force.clone(),
-            working_type: self
-                .working_type
-                .clone()
-                .unwrap_or_default(),
+            working_type: self.working_type.clone().unwrap_or_default(),
             bids_notional: self.bids_notional.clone(),
             ask_notional: self.ask_notional.clone(),
             activation_price: self.activation_price.clone(),
@@ -290,7 +272,6 @@ impl OrderTradeUpdateData {
         }
     }
 }
-
 
 // 入口函数: 反序列化JSON并转换为WsFeedEvent
 pub fn process(json: &str) -> Option<WsFeedEvent> {

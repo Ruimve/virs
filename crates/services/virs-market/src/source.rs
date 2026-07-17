@@ -5,7 +5,6 @@ use virs_types::enums::MarketType;
 
 use crate::types::{Candle, KlineSource};
 
-
 pub fn timeframe_str_to_ms(tf: &str) -> i64 {
     match tf {
         "1m" => 60_000,
@@ -39,13 +38,11 @@ impl KlineSource for ExchangeKlineSource {
         since: Option<i64>,
         market_type: Option<MarketType>,
     ) -> VirsResult<Vec<Candle>> {
-
         let key = if let Some(mt) = market_type {
             let key = format!("{}:{}", exchange, mt);
             if self.registry.get(&key).is_some() {
                 key
             } else {
-
                 self.registry
                     .registered_names()
                     .into_iter()
@@ -63,20 +60,15 @@ impl KlineSource for ExchangeKlineSource {
                 .into_iter()
                 .find(|n| n.starts_with(&format!("{}:", exchange)))
                 .ok_or_else(|| {
-                    VirsError::not_found(format!(
-                        "Exchange '{}' not found in registry",
-                        exchange
-                    ))
+                    VirsError::not_found(format!("Exchange '{}' not found in registry", exchange))
                 })?
         };
 
-        let ex = self
-            .registry
-            .get(&key)
-            .ok_or_else(|| VirsError::not_found(format!("Exchange '{}' not available", exchange)))?;
+        let ex = self.registry.get(&key).ok_or_else(|| {
+            VirsError::not_found(format!("Exchange '{}' not available", exchange))
+        })?;
 
         let klines = ex.get_klines(symbol, timeframe, limit, since).await?;
-
 
         Ok(klines
             .into_iter()

@@ -1,11 +1,9 @@
 use serde::Deserialize;
 use virs_types::WsFeedEvent;
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct StrategyUpdateEvent {
-
     #[serde(rename = "e")]
     pub event_type: String,
 
@@ -19,11 +17,9 @@ pub struct StrategyUpdateEvent {
     pub strategy_update: StrategyUpdate,
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct StrategyUpdate {
-
     #[serde(rename = "si")]
     pub strategy_id: i64,
 
@@ -42,7 +38,6 @@ pub struct StrategyUpdate {
     #[serde(rename = "c")]
     pub op_code: i32,
 }
-
 
 pub fn process(json: &str) -> Option<WsFeedEvent> {
     let event: StrategyUpdateEvent = match serde_json::from_str(json) {

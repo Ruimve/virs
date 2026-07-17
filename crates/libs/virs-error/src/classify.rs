@@ -2,7 +2,6 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCategory {
@@ -33,21 +32,17 @@ impl fmt::Display for ErrorCategory {
     }
 }
 
-
 pub trait Retryable {
     fn is_retryable(&self) -> bool;
 }
-
 
 pub trait Categorized {
     fn category(&self) -> ErrorCategory;
 }
 
-
 pub trait HttpStatus {
     fn http_status(&self) -> u16;
 }
-
 
 pub trait ErrorCode {
     fn error_code(&self) -> &'static str;

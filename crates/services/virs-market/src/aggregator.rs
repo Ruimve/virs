@@ -151,7 +151,6 @@ impl Aggregator {
     }
 }
 
-
 pub fn candle_from_1m(base: &Candle, timeframe: Timeframe) -> Candle {
     let tf_ms = timeframe.ms();
     let aligned_open_time = (base.open_time / tf_ms) * tf_ms;

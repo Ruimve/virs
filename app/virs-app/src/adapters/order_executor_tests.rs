@@ -127,7 +127,10 @@ fn o1_4_convert_order_failed() {
     let result = convert_pe_event(event);
     assert!(result.is_some());
     match result.unwrap() {
-        OrderEvent::OrderFailed { order_id: _, reason } => {
+        OrderEvent::OrderFailed {
+            order_id: _,
+            reason,
+        } => {
             assert_eq!(reason, "Insufficient balance");
         }
         _ => panic!("Expected OrderFailed"),
@@ -153,7 +156,6 @@ fn o1_5_convert_risk_alert() {
 
 #[test]
 fn o1_6_convert_position_opened_none() {
-
     let pos = virs_types::position::Position {
         id: Uuid::new_v4(),
         exchange: "binance".to_string(),
@@ -168,7 +170,6 @@ fn o1_6_convert_position_opened_none() {
         client_order_id: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
-        closed_at: None,
     };
     let event = EngineEvent::PositionOpened { position: pos };
     let result = convert_pe_event(event);
