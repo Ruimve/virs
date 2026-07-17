@@ -30,7 +30,6 @@ struct PaperPendingOrder {
     price: Option<f64>,
     position_side: Option<PositionSide>,
     client_order_id: Option<String>,
-    created_at: chrono::DateTime<Utc>,
 }
 
 
@@ -416,7 +415,6 @@ impl ExchangePe for PaperExchangeAdapter {
 
     async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<OrderResult> {
         let order_id = Uuid::new_v4();
-        let now = Utc::now();
         let is_market = params.order_type == OrderType::Market || params.price.is_none();
 
         if is_market {
@@ -443,7 +441,6 @@ impl ExchangePe for PaperExchangeAdapter {
                 price: Some(fill_price),
                 position_side: params.position_side,
                 client_order_id: params.client_order_id.clone(),
-                created_at: now,
             };
             self.update_position_on_fill(&pending_for_fill, fill_price)
                 .await;
@@ -520,7 +517,6 @@ impl ExchangePe for PaperExchangeAdapter {
                 price: params.price,
                 position_side: params.position_side,
                 client_order_id: params.client_order_id.clone(),
-                created_at: now,
             };
             self.pending.insert(order_id, pending);
             // 限价单挂单未成交，不发送 WS 推送

@@ -6,9 +6,6 @@ use virs_error::ExchangeError;
 
 
 pub use virs_types::WsFeedEvent;
-use virs_types::{
-    CcxtOrder, CcxtOrderStatus, ExecutionType, OrderStatus, PositionSide, Side,
-};
 
 use crate::adapter::binance::fapi;
 use crate::adapter::binance::user_data_ws_events::dispatch_event;
@@ -18,13 +15,12 @@ use crate::ExchangeClient;
 
 
 // Binance用户数据WebSocket消息，兼容两种格式：
-// 组合流: {"stream":...,"data":{"e":"...","o":{...}}}
+// 组合流: {"stream":...,"data":{"e":"...",...}}
 // 扁平流: {"e":"...","E":...,"o":{...}}
+// 注意: 订单数据解析由 dispatch_event → OrderTradeUpdateData 负责（user_data_ws_events/），
+//       本结构仅用于延迟检测（event_type/event_time），不再解析订单字段。
 #[derive(Debug, Clone, Deserialize)]
 pub struct BinanceOrderMessage {
-    #[allow(dead_code)]
-    pub(crate) stream: Option<String>,  // 组合流的stream名称（扁平流无此字段）
-
     pub(crate) data: Option<BinanceOrderData>,  // 组合流内层事件数据
 
     #[serde(rename = "e")]
@@ -32,8 +28,6 @@ pub struct BinanceOrderMessage {
 
     #[serde(rename = "E")]
     event_time_flat: Option<i64>,  // 扁平流的事件时间(ms)
-    #[serde(rename = "o")]
-    order_flat: Option<BinanceOrderInner>,  // 扁平流的订单数据
 }
 
 impl BinanceOrderMessage {
@@ -49,175 +43,15 @@ impl BinanceOrderMessage {
         self.event_time_flat
             .or_else(|| self.data.as_ref().map(|d| d.event_time))
     }
-
-    // 转换为WsFeedEvent，先尝试扁平流解析，再尝试组合流
-    pub fn to_ws_feed_event(self) -> Option<WsFeedEvent> {
-        // 扁平流格式解析
-        if let Some(et) = self.event_type_flat.as_deref() {
-            if et == "ORDER_TRADE_UPDATE" {
-
-                if let Some(order) = self.order_flat {
-                    return order.to_ws_feed_event();
-                }
-            }
-        }
-
-        // 组合流格式解析
-        if let Some(data) = self.data {
-            if data.event_type == "ORDER_TRADE_UPDATE" {
-                return data.order.to_ws_feed_event();
-            }
-        }
-        None
-    }
 }
 
-// 组合流内层事件数据
+// 组合流内层事件数据（仅保留延迟检测所需字段）
 #[derive(Debug, Clone, Deserialize)]
 pub struct BinanceOrderData {
     #[serde(rename = "e")]
     pub event_type: String,  // e→事件类型
     #[serde(rename = "E")]
     pub event_time: i64,  // E→事件时间(ms)
-    #[serde(rename = "o")]
-    pub order: BinanceOrderInner,  // o→订单详情
-}
-
-
-// ORDER_TRADE_UPDATE事件内层订单数据
-#[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
-pub struct BinanceOrderInner {
-
-    #[serde(rename = "s")]
-    pub(crate) symbol: String,  // s→交易对
-
-    #[serde(rename = "c")]
-    pub(crate) client_order_id: String,  // c→客户端订单ID
-
-    #[serde(rename = "S")]
-    pub(crate) side: String,  // S→买卖方向
-
-    #[serde(rename = "o")]
-    pub(crate) order_type: String,  // o→订单类型
-
-    #[serde(rename = "X")]
-    pub(crate) status: String,  // X→订单状态
-
-    #[serde(rename = "i")]
-    pub(crate) order_id: i64,  // i→交易所订单ID
-
-    #[serde(rename = "q")]
-    pub(crate) orig_qty: String,  // q→原始数量
-
-    #[serde(rename = "z")]
-    pub(crate) filled_qty: String,  // z→已成交数量
-
-    #[serde(rename = "Q")]
-    pub(crate) remaining_qty: Option<String>,  // Q→剩余未成交数量
-
-    #[serde(rename = "L")]
-    pub(crate) last_fill_price: String,  // L→最新成交价
-
-    #[serde(rename = "ap")]
-    pub(crate) avg_fill_price: Option<String>,  // ap→平均成交价
-
-    #[serde(rename = "l")]
-    pub(crate) last_fill_qty: String,  // l→最新成交数量
-
-    #[serde(rename = "n")]
-    pub(crate) commission: String,  // n→手续费
-
-    #[serde(rename = "N")]
-    pub(crate) commission_asset: String,  // N→手续费资产
-
-    #[serde(rename = "T")]
-    pub(crate) trade_time: i64,  // T→成交时间(ms)
-
-    #[serde(rename = "R")]
-    pub(crate) reduce_only: bool,  // R→是否仅减仓 (exchange-native)
-
-    #[serde(rename = "w")]
-    pub(crate) working_type: String,  // w→工作类型(逐仓/全仓)
-
-    #[serde(rename = "ps")]
-    pub(crate) position_side: Option<String>,  // ps→持仓方向
-}
-
-impl BinanceOrderInner {
-    // 订单状态映射: NEW→Open, PARTIALLY_FILLED→PartiallyFilled, FILLED→Filled,
-    // CANCELED/EXPIRED/EXPIRED_IN_MATCH→Canceled, REJECTED→Failed
-    pub(crate) fn to_order_status(&self) -> Option<OrderStatus> {
-        match self.status.as_str() {
-            "NEW" => Some(OrderStatus::Open),
-            "PARTIALLY_FILLED" => Some(OrderStatus::PartiallyFilled),
-            "FILLED" => Some(OrderStatus::Filled),
-            "CANCELED" => Some(OrderStatus::Canceled),
-            "EXPIRED" => Some(OrderStatus::Canceled),
-            "EXPIRED_IN_MATCH" => Some(OrderStatus::Canceled),
-            "REJECTED" => Some(OrderStatus::Failed),
-            _ => None,
-        }
-    }
-
-    // 转换为WsFeedEvent::OrderUpdate
-    pub fn to_ws_feed_event(&self) -> Option<WsFeedEvent> {
-        // 状态检查: 未知状态则跳过事件
-        self.to_order_status()?;
-
-        let ccxt_order = CcxtOrder {
-            order_id: self.order_id,
-            client_order_id: self.client_order_id.clone(),
-            symbol: self.symbol.clone(),
-            side: match self.side.as_str() {
-                "BUY" => Side::Buy,
-                _ => Side::Sell,
-            },
-            order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&self.order_type),
-            position_side: self
-                .position_side
-                .as_deref()
-                .and_then(|ps| match ps {
-                    "LONG" => Some(PositionSide::Long),
-                    "SHORT" => Some(PositionSide::Short),
-                    _ => None,
-                })
-                .unwrap_or(PositionSide::Long),
-            original_order_type: String::new(),
-            status: CcxtOrderStatus::from_str(&self.status),
-            execution_type: ExecutionType::from_str(""),
-            orig_qty: self.orig_qty.clone(),
-            original_price: String::new(),
-            avg_fill_price: self.avg_fill_price.clone().unwrap_or_default(),
-            filled_qty: self.filled_qty.clone(),
-            last_fill_qty: self.last_fill_qty.clone(),
-            last_fill_price: self.last_fill_price.clone(),
-            stop_price: None,
-            commission: self.commission.clone(),
-            commission_asset: self.commission_asset.clone(),
-            realized_pnl: String::new(),
-            reduce_only: self.reduce_only,
-            is_maker: false,
-            close_position: None,
-            time_in_force: String::new(),
-            working_type: self.working_type.clone(),
-            bids_notional: None,
-            ask_notional: None,
-            activation_price: None,
-            callback_rate: None,
-            price_protection: false,
-            stp_mode: None,
-            price_match_mode: None,
-            gtd_auto_cancel_time: None,
-            expiry_reason: None,
-            si: 0,
-            ss: 0,
-            trade_time: self.trade_time,
-            trade_id: 0,
-        };
-
-        Some(WsFeedEvent::OrderUpdate { order: ccxt_order })
-    }
 }
 
 

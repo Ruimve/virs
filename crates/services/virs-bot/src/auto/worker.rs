@@ -34,9 +34,6 @@ pub(crate) struct PendingClose {
     pub close_reason: String,
     pub entry_price: f64,
     pub position_size: f64,
-
-    #[allow(dead_code)]
-    pub unrealized_pnl: f64,
     pub client_order_id: String,
     pub sent_at: tokio::time::Instant,
 }
@@ -1325,9 +1322,9 @@ impl AutoWorker {
         }
 
         let side = self.current_side_str();
-        let (entry_price, position_size, unrealized_pnl) = match &self.current_position {
-            Some(p) => (p.entry_price, p.size, p.unrealized_pnl),
-            None => (0.0, 0.0, 0.0),
+        let (entry_price, position_size) = match &self.current_position {
+            Some(p) => (p.entry_price, p.size),
+            None => (0.0, 0.0),
         };
 
 
@@ -1358,7 +1355,6 @@ impl AutoWorker {
                         close_reason: close_reason.to_string(),
                         entry_price,
                         position_size,
-                        unrealized_pnl,
                         client_order_id,
                         sent_at: tokio::time::Instant::now(),
                     });
@@ -1408,7 +1404,6 @@ impl AutoWorker {
                         close_reason: close_reason.to_string(),
                         entry_price,
                         position_size,
-                        unrealized_pnl,
                         client_order_id,
                         sent_at: tokio::time::Instant::now(),
                     });

@@ -145,13 +145,6 @@ pub enum EngineEvent {
     PositionClosed {
         position: Position,
     },
-    PositionModified {
-        position_id: Uuid,
-        stop_loss: Option<f64>,
-        take_profit: Option<f64>,
-    },
-
-
     PositionUpdated {
         position: Position,
     },
@@ -176,8 +169,5 @@ pub enum EngineEvent {
     RiskAlert {
         level: String,
         message: String,
-    },
-    PositionSynced {
-        positions: Vec<crate::market::ExchangePosition>,
     },
 }

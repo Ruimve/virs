@@ -33,7 +33,6 @@
 | ID | 测试函数 | 描述 |
 |----|---------|------|
 | A1.1 | `a1_1_bot_to_config_basic` | 基础字段映射正确 |
-| A1.2 | `a1_2_bot_to_config_market_type` | (deleted — market_type field removed) |
 | A1.3 | `a1_3_bot_to_config_optional_fields` | None 字段保持 None |
 | A1.4 | `a1_4_bot_to_config_stats` | 统计字段 (pnl/trades) 精确映射 |
 | A1.5 | `a1_5_bot_to_config_id_preserved` | UUID 保持一致 |

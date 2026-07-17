@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use virs_ccxt::{
-    adapter::binance::{user_data_ws::BinanceOrderMessage, BinanceExchange},
+    adapter::binance::{user_data_ws_events::dispatch_event, BinanceExchange},
     auth::hmac_sha256_hex,
     create_exchange, parse_f64, parse_str,
     types::{CcxtOrderStatus, CcxtTicker},
@@ -48,7 +48,7 @@ fn int_2_1_hmac_signature_deterministic() {
 
 
 #[test]
-fn int_4_2_order_trade_update_to_ws_feed_event() {
+fn int_4_2_order_trade_update_dispatch() {
     let raw = json!({
         "e": "ORDER_TRADE_UPDATE",
         "E": 1591276258743i64,
@@ -58,30 +58,36 @@ fn int_4_2_order_trade_update_to_ws_feed_event() {
             "c": "test_order",
             "S": "BUY",
             "o": "LIMIT",
+            "f": "GTC",
+            "q": "0.001",
+            "p": "50000",
+            "ap": "50000",
+            "x": "TRADE",
             "X": "FILLED",
             "i": 123456,
-            "q": "0.001",
+            "l": "0.001",
             "z": "0.001",
             "L": "50000",
-            "l": "0.001",
             "n": "0.015",
             "N": "USDT",
             "T": 1591276258732i64,
+            "t": 1,
+            "m": false,
             "R": false,
             "w": "MARK_PRICE"
         }
     });
-    let msg: BinanceOrderMessage = serde_json::from_value(raw).unwrap();
-    let event = msg.to_ws_feed_event();
+    let text = serde_json::to_string(&raw).unwrap();
+    let event = dispatch_event(&text);
     assert!(event.is_some());
 }
 
 #[test]
 fn int_4_3_non_order_event_returns_none() {
     let raw = json!({"e": "listenKeyExpired", "E": 1234567890});
-    let msg: BinanceOrderMessage = serde_json::from_value(raw).unwrap();
-    let event = msg.to_ws_feed_event();
-    assert_eq!(event, None);
+    let text = serde_json::to_string(&raw).unwrap();
+    let event = dispatch_event(&text);
+    assert!(event.is_none());
 }
 
 

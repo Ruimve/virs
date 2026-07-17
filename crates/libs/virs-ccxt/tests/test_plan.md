@@ -131,26 +131,18 @@
 | `test_to_candle_basic` | kline → candle 基础转换 |
 | `test_to_candle_invalid_numbers` | 无效数字处理 |
 
-### adapter/binance/order_ws.rs — 内联测试 (15)
+### adapter/binance/user_data_ws.rs — 内联测试 (2)
 
 | 测试函数 | 描述 |
 |---------|------|
-| `test_execution_report` | (deleted — executionReport was spot-only) |
-| `test_order_trade_update` | ORDER_TRADE_UPDATE 解析 |
-| `test_order_trade_update_single_stream` | 单流 ORDER_TRADE_UPDATE |
-| `test_non_order_event` | 非订单事件 → None |
-| `test_to_ws_feed_event_order_update` | → WsFeedEvent::OrderUpdate |
-| `test_to_ws_feed_event_filled` | FILLED 状态转换 |
-| `test_to_ws_feed_event_canceled` | CANCELED 状态转换 |
+| `test_parse_invalid_json` | 无效 JSON 处理 |
 | `test_new_perpetual` | 合约 WS URL |
-| `test_update_listen_key` | listenKey URL |
-| `test_parse_order_message_*` | 订单消息解析系列 |
 
 ---
 
 ## 集成测试用例
 
-### integration_tests.rs (19)
+### integration_tests.rs (18)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
@@ -158,9 +150,8 @@
 | INT-1.2 | `int_1_2_symbol_roundtrip_usdc` | ETH-USDC → ETHUSDC → ETH/USDC |
 | INT-1.3 | `int_1_3_symbol_roundtrip_btc_pair` | BNB/BTC → BNBBTC → BNB/BTC |
 | INT-2.1 | `int_2_1_hmac_signature_deterministic` | HMAC 签名幂等性 |
-| INT-4.1 | `int_4_1_execution_report_to_ws_feed_event` | (deleted — executionReport was spot-only) |
-| INT-4.2 | `int_4_2_order_trade_update_to_ws_feed_event` | ORDER_TRADE_UPDATE → WsFeedEvent |
-| INT-4.3 | `int_4_3_non_order_event_returns_none` | 非订单事件 → None |
+| INT-4.2 | `int_4_2_order_trade_update_dispatch` | ORDER_TRADE_UPDATE → dispatch_event → WsFeedEvent |
+| INT-4.3 | `int_4_3_non_order_event_returns_none` | 非订单事件 → dispatch_event → None |
 | INT-5.1 | `int_5_1_create_exchange_binance_hmac` | Binance + HMAC 创建成功 |
 | INT-5.2 | `int_5_2_create_exchange_binance_ed25519` | Binance + Ed25519 创建成功 |
 | INT-5.3 | `int_5_3_create_exchange_bybit_not_supported` | Bybit → NotSupported |

@@ -63,7 +63,6 @@ fn position_side_str(side: &virs_types::PositionSide) -> &'static str {
 
 fn position_status_str(status: &virs_types::PositionStatus) -> &'static str {
     match status {
-        virs_types::PositionStatus::Empty => "empty",
         virs_types::PositionStatus::Opening => "opening",
         virs_types::PositionStatus::Open => "open",
         virs_types::PositionStatus::Closing => "closing",
