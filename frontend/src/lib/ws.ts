@@ -1,14 +1,15 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 
+/** WebSocket 连接状态，比布尔 `connected` 更细粒度，便于 UI 展示重连中状态 */
+export type WsState = 'idle' | 'connecting' | 'open' | 'closed';
+
 export interface WsInstance<T> {
   ws: WebSocket | null;
   listeners: Set<(event: T) => void>;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   reconnectAttempts: number;
-  reconnectCallbacks: Set<() => void>;
-
-  stateChangeCallbacks: Set<() => void>;
-
+  /** 单一状态回调集合，取代原 reconnectCallbacks + stateChangeCallbacks */
+  stateCallbacks: Set<(state: WsState) => void>;
   refCount: number;
 }
 
@@ -18,32 +19,69 @@ export function createWsInstance<T>(): WsInstance<T> {
     listeners: new Set(),
     reconnectTimer: null,
     reconnectAttempts: 0,
-    reconnectCallbacks: new Set(),
-    stateChangeCallbacks: new Set(),
+    stateCallbacks: new Set(),
     refCount: 0,
   };
 }
 
 const BASE_RECONNECT_MS = 1000;
 const MAX_RECONNECT_MS = 30000;
+/** 最大重连次数，超过后停止重试并发出 error，避免无限重试 */
+const MAX_RECONNECT_ATTEMPTS = 20;
+
+function notifyState<T>(inst: WsInstance<T>, state: WsState) {
+  inst.stateCallbacks.forEach((cb) => cb(state));
+}
+
+/** 计算指数退避延迟（带 jitter，避免群体同步重连） */
+function backoffDelay(attempts: number): number {
+  const base = Math.min(BASE_RECONNECT_MS * Math.pow(2, attempts), MAX_RECONNECT_MS);
+  return Math.floor(base * (0.75 + Math.random() * 0.5));
+}
+
+function scheduleReconnect<T>(
+  inst: WsInstance<T>,
+  getUrl: () => string,
+  parse: (raw: string) => T | null,
+) {
+  if (inst.refCount <= 0) return;
+  if (inst.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.error(
+      `[WS] Reached max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}), giving up`,
+    );
+    notifyState(inst, 'closed');
+    return;
+  }
+  const delay = backoffDelay(inst.reconnectAttempts);
+  inst.reconnectAttempts++;
+  console.warn(`[WS] Reconnecting in ${delay}ms (attempt ${inst.reconnectAttempts})`);
+  inst.reconnectTimer = setTimeout(() => connectWs(inst, getUrl, parse), delay);
+}
 
 export function connectWs<T>(
   inst: WsInstance<T>,
   getUrl: () => string,
   parse: (raw: string) => T | null,
 ) {
+  // 已有可用连接则跳过
   if (inst.ws && inst.ws.readyState < WebSocket.CLOSING) return;
+
+  notifyState(inst, 'connecting');
 
   try {
     const ws = new WebSocket(getUrl());
 
+    // 绑定当前 ws 引用，防止旧连接的异步回调污染新连接的共享状态
+    const isCurrent = () => inst.ws === ws;
+
     ws.onopen = () => {
+      if (!isCurrent()) return;
       inst.reconnectAttempts = 0;
-      inst.stateChangeCallbacks.forEach((cb) => cb());
-      inst.reconnectCallbacks.forEach((cb) => cb());
+      notifyState(inst, 'open');
     };
 
     ws.onmessage = (e) => {
+      if (!isCurrent()) return;
       try {
         const event = parse(e.data);
         if (event) inst.listeners.forEach((l) => l(event));
@@ -53,32 +91,21 @@ export function connectWs<T>(
     };
 
     ws.onclose = () => {
+      if (!isCurrent()) return;
       inst.ws = null;
-      inst.stateChangeCallbacks.forEach((cb) => cb());
-
-      if (inst.refCount > 0) {
-        const delay = Math.min(
-          BASE_RECONNECT_MS * Math.pow(2, inst.reconnectAttempts),
-          MAX_RECONNECT_MS,
-        );
-        inst.reconnectAttempts++;
-        inst.reconnectTimer = setTimeout(() => connectWs(inst, getUrl, parse), delay);
-      }
+      notifyState(inst, 'closed');
+      scheduleReconnect(inst, getUrl, parse);
     };
 
-    ws.onerror = () => {};
+    ws.onerror = () => {
+      if (!isCurrent()) return;
+      console.warn('[WS] Connection error');
+    };
 
     inst.ws = ws;
   } catch (err) {
     console.error('[WS] Failed to connect:', err);
-    if (inst.refCount > 0) {
-      const delay = Math.min(
-        BASE_RECONNECT_MS * Math.pow(2, inst.reconnectAttempts),
-        MAX_RECONNECT_MS,
-      );
-      inst.reconnectAttempts++;
-      inst.reconnectTimer = setTimeout(() => connectWs(inst, getUrl, parse), delay);
-    }
+    scheduleReconnect(inst, getUrl, parse);
   }
 }
 
@@ -88,19 +115,45 @@ function disconnectWs<T>(inst: WsInstance<T>) {
     inst.reconnectTimer = null;
   }
   if (inst.ws) {
-    inst.ws.close();
+    // 先解绑回调，避免 close() 触发的 onclose 改写共享状态
+    const ws = inst.ws;
+    ws.onopen = null;
+    ws.onmessage = null;
+    ws.onclose = null;
+    ws.onerror = null;
+    ws.close();
     inst.ws = null;
   }
   inst.reconnectAttempts = 0;
+  notifyState(inst, 'idle');
 }
 
-export function useWsHook<T>(
+/** 安全发送：未 OPEN 时返回 false 并 warn，不让消费端裸触 inst.ws */
+export function sendWs<T>(inst: WsInstance<T>, data: string): boolean {
+  if (!inst.ws || inst.ws.readyState !== WebSocket.OPEN) {
+    console.warn('[WS] send() called but connection not OPEN, message dropped');
+    return false;
+  }
+  inst.ws.send(data);
+  return true;
+}
+
+export interface UseWsResult {
+  /** 连接是否处于 OPEN 状态，兼容旧消费端 */
+  connected: boolean;
+  /** 细粒度连接状态，便于 UI 展示重连中 */
+  state: WsState;
+  /** 安全发送，未 OPEN 时返回 false */
+  send: (data: string) => boolean;
+}
+
+export function useWs<T>(
   inst: WsInstance<T>,
   getUrl: () => string,
   parse: (raw: string) => T | null,
   onEvent: (event: T) => void,
   onReconnect?: () => void,
-): { connected: boolean } {
+): UseWsResult {
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
@@ -111,41 +164,46 @@ export function useWsHook<T>(
     onEventRef.current(event);
   }, []);
 
-  const stableReconnect = useCallback(() => {
-    onReconnectRef.current?.();
+  // 关键修复：依赖 [] 而非 inst.ws?.readyState。
+  // 函数体内已实时读取 inst.ws，依赖值会随 readyState 变化，导致回调 identity 抖动 →
+  // useEffect 重跑 → refCount 清零 disconnectWs → 再 connectWs，连接反复建断。
+  const stableStateCallback = useCallback((state: WsState) => {
+    if (state === 'open') {
+      onReconnectRef.current?.();
+    }
+    setWsState(state);
   }, []);
 
-  const [connected, setConnected] = useState(() => inst.ws?.readyState === WebSocket.OPEN);
-
-  const stableStateChange = useCallback(() => {
-    setConnected(inst.ws?.readyState === WebSocket.OPEN);
-  }, [inst.ws?.readyState]);
+  const [wsState, setWsState] = useState<WsState>(
+    () => (inst.ws?.readyState === WebSocket.OPEN ? 'open' : 'idle'),
+  );
 
   useEffect(() => {
     inst.refCount++;
     inst.listeners.add(stableListener);
-    inst.reconnectCallbacks.add(stableReconnect);
-    inst.stateChangeCallbacks.add(stableStateChange);
+    inst.stateCallbacks.add(stableStateCallback);
 
     if (!inst.ws || inst.ws.readyState === WebSocket.CLOSED) {
       inst.reconnectAttempts = 0;
       connectWs(inst, getUrl, parse);
     } else if (inst.ws.readyState === WebSocket.OPEN) {
-      setConnected(true);
+      setWsState('open');
+      onReconnectRef.current?.();
     }
 
     return () => {
       inst.listeners.delete(stableListener);
-      inst.reconnectCallbacks.delete(stableReconnect);
-      inst.stateChangeCallbacks.delete(stableStateChange);
+      inst.stateCallbacks.delete(stableStateCallback);
       inst.refCount--;
 
       if (inst.refCount <= 0) {
         disconnectWs(inst);
-        setConnected(false);
       }
     };
-  }, [inst, getUrl, parse, stableListener, stableReconnect, stableStateChange]);
+  }, [inst, getUrl, parse, stableListener, stableStateCallback]);
 
-  return { connected };
+  const send = useCallback((data: string) => sendWs(inst, data), [inst]);
+  const connected = wsState === 'open';
+
+  return { connected, state: wsState, send };
 }

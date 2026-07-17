@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { createWsInstance, useWsHook } from '../../lib/ws';
+import { createWsInstance, useWs, sendWs } from '../../lib/ws';
 
 export interface KlineWsEventRaw {
   exchange: string;
@@ -66,17 +66,14 @@ export function useKlineWs(
   onReconnect?: () => void,
   timeframe?: string,
 ): { connected: boolean } {
-  const { connected } = useWsHook(klineInst, getKlineWsUrl, parseKlineWs, onEvent, onReconnect);
+  const { connected } = useWs(klineInst, getKlineWsUrl, parseKlineWs, onEvent, onReconnect);
 
   useEffect(() => {
     if (!connected) return;
-    const ws = klineInst.ws;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
     if (timeframe) {
-      ws.send(JSON.stringify({ action: 'subscribe', timeframe }));
+      sendWs(klineInst, JSON.stringify({ action: 'subscribe', timeframe }));
     } else {
-      ws.send(JSON.stringify({ action: 'unsubscribe' }));
+      sendWs(klineInst, JSON.stringify({ action: 'unsubscribe' }));
     }
   }, [timeframe, connected]);
 

@@ -1,4 +1,4 @@
-import { createWsInstance, useWsHook } from '../../lib/ws';
+import { createWsInstance, useWs } from '../../lib/ws';
 import type { OrderBookData } from '../types';
 
 export interface OrderBookWsEventRaw {
@@ -44,5 +44,5 @@ export function useOrderBookWs(
   onEvent: (event: OrderBookWsEvent) => void,
   onReconnect?: () => void,
 ): { connected: boolean } {
-  return useWsHook(orderbookInst, getOrderBookWsUrl, parseOrderBookWs, onEvent, onReconnect);
+  return useWs(orderbookInst, getOrderBookWsUrl, parseOrderBookWs, onEvent, onReconnect);
 }

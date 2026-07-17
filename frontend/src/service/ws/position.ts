@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { createWsInstance, useWsHook } from '../../lib/ws';
+import { createWsInstance, useWs, sendWs } from '../../lib/ws';
 
 export interface PositionWsEventRaw {
   type: string;
@@ -82,14 +82,15 @@ export function usePositionWs(
   const symbolRef = useRef(symbol);
   symbolRef.current = symbol;
 
+  // 重连后自动重新订阅当前 symbol
   const handleReconnect = useCallback(() => {
     const sym = symbolRef.current;
-    if (sym && positionInst.ws?.readyState === WebSocket.OPEN) {
-      positionInst.ws.send(JSON.stringify({ action: 'subscribe', symbol: sym }));
+    if (sym) {
+      sendWs(positionInst, JSON.stringify({ action: 'subscribe', symbol: sym }));
     }
   }, []);
 
-  const result = useWsHook(
+  const result = useWs(
     positionInst,
     getPositionWsUrl,
     parsePositionWs,
@@ -99,14 +100,9 @@ export function usePositionWs(
 
   useEffect(() => {
     if (!symbol) return;
-
-    if (positionInst.ws?.readyState === WebSocket.OPEN) {
-      positionInst.ws.send(JSON.stringify({ action: 'subscribe', symbol }));
-    }
+    sendWs(positionInst, JSON.stringify({ action: 'subscribe', symbol }));
     return () => {
-      if (positionInst.ws?.readyState === WebSocket.OPEN) {
-        positionInst.ws.send(JSON.stringify({ action: 'unsubscribe', symbol }));
-      }
+      sendWs(positionInst, JSON.stringify({ action: 'unsubscribe', symbol }));
     };
   }, [symbol]);
 
