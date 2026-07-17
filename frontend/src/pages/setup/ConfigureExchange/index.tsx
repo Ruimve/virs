@@ -14,7 +14,6 @@ import type { PermissionItem } from '../../../service';
 import { WizardStep } from '../context/WizardContext/consts';
 import { Button } from '@/components/Button';
 
-
 const normalizePemSecret = (raw: string): string => {
   const value = raw.trim();
 
@@ -30,7 +29,6 @@ const normalizePemSecret = (raw: string): string => {
   const bodyStart = value.indexOf(header) + header.length;
   const bodyEnd = value.indexOf(footer);
   const body = value.slice(bodyStart, bodyEnd).trim();
-
 
   if (body.includes('\n')) {
     return `${header}\n${body}\n${footer}`;
@@ -49,21 +47,17 @@ const ConfigureExchange = () => {
   const { wizard, updateWizard, advanceStep } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.SelectExchange);
 
-
   const [step1Status, setStep1Status] = useState<FlowStepStatus>('active');
   const [step1Error, setStep1Error] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
 
-
   const [step2Status, setStep2Status] = useState<FlowStepStatus>('pending');
   const [step2Error, setStep2Error] = useState<string | null>(null);
-
 
   const [step3Status, setStep3Status] = useState<FlowStepStatus>('pending');
   const [step3Error, setStep3Error] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
-
 
   const [step4Status, setStep4Status] = useState<FlowStepStatus>('pending');
   const [step4Error, setStep4Error] = useState<string | null>(null);
@@ -78,7 +72,6 @@ const ConfigureExchange = () => {
     setStep4Status('pending');
     setStep4Error(null);
   }, []);
-
 
   const startStep4 = useCallback(async () => {
     setStep4Status('verifying');
@@ -102,7 +95,6 @@ const ConfigureExchange = () => {
         return;
       }
 
-
       setStep4Status('error');
       setStep4Error(
         '当前为单向持仓模式。请在 Binance APP > 合约 > 设置 > 持仓模式 中切换到双向持仓后重新验证。',
@@ -112,7 +104,6 @@ const ConfigureExchange = () => {
       setStep4Error('Network error');
     }
   }, []);
-
 
   const startStep3 = useCallback(async () => {
     setStep3Status('verifying');
@@ -140,7 +131,6 @@ const ConfigureExchange = () => {
     }
   }, [startStep4]);
 
-
   const startStep2 = useCallback(async () => {
     setStep2Status('verifying');
     try {
@@ -158,7 +148,6 @@ const ConfigureExchange = () => {
       setStep2Error('Network error');
     }
   }, [startStep3]);
-
 
   const startStep1 = useCallback(async () => {
     setStep1Status('verifying');
@@ -290,9 +279,7 @@ const ConfigureExchange = () => {
         )}
         {step4Status === 'error' && (
           <div className="space-y-1">
-            <p className="text-xs text-danger-text">
-              {step4Error || 'Position mode check failed'}
-            </p>
+            <p className="text-xs text-danger-text">{step4Error || 'Position mode check failed'}</p>
             <Button size="small" onClick={startStep4}>
               重新验证
             </Button>

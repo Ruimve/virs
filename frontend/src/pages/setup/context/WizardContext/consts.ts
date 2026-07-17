@@ -11,7 +11,6 @@ export const WizardStep = {
 
 export type WizardStepValue = (typeof WizardStep)[keyof typeof WizardStep];
 
-
 export interface WizardState {
   current_step: WizardStepValue;
   exchange: string;

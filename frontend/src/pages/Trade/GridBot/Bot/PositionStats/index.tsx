@@ -10,12 +10,10 @@ interface Props {
   latestPrice: number;
 }
 
-
 export const PositionStats = memo(({ bot, latestPrice }: Props) => {
   const { gridLevels } = useBot();
   const b = bot;
   const filledCount = Math.min(b.grid_filled_count, b.grid_count);
-
 
   const { unrealizedPnl, usedMargin } = useMemo(() => {
     if (!gridLevels || gridLevels.length === 0 || latestPrice <= 0) {

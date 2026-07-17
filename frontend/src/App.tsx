@@ -5,12 +5,9 @@ import { FullScreen } from './components/Transition/FullScreen';
 import { AssetLoading } from './components/Transition/Icon';
 import { AuthProvider } from './context/AuthContext/AuthProvider';
 
-
 const Loading = lazy(() => import('./pages/Loading'));
 
-
 const Login = lazy(() => import('./pages/Login'));
-
 
 const SetupLayout = lazy(() => import('./pages/Setup/Layout'));
 const SelectBotType = lazy(() => import('./pages/Setup/SelectBotType'));
@@ -18,7 +15,6 @@ const ConfigureLlm = lazy(() => import('./pages/Setup/ConfigureLlm'));
 const ConfigureExchange = lazy(() => import('./pages/Setup/ConfigureExchange'));
 const ConfigureParams = lazy(() => import('./pages/Setup/ConfigureParams'));
 const ReviewLaunch = lazy(() => import('./pages/Setup/ReviewLaunch'));
-
 
 const TradeLayout = lazy(() => import('./pages/Trade/Layout'));
 
@@ -36,7 +32,6 @@ const GridBotLogDetail = lazy(() => import('./pages/Trade/GridBot/Log/Detail'));
 const GridBotTrades = lazy(() => import('./pages/Trade/GridBot/Trades'));
 const GridBotLevels = lazy(() => import('./pages/Trade/GridBot/Levels'));
 const GridBotSystem = lazy(() => import('./pages/Trade/GridBot/System'));
-
 
 const HealthCheck = lazy(() => import('./pages/Trade/HealthCheck'));
 

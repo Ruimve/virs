@@ -1,7 +1,6 @@
 import { forwardRef, memo } from 'react';
 import type { IconProps } from '../define';
 
-
 export const Spinner = memo(
   forwardRef<SVGSVGElement, IconProps>(({ className = '', ...props }, ref) => (
     <svg

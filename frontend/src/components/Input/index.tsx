@@ -2,7 +2,6 @@ import { memo, type InputHTMLAttributes } from 'react';
 import { Spinner } from '@/components/Icon';
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
-
   loading?: boolean;
 }
 

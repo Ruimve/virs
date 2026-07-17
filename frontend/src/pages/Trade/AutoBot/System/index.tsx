@@ -6,7 +6,6 @@ import { Progress } from '@/components/Progress';
 import { usageColor } from '@/components/Progress/utils';
 import { StateFeedback } from '@/components/StateFeedback';
 
-
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -29,7 +28,6 @@ function formatUptime(secs: number): string {
   parts.push(`${mins}分钟`);
   return parts.join(' ');
 }
-
 
 interface MiniSparkProps {
   active: boolean;
@@ -64,7 +62,6 @@ const MiniSpark = ({ active, direction }: MiniSparkProps) => {
     </svg>
   );
 };
-
 
 const CpuIcon = () => (
   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
@@ -107,7 +104,6 @@ const LoadIcon = () => (
     <circle cx="12" cy="12" r="4" />
   </svg>
 );
-
 
 interface NetSample {
   total_rx: number;

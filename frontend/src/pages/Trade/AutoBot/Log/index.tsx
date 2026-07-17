@@ -34,13 +34,11 @@ const Log = () => {
     [bot?.id],
   );
 
-
   useEffect(() => {
     loadLogs(1, false);
   }, [loadLogs]);
 
   const hasMore = logs.length < total;
-
 
   useEffect(() => {
     const el = sentinelRef.current;

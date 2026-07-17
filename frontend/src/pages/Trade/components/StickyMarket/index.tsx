@@ -21,7 +21,6 @@ interface CollapsibleMarketPanelProps {
   latestPrice: number;
 }
 
-
 function formatVolume(v: number): string {
   if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(2)}B`;
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
@@ -29,13 +28,11 @@ function formatVolume(v: number): string {
   return v.toFixed(2);
 }
 
-
 function useMarketSummary(klineData: KlineCandle[], timeframe: string) {
   return useMemo(() => {
     if (klineData.length === 0) {
       return { changePct: 0, high: 0, low: 0, volume: 0 };
     }
-
 
     const tfHours: Record<string, number> = {
       '1m': 1 / 60,

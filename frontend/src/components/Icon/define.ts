@@ -2,7 +2,6 @@ import { type SVGProps } from 'react';
 
 export type IconProps = SVGProps<SVGSVGElement>;
 
-
 export const strokeBase = {
   width: 24,
   height: 24,

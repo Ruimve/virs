@@ -6,7 +6,6 @@ export interface LogoProps {
   onClick?: () => void;
 }
 
-
 export const Logo = memo(({ className = '', onClick = fn }: LogoProps) => {
   return (
     <span

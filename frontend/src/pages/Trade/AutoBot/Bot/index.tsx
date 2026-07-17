@@ -18,7 +18,6 @@ import { PositionStats } from './PositionStats';
 import { RecentDecisions } from './RecentDecisions';
 import { RecentTrades } from './RecentTrades';
 
-
 const useRafThrottledPrice = () => {
   const [latestPrice, setLatestPrice] = useState(0);
   const rafRef = useRef<number | undefined>(undefined);
@@ -41,7 +40,6 @@ const useRafThrottledPrice = () => {
 
   return { latestPrice, update };
 };
-
 
 function tradesToMarkers(trades: AutoTrade[]) {
   const markers: Array<{

@@ -13,7 +13,6 @@ export interface PaginatedResponse<T> {
   total_pages: number;
 }
 
-
 export interface UserInfo {
   id: string;
   username: string;
@@ -25,7 +24,6 @@ export interface LoginResponse {
   token: string;
   user: UserInfo;
 }
-
 
 export interface PluginParam {
   name: string;
@@ -45,7 +43,6 @@ export interface Plugin {
   required_timeframes?: string[];
 }
 
-
 export interface AiGeneratedParam {
   name: string;
   label: string;
@@ -64,7 +61,6 @@ export interface AiGenerateResult {
   model: string;
 }
 
-
 export interface PermissionItem {
   name: string;
   label: string;
@@ -77,7 +73,6 @@ export interface PositionModeResult {
   mode: 'hedge' | 'oneway' | null;
   message?: string;
 }
-
 
 export interface BotSummary {
   id: string;
@@ -92,7 +87,6 @@ export interface BotHeaderInfo {
   status: string;
   leverage: number;
 }
-
 
 export interface AutoBot {
   id: string;
@@ -183,7 +177,6 @@ export interface AutoBotStats {
   net_pnl_after_fee: number;
 }
 
-
 export interface GridBot {
   id: string;
   name: string;
@@ -272,7 +265,6 @@ export interface GridBotStats {
   max_loss: number;
 }
 
-
 export interface AnalysisLog {
   id: string;
   bot_id: string;
@@ -302,7 +294,6 @@ export interface AnalysisLog {
   created_at: string;
 }
 
-
 export interface KlineCandle {
   time: number;
   open: number;
@@ -322,19 +313,16 @@ export interface OrderBookData {
   asks: OrderBookEntry[];
 }
 
-
 export interface HealthStatus {
   status: string;
   version?: string;
 }
 
 export interface PaperModeStatus {
-
   paper_mode: boolean | null;
 
   restore_error: string | null;
 }
-
 
 export interface CpuInfo {
   usage_pct: number;

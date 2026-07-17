@@ -8,16 +8,13 @@ export interface ReactChartProps {
   secondsVisible?: boolean;
 }
 
-
 function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | undefined>(undefined);
 
-
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-
 
     const cs = getComputedStyle(el);
     const bgBase = cs.getPropertyValue('--bg-base').trim() || '#ffffff';
@@ -69,9 +66,7 @@ function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartP
       chartRef.current = undefined;
       onLoad(undefined);
     };
-
-  }, [onLoad]);
-
+  }, [secondsVisible, timeVisible, onLoad]);
 
   useEffect(() => {
     const chart = chartRef.current;

@@ -4,7 +4,6 @@ import './style.css';
 export type IconName = 'AssetLoading';
 
 interface Props extends SVGProps<SVGSVGElement> {
-
   size?: number;
 }
 

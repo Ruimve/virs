@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { findActiveBot } from '@/service';
 import { AssetLoading } from '@/components/Transition/Icon';
 
-
 type Stage = 'auth' | 'session' | 'routing';
 
 const STAGE_LABEL: Record<Stage, string> = {
@@ -32,7 +31,6 @@ const Loading = () => {
       navigate('/setup/bot-type', { replace: true });
     }
   }, [navigate]);
-
 
   useEffect(() => {
     startStage();

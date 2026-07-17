@@ -1,7 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { createWsInstance, useWsHook } from '../../lib/ws';
 
-
 export interface PositionWsEventRaw {
   type: string;
   symbol: string;
@@ -42,7 +41,6 @@ export interface PositionWsEvent {
   updatedAt: string;
 }
 
-
 const positionInst = createWsInstance<PositionWsEvent>();
 
 function getPositionWsUrl(): string {
@@ -77,14 +75,12 @@ const parsePositionWs = (raw: string): PositionWsEvent | null => {
   }
 };
 
-
 export function usePositionWs(
   symbol: string | undefined,
   onEvent: (event: PositionWsEvent) => void,
 ): { connected: boolean } {
   const symbolRef = useRef(symbol);
   symbolRef.current = symbol;
-
 
   const handleReconnect = useCallback(() => {
     const sym = symbolRef.current;
@@ -101,7 +97,6 @@ export function usePositionWs(
     handleReconnect,
   );
 
-
   useEffect(() => {
     if (!symbol) return;
 
@@ -109,7 +104,6 @@ export function usePositionWs(
       positionInst.ws.send(JSON.stringify({ action: 'subscribe', symbol }));
     }
     return () => {
-
       if (positionInst.ws?.readyState === WebSocket.OPEN) {
         positionInst.ws.send(JSON.stringify({ action: 'unsubscribe', symbol }));
       }

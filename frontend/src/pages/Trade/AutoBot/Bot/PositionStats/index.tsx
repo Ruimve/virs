@@ -10,7 +10,6 @@ interface Props {
   latestPrice: number;
 }
 
-
 export const PositionStats = memo(({ bot, latestPrice }: Props) => {
   const { position } = usePositionContext();
 
@@ -18,7 +17,6 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
     () => !!position && position.status === 'open' && position.size > 0,
     [position],
   );
-
 
   const unrealizedPnl = useMemo(() => {
     if (!hasPosition || latestPrice <= 0) return 0;

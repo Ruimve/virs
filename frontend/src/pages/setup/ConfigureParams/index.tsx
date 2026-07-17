@@ -6,7 +6,6 @@ import { WizardStep } from '../context/WizardContext/consts';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
 
-
 const GRID_PARAMS = [
   {
     key: 'symbol',
@@ -45,7 +44,6 @@ const GRID_PARAMS = [
   },
   { key: 'leverage', label: 'Leverage', type: 'number' as const, placeholder: '5', required: true },
 ];
-
 
 const AUTO_PARAMS = [
   {

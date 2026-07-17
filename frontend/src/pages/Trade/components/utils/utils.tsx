@@ -93,10 +93,8 @@ export const tradeTypeColor = (t: string) => {
   return 'text-on-surface-tertiary';
 };
 
-
 export const pnlColor = (v: number): string =>
   v > 0 ? 'text-success-text' : v < 0 ? 'text-danger-text' : 'text-on-surface';
-
 
 export const actionVariant = (
   action: string | undefined,
@@ -115,7 +113,6 @@ export const actionVariant = (
   };
   return map[action] || 'neutral';
 };
-
 
 export function formatVolume(v: number): string {
   if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(2)}B`;

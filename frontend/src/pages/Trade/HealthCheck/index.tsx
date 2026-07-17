@@ -18,7 +18,6 @@ import { useHeader } from '../Layout/Header/HeaderContext';
 import type { CheckData, CheckItem, CheckKey } from './define';
 import CheckDetail from './CheckDetail';
 
-
 const INITIAL_CHECKS: CheckItem[] = [
   {
     key: 'llm',
@@ -72,7 +71,6 @@ const HealthCheck = () => {
     },
     [],
   );
-
 
   const runLlmCheck = useCallback(async () => {
     updateCheck('llm', 'verifying', '');
@@ -209,7 +207,6 @@ const HealthCheck = () => {
     trading: runTradingCheck,
   };
 
-
   const runChecks = useCallback(async () => {
     setRunning(true);
     await Promise.allSettled([
@@ -228,9 +225,7 @@ const HealthCheck = () => {
 
   useEffect(() => {
     runChecks();
-
-  }, []);
-
+  }, [runChecks]);
 
   const total = checks.length;
   const passed = checks.filter((c) => c.status === 'done').length;
@@ -256,7 +251,6 @@ const HealthCheck = () => {
   const handleContinue = () => {
     navigate(`/trade/${param.botType}/${bot?.id}`, { replace: true });
   };
-
 
   const tone = running ? 'accent' : failed === 0 ? 'success' : 'warning';
   const toneClasses: Record<string, string> = {

@@ -31,7 +31,6 @@ export const FlowStep = memo(
   }: FlowStepProps) => {
     const [expanded, setExpanded] = useState(false);
 
-
     useEffect(() => {
       if (status === 'active' || status === 'verifying' || status === 'error') {
         setExpanded(true);

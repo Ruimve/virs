@@ -7,7 +7,6 @@ interface FlashPriceProps {
   flashDuration?: number;
 }
 
-
 export const FlashPrice = memo(
   ({ price, className = '', flashDuration = 1500 }: FlashPriceProps) => {
     const prevRef = useRef<number>(price);
@@ -20,7 +19,6 @@ export const FlashPrice = memo(
         if (price > prev) setFlash('up');
         else if (price < prev) setFlash('down');
       }
-
 
       const timer = setTimeout(() => setFlash(null), flashDuration);
       return () => clearTimeout(timer);

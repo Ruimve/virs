@@ -21,7 +21,6 @@ const ConfigureLlm = () => {
   const { wizard, updateWizard, advanceStep } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.ConfigureLlm);
 
-
   const [step1Status, setStep1Status] = useState<FlowStepStatus>('active');
   const [step1Error, setStep1Error] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
@@ -29,17 +28,14 @@ const ConfigureLlm = () => {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [model, setModel] = useState(wizard.llm_model);
 
-
   const [step2Status, setStep2Status] = useState<FlowStepStatus>('pending');
   const [step2Error, setStep2Error] = useState<string | null>(null);
-
 
   const [step3Status, setStep3Status] = useState<FlowStepStatus>('pending');
   const [step3Error, setStep3Error] = useState<string | null>(null);
   const [balance, setBalance] = useState<BalanceInfo | null>(null);
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
 
   const resetSteps = useCallback(() => {
     setStep1Status('active');
@@ -49,7 +45,6 @@ const ConfigureLlm = () => {
     setStep3Status('pending');
     setStep3Error(null);
   }, []);
-
 
   const startStep3 = useCallback(async () => {
     setStep3Status('verifying');
@@ -70,7 +65,6 @@ const ConfigureLlm = () => {
       setStep3Status('error');
     }
   }, []);
-
 
   const startStep2 = useCallback(async () => {
     setStep2Status('verifying');
@@ -113,7 +107,6 @@ const ConfigureLlm = () => {
     }
   }, [apiKey, model, startStep2]);
 
-
   const fetchModels = useCallback(async () => {
     try {
       const result = await fetchAiModels();
@@ -143,7 +136,6 @@ const ConfigureLlm = () => {
       if (!inputValue) return;
 
       resetSteps();
-
 
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(async () => {
@@ -229,9 +221,7 @@ const ConfigureLlm = () => {
     return (
       <div className="space-y-2">
         {step2Status === 'verifying' && (
-          <p className="text-xs text-on-surface-tertiary">
-            Testing connection to DeepSeek API...
-          </p>
+          <p className="text-xs text-on-surface-tertiary">Testing connection to DeepSeek API...</p>
         )}
         {step2Status === 'error' && (
           <p className="text-xs text-danger-text">{step2Error || 'Connection failed'}</p>

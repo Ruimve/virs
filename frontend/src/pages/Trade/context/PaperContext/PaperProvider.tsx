@@ -3,7 +3,6 @@ import { getPaperStatus } from '@/service';
 import { PaperContext } from '.';
 
 export function PaperProvider({ children }: { children: ReactNode }) {
-
   const [enabled, setEnabled] = useState<boolean | null>(null);
 
   const refresh = useCallback(async () => {

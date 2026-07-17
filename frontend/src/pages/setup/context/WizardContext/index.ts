@@ -16,7 +16,6 @@ export const WizardContext = createContext<WizardContextType>({
   resetWizard: () => {},
 });
 
-
 export const useWizardGuard = (currentStep: WizardStepValue, requiredStep: WizardStepValue) => {
   const navigate = useNavigate();
   useEffect(() => {

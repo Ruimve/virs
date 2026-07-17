@@ -1,6 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 
-
 export interface WsInstance<T> {
   ws: WebSocket | null;
   listeners: Set<(event: T) => void>;
@@ -33,8 +32,6 @@ export function connectWs<T>(
   getUrl: () => string,
   parse: (raw: string) => T | null,
 ) {
-
-
   if (inst.ws && inst.ws.readyState < WebSocket.CLOSING) return;
 
   try {
@@ -104,14 +101,11 @@ export function useWsHook<T>(
   onEvent: (event: T) => void,
   onReconnect?: () => void,
 ): { connected: boolean } {
-
-
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
   const onReconnectRef = useRef(onReconnect);
   onReconnectRef.current = onReconnect;
-
 
   const stableListener = useCallback((event: T) => {
     onEventRef.current(event);
@@ -121,20 +115,17 @@ export function useWsHook<T>(
     onReconnectRef.current?.();
   }, []);
 
-
   const [connected, setConnected] = useState(() => inst.ws?.readyState === WebSocket.OPEN);
 
   const stableStateChange = useCallback(() => {
     setConnected(inst.ws?.readyState === WebSocket.OPEN);
   }, [inst.ws?.readyState]);
 
-
   useEffect(() => {
     inst.refCount++;
     inst.listeners.add(stableListener);
     inst.reconnectCallbacks.add(stableReconnect);
     inst.stateChangeCallbacks.add(stableStateChange);
-
 
     if (!inst.ws || inst.ws.readyState === WebSocket.CLOSED) {
       inst.reconnectAttempts = 0;
@@ -149,13 +140,12 @@ export function useWsHook<T>(
       inst.stateChangeCallbacks.delete(stableStateChange);
       inst.refCount--;
 
-
       if (inst.refCount <= 0) {
         disconnectWs(inst);
         setConnected(false);
       }
     };
-  }, []);
+  }, [inst, getUrl, parse, stableListener, stableReconnect, stableStateChange]);
 
   return { connected };
 }

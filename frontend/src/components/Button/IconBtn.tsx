@@ -11,7 +11,6 @@ const sizeStyles = {
   md: 'p-1.5',
 };
 
-
 export const IconBtn = memo(({ children, size = 'md', className = '', ...props }: IconBtnProps) => (
   <button
     type="button"

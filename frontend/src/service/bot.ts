@@ -11,7 +11,6 @@ import type {
   AnalysisLogsPage,
 } from './types';
 
-
 export async function createGridBot(params: {
   symbol: string;
   exchange: string;
@@ -65,7 +64,6 @@ export async function getGridAnalysisLogs(
   );
 }
 
-
 export async function createAutoBot(params: {
   symbol: string;
   exchange: string;
@@ -115,7 +113,6 @@ export async function getAutoAnalysisLogs(
   );
 }
 
-
 export async function findActiveBot(): Promise<BotSummary | null> {
   try {
     const [gridRes, autoRes] = await Promise.all([
@@ -130,8 +127,8 @@ export async function findActiveBot(): Promise<BotSummary | null> {
       const bot = gridRes.data.items.find((b) => b.status === 'running') || gridRes.data.items[0];
       return { id: bot.id, bot_type: 'grid' };
     }
+    return null;
   } catch {
-
+    return null;
   }
-  return null;
 }

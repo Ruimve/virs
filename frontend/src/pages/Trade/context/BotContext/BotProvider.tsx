@@ -15,10 +15,8 @@ type Bot = {
   gridLevels: GridLevelInfo[];
 };
 
-
 const fetchBot = (botType: string, botId: string): Promise<Bot> => {
   if (!botId) {
-
     return Promise.resolve({ bot: null, gridLevels: [] });
   }
 
@@ -33,7 +31,6 @@ const fetchBot = (botType: string, botId: string): Promise<Bot> => {
       gridLevels: res?.data?.grid_levels || [],
     }));
   } else {
-
     return Promise.resolve({ bot: null, gridLevels: [] });
   }
 };

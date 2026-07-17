@@ -6,7 +6,6 @@ import { Progress } from '@/components/Progress';
 import { usageColor } from '@/components/Progress/utils';
 import { StateFeedback } from '@/components/StateFeedback';
 
-
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -30,7 +29,6 @@ function formatUptime(secs: number): string {
   return parts.join(' ');
 }
 
-
 interface NetSample {
   total_rx: number;
   total_tx: number;
@@ -50,7 +48,6 @@ const System = () => {
       if (res.success && res.data) {
         setInfo(res.data);
         setError(null);
-
 
         const now = Date.now();
         const newRates: Record<string, { rx: number; tx: number }> = {};
@@ -194,7 +191,6 @@ const System = () => {
             { label: '5 分钟', value: info.load_average.five },
             { label: '15 分钟', value: info.load_average.fifteen },
           ].map(({ label, value }) => {
-
             const loadPct = info.cpu.core_count > 0 ? (value / info.cpu.core_count) * 100 : 0;
             return (
               <div key={label}>

@@ -20,7 +20,6 @@ export interface KlineWsEventRaw {
   event_type: 'Update' | 'Closed' | 'Backfilled';
 }
 
-
 export interface KlineWsEvent {
   exchange: string;
   symbol: string;
@@ -35,7 +34,6 @@ export interface KlineWsEvent {
   };
   event_type: 'Update' | 'Closed' | 'Backfilled';
 }
-
 
 const klineInst = createWsInstance<KlineWsEvent>();
 
@@ -63,14 +61,12 @@ const parseKlineWs = (raw: string): KlineWsEvent | null => {
   }
 };
 
-
 export function useKlineWs(
   onEvent: (event: KlineWsEvent) => void,
   onReconnect?: () => void,
   timeframe?: string,
 ): { connected: boolean } {
   const { connected } = useWsHook(klineInst, getKlineWsUrl, parseKlineWs, onEvent, onReconnect);
-
 
   useEffect(() => {
     if (!connected) return;

@@ -8,7 +8,6 @@ interface Props {
   botId: string;
 }
 
-
 export const RecentTrades = memo(({ botId }: Props) => {
   const [trades, setTrades] = useState<GridTrade[]>([]);
   const [, setLoading] = useState(true);

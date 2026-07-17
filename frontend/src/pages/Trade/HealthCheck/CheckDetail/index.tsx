@@ -20,9 +20,7 @@ const CheckDetail = ({ item, onRetry = fn }: Props) => {
   if (status === 'error') {
     return (
       <div className="space-y-2">
-        <p className="text-xs text-danger-text leading-relaxed">
-          {data?.message || item.detail}
-        </p>
+        <p className="text-xs text-danger-text leading-relaxed">{data?.message || item.detail}</p>
         <Button variant="ghost" size="xs" responsive={false} onClick={onRetry}>
           <Spinner className="w-3 h-3" />
           Retry

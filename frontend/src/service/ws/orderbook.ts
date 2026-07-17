@@ -1,7 +1,6 @@
 import { createWsInstance, useWsHook } from '../../lib/ws';
 import type { OrderBookData } from '../types';
 
-
 export interface OrderBookWsEventRaw {
   exchange: string;
   symbol: string;
@@ -16,7 +15,6 @@ export interface OrderBookWsEvent {
   orderBook: OrderBookData;
   timestamp: number;
 }
-
 
 const orderbookInst = createWsInstance<OrderBookWsEvent>();
 

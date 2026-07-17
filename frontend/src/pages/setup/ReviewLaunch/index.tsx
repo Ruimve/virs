@@ -25,7 +25,6 @@ const ReviewLaunch = () => {
     const isGrid = wizard.bot_type === 'grid';
     const botParams = wizard.bot_params;
     try {
-
       let botId: string;
       if (isGrid) {
         const result = await createGridBot({
@@ -60,7 +59,6 @@ const ReviewLaunch = () => {
         botId = result.data.id;
       }
 
-
       if (isGrid) {
         const result = await startGridBot(botId);
         if (!result.success) {
@@ -74,7 +72,6 @@ const ReviewLaunch = () => {
           return;
         }
       }
-
 
       updateWizard({ paper_mode: paperMode, bot_id: botId });
       startTransition(() => {

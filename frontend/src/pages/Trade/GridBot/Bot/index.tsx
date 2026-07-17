@@ -19,7 +19,6 @@ import { LevelsOverview } from './LevelsOverview';
 import { RecentTrades } from './RecentTrades';
 import { PositionStats } from './PositionStats';
 
-
 const useRafThrottledPrice = () => {
   const [latestPrice, setLatestPrice] = useState(0);
   const rafRef = useRef<number | undefined>(undefined);
@@ -42,7 +41,6 @@ const useRafThrottledPrice = () => {
 
   return { latestPrice, update };
 };
-
 
 function tradesToMarkers(trades: GridTrade[]) {
   const cs = getComputedStyle(document.documentElement);
@@ -85,7 +83,6 @@ const Bot = () => {
 
   const loadTrades = useCallback(async (botId: string) => {
     try {
-
       const res = await getGridTrades(botId, 1, 50);
       if (res.data?.trades) setGridTrades(res.data.trades);
     } catch (e) {

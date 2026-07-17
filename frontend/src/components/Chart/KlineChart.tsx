@@ -11,9 +11,7 @@ import {
 import ReactChart from './ReactChart';
 import { toLocaleTime } from './ReactChart/locale/zh_CN';
 
-
 export interface KlineChartHandle {
-
   update: (candle: {
     time: number;
     open: number;
@@ -23,7 +21,6 @@ export interface KlineChartHandle {
     volume?: number;
   }) => void;
 }
-
 
 interface OverlayLine {
   name: string;
@@ -53,7 +50,6 @@ interface KlineChartProps {
   overlays?: OverlayLine[];
 }
 
-
 const MOBILE_BREAKPOINT = 768;
 
 function getVisibleRangeWidth() {
@@ -62,7 +58,6 @@ function getVisibleRangeWidth() {
   }
   return 100;
 }
-
 
 function applyVisibleRange(chart: IChartApi | undefined, dataLength: number) {
   if (!chart) return;
@@ -83,7 +78,6 @@ function applyVisibleRange(chart: IChartApi | undefined, dataLength: number) {
   }
 }
 
-
 const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineChart(
   { data, height, markers, overlays },
   ref,
@@ -92,11 +86,9 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | undefined>(undefined);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | undefined>(undefined);
 
-
   const markersPluginRef = useRef<{ detach: () => void } | null>(null);
   const overlaySeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
   const initializedRef = useRef(false);
-
 
   const colorsRef = useRef({
     up: '',
@@ -115,7 +107,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     };
   }, []);
 
-
   useImperativeHandle(
     ref,
     () => ({
@@ -131,7 +122,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
           close: candle.close,
         };
         candleSeries.update(bar);
-
 
         const volumeSeries = volumeSeriesRef.current;
         if (volumeSeries && candle.volume !== undefined) {
@@ -151,7 +141,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     chartRef.current = c;
   }, []);
 
-
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart || data.length === 0) return;
@@ -161,7 +150,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     if (isFirstInit) {
       initializedRef.current = true;
       readChartColors();
-
 
       let timeVisible = true;
       const secondsVisible = false;
@@ -173,7 +161,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
 
       const c = colorsRef.current;
 
-
       const candleSeries = chart.addSeries(CandlestickSeries, {
         upColor: c.up,
         downColor: c.down,
@@ -183,7 +170,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
         wickUpColor: c.up,
       });
       candleSeriesRef.current = candleSeries;
-
 
       if (data[0].volume !== undefined) {
         const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -200,7 +186,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     const c = colorsRef.current;
     const candleSeries = candleSeriesRef.current!;
 
-
     const chartData: CandlestickData[] = data.map((item) => ({
       time: toLocaleTime(item.time),
       open: item.open,
@@ -209,7 +194,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       close: item.close,
     }));
     candleSeries.setData(chartData);
-
 
     const volumeSeries = volumeSeriesRef.current;
     if (volumeSeries) {
@@ -221,7 +205,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
         })),
       );
     }
-
 
     if (markersPluginRef.current) {
       markersPluginRef.current.detach();
@@ -239,7 +222,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
         })),
       );
     }
-
 
     for (const series of overlaySeriesRef.current) {
       chart.removeSeries(series);
@@ -263,7 +245,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
         overlaySeriesRef.current.push(lineSeries);
       }
     }
-
 
     applyVisibleRange(chart, data.length);
   }, [data, markers, overlays, readChartColors]);

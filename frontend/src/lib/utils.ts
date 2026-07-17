@@ -2,7 +2,6 @@ export function formatNumber(n: number, decimals = 2): string {
   return n.toFixed(decimals);
 }
 
-
 export function formatDateTime(s: string): string {
   if (!s) return '-';
   try {
@@ -20,7 +19,6 @@ export function formatDateTime(s: string): string {
   }
 }
 
-
 export function formatDate(dateStr: string): string {
   try {
     const d = new Date(dateStr);
@@ -36,11 +34,9 @@ export function formatDate(dateStr: string): string {
   }
 }
 
-
 export function truncateId(id: string, maxLen = 8): string {
   return id.length > maxLen ? `${id.slice(0, maxLen)}...` : id;
 }
-
 
 export function debounce<T extends (...args: any[]) => any>(
   fn: T,

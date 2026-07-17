@@ -4,7 +4,6 @@ import './style.css';
 export type IconName = 'aiThinking';
 
 interface Props extends SVGProps<SVGSVGElement> {
-
   size?: number;
 }
 

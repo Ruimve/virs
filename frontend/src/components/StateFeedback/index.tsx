@@ -32,7 +32,6 @@ export const StateFeedback = memo(({ type, text, icon }: StateFeedbackProps) => 
     );
   }
 
-
   return (
     <div className="h-full flex items-center justify-center text-danger-text text-sm">
       {text || '发生错误'}
