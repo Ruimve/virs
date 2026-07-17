@@ -270,7 +270,6 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             funding_rate,
             funding_next_time: "N/A".to_string(),
             min_qty,
-            liquidation_price: None,
             indicators_json: serde_json::to_value(&ind).unwrap_or_default(),
         }
     }
@@ -570,24 +569,11 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
         };
 
 
-        let liquidation_price = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
-            match ex.get_positions(Some(symbol)).await {
-                Ok(positions) => positions
-                    .iter()
-                    .find(|p| p.symbol.as_str() == symbol && p.size.abs() > 0.0)
-                    .and_then(|p| p.liquidation_price),
-                Err(_) => None,
-            }
-        } else {
-            None
-        };
-
         MarketSnapshot {
             current_price: effective_price,
             funding_rate,
             funding_next_time,
             min_qty,
-            liquidation_price,
             indicators_json: serde_json::to_value(&ind).unwrap_or_default(),
         }
     }

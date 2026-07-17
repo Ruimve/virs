@@ -7,17 +7,14 @@ export interface PositionWsEventRaw {
   exchange: string;
   side: string;
   status: string;
-  size: number;
+  quantity: number;
   entry_price: number;
-  current_price: number;
   leverage: number;
-  margin: number;
-  unrealized_pnl: number;
   realized_pnl: number;
   stop_loss: number | null;
   take_profit: number | null;
-  liquidation_price: number | null;
   position_id: string;
+  created_at: string;
   updated_at: string;
 }
 
@@ -27,17 +24,14 @@ export interface PositionWsEvent {
   exchange: string;
   side: string;
   status: string;
-  size: number;
+  quantity: number;
   entryPrice: number;
-  currentPrice: number;
   leverage: number;
-  margin: number;
-  unrealizedPnl: number;
   realizedPnl: number;
   stopLoss: number | null;
   takeProfit: number | null;
-  liquidationPrice: number | null;
   positionId: string;
+  createdAt: string;
   updatedAt: string;
 }
 
@@ -57,17 +51,14 @@ const parsePositionWs = (raw: string): PositionWsEvent | null => {
       exchange: json.exchange,
       side: json.side,
       status: json.status,
-      size: json.size,
+      quantity: json.quantity,
       entryPrice: json.entry_price,
-      currentPrice: json.current_price,
       leverage: json.leverage,
-      margin: json.margin,
-      unrealizedPnl: json.unrealized_pnl,
       realizedPnl: json.realized_pnl,
       stopLoss: json.stop_loss,
       takeProfit: json.take_profit,
-      liquidationPrice: json.liquidation_price,
       positionId: json.position_id,
+      createdAt: json.created_at,
       updatedAt: json.updated_at,
     };
   } catch {

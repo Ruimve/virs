@@ -10,7 +10,7 @@ export const PositionProvider = ({ children }: { children: ReactNode }) => {
   usePositionWs(bot?.symbol, (event) => {
     if (event.symbol !== bot?.symbol) return;
 
-    if (event.status === 'closed' || event.size <= 0) {
+    if (event.status === 'closed' || event.quantity <= 0) {
       setPosition(null);
       return;
     }

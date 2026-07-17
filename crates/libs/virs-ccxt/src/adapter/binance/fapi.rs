@@ -779,31 +779,14 @@ pub async fn fetch_positions(
             };
 
 
-            // 未实现盈亏，缺失则报错 (无法计算 PnL)
-            let unrealized_pnl = match parse_f64(p, "unRealizedProfit") {
-                Some(v) => v,
-                None => {
-                    tracing::error!(
-                        symbol = %symbol_str,
-                        "positionRisk unRealizedProfit missing — cannot calculate PnL"
-                    );
-                    return Err(ExchangeError::no_data(format!(
-                        "unRealizedProfit missing for symbol {} in positionRisk response",
-                        symbol_str
-                    )));
-                }
-            };
-
             positions.push(Position {
                 // 转回统一格式符号 (如 BTCUSDT -> BTC/USDT)
                 symbol: crate::adapter::binance::BinanceExchange::to_unified_symbol(&symbol_str),
                 side,
-                size,
+                quantity: size,
                 entry_price,
                 leverage,
-                unrealized_pnl,
                 margin_mode,
-                liquidation_price: parse_f64(p, "liquidationPrice"), // 强平价
                 info: p.clone(),
             });
     }

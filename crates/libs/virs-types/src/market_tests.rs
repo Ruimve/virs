@@ -34,14 +34,12 @@ fn m10_3_long_loss() {
 }
 
 
-fn make_exchange_position(side: PositionSide, entry: f64, size: f64) -> ExchangePosition {
+fn make_exchange_position(side: PositionSide, entry: f64, quantity: f64) -> ExchangePosition {
     ExchangePosition {
         symbol: "BTC/USDT".into(),
         side,
-        size,
+        quantity,
         entry_price: entry,
         leverage: 10,
-        unrealized_pnl: 0.0,
-        liquidation_price: None,
     }
 }

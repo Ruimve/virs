@@ -14,23 +14,25 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
   const { position } = usePositionContext();
 
   const hasPosition = useMemo(
-    () => !!position && position.status === 'open' && position.size > 0,
+    () => !!position && position.status === 'open' && position.quantity > 0,
     [position],
   );
 
   const unrealizedPnl = useMemo(() => {
     if (!hasPosition || latestPrice <= 0) return 0;
     const dir = position!.side === 'long' ? 1 : -1;
-    return (latestPrice - position!.entryPrice) * position!.size * dir;
+    return (latestPrice - position!.entryPrice) * position!.quantity * dir;
   }, [hasPosition, position, latestPrice]);
 
-  const usedMargin = hasPosition ? position!.margin : 0;
+  const usedMargin = hasPosition
+    ? (position!.quantity * position!.entryPrice) / position!.leverage
+    : 0;
   const accountBalance = bot.initial_capital + bot.total_pnl + unrealizedPnl;
   const freeMargin = accountBalance - usedMargin;
   const unrealizedPct = useMemo(() => {
-    if (!hasPosition || position!.margin <= 0) return 0;
-    return (unrealizedPnl / position!.margin) * 100;
-  }, [hasPosition, position, unrealizedPnl]);
+    if (!hasPosition || usedMargin <= 0) return 0;
+    return (unrealizedPnl / usedMargin) * 100;
+  }, [hasPosition, usedMargin, unrealizedPnl]);
 
   return (
     <div className="border-b border-line-subtle">
@@ -94,7 +96,7 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
         </Stat>
         <Stat label="持仓量">
           {hasPosition ? (
-            <span className="text-on-surface">{position!.size.toFixed(4)}</span>
+            <span className="text-on-surface">{position!.quantity.toFixed(4)}</span>
           ) : (
             <span className="text-on-surface-muted">-</span>
           )}
@@ -116,9 +118,12 @@ export const PositionStats = memo(({ bot, latestPrice }: Props) => {
             <span className="text-on-surface-muted">-</span>
           )}
         </Stat>
-        <Stat label="强平价">
-          {hasPosition && position!.liquidationPrice != null ? (
-            <span className="text-danger-text">{position!.liquidationPrice.toFixed(2)}</span>
+        <Stat label="已实现盈亏">
+          {hasPosition ? (
+            <span className={pnlColor(position!.realizedPnl)}>
+              {position!.realizedPnl >= 0 ? '+' : ''}
+              {position!.realizedPnl.toFixed(2)}
+            </span>
           ) : (
             <span className="text-on-surface-muted">-</span>
           )}

@@ -51,21 +51,6 @@ pub struct PaperExchangeAdapter {
 }
 
 
-pub fn compute_paper_liquidation_price(
-    entry_price: f64,
-    side: PositionSide,
-    leverage: u32,
-) -> Option<f64> {
-    if leverage == 0 || entry_price <= 0.0 {
-        return None;
-    }
-    let ratio = 1.0 / leverage as f64;
-    Some(match side {
-        PositionSide::Long => entry_price * (1.0 - ratio),
-        PositionSide::Short => entry_price * (1.0 + ratio),
-    })
-}
-
 impl PaperExchangeAdapter {
     pub fn new(name: &str, market_type: MarketType, initial_balance: f64) -> Self {
         Self {
@@ -204,7 +189,6 @@ impl PaperExchangeAdapter {
                 }
             }
         }
-        self.update_unrealized_pnl(symbol, current_price).await;
     }
 
     async fn update_position_on_fill(&self, order: &PaperPendingOrder, fill_price: f64) {
@@ -254,12 +238,12 @@ impl PaperExchangeAdapter {
         let old_pos_info = self
             .positions
             .get(&key)
-            .map(|p| (p.side, p.entry_price, p.size));
+            .map(|p| (p.side, p.entry_price, p.quantity));
 
 
         let realized_pnl: f64 = match (&old_pos_info, is_opening) {
-            (Some((side, entry, old_size)), false) => {
-                let closed = order.amount.min(*old_size);
+            (Some((side, entry, old_qty)), false) => {
+                let closed = order.amount.min(*old_qty);
                 match side {
                     PositionSide::Long => (fill_price - entry) * closed,
                     PositionSide::Short => (entry - fill_price) * closed,
@@ -273,43 +257,36 @@ impl PaperExchangeAdapter {
             Some(mut pos) => {
                 if is_opening {
 
-                    let old_size = pos.size;
-                    let new_size = old_size + size_delta;
-                    let total_cost = pos.entry_price * old_size + fill_price * size_delta;
-                    pos.size = new_size;
-                    pos.entry_price = total_cost / new_size;
+                    let old_qty = pos.quantity;
+                    let new_qty = old_qty + size_delta;
+                    let total_cost = pos.entry_price * old_qty + fill_price * size_delta;
+                    pos.quantity = new_qty;
+                    pos.entry_price = total_cost / new_qty;
                     pos.leverage = leverage;
-                    pos.liquidation_price =
-                        compute_paper_liquidation_price(pos.entry_price, pos.side, leverage);
                 } else {
 
-                    let new_size = pos.size - size_delta;
-                    if new_size < 1e-8 {
+                    let new_qty = pos.quantity - size_delta;
+                    if new_qty < 1e-8 {
 
                         drop(pos);
                         self.positions.remove(&key);
                     } else {
 
-                        pos.size = new_size;
+                        pos.quantity = new_qty;
                         pos.leverage = leverage;
-                        pos.liquidation_price =
-                            compute_paper_liquidation_price(pos.entry_price, pos.side, leverage);
                     }
                 }
             }
             None => {
 
-                let liq_price = compute_paper_liquidation_price(fill_price, position_side, leverage);
                 self.positions.insert(
                     key.clone(),
                     PaperPosition {
                         symbol: order.symbol.clone(),
                         side: position_side,
-                        size: size_delta,
+                        quantity: size_delta,
                         entry_price: fill_price,
                         leverage,
-                        unrealized_pnl: 0.0,
-                        liquidation_price: liq_price,
                     },
                 );
             }
@@ -326,16 +303,6 @@ impl PaperExchangeAdapter {
             let margin_release = margin.min(balance.used);
             balance.used -= margin_release;
             balance.free += margin_release + realized_pnl;
-        }
-    }
-
-    async fn update_unrealized_pnl(&self, symbol: &str, current_price: f64) {
-        for mut entry in self.positions.iter_mut() {
-            let pos = entry.value_mut();
-            if pos.symbol != symbol {
-                continue;
-            }
-            pos.unrealized_pnl = pos.unrealized_pnl_at(current_price);
         }
     }
 }
@@ -383,18 +350,16 @@ impl ExchangePe for PaperExchangeAdapter {
             .iter()
             .filter(|e| {
                 let pos = e.value();
-                symbol.is_none_or(|s| pos.symbol == s) && pos.size.abs() > 1e-8
+                symbol.is_none_or(|s| pos.symbol == s) && pos.quantity.abs() > 1e-8
             })
             .map(|e| {
                 let pos = e.value();
                 ExchangePosition {
                     symbol: pos.symbol.clone(),
                     side: pos.side,
-                    size: pos.size,
+                    quantity: pos.quantity,
                     entry_price: pos.entry_price,
                     leverage: pos.leverage,
-                    unrealized_pnl: pos.unrealized_pnl,
-                    liquidation_price: pos.liquidation_price,
                 }
             })
             .collect())
@@ -611,7 +576,7 @@ impl ExchangePe for PaperExchangeAdapter {
     async fn restore_positions(&self, positions: Vec<ExchangePosition>) {
         for pos in positions {
 
-            if pos.size.abs() < 1e-8 {
+            if pos.quantity.abs() < 1e-8 {
                 continue;
             }
             let key = format!("{}:{:?}", pos.symbol, pos.side);
@@ -620,11 +585,9 @@ impl ExchangePe for PaperExchangeAdapter {
                 PaperPosition {
                     symbol: pos.symbol.clone(),
                     side: pos.side,
-                    size: pos.size,
+                    quantity: pos.quantity,
                     entry_price: pos.entry_price,
                     leverage: pos.leverage,
-                    unrealized_pnl: pos.unrealized_pnl,
-                    liquidation_price: pos.liquidation_price,
                 },
             );
 

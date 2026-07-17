@@ -143,7 +143,6 @@ pub struct MarketSnapshot {
     pub funding_rate: f64,
     pub funding_next_time: String,
     pub min_qty: f64,
-    pub liquidation_price: Option<f64>,
 
     pub indicators_json: serde_json::Value,
 }

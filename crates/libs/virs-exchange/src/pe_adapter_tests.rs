@@ -168,20 +168,16 @@ fn pe9_1_position_normal() {
     let ep = models::ExchangePosition {
         symbol: "BTC/USDT".into(),
         side: models::PositionSide::Long,
-        size: 1.0,
+        quantity: 1.0,
         entry_price: 50000.0,
         leverage: 10,
-        unrealized_pnl: 500.0,
-        liquidation_price: Some(45000.0),
     };
     let result: ExchangePosition = convert_exchange_position(&ep);
     assert_eq!(result.symbol, "BTC/USDT");
     assert_eq!(result.side, PositionSide::Long);
-    assert_eq!(result.size, 1.0);
+    assert_eq!(result.quantity, 1.0);
     assert_eq!(result.entry_price, 50000.0);
     assert_eq!(result.leverage, 10);
-    assert_eq!(result.unrealized_pnl, 500.0);
-    assert_eq!(result.liquidation_price, Some(45000.0));
 }
 
 #[test]
@@ -189,14 +185,11 @@ fn pe9_2_position_no_liquidation() {
     let ep = models::ExchangePosition {
         symbol: "ETH/USDT".into(),
         side: models::PositionSide::Short,
-        size: 5.0,
+        quantity: 5.0,
         entry_price: 3000.0,
         leverage: 5,
-        unrealized_pnl: -100.0,
-        liquidation_price: None,
     };
     let result = convert_exchange_position(&ep);
-    assert_eq!(result.liquidation_price, None);
     assert_eq!(result.side, PositionSide::Short);
 }
 

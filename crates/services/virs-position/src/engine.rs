@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use chrono::Utc;
 use dashmap::DashMap;
@@ -16,7 +16,6 @@ use virs_types::CcxtOrder;
 use virs_error::{VirsError, VirsResult};
 
 use crate::persistence::{position_uuid_v5, PositionPersistence};
-use crate::tracker::PnlTracker;
 
 
 fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
@@ -60,7 +59,6 @@ pub(crate) struct EngineInner {
     pub(crate) pending_orders: DashMap<String, PendingOrder>,
     pub(crate) order_position: DashMap<String, Uuid>,
     pub(crate) event_tx: broadcast::Sender<EngineEvent>,
-    pub(crate) tracker: Mutex<PnlTracker>,
     pub(crate) state: RwLock<EngineState>,
     pub(crate) position_id_index: DashMap<Uuid, (String, String, PositionSide)>,
     pub(crate) persist_max_retries: u32,
@@ -119,7 +117,6 @@ impl PositionEngine {
 
         let inner = EngineInner {
             persistence,
-            tracker: Mutex::new(PnlTracker::new(0.0)),
             state: RwLock::new(EngineState::Created),
             exchange,
             event_tx,
@@ -270,25 +267,20 @@ impl PositionEngine {
                     let now = Utc::now();
                     let position = Position {
                         id: pos_id,
-                        strategy_id: None,
                         exchange: exchange_name.clone(),
                         symbol: order.symbol.clone(),
                         side: order.position_side,
                         status: PositionStatus::Opening,
-                        size: 0.0,
+                        quantity: 0.0,
                         entry_price: 0.0,
-                        current_price: 0.0,
                         leverage: 0,
-                        margin: 0.0,
-                        unrealized_pnl: 0.0,
                         realized_pnl: 0.0,
                         stop_loss: None,
                         take_profit: None,
-                        liquidation_price: None,
-                        opened_at: now,
+                        client_order_id: Some(order.client_order_id.clone()),
+                        created_at: now,
                         updated_at: now,
                         closed_at: None,
-                        metadata: serde_json::Value::Null,
                     };
                     self.inner.position_id_index.insert(pos_id, key.clone());
                     self.inner.positions.insert(key, position);
@@ -302,11 +294,9 @@ impl PositionEngine {
             .map(|p| ExchangePosition {
                 symbol: p.symbol.clone(),
                 side: p.side,
-                size: p.size,
+                quantity: p.quantity,
                 entry_price: p.entry_price,
                 leverage: p.leverage,
-                unrealized_pnl: p.unrealized_pnl,
-                liquidation_price: p.liquidation_price,
             })
             .collect();
         self.inner
@@ -330,13 +320,13 @@ pub(crate) async fn command_loop(
                 symbol,
                 side,
                 order_side,
-                size,
+                quantity,
                 leverage,
                 order_type,
                 price,
                 stop_loss,
                 take_profit,
-                strategy_id,
+                client_order_id,
             } => {
                 handle_open_position(
                     &inner,
@@ -344,13 +334,13 @@ pub(crate) async fn command_loop(
                     symbol,
                     side,
                     order_side,
-                    size,
+                    quantity,
                     leverage,
                     order_type,
                     price,
                     stop_loss,
                     take_profit,
-                    strategy_id,
+                    client_order_id,
                 )
                 .await;
             }
@@ -358,9 +348,9 @@ pub(crate) async fn command_loop(
                 position_id,
                 order_type,
                 price,
-                strategy_id,
+                client_order_id,
             } => {
-                handle_close_position(&inner, position_id, order_type, price, strategy_id).await;
+                handle_close_position(&inner, position_id, order_type, price, client_order_id).await;
             }
             EngineCommand::PlaceOrder { params } => {
                 handle_place_order(&inner, params).await;
@@ -634,10 +624,6 @@ async fn process_order_fill(
         created_at: timestamp,
     };
 
-    {
-        recover_lock(inner.tracker.lock()).record_trade(&trade);
-    }
-
     if pnl != 0.0 {
         if let Some(key) = &pos_key_opt {
             if let Some(mut pos) = inner.positions.get_mut(key) {
@@ -668,26 +654,25 @@ async fn process_order_fill(
             let pos_entry = inner.positions.get(key).map(|r| r.value().clone());
             if let Some(mut position) = pos_entry {
                 if is_close {
-                    position.size -= filled;
-                    if position.size.abs() < 1e-8 {
-                        position.size = 0.0;
+                    position.quantity -= filled;
+                    if position.quantity.abs() < 1e-8 {
+                        position.quantity = 0.0;
                         position.status = PositionStatus::Closed;
                         position.closed_at = Some(timestamp);
                     } else {
                         position.status = PositionStatus::Open;
                     }
                 } else {
-                    let old_size = position.size;
-                    position.size += filled;
+                    let old_qty = position.quantity;
+                    position.quantity += filled;
                     if avg_price > 0.0 {
-                        if old_size > 0.0 && position.entry_price > 0.0 {
+                        if old_qty > 0.0 && position.entry_price > 0.0 {
                             let total_cost =
-                                position.entry_price * old_size + avg_price * filled;
-                            position.entry_price = total_cost / position.size;
+                                position.entry_price * old_qty + avg_price * filled;
+                            position.entry_price = total_cost / position.quantity;
                         } else {
                             position.entry_price = avg_price;
                         }
-                        position.current_price = avg_price;
                     }
                     position.status = PositionStatus::Open;
                 }
@@ -725,13 +710,13 @@ pub(crate) async fn handle_open_position(
     symbol: String,
     side: PositionSide,
     _order_side: Side,
-    size: f64,
+    quantity: f64,
     leverage: u32,
     order_type: OrderType,
     price: Option<f64>,
     stop_loss: Option<f64>,
     take_profit: Option<f64>,
-    strategy_id: Option<String>,
+    client_order_id: Option<String>,
 ) {
     let exchange_name = if exchange.is_empty() {
         inner.exchange.name().to_string()
@@ -754,11 +739,11 @@ pub(crate) async fn handle_open_position(
             symbol: symbol.clone(),
             side: resolved_side,
             order_type,
-            amount: size,
+            amount: quantity,
             price,
             position_side: Some(side),
             position_id: Some(position_id),
-            client_order_id: strategy_id.clone(),
+            client_order_id: client_order_id.clone(),
         };
         handle_place_order(inner, params).await;
         return;
@@ -798,25 +783,20 @@ pub(crate) async fn handle_open_position(
     let position_id = position_uuid_v5(&exchange_name, &symbol, side);
     let position = Position {
         id: position_id,
-        strategy_id: strategy_id.clone(),
         exchange: exchange_name.clone(),
         symbol: symbol.clone(),
         side,
         status: PositionStatus::Opening,
-        size: 0.0,
+        quantity: 0.0,
         entry_price: 0.0,
-        current_price: 0.0,
         leverage,
-        margin: 0.0,
-        unrealized_pnl: 0.0,
         realized_pnl: 0.0,
         stop_loss,
         take_profit,
-        liquidation_price: None,
-        opened_at: now,
+        client_order_id: client_order_id.clone(),
+        created_at: now,
         updated_at: now,
         closed_at: None,
-        metadata: serde_json::Value::Null,
     };
 
     inner.position_id_index.insert(position.id, key.clone());
@@ -835,11 +815,11 @@ pub(crate) async fn handle_open_position(
         symbol: symbol.clone(),
         side: resolved_side,
         order_type,
-        amount: size,
+        amount: quantity,
         price,
         position_side: Some(side),
         position_id: Some(position_id),
-        client_order_id: strategy_id.clone(),
+        client_order_id: client_order_id.clone(),
     };
     handle_place_order(inner, params).await;
 }
@@ -850,7 +830,7 @@ pub(crate) async fn handle_close_position(
     position_id: Uuid,
     order_type: OrderType,
     price: Option<f64>,
-    strategy_id: Option<String>,
+    client_order_id: Option<String>,
 ) {
     let position = {
         let pos_key = inner
@@ -877,11 +857,11 @@ pub(crate) async fn handle_close_position(
         }
     };
 
-    if position.size == 0.0 {
+    if position.quantity == 0.0 {
         let client_order_id = Uuid::new_v4().to_string();
         inner.emit_event(EngineEvent::OrderFailed {
             client_order_id,
-            reason: format!("Position {} has zero size", position_id),
+            reason: format!("Position {} has zero quantity", position_id),
         });
         return;
     }
@@ -895,11 +875,11 @@ pub(crate) async fn handle_close_position(
         symbol: position.symbol.clone(),
         side: close_side,
         order_type,
-        amount: position.size,
+        amount: position.quantity,
         price,
         position_side: Some(position.side),
         position_id: Some(position.id),
-        client_order_id: strategy_id.clone(),
+        client_order_id: client_order_id.clone(),
     };
 
     // 将仓位状态改为 Closing
@@ -925,11 +905,11 @@ pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol:
         .iter()
         .filter(|entry| {
             let pos = entry.value();
-            pos.symbol == symbol && pos.size > 0.0
+            pos.symbol == symbol && pos.quantity > 0.0
         })
         .map(|entry| {
             let pos = entry.value();
-            (pos.id, pos.side, pos.size)
+            (pos.id, pos.side, pos.quantity)
         })
         .collect();
 
@@ -974,25 +954,20 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
             } else {
                 let position = Position {
                     id: pos_id,
-                    strategy_id: params.client_order_id.clone(),
                     exchange: exchange_name,
                     symbol: params.symbol.clone(),
                     side: position_side,
                     status: PositionStatus::Opening,
-                    size: 0.0,
+                    quantity: 0.0,
                     entry_price: 0.0,
-                    current_price: 0.0,
                     leverage: 1,
-                    margin: 0.0,
-                    unrealized_pnl: 0.0,
                     realized_pnl: 0.0,
                     stop_loss: None,
                     take_profit: None,
-                    liquidation_price: None,
-                    opened_at: Utc::now(),
+                    client_order_id: params.client_order_id.clone(),
+                    created_at: Utc::now(),
                     updated_at: Utc::now(),
                     closed_at: None,
-                    metadata: serde_json::json!({}),
                 };
                 inner.position_id_index.insert(pos_id, key.clone());
                 inner.positions.insert(key, position.clone());
@@ -1059,7 +1034,7 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
                 let should_remove = inner
                     .positions
                     .get(&key)
-                    .map(|p| p.status == PositionStatus::Opening && p.size == 0.0)
+                    .map(|p| p.status == PositionStatus::Opening && p.quantity == 0.0)
                     .unwrap_or(false);
                 if should_remove {
                     inner.positions.remove(&key);

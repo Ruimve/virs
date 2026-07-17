@@ -111,11 +111,9 @@ pub fn convert_exchange_position(ep: &models::ExchangePosition) -> ExchangePosit
     ExchangePosition {
         symbol: ep.symbol.clone(),
         side: convert_virs_position_side(&ep.side),
-        size: ep.size,
+        quantity: ep.quantity,
         entry_price: ep.entry_price,
         leverage: ep.leverage,
-        unrealized_pnl: ep.unrealized_pnl,
-        liquidation_price: ep.liquidation_price,
     }
 }
 

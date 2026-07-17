@@ -156,25 +156,20 @@ fn o1_6_convert_position_opened_none() {
 
     let pos = virs_types::position::Position {
         id: Uuid::new_v4(),
-        strategy_id: None,
         exchange: "binance".to_string(),
         symbol: "BTC/USDT".to_string(),
         side: virs_types::enums::PositionSide::Long,
         status: virs_types::enums::PositionStatus::Open,
-        size: 1.0,
+        quantity: 1.0,
         entry_price: 100.0,
-        current_price: 100.0,
         leverage: 10,
-        margin: 10.0,
-        unrealized_pnl: 0.0,
         realized_pnl: 0.0,
         stop_loss: None,
         take_profit: None,
-        liquidation_price: None,
-        opened_at: Utc::now(),
+        client_order_id: None,
+        created_at: Utc::now(),
         updated_at: Utc::now(),
         closed_at: None,
-        metadata: serde_json::Value::Null,
     };
     let event = EngineEvent::PositionOpened { position: pos };
     let result = convert_pe_event(event);

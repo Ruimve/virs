@@ -94,7 +94,7 @@ async fn int_2_2_paper_market_order_updates_balance() {
     let positions = paper.get_positions(Some("BTC/USDT")).await.unwrap();
     assert_eq!(positions.len(), 1);
     assert_eq!(positions[0].side, PositionSide::Long);
-    assert!((positions[0].size - 0.1).abs() < 1e-8);
+    assert!((positions[0].quantity - 0.1).abs() < 1e-8);
 }
 
 
@@ -136,19 +136,15 @@ fn int_6_2_position_conversion_full_chain() {
     let ep = models::ExchangePosition {
         symbol: "BTC/USDT".into(),
         side: models::PositionSide::Short,
-        size: 2.0,
+        quantity: 2.0,
         entry_price: 45000.0,
         leverage: 20,
-        unrealized_pnl: -500.0,
-        liquidation_price: Some(47000.0),
     };
 
     let result = virs_exchange::pe_adapter::convert_exchange_position(&ep);
     assert_eq!(result.symbol, "BTC/USDT");
     assert_eq!(result.side, PositionSide::Short);
-    assert_eq!(result.size, 2.0);
+    assert_eq!(result.quantity, 2.0);
     assert_eq!(result.entry_price, 45000.0);
     assert_eq!(result.leverage, 20);
-    assert_eq!(result.unrealized_pnl, -500.0);
-    assert_eq!(result.liquidation_price, Some(47000.0));
 }

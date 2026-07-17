@@ -9,25 +9,20 @@ use crate::enums::*;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Position {
     pub id: Uuid,
-    pub strategy_id: Option<String>,
     pub exchange: String,
     pub symbol: String,
     pub side: PositionSide,
     pub status: PositionStatus,
-    pub size: f64,
+    pub quantity: f64,
     pub entry_price: f64,
-    pub current_price: f64,
     pub leverage: u32,
-    pub margin: f64,
-    pub unrealized_pnl: f64,
     pub realized_pnl: f64,
     pub stop_loss: Option<f64>,
     pub take_profit: Option<f64>,
-    pub liquidation_price: Option<f64>,
-    pub opened_at: DateTime<Utc>,
+    pub client_order_id: Option<String>,
+    pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub closed_at: Option<DateTime<Utc>>,
-    pub metadata: serde_json::Value,
 }
 
 impl Position {
@@ -38,8 +33,8 @@ impl Position {
 
     pub fn unrealized_pnl_at(&self, current_price: f64) -> f64 {
         match self.side {
-            PositionSide::Long => (current_price - self.entry_price) * self.size,
-            PositionSide::Short => (self.entry_price - current_price) * self.size,
+            PositionSide::Long => (current_price - self.entry_price) * self.quantity,
+            PositionSide::Short => (self.entry_price - current_price) * self.quantity,
         }
     }
 }
@@ -106,19 +101,19 @@ pub enum EngineCommand {
         symbol: String,
         side: PositionSide,
         order_side: Side,
-        size: f64,
+        quantity: f64,
         leverage: u32,
         order_type: OrderType,
         price: Option<f64>,
         stop_loss: Option<f64>,
         take_profit: Option<f64>,
-        strategy_id: Option<String>,
+        client_order_id: Option<String>,
     },
     ClosePosition {
         position_id: Uuid,
         order_type: OrderType,
         price: Option<f64>,
-        strategy_id: Option<String>,
+        client_order_id: Option<String>,
     },
     PlaceOrder {
         params: PlaceOrderParams,

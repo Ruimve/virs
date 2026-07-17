@@ -277,11 +277,9 @@ impl Exchange for CcxtAdapter {
                     virs_ccxt::PositionSide::Long => PositionSide::Long,
                     virs_ccxt::PositionSide::Short => PositionSide::Short,
                 },
-                size: p.size,
+                quantity: p.quantity,
                 entry_price: p.entry_price,
                 leverage: p.leverage,
-                unrealized_pnl: p.unrealized_pnl,
-                liquidation_price: p.liquidation_price,
             })
             .collect())
     }

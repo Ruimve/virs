@@ -127,7 +127,7 @@ impl AutoWorker {
 
     pub(crate) fn has_position(&self) -> bool {
         match &self.current_position {
-            Some(p) if p.is_open() => p.size.abs() > 1e-8,
+            Some(p) if p.is_open() => p.quantity.abs() > 1e-8,
             _ => false,
         }
     }
@@ -159,7 +159,7 @@ impl AutoWorker {
             .await
         {
             Ok(Some(pe_pos))
-                if pe_pos.is_open() && pe_pos.size.abs() > 1e-8 =>
+                if pe_pos.is_open() && pe_pos.quantity.abs() > 1e-8 =>
             {
 
                 let was_empty = !self.has_position();
@@ -168,7 +168,7 @@ impl AutoWorker {
                         bot_id = %self.bot.id,
                         position_id = %pe_pos.id,
                         side = ?pe_pos.side,
-                        size = pe_pos.size,
+                        quantity = pe_pos.quantity,
                         "Position cache was empty but PE has open position — recovered to prevent duplicate open"
                     );
                 }
@@ -1323,7 +1323,7 @@ impl AutoWorker {
 
         let side = self.current_side_str();
         let (entry_price, position_size) = match &self.current_position {
-            Some(p) => (p.entry_price, p.size),
+            Some(p) => (p.entry_price, p.quantity),
             None => (0.0, 0.0),
         };
 

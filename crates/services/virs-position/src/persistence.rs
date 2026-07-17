@@ -82,13 +82,13 @@ impl Persistence {
             SELECT
                 symbol,
                 position_side,
-                SUM(CASE WHEN is_open = 1 THEN qty ELSE -qty END) AS size,
+                SUM(CASE WHEN is_open = 1 THEN qty ELSE -qty END) AS quantity,
                 CASE WHEN SUM(CASE WHEN is_open = 1 THEN qty ELSE 0 END) > 0
                     THEN SUM(CASE WHEN is_open = 1 THEN price * qty ELSE 0 END)
                          / NULLIF(SUM(CASE WHEN is_open = 1 THEN qty ELSE 0 END), 0)
                     ELSE 0 END AS entry_price,
                 COALESCE(SUM(CASE WHEN is_open = 0 THEN rp ELSE 0 END), 0) AS realized_pnl,
-                COALESCE(MIN(CASE WHEN is_open = 1 THEN trade_time END), 0) AS opened_at_ms
+                COALESCE(MIN(CASE WHEN is_open = 1 THEN trade_time END), 0) AS created_at_ms
             FROM classified
             GROUP BY symbol, position_side
             HAVING SUM(CASE WHEN is_open = 1 THEN qty ELSE -qty END) > 0.00000001
@@ -261,10 +261,10 @@ impl Persistence {
 struct AggregatedPositionRow {
     symbol: String,
     position_side: String,
-    size: f64,
+    quantity: f64,
     entry_price: f64,
     realized_pnl: f64,
-    opened_at_ms: i64,
+    created_at_ms: i64,
 }
 
 impl AggregatedPositionRow {
@@ -275,30 +275,25 @@ impl AggregatedPositionRow {
             _ => return None,
         };
         let now = Utc::now();
-        let opened_at = DateTime::from_timestamp_millis(self.opened_at_ms).unwrap_or(now);
+        let created_at = DateTime::from_timestamp_millis(self.created_at_ms).unwrap_or(now);
         let id = position_uuid_v5(exchange, &self.symbol, side);
 
         Some(Position {
             id,
-            strategy_id: None,
             exchange: exchange.to_string(),
             symbol: self.symbol,
             side,
             status: PositionStatus::Open,
-            size: self.size,
+            quantity: self.quantity,
             entry_price: self.entry_price,
-            current_price: 0.0,
             leverage: 0,
-            margin: 0.0,
-            unrealized_pnl: 0.0,
             realized_pnl: self.realized_pnl,
             stop_loss: None,
             take_profit: None,
-            liquidation_price: None,
-            opened_at,
+            client_order_id: None,
+            created_at,
             updated_at: now,
             closed_at: None,
-            metadata: serde_json::Value::Null,
         })
     }
 }

@@ -144,24 +144,19 @@ fn int_4_2_balance_response_parse_chain() {
 fn make_position(side: PositionSide, stop_loss: Option<f64>) -> Position {
     Position {
         id: Uuid::nil(),
-        strategy_id: None,
         exchange: "binance".into(),
         symbol: "BTC/USDT".into(),
         side,
         status: PositionStatus::Open,
-        size: 1.0,
+        quantity: 1.0,
         entry_price: 50000.0,
-        current_price: 50000.0,
         leverage: 10,
-        margin: 5000.0,
-        unrealized_pnl: 0.0,
         realized_pnl: 0.0,
         stop_loss,
         take_profit: None,
-        liquidation_price: None,
-        opened_at: Utc::now(),
+        client_order_id: None,
+        created_at: Utc::now(),
         updated_at: Utc::now(),
         closed_at: None,
-        metadata: serde_json::json!({}),
     }
 }

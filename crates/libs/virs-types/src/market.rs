@@ -66,11 +66,9 @@ impl Balance {
 pub struct ExchangePosition {
     pub symbol: String,
     pub side: PositionSide,
-    pub size: f64,
+    pub quantity: f64,
     pub entry_price: f64,
     pub leverage: u32,
-    pub unrealized_pnl: f64,
-    pub liquidation_price: Option<f64>,
 }
 
 impl ExchangePosition {
@@ -78,8 +76,8 @@ impl ExchangePosition {
 
     pub fn unrealized_pnl_at(&self, current_price: f64) -> f64 {
         match self.side {
-            PositionSide::Long => (current_price - self.entry_price) * self.size,
-            PositionSide::Short => (self.entry_price - current_price) * self.size,
+            PositionSide::Long => (current_price - self.entry_price) * self.quantity,
+            PositionSide::Short => (self.entry_price - current_price) * self.quantity,
         }
     }
 }

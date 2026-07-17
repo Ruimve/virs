@@ -78,7 +78,7 @@ impl OrderExecutor for PeOrderExecutor {
                         OrderSide::Buy => Side::Buy,
                         OrderSide::Sell => Side::Sell,
                     },
-                    size: amount,
+                    quantity: amount,
                     leverage,
                     order_type: if price.is_some() {
                         OrderType::Limit
@@ -88,7 +88,7 @@ impl OrderExecutor for PeOrderExecutor {
                     price,
                     stop_loss,
                     take_profit,
-                    strategy_id: client_order_id,
+                    client_order_id,
                 }
             }
             OrderCommand::ClosePosition {
@@ -103,7 +103,7 @@ impl OrderExecutor for PeOrderExecutor {
                     OrderType::Market
                 },
                 price,
-                strategy_id: client_order_id,
+                client_order_id,
             },
             OrderCommand::PlaceOrder {
                 symbol,

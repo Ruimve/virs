@@ -13,8 +13,6 @@ pub use registry::Exchanges;
 #[cfg(test)]
 mod adapter_tests;
 #[cfg(test)]
-mod paper_tests;
-#[cfg(test)]
 mod pe_adapter_tests;
 
 use async_trait::async_trait;

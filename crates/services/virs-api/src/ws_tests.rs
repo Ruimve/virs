@@ -21,7 +21,7 @@ fn w1_1_position_all_fields() {
     assert_eq!(json["exchange"], "binance");
     assert_eq!(json["side"], "long");
     assert_eq!(json["status"], "open");
-    assert_eq!(json["size"], 1.0);
+    assert_eq!(json["quantity"], 1.0);
     assert_eq!(json["entry_price"], 50000.0);
     assert_eq!(json["leverage"], 10);
     assert_eq!(json["stop_loss"], 45000.0);
@@ -33,7 +33,6 @@ fn w1_2_position_optional_fields_none() {
     let json = ws_value(position_to_ws_json(&pos));
     assert!(json["stop_loss"].is_null());
     assert!(json["take_profit"].is_null());
-    assert!(json["liquidation_price"].is_null());
 }
 
 #[test]
@@ -112,25 +111,20 @@ fn w3_3_orderbook_level_format() {
 fn make_position(side: PositionSide, status: PositionStatus, stop_loss: Option<f64>) -> Position {
     Position {
         id: Uuid::nil(),
-        strategy_id: None,
         exchange: "binance".into(),
         symbol: "BTC/USDT".into(),
         side,
         status,
-        size: 1.0,
+        quantity: 1.0,
         entry_price: 50000.0,
-        current_price: 50000.0,
         leverage: 10,
-        margin: 5000.0,
-        unrealized_pnl: 0.0,
         realized_pnl: 0.0,
         stop_loss,
         take_profit: None,
-        liquidation_price: None,
-        opened_at: Utc::now(),
+        client_order_id: None,
+        created_at: Utc::now(),
         updated_at: Utc::now(),
         closed_at: None,
-        metadata: serde_json::json!({}),
     }
 }
 
