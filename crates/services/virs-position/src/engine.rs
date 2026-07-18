@@ -443,6 +443,12 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
             .await;
         }
 
+        // Filled 终态清理：即使无新增成交（重复推送），也需清理避免泄漏
+        if order_status == OrderStatus::Filled {
+            inner.orders.remove(&client_order_id);
+            inner.order_position.remove(&client_order_id);
+        }
+
         // 处理取消终态
         if order_status == OrderStatus::Canceled {
             if let Some((_, order)) = inner.orders.remove(&client_order_id) {
@@ -513,7 +519,13 @@ async fn finalize_pending_order(
             )
             .await;
         } else {
-            inner.emit_event(EngineEvent::OrderPlaced { order: ws_order });
+            inner.emit_event(EngineEvent::OrderPlaced { order: ws_order.clone() });
+        }
+
+        // Filled 终态清理：即使无成交（filled=0），也需清理避免泄漏
+        if order_status == OrderStatus::Filled {
+            inner.orders.remove(client_order_id);
+            inner.order_position.remove(client_order_id);
         }
     } else if order_status == OrderStatus::Canceled {
         inner.emit_event(EngineEvent::OrderCanceled {
@@ -667,12 +679,8 @@ async fn process_order_fill(
             }
         }
     }
-
-    // 已成交订单终态清理：独立判断，避免 Filled 推送无增量时订单泄漏
-    if order_status.is_filled() {
-        inner.orders.remove(client_order_id);
-        inner.order_position.remove(client_order_id);
-    }
+    // 注：终态清理（orders/order_position remove）由调用点统一负责，
+    // 确保 Filled 状态无论 trade_fill 是否 > 0 都能清理，避免泄漏。
 }
 
 pub(crate) async fn handle_open_position(
