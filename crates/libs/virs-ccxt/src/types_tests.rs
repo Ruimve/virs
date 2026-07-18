@@ -2,7 +2,7 @@ use chrono::Utc;
 
 use crate::types::*;
 use virs_types::enums::{OrderStatus, Side};
-use virs_types::market::{FundingHistoryEntry, FundingRate, OrderBook, Ticker};
+use virs_types::market::{FundingRate, OrderBook, Ticker};
 
 #[test]
 fn t1_1_new_to_open() {
@@ -172,20 +172,6 @@ fn t4_1_funding_rate_normal() {
     assert_eq!(fr.symbol, "BTC/USDT");
     assert!((fr.rate - 0.0001).abs() < f64::EPSILON);
     assert_eq!(fr.next_funding_time, Some(now));
-}
-
-#[test]
-fn t5_1_funding_history_normal() {
-    let ccxt = CcxtFundingHistoryEntry {
-        funding_time: chrono::DateTime::from_timestamp_millis(1700000000).unwrap(),
-        rate: 0.00005,
-    };
-    let e: FundingHistoryEntry = ccxt.into();
-    assert_eq!(
-        e.funding_time,
-        chrono::DateTime::from_timestamp_millis(1700000000).unwrap()
-    );
-    assert!((e.rate - 0.00005).abs() < f64::EPSILON);
 }
 
 #[allow(dead_code)]

@@ -70,28 +70,10 @@ pub struct ExchangePosition {
     pub entry_price: f64,
 }
 
-impl ExchangePosition {
-
-
-    pub fn unrealized_pnl_at(&self, current_price: f64) -> f64 {
-        match self.side {
-            PositionSide::Long => (current_price - self.entry_price) * self.quantity,
-            PositionSide::Short => (self.entry_price - current_price) * self.quantity,
-        }
-    }
-}
-
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FundingRate {
     pub symbol: String,
     pub rate: f64,
     pub next_funding_time: Option<DateTime<Utc>>,
-}
-
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct FundingHistoryEntry {
-    pub funding_time: DateTime<Utc>,
-    pub rate: f64,
 }

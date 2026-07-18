@@ -5,7 +5,6 @@ use virs_app::adapters::grid_store::bot_to_config as grid_bot_to_config;
 use virs_app::adapters::llm_resolver::resolve_llm_provider;
 use virs_app::adapters::market_data::candle_to_kline;
 use virs_app::adapters::order_executor::convert_pe_event;
-use virs_app::adapters::utils::{derive_open_side, sanitize_pnl_pct};
 use virs_market::Candle;
 use virs_models::AutoBot;
 use virs_models::GridBot;
@@ -209,16 +208,6 @@ fn int_2_1_candle_to_kline_preserves_ohlcv() {
 }
 
 #[test]
-fn int_2_2_sanitize_then_derive_chain() {
-    let raw_pnl_pct = f64::NAN;
-    let close_side = "buy";
-    let sanitized = sanitize_pnl_pct(raw_pnl_pct);
-    let open_side = derive_open_side(close_side);
-    assert_eq!(sanitized, 0.0);
-    assert_eq!(open_side, "sell");
-}
-
-#[test]
 fn int_3_1_llm_resolve_priority_chain() {
     let creds = vec![
         ("openai".to_string(), "oai-key".to_string(), None),
@@ -318,24 +307,6 @@ fn int_4_2_convert_event_canceled_failed() {
         }
         _ => panic!("Expected OrderFailed"),
     }
-}
-
-#[test]
-fn int_5_1_sanitize_all_pnl_cases() {
-    assert_eq!(sanitize_pnl_pct(0.15), 0.15);
-    assert_eq!(sanitize_pnl_pct(f64::NAN), 0.0);
-    assert_eq!(sanitize_pnl_pct(0.0), 0.0);
-    assert_eq!(sanitize_pnl_pct(-0.5), -0.5);
-    assert_eq!(sanitize_pnl_pct(1.0), 1.0);
-}
-
-#[test]
-fn int_5_2_derive_open_side_all_cases() {
-    assert_eq!(derive_open_side("buy"), "sell");
-    assert_eq!(derive_open_side("sell"), "buy");
-
-    assert_eq!(derive_open_side("unknown"), "buy");
-    assert_eq!(derive_open_side(""), "buy");
 }
 
 #[test]

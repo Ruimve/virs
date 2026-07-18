@@ -7,7 +7,7 @@ pub use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderResult};
 
 pub use virs_types::enums::{MarketType, OrderStatus, OrderType, PositionMode, PositionSide, Side};
 pub use virs_types::market::{
-    Balance, ExchangePosition, FundingHistoryEntry, FundingRate, Kline, OrderBook, Ticker,
+    Balance, ExchangePosition, FundingRate, Kline, OrderBook, Ticker,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -197,21 +197,6 @@ impl From<CcxtFundingRate> for FundingRate {
             symbol: fr.symbol,
             rate: fr.rate,
             next_funding_time: fr.next_funding_time,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CcxtFundingHistoryEntry {
-    pub funding_time: DateTime<Utc>,
-    pub rate: f64,
-}
-
-impl From<CcxtFundingHistoryEntry> for FundingHistoryEntry {
-    fn from(e: CcxtFundingHistoryEntry) -> Self {
-        FundingHistoryEntry {
-            funding_time: e.funding_time,
-            rate: e.rate,
         }
     }
 }

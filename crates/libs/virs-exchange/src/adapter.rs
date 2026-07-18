@@ -293,25 +293,8 @@ impl Exchange for CcxtAdapter {
         Ok(fr.into())
     }
 
-    async fn get_funding_history(
-        &self,
-        symbol: &str,
-        start_time: i64,
-        end_time: i64,
-    ) -> Result<Vec<FundingHistoryEntry>, ExchangeError> {
-        let entries = self
-            .inner
-            .fetch_funding_history(symbol, start_time, end_time)
-            .await?;
-        Ok(entries.into_iter().map(|e| e.into()).collect())
-    }
-
     async fn create_listen_key(&self) -> Result<String, ExchangeError> {
         self.inner.create_listen_key().await
-    }
-
-    async fn keepalive_listen_key(&self, listen_key: &str) -> Result<(), ExchangeError> {
-        self.inner.keepalive_listen_key(listen_key).await
     }
 
     async fn get_api_restrictions(&self) -> Result<virs_ccxt::ApiRestrictions, ExchangeError> {

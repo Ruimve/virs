@@ -5,20 +5,9 @@ use virs_types::market::ExchangePosition;
 use virs_error::ExchangeError;
 
 use crate::pe_adapter::{
-    convert_exchange_position, convert_order_status, convert_order_type, convert_position_side,
-    convert_side, convert_to_models_side, convert_virs_market_type, convert_virs_position_side,
-    no_exchange_error,
+    convert_exchange_position, convert_order_type, convert_position_side,
+    convert_to_models_side, convert_virs_position_side, no_exchange_error,
 };
-
-#[test]
-fn pe1_1_buy() {
-    assert_eq!(convert_side(&models::Side::Buy), Side::Buy);
-}
-
-#[test]
-fn pe1_2_sell() {
-    assert_eq!(convert_side(&models::Side::Sell), Side::Sell);
-}
 
 #[test]
 fn pe2_1_buy() {
@@ -84,54 +73,6 @@ fn pe4_5_take_profit_market() {
 }
 
 #[test]
-fn pe5_1_open() {
-    assert_eq!(
-        convert_order_status(&models::OrderStatus::Open),
-        OrderStatus::Open
-    );
-}
-
-#[test]
-fn pe5_2_partially_filled() {
-    assert_eq!(
-        convert_order_status(&models::OrderStatus::PartiallyFilled),
-        OrderStatus::PartiallyFilled
-    );
-}
-
-#[test]
-fn pe5_3_filled() {
-    assert_eq!(
-        convert_order_status(&models::OrderStatus::Filled),
-        OrderStatus::Filled
-    );
-}
-
-#[test]
-fn pe5_4_canceled() {
-    assert_eq!(
-        convert_order_status(&models::OrderStatus::Canceled),
-        OrderStatus::Canceled
-    );
-}
-
-#[test]
-fn pe5_5_failed() {
-    assert_eq!(
-        convert_order_status(&models::OrderStatus::Failed),
-        OrderStatus::Failed
-    );
-}
-
-#[test]
-fn pe5_6_pending() {
-    assert_eq!(
-        convert_order_status(&models::OrderStatus::Pending),
-        OrderStatus::Pending
-    );
-}
-
-#[test]
 fn pe6_1_long() {
     assert_eq!(
         convert_virs_position_side(&models::PositionSide::Long),
@@ -144,14 +85,6 @@ fn pe6_2_short() {
     assert_eq!(
         convert_virs_position_side(&models::PositionSide::Short),
         PositionSide::Short
-    );
-}
-
-#[test]
-fn pe7_2_perpetual() {
-    assert_eq!(
-        convert_virs_market_type(&models::MarketType::Perpetual),
-        MarketType::Perpetual
     );
 }
 

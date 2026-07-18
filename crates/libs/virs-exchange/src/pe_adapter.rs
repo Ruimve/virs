@@ -46,13 +46,6 @@ impl CcxtExchangeAdapter {
 }
 
 // 以下为 models::Side 与 virs_types::Side 等类型互转的辅助函数
-pub fn convert_side(side: &models::Side) -> Side {
-    match side {
-        models::Side::Buy => Side::Buy,
-        models::Side::Sell => Side::Sell,
-    }
-}
-
 pub fn convert_to_models_side(side: &Side) -> models::Side {
     match side {
         Side::Buy => models::Side::Buy,
@@ -78,29 +71,11 @@ pub fn convert_order_type(ot: &OrderType) -> models::OrderType {
     }
 }
 
-pub fn convert_order_status(status: &models::OrderStatus) -> OrderStatus {
-    match status {
-        models::OrderStatus::Pending => OrderStatus::Pending,
-        models::OrderStatus::Open => OrderStatus::Open,
-        models::OrderStatus::PartiallyFilled => OrderStatus::PartiallyFilled,
-        models::OrderStatus::Filled => OrderStatus::Filled,
-        models::OrderStatus::Canceled => OrderStatus::Canceled,
-        models::OrderStatus::Failed => OrderStatus::Failed,
-    }
-}
-
 // 持仓方向互转
 pub fn convert_virs_position_side(side: &models::PositionSide) -> PositionSide {
     match side {
         models::PositionSide::Long => PositionSide::Long,
         models::PositionSide::Short => PositionSide::Short,
-    }
-}
-
-// 市场类型互转
-pub fn convert_virs_market_type(mt: &models::MarketType) -> MarketType {
-    match mt {
-        models::MarketType::Perpetual => MarketType::Perpetual,
     }
 }
 

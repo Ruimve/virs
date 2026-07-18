@@ -309,18 +309,16 @@ impl WsHandler<WsEvent> for KlineWsHandler {
 pub struct KlineWs {
     manager: WsManager<WsEvent>,
     pub(crate) handler: Arc<KlineWsHandler>,
-    pub(crate) ws_url: String,
 }
 
 impl KlineWs {
     pub fn new(ws_url: String) -> Self {
-        let handler = Arc::new(KlineWsHandler::new(ws_url.clone()));
+        let handler = Arc::new(KlineWsHandler::new(ws_url));
         let config = WsManagerConfig::default();
 
         Self {
             manager: WsManager::new(config, handler.clone()),
             handler,
-            ws_url,
         }
     }
 

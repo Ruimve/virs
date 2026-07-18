@@ -40,17 +40,6 @@ pub trait Exchange: Send + Sync {
     async fn get_order_book(&self, symbol: &str, depth: u32) -> Result<OrderBook, ExchangeError>;
     async fn get_balances(&self) -> Result<Vec<Balance>, ExchangeError>;
 
-    async fn place_order(
-        &self,
-        symbol: &str,
-        side: Side,
-        order_type: OrderType,
-        amount: f64,
-        price: Option<f64>,
-    ) -> Result<Order, ExchangeError> {
-        self.place_order_with_options(symbol, side, order_type, amount, price, None, None)
-            .await
-    }
     async fn place_order_with_options(
         &self,
         symbol: &str,
@@ -75,14 +64,7 @@ pub trait Exchange: Send + Sync {
     ) -> Result<Vec<ExchangePosition>, ExchangeError>;
     async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError>;
     async fn get_funding_rate(&self, symbol: &str) -> Result<FundingRate, ExchangeError>;
-    async fn get_funding_history(
-        &self,
-        symbol: &str,
-        start_time: i64,
-        end_time: i64,
-    ) -> Result<Vec<FundingHistoryEntry>, ExchangeError>;
     async fn create_listen_key(&self) -> Result<String, ExchangeError>;
-    async fn keepalive_listen_key(&self, listen_key: &str) -> Result<(), ExchangeError>;
 
     async fn get_api_restrictions(&self) -> Result<virs_ccxt::ApiRestrictions, ExchangeError>;
 
@@ -128,18 +110,6 @@ impl Exchange for Box<dyn Exchange> {
     }
     async fn get_balances(&self) -> Result<Vec<Balance>, ExchangeError> {
         (**self).get_balances().await
-    }
-    async fn place_order(
-        &self,
-        symbol: &str,
-        side: Side,
-        order_type: OrderType,
-        amount: f64,
-        price: Option<f64>,
-    ) -> Result<Order, ExchangeError> {
-        (**self)
-            .place_order(symbol, side, order_type, amount, price)
-            .await
     }
     async fn place_order_with_options(
         &self,
@@ -193,21 +163,8 @@ impl Exchange for Box<dyn Exchange> {
     async fn get_funding_rate(&self, symbol: &str) -> Result<FundingRate, ExchangeError> {
         (**self).get_funding_rate(symbol).await
     }
-    async fn get_funding_history(
-        &self,
-        symbol: &str,
-        start_time: i64,
-        end_time: i64,
-    ) -> Result<Vec<FundingHistoryEntry>, ExchangeError> {
-        (**self)
-            .get_funding_history(symbol, start_time, end_time)
-            .await
-    }
     async fn create_listen_key(&self) -> Result<String, ExchangeError> {
         (**self).create_listen_key().await
-    }
-    async fn keepalive_listen_key(&self, listen_key: &str) -> Result<(), ExchangeError> {
-        (**self).keepalive_listen_key(listen_key).await
     }
     async fn get_api_restrictions(&self) -> Result<virs_ccxt::ApiRestrictions, ExchangeError> {
         (**self).get_api_restrictions().await

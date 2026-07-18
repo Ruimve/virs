@@ -583,23 +583,9 @@ impl Exchange for BinanceExchange {
         fapi::fetch_funding_rate(&self.client, symbol).await
     }
 
-    async fn fetch_funding_history(
-        &self,
-        symbol: &str,
-        start_time: i64,
-        end_time: i64,
-    ) -> Result<Vec<CcxtFundingHistoryEntry>, ExchangeError> {
-        fapi::fetch_funding_history(&self.client, symbol, start_time, end_time).await
-    }
-
     // 创建listenKey: POST /fapi/v1/listenKey (签名)
     async fn create_listen_key(&self) -> Result<String, ExchangeError> {
         fapi::create_listen_key(&self.client, self.signer.as_ref()).await
-    }
-
-    // 续期listenKey: PUT /fapi/v1/listenKey (签名)
-    async fn keepalive_listen_key(&self, listen_key: &str) -> Result<(), ExchangeError> {
-        fapi::keepalive_listen_key(&self.client, self.signer.as_ref(), listen_key).await
     }
 
     async fn fetch_api_restrictions(&self) -> Result<ApiRestrictions, ExchangeError> {

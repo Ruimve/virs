@@ -320,18 +320,16 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
 pub struct OrderBookWs {
     manager: WsManager<WsOrderBookEvent>,
     pub(crate) handler: Arc<OrderBookWsHandler>,
-    pub(crate) ws_url: String,
 }
 
 impl OrderBookWs {
     pub fn new(ws_url: String) -> Self {
-        let handler = Arc::new(OrderBookWsHandler::new(ws_url.clone()));
+        let handler = Arc::new(OrderBookWsHandler::new(ws_url));
         let config = WsManagerConfig::default();
 
         Self {
             manager: WsManager::new(config, handler.clone()),
             handler,
-            ws_url,
         }
     }
 

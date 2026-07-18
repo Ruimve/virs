@@ -5,7 +5,6 @@ pub mod llm_resolver;
 pub mod market_data;
 pub mod order_executor;
 mod price_provider;
-pub mod utils;
 
 pub use auto_store::PgAutoStore;
 pub use credential_store::PgCredentialStore;
@@ -25,5 +24,3 @@ mod llm_resolver_tests;
 mod market_data_tests;
 #[cfg(test)]
 mod order_executor_tests;
-#[cfg(test)]
-mod utils_tests;

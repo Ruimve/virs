@@ -280,13 +280,6 @@ fn test_binance_ws_symbol_basic() {
     assert_eq!(binance_ws_symbol("btcusdt"), "btcusdt");
 }
 
-#[test]
-fn test_new_perpetual() {
-    let ws = KlineWs::new_perpetual(None);
-    assert_eq!(ws.ws_url, "wss://fstream.binance.com/market/ws");
-    assert!(!ws.is_running());
-}
-
 #[tokio::test]
 async fn test_subscribe_without_start() {
     let ws = KlineWs::new_perpetual(None);

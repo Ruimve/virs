@@ -13,8 +13,8 @@ use auth::Signer;
 use virs_error::ExchangeError;
 
 pub use types::{
-    ApiRestrictions, Balance, CcxtFundingHistoryEntry, CcxtFundingRate, CcxtKline, CcxtOrder,
-    CcxtOrderBook, CcxtOrderStatus, CcxtTicker, ExecutionType, FundingHistoryEntry, FundingRate,
+    ApiRestrictions, Balance, CcxtFundingRate, CcxtKline, CcxtOrder,
+    CcxtOrderBook, CcxtOrderStatus, CcxtTicker, ExecutionType, FundingRate,
     Kline, MarginMode, MarketInfo, MarketType, OrderBook, OrderFee, OrderResult, OrderStatus,
     OrderType, PlaceOrderParams, PositionMode, PositionSide, Side, Ticker,
 };
@@ -101,16 +101,7 @@ pub trait Exchange: Send + Sync {
     ) -> Result<Vec<types::Position>, ExchangeError>;
     async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError>;
     async fn fetch_funding_rate(&self, symbol: &str) -> Result<CcxtFundingRate, ExchangeError>;
-    async fn fetch_funding_history(
-        &self,
-        symbol: &str,
-        start_time: i64,
-        end_time: i64,
-    ) -> Result<Vec<CcxtFundingHistoryEntry>, ExchangeError>;
     async fn create_listen_key(&self) -> Result<String, ExchangeError>;
-    async fn keepalive_listen_key(&self, _listen_key: &str) -> Result<(), ExchangeError> {
-        Ok(())
-    }
     async fn fetch_api_restrictions(&self) -> Result<types::ApiRestrictions, ExchangeError> {
         Err(ExchangeError::NotSupported(
             "fetch_api_restrictions not supported".into(),
