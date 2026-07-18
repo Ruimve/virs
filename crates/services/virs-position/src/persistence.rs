@@ -69,12 +69,34 @@ impl Persistence {
                     avg_fill_price::float8 AS price,
                     realized_pnl::float8 AS rp,
                     trade_time,
+                    client_order_id,
                     CASE WHEN (side = 'BUY' AND position_side = 'LONG')
                            OR (side = 'SELL' AND position_side = 'SHORT')
                          THEN 1 ELSE 0 END AS is_open
                 FROM pe_orders
                 WHERE status IN ('FILLED', 'PARTIALLY_FILLED')
                   AND filled_qty::float8 > 0
+            ),
+            ordered AS (
+                SELECT
+                    *,
+                    SUM(CASE WHEN is_open = 1 THEN qty ELSE -qty END)
+                        OVER (PARTITION BY symbol, position_side ORDER BY trade_time)
+                        AS running_qty
+                FROM classified
+            ),
+            -- 找到每个 (symbol, position_side) 分组内最后一次净持仓归零点
+            -- 仅保留归零点之后的行，确保只聚合当前代际（避免历史已平仓订单污染 client_order_id）
+            generation_filtered AS (
+                SELECT *
+                FROM (
+                    SELECT
+                        *,
+                        MAX(CASE WHEN running_qty <= 0.00000001 THEN trade_time END)
+                            OVER (PARTITION BY symbol, position_side) AS last_zero_time
+                    FROM ordered
+                ) t
+                WHERE last_zero_time IS NULL OR trade_time > last_zero_time
             )
             SELECT
                 symbol,
@@ -85,8 +107,9 @@ impl Persistence {
                          / NULLIF(SUM(CASE WHEN is_open = 1 THEN qty ELSE 0 END), 0)
                     ELSE 0 END AS entry_price,
                 COALESCE(SUM(CASE WHEN is_open = 0 THEN rp ELSE 0 END), 0) AS realized_pnl,
-                COALESCE(MIN(CASE WHEN is_open = 1 THEN trade_time END), 0) AS created_at_ms
-            FROM classified
+                COALESCE(MIN(CASE WHEN is_open = 1 THEN trade_time END), 0) AS created_at_ms,
+                (array_agg(client_order_id ORDER BY trade_time) FILTER (WHERE is_open = 1))[1] AS open_client_order_id
+            FROM generation_filtered
             GROUP BY symbol, position_side
             HAVING SUM(CASE WHEN is_open = 1 THEN qty ELSE -qty END) > 0.00000001
             "#,
@@ -267,6 +290,7 @@ struct AggregatedPositionRow {
     entry_price: f64,
     realized_pnl: f64,
     created_at_ms: i64,
+    open_client_order_id: Option<String>,
 }
 
 impl AggregatedPositionRow {
@@ -289,7 +313,7 @@ impl AggregatedPositionRow {
             quantity: self.quantity,
             entry_price: self.entry_price,
             realized_pnl: self.realized_pnl,
-            client_order_id: None,
+            client_order_id: self.open_client_order_id,
             created_at,
             updated_at: now,
         })

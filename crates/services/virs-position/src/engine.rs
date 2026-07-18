@@ -432,7 +432,6 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
                 &ws_order,
                 &client_order_id,
                 position_id,
-                filled,
                 trade_fill,
                 avg_price,
                 commission,
@@ -505,7 +504,6 @@ async fn finalize_pending_order(
                 client_order_id,
                 position_id,
                 filled,
-                filled,
                 avg_price,
                 commission,
                 realized_pnl,
@@ -534,7 +532,6 @@ async fn process_order_fill(
     ws_order: &CcxtOrder,
     client_order_id: &str,
     position_id: Option<Uuid>,
-    filled: f64,
     trade_fill: f64,
     avg_price: f64,
     commission: f64,
@@ -623,13 +620,13 @@ async fn process_order_fill(
         _ => {}
     }
 
-    // 仓位更新（只在完全成交时）
-    if order_status.is_filled() {
+    // 仓位更新（有成交增量时同步 quantity/status/entry_price，避免部分成交不同步）
+    if trade_fill > 0.0 {
         if let Some(key) = &pos_key_opt {
             let pos_entry = inner.positions.get(key).map(|r| r.value().clone());
             if let Some(mut position) = pos_entry {
                 if is_close {
-                    position.quantity -= filled;
+                    position.quantity -= trade_fill;
                     if position.quantity.abs() < 1e-8 {
                         position.quantity = 0.0;
                         position.status = PositionStatus::Closed;
@@ -638,10 +635,10 @@ async fn process_order_fill(
                     }
                 } else {
                     let old_qty = position.quantity;
-                    position.quantity += filled;
+                    position.quantity += trade_fill;
                     if avg_price > 0.0 {
                         if old_qty > 0.0 && position.entry_price > 0.0 {
-                            let total_cost = position.entry_price * old_qty + avg_price * filled;
+                            let total_cost = position.entry_price * old_qty + avg_price * trade_fill;
                             position.entry_price = total_cost / position.quantity;
                         } else {
                             position.entry_price = avg_price;
@@ -669,8 +666,10 @@ async fn process_order_fill(
                 }
             }
         }
+    }
 
-        // 已成交订单终态清理：避免 orders / order_position 无限增长
+    // 已成交订单终态清理：独立判断，避免 Filled 推送无增量时订单泄漏
+    if order_status.is_filled() {
         inner.orders.remove(client_order_id);
         inner.order_position.remove(client_order_id);
     }
@@ -856,6 +855,11 @@ pub(crate) async fn handle_close_position(
     if let Some(mut pos) = inner.positions.get_mut(&key) {
         pos.status = PositionStatus::Closing;
         pos.updated_at = Utc::now();
+        let pos_clone = pos.clone();
+        drop(pos);
+        inner.emit_event(EngineEvent::PositionUpdated {
+            position: pos_clone,
+        });
     }
 
     handle_place_order(inner, params).await;
@@ -988,15 +992,24 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
                 .get(&position_id)
                 .map(|r| r.value().clone());
             if let Some(key) = pos_key {
-                let should_remove = inner
-                    .positions
-                    .get(&key)
-                    .map(|p| p.status == PositionStatus::Opening && p.quantity == 0.0)
-                    .unwrap_or(false);
-                if should_remove {
-                    inner.positions.remove(&key);
-                    inner.position_id_index.remove(&position_id);
-                    warn!(position_id = %position_id, "Removed ghost Opening position after place_order failure");
+                let pos_entry = inner.positions.get(&key).map(|r| r.value().clone());
+                if let Some(pos) = pos_entry {
+                    if pos.status == PositionStatus::Opening && pos.quantity == 0.0 {
+                        inner.positions.remove(&key);
+                        inner.position_id_index.remove(&position_id);
+                        warn!(position_id = %position_id, "Removed ghost Opening position after place_order failure");
+                    } else if pos.status == PositionStatus::Closing {
+                        // Closing 态回滚：place_order 失败，仓位仍有持仓，恢复为 Open
+                        let mut pos = pos;
+                        pos.status = PositionStatus::Open;
+                        pos.updated_at = Utc::now();
+                        let pos_clone = pos.clone();
+                        inner.positions.insert(key, pos);
+                        warn!(position_id = %position_id, "Rolled back Closing position to Open after place_order failure");
+                        inner.emit_event(EngineEvent::PositionUpdated {
+                            position: pos_clone,
+                        });
+                    }
                 }
             }
 
