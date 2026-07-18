@@ -16,8 +16,6 @@ pub struct Position {
     pub quantity: f64,
     pub entry_price: f64,
     pub realized_pnl: f64,
-    pub stop_loss: Option<f64>,
-    pub take_profit: Option<f64>,
     pub client_order_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -103,8 +101,6 @@ pub enum EngineCommand {
         leverage: u32,
         order_type: OrderType,
         price: Option<f64>,
-        stop_loss: Option<f64>,
-        take_profit: Option<f64>,
         client_order_id: Option<String>,
     },
     ClosePosition {

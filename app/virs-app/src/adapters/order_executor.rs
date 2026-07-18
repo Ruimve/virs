@@ -59,8 +59,6 @@ impl OrderExecutor for PeOrderExecutor {
                 amount,
                 leverage,
                 price,
-                stop_loss,
-                take_profit,
                 client_order_id,
             } => EngineCommand::OpenPosition {
                 exchange: String::new(),
@@ -81,8 +79,6 @@ impl OrderExecutor for PeOrderExecutor {
                     OrderType::Market
                 },
                 price,
-                stop_loss,
-                take_profit,
                 client_order_id,
             },
             OrderCommand::ClosePosition {

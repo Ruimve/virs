@@ -1056,7 +1056,7 @@ impl AutoWorker {
                         remaining, side_cn, closed_side_cn, reason_cn
                     ));
                 }
-                self.open_position(side, decision, &snapshot).await;
+                self.open_position(side, &snapshot).await;
 
                 if self.pending_open.is_none() {
                     return Some("开仓订单发送失败".to_string());
@@ -1113,7 +1113,6 @@ impl AutoWorker {
     async fn open_position(
         &mut self,
         side: &str,
-        decision: Option<&AutoDecision>,
         snapshot: &AutoMarketSnapshot,
     ) {
         let account = self
@@ -1161,53 +1160,10 @@ impl AutoWorker {
             quantity
         };
 
-        let formula_sl = strategy::compute_stop_loss(price, side, atr);
-        let formula_tp = strategy::compute_take_profit(price, side, atr);
-
-        let llm_sl = decision.and_then(|d| d.stop_loss);
-        let llm_tp = decision.and_then(|d| d.take_profit);
-
-        let (stop_loss, stop_loss_source) = match (llm_sl, side) {
-            (Some(sl), "long") if sl > 0.0 && sl < price => (sl, "llm"),
-            (Some(sl), "short") if sl > 0.0 && sl > price => (sl, "llm"),
-            (Some(sl), _) => {
-                warn!(
-                    bot_id = %self.bot.id, side, llm_sl = sl, price,
-                    "LLM stop_loss invalid (direction mismatch or non-positive), fallback to formula"
-                );
-                (formula_sl, "formula")
-            }
-            (None, _) => (formula_sl, "formula"),
-        };
-
-        let (take_profit, take_profit_source) = match (llm_tp, side) {
-            (Some(tp), "long") if tp > 0.0 && tp > price => (tp, "llm"),
-            (Some(tp), "short") if tp > 0.0 && tp < price => (tp, "llm"),
-            (Some(tp), _) => {
-                warn!(
-                    bot_id = %self.bot.id, side, llm_tp = tp, price,
-                    "LLM take_profit invalid (direction mismatch or non-positive), fallback to formula"
-                );
-                (formula_tp, "formula")
-            }
-            (None, _) => (formula_tp, "formula"),
-        };
-
-        let rr_ratio = match side {
-            "long" => (take_profit - price) / (price - stop_loss).max(1e-9),
-            "short" => (price - take_profit) / (stop_loss - price).max(1e-9),
-            _ => 1.5,
-        };
-        let (stop_loss, take_profit, sl_source, tp_source) = if rr_ratio < 1.0 {
-            warn!(
-                bot_id = %self.bot.id, side,
-                entry = price, llm_sl = stop_loss, llm_tp = take_profit, rr_ratio,
-                "Risk-reward ratio < 1.0, fallback to formula"
-            );
-            (formula_sl, formula_tp, "formula", "formula")
-        } else {
-            (stop_loss, take_profit, stop_loss_source, take_profit_source)
-        };
+        let stop_loss = strategy::compute_stop_loss(price, side, atr);
+        let take_profit = strategy::compute_take_profit(price, side, atr);
+        let sl_source = "formula";
+        let tp_source = "formula";
 
         let position_side = match side {
             "long" => BotPositionSide::Long,
@@ -1238,8 +1194,6 @@ impl AutoWorker {
                 amount: quantity,
                 leverage: self.bot.leverage.max(1) as u32,
                 price: None,
-                stop_loss: Some(stop_loss),
-                take_profit: Some(take_profit),
                 client_order_id: Some(client_order_id.clone()),
             })
             .await;

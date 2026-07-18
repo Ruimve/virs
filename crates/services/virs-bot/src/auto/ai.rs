@@ -49,9 +49,6 @@ pub struct AutoDecision {
     pub reason: String,
     pub confidence: f64,
 
-    pub stop_loss: Option<f64>,
-
-    pub take_profit: Option<f64>,
     pub market_regime: Option<String>,
     pub funding_rate_warning: Option<String>,
     pub event_impact: Option<String>,
@@ -80,9 +77,6 @@ impl AutoDecision {
             })
             .clamp(0.0, 1.0);
 
-        let stop_loss = decision["stop_loss"].as_f64().filter(|v| *v > 0.0);
-        let take_profit = decision["take_profit"].as_f64().filter(|v| *v > 0.0);
-
         let market_regime = market["market_regime"].as_str().map(|s| s.to_string());
         let funding_rate_warning = market["funding_rate_warning"]
             .as_str()
@@ -105,8 +99,6 @@ impl AutoDecision {
             action,
             reason,
             confidence,
-            stop_loss,
-            take_profit,
             market_regime,
             funding_rate_warning,
             event_impact,

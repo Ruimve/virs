@@ -14,8 +14,8 @@ fn ws_value<T: serde::Serialize>(v: T) -> serde_json::Value {
 
 #[test]
 fn w1_1_position_all_fields() {
-    let pos = make_position(PositionSide::Long, PositionStatus::Open, Some(45000.0));
-    let json = ws_value(position_to_ws_json(&pos));
+    let pos = make_position(PositionSide::Long, PositionStatus::Open);
+    let json = ws_value(position_to_ws_json(&pos, Some(45000.0), Some(55000.0)));
     assert_eq!(json["type"], "position_updated");
     assert_eq!(json["symbol"], "BTC/USDT");
     assert_eq!(json["exchange"], "binance");
@@ -24,20 +24,21 @@ fn w1_1_position_all_fields() {
     assert_eq!(json["quantity"], 1.0);
     assert_eq!(json["entry_price"], 50000.0);
     assert_eq!(json["stop_loss"], 45000.0);
+    assert_eq!(json["take_profit"], 55000.0);
 }
 
 #[test]
 fn w1_2_position_optional_fields_none() {
-    let pos = make_position(PositionSide::Short, PositionStatus::Closed, None);
-    let json = ws_value(position_to_ws_json(&pos));
+    let pos = make_position(PositionSide::Short, PositionStatus::Closed);
+    let json = ws_value(position_to_ws_json(&pos, None, None));
     assert!(json["stop_loss"].is_null());
     assert!(json["take_profit"].is_null());
 }
 
 #[test]
 fn w1_3_position_type_field() {
-    let pos = make_position(PositionSide::Long, PositionStatus::Open, None);
-    let json = ws_value(position_to_ws_json(&pos));
+    let pos = make_position(PositionSide::Long, PositionStatus::Open);
+    let json = ws_value(position_to_ws_json(&pos, None, None));
     assert_eq!(json["type"], "position_updated");
 }
 
@@ -107,7 +108,7 @@ fn w3_3_orderbook_level_format() {
 }
 
 
-fn make_position(side: PositionSide, status: PositionStatus, stop_loss: Option<f64>) -> Position {
+fn make_position(side: PositionSide, status: PositionStatus) -> Position {
     Position {
         id: Uuid::nil(),
         exchange: "binance".into(),
@@ -117,8 +118,6 @@ fn make_position(side: PositionSide, status: PositionStatus, stop_loss: Option<f
         quantity: 1.0,
         entry_price: 50000.0,
         realized_pnl: 0.0,
-        stop_loss,
-        take_profit: None,
         client_order_id: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),

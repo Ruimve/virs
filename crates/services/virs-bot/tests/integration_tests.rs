@@ -99,9 +99,7 @@ fn int_2_2_auto_decision_json_roundtrip() {
         "decision": {
             "action": "open_long",
             "reason": "Bullish divergence",
-            "confidence": 0.9,
-            "stop_loss": 95000.0,
-            "take_profit": 105000.0
+            "confidence": 0.9
         },
         "market": {
             "market_regime": "trending_up"
@@ -112,15 +110,6 @@ fn int_2_2_auto_decision_json_roundtrip() {
     assert_eq!(decision.action, AutoAction::OpenLong);
 
     assert_eq!(decision.action.as_str(), "open_long");
-
-    if let (Some(sl), Some(tp)) = (decision.stop_loss, decision.take_profit) {
-        let computed_sl = compute_stop_loss(100000.0, "long", 2000.0);
-        let computed_tp = compute_take_profit(100000.0, "long", 2000.0);
-        assert!(sl < 100000.0, "stop_loss below entry");
-        assert!(tp > 100000.0, "take_profit above entry");
-
-        assert!(computed_sl < computed_tp);
-    }
 }
 
 #[test]

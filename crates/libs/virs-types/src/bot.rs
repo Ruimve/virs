@@ -54,8 +54,6 @@ pub enum OrderCommand {
         amount: f64,
         leverage: u32,
         price: Option<f64>,
-        stop_loss: Option<f64>,
-        take_profit: Option<f64>,
         client_order_id: Option<String>,
     },
     ClosePosition {

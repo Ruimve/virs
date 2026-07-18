@@ -289,8 +289,6 @@ impl AggregatedPositionRow {
             quantity: self.quantity,
             entry_price: self.entry_price,
             realized_pnl: self.realized_pnl,
-            stop_loss: None,
-            take_profit: None,
             client_order_id: None,
             created_at,
             updated_at: now,

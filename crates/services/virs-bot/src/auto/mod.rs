@@ -1,4 +1,3 @@
-pub mod adapters;
 pub mod ai;
 pub mod engine;
 pub mod ports;

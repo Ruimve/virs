@@ -34,12 +34,11 @@ fn int_1_2_known_provider_roundtrip() {
 
 #[test]
 fn int_2_1_position_serde_then_ws_json() {
-    let pos = make_position(PositionSide::Long, Some(45000.0));
-    let json = serde_json::to_value(position_to_ws_json(&pos)).unwrap();
+    let pos = make_position(PositionSide::Long);
+    let json = serde_json::to_value(position_to_ws_json(&pos, None, None)).unwrap();
     assert_eq!(json["type"], "position_updated");
     assert_eq!(json["symbol"], "BTC/USDT");
     assert_eq!(json["side"], "long");
-    assert_eq!(json["stop_loss"], 45000.0);
 
 
     let serialized = serde_json::to_string(&json).unwrap();
@@ -141,7 +140,7 @@ fn int_4_2_balance_response_parse_chain() {
 }
 
 
-fn make_position(side: PositionSide, stop_loss: Option<f64>) -> Position {
+fn make_position(side: PositionSide) -> Position {
     Position {
         id: Uuid::nil(),
         exchange: "binance".into(),
@@ -151,8 +150,6 @@ fn make_position(side: PositionSide, stop_loss: Option<f64>) -> Position {
         quantity: 1.0,
         entry_price: 50000.0,
         realized_pnl: 0.0,
-        stop_loss,
-        take_profit: None,
         client_order_id: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),

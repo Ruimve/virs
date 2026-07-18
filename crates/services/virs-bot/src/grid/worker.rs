@@ -350,8 +350,6 @@ impl GridWorker {
                 amount,
                 leverage: self.bot.leverage.max(1) as u32,
                 price: Some(price),
-                stop_loss: None,
-                take_profit: None,
                 client_order_id,
             }
         };

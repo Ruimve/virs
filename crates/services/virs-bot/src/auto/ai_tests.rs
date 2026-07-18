@@ -42,9 +42,7 @@ fn a3_1_decision_from_json_complete() {
         "decision": {
             "action": "open_long",
             "reason": "EMA golden cross",
-            "confidence": 0.85,
-            "stop_loss": 95000.0,
-            "take_profit": 105000.0
+            "confidence": 0.85
         },
         "market": {
             "market_regime": "trending_up",
@@ -59,8 +57,6 @@ fn a3_1_decision_from_json_complete() {
     assert_eq!(decision.action, AutoAction::OpenLong);
     assert_eq!(decision.reason, "EMA golden cross");
     assert!((decision.confidence - 0.85).abs() < 1e-10);
-    assert_eq!(decision.stop_loss, Some(95000.0));
-    assert_eq!(decision.take_profit, Some(105000.0));
     assert_eq!(decision.market_regime.as_deref(), Some("trending_up"));
     assert!(decision.funding_rate_warning.is_none());
     assert!(decision.event_impact.is_none());
@@ -75,23 +71,7 @@ fn a3_2_decision_from_json_missing_fields() {
     assert_eq!(decision.action, AutoAction::Hold);
     assert_eq!(decision.reason, "No reason provided");
     assert!((decision.confidence - 0.0).abs() < 1e-10);
-    assert!(decision.stop_loss.is_none());
-    assert!(decision.take_profit.is_none());
     assert!(decision.market_regime.is_none());
-}
-
-#[test]
-fn a3_3_decision_from_json_sl_tp_zero() {
-    let json = serde_json::json!({
-        "decision": {
-            "action": "hold",
-            "stop_loss": 0.0,
-            "take_profit": 0.0
-        }
-    });
-    let decision = AutoDecision::from_json(&json);
-    assert!(decision.stop_loss.is_none());
-    assert!(decision.take_profit.is_none());
 }
 
 #[test]

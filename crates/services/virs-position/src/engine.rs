@@ -267,8 +267,6 @@ impl PositionEngine {
                         quantity: 0.0,
                         entry_price: 0.0,
                         realized_pnl: 0.0,
-                        stop_loss: None,
-                        take_profit: None,
                         client_order_id: Some(order.client_order_id.clone()),
                         created_at: now,
                         updated_at: now,
@@ -313,8 +311,6 @@ pub(crate) async fn command_loop(
                 leverage,
                 order_type,
                 price,
-                stop_loss,
-                take_profit,
                 client_order_id,
             } => {
                 handle_open_position(
@@ -327,8 +323,6 @@ pub(crate) async fn command_loop(
                     leverage,
                     order_type,
                     price,
-                    stop_loss,
-                    take_profit,
                     client_order_id,
                 )
                 .await;
@@ -692,8 +686,6 @@ pub(crate) async fn handle_open_position(
     leverage: u32,
     order_type: OrderType,
     price: Option<f64>,
-    stop_loss: Option<f64>,
-    take_profit: Option<f64>,
     client_order_id: Option<String>,
 ) {
     let exchange_name = if exchange.is_empty() {
@@ -768,8 +760,6 @@ pub(crate) async fn handle_open_position(
         quantity: 0.0,
         entry_price: 0.0,
         realized_pnl: 0.0,
-        stop_loss,
-        take_profit,
         client_order_id: client_order_id.clone(),
         created_at: now,
         updated_at: now,
@@ -933,8 +923,6 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
                     quantity: 0.0,
                     entry_price: 0.0,
                     realized_pnl: 0.0,
-                    stop_loss: None,
-                    take_profit: None,
                     client_order_id: params.client_order_id.clone(),
                     created_at: Utc::now(),
                     updated_at: Utc::now(),

@@ -67,7 +67,11 @@ fn position_status_str(status: &virs_types::PositionStatus) -> &'static str {
 }
 
 
-pub fn position_to_ws_json(pos: &virs_types::Position) -> PositionWsMsg<'_> {
+pub fn position_to_ws_json(
+    pos: &virs_types::Position,
+    stop_loss: Option<f64>,
+    take_profit: Option<f64>,
+) -> PositionWsMsg<'_> {
     PositionWsMsg {
         msg_type: "position_updated",
         symbol: &pos.symbol,
@@ -77,11 +81,37 @@ pub fn position_to_ws_json(pos: &virs_types::Position) -> PositionWsMsg<'_> {
         quantity: pos.quantity,
         entry_price: pos.entry_price,
         realized_pnl: pos.realized_pnl,
-        stop_loss: pos.stop_loss,
-        take_profit: pos.take_profit,
+        stop_loss,
+        take_profit,
         position_id: pos.id.to_string(),
         created_at: pos.created_at.to_rfc3339(),
         updated_at: pos.updated_at.to_rfc3339(),
+    }
+}
+
+
+async fn fetch_stop_loss_take_profit(
+    db: &sqlx::PgPool,
+    symbol: &str,
+    exchange: &str,
+) -> (Option<f64>, Option<f64>) {
+    let row: Result<(f64, f64), _> = sqlx::query_as(
+        r#"SELECT stop_loss, take_profit FROM pe_auto_order_context
+           WHERE symbol = $1 AND exchange = $2 AND order_role = 'open' AND status = 'open'
+           ORDER BY created_at DESC LIMIT 1"#,
+    )
+    .bind(symbol)
+    .bind(exchange)
+    .fetch_one(db)
+    .await;
+
+    match row {
+        Ok((sl, tp)) => {
+            let sl = if sl > 0.0 { Some(sl) } else { None };
+            let tp = if tp > 0.0 { Some(tp) } else { None };
+            (sl, tp)
+        }
+        Err(_) => (None, None),
     }
 }
 
@@ -277,7 +307,12 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
                                 && !subscribed_symbols.contains(&position.symbol)
                             { continue; }
 
-                            let msg = position_to_ws_json(&position);
+                            let (sl, tp) = fetch_stop_loss_take_profit(
+                                &state.db_pool,
+                                &position.symbol,
+                                &position.exchange,
+                            ).await;
+                            let msg = position_to_ws_json(&position, sl, tp);
                             if let Ok(text) = serde_json::to_string(&msg) {
                                 if socket.send(Message::Text(text.into())).await.is_err() {
                                     break;
@@ -300,7 +335,12 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
 
                                     let positions = state.engine_manager.get_positions_by_symbol(sym);
                                     for pos in positions {
-                                        let msg = position_to_ws_json(&pos);
+                                        let (sl, tp) = fetch_stop_loss_take_profit(
+                                            &state.db_pool,
+                                            &pos.symbol,
+                                            &pos.exchange,
+                                        ).await;
+                                        let msg = position_to_ws_json(&pos, sl, tp);
                                         if let Ok(text) = serde_json::to_string(&msg) {
                                             if socket.send(Message::Text(text.into())).await.is_err() {
                                                 break;

@@ -54,8 +54,6 @@ fn make_position(side: PositionSide, entry: f64, quantity: f64) -> Position {
         quantity,
         entry_price: entry,
         realized_pnl: 0.0,
-        stop_loss: None,
-        take_profit: None,
         client_order_id: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),

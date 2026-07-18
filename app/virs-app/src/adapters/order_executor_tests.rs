@@ -165,8 +165,6 @@ fn o1_6_convert_position_opened_none() {
         quantity: 1.0,
         entry_price: 100.0,
         realized_pnl: 0.0,
-        stop_loss: None,
-        take_profit: None,
         client_order_id: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
