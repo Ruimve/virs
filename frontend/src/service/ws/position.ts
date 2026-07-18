@@ -78,13 +78,7 @@ export function usePositionWs(
     }
   }, []);
 
-  const result = useWs(
-    positionInst,
-    getPositionWsUrl,
-    parsePositionWs,
-    onEvent,
-    handleReconnect,
-  );
+  const result = useWs(positionInst, getPositionWsUrl, parsePositionWs, onEvent, handleReconnect);
 
   useEffect(() => {
     if (!symbol) return;

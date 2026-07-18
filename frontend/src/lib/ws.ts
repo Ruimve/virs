@@ -46,9 +46,7 @@ function scheduleReconnect<T>(
 ) {
   if (inst.refCount <= 0) return;
   if (inst.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    console.error(
-      `[WS] Reached max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}), giving up`,
-    );
+    console.error(`[WS] Reached max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}), giving up`);
     notifyState(inst, 'closed');
     return;
   }
@@ -174,8 +172,8 @@ export function useWs<T>(
     setWsState(state);
   }, []);
 
-  const [wsState, setWsState] = useState<WsState>(
-    () => (inst.ws?.readyState === WebSocket.OPEN ? 'open' : 'idle'),
+  const [wsState, setWsState] = useState<WsState>(() =>
+    inst.ws?.readyState === WebSocket.OPEN ? 'open' : 'idle',
   );
 
   useEffect(() => {
