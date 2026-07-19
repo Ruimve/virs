@@ -21,7 +21,7 @@ export interface KlineChartHandle {
   }) => void;
 }
 
-interface KlineChartProps {
+export interface KlineChartProps {
   data: Array<{
     time: number;
     open: number;
@@ -40,8 +40,6 @@ interface KlineChartProps {
   }>;
 }
 
-const MOBILE_BREAKPOINT = 768;
-
 const getColors = () => {
   const cs = getComputedStyle(document.documentElement);
   return {
@@ -52,6 +50,7 @@ const getColors = () => {
   };
 };
 
+const MOBILE_BREAKPOINT = 768;
 const getVisibleRangeWidth = () => {
   if (typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT) {
     return 50;
