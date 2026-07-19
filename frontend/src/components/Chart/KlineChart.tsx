@@ -5,7 +5,6 @@ import {
   type CandlestickData,
   CandlestickSeries,
   HistogramSeries,
-  LineSeries,
   createSeriesMarkers,
 } from 'lightweight-charts';
 import ReactChart from './ReactChart';
@@ -87,7 +86,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'>>(null);
 
   const markersPluginRef = useRef<{ detach: () => void } | null>(null);
-  const overlaySeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
   const initializedRef = useRef(false);
 
   const colorsRef = useRef({
