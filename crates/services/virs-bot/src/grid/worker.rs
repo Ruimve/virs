@@ -843,6 +843,22 @@ impl GridWorker {
     }
 
     pub(crate) async fn on_llm_decision(&mut self) {
+        // 守卫1：有待确认订单时跳过 LLM 决策（与 AutoWorker 对齐）
+        if !self.pending_orders.is_empty() {
+            warn!(
+                bot_id = %self.bot.id,
+                pending_count = self.pending_orders.len(),
+                "Pending orders in progress, skipping LLM decision"
+            );
+            return;
+        }
+
+        // 守卫2：AI 服务不可用时跳过（与 AutoWorker 对齐）
+        if !self.ai_service.is_available_for_user(self.bot.user_id).await {
+            warn!(bot_id = %self.bot.id, "AI service not available, skipping decision");
+            return;
+        }
+
         let is_initial =
             self.bot.upper_price <= 0.0 || self.bot.lower_price <= 0.0 || self.levels.is_empty();
 
@@ -856,7 +872,7 @@ impl GridWorker {
             .analyze(&self.bot, &system_prompt, &user_prompt)
             .await;
         let (decision, raw_llm_response, llm_model) = match decision_result {
-            Ok((d, m)) => (Some(d), None, m),
+            Ok((d, raw, m)) => (Some(d), Some(raw), m),
             Err(e) => {
                 warn!(bot_id = %self.bot.id, error = %e, "LLM call failed");
                 (None, None, String::new())
@@ -1101,13 +1117,13 @@ impl GridWorker {
         decision: &Option<GridAiDecision>,
         system_prompt: &str,
         user_prompt: &str,
-        _raw_llm_response: Option<&serde_json::Value>,
+        raw_llm_response: Option<&serde_json::Value>,
         is_initial: bool,
         llm_model: &str,
     ) -> GridAction {
         match decision {
             Some(d) => {
-                let result = serde_json::json!({
+                let mut result = serde_json::json!({
                     "decision": { "action": d.action, "reason": d.reason, "confidence": d.confidence },
                     "grid": { "upper_price": d.upper_price, "lower_price": d.lower_price, "grid_count": d.grid_count, "grid_profit_pct": d.grid_profit_pct },
                     "risk": { "quantity_per_grid": d.quantity_per_grid },
@@ -1115,6 +1131,16 @@ impl GridWorker {
                     "analysis": d.analysis,
                     "risk_warning": d.risk_warning,
                 });
+                // 保存 LLM 原始返回到审计日志（与 AutoWorker 对齐）
+                if let Some(raw) = raw_llm_response {
+                    if let Some(obj) = result.as_object_mut() {
+                        obj.insert("raw_llm_response".to_string(), raw.clone());
+                    } else {
+                        tracing::error!(
+                            "LLM result is not a JSON object — cannot insert raw_llm_response"
+                        );
+                    }
+                }
                 if let Err(e) = self
                     .store
                     .save_analysis_log(

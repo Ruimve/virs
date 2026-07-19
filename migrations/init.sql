@@ -89,6 +89,9 @@ CREATE TABLE IF NOT EXISTS qd_grid_bots (
     system_prompt TEXT,
     user_prompt TEXT,
 
+    -- 策略 prompt 文件名（STRATEGIES_DIR/grid/{strategy_file}.json）；NULL 时回退到 DEFAULT_* 常量
+    strategy_file TEXT,
+
     -- 动态调整（内部字段，API 不返回）
     dynamic_adjust BOOLEAN NOT NULL DEFAULT true,
     adjust_interval_secs INT NOT NULL DEFAULT 300,
@@ -244,6 +247,9 @@ CREATE TABLE IF NOT EXISTS qd_auto_bots (
     ai_analysis TEXT,
     system_prompt TEXT,
     user_prompt TEXT,
+
+    -- 策略 prompt 文件名（STRATEGIES_DIR/auto/{strategy_file}.json）；NULL 时回退到 DEFAULT_* 常量
+    strategy_file TEXT,
 
     -- 统计缓存（denormalized，由 worker 定期同步）
     total_pnl DOUBLE PRECISION NOT NULL DEFAULT 0,

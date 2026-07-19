@@ -109,19 +109,24 @@ impl GridAiService {
         }
     }
 
+    /// 检查指定用户是否有可用的 LLM 凭证（与 AutoAiService 对齐）。
+    pub async fn is_available_for_user(&self, user_id: Uuid) -> bool {
+        self.llm_client.is_available_for_user(user_id).await
+    }
+
     pub async fn analyze(
         &self,
         bot: &GridBotConfig,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> BotResult<(GridAiDecision, String)> {
+    ) -> BotResult<(GridAiDecision, serde_json::Value, String)> {
         let result = self
             .llm_client
             .call(bot.user_id, system_prompt, user_prompt, "grid-ai")
             .await?;
 
         let decision = parse_grid_decision(&result.content)?;
-        Ok((decision, result.used_model))
+        Ok((decision, result.content, result.used_model))
     }
 }
 
