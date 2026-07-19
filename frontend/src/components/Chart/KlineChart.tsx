@@ -95,16 +95,6 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     downVolume: '',
   });
 
-  const readChartColors = useCallback(() => {
-    const cs = getComputedStyle(document.documentElement);
-    colorsRef.current = {
-      up: cs.getPropertyValue('--chart-up').trim() || '#10b981',
-      upVolume: cs.getPropertyValue('--chart-up-volume').trim() || 'rgba(16, 185, 129, 0.3)',
-      down: cs.getPropertyValue('--chart-down').trim() || '#ef4444',
-      downVolume: cs.getPropertyValue('--chart-down-volume').trim() || 'rgba(239, 68, 68, 0.3)',
-    };
-  }, []);
-
   useImperativeHandle(
     ref,
     () => ({
@@ -212,7 +202,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     }
 
     applyVisibleRange(chart, data.length);
-  }, [data, markers, readChartColors]);
+  }, [data, markers]);
 
   const onLoad = useCallback((c: IChartApi) => {
     chartRef.current = c;
