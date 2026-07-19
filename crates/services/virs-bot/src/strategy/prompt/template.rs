@@ -1,7 +1,9 @@
 //! Prompt 模板数据结构。
 //!
-//! 一个 [`PromptTemplate`] 对应 `strategies/{auto,grid}/{name}.json` 一个文件。
-//! 字段设计与 AI 生成产物对齐：LLM 生成 JSON → 校验 → 写文件 → loader 加载。
+//! 一个 [`PromptTemplate`] 对应 `strategies/{auto,grid}/{name}/` 一个文件夹，
+//! 内含 `meta.json` + `system_prompt.md` + `user_prompt_template.md` 三个文件。
+//! API 传输时仍使用单个 JSON（[`PromptTemplate`] 本身），仅磁盘存储拆分为三文件。
+//! 字段设计与 AI 生成产物对齐：LLM 生成 JSON → 校验 → 写文件夹 → loader 加载。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -42,25 +44,17 @@ impl Default for PromptSource {
     }
 }
 
-/// Prompt 模板。
+/// Prompt 模板（内存表示，同时用于 API JSON 传输）。
 ///
-/// JSON 文件结构示例：
-/// ```json
-/// {
-///   "name": "trend_following",
-///   "strategy_type": "auto",
-///   "system_prompt": "你是趋势跟随引擎...",
-///   "user_prompt_template": "当前时间:{timestamp}\n4h:{h4_ema20}...",
-///   "required_placeholders": ["h4_ema20", "h1_rsi"],
-///   "source": { "kind": "human" },
-///   "version": 1,
-///   "description": "多周期趋势跟随",
-///   "created_at": "2026-07-19T10:00:00Z"
-/// }
-/// ```
+/// 磁盘存储为文件夹 `strategies/{type}/{name}/`，内含三个文件：
+/// - `meta.json` — 除 system_prompt / user_prompt_template 外的全部字段
+/// - `system_prompt.md` — system_prompt 原文（Markdown，可直接编辑查看）
+/// - `user_prompt_template.md` — user_prompt_template 原文
+///
+/// API 传输时使用完整的 [`PromptTemplate`] JSON（含所有字段）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptTemplate {
-    /// 模板名（不含扩展名）。对应文件名 `{name}.json`
+    /// 模板名。对应文件夹名 `{name}/`
     pub name: String,
     /// 策略类型，决定文件所在子目录
     pub strategy_type: StrategyType,
@@ -84,6 +78,47 @@ pub struct PromptTemplate {
     /// 创建时间（ISO 8601）。缺失时由 loader 填入文件 mtime
     #[serde(default)]
     pub created_at: Option<DateTime<Utc>>,
+}
+
+/// 磁盘上的 `meta.json` 结构。
+///
+/// [`PromptTemplate`] 的子集——不包含 `system_prompt` 和 `user_prompt_template`，
+/// 这两个字段单独存为 `.md` 文件以便编辑查看。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetaFile {
+    /// 模板名。对应文件夹名 `{name}/`
+    pub name: String,
+    /// 策略类型，决定文件所在子目录
+    pub strategy_type: StrategyType,
+    /// 声明使用的占位符列表
+    pub required_placeholders: Vec<String>,
+    /// 来源标记
+    #[serde(default)]
+    pub source: PromptSource,
+    /// 版本号，人工/AI 编辑时递增
+    #[serde(default = "default_version")]
+    pub version: i32,
+    /// 人类可读的描述
+    #[serde(default)]
+    pub description: String,
+    /// 创建时间（ISO 8601）
+    #[serde(default)]
+    pub created_at: Option<DateTime<Utc>>,
+}
+
+impl MetaFile {
+    /// 从 [`PromptTemplate`] 提取元数据（不含 prompt 文本）。
+    pub fn from_template(tpl: &PromptTemplate) -> Self {
+        Self {
+            name: tpl.name.clone(),
+            strategy_type: tpl.strategy_type,
+            required_placeholders: tpl.required_placeholders.clone(),
+            source: tpl.source.clone(),
+            version: tpl.version,
+            description: tpl.description.clone(),
+            created_at: tpl.created_at,
+        }
+    }
 }
 
 fn default_version() -> i32 {

@@ -1,4 +1,4 @@
-//! 集成测试：验证项目根 `strategies/` 目录下的 seed JSON 文件能被
+//! 集成测试：验证项目根 `strategies/` 目录下的 seed 文件夹能被
 //! PromptLoader 正确加载并通过校验。
 //!
 //! 该测试需要 `STRATEGIES_DIR` 环境变量指向项目根的 `strategies/` 目录，
@@ -21,7 +21,7 @@ async fn seed_auto_default_loads_and_validates() {
     let tpl = loader
         .get(StrategyType::Auto, "default")
         .await
-        .expect("strategies/auto/default.json should load");
+        .expect("strategies/auto/default/ should load");
     assert_eq!(tpl.strategy_type, StrategyType::Auto);
     assert!(!tpl.system_prompt.is_empty());
     assert!(!tpl.user_prompt_template.is_empty());
@@ -42,7 +42,7 @@ async fn seed_grid_default_loads_and_validates() {
     let tpl = loader
         .get(StrategyType::Grid, "default")
         .await
-        .expect("strategies/grid/default.json should load");
+        .expect("strategies/grid/default/ should load");
     assert_eq!(tpl.strategy_type, StrategyType::Grid);
     assert!(!tpl.system_prompt.is_empty());
     assert!(!tpl.user_prompt_template.is_empty());

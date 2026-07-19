@@ -1,9 +1,10 @@
-//! Prompt 模板文件加载器。
+//! Prompt 模板文件夹加载器。
 //!
 //! 启动流程：
 //! 1. 读取 `STRATEGIES_DIR` 环境变量。未设置时返回空 loader（worker 回退默认常量）
-//! 2. 扫描 `{dir}/auto/*.json` 和 `{dir}/grid/*.json`
-//! 3. 逐文件反序列化为 [`PromptTemplate`]，调用 [`validator::validate`] 校验
+//! 2. 扫描 `{dir}/auto/*/` 和 `{dir}/grid/*/` 子目录（每个子目录 = 一个策略）
+//! 3. 每个子目录读取 `meta.json` + `system_prompt.md` + `user_prompt_template.md`，
+//!    组装为 [`PromptTemplate`]，调用 [`validator::validate`] 校验
 //! 4. 校验通过则缓存，失败则 `warn!` 记录并跳过（不中断启动）
 //!
 //! 运行时查询：[`PromptLoader::get`] 按 `(strategy_type, name)` 查找。
@@ -16,7 +17,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-use crate::strategy::prompt::template::{PromptTemplate, StrategyType};
+use crate::strategy::prompt::template::{MetaFile, PromptTemplate, StrategyType};
 use crate::strategy::prompt::validator::validate;
 
 /// 环境变量名。
@@ -65,7 +66,7 @@ impl PromptLoader {
         }
     }
 
-    /// 从指定目录加载。扫描 `{dir}/auto/*.json` 和 `{dir}/grid/*.json`。
+    /// 从指定目录加载。扫描 `{dir}/auto/*/` 和 `{dir}/grid/*/` 子目录。
     pub async fn from_dir(dir: PathBuf) -> Self {
         let mut inner = Inner {
             templates: HashMap::new(),
@@ -154,61 +155,82 @@ async fn load_subdir(sub: &Path, st: StrategyType, inner: &mut Inner) {
 
     while let Ok(Some(entry)) = entries.next_entry().await {
         let path = entry.path();
-        if path.extension().and_then(|s| s.to_str()) != Some("json") {
+        if !path.is_dir() {
             continue;
         }
-        let stem = match path.file_stem().and_then(|s| s.to_str()) {
+        let name = match path.file_name().and_then(|s| s.to_str()) {
             Some(s) => s.to_string(),
             None => continue,
         };
 
-        let data = match tokio::fs::read(&path).await {
-            Ok(d) => d,
+        match load_strategy_folder(&path, st, &name).await {
+            Ok(tpl) => {
+                let key = (st, tpl.name.clone());
+                if inner.templates.insert(key, tpl).is_some() {
+                    warn!(
+                        subdir = %sub.display(),
+                        name = %name,
+                        "Duplicate strategy name — last loaded wins"
+                    );
+                }
+            }
             Err(e) => {
                 warn!(
-                    file = %path.display(),
+                    dir = %path.display(),
                     error = %e,
-                    "Failed to read strategy file — skipping"
+                    "Failed to load strategy folder — skipping"
                 );
-                continue;
             }
-        };
-
-        let mut tpl: PromptTemplate = match serde_json::from_slice(&data) {
-            Ok(t) => t,
-            Err(e) => {
-                warn!(
-                    file = %path.display(),
-                    error = %e,
-                    "Failed to parse strategy JSON — skipping"
-                );
-                continue;
-            }
-        };
-
-        // name 字段以文件名为准（防止 JSON 内 name 与文件名不一致）
-        tpl.name = stem.clone();
-        // strategy_type 以目录为准（防止放错目录）
-        tpl.strategy_type = st;
-
-        if let Err(e) = validate(&tpl) {
-            warn!(
-                file = %path.display(),
-                error = %e,
-                "Strategy template validation failed — skipping"
-            );
-            continue;
-        }
-
-        let key = (st, tpl.name.clone());
-        if inner.templates.insert(key, tpl).is_some() {
-            warn!(
-                subdir = %sub.display(),
-                name = stem.as_str(),
-                "Duplicate strategy name — last loaded wins"
-            );
         }
     }
+}
+
+/// 从单个策略文件夹加载模板。
+///
+/// 文件夹内必须包含 `meta.json` + `system_prompt.md` + `user_prompt_template.md`。
+/// `name` 以文件夹名为准，`strategy_type` 以父目录为准（防止放错位置）。
+async fn load_strategy_folder(
+    dir: &Path,
+    st: StrategyType,
+    name: &str,
+) -> Result<PromptTemplate, String> {
+    let meta_path = dir.join("meta.json");
+    let system_path = dir.join("system_prompt.md");
+    let user_path = dir.join("user_prompt_template.md");
+
+    let meta_data = tokio::fs::read(&meta_path)
+        .await
+        .map_err(|e| format!("读取 meta.json 失败: {e}"))?;
+    let mut meta: MetaFile = serde_json::from_slice(&meta_data)
+        .map_err(|e| format!("解析 meta.json 失败: {e}"))?;
+
+    let system_prompt = tokio::fs::read_to_string(&system_path)
+        .await
+        .map_err(|e| format!("读取 system_prompt.md 失败: {e}"))?;
+    let user_prompt_template = tokio::fs::read_to_string(&user_path)
+        .await
+        .map_err(|e| format!("读取 user_prompt_template.md 失败: {e}"))?;
+
+    // name 以文件夹名为准（防止 meta.json 内 name 与文件夹名不一致）
+    meta.name = name.to_string();
+    // strategy_type 以目录为准（防止放错目录）
+    meta.strategy_type = st;
+
+    let tpl = PromptTemplate {
+        name: meta.name,
+        strategy_type: meta.strategy_type,
+        system_prompt,
+        user_prompt_template,
+        required_placeholders: meta.required_placeholders,
+        source: meta.source,
+        version: meta.version,
+        description: meta.description,
+        created_at: meta.created_at,
+    };
+
+    validate(&tpl).map_err(|e| format!("校验失败: {e}"))?;
+
+    Ok(tpl)
 }
 
 /// 同步加载辅助函数（用于测试或非 async 上下文）。
@@ -230,23 +252,50 @@ pub fn load_dir_blocking(dir: PathBuf) -> PromptLoader {
         if let Ok(entries) = std::fs::read_dir(&sub) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) != Some("json") {
+                if !path.is_dir() {
                     continue;
                 }
-                let stem = match path.file_stem().and_then(|s| s.to_str()) {
+                let name = match path.file_name().and_then(|s| s.to_str()) {
                     Some(s) => s.to_string(),
                     None => continue,
                 };
-                let data = match std::fs::read(&path) {
+
+                let meta_path = path.join("meta.json");
+                let system_path = path.join("system_prompt.md");
+                let user_path = path.join("user_prompt_template.md");
+
+                let meta_data = match std::fs::read(&meta_path) {
                     Ok(d) => d,
                     Err(_) => continue,
                 };
-                let mut tpl: PromptTemplate = match serde_json::from_slice(&data) {
-                    Ok(t) => t,
+                let mut meta: MetaFile = match serde_json::from_slice(&meta_data) {
+                    Ok(m) => m,
                     Err(_) => continue,
                 };
-                tpl.name = stem;
-                tpl.strategy_type = st;
+                let system_prompt = match std::fs::read_to_string(&system_path) {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+                let user_prompt_template = match std::fs::read_to_string(&user_path) {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+
+                meta.name = name;
+                meta.strategy_type = st;
+
+                let tpl = PromptTemplate {
+                    name: meta.name,
+                    strategy_type: meta.strategy_type,
+                    system_prompt,
+                    user_prompt_template,
+                    required_placeholders: meta.required_placeholders,
+                    source: meta.source,
+                    version: meta.version,
+                    description: meta.description,
+                    created_at: meta.created_at,
+                };
+
                 if let Err(_e) = validate(&tpl) {
                     continue;
                 }
@@ -262,24 +311,24 @@ pub fn load_dir_blocking(dir: PathBuf) -> PromptLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::strategy::prompt::template::PromptSource;
+    use crate::strategy::prompt::template::{MetaFile, PromptSource};
 
     fn write_template(dir: &Path, st: StrategyType, name: &str, system: &str, user: &str) {
-        let sub = dir.join(st.as_dir());
-        std::fs::create_dir_all(&sub).unwrap();
-        let tpl = PromptTemplate {
+        let strategy_dir = dir.join(st.as_dir()).join(name);
+        std::fs::create_dir_all(&strategy_dir).unwrap();
+        let meta = MetaFile {
             name: name.to_string(),
             strategy_type: st,
-            system_prompt: system.to_string(),
-            user_prompt_template: user.to_string(),
             required_placeholders: vec!["h1_current_price".to_string()],
             source: PromptSource::Human,
             version: 1,
             description: String::new(),
             created_at: None,
         };
-        let json = serde_json::to_string_pretty(&tpl).unwrap();
-        std::fs::write(sub.join(format!("{name}.json")), json).unwrap();
+        let json = serde_json::to_string_pretty(&meta).unwrap();
+        std::fs::write(strategy_dir.join("meta.json"), json).unwrap();
+        std::fs::write(strategy_dir.join("system_prompt.md"), system).unwrap();
+        std::fs::write(strategy_dir.join("user_prompt_template.md"), user).unwrap();
     }
 
     #[test]
@@ -326,17 +375,15 @@ mod tests {
     }
 
     #[test]
-    fn l4_strategy_type_from_directory_not_json() {
-        // 文件放在 auto/ 目录但 JSON 内写 strategy_type=Grid
+    fn l4_strategy_type_from_directory_not_meta() {
+        // 文件夹放在 auto/ 目录但 meta.json 内写 strategy_type=Grid
         // 加载器应以目录为准
         let tmp = tempfile::tempdir().unwrap();
-        let sub = tmp.path().join("auto");
-        std::fs::create_dir_all(&sub).unwrap();
-        let tpl = PromptTemplate {
+        let strategy_dir = tmp.path().join("auto").join("mismatch");
+        std::fs::create_dir_all(&strategy_dir).unwrap();
+        let meta = MetaFile {
             name: "mismatch".to_string(),
             strategy_type: StrategyType::Grid, // 故意写错
-            system_prompt: "返回 JSON".to_string(),
-            user_prompt_template: "{h1_current_price}".to_string(),
             required_placeholders: vec!["h1_current_price".to_string()],
             source: PromptSource::Human,
             version: 1,
@@ -344,10 +391,12 @@ mod tests {
             created_at: None,
         };
         std::fs::write(
-            sub.join("mismatch.json"),
-            serde_json::to_string_pretty(&tpl).unwrap(),
+            strategy_dir.join("meta.json"),
+            serde_json::to_string_pretty(&meta).unwrap(),
         )
         .unwrap();
+        std::fs::write(strategy_dir.join("system_prompt.md"), "返回 JSON").unwrap();
+        std::fs::write(strategy_dir.join("user_prompt_template.md"), "{h1_current_price}").unwrap();
         let loader = load_dir_blocking(tmp.path().to_path_buf());
         let rt = tokio::runtime::Runtime::new().unwrap();
         let loaded = rt

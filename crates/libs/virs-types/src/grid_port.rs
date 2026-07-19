@@ -41,7 +41,7 @@ pub struct GridBotConfig {
     pub grid_levels_json: Option<serde_json::Value>,
     pub system_prompt: Option<String>,
     pub last_adjusted_at: Option<DateTime<Utc>>,
-    /// 策略 prompt 文件名（不含扩展名）。加载时查 `strategies/grid/{strategy_file}.json`。
+    /// 策略 prompt 文件夹名。加载时查 `strategies/grid/{strategy_file}/`。
     /// 为 None 时回退到 crate 内硬编码的 DEFAULT_SYSTEM_PROMPT / DEFAULT_USER_PROMPT_TEMPLATE。
     pub strategy_file: Option<String>,
 }

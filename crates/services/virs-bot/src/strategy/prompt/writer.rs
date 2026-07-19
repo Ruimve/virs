@@ -1,7 +1,12 @@
-//! 策略 prompt 文件写入器。
+//! 策略 prompt 文件夹写入器。
 //!
-//! 将校验通过的 [`PromptTemplate`] 写入 `STRATEGIES_DIR/{strategy_type}/{name}.json`。
-//! 写入前自动校验，写入后返回文件路径。
+//! 将校验通过的 [`PromptTemplate`] 写入 `STRATEGIES_DIR/{strategy_type}/{name}/` 文件夹。
+//! 文件夹内含三个文件：
+//! - `meta.json` — 除 system_prompt / user_prompt_template 外的全部字段
+//! - `system_prompt.md` — system_prompt 原文（Markdown，可直接编辑查看）
+//! - `user_prompt_template.md` — user_prompt_template 原文
+//!
+//! 写入前自动校验，写入后返回文件夹路径。
 //!
 //! 注意：写入后运行中的 bot 不会自动热更新——需重启 bot 才能加载新 prompt。
 //! 这是有意为之，避免运行中策略行为突变。
@@ -11,14 +16,14 @@ use std::path::PathBuf;
 use virs_error::{BotError, BotResult};
 
 use crate::strategy::prompt::loader::ENV_STRATEGIES_DIR;
-use crate::strategy::prompt::template::PromptTemplate;
+use crate::strategy::prompt::template::{MetaFile, PromptTemplate};
 use crate::strategy::prompt::validator::validate;
 
-/// 保存策略模板到文件。
+/// 保存策略模板到文件夹。
 ///
-/// - `overwrite` 为 `false` 且文件已存在时返回错误
+/// - `overwrite` 为 `false` 且文件夹已存在时返回错误
 /// - 写入前自动校验模板
-/// - 返回写入的文件完整路径
+/// - 返回写入的文件夹完整路径
 pub fn save_template(template: &PromptTemplate, overwrite: bool) -> BotResult<PathBuf> {
     // 先校验
     validate(template).map_err(|e| {
@@ -40,40 +45,59 @@ pub fn save_template(template: &PromptTemplate, overwrite: bool) -> BotResult<Pa
         )));
     }
 
-    let sub_dir = dir.join(template.strategy_type.as_dir());
-    std::fs::create_dir_all(&sub_dir).map_err(|e| {
-        BotError::Llm(format!("创建策略子目录失败: {e}"))
-    })?;
+    let strategy_dir = dir
+        .join(template.strategy_type.as_dir())
+        .join(&template.name);
 
-    let file_path = sub_dir.join(format!("{}.json", template.name));
-
-    if !overwrite && file_path.exists() {
+    if !overwrite && strategy_dir.exists() {
         return Err(BotError::Llm(format!(
-            "策略文件已存在: {path}（设置 overwrite=true 可覆盖）",
-            path = file_path.display()
+            "策略文件夹已存在: {path}（设置 overwrite=true 可覆盖）",
+            path = strategy_dir.display()
         )));
     }
 
-    let json = serde_json::to_string_pretty(template).map_err(|e| {
-        BotError::Llm(format!("序列化策略模板失败: {e}"))
+    std::fs::create_dir_all(&strategy_dir).map_err(|e| {
+        BotError::Llm(format!("创建策略文件夹失败: {e}"))
     })?;
 
-    std::fs::write(&file_path, json).map_err(|e| {
-        BotError::Llm(format!("写入策略文件失败: {e}"))
+    // 写入 meta.json
+    let meta = MetaFile::from_template(template);
+    let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| {
+        BotError::Llm(format!("序列化 meta.json 失败: {e}"))
+    })?;
+    std::fs::write(strategy_dir.join("meta.json"), meta_json).map_err(|e| {
+        BotError::Llm(format!("写入 meta.json 失败: {e}"))
+    })?;
+
+    // 写入 system_prompt.md
+    std::fs::write(strategy_dir.join("system_prompt.md"), &template.system_prompt).map_err(|e| {
+        BotError::Llm(format!("写入 system_prompt.md 失败: {e}"))
+    })?;
+
+    // 写入 user_prompt_template.md
+    std::fs::write(
+        strategy_dir.join("user_prompt_template.md"),
+        &template.user_prompt_template,
+    )
+    .map_err(|e| {
+        BotError::Llm(format!("写入 user_prompt_template.md 失败: {e}"))
     })?;
 
     tracing::info!(
-        path = %file_path.display(),
+        path = %strategy_dir.display(),
         name = %template.name,
         strategy_type = ?template.strategy_type,
         "策略模板已保存"
     );
 
-    Ok(file_path)
+    Ok(strategy_dir)
 }
 
-/// 删除策略模板文件。
-pub fn delete_template(strategy_type: crate::strategy::prompt::template::StrategyType, name: &str) -> BotResult<()> {
+/// 删除策略模板文件夹。
+pub fn delete_template(
+    strategy_type: crate::strategy::prompt::template::StrategyType,
+    name: &str,
+) -> BotResult<()> {
     let dir = std::env::var(ENV_STRATEGIES_DIR).map_err(|_| {
         BotError::Llm(format!(
             "{env} 环境变量未设置",
@@ -81,23 +105,23 @@ pub fn delete_template(strategy_type: crate::strategy::prompt::template::Strateg
         ))
     })?;
 
-    let file_path = PathBuf::from(&dir)
+    let strategy_dir = PathBuf::from(&dir)
         .join(strategy_type.as_dir())
-        .join(format!("{name}.json"));
+        .join(name);
 
-    if !file_path.exists() {
+    if !strategy_dir.exists() {
         return Err(BotError::Llm(format!(
-            "策略文件不存在: {path}",
-            path = file_path.display()
+            "策略文件夹不存在: {path}",
+            path = strategy_dir.display()
         )));
     }
 
-    std::fs::remove_file(&file_path).map_err(|e| {
-        BotError::Llm(format!("删除策略文件失败: {e}"))
+    std::fs::remove_dir_all(&strategy_dir).map_err(|e| {
+        BotError::Llm(format!("删除策略文件夹失败: {e}"))
     })?;
 
     tracing::info!(
-        path = %file_path.display(),
+        path = %strategy_dir.display(),
         name = name,
         "策略模板已删除"
     );
@@ -131,7 +155,7 @@ mod tests {
     }
 
     #[test]
-    fn w1_save_template_writes_file() {
+    fn w1_save_template_writes_folder() {
         let _guard = ENV_LOCK.lock().unwrap();
         let tmp = tempdir().unwrap();
         std::env::set_var(ENV_STRATEGIES_DIR, tmp.path());
@@ -139,11 +163,24 @@ mod tests {
         let tpl = make_valid_template("test_save", StrategyType::Auto);
         let path = save_template(&tpl, false).unwrap();
         assert!(path.exists());
-        assert!(path.to_str().unwrap().ends_with("auto/test_save.json"));
+        assert!(path.is_dir());
+        assert!(path.to_str().unwrap().ends_with("auto/test_save"));
 
-        let content = std::fs::read_to_string(&path).unwrap();
-        let loaded: PromptTemplate = serde_json::from_str(&content).unwrap();
-        assert_eq!(loaded.name, "test_save");
+        // 验证三个文件都存在
+        assert!(path.join("meta.json").exists());
+        assert!(path.join("system_prompt.md").exists());
+        assert!(path.join("user_prompt_template.md").exists());
+
+        // 验证 meta.json 可解析
+        let meta_content = std::fs::read_to_string(path.join("meta.json")).unwrap();
+        let meta: MetaFile = serde_json::from_str(&meta_content).unwrap();
+        assert_eq!(meta.name, "test_save");
+
+        // 验证 .md 文件内容
+        let sys = std::fs::read_to_string(path.join("system_prompt.md")).unwrap();
+        assert_eq!(sys, tpl.system_prompt);
+        let user = std::fs::read_to_string(path.join("user_prompt_template.md")).unwrap();
+        assert_eq!(user, tpl.user_prompt_template);
 
         std::env::remove_var(ENV_STRATEGIES_DIR);
     }
@@ -169,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn w3_delete_template_removes_file() {
+    fn w3_delete_template_removes_folder() {
         let _guard = ENV_LOCK.lock().unwrap();
         let tmp = tempdir().unwrap();
         std::env::set_var(ENV_STRATEGIES_DIR, tmp.path());
