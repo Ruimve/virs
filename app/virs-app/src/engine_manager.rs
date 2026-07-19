@@ -339,6 +339,10 @@ impl EngineManager for AppEngineManager {
             std::time::Duration::from_secs(self.time_config.llm_timeout_secs),
         ));
 
+        // 加载策略 prompt 文件（STRATEGIES_DIR 环境变量指向的目录）。
+        // 未设置环境变量时返回空 loader，worker 回退到 crate 内硬编码的 DEFAULT_* 常量。
+        let prompt_loader = virs_bot::strategy::prompt::PromptLoader::from_env().await;
+
         let (mut grid_engine, grid_cmd_tx, _grid_event_broadcast) = virs_bot::grid::GridEngine::new(
             grid_store,
             grid_ai_service,
@@ -347,6 +351,7 @@ impl EngineManager for AppEngineManager {
             grid_market_data_provider,
             grid_event_tx.clone(),
             self.time_config.clone(),
+            prompt_loader.clone(),
         );
 
         let paper_symbols: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
@@ -450,6 +455,7 @@ impl EngineManager for AppEngineManager {
             auto_order_event_tx.clone(),
             pe_event_sender.clone(),
             self.time_config.clone(),
+            prompt_loader.clone(),
         );
 
         let auto_handle = tokio::spawn(async move {

@@ -40,6 +40,7 @@ pub fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
         win_trades: bot.win_trades,
         loss_trades: bot.loss_trades,
         last_decided_at: bot.last_decided_at,
+        strategy_file: bot.strategy_file.clone(),
     }
 }
 

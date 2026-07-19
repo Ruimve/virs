@@ -9,6 +9,7 @@ use crate::auto::ai::AutoAiService;
 use crate::auto::ports::*;
 use crate::auto::types::AutoCommand;
 use crate::auto::worker::AutoWorker;
+use crate::strategy::prompt::PromptLoader;
 use virs_config::TimeConfig;
 use virs_types::position::EngineEvent;
 
@@ -26,6 +27,7 @@ pub struct AutoEngine {
     bot_symbols: HashMap<Uuid, String>,
 
     time_config: TimeConfig,
+    prompt_loader: PromptLoader,
 }
 
 impl AutoEngine {
@@ -38,6 +40,7 @@ impl AutoEngine {
         event_tx: broadcast::Sender<OrderEvent>,
         pe_event_tx: broadcast::Sender<EngineEvent>,
         time_config: TimeConfig,
+        prompt_loader: PromptLoader,
     ) -> (Self, mpsc::Sender<AutoCommand>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
 
@@ -54,6 +57,7 @@ impl AutoEngine {
             shutdown_txs: HashMap::new(),
             bot_symbols: HashMap::new(),
             time_config,
+            prompt_loader,
         };
 
         (engine, cmd_tx)
@@ -126,6 +130,7 @@ impl AutoEngine {
         let market_data_provider = self.market_data_provider.clone();
         let bot_symbol = bot.symbol.clone();
         let time_config = self.time_config.clone();
+        let prompt_loader = self.prompt_loader.clone();
 
         let handle = tokio::spawn(async move {
             let mut worker = AutoWorker::new(
@@ -138,6 +143,7 @@ impl AutoEngine {
                 event_rx,
                 pe_event_rx,
                 time_config,
+                prompt_loader,
             );
             worker.run(shutdown_rx).await;
         });

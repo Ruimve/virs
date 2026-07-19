@@ -1,7 +1,11 @@
 use crate::common::indicators::MarketIndicators;
-use crate::grid::types::DEFAULT_USER_PROMPT_TEMPLATE;
 
+/// 渲染 grid 用户 prompt。
+///
+/// `template` 通常为 `DEFAULT_USER_PROMPT_TEMPLATE`，或从策略文件加载的
+/// `PromptTemplate::user_prompt_template`。两者占位符语法一致。
 pub fn render_user_prompt(
+    template: &str,
     indicators: &MarketIndicators,
     total_balance: f64,
     available_balance: f64,
@@ -22,7 +26,7 @@ pub fn render_user_prompt(
         0.0
     };
 
-    let mut prompt = DEFAULT_USER_PROMPT_TEMPLATE.to_string();
+    let mut prompt = template.to_string();
 
     prompt = prompt.replace("{timestamp}", &chrono::Utc::now().to_rfc3339());
     prompt = prompt.replace("{total_balance}", &format!("{:.2}", total_balance));
@@ -54,7 +58,7 @@ pub fn render_user_prompt(
     prompt = prompt.replace("{h1_ema20}", &format!("{:.2}", indicators.ema20));
     prompt = prompt.replace("{h1_ema50}", &format!("{:.2}", indicators.ema50));
     prompt = prompt.replace(
-        "{h1_ema_distance_pct}",
+        "{h1_ema_gap_pct}",
         &format!("{:.2}", indicators.h1_ema_gap_pct),
     );
     prompt = prompt.replace("{h1_adx}", &format!("{:.1}", indicators.adx));

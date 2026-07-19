@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::common::ai_client;
 use crate::common::ports::{CredentialStore, LlmProviderResolver};
+use crate::strategy::output::{StrategyAction, StrategyOutput, ToStrategyOutput};
 use virs_error::BotResult;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -104,6 +105,29 @@ impl AutoDecision {
             event_impact,
             analysis,
             risk_warning,
+        }
+    }
+}
+
+impl ToStrategyOutput for AutoDecision {
+    fn to_output(&self, raw: serde_json::Value, bot_id: Option<Uuid>) -> StrategyOutput {
+        let action = match self.action {
+            AutoAction::OpenLong => StrategyAction::OpenLong,
+            AutoAction::OpenShort => StrategyAction::OpenShort,
+            AutoAction::ClosePosition => StrategyAction::ClosePosition,
+            AutoAction::Hold => StrategyAction::Hold,
+        };
+        StrategyOutput {
+            action,
+            reason: self.reason.clone(),
+            confidence: self.confidence,
+            market_regime: self.market_regime.clone(),
+            analysis: self.analysis.clone(),
+            risk_warning: self.risk_warning.clone(),
+            funding_rate_warning: self.funding_rate_warning.clone(),
+            event_impact: self.event_impact.clone(),
+            decision_raw: raw,
+            bot_id,
         }
     }
 }

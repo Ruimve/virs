@@ -250,7 +250,7 @@ pub const DEFAULT_USER_PROMPT_TEMPLATE: &str = r#"当前时间：{timestamp}
 - 带宽百分比：{h1_bb_width_pct}%
 - EMA20：{h1_ema20}
 - EMA50：{h1_ema50}
-- EMA距离百分比：{h1_ema_distance_pct}%
+- EMA距离百分比：{h1_ema_gap_pct}%
 - ADX(14)：{h1_adx}
 - ATR(14)：{h1_atr}
 - ATR(14)的20周期均值：{h1_atr_sma20}

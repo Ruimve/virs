@@ -33,6 +33,7 @@ fn make_auto_bot(
         win_trades,
         loss_trades,
         last_decided_at: None,
+        strategy_file: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
         started_at: None,

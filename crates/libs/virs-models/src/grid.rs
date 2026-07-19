@@ -29,6 +29,7 @@ pub struct GridBot {
     pub dynamic_adjust: bool,
     pub adjust_interval_secs: i32,
     pub last_adjusted_at: Option<DateTime<Utc>>,
+    pub strategy_file: Option<String>,
     pub total_pnl: f64,
     pub unrealized_pnl: f64,
     pub total_trades: i32,

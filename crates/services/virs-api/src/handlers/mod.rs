@@ -7,6 +7,7 @@ pub mod grid;
 pub mod health;
 pub mod market;
 pub mod response;
+pub mod strategy;
 pub mod system;
 pub mod user;
 pub mod utils;

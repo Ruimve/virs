@@ -26,6 +26,7 @@ pub struct AutoBot {
     pub win_trades: i32,
     pub loss_trades: i32,
     pub last_decided_at: Option<DateTime<Utc>>,
+    pub strategy_file: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,

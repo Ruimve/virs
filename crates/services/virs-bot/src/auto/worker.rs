@@ -9,6 +9,7 @@ use crate::auto::ai::{AutoAction, AutoAiService, AutoDecision};
 use crate::auto::ports::*;
 use crate::auto::strategy;
 use crate::auto::types::AutoBotConfig;
+use crate::strategy::prompt::{PromptLoader, StrategyType};
 use virs_config::TimeConfig;
 use virs_types::client_order_id;
 use virs_types::enums::PositionSide;
@@ -67,6 +68,7 @@ pub struct AutoWorker {
     pub(crate) last_close_event: Option<(String, String, chrono::DateTime<chrono::Utc>)>,
 
     pub(crate) time_config: TimeConfig,
+    pub(crate) prompt_loader: PromptLoader,
 }
 
 impl AutoWorker {
@@ -80,6 +82,7 @@ impl AutoWorker {
         event_rx: broadcast::Receiver<OrderEvent>,
         pe_event_rx: broadcast::Receiver<EngineEvent>,
         time_config: TimeConfig,
+        prompt_loader: PromptLoader,
     ) -> Self {
         Self {
             bot,
@@ -105,6 +108,7 @@ impl AutoWorker {
             take_profit: 0.0,
             last_close_event: None,
             time_config,
+            prompt_loader,
         }
     }
 
@@ -854,14 +858,57 @@ impl AutoWorker {
             min_qty: snapshot.base.min_qty,
         };
 
-        let template = crate::auto::types::DEFAULT_USER_PROMPT_TEMPLATE;
-        let user_prompt = strategy::render_prompt(template, &ctx);
-        let system_prompt = self
-            .bot
-            .system_prompt
-            .as_deref()
-            .unwrap_or(crate::auto::types::DEFAULT_SYSTEM_PROMPT)
-            .to_string();
+        // 优先使用策略文件（STRATEGIES_DIR/auto/{strategy_file}.json）。
+        // 未配置或未找到时回退到 crate 内硬编码的 DEFAULT_* 常量。
+        let (system_prompt, user_prompt) =
+            if let Some(file_name) = self.bot.strategy_file.as_deref() {
+                match self
+                    .prompt_loader
+                    .get(StrategyType::Auto, file_name)
+                    .await
+                {
+                    Some(tpl) => {
+                        let user = strategy::render_prompt(&tpl.user_prompt_template, &ctx);
+                        let system = self
+                            .bot
+                            .system_prompt
+                            .as_deref()
+                            .unwrap_or(&tpl.system_prompt)
+                            .to_string();
+                        (system, user)
+                    }
+                    None => {
+                        warn!(
+                            bot_id = %self.bot.id,
+                            strategy_file = file_name,
+                            "Strategy file not found in loader — falling back to built-in default prompt"
+                        );
+                        let user = strategy::render_prompt(
+                            crate::auto::types::DEFAULT_USER_PROMPT_TEMPLATE,
+                            &ctx,
+                        );
+                        let system = self
+                            .bot
+                            .system_prompt
+                            .as_deref()
+                            .unwrap_or(crate::auto::types::DEFAULT_SYSTEM_PROMPT)
+                            .to_string();
+                        (system, user)
+                    }
+                }
+            } else {
+                let user = strategy::render_prompt(
+                    crate::auto::types::DEFAULT_USER_PROMPT_TEMPLATE,
+                    &ctx,
+                );
+                let system = self
+                    .bot
+                    .system_prompt
+                    .as_deref()
+                    .unwrap_or(crate::auto::types::DEFAULT_SYSTEM_PROMPT)
+                    .to_string();
+                (system, user)
+            };
 
         Some((system_prompt, user_prompt))
     }

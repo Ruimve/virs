@@ -1,4 +1,6 @@
 use crate::auto::ai::{AutoAction, AutoDecision};
+use crate::strategy::output::{StrategyAction, ToStrategyOutput};
+use uuid::Uuid;
 
 #[test]
 fn a1_1_action_from_str_open_long() {
@@ -84,4 +86,67 @@ fn a3_4_decision_from_json_confidence_clamped() {
     });
     let decision = AutoDecision::from_json(&json);
     assert!((decision.confidence - 1.0).abs() < 1e-10);
+}
+
+#[test]
+fn a4_1_to_output_open_long() {
+    let decision = AutoDecision {
+        action: AutoAction::OpenLong,
+        reason: "bullish".to_string(),
+        confidence: 0.8,
+        market_regime: Some("trending_up".to_string()),
+        funding_rate_warning: None,
+        event_impact: None,
+        analysis: Some("ema cross".to_string()),
+        risk_warning: Some("watch rsi".to_string()),
+    };
+    let raw = serde_json::json!({"decision": {"action": "open_long"}});
+    let out = decision.to_output(raw.clone(), Some(Uuid::nil()));
+    assert_eq!(out.action, StrategyAction::OpenLong);
+    assert!(out.is_open_position());
+    assert!(!out.is_noop());
+    assert_eq!(out.reason, "bullish");
+    assert!((out.confidence - 0.8).abs() < 1e-10);
+    assert_eq!(out.market_regime.as_deref(), Some("trending_up"));
+    assert_eq!(out.analysis.as_deref(), Some("ema cross"));
+    assert_eq!(out.risk_warning.as_deref(), Some("watch rsi"));
+    assert_eq!(out.decision_raw, raw);
+    assert!(out.bot_id.is_some());
+}
+
+#[test]
+fn a4_2_to_output_hold_no_op() {
+    let decision = AutoDecision {
+        action: AutoAction::Hold,
+        reason: "wait".to_string(),
+        confidence: 0.3,
+        market_regime: None,
+        funding_rate_warning: None,
+        event_impact: None,
+        analysis: None,
+        risk_warning: None,
+    };
+    let out = decision.to_output(serde_json::json!({}), None);
+    assert_eq!(out.action, StrategyAction::Hold);
+    assert!(out.is_noop());
+    assert!(!out.is_open_position());
+    assert!(out.bot_id.is_none());
+}
+
+#[test]
+fn a4_3_to_output_close_position() {
+    let decision = AutoDecision {
+        action: AutoAction::ClosePosition,
+        reason: "take profit".to_string(),
+        confidence: 0.9,
+        market_regime: None,
+        funding_rate_warning: None,
+        event_impact: None,
+        analysis: None,
+        risk_warning: None,
+    };
+    let out = decision.to_output(serde_json::json!({}), None);
+    assert_eq!(out.action, StrategyAction::ClosePosition);
+    assert!(!out.is_open_position());
+    assert!(!out.is_noop());
 }

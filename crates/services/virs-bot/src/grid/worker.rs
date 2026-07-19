@@ -11,6 +11,7 @@ use crate::grid::ai::{GridAction, GridAiDecision, GridAiService};
 use crate::grid::ports::*;
 use crate::grid::types::{GridEvent, GridLevel, GridState};
 use crate::grid::utils;
+use crate::strategy::prompt::{PromptLoader, StrategyType};
 
 pub enum OrderDir {
     Buy,
@@ -37,6 +38,7 @@ pub struct GridWorker {
     pending_orders: HashSet<(usize, String)>,
 
     pub(crate) time_config: virs_config::TimeConfig,
+    pub(crate) prompt_loader: PromptLoader,
 }
 
 impl GridWorker {
@@ -50,6 +52,7 @@ impl GridWorker {
         event_rx: broadcast::Receiver<OrderEvent>,
         grid_event_tx: broadcast::Sender<GridEvent>,
         time_config: virs_config::TimeConfig,
+        prompt_loader: PromptLoader,
     ) -> Self {
         let levels = utils::calculate_levels(&bot, 0.0);
         Self {
@@ -71,6 +74,7 @@ impl GridWorker {
             initial_order_range: 3,
             pending_orders: HashSet::new(),
             time_config,
+            prompt_loader,
         }
     }
 
@@ -987,32 +991,108 @@ impl GridWorker {
                 crate::common::indicators::MarketIndicators::default()
             });
 
-        let user_prompt = utils::prompt::render_user_prompt(
-            &indicators,
-            account.total,
-            account.free,
-            account.used,
-            self.bot.leverage,
-            grid_status,
-            &self
-                .bot
-                .last_adjusted_at
-                .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-                .unwrap_or_else(|| "N/A".to_string()),
-            self.consecutive_losses,
-            &current_grid_config,
-            &position_info,
-            false,
-            "",
-            "scheduled_15m",
-        );
-
-        let system_prompt = self
-            .bot
-            .system_prompt
-            .as_deref()
-            .unwrap_or(crate::grid::types::DEFAULT_SYSTEM_PROMPT)
-            .to_string();
+        // 优先使用策略文件（STRATEGIES_DIR/grid/{strategy_file}.json）。
+        // 未配置或未找到时回退到 crate 内硬编码的 DEFAULT_* 常量。
+        let (system_prompt, user_prompt) =
+            if let Some(file_name) = self.bot.strategy_file.as_deref() {
+                match self
+                    .prompt_loader
+                    .get(StrategyType::Grid, file_name)
+                    .await
+                {
+                    Some(tpl) => {
+                        let user = utils::prompt::render_user_prompt(
+                            &tpl.user_prompt_template,
+                            &indicators,
+                            account.total,
+                            account.free,
+                            account.used,
+                            self.bot.leverage,
+                            grid_status,
+                            &self
+                                .bot
+                                .last_adjusted_at
+                                .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                                .unwrap_or_else(|| "N/A".to_string()),
+                            self.consecutive_losses,
+                            &current_grid_config,
+                            &position_info,
+                            false,
+                            "",
+                            "scheduled_15m",
+                        );
+                        let system = self
+                            .bot
+                            .system_prompt
+                            .as_deref()
+                            .unwrap_or(&tpl.system_prompt)
+                            .to_string();
+                        (system, user)
+                    }
+                    None => {
+                        warn!(
+                            bot_id = %self.bot.id,
+                            strategy_file = file_name,
+                            "Strategy file not found in loader — falling back to built-in default prompt"
+                        );
+                        let user = utils::prompt::render_user_prompt(
+                            crate::grid::types::DEFAULT_USER_PROMPT_TEMPLATE,
+                            &indicators,
+                            account.total,
+                            account.free,
+                            account.used,
+                            self.bot.leverage,
+                            grid_status,
+                            &self
+                                .bot
+                                .last_adjusted_at
+                                .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                                .unwrap_or_else(|| "N/A".to_string()),
+                            self.consecutive_losses,
+                            &current_grid_config,
+                            &position_info,
+                            false,
+                            "",
+                            "scheduled_15m",
+                        );
+                        let system = self
+                            .bot
+                            .system_prompt
+                            .as_deref()
+                            .unwrap_or(crate::grid::types::DEFAULT_SYSTEM_PROMPT)
+                            .to_string();
+                        (system, user)
+                    }
+                }
+            } else {
+                let user = utils::prompt::render_user_prompt(
+                    crate::grid::types::DEFAULT_USER_PROMPT_TEMPLATE,
+                    &indicators,
+                    account.total,
+                    account.free,
+                    account.used,
+                    self.bot.leverage,
+                    grid_status,
+                    &self
+                        .bot
+                        .last_adjusted_at
+                        .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                        .unwrap_or_else(|| "N/A".to_string()),
+                    self.consecutive_losses,
+                    &current_grid_config,
+                    &position_info,
+                    false,
+                    "",
+                    "scheduled_15m",
+                );
+                let system = self
+                    .bot
+                    .system_prompt
+                    .as_deref()
+                    .unwrap_or(crate::grid::types::DEFAULT_SYSTEM_PROMPT)
+                    .to_string();
+                (system, user)
+            };
         Some((system_prompt, user_prompt))
     }
 

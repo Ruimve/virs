@@ -38,6 +38,7 @@ pub fn bot_to_config(b: &GridBot) -> GridBotConfig {
         grid_levels_json: b.grid_levels_json.clone(),
         system_prompt: b.system_prompt.clone(),
         last_adjusted_at: b.last_adjusted_at,
+        strategy_file: b.strategy_file.clone(),
     }
 }
 

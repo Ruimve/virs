@@ -28,6 +28,7 @@ fn make_bot() -> GridBot {
         dynamic_adjust: false,
         adjust_interval_secs: 300,
         last_adjusted_at: None,
+        strategy_file: None,
         total_pnl: 0.0,
         unrealized_pnl: 0.0,
         total_trades: 0,

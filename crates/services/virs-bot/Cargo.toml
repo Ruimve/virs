@@ -18,6 +18,10 @@ tracing = { workspace = true }
 dashmap = { workspace = true }
 reqwest = { workspace = true }
 talib-rs = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

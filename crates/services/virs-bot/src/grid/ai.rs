@@ -4,7 +4,9 @@ use crate::common::ai_client;
 use crate::common::ports::CredentialStore;
 use crate::common::ports::LlmProviderResolver;
 use crate::grid::ports::GridBotConfig;
+use crate::strategy::output::{StrategyAction, StrategyOutput, ToStrategyOutput};
 use tracing::warn;
+use uuid::Uuid;
 use virs_error::BotResult;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -54,6 +56,42 @@ pub struct GridAiDecision {
     pub market_regime: String,
     pub analysis: String,
     pub risk_warning: String,
+}
+
+impl ToStrategyOutput for GridAiDecision {
+    fn to_output(&self, raw: serde_json::Value, bot_id: Option<Uuid>) -> StrategyOutput {
+        let action = match self.action.as_str() {
+            "adjust_grid" => StrategyAction::AdjustGrid {
+                upper_price: self.upper_price,
+                lower_price: self.lower_price,
+                grid_count: self.grid_count,
+                grid_profit_pct: self.grid_profit_pct,
+                quantity_per_grid: self.quantity_per_grid,
+            },
+            "pause_grid" => StrategyAction::PauseGrid,
+            "run_grid" => StrategyAction::RunGrid,
+            "reduce_position" => StrategyAction::ReducePosition,
+            _ => StrategyAction::Hold,
+        };
+        // market_regime 为 "unknown" 时归一化为 None（与 AutoDecision 行为对齐）
+        let market_regime = if self.market_regime.eq_ignore_ascii_case("unknown") {
+            None
+        } else {
+            Some(self.market_regime.clone())
+        };
+        StrategyOutput {
+            action,
+            reason: self.reason.clone(),
+            confidence: self.confidence,
+            market_regime,
+            analysis: Some(self.analysis.clone()),
+            risk_warning: Some(self.risk_warning.clone()),
+            funding_rate_warning: None,
+            event_impact: None,
+            decision_raw: raw,
+            bot_id,
+        }
+    }
 }
 
 pub struct GridAiService {

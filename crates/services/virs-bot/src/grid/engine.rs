@@ -9,6 +9,7 @@ use crate::grid::ai::GridAiService;
 use crate::grid::ports::*;
 use crate::grid::types::{GridCommand, GridEvent};
 use crate::grid::worker::GridWorker;
+use crate::strategy::prompt::PromptLoader;
 use virs_config::TimeConfig;
 
 pub struct GridEngine {
@@ -26,6 +27,7 @@ pub struct GridEngine {
     bot_symbols: HashMap<Uuid, String>,
 
     time_config: TimeConfig,
+    prompt_loader: PromptLoader,
 }
 
 impl GridEngine {
@@ -37,6 +39,7 @@ impl GridEngine {
         market_data_provider: Arc<dyn MarketDataProvider>,
         event_tx: broadcast::Sender<OrderEvent>,
         time_config: TimeConfig,
+        prompt_loader: PromptLoader,
     ) -> (
         Self,
         mpsc::Sender<GridCommand>,
@@ -59,6 +62,7 @@ impl GridEngine {
             adjust_txs: HashMap::new(),
             bot_symbols: HashMap::new(),
             time_config,
+            prompt_loader,
         };
 
         (engine, cmd_tx, grid_event_tx)
@@ -132,6 +136,7 @@ impl GridEngine {
         let market_data_provider = self.market_data_provider.clone();
         let bot_symbol = bot.symbol.clone();
         let time_config = self.time_config.clone();
+        let prompt_loader = self.prompt_loader.clone();
 
         let handle = tokio::spawn(async move {
             let mut worker = GridWorker::new(
@@ -144,6 +149,7 @@ impl GridEngine {
                 event_rx,
                 grid_event_tx,
                 time_config,
+                prompt_loader,
             );
             worker.run(shutdown_rx, adjust_rx).await;
         });

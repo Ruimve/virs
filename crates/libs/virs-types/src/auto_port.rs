@@ -125,4 +125,7 @@ pub struct AutoBotConfig {
     pub win_trades: i32,
     pub loss_trades: i32,
     pub last_decided_at: Option<DateTime<Utc>>,
+    /// 策略 prompt 文件名（不含扩展名）。加载时查 `strategies/auto/{strategy_file}.json`。
+    /// 为 None 时回退到 crate 内硬编码的 DEFAULT_SYSTEM_PROMPT / DEFAULT_USER_PROMPT_TEMPLATE。
+    pub strategy_file: Option<String>,
 }

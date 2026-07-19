@@ -34,6 +34,7 @@ fn make_grid_bot(
         dynamic_adjust: false,
         adjust_interval_secs: 3600,
         last_adjusted_at: None,
+        strategy_file: None,
         total_pnl,
         unrealized_pnl: 0.0,
         total_trades: 0,

@@ -22,6 +22,7 @@ fn make_bot(upper: f64, lower: f64, count: i32, profit_pct: f64, qty: f64) -> Gr
         grid_levels_json: None,
         system_prompt: None,
         last_adjusted_at: None,
+        strategy_file: None,
     }
 }
 
