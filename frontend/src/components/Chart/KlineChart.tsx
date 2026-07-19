@@ -22,14 +22,6 @@ export interface KlineChartHandle {
   }) => void;
 }
 
-interface OverlayLine {
-  name: string;
-  data: Array<{ time: number; value: number }>;
-  color: string;
-  lineWidth?: number;
-  priceScaleId?: string;
-}
-
 interface KlineChartProps {
   data: Array<{
     time: number;
@@ -47,7 +39,6 @@ interface KlineChartProps {
     shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown';
     text?: string;
   }>;
-  overlays?: OverlayLine[];
 }
 
 const MOBILE_BREAKPOINT = 768;
@@ -88,7 +79,7 @@ const applyVisibleRange = (chart: IChartApi, dataLength: number) => {
 };
 
 const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineChart(
-  { data, height, markers, overlays },
+  { data, height, markers },
   ref,
 ) {
   const chartRef = useRef<IChartApi>(null);
@@ -222,31 +213,8 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       );
     }
 
-    for (const series of overlaySeriesRef.current) {
-      chart.removeSeries(series);
-    }
-    overlaySeriesRef.current = [];
-    if (overlays && overlays.length > 0) {
-      for (const overlay of overlays) {
-        const lineSeries = chart.addSeries(LineSeries, {
-          color: overlay.color,
-          lineWidth: Math.min(Math.max(overlay.lineWidth || 1, 1), 4) as 1 | 2 | 3 | 4,
-          priceScaleId: overlay.priceScaleId || 'right',
-          lastValueVisible: false,
-          priceLineVisible: false,
-        });
-        lineSeries.setData(
-          overlay.data.map((d) => ({
-            time: toLocaleTime(d.time),
-            value: d.value,
-          })),
-        );
-        overlaySeriesRef.current.push(lineSeries);
-      }
-    }
-
     applyVisibleRange(chart, data.length);
-  }, [data, markers, overlays, readChartColors]);
+  }, [data, markers, readChartColors]);
 
   const onLoad = useCallback((c: IChartApi) => {
     chartRef.current = c;
