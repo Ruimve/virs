@@ -1,4 +1,4 @@
-import { memo, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { memo, useMemo, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Spinner } from '@/components/Icon';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'error' | 'accent-outline';
@@ -43,20 +43,17 @@ export const Button = memo(
     children,
     ...props
   }: ButtonProps) => {
-    const isDisabled = disabled || loading;
-    const widthClass = responsive ? 'w-full sm:w-auto' : '';
-    const { box: sizeBox, spinner: spinnerSize } = sizeStyles[size];
+    const sizeStyle = useMemo(() => sizeStyles[size], [size]);
+    const classText = useMemo(() => {
+      const widthClass = responsive ? 'w-full sm:w-auto' : '';
+      return [baseStyles, widthClass, sizeStyle.box, variantStyles[variant], className]
+        .filter(Boolean)
+        .join(' ');
+    }, [responsive, sizeStyle.box, variant, className]);
 
     return (
-      <button
-        type={type}
-        disabled={isDisabled}
-        className={[baseStyles, widthClass, sizeBox, variantStyles[variant], className]
-          .filter(Boolean)
-          .join(' ')}
-        {...props}
-      >
-        {loading && <Spinner className={`${spinnerSize} shrink-0`} />}
+      <button type={type} disabled={disabled || loading} className={classText} {...props}>
+        {loading && <Spinner className={`${sizeStyle.spinner} shrink-0`} />}
         {children}
       </button>
     );

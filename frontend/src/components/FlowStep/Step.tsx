@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode, memo } from 'react';
+import { useState, useEffect, type ReactNode, memo, useMemo, useCallback } from 'react';
 import { Spinner, Check, Close } from '@/components/Icon';
 
 export type FlowStepStatus = 'pending' | 'active' | 'verifying' | 'done' | 'error';
@@ -40,13 +40,8 @@ export const FlowStep = memo(
       }
     }, [status]);
 
-    const isEditable = editable !== false && status === 'done';
-    const isCollapsed = status === 'done' && !expanded;
-    const showContent =
-      status === 'active' ||
-      status === 'verifying' ||
-      status === 'error' ||
-      (status === 'done' && expanded);
+    const isEditable = useMemo(() => editable !== false && status === 'done', [editable, status]);
+    const isCollapsed = useMemo(() => status === 'done' && !expanded, [status, expanded]);
 
     const handleHeaderClick = () => {
       if (!isEditable) return;
@@ -63,9 +58,9 @@ export const FlowStep = memo(
       }
     };
 
-    const shouldShowLine = showLine !== undefined ? showLine : !isCollapsed;
+    const renderIndicator = useCallback(() => {
+      if (!indicator) return null;
 
-    const defaultIndicator = (): ReactNode => {
       const stepContent =
         typeof step === 'number' ? <span className="text-caption">{step}</span> : step;
 
@@ -101,9 +96,28 @@ export const FlowStep = memo(
             </div>
           );
       }
-    };
+    }, [indicator, step, status]);
 
-    const titleColor = () => {
+    const renderLine = useCallback(() => {
+      const show = showLine !== undefined ? showLine : !isCollapsed;
+      if (!show) return null;
+      return <div className="w-px flex-1 min-h-[16px] bg-line-default mt-1" />;
+    }, [showLine, isCollapsed]);
+
+    const renderContent = useCallback(
+      (slot: ReactNode) => {
+        const show =
+          status === 'active' ||
+          status === 'verifying' ||
+          status === 'error' ||
+          (status === 'done' && expanded);
+        if (!show) return null;
+        return slot;
+      },
+      [status, expanded],
+    );
+
+    const titleColor = useMemo(() => {
       switch (status) {
         case 'pending':
           return 'text-on-surface-faint';
@@ -112,7 +126,7 @@ export const FlowStep = memo(
         default:
           return 'text-on-surface';
       }
-    };
+    }, [status]);
 
     return (
       <div className="flex gap-3">
@@ -122,9 +136,9 @@ export const FlowStep = memo(
             onClick={handleHeaderClick}
             onKeyDown={handleHeaderKeyDown}
           >
-            {indicator ?? defaultIndicator()}
+            {renderIndicator()}
           </div>
-          {shouldShowLine && <div className="w-px flex-1 min-h-[16px] bg-line-default mt-1" />}
+          {renderLine()}
         </div>
 
         <div className="flex-1 pb-4">
@@ -133,7 +147,7 @@ export const FlowStep = memo(
             onClick={handleHeaderClick}
             onKeyDown={handleHeaderKeyDown}
           >
-            <p className={`text-sm font-medium leading-7 ${titleColor()}`}>{title}</p>
+            <p className={`text-sm font-medium leading-7 ${titleColor}`}>{title}</p>
             {isEditable && (
               <span className="text-2xs text-on-surface-muted group-hover:text-on-surface-tertiary transition-colors">
                 {expanded ? 'collapse' : 'edit'}
@@ -149,7 +163,7 @@ export const FlowStep = memo(
             <div className="text-xs text-on-surface-muted -mt-1">{summary}</div>
           )}
 
-          {showContent && <div className="mt-2">{children}</div>}
+          {renderContent(children)}
         </div>
       </div>
     );

@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from 'react';
+import { memo, useMemo, type ReactNode } from 'react';
 
 export interface CardProps {
   children: ReactNode;
@@ -11,12 +11,16 @@ export interface CardProps {
 
 export const Card = memo(
   ({ children, title, icon, padding = true, border = 'default', className = '' }: CardProps) => {
-    const borderClass =
-      border === 'none'
-        ? ''
-        : border === 'subtle'
-          ? 'border-line-subtle border'
-          : 'border-line-default border';
+    const borderClass = useMemo(() => {
+      switch (border) {
+        case 'subtle':
+          return 'border-line-subtle border';
+        case 'none':
+          return '';
+        default:
+          return 'border-line-default border';
+      }
+    }, [border]);
     return (
       <div
         className={`bg-surface-1 rounded-xl ${borderClass} shadow-sm ${padding ? 'p-4' : ''} ${className}`}
