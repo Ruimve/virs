@@ -15,7 +15,6 @@ use virs_bot::strategy::prompt::{
     StrategyType,
 };
 use virs_error::VirsError;
-use virs_types::llm::{resolve_provider_base_url, resolve_provider_model};
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -55,36 +54,7 @@ pub async fn generate(
 
     let name_hint = body["name_hint"].as_str().filter(|s| !s.is_empty());
 
-    // 解析 LLM 凭证（与 handlers/ai.rs 同一模式）
-    let row: Option<(String, String)> = sqlx::query_as(
-        r#"SELECT provider, encrypted_api_key
-           FROM qd_ai_credentials ORDER BY created_at DESC LIMIT 1"#,
-    )
-    .fetch_optional(&state.db_pool)
-    .await?;
-
-    let (api_key, base_url, model) = match row {
-        Some((provider, encrypted_key)) => {
-            let decrypted_key =
-                virs_utils::crypto::decrypt_with_key(&encrypted_key, &state.llm_key)?;
-            let resolved_base_url = resolve_provider_base_url(&provider)
-                .ok_or_else(|| {
-                    VirsError::config(format!("Unknown AI provider: {provider}"))
-                })?
-                .to_string();
-            let resolved_model = resolve_provider_model(&provider)
-                .ok_or_else(|| {
-                    VirsError::config(format!("Unknown AI provider: {provider}"))
-                })?
-                .to_string();
-            (decrypted_key, resolved_base_url, resolved_model)
-        }
-        None => {
-            return Err(VirsError::unauthorized(
-                "No AI API key configured. Set AI credentials first.",
-            ));
-        }
-    };
+    let (api_key, base_url, model) = state.resolve_llm_credentials().await?;
 
     let result = generate_prompt(
         &state.http_client,

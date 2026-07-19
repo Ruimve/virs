@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::common::ai_client;
+use crate::common::llm_client::LlmClient;
 use crate::common::ports::CredentialStore;
 use crate::common::ports::LlmProviderResolver;
 use crate::grid::ports::GridBotConfig;
@@ -95,9 +95,7 @@ impl ToStrategyOutput for GridAiDecision {
 }
 
 pub struct GridAiService {
-    http_client: reqwest::Client,
-    llm_resolver: Arc<dyn LlmProviderResolver>,
-    credential_store: Arc<dyn CredentialStore>,
+    llm_client: LlmClient,
 }
 
 impl GridAiService {
@@ -107,9 +105,7 @@ impl GridAiService {
         llm_timeout: std::time::Duration,
     ) -> Self {
         Self {
-            http_client: ai_client::create_llm_http_client(llm_timeout),
-            llm_resolver,
-            credential_store,
+            llm_client: LlmClient::new(llm_resolver, credential_store, llm_timeout),
         }
     }
 
@@ -119,19 +115,10 @@ impl GridAiService {
         system_prompt: &str,
         user_prompt: &str,
     ) -> BotResult<(GridAiDecision, String)> {
-        let credentials = self.credential_store.load_credentials(bot.user_id).await?;
-        let (api_key, base_url, model, _provider) = self.llm_resolver.resolve(&credentials)?;
-
-        let result = ai_client::call_llm_api(
-            &self.http_client,
-            &api_key,
-            &base_url,
-            &model,
-            system_prompt,
-            user_prompt,
-            "grid-ai",
-        )
-        .await?;
+        let result = self
+            .llm_client
+            .call(bot.user_id, system_prompt, user_prompt, "grid-ai")
+            .await?;
 
         let decision = parse_grid_decision(&result.content)?;
         Ok((decision, result.used_model))

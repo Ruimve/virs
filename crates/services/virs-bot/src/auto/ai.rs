@@ -3,10 +3,9 @@ use std::sync::Arc;
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::common::ai_client;
+use crate::common::llm_client::LlmClient;
 use crate::common::ports::{CredentialStore, LlmProviderResolver};
 use crate::strategy::output::{StrategyAction, StrategyOutput, ToStrategyOutput};
-use virs_error::BotResult;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AutoAction {
@@ -133,9 +132,7 @@ impl ToStrategyOutput for AutoDecision {
 }
 
 pub struct AutoAiService {
-    http_client: reqwest::Client,
-    llm_resolver: Arc<dyn LlmProviderResolver>,
-    credential_store: Arc<dyn CredentialStore>,
+    llm_client: LlmClient,
 }
 
 impl AutoAiService {
@@ -145,41 +142,12 @@ impl AutoAiService {
         llm_timeout: std::time::Duration,
     ) -> Self {
         Self {
-            http_client: ai_client::create_llm_http_client(llm_timeout),
-            llm_resolver,
-            credential_store,
+            llm_client: LlmClient::new(llm_resolver, credential_store, llm_timeout),
         }
     }
 
     pub async fn is_available_for_user(&self, user_id: Uuid) -> bool {
-        if self.llm_resolver.is_available() {
-            return true;
-        }
-        match self.credential_store.load_credentials(user_id).await {
-            Ok(creds) => !creds.is_empty(),
-            Err(_) => false,
-        }
-    }
-
-    async fn call_llm(
-        &self,
-        user_id: Uuid,
-        system_prompt: &str,
-        user_prompt: &str,
-    ) -> BotResult<ai_client::LlmCallResult> {
-        let user_creds = self.credential_store.load_credentials(user_id).await?;
-        let (api_key, base_url, model, _provider) = self.llm_resolver.resolve(&user_creds)?;
-
-        ai_client::call_llm_api(
-            &self.http_client,
-            &api_key,
-            &base_url,
-            &model,
-            system_prompt,
-            user_prompt,
-            "auto-ai",
-        )
-        .await
+        self.llm_client.is_available_for_user(user_id).await
     }
 
     pub async fn auto_decision(
@@ -188,7 +156,11 @@ impl AutoAiService {
         system_prompt: &str,
         user_prompt: &str,
     ) -> Option<(AutoDecision, serde_json::Value, String)> {
-        match self.call_llm(user_id, system_prompt, user_prompt).await {
+        match self
+            .llm_client
+            .call(user_id, system_prompt, user_prompt, "auto-ai")
+            .await
+        {
             Ok(result) => {
                 let decision = AutoDecision::from_json(&result.content);
                 let used_model = result.used_model;

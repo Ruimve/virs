@@ -6,7 +6,7 @@ use tokio::sync::{broadcast, mpsc};
 
 use virs_bot::auto::types::AutoCommand;
 use virs_bot::grid::types::GridCommand;
-use virs_error::VirsResult;
+use virs_error::{VirsError, VirsResult};
 use virs_exchange::Exchanges;
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_types::position::EngineEvent;
@@ -68,6 +68,37 @@ pub struct AppState {
     pub http_pool_max_idle_per_host: usize,
 
     pub listenkey_keepalive_futures_secs: u64,
+}
+
+impl AppState {
+    /// 从 DB 读取最新一条 LLM 凭证 → 解密 → 解析 provider → 返回 `(api_key, base_url, model)`。
+    ///
+    /// 供 API handler 层的 LLM 调用使用（optimize / explain / recommend_strategy / generate 等）。
+    pub async fn resolve_llm_credentials(&self) -> VirsResult<(String, String, String)> {
+        let row: Option<(String, String)> = sqlx::query_as(
+            r#"SELECT provider, encrypted_api_key
+               FROM qd_ai_credentials ORDER BY created_at DESC LIMIT 1"#,
+        )
+        .fetch_optional(&self.db_pool)
+        .await?;
+
+        match row {
+            Some((provider, encrypted_key)) => {
+                let api_key =
+                    virs_utils::crypto::decrypt_with_key(&encrypted_key, &self.llm_key)?;
+                let base_url = virs_types::llm::resolve_provider_base_url(&provider)
+                    .ok_or_else(|| VirsError::config(format!("Unknown AI provider: {provider}")))?
+                    .to_string();
+                let model = virs_types::llm::resolve_provider_model(&provider)
+                    .ok_or_else(|| VirsError::config(format!("Unknown AI provider: {provider}")))?
+                    .to_string();
+                Ok((api_key, base_url, model))
+            }
+            None => Err(VirsError::unauthorized(
+                "No AI API key configured. Set AI credentials first.",
+            )),
+        }
+    }
 }
 
 impl FromRef<AppState> for sqlx::PgPool {

@@ -69,7 +69,7 @@ Respond in JSON format with:
         symbol, exchange, current_price,
     );
 
-    match call_llm_with_fallback(&state, system_prompt, &user_prompt).await {
+    match call_llm(&state, system_prompt, &user_prompt).await {
         Ok(result) => Ok(Json(ApiResponse::ok(result))),
         Err(e) => Err(VirsError::bad_request(format!(
             "AI optimization failed: {}",
@@ -102,7 +102,7 @@ Respond in JSON format with:
 
     let user_prompt = format!("Symbol: {}\nQuestion: {}", symbol, question,);
 
-    match call_llm_with_fallback(&state, system_prompt, &user_prompt).await {
+    match call_llm(&state, system_prompt, &user_prompt).await {
         Ok(result) => Ok(Json(ApiResponse::ok(result))),
         Err(e) => Err(VirsError::bad_request(format!("AI explain failed: {}", e))),
     }
@@ -147,7 +147,7 @@ Respond in JSON format with:
         symbol, exchange, current_price, risk_tolerance,
     );
 
-    match call_llm_with_fallback(&state, system_prompt, &user_prompt).await {
+    match call_llm(&state, system_prompt, &user_prompt).await {
         Ok(result) => Ok(Json(ApiResponse::ok(result))),
         Err(e) => Err(VirsError::bad_request(format!(
             "AI recommend failed: {}",
@@ -189,50 +189,15 @@ async fn fetch_price_from_kline(
     Ok(last.close)
 }
 
-async fn call_llm_with_fallback(
+async fn call_llm(
     state: &AppState,
     system_prompt: &str,
     user_prompt: &str,
 ) -> VirsResult<serde_json::Value> {
+    let (api_key, base_url, model) = state.resolve_llm_credentials().await?;
 
-    let row: Option<(String, String)> = sqlx::query_as(
-        r#"SELECT provider, encrypted_api_key
-           FROM qd_ai_credentials ORDER BY created_at DESC LIMIT 1"#,
-    )
-    .fetch_optional(&state.db_pool)
-    .await?;
-
-    let (api_key, base_url, model) = match row {
-        Some((provider, encrypted_key)) => {
-            let decrypted_key = virs_utils::crypto::decrypt_with_key(&encrypted_key, &state.llm_key)?;
-
-            let resolved_base_url = match resolve_provider_base_url(&provider) {
-                Some(url) => url.to_string(),
-                None => format!("https://api.{}.com", provider),
-            };
-
-            let resolved_model = resolve_provider_model(&provider)
-                .ok_or_else(|| {
-                    VirsError::config(format!(
-                        "Unknown AI provider '{}' — cannot resolve default model. \
-                         Supported providers: deepseek, openai, openrouter",
-                        provider
-                    ))
-                })?
-                .to_string();
-
-            (decrypted_key, resolved_base_url, resolved_model)
-        }
-        None => {
-            return Err(VirsError::unauthorized(
-                "No AI API key configured. Set AI credentials via the wizard.",
-            ));
-        }
-    };
-
-    let http_client = &state.http_client;
     let result = virs_bot::common::ai_client::call_llm_api(
-        http_client,
+        &state.http_client,
         &api_key,
         &base_url,
         &model,
