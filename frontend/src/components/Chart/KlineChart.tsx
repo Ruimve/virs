@@ -52,15 +52,24 @@ interface KlineChartProps {
 
 const MOBILE_BREAKPOINT = 768;
 
-function getVisibleRangeWidth() {
+const getColors = () => {
+  const cs = getComputedStyle(document.documentElement);
+  return {
+    up: cs.getPropertyValue('--chart-up').trim() || '#10b981',
+    upVolume: cs.getPropertyValue('--chart-up-volume').trim() || 'rgba(16, 185, 129, 0.3)',
+    down: cs.getPropertyValue('--chart-down').trim() || '#ef4444',
+    downVolume: cs.getPropertyValue('--chart-down-volume').trim() || 'rgba(239, 68, 68, 0.3)',
+  };
+};
+
+const getVisibleRangeWidth = () => {
   if (typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT) {
     return 50;
   }
   return 100;
-}
+};
 
-function applyVisibleRange(chart: IChartApi | undefined, dataLength: number) {
-  if (!chart) return;
+const applyVisibleRange = (chart: IChartApi, dataLength: number) => {
   const visibleWidth = getVisibleRangeWidth();
   if (dataLength > visibleWidth) {
     chart.timeScale().setVisibleLogicalRange({
@@ -76,15 +85,15 @@ function applyVisibleRange(chart: IChartApi | undefined, dataLength: number) {
   } else {
     chart.timeScale().fitContent();
   }
-}
+};
 
 const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineChart(
   { data, height, markers, overlays },
   ref,
 ) {
-  const chartRef = useRef<IChartApi | undefined>(undefined);
-  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | undefined>(undefined);
-  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | undefined>(undefined);
+  const chartRef = useRef<IChartApi>(null);
+  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'>>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'>>(null);
 
   const markersPluginRef = useRef<{ detach: () => void } | null>(null);
   const overlaySeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
@@ -112,34 +121,30 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     () => ({
       update(candle) {
         const candleSeries = candleSeriesRef.current;
-        if (!candleSeries) return;
+        const volumeSeries = volumeSeriesRef.current;
+        const colors = colorsRef.current;
+        if (!candleSeries || !volumeSeries || !colors) return;
 
-        const bar: CandlestickData = {
+        candleSeries.update({
           time: toLocaleTime(candle.time),
           open: candle.open,
           high: candle.high,
           low: candle.low,
           close: candle.close,
-        };
-        candleSeries.update(bar);
+        });
 
-        const volumeSeries = volumeSeriesRef.current;
-        if (volumeSeries && candle.volume !== undefined) {
-          const c = colorsRef.current;
+        if (candle.volume !== undefined) {
+          const { upVolume, downVolume } = colors;
           volumeSeries.update({
             time: toLocaleTime(candle.time),
             value: candle.volume,
-            color: candle.close >= candle.open ? c.upVolume : c.downVolume,
+            color: candle.close >= candle.open ? upVolume : downVolume,
           });
         }
       },
     }),
     [],
   );
-
-  const setChart = useCallback((c: IChartApi | undefined) => {
-    chartRef.current = c;
-  }, []);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -149,25 +154,17 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
 
     if (isFirstInit) {
       initializedRef.current = true;
-      readChartColors();
 
-      let timeVisible = true;
-      const secondsVisible = false;
-      if (data.length >= 2) {
-        const spanHours = (data[data.length - 1].time - data[0].time) / 3600;
-        if (spanHours > 2160) timeVisible = false;
-      }
-      chart.applyOptions({ timeScale: { timeVisible, secondsVisible } });
-
-      const c = colorsRef.current;
+      const colors = getColors();
+      colorsRef.current = colors;
 
       const candleSeries = chart.addSeries(CandlestickSeries, {
-        upColor: c.up,
-        downColor: c.down,
-        borderDownColor: c.down,
-        borderUpColor: c.up,
-        wickDownColor: c.down,
-        wickUpColor: c.up,
+        upColor: colors.up,
+        downColor: colors.down,
+        borderDownColor: colors.down,
+        borderUpColor: colors.up,
+        wickDownColor: colors.down,
+        wickUpColor: colors.up,
       });
       candleSeriesRef.current = candleSeries;
 
@@ -183,8 +180,9 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       }
     }
 
-    const c = colorsRef.current;
-    const candleSeries = candleSeriesRef.current!;
+    const colors = colorsRef.current;
+    const candleSeries = candleSeriesRef.current;
+    if (!candleSeries) return;
 
     const chartData: CandlestickData[] = data.map((item) => ({
       time: toLocaleTime(item.time),
@@ -201,7 +199,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
         data.map((item) => ({
           time: toLocaleTime(item.time),
           value: item.volume || 0,
-          color: item.close >= item.open ? c.upVolume : c.downVolume,
+          color: item.close >= item.open ? colors.upVolume : colors.downVolume,
         })),
       );
     }
@@ -210,6 +208,7 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
       markersPluginRef.current.detach();
       markersPluginRef.current = null;
     }
+
     if (markers && markers.length > 0) {
       markersPluginRef.current = createSeriesMarkers(
         candleSeries,
@@ -249,7 +248,11 @@ const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineC
     applyVisibleRange(chart, data.length);
   }, [data, markers, overlays, readChartColors]);
 
-  return <ReactChart onLoad={setChart} height={height} />;
+  const onLoad = useCallback((c: IChartApi) => {
+    chartRef.current = c;
+  }, []);
+
+  return <ReactChart onLoad={onLoad} height={height} />;
 });
 
 export default memo(KlineChart);

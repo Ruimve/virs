@@ -1,16 +1,15 @@
 import { useRef, useEffect, memo } from 'react';
 import { createChart, type IChartApi, ColorType } from 'lightweight-charts';
+import { fn } from '@/utils/default';
 
 export interface ReactChartProps {
-  onLoad: (chart: IChartApi | undefined) => void;
+  onLoad?: (chart: IChartApi) => void;
   height?: number;
-  timeVisible?: boolean;
-  secondsVisible?: boolean;
 }
 
-function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartProps) {
+function ReactChart({ onLoad = fn, height }: ReactChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | undefined>(undefined);
+  const chartRef = useRef<IChartApi>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -41,8 +40,8 @@ function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartP
       },
       timeScale: {
         borderColor: borderDefault,
-        timeVisible: timeVisible ?? true,
-        secondsVisible: secondsVisible ?? false,
+        timeVisible: true,
+        secondsVisible: false,
       },
       handleScroll: { vertTouchDrag: false },
     });
@@ -63,21 +62,9 @@ function ReactChart({ onLoad, height, timeVisible, secondsVisible }: ReactChartP
     return () => {
       resizeObserver.disconnect();
       chart.remove();
-      chartRef.current = undefined;
-      onLoad(undefined);
+      chartRef.current = null;
     };
-  }, [secondsVisible, timeVisible, onLoad]);
-
-  useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart) return;
-    chart.applyOptions({
-      timeScale: {
-        timeVisible: timeVisible ?? true,
-        secondsVisible: secondsVisible ?? false,
-      },
-    });
-  }, [timeVisible, secondsVisible]);
+  }, [onLoad]);
 
   return (
     <div
