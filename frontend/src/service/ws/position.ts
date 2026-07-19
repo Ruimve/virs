@@ -12,7 +12,8 @@ export interface PositionWsEventRaw {
   realized_pnl: number;
   stop_loss: number | null;
   take_profit: number | null;
-  position_id: string;
+  id: string;
+  client_order_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -28,7 +29,8 @@ export interface PositionWsEvent {
   realizedPnl: number;
   stopLoss: number | null;
   takeProfit: number | null;
-  positionId: string;
+  id: string;
+  clientOrderId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,7 +56,8 @@ const parsePositionWs = (raw: string): PositionWsEvent | null => {
       realizedPnl: json.realized_pnl,
       stopLoss: json.stop_loss,
       takeProfit: json.take_profit,
-      positionId: json.position_id,
+      id: json.id,
+      clientOrderId: json.client_order_id,
       createdAt: json.created_at,
       updatedAt: json.updated_at,
     };

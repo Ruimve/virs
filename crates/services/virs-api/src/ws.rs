@@ -32,7 +32,8 @@ pub struct PositionWsMsg<'a> {
     realized_pnl: f64,
     stop_loss: Option<f64>,
     take_profit: Option<f64>,
-    position_id: String,
+    id: String,
+    client_order_id: Option<&'a str>,
     created_at: String,
     updated_at: String,
 }
@@ -83,7 +84,8 @@ pub fn position_to_ws_json(
         realized_pnl: pos.realized_pnl,
         stop_loss,
         take_profit,
-        position_id: pos.id.to_string(),
+        id: pos.id.to_string(),
+        client_order_id: pos.client_order_id.as_deref(),
         created_at: pos.created_at.to_rfc3339(),
         updated_at: pos.updated_at.to_rfc3339(),
     }
