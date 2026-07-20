@@ -9,7 +9,7 @@ use crate::auto::ai::{AutoAction, AutoAiService, AutoDecision};
 use crate::auto::ports::*;
 use crate::auto::strategy;
 use crate::auto::types::AutoBotConfig;
-use crate::strategy::prompt::{PromptLoader, StrategyType};
+use crate::strategy::prompt::{render, PromptLoader, RenderContext, StrategyType};
 use virs_config::TimeConfig;
 use virs_types::client_order_id;
 use virs_types::enums::PositionSide;
@@ -831,7 +831,7 @@ impl AutoWorker {
             None => "无".to_string(),
         };
 
-        let ctx = strategy::PromptContext {
+        let ctx = RenderContext {
             timestamp: chrono::Utc::now()
                 .format("%Y-%m-%d %H:%M:%S UTC")
                 .to_string(),
@@ -840,7 +840,7 @@ impl AutoWorker {
             total_balance: account.total,
             available_balance: account.free,
             used_margin: account.used,
-            margin_usage_rate,
+            margin_usage_rate: margin_usage_rate * 100.0,
             leverage: self.bot.leverage,
             position_info,
             position_duration,
@@ -854,11 +854,17 @@ impl AutoWorker {
             total_pnl: self.bot.total_pnl,
             consecutive_losses: self.consecutive_losses,
             trigger_reason: "scheduled".to_string(),
-            ind: snapshot.indicators,
             min_qty: snapshot.base.min_qty,
+            ind: snapshot.indicators,
+            // Auto bot 不使用以下字段，填默认值
+            grid_status: String::new(),
+            last_adjust_time: String::new(),
+            current_grid_config: String::new(),
+            event_flag: false,
+            event_description: String::new(),
         };
 
-        // 优先使用策略文件（STRATEGIES_DIR/auto/{strategy_file}.json）。
+        // 优先使用策略文件（STRATEGIES_DIR/auto/{strategy_file}/）。
         // 未配置或未找到时回退到 crate 内硬编码的 DEFAULT_* 常量。
         let (system_prompt, user_prompt) =
             if let Some(file_name) = self.bot.strategy_file.as_deref() {
@@ -868,7 +874,7 @@ impl AutoWorker {
                     .await
                 {
                     Some(tpl) => {
-                        let user = strategy::render_prompt(&tpl.user_prompt_template, &ctx);
+                        let user = render(&tpl.user_prompt_template, &ctx);
                         let system = self
                             .bot
                             .system_prompt
@@ -883,7 +889,7 @@ impl AutoWorker {
                             strategy_file = file_name,
                             "Strategy file not found in loader — falling back to built-in default prompt"
                         );
-                        let user = strategy::render_prompt(
+                        let user = render(
                             crate::auto::types::DEFAULT_USER_PROMPT_TEMPLATE,
                             &ctx,
                         );
@@ -897,7 +903,7 @@ impl AutoWorker {
                     }
                 }
             } else {
-                let user = strategy::render_prompt(
+                let user = render(
                     crate::auto::types::DEFAULT_USER_PROMPT_TEMPLATE,
                     &ctx,
                 );

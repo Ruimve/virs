@@ -1,8 +1,3 @@
-pub mod prompt;
-
-#[cfg(test)]
-mod prompt_tests;
-
 use crate::grid::ports::GridBotConfig;
 use crate::grid::types::GridLevel;
 

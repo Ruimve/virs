@@ -18,15 +18,18 @@
 //! - [`loader`]：文件夹扫描 + 缓存 + 查询
 //! - [`ai_generator`]：AI 生成器（LLM → PromptTemplate）
 //! - [`writer`]：文件夹写入器（PromptTemplate → 3 文件）
+//! - [`render`]：统一 prompt 渲染器（RenderContext + render）
 
 pub mod ai_generator;
 pub mod loader;
+pub mod render;
 pub mod template;
 pub mod validator;
 pub mod writer;
 
 pub use ai_generator::{generate_prompt, GenerateRequest, GenerateResult};
 pub use loader::PromptLoader;
+pub use render::{render, RenderContext};
 pub use template::{MetaFile, PromptSource, PromptTemplate, StrategyType};
 pub use validator::ValidationError;
 pub use writer::{delete_template, save_template};

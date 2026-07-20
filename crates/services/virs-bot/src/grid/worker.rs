@@ -11,7 +11,7 @@ use crate::grid::ai::{GridAction, GridAiDecision, GridAiService};
 use crate::grid::ports::*;
 use crate::grid::types::{GridEvent, GridLevel, GridState};
 use crate::grid::utils;
-use crate::strategy::prompt::{PromptLoader, StrategyType};
+use crate::strategy::prompt::{render, PromptLoader, RenderContext, StrategyType};
 
 pub enum OrderDir {
     Buy,
@@ -1007,7 +1007,52 @@ impl GridWorker {
                 crate::common::indicators::MarketIndicators::default()
             });
 
-        // 优先使用策略文件（STRATEGIES_DIR/grid/{strategy_file}.json）。
+        let last_adjust_time = self
+            .bot
+            .last_adjusted_at
+            .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+            .unwrap_or_else(|| "N/A".to_string());
+
+        let margin_usage_rate = if account.total > 0.0 {
+            account.used / account.total * 100.0
+        } else {
+            0.0
+        };
+
+        let ctx = RenderContext {
+            timestamp: chrono::Utc::now()
+                .format("%Y-%m-%d %H:%M:%S UTC")
+                .to_string(),
+            total_balance: account.total,
+            available_balance: account.free,
+            used_margin: account.used,
+            margin_usage_rate,
+            leverage: self.bot.leverage,
+            grid_status: grid_status.to_string(),
+            last_adjust_time,
+            consecutive_losses: self.consecutive_losses,
+            current_grid_config,
+            position_info,
+            event_flag: false,
+            event_description: String::new(),
+            trigger_reason: "scheduled_15m".to_string(),
+            funding_rate: indicators.funding_rate,
+            funding_next_time: indicators.funding_next_time.clone(),
+            ind: indicators,
+            // Grid bot 不使用以下字段，填默认值
+            symbol: String::new(),
+            exchange: String::new(),
+            min_qty: 0.0,
+            position_duration: String::new(),
+            stop_take_profit_info: String::new(),
+            recent_close_info: String::new(),
+            total_trades: 0,
+            win_trades: 0,
+            loss_trades: 0,
+            total_pnl: 0.0,
+        };
+
+        // 优先使用策略文件（STRATEGIES_DIR/grid/{strategy_file}/）。
         // 未配置或未找到时回退到 crate 内硬编码的 DEFAULT_* 常量。
         let (system_prompt, user_prompt) =
             if let Some(file_name) = self.bot.strategy_file.as_deref() {
@@ -1017,26 +1062,7 @@ impl GridWorker {
                     .await
                 {
                     Some(tpl) => {
-                        let user = utils::prompt::render_user_prompt(
-                            &tpl.user_prompt_template,
-                            &indicators,
-                            account.total,
-                            account.free,
-                            account.used,
-                            self.bot.leverage,
-                            grid_status,
-                            &self
-                                .bot
-                                .last_adjusted_at
-                                .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-                                .unwrap_or_else(|| "N/A".to_string()),
-                            self.consecutive_losses,
-                            &current_grid_config,
-                            &position_info,
-                            false,
-                            "",
-                            "scheduled_15m",
-                        );
+                        let user = render(&tpl.user_prompt_template, &ctx);
                         let system = self
                             .bot
                             .system_prompt
@@ -1051,25 +1077,9 @@ impl GridWorker {
                             strategy_file = file_name,
                             "Strategy file not found in loader — falling back to built-in default prompt"
                         );
-                        let user = utils::prompt::render_user_prompt(
+                        let user = render(
                             crate::grid::types::DEFAULT_USER_PROMPT_TEMPLATE,
-                            &indicators,
-                            account.total,
-                            account.free,
-                            account.used,
-                            self.bot.leverage,
-                            grid_status,
-                            &self
-                                .bot
-                                .last_adjusted_at
-                                .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-                                .unwrap_or_else(|| "N/A".to_string()),
-                            self.consecutive_losses,
-                            &current_grid_config,
-                            &position_info,
-                            false,
-                            "",
-                            "scheduled_15m",
+                            &ctx,
                         );
                         let system = self
                             .bot
@@ -1081,25 +1091,9 @@ impl GridWorker {
                     }
                 }
             } else {
-                let user = utils::prompt::render_user_prompt(
+                let user = render(
                     crate::grid::types::DEFAULT_USER_PROMPT_TEMPLATE,
-                    &indicators,
-                    account.total,
-                    account.free,
-                    account.used,
-                    self.bot.leverage,
-                    grid_status,
-                    &self
-                        .bot
-                        .last_adjusted_at
-                        .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-                        .unwrap_or_else(|| "N/A".to_string()),
-                    self.consecutive_losses,
-                    &current_grid_config,
-                    &position_info,
-                    false,
-                    "",
-                    "scheduled_15m",
+                    &ctx,
                 );
                 let system = self
                     .bot
