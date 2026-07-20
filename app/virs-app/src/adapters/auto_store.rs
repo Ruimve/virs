@@ -30,7 +30,8 @@ pub fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
         leverage: bot.leverage,
         max_position_pct: bot.max_position_pct,
         decide_interval_secs: bot.decide_interval_secs,
-        position_id: bot.position_id,
+        position_id_long: bot.position_id_long,
+        position_id_short: bot.position_id_short,
         market_regime: bot.market_regime.clone(),
         ai_analysis: bot.ai_analysis.clone(),
         system_prompt: bot.system_prompt.clone(),
@@ -89,14 +90,20 @@ impl AutoStore for PgAutoStore {
         Ok(())
     }
 
-    async fn update_position(&self, bot_id: Uuid, position_id: Option<Uuid>) -> VirsResult<()> {
+    async fn update_position(
+        &self,
+        bot_id: Uuid,
+        position_id_long: Option<Uuid>,
+        position_id_short: Option<Uuid>,
+    ) -> VirsResult<()> {
         sqlx::query(
             r#"UPDATE qd_auto_bots SET
-                position_id = $2, updated_at = NOW()
+                position_id_long = $2, position_id_short = $3, updated_at = NOW()
                WHERE id = $1"#,
         )
         .bind(bot_id)
-        .bind(position_id)
+        .bind(position_id_long)
+        .bind(position_id_short)
         .execute(&self.db)
         .await?;
         Ok(())

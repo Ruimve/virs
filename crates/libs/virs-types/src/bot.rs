@@ -107,8 +107,16 @@ pub enum OrderEvent {
 pub trait OrderExecutor: Send + Sync {
     async fn send_command(&self, command: OrderCommand) -> BotResult<()>;
 
+    /// 查询单个 open 仓位（Hedge 模式下仅返回第一个匹配，不保证 side）。
+    ///
+    /// 默认委托 [`query_open_positions`](Self::query_open_positions) 取首个匹配。
+    /// 实现方可按需覆写以提供更高效的直查路径。
+    async fn query_open_position(&self, symbol: &str) -> BotResult<Option<Position>> {
+        Ok(self.query_open_positions(symbol).await?.into_iter().next())
+    }
 
-    async fn query_open_position(&self, symbol: &str) -> BotResult<Option<Position>>;
+    /// 查询指定 symbol 下所有 open 仓位（Hedge 模式下可能同时返回 Long 和 Short）。
+    async fn query_open_positions(&self, symbol: &str) -> BotResult<Vec<Position>>;
 }
 
 

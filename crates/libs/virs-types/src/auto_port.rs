@@ -13,7 +13,12 @@ pub trait AutoStore: Send + Sync {
     ) -> VirsResult<Option<crate::auto_port::AutoBotConfig>>;
     async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> VirsResult<()>;
     async fn update_last_decided(&self, bot_id: Uuid) -> VirsResult<()>;
-    async fn update_position(&self, bot_id: Uuid, position_id: Option<Uuid>) -> VirsResult<()>;
+    async fn update_position(
+        &self,
+        bot_id: Uuid,
+        position_id_long: Option<Uuid>,
+        position_id_short: Option<Uuid>,
+    ) -> VirsResult<()>;
     async fn update_ai_analysis(
         &self,
         bot_id: Uuid,
@@ -115,7 +120,8 @@ pub struct AutoBotConfig {
     pub leverage: i32,
     pub max_position_pct: f64,
     pub decide_interval_secs: i32,
-    pub position_id: Option<Uuid>,
+    pub position_id_long: Option<Uuid>,
+    pub position_id_short: Option<Uuid>,
     pub market_regime: Option<String>,
     pub ai_analysis: Option<String>,
     pub system_prompt: Option<String>,

@@ -153,13 +153,14 @@ impl PositionEngine {
             .collect()
     }
 
-    pub fn get_open_position_by_symbol(&self, symbol: &str) -> Option<Position> {
+    /// 查询指定 symbol 下所有 open 仓位（Hedge 模式下可能同时返回 Long 和 Short）。
+    pub fn get_open_positions_by_symbol(&self, symbol: &str) -> Vec<Position> {
         self.inner
             .positions
             .iter()
             .filter(|r| r.value().symbol == symbol && r.value().is_open())
             .map(|r| r.value().clone())
-            .next()
+            .collect()
     }
 
     pub fn exchange(&self) -> Arc<dyn ExchangePe> {

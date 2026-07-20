@@ -140,8 +140,8 @@ impl OrderExecutor for PeOrderExecutor {
         })
     }
 
-    async fn query_open_position(&self, symbol: &str) -> BotResult<Option<Position>> {
-        Ok(self.engine.get_open_position_by_symbol(symbol))
+    async fn query_open_positions(&self, symbol: &str) -> BotResult<Vec<Position>> {
+        Ok(self.engine.get_open_positions_by_symbol(symbol))
     }
 }
 

@@ -58,6 +58,15 @@ fn position_side_str(side: &virs_types::PositionSide) -> &'static str {
 }
 
 
+// pe_orders.position_side 列存储大写形式（见 virs-position persistence.rs）。
+fn position_side_db_str(side: &virs_types::PositionSide) -> &'static str {
+    match side {
+        virs_types::PositionSide::Long => "LONG",
+        virs_types::PositionSide::Short => "SHORT",
+    }
+}
+
+
 fn position_status_str(status: &virs_types::PositionStatus) -> &'static str {
     match status {
         virs_types::PositionStatus::Opening => "opening",
@@ -96,14 +105,23 @@ async fn fetch_stop_loss_take_profit(
     db: &sqlx::PgPool,
     symbol: &str,
     exchange: &str,
+    side: &virs_types::PositionSide,
 ) -> (Option<f64>, Option<f64>) {
+    // pe_auto_order_context 表本身没有 position_side 列，通过 client_order_id
+    // JOIN pe_orders 表按 position_side 过滤（pe_orders.position_side 存储大写 LONG/SHORT）。
+    let side_str = position_side_db_str(side);
     let row: Result<(f64, f64), _> = sqlx::query_as(
-        r#"SELECT stop_loss, take_profit FROM pe_auto_order_context
-           WHERE symbol = $1 AND exchange = $2 AND order_role = 'open' AND status = 'open'
-           ORDER BY created_at DESC LIMIT 1"#,
+        r#"SELECT ctx.stop_loss, ctx.take_profit
+           FROM pe_auto_order_context ctx
+           JOIN pe_orders o ON o.client_order_id = ctx.client_order_id
+           WHERE ctx.symbol = $1 AND ctx.exchange = $2
+             AND ctx.order_role = 'open' AND ctx.status = 'open'
+             AND o.position_side = $3
+           ORDER BY ctx.created_at DESC LIMIT 1"#,
     )
     .bind(symbol)
     .bind(exchange)
+    .bind(side_str)
     .fetch_one(db)
     .await;
 
@@ -302,9 +320,17 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
             msg = pe_rx.recv() => {
                 match msg {
                     Ok(event) => {
-                        if let virs_types::position::EngineEvent::PositionUpdated { position } = event {
+                        // 处理三种仓位事件：开仓/平仓/更新。
+                        // 每次推送一个仓位消息（PositionWsMsg 结构体保持不变），
+                        // 前端按 side 分桶存储。
+                        let position = match event {
+                            virs_types::position::EngineEvent::PositionOpened { position } => Some(position),
+                            virs_types::position::EngineEvent::PositionClosed { position } => Some(position),
+                            virs_types::position::EngineEvent::PositionUpdated { position } => Some(position),
+                            _ => None,
+                        };
 
-
+                        if let Some(position) = position {
                             if !subscribed_symbols.is_empty()
                                 && !subscribed_symbols.contains(&position.symbol)
                             { continue; }
@@ -313,6 +339,7 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
                                 &state.db_pool,
                                 &position.symbol,
                                 &position.exchange,
+                                &position.side,
                             ).await;
                             let msg = position_to_ws_json(&position, sl, tp);
                             if let Ok(text) = serde_json::to_string(&msg) {
@@ -341,6 +368,7 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
                                             &state.db_pool,
                                             &pos.symbol,
                                             &pos.exchange,
+                                            &pos.side,
                                         ).await;
                                         let msg = position_to_ws_json(&pos, sl, tp);
                                         if let Ok(text) = serde_json::to_string(&msg) {

@@ -257,8 +257,9 @@ CREATE TABLE IF NOT EXISTS qd_auto_bots (
     win_trades INT NOT NULL DEFAULT 0,
     loss_trades INT NOT NULL DEFAULT 0,
 
-    -- 仓位追踪（跨系统引用 PositionEngine 内存中的 Position.id）
-    position_id UUID,
+    -- 仓位追踪（per-side，Hedge 模式支持多空并存；跨系统引用 PositionEngine 内存中的 Position.id）
+    position_id_long UUID,
+    position_id_short UUID,
 
     -- 生命周期时间戳（内部字段，API 不返回）
     last_decided_at TIMESTAMPTZ,

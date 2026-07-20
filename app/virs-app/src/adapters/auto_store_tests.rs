@@ -16,7 +16,8 @@ fn make_bot() -> AutoBot {
         max_position_pct: 80.0,
         decide_interval_secs: 60,
         initial_capital: 5000.0,
-        position_id: None,
+        position_id_long: None,
+        position_id_short: None,
         market_regime: None,
         ai_analysis: None,
         system_prompt: None,
@@ -49,7 +50,8 @@ fn a1_1_bot_to_config_basic() {
 fn a1_3_bot_to_config_optional_fields() {
     let bot = make_bot();
     let config = bot_to_config(&bot);
-    assert!(config.position_id.is_none());
+    assert!(config.position_id_long.is_none());
+    assert!(config.position_id_short.is_none());
     assert!(config.market_regime.is_none());
     assert!(config.ai_analysis.is_none());
     assert!(config.system_prompt.is_none());

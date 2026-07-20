@@ -46,29 +46,50 @@ pub struct AutoWorker {
     market_data_provider: Arc<dyn MarketDataProvider>,
     event_rx: broadcast::Receiver<OrderEvent>,
     pe_event_rx: broadcast::Receiver<EngineEvent>,
+
+    // ===== 全局状态（不 per-side） =====
     pub(crate) current_price: f64,
     pub(crate) consecutive_losses: i32,
     pub(crate) paused: bool,
-    pub(crate) pending_open: Option<PendingOpen>,
-    pub(crate) pending_close: Option<PendingClose>,
-    pub(crate) position_opened_at: Option<tokio::time::Instant>,
     pub(crate) trailing_stop_dirty: bool,
-
-    pub(crate) current_position: Option<Position>,
-
-    pub(crate) current_open_client_order_id: Option<String>,
-
-    pub(crate) current_log_id: Option<Uuid>,
-
-    pub(crate) current_open_fee: f64,
-
-    pub(crate) stop_loss: f64,
-    pub(crate) take_profit: f64,
-
-    pub(crate) last_close_event: Option<(String, String, chrono::DateTime<chrono::Utc>)>,
-
     pub(crate) time_config: TimeConfig,
     pub(crate) prompt_loader: PromptLoader,
+
+    // ===== Per-side 持仓缓存 =====
+    pub(crate) current_long: Option<Position>,
+    pub(crate) current_short: Option<Position>,
+
+    // ===== Per-side pending =====
+    pub(crate) pending_open_long: Option<PendingOpen>,
+    pub(crate) pending_open_short: Option<PendingOpen>,
+    pub(crate) pending_close_long: Option<PendingClose>,
+    pub(crate) pending_close_short: Option<PendingClose>,
+
+    // ===== Per-side 止损止盈 =====
+    pub(crate) stop_loss_long: f64,
+    pub(crate) take_profit_long: f64,
+    pub(crate) stop_loss_short: f64,
+    pub(crate) take_profit_short: f64,
+
+    // ===== Per-side 持仓开始时间 =====
+    pub(crate) position_opened_at_long: Option<tokio::time::Instant>,
+    pub(crate) position_opened_at_short: Option<tokio::time::Instant>,
+
+    // ===== Per-side 开仓 client_order_id =====
+    pub(crate) current_open_client_order_id_long: Option<String>,
+    pub(crate) current_open_client_order_id_short: Option<String>,
+
+    // ===== Per-side 分析日志 ID =====
+    pub(crate) current_log_id_long: Option<Uuid>,
+    pub(crate) current_log_id_short: Option<Uuid>,
+
+    // ===== Per-side 开仓手续费 =====
+    pub(crate) current_open_fee_long: f64,
+    pub(crate) current_open_fee_short: f64,
+
+    // ===== Per-side 上次平仓事件 =====
+    pub(crate) last_close_event_long: Option<(String, String, chrono::DateTime<chrono::Utc>)>,
+    pub(crate) last_close_event_short: Option<(String, String, chrono::DateTime<chrono::Utc>)>,
 }
 
 impl AutoWorker {
@@ -96,45 +117,82 @@ impl AutoWorker {
             current_price: 0.0,
             consecutive_losses: 0,
             paused: false,
-            pending_open: None,
-            pending_close: None,
-            position_opened_at: None,
             trailing_stop_dirty: false,
-            current_position: None,
-            current_open_client_order_id: None,
-            current_log_id: None,
-            current_open_fee: 0.0,
-            stop_loss: 0.0,
-            take_profit: 0.0,
-            last_close_event: None,
             time_config,
             prompt_loader,
+            current_long: None,
+            current_short: None,
+            pending_open_long: None,
+            pending_open_short: None,
+            pending_close_long: None,
+            pending_close_short: None,
+            stop_loss_long: 0.0,
+            take_profit_long: 0.0,
+            stop_loss_short: 0.0,
+            take_profit_short: 0.0,
+            position_opened_at_long: None,
+            position_opened_at_short: None,
+            current_open_client_order_id_long: None,
+            current_open_client_order_id_short: None,
+            current_log_id_long: None,
+            current_log_id_short: None,
+            current_open_fee_long: 0.0,
+            current_open_fee_short: 0.0,
+            last_close_event_long: None,
+            last_close_event_short: None,
         }
     }
 
-    pub(crate) fn current_side_str(&self) -> String {
-        match &self.current_position {
-            Some(p) if p.is_open() => match p.side {
-                PositionSide::Long => "long".to_string(),
-                PositionSide::Short => "short".to_string(),
-            },
-            _ => "none".to_string(),
+    // ===== Per-side 辅助方法 =====
+
+    pub(crate) fn get_position(&self, side: PositionSide) -> Option<&Position> {
+        match side {
+            PositionSide::Long => self.current_long.as_ref(),
+            PositionSide::Short => self.current_short.as_ref(),
         }
     }
 
-    pub(crate) fn has_position(&self) -> bool {
-        match &self.current_position {
-            Some(p) if p.is_open() => p.quantity.abs() > 1e-8,
-            _ => false,
+    pub(crate) fn has_position_side(&self, side: PositionSide) -> bool {
+        self.get_position(side)
+            .map(|p| p.is_open() && p.quantity.abs() > 1e-8)
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn has_any_position(&self) -> bool {
+        self.has_position_side(PositionSide::Long) || self.has_position_side(PositionSide::Short)
+    }
+
+    pub(crate) fn is_pending_side(&self, side: PositionSide) -> bool {
+        match side {
+            PositionSide::Long => self.pending_open_long.is_some() || self.pending_close_long.is_some(),
+            PositionSide::Short => self.pending_open_short.is_some() || self.pending_close_short.is_some(),
         }
     }
 
     pub(crate) fn is_pending(&self) -> bool {
-        self.pending_open.is_some() || self.pending_close.is_some()
+        self.is_pending_side(PositionSide::Long) || self.is_pending_side(PositionSide::Short)
+    }
+
+    /// 返回当前持仓方向字符串："long" / "short" / "long+short" / "none"
+    #[allow(dead_code)]
+    pub(crate) fn current_sides_str(&self) -> String {
+        let has_long = self.has_position_side(PositionSide::Long);
+        let has_short = self.has_position_side(PositionSide::Short);
+        match (has_long, has_short) {
+            (true, true) => "long+short".to_string(),
+            (true, false) => "long".to_string(),
+            (false, true) => "short".to_string(),
+            (false, false) => "none".to_string(),
+        }
     }
 
     pub(crate) fn cooldown_remaining_secs(&self, new_side: &str) -> Option<i64> {
-        let (closed_side, reason, closed_at) = self.last_close_event.as_ref()?;
+        let last_event = match new_side {
+            "long" => self.last_close_event_long.as_ref(),
+            "short" => self.last_close_event_short.as_ref(),
+            _ => return None,
+        };
+        let (closed_side, reason, closed_at) = last_event?;
         let elapsed = chrono::Utc::now().signed_duration_since(*closed_at);
         let elapsed_secs = elapsed.num_seconds().max(0);
 
@@ -150,47 +208,79 @@ impl AutoWorker {
     pub(crate) async fn refresh_position_from_pe(&mut self) -> bool {
         match self
             .order_executor
-            .query_open_position(&self.bot.symbol)
+            .query_open_positions(&self.bot.symbol)
             .await
         {
-            Ok(Some(pe_pos)) if pe_pos.is_open() && pe_pos.quantity.abs() > 1e-8 => {
-                let was_empty = !self.has_position();
-                if was_empty {
+            Ok(positions) => {
+                let mut found_long: Option<Position> = None;
+                let mut found_short: Option<Position> = None;
+                for pe_pos in positions.into_iter() {
+                    if !pe_pos.is_open() || pe_pos.quantity.abs() <= 1e-8 {
+                        continue;
+                    }
+                    match pe_pos.side {
+                        PositionSide::Long if found_long.is_none() => found_long = Some(pe_pos),
+                        PositionSide::Short if found_short.is_none() => found_short = Some(pe_pos),
+                        _ => {}
+                    }
+                }
+
+                // 恢复日志：缓存为空但 PE 有仓位
+                if !self.has_position_side(PositionSide::Long) && found_long.is_some() {
+                    let p = found_long.as_ref().unwrap();
                     warn!(
                         bot_id = %self.bot.id,
-                        position_id = %pe_pos.id,
-                        side = ?pe_pos.side,
-                        quantity = pe_pos.quantity,
-                        "Position cache was empty but PE has open position — recovered to prevent duplicate open"
+                        position_id = %p.id,
+                        side = "long",
+                        quantity = p.quantity,
+                        "Long position cache was empty but PE has open position — recovered to prevent duplicate open"
+                    );
+                }
+                if !self.has_position_side(PositionSide::Short) && found_short.is_some() {
+                    let p = found_short.as_ref().unwrap();
+                    warn!(
+                        bot_id = %self.bot.id,
+                        position_id = %p.id,
+                        side = "short",
+                        quantity = p.quantity,
+                        "Short position cache was empty but PE has open position — recovered to prevent duplicate open"
                     );
                 }
 
-                if self.bot.position_id.is_none() || self.bot.position_id == Some(Uuid::nil()) {
-                    self.bot.position_id = Some(pe_pos.id);
+                // per-side 回填 position_id（PE 已从 pe_orders 聚合恢复）
+                let mut position_updated = false;
+                if self.bot.position_id_long.is_none() || self.bot.position_id_long == Some(Uuid::nil()) {
+                    if let Some(ref p) = found_long {
+                        self.bot.position_id_long = Some(p.id);
+                        position_updated = true;
+                    }
+                }
+                if self.bot.position_id_short.is_none() || self.bot.position_id_short == Some(Uuid::nil()) {
+                    if let Some(ref p) = found_short {
+                        self.bot.position_id_short = Some(p.id);
+                        position_updated = true;
+                    }
+                }
+                if position_updated {
                     if let Err(e) = self
                         .store
-                        .update_position(self.bot.id, self.bot.position_id)
+                        .update_position(
+                            self.bot.id,
+                            self.bot.position_id_long,
+                            self.bot.position_id_short,
+                        )
                         .await
                     {
                         warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
                     }
                 }
-                self.current_position = Some(pe_pos);
-                true
-            }
-            Ok(Some(_)) => true,
-            Ok(None) => {
-                if self.has_position() {
-                    warn!(
-                        bot_id = %self.bot.id,
-                        "Position cache has open position but PE confirms none — clearing stale cache"
-                    );
-                    self.current_position = None;
-                }
+
+                self.current_long = found_long;
+                self.current_short = found_short;
                 true
             }
             Err(e) => {
-                warn!(bot_id = %self.bot.id, error = %e, "Failed to query PE for position, relying on cached state");
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to query PE for positions, relying on cached state");
                 false
             }
         }
@@ -210,7 +300,11 @@ impl AutoWorker {
     pub(crate) async fn save_position(&self) {
         if let Err(e) = self
             .store
-            .update_position(self.bot.id, self.bot.position_id)
+            .update_position(
+                self.bot.id,
+                self.bot.position_id_long,
+                self.bot.position_id_short,
+            )
             .await
         {
             warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
@@ -236,31 +330,62 @@ impl AutoWorker {
     pub(crate) async fn check_pending_timeout(&mut self) {
         let now = tokio::time::Instant::now();
         let pending_timeout = Duration::from_secs(self.time_config.pending_order_timeout_secs);
-        let mut timed_out_open = false;
-        let mut timed_out_close = false;
+        let mut timed_out_open_long = false;
+        let mut timed_out_open_short = false;
+        let mut timed_out_close_long = false;
+        let mut timed_out_close_short = false;
 
-        if let Some(ref pending) = self.pending_open {
+        if let Some(ref pending) = self.pending_open_long {
             if now.duration_since(pending.sent_at) > pending_timeout {
-                warn!(bot_id = %self.bot.id, "Pending open order timed out, clearing");
-                self.pending_open = None;
-                timed_out_open = true;
+                warn!(bot_id = %self.bot.id, side = "long", "Pending open order timed out, clearing");
+                self.pending_open_long = None;
+                timed_out_open_long = true;
             }
         }
-        if let Some(ref pending) = self.pending_close {
+        if let Some(ref pending) = self.pending_open_short {
             if now.duration_since(pending.sent_at) > pending_timeout {
-                warn!(bot_id = %self.bot.id, "Pending close order timed out, clearing");
-                self.pending_close = None;
-                timed_out_close = true;
+                warn!(bot_id = %self.bot.id, side = "short", "Pending open order timed out, clearing");
+                self.pending_open_short = None;
+                timed_out_open_short = true;
             }
         }
+        if let Some(ref pending) = self.pending_close_long {
+            if now.duration_since(pending.sent_at) > pending_timeout {
+                warn!(bot_id = %self.bot.id, side = "long", "Pending close order timed out, clearing");
+                self.pending_close_long = None;
+                timed_out_close_long = true;
+            }
+        }
+        if let Some(ref pending) = self.pending_close_short {
+            if now.duration_since(pending.sent_at) > pending_timeout {
+                warn!(bot_id = %self.bot.id, side = "short", "Pending close order timed out, clearing");
+                self.pending_close_short = None;
+                timed_out_close_short = true;
+            }
+        }
+
+        let timed_out_open = timed_out_open_long || timed_out_open_short;
+        let timed_out_close = timed_out_close_long || timed_out_close_short;
 
         if timed_out_open || timed_out_close {
-            if let Some(log_id) = self.current_log_id.take() {
-                let exec_status = if timed_out_open {
-                    "open_failed"
-                } else {
-                    "close_failed"
-                };
+            let exec_status = if timed_out_open {
+                "open_failed"
+            } else {
+                "close_failed"
+            };
+            // 取出对应 side 的 log_id 进行更新
+            let log_ids: Vec<Uuid> = [
+                (timed_out_open_long || timed_out_close_long)
+                    .then(|| self.current_log_id_long.take())
+                    .flatten(),
+                (timed_out_open_short || timed_out_close_short)
+                    .then(|| self.current_log_id_short.take())
+                    .flatten(),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            for log_id in log_ids {
                 if let Err(e) = self
                     .store
                     .update_analysis_log_execution(log_id, exec_status, Some("订单超时未成交"))
@@ -275,17 +400,27 @@ impl AutoWorker {
     pub(crate) fn matches_pending_order(&self, client_order_id: Option<&str>) -> bool {
         match client_order_id {
             Some(cid) => {
-                let open_match = self
-                    .pending_open
+                let open_long = self
+                    .pending_open_long
                     .as_ref()
                     .map(|p| p.client_order_id == cid)
                     .unwrap_or(false);
-                let close_match = self
-                    .pending_close
+                let open_short = self
+                    .pending_open_short
                     .as_ref()
                     .map(|p| p.client_order_id == cid)
                     .unwrap_or(false);
-                open_match || close_match
+                let close_long = self
+                    .pending_close_long
+                    .as_ref()
+                    .map(|p| p.client_order_id == cid)
+                    .unwrap_or(false);
+                let close_short = self
+                    .pending_close_short
+                    .as_ref()
+                    .map(|p| p.client_order_id == cid)
+                    .unwrap_or(false);
+                open_long || open_short || close_long || close_short
             }
             None => false,
         }
@@ -323,7 +458,16 @@ impl AutoWorker {
 
         match self.store.find_last_closed_trade(self.bot.id).await {
             Ok(Some((side, close_reason, closed_at))) => {
-                self.last_close_event = Some((side.clone(), close_reason.clone(), closed_at));
+                let event = (side.clone(), close_reason.clone(), closed_at);
+                match side.as_str() {
+                    "long" => self.last_close_event_long = Some(event),
+                    "short" => self.last_close_event_short = Some(event),
+                    _ => {
+                        // 未知 side，回退到两边都设置
+                        self.last_close_event_long = Some(event.clone());
+                        self.last_close_event_short = Some(event);
+                    }
+                }
             }
             Ok(None) => {}
             Err(e) => {
@@ -340,7 +484,12 @@ impl AutoWorker {
         if pe_ok
             && self
                 .bot
-                .position_id
+                .position_id_long
+                .filter(|id| *id != Uuid::nil())
+                .is_none()
+            && self
+                .bot
+                .position_id_short
                 .filter(|id| *id != Uuid::nil())
                 .is_none()
         {
@@ -349,7 +498,7 @@ impl AutoWorker {
                     warn!(
                         bot_id = %self.bot.id,
                         client_order_id = %client_order_id,
-                        "Orphaned trade detected: open trade exists but bot.position_id is empty and PE confirms no position, marking as orphaned"
+                        "Orphaned trade detected: open trade exists but bot.position_id_long/short are empty and PE confirms no position, marking as orphaned"
                     );
                     if let Err(e) = self.store.mark_trade_orphaned(&client_order_id).await {
                         warn!(bot_id = %self.bot.id, client_order_id = %client_order_id, error = %e, "Failed to mark trade as orphaned");
@@ -364,27 +513,58 @@ impl AutoWorker {
 
         if self
             .bot
-            .position_id
+            .position_id_long
             .filter(|id| *id != Uuid::nil())
             .is_some()
+            || self
+                .bot
+                .position_id_short
+                .filter(|id| *id != Uuid::nil())
+                .is_some()
         {
+            // DB 单行 find_open_trade：根据 client_order_id 前缀判断 side，
+            // 仅能恢复一个方向的 SL/TP（DB 多 side 恢复留待阶段 3）
             match self.store.find_open_trade(self.bot.id).await {
                 Ok(Some((client_order_id, sl, tp, opened_at))) => {
-                    self.current_open_client_order_id = Some(client_order_id);
-                    self.stop_loss = sl;
-                    self.take_profit = tp;
-
+                    let side = parse_side_from_client_order_id(&client_order_id);
                     let elapsed = chrono::Utc::now().signed_duration_since(opened_at);
                     let elapsed_secs = elapsed.num_seconds().max(0) as u64;
                     let elapsed_dur = std::time::Duration::from_secs(elapsed_secs);
-                    self.position_opened_at = tokio::time::Instant::now().checked_sub(elapsed_dur);
-                    if self.position_opened_at.is_none() {
-                        warn!(
-                            bot_id = %self.bot.id,
-                            elapsed_secs,
-                            "Failed to compute position_opened_at from DB opened_at, using now as fallback"
-                        );
-                        self.position_opened_at = Some(tokio::time::Instant::now());
+                    let position_opened_at =
+                        tokio::time::Instant::now().checked_sub(elapsed_dur);
+
+                    let position_opened_at = match position_opened_at {
+                        Some(at) => at,
+                        None => {
+                            warn!(
+                                bot_id = %self.bot.id,
+                                elapsed_secs,
+                                "Failed to compute position_opened_at from DB opened_at, using now as fallback"
+                            );
+                            tokio::time::Instant::now()
+                        }
+                    };
+
+                    match side {
+                        Some(PositionSide::Long) => {
+                            self.current_open_client_order_id_long = Some(client_order_id);
+                            self.stop_loss_long = sl;
+                            self.take_profit_long = tp;
+                            self.position_opened_at_long = Some(position_opened_at);
+                        }
+                        Some(PositionSide::Short) => {
+                            self.current_open_client_order_id_short = Some(client_order_id);
+                            self.stop_loss_short = sl;
+                            self.take_profit_short = tp;
+                            self.position_opened_at_short = Some(position_opened_at);
+                        }
+                        None => {
+                            warn!(
+                                bot_id = %self.bot.id,
+                                client_order_id = %client_order_id,
+                                "Cannot parse side from client_order_id — stop_loss/take_profit not restored"
+                            );
+                        }
                     }
                 }
                 Ok(None) => {
@@ -404,11 +584,11 @@ impl AutoWorker {
                 }
             }
 
-            if self.current_position.is_none() {
+            if !self.has_any_position() {
                 let deadline = tokio::time::Instant::now()
                     + Duration::from_secs(self.time_config.close_order_timeout_secs);
                 loop {
-                    if self.current_position.is_some() {
+                    if self.has_any_position() {
                         break;
                     }
                     if tokio::time::Instant::now() >= deadline {
@@ -416,7 +596,8 @@ impl AutoWorker {
                             bot_id = %self.bot.id,
                             "Timeout waiting for PE position event, clearing stale position_id"
                         );
-                        self.bot.position_id = None;
+                        self.bot.position_id_long = None;
+                        self.bot.position_id_short = None;
                         self.save_position().await;
                         break;
                     }
@@ -442,9 +623,17 @@ impl AutoWorker {
             }
         }
 
-        let skip_llm = if self.has_position() {
-            if self.position_opened_at.is_none() {
-                self.position_opened_at = Some(tokio::time::Instant::now());
+        let skip_llm = if self.has_any_position() {
+            // 为每个有持仓的方向确保 opened_at 已设置
+            if self.has_position_side(PositionSide::Long)
+                && self.position_opened_at_long.is_none()
+            {
+                self.position_opened_at_long = Some(tokio::time::Instant::now());
+            }
+            if self.has_position_side(PositionSide::Short)
+                && self.position_opened_at_short.is_none()
+            {
+                self.position_opened_at_short = Some(tokio::time::Instant::now());
             }
             if self.check_stop_take_profit().await {
                 self.save_position().await;
@@ -530,11 +719,11 @@ impl AutoWorker {
 
         self.check_pending_timeout().await;
 
-        if self.pending_open.is_some() || self.pending_close.is_some() {
+        if self.is_pending() {
             return;
         }
 
-        if self.has_position() {
+        if self.has_any_position() {
             let atr = self.fetch_current_atr().await;
             self.update_trailing_stop(atr);
 
@@ -553,8 +742,24 @@ impl AutoWorker {
         }
     }
 
+    /// 对 Long 和 Short 分别检查止损止盈；任意方向触发平仓即返回 true
     async fn check_stop_take_profit(&mut self) -> bool {
-        let entry_price = match &self.current_position {
+        let mut triggered = false;
+        if self.has_position_side(PositionSide::Long) {
+            if self.check_stop_take_profit_side(PositionSide::Long).await {
+                triggered = true;
+            }
+        }
+        if self.has_position_side(PositionSide::Short) {
+            if self.check_stop_take_profit_side(PositionSide::Short).await {
+                triggered = true;
+            }
+        }
+        triggered
+    }
+
+    async fn check_stop_take_profit_side(&mut self, side: PositionSide) -> bool {
+        let entry_price = match self.get_position(side) {
             Some(p) if p.is_open() => p.entry_price,
             _ => return false,
         };
@@ -562,26 +767,30 @@ impl AutoWorker {
             return false;
         }
 
-        let side = self.current_side_str();
-        let should_close = match side.as_str() {
-            "long" => {
-                (self.stop_loss > 0.0 && self.current_price <= self.stop_loss)
-                    || (self.take_profit > 0.0 && self.current_price >= self.take_profit)
+        let (stop_loss, take_profit) = match side {
+            PositionSide::Long => (self.stop_loss_long, self.take_profit_long),
+            PositionSide::Short => (self.stop_loss_short, self.take_profit_short),
+        };
+        let side_str = side_str(side);
+
+        let should_close = match side {
+            PositionSide::Long => {
+                (stop_loss > 0.0 && self.current_price <= stop_loss)
+                    || (take_profit > 0.0 && self.current_price >= take_profit)
             }
-            "short" => {
-                (self.stop_loss > 0.0 && self.current_price >= self.stop_loss)
-                    || (self.take_profit > 0.0 && self.current_price <= self.take_profit)
+            PositionSide::Short => {
+                (stop_loss > 0.0 && self.current_price >= stop_loss)
+                    || (take_profit > 0.0 && self.current_price <= take_profit)
             }
-            _ => false,
         };
 
         if should_close {
-            let stop_triggered = self.stop_loss > 0.0
-                && ((side == "long" && self.current_price <= self.stop_loss)
-                    || (side == "short" && self.current_price >= self.stop_loss));
-            let take_triggered = self.take_profit > 0.0
-                && ((side == "long" && self.current_price >= self.take_profit)
-                    || (side == "short" && self.current_price <= self.take_profit));
+            let stop_triggered = stop_loss > 0.0
+                && ((side == PositionSide::Long && self.current_price <= stop_loss)
+                    || (side == PositionSide::Short && self.current_price >= stop_loss));
+            let take_triggered = take_profit > 0.0
+                && ((side == PositionSide::Long && self.current_price >= take_profit)
+                    || (side == PositionSide::Short && self.current_price <= take_profit));
 
             let close_reason = if take_triggered {
                 "take_profit"
@@ -591,45 +800,64 @@ impl AutoWorker {
                 "stop_loss"
             };
             info!(
-                bot_id = %self.bot.id, side = %side,
+                bot_id = %self.bot.id, side = %side_str,
                 close_reason, price = self.current_price,
-                stop_loss = self.stop_loss, take_profit = self.take_profit,
+                stop_loss, take_profit,
                 "Stop/take profit triggered"
             );
-            self.close_position(close_reason).await;
+            self.close_position(side, close_reason).await;
             return true;
         }
         false
     }
 
     fn update_trailing_stop(&mut self, atr: f64) {
-        let entry_price = match &self.current_position {
-            Some(p) if p.is_open() => p.entry_price,
-            _ => return,
-        };
-        if entry_price <= 0.0 || self.stop_loss <= 0.0 {
-            return;
-        }
-
         if atr <= 0.0 {
             return;
         }
+        self.update_trailing_stop_side(PositionSide::Long, atr);
+        self.update_trailing_stop_side(PositionSide::Short, atr);
+    }
 
-        let side = self.current_side_str();
+    fn update_trailing_stop_side(&mut self, side: PositionSide, atr: f64) {
+        let entry_price = match self.get_position(side) {
+            Some(p) if p.is_open() => p.entry_price,
+            _ => return,
+        };
+
+        let (stop_loss, client_order_id) = match side {
+            PositionSide::Long => (
+                self.stop_loss_long,
+                self.current_open_client_order_id_long.clone(),
+            ),
+            PositionSide::Short => (
+                self.stop_loss_short,
+                self.current_open_client_order_id_short.clone(),
+            ),
+        };
+
+        if entry_price <= 0.0 || stop_loss <= 0.0 {
+            return;
+        }
+
+        let side_str = side_str(side);
 
         let new_stop = strategy::compute_trailing_stop(
             entry_price,
             self.current_price,
-            &side,
+            side_str,
             atr,
-            self.stop_loss,
+            stop_loss,
         );
 
-        if new_stop != self.stop_loss {
-            self.stop_loss = new_stop;
+        if new_stop != stop_loss {
+            match side {
+                PositionSide::Long => self.stop_loss_long = new_stop,
+                PositionSide::Short => self.stop_loss_short = new_stop,
+            }
             self.trailing_stop_dirty = true;
 
-            if let Some(client_order_id) = self.current_open_client_order_id.clone() {
+            if let Some(client_order_id) = client_order_id {
                 let store = self.store.clone();
                 tokio::spawn(async move {
                     if let Err(e) = store
@@ -653,15 +881,31 @@ impl AutoWorker {
     }
 
     async fn check_position_timeout(&mut self) -> bool {
+        let mut triggered = false;
+        if self.check_position_timeout_side(PositionSide::Long).await {
+            triggered = true;
+        }
+        if self.check_position_timeout_side(PositionSide::Short).await {
+            triggered = true;
+        }
+        triggered
+    }
+
+    async fn check_position_timeout_side(&mut self, side: PositionSide) -> bool {
         let max_duration = Duration::from_secs(self.time_config.max_position_duration_secs);
-        if let Some(opened_at) = self.position_opened_at {
+        let opened_at = match side {
+            PositionSide::Long => self.position_opened_at_long,
+            PositionSide::Short => self.position_opened_at_short,
+        };
+        if let Some(opened_at) = opened_at {
             if opened_at.elapsed() > max_duration {
                 warn!(
                     bot_id = %self.bot.id,
+                    side = %side_str(side),
                     duration_secs = opened_at.elapsed().as_secs(),
                     "Position held too long, force closing"
                 );
-                self.close_position("position_timeout").await;
+                self.close_position(side, "position_timeout").await;
                 return true;
             }
         }
@@ -709,17 +953,41 @@ impl AutoWorker {
             )
             .await;
 
-        self.current_log_id = log_id;
+        // 按 action 分配 log_id 到对应 side
+        match action {
+            AutoAction::OpenLong => self.current_log_id_long = log_id,
+            AutoAction::OpenShort => self.current_log_id_short = log_id,
+            AutoAction::ClosePosition => {
+                // ClosePosition 会平掉所有持仓方向；将 log_id 分配给有持仓的一侧
+                // （若两侧都有，优先 Long；若都无，回退到 Long 供 intercept 路径更新）
+                if self.has_position_side(PositionSide::Long)
+                    || !self.has_position_side(PositionSide::Short)
+                {
+                    self.current_log_id_long = log_id;
+                } else {
+                    self.current_log_id_short = log_id;
+                }
+            }
+            AutoAction::Hold => {
+                // Hold 不执行，暂存到 Long 侧供后续更新
+                self.current_log_id_long = log_id;
+            }
+        }
 
         let intercept_reason = self.execute_decision(&action, decision.as_ref()).await;
         if let Some(reason) = intercept_reason {
             warn!(bot_id = %self.bot.id, action = %action.as_str(), intercept_reason = %reason, "Decision intercepted");
-            if let Some(log_id) = self.current_log_id {
-                let exec_status = match action {
-                    AutoAction::OpenLong | AutoAction::OpenShort => "open_failed",
-                    AutoAction::ClosePosition => "close_failed",
-                    AutoAction::Hold => "hold",
-                };
+            let exec_status = match action {
+                AutoAction::OpenLong | AutoAction::OpenShort => "open_failed",
+                AutoAction::ClosePosition => "close_failed",
+                AutoAction::Hold => "hold",
+            };
+            // 取出两侧的 log_id 进行更新
+            let log_ids: Vec<Uuid> = [self.current_log_id_long.take(), self.current_log_id_short.take()]
+                .into_iter()
+                .flatten()
+                .collect();
+            for log_id in log_ids {
                 if let Err(e) = self
                     .store
                     .update_analysis_log_execution(log_id, exec_status, Some(&reason))
@@ -728,10 +996,8 @@ impl AutoWorker {
                     error!(bot_id = %self.bot.id, error = %e, "Failed to update intercept log");
                 }
             }
-
-            self.current_log_id = None;
         } else if matches!(action, AutoAction::Hold) {
-            if let Some(log_id) = self.current_log_id {
+            if let Some(log_id) = self.current_log_id_long.take() {
                 if let Err(e) = self
                     .store
                     .update_analysis_log_execution(log_id, "hold", None)
@@ -739,8 +1005,8 @@ impl AutoWorker {
                 {
                     error!(bot_id = %self.bot.id, error = %e, "Failed to update hold log");
                 }
-                self.current_log_id = None;
             }
+            self.current_log_id_short = None;
         }
 
         if !matches!(action, AutoAction::Hold) {
@@ -772,63 +1038,96 @@ impl AutoWorker {
             0.0
         };
 
-        let position_info = match &self.current_position {
-            Some(p) if p.is_open() => strategy::format_position_info(
-                p,
-                Some(&self.current_side_str()),
-                snapshot.base.current_price,
-            ),
-            _ => "无仓位".to_string(),
+        // 拼接 Long / Short 双向持仓信息（固定双向格式，空方向显示"无仓位"）
+        let position_info = {
+            let long_info = match &self.current_long {
+                Some(p) if p.is_open() => strategy::format_position_info(
+                    p,
+                    Some("long"),
+                    snapshot.base.current_price,
+                ),
+                _ => "无仓位".to_string(),
+            };
+            let short_info = match &self.current_short {
+                Some(p) if p.is_open() => strategy::format_position_info(
+                    p,
+                    Some("short"),
+                    snapshot.base.current_price,
+                ),
+                _ => "无仓位".to_string(),
+            };
+            format!("多：\n{}\n空：\n{}", long_info, short_info)
         };
 
-        let stop_take_profit_info =
-            strategy::format_stop_take_profit(self.stop_loss, self.take_profit);
-
-        let position_duration = if self.has_position() {
-            if let Some(opened_at) = self.position_opened_at {
-                let elapsed = opened_at.elapsed();
-                let hours = elapsed.as_secs() / 3600;
-                let mins = (elapsed.as_secs() % 3600) / 60;
-                format!("{}小时{}分钟", hours, mins)
+        // 拼接双向止损止盈信息
+        let stop_take_profit_info = {
+            let has_long = self.has_position_side(PositionSide::Long);
+            let has_short = self.has_position_side(PositionSide::Short);
+            let long_info =
+                strategy::format_stop_take_profit(self.stop_loss_long, self.take_profit_long);
+            let short_info =
+                strategy::format_stop_take_profit(self.stop_loss_short, self.take_profit_short);
+            if has_long && has_short {
+                if long_info.is_empty() || long_info == "未设置" {
+                    if short_info.is_empty() || short_info == "未设置" {
+                        "未设置".to_string()
+                    } else {
+                        format!("空：\n{}", short_info)
+                    }
+                } else if short_info.is_empty() || short_info == "未设置" {
+                    format!("多：\n{}", long_info)
+                } else {
+                    format!("多：\n{}\n空：\n{}", long_info, short_info)
+                }
+            } else if has_long {
+                long_info
+            } else if has_short {
+                short_info
             } else {
-                "未知".to_string()
+                "未设置".to_string()
             }
+        };
+
+        let position_duration = if self.has_any_position() {
+            let mut parts: Vec<String> = Vec::new();
+            if self.has_position_side(PositionSide::Long) {
+                if let Some(opened_at) = self.position_opened_at_long {
+                    let elapsed = opened_at.elapsed();
+                    let hours = elapsed.as_secs() / 3600;
+                    let mins = (elapsed.as_secs() % 3600) / 60;
+                    parts.push(format!("多：{}小时{}分钟", hours, mins));
+                } else {
+                    parts.push("多：未知".to_string());
+                }
+            }
+            if self.has_position_side(PositionSide::Short) {
+                if let Some(opened_at) = self.position_opened_at_short {
+                    let elapsed = opened_at.elapsed();
+                    let hours = elapsed.as_secs() / 3600;
+                    let mins = (elapsed.as_secs() % 3600) / 60;
+                    parts.push(format!("空：{}小时{}分钟", hours, mins));
+                } else {
+                    parts.push("空：未知".to_string());
+                }
+            }
+            parts.join("，")
         } else {
             "无持仓".to_string()
         };
 
-        let recent_close_info = match &self.last_close_event {
-            Some((side, close_reason, closed_at)) => {
-                let side_cn = match side.as_str() {
-                    "long" => "多",
-                    "short" => "空",
-                    _ => "未知",
-                };
-                let reason_cn = match close_reason.as_str() {
-                    "stop_loss" => "止损",
-                    "take_profit" => "止盈",
-                    "position_timeout" => "持仓超时",
-                    "llm_decision" => "LLM主动平仓",
-                    _ => "其他",
-                };
-                let elapsed = chrono::Utc::now().signed_duration_since(*closed_at);
-                let elapsed_str = {
-                    let mins = elapsed.num_minutes();
-                    if mins < 60 {
-                        format!("{} 分钟前", mins)
-                    } else {
-                        format!("{} 小时 {} 分钟前", mins / 60, mins % 60)
-                    }
-                };
-                format!(
-                    "{}平{}，原因：{}（{}）",
-                    elapsed_str,
-                    side_cn,
-                    reason_cn,
-                    closed_at.format("%Y-%m-%d %H:%M:%S UTC")
-                )
+        let recent_close_info = {
+            let mut parts: Vec<String> = Vec::new();
+            if let Some((side, reason, closed_at)) = &self.last_close_event_long {
+                parts.push(format_close_event(side, reason, closed_at));
             }
-            None => "无".to_string(),
+            if let Some((side, reason, closed_at)) = &self.last_close_event_short {
+                parts.push(format_close_event(side, reason, closed_at));
+            }
+            if parts.is_empty() {
+                "无".to_string()
+            } else {
+                parts.join("\n")
+            }
         };
 
         let ctx = RenderContext {
@@ -1064,17 +1363,24 @@ impl AutoWorker {
                     AutoAction::OpenShort => "short",
                     _ => unreachable!(),
                 };
+                let position_side = match side {
+                    "long" => PositionSide::Long,
+                    "short" => PositionSide::Short,
+                    _ => unreachable!(),
+                };
 
-                if self.has_position() {
-                    warn!(bot_id = %self.bot.id, side = %side, "Already has position, cannot open");
-                    return Some("已有仓位，无法开仓".to_string());
+                // per-side 硬卡点：仅检查该方向是否已有仓位
+                if self.has_position_side(position_side) {
+                    warn!(bot_id = %self.bot.id, side = %side, "Already has position on this side, cannot open");
+                    return Some("该方向已有仓位".to_string());
                 }
 
                 if let Some(remaining) = self.cooldown_remaining_secs(side) {
-                    let (closed_side, close_reason, closed_at) = match self
-                        .last_close_event
-                        .as_ref()
-                    {
+                    let last_event = match position_side {
+                        PositionSide::Long => self.last_close_event_long.as_ref(),
+                        PositionSide::Short => self.last_close_event_short.as_ref(),
+                    };
+                    let (closed_side, close_reason, closed_at) = match last_event {
                         Some(ev) => ev,
                         None => {
                             error!(
@@ -1111,20 +1417,37 @@ impl AutoWorker {
                 }
                 self.open_position(side, &snapshot).await;
 
-                if self.pending_open.is_none() {
+                let pending_set = match position_side {
+                    PositionSide::Long => self.pending_open_long.is_some(),
+                    PositionSide::Short => self.pending_open_short.is_some(),
+                };
+                if !pending_set {
                     return Some("开仓订单发送失败".to_string());
                 }
                 None
             }
             AutoAction::ClosePosition => {
-                if !self.has_position() {
+                if !self.has_any_position() {
                     warn!(bot_id = %self.bot.id, "No position to close");
                     return Some("无仓位可平".to_string());
                 }
 
-                self.close_position("llm_decision").await;
+                // 平掉所有方向的仓位
+                let mut any_pending = false;
+                if self.has_position_side(PositionSide::Long) {
+                    self.close_position(PositionSide::Long, "llm_decision").await;
+                    if self.pending_close_long.is_some() {
+                        any_pending = true;
+                    }
+                }
+                if self.has_position_side(PositionSide::Short) {
+                    self.close_position(PositionSide::Short, "llm_decision").await;
+                    if self.pending_close_short.is_some() {
+                        any_pending = true;
+                    }
+                }
 
-                if self.pending_close.is_none() {
+                if !any_pending {
                     return Some("平仓订单发送失败".to_string());
                 }
                 None
@@ -1261,7 +1584,7 @@ impl AutoWorker {
                     "Position opening order sent, awaiting confirmation"
                 );
 
-                self.pending_open = Some(PendingOpen {
+                let pending = PendingOpen {
                     side: side.to_string(),
                     entry_price: price,
                     position_size: quantity,
@@ -1269,7 +1592,12 @@ impl AutoWorker {
                     take_profit,
                     client_order_id,
                     sent_at: tokio::time::Instant::now(),
-                });
+                };
+                match side {
+                    "long" => self.pending_open_long = Some(pending),
+                    "short" => self.pending_open_short = Some(pending),
+                    _ => unreachable!(),
+                }
             }
             Err(e) => {
                 warn!(bot_id = %self.bot.id, error = %e, "Failed to send open position order");
@@ -1277,19 +1605,20 @@ impl AutoWorker {
         }
     }
 
-    pub(crate) async fn close_position(&mut self, close_reason: &str) {
-        if !self.has_position() {
-            return;
-        }
-
-        let side = self.current_side_str();
-        let (entry_price, position_size) = match &self.current_position {
-            Some(p) => (p.entry_price, p.quantity),
-            None => (0.0, 0.0),
+    pub(crate) async fn close_position(&mut self, side: PositionSide, close_reason: &str) {
+        let position = match self.get_position(side) {
+            Some(p) if p.is_open() => p.clone(),
+            _ => return,
         };
 
-        if let Some(position_id) = self.bot.position_id.filter(|id| *id != Uuid::nil()) {
-            let client_order_id = client_order_id::format_auto_close(self.bot.id, &side);
+        let side_str = side_str(side);
+        let entry_price = position.entry_price;
+        let position_size = position.quantity;
+        let position_id = position.id;
+
+        // 优先使用 per-side 缓存的 position_id；若为 nil 则回退到 PlaceOrder 路径
+        if position_id != Uuid::nil() {
+            let client_order_id = client_order_id::format_auto_close(self.bot.id, side_str);
 
             let result = self
                 .order_executor
@@ -1303,37 +1632,38 @@ impl AutoWorker {
             match result {
                 Ok(()) => {
                     info!(
-                        bot_id = %self.bot.id, side = %side,
+                        bot_id = %self.bot.id, side = %side_str,
                         entry_price = entry_price,
                         close_price = self.current_price,
                         close_reason = %close_reason,
                         "Position closing order sent via ClosePosition, awaiting confirmation"
                     );
 
-                    self.pending_close = Some(PendingClose {
-                        side: side.clone(),
+                    let pending = PendingClose {
+                        side: side_str.to_string(),
                         close_reason: close_reason.to_string(),
                         entry_price,
                         position_size,
                         client_order_id,
                         sent_at: tokio::time::Instant::now(),
-                    });
+                    };
+                    match side {
+                        PositionSide::Long => self.pending_close_long = Some(pending),
+                        PositionSide::Short => self.pending_close_short = Some(pending),
+                    }
                 }
                 Err(e) => {
-                    error!(bot_id = %self.bot.id, error = %e, "Failed to send close position order");
+                    error!(bot_id = %self.bot.id, side = %side_str, error = %e, "Failed to send close position order");
                 }
             }
         } else {
-            let (order_side, position_side) = match side.as_str() {
-                "long" => (OrderSide::Sell, Some(BotPositionSide::Long)),
-                "short" => (OrderSide::Buy, Some(BotPositionSide::Short)),
-                _ => {
-                    error!(bot_id = %self.bot.id, side = %side, "Unknown position side, cannot close");
-                    return;
-                }
+            // 回退路径：缓存 position_id 为 nil 时使用 PlaceOrder 反向单
+            let (order_side, position_side_field) = match side {
+                PositionSide::Long => (OrderSide::Sell, Some(BotPositionSide::Long)),
+                PositionSide::Short => (OrderSide::Buy, Some(BotPositionSide::Short)),
             };
 
-            let client_order_id = client_order_id::format_auto_close(self.bot.id, &side);
+            let client_order_id = client_order_id::format_auto_close(self.bot.id, side_str);
 
             let result = self
                 .order_executor
@@ -1342,7 +1672,7 @@ impl AutoWorker {
                     side: order_side,
                     amount: position_size,
                     price: None,
-                    position_side,
+                    position_side: position_side_field,
                     position_id: None,
                     client_order_id: Some(client_order_id.clone()),
                 })
@@ -1351,24 +1681,28 @@ impl AutoWorker {
             match result {
                 Ok(()) => {
                     info!(
-                        bot_id = %self.bot.id, side = %side,
+                        bot_id = %self.bot.id, side = %side_str,
                         entry_price = entry_price,
                         close_price = self.current_price,
                         close_reason = %close_reason,
                         "Position closing order sent via PlaceOrder, awaiting confirmation"
                     );
 
-                    self.pending_close = Some(PendingClose {
-                        side: side.clone(),
+                    let pending = PendingClose {
+                        side: side_str.to_string(),
                         close_reason: close_reason.to_string(),
                         entry_price,
                         position_size,
                         client_order_id,
                         sent_at: tokio::time::Instant::now(),
-                    });
+                    };
+                    match side {
+                        PositionSide::Long => self.pending_close_long = Some(pending),
+                        PositionSide::Short => self.pending_close_short = Some(pending),
+                    }
                 }
                 Err(e) => {
-                    error!(bot_id = %self.bot.id, error = %e, "Failed to send close position order (fallback path)");
+                    error!(bot_id = %self.bot.id, side = %side_str, error = %e, "Failed to send close position order (fallback path)");
                 }
             }
         }
@@ -1380,44 +1714,125 @@ impl AutoWorker {
                 if position.symbol != self.bot.symbol {
                     return;
                 }
-                let is_ours = match self.bot.position_id {
-                    Some(pid) if pid != Uuid::nil() => pid == position.id,
-
-                    _ => position.is_open(),
+                let side = position.side;
+                let cached_id = self.get_position(side).map(|p| p.id);
+                let is_ours = match cached_id {
+                    Some(pid) => pid == position.id,
+                    None => {
+                        let persisted = match side {
+                            PositionSide::Long => self.bot.position_id_long,
+                            PositionSide::Short => self.bot.position_id_short,
+                        };
+                        match persisted.filter(|id| *id != Uuid::nil()) {
+                            Some(pid) => pid == position.id,
+                            None => position.is_open(),
+                        }
+                    }
                 };
                 if !is_ours {
                     return;
                 }
 
-                if self.bot.position_id.is_none() || self.bot.position_id == Some(Uuid::nil()) {
-                    self.bot.position_id = Some(position.id);
+                let needs_update = match side {
+                    PositionSide::Long => {
+                        self.bot.position_id_long.is_none()
+                            || self.bot.position_id_long == Some(Uuid::nil())
+                    }
+                    PositionSide::Short => {
+                        self.bot.position_id_short.is_none()
+                            || self.bot.position_id_short == Some(Uuid::nil())
+                    }
+                };
+                if needs_update {
+                    match side {
+                        PositionSide::Long => self.bot.position_id_long = Some(position.id),
+                        PositionSide::Short => self.bot.position_id_short = Some(position.id),
+                    }
                     if let Err(e) = self
                         .store
-                        .update_position(self.bot.id, self.bot.position_id)
+                        .update_position(
+                            self.bot.id,
+                            self.bot.position_id_long,
+                            self.bot.position_id_short,
+                        )
                         .await
                     {
                         warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
                     }
                 }
-                self.current_position = Some(position);
+                match side {
+                    PositionSide::Long => self.current_long = Some(position),
+                    PositionSide::Short => self.current_short = Some(position),
+                }
             }
             EngineEvent::PositionClosed { position } => {
                 if position.symbol != self.bot.symbol {
                     return;
                 }
-                let is_ours = match self.bot.position_id.filter(|id| *id != Uuid::nil()) {
+                let side = position.side;
+                let cached_id = self.get_position(side).map(|p| p.id);
+                let is_ours = match cached_id {
                     Some(pid) => pid == position.id,
-                    None => self.current_position.is_some(),
+                    None => {
+                        let persisted = match side {
+                            PositionSide::Long => self.bot.position_id_long,
+                            PositionSide::Short => self.bot.position_id_short,
+                        };
+                        match persisted.filter(|id| *id != Uuid::nil()) {
+                            Some(pid) => pid == position.id,
+                            None => self.get_position(side).is_some(),
+                        }
+                    }
                 };
                 if !is_ours {
                     return;
                 }
-                self.current_position = None;
 
-                self.bot.position_id = None;
+                // 外部平仓场景（apply_pending_close 未处理）：完整清理 per-side 字段
+                // apply_pending_close 已清空 current_{side} 和 bot.position_id_{side}，
+                // is_ours 检查会直接 return，不会进入此分支。
+                // 进入此分支说明是 PE 直接推送的 PositionClosed（外部止损单/强平），
+                // 需补充与 apply_pending_close 一致的字段清理，否则残留状态影响后续决策。
+                let now = chrono::Utc::now();
+                match side {
+                    PositionSide::Long => {
+                        self.current_long = None;
+                        self.stop_loss_long = 0.0;
+                        self.take_profit_long = 0.0;
+                        self.position_opened_at_long = None;
+                        self.current_open_client_order_id_long = None;
+                        self.current_log_id_long = None;
+                        self.current_open_fee_long = 0.0;
+                        // 外部平仓设置 last_close_event 触发冷却（compute_cooldown_secs 对未知 reason 返回 15 分钟）
+                        self.last_close_event_long =
+                            Some(("long".to_string(), "external_close".to_string(), now));
+                        self.bot.position_id_long = None;
+                    }
+                    PositionSide::Short => {
+                        self.current_short = None;
+                        self.stop_loss_short = 0.0;
+                        self.take_profit_short = 0.0;
+                        self.position_opened_at_short = None;
+                        self.current_open_client_order_id_short = None;
+                        self.current_log_id_short = None;
+                        self.current_open_fee_short = 0.0;
+                        self.last_close_event_short =
+                            Some(("short".to_string(), "external_close".to_string(), now));
+                        self.bot.position_id_short = None;
+                    }
+                }
+                warn!(
+                    bot_id = %self.bot.id, side = ?side,
+                    "Position closed by external event (not initiated by worker) — \
+                     per-side state cleared, cooldown armed with reason=external_close"
+                );
                 if let Err(e) = self
                     .store
-                    .update_position(self.bot.id, self.bot.position_id)
+                    .update_position(
+                        self.bot.id,
+                        self.bot.position_id_long,
+                        self.bot.position_id_short,
+                    )
                     .await
                 {
                     warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
@@ -1428,17 +1843,37 @@ impl AutoWorker {
                     return;
                 }
 
-                if self.bot.position_id.is_none() || self.bot.position_id == Some(Uuid::nil()) {
-                    self.bot.position_id = Some(position.id);
+                let needs_update = match position.side {
+                    PositionSide::Long => {
+                        self.bot.position_id_long.is_none()
+                            || self.bot.position_id_long == Some(Uuid::nil())
+                    }
+                    PositionSide::Short => {
+                        self.bot.position_id_short.is_none()
+                            || self.bot.position_id_short == Some(Uuid::nil())
+                    }
+                };
+                if needs_update {
+                    match position.side {
+                        PositionSide::Long => self.bot.position_id_long = Some(position.id),
+                        PositionSide::Short => self.bot.position_id_short = Some(position.id),
+                    }
                     if let Err(e) = self
                         .store
-                        .update_position(self.bot.id, self.bot.position_id)
+                        .update_position(
+                            self.bot.id,
+                            self.bot.position_id_long,
+                            self.bot.position_id_short,
+                        )
                         .await
                     {
                         warn!(bot_id = %self.bot.id, error = %e, "Failed to update position");
                     }
                 }
-                self.current_position = Some(position);
+                match position.side {
+                    PositionSide::Long => self.current_long = Some(position),
+                    PositionSide::Short => self.current_short = Some(position),
+                }
             }
             _ => {}
         }
@@ -1451,15 +1886,7 @@ impl AutoWorker {
                     return;
                 }
 
-                if order.position_id.filter(|id| *id != Uuid::nil()).is_some()
-                    && self
-                        .bot
-                        .position_id
-                        .filter(|id| *id != Uuid::nil())
-                        .is_none()
-                {
-                    self.bot.position_id = order.position_id;
-                }
+                let order_position_id = order.position_id;
 
                 let fill_price = order.fill_price.or(order.request_price).unwrap_or_else(|| {
                     warn!(
@@ -1475,34 +1902,77 @@ impl AutoWorker {
                     0.0
                 };
 
-                if self.pending_open.is_some() {
-                    self.apply_pending_open(fill_price, filled_qty, order.fee)
+                let cid = match order.client_order_id.as_deref() {
+                    Some(cid) => cid,
+                    None => return,
+                };
+
+                let is_open_long = self
+                    .pending_open_long
+                    .as_ref()
+                    .map(|p| p.client_order_id == cid)
+                    .unwrap_or(false);
+                let is_open_short = self
+                    .pending_open_short
+                    .as_ref()
+                    .map(|p| p.client_order_id == cid)
+                    .unwrap_or(false);
+                let is_close_long = self
+                    .pending_close_long
+                    .as_ref()
+                    .map(|p| p.client_order_id == cid)
+                    .unwrap_or(false);
+                let is_close_short = self
+                    .pending_close_short
+                    .as_ref()
+                    .map(|p| p.client_order_id == cid)
+                    .unwrap_or(false);
+
+                if is_open_long {
+                    self.apply_pending_open(PositionSide::Long, fill_price, filled_qty, order.fee, order_position_id)
                         .await;
-                } else if self.pending_close.is_some() {
-                    self.apply_pending_close(fill_price, filled_qty, order.fee)
+                } else if is_open_short {
+                    self.apply_pending_open(PositionSide::Short, fill_price, filled_qty, order.fee, order_position_id)
+                        .await;
+                } else if is_close_long {
+                    self.apply_pending_close(PositionSide::Long, fill_price, filled_qty, order.fee)
+                        .await;
+                } else if is_close_short {
+                    self.apply_pending_close(PositionSide::Short, fill_price, filled_qty, order.fee)
                         .await;
                 }
             }
             OrderEvent::OrderFailed {
                 order_id: _,
                 reason,
-            } if self.pending_open.is_some() || self.pending_close.is_some() => {
-                let was_open = self.pending_open.is_some();
+            } if self.is_pending() => {
+                let was_open_long = self.pending_open_long.is_some();
+                let was_open_short = self.pending_open_short.is_some();
+                let was_open = was_open_long || was_open_short;
                 warn!(
                     bot_id = %self.bot.id,
                     reason = %reason,
                     was_open,
                     "Order failed, rolling back pending state"
                 );
-                self.rollback_pending_open();
-                self.rollback_pending_close();
+                self.rollback_pending_open(PositionSide::Long);
+                self.rollback_pending_open(PositionSide::Short);
+                self.rollback_pending_close(PositionSide::Long);
+                self.rollback_pending_close(PositionSide::Short);
 
-                if let Some(log_id) = self.current_log_id.take() {
-                    let exec_status = if was_open {
-                        "open_failed"
-                    } else {
-                        "close_failed"
-                    };
+                let exec_status = if was_open {
+                    "open_failed"
+                } else {
+                    "close_failed"
+                };
+                let log_ids: Vec<Uuid> = [
+                    self.current_log_id_long.take(),
+                    self.current_log_id_short.take(),
+                ]
+                .into_iter()
+                .flatten()
+                .collect();
+                for log_id in log_ids {
                     if let Err(e) = self
                         .store
                         .update_analysis_log_execution(log_id, exec_status, Some(&reason))
@@ -1516,11 +1986,19 @@ impl AutoWorker {
         }
     }
 
-    pub(crate) async fn apply_pending_open(&mut self, fill_price: f64, filled_qty: f64, fee: f64) {
-        let pending = match self.pending_open.take() {
-            Some(p) => p,
-            None => return,
+    pub(crate) async fn apply_pending_open(
+        &mut self,
+        side: PositionSide,
+        fill_price: f64,
+        filled_qty: f64,
+        fee: f64,
+        order_position_id: Option<Uuid>,
+    ) {
+        let pending = match side {
+            PositionSide::Long => self.pending_open_long.take(),
+            PositionSide::Short => self.pending_open_short.take(),
         };
+        let Some(pending) = pending else { return };
 
         let actual_qty = if filled_qty > 0.0 {
             filled_qty
@@ -1567,9 +2045,37 @@ impl AutoWorker {
             "Open order confirmed, applying position state"
         );
 
-        self.stop_loss = stop_loss;
-        self.take_profit = take_profit;
-        self.position_opened_at = Some(tokio::time::Instant::now());
+        // 写入 per-side 字段
+        match side {
+            PositionSide::Long => {
+                self.stop_loss_long = stop_loss;
+                self.take_profit_long = take_profit;
+                self.position_opened_at_long = Some(tokio::time::Instant::now());
+                self.current_open_fee_long = fee;
+            }
+            PositionSide::Short => {
+                self.stop_loss_short = stop_loss;
+                self.take_profit_short = take_profit;
+                self.position_opened_at_short = Some(tokio::time::Instant::now());
+                self.current_open_fee_short = fee;
+            }
+        }
+
+        // 从订单事件回填 per-side position_id（PE PositionOpened 事件可能尚未到达）
+        if let Some(pid) = order_position_id.filter(|id| *id != Uuid::nil()) {
+            match side {
+                PositionSide::Long => {
+                    if self.bot.position_id_long.filter(|id| *id != Uuid::nil()).is_none() {
+                        self.bot.position_id_long = Some(pid);
+                    }
+                }
+                PositionSide::Short => {
+                    if self.bot.position_id_short.filter(|id| *id != Uuid::nil()).is_none() {
+                        self.bot.position_id_short = Some(pid);
+                    }
+                }
+            }
+        }
 
         self.save_position().await;
 
@@ -1582,7 +2088,6 @@ impl AutoWorker {
             }
         };
 
-        self.current_open_fee = fee;
         let client_order_id = pending.client_order_id.clone();
         match self
             .store
@@ -1599,7 +2104,14 @@ impl AutoWorker {
         {
             Ok(()) => {
                 info!(bot_id = %self.bot.id, client_order_id = %client_order_id, trade_type, stop_loss, take_profit, "Open trade recorded");
-                self.current_open_client_order_id = Some(client_order_id);
+                match side {
+                    PositionSide::Long => {
+                        self.current_open_client_order_id_long = Some(client_order_id)
+                    }
+                    PositionSide::Short => {
+                        self.current_open_client_order_id_short = Some(client_order_id)
+                    }
+                }
             }
             Err(e) => {
                 error!(bot_id = %self.bot.id, error = %e, "Failed to record open trade");
@@ -1615,7 +2127,11 @@ impl AutoWorker {
             );
         }
 
-        if let Some(log_id) = self.current_log_id.take() {
+        let log_id = match side {
+            PositionSide::Long => self.current_log_id_long.take(),
+            PositionSide::Short => self.current_log_id_short.take(),
+        };
+        if let Some(log_id) = log_id {
             if let Err(e) = self
                 .store
                 .update_analysis_log_execution(log_id, "open", None)
@@ -1626,11 +2142,18 @@ impl AutoWorker {
         }
     }
 
-    pub(crate) async fn apply_pending_close(&mut self, fill_price: f64, filled_qty: f64, fee: f64) {
-        let pending = match self.pending_close.take() {
-            Some(p) => p,
-            None => return,
+    pub(crate) async fn apply_pending_close(
+        &mut self,
+        side: PositionSide,
+        fill_price: f64,
+        filled_qty: f64,
+        fee: f64,
+    ) {
+        let pending = match side {
+            PositionSide::Long => self.pending_close_long.take(),
+            PositionSide::Short => self.pending_close_short.take(),
         };
+        let Some(pending) = pending else { return };
 
         let actual_qty = if filled_qty > 0.0 {
             filled_qty
@@ -1646,7 +2169,11 @@ impl AutoWorker {
                 return;
             }
         };
-        let total_fee = self.current_open_fee + fee;
+        let open_fee = match side {
+            PositionSide::Long => self.current_open_fee_long,
+            PositionSide::Short => self.current_open_fee_short,
+        };
+        let total_fee = open_fee + fee;
         let realized_pnl = gross_pnl - total_fee;
 
         let pnl_pct = if pending.entry_price > 0.0 && actual_qty > 0.0 {
@@ -1660,7 +2187,7 @@ impl AutoWorker {
             entry_price = pending.entry_price, close_price = fill_price,
             quantity = actual_qty, realized_pnl, pnl_pct,
             close_reason = %pending.close_reason,
-            open_fee = self.current_open_fee, close_fee = fee, total_fee,
+            open_fee = open_fee, close_fee = fee, total_fee,
             "Position closed"
         );
 
@@ -1674,17 +2201,40 @@ impl AutoWorker {
             self.consecutive_losses += 1;
         }
 
-        self.bot.position_id = None;
-        self.stop_loss = 0.0;
-        self.take_profit = 0.0;
-        self.current_position = None;
-        self.position_opened_at = None;
+        // 清除 per-side 字段
+        match side {
+            PositionSide::Long => {
+                self.stop_loss_long = 0.0;
+                self.take_profit_long = 0.0;
+                self.current_long = None;
+                self.position_opened_at_long = None;
+                self.current_open_fee_long = 0.0;
+            }
+            PositionSide::Short => {
+                self.stop_loss_short = 0.0;
+                self.take_profit_short = 0.0;
+                self.current_short = None;
+                self.position_opened_at_short = None;
+                self.current_open_fee_short = 0.0;
+            }
+        }
 
-        self.last_close_event = Some((
+        // 写入 per-side last_close_event
+        let close_event = (
             pending.side.clone(),
             pending.close_reason.clone(),
             chrono::Utc::now(),
-        ));
+        );
+        match side {
+            PositionSide::Long => self.last_close_event_long = Some(close_event),
+            PositionSide::Short => self.last_close_event_short = Some(close_event),
+        }
+
+        // 平仓后清空对应 side 的 position_id
+        match side {
+            PositionSide::Long => self.bot.position_id_long = None,
+            PositionSide::Short => self.bot.position_id_short = None,
+        }
 
         self.save_position().await;
         self.save_stats().await;
@@ -1692,7 +2242,10 @@ impl AutoWorker {
         let close_reason = &pending.close_reason;
         let close_client_order_id = pending.client_order_id.clone();
 
-        let open_client_order_id = self.current_open_client_order_id.take();
+        let open_client_order_id = match side {
+            PositionSide::Long => self.current_open_client_order_id_long.take(),
+            PositionSide::Short => self.current_open_client_order_id_short.take(),
+        };
         match open_client_order_id {
             Some(open_oid) => {
                 if let Err(e) = self
@@ -1740,9 +2293,11 @@ impl AutoWorker {
             },
         }
 
-        self.current_open_fee = 0.0;
-
-        if let Some(log_id) = self.current_log_id.take() {
+        let log_id = match side {
+            PositionSide::Long => self.current_log_id_long.take(),
+            PositionSide::Short => self.current_log_id_short.take(),
+        };
+        if let Some(log_id) = log_id {
             if let Err(e) = self
                 .store
                 .update_analysis_log_execution(log_id, "close", None)
@@ -1753,17 +2308,79 @@ impl AutoWorker {
         }
     }
 
-    fn rollback_pending_open(&mut self) {
-        if self.pending_open.is_some() {
-            warn!(bot_id = %self.bot.id, "Rolling back pending open order");
-            self.pending_open = None;
+    fn rollback_pending_open(&mut self, side: PositionSide) {
+        let pending = match side {
+            PositionSide::Long => self.pending_open_long.take(),
+            PositionSide::Short => self.pending_open_short.take(),
+        };
+        if pending.is_some() {
+            warn!(bot_id = %self.bot.id, side = %side_str(side), "Rolling back pending open order");
         }
     }
 
-    fn rollback_pending_close(&mut self) {
-        if self.pending_close.is_some() {
-            warn!(bot_id = %self.bot.id, "Rolling back pending close order");
-            self.pending_close = None;
+    fn rollback_pending_close(&mut self, side: PositionSide) {
+        let pending = match side {
+            PositionSide::Long => self.pending_close_long.take(),
+            PositionSide::Short => self.pending_close_short.take(),
+        };
+        if pending.is_some() {
+            warn!(bot_id = %self.bot.id, side = %side_str(side), "Rolling back pending close order");
         }
     }
+}
+
+// ===== 模块级辅助函数 =====
+
+fn side_str(side: PositionSide) -> &'static str {
+    match side {
+        PositionSide::Long => "long",
+        PositionSide::Short => "short",
+    }
+}
+
+/// 从 client_order_id 前缀解析 side。
+/// `AOL__` / `ACL__` → Long，`AOS__` / `ACS__` → Short
+fn parse_side_from_client_order_id(cid: &str) -> Option<PositionSide> {
+    if cid.starts_with("AOL") || cid.starts_with("ACL") {
+        Some(PositionSide::Long)
+    } else if cid.starts_with("AOS") || cid.starts_with("ACS") {
+        Some(PositionSide::Short)
+    } else {
+        None
+    }
+}
+
+fn format_close_event(
+    side: &str,
+    close_reason: &str,
+    closed_at: &chrono::DateTime<chrono::Utc>,
+) -> String {
+    let side_cn = match side {
+        "long" => "多",
+        "short" => "空",
+        _ => "未知",
+    };
+    let reason_cn = match close_reason {
+        "stop_loss" => "止损",
+        "take_profit" => "止盈",
+        "position_timeout" => "持仓超时",
+        "llm_decision" => "LLM主动平仓",
+        _ => "其他",
+    };
+    let elapsed = chrono::Utc::now().signed_duration_since(*closed_at);
+    let elapsed_str = {
+        let mins = elapsed.num_minutes();
+        if mins < 60 {
+            format!("{} 分钟前", mins)
+        } else {
+            format!("{} 小时 {} 分钟前", mins / 60, mins % 60)
+        }
+    };
+    format!(
+        "{}平{}，原因：{}（{}）",
+        elapsed_str,
+        side_cn,
+        reason_cn,
+        closed_at.format("%Y-%m-%d %H:%M:%S UTC")
+    )
 }

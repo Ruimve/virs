@@ -62,7 +62,8 @@ fn make_auto_bot() -> AutoBot {
         max_position_pct: 80.0,
         decide_interval_secs: 120,
         initial_capital: 10000.0,
-        position_id: Some(Uuid::new_v4()),
+        position_id_long: Some(Uuid::new_v4()),
+        position_id_short: Some(Uuid::new_v4()),
         market_regime: Some("volatile".to_string()),
         ai_analysis: Some("neutral".to_string()),
         system_prompt: Some("sys".to_string()),
@@ -186,7 +187,8 @@ fn int_1_2_auto_bot_to_config_then_compare() {
     assert_eq!(config.leverage, bot.leverage);
     assert_eq!(config.max_position_pct, bot.max_position_pct);
     assert_eq!(config.decide_interval_secs, bot.decide_interval_secs);
-    assert_eq!(config.position_id, bot.position_id);
+    assert_eq!(config.position_id_long, bot.position_id_long);
+    assert_eq!(config.position_id_short, bot.position_id_short);
     assert_eq!(config.market_regime, bot.market_regime);
     assert_eq!(config.total_pnl, bot.total_pnl);
     assert_eq!(config.total_trades, bot.total_trades);
