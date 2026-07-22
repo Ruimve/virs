@@ -381,7 +381,9 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
     let client_order_id = ws_order.client_order_id.clone();
     let order_status: OrderStatus = ws_order.status.clone().into();
     let filled: f64 = ws_order.filled_qty.parse().unwrap_or(0.0);
-    let avg_price: f64 = ws_order.avg_fill_price.parse().unwrap_or(0.0);
+    // 路径2（增量更新）: 每个 WS 事件代表一笔成交, trade_fill 是增量量,
+    // 必须用 last_fill_price(本笔成交价) 而非 avg_fill_price(累计均价) 做边际成本
+    let fill_price: f64 = ws_order.last_fill_price.parse().unwrap_or(0.0);
     let commission: f64 = ws_order.commission.parse().unwrap_or(0.0);
     let realized_pnl: f64 = ws_order.realized_pnl.parse().unwrap_or(0.0);
     // Hedge 模式下开平仓由 side + position_side 组合判断
@@ -434,7 +436,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
                 &client_order_id,
                 position_id,
                 trade_fill,
-                avg_price,
+                fill_price,
                 commission,
                 realized_pnl,
                 is_close,
@@ -491,7 +493,9 @@ async fn finalize_pending_order(
 
     let order_status: OrderStatus = ws_order.status.clone().into();
     let filled: f64 = ws_order.filled_qty.parse().unwrap_or(0.0);
-    let avg_price: f64 = ws_order.avg_fill_price.parse().unwrap_or(0.0);
+    // 首次确认: REST 返回前可能已有多笔 WS 事件到达, trade_fill = filled(累计量),
+    // 必须用 avg_fill_price(累计加权均价) 而非 last_fill_price(末笔价) 做批量成本
+    let fill_price: f64 = ws_order.avg_fill_price.parse().unwrap_or(0.0);
     let commission: f64 = ws_order.commission.parse().unwrap_or(0.0);
     let realized_pnl: f64 = ws_order.realized_pnl.parse().unwrap_or(0.0);
     // Hedge 模式下开平仓由 side + position_side 组合判断
@@ -511,7 +515,7 @@ async fn finalize_pending_order(
                 client_order_id,
                 position_id,
                 filled,
-                avg_price,
+                fill_price,
                 commission,
                 realized_pnl,
                 is_close,
@@ -546,7 +550,7 @@ async fn process_order_fill(
     client_order_id: &str,
     position_id: Option<Uuid>,
     trade_fill: f64,
-    avg_price: f64,
+    fill_price: f64,
     commission: f64,
     realized_pnl: f64,
     is_close: bool,
@@ -583,11 +587,11 @@ async fn process_order_fill(
         None => (0.0, Side::Buy, TradeType::Open),
     };
 
-    if avg_price <= 0.0 {
+    if fill_price <= 0.0 {
         error!(
             client_order_id = %client_order_id,
             symbol = %ws_order.symbol,
-            price = avg_price,
+            price = fill_price,
             "WS order update has invalid price (<=0.0) — skipping Trade record to prevent 0.0 price propagation"
         );
         return;
@@ -600,7 +604,7 @@ async fn process_order_fill(
         exchange: inner.exchange.name().to_string(),
         symbol: ws_order.symbol.clone(),
         side: trade_side,
-        price: avg_price,
+        price: fill_price,
         amount: trade_fill,
         fee: commission,
         fee_currency: ws_order.commission_asset.clone(),
@@ -649,12 +653,12 @@ async fn process_order_fill(
                 } else {
                     let old_qty = position.quantity;
                     position.quantity += trade_fill;
-                    if avg_price > 0.0 {
+                    if fill_price > 0.0 {
                         if old_qty > 0.0 && position.entry_price > 0.0 {
-                            let total_cost = position.entry_price * old_qty + avg_price * trade_fill;
+                            let total_cost = position.entry_price * old_qty + fill_price * trade_fill;
                             position.entry_price = total_cost / position.quantity;
                         } else {
-                            position.entry_price = avg_price;
+                            position.entry_price = fill_price;
                         }
                     }
                     position.status = PositionStatus::Open;

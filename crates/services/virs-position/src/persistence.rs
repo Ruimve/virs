@@ -108,7 +108,7 @@ impl Persistence {
                     ELSE 0 END AS entry_price,
                 COALESCE(SUM(CASE WHEN is_open = 0 THEN rp ELSE 0 END), 0) AS realized_pnl,
                 COALESCE(MIN(CASE WHEN is_open = 1 THEN trade_time END), 0) AS created_at_ms,
-                (array_agg(client_order_id ORDER BY trade_time) FILTER (WHERE is_open = 1))[1] AS open_client_order_id
+                (array_agg(client_order_id ORDER BY trade_time) FILTER (WHERE is_open = 1))[1] AS client_order_id
             FROM generation_filtered
             GROUP BY symbol, position_side
             HAVING SUM(CASE WHEN is_open = 1 THEN qty ELSE -qty END) > 0.00000001
@@ -290,7 +290,7 @@ struct AggregatedPositionRow {
     entry_price: f64,
     realized_pnl: f64,
     created_at_ms: i64,
-    open_client_order_id: Option<String>,
+    client_order_id: Option<String>,
 }
 
 impl AggregatedPositionRow {
@@ -313,7 +313,7 @@ impl AggregatedPositionRow {
             quantity: self.quantity,
             entry_price: self.entry_price,
             realized_pnl: self.realized_pnl,
-            client_order_id: self.open_client_order_id,
+            client_order_id: self.client_order_id,
             created_at,
             updated_at: now,
         })
