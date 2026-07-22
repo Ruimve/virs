@@ -33,3 +33,14 @@ pub use render::{render, RenderContext};
 pub use template::{MetaFile, PromptSource, PromptTemplate, StrategyType};
 pub use validator::ValidationError;
 pub use writer::{delete_template, save_template};
+
+#[cfg(test)]
+mod ai_generator_tests;
+#[cfg(test)]
+mod loader_tests;
+#[cfg(test)]
+mod render_tests;
+#[cfg(test)]
+mod validator_tests;
+#[cfg(test)]
+mod writer_tests;

@@ -25,3 +25,5 @@ mod market_tests;
 mod position_tests;
 #[cfg(test)]
 mod serde_tests;
+#[cfg(test)]
+mod client_order_id_tests;

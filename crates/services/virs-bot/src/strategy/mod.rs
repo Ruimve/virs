@@ -8,3 +8,6 @@
 pub mod indicator;
 pub mod output;
 pub mod prompt;
+
+#[cfg(test)]
+mod output_tests;

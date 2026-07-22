@@ -90,7 +90,7 @@ pub async fn generate_prompt(
 }
 
 /// 元 system prompt：教 LLM 如何生成策略 prompt。
-fn build_meta_system_prompt(strategy_type: StrategyType) -> String {
+pub(crate) fn build_meta_system_prompt(strategy_type: StrategyType) -> String {
     let strategy_desc = match strategy_type {
         StrategyType::Auto => {
             "Auto 趋势策略（单仓位方向判断：open_long/open_short/close_position/hold）"
@@ -142,7 +142,7 @@ user_prompt_template 要求：
 }
 
 /// 元 user prompt：传递用户意图。
-fn build_meta_user_prompt(req: &GenerateRequest<'_>) -> String {
+pub(crate) fn build_meta_user_prompt(req: &GenerateRequest<'_>) -> String {
     let name_hint = req.name_hint.unwrap_or("（由你命名）");
     format!(
         r#"请根据以下意图生成策略 prompt：
@@ -159,35 +159,4 @@ fn build_meta_user_prompt(req: &GenerateRequest<'_>) -> String {
         name_hint = name_hint,
         user_intent = req.user_intent,
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn g1_meta_system_prompt_contains_json_constraint() {
-        let s = build_meta_system_prompt(StrategyType::Auto);
-        assert!(s.contains("JSON"));
-        assert!(s.contains("open_long"));
-    }
-
-    #[test]
-    fn g2_meta_system_prompt_grid_contains_grid_actions() {
-        let s = build_meta_system_prompt(StrategyType::Grid);
-        assert!(s.contains("adjust_grid"));
-        assert!(s.contains("pause_grid"));
-    }
-
-    #[test]
-    fn g3_meta_user_prompt_contains_intent() {
-        let req = GenerateRequest {
-            strategy_type: StrategyType::Auto,
-            user_intent: "做多趋势策略",
-            name_hint: Some("my_trend"),
-        };
-        let u = build_meta_user_prompt(&req);
-        assert!(u.contains("做多趋势策略"));
-        assert!(u.contains("my_trend"));
-    }
 }
