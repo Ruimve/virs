@@ -1,22 +1,10 @@
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
-use uuid::Uuid;
 
 use virs_error::VirsResult;
-use virs_types::enums::{PositionSide, PositionStatus};
+use virs_types::enums::PositionSide;
 use virs_types::position::Position;
 use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderType, Side};
-
-/// 根据 (exchange, symbol, side) 生成确定性 UUID v5
-/// 同一仓位在重启前后获得相同 ID，保证 bot.position_id 引用有效
-pub fn position_uuid_v5(exchange: &str, symbol: &str, side: PositionSide) -> Uuid {
-    let side_str = match side {
-        PositionSide::Long => "LONG",
-        PositionSide::Short => "SHORT",
-    };
-    let key = format!("{}:{}:{}", exchange, symbol, side_str);
-    Uuid::new_v5(&Uuid::NAMESPACE_URL, key.as_bytes())
-}
 
 #[async_trait::async_trait]
 pub trait PositionPersistence: Send + Sync {
@@ -302,21 +290,17 @@ impl AggregatedPositionRow {
         };
         let now = Utc::now();
         let created_at = DateTime::from_timestamp_millis(self.created_at_ms).unwrap_or(now);
-        let id = position_uuid_v5(exchange, &self.symbol, side);
 
-        Some(Position {
-            id,
-            exchange: exchange.to_string(),
-            symbol: self.symbol,
+        Some(Position::from_aggregate(
+            exchange,
+            self.symbol,
             side,
-            status: PositionStatus::Open,
-            quantity: self.quantity,
-            entry_price: self.entry_price,
-            realized_pnl: self.realized_pnl,
-            client_order_id: self.client_order_id,
+            self.quantity,
+            self.entry_price,
+            self.realized_pnl,
+            self.client_order_id,
             created_at,
-            updated_at: now,
-        })
+        ))
     }
 }
 

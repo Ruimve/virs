@@ -15,7 +15,7 @@ use virs_types::market::ExchangePosition;
 use virs_types::position::*;
 use virs_types::CcxtOrder;
 
-use crate::persistence::{position_uuid_v5, PositionPersistence};
+use crate::persistence::PositionPersistence;
 
 fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
     lock.unwrap_or_else(|_| {
@@ -258,20 +258,12 @@ impl PositionEngine {
                     order.position_side,
                 );
                 if !self.inner.positions.contains_key(&key) {
-                    let now = Utc::now();
-                    let position = Position {
-                        id: pos_id,
-                        exchange: exchange_name.clone(),
-                        symbol: order.symbol.clone(),
-                        side: order.position_side,
-                        status: PositionStatus::Opening,
-                        quantity: 0.0,
-                        entry_price: 0.0,
-                        realized_pnl: 0.0,
-                        client_order_id: Some(order.client_order_id.clone()),
-                        created_at: now,
-                        updated_at: now,
-                    };
+                    let position = Position::new_opening(
+                        &exchange_name,
+                        &order.symbol,
+                        order.position_side,
+                        Some(order.client_order_id.clone()),
+                    );
                     self.inner.position_id_index.insert(pos_id, key.clone());
                     self.inner.positions.insert(key, position);
                 }
@@ -613,14 +605,6 @@ async fn process_order_fill(
         created_at: timestamp,
     };
 
-    if pnl != 0.0 {
-        if let Some(key) = &pos_key_opt {
-            if let Some(mut pos) = inner.positions.get_mut(key) {
-                pos.realized_pnl += pnl;
-            }
-        }
-    }
-
     match order_status {
         OrderStatus::Filled => {
             inner.emit_event(EngineEvent::OrderFilled {
@@ -637,50 +621,26 @@ async fn process_order_fill(
         _ => {}
     }
 
-    // 仓位更新（有成交增量时同步 quantity/status/entry_price，避免部分成交不同步）
-    if trade_fill > 0.0 {
-        if let Some(key) = &pos_key_opt {
-            let pos_entry = inner.positions.get(key).map(|r| r.value().clone());
-            if let Some(mut position) = pos_entry {
-                if is_close {
-                    position.quantity -= trade_fill;
-                    if position.quantity.abs() < 1e-8 {
-                        position.quantity = 0.0;
-                        position.status = PositionStatus::Closed;
-                    } else {
-                        position.status = PositionStatus::Open;
-                    }
-                } else {
-                    let old_qty = position.quantity;
-                    position.quantity += trade_fill;
-                    if fill_price > 0.0 {
-                        if old_qty > 0.0 && position.entry_price > 0.0 {
-                            let total_cost = position.entry_price * old_qty + fill_price * trade_fill;
-                            position.entry_price = total_cost / position.quantity;
-                        } else {
-                            position.entry_price = fill_price;
-                        }
-                    }
-                    position.status = PositionStatus::Open;
-                }
-                position.updated_at = timestamp;
-                let pos_clone = position.clone();
+    // 仓位更新：原子更新 realized_pnl + quantity + entry_price + status
+    if let Some(key) = &pos_key_opt {
+        if let Some(mut pos) = inner.positions.get_mut(key) {
+            let is_closed = pos.apply_fill(is_close, fill_price, trade_fill, pnl, timestamp);
+            let pos_clone = pos.clone();
+            drop(pos);
 
-                if pos_clone.status == PositionStatus::Closed {
-                    inner.position_id_index.remove(&pos_clone.id);
-                    inner.positions.remove(key);
-                    inner.emit_event(EngineEvent::PositionClosed {
-                        position: pos_clone.clone(),
-                    });
-                    inner.emit_event(EngineEvent::PositionUpdated {
-                        position: pos_clone.clone(),
-                    });
-                } else {
-                    inner.positions.insert(key.clone(), pos_clone.clone());
-                    inner.emit_event(EngineEvent::PositionUpdated {
-                        position: pos_clone.clone(),
-                    });
-                }
+            if is_closed {
+                inner.position_id_index.remove(&pos_clone.id);
+                inner.positions.remove(key);
+                inner.emit_event(EngineEvent::PositionClosed {
+                    position: pos_clone.clone(),
+                });
+                inner.emit_event(EngineEvent::PositionUpdated {
+                    position: pos_clone,
+                });
+            } else {
+                inner.emit_event(EngineEvent::PositionUpdated {
+                    position: pos_clone,
+                });
             }
         }
     }
@@ -761,21 +721,13 @@ pub(crate) async fn handle_open_position(
         return;
     }
 
-    let now = Utc::now();
     let position_id = position_uuid_v5(&exchange_name, &symbol, side);
-    let position = Position {
-        id: position_id,
-        exchange: exchange_name.clone(),
-        symbol: symbol.clone(),
+    let position = Position::new_opening(
+        &exchange_name,
+        &symbol,
         side,
-        status: PositionStatus::Opening,
-        quantity: 0.0,
-        entry_price: 0.0,
-        realized_pnl: 0.0,
-        client_order_id: client_order_id.clone(),
-        created_at: now,
-        updated_at: now,
-    };
+        client_order_id.clone(),
+    );
 
     inner.position_id_index.insert(position.id, key.clone());
     inner.positions.insert(key, position.clone());
@@ -866,8 +818,7 @@ pub(crate) async fn handle_close_position(
         position.side,
     );
     if let Some(mut pos) = inner.positions.get_mut(&key) {
-        pos.status = PositionStatus::Closing;
-        pos.updated_at = Utc::now();
+        pos.set_closing(Utc::now());
         let pos_clone = pos.clone();
         drop(pos);
         inner.emit_event(EngineEvent::PositionUpdated {
@@ -931,21 +882,14 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
             if let Some(existing) = inner.positions.get(&key) {
                 existing.id
             } else {
-                let position = Position {
-                    id: pos_id,
-                    exchange: exchange_name,
-                    symbol: params.symbol.clone(),
-                    side: position_side,
-                    status: PositionStatus::Opening,
-                    quantity: 0.0,
-                    entry_price: 0.0,
-                    realized_pnl: 0.0,
-                    client_order_id: params.client_order_id.clone(),
-                    created_at: Utc::now(),
-                    updated_at: Utc::now(),
-                };
+                let position = Position::new_opening(
+                    &exchange_name,
+                    &params.symbol,
+                    position_side,
+                    params.client_order_id.clone(),
+                );
                 inner.position_id_index.insert(pos_id, key.clone());
-                inner.positions.insert(key, position.clone());
+                inner.positions.insert(key, position);
                 pos_id
             }
         }
@@ -1005,19 +949,17 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
                 .get(&position_id)
                 .map(|r| r.value().clone());
             if let Some(key) = pos_key {
-                let pos_entry = inner.positions.get(&key).map(|r| r.value().clone());
-                if let Some(pos) = pos_entry {
-                    if pos.status == PositionStatus::Opening && pos.quantity == 0.0 {
+                if let Some(mut pos) = inner.positions.get_mut(&key) {
+                    if pos.is_ghost() {
+                        let id = pos.id;
+                        drop(pos);
                         inner.positions.remove(&key);
-                        inner.position_id_index.remove(&position_id);
+                        inner.position_id_index.remove(&id);
                         warn!(position_id = %position_id, "Removed ghost Opening position after place_order failure");
                     } else if pos.status == PositionStatus::Closing {
-                        // Closing 态回滚：place_order 失败，仓位仍有持仓，恢复为 Open
-                        let mut pos = pos;
-                        pos.status = PositionStatus::Open;
-                        pos.updated_at = Utc::now();
+                        pos.rollback_to_open(Utc::now());
                         let pos_clone = pos.clone();
-                        inner.positions.insert(key, pos);
+                        drop(pos);
                         warn!(position_id = %position_id, "Rolled back Closing position to Open after place_order failure");
                         inner.emit_event(EngineEvent::PositionUpdated {
                             position: pos_clone,
