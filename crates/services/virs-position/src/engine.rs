@@ -49,6 +49,49 @@ macro_rules! persist {
     };
 }
 
+/// 解析 String 字段为 f64，失败时记录 error 并从当前函数 return（跳过该 WS 事件）。
+/// 用于关键交易参数（filled_qty、last_fill_price、commission 等），不允许默认值。
+macro_rules! parse_field {
+    ($expr:expr, $field:expr, $coid:expr) => {
+        match $expr {
+            Ok(v) => v,
+            Err(e) => {
+                error!(
+                    client_order_id = %$coid,
+                    field = $field,
+                    error = %e,
+                    "parse failed — skipping WS event to prevent default value propagation"
+                );
+                return;
+            }
+        }
+    };
+}
+
+/// 解析 Option<String> 字段为 f64。
+/// None → 0.0（语义正确：开仓单 rp=0、NEW 状态 avg_fill_price 无意义）
+/// Some(s) 解析失败 → error + return（不允许默认值）
+macro_rules! parse_opt_field {
+    ($opt:expr, $field:expr, $coid:expr) => {
+        match $opt.as_deref() {
+            None => 0.0,
+            Some(s) => match s.parse::<f64>() {
+                Ok(v) => v,
+                Err(e) => {
+                    error!(
+                        client_order_id = %$coid,
+                        field = $field,
+                        raw_value = s,
+                        error = %e,
+                        "parse failed — skipping WS event to prevent default value propagation"
+                    );
+                    return;
+                }
+            },
+        }
+    };
+}
+
 pub(crate) struct EngineInner {
     pub(crate) exchange: Arc<dyn ExchangePe>,
     pub(crate) persistence: Box<dyn PositionPersistence>,
@@ -372,16 +415,12 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
 pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: CcxtOrder) {
     let client_order_id = ws_order.client_order_id.clone();
     let order_status: OrderStatus = ws_order.status.clone().into();
-    let filled: f64 = ws_order.filled_qty.parse().unwrap_or(0.0);
+    let filled: f64 = parse_field!(ws_order.filled_qty.parse(), "filled_qty", client_order_id);
     // 路径2（增量更新）: 每个 WS 事件代表一笔成交, trade_fill 是增量量,
     // 必须用 last_fill_price(本笔成交价) 而非 avg_fill_price(累计均价) 做边际成本
-    let fill_price: f64 = ws_order.last_fill_price.parse().unwrap_or(0.0);
-    let commission: f64 = ws_order.commission.parse().unwrap_or(0.0);
-    let realized_pnl: f64 = ws_order
-        .realized_pnl
-        .as_deref()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0.0);
+    let fill_price: f64 = parse_field!(ws_order.last_fill_price.parse(), "last_fill_price", client_order_id);
+    let commission: f64 = parse_field!(ws_order.commission.parse(), "commission", client_order_id);
+    let realized_pnl: f64 = parse_opt_field!(ws_order.realized_pnl, "realized_pnl", client_order_id);
     // Hedge 模式下开平仓由 side + position_side 组合判断
     let is_close = matches!(
         (&ws_order.side, &ws_order.position_side),
@@ -406,7 +445,11 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
 
     // 2. 如果不在 pending，检查 orders 中是否已存在（后续 WS 更新）
     if let Some(mut existing) = inner.orders.get_mut(&client_order_id) {
-        let prev_filled: f64 = existing.filled_qty.parse().unwrap_or(0.0);
+        let prev_filled: f64 = parse_field!(
+            existing.filled_qty.parse(),
+            "prev_filled_qty",
+            client_order_id
+        );
         *existing = ws_order.clone();
         drop(existing);
 
@@ -488,20 +531,20 @@ async fn finalize_pending_order(
     );
 
     let order_status: OrderStatus = ws_order.status.clone().into();
-    let filled: f64 = ws_order.filled_qty.parse().unwrap_or(0.0);
+    let filled: f64 = parse_field!(ws_order.filled_qty.parse(), "filled_qty", client_order_id);
     // 首次确认: REST 返回前可能已有多笔 WS 事件到达, trade_fill = filled(累计量),
     // 必须用 avg_fill_price(累计加权均价) 而非 last_fill_price(末笔价) 做批量成本
-    let fill_price: f64 = ws_order
-        .avg_fill_price
-        .as_deref()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0.0);
-    let commission: f64 = ws_order.commission.parse().unwrap_or(0.0);
-    let realized_pnl: f64 = ws_order
-        .realized_pnl
-        .as_deref()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0.0);
+    let fill_price: f64 = parse_opt_field!(
+        ws_order.avg_fill_price,
+        "avg_fill_price",
+        client_order_id
+    );
+    let commission: f64 = parse_field!(ws_order.commission.parse(), "commission", client_order_id);
+    let realized_pnl: f64 = parse_opt_field!(
+        ws_order.realized_pnl,
+        "realized_pnl",
+        client_order_id
+    );
     // Hedge 模式下开平仓由 side + position_side 组合判断
     let is_close = matches!(
         (&ws_order.side, &ws_order.position_side),

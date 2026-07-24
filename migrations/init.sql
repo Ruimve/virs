@@ -145,7 +145,7 @@ CREATE TABLE IF NOT EXISTS pe_orders (
     -- 手续费与盈亏
     commission          TEXT NOT NULL DEFAULT '0',   -- n  手续费数量
     commission_asset    TEXT NOT NULL DEFAULT '',    -- N  手续费资产类型
-    realized_pnl        TEXT,                        -- rp 该交易实现盈亏 (NEW 状态时缺失)
+    realized_pnl        TEXT,                        -- rp 该交易实现盈亏 (NEW 状态时缺失, 逐笔增量)
 
     -- 订单属性
     reduce_only         BOOLEAN NOT NULL DEFAULT FALSE, -- R 是否仅减仓 (exchange-native, 业务层不使用)
