@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
-
-use virs_error::VirsResult;
+use virs_error::{Context, VirsResult};
 use virs_types::enums::PositionSide;
 use virs_types::position::Position;
 use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderType, Side};
@@ -42,22 +41,20 @@ impl PositionPersistence for Persistence {
 }
 
 impl Persistence {
-    /// 从 pe_orders 聚合派生当前持仓
-    /// 开仓单: (side='BUY' AND position_side='LONG') OR (side='SELL' AND position_side='SHORT')
-    /// 平仓单: 反之
-    /// size = SUM(开仓qty) - SUM(平仓qty)，仅返回 size > 0 的持仓
+    /// 从 pe_orders 回放派生当前持仓（Plan A: Rust replay）
+    ///
+    /// SQL 仅负责过滤和排序（保留 generation_filtered CTE 确保只回放当前代际），
+    /// Rust 按 (symbol, position_side) 分组、按 trade_time 顺序逐笔回放 apply_fill，
+    /// 保证 entry_price 计算与运行时一致（边际成本法：平仓不改 entry_price，
+    /// 再开仓仅对剩余持仓做加权平均）。
     async fn get_positions_from_orders_impl(&self, exchange: &str) -> VirsResult<Vec<Position>> {
-        let rows = sqlx::query_as::<_, AggregatedPositionRow>(
+        let rows = sqlx::query_as::<_, ReplayOrderRow>(
             r#"
             WITH classified AS (
                 SELECT
-                    symbol,
-                    position_side,
-                    filled_qty::float8 AS qty,
-                    COALESCE(avg_fill_price, '0')::float8 AS price,
-                    COALESCE(realized_pnl, '0')::float8 AS rp,
-                    trade_time,
-                    client_order_id,
+                    symbol, position_side, side,
+                    filled_qty, avg_fill_price, realized_pnl,
+                    trade_time, client_order_id,
                     CASE WHEN (side = 'BUY' AND position_side = 'LONG')
                            OR (side = 'SELL' AND position_side = 'SHORT')
                          THEN 1 ELSE 0 END AS is_open
@@ -68,16 +65,15 @@ impl Persistence {
             ordered AS (
                 SELECT
                     *,
-                    SUM(CASE WHEN is_open = 1 THEN qty ELSE -qty END)
-                        OVER (PARTITION BY symbol, position_side ORDER BY trade_time)
+                    SUM(CASE WHEN is_open = 1 THEN filled_qty::float8 ELSE -filled_qty::float8 END)
+                        OVER (PARTITION BY symbol, position_side ORDER BY trade_time, client_order_id)
                         AS running_qty
                 FROM classified
             ),
             -- 找到每个 (symbol, position_side) 分组内最后一次净持仓归零点
-            -- 仅保留归零点之后的行，确保只聚合当前代际（避免历史已平仓订单污染 client_order_id）
+            -- 仅保留归零点之后的行，确保只回放当前代际（避免历史已平仓订单污染）
             generation_filtered AS (
-                SELECT *
-                FROM (
+                SELECT * FROM (
                     SELECT
                         *,
                         MAX(CASE WHEN running_qty <= 0.00000001 THEN trade_time END)
@@ -87,28 +83,120 @@ impl Persistence {
                 WHERE last_zero_time IS NULL OR trade_time > last_zero_time
             )
             SELECT
-                symbol,
-                position_side,
-                SUM(CASE WHEN is_open = 1 THEN qty ELSE -qty END) AS quantity,
-                CASE WHEN SUM(CASE WHEN is_open = 1 THEN qty ELSE 0 END) > 0
-                    THEN SUM(CASE WHEN is_open = 1 THEN price * qty ELSE 0 END)
-                         / NULLIF(SUM(CASE WHEN is_open = 1 THEN qty ELSE 0 END), 0)
-                    ELSE 0 END AS entry_price,
-                COALESCE(SUM(CASE WHEN is_open = 0 THEN rp ELSE 0 END), 0) AS realized_pnl,
-                COALESCE(MIN(CASE WHEN is_open = 1 THEN trade_time END), 0) AS created_at_ms,
-                (array_agg(client_order_id ORDER BY trade_time) FILTER (WHERE is_open = 1))[1] AS client_order_id
+                symbol, position_side, side,
+                filled_qty, avg_fill_price, realized_pnl,
+                trade_time, client_order_id
             FROM generation_filtered
-            GROUP BY symbol, position_side
-            HAVING SUM(CASE WHEN is_open = 1 THEN qty ELSE -qty END) > 0.00000001
+            ORDER BY symbol, position_side, trade_time, client_order_id
             "#,
         )
         .fetch_all(&self.db)
         .await?;
 
-        Ok(rows
-            .into_iter()
-            .filter_map(|r| r.into_position(exchange))
-            .collect())
+        // Rust replay: 按 (symbol, position_side) 分组，按时间顺序回放 apply_fill
+        let mut positions: Vec<Position> = Vec::new();
+        let mut current_key: Option<(String, String)> = None;
+        let mut current_pos: Option<Position> = None;
+
+        for row in rows {
+            let group_key = (row.symbol.clone(), row.position_side.clone());
+
+            // 检测分组边界
+            if current_key.as_ref() != Some(&group_key) {
+                // 输出上一组仓位（仅保留有剩余持仓的）
+                if let Some(pos) = current_pos.take() {
+                    if pos.quantity > 1e-8 {
+                        positions.push(pos);
+                    }
+                }
+
+                // 校验 position_side
+                virs_types::validate_position_side(Some(&row.position_side))
+                    .context("DB replay position_side validation")?;
+                let side = match row.position_side.as_str() {
+                    "LONG" => PositionSide::Long,
+                    "SHORT" => PositionSide::Short,
+                    _ => unreachable!("validate_position_side 已保证为 LONG/SHORT"),
+                };
+
+                // generation_filtered 保证每组首单为开仓单（零持仓后只能开仓）
+                let created_at = DateTime::from_timestamp_millis(row.trade_time)
+                    .unwrap_or_else(Utc::now);
+
+                current_pos = Some(Position::new_for_replay(
+                    exchange,
+                    &row.symbol,
+                    side,
+                    Some(row.client_order_id.clone()),
+                    created_at,
+                ));
+                current_key = Some(group_key);
+            }
+
+            let pos = current_pos
+                .as_mut()
+                .expect("current_pos is always Some after group boundary detection");
+
+            // 判断开平仓方向
+            let is_close = matches!(
+                (row.side.as_str(), row.position_side.as_str()),
+                ("SELL", "LONG") | ("BUY", "SHORT")
+            );
+
+            // 解析成交数量 — 不使用默认值，解析失败直接报错
+            let trade_fill: f64 = row
+                .filled_qty
+                .parse()
+                .context(format!("parse filled_qty '{}' for order {}", row.filled_qty, row.client_order_id))?;
+
+            // 解析成交价格 — 开仓单必须有 avg_fill_price，平仓单不使用此字段
+            let fill_price = if is_close {
+                // apply_fill 在 is_close=true 时不读取 fill_price
+                0.0
+            } else {
+                let avg_str = row
+                    .avg_fill_price
+                    .as_ref()
+                    .context(format!(
+                        "avg_fill_price is NULL for filled open order {}",
+                        row.client_order_id
+                    ))?;
+                avg_str
+                    .parse::<f64>()
+                    .context(format!("parse avg_fill_price '{}' for order {}", avg_str, row.client_order_id))?
+            };
+
+            // 解析已实现盈亏 — 平仓单必须有 realized_pnl，开仓单 rp=0
+            let realized_pnl = if is_close {
+                let rp_str = row
+                    .realized_pnl
+                    .as_ref()
+                    .context(format!(
+                        "realized_pnl is NULL for close order {}",
+                        row.client_order_id
+                    ))?;
+                rp_str
+                    .parse::<f64>()
+                    .context(format!("parse realized_pnl '{}' for order {}", rp_str, row.client_order_id))?
+            } else {
+                // 开仓单的 rp 始终为 0（Binance 对非平仓订单发送 rp=0）
+                0.0
+            };
+
+            let timestamp = DateTime::from_timestamp_millis(row.trade_time)
+                .unwrap_or_else(Utc::now);
+
+            pos.apply_fill(is_close, fill_price, trade_fill, realized_pnl, timestamp);
+        }
+
+        // 输出最后一组仓位
+        if let Some(pos) = current_pos {
+            if pos.quantity > 1e-8 {
+                positions.push(pos);
+            }
+        }
+
+        Ok(positions)
     }
 
     async fn upsert_order_impl(&self, order: &CcxtOrder) -> VirsResult<()> {
@@ -275,46 +363,15 @@ impl Persistence {
 }
 
 #[derive(Debug, sqlx::FromRow)]
-struct AggregatedPositionRow {
+struct ReplayOrderRow {
     symbol: String,
     position_side: String,
-    quantity: f64,
-    entry_price: f64,
-    realized_pnl: f64,
-    created_at_ms: i64,
-    client_order_id: Option<String>,
-}
-
-impl AggregatedPositionRow {
-    fn into_position(self, exchange: &str) -> Option<Position> {
-        // DB 读取校验：position_side 非法值直接跳过（与 WS validate 共用校验逻辑）
-        if let Err(e) = virs_types::validate_position_side(Some(&self.position_side)) {
-            tracing::error!(
-                symbol = %self.symbol,
-                error = %e,
-                "DB 聚合仓位 position_side 非法，跳过该仓位"
-            );
-            return None;
-        }
-        let side = match self.position_side.as_str() {
-            "LONG" => PositionSide::Long,
-            "SHORT" => PositionSide::Short,
-            _ => unreachable!("validate_position_side 已保证到达此处时 position_side 为 LONG/SHORT"),
-        };
-        let now = Utc::now();
-        let created_at = DateTime::from_timestamp_millis(self.created_at_ms).unwrap_or(now);
-
-        Some(Position::from_aggregate(
-            exchange,
-            self.symbol,
-            side,
-            self.quantity,
-            self.entry_price,
-            self.realized_pnl,
-            self.client_order_id,
-            created_at,
-        ))
-    }
+    side: String,
+    filled_qty: String,
+    avg_fill_price: Option<String>,
+    realized_pnl: Option<String>,
+    trade_time: i64,
+    client_order_id: String,
 }
 
 #[derive(Debug, sqlx::FromRow)]

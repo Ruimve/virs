@@ -597,46 +597,53 @@ async fn process_order_fill(
         None => (0.0, Side::Buy, TradeType::Open),
     };
 
-    if fill_price <= 0.0 {
+    // fill_price <= 0.0: 跳过 Trade 记录构造（防止 0.0 价格传播给回测），
+    // 但仓位更新必须执行——apply_fill 对平仓单不读 fill_price，
+    // 对开仓单有内部 `if fill_price > 0.0` 守卫。
+    // 若此处 return 会导致仓位状态与 DB replay 不一致（project_memory lesson:
+    // "fill_price <= 0.0 时直接返回不更新仓位会导致订单状态与仓位不一致"）。
+    let skip_trade = fill_price <= 0.0;
+    if skip_trade {
         error!(
             client_order_id = %client_order_id,
             symbol = %ws_order.symbol,
             price = fill_price,
-            "WS order update has invalid price (<=0.0) — skipping Trade record to prevent 0.0 price propagation"
+            "WS order update has invalid price (<=0.0) — skipping Trade record but still updating position"
         );
-        return;
     }
 
-    let trade = Trade {
-        id: Uuid::new_v4(),
-        position_id: position_id.unwrap_or(Uuid::nil()),
-        order_id: Uuid::nil(),
-        exchange: inner.exchange.name().to_string(),
-        symbol: ws_order.symbol.clone(),
-        side: trade_side,
-        price: fill_price,
-        amount: trade_fill,
-        fee: commission,
-        fee_currency: ws_order.commission_asset.clone(),
-        pnl,
-        trade_type,
-        created_at: timestamp,
-    };
+    if !skip_trade {
+        let trade = Trade {
+            id: Uuid::new_v4(),
+            position_id: position_id.unwrap_or(Uuid::nil()),
+            order_id: Uuid::nil(),
+            exchange: inner.exchange.name().to_string(),
+            symbol: ws_order.symbol.clone(),
+            side: trade_side,
+            price: fill_price,
+            amount: trade_fill,
+            fee: commission,
+            fee_currency: ws_order.commission_asset.clone(),
+            pnl,
+            trade_type,
+            created_at: timestamp,
+        };
 
-    match order_status {
-        OrderStatus::Filled => {
-            inner.emit_event(EngineEvent::OrderFilled {
-                order: ws_order.clone(),
-                trade: trade.clone(),
-            });
+        match order_status {
+            OrderStatus::Filled => {
+                inner.emit_event(EngineEvent::OrderFilled {
+                    order: ws_order.clone(),
+                    trade: trade.clone(),
+                });
+            }
+            OrderStatus::PartiallyFilled => {
+                inner.emit_event(EngineEvent::OrderPartiallyFilled {
+                    order: ws_order.clone(),
+                    trade: trade.clone(),
+                });
+            }
+            _ => {}
         }
-        OrderStatus::PartiallyFilled => {
-            inner.emit_event(EngineEvent::OrderPartiallyFilled {
-                order: ws_order.clone(),
-                trade: trade.clone(),
-            });
-        }
-        _ => {}
     }
 
     // 仓位更新：原子更新 realized_pnl + quantity + entry_price + status

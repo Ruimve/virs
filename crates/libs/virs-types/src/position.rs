@@ -54,30 +54,28 @@ impl Position {
         }
     }
 
-    /// 从聚合数据恢复仓位（DB 重启恢复用）。
-    pub fn from_aggregate(
+    /// 从 DB 回放创建初始仓位（replay 恢复用）。
+    /// 与 new_opening 类似但接受 created_at 参数，用于精确恢复时间戳。
+    pub fn new_for_replay(
         exchange: &str,
-        symbol: String,
+        symbol: &str,
         side: PositionSide,
-        quantity: f64,
-        entry_price: f64,
-        realized_pnl: f64,
         client_order_id: Option<String>,
         created_at: DateTime<Utc>,
     ) -> Self {
-        let id = position_uuid_v5(exchange, &symbol, &side);
+        let id = position_uuid_v5(exchange, symbol, &side);
         Self {
             id,
             exchange: exchange.to_string(),
-            symbol,
+            symbol: symbol.to_string(),
             side,
-            status: PositionStatus::Open,
-            quantity,
-            entry_price,
-            realized_pnl,
+            status: PositionStatus::Opening,
+            quantity: 0.0,
+            entry_price: 0.0,
+            realized_pnl: 0.0,
             client_order_id,
             created_at,
-            updated_at: Utc::now(),
+            updated_at: created_at,
         }
     }
 
