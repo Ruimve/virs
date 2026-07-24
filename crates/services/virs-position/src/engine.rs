@@ -377,7 +377,11 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
     // 必须用 last_fill_price(本笔成交价) 而非 avg_fill_price(累计均价) 做边际成本
     let fill_price: f64 = ws_order.last_fill_price.parse().unwrap_or(0.0);
     let commission: f64 = ws_order.commission.parse().unwrap_or(0.0);
-    let realized_pnl: f64 = ws_order.realized_pnl.parse().unwrap_or(0.0);
+    let realized_pnl: f64 = ws_order
+        .realized_pnl
+        .as_deref()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.0);
     // Hedge 模式下开平仓由 side + position_side 组合判断
     let is_close = matches!(
         (&ws_order.side, &ws_order.position_side),
@@ -487,9 +491,17 @@ async fn finalize_pending_order(
     let filled: f64 = ws_order.filled_qty.parse().unwrap_or(0.0);
     // 首次确认: REST 返回前可能已有多笔 WS 事件到达, trade_fill = filled(累计量),
     // 必须用 avg_fill_price(累计加权均价) 而非 last_fill_price(末笔价) 做批量成本
-    let fill_price: f64 = ws_order.avg_fill_price.parse().unwrap_or(0.0);
+    let fill_price: f64 = ws_order
+        .avg_fill_price
+        .as_deref()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.0);
     let commission: f64 = ws_order.commission.parse().unwrap_or(0.0);
-    let realized_pnl: f64 = ws_order.realized_pnl.parse().unwrap_or(0.0);
+    let realized_pnl: f64 = ws_order
+        .realized_pnl
+        .as_deref()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.0);
     // Hedge 模式下开平仓由 side + position_side 组合判断
     let is_close = matches!(
         (&ws_order.side, &ws_order.position_side),

@@ -129,14 +129,14 @@ CREATE TABLE IF NOT EXISTS pe_orders (
     side                TEXT NOT NULL,               -- S  买卖方向 (BUY/SELL)
     order_type           TEXT NOT NULL,               -- o  订单类型
     position_side       TEXT NOT NULL,               -- ps 持仓方向 (LONG/SHORT)
-    original_order_type TEXT NOT NULL DEFAULT '',     -- ot 原始订单类型
+    original_order_type TEXT,                        -- ot 原始订单类型 (可能缺失)
     status              TEXT NOT NULL,               -- X  订单当前状态
     execution_type      TEXT NOT NULL,               -- x  本次事件执行类型
 
     -- 价格与数量 (币安返回字符串，保持原样)
     orig_qty            TEXT NOT NULL,               -- q  原始数量
     original_price      TEXT NOT NULL,               -- p  原始价格
-    avg_fill_price      TEXT NOT NULL,               -- ap 平均成交价
+    avg_fill_price      TEXT,                        -- ap 平均成交价 (NEW 状态时缺失)
     filled_qty          TEXT NOT NULL,               -- z  累计已成交量
     last_fill_qty       TEXT NOT NULL,               -- l  末次成交量
     last_fill_price     TEXT NOT NULL,               -- L  末次成交价
@@ -145,14 +145,14 @@ CREATE TABLE IF NOT EXISTS pe_orders (
     -- 手续费与盈亏
     commission          TEXT NOT NULL DEFAULT '0',   -- n  手续费数量
     commission_asset    TEXT NOT NULL DEFAULT '',    -- N  手续费资产类型
-    realized_pnl        TEXT NOT NULL DEFAULT '0',   -- rp 该交易实现盈亏
+    realized_pnl        TEXT,                        -- rp 该交易实现盈亏 (NEW 状态时缺失)
 
     -- 订单属性
     reduce_only         BOOLEAN NOT NULL DEFAULT FALSE, -- R 是否仅减仓 (exchange-native, 业务层不使用)
     is_maker            BOOLEAN NOT NULL DEFAULT FALSE, -- m 是否为挂单成交
     close_position      BOOLEAN,                     -- cp 是否为触发平仓单
     time_in_force       TEXT NOT NULL DEFAULT 'GTC', -- f  有效方式
-    working_type        TEXT NOT NULL DEFAULT '',     -- wt 触发价类型
+    working_type        TEXT,                        -- wt 触发价类型 (可能缺失)
 
     -- 名义价值
     bids_notional       TEXT,                        -- b  买单净值
@@ -163,15 +163,15 @@ CREATE TABLE IF NOT EXISTS pe_orders (
     callback_rate       TEXT,                        -- cr 追踪止损回调比例
 
     -- 价格保护与模式
-    price_protection     BOOLEAN NOT NULL DEFAULT FALSE, -- pP 是否开启条件单触发保护
+    price_protection     BOOLEAN,                     -- pP 是否开启条件单触发保护 (可能缺失)
     stp_mode            TEXT,                        -- V  自成交防止模式
     price_match_mode    TEXT,                        -- pm 价格匹配模式
     gtd_auto_cancel_time BIGINT,                     -- gtd TIF为GTD的订单自动取消时间
     expiry_reason       TEXT,                        -- er 过期原因
 
     -- 忽略字段
-    si                  BIGINT NOT NULL DEFAULT 0,   -- si 忽略
-    ss                  BIGINT NOT NULL DEFAULT 0,   -- ss 忽略
+    si                  BIGINT,                      -- si 忽略 (可能缺失)
+    ss                  BIGINT,                      -- ss 忽略 (可能缺失)
 
     -- 时间与成交ID
     trade_time          BIGINT NOT NULL DEFAULT 0,   -- T  成交时间(ms)

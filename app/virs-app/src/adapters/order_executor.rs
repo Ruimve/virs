@@ -178,7 +178,7 @@ fn ccxt_order_to_order_info(order: &CcxtOrder) -> OrderInfo {
         position_id: None,
         symbol: order.symbol.clone(),
         side,
-        fill_price: order.avg_fill_price.parse::<f64>().ok(),
+        fill_price: order.avg_fill_price.as_deref().and_then(|s| s.parse::<f64>().ok()),
         request_price: order.original_price.parse::<f64>().ok(),
         filled: order.filled_qty.parse::<f64>().unwrap_or(0.0),
         client_order_id: Some(order.client_order_id.clone()),

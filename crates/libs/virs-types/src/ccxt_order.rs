@@ -110,14 +110,14 @@ pub struct CcxtOrder {
     pub side: Side,                         // 买卖方向 (BUY/SELL)
     pub order_type: OrderType,               // 订单类型
     pub position_side: PositionSide,         // 持仓方向 (LONG/SHORT)
-    pub original_order_type: String,         // 原始订单类型
+    pub original_order_type: Option<String>,  // 原始订单类型 (ot 字段，可能缺失)
     pub status: CcxtOrderStatus,             // 订单当前状态
     pub execution_type: ExecutionType,       // 本次事件执行类型
 
     // --- 价格与数量 (币安返回字符串，保持原样) ---
     pub orig_qty: String,                    // 原始数量
     pub original_price: String,              // 原始价格
-    pub avg_fill_price: String,              // 平均成交价
+    pub avg_fill_price: Option<String>,      // 平均成交价 (ap 字段，NEW 状态时缺失)
     pub filled_qty: String,                  // 累计已成交量
     pub last_fill_qty: String,               // 末次成交量
     pub last_fill_price: String,             // 末次成交价
@@ -126,14 +126,14 @@ pub struct CcxtOrder {
     // --- 手续费与盈亏 (币安返回字符串，保持原样) ---
     pub commission: String,                  // 手续费数量
     pub commission_asset: String,            // 手续费资产类型
-    pub realized_pnl: String,                // 该交易实现盈亏
+    pub realized_pnl: Option<String>,        // 该交易实现盈亏 (rp 字段，NEW 状态时缺失)
 
     // --- 订单属性 ---
     pub reduce_only: bool,                   // 是否仅减仓 (exchange-native 字段, 业务层不使用)
     pub is_maker: bool,                      // 是否为挂单成交
     pub close_position: Option<bool>,        // 是否为触发平仓单 (仅在条件订单情况下推送)
     pub time_in_force: String,               // 有效方式 (GTC/IOC/FOK/GTX)
-    pub working_type: String,                // 触发价类型
+    pub working_type: Option<String>,        // 触发价类型 (wt 字段，可能缺失)
 
     // --- 名义价值 (币安返回字符串，保持原样) ---
     pub bids_notional: Option<String>,       // 买单净值
@@ -144,15 +144,15 @@ pub struct CcxtOrder {
     pub callback_rate: Option<String>,      // 追踪止损回调比例
 
     // --- 价格保护与模式 ---
-    pub price_protection: bool,              // 是否开启条件单触发保护
+    pub price_protection: Option<bool>,      // 是否开启条件单触发保护 (pP 字段，可能缺失)
     pub stp_mode: Option<String>,            // 自成交防止模式
     pub price_match_mode: Option<String>,    // 价格匹配模式
     pub gtd_auto_cancel_time: Option<i64>,   // TIF为GTD的订单自动取消时间
     pub expiry_reason: Option<String>,       // 过期原因 (0-9)
 
     // --- 忽略字段 (官方标注忽略，保留以完整映射) ---
-    pub si: i64,                             // 忽略
-    pub ss: i64,                             // 忽略
+    pub si: Option<i64>,                     // 忽略 (可能缺失)
+    pub ss: Option<i64>,                     // 忽略 (可能缺失)
 
     // --- 时间与成交ID ---
     pub trade_time: i64,                     // 成交时间(ms)
