@@ -229,7 +229,7 @@ impl PositionEngine {
             .get_positions_from_orders(&exchange_name)
             .await?;
         for pos in &positions {
-            let key = (pos.exchange.clone(), pos.symbol.clone(), pos.side);
+            let key = (pos.exchange.clone(), pos.symbol.clone(), pos.side.clone());
             self.inner.position_id_index.insert(pos.id, key.clone());
             self.inner.positions.insert(key, pos.clone());
         }
@@ -237,7 +237,7 @@ impl PositionEngine {
         // 2. 恢复活跃订单和 order_position 映射
         let active_orders = self.inner.persistence.get_active_orders().await?;
         for order in &active_orders {
-            let pos_id = position_uuid_v5(&exchange_name, &order.symbol, order.position_side);
+            let pos_id = position_uuid_v5(&exchange_name, &order.symbol, &order.position_side);
             self.inner
                 .order_position
                 .insert(order.client_order_id.clone(), pos_id);
@@ -255,13 +255,13 @@ impl PositionEngine {
                 let key = (
                     exchange_name.clone(),
                     order.symbol.clone(),
-                    order.position_side,
+                    order.position_side.clone(),
                 );
                 if !self.inner.positions.contains_key(&key) {
                     let position = Position::new_opening(
                         &exchange_name,
                         &order.symbol,
-                        order.position_side,
+                        order.position_side.clone(),
                         Some(order.client_order_id.clone()),
                     );
                     self.inner.position_id_index.insert(pos_id, key.clone());
@@ -275,7 +275,7 @@ impl PositionEngine {
             .iter()
             .map(|p| ExchangePosition {
                 symbol: p.symbol.clone(),
-                side: p.side,
+                side: p.side.clone(),
                 quantity: p.quantity,
                 entry_price: p.entry_price,
             })
@@ -563,12 +563,18 @@ async fn process_order_fill(
                         let side = match pos.side {
                             PositionSide::Long => Side::Sell,
                             PositionSide::Short => Side::Buy,
+                            PositionSide::Unknown(_) => {
+                                unreachable!("validate ensures position side is Long/Short")
+                            }
                         };
                         (realized_pnl, side, TradeType::Close)
                     } else {
                         let side = match pos.side {
                             PositionSide::Long => Side::Buy,
                             PositionSide::Short => Side::Sell,
+                            PositionSide::Unknown(_) => {
+                                unreachable!("validate ensures position side is Long/Short")
+                            }
                         };
                         (0.0, side, TradeType::Open)
                     }
@@ -665,16 +671,19 @@ pub(crate) async fn handle_open_position(
     } else {
         exchange
     };
-    let key = (exchange_name.clone(), symbol.clone(), side);
+    let key = (exchange_name.clone(), symbol.clone(), side.clone());
 
     // 如果仓位已存在，直接下单
     if let Some(existing) = inner.positions.get(&key) {
         let position_id = existing.id;
         drop(existing);
 
-        let resolved_side = match side {
+        let resolved_side = match &side {
             PositionSide::Long => Side::Buy,
             PositionSide::Short => Side::Sell,
+            PositionSide::Unknown(_) => {
+                unreachable!("validate ensures position_side is Long/Short at WS entry")
+            }
         };
 
         let params = PlaceOrderParams {
@@ -721,11 +730,11 @@ pub(crate) async fn handle_open_position(
         return;
     }
 
-    let position_id = position_uuid_v5(&exchange_name, &symbol, side);
+    let position_id = position_uuid_v5(&exchange_name, &symbol, &side);
     let position = Position::new_opening(
         &exchange_name,
         &symbol,
-        side,
+        side.clone(),
         client_order_id.clone(),
     );
 
@@ -736,9 +745,12 @@ pub(crate) async fn handle_open_position(
     });
     inner.emit_event(EngineEvent::PositionUpdated { position });
 
-    let resolved_side = match side {
+    let resolved_side = match &side {
         PositionSide::Long => Side::Buy,
         PositionSide::Short => Side::Sell,
+        PositionSide::Unknown(_) => {
+            unreachable!("validate ensures position_side is Long/Short at WS entry")
+        }
     };
 
     let params = PlaceOrderParams {
@@ -795,9 +807,12 @@ pub(crate) async fn handle_close_position(
         return;
     }
 
-    let close_side = match position.side {
+    let close_side = match &position.side {
         PositionSide::Long => Side::Sell,
         PositionSide::Short => Side::Buy,
+        PositionSide::Unknown(_) => {
+            unreachable!("validate ensures position_side is Long/Short")
+        }
     };
 
     let params = PlaceOrderParams {
@@ -806,7 +821,7 @@ pub(crate) async fn handle_close_position(
         order_type,
         amount: position.quantity,
         price,
-        position_side: Some(position.side),
+        position_side: Some(position.side.clone()),
         position_id: Some(position.id),
         client_order_id: client_order_id.clone(),
     };
@@ -815,7 +830,7 @@ pub(crate) async fn handle_close_position(
     let key = (
         position.exchange.clone(),
         position.symbol.clone(),
-        position.side,
+        position.side.clone(),
     );
     if let Some(mut pos) = inner.positions.get_mut(&key) {
         pos.set_closing(Utc::now());
@@ -841,7 +856,7 @@ pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol:
         })
         .map(|entry| {
             let pos = entry.value();
-            (pos.id, pos.side, pos.quantity)
+            (pos.id, pos.side.clone(), pos.quantity)
         })
         .collect();
 
@@ -861,6 +876,9 @@ pub(crate) fn resolve_position_side_for_hedge(params: &mut PlaceOrderParams) {
         params.position_side = match &params.side {
             Side::Buy => Some(PositionSide::Long),
             Side::Sell => Some(PositionSide::Short),
+            Side::Unknown(_) => {
+                unreachable!("validate ensures side is Buy/Sell at WS entry")
+            }
         };
     }
 }
@@ -872,12 +890,24 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
     let position_id = match params.position_id {
         Some(pid) => pid,
         None => {
-            let position_side = params
-                .position_side
-                .expect("position_side must be resolved by resolve_position_side_for_hedge");
+            let position_side = match params.position_side.take() {
+                Some(ps) => ps,
+                None => {
+                    error!(
+                        client_order_id = ?params.client_order_id,
+                        symbol = %params.symbol,
+                        "position_side unresolved (side is Unknown), cannot place order"
+                    );
+                    inner.emit_event(EngineEvent::OrderFailed {
+                        client_order_id: params.client_order_id.clone().unwrap_or_default(),
+                        reason: "position_side unresolved (side is Unknown)".into(),
+                    });
+                    return;
+                }
+            };
             let exchange_name = inner.exchange.name().to_string();
-            let pos_id = position_uuid_v5(&exchange_name, &params.symbol, position_side);
-            let key = (exchange_name.clone(), params.symbol.clone(), position_side);
+            let pos_id = position_uuid_v5(&exchange_name, &params.symbol, &position_side);
+            let key = (exchange_name.clone(), params.symbol.clone(), position_side.clone());
 
             if let Some(existing) = inner.positions.get(&key) {
                 existing.id

@@ -8,10 +8,11 @@ use crate::enums::*;
 
 /// 基于 (exchange, symbol, side) 生成确定性 UUID v5，
 /// 保证同一仓位在重启前后 ID 一致。
-pub fn position_uuid_v5(exchange: &str, symbol: &str, side: PositionSide) -> Uuid {
+pub fn position_uuid_v5(exchange: &str, symbol: &str, side: &PositionSide) -> Uuid {
     let side_str = match side {
         PositionSide::Long => "LONG",
         PositionSide::Short => "SHORT",
+        PositionSide::Unknown(raw) => raw.as_str(),
     };
     let key = format!("{}:{}:{}", exchange, symbol, side_str);
     Uuid::new_v5(&Uuid::NAMESPACE_URL, key.as_bytes())
@@ -36,7 +37,7 @@ pub struct Position {
 impl Position {
     /// 创建 Opening 状态的初始仓位（quantity=0, entry_price=0, realized_pnl=0）。
     pub fn new_opening(exchange: &str, symbol: &str, side: PositionSide, client_order_id: Option<String>) -> Self {
-        let id = position_uuid_v5(exchange, symbol, side);
+        let id = position_uuid_v5(exchange, symbol, &side);
         let now = Utc::now();
         Self {
             id,
@@ -64,7 +65,7 @@ impl Position {
         client_order_id: Option<String>,
         created_at: DateTime<Utc>,
     ) -> Self {
-        let id = position_uuid_v5(exchange, &symbol, side);
+        let id = position_uuid_v5(exchange, &symbol, &side);
         Self {
             id,
             exchange: exchange.to_string(),
@@ -145,6 +146,7 @@ impl Position {
         match self.side {
             PositionSide::Long => (current_price - self.entry_price) * self.quantity,
             PositionSide::Short => (self.entry_price - current_price) * self.quantity,
+            PositionSide::Unknown(_) => 0.0,
         }
     }
 }

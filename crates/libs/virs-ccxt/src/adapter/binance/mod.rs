@@ -428,7 +428,7 @@ impl BinanceExchange {
         native.to_string()
     }
 
-    // 币安状态码映射: 与官方文档对齐
+    // 币安状态码映射: 与官方文档对齐，未知状态保留原始字符串
     pub fn parse_order_status(status: &str) -> CcxtOrderStatus {
         match status {
             "NEW" => CcxtOrderStatus::New,
@@ -437,11 +437,11 @@ impl BinanceExchange {
             "CANCELED" | "CANCELLED" => CcxtOrderStatus::Canceled,
             "EXPIRED" => CcxtOrderStatus::Expired,
             "EXPIRED_IN_MATCH" => CcxtOrderStatus::ExpiredInMatch,
-            _ => CcxtOrderStatus::New,
+            other => CcxtOrderStatus::Unknown(other.to_string()),
         }
     }
 
-    // 币安订单类型映射: MARKET/LIMIT/STOP_MARKET等
+    // 币安订单类型映射: MARKET/LIMIT/STOP_MARKET等，未知类型保留原始字符串
     pub fn parse_order_type(order_type: &str) -> OrderType {
         match order_type {
             "MARKET" => OrderType::Market,
@@ -452,29 +452,31 @@ impl BinanceExchange {
             "TAKE_PROFIT_MARKET" => OrderType::TakeProfitMarket,
             "TRAILING_STOP_MARKET" => OrderType::TrailingStopMarket,
             "LIQUIDATION" => OrderType::Liquidation,
-            _ => OrderType::Market,
+            other => OrderType::Unknown(other.to_string()),
         }
     }
 
-    // 枚举Side转币安字符串: Buy→BUY, Sell→SELL
-    pub fn side_str(side: &Side) -> &'static str {
+    // 枚举Side转币安字符串: Buy→BUY, Sell→SELL, Unknown→原始值
+    pub fn side_str(side: &Side) -> String {
         match side {
-            Side::Buy => "BUY",
-            Side::Sell => "SELL",
+            Side::Buy => "BUY".to_string(),
+            Side::Sell => "SELL".to_string(),
+            Side::Unknown(raw) => raw.clone(),
         }
     }
 
-    // 枚举OrderType转币安字符串
-    pub fn order_type_str(order_type: &OrderType) -> &'static str {
+    // 枚举OrderType转币安字符串，Unknown→原始值
+    pub fn order_type_str(order_type: &OrderType) -> String {
         match order_type {
-            OrderType::Market => "MARKET",
-            OrderType::Limit => "LIMIT",
-            OrderType::Stop => "STOP",
-            OrderType::StopMarket => "STOP_MARKET",
-            OrderType::TakeProfit => "TAKE_PROFIT",
-            OrderType::TakeProfitMarket => "TAKE_PROFIT_MARKET",
-            OrderType::TrailingStopMarket => "TRAILING_STOP_MARKET",
-            OrderType::Liquidation => "LIQUIDATION",
+            OrderType::Market => "MARKET".to_string(),
+            OrderType::Limit => "LIMIT".to_string(),
+            OrderType::Stop => "STOP".to_string(),
+            OrderType::StopMarket => "STOP_MARKET".to_string(),
+            OrderType::TakeProfit => "TAKE_PROFIT".to_string(),
+            OrderType::TakeProfitMarket => "TAKE_PROFIT_MARKET".to_string(),
+            OrderType::TrailingStopMarket => "TRAILING_STOP_MARKET".to_string(),
+            OrderType::Liquidation => "LIQUIDATION".to_string(),
+            OrderType::Unknown(raw) => raw.clone(),
         }
     }
 }

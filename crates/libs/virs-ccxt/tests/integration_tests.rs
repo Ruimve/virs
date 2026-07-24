@@ -71,7 +71,8 @@ fn int_4_2_order_trade_update_dispatch() {
             "t": 1,
             "m": false,
             "R": false,
-            "w": "MARK_PRICE"
+            "w": "MARK_PRICE",
+            "ps": "LONG"
         }
     });
     let text = serde_json::to_string(&raw).unwrap();
@@ -262,7 +263,7 @@ fn int_7_1_order_type_roundtrip() {
 
     for ot in &types {
         let binance_str = BinanceExchange::order_type_str(ot);
-        let parsed = BinanceExchange::parse_order_type(binance_str);
+        let parsed = BinanceExchange::parse_order_type(&binance_str);
         assert_eq!(&parsed, ot, "Roundtrip failed for {:?}", ot);
     }
 }

@@ -112,11 +112,12 @@ impl Persistence {
     }
 
     async fn upsert_order_impl(&self, order: &CcxtOrder) -> VirsResult<()> {
-        let side_str = match order.side {
+        let side_str = match &order.side {
             Side::Buy => "BUY",
             Side::Sell => "SELL",
+            Side::Unknown(raw) => raw,
         };
-        let order_type_str = match order.order_type {
+        let order_type_str = match &order.order_type {
             OrderType::Limit => "LIMIT",
             OrderType::Market => "MARKET",
             OrderType::Stop => "STOP",
@@ -125,18 +126,21 @@ impl Persistence {
             OrderType::TakeProfitMarket => "TAKE_PROFIT_MARKET",
             OrderType::TrailingStopMarket => "TRAILING_STOP_MARKET",
             OrderType::Liquidation => "LIQUIDATION",
+            OrderType::Unknown(raw) => raw,
         };
-        let position_side_str = match order.position_side {
+        let position_side_str = match &order.position_side {
             PositionSide::Long => "LONG",
             PositionSide::Short => "SHORT",
+            PositionSide::Unknown(raw) => raw,
         };
-        let status_str = match order.status {
+        let status_str = match &order.status {
             CcxtOrderStatus::New => "NEW",
             CcxtOrderStatus::PartiallyFilled => "PARTIALLY_FILLED",
             CcxtOrderStatus::Filled => "FILLED",
             CcxtOrderStatus::Canceled => "CANCELED",
             CcxtOrderStatus::Expired => "EXPIRED",
             CcxtOrderStatus::ExpiredInMatch => "EXPIRED_IN_MATCH",
+            CcxtOrderStatus::Unknown(raw) => raw,
         };
         let execution_type_str = match &order.execution_type {
             ExecutionType::New => "NEW",
@@ -283,10 +287,19 @@ struct AggregatedPositionRow {
 
 impl AggregatedPositionRow {
     fn into_position(self, exchange: &str) -> Option<Position> {
+        // DB 读取校验：position_side 非法值直接跳过（与 WS validate 共用校验逻辑）
+        if let Err(e) = virs_types::validate_position_side(Some(&self.position_side)) {
+            tracing::error!(
+                symbol = %self.symbol,
+                error = %e,
+                "DB 聚合仓位 position_side 非法，跳过该仓位"
+            );
+            return None;
+        }
         let side = match self.position_side.as_str() {
             "LONG" => PositionSide::Long,
             "SHORT" => PositionSide::Short,
-            _ => return None,
+            _ => unreachable!("validate_position_side 已保证到达此处时 position_side 为 LONG/SHORT"),
         };
         let now = Utc::now();
         let created_at = DateTime::from_timestamp_millis(self.created_at_ms).unwrap_or(now);
@@ -347,11 +360,25 @@ struct OrderRow {
 
 impl OrderRow {
     fn into_ccxt_order(self) -> Option<CcxtOrder> {
+        // DB 读取校验：side/position_side/status 非法值直接跳过（与 WS validate 共用校验逻辑）
+        if let Err(e) = virs_types::validate_order_fields(
+            &self.side,
+            Some(&self.position_side),
+            &self.status,
+        ) {
+            tracing::error!(
+                client_order_id = %self.client_order_id,
+                error = %e,
+                "DB 订单字段校验失败，跳过该订单"
+            );
+            return None;
+        }
         let side = match self.side.as_str() {
             "BUY" => Side::Buy,
             "SELL" => Side::Sell,
-            _ => return None,
+            _ => unreachable!("validate_order_fields 已保证到达此处时 side 为 BUY/SELL"),
         };
+        // order_type: 纯信息字段，透传保留原始字符串
         let order_type = match self.order_type.as_str() {
             "LIMIT" => OrderType::Limit,
             "MARKET" => OrderType::Market,
@@ -361,12 +388,12 @@ impl OrderRow {
             "TAKE_PROFIT_MARKET" => OrderType::TakeProfitMarket,
             "TRAILING_STOP_MARKET" => OrderType::TrailingStopMarket,
             "LIQUIDATION" => OrderType::Liquidation,
-            _ => OrderType::Market,
+            other => OrderType::Unknown(other.to_string()),
         };
         let position_side = match self.position_side.as_str() {
             "LONG" => PositionSide::Long,
             "SHORT" => PositionSide::Short,
-            _ => PositionSide::Long,
+            _ => unreachable!("validate_order_fields 已保证到达此处时 position_side 为 LONG/SHORT"),
         };
         let status = CcxtOrderStatus::from_str(&self.status);
         let execution_type = ExecutionType::from_str(&self.execution_type);

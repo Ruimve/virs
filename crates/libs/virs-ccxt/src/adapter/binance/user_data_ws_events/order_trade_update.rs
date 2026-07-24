@@ -184,7 +184,31 @@ impl OrderTradeUpdateData {
         self.execution_type == "CALCULATED" && self.client_order_id == "adl_autoclose"
     }
 
+    /// WS 事件合法性校验：在转换为 CcxtOrder 之前，对影响业务逻辑的必需字段做原始字符串校验。
+    /// 校验逻辑由 `virs_types::validate_order_fields` 共享函数提供，WS 路径和 DB 读取路径共用。
+    ///
+    /// 返回 false 时已记录 error 日志，调用方应跳过该订单（return None）。
+    pub fn validate(&self) -> bool {
+        if let Err(e) = virs_types::validate_order_fields(
+            &self.side,
+            self.position_side.as_deref(),
+            &self.status,
+        ) {
+            tracing::error!(
+                symbol = %self.symbol,
+                client_order_id = %self.client_order_id,
+                order_id = self.order_id,
+                error = %e,
+                "WS ORDER_TRADE_UPDATE 字段校验失败，跳过该订单"
+            );
+            false
+        } else {
+            true
+        }
+    }
+
     // 转换为WsFeedEvent::OrderUpdate
+    // 先做合法性校验，通过后再转换为 CcxtOrder
     pub fn to_ws_feed_event(&self) -> Option<WsFeedEvent> {
         // 检测强平和ADL事件并记录日志
         if self.is_liquidation() {
@@ -203,29 +227,33 @@ impl OrderTradeUpdateData {
             );
         }
 
+        // 合法性校验：side/position_side/status 不合法则跳过该订单
+        if !self.validate() {
+            return None;
+        }
+
         let ccxt_order = self.to_ccxt_order();
         Some(WsFeedEvent::OrderUpdate { order: ccxt_order })
     }
 
     // 转换为 CcxtOrder，字段类型与币安原生返回保持一致
+    // 不做任何默认值填充: Option<String> 保持 Option, 未知枚举值保留原始字符串
     pub fn to_ccxt_order(&self) -> CcxtOrder {
         let side = match self.side.as_str() {
             "BUY" => virs_types::Side::Buy,
-            _ => virs_types::Side::Sell,
+            "SELL" => virs_types::Side::Sell,
+            other => virs_types::Side::Unknown(other.to_string()),
         };
 
         let order_type =
             crate::adapter::binance::BinanceExchange::parse_order_type(&self.order_type);
 
-        let position_side = self
-            .position_side
-            .as_deref()
-            .and_then(|ps| match ps {
-                "LONG" => Some(PositionSide::Long),
-                "SHORT" => Some(PositionSide::Short),
-                _ => None,
-            })
-            .unwrap_or(PositionSide::Long);
+        let position_side = match self.position_side.as_deref() {
+            Some("LONG") => PositionSide::Long,
+            Some("SHORT") => PositionSide::Short,
+            Some(other) => PositionSide::Unknown(other.to_string()),
+            None => PositionSide::Unknown("None".to_string()),
+        };
 
         let status = CcxtOrderStatus::from_str(&self.status);
 

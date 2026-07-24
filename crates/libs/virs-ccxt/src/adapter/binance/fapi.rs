@@ -477,6 +477,16 @@ pub async fn create_order(
                     .into(),
             ));
         }
+        (Side::Unknown(raw), _) => {
+            return Err(ExchangeError::InvalidRequest(
+                format!("side is Unknown({}) — cannot place order with unknown side", raw),
+            ));
+        }
+        (_, Some(PositionSide::Unknown(raw))) => {
+            return Err(ExchangeError::InvalidRequest(
+                format!("position_side is Unknown({}) — cannot place order with unknown position side", raw),
+            ));
+        }
     };
     body["positionSide"] = serde_json::json!(position_side);
 

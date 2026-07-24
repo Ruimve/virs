@@ -1,21 +1,25 @@
 use serde::{Deserialize, Serialize};
 
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Side {
     #[serde(rename = "BUY")]
     Buy,
     #[serde(rename = "SELL")]
     Sell,
+    #[serde(untagged)]
+    Unknown(String),
 }
 
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PositionSide {
     #[serde(rename = "LONG")]
     Long,
     #[serde(rename = "SHORT")]
     Short,
+    #[serde(untagged)]
+    Unknown(String),
 }
 
 
@@ -25,7 +29,7 @@ pub enum PositionMode {
 }
 
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum OrderType {
     #[serde(rename = "LIMIT")]
     Limit,               // 限价单
@@ -43,6 +47,8 @@ pub enum OrderType {
     TrailingStopMarket,  // 跟踪止损单
     #[serde(rename = "LIQUIDATION")]
     Liquidation,         // 爆仓
+    #[serde(untagged)]
+    Unknown(String),
 }
 
 
@@ -131,7 +137,7 @@ mod sqlx_impls {
             match s {
                 "buy" => Ok(Side::Buy),
                 "sell" => Ok(Side::Sell),
-                _ => Err(format!("unknown Side variant: {}", s).into()),
+                other => Ok(Side::Unknown(other.to_string())),
             }
         }
     }
@@ -150,6 +156,7 @@ mod sqlx_impls {
             let s = match self {
                 Side::Buy => "buy",
                 Side::Sell => "sell",
+                Side::Unknown(other) => other.as_str(),
             };
             <&str as sqlx::Encode<sqlx::Postgres>>::encode_by_ref(&s, buf)
         }
@@ -161,7 +168,7 @@ mod sqlx_impls {
             match s {
                 "long" => Ok(PositionSide::Long),
                 "short" => Ok(PositionSide::Short),
-                _ => Err(format!("unknown PositionSide variant: {}", s).into()),
+                other => Ok(PositionSide::Unknown(other.to_string())),
             }
         }
     }
@@ -180,6 +187,7 @@ mod sqlx_impls {
             let s = match self {
                 PositionSide::Long => "long",
                 PositionSide::Short => "short",
+                PositionSide::Unknown(other) => other.as_str(),
             };
             <&str as sqlx::Encode<sqlx::Postgres>>::encode_by_ref(&s, buf)
         }

@@ -60,6 +60,8 @@ pub enum CcxtOrderStatus {
     Expired,
     #[serde(rename = "EXPIRED_IN_MATCH")]
     ExpiredInMatch,
+    #[serde(untagged)]
+    Unknown(String),
 }
 
 impl CcxtOrderStatus {
@@ -71,7 +73,7 @@ impl CcxtOrderStatus {
             "CANCELED" | "CANCELLED" => Self::Canceled,
             "EXPIRED" => Self::Expired,
             "EXPIRED_IN_MATCH" => Self::ExpiredInMatch,
-            _ => Self::New,
+            other => Self::Unknown(other.to_string()),
         }
     }
 }
@@ -85,6 +87,9 @@ impl From<CcxtOrderStatus> for OrderStatus {
             CcxtOrderStatus::Canceled => OrderStatus::Canceled,
             CcxtOrderStatus::Expired => OrderStatus::Canceled,
             CcxtOrderStatus::ExpiredInMatch => OrderStatus::Canceled,
+            CcxtOrderStatus::Unknown(_) => {
+                unreachable!("validate_order_fields ensures status is known before CcxtOrderStatus is created")
+            }
         }
     }
 }
@@ -152,4 +157,90 @@ pub struct CcxtOrder {
     // --- 时间与成交ID ---
     pub trade_time: i64,                     // 成交时间(ms)
     pub trade_id: i64,                       // 成交ID
+}
+
+
+/// 订单字段校验错误。由 `validate_order_fields` 返回，调用方据此记录日志并跳过该订单。
+#[derive(Debug)]
+pub enum OrderFieldError {
+    /// side (S) 非 BUY/SELL
+    InvalidSide(String),
+    /// position_side (ps) 非 LONG/SHORT，或为 None（OneWay 模式）
+    InvalidPositionSide(Option<String>),
+    /// status (X) 不在已知枚举范围内
+    UnknownStatus(String),
+}
+
+impl std::fmt::Display for OrderFieldError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidSide(v) => write!(f, "side 非法 (非 BUY/SELL): {}", v),
+            Self::InvalidPositionSide(Some(v)) => {
+                write!(f, "position_side 非法 (非 LONG/SHORT): {}", v)
+            }
+            Self::InvalidPositionSide(None) => {
+                write!(f, "position_side 为 None (OneWay 模式?)")
+            }
+            Self::UnknownStatus(v) => write!(f, "status 未知: {}", v),
+        }
+    }
+}
+
+impl std::error::Error for OrderFieldError {}
+
+
+/// 校验订单必需字段的合法性。WS 事件入口和 DB 读取路径共用此函数。
+///
+/// 校验范围（影响业务逻辑的必需字段）：
+/// - side: 必需 BUY/SELL — 决定开平仓方向
+/// - position_side: Hedge 模式下必需 LONG/SHORT — 决定仓位定位
+/// - status: 必需已知状态 — 决定成交处理和终态清理
+///
+/// 不校验的字段（纯信息，透传入库不影响逻辑）：
+/// - order_type, execution_type: 未知类型保留原始字符串入库
+///
+/// # 参数
+/// - `side`: 原始 side 字符串 (S 字段)
+/// - `position_side`: 原始 position_side 字符串 (ps 字段)，DB 路径传 `Some(&str)`，WS 路径可能为 None
+/// - `status`: 原始 status 字符串 (X 字段)
+///
+/// # 返回
+/// - `Ok(())`: 字段合法，可以继续转换
+/// - `Err(OrderFieldError)`: 字段非法，调用方应记录日志并跳过该订单
+pub fn validate_order_fields(
+    side: &str,
+    position_side: Option<&str>,
+    status: &str,
+) -> Result<(), OrderFieldError> {
+    validate_side(side)?;
+    validate_position_side(position_side)?;
+    validate_status(status)?;
+    Ok(())
+}
+
+/// 校验 side (S) 字段：必需 BUY/SELL。
+pub fn validate_side(side: &str) -> Result<(), OrderFieldError> {
+    match side {
+        "BUY" | "SELL" => Ok(()),
+        other => Err(OrderFieldError::InvalidSide(other.to_string())),
+    }
+}
+
+/// 校验 position_side (ps) 字段：Hedge 模式下必需 LONG/SHORT。
+/// 可独立调用（如 DB 聚合仓位恢复时只需校验 position_side）。
+pub fn validate_position_side(position_side: Option<&str>) -> Result<(), OrderFieldError> {
+    match position_side {
+        Some("LONG") | Some("SHORT") => Ok(()),
+        Some(other) => Err(OrderFieldError::InvalidPositionSide(Some(other.to_string()))),
+        None => Err(OrderFieldError::InvalidPositionSide(None)),
+    }
+}
+
+/// 校验 status (X) 字段：必需已知状态。
+pub fn validate_status(status: &str) -> Result<(), OrderFieldError> {
+    match status {
+        "NEW" | "PARTIALLY_FILLED" | "FILLED" | "CANCELED" | "CANCELLED" | "EXPIRED"
+        | "EXPIRED_IN_MATCH" => Ok(()),
+        other => Err(OrderFieldError::UnknownStatus(other.to_string())),
+    }
 }

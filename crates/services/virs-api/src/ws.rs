@@ -25,7 +25,7 @@ pub struct PositionWsMsg<'a> {
     msg_type: &'static str,
     symbol: &'a str,
     exchange: &'a str,
-    side: &'static str,
+    side: String,
     status: &'static str,
     quantity: f64,
     entry_price: f64,
@@ -50,19 +50,25 @@ pub struct OrderBookWsMsg<'a> {
 }
 
 
-fn position_side_str(side: &virs_types::PositionSide) -> &'static str {
+fn position_side_str(side: &virs_types::PositionSide) -> String {
     match side {
-        virs_types::PositionSide::Long => "long",
-        virs_types::PositionSide::Short => "short",
+        virs_types::PositionSide::Long => "long".to_string(),
+        virs_types::PositionSide::Short => "short".to_string(),
+        virs_types::PositionSide::Unknown(_) => {
+            unreachable!("validate ensures position_side is Long/Short")
+        }
     }
 }
 
 
 // pe_orders.position_side 列存储大写形式（见 virs-position persistence.rs）。
-fn position_side_db_str(side: &virs_types::PositionSide) -> &'static str {
+fn position_side_db_str(side: &virs_types::PositionSide) -> String {
     match side {
-        virs_types::PositionSide::Long => "LONG",
-        virs_types::PositionSide::Short => "SHORT",
+        virs_types::PositionSide::Long => "LONG".to_string(),
+        virs_types::PositionSide::Short => "SHORT".to_string(),
+        virs_types::PositionSide::Unknown(_) => {
+            unreachable!("validate ensures position_side is Long/Short")
+        }
     }
 }
 

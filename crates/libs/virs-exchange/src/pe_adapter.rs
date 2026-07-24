@@ -50,6 +50,7 @@ pub fn convert_to_models_side(side: &Side) -> models::Side {
     match side {
         Side::Buy => models::Side::Buy,
         Side::Sell => models::Side::Sell,
+        Side::Unknown(s) => models::Side::Unknown(s.clone()),
     }
 }
 
@@ -57,6 +58,7 @@ pub fn convert_position_side(side: &Option<PositionSide>) -> Option<models::Posi
     side.as_ref().map(|s| match s {
         PositionSide::Long => models::PositionSide::Long,
         PositionSide::Short => models::PositionSide::Short,
+        PositionSide::Unknown(raw) => models::PositionSide::Unknown(raw.clone()),
     })
 }
 
@@ -67,7 +69,8 @@ pub fn convert_order_type(ot: &OrderType) -> models::OrderType {
         OrderType::Market => models::OrderType::Market,
         OrderType::StopMarket => models::OrderType::StopMarket,
         OrderType::TakeProfitMarket => models::OrderType::TakeProfitMarket,
-        _ => models::OrderType::Market, // Stop/TakeProfit/TrailingStopMarket/Liquidation 暂无对应
+        OrderType::Unknown(raw) => models::OrderType::Unknown(raw.clone()),
+        _ => models::OrderType::Unknown(format!("{:?}", ot)), // Stop/TakeProfit/TrailingStopMarket/Liquidation
     }
 }
 
@@ -76,6 +79,7 @@ pub fn convert_virs_position_side(side: &models::PositionSide) -> PositionSide {
     match side {
         models::PositionSide::Long => PositionSide::Long,
         models::PositionSide::Short => PositionSide::Short,
+        models::PositionSide::Unknown(raw) => PositionSide::Unknown(raw.clone()),
     }
 }
 

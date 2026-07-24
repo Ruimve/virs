@@ -147,12 +147,8 @@ impl OrderExecutor for PeOrderExecutor {
 
 pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
     match event {
-        EngineEvent::OrderPlaced { order } => Some(OrderEvent::OrderPlaced {
-            order: ccxt_order_to_order_info(&order),
-        }),
-        EngineEvent::OrderFilled { order, .. } => Some(OrderEvent::OrderFilled {
-            order: ccxt_order_to_order_info(&order),
-        }),
+        EngineEvent::OrderPlaced { order } => Some(OrderEvent::OrderPlaced { order: ccxt_order_to_order_info(&order) }),
+        EngineEvent::OrderFilled { order, .. } => Some(OrderEvent::OrderFilled { order: ccxt_order_to_order_info(&order) }),
         EngineEvent::OrderCanceled { order } => Some(OrderEvent::OrderCanceled {
             order_id: Uuid::from_u128(order.order_id as u128),
             symbol: Some(order.symbol.clone()),
@@ -170,14 +166,18 @@ pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
 }
 
 fn ccxt_order_to_order_info(order: &CcxtOrder) -> OrderInfo {
+    let side = match &order.side {
+        Side::Buy => OrderSide::Buy,
+        Side::Sell => OrderSide::Sell,
+        Side::Unknown(ref s) => {
+            unreachable!("validate ensures side is Buy/Sell: {}", s)
+        }
+    };
     OrderInfo {
         id: Uuid::from_u128(order.order_id as u128),
         position_id: None,
         symbol: order.symbol.clone(),
-        side: match order.side {
-            Side::Buy => OrderSide::Buy,
-            Side::Sell => OrderSide::Sell,
-        },
+        side,
         fill_price: order.avg_fill_price.parse::<f64>().ok(),
         request_price: order.original_price.parse::<f64>().ok(),
         filled: order.filled_qty.parse::<f64>().unwrap_or(0.0),

@@ -47,12 +47,13 @@ pub fn to_ccxt_side(side: &Side) -> virs_ccxt::Side {
     match side {
         Side::Buy => virs_ccxt::Side::Buy,
         Side::Sell => virs_ccxt::Side::Sell,
+        Side::Unknown(s) => virs_ccxt::Side::Unknown(s.clone()),
     }
 }
 
 pub fn to_ccxt_order_type(ot: &OrderType) -> virs_ccxt::OrderType {
     // models::OrderType 与 virs_ccxt::OrderType 均为 virs_types::enums::OrderType 的重新导出，类型一致
-    *ot
+    ot.clone()
 }
 
 pub fn to_models_kline(
@@ -196,6 +197,7 @@ impl Exchange for CcxtAdapter {
         let ccxt_position_side = position_side.map(|ps| match ps {
             PositionSide::Long => virs_ccxt::PositionSide::Long,
             PositionSide::Short => virs_ccxt::PositionSide::Short,
+            PositionSide::Unknown(s) => virs_ccxt::PositionSide::Unknown(s),
         });
         let params = PlaceOrderParams {
             symbol: symbol.to_string(),
@@ -277,6 +279,7 @@ impl Exchange for CcxtAdapter {
                 side: match p.side {
                     virs_ccxt::PositionSide::Long => PositionSide::Long,
                     virs_ccxt::PositionSide::Short => PositionSide::Short,
+                    virs_ccxt::PositionSide::Unknown(s) => PositionSide::Unknown(s),
                 },
                 quantity: p.quantity,
                 entry_price: p.entry_price,

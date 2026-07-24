@@ -121,9 +121,10 @@ impl PaperExchangeAdapter {
             if order.symbol != symbol {
                 continue;
             }
-            let filled = match order.side {
+            let filled = match &order.side {
                 Side::Buy => current_price <= order.price.unwrap_or(current_price),
                 Side::Sell => current_price >= order.price.unwrap_or(current_price),
+                Side::Unknown(_) => unreachable!("validate ensures side is Buy/Sell"),
             };
             if filled {
                 triggered.push(order.clone());
@@ -139,11 +140,12 @@ impl PaperExchangeAdapter {
                 order_id: order.id.to_string().parse().unwrap_or(0),
                 client_order_id: order.client_order_id.clone().unwrap_or_default(),
                 symbol: order.symbol.clone(),
-                side: order.side,
-                order_type: order.order_type,
+                side: order.side.clone(),
+                order_type: order.order_type.clone(),
                 position_side: order
                     .position_side
-                    .unwrap_or(virs_types::PositionSide::Long),
+                    .clone()
+                    .expect("engine always sends Some(Long/Short) to paper exchange"),
                 original_order_type: format!("{:?}", order.order_type),
                 status: CcxtOrderStatus::Filled,
                 execution_type: ExecutionType::Trade,
@@ -190,8 +192,8 @@ impl PaperExchangeAdapter {
     }
 
     async fn update_position_on_fill(&self, order: &PaperPendingOrder, fill_price: f64) {
-        let position_side = match order.position_side {
-            Some(ps) => ps,
+        let position_side = match &order.position_side {
+            Some(ps) => ps.clone(),
             None => {
                 tracing::error!(
                     symbol = %order.symbol,
@@ -222,17 +224,20 @@ impl PaperExchangeAdapter {
         let notional = fill_price * order.amount;
         let margin = notional / leverage_f64;
 
-        let is_opening = match (order.side, position_side) {
+        let is_opening = match (&order.side, &position_side) {
             (Side::Buy, PositionSide::Long) => true,
             (Side::Sell, PositionSide::Short) => true,
             (Side::Sell, PositionSide::Long) => false,
             (Side::Buy, PositionSide::Short) => false,
+            (Side::Unknown(_), _) | (_, PositionSide::Unknown(_)) => {
+                unreachable!("validate ensures side/position_side are known")
+            }
         };
 
         let old_pos_info = self
             .positions
             .get(&key)
-            .map(|p| (p.side, p.entry_price, p.quantity));
+            .map(|p| (p.side.clone(), p.entry_price, p.quantity));
 
         let realized_pnl: f64 = match (&old_pos_info, is_opening) {
             (Some((side, entry, old_qty)), false) => {
@@ -240,6 +245,9 @@ impl PaperExchangeAdapter {
                 match side {
                     PositionSide::Long => (fill_price - entry) * closed,
                     PositionSide::Short => (entry - fill_price) * closed,
+                    PositionSide::Unknown(_) => {
+                        unreachable!("validate ensures position_side is Long/Short")
+                    }
                 }
             }
             _ => 0.0,
@@ -338,7 +346,7 @@ impl ExchangePe for PaperExchangeAdapter {
                 let pos = e.value();
                 ExchangePosition {
                     symbol: pos.symbol.clone(),
-                    side: pos.side,
+                    side: pos.side.clone(),
                     quantity: pos.quantity,
                     entry_price: pos.entry_price,
                 }
@@ -381,11 +389,11 @@ impl ExchangePe for PaperExchangeAdapter {
             let pending_for_fill = PaperPendingOrder {
                 id: order_id,
                 symbol: params.symbol.clone(),
-                side: params.side,
-                order_type: params.order_type,
+                side: params.side.clone(),
+                order_type: params.order_type.clone(),
                 amount: params.amount,
                 price: Some(fill_price),
-                position_side: params.position_side,
+                position_side: params.position_side.clone(),
                 client_order_id: params.client_order_id.clone(),
             };
             self.update_position_on_fill(&pending_for_fill, fill_price)
@@ -406,10 +414,10 @@ impl ExchangePe for PaperExchangeAdapter {
                 client_order_id: params.client_order_id.clone().unwrap_or_default(),
                 symbol: params.symbol.clone(),
                 side: params.side,
-                order_type: params.order_type,
+                order_type: params.order_type.clone(),
                 position_side: params
                     .position_side
-                    .unwrap_or(virs_types::PositionSide::Long),
+                    .expect("engine always sends Some(Long/Short) to paper exchange"),
                 original_order_type: format!("{:?}", params.order_type),
                 status: CcxtOrderStatus::Filled,
                 execution_type: ExecutionType::Trade,

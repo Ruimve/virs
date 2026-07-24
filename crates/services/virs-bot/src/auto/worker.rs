@@ -145,15 +145,16 @@ impl AutoWorker {
 
     // ===== Per-side 辅助方法 =====
 
-    pub(crate) fn get_position(&self, side: PositionSide) -> Option<&Position> {
+    pub(crate) fn get_position(&self, side: &PositionSide) -> Option<&Position> {
         match side {
             PositionSide::Long => self.current_long.as_ref(),
             PositionSide::Short => self.current_short.as_ref(),
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         }
     }
 
     pub(crate) fn has_position_side(&self, side: PositionSide) -> bool {
-        self.get_position(side)
+        self.get_position(&side)
             .map(|p| p.is_open() && p.quantity.abs() > 1e-8)
             .unwrap_or(false)
     }
@@ -166,6 +167,7 @@ impl AutoWorker {
         match side {
             PositionSide::Long => self.pending_open_long.is_some() || self.pending_close_long.is_some(),
             PositionSide::Short => self.pending_open_short.is_some() || self.pending_close_short.is_some(),
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         }
     }
 
@@ -565,6 +567,7 @@ impl AutoWorker {
                                 "Cannot parse side from client_order_id — stop_loss/take_profit not restored"
                             );
                         }
+                        Some(PositionSide::Unknown(_)) => unreachable!("validate ensures position_side is Long/Short"),
                     }
                 }
                 Ok(None) => {
@@ -759,7 +762,7 @@ impl AutoWorker {
     }
 
     async fn check_stop_take_profit_side(&mut self, side: PositionSide) -> bool {
-        let entry_price = match self.get_position(side) {
+        let entry_price = match self.get_position(&side) {
             Some(p) if p.is_open() => p.entry_price,
             _ => return false,
         };
@@ -770,8 +773,9 @@ impl AutoWorker {
         let (stop_loss, take_profit) = match side {
             PositionSide::Long => (self.stop_loss_long, self.take_profit_long),
             PositionSide::Short => (self.stop_loss_short, self.take_profit_short),
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         };
-        let side_str = side_str(side);
+        let side_str = side_str(&side);
 
         let should_close = match side {
             PositionSide::Long => {
@@ -782,6 +786,7 @@ impl AutoWorker {
                 (stop_loss > 0.0 && self.current_price >= stop_loss)
                     || (take_profit > 0.0 && self.current_price <= take_profit)
             }
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         };
 
         if should_close {
@@ -820,7 +825,7 @@ impl AutoWorker {
     }
 
     fn update_trailing_stop_side(&mut self, side: PositionSide, atr: f64) {
-        let entry_price = match self.get_position(side) {
+        let entry_price = match self.get_position(&side) {
             Some(p) if p.is_open() => p.entry_price,
             _ => return,
         };
@@ -834,13 +839,14 @@ impl AutoWorker {
                 self.stop_loss_short,
                 self.current_open_client_order_id_short.clone(),
             ),
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         };
 
         if entry_price <= 0.0 || stop_loss <= 0.0 {
             return;
         }
 
-        let side_str = side_str(side);
+        let side_str = side_str(&side);
 
         let new_stop = strategy::compute_trailing_stop(
             entry_price,
@@ -854,6 +860,7 @@ impl AutoWorker {
             match side {
                 PositionSide::Long => self.stop_loss_long = new_stop,
                 PositionSide::Short => self.stop_loss_short = new_stop,
+                PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
             }
             self.trailing_stop_dirty = true;
 
@@ -896,12 +903,13 @@ impl AutoWorker {
         let opened_at = match side {
             PositionSide::Long => self.position_opened_at_long,
             PositionSide::Short => self.position_opened_at_short,
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         };
         if let Some(opened_at) = opened_at {
             if opened_at.elapsed() > max_duration {
                 warn!(
                     bot_id = %self.bot.id,
-                    side = %side_str(side),
+                    side = %side_str(&side),
                     duration_secs = opened_at.elapsed().as_secs(),
                     "Position held too long, force closing"
                 );
@@ -1370,7 +1378,7 @@ impl AutoWorker {
                 };
 
                 // per-side 硬卡点：仅检查该方向是否已有仓位
-                if self.has_position_side(position_side) {
+                if self.has_position_side(position_side.clone()) {
                     warn!(bot_id = %self.bot.id, side = %side, "Already has position on this side, cannot open");
                     return Some("该方向已有仓位".to_string());
                 }
@@ -1379,6 +1387,7 @@ impl AutoWorker {
                     let last_event = match position_side {
                         PositionSide::Long => self.last_close_event_long.as_ref(),
                         PositionSide::Short => self.last_close_event_short.as_ref(),
+                        PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                     };
                     let (closed_side, close_reason, closed_at) = match last_event {
                         Some(ev) => ev,
@@ -1420,6 +1429,7 @@ impl AutoWorker {
                 let pending_set = match position_side {
                     PositionSide::Long => self.pending_open_long.is_some(),
                     PositionSide::Short => self.pending_open_short.is_some(),
+                    PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                 };
                 if !pending_set {
                     return Some("开仓订单发送失败".to_string());
@@ -1606,12 +1616,12 @@ impl AutoWorker {
     }
 
     pub(crate) async fn close_position(&mut self, side: PositionSide, close_reason: &str) {
-        let position = match self.get_position(side) {
+        let position = match self.get_position(&side) {
             Some(p) if p.is_open() => p.clone(),
             _ => return,
         };
 
-        let side_str = side_str(side);
+        let side_str = side_str(&side);
         let entry_price = position.entry_price;
         let position_size = position.quantity;
         let position_id = position.id;
@@ -1650,6 +1660,7 @@ impl AutoWorker {
                     match side {
                         PositionSide::Long => self.pending_close_long = Some(pending),
                         PositionSide::Short => self.pending_close_short = Some(pending),
+                        PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                     }
                 }
                 Err(e) => {
@@ -1661,6 +1672,7 @@ impl AutoWorker {
             let (order_side, position_side_field) = match side {
                 PositionSide::Long => (OrderSide::Sell, Some(BotPositionSide::Long)),
                 PositionSide::Short => (OrderSide::Buy, Some(BotPositionSide::Short)),
+                PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
             };
 
             let client_order_id = client_order_id::format_auto_close(self.bot.id, side_str);
@@ -1699,6 +1711,7 @@ impl AutoWorker {
                     match side {
                         PositionSide::Long => self.pending_close_long = Some(pending),
                         PositionSide::Short => self.pending_close_short = Some(pending),
+                        PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                     }
                 }
                 Err(e) => {
@@ -1714,14 +1727,15 @@ impl AutoWorker {
                 if position.symbol != self.bot.symbol {
                     return;
                 }
-                let side = position.side;
-                let cached_id = self.get_position(side).map(|p| p.id);
+                let side = position.side.clone();
+                let cached_id = self.get_position(&side).map(|p| p.id);
                 let is_ours = match cached_id {
                     Some(pid) => pid == position.id,
                     None => {
                         let persisted = match side {
                             PositionSide::Long => self.bot.position_id_long,
                             PositionSide::Short => self.bot.position_id_short,
+                            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                         };
                         match persisted.filter(|id| *id != Uuid::nil()) {
                             Some(pid) => pid == position.id,
@@ -1742,11 +1756,13 @@ impl AutoWorker {
                         self.bot.position_id_short.is_none()
                             || self.bot.position_id_short == Some(Uuid::nil())
                     }
+                    PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                 };
                 if needs_update {
                     match side {
                         PositionSide::Long => self.bot.position_id_long = Some(position.id),
                         PositionSide::Short => self.bot.position_id_short = Some(position.id),
+                        PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                     }
                     if let Err(e) = self
                         .store
@@ -1763,6 +1779,7 @@ impl AutoWorker {
                 match side {
                     PositionSide::Long => self.current_long = Some(position),
                     PositionSide::Short => self.current_short = Some(position),
+                    PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                 }
             }
             EngineEvent::PositionClosed { position } => {
@@ -1770,17 +1787,18 @@ impl AutoWorker {
                     return;
                 }
                 let side = position.side;
-                let cached_id = self.get_position(side).map(|p| p.id);
+                let cached_id = self.get_position(&side).map(|p| p.id);
                 let is_ours = match cached_id {
                     Some(pid) => pid == position.id,
                     None => {
                         let persisted = match side {
                             PositionSide::Long => self.bot.position_id_long,
                             PositionSide::Short => self.bot.position_id_short,
+                            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                         };
                         match persisted.filter(|id| *id != Uuid::nil()) {
                             Some(pid) => pid == position.id,
-                            None => self.get_position(side).is_some(),
+                            None => self.get_position(&side).is_some(),
                         }
                     }
                 };
@@ -1820,6 +1838,7 @@ impl AutoWorker {
                             Some(("short".to_string(), "external_close".to_string(), now));
                         self.bot.position_id_short = None;
                     }
+                    PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                 }
                 warn!(
                     bot_id = %self.bot.id, side = ?side,
@@ -1852,11 +1871,13 @@ impl AutoWorker {
                         self.bot.position_id_short.is_none()
                             || self.bot.position_id_short == Some(Uuid::nil())
                     }
+                    PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                 };
                 if needs_update {
                     match position.side {
                         PositionSide::Long => self.bot.position_id_long = Some(position.id),
                         PositionSide::Short => self.bot.position_id_short = Some(position.id),
+                        PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                     }
                     if let Err(e) = self
                         .store
@@ -1873,6 +1894,7 @@ impl AutoWorker {
                 match position.side {
                     PositionSide::Long => self.current_long = Some(position),
                     PositionSide::Short => self.current_short = Some(position),
+                    PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                 }
             }
             _ => {}
@@ -1997,6 +2019,7 @@ impl AutoWorker {
         let pending = match side {
             PositionSide::Long => self.pending_open_long.take(),
             PositionSide::Short => self.pending_open_short.take(),
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         };
         let Some(pending) = pending else { return };
 
@@ -2059,6 +2082,7 @@ impl AutoWorker {
                 self.position_opened_at_short = Some(tokio::time::Instant::now());
                 self.current_open_fee_short = fee;
             }
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         }
 
         // 从订单事件回填 per-side position_id（PE PositionOpened 事件可能尚未到达）
@@ -2074,6 +2098,7 @@ impl AutoWorker {
                         self.bot.position_id_short = Some(pid);
                     }
                 }
+                PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
             }
         }
 
@@ -2111,6 +2136,7 @@ impl AutoWorker {
                     PositionSide::Short => {
                         self.current_open_client_order_id_short = Some(client_order_id)
                     }
+                    PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                 }
             }
             Err(e) => {
@@ -2130,6 +2156,7 @@ impl AutoWorker {
         let log_id = match side {
             PositionSide::Long => self.current_log_id_long.take(),
             PositionSide::Short => self.current_log_id_short.take(),
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         };
         if let Some(log_id) = log_id {
             if let Err(e) = self
@@ -2152,6 +2179,7 @@ impl AutoWorker {
         let pending = match side {
             PositionSide::Long => self.pending_close_long.take(),
             PositionSide::Short => self.pending_close_short.take(),
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         };
         let Some(pending) = pending else { return };
 
@@ -2172,6 +2200,7 @@ impl AutoWorker {
         let open_fee = match side {
             PositionSide::Long => self.current_open_fee_long,
             PositionSide::Short => self.current_open_fee_short,
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         };
         let total_fee = open_fee + fee;
         let realized_pnl = gross_pnl - total_fee;
@@ -2217,6 +2246,7 @@ impl AutoWorker {
                 self.position_opened_at_short = None;
                 self.current_open_fee_short = 0.0;
             }
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         }
 
         // 写入 per-side last_close_event
@@ -2228,12 +2258,14 @@ impl AutoWorker {
         match side {
             PositionSide::Long => self.last_close_event_long = Some(close_event),
             PositionSide::Short => self.last_close_event_short = Some(close_event),
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         }
 
         // 平仓后清空对应 side 的 position_id
         match side {
             PositionSide::Long => self.bot.position_id_long = None,
             PositionSide::Short => self.bot.position_id_short = None,
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         }
 
         self.save_position().await;
@@ -2245,6 +2277,7 @@ impl AutoWorker {
         let open_client_order_id = match side {
             PositionSide::Long => self.current_open_client_order_id_long.take(),
             PositionSide::Short => self.current_open_client_order_id_short.take(),
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         };
         match open_client_order_id {
             Some(open_oid) => {
@@ -2296,6 +2329,7 @@ impl AutoWorker {
         let log_id = match side {
             PositionSide::Long => self.current_log_id_long.take(),
             PositionSide::Short => self.current_log_id_short.take(),
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         };
         if let Some(log_id) = log_id {
             if let Err(e) = self
@@ -2312,9 +2346,10 @@ impl AutoWorker {
         let pending = match side {
             PositionSide::Long => self.pending_open_long.take(),
             PositionSide::Short => self.pending_open_short.take(),
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         };
         if pending.is_some() {
-            warn!(bot_id = %self.bot.id, side = %side_str(side), "Rolling back pending open order");
+            warn!(bot_id = %self.bot.id, side = %side_str(&side), "Rolling back pending open order");
         }
     }
 
@@ -2322,19 +2357,21 @@ impl AutoWorker {
         let pending = match side {
             PositionSide::Long => self.pending_close_long.take(),
             PositionSide::Short => self.pending_close_short.take(),
+            PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
         };
         if pending.is_some() {
-            warn!(bot_id = %self.bot.id, side = %side_str(side), "Rolling back pending close order");
+            warn!(bot_id = %self.bot.id, side = %side_str(&side), "Rolling back pending close order");
         }
     }
 }
 
 // ===== 模块级辅助函数 =====
 
-fn side_str(side: PositionSide) -> &'static str {
+fn side_str(side: &PositionSide) -> &'static str {
     match side {
         PositionSide::Long => "long",
         PositionSide::Short => "short",
+        PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
     }
 }
 

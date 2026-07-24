@@ -118,10 +118,10 @@ fn b3_7_status_expired_in_match() {
 }
 
 #[test]
-fn b3_8_status_unknown_defaults_to_new() {
+fn b3_8_status_unknown_returns_unknown() {
     assert_eq!(
         BinanceExchange::parse_order_status("UNKNOWN"),
-        CcxtOrderStatus::New
+        CcxtOrderStatus::Unknown("UNKNOWN".to_string())
     );
 }
 
@@ -184,10 +184,10 @@ fn b4_7b_type_take_profit() {
 }
 
 #[test]
-fn b4_8_type_unknown_defaults_to_market() {
+fn b4_8_type_unknown_returns_unknown() {
     assert_eq!(
         BinanceExchange::parse_order_type("UNKNOWN"),
-        OrderType::Market
+        OrderType::Unknown("UNKNOWN".to_string())
     );
 }
 
