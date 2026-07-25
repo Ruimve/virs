@@ -61,7 +61,7 @@ fn position_side_str(side: &virs_types::PositionSide) -> String {
 }
 
 
-// pe_orders.position_side 列存储大写形式（见 virs-position persistence.rs）。
+// pe_order_latest.position_side 列存储大写形式（见 virs-position persistence.rs）。
 fn position_side_db_str(side: &virs_types::PositionSide) -> String {
     match side {
         virs_types::PositionSide::Long => "LONG".to_string(),
@@ -114,12 +114,12 @@ async fn fetch_stop_loss_take_profit(
     side: &virs_types::PositionSide,
 ) -> (Option<f64>, Option<f64>) {
     // pe_auto_order_context 表本身没有 position_side 列，通过 client_order_id
-    // JOIN pe_orders 表按 position_side 过滤（pe_orders.position_side 存储大写 LONG/SHORT）。
+    // JOIN pe_order_latest 表按 position_side 过滤（pe_order_latest.position_side 存储大写 LONG/SHORT）。
     let side_str = position_side_db_str(side);
     let row: Result<(f64, f64), _> = sqlx::query_as(
         r#"SELECT ctx.stop_loss, ctx.take_profit
            FROM pe_auto_order_context ctx
-           JOIN pe_orders o ON o.client_order_id = ctx.client_order_id
+           JOIN pe_order_latest o ON o.client_order_id = ctx.client_order_id
            WHERE ctx.symbol = $1 AND ctx.exchange = $2
              AND ctx.order_role = 'open' AND ctx.status = 'open'
              AND o.position_side = $3

@@ -395,9 +395,9 @@ pub async fn get_trades(
              close_ctx.close_reason,
              open_ctx.status
            FROM pe_auto_order_context open_ctx
-           JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+           JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
            LEFT JOIN pe_auto_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
-           LEFT JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+           LEFT JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
            WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.order_role = 'open'
            ORDER BY open_ctx.created_at DESC LIMIT $3 OFFSET $4"#,
     )
@@ -475,9 +475,9 @@ pub async fn get_stats(
              open_ctx.created_at AS opened_at,
              close_ctx.created_at AS closed_at
            FROM pe_auto_order_context open_ctx
-           JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+           JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
            JOIN pe_auto_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id AND close_ctx.order_role = 'close'
-           JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+           JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
            WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.status = 'closed'
            ORDER BY close_ctx.created_at ASC"#,
     )

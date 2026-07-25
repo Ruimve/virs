@@ -87,9 +87,9 @@ impl GridStore for PgGridStore {
                   COALESCE(close_ord.realized_pnl::float, 0) AS pnl,
                   open_ctx.created_at AS opened_at
                FROM pe_grid_order_context open_ctx
-               JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+               JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
                LEFT JOIN pe_grid_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
-               LEFT JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+               LEFT JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
                WHERE open_ctx.bot_id = $1 AND open_ctx.order_role = 'open'
                ORDER BY open_ctx.created_at ASC"#,
         )

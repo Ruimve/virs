@@ -246,7 +246,7 @@ impl AutoStore for PgAutoStore {
                       close_ctx.created_at
                FROM pe_auto_order_context close_ctx
                JOIN pe_auto_order_context open_ctx ON open_ctx.client_order_id = close_ctx.paired_client_order_id
-               JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+               JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
                WHERE close_ctx.bot_id = $1 AND close_ctx.order_role = 'close' AND close_ctx.status = 'closed'
                ORDER BY close_ctx.created_at DESC LIMIT 1"#,
         )
@@ -353,7 +353,7 @@ impl AutoStore for PgAutoStore {
         let pnl_rows: Vec<(f64,)> = sqlx::query_as(
             r#"SELECT close_ord.realized_pnl::float AS pnl
                FROM pe_auto_order_context close_ctx
-               JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+               JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
                WHERE close_ctx.bot_id = $1 AND close_ctx.order_role = 'close' AND close_ctx.status = 'closed'
                ORDER BY close_ctx.created_at DESC LIMIT 20"#,
         )

@@ -43,6 +43,7 @@ impl PositionPersistence for Persistence {
 impl Persistence {
     /// 从 pe_orders 回放派生当前持仓（Plan A: Rust replay）
     ///
+    /// 每笔 TRADE 事件独立一行，使用 last_fill_qty/last_fill_price（本笔量/本笔价）。
     /// SQL 仅负责过滤和排序（保留 generation_filtered CTE 确保只回放当前代际），
     /// Rust 按 (symbol, position_side) 分组、按 trade_time 顺序逐笔回放 apply_fill，
     /// 保证 entry_price 计算与运行时一致（边际成本法：平仓不改 entry_price，
@@ -53,20 +54,20 @@ impl Persistence {
             WITH classified AS (
                 SELECT
                     symbol, position_side, side,
-                    filled_qty, avg_fill_price, realized_pnl,
-                    trade_time, client_order_id,
+                    last_fill_qty, last_fill_price, realized_pnl,
+                    trade_time, trade_id, client_order_id,
                     CASE WHEN (side = 'BUY' AND position_side = 'LONG')
                            OR (side = 'SELL' AND position_side = 'SHORT')
                          THEN 1 ELSE 0 END AS is_open
                 FROM pe_orders
-                WHERE status IN ('FILLED', 'PARTIALLY_FILLED')
-                  AND filled_qty::float8 > 0
+                WHERE execution_type = 'TRADE'
+                  AND last_fill_qty::float8 > 0
             ),
             ordered AS (
                 SELECT
                     *,
-                    SUM(CASE WHEN is_open = 1 THEN filled_qty::float8 ELSE -filled_qty::float8 END)
-                        OVER (PARTITION BY symbol, position_side ORDER BY trade_time, client_order_id)
+                    SUM(CASE WHEN is_open = 1 THEN last_fill_qty::float8 ELSE -last_fill_qty::float8 END)
+                        OVER (PARTITION BY symbol, position_side ORDER BY trade_time, trade_id)
                         AS running_qty
                 FROM classified
             ),
@@ -84,10 +85,10 @@ impl Persistence {
             )
             SELECT
                 symbol, position_side, side,
-                filled_qty, avg_fill_price, realized_pnl,
+                last_fill_qty, last_fill_price, realized_pnl,
                 trade_time, client_order_id
             FROM generation_filtered
-            ORDER BY symbol, position_side, trade_time, client_order_id
+            ORDER BY symbol, position_side, trade_time, trade_id
             "#,
         )
         .fetch_all(&self.db)
@@ -143,44 +144,24 @@ impl Persistence {
                 ("SELL", "LONG") | ("BUY", "SHORT")
             );
 
-            // 解析成交数量 — 不使用默认值，解析失败直接报错
+            // 解析本笔成交量 — 不使用默认值，解析失败直接报错
             let trade_fill: f64 = row
-                .filled_qty
+                .last_fill_qty
                 .parse()
-                .context(format!("parse filled_qty '{}' for order {}", row.filled_qty, row.client_order_id))?;
+                .context(format!("parse last_fill_qty '{}' for order {}", row.last_fill_qty, row.client_order_id))?;
 
-            // 解析成交价格 — 开仓单必须有 avg_fill_price，平仓单不使用此字段
-            let fill_price = if is_close {
-                // apply_fill 在 is_close=true 时不读取 fill_price
-                0.0
-            } else {
-                let avg_str = row
-                    .avg_fill_price
-                    .as_ref()
-                    .context(format!(
-                        "avg_fill_price is NULL for filled open order {}",
-                        row.client_order_id
-                    ))?;
-                avg_str
-                    .parse::<f64>()
-                    .context(format!("parse avg_fill_price '{}' for order {}", avg_str, row.client_order_id))?
-            };
+            // 解析本笔成交价格 — 每笔 TRADE 事件的价格（与运行时增量路径一致）
+            let fill_price: f64 = row
+                .last_fill_price
+                .parse()
+                .context(format!("parse last_fill_price '{}' for order {}", row.last_fill_price, row.client_order_id))?;
 
-            // 解析已实现盈亏 — 平仓单必须有 realized_pnl，开仓单 rp=0
-            let realized_pnl = if is_close {
-                let rp_str = row
-                    .realized_pnl
-                    .as_ref()
-                    .context(format!(
-                        "realized_pnl is NULL for close order {}",
-                        row.client_order_id
-                    ))?;
-                rp_str
+            // 解析已实现盈亏 — 平仓单有 realized_pnl，开仓单 rp=0 或 NULL
+            let realized_pnl = match row.realized_pnl.as_deref() {
+                Some(s) if !s.is_empty() => s
                     .parse::<f64>()
-                    .context(format!("parse realized_pnl '{}' for order {}", rp_str, row.client_order_id))?
-            } else {
-                // 开仓单的 rp 始终为 0（Binance 对非平仓订单发送 rp=0）
-                0.0
+                    .context(format!("parse realized_pnl '{}' for order {}", s, row.client_order_id))?,
+                _ => 0.0,
             };
 
             let timestamp = DateTime::from_timestamp_millis(row.trade_time)
@@ -262,44 +243,8 @@ impl Persistence {
                 $29, $30, $31, $32, $33,
                 $34, $35, $36, $37
             )
-            ON CONFLICT (client_order_id)
-            DO UPDATE SET
-                order_id              = EXCLUDED.order_id,
-                symbol               = EXCLUDED.symbol,
-                side                 = EXCLUDED.side,
-                order_type           = EXCLUDED.order_type,
-                position_side        = EXCLUDED.position_side,
-                original_order_type  = EXCLUDED.original_order_type,
-                status               = EXCLUDED.status,
-                execution_type       = EXCLUDED.execution_type,
-                orig_qty             = EXCLUDED.orig_qty,
-                original_price       = EXCLUDED.original_price,
-                avg_fill_price       = EXCLUDED.avg_fill_price,
-                filled_qty           = EXCLUDED.filled_qty,
-                last_fill_qty        = EXCLUDED.last_fill_qty,
-                last_fill_price      = EXCLUDED.last_fill_price,
-                stop_price           = EXCLUDED.stop_price,
-                commission           = EXCLUDED.commission,
-                commission_asset     = EXCLUDED.commission_asset,
-                realized_pnl         = EXCLUDED.realized_pnl,
-                reduce_only          = EXCLUDED.reduce_only,
-                is_maker             = EXCLUDED.is_maker,
-                close_position       = EXCLUDED.close_position,
-                time_in_force        = EXCLUDED.time_in_force,
-                working_type         = EXCLUDED.working_type,
-                bids_notional        = EXCLUDED.bids_notional,
-                ask_notional         = EXCLUDED.ask_notional,
-                activation_price     = EXCLUDED.activation_price,
-                callback_rate        = EXCLUDED.callback_rate,
-                price_protection     = EXCLUDED.price_protection,
-                stp_mode             = EXCLUDED.stp_mode,
-                price_match_mode     = EXCLUDED.price_match_mode,
-                gtd_auto_cancel_time = EXCLUDED.gtd_auto_cancel_time,
-                expiry_reason        = EXCLUDED.expiry_reason,
-                si                   = EXCLUDED.si,
-                ss                   = EXCLUDED.ss,
-                trade_time           = EXCLUDED.trade_time,
-                trade_id             = EXCLUDED.trade_id
+            ON CONFLICT (client_order_id, trade_id, execution_type)
+            DO NOTHING
             "#,
         )
         .bind(&order.client_order_id)
@@ -346,9 +291,10 @@ impl Persistence {
     }
 
     async fn get_active_orders_impl(&self) -> VirsResult<Vec<CcxtOrder>> {
+        // pe_order_latest 视图取每个 client_order_id 的最新事件行
         let rows = sqlx::query_as::<_, OrderRow>(
             r#"
-            SELECT * FROM pe_orders
+            SELECT * FROM pe_order_latest
             WHERE status IN ('NEW', 'PARTIALLY_FILLED')
             "#,
         )
@@ -367,8 +313,8 @@ struct ReplayOrderRow {
     symbol: String,
     position_side: String,
     side: String,
-    filled_qty: String,
-    avg_fill_price: Option<String>,
+    last_fill_qty: String,
+    last_fill_price: String,
     realized_pnl: Option<String>,
     trade_time: i64,
     client_order_id: String,

@@ -291,9 +291,9 @@ pub async fn get_bot(
              close_ctx.created_at AS closed_at,
              open_ctx.status
            FROM pe_grid_order_context open_ctx
-           JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+           JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
            LEFT JOIN pe_grid_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
-           LEFT JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+           LEFT JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
            WHERE open_ctx.bot_id = $1 AND open_ctx.order_role = 'open'
            ORDER BY open_ctx.created_at DESC LIMIT 50"#,
     )
@@ -513,9 +513,9 @@ pub async fn get_trades(
              close_ctx.created_at AS closed_at,
              open_ctx.status
            FROM pe_grid_order_context open_ctx
-           JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+           JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
            LEFT JOIN pe_grid_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
-           LEFT JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+           LEFT JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
            WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.order_role = 'open'
            ORDER BY open_ctx.created_at DESC LIMIT $3 OFFSET $4"#,
     )
@@ -568,9 +568,9 @@ pub async fn get_stats(
     let trades = sqlx::query_as::<_, (f64, chrono::DateTime<chrono::Utc>)>(
         r#"SELECT COALESCE(close_ord.realized_pnl::float, 0) AS pnl, open_ctx.created_at AS opened_at
            FROM pe_grid_order_context open_ctx
-           JOIN pe_orders open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+           JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
            JOIN pe_grid_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id AND close_ctx.order_role = 'close'
-           JOIN pe_orders close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+           JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
            WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.status = 'closed'
            ORDER BY open_ctx.created_at ASC"#,
     )

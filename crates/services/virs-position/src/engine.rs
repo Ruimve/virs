@@ -13,7 +13,7 @@ use virs_types::enums::*;
 use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_types::market::ExchangePosition;
 use virs_types::position::*;
-use virs_types::CcxtOrder;
+use virs_types::{CcxtOrder, ExecutionType};
 
 use crate::persistence::PositionPersistence;
 
@@ -431,12 +431,51 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
 
     // 1. 检查 pending_orders 中是否有此 client_order_id
     if let Some(mut pending) = inner.pending_orders.get_mut(&client_order_id) {
+        // 每笔 WS 事件立即持久化到 DB（每笔事件独立一行，不能只存内存）
+        persist!(
+            inner.persistence.upsert_order(&ws_order),
+            "upsert_order (pending)",
+            inner.persist_max_retries,
+            inner.persist_retry_base_ms
+        );
+
+        let position_id = pending.position_id;
+        let rest_ready = pending.rest_result.is_some();
         pending.ws_order = Some(ws_order.clone());
+        drop(pending);
+
+        // TRADE 事件且有成交：立即用增量字段处理 fill
+        // 使用 last_fill_qty（本笔量）和 last_fill_price（本笔价），
+        // 与 path 2（运行时增量）和 DB 回放逻辑完全一致
+        if ws_order.execution_type == ExecutionType::Trade
+            && (order_status == OrderStatus::Filled
+                || order_status == OrderStatus::PartiallyFilled)
+        {
+            let trade_fill: f64 = parse_field!(
+                ws_order.last_fill_qty.parse(),
+                "last_fill_qty",
+                client_order_id
+            );
+            if trade_fill > 0.0 {
+                process_order_fill(
+                    inner,
+                    &ws_order,
+                    &client_order_id,
+                    position_id,
+                    trade_fill,
+                    fill_price,
+                    commission,
+                    realized_pnl,
+                    is_close,
+                    timestamp,
+                    order_status,
+                )
+                .await;
+            }
+        }
 
         // 双确认：检查 rest_result 是否也存在
-        if pending.rest_result.is_some() {
-            let position_id = pending.position_id;
-            drop(pending);
+        if rest_ready {
             finalize_pending_order(inner, &client_order_id, ws_order, position_id).await;
         }
         // REST 还没返回，WS 数据暂存 pending，等 REST 到达后再处理
@@ -505,7 +544,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
     warn!(client_order_id = %client_order_id, "WS order update for unknown order, ignoring");
 }
 
-/// 双确认成功后，将订单从 pending 移入 orders，并处理后续事件（成交/取消/放置）。
+/// 双确认成功后，将订单从 pending 移入 orders，并处理终态（成交处理已在 pending 路径完成）。
 async fn finalize_pending_order(
     inner: &Arc<EngineInner>,
     client_order_id: &str,
@@ -522,7 +561,7 @@ async fn finalize_pending_order(
             .insert(client_order_id.to_string(), pid);
     }
 
-    // 持久化订单到 DB
+    // 持久化订单到 DB（幂等：pending 路径已持久化，ON CONFLICT DO NOTHING 保证不重复）
     persist!(
         inner.persistence.upsert_order(&ws_order),
         "upsert_order",
@@ -531,63 +570,24 @@ async fn finalize_pending_order(
     );
 
     let order_status: OrderStatus = ws_order.status.clone().into();
-    let filled: f64 = parse_field!(ws_order.filled_qty.parse(), "filled_qty", client_order_id);
-    // 首次确认: REST 返回前可能已有多笔 WS 事件到达, trade_fill = filled(累计量),
-    // 必须用 avg_fill_price(累计加权均价) 而非 last_fill_price(末笔价) 做批量成本
-    let fill_price: f64 = parse_opt_field!(
-        ws_order.avg_fill_price,
-        "avg_fill_price",
-        client_order_id
-    );
-    let commission: f64 = parse_field!(ws_order.commission.parse(), "commission", client_order_id);
-    let realized_pnl: f64 = parse_opt_field!(
-        ws_order.realized_pnl,
-        "realized_pnl",
-        client_order_id
-    );
-    // Hedge 模式下开平仓由 side + position_side 组合判断
-    let is_close = matches!(
-        (&ws_order.side, &ws_order.position_side),
-        (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short)
-    );
-    let timestamp =
-        chrono::DateTime::from_timestamp_millis(ws_order.trade_time).unwrap_or_else(Utc::now);
 
-    if order_status == OrderStatus::Filled || order_status == OrderStatus::PartiallyFilled {
-        if filled > 0.0 {
-            // prev_filled = 0（首次确认）
-            process_order_fill(
-                inner,
-                &ws_order,
-                client_order_id,
-                position_id,
-                filled,
-                fill_price,
-                commission,
-                realized_pnl,
-                is_close,
-                timestamp,
-                order_status,
-            )
-            .await;
-        } else {
-            inner.emit_event(EngineEvent::OrderPlaced { order: ws_order.clone() });
-        }
-
-        // Filled 终态清理：即使无成交（filled=0），也需清理避免泄漏
-        if order_status == OrderStatus::Filled {
-            inner.orders.remove(client_order_id);
-            inner.order_position.remove(client_order_id);
-        }
+    // 成交处理已在 pending 路径完成（process_order_fill 用 last_fill_qty/last_fill_price），
+    // 此处只处理订单终态清理和事件发射
+    if order_status == OrderStatus::Filled {
+        // Filled 终态清理
+        inner.orders.remove(client_order_id);
+        inner.order_position.remove(client_order_id);
     } else if order_status == OrderStatus::Canceled {
         inner.emit_event(EngineEvent::OrderCanceled {
             order: ws_order.clone(),
         });
         inner.orders.remove(client_order_id);
         inner.order_position.remove(client_order_id);
-    } else {
+    } else if ws_order.execution_type == ExecutionType::New {
+        // NEW 事件：emit OrderPlaced
         inner.emit_event(EngineEvent::OrderPlaced { order: ws_order });
     }
+    // PartiallyFilled / TRADE：fill 事件已在 pending 路径 emit，订单留在 orders 中等待后续更新
 }
 
 /// 处理订单成交：构造 Trade、更新仓位、emit 成交事件。
