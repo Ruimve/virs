@@ -3,44 +3,6 @@ use virs_types::{PositionSide, WsFeedEvent};
 
 use crate::types::{CcxtOrder, CcxtOrderStatus, ExecutionType as CcxtExecutionType};
 
-// 执行类型枚举(NEW/TRADE/CANCELED/CALCULATED/EXPIRED/AMENDMENT)
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExecutionType {
-    New,
-
-    Trade,
-
-    Canceled,
-
-    Calculated, // CALCULATED类型为强平事件
-
-    Expired,
-
-    Amendment,
-
-    Unknown(String),
-}
-
-impl ExecutionType {
-    // 从字符串解析执行类型
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "NEW" => Self::New,
-            "TRADE" => Self::Trade,
-            "CANCELED" => Self::Canceled,
-            "CALCULATED" => Self::Calculated,
-            "EXPIRED" => Self::Expired,
-            "AMENDMENT" => Self::Amendment,
-            other => Self::Unknown(other.to_string()),
-        }
-    }
-
-    // CALCULATED类型为强平事件
-    pub fn is_liquidation(&self) -> bool {
-        matches!(self, Self::Calculated)
-    }
-}
-
 // ORDER_TRADE_UPDATE事件外层结构
 #[derive(Debug, Clone, Deserialize)]
 pub struct OrderTradeUpdateEvent {
