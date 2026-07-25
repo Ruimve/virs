@@ -236,10 +236,8 @@ impl OrderTradeUpdateData {
             );
         }
 
-        // 合法性校验：side/position_side/status 不合法则跳过该订单
-        if !self.validate() {
-            return None;
-        }
+        // 校验移至 engine 层: 非法订单照常构造 CcxtOrder (Unknown 变体保留原始值)
+        // 由 engine 判断 Unknown 并持久化到 pe_rejected_orders
 
         let ccxt_order = self.to_ccxt_order(
             envelope_event_type,

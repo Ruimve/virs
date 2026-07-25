@@ -13,7 +13,7 @@ use virs_types::enums::*;
 use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
 use virs_types::market::ExchangePosition;
 use virs_types::position::*;
-use virs_types::{CcxtOrder, ExecutionType};
+use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType};
 
 use crate::persistence::PositionPersistence;
 
@@ -413,6 +413,32 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
 }
 
 pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: CcxtOrder) {
+    // 校验: side/position_side/status 是否合法 (Unknown 变体表示非法原始值)
+    // 非法订单持久化到 pe_rejected_orders 并跳过业务处理
+    let rejection_reason = match (&ws_order.side, &ws_order.position_side, &ws_order.status) {
+        (Side::Unknown(raw), _, _) => Some(format!("InvalidSide({})", raw)),
+        (_, PositionSide::Unknown(raw), _) => Some(format!("InvalidPositionSide({})", raw)),
+        (_, _, CcxtOrderStatus::Unknown(raw)) => Some(format!("InvalidStatus({})", raw)),
+        _ => None,
+    };
+
+    if let Some(reason) = rejection_reason {
+        tracing::error!(
+            symbol = %ws_order.symbol,
+            client_order_id = %ws_order.client_order_id,
+            order_id = ws_order.order_id,
+            reason = %reason,
+            "WS 订单字段校验失败，持久化到 pe_rejected_orders 并跳过业务处理"
+        );
+        persist!(
+            inner.persistence.persist_rejected_order(&ws_order, &reason),
+            "persist_rejected_order",
+            inner.persist_max_retries,
+            inner.persist_retry_base_ms
+        );
+        return;
+    }
+
     let client_order_id = ws_order.client_order_id.clone();
     let order_status: OrderStatus = ws_order.status.clone().into();
     let filled: f64 = parse_field!(ws_order.filled_qty.parse(), "filled_qty", client_order_id);

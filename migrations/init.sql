@@ -269,6 +269,83 @@ CREATE TABLE IF NOT EXISTS pe_trades (
 CREATE INDEX IF NOT EXISTS idx_pe_trades_symbol_ps ON pe_trades (symbol, position_side, trade_time);
 CREATE INDEX IF NOT EXISTS idx_pe_trades_cid ON pe_trades (client_order_id);
 
+-- pe_rejected_orders: 被 validate 拦截的非法订单 (side/position_side/status 非法)
+-- 41 字段与 pe_order_events/pe_trades 一致 + rejection_reason 拒绝原因
+CREATE TABLE IF NOT EXISTS pe_rejected_orders (
+    -- 订单标识
+    client_order_id     TEXT NOT NULL,
+    order_id            BIGINT NOT NULL,
+
+    -- 订单基本信息
+    symbol              TEXT NOT NULL,
+    side                TEXT NOT NULL,
+    order_type          TEXT NOT NULL,
+    position_side       TEXT NOT NULL,
+    original_order_type TEXT,
+    status              TEXT NOT NULL,
+    execution_type      TEXT NOT NULL,
+
+    -- 价格与数量
+    orig_qty            TEXT NOT NULL,
+    original_price      TEXT NOT NULL,
+    avg_fill_price      TEXT,
+    filled_qty          TEXT NOT NULL,
+    last_fill_qty       TEXT NOT NULL,
+    last_fill_price     TEXT NOT NULL,
+    stop_price          TEXT,
+
+    -- 手续费与盈亏
+    commission          TEXT NOT NULL,
+    commission_asset    TEXT NOT NULL,
+    realized_pnl        TEXT,
+
+    -- 订单属性
+    reduce_only         BOOLEAN NOT NULL,
+    is_maker            BOOLEAN NOT NULL,
+    close_position      BOOLEAN,
+    time_in_force       TEXT NOT NULL,
+    working_type        TEXT,
+
+    -- 名义价值
+    bids_notional       TEXT,
+    ask_notional        TEXT,
+
+    -- 追踪止损
+    activation_price    TEXT,
+    callback_rate       TEXT,
+
+    -- 价格保护与模式
+    price_protection    BOOLEAN,
+    stp_mode            TEXT,
+    price_match_mode    TEXT,
+    gtd_auto_cancel_time BIGINT,
+    expiry_reason       TEXT,
+
+    -- 忽略字段
+    si                  BIGINT,
+    ss                  BIGINT,
+
+    -- 时间与成交ID
+    trade_time          BIGINT NOT NULL,
+    trade_id            BIGINT NOT NULL,
+
+    -- 改单标识
+    modify_id           TEXT,
+
+    -- 信封字段
+    envelope_event_type      TEXT NOT NULL,
+    envelope_event_time      BIGINT NOT NULL,
+    envelope_transaction_time BIGINT NOT NULL,
+
+    -- 拒绝原因
+    rejection_reason    TEXT NOT NULL,
+
+    -- 复合主键: 同一订单同一事件只存一条
+    PRIMARY KEY (client_order_id, execution_type, trade_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pe_rejected_orders_cid ON pe_rejected_orders (client_order_id);
+
 -- pe_order_latest 视图: UNION ALL 合并两表取最新行, commission/realized_pnl 从 pe_trades 聚合
 -- pe_order_events 存非 TRADE 事件, pe_trades 存 TRADE 事件, 两表数据互补无冗余
 CREATE OR REPLACE VIEW pe_order_latest AS

@@ -10,8 +10,11 @@ pub trait PositionPersistence: Send + Sync {
     /// 从 pe_trades 回放派生当前持仓，用于重启恢复
     async fn get_positions_from_orders(&self, exchange: &str) -> VirsResult<Vec<Position>>;
 
-    /// 持久化订单: 所有事件写 pe_order_events, TRADE 事件额外写 pe_trades (同一事务)
+    /// 持久化订单: TRADE → pe_trades, 非 TRADE → pe_order_events (互斥写入)
     async fn persist_order(&self, order: &CcxtOrder) -> VirsResult<()>;
+
+    /// 持久化被拦截的非法订单到 pe_rejected_orders
+    async fn persist_rejected_order(&self, order: &CcxtOrder, reason: &str) -> VirsResult<()>;
 
     async fn get_active_orders(&self) -> VirsResult<Vec<CcxtOrder>>;
 }
@@ -34,6 +37,10 @@ impl PositionPersistence for Persistence {
 
     async fn persist_order(&self, order: &CcxtOrder) -> VirsResult<()> {
         self.persist_order_impl(order).await
+    }
+
+    async fn persist_rejected_order(&self, order: &CcxtOrder, reason: &str) -> VirsResult<()> {
+        self.persist_rejected_order_impl(order, reason).await
     }
 
     async fn get_active_orders(&self) -> VirsResult<Vec<CcxtOrder>> {
@@ -374,6 +381,131 @@ impl Persistence {
         }
 
         tx.commit().await?;
+        Ok(())
+    }
+
+    /// 持久化被拦截的非法订单到 pe_rejected_orders
+    /// 41 字段与 pe_order_events/pe_trades 一致 + rejection_reason
+    async fn persist_rejected_order_impl(
+        &self,
+        order: &CcxtOrder,
+        reason: &str,
+    ) -> VirsResult<()> {
+        let side_str = match &order.side {
+            Side::Buy => "BUY",
+            Side::Sell => "SELL",
+            Side::Unknown(raw) => raw,
+        };
+        let order_type_str = match &order.order_type {
+            OrderType::Limit => "LIMIT",
+            OrderType::Market => "MARKET",
+            OrderType::Stop => "STOP",
+            OrderType::StopMarket => "STOP_MARKET",
+            OrderType::TakeProfit => "TAKE_PROFIT",
+            OrderType::TakeProfitMarket => "TAKE_PROFIT_MARKET",
+            OrderType::TrailingStopMarket => "TRAILING_STOP_MARKET",
+            OrderType::Liquidation => "LIQUIDATION",
+            OrderType::Unknown(raw) => raw,
+        };
+        let position_side_str = match &order.position_side {
+            PositionSide::Long => "LONG",
+            PositionSide::Short => "SHORT",
+            PositionSide::Unknown(raw) => raw,
+        };
+        let status_str = match &order.status {
+            CcxtOrderStatus::New => "NEW",
+            CcxtOrderStatus::PartiallyFilled => "PARTIALLY_FILLED",
+            CcxtOrderStatus::Filled => "FILLED",
+            CcxtOrderStatus::Canceled => "CANCELED",
+            CcxtOrderStatus::Expired => "EXPIRED",
+            CcxtOrderStatus::ExpiredInMatch => "EXPIRED_IN_MATCH",
+            CcxtOrderStatus::Unknown(raw) => raw,
+        };
+        let execution_type_str = match &order.execution_type {
+            ExecutionType::New => "NEW",
+            ExecutionType::Trade => "TRADE",
+            ExecutionType::Canceled => "CANCELED",
+            ExecutionType::Calculated => "CALCULATED",
+            ExecutionType::Expired => "EXPIRED",
+            ExecutionType::Amendment => "AMENDMENT",
+            ExecutionType::Unknown(s) => s,
+        };
+
+        sqlx::query(
+            r#"
+            INSERT INTO pe_rejected_orders (
+                client_order_id, order_id, symbol, side, order_type, position_side,
+                original_order_type, status, execution_type,
+                orig_qty, original_price, avg_fill_price, filled_qty,
+                last_fill_qty, last_fill_price, stop_price,
+                commission, commission_asset, realized_pnl,
+                reduce_only, is_maker, close_position, time_in_force, working_type,
+                bids_notional, ask_notional, activation_price, callback_rate,
+                price_protection, stp_mode, price_match_mode, gtd_auto_cancel_time, expiry_reason,
+                si, ss, trade_time, trade_id,
+                modify_id, envelope_event_type, envelope_event_time, envelope_transaction_time,
+                rejection_reason
+            )
+            VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9,
+                $10, $11, $12, $13, $14, $15, $16,
+                $17, $18, $19,
+                $20, $21, $22, $23, $24,
+                $25, $26, $27, $28,
+                $29, $30, $31, $32, $33,
+                $34, $35, $36, $37,
+                $38, $39, $40, $41,
+                $42
+            )
+            ON CONFLICT (client_order_id, execution_type, trade_id)
+            DO NOTHING
+            "#,
+        )
+        .bind(&order.client_order_id)
+        .bind(order.order_id)
+        .bind(&order.symbol)
+        .bind(side_str)
+        .bind(order_type_str)
+        .bind(position_side_str)
+        .bind(&order.original_order_type)
+        .bind(status_str)
+        .bind(execution_type_str)
+        .bind(&order.orig_qty)
+        .bind(&order.original_price)
+        .bind(&order.avg_fill_price)
+        .bind(&order.filled_qty)
+        .bind(&order.last_fill_qty)
+        .bind(&order.last_fill_price)
+        .bind(&order.stop_price)
+        .bind(&order.commission)
+        .bind(&order.commission_asset)
+        .bind(&order.realized_pnl)
+        .bind(order.reduce_only)
+        .bind(order.is_maker)
+        .bind(order.close_position)
+        .bind(&order.time_in_force)
+        .bind(&order.working_type)
+        .bind(&order.bids_notional)
+        .bind(&order.ask_notional)
+        .bind(&order.activation_price)
+        .bind(&order.callback_rate)
+        .bind(order.price_protection)
+        .bind(&order.stp_mode)
+        .bind(&order.price_match_mode)
+        .bind(order.gtd_auto_cancel_time)
+        .bind(&order.expiry_reason)
+        .bind(order.si)
+        .bind(order.ss)
+        .bind(order.trade_time)
+        .bind(order.trade_id)
+        .bind(&order.modify_id)
+        .bind(&order.envelope_event_type)
+        .bind(order.envelope_event_time)
+        .bind(order.envelope_transaction_time)
+        .bind(reason)
+        .execute(&self.db)
+        .await?;
+
         Ok(())
     }
 
