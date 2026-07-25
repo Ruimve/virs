@@ -265,7 +265,7 @@ impl PositionEngine {
     async fn recover_state(&self) -> VirsResult<()> {
         let exchange_name = self.inner.exchange.name().to_string();
 
-        // 1. 从 pe_orders 聚合恢复仓位
+        // 1. 从 pe_trades 聚合恢复仓位
         let positions = self
             .inner
             .persistence
@@ -433,7 +433,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
     if let Some(mut pending) = inner.pending_orders.get_mut(&client_order_id) {
         // 每笔 WS 事件立即持久化到 DB（每笔事件独立一行，不能只存内存）
         persist!(
-            inner.persistence.upsert_order(&ws_order),
+            inner.persistence.persist_order(&ws_order),
             "upsert_order (pending)",
             inner.persist_max_retries,
             inner.persist_retry_base_ms
@@ -494,7 +494,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
 
         // 持久化订单更新到 DB
         persist!(
-            inner.persistence.upsert_order(&ws_order),
+            inner.persistence.persist_order(&ws_order),
             "upsert_order",
             inner.persist_max_retries,
             inner.persist_retry_base_ms
@@ -563,7 +563,7 @@ async fn finalize_pending_order(
 
     // 持久化订单到 DB（幂等：pending 路径已持久化，ON CONFLICT DO NOTHING 保证不重复）
     persist!(
-        inner.persistence.upsert_order(&ws_order),
+        inner.persistence.persist_order(&ws_order),
         "upsert_order",
         inner.persist_max_retries,
         inner.persist_retry_base_ms

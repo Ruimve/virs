@@ -114,12 +114,14 @@ CREATE INDEX IF NOT EXISTS idx_grid_bots_user ON qd_grid_bots(user_id);
 CREATE INDEX IF NOT EXISTS idx_grid_bots_status ON qd_grid_bots(status);
 
 -- ============================================================
--- Position Engine Orders (pe_orders)
--- 完整映射 CcxtOrder 37 字段，每笔 WS 事件独立一行（含 NEW/TRADE/CANCELED 等）
--- 复合主键 (client_order_id, trade_id, execution_type): 同一订单的不同事件各自独立
+-- Position Engine: 订单事件表 + 成交表 (分表方案)
+-- pe_order_events: 每笔 WS 事件独立一行 (ALL 事件类型), 全部 41 字段
+-- pe_trades: 每笔成交独立一行 (仅 TRADE 事件), 全部 41 字段
+-- 两表均无 DEFAULT, 所有值由 INSERT 提供 (来自币安原生推送)
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS pe_orders (
+-- pe_order_events: 订单事件表 (每笔 WS 事件一行, 含 NEW/TRADE/CANCELED 等)
+CREATE TABLE IF NOT EXISTS pe_order_events (
     -- 订单标识
     client_order_id     TEXT NOT NULL,                -- c  客户端自定义订单ID
     order_id            BIGINT NOT NULL,              -- i  订单ID
@@ -133,25 +135,25 @@ CREATE TABLE IF NOT EXISTS pe_orders (
     status              TEXT NOT NULL,                -- X  订单当前状态
     execution_type      TEXT NOT NULL,                -- x  本次事件执行类型
 
-    -- 价格与数量 (币安返回字符串，保持原样)
+    -- 价格与数量 (累计语义, 所有事件有意义)
     orig_qty            TEXT NOT NULL,                -- q  原始数量
     original_price      TEXT NOT NULL,                -- p  原始价格
     avg_fill_price      TEXT,                         -- ap 平均成交价 (NEW 状态时缺失)
     filled_qty          TEXT NOT NULL,                -- z  累计已成交量
-    last_fill_qty       TEXT NOT NULL,                -- l  末次成交量
-    last_fill_price     TEXT NOT NULL,                -- L  末次成交价
+    last_fill_qty       TEXT NOT NULL,                -- l  末次成交量 (非 TRADE 事件为 "0", 币安原值)
+    last_fill_price     TEXT NOT NULL,                -- L  末次成交价 (非 TRADE 事件为 "0", 币安原值)
     stop_price          TEXT,                         -- sp 条件订单触发价格
 
-    -- 手续费与盈亏 (逐笔增量: 每笔 TRADE 事件的 commission/rp 独立保存)
-    commission          TEXT NOT NULL DEFAULT '0',    -- n  手续费数量
-    commission_asset    TEXT NOT NULL DEFAULT '',     -- N  手续费资产类型
-    realized_pnl        TEXT,                         -- rp 该交易实现盈亏 (NEW 状态时缺失, 逐笔增量)
+    -- 手续费与盈亏 (本笔增量语义)
+    commission          TEXT NOT NULL,                -- n  手续费数量 (非 TRADE 事件为 "0", 币安原值)
+    commission_asset    TEXT NOT NULL,                -- N  手续费资产类型
+    realized_pnl        TEXT,                         -- rp 该交易实现盈亏 (NEW 状态时缺失)
 
     -- 订单属性
-    reduce_only         BOOLEAN NOT NULL DEFAULT FALSE, -- R 是否仅减仓 (exchange-native, 业务层不使用)
-    is_maker            BOOLEAN NOT NULL DEFAULT FALSE, -- m 是否为挂单成交
+    reduce_only         BOOLEAN NOT NULL,             -- R  是否仅减仓
+    is_maker            BOOLEAN NOT NULL,             -- m  是否为挂单成交 (非 TRADE 事件为 false, 币安原值)
     close_position      BOOLEAN,                      -- cp 是否为触发平仓单
-    time_in_force       TEXT NOT NULL DEFAULT 'GTC',  -- f  有效方式
+    time_in_force       TEXT NOT NULL,                -- f  有效方式
     working_type        TEXT,                         -- wt 触发价类型 (可能缺失)
 
     -- 名义价值
@@ -163,7 +165,7 @@ CREATE TABLE IF NOT EXISTS pe_orders (
     callback_rate       TEXT,                         -- cr 追踪止损回调比例
 
     -- 价格保护与模式
-    price_protection    BOOLEAN,                      -- pP 是否开启条件单触发保护 (可能缺失)
+    price_protection    BOOLEAN,                      -- pP 是否开启条件单触发保护
     stp_mode            TEXT,                         -- V  自成交防止模式
     price_match_mode    TEXT,                         -- pm 价格匹配模式
     gtd_auto_cancel_time BIGINT,                      -- gtd TIF为GTD的订单自动取消时间
@@ -174,19 +176,100 @@ CREATE TABLE IF NOT EXISTS pe_orders (
     ss                  BIGINT,                       -- ss 忽略 (可能缺失)
 
     -- 时间与成交ID
-    trade_time          BIGINT NOT NULL DEFAULT 0,    -- T  成交时间(ms)
-    trade_id            BIGINT NOT NULL DEFAULT 0,    -- t  成交ID
+    trade_time          BIGINT NOT NULL,              -- T  成交时间(ms)
+    trade_id            BIGINT NOT NULL,              -- t  成交ID (非 TRADE 事件为 0, 币安原值)
 
-    -- 复合主键: 同一订单的每个 (trade_id, execution_type) 组合唯一
-    PRIMARY KEY (client_order_id, trade_id, execution_type)
+    -- 改单标识 (内层 o.M 字段)
+    modify_id           TEXT,                         -- M  改单标识, 仅 AMENDMENT 事件推送
+
+    -- 信封字段 (外层 e/E/T, 非内层 o 对象)
+    envelope_event_type      TEXT NOT NULL,           -- e  事件类型 (固定 "ORDER_TRADE_UPDATE")
+    envelope_event_time      BIGINT NOT NULL,         -- E  事件时间(ms)
+    envelope_transaction_time BIGINT NOT NULL,        -- T  撮合时间(ms)
+
+    -- 复合主键: 同一订单的每个 (execution_type, trade_id) 组合唯一
+    PRIMARY KEY (client_order_id, execution_type, trade_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_pe_orders_status ON pe_orders (status);
-CREATE INDEX IF NOT EXISTS idx_pe_orders_order_id ON pe_orders (order_id);
-CREATE INDEX IF NOT EXISTS idx_pe_orders_cid ON pe_orders (client_order_id);
+CREATE INDEX IF NOT EXISTS idx_pe_order_events_status ON pe_order_events (status);
+CREATE INDEX IF NOT EXISTS idx_pe_order_events_order_id ON pe_order_events (order_id);
+CREATE INDEX IF NOT EXISTS idx_pe_order_events_cid ON pe_order_events (client_order_id);
 
--- pe_order_latest 视图: 每个订单取最新事件行，commission/realized_pnl 聚合为累计值
--- 业务查询（grid/auto context JOIN）使用此视图替代直接 JOIN pe_orders
+-- pe_trades: 成交表 (每笔成交一行, 仅 TRADE 事件), 全部 41 字段
+CREATE TABLE IF NOT EXISTS pe_trades (
+    -- 订单标识
+    client_order_id     TEXT NOT NULL,                -- c  客户端自定义订单ID
+    order_id            BIGINT NOT NULL,              -- i  订单ID
+
+    -- 订单基本信息
+    symbol              TEXT NOT NULL,                -- s  交易对
+    side                TEXT NOT NULL,                -- S  买卖方向 (BUY/SELL)
+    order_type          TEXT NOT NULL,                -- o  订单类型
+    position_side       TEXT NOT NULL,                -- ps 持仓方向 (LONG/SHORT)
+    original_order_type TEXT,                         -- ot 原始订单类型 (可能缺失)
+    status              TEXT NOT NULL,                -- X  订单当前状态
+    execution_type      TEXT NOT NULL,                -- x  始终为 'TRADE'
+
+    -- 价格与数量 (累计语义)
+    orig_qty            TEXT NOT NULL,                -- q  原始数量
+    original_price      TEXT NOT NULL,                -- p  原始价格
+    avg_fill_price      TEXT,                         -- ap 平均成交价
+    filled_qty          TEXT NOT NULL,                -- z  累计已成交量
+    last_fill_qty       TEXT NOT NULL,                -- l  本笔成交量 (必有实际值)
+    last_fill_price     TEXT NOT NULL,                -- L  本笔成交价 (必有实际值)
+    stop_price          TEXT,                         -- sp 条件订单触发价格
+
+    -- 手续费与盈亏 (本笔增量, 必有实际值)
+    commission          TEXT NOT NULL,                -- n  本笔手续费
+    commission_asset    TEXT NOT NULL,                -- N  手续费资产类型
+    realized_pnl        TEXT,                         -- rp 本笔实现盈亏 (开仓时可能为 NULL/"0")
+
+    -- 订单属性
+    reduce_only         BOOLEAN NOT NULL,             -- R  是否仅减仓
+    is_maker            BOOLEAN NOT NULL,             -- m  是否为挂单成交
+    close_position      BOOLEAN,                      -- cp 是否为触发平仓单
+    time_in_force       TEXT NOT NULL,                -- f  有效方式
+    working_type        TEXT,                         -- wt 触发价类型
+
+    -- 名义价值
+    bids_notional       TEXT,                         -- b  买单净值
+    ask_notional        TEXT,                         -- a  卖单净值
+
+    -- 追踪止损
+    activation_price    TEXT,                         -- AP 追踪止损激活价格
+    callback_rate       TEXT,                         -- cr 追踪止损回调比例
+
+    -- 价格保护与模式
+    price_protection    BOOLEAN,                      -- pP 是否开启条件单触发保护
+    stp_mode            TEXT,                         -- V  自成交防止模式
+    price_match_mode    TEXT,                         -- pm 价格匹配模式
+    gtd_auto_cancel_time BIGINT,                      -- gtd TIF为GTD的订单自动取消时间
+    expiry_reason       TEXT,                         -- er 过期原因
+
+    -- 忽略字段
+    si                  BIGINT,                       -- si 忽略
+    ss                  BIGINT,                       -- ss 忽略
+
+    -- 时间与成交ID
+    trade_time          BIGINT NOT NULL,              -- T  成交时间(ms)
+    trade_id            BIGINT NOT NULL,              -- t  成交ID (必有实际值 >0)
+
+    -- 改单标识 (内层 o.M 字段)
+    modify_id           TEXT,                         -- M  改单标识
+
+    -- 信封字段 (外层 e/E/T)
+    envelope_event_type      TEXT NOT NULL,           -- e  事件类型
+    envelope_event_time      BIGINT NOT NULL,         -- E  事件时间(ms)
+    envelope_transaction_time BIGINT NOT NULL,        -- T  撮合时间(ms)
+
+    -- 复合主键: 同一订单的每笔成交唯一
+    PRIMARY KEY (client_order_id, trade_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pe_trades_symbol_ps ON pe_trades (symbol, position_side, trade_time);
+CREATE INDEX IF NOT EXISTS idx_pe_trades_cid ON pe_trades (client_order_id);
+
+-- pe_order_latest 视图: 每个订单取最新事件行, commission/realized_pnl 从 pe_trades 聚合
 CREATE OR REPLACE VIEW pe_order_latest AS
 SELECT
     latest.client_order_id,
@@ -225,18 +308,21 @@ SELECT
     latest.si,
     latest.ss,
     latest.trade_time,
-    latest.trade_id
+    latest.trade_id,
+    latest.modify_id,
+    latest.envelope_event_type,
+    latest.envelope_event_time,
+    latest.envelope_transaction_time
 FROM (
     SELECT DISTINCT ON (client_order_id) *
-    FROM pe_orders
+    FROM pe_order_events
     ORDER BY client_order_id, trade_time DESC, trade_id DESC
 ) latest
 LEFT JOIN (
     SELECT client_order_id,
            SUM(commission::float8) AS commission_sum,
            SUM(COALESCE(realized_pnl::float8, 0)) AS rp_sum
-    FROM pe_orders
-    WHERE execution_type = 'TRADE'
+    FROM pe_trades
     GROUP BY client_order_id
 ) agg ON agg.client_order_id = latest.client_order_id;
 

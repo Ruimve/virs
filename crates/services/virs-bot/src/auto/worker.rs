@@ -249,7 +249,7 @@ impl AutoWorker {
                     );
                 }
 
-                // per-side 回填 position_id（PE 已从 pe_orders 聚合恢复）
+                // per-side 回填 position_id（PE 已从 pe_trades 聚合恢复）
                 let mut position_updated = false;
                 if self.bot.position_id_long.is_none() || self.bot.position_id_long == Some(Uuid::nil()) {
                     if let Some(ref p) = found_long {
@@ -477,7 +477,7 @@ impl AutoWorker {
             }
         }
 
-        // 先从 PE 查询当前仓位，可能恢复 position_id（PE 已从 pe_orders 聚合恢复）
+        // 先从 PE 查询当前仓位，可能恢复 position_id（PE 已从 pe_trades 聚合恢复）
         // 避免在 PE 有仓位时误判为孤儿 trade
         let pe_ok = self.refresh_position_from_pe().await;
 

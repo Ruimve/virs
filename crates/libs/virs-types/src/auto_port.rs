@@ -68,7 +68,7 @@ pub trait AutoStore: Send + Sync {
     async fn mark_trade_orphaned(&self, client_order_id: &str) -> VirsResult<()>;
 
     /// 查找最近已平仓交易 — 返回 (open_side, close_reason, closed_at)
-    /// open_side 从 pe_orders.side 派生, close_reason 从 context 取
+    /// open_side 从 pe_trades.side 派生, close_reason 从 context 取
     async fn find_last_closed_trade(
         &self,
         bot_id: Uuid,
@@ -103,7 +103,7 @@ pub trait AutoStore: Send + Sync {
         intercept_reason: Option<&str>,
     ) -> VirsResult<()>;
 
-    /// 加载连续亏损次数 — JOIN pe_orders 取 close 订单的 realized_pnl
+    /// 加载连续亏损次数 — JOIN pe_order_latest 取 close 订单的 realized_pnl
     async fn load_consecutive_losses(&self, bot_id: Uuid) -> VirsResult<i32>;
     async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()>;
 }

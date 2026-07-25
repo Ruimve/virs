@@ -7,10 +7,11 @@ use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderType, Side};
 
 #[async_trait::async_trait]
 pub trait PositionPersistence: Send + Sync {
-    /// 从 pe_orders 聚合派生当前持仓，用于重启恢复
+    /// 从 pe_trades 回放派生当前持仓，用于重启恢复
     async fn get_positions_from_orders(&self, exchange: &str) -> VirsResult<Vec<Position>>;
 
-    async fn upsert_order(&self, order: &CcxtOrder) -> VirsResult<()>;
+    /// 持久化订单: 所有事件写 pe_order_events, TRADE 事件额外写 pe_trades (同一事务)
+    async fn persist_order(&self, order: &CcxtOrder) -> VirsResult<()>;
 
     async fn get_active_orders(&self) -> VirsResult<Vec<CcxtOrder>>;
 }
@@ -31,8 +32,8 @@ impl PositionPersistence for Persistence {
         self.get_positions_from_orders_impl(exchange).await
     }
 
-    async fn upsert_order(&self, order: &CcxtOrder) -> VirsResult<()> {
-        self.upsert_order_impl(order).await
+    async fn persist_order(&self, order: &CcxtOrder) -> VirsResult<()> {
+        self.persist_order_impl(order).await
     }
 
     async fn get_active_orders(&self) -> VirsResult<Vec<CcxtOrder>> {
@@ -41,13 +42,11 @@ impl PositionPersistence for Persistence {
 }
 
 impl Persistence {
-    /// 从 pe_orders 回放派生当前持仓（Plan A: Rust replay）
+    /// 从 pe_trades 回放派生当前持仓（Plan A: Rust replay）
     ///
-    /// 每笔 TRADE 事件独立一行，使用 last_fill_qty/last_fill_price（本笔量/本笔价）。
-    /// SQL 仅负责过滤和排序（保留 generation_filtered CTE 确保只回放当前代际），
-    /// Rust 按 (symbol, position_side) 分组、按 trade_time 顺序逐笔回放 apply_fill，
-    /// 保证 entry_price 计算与运行时一致（边际成本法：平仓不改 entry_price，
-    /// 再开仓仅对剩余持仓做加权平均）。
+    /// pe_trades 天然只有 TRADE 事件，无需 execution_type 过滤。
+    /// 使用 last_fill_qty/last_fill_price（本笔量/本笔价），
+    /// 与运行时增量路径和 pending 路径字段语义完全一致。
     async fn get_positions_from_orders_impl(&self, exchange: &str) -> VirsResult<Vec<Position>> {
         let rows = sqlx::query_as::<_, ReplayOrderRow>(
             r#"
@@ -59,9 +58,8 @@ impl Persistence {
                     CASE WHEN (side = 'BUY' AND position_side = 'LONG')
                            OR (side = 'SELL' AND position_side = 'SHORT')
                          THEN 1 ELSE 0 END AS is_open
-                FROM pe_orders
-                WHERE execution_type = 'TRADE'
-                  AND last_fill_qty::float8 > 0
+                FROM pe_trades
+                WHERE last_fill_qty::float8 > 0
             ),
             ordered AS (
                 SELECT
@@ -180,7 +178,9 @@ impl Persistence {
         Ok(positions)
     }
 
-    async fn upsert_order_impl(&self, order: &CcxtOrder) -> VirsResult<()> {
+    /// 持久化订单: 所有事件写 pe_order_events, TRADE 事件额外写 pe_trades (同一事务)
+    /// ON CONFLICT DO NOTHING 保证 WS 重复推送幂等
+    async fn persist_order_impl(&self, order: &CcxtOrder) -> VirsResult<()> {
         let side_str = match &order.side {
             Side::Buy => "BUY",
             Side::Sell => "SELL",
@@ -221,9 +221,12 @@ impl Persistence {
             ExecutionType::Unknown(s) => s,
         };
 
+        let mut tx = self.db.begin().await.context("begin transaction for persist_order")?;
+
+        // 1. 所有事件写入 pe_order_events
         sqlx::query(
             r#"
-            INSERT INTO pe_orders (
+            INSERT INTO pe_order_events (
                 client_order_id, order_id, symbol, side, order_type, position_side,
                 original_order_type, status, execution_type,
                 orig_qty, original_price, avg_fill_price, filled_qty,
@@ -232,7 +235,8 @@ impl Persistence {
                 reduce_only, is_maker, close_position, time_in_force, working_type,
                 bids_notional, ask_notional, activation_price, callback_rate,
                 price_protection, stp_mode, price_match_mode, gtd_auto_cancel_time, expiry_reason,
-                si, ss, trade_time, trade_id
+                si, ss, trade_time, trade_id,
+                modify_id, envelope_event_type, envelope_event_time, envelope_transaction_time
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9,
@@ -241,9 +245,10 @@ impl Persistence {
                 $20, $21, $22, $23, $24,
                 $25, $26, $27, $28,
                 $29, $30, $31, $32, $33,
-                $34, $35, $36, $37
+                $34, $35, $36, $37,
+                $38, $39, $40, $41
             )
-            ON CONFLICT (client_order_id, trade_id, execution_type)
+            ON CONFLICT (client_order_id, execution_type, trade_id)
             DO NOTHING
             "#,
         )
@@ -284,9 +289,89 @@ impl Persistence {
         .bind(order.ss)
         .bind(order.trade_time)
         .bind(order.trade_id)
-        .execute(&self.db)
+        .bind(&order.modify_id)
+        .bind(&order.envelope_event_type)
+        .bind(order.envelope_event_time)
+        .bind(order.envelope_transaction_time)
+        .execute(&mut *tx)
         .await?;
 
+        // 2. TRADE 事件额外写入 pe_trades
+        if order.execution_type == ExecutionType::Trade {
+            sqlx::query(
+                r#"
+                INSERT INTO pe_trades (
+                    client_order_id, order_id, symbol, side, order_type, position_side,
+                    original_order_type, status, execution_type,
+                    orig_qty, original_price, avg_fill_price, filled_qty,
+                    last_fill_qty, last_fill_price, stop_price,
+                    commission, commission_asset, realized_pnl,
+                    reduce_only, is_maker, close_position, time_in_force, working_type,
+                    bids_notional, ask_notional, activation_price, callback_rate,
+                    price_protection, stp_mode, price_match_mode, gtd_auto_cancel_time, expiry_reason,
+                    si, ss, trade_time, trade_id,
+                    modify_id, envelope_event_type, envelope_event_time, envelope_transaction_time
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9,
+                    $10, $11, $12, $13, $14, $15, $16,
+                    $17, $18, $19,
+                    $20, $21, $22, $23, $24,
+                    $25, $26, $27, $28,
+                    $29, $30, $31, $32, $33,
+                    $34, $35, $36, $37,
+                    $38, $39, $40, $41
+                )
+                ON CONFLICT (client_order_id, trade_id)
+                DO NOTHING
+                "#,
+            )
+            .bind(&order.client_order_id)
+            .bind(order.order_id)
+            .bind(&order.symbol)
+            .bind(side_str)
+            .bind(order_type_str)
+            .bind(position_side_str)
+            .bind(&order.original_order_type)
+            .bind(status_str)
+            .bind(execution_type_str)
+            .bind(&order.orig_qty)
+            .bind(&order.original_price)
+            .bind(&order.avg_fill_price)
+            .bind(&order.filled_qty)
+            .bind(&order.last_fill_qty)
+            .bind(&order.last_fill_price)
+            .bind(&order.stop_price)
+            .bind(&order.commission)
+            .bind(&order.commission_asset)
+            .bind(&order.realized_pnl)
+            .bind(order.reduce_only)
+            .bind(order.is_maker)
+            .bind(order.close_position)
+            .bind(&order.time_in_force)
+            .bind(&order.working_type)
+            .bind(&order.bids_notional)
+            .bind(&order.ask_notional)
+            .bind(&order.activation_price)
+            .bind(&order.callback_rate)
+            .bind(order.price_protection)
+            .bind(&order.stp_mode)
+            .bind(&order.price_match_mode)
+            .bind(order.gtd_auto_cancel_time)
+            .bind(&order.expiry_reason)
+            .bind(order.si)
+            .bind(order.ss)
+            .bind(order.trade_time)
+            .bind(order.trade_id)
+            .bind(&order.modify_id)
+            .bind(&order.envelope_event_type)
+            .bind(order.envelope_event_time)
+            .bind(order.envelope_transaction_time)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
         Ok(())
     }
 
@@ -359,6 +444,10 @@ struct OrderRow {
     ss: Option<i64>,
     trade_time: i64,
     trade_id: i64,
+    modify_id: Option<String>,
+    envelope_event_type: String,
+    envelope_event_time: i64,
+    envelope_transaction_time: i64,
 }
 
 impl OrderRow {
@@ -439,6 +528,10 @@ impl OrderRow {
             ss: self.ss,
             trade_time: self.trade_time,
             trade_id: self.trade_id,
+            modify_id: self.modify_id,
+            envelope_event_type: self.envelope_event_type,
+            envelope_event_time: self.envelope_event_time,
+            envelope_transaction_time: self.envelope_transaction_time,
         })
     }
 }

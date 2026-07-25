@@ -4,7 +4,7 @@ use uuid::Uuid;
 use virs_error::VirsResult;
 
 
-/// Grid 交易记录 — 从 pe_orders + pe_grid_order_context 联查派生
+/// Grid 交易记录 — 从 pe_order_latest + pe_grid_order_context 联查派生
 #[derive(Debug, Clone)]
 pub struct GridTradeRecord {
     pub open_client_order_id: String,
@@ -52,7 +52,7 @@ pub trait GridStore: Send + Sync {
     async fn load_running_bots(&self) -> VirsResult<Vec<GridBotConfig>>;
     async fn load_bot(&self, bot_id: Uuid) -> VirsResult<Option<GridBotConfig>>;
 
-    /// 加载交易记录 — JOIN pe_orders + pe_grid_order_context
+    /// 加载交易记录 — JOIN pe_order_latest + pe_grid_order_context
     async fn load_trades(&self, bot_id: Uuid) -> VirsResult<Vec<GridTradeRecord>>;
 
     /// 记录开仓 context — INSERT pe_grid_order_context (order_role='open', status='open')

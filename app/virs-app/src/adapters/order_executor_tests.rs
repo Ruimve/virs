@@ -45,6 +45,10 @@ fn make_order(side: Side) -> CcxtOrder {
         ss: Some(0),
         trade_time: 0,
         trade_id: 0,
+        modify_id: None,
+        envelope_event_type: "ORDER_TRADE_UPDATE".to_string(),
+        envelope_event_time: 0,
+        envelope_transaction_time: 0,
     }
 }
 

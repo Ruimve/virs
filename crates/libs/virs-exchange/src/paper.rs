@@ -177,6 +177,10 @@ impl PaperExchangeAdapter {
                 ss: Some(0),
                 trade_time: chrono::Utc::now().timestamp_millis(),
                 trade_id: 0,
+                modify_id: None,
+                envelope_event_type: "ORDER_TRADE_UPDATE".to_string(),
+                envelope_event_time: chrono::Utc::now().timestamp_millis(),
+                envelope_transaction_time: chrono::Utc::now().timestamp_millis(),
             };
             let tx = self.price_tx.lock().await;
             if let Some(ref tx) = *tx {
@@ -449,6 +453,10 @@ impl ExchangePe for PaperExchangeAdapter {
                 ss: Some(0),
                 trade_time: chrono::Utc::now().timestamp_millis(),
                 trade_id: 0,
+                modify_id: None,
+                envelope_event_type: "ORDER_TRADE_UPDATE".to_string(),
+                envelope_event_time: chrono::Utc::now().timestamp_millis(),
+                envelope_transaction_time: chrono::Utc::now().timestamp_millis(),
             };
 
             let tx = self.price_tx.lock().await;

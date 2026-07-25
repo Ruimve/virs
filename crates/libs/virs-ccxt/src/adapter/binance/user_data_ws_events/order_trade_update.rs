@@ -97,6 +97,9 @@ pub struct OrderTradeUpdateData {
     #[serde(rename = "i")]
     pub order_id: i64, // i→订单ID
 
+    #[serde(rename = "M")]
+    pub modify_id: Option<String>, // M→改单标识, 仅在AMENDMENT事件且请求中传入时推送
+
     #[serde(rename = "l")]
     pub last_fill_qty: String, // l→最新成交数量
 
@@ -209,7 +212,13 @@ impl OrderTradeUpdateData {
 
     // 转换为WsFeedEvent::OrderUpdate
     // 先做合法性校验，通过后再转换为 CcxtOrder
-    pub fn to_ws_feed_event(&self) -> Option<WsFeedEvent> {
+    // 信封字段 (e/E/T) 从 OrderTradeUpdateEvent 传入
+    pub fn to_ws_feed_event(
+        &self,
+        envelope_event_type: &str,
+        envelope_event_time: i64,
+        envelope_transaction_time: i64,
+    ) -> Option<WsFeedEvent> {
         // 检测强平和ADL事件并记录日志
         if self.is_liquidation() {
             tracing::error!(
@@ -232,13 +241,23 @@ impl OrderTradeUpdateData {
             return None;
         }
 
-        let ccxt_order = self.to_ccxt_order();
+        let ccxt_order = self.to_ccxt_order(
+            envelope_event_type,
+            envelope_event_time,
+            envelope_transaction_time,
+        );
         Some(WsFeedEvent::OrderUpdate { order: ccxt_order })
     }
 
     // 转换为 CcxtOrder，字段类型与币安原生返回保持一致
     // 不做任何默认值填充: Option<String> 保持 Option, 未知枚举值保留原始字符串
-    pub fn to_ccxt_order(&self) -> CcxtOrder {
+    // envelope_* 参数来自外层 OrderTradeUpdateEvent 信封字段
+    pub fn to_ccxt_order(
+        &self,
+        envelope_event_type: &str,
+        envelope_event_time: i64,
+        envelope_transaction_time: i64,
+    ) -> CcxtOrder {
         let side = match self.side.as_str() {
             "BUY" => virs_types::Side::Buy,
             "SELL" => virs_types::Side::Sell,
@@ -297,6 +316,10 @@ impl OrderTradeUpdateData {
             ss: self.ss,
             trade_time: self.trade_time,
             trade_id: self.trade_id,
+            modify_id: self.modify_id.clone(),
+            envelope_event_type: envelope_event_type.to_string(),
+            envelope_event_time,
+            envelope_transaction_time,
         }
     }
 }
@@ -304,5 +327,9 @@ impl OrderTradeUpdateData {
 // 入口函数: 反序列化JSON并转换为WsFeedEvent
 pub fn process(json: &str) -> Option<WsFeedEvent> {
     let event: OrderTradeUpdateEvent = serde_json::from_str(json).ok()?;
-    event.order.to_ws_feed_event()
+    event.order.to_ws_feed_event(
+        &event.event_type,
+        event.event_time,
+        event.transaction_time,
+    )
 }

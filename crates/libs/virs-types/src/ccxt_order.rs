@@ -157,6 +157,14 @@ pub struct CcxtOrder {
     // --- 时间与成交ID ---
     pub trade_time: i64,                     // 成交时间(ms)
     pub trade_id: i64,                       // 成交ID
+
+    // --- 改单标识 (内层 o.M 字段) ---
+    pub modify_id: Option<String>,           // M 改单标识, 仅在AMENDMENT事件且请求中传入时推送
+
+    // --- 信封字段 (外层 e/E/T, 非内层 o 对象) ---
+    pub envelope_event_type: String,         // e  事件类型 (固定 "ORDER_TRADE_UPDATE")
+    pub envelope_event_time: i64,            // E  事件时间(ms)
+    pub envelope_transaction_time: i64,      // T  撮合时间(ms)
 }
 
 
