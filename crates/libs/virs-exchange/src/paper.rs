@@ -45,6 +45,7 @@ pub struct PaperExchangeAdapter {
     balance_initialized: Arc<AtomicBool>,
 
     configured_leverage: Arc<DashMap<String, u32>>,
+    trade_id_counter: Arc<std::sync::atomic::AtomicI64>,
 }
 
 impl PaperExchangeAdapter {
@@ -65,12 +66,19 @@ impl PaperExchangeAdapter {
             exchange_registry: None,
             balance_initialized: Arc::new(AtomicBool::new(initial_balance > 0.0)),
             configured_leverage: Arc::new(DashMap::new()),
+            trade_id_counter: Arc::new(std::sync::atomic::AtomicI64::new(1)),
         }
     }
 
     pub fn with_exchange_registry(mut self, registry: Arc<Exchanges>) -> Self {
         self.exchange_registry = Some(registry);
         self
+    }
+
+    /// 生成递增的 trade_id，确保同一订单多笔成交不会因 trade_id 冲突被丢弃
+    fn next_trade_id(&self) -> i64 {
+        self.trade_id_counter
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
     async fn ensure_balance_initialized(&self) {
@@ -133,7 +141,7 @@ impl PaperExchangeAdapter {
 
         for order in &triggered {
             self.pending.remove(&order.id);
-            self.update_position_on_fill(order, current_price).await;
+            let realized_pnl = self.update_position_on_fill(order, current_price).await;
 
             let fee = current_price * order.amount * 0.0002;
             let ccxt_order = CcxtOrder {
@@ -158,7 +166,7 @@ impl PaperExchangeAdapter {
                 stop_price: None,
                 commission: fee.to_string(),
                 commission_asset: "USDT".to_string(),
-                realized_pnl: Some("0".to_string()),
+                realized_pnl: Some(realized_pnl.to_string()),
                 reduce_only: false,
                 is_maker: true,
                 close_position: None,
@@ -176,7 +184,7 @@ impl PaperExchangeAdapter {
                 si: Some(0),
                 ss: Some(0),
                 trade_time: chrono::Utc::now().timestamp_millis(),
-                trade_id: 0,
+                trade_id: self.next_trade_id(),
                 modify_id: None,
                 envelope_event_type: "ORDER_TRADE_UPDATE".to_string(),
                 envelope_event_time: chrono::Utc::now().timestamp_millis(),
@@ -195,7 +203,7 @@ impl PaperExchangeAdapter {
         }
     }
 
-    async fn update_position_on_fill(&self, order: &PaperPendingOrder, fill_price: f64) {
+    async fn update_position_on_fill(&self, order: &PaperPendingOrder, fill_price: f64) -> f64 {
         let position_side = match &order.position_side {
             Some(ps) => ps.clone(),
             None => {
@@ -205,7 +213,7 @@ impl PaperExchangeAdapter {
                     "position_side is None in Hedge mode — skipping fill update to avoid \
                      silent position corruption. Caller must provide position_side."
                 );
-                return;
+                return 0.0;
             }
         };
         let key = format!("{}:{:?}", order.symbol, position_side);
@@ -298,6 +306,8 @@ impl PaperExchangeAdapter {
             balance.used -= margin_release;
             balance.free += margin_release + realized_pnl;
         }
+
+        realized_pnl
     }
 }
 
@@ -400,7 +410,8 @@ impl ExchangePe for PaperExchangeAdapter {
                 position_side: params.position_side.clone(),
                 client_order_id: params.client_order_id.clone(),
             };
-            self.update_position_on_fill(&pending_for_fill, fill_price)
+            let realized_pnl = self
+                .update_position_on_fill(&pending_for_fill, fill_price)
                 .await;
 
             let fee = fill_price * params.amount * 0.0005;
@@ -434,7 +445,7 @@ impl ExchangePe for PaperExchangeAdapter {
                 stop_price: None,
                 commission: fee.to_string(),
                 commission_asset: "USDT".to_string(),
-                realized_pnl: Some("0".to_string()),
+                realized_pnl: Some(realized_pnl.to_string()),
                 reduce_only: false,
                 is_maker: false,
                 close_position: None,
@@ -452,7 +463,7 @@ impl ExchangePe for PaperExchangeAdapter {
                 si: Some(0),
                 ss: Some(0),
                 trade_time: chrono::Utc::now().timestamp_millis(),
-                trade_id: 0,
+                trade_id: self.next_trade_id(),
                 modify_id: None,
                 envelope_event_type: "ORDER_TRADE_UPDATE".to_string(),
                 envelope_event_time: chrono::Utc::now().timestamp_millis(),
