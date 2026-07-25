@@ -223,81 +223,10 @@ impl Persistence {
 
         let mut tx = self.db.begin().await.context("begin transaction for persist_order")?;
 
-        // 1. 所有事件写入 pe_order_events
-        sqlx::query(
-            r#"
-            INSERT INTO pe_order_events (
-                client_order_id, order_id, symbol, side, order_type, position_side,
-                original_order_type, status, execution_type,
-                orig_qty, original_price, avg_fill_price, filled_qty,
-                last_fill_qty, last_fill_price, stop_price,
-                commission, commission_asset, realized_pnl,
-                reduce_only, is_maker, close_position, time_in_force, working_type,
-                bids_notional, ask_notional, activation_price, callback_rate,
-                price_protection, stp_mode, price_match_mode, gtd_auto_cancel_time, expiry_reason,
-                si, ss, trade_time, trade_id,
-                modify_id, envelope_event_type, envelope_event_time, envelope_transaction_time
-            )
-            VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9,
-                $10, $11, $12, $13, $14, $15, $16,
-                $17, $18, $19,
-                $20, $21, $22, $23, $24,
-                $25, $26, $27, $28,
-                $29, $30, $31, $32, $33,
-                $34, $35, $36, $37,
-                $38, $39, $40, $41
-            )
-            ON CONFLICT (client_order_id, execution_type, trade_id)
-            DO NOTHING
-            "#,
-        )
-        .bind(&order.client_order_id)
-        .bind(order.order_id)
-        .bind(&order.symbol)
-        .bind(side_str)
-        .bind(order_type_str)
-        .bind(position_side_str)
-        .bind(&order.original_order_type)
-        .bind(status_str)
-        .bind(execution_type_str)
-        .bind(&order.orig_qty)
-        .bind(&order.original_price)
-        .bind(&order.avg_fill_price)
-        .bind(&order.filled_qty)
-        .bind(&order.last_fill_qty)
-        .bind(&order.last_fill_price)
-        .bind(&order.stop_price)
-        .bind(&order.commission)
-        .bind(&order.commission_asset)
-        .bind(&order.realized_pnl)
-        .bind(order.reduce_only)
-        .bind(order.is_maker)
-        .bind(order.close_position)
-        .bind(&order.time_in_force)
-        .bind(&order.working_type)
-        .bind(&order.bids_notional)
-        .bind(&order.ask_notional)
-        .bind(&order.activation_price)
-        .bind(&order.callback_rate)
-        .bind(order.price_protection)
-        .bind(&order.stp_mode)
-        .bind(&order.price_match_mode)
-        .bind(order.gtd_auto_cancel_time)
-        .bind(&order.expiry_reason)
-        .bind(order.si)
-        .bind(order.ss)
-        .bind(order.trade_time)
-        .bind(order.trade_id)
-        .bind(&order.modify_id)
-        .bind(&order.envelope_event_type)
-        .bind(order.envelope_event_time)
-        .bind(order.envelope_transaction_time)
-        .execute(&mut *tx)
-        .await?;
-
-        // 2. TRADE 事件额外写入 pe_trades
+        // 互斥写入: TRADE → pe_trades, 非 TRADE → pe_order_events
+        // 两表数据互补无冗余, 视图 UNION ALL 合并取最新行
         if order.execution_type == ExecutionType::Trade {
+            // TRADE 事件 → pe_trades
             sqlx::query(
                 r#"
                 INSERT INTO pe_trades (
@@ -323,6 +252,79 @@ impl Persistence {
                     $38, $39, $40, $41
                 )
                 ON CONFLICT (client_order_id, trade_id)
+                DO NOTHING
+                "#,
+            )
+            .bind(&order.client_order_id)
+            .bind(order.order_id)
+            .bind(&order.symbol)
+            .bind(side_str)
+            .bind(order_type_str)
+            .bind(position_side_str)
+            .bind(&order.original_order_type)
+            .bind(status_str)
+            .bind(execution_type_str)
+            .bind(&order.orig_qty)
+            .bind(&order.original_price)
+            .bind(&order.avg_fill_price)
+            .bind(&order.filled_qty)
+            .bind(&order.last_fill_qty)
+            .bind(&order.last_fill_price)
+            .bind(&order.stop_price)
+            .bind(&order.commission)
+            .bind(&order.commission_asset)
+            .bind(&order.realized_pnl)
+            .bind(order.reduce_only)
+            .bind(order.is_maker)
+            .bind(order.close_position)
+            .bind(&order.time_in_force)
+            .bind(&order.working_type)
+            .bind(&order.bids_notional)
+            .bind(&order.ask_notional)
+            .bind(&order.activation_price)
+            .bind(&order.callback_rate)
+            .bind(order.price_protection)
+            .bind(&order.stp_mode)
+            .bind(&order.price_match_mode)
+            .bind(order.gtd_auto_cancel_time)
+            .bind(&order.expiry_reason)
+            .bind(order.si)
+            .bind(order.ss)
+            .bind(order.trade_time)
+            .bind(order.trade_id)
+            .bind(&order.modify_id)
+            .bind(&order.envelope_event_type)
+            .bind(order.envelope_event_time)
+            .bind(order.envelope_transaction_time)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            // 非 TRADE 事件 → pe_order_events
+            sqlx::query(
+                r#"
+                INSERT INTO pe_order_events (
+                    client_order_id, order_id, symbol, side, order_type, position_side,
+                    original_order_type, status, execution_type,
+                    orig_qty, original_price, avg_fill_price, filled_qty,
+                    last_fill_qty, last_fill_price, stop_price,
+                    commission, commission_asset, realized_pnl,
+                    reduce_only, is_maker, close_position, time_in_force, working_type,
+                    bids_notional, ask_notional, activation_price, callback_rate,
+                    price_protection, stp_mode, price_match_mode, gtd_auto_cancel_time, expiry_reason,
+                    si, ss, trade_time, trade_id,
+                    modify_id, envelope_event_type, envelope_event_time, envelope_transaction_time
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9,
+                    $10, $11, $12, $13, $14, $15, $16,
+                    $17, $18, $19,
+                    $20, $21, $22, $23, $24,
+                    $25, $26, $27, $28,
+                    $29, $30, $31, $32, $33,
+                    $34, $35, $36, $37,
+                    $38, $39, $40, $41
+                )
+                ON CONFLICT (client_order_id, execution_type, trade_id)
                 DO NOTHING
                 "#,
             )

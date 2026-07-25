@@ -269,7 +269,8 @@ CREATE TABLE IF NOT EXISTS pe_trades (
 CREATE INDEX IF NOT EXISTS idx_pe_trades_symbol_ps ON pe_trades (symbol, position_side, trade_time);
 CREATE INDEX IF NOT EXISTS idx_pe_trades_cid ON pe_trades (client_order_id);
 
--- pe_order_latest 视图: 每个订单取最新事件行, commission/realized_pnl 从 pe_trades 聚合
+-- pe_order_latest 视图: UNION ALL 合并两表取最新行, commission/realized_pnl 从 pe_trades 聚合
+-- pe_order_events 存非 TRADE 事件, pe_trades 存 TRADE 事件, 两表数据互补无冗余
 CREATE OR REPLACE VIEW pe_order_latest AS
 SELECT
     latest.client_order_id,
@@ -315,7 +316,11 @@ SELECT
     latest.envelope_transaction_time
 FROM (
     SELECT DISTINCT ON (client_order_id) *
-    FROM pe_order_events
+    FROM (
+        SELECT * FROM pe_order_events
+        UNION ALL
+        SELECT * FROM pe_trades
+    ) combined
     ORDER BY client_order_id, trade_time DESC, trade_id DESC
 ) latest
 LEFT JOIN (
