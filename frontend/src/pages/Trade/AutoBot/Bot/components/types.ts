@@ -27,10 +27,6 @@ export interface MarketLineProps {
   changePct: number;
   /** bot 配置：杠杆倍数 */
   leverage: number;
-  /** bot 配置：决策间隔（秒） */
-  decideIntervalSecs: number;
-  /** bot 运行状态 */
-  status: string;
 }
 
 /** 账户条 Props */
@@ -45,6 +41,8 @@ export interface StrategyBlockProps {
   stats: AutoBotStats | null;
   totalPnl: number;
   totalPnlPct: number;
+  /** bot 配置：决策间隔（秒） */
+  decideIntervalSecs: number;
 }
 
 /** 仓位卡 Props */

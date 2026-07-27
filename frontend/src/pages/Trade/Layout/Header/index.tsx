@@ -118,11 +118,6 @@ const Header = () => {
               {paperEnabled ? 'Paper' : 'Live'}
             </span>
           )}
-
-          {}
-          <span className="text-caption text-on-surface-tertiary font-mono tabular-nums">
-            {bot?.symbol || ''} &middot; {bot?.leverage || ''}x
-          </span>
         </div>
 
         {}

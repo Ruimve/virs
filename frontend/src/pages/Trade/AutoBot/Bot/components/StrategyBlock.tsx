@@ -5,6 +5,14 @@ import { actionLabel, actionVariant } from '../../../components/utils/utils';
 import type { StrategyBlockProps } from './types';
 import { formatCompact, formatSigned, formatRelativeTime, formatDuration } from './utils';
 
+/** 决策间隔秒数 → 可读格式 */
+function formatInterval(secs: number): string {
+  if (secs <= 0) return '';
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h`;
+}
+
 /** 从 AnalysisLog 提取决策对象（兼容新旧格式） */
 function extractDecision(log: AnalysisLog | null) {
   if (!log?.result) return null;
@@ -62,7 +70,7 @@ function MetaItem({ children }: { children: ReactNode }) {
  *   深度统计行（低权重）
  */
 export const StrategyBlock = memo(
-  ({ bot, decision, stats, totalPnl, totalPnlPct }: StrategyBlockProps) => {
+  ({ bot, decision, stats, totalPnl, totalPnlPct, decideIntervalSecs }: StrategyBlockProps) => {
     const dec = extractDecision(decision);
     const strategyName = deriveStrategyName(bot);
     const direction = deriveDirection(dec?.action);
@@ -74,6 +82,7 @@ export const StrategyBlock = memo(
     const pnlClass =
       totalPnl > 0 ? 'text-success-text' : totalPnl < 0 ? 'text-danger-text' : 'text-on-surface';
 
+    const interval = formatInterval(decideIntervalSecs);
     const lastDecisionTime = formatRelativeTime(decision?.created_at);
     const runningDuration = formatDuration(bot.created_at);
 
@@ -124,7 +133,7 @@ export const StrategyBlock = memo(
           </div>
         )}
 
-        {/* 状态行：动作 Badge + 市况 + 决策时间 + 运行时长 */}
+        {/* 状态行：动作 Badge + 市况 + 决策间隔 + 决策时间 + 运行时长 */}
         <div className="flex items-center flex-wrap text-2xs gap-2">
           {dec?.action && (
             <Badge variant={actionVariant(dec.action)} size="xs">
@@ -135,6 +144,13 @@ export const StrategyBlock = memo(
             <span className="flex items-center gap-1">
               <span className="text-on-surface-tertiary">市况</span>
               <span className="font-semibold text-info-text">{regime}</span>
+            </span>
+          )}
+          {interval && (
+            <span className="flex items-center gap-1">
+              <span className="text-on-surface-faint">·</span>
+              <span className="text-on-surface-tertiary">间隔</span>
+              <span className="font-mono tabular-nums text-on-surface-secondary">{interval}</span>
             </span>
           )}
           {lastDecisionTime && (

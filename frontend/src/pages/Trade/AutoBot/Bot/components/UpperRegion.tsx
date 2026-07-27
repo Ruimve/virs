@@ -27,8 +27,6 @@ export const UpperRegion = memo(
           latestPrice={latestPrice}
           changePct={marketSummary.changePct}
           leverage={bot.leverage}
-          decideIntervalSecs={bot.decide_interval_secs}
-          status={bot.status}
         />
         <AccountBar metrics={accountMetrics} />
         <StrategyBlock
@@ -37,6 +35,7 @@ export const UpperRegion = memo(
           stats={stats}
           totalPnl={totalPnl}
           totalPnlPct={totalPnlPct}
+          decideIntervalSecs={bot.decide_interval_secs}
         />
       </div>
     );
