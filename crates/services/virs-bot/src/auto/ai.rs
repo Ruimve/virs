@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::common::llm_client::LlmClient;
 use crate::common::ports::{CredentialStore, LlmProviderResolver};
-use crate::strategy::output::{StrategyAction, StrategyOutput, ToStrategyOutput};
+use virs_strategy::output::{StrategyAction, StrategyOutput, ToStrategyOutput};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AutoAction {

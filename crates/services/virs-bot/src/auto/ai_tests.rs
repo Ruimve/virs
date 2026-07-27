@@ -1,5 +1,5 @@
 use crate::auto::ai::{AutoAction, AutoDecision};
-use crate::strategy::output::{StrategyAction, ToStrategyOutput};
+use virs_strategy::output::{StrategyAction, ToStrategyOutput};
 use uuid::Uuid;
 
 #[test]

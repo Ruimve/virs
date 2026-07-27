@@ -11,7 +11,7 @@ use crate::grid::ai::{GridAction, GridAiDecision, GridAiService};
 use crate::grid::ports::*;
 use crate::grid::types::{GridEvent, GridLevel, GridState};
 use crate::grid::utils;
-use crate::strategy::prompt::{render, PromptLoader, RenderContext, StrategyType};
+use virs_strategy::prompt::{render, PromptLoader, RenderContext, StrategyType};
 
 pub enum OrderDir {
     Buy,
@@ -1000,13 +1000,13 @@ impl GridWorker {
             .get_account_balance(&self.bot.exchange)
             .await;
 
-        let indicators: crate::common::indicators::MarketIndicators =
+        let indicators: virs_strategy::market::MarketIndicators =
             serde_json::from_value(snapshot.indicators_json.clone()).unwrap_or_else(|e| {
                 tracing::warn!(
                     error = %e,
                     "Failed to deserialize indicators_json for grid LLM — using all-zero defaults"
                 );
-                crate::common::indicators::MarketIndicators::default()
+                virs_strategy::market::MarketIndicators::default()
             });
 
         let last_adjust_time = self

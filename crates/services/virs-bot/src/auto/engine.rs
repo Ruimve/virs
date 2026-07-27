@@ -9,7 +9,7 @@ use crate::auto::ai::AutoAiService;
 use crate::auto::ports::*;
 use crate::auto::types::AutoCommand;
 use crate::auto::worker::AutoWorker;
-use crate::strategy::prompt::PromptLoader;
+use virs_strategy::prompt::PromptLoader;
 use virs_config::TimeConfig;
 use virs_types::position::EngineEvent;
 

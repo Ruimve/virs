@@ -9,7 +9,7 @@ use crate::auto::ai::{AutoAction, AutoAiService, AutoDecision};
 use crate::auto::ports::*;
 use crate::auto::strategy;
 use crate::auto::types::AutoBotConfig;
-use crate::strategy::prompt::{render, PromptLoader, RenderContext, StrategyType};
+use virs_strategy::prompt::{render, PromptLoader, RenderContext, StrategyType};
 use virs_config::TimeConfig;
 use virs_types::client_order_id;
 use virs_types::enums::PositionSide;

@@ -7,7 +7,7 @@ use virs_bot::auto::strategy::{
 use virs_bot::grid::ai::{parse_grid_decision, GridAction};
 use virs_bot::grid::types::GridLevel;
 use virs_bot::grid::utils::calculate_levels;
-use virs_bot::strategy::prompt::render::format_bars_outside;
+use virs_strategy::prompt::render::format_bars_outside;
 use virs_types::grid_port::GridBotConfig;
 
 fn make_bot(upper: f64, lower: f64, count: i32) -> GridBotConfig {

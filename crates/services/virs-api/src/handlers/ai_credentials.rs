@@ -181,7 +181,7 @@ pub async fn test_credential(
     let model = resolve_provider_model(&provider).unwrap_or("deepseek-chat");
 
     let http_client = &state.http_client;
-    match virs_bot::common::ai_client::call_llm_api(
+    match virs_strategy::llm_client::call_llm_api(
         http_client,
         &api_key,
         base_url,

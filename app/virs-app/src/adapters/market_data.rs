@@ -225,7 +225,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             0.0
         };
 
-        let ind = virs_bot::common::indicators::compute_market_indicators(
+        let ind = virs_strategy::market::compute_market_indicators(
             &klines_1h,
             &klines_4h,
             &klines_15m,
@@ -513,7 +513,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
                 (0.0, "N/A".to_string())
             };
 
-        let ind = virs_bot::common::indicators::compute_market_indicators(
+        let ind = virs_strategy::market::compute_market_indicators(
             &klines_1h,
             &klines_4h,
             &klines_15m,

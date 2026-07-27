@@ -3064,6 +3064,7 @@ dependencies = [
  "virs-market",
  "virs-models",
  "virs-position",
+ "virs-strategy",
  "virs-types",
  "virs-utils",
 ]

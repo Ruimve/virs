@@ -3,7 +3,7 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use virs_error::{VirsError, VirsResult};
+use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -69,8 +69,8 @@ Respond in JSON format with:
         symbol, exchange, current_price,
     );
 
-    match call_llm(&state, system_prompt, &user_prompt).await {
-        Ok(result) => Ok(Json(ApiResponse::ok(result))),
+    match state.call_llm(system_prompt, &user_prompt, "virs-api").await {
+        Ok(result) => Ok(Json(ApiResponse::ok(result.content))),
         Err(e) => Err(VirsError::bad_request(format!(
             "AI optimization failed: {}",
             e
@@ -102,8 +102,8 @@ Respond in JSON format with:
 
     let user_prompt = format!("Symbol: {}\nQuestion: {}", symbol, question,);
 
-    match call_llm(&state, system_prompt, &user_prompt).await {
-        Ok(result) => Ok(Json(ApiResponse::ok(result))),
+    match state.call_llm(system_prompt, &user_prompt, "virs-api").await {
+        Ok(result) => Ok(Json(ApiResponse::ok(result.content))),
         Err(e) => Err(VirsError::bad_request(format!("AI explain failed: {}", e))),
     }
 }
@@ -147,8 +147,8 @@ Respond in JSON format with:
         symbol, exchange, current_price, risk_tolerance,
     );
 
-    match call_llm(&state, system_prompt, &user_prompt).await {
-        Ok(result) => Ok(Json(ApiResponse::ok(result))),
+    match state.call_llm(system_prompt, &user_prompt, "virs-api").await {
+        Ok(result) => Ok(Json(ApiResponse::ok(result.content))),
         Err(e) => Err(VirsError::bad_request(format!(
             "AI recommend failed: {}",
             e
@@ -187,25 +187,4 @@ async fn fetch_price_from_kline(
     }
 
     Ok(last.close)
-}
-
-async fn call_llm(
-    state: &AppState,
-    system_prompt: &str,
-    user_prompt: &str,
-) -> VirsResult<serde_json::Value> {
-    let (api_key, base_url, model) = state.resolve_llm_credentials().await?;
-
-    let result = virs_bot::common::ai_client::call_llm_api(
-        &state.http_client,
-        &api_key,
-        &base_url,
-        &model,
-        system_prompt,
-        user_prompt,
-        "virs-api",
-    )
-    .await?;
-
-    Ok(result.content)
 }

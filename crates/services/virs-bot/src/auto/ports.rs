@@ -8,19 +8,19 @@ pub use virs_types::bot::{
 #[derive(Debug, Clone, Default)]
 pub struct AutoMarketSnapshot {
     pub base: virs_types::bot::MarketSnapshot,
-    pub indicators: crate::common::indicators::MarketIndicators,
+    pub indicators: virs_strategy::market::MarketIndicators,
 }
 
 impl AutoMarketSnapshot {
     pub fn from_base(snapshot: virs_types::bot::MarketSnapshot) -> Self {
-        let indicators: crate::common::indicators::MarketIndicators =
+        let indicators: virs_strategy::market::MarketIndicators =
             serde_json::from_value(snapshot.indicators_json.clone()).unwrap_or_else(|e| {
                 tracing::warn!(
                     error = %e,
                     "Failed to deserialize indicators_json — using all-zero defaults. \
                      LLM decisions based on zero indicators may be incorrect."
                 );
-                crate::common::indicators::MarketIndicators::default()
+                virs_strategy::market::MarketIndicators::default()
             });
         Self {
             base: snapshot,

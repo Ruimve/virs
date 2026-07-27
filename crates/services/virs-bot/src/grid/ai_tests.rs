@@ -1,5 +1,5 @@
 use crate::grid::ai::{parse_grid_decision, GridAction, GridAiDecision};
-use crate::strategy::output::{StrategyAction, ToStrategyOutput};
+use virs_strategy::output::{StrategyAction, ToStrategyOutput};
 use uuid::Uuid;
 
 #[test]

@@ -4,7 +4,7 @@ use crate::common::llm_client::LlmClient;
 use crate::common::ports::CredentialStore;
 use crate::common::ports::LlmProviderResolver;
 use crate::grid::ports::GridBotConfig;
-use crate::strategy::output::{StrategyAction, StrategyOutput, ToStrategyOutput};
+use virs_strategy::output::{StrategyAction, StrategyOutput, ToStrategyOutput};
 use tracing::warn;
 use uuid::Uuid;
 use virs_error::BotResult;

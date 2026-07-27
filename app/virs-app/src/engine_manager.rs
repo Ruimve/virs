@@ -341,7 +341,7 @@ impl EngineManager for AppEngineManager {
 
         // 加载策略 prompt 文件（STRATEGIES_DIR 环境变量指向的目录）。
         // 未设置环境变量时返回空 loader，worker 回退到 crate 内硬编码的 DEFAULT_* 常量。
-        let prompt_loader = virs_bot::strategy::prompt::PromptLoader::from_env().await;
+        let prompt_loader = virs_strategy::prompt::PromptLoader::from_env().await;
 
         let (mut grid_engine, grid_cmd_tx, _grid_event_broadcast) = virs_bot::grid::GridEngine::new(
             grid_store,

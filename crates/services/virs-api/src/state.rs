@@ -9,6 +9,7 @@ use virs_bot::grid::types::GridCommand;
 use virs_error::{VirsError, VirsResult};
 use virs_exchange::Exchanges;
 use virs_market::{KlineEngine, OrderBookEngine};
+use virs_strategy::llm_client::{call_llm_api, LlmCallResult};
 use virs_types::position::EngineEvent;
 
 
@@ -98,6 +99,30 @@ impl AppState {
                 "No AI API key configured. Set AI credentials first.",
             )),
         }
+    }
+
+    /// 解析凭证 → 调用 LLM API 的统一入口。
+    ///
+    /// 供所有 API handler 复用,避免各 handler 重复 `resolve_llm_credentials + call_llm_api`。
+    /// `provider_name` 仅用于错误日志标识调用方(如 "auto-ai" / "strategy-selection")。
+    pub async fn call_llm(
+        &self,
+        system_prompt: &str,
+        user_prompt: &str,
+        provider_name: &str,
+    ) -> VirsResult<LlmCallResult> {
+        let (api_key, base_url, model) = self.resolve_llm_credentials().await?;
+        let result = call_llm_api(
+            &self.http_client,
+            &api_key,
+            &base_url,
+            &model,
+            system_prompt,
+            user_prompt,
+            provider_name,
+        )
+        .await?;
+        Ok(result)
     }
 }
 

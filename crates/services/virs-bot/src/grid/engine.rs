@@ -9,7 +9,7 @@ use crate::grid::ai::GridAiService;
 use crate::grid::ports::*;
 use crate::grid::types::{GridCommand, GridEvent};
 use crate::grid::worker::GridWorker;
-use crate::strategy::prompt::PromptLoader;
+use virs_strategy::prompt::PromptLoader;
 use virs_config::TimeConfig;
 
 pub struct GridEngine {
