@@ -10,8 +10,8 @@
 //! 注意：本模块只定义"输出契约"，不改变 worker 的 `execute_decision` 内部逻辑。
 //! 各策略的 `to_output` 是纯转换函数，可独立测试。
 //!
-//! [`AutoDecision`]: crate::auto::ai::AutoDecision
-//! [`GridAiDecision`]: crate::grid::ai::GridAiDecision
+//! [`AutoDecision`]: AutoDecision
+//! [`GridAiDecision`]: GridAiDecision
 
 use uuid::Uuid;
 

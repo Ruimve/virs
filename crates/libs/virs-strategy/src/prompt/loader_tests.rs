@@ -1,5 +1,5 @@
-use crate::strategy::prompt::loader::{load_dir_blocking, ENV_STRATEGIES_DIR};
-use crate::strategy::prompt::template::{MetaFile, PromptSource, StrategyType};
+use crate::prompt::loader::{load_dir_blocking, ENV_STRATEGIES_DIR};
+use crate::prompt::template::{MetaFile, PromptSource, StrategyType};
 use std::path::{Path, PathBuf};
 
 fn write_template(dir: &Path, st: StrategyType, name: &str, system: &str, user: &str) {

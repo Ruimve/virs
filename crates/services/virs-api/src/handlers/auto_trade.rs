@@ -5,6 +5,9 @@ use axum::{
 };
 use serde::Deserialize;
 use sqlx::FromRow;
+use virs_bot::strategy::prompt::{PromptLoader, StrategyType};
+use virs_bot::strategy::indicator::library::{atr, closes, rsi_at};
+use virs_bot::strategy::{call_llm_api};
 use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
@@ -146,9 +149,32 @@ pub async fn create_bot(
     };
 
     let id = uuid::Uuid::new_v4();
+
+    // 策略选择：从 PromptLoader 获取 auto 策略列表
+    let loader = PromptLoader::from_env().await;
+    let strategies = loader.list(StrategyType::Auto).await;
+
+    let strategy_file = match strategies.len() {
+        0 => return Err(VirsError::bad_request(
+            "No auto strategy available. Please create a strategy first.",
+        )),
+        1 => strategies[0].clone(),
+        _ => {
+            // 多策略：LLM 分析市场数据后选择
+            select_strategy_by_llm(&state, &loader, &strategies, exchange, symbol).await?
+        }
+    };
+
+    // 校验策略在 loader 中存在
+    if loader.get(StrategyType::Auto, &strategy_file).await.is_none() {
+        return Err(VirsError::bad_request(
+            format!("Strategy '{strategy_file}' not found in loaded strategies"),
+        ));
+    }
+
     sqlx::query(
-        r#"INSERT INTO qd_auto_bots (id, user_id, name, symbol, exchange, leverage, max_position_pct, decide_interval_secs, paper_mode, initial_capital, status, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'stopped', NOW(), NOW())"#,
+        r#"INSERT INTO qd_auto_bots (id, user_id, name, symbol, exchange, leverage, max_position_pct, decide_interval_secs, paper_mode, initial_capital, status, strategy_file, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'stopped', $11, NOW(), NOW())"#,
     )
     .bind(id)
     .bind(user_id)
@@ -160,12 +186,150 @@ pub async fn create_bot(
     .bind(decide_interval_secs)
     .bind(paper_mode)
     .bind(initial_capital)
+    .bind(&strategy_file)
     .execute(&state.db_pool)
     .await?;
 
+    // 如果是 LLM 选择的策略，记录选择日志
+    if strategies.len() > 1 {
+        let _ = sqlx::query(
+            r#"INSERT INTO qd_auto_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, strategy_file, completed_at)
+               VALUES ($1, 'strategy_selection', $2, $3, 'completed', $4, $5, NOW())"#,
+        )
+        .bind(id)
+        .bind("You are a trading strategy selector. Choose the best strategy for the current market conditions.")
+        .bind(format!("Symbol: {}, Exchange: {}, Strategies: {:?}", symbol, exchange, strategies))
+        .bind(serde_json::json!({"selected": strategy_file}))
+        .bind(&strategy_file)
+        .execute(&state.db_pool)
+        .await;
+    }
+
     Ok(Json(ApiResponse::ok(
-        serde_json::json!({"id": id.to_string()}),
+        serde_json::json!({"id": id.to_string(), "strategy_file": strategy_file}),
     )))
+}
+
+/// LLM 选择策略：获取市场快照 + 构造选择 prompt + 调用 LLM + 解析返回
+async fn select_strategy_by_llm(
+    state: &AppState,
+    loader: &PromptLoader,
+    strategies: &[String],
+    exchange: &str,
+    symbol: &str,
+) -> Result<String, VirsError> {
+    // 获取 H1 K 线数据
+    let candles = state
+        .kline_engine
+        .get_klines_async(exchange, symbol, virs_market::Timeframe::H1)
+        .await
+        .ok_or_else(|| {
+            VirsError::bad_request(format!(
+                "No kline data available for {} on {} — cannot select strategy",
+                symbol, exchange
+            ))
+        })?;
+
+    if candles.is_empty() {
+        return Err(VirsError::bad_request(format!(
+            "Kline data for {} on {} is empty — cannot select strategy",
+            symbol, exchange
+        )));
+    }
+
+    let klines: Vec<virs_models::Kline> = candles
+        .iter()
+        .map(|c| virs_models::Kline {
+            open_time: c.open_time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: c.volume,
+            close_time: c.close_time,
+            quote_volume: c.quote_volume,
+            trades: c.trades,
+            symbol: symbol.to_string(),
+            exchange: exchange.to_string(),
+            interval: "1h".to_string(),
+        })
+        .collect();
+
+    // 计算基础指标
+    let close_prices = closes(&klines);
+    let current_price = close_prices.last().copied().unwrap_or(0.0);
+    let atr_series = atr(&klines, 14);
+    let atr_val = atr_series.last().copied().unwrap_or(0.0);
+    let rsi_val = rsi_at(&klines, klines.len().saturating_sub(1), 14);
+
+    // 获取策略元数据
+    let mut strategy_details: Vec<serde_json::Value> = Vec::new();
+    for name in strategies {
+        if let Some(tpl) = loader.get(StrategyType::Auto, name).await {
+            strategy_details.push(serde_json::json!({
+                "name": tpl.name,
+                "description": tpl.description,
+            }));
+        }
+    }
+
+    let system_prompt = r#"You are a trading strategy selector. Based on the current market conditions and available strategies, select the most suitable strategy.
+Respond in JSON format with:
+{
+  "strategy_name": "the_strategy_name",
+  "reason": "brief explanation",
+  "confidence": 0.8
+}"#;
+
+    let user_prompt = format!(
+        "Symbol: {}, Exchange: {}, Current Price: {:.2}\n\
+         Market Indicators: ATR(14)={:.4}, RSI(14)={:.2}\n\
+         Available Strategies: {}\n\
+         Please select the best strategy for current market conditions.",
+        symbol,
+        exchange,
+        current_price,
+        atr_val,
+        rsi_val,
+        serde_json::to_string(&strategy_details).unwrap_or_default(),
+    );
+
+    let (api_key, base_url, model) = state.resolve_llm_credentials().await?;
+
+    let result = call_llm_api(
+        &state.http_client,
+        &api_key,
+        &base_url,
+        &model,
+        system_prompt,
+        &user_prompt,
+        "strategy-selection",
+    )
+    .await
+    .map_err(|e| VirsError::bad_request(format!("LLM strategy selection failed: {e}")))?;
+
+    // 解析 LLM 返回的策略名（content 已是 JSON Value）
+    let parsed = &result.content;
+
+    let selected = parsed["strategy_name"]
+        .as_str()
+        .ok_or_else(|| VirsError::bad_request("LLM did not return strategy_name"))?;
+
+    // 校验 LLM 返回的策略名在列表中
+    if !strategies.iter().any(|s| s == selected) {
+        return Err(VirsError::bad_request(format!(
+            "LLM selected strategy '{selected}' which is not in the available list: {:?}",
+            strategies
+        )));
+    }
+
+    tracing::info!(
+        selected = %selected,
+        confidence = ?parsed["confidence"],
+        "LLM strategy selection completed"
+    );
+
+    Ok(selected.to_string())
 }
 
 pub async fn list_bots(
@@ -246,6 +410,21 @@ pub async fn get_bot(
         }
     };
 
+    // 从 PromptLoader 查询策略元数据（不含完整 prompt 文本）
+    let strategy_detail = if let Some(ref file) = bot.strategy_file {
+        let loader = PromptLoader::from_env().await;
+        loader.get(StrategyType::Auto, file).await.map(|tpl| {
+            serde_json::json!({
+                "name": tpl.name,
+                "description": tpl.description,
+                "version": tpl.version,
+                "source": tpl.source,
+            })
+        })
+    } else {
+        None
+    };
+
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "bot": {
             "id": bot.id.to_string(),
@@ -266,9 +445,77 @@ pub async fn get_bot(
             "total_trades": bot.total_trades,
             "win_trades": bot.win_trades,
             "loss_trades": bot.loss_trades,
+            "strategy_file": bot.strategy_file,
             "created_at": bot.created_at.to_rfc3339(),
             "updated_at": bot.updated_at.to_rfc3339(),
         },
+        "strategy": strategy_detail,
+    }))))
+}
+
+/// 更新 bot 配置（当前仅支持变更 strategy_file）。
+///
+/// 约束：bot 必须处于 stopped 状态才能更新。
+/// 前端不暴露此接口，仅作为后端 API 供未来使用。
+pub async fn update_bot(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<uuid::Uuid>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<ApiResponse>, VirsError> {
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
+
+    // 查询 bot 当前状态
+    let bot = sqlx::query_as::<_, virs_models::AutoBot>(
+        "SELECT * FROM qd_auto_bots WHERE id = $1 AND user_id = $2",
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(&state.db_pool)
+    .await?;
+
+    let bot = match bot {
+        Some(b) => b,
+        None => return Err(VirsError::not_found("Bot not found")),
+    };
+
+    // 运行中拒绝更新
+    if bot.is_running() {
+        return Err(VirsError::conflict(
+            "Cannot update bot while it is running. Please stop the bot first.",
+        ));
+    }
+
+    // 解析新 strategy_file
+    let new_strategy_file = body["strategy_file"]
+        .as_str()
+        .ok_or_else(|| VirsError::bad_request("strategy_file is required"))?;
+
+    // 校验策略在 loader 中存在
+    let loader = PromptLoader::from_env().await;
+    if loader.get(StrategyType::Auto, new_strategy_file).await.is_none() {
+        return Err(VirsError::bad_request(format!(
+            "Strategy '{new_strategy_file}' not found in loaded strategies"
+        )));
+    }
+
+    // UPDATE
+    sqlx::query("UPDATE qd_auto_bots SET strategy_file = $2, updated_at = NOW() WHERE id = $1")
+        .bind(id)
+        .bind(new_strategy_file)
+        .execute(&state.db_pool)
+        .await?;
+
+    tracing::info!(
+        bot_id = %id,
+        old_strategy = ?bot.strategy_file,
+        new_strategy = %new_strategy_file,
+        "Bot strategy updated"
+    );
+
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "id": id.to_string(),
+        "strategy_file": new_strategy_file,
     }))))
 }
 
@@ -639,8 +886,8 @@ pub async fn get_analysis_logs(
     .fetch_one(&state.db_pool)
     .await?;
 
-    let logs = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, String, String, String, serde_json::Value, Option<String>, String, String, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT l.id, l.bot_id, l.analysis_type, l.status, l.system_prompt, l.result, l.error, l.user_prompt, l.llm_model, l.created_at
+    let logs = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, String, String, String, serde_json::Value, Option<String>, String, String, chrono::DateTime<chrono::Utc>, Option<String>)>(
+        r#"SELECT l.id, l.bot_id, l.analysis_type, l.status, l.system_prompt, l.result, l.error, l.user_prompt, l.llm_model, l.created_at, l.strategy_file
            FROM qd_auto_analysis_logs l
            JOIN qd_auto_bots b ON l.bot_id = b.id
            WHERE l.bot_id = $1 AND b.user_id = $2
@@ -654,7 +901,7 @@ pub async fn get_analysis_logs(
     .await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
-        "items": logs.iter().map(|(id, bot_id, analysis_type, status, system_prompt, result, error, user_prompt, llm_model, created_at)| {
+        "items": logs.iter().map(|(id, bot_id, analysis_type, status, system_prompt, result, error, user_prompt, llm_model, created_at, strategy_file)| {
             serde_json::json!({
                 "id": id.to_string(),
                 "bot_id": bot_id.to_string(),
@@ -665,6 +912,7 @@ pub async fn get_analysis_logs(
                 "result": result,
                 "error": error,
                 "llm_model": llm_model,
+                "strategy_file": strategy_file,
                 "created_at": created_at.to_rfc3339(),
             })
         }).collect::<Vec<_>>(),

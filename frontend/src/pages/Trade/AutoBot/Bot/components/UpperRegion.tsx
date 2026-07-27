@@ -11,6 +11,7 @@ import { StrategyBlock } from './StrategyBlock';
 export const UpperRegion = memo(
   ({
     bot,
+    strategy,
     latestPrice,
     marketSummary,
     decision,
@@ -31,6 +32,7 @@ export const UpperRegion = memo(
         <AccountBar metrics={accountMetrics} />
         <StrategyBlock
           bot={bot}
+          strategy={strategy}
           decision={decision}
           stats={stats}
           totalPnl={totalPnl}

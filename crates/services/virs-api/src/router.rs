@@ -117,6 +117,7 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::grid::get_analysis_logs),
         )
         .route("/api/grid/{id}", get(handlers::grid::get_bot))
+        .route("/api/grid/{id}", put(handlers::grid::update_bot))
         .route("/api/grid/{id}/start", post(handlers::grid::start_bot))
         .route("/api/grid/{id}/stop", post(handlers::grid::stop_bot))
         .route("/api/grid/{id}/delete", delete(handlers::grid::delete_bot))
@@ -130,6 +131,7 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::auto_trade::get_analysis_logs),
         )
         .route("/api/auto/{id}", get(handlers::auto_trade::get_bot))
+        .route("/api/auto/{id}", put(handlers::auto_trade::update_bot))
         .route(
             "/api/auto/{id}/start",
             post(handlers::auto_trade::start_bot),

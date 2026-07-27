@@ -10,8 +10,8 @@
 use std::collections::{HashMap, HashSet};
 use virs_models::Kline;
 
-use crate::strategy::indicator::library as lib;
-use crate::strategy::indicator::spec::{IndicatorSpec, Timeframe};
+use crate::indicator::library as lib;
+use crate::indicator::spec::{IndicatorSpec, Timeframe};
 
 /// 三周期 K 线输入。对应现有 `compute_market_indicators` 的三个参数。
 #[derive(Debug, Clone, Copy)]

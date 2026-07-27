@@ -1,5 +1,5 @@
-use crate::strategy::prompt::ai_generator::{build_meta_system_prompt, build_meta_user_prompt, GenerateRequest};
-use crate::strategy::prompt::template::StrategyType;
+use crate::prompt::ai_generator::{build_meta_system_prompt, build_meta_user_prompt, GenerateRequest};
+use crate::prompt::template::StrategyType;
 
 #[test]
 fn g1_meta_system_prompt_contains_json_constraint() {

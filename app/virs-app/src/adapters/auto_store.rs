@@ -157,11 +157,12 @@ impl AutoStore for PgAutoStore {
         client_order_id: &str,
         stop_loss: f64,
         take_profit: f64,
+        strategy_file: &Option<String>,
     ) -> VirsResult<()> {
         sqlx::query(
             r#"INSERT INTO pe_auto_order_context
-               (client_order_id, bot_id, user_id, symbol, exchange, order_role, status, stop_loss, take_profit)
-               VALUES ($1, $2, $3, $4, $5, 'open', 'open', $6, $7)"#,
+               (client_order_id, bot_id, user_id, symbol, exchange, order_role, status, stop_loss, take_profit, strategy_file)
+               VALUES ($1, $2, $3, $4, $5, 'open', 'open', $6, $7, $8)"#,
         )
         .bind(client_order_id)
         .bind(bot_id)
@@ -170,6 +171,7 @@ impl AutoStore for PgAutoStore {
         .bind(exchange)
         .bind(stop_loss)
         .bind(take_profit)
+        .bind(strategy_file)
         .execute(&self.db)
         .await?;
         Ok(())
@@ -195,8 +197,8 @@ impl AutoStore for PgAutoStore {
 
         sqlx::query(
             r#"INSERT INTO pe_auto_order_context
-               (client_order_id, bot_id, user_id, symbol, exchange, order_role, status, paired_client_order_id, close_reason)
-               SELECT $1, bot_id, user_id, symbol, exchange, 'close', 'closed', client_order_id, $2
+               (client_order_id, bot_id, user_id, symbol, exchange, order_role, status, paired_client_order_id, close_reason, strategy_file)
+               SELECT $1, bot_id, user_id, symbol, exchange, 'close', 'closed', client_order_id, $2, strategy_file
                FROM pe_auto_order_context
                WHERE client_order_id = $3 AND order_role = 'open'"#,
         )
@@ -279,11 +281,12 @@ impl AutoStore for PgAutoStore {
         exchange: &str,
         close_client_order_id: &str,
         close_reason: &str,
+        strategy_file: &Option<String>,
     ) -> VirsResult<()> {
         sqlx::query(
             r#"INSERT INTO pe_auto_order_context
-               (client_order_id, bot_id, user_id, symbol, exchange, order_role, status, close_reason)
-               VALUES ($1, $2, $3, $4, $5, 'close', 'orphaned', $6)"#,
+               (client_order_id, bot_id, user_id, symbol, exchange, order_role, status, close_reason, strategy_file)
+               VALUES ($1, $2, $3, $4, $5, 'close', 'orphaned', $6, $7)"#,
         )
         .bind(close_client_order_id)
         .bind(bot_id)
@@ -291,6 +294,7 @@ impl AutoStore for PgAutoStore {
         .bind(symbol)
         .bind(exchange)
         .bind(close_reason)
+        .bind(strategy_file)
         .execute(&self.db)
         .await?;
         Ok(())
@@ -305,6 +309,7 @@ impl AutoStore for PgAutoStore {
         result: &serde_json::Value,
         error: Option<&str>,
         llm_model: &str,
+        strategy_file: &Option<String>,
     ) -> VirsResult<Uuid> {
         let status = if error.is_some() {
             "failed"
@@ -312,12 +317,13 @@ impl AutoStore for PgAutoStore {
             "completed"
         };
         let row: (Uuid,) = sqlx::query_as(
-            r#"INSERT INTO qd_auto_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, error, llm_model, completed_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+            r#"INSERT INTO qd_auto_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, error, llm_model, completed_at, strategy_file)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
                RETURNING id"#,
         )
         .bind(bot_id).bind(analysis_type).bind(system_prompt).bind(user_prompt)
         .bind(status).bind(result).bind(error).bind(llm_model)
+        .bind(strategy_file)
         .fetch_one(&self.db).await?;
         Ok(row.0)
     }

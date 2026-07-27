@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from 'react';
-import type { AnalysisLog, AutoBot } from '@/service/types';
+import type { AnalysisLog, AutoBot, StrategyDetail } from '@/service/types';
 import { Badge } from '@/components/Badge';
 import { actionLabel, actionVariant } from '../../../components/utils/utils';
 import type { StrategyBlockProps } from './types';
@@ -28,17 +28,13 @@ function extractDecision(log: AnalysisLog | null) {
 }
 
 /**
- * 策略类型名：仅基于 market_regime 推导策略类别。
- * 不混入具体动作（开多/做空/持有），动作由下方 Badge 单独展示。
+ * 策略名：优先使用 bot 绑定的策略文件名或策略元数据名。
+ * 不再从 market_regime 伪造策略类型。
  */
-function deriveStrategyName(bot: AutoBot): string {
-  const regime = bot.market_regime ?? 'unknown';
-
-  if (regime.includes('trending_up')) return '趋势跟踪';
-  if (regime.includes('trending_down')) return '趋势跟踪';
-  if (regime.includes('ranging')) return '区间震荡';
-  if (regime.includes('volatile')) return '波动捕获';
-  return 'AI 自主策略';
+function resolveStrategyName(bot: AutoBot, strategy: StrategyDetail | null | undefined): string {
+  if (strategy?.name) return strategy.name;
+  if (bot.strategy_file) return bot.strategy_file;
+  return '未绑定策略';
 }
 
 /** 基于动作推导策略方向后缀 */
@@ -70,9 +66,10 @@ function MetaItem({ children }: { children: ReactNode }) {
  *   深度统计行（低权重）
  */
 export const StrategyBlock = memo(
-  ({ bot, decision, stats, totalPnl, totalPnlPct, decideIntervalSecs }: StrategyBlockProps) => {
+  ({ bot, strategy, decision, stats, totalPnl, totalPnlPct, decideIntervalSecs }: StrategyBlockProps) => {
     const dec = extractDecision(decision);
-    const strategyName = deriveStrategyName(bot);
+    const strategyName = resolveStrategyName(bot, strategy);
+    const strategyDesc = strategy?.description;
     const direction = deriveDirection(dec?.action);
     const reason = dec?.reason || bot.ai_analysis || '';
     const confidence = dec?.confidence;
@@ -126,10 +123,10 @@ export const StrategyBlock = memo(
           </div>
         </div>
 
-        {/* AI 推理引用 */}
-        {reason && (
+        {/* 策略描述 / AI 推理引用 */}
+        {(reason || strategyDesc) && (
           <div className="border-l-2 border-accent-muted pl-2 text-2xs text-on-surface-secondary leading-relaxed line-clamp-3">
-            {reason}
+            {reason || strategyDesc}
           </div>
         )}
 

@@ -3035,6 +3035,7 @@ dependencies = [
  "virs-exchange",
  "virs-market",
  "virs-models",
+ "virs-strategy",
  "virs-types",
  "virs-utils",
 ]
@@ -3086,6 +3087,7 @@ dependencies = [
  "virs-config",
  "virs-error",
  "virs-models",
+ "virs-strategy",
  "virs-types",
 ]
 
@@ -3202,6 +3204,24 @@ dependencies = [
  "virs-error",
  "virs-exchange",
  "virs-types",
+]
+
+[[package]]
+name = "virs-strategy"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "talib-rs",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
+ "virs-error",
+ "virs-models",
 ]
 
 [[package]]

@@ -17,8 +17,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-use crate::strategy::prompt::template::{MetaFile, PromptTemplate, StrategyType};
-use crate::strategy::prompt::validator::validate;
+use crate::prompt::template::{MetaFile, PromptTemplate, StrategyType};
+use crate::prompt::validator::validate;
 
 /// 环境变量名。
 pub const ENV_STRATEGIES_DIR: &str = "STRATEGIES_DIR";

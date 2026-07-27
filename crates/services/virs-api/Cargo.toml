@@ -9,6 +9,7 @@ virs-error = { path = "../../libs/virs-error", features = ["axum", "sqlx"] }
 virs-models = { path = "../../libs/virs-models" }
 virs-utils = { path = "../../libs/virs-utils" }
 virs-bot = { path = "../virs-bot" }
+virs-strategy = { path = "../../libs/virs-strategy" }
 virs-exchange = { path = "../../libs/virs-exchange" }
 virs-market = { path = "../virs-market" }
 virs-ccxt = { path = "../../libs/virs-ccxt" }

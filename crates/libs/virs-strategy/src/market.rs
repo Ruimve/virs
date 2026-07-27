@@ -2,19 +2,19 @@
 //!
 //! 本模块保留 [`MarketIndicators`] 作为上游 `MarketDataProvider` 与 bot worker 之间的
 //! JSON 传输格式（`indicators_json`），但内部计算已委托给
-//! [`crate::strategy::indicator`] 统一指标库。
+//! [`crate::indicator`] 统一指标库。
 //!
-//! 原子计算函数从本模块迁移至 `strategy::indicator::library`，此处通过 `pub use`
+//! 原子计算函数从本模块迁移至 `indicator::library`，此处通过 `pub use`
 //! 转发以保持向后兼容（`market_data.rs` 等外部调用方无需改动）。
 
 use virs_models::Kline;
 
-use crate::strategy::indicator::{
+use crate::indicator::{
     all_market_indicators_specs, IndicatorSet, IndicatorSpec, KlineSet, Timeframe,
 };
 
 // 重新导出原子计算函数，保持向后兼容。
-pub use crate::strategy::indicator::library::{
+pub use crate::indicator::library::{
     adx_at, atr, atr_at, bbands_at, bbands_width_at, closes, compute_bars_outside_band,
     compute_ema_cross_bars_ago, ema_at, find_round_number, highest_at, highs, lows, macd_at,
     macd_histogram_at, macd_signal_at, rsi_at, sma_at_from, volume_sma_at,
@@ -23,7 +23,7 @@ pub use crate::strategy::indicator::library::{
 /// 市场指标快照。作为 `indicators_json` 的 JSON 传输格式。
 ///
 /// 注意：本 struct 仅用于过渡期的 JSON 序列化/反序列化。
-/// 新代码应直接使用 [`crate::strategy::indicator::IndicatorSet`]。
+/// 新代码应直接使用 [`crate::indicator::IndicatorSet`]。
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct MarketIndicators {
     pub current_price: f64,

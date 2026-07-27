@@ -137,11 +137,12 @@ impl GridStore for PgGridStore {
         exchange: &str,
         grid_level: i32,
         client_order_id: &str,
+        strategy_file: &Option<String>,
     ) -> VirsResult<()> {
         sqlx::query(
             r#"INSERT INTO pe_grid_order_context
-               (client_order_id, bot_id, user_id, symbol, exchange, grid_level, order_role, status)
-               VALUES ($1, $2, $3, $4, $5, $6, 'open', 'open')"#,
+               (client_order_id, bot_id, user_id, symbol, exchange, grid_level, order_role, status, strategy_file)
+               VALUES ($1, $2, $3, $4, $5, $6, 'open', 'open', $7)"#,
         )
         .bind(client_order_id)
         .bind(bot_id)
@@ -149,6 +150,7 @@ impl GridStore for PgGridStore {
         .bind(symbol)
         .bind(exchange)
         .bind(grid_level)
+        .bind(strategy_file)
         .execute(&self.db)
         .await?;
         Ok(())
@@ -173,8 +175,8 @@ impl GridStore for PgGridStore {
 
         sqlx::query(
             r#"INSERT INTO pe_grid_order_context
-               (client_order_id, bot_id, user_id, symbol, exchange, grid_level, order_role, status, paired_client_order_id)
-               SELECT $1, bot_id, user_id, symbol, exchange, grid_level, 'close', 'closed', client_order_id
+               (client_order_id, bot_id, user_id, symbol, exchange, grid_level, order_role, status, paired_client_order_id, strategy_file)
+               SELECT $1, bot_id, user_id, symbol, exchange, grid_level, 'close', 'closed', client_order_id, strategy_file
                FROM pe_grid_order_context
                WHERE client_order_id = $2 AND order_role = 'open'"#,
         )
@@ -207,11 +209,12 @@ impl GridStore for PgGridStore {
         exchange: &str,
         grid_level: i32,
         close_client_order_id: &str,
+        strategy_file: &Option<String>,
     ) -> VirsResult<()> {
         sqlx::query(
             r#"INSERT INTO pe_grid_order_context
-               (client_order_id, bot_id, user_id, symbol, exchange, grid_level, order_role, status)
-               VALUES ($1, $2, $3, $4, $5, $6, 'close', 'orphaned')"#,
+               (client_order_id, bot_id, user_id, symbol, exchange, grid_level, order_role, status, strategy_file)
+               VALUES ($1, $2, $3, $4, $5, $6, 'close', 'orphaned', $7)"#,
         )
         .bind(close_client_order_id)
         .bind(bot_id)
@@ -219,6 +222,7 @@ impl GridStore for PgGridStore {
         .bind(symbol)
         .bind(exchange)
         .bind(grid_level)
+        .bind(strategy_file)
         .execute(&self.db)
         .await?;
         Ok(())
@@ -335,6 +339,7 @@ impl GridStore for PgGridStore {
         result: &serde_json::Value,
         error: Option<&str>,
         llm_model: &str,
+        strategy_file: &Option<String>,
     ) -> VirsResult<()> {
         let status = if error.is_some() {
             "failed"
@@ -342,11 +347,12 @@ impl GridStore for PgGridStore {
             "completed"
         };
         sqlx::query(
-            r#"INSERT INTO qd_grid_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, error, llm_model, completed_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())"#,
+            r#"INSERT INTO qd_grid_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, error, llm_model, completed_at, strategy_file)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)"#,
         )
         .bind(bot_id).bind(analysis_type).bind(system_prompt).bind(user_prompt)
         .bind(status).bind(result).bind(error).bind(llm_model)
+        .bind(strategy_file)
         .execute(&self.db).await?;
         Ok(())
     }

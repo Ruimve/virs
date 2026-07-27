@@ -15,9 +15,9 @@ use std::path::PathBuf;
 
 use virs_error::{BotError, BotResult};
 
-use crate::strategy::prompt::loader::ENV_STRATEGIES_DIR;
-use crate::strategy::prompt::template::{MetaFile, PromptTemplate};
-use crate::strategy::prompt::validator::validate;
+use crate::prompt::loader::ENV_STRATEGIES_DIR;
+use crate::prompt::template::{MetaFile, PromptTemplate};
+use crate::prompt::validator::validate;
 
 /// 保存策略模板到文件夹。
 ///
@@ -95,7 +95,7 @@ pub fn save_template(template: &PromptTemplate, overwrite: bool) -> BotResult<Pa
 
 /// 删除策略模板文件夹。
 pub fn delete_template(
-    strategy_type: crate::strategy::prompt::template::StrategyType,
+    strategy_type: crate::prompt::template::StrategyType,
     name: &str,
 ) -> BotResult<()> {
     let dir = std::env::var(ENV_STRATEGIES_DIR).map_err(|_| {

@@ -36,6 +36,7 @@ pub trait AutoStore: Send + Sync {
     ) -> VirsResult<()>;
 
     /// 记录开仓 context — INSERT pe_auto_order_context (order_role='open', status='open')
+    /// strategy_file 为行级快照，INSERT 时从 bot config 冻结
     async fn record_open_trade(
         &self,
         bot_id: Uuid,
@@ -45,6 +46,7 @@ pub trait AutoStore: Send + Sync {
         client_order_id: &str,
         stop_loss: f64,
         take_profit: f64,
+        strategy_file: &Option<String>,
     ) -> VirsResult<()>;
 
     /// 记录平仓 context — UPDATE open row status='closed' + INSERT close row
@@ -75,6 +77,7 @@ pub trait AutoStore: Send + Sync {
     ) -> VirsResult<Option<(String, String, DateTime<Utc>)>>;
 
     /// 记录孤儿平仓 — INSERT close context row, status='orphaned'
+    /// strategy_file 为行级快照
     async fn record_orphaned_close_trade(
         &self,
         bot_id: Uuid,
@@ -83,6 +86,7 @@ pub trait AutoStore: Send + Sync {
         exchange: &str,
         close_client_order_id: &str,
         close_reason: &str,
+        strategy_file: &Option<String>,
     ) -> VirsResult<()>;
 
     async fn save_analysis_log(
@@ -94,6 +98,7 @@ pub trait AutoStore: Send + Sync {
         result: &serde_json::Value,
         error: Option<&str>,
         llm_model: &str,
+        strategy_file: &Option<String>,
     ) -> VirsResult<Uuid>;
 
     async fn update_analysis_log_execution(
@@ -132,6 +137,6 @@ pub struct AutoBotConfig {
     pub loss_trades: i32,
     pub last_decided_at: Option<DateTime<Utc>>,
     /// 策略 prompt 文件夹名。加载时查 `strategies/auto/{strategy_file}/`。
-    /// 为 None 时回退到 crate 内硬编码的 DEFAULT_SYSTEM_PROMPT / DEFAULT_USER_PROMPT_TEMPLATE。
+    /// 必填项，创建 bot 时由策略选择逻辑写入。worker 缺失时报错并跳过决策。
     pub strategy_file: Option<String>,
 }

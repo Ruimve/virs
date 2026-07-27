@@ -11,7 +11,7 @@
 
 use std::collections::HashSet;
 
-use crate::strategy::prompt::template::{PromptSource, PromptTemplate, StrategyType};
+use crate::prompt::template::{PromptSource, PromptTemplate, StrategyType};
 
 /// 占位符白名单。覆盖 auto + grid 两个默认 prompt 中出现的全部占位符。
 ///

@@ -1,22 +1,17 @@
 [package]
-name = "virs-bot"
+name = "virs-strategy"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-types = { path = "../../libs/virs-types" }
-virs-models = { path = "../../libs/virs-models" }
-virs-error = { path = "../../libs/virs-error", features = ["reqwest"] }
-virs-config = { path = "../../libs/virs-config" }
-virs-strategy = { path = "../../libs/virs-strategy" }
+virs-error = { path = "../virs-error", features = ["reqwest"] }
+virs-models = { path = "../virs-models" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
-async-trait = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-dashmap = { workspace = true }
 reqwest = { workspace = true }
 talib-rs = { workspace = true }
 thiserror = { workspace = true }

@@ -1,5 +1,5 @@
-use crate::strategy::prompt::template::{PromptSource, PromptTemplate, StrategyType};
-use crate::strategy::prompt::validator::{extract_placeholders, is_ai_generated, validate, ValidationError};
+use crate::prompt::template::{PromptSource, PromptTemplate, StrategyType};
+use crate::prompt::validator::{extract_placeholders, is_ai_generated, validate, ValidationError};
 use std::collections::HashSet;
 
 fn make_valid_template() -> PromptTemplate {

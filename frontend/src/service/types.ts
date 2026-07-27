@@ -88,6 +88,13 @@ export interface BotHeaderInfo {
   leverage: number;
 }
 
+export interface StrategyDetail {
+  name: string;
+  description: string;
+  version: number;
+  source: { kind: 'human' } | { kind: 'aigenerated'; model: string };
+}
+
 export interface AutoBot {
   id: string;
   name: string;
@@ -104,6 +111,7 @@ export interface AutoBot {
   total_trades: number;
   win_trades: number;
   loss_trades: number;
+  strategy_file: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -142,6 +150,7 @@ export interface AutoTrade {
 
 export interface AutoBotDetail {
   bot: AutoBot;
+  strategy: StrategyDetail | null;
 }
 
 export interface AutoTradesPage {
@@ -197,6 +206,7 @@ export interface GridBot {
   market_regime: string | null;
   dynamic_adjust: boolean;
   ai_analysis: string | null;
+  strategy_file: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -234,6 +244,7 @@ export interface GridTrade {
 
 export interface GridBotDetail {
   bot: GridBot;
+  strategy: StrategyDetail | null;
   grid_levels: GridLevelInfo[];
 }
 
@@ -290,6 +301,7 @@ export interface AnalysisLog {
     [key: string]: any;
   } | null;
   llm_model?: string;
+  strategy_file?: string | null;
   error?: string;
   created_at: string;
 }

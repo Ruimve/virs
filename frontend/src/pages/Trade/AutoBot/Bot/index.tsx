@@ -116,7 +116,7 @@ function computeMarketSummary(klineData: KlineCandle[], timeframe: string) {
 }
 
 const Bot = () => {
-  const { bot } = useBot();
+  const { bot, strategy } = useBot();
   const { positions } = usePositionContext();
 
   const [klineTimeframe, setKlineTimeframe] = useState('15m');
@@ -229,6 +229,7 @@ const Bot = () => {
       {/* 上区：市场 + 账户 + AI 策略（白色） */}
       <UpperRegion
         bot={autoBot}
+        strategy={strategy}
         latestPrice={latestPrice}
         marketSummary={marketSummary}
         decision={latestDecision}

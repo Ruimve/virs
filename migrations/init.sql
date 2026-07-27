@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS qd_grid_bots (
     system_prompt TEXT,
     user_prompt TEXT,
 
-    -- 策略 prompt 文件名（STRATEGIES_DIR/grid/{strategy_file}.json）；NULL 时回退到 DEFAULT_* 常量
+    -- 策略 prompt 文件名（STRATEGIES_DIR/grid/{strategy_file}/）；必填，创建 bot 时由策略选择逻辑写入
     strategy_file TEXT,
 
     -- 动态调整（内部字段，API 不返回）
@@ -426,6 +426,9 @@ CREATE TABLE IF NOT EXISTS pe_grid_order_context (
     -- 配对关联: close 行指向 open 行的 client_order_id
     paired_client_order_id TEXT REFERENCES pe_grid_order_context(client_order_id),
 
+    -- 行级快照：交易发生时使用的策略名（INSERT 时冻结，永不 UPDATE）
+    strategy_file          TEXT,
+
     created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -443,7 +446,9 @@ CREATE TABLE IF NOT EXISTS qd_grid_analysis_logs (
     user_prompt TEXT NOT NULL DEFAULT '',
     result JSONB NOT NULL DEFAULT '{}',
     error TEXT,
-    llm_model TEXT NOT NULL DEFAULT '',
+    llm_model TEXT NOT NULL '',
+    -- 行级快照：决策发生时使用的策略名（INSERT 时冻结，永不 UPDATE）
+    strategy_file TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at TIMESTAMPTZ
 );
@@ -475,7 +480,7 @@ CREATE TABLE IF NOT EXISTS qd_auto_bots (
     system_prompt TEXT,
     user_prompt TEXT,
 
-    -- 策略 prompt 文件名（STRATEGIES_DIR/auto/{strategy_file}.json）；NULL 时回退到 DEFAULT_* 常量
+    -- 策略 prompt 文件名（STRATEGIES_DIR/auto/{strategy_file}/）；必填，创建 bot 时由策略选择逻辑写入
     strategy_file TEXT,
 
     -- 统计缓存（denormalized，由 worker 定期同步）
@@ -521,6 +526,9 @@ CREATE TABLE IF NOT EXISTS pe_auto_order_context (
     take_profit            DOUBLE PRECISION NOT NULL DEFAULT 0,
     close_reason           TEXT CHECK (close_reason IS NULL OR close_reason IN ('stop_loss', 'take_profit', 'position_timeout', 'llm_decision')),
 
+    -- 行级快照：交易发生时使用的策略名（INSERT 时冻结，永不 UPDATE）
+    strategy_file          TEXT,
+
     created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -545,6 +553,8 @@ CREATE TABLE IF NOT EXISTS qd_auto_analysis_logs (
     -- 注：close_reason 不在此表，已记录在 pe_auto_order_context.close_reason
     intercept_reason TEXT,
     execution_status TEXT CHECK (execution_status IS NULL OR execution_status IN ('open', 'open_failed', 'close', 'close_failed', 'hold')),
+    -- 行级快照：决策发生时使用的策略名（INSERT 时冻结，永不 UPDATE）
+    strategy_file TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at TIMESTAMPTZ
 );

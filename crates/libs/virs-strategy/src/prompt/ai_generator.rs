@@ -5,16 +5,15 @@
 //! 流程：
 //! 1. 调用方提供策略类型（auto/grid）+ 用户意图描述
 //! 2. 构造元 prompt（教 LLM 如何生成策略 prompt）
-//! 3. 调用 LLM（复用 [`crate::common::ai_client::call_llm_api`])
+//! 3. 调用 LLM（复用 [`crate::llm_client::call_llm_api`])
 //! 4. 解析 LLM 返回的 JSON 为 [`PromptTemplate`]
 //! 5. 校验（占位符白名单 + JSON schema 约束）
 //! 6. 返回校验通过的模板
 
 use virs_error::{BotError, BotResult};
 
-use crate::common::ai_client;
-use crate::strategy::prompt::template::{PromptSource, PromptTemplate, StrategyType};
-use crate::strategy::prompt::validator::validate;
+use crate::prompt::template::{PromptSource, PromptTemplate, StrategyType};
+use crate::prompt::validator::validate;
 
 /// AI 生成请求。
 pub struct GenerateRequest<'a> {
@@ -45,7 +44,7 @@ pub async fn generate_prompt(
     let system = build_meta_system_prompt(req.strategy_type);
     let user = build_meta_user_prompt(&req);
 
-    let result = ai_client::call_llm_api(
+    let result = crate::llm_client::call_llm_api(
         http_client,
         api_key,
         base_url,

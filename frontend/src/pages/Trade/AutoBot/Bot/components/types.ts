@@ -1,4 +1,4 @@
-import type { AutoBot, AutoBotStats, AnalysisLog } from '@/service/types';
+import type { AutoBot, AutoBotStats, AnalysisLog, StrategyDetail } from '@/service/types';
 import type { PositionWsEvent } from '@/service/ws';
 
 /** 单边持仓指标（前端实时计算） */
@@ -37,6 +37,8 @@ export interface AccountBarProps {
 /** AI 策略块 Props */
 export interface StrategyBlockProps {
   bot: AutoBot;
+  /** bot 绑定的策略元数据（从 get_bot API 返回） */
+  strategy: StrategyDetail | null;
   decision: AnalysisLog | null;
   stats: AutoBotStats | null;
   totalPnl: number;
@@ -61,6 +63,8 @@ export interface PositionCardProps {
 /** 上区 Props */
 export interface UpperRegionProps {
   bot: AutoBot;
+  /** bot 绑定的策略元数据 */
+  strategy: StrategyDetail | null;
   latestPrice: number;
   marketSummary: { changePct: number; high: number; low: number; volume: number };
   decision: AnalysisLog | null;

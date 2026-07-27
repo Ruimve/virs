@@ -42,7 +42,7 @@ pub struct GridBotConfig {
     pub system_prompt: Option<String>,
     pub last_adjusted_at: Option<DateTime<Utc>>,
     /// 策略 prompt 文件夹名。加载时查 `strategies/grid/{strategy_file}/`。
-    /// 为 None 时回退到 crate 内硬编码的 DEFAULT_SYSTEM_PROMPT / DEFAULT_USER_PROMPT_TEMPLATE。
+    /// 必填项，创建 bot 时由策略选择逻辑写入。worker 缺失时报错并跳过决策。
     pub strategy_file: Option<String>,
 }
 
@@ -64,6 +64,7 @@ pub trait GridStore: Send + Sync {
         exchange: &str,
         grid_level: i32,
         client_order_id: &str,
+        strategy_file: &Option<String>,
     ) -> VirsResult<()>;
 
     /// 记录平仓 context — UPDATE open row status='closed' + INSERT close row
@@ -89,6 +90,7 @@ pub trait GridStore: Send + Sync {
         exchange: &str,
         grid_level: i32,
         close_client_order_id: &str,
+        strategy_file: &Option<String>,
     ) -> VirsResult<()>;
 
     async fn save_stats(
@@ -130,6 +132,7 @@ pub trait GridStore: Send + Sync {
         result: &serde_json::Value,
         error: Option<&str>,
         llm_model: &str,
+        strategy_file: &Option<String>,
     ) -> VirsResult<()>;
     async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()>;
 }

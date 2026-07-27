@@ -1,5 +1,5 @@
-use crate::common::indicators::MarketIndicators;
-use crate::strategy::prompt::render::{format_bars_outside, render, RenderContext};
+use crate::market::MarketIndicators;
+use crate::prompt::render::{format_bars_outside, render, RenderContext};
 
 fn make_ctx() -> RenderContext {
     let mut ind = MarketIndicators::default();

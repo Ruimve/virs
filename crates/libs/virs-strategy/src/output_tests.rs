@@ -1,4 +1,4 @@
-use crate::strategy::output::{StrategyAction, StrategyOutput};
+use crate::output::{StrategyAction, StrategyOutput};
 use uuid::Uuid;
 
 #[test]

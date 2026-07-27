@@ -492,6 +492,7 @@ impl GridWorker {
                         &self.bot.exchange,
                         level_num,
                         close_client_order_id,
+                        &self.bot.strategy_file,
                     )
                     .await
                 {
@@ -811,6 +812,7 @@ impl GridWorker {
                 &self.bot.exchange,
                 level,
                 client_order_id,
+                &self.bot.strategy_file,
             )
             .await
         {
@@ -1052,57 +1054,47 @@ impl GridWorker {
             total_pnl: 0.0,
         };
 
-        // 优先使用策略文件（STRATEGIES_DIR/grid/{strategy_file}/）。
-        // 未配置或未找到时回退到 crate 内硬编码的 DEFAULT_* 常量。
-        let (system_prompt, user_prompt) =
-            if let Some(file_name) = self.bot.strategy_file.as_deref() {
-                match self
-                    .prompt_loader
-                    .get(StrategyType::Grid, file_name)
-                    .await
-                {
-                    Some(tpl) => {
-                        let user = render(&tpl.user_prompt_template, &ctx);
-                        let system = self
-                            .bot
-                            .system_prompt
-                            .as_deref()
-                            .unwrap_or(&tpl.system_prompt)
-                            .to_string();
-                        (system, user)
-                    }
-                    None => {
-                        warn!(
-                            bot_id = %self.bot.id,
-                            strategy_file = file_name,
-                            "Strategy file not found in loader — falling back to built-in default prompt"
-                        );
-                        let user = render(
-                            crate::grid::types::DEFAULT_USER_PROMPT_TEMPLATE,
-                            &ctx,
-                        );
-                        let system = self
-                            .bot
-                            .system_prompt
-                            .as_deref()
-                            .unwrap_or(crate::grid::types::DEFAULT_SYSTEM_PROMPT)
-                            .to_string();
-                        (system, user)
-                    }
+        // 使用策略文件（STRATEGIES_DIR/grid/{strategy_file}/）。
+        // strategy_file 为必填项：缺失或 loader 未命中时报错并跳过决策（不回退默认值）。
+        let (system_prompt, user_prompt) = {
+            let file_name = match self.bot.strategy_file.as_deref() {
+                Some(f) => f,
+                None => {
+                    error!(
+                        bot_id = %self.bot.id,
+                        "Bot has no strategy_file bound — cannot build LLM prompt. \
+                         Stopping decision cycle."
+                    );
+                    return None;
                 }
-            } else {
-                let user = render(
-                    crate::grid::types::DEFAULT_USER_PROMPT_TEMPLATE,
-                    &ctx,
-                );
-                let system = self
-                    .bot
-                    .system_prompt
-                    .as_deref()
-                    .unwrap_or(crate::grid::types::DEFAULT_SYSTEM_PROMPT)
-                    .to_string();
-                (system, user)
             };
+
+            match self
+                .prompt_loader
+                .get(StrategyType::Grid, file_name)
+                .await
+            {
+                Some(tpl) => {
+                    let user = render(&tpl.user_prompt_template, &ctx);
+                    let system = self
+                        .bot
+                        .system_prompt
+                        .as_deref()
+                        .unwrap_or(&tpl.system_prompt)
+                        .to_string();
+                    (system, user)
+                }
+                None => {
+                    error!(
+                        bot_id = %self.bot.id,
+                        strategy_file = file_name,
+                        "Strategy file not found in loader — cannot build LLM prompt. \
+                         Stopping decision cycle. Check STRATEGIES_DIR and strategy files."
+                    );
+                    return None;
+                }
+            }
+        };
         Some((system_prompt, user_prompt))
     }
 
@@ -1145,6 +1137,7 @@ impl GridWorker {
                         &result,
                         None,
                         llm_model,
+                        &self.bot.strategy_file,
                     )
                     .await
                 {
@@ -1168,6 +1161,7 @@ impl GridWorker {
                         &result,
                         Some("LLM call failed"),
                         llm_model,
+                        &self.bot.strategy_file,
                     )
                     .await
                 {
