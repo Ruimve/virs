@@ -91,6 +91,9 @@ COPY --chown=65532:65532 --from=backend-builder /build/virs /app/virs
 # Copy migrations
 COPY --chown=65532:65532 migrations/ /app/migrations/
 
+# Copy strategy prompt templates (PromptLoader reads from STRATEGIES_DIR)
+COPY --chown=65532:65532 strategies/ /app/strategies/
+
 # Copy frontend static files
 COPY --chown=65532:65532 --from=frontend-builder /frontend/dist /app/frontend/dist
 

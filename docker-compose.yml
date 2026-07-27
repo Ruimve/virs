@@ -63,6 +63,8 @@ services:
       # Override in .env if you need to debug other modules (e.g. RUST_LOG=debug).
       RUST_LOG: ${RUST_LOG:-virs_app=info,virs_bot=info,virs_position=info,virs_market=info,virs_api=info,binance_api=info}
       FRONTEND_DIR: /app/frontend/dist
+      # Strategy prompt templates directory (PromptLoader reads from this)
+      STRATEGIES_DIR: /app/strategies
       # Security (MUST change in production)
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required (must differ from LLM_KEY)}
       LLM_KEY: ${LLM_KEY:?LLM_KEY is required (must differ from ENCRYPTION_KEY)}

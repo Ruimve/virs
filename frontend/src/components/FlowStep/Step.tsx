@@ -59,7 +59,7 @@ export const FlowStep = memo(
     };
 
     const renderIndicator = useCallback(() => {
-      if (!indicator) return null;
+      if (indicator === false) return null;
 
       const stepContent =
         typeof step === 'number' ? <span className="text-caption">{step}</span> : step;
