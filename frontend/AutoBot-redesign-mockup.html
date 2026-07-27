@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>VIRS AutoBot — v3</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ===== Terminal Luxe tokens (复用项目) ===== */
+      :root {
+        --bg-base: #08090d;
+        --bg-base-secondary: #0c0e14;
+        --bg-surface-1: #12141c;
+        --bg-surface-2: #1a1d28;
+        --bg-surface-3: #242736;
+        --text-on-base: rgba(255, 255, 255, 0.95);
+        --text-on-surface: rgba(255, 255, 255, 0.85);
+        --text-on-surface-secondary: rgba(255, 255, 255, 0.62);
+        --text-on-surface-tertiary: rgba(255, 255, 255, 0.42);
+        --text-on-surface-muted: rgba(255, 255, 255, 0.28);
+        --text-on-surface-faint: rgba(255, 255, 255, 0.16);
+        --border-subtle: rgba(255, 255, 255, 0.05);
+        --border-default: rgba(255, 255, 255, 0.08);
+        --border-strong: rgba(255, 255, 255, 0.12);
+        --color-accent: #7c6aef;
+        --color-accent-hover: #9185f0;
+        --color-accent-light: rgba(124, 106, 239, 0.12);
+        --color-accent-muted: rgba(124, 106, 239, 0.25);
+        --color-success: #2dd4a0;
+        --color-success-text: #2dd4a0;
+        --color-success-bg: rgba(45, 212, 160, 0.1);
+        --color-success-border: rgba(45, 212, 160, 0.25);
+        --color-warning: #fbbf24;
+        --color-warning-text: #fbbf24;
+        --color-warning-bg: rgba(251, 191, 36, 0.1);
+        --color-danger: #f47171;
+        --color-danger-text: #f47171;
+        --color-danger-bg: rgba(244, 113, 113, 0.1);
+        --color-danger-border: rgba(244, 113, 113, 0.25);
+        --color-info: #38bdf8;
+        --color-info-text: #38bdf8;
+        --color-info-bg: rgba(56, 189, 248, 0.1);
+        --shadow-sticky: 0 -4px 16px rgba(0, 0, 0, 0.5);
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family:
+          'Plus Jakarta Sans',
+          'Noto Sans SC',
+          -apple-system,
+          sans-serif;
+        background: var(--bg-base);
+        color: var(--text-on-base);
+        -webkit-font-smoothing: antialiased;
+        font-variant-numeric: lining-nums;
+      }
+      .mono {
+        font-family: 'JetBrains Mono', monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      .up {
+        color: var(--color-success-text);
+      }
+      .down {
+        color: var(--color-danger-text);
+      }
+
+      /* ===== Layout shell — 手机一屏优先 ===== */
+      .app {
+        max-width: 480px;
+        margin: 0 auto;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      @media (min-width: 768px) {
+        .app {
+          max-width: 960px;
+        }
+      }
+
+      /* ===== 上区：surface-1 白色 · 高密度 ===== */
+      .upper {
+        background: var(--bg-surface-1);
+        border-bottom: 1px solid var(--border-default);
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      /* --- 市场行：symbol + price + 24h 同行紧凑 --- */
+      .market-line {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .mkt-left {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+      }
+      .sym {
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .ex {
+        font-size: 9px;
+        color: var(--text-on-surface-tertiary);
+      }
+      .price {
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: -0.01em;
+      }
+      .chg {
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .mkt-stats {
+        display: flex;
+        gap: 8px;
+        font-size: 9px;
+        color: var(--text-on-surface-tertiary);
+      }
+      .mkt-stats span {
+        display: flex;
+        gap: 2px;
+      }
+      .mkt-stats .v {
+        color: var(--text-on-surface-secondary);
+        font-weight: 600;
+      }
+
+      /* --- 账户条：紧凑单行 --- */
+      .acct-line {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        font-size: 10px;
+        padding: 5px 0;
+        border-top: 1px solid var(--border-subtle);
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      .acct-item {
+        display: flex;
+        align-items: baseline;
+        gap: 3px;
+        padding: 0 8px;
+        border-right: 1px solid var(--border-subtle);
+      }
+      .acct-item:first-child {
+        padding-left: 0;
+      }
+      .acct-item:last-child {
+        border-right: none;
+      }
+      .acct-l {
+        color: var(--text-on-surface-tertiary);
+      }
+      .acct-v {
+        font-weight: 600;
+        color: var(--text-on-surface-secondary);
+      }
+
+      /* --- AI 策略 + 盈亏 一体 --- */
+      .ai-block {
+        border: 1px solid var(--border-default);
+        border-radius: 8px;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        background: var(--bg-base-secondary);
+      }
+      .ai-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .ai-label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 9px;
+        font-weight: 600;
+        color: var(--text-on-surface-tertiary);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .cursor-blink {
+        display: inline-block;
+        width: 5px;
+        height: 10px;
+        background: var(--color-accent);
+        animation: blink 1.1s steps(2) infinite;
+      }
+      @keyframes blink {
+        0%,
+        50% {
+          opacity: 1;
+        }
+        50.01%,
+        100% {
+          opacity: 0.15;
+        }
+      }
+      .ai-model {
+        font-size: 9px;
+        color: var(--text-on-surface-muted);
+        font-family: 'JetBrains Mono', monospace;
+      }
+
+      /* 策略名 + 盈亏 同行 */
+      .strategy-pnl {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .strategy-name {
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.25;
+      }
+      .pnl-block {
+        text-align: right;
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+      .pnl-amt {
+        font-size: 17px;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: -0.01em;
+      }
+      .pnl-pct {
+        font-size: 10px;
+        font-weight: 600;
+      }
+
+      /* AI 推理引用 */
+      .ai-reason {
+        border-left: 2px solid var(--color-accent-muted);
+        padding-left: 9px;
+        font-size: 10px;
+        color: var(--text-on-surface-secondary);
+        line-height: 1.5;
+      }
+
+      /* 元数据行 */
+      .ai-meta {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        font-size: 10px;
+        flex-wrap: wrap;
+      }
+      .meta-item {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        padding: 0 8px;
+        border-right: 1px solid var(--border-subtle);
+      }
+      .meta-item:first-child {
+        padding-left: 0;
+      }
+      .meta-item:last-child {
+        border-right: none;
+      }
+      .meta-lbl {
+        color: var(--text-on-surface-tertiary);
+        font-size: 9px;
+      }
+      .meta-val {
+        font-weight: 600;
+        color: var(--text-on-surface-secondary);
+      }
+      .act-tag {
+        font-size: 9px;
+        font-weight: 600;
+        padding: 1px 5px;
+        border-radius: 3px;
+        border: 1px solid;
+      }
+      .act-long {
+        background: var(--color-success-bg);
+        color: var(--color-success-text);
+        border-color: var(--color-success-border);
+      }
+      .act-hold {
+        background: var(--bg-surface-3);
+        color: var(--text-on-surface-tertiary);
+        border-color: var(--border-default);
+      }
+      .regime {
+        color: var(--color-info-text);
+      }
+
+      /* ===== 下区：surface-2 灰色包裹仓位 ===== */
+      .lower {
+        background: var(--bg-base-secondary);
+        flex: 1;
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 0;
+      }
+
+      .pos-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      @media (min-width: 768px) {
+        .pos-cards {
+          flex-direction: row;
+        }
+      }
+
+      /* 仓位 card — 克制，无装饰 */
+      .pos-card {
+        background: var(--bg-surface-1);
+        border: 1px solid var(--border-default);
+        border-radius: 8px;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        flex: 1;
+      }
+      .pos-card.long {
+        border-left: 2px solid var(--color-success);
+      }
+      .pos-card.short {
+        border-left: 2px solid var(--color-danger);
+      }
+      .pos-card.empty {
+        border-left: 2px solid var(--border-strong);
+        opacity: 0.7;
+      }
+
+      .pc-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .dir {
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .dir-long {
+        color: var(--color-success-text);
+      }
+      .dir-short {
+        color: var(--color-danger-text);
+      }
+      .dir-none {
+        color: var(--text-on-surface-tertiary);
+      }
+      .pc-status {
+        font-size: 9px;
+        color: var(--text-on-surface-muted);
+        font-family: 'JetBrains Mono', monospace;
+      }
+
+      /* 仓位数据网格 — 纯数据，无可视化 */
+      .pc-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1px;
+        background: var(--border-subtle);
+        border-radius: 5px;
+        overflow: hidden;
+      }
+      .pc-cell {
+        padding: 5px 8px;
+        background: var(--bg-surface-1);
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .pc-cell .l {
+        font-size: 8px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--text-on-surface-tertiary);
+      }
+      .pc-cell .v {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .pc-cell .v.warn {
+        color: var(--color-warning-text);
+      }
+
+      /* 强平价高亮行 */
+      .liq-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 8px;
+        border-radius: 4px;
+        background: var(--color-danger-bg);
+        font-size: 10px;
+      }
+      .liq-row .l {
+        color: var(--color-danger-text);
+        font-weight: 600;
+      }
+      .liq-row .v {
+        font-weight: 700;
+        color: var(--color-danger-text);
+      }
+      .liq-row .dist {
+        font-size: 9px;
+        color: var(--text-on-surface-tertiary);
+      }
+
+      /* 未实现盈亏 */
+      .pc-pnl {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+      .pc-pnl .l {
+        font-size: 9px;
+        color: var(--text-on-surface-tertiary);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .pc-pnl .v {
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      /* 空仓紧凑 */
+      .empty-line {
+        font-size: 10px;
+        color: var(--text-on-surface-muted);
+        line-height: 1.4;
+        padding: 2px 0;
+      }
+
+      /* ===== 底部固定 kline ===== */
+      .kline-bar {
+        background: var(--bg-surface-1);
+        border-top: 1px solid var(--border-default);
+        box-shadow: var(--shadow-sticky);
+        flex-shrink: 0;
+      }
+      .kline-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 14px;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .kline-toggle:hover {
+        background: var(--bg-surface-2);
+      }
+      .kline-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+      }
+      .kline-label {
+        color: var(--text-on-surface-tertiary);
+      }
+      .kline-price {
+        font-weight: 600;
+      }
+      .kline-chg {
+        font-size: 10px;
+        font-weight: 600;
+      }
+      .kline-right {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .kline-tf {
+        display: flex;
+        gap: 2px;
+      }
+      .tf-btn {
+        font-size: 9px;
+        padding: 2px 5px;
+        border-radius: 3px;
+        color: var(--text-on-surface-tertiary);
+        cursor: pointer;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .tf-btn.active {
+        background: var(--color-accent-light);
+        color: var(--color-accent-hover);
+      }
+      .chev {
+        transition: transform 0.2s;
+        color: var(--text-on-surface-muted);
+      }
+      .chev.open {
+        transform: rotate(180deg);
+      }
+
+      .kline-body {
+        border-top: 1px solid var(--border-subtle);
+        height: 0;
+        overflow: hidden;
+        transition: height 0.25s ease;
+      }
+      .kline-body.open {
+        height: 220px;
+      }
+      .kline-canvas {
+        width: 100%;
+        height: 220px;
+        background: var(--bg-base);
+        position: relative;
+      }
+
+      /* ===== Annotation ===== */
+      .anno-toggle {
+        position: fixed;
+        bottom: 14px;
+        right: 14px;
+        z-index: 50;
+        padding: 6px 11px;
+        border-radius: 999px;
+        background: var(--color-accent);
+        color: #fff;
+        font-size: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        box-shadow: 0 4px 16px rgba(124, 106, 239, 0.4);
+      }
+      .anno-panel {
+        position: fixed;
+        bottom: 50px;
+        right: 14px;
+        width: 280px;
+        max-height: 55vh;
+        overflow-y: auto;
+        padding: 14px;
+        border-radius: 10px;
+        background: var(--bg-surface-1);
+        border: 1px solid var(--border-default);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+        z-index: 49;
+        display: none;
+      }
+      .anno-panel.open {
+        display: block;
+      }
+      .anno-panel h3 {
+        font-size: 11px;
+        font-weight: 700;
+        margin-bottom: 8px;
+        color: var(--color-accent-hover);
+      }
+      .anno-item {
+        margin-bottom: 8px;
+      }
+      .anno-item .t {
+        font-size: 10px;
+        font-weight: 600;
+        margin-bottom: 1px;
+      }
+      .anno-item .d {
+        font-size: 9px;
+        color: var(--text-on-surface-tertiary);
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <!-- ============ 上区：市场 + 账户 + AI 策略（高密度）============ -->
+      <div class="upper">
+        <!-- 市场行：symbol+price+24h 紧凑 -->
+        <div class="market-line">
+          <div class="mkt-left">
+            <span class="sym">BTCUSDT</span>
+            <span class="ex">· Perp</span>
+          </div>
+          <div class="mkt-stats">
+            <span>24H高<span class="v mono">67,890</span></span>
+            <span>低<span class="v mono">65,120</span></span>
+            <span>量<span class="v mono">1.82B</span></span>
+          </div>
+        </div>
+
+        <div class="market-line">
+          <span class="price mono" id="livePrice">67,234.50</span>
+          <span class="chg up mono">▲ +1.42%</span>
+        </div>
+
+        <!-- 账户条：紧凑单行 -->
+        <div class="acct-line">
+          <div class="acct-item">
+            <span class="acct-l">权益</span><span class="acct-v mono">11,423</span>
+          </div>
+          <div class="acct-item">
+            <span class="acct-l">已用</span><span class="acct-v mono">1,002</span>
+          </div>
+          <div class="acct-item">
+            <span class="acct-l">保证金率</span><span class="acct-v mono">8.78%</span>
+          </div>
+          <div class="acct-item">
+            <span class="acct-l">初始</span><span class="acct-v mono">10,000</span>
+          </div>
+        </div>
+
+        <!-- AI 策略 + 盈亏 一体 -->
+        <div class="ai-block">
+          <div class="ai-head">
+            <div class="ai-label">
+              <span class="cursor-blink"></span>
+              AI 自主策略
+            </div>
+            <span class="ai-model">deepseek-v3 · conf 0.78</span>
+          </div>
+
+          <!-- 策略名 + 盈亏同行 -->
+          <div class="strategy-pnl">
+            <div class="strategy-name">趋势跟踪 · 做多</div>
+            <div class="pnl-block">
+              <span class="pnl-amt up mono">+1,423.08</span>
+              <span class="pnl-pct up mono">+14.23%</span>
+            </div>
+          </div>
+
+          <!-- AI 推理引用 -->
+          <div class="ai-reason">
+            EMA50/EMA200 金叉确认上升趋势，ATR 收缩动能稳定。突破前高 67,100 且量能放大 1.5 倍，RSI
+            62 未超买，适合顺势加仓。
+          </div>
+
+          <!-- 元数据行 -->
+          <div class="ai-meta">
+            <div class="meta-item">
+              <span class="act-tag act-long">开多</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-lbl">市况</span>
+              <span class="meta-val regime">趋势</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-lbl">胜率</span>
+              <span class="meta-val mono">62.5%</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-lbl">盈亏比</span>
+              <span class="meta-val mono">2.14</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-lbl">回撤</span>
+              <span class="meta-val mono down">-3.82%</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-lbl">16笔</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 下区：灰色背景 + 仓位 card 缩小 ============ -->
+      <div class="lower">
+        <div class="pos-cards">
+          <!-- 多头仓位 -->
+          <div class="pos-card long">
+            <div class="pc-head">
+              <span class="dir dir-long">▲ 多头</span>
+              <span class="pc-status">holding · 6h42m</span>
+            </div>
+
+            <div class="pc-pnl">
+              <span class="l">未实现</span>
+              <span class="v up mono">+65.18</span>
+            </div>
+
+            <div class="pc-grid">
+              <div class="pc-cell">
+                <span class="l">持仓</span><span class="v mono">0.1500</span>
+              </div>
+              <div class="pc-cell">
+                <span class="l">开仓价</span><span class="v mono">66,800</span>
+              </div>
+              <div class="pc-cell"><span class="l">杠杆</span><span class="v mono">10x</span></div>
+              <div class="pc-cell">
+                <span class="l">保证金</span><span class="v mono">1,002</span>
+              </div>
+            </div>
+
+            <div class="liq-row">
+              <span class="l">强平价</span>
+              <span class="v mono">62,500</span>
+              <span class="dist">距 -7.0%</span>
+            </div>
+          </div>
+
+          <!-- 空头仓位（空仓紧凑） -->
+          <div class="pos-card empty">
+            <div class="pc-head">
+              <span class="dir dir-none">▼ 空头</span>
+              <span class="pc-status">observing</span>
+            </div>
+            <div class="empty-line">
+              AI 判定上升趋势，空头置信度 0.34，主动放弃做空。已实现 +530.68（3笔）
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 底部固定 kline ============ -->
+      <div class="kline-bar">
+        <div class="kline-toggle" id="klineToggle">
+          <div class="kline-left">
+            <span class="kline-label">行情</span>
+            <span class="kline-price mono" id="klinePrice">67,234.50</span>
+            <span class="kline-chg up mono">+1.42%</span>
+          </div>
+          <div class="kline-right">
+            <div class="kline-tf">
+              <span class="tf-btn">1m</span>
+              <span class="tf-btn">5m</span>
+              <span class="tf-btn active">15m</span>
+              <span class="tf-btn">1h</span>
+              <span class="tf-btn">4h</span>
+            </div>
+            <svg
+              class="chev"
+              id="chev"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
+        <div class="kline-body" id="klineBody">
+          <div class="kline-canvas">
+            <svg viewBox="0 0 400 220" preserveAspectRatio="none" style="width: 100%; height: 100%">
+              <defs>
+                <linearGradient id="kg" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#2dd4a0" stop-opacity="0.15" />
+                  <stop offset="100%" stop-color="#2dd4a0" stop-opacity="0" />
+                </linearGradient>
+              </defs>
+              <!-- grid lines -->
+              <line x1="0" y1="55" x2="400" y2="55" stroke="rgba(255,255,255,0.04)" />
+              <line x1="0" y1="110" x2="400" y2="110" stroke="rgba(255,255,255,0.04)" />
+              <line x1="0" y1="165" x2="400" y2="165" stroke="rgba(255,255,255,0.04)" />
+              <!-- area -->
+              <path
+                d="M0,180 L20,175 L40,178 L60,165 L80,155 L100,160 L120,140 L140,148 L160,125 L180,130 L200,108 L220,115 L240,95 L260,100 L280,82 L300,88 L320,70 L340,75 L360,60 L380,65 L400,50 L400,220 L0,220 Z"
+                fill="url(#kg)"
+              />
+              <!-- line -->
+              <path
+                d="M0,180 L20,175 L40,178 L60,165 L80,155 L100,160 L120,140 L140,148 L160,125 L180,130 L200,108 L220,115 L240,95 L260,100 L280,82 L300,88 L320,70 L340,75 L360,60 L380,65 L400,50"
+                fill="none"
+                stroke="#2dd4a0"
+                stroke-width="1.5"
+              />
+              <!-- entry marker -->
+              <line
+                x1="280"
+                y1="0"
+                x2="280"
+                y2="220"
+                stroke="rgba(255,255,255,0.15)"
+                stroke-dasharray="2,3"
+              />
+              <text
+                x="284"
+                y="14"
+                fill="rgba(255,255,255,0.4)"
+                font-size="9"
+                font-family="JetBrains Mono"
+              >
+                开仓 66,800
+              </text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="anno-toggle" id="annoBtn">设计解读</button>
+    <div class="anno-panel" id="annoPanel">
+      <h3>v3 设计哲学 · 克制的金融终端</h3>
+      <div class="anno-item">
+        <div class="t">1. AI 策略 + 盈亏 一体</div>
+        <div class="d">
+          策略名称与累计盈亏在同一行同一
+          card。策略是因，盈亏是果，强行分开才割裂。元数据行(动作/市况/胜率/盈亏比/笔数)用分隔线串联，无独立统计区。
+        </div>
+      </div>
+      <div class="anno-item">
+        <div class="t">2. AI 感来自内容非特效</div>
+        <div class="d">
+          去掉发光球、渐变边框。AI 感由：terminal cursor 脉动竖线 + 推理引用文本 + 等宽置信度数据
+          构成。智能感来自内容本身。
+        </div>
+      </div>
+      <div class="anno-item">
+        <div class="t">3. 上白下灰 + 底部 kline</div>
+        <div class="d">
+          上区 surface-1(白)放市场+AI；下区 base-secondary(灰)包裹缩小的仓位 card；底部固定 kline
+          可展开。回归原项目 StickyMarket 结构。
+        </div>
+      </div>
+      <div class="anno-item">
+        <div class="t">4. 仓位 card 克制化</div>
+        <div class="d">
+          去掉价格阶梯可视化(花哨)。强平价用一行 danger-bg 高亮 + 距离百分比。数据用 2×2
+          网格，纯数字无装饰。
+        </div>
+      </div>
+      <div class="anno-item">
+        <div class="t">5. 去掉低级标题</div>
+        <div class="d">
+          无"仓位驾驶舱"等浮夸标题。下区直接是 card，用左边框颜色(绿多/红空/灰空仓)区分方向。
+        </div>
+      </div>
+      <div class="anno-item">
+        <div class="t">6. 手机一屏</div>
+        <div class="d">
+          上区~280px + 下区~180px + kline条~36px = ~500px，375×667 无需滑动。kline 默认收起，展开后
+          220px。
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // kline toggle
+      const toggle = document.getElementById('klineToggle');
+      const body = document.getElementById('klineBody');
+      const chev = document.getElementById('chev');
+      toggle.addEventListener('click', () => {
+        body.classList.toggle('open');
+        chev.classList.toggle('open');
+      });
+
+      // annotation
+      const btn = document.getElementById('annoBtn');
+      const panel = document.getElementById('annoPanel');
+      btn.addEventListener('click', () => panel.classList.toggle('open'));
+
+      // live price
+      const priceEl = document.getElementById('livePrice');
+      const klinePriceEl = document.getElementById('klinePrice');
+      let base = 67234.5;
+      setInterval(() => {
+        const delta = (Math.random() - 0.48) * 25;
+        base = Math.max(66500, Math.min(68200, base + delta));
+        const txt = base.toLocaleString('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+        const cls = delta >= 0 ? 'up' : 'down';
+        priceEl.textContent = txt;
+        priceEl.className = 'price mono ' + cls;
+        klinePriceEl.textContent = txt;
+      }, 2000);
+
+      // timeframe switch
+      document.querySelectorAll('.tf-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          document.querySelectorAll('.tf-btn').forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+        });
+      });
+    </script>
+  </body>
+</html>

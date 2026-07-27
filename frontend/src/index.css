@@ -508,6 +508,18 @@ tbody tr:hover {
   }
 }
 
+/* Terminal cursor blink: steps(2) 硬切，模拟终端光标 */
+@keyframes virs-cursor-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
 .animate-subtle-pulse {
   animation: subtle-pulse 2s ease-in-out infinite;
 }

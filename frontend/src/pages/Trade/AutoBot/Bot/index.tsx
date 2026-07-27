@@ -3,21 +3,23 @@ import {
   fetchKlines,
   getAutoAnalysisLogs,
   getAutoTrades,
+  getAutoStats,
   type AnalysisLog,
   type AutoBot,
   type AutoTrade,
+  type AutoBotStats,
   type KlineCandle,
 } from '@/service';
 import { useKlineWs, type KlineWsEvent } from '@/service/ws';
 import type { KlineChartHandle } from '@/components/Chart/KlineChart';
 import { useBot } from '../../context/BotContext';
-import { DecisionCard } from '../../components/DecisionCard';
-import { TradeStats } from './TradeStats';
+import { usePositionContext } from '../../context/PositionContext';
 import { StickyMarket } from '../../components/StickyMarket';
-import { PositionStats } from './PositionStats';
-import { RecentDecisions } from './RecentDecisions';
-import { RecentTrades } from './RecentTrades';
+import { UpperRegion } from './components/UpperRegion';
+import { LowerRegion } from './components/LowerRegion';
+import { computeMetrics, computeAccount, computeTotalPnlPct } from './components/utils';
 
+/** RAF 节流价格 hook，避免高频 WS 推送导致过度渲染 */
 const useRafThrottledPrice = () => {
   const [latestPrice, setLatestPrice] = useState(0);
   const rafRef = useRef<number | undefined>(undefined);
@@ -41,6 +43,7 @@ const useRafThrottledPrice = () => {
   return { latestPrice, update };
 };
 
+/** 将 AutoTrade[] 转换为 K 线图表 marker */
 function tradesToMarkers(trades: AutoTrade[]) {
   const markers: Array<{
     time: number;
@@ -86,14 +89,42 @@ function tradesToMarkers(trades: AutoTrade[]) {
   return markers.sort((a, b) => a.time - b.time);
 }
 
+/** 从 K 线数据计算 24h 市场摘要（与 StickyMarket 的 useMarketSummary 逻辑一致） */
+function computeMarketSummary(klineData: KlineCandle[], timeframe: string) {
+  if (klineData.length === 0) return { changePct: 0, high: 0, low: 0, volume: 0 };
+
+  const tfHours: Record<string, number> = {
+    '1m': 1 / 60,
+    '5m': 5 / 60,
+    '15m': 15 / 60,
+    '1h': 1,
+    '4h': 4,
+    '1d': 24,
+  };
+  const hoursPerCandle = tfHours[timeframe] ?? 1;
+  const candlesIn24h = Math.min(Math.ceil(24 / hoursPerCandle), klineData.length);
+  const recent = klineData.slice(-candlesIn24h);
+
+  const firstClose = recent[0].close;
+  const lastClose = recent[recent.length - 1].close;
+  const changePct = firstClose > 0 ? ((lastClose - firstClose) / firstClose) * 100 : 0;
+  const high = Math.max(...recent.map((k) => k.high));
+  const low = Math.min(...recent.map((k) => k.low));
+  const volume = recent.reduce((sum, k) => sum + (k.volume || 0), 0);
+
+  return { changePct, high, low, volume };
+}
+
 const Bot = () => {
   const { bot } = useBot();
+  const { positions } = usePositionContext();
 
   const [klineTimeframe, setKlineTimeframe] = useState('15m');
   const [klineData, setKlineData] = useState<KlineCandle[]>([]);
   const { latestPrice, update: updateLatestPrice } = useRafThrottledPrice();
   const [logs, setLogs] = useState<AnalysisLog[]>([]);
   const [autoTrades, setAutoTrades] = useState<AutoTrade[]>([]);
+  const [stats, setStats] = useState<AutoBotStats | null>(null);
 
   const chartRef = useRef<KlineChartHandle>(null);
 
@@ -115,13 +146,18 @@ const Bot = () => {
     }
   }, []);
 
+  const loadStats = useCallback(async (botId: string) => {
+    try {
+      const res = await getAutoStats(botId);
+      if (res.success && res.data) setStats(res.data);
+    } catch (e) {
+      console.error('Failed to load stats:', e);
+    }
+  }, []);
+
   const loadKlines = useCallback(async (exchange: string, symbol: string, tf: string) => {
     try {
-      const res = await fetchKlines({
-        exchange,
-        symbol,
-        timeframe: tf,
-      });
+      const res = await fetchKlines({ exchange, symbol, timeframe: tf });
       if (res.data) setKlineData(res.data);
     } catch (e) {
       console.error('Failed to load kline:', e);
@@ -130,24 +166,25 @@ const Bot = () => {
 
   const loadKlineStable = useCallback(() => {
     if (!bot?.exchange || !bot?.symbol || !klineTimeframe) return;
-    loadKlines(bot?.exchange, bot?.symbol, klineTimeframe);
+    loadKlines(bot.exchange, bot.symbol, klineTimeframe);
   }, [bot?.exchange, bot?.symbol, klineTimeframe, loadKlines]);
 
   useEffect(() => {
     if (!bot?.id) return;
-    loadLogs(bot?.id);
-    loadTrades(bot?.id);
-  }, [bot?.id, loadLogs, loadTrades]);
+    loadLogs(bot.id);
+    loadTrades(bot.id);
+    loadStats(bot.id);
+  }, [bot?.id, loadLogs, loadTrades, loadStats]);
 
   useEffect(() => {
     if (!bot?.exchange || !bot?.symbol || !klineTimeframe) return;
-    loadKlines(bot?.exchange, bot?.symbol, klineTimeframe);
+    loadKlines(bot.exchange, bot.symbol, klineTimeframe);
   }, [bot?.exchange, bot?.symbol, klineTimeframe, loadKlines]);
 
   useKlineWs(
     (event: KlineWsEvent) => {
       if (!bot) return;
-      if (event.symbol !== bot?.symbol || event.exchange !== bot?.exchange) return;
+      if (event.symbol !== bot.symbol || event.exchange !== bot.exchange) return;
       const c = event.candle;
       if (!c) return;
       updateLatestPrice(c.close);
@@ -158,47 +195,69 @@ const Bot = () => {
   );
 
   const autoBot = useMemo(() => bot as AutoBot, [bot]);
-
   const markers = useMemo(() => tradesToMarkers(autoTrades), [autoTrades]);
   const latestDecision = useMemo(() => logs[0] || null, [logs]);
 
+  // 实时指标计算
+  const longMetrics = useMemo(
+    () => computeMetrics(positions.long, latestPrice, autoBot.leverage),
+    [positions.long, latestPrice, autoBot.leverage],
+  );
+  const shortMetrics = useMemo(
+    () => computeMetrics(positions.short, latestPrice, autoBot.leverage),
+    [positions.short, latestPrice, autoBot.leverage],
+  );
+
+  const totalUnrealizedPnl = longMetrics.unrealizedPnl + shortMetrics.unrealizedPnl;
+  const totalUsedMargin = longMetrics.usedMargin + shortMetrics.usedMargin;
+
+  const accountMetrics = useMemo(
+    () => computeAccount(autoBot, totalUnrealizedPnl, totalUsedMargin),
+    [autoBot, totalUnrealizedPnl, totalUsedMargin],
+  );
+
+  const totalPnl = autoBot.total_pnl + totalUnrealizedPnl;
+  const totalPnlPct = computeTotalPnlPct(autoBot, totalPnl);
+
+  const marketSummary = useMemo(
+    () => computeMarketSummary(klineData, klineTimeframe),
+    [klineData, klineTimeframe],
+  );
+
   return (
-    <div className="h-full flex flex-col lg:flex-row">
-      {}
-      <div className="flex flex-col h-full lg:flex-1 lg:min-h-0 overflow-y-auto relative mb-9">
-        {}
-        <PositionStats bot={autoBot} latestPrice={latestPrice} />
+    <div className="h-full flex flex-col max-w-[480px] md:max-w-3xl mx-auto">
+      {/* 上区：市场 + 账户 + AI 策略（白色） */}
+      <UpperRegion
+        bot={autoBot}
+        latestPrice={latestPrice}
+        marketSummary={marketSummary}
+        decision={latestDecision}
+        stats={stats}
+        accountMetrics={accountMetrics}
+        totalPnl={totalPnl}
+        totalPnlPct={totalPnlPct}
+      />
 
-        {}
-        <DecisionCard log={latestDecision} botId={autoBot?.id} botType="auto" />
+      {/* 下区：仓位卡（灰色包裹） */}
+      <LowerRegion
+        bot={autoBot}
+        latestPrice={latestPrice}
+        longPosition={positions.long}
+        shortPosition={positions.short}
+        longMetrics={longMetrics}
+        shortMetrics={shortMetrics}
+        decision={latestDecision}
+      />
 
-        {}
-        <TradeStats botId={autoBot?.id} />
-
-        {}
-        <div className="fixed bottom-0 left-0 right-0">
-          <StickyMarket
-            klineData={klineData}
-            klineTimeframe={klineTimeframe}
-            onTimeframeChange={setKlineTimeframe}
-            chartRef={chartRef}
-            markers={markers}
-            latestPrice={latestPrice}
-          />
-        </div>
-      </div>
-
-      {}
-      <div className="hidden lg:flex w-72 xl:w-80 border-l border-line-subtle/50 flex-col bg-surface-1/20">
-        <div className="flex flex-col h-full divide-y divide-line-subtle/50">
-          <div className="flex-1 min-h-0">
-            <RecentDecisions logs={logs} botId={autoBot?.id} botType={'auto'} />
-          </div>
-          <div className="flex-1 min-h-0">
-            <RecentTrades trades={autoTrades} />
-          </div>
-        </div>
-      </div>
+      {/* 底部固定 K 线 */}
+      <StickyMarket
+        klineData={klineData}
+        klineTimeframe={klineTimeframe}
+        onTimeframeChange={setKlineTimeframe}
+        chartRef={chartRef}
+        markers={markers}
+        latestPrice={latestPrice}
+      />
     </div>
   );
 };
