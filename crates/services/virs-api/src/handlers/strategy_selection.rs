@@ -97,7 +97,8 @@ Respond in JSON format with:
 
     let result = state
         .call_llm(system_prompt, &user_prompt, "strategy-selection")
-        .await?;
+        .await
+        .map_err(|e| VirsError::bad_request(format!("LLM strategy selection failed: {e}")))?;
 
     // 解析 LLM 返回的策略名（content 已是 JSON Value）
     let parsed = &result.content;
