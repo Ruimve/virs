@@ -11,7 +11,7 @@ use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::Json;
 use virs_strategy::prompt::{
-    delete_template, generate_prompt, save_template, GenerateRequest, PromptLoader, PromptTemplate,
+    delete_template, generate_prompt, save_template, GenerateRequest, PromptTemplate,
     StrategyType,
 };
 use virs_error::VirsError;
@@ -79,7 +79,7 @@ pub async fn generate(
 pub async fn list(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let loader = PromptLoader::from_env().await;
+    let loader = state.prompt_loader.clone();
     let auto_list = loader.list(StrategyType::Auto).await;
     let grid_list = loader.list(StrategyType::Grid).await;
 
@@ -91,14 +91,14 @@ pub async fn list(State(state): State<AppState>, headers: HeaderMap) -> Result<J
 
 /// 获取指定策略模板。
 pub async fn get(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     headers: HeaderMap,
     Path((strategy_type, name)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers, &_state.jwt_secret)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let st = parse_strategy_type(&strategy_type)?;
-    let loader = PromptLoader::from_env().await;
+    let loader = state.prompt_loader.clone();
     let tpl = loader
         .get(st, &name)
         .await
@@ -110,12 +110,14 @@ pub async fn get(
 /// 保存策略模板到文件。
 ///
 /// 请求体：完整的 PromptTemplate JSON + `overwrite` 选项
+///
+/// 写入文件成功后同步更新内存缓存,使后续 `get` / `list` 立即返回新内容。
 pub async fn save(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers, &_state.jwt_secret)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let overwrite = body["overwrite"].as_bool().unwrap_or(false);
     let tpl: PromptTemplate = serde_json::from_value(body["template"].clone()).map_err(|e| {
@@ -123,6 +125,7 @@ pub async fn save(
     })?;
 
     let path = save_template(&tpl, overwrite)?;
+    state.prompt_loader.upsert(tpl.clone()).await;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "path": path.display().to_string(),
@@ -132,15 +135,18 @@ pub async fn save(
 }
 
 /// 删除策略模板文件。
+///
+/// 删除文件成功后同步从内存缓存移除,使后续 `get` / `list` 不再返回已删除的策略。
 pub async fn delete(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     headers: HeaderMap,
     Path((strategy_type, name)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let _user_id = extract_user_id(&headers, &_state.jwt_secret)?;
+    let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let st = parse_strategy_type(&strategy_type)?;
     delete_template(st, &name)?;
+    state.prompt_loader.remove(st, &name).await;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "deleted": format!("{strategy_type}/{name}")

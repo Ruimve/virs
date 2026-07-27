@@ -12,6 +12,7 @@ use virs_error::VirsResult;
 use virs_exchange::{CcxtExchangeAdapter, Exchanges, PaperExchangeAdapter};
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
+use virs_strategy::prompt::PromptLoader;
 use virs_types::bot::{OrderEvent, PriceProvider};
 use virs_types::enums::MarketType;
 use virs_types::exchange_pe::ExchangePe;
@@ -50,6 +51,8 @@ pub struct AppEngineManager {
 
     time_config: virs_config::TimeConfig,
 
+    prompt_loader: PromptLoader,
+
     started: AtomicBool,
 
     init_lock: Mutex<()>,
@@ -69,6 +72,7 @@ impl AppEngineManager {
         llm_key: String,
         proxy: Option<String>,
         time_config: virs_config::TimeConfig,
+        prompt_loader: PromptLoader,
     ) -> Self {
         Self {
             db_pool,
@@ -79,6 +83,7 @@ impl AppEngineManager {
             llm_key,
             proxy,
             time_config,
+            prompt_loader,
             started: AtomicBool::new(false),
             init_lock: Mutex::new(()),
             state: OnceLock::new(),
@@ -339,9 +344,8 @@ impl EngineManager for AppEngineManager {
             std::time::Duration::from_secs(self.time_config.llm_timeout_secs),
         ));
 
-        // 加载策略 prompt 文件（STRATEGIES_DIR 环境变量指向的目录）。
-        // 未设置环境变量时返回空 loader，worker 回退到 crate 内硬编码的 DEFAULT_* 常量。
-        let prompt_loader = virs_strategy::prompt::PromptLoader::from_env().await;
+        // 复用 AppEngineManager 持有的全局 PromptLoader（启动时一次性加载）。
+        let prompt_loader = self.prompt_loader.clone();
 
         let (mut grid_engine, grid_cmd_tx, _grid_event_broadcast) = virs_bot::grid::GridEngine::new(
             grid_store,

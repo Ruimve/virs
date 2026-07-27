@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
-use virs_strategy::prompt::{PromptLoader, StrategyType};
+use virs_strategy::prompt::StrategyType;
 use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
@@ -141,8 +141,8 @@ pub async fn create_bot(
 
     let id = uuid::Uuid::new_v4();
 
-    // 策略选择：从 PromptLoader 获取 grid 策略列表
-    let loader = PromptLoader::from_env().await;
+    // 策略选择：从全局 PromptLoader 获取 grid 策略列表
+    let loader = state.prompt_loader.clone();
     let strategies = loader.list(StrategyType::Grid).await;
 
     let strategy_file = match strategies.len() {
@@ -389,9 +389,9 @@ pub async fn get_bot(
         )
         .collect();
 
-    // 从 PromptLoader 查询策略元数据
+    // 从全局 PromptLoader 查询策略元数据
     let strategy_detail = if let Some(ref file) = bot.strategy_file {
-        let loader = PromptLoader::from_env().await;
+        let loader = state.prompt_loader.clone();
         loader.get(StrategyType::Grid, file).await.map(|tpl| {
             serde_json::json!({
                 "name": tpl.name,
@@ -478,7 +478,7 @@ pub async fn update_bot(
         .ok_or_else(|| VirsError::bad_request("strategy_file is required"))?;
 
     // 校验策略在 loader 中存在
-    let loader = PromptLoader::from_env().await;
+    let loader = state.prompt_loader.clone();
     if loader.get(StrategyType::Grid, new_strategy_file).await.is_none() {
         return Err(VirsError::bad_request(format!(
             "Strategy '{new_strategy_file}' not found in loaded strategies"

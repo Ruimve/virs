@@ -119,6 +119,8 @@ async fn main() -> VirsResult<()> {
     ));
     info!("OrderBook engine created (lazy — will start on first subscribe)");
 
+    let prompt_loader = virs_strategy::prompt::PromptLoader::from_env().await;
+
     let engine_manager = Arc::new(AppEngineManager::new(
         db_pool.clone(),
         exchange_registry.clone(),
@@ -128,6 +130,7 @@ async fn main() -> VirsResult<()> {
         config.server.llm_key.clone(),
         config.proxy.clone(),
         config.time.clone(),
+        prompt_loader.clone(),
     ));
     info!("Engine manager created (engines will start on first bot creation)");
 
@@ -146,6 +149,7 @@ async fn main() -> VirsResult<()> {
         http_connect_timeout_secs: config.time.http.http_connect_timeout_secs,
         http_pool_max_idle_per_host: config.time.http.http_pool_max_idle_per_host,
         listenkey_keepalive_futures_secs: config.time.listenkey.listenkey_keepalive_futures_secs,
+        prompt_loader,
     };
 
     let _ = engine_manager.restore_if_needed().await;

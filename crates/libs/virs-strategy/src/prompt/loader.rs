@@ -138,6 +138,28 @@ impl PromptLoader {
     pub async fn root_dir(&self) -> Option<PathBuf> {
         self.inner.read().await.root_dir.clone()
     }
+
+    /// 插入或更新单个模板到内存缓存。
+    ///
+    /// 供 `save_template` 写入文件后调用,使后续 `get` / `list` 立即返回新内容。
+    /// 若同名 key 已存在则覆盖（语义与启动时扫描一致——"last loaded wins"）。
+    pub async fn upsert(&self, template: PromptTemplate) {
+        let key = (template.strategy_type, template.name.clone());
+        let mut guard = self.inner.write().await;
+        if guard.templates.insert(key, template).is_some() {
+            warn!("upsert overwrote existing strategy template");
+        }
+    }
+
+    /// 从内存缓存移除单个模板。
+    ///
+    /// 供 `delete_template` 删除文件后调用,使后续 `get` / `list` 不再返回已删除的策略。
+    /// key 不存在时静默返回（幂等）。
+    pub async fn remove(&self, strategy_type: StrategyType, name: &str) {
+        let key = (strategy_type, name.to_string());
+        let mut guard = self.inner.write().await;
+        guard.templates.remove(&key);
+    }
 }
 
 async fn load_subdir(sub: &Path, st: StrategyType, inner: &mut Inner) {

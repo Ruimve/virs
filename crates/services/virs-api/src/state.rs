@@ -10,6 +10,7 @@ use virs_error::{VirsError, VirsResult};
 use virs_exchange::Exchanges;
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_strategy::llm_client::{call_llm_api, LlmCallResult};
+use virs_strategy::prompt::PromptLoader;
 use virs_types::position::EngineEvent;
 
 
@@ -69,6 +70,9 @@ pub struct AppState {
     pub http_pool_max_idle_per_host: usize,
 
     pub listenkey_keepalive_futures_secs: u64,
+
+    /// 全局共享的策略模板加载器（启动时一次性加载，所有 handler 复用）。
+    pub prompt_loader: PromptLoader,
 }
 
 impl AppState {
