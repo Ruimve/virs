@@ -29,6 +29,9 @@ pub enum ExchangeError {
     #[error("No data available: {0}")]
     NoData(String),
 
+    #[error("Invalid order field: {0}")]
+    InvalidOrderField(String),
+
     #[error("HTTP error {status}: {body}")]
     Http { status: u16, body: String },
 
@@ -74,6 +77,7 @@ impl Retryable for ExchangeError {
             Self::OrderStatusUnknown(_) => false,
 
             Self::IpBanned(_) => false,
+            Self::InvalidOrderField(_) => false,
             _ => false,
         }
     }
@@ -85,7 +89,9 @@ impl Categorized for ExchangeError {
             Self::Network(_) | Self::Http { .. } => ErrorCategory::Network,
             Self::Authentication(_) => ErrorCategory::Authentication,
             Self::RateLimited(_) | Self::IpBanned(_) => ErrorCategory::RateLimited,
-            Self::InvalidRequest(_) | Self::InsufficientFunds(_) => ErrorCategory::Validation,
+            Self::InvalidRequest(_) | Self::InsufficientFunds(_) | Self::InvalidOrderField(_) => {
+                ErrorCategory::Validation
+            }
             Self::OrderNotFound(_) | Self::NoData(_) => ErrorCategory::NotFound,
             Self::NotSupported(_) => ErrorCategory::Internal,
             Self::ExchangeError { .. } | Self::Internal(_) | Self::OrderStatusUnknown(_) => {
@@ -101,7 +107,9 @@ impl HttpStatus for ExchangeError {
             Self::Authentication(_) => 401,
             Self::RateLimited(_) => 429,
             Self::IpBanned(_) => 418,
-            Self::InvalidRequest(_) | Self::InsufficientFunds(_) => 400,
+            Self::InvalidRequest(_) | Self::InsufficientFunds(_) | Self::InvalidOrderField(_) => {
+                400
+            }
             Self::OrderNotFound(_) | Self::NoData(_) => 404,
             Self::NotSupported(_) => 501,
             Self::Http { status, .. } => *status,
@@ -124,6 +132,7 @@ impl ErrorCode for ExchangeError {
             Self::OrderNotFound(_) => "EXCHANGE_ORDER_NOT_FOUND",
             Self::NotSupported(_) => "EXCHANGE_NOT_SUPPORTED",
             Self::NoData(_) => "EXCHANGE_NO_DATA",
+            Self::InvalidOrderField(_) => "EXCHANGE_INVALID_ORDER_FIELD",
             Self::Http { .. } => "EXCHANGE_HTTP_ERROR",
             Self::OrderStatusUnknown(_) => "EXCHANGE_ORDER_STATUS_UNKNOWN",
             Self::IpBanned(_) => "EXCHANGE_IP_BANNED",

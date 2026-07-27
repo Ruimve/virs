@@ -9,6 +9,9 @@ pub enum BotError {
     #[error("LLM error: {0}")]
     Llm(String),
 
+    #[error("Validation error: {0}")]
+    Validation(String),
+
     #[cfg(feature = "reqwest")]
     #[error("LLM request error: {0}")]
     Reqwest(#[from] reqwest::Error),
@@ -26,6 +29,7 @@ impl Retryable for BotError {
     fn is_retryable(&self) -> bool {
         match self {
             Self::OrderExecution(_) | Self::Llm(_) => true,
+            Self::Validation(_) => false,
             #[cfg(feature = "reqwest")]
             Self::Reqwest(_) => true,
             Self::Credential(_) => false,
@@ -39,6 +43,7 @@ impl Categorized for BotError {
             Self::OrderExecution(_) => ErrorCategory::Internal,
             Self::Credential(_) => ErrorCategory::Authentication,
             Self::Llm(_) => ErrorCategory::Internal,
+            Self::Validation(_) => ErrorCategory::Validation,
             #[cfg(feature = "reqwest")]
             Self::Reqwest(_) => ErrorCategory::Network,
         }
@@ -49,6 +54,7 @@ impl HttpStatus for BotError {
     fn http_status(&self) -> u16 {
         match self {
             Self::Credential(_) => 401,
+            Self::Validation(_) => 400,
             #[cfg(feature = "reqwest")]
             Self::Reqwest(_) => 503,
             _ => 500,
@@ -62,6 +68,7 @@ impl ErrorCode for BotError {
             Self::OrderExecution(_) => "BOT_ORDER_EXECUTION_FAILED",
             Self::Credential(_) => "BOT_CREDENTIAL_ERROR",
             Self::Llm(_) => "BOT_LLM_ERROR",
+            Self::Validation(_) => "BOT_VALIDATION_ERROR",
             #[cfg(feature = "reqwest")]
             Self::Reqwest(_) => "BOT_LLM_NETWORK_ERROR",
         }

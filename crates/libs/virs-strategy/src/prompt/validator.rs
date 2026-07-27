@@ -11,6 +11,8 @@
 
 use std::collections::HashSet;
 
+use virs_error::BotError;
+
 use crate::prompt::template::{PromptSource, PromptTemplate, StrategyType};
 
 /// 占位符白名单。覆盖 auto + grid 两个默认 prompt 中出现的全部占位符。
@@ -104,36 +106,23 @@ pub const KNOWN_PLACEHOLDERS: &[&str] = &[
     "event_description",
 ];
 
-/// 校验错误。
-#[derive(Debug, thiserror::Error)]
-pub enum ValidationError {
-    #[error("system_prompt 不能为空")]
-    EmptySystemPrompt,
-    #[error("user_prompt_template 不能为空")]
-    EmptyUserTemplate,
-    #[error("system_prompt 必须包含 JSON 输出格式约束（未找到 'JSON' 字样）")]
-    SystemPromptMissingJsonSchema,
-    #[error("模板内出现未知占位符: {0}")]
-    UnknownPlaceholder(String),
-    #[error("required_placeholders 声明了 '{0}'，但 user_prompt_template 中未使用")]
-    DeclaredButUnused(String),
-    #[error("user_prompt_template 使用了 '{0}'，但未在 required_placeholders 中声明")]
-    UsedButNotDeclared(String),
-    #[error("name 不能为空且只能包含字母数字/下划线/连字符")]
-    InvalidName,
-}
-
 /// 校验单个模板。
-pub fn validate(tpl: &PromptTemplate) -> Result<(), ValidationError> {
+pub fn validate(tpl: &PromptTemplate) -> Result<(), BotError> {
     if tpl.system_prompt.trim().is_empty() {
-        return Err(ValidationError::EmptySystemPrompt);
+        return Err(BotError::Validation(
+            "system_prompt 不能为空".to_string(),
+        ));
     }
     if tpl.user_prompt_template.trim().is_empty() {
-        return Err(ValidationError::EmptyUserTemplate);
+        return Err(BotError::Validation(
+            "user_prompt_template 不能为空".to_string(),
+        ));
     }
     // system_prompt 必须约束 LLM 的输出格式（auto/grid 默认 prompt 均含 "JSON" 字样）
     if !tpl.system_prompt.contains("JSON") && !tpl.system_prompt.contains("json") {
-        return Err(ValidationError::SystemPromptMissingJsonSchema);
+        return Err(BotError::Validation(
+            "system_prompt 必须包含 JSON 输出格式约束（未找到 'JSON' 字样）".to_string(),
+        ));
     }
     // name 合法性
     if tpl
@@ -143,10 +132,14 @@ pub fn validate(tpl: &PromptTemplate) -> Result<(), ValidationError> {
     {
         // ok
     } else {
-        return Err(ValidationError::InvalidName);
+        return Err(BotError::Validation(
+            "name 不能为空且只能包含字母数字/下划线/连字符".to_string(),
+        ));
     }
     if tpl.name.is_empty() {
-        return Err(ValidationError::InvalidName);
+        return Err(BotError::Validation(
+            "name 不能为空且只能包含字母数字/下划线/连字符".to_string(),
+        ));
     }
 
     let known: HashSet<&str> = KNOWN_PLACEHOLDERS.iter().copied().collect();
@@ -155,7 +148,9 @@ pub fn validate(tpl: &PromptTemplate) -> Result<(), ValidationError> {
     // 白名单校验
     for ph in &used {
         if !known.contains(ph.as_str()) {
-            return Err(ValidationError::UnknownPlaceholder(ph.clone()));
+            return Err(BotError::Validation(format!(
+                "模板内出现未知占位符: {ph}"
+            )));
         }
     }
 
@@ -163,12 +158,16 @@ pub fn validate(tpl: &PromptTemplate) -> Result<(), ValidationError> {
     let declared: HashSet<&str> = tpl.required_placeholders.iter().map(|s| s.as_str()).collect();
     for ph in &used {
         if !declared.contains(ph.as_str()) {
-            return Err(ValidationError::UsedButNotDeclared(ph.clone()));
+            return Err(BotError::Validation(format!(
+                "user_prompt_template 使用了 '{ph}'，但未在 required_placeholders 中声明"
+            )));
         }
     }
     for ph in &tpl.required_placeholders {
         if !used.contains(ph) {
-            return Err(ValidationError::DeclaredButUnused(ph.clone()));
+            return Err(BotError::Validation(format!(
+                "required_placeholders 声明了 '{ph}'，但 user_prompt_template 中未使用"
+            )));
         }
     }
 

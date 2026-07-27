@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 use tracing::{info, warn};
+use virs_error::{Context, VirsResult};
 
 use crate::prompt::template::{MetaFile, PromptTemplate, StrategyType};
 use crate::prompt::validator::validate;
@@ -215,23 +216,23 @@ async fn load_strategy_folder(
     dir: &Path,
     st: StrategyType,
     name: &str,
-) -> Result<PromptTemplate, String> {
+) -> VirsResult<PromptTemplate> {
     let meta_path = dir.join("meta.json");
     let system_path = dir.join("system_prompt.md");
     let user_path = dir.join("user_prompt_template.md");
 
     let meta_data = tokio::fs::read(&meta_path)
         .await
-        .map_err(|e| format!("读取 meta.json 失败: {e}"))?;
+        .context("读取 meta.json 失败")?;
     let mut meta: MetaFile = serde_json::from_slice(&meta_data)
-        .map_err(|e| format!("解析 meta.json 失败: {e}"))?;
+        .context("解析 meta.json 失败")?;
 
     let system_prompt = tokio::fs::read_to_string(&system_path)
         .await
-        .map_err(|e| format!("读取 system_prompt.md 失败: {e}"))?;
+        .context("读取 system_prompt.md 失败")?;
     let user_prompt_template = tokio::fs::read_to_string(&user_path)
         .await
-        .map_err(|e| format!("读取 user_prompt_template.md 失败: {e}"))?;
+        .context("读取 user_prompt_template.md 失败")?;
 
     // name 以文件夹名为准（防止 meta.json 内 name 与文件夹名不一致）
     meta.name = name.to_string();
@@ -250,7 +251,7 @@ async fn load_strategy_folder(
         created_at: meta.created_at,
     };
 
-    validate(&tpl).map_err(|e| format!("校验失败: {e}"))?;
+    validate(&tpl).context("校验失败")?;
 
     Ok(tpl)
 }

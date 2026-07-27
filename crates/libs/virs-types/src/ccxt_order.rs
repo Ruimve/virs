@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use virs_error::ExchangeError;
+
 use crate::enums::{OrderStatus, OrderType, PositionSide, Side};
 
 
@@ -168,35 +170,6 @@ pub struct CcxtOrder {
 }
 
 
-/// 订单字段校验错误。由 `validate_order_fields` 返回，调用方据此记录日志并跳过该订单。
-#[derive(Debug)]
-pub enum OrderFieldError {
-    /// side (S) 非 BUY/SELL
-    InvalidSide(String),
-    /// position_side (ps) 非 LONG/SHORT，或为 None（OneWay 模式）
-    InvalidPositionSide(Option<String>),
-    /// status (X) 不在已知枚举范围内
-    UnknownStatus(String),
-}
-
-impl std::fmt::Display for OrderFieldError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidSide(v) => write!(f, "side 非法 (非 BUY/SELL): {}", v),
-            Self::InvalidPositionSide(Some(v)) => {
-                write!(f, "position_side 非法 (非 LONG/SHORT): {}", v)
-            }
-            Self::InvalidPositionSide(None) => {
-                write!(f, "position_side 为 None (OneWay 模式?)")
-            }
-            Self::UnknownStatus(v) => write!(f, "status 未知: {}", v),
-        }
-    }
-}
-
-impl std::error::Error for OrderFieldError {}
-
-
 /// 校验订单必需字段的合法性。WS 事件入口和 DB 读取路径共用此函数。
 ///
 /// 校验范围（影响业务逻辑的必需字段）：
@@ -214,12 +187,12 @@ impl std::error::Error for OrderFieldError {}
 ///
 /// # 返回
 /// - `Ok(())`: 字段合法，可以继续转换
-/// - `Err(OrderFieldError)`: 字段非法，调用方应记录日志并跳过该订单
+/// - `Err(ExchangeError::InvalidOrderField)`: 字段非法，调用方应记录日志并跳过该订单
 pub fn validate_order_fields(
     side: &str,
     position_side: Option<&str>,
     status: &str,
-) -> Result<(), OrderFieldError> {
+) -> Result<(), ExchangeError> {
     validate_side(side)?;
     validate_position_side(position_side)?;
     validate_status(status)?;
@@ -227,28 +200,36 @@ pub fn validate_order_fields(
 }
 
 /// 校验 side (S) 字段：必需 BUY/SELL。
-pub fn validate_side(side: &str) -> Result<(), OrderFieldError> {
+pub fn validate_side(side: &str) -> Result<(), ExchangeError> {
     match side {
         "BUY" | "SELL" => Ok(()),
-        other => Err(OrderFieldError::InvalidSide(other.to_string())),
+        other => Err(ExchangeError::InvalidOrderField(format!(
+            "side 非法 (非 BUY/SELL): {other}"
+        ))),
     }
 }
 
 /// 校验 position_side (ps) 字段：Hedge 模式下必需 LONG/SHORT。
 /// 可独立调用（如 DB 聚合仓位恢复时只需校验 position_side）。
-pub fn validate_position_side(position_side: Option<&str>) -> Result<(), OrderFieldError> {
+pub fn validate_position_side(position_side: Option<&str>) -> Result<(), ExchangeError> {
     match position_side {
         Some("LONG") | Some("SHORT") => Ok(()),
-        Some(other) => Err(OrderFieldError::InvalidPositionSide(Some(other.to_string()))),
-        None => Err(OrderFieldError::InvalidPositionSide(None)),
+        Some(other) => Err(ExchangeError::InvalidOrderField(format!(
+            "position_side 非法 (非 LONG/SHORT): {other}"
+        ))),
+        None => Err(ExchangeError::InvalidOrderField(
+            "position_side 为 None (OneWay 模式?)".to_string(),
+        )),
     }
 }
 
 /// 校验 status (X) 字段：必需已知状态。
-pub fn validate_status(status: &str) -> Result<(), OrderFieldError> {
+pub fn validate_status(status: &str) -> Result<(), ExchangeError> {
     match status {
         "NEW" | "PARTIALLY_FILLED" | "FILLED" | "CANCELED" | "CANCELLED" | "EXPIRED"
         | "EXPIRED_IN_MATCH" => Ok(()),
-        other => Err(OrderFieldError::UnknownStatus(other.to_string())),
+        other => Err(ExchangeError::InvalidOrderField(format!(
+            "status 未知: {other}"
+        ))),
     }
 }

@@ -31,7 +31,6 @@ pub use ai_generator::{generate_prompt, GenerateRequest, GenerateResult};
 pub use loader::PromptLoader;
 pub use render::{render, RenderContext};
 pub use template::{MetaFile, PromptSource, PromptTemplate, StrategyType};
-pub use validator::ValidationError;
 pub use writer::{delete_template, save_template};
 
 #[cfg(test)]
