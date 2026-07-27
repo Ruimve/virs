@@ -446,7 +446,7 @@ CREATE TABLE IF NOT EXISTS qd_grid_analysis_logs (
     user_prompt TEXT NOT NULL DEFAULT '',
     result JSONB NOT NULL DEFAULT '{}',
     error TEXT,
-    llm_model TEXT NOT NULL '',
+    llm_model TEXT NOT NULL DEFAULT '',
     -- 行级快照：决策发生时使用的策略名（INSERT 时冻结，永不 UPDATE）
     strategy_file TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

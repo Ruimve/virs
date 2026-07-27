@@ -66,7 +66,15 @@ function MetaItem({ children }: { children: ReactNode }) {
  *   深度统计行（低权重）
  */
 export const StrategyBlock = memo(
-  ({ bot, strategy, decision, stats, totalPnl, totalPnlPct, decideIntervalSecs }: StrategyBlockProps) => {
+  ({
+    bot,
+    strategy,
+    decision,
+    stats,
+    totalPnl,
+    totalPnlPct,
+    decideIntervalSecs,
+  }: StrategyBlockProps) => {
     const dec = extractDecision(decision);
     const strategyName = resolveStrategyName(bot, strategy);
     const strategyDesc = strategy?.description;
