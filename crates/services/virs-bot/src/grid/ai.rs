@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use crate::common::llm_client::LlmClient;
-use crate::common::ports::CredentialStore;
-use crate::common::ports::LlmProviderResolver;
-use crate::grid::ports::GridBotConfig;
+use virs_types::bot::{CredentialStore, LlmProviderResolver};
+use virs_types::grid_port::GridBotConfig;
 use virs_strategy::output::{StrategyAction, StrategyOutput, ToStrategyOutput};
 use tracing::warn;
 use uuid::Uuid;

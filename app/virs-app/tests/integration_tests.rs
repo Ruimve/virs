@@ -5,7 +5,7 @@ use virs_app::adapters::grid_store::bot_to_config as grid_bot_to_config;
 use virs_app::adapters::llm_resolver::resolve_llm_provider;
 use virs_app::adapters::market_data::candle_to_kline;
 use virs_app::adapters::order_executor::convert_pe_event;
-use virs_market::Candle;
+use virs_ccxt::ws_types::Candle;
 use virs_models::AutoBot;
 use virs_models::GridBot;
 use virs_types::bot::OrderEvent;

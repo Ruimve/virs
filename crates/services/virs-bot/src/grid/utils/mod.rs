@@ -1,4 +1,4 @@
-use crate::grid::ports::GridBotConfig;
+use virs_types::grid_port::GridBotConfig;
 use crate::grid::types::GridLevel;
 
 pub fn calculate_levels(bot: &GridBotConfig, current_price: f64) -> Vec<GridLevel> {

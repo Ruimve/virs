@@ -1,10 +1,3 @@
-pub use virs_types::auto_port::*;
-
-pub use virs_types::bot::{
-    MarketDataProvider, MarketSnapshot, OrderCommand, OrderEvent,
-    OrderExecutor, OrderInfo, PriceProvider,
-};
-
 #[derive(Debug, Clone, Default)]
 pub struct AutoMarketSnapshot {
     pub base: virs_types::bot::MarketSnapshot,

@@ -15,7 +15,7 @@ pub struct KlineWsMsg<'a> {
     exchange: &'a str,
     symbol: &'a str,
     timeframe: &'a str,
-    candle: &'a virs_market::Candle,
+    candle: &'a virs_ccxt::ws_types::Candle,
     event_type: &'a str,
 }
 

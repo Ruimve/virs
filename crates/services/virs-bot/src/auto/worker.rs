@@ -6,9 +6,10 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::auto::ai::{AutoAction, AutoAiService, AutoDecision};
-use crate::auto::ports::*;
+use crate::auto::ports::AutoMarketSnapshot;
 use crate::auto::strategy;
-use crate::auto::types::AutoBotConfig;
+use virs_types::auto_port::{AutoBotConfig, AutoStore};
+use virs_types::bot::{MarketDataProvider, OrderCommand, OrderEvent, OrderExecutor, PriceProvider};
 use virs_strategy::prompt::{render, PromptLoader, RenderContext, StrategyType};
 use virs_config::TimeConfig;
 use virs_types::client_order_id;

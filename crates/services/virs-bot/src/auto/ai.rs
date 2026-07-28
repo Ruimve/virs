@@ -4,7 +4,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::common::llm_client::LlmClient;
-use crate::common::ports::{CredentialStore, LlmProviderResolver};
+use virs_types::bot::{CredentialStore, LlmProviderResolver};
 use virs_strategy::output::{StrategyAction, StrategyOutput, ToStrategyOutput};
 
 #[derive(Debug, Clone, PartialEq)]

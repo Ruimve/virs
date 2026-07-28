@@ -2,13 +2,13 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use virs_error::VirsResult;
 
-pub use virs_ccxt::ws_types::{Candle, KlineWsClient, WsCandleUpdate, WsEvent};
+pub(crate) use virs_ccxt::ws_types::{Candle, KlineWsClient, WsEvent};
 
-pub use virs_ccxt::ws_types::{
-    OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate,
+pub(crate) use virs_ccxt::ws_types::{
+    OrderBookLevel, OrderBookWsClient, WsOrderBookEvent,
 };
 
-pub use virs_types::enums::MarketType;
+pub(crate) use virs_types::enums::MarketType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Timeframe {

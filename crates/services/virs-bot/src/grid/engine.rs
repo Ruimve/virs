@@ -6,7 +6,8 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::grid::ai::GridAiService;
-use crate::grid::ports::*;
+use virs_types::bot::{MarketDataProvider, OrderCommand, OrderEvent, OrderExecutor, PriceProvider};
+use virs_types::grid_port::GridStore;
 use crate::grid::types::{GridCommand, GridEvent};
 use crate::grid::worker::GridWorker;
 use virs_strategy::prompt::PromptLoader;

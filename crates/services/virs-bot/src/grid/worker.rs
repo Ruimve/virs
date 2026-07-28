@@ -9,7 +9,8 @@ use virs_types::client_order_id;
 use virs_types::enums::{PositionSide, Side};
 
 use crate::grid::ai::{GridAction, GridAiDecision, GridAiService};
-use crate::grid::ports::*;
+use virs_types::bot::{MarketDataProvider, OrderCommand, OrderEvent, OrderExecutor, OrderInfo, PriceProvider};
+use virs_types::grid_port::{GridBotConfig, GridStore};
 use crate::grid::types::{GridEvent, GridLevel, GridState};
 use crate::grid::utils;
 use virs_strategy::prompt::{render, PromptLoader, RenderContext, StrategyType};
