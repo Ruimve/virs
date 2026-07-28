@@ -2,11 +2,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::Utc;
 use dashmap::DashMap;
 use tokio::sync::{mpsc, Mutex};
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::warn;
+use tracing::{error, warn};
 use uuid::Uuid;
 
 use virs_types::enums::*;
@@ -137,7 +136,18 @@ impl PaperExchangeAdapter {
 
         for order in &triggered {
             self.pending.remove(&order.id);
-            let realized_pnl = self.update_position_on_fill(order, current_price).await;
+            let realized_pnl = match self.update_position_on_fill(order, current_price).await {
+                Ok(pnl) => pnl,
+                Err(e) => {
+                    error!(
+                        symbol = %order.symbol,
+                        order_id = %order.id,
+                        error = %e,
+                        "Failed to update position on fill — skipping order"
+                    );
+                    continue;
+                }
+            };
 
             let fee = current_price * order.amount * 0.0002;
             let ccxt_order = CcxtOrder {
@@ -199,17 +209,18 @@ impl PaperExchangeAdapter {
         }
     }
 
-    async fn update_position_on_fill(&self, order: &PaperPendingOrder, fill_price: f64) -> f64 {
+    async fn update_position_on_fill(
+        &self,
+        order: &PaperPendingOrder,
+        fill_price: f64,
+    ) -> VirsResult<f64> {
         let position_side = match &order.position_side {
             Some(ps) => ps.clone(),
             None => {
-                tracing::error!(
-                    symbol = %order.symbol,
-                    order_id = %order.id,
-                    "position_side is None in Hedge mode — skipping fill update to avoid \
-                     silent position corruption. Caller must provide position_side."
-                );
-                return 0.0;
+                return Err(VirsError::config(format!(
+                    "position_side is None for order {} on {} — caller must provide position_side in Hedge mode",
+                    order.id, order.symbol
+                )));
             }
         };
         let key = format!("{}:{:?}", order.symbol, position_side);
@@ -220,14 +231,12 @@ impl PaperExchangeAdapter {
             .configured_leverage
             .get(&order.symbol)
             .map(|v| *v)
-            .unwrap_or_else(|| {
-                tracing::error!(
-                    symbol = %order.symbol,
-                    "No leverage configured for symbol — defaulting to 1 (no leverage). \
-                     Call set_leverage() before trading to avoid unexpected margin calculations."
-                );
-                1
-            });
+            .ok_or_else(|| {
+                VirsError::config(format!(
+                    "No leverage configured for {} — call set_leverage() before trading",
+                    order.symbol
+                ))
+            })?;
         let leverage_f64 = leverage as f64;
         let notional = fill_price * order.amount;
         let margin = notional / leverage_f64;
@@ -305,7 +314,7 @@ impl PaperExchangeAdapter {
             balance.free += margin_release + realized_pnl;
         }
 
-        realized_pnl
+        Ok(realized_pnl)
     }
 }
 
@@ -319,24 +328,12 @@ impl ExchangePe for PaperExchangeAdapter {
     }
 
     async fn get_ticker(&self, symbol: &str) -> VirsResult<Ticker> {
-        warn!(
-            exchange = %self.name,
-            symbol = %symbol,
-            "PaperExchange get_ticker stub — returning all-zero Ticker (paper mode, no real market data)"
-        );
-        Ok(Ticker {
-            symbol: symbol.to_string(),
-            exchange: self.name.clone(),
-            bid: None,
-            ask: None,
-            last: 0.0,
-            high_24h: 0.0,
-            low_24h: 0.0,
-            volume_24h: 0.0,
-            price_change_24h: 0.0,
-            price_change_pct_24h: 0.0,
-            timestamp: Utc::now(),
-        })
+        Err(VirsError::Exchange(ExchangeError::NotSupported(
+            format!(
+                "PaperExchange does not support get_ticker for {} — no real market data in paper mode",
+                symbol
+            )
+        )))
     }
 
     async fn get_balance(&self) -> VirsResult<Balance> {
@@ -369,16 +366,12 @@ impl ExchangePe for PaperExchangeAdapter {
     }
 
     async fn get_funding_rate(&self, symbol: &str) -> VirsResult<FundingRate> {
-        warn!(
-            exchange = %self.name,
-            symbol = %symbol,
-            "PaperExchange get_funding_rate stub — returning zero rate (paper mode, no real funding data)"
-        );
-        Ok(FundingRate {
-            symbol: symbol.to_string(),
-            rate: 0.0,
-            next_funding_time: Some(Utc::now()),
-        })
+        Err(VirsError::Exchange(ExchangeError::NotSupported(
+            format!(
+                "PaperExchange does not support get_funding_rate for {} — no real funding data in paper mode",
+                symbol
+            )
+        )))
     }
 
     async fn get_klines(
@@ -464,7 +457,7 @@ impl ExchangePe for PaperExchangeAdapter {
             };
             let realized_pnl = self
                 .update_position_on_fill(&pending_for_fill, fill_price)
-                .await;
+                .await?;
 
             let fee = fill_price * params.amount * 0.0005;
 

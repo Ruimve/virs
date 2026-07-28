@@ -56,6 +56,7 @@ async fn int_2_2_paper_market_order_updates_balance() {
         virs_exchange::paper::PaperExchangeAdapter::new("binance", MarketType::Perpetual, 50000.0);
 
     paper.on_price_tick("BTC/USDT", 50000.0).await;
+    paper.set_leverage("BTC/USDT", 10).await.unwrap();
 
     let params = PlaceOrderParams {
         symbol: "BTC/USDT".into(),

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use virs_error::BotResult;
+use virs_error::{BotResult, VirsResult};
 
 use crate::enums::{PositionSide, Side};
 use crate::market::Balance;
@@ -113,7 +113,7 @@ pub trait PriceProvider: Send + Sync {
 }
 
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MarketSnapshot {
     pub current_price: f64,
     pub funding_rate: f64,
@@ -130,8 +130,8 @@ pub trait MarketDataProvider: Send + Sync {
         &self,
         exchange: &str,
         symbol: &str,
-    ) -> MarketSnapshot;
-    async fn get_account_balance(&self, exchange: &str) -> Balance;
+    ) -> VirsResult<MarketSnapshot>;
+    async fn get_account_balance(&self, exchange: &str) -> VirsResult<Balance>;
 }
 
 

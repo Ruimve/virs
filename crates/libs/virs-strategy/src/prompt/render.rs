@@ -11,7 +11,7 @@ use crate::market::MarketIndicators;
 /// 渲染 prompt 所需的全部上下文数据。
 ///
 /// 所有字段对任何 bot 都是通用的；不适用于当前 bot 的字段填默认值即可。
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct RenderContext {
     // ── 时间 ──
     /// 当前时间戳（格式："2026-07-19 12:00:00 UTC"）

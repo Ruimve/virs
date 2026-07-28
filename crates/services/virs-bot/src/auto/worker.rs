@@ -728,8 +728,9 @@ impl AutoWorker {
         }
 
         if self.has_any_position() {
-            let atr = self.fetch_current_atr().await;
-            self.update_trailing_stop(atr);
+            if let Some(atr) = self.fetch_current_atr().await {
+                self.update_trailing_stop(atr);
+            }
 
             if self.check_position_timeout().await {
                 return;
@@ -879,13 +880,25 @@ impl AutoWorker {
         }
     }
 
-    async fn fetch_current_atr(&self) -> f64 {
-        let snapshot = AutoMarketSnapshot::from_base(
-            self.market_data_provider
-                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
-                .await,
-        );
-        snapshot.indicators.atr
+    async fn fetch_current_atr(&self) -> Option<f64> {
+        let snapshot = match self
+            .market_data_provider
+            .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
+            .await
+        {
+            Ok(s) => match AutoMarketSnapshot::from_base(s) {
+                Ok(snap) => snap,
+                Err(e) => {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to parse indicators for ATR");
+                    return None;
+                }
+            },
+            Err(e) => {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to fetch market snapshot for ATR");
+                return None;
+            }
+        };
+        Some(snapshot.indicators.atr)
     }
 
     async fn check_position_timeout(&mut self) -> bool {
@@ -1026,21 +1039,40 @@ impl AutoWorker {
     }
 
     async fn build_llm_prompt(&self) -> Option<(String, String)> {
-        let snapshot = AutoMarketSnapshot::from_base(
-            self.market_data_provider
-                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
-                .await,
-        );
+        let snapshot = match self
+            .market_data_provider
+            .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
+            .await
+        {
+            Ok(s) => match AutoMarketSnapshot::from_base(s) {
+                Ok(snap) => snap,
+                Err(e) => {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to parse indicators for LLM prompt");
+                    return None;
+                }
+            },
+            Err(e) => {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to fetch market snapshot for LLM prompt");
+                return None;
+            }
+        };
 
         if snapshot.base.current_price <= 0.0 {
             warn!(bot_id = %self.bot.id, "Market snapshot has zero price, skipping decision");
             return None;
         }
 
-        let account = self
+        let account = match self
             .market_data_provider
             .get_account_balance(&self.bot.exchange)
-            .await;
+            .await
+        {
+            Ok(b) => b,
+            Err(e) => {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to fetch account balance for LLM prompt");
+                return None;
+            }
+        };
         let margin_usage_rate = if account.total > 0.0 {
             account.used / account.total
         } else {
@@ -1342,11 +1374,23 @@ impl AutoWorker {
             }
         }
 
-        let snapshot = AutoMarketSnapshot::from_base(
-            self.market_data_provider
-                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
-                .await,
-        );
+        let snapshot = match self
+            .market_data_provider
+            .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
+            .await
+        {
+            Ok(s) => match AutoMarketSnapshot::from_base(s) {
+                Ok(snap) => snap,
+                Err(e) => {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to parse indicators for decision execution");
+                    return Some(format!("指标解析失败，跳过决策: {}", e));
+                }
+            },
+            Err(e) => {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to fetch market snapshot for decision execution");
+                return Some(format!("市场快照获取失败，跳过决策: {}", e));
+            }
+        };
 
         if snapshot.base.current_price <= 0.0 {
             warn!(bot_id = %self.bot.id, "Market snapshot has zero price, skipping decision execution");
@@ -1494,13 +1538,20 @@ impl AutoWorker {
         side: &str,
         snapshot: &AutoMarketSnapshot,
     ) {
-        let account = self
+        let account = match self
             .market_data_provider
             .get_account_balance(&self.bot.exchange)
-            .await;
+            .await
+        {
+            Ok(b) => b,
+            Err(e) => {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to fetch account balance, skipping open");
+                return;
+            }
+        };
 
         if account.total <= 0.0 && account.free <= 0.0 {
-            warn!(bot_id = %self.bot.id, "Cannot retrieve account balance, skipping open");
+            warn!(bot_id = %self.bot.id, "Account balance is zero, skipping open");
             return;
         }
 
@@ -2029,15 +2080,26 @@ impl AutoWorker {
         };
 
         let (stop_loss, take_profit) = if price_deviation > 0.005 {
-            let snapshot = AutoMarketSnapshot::from_base(
-                self.market_data_provider
-                    .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
-                    .await,
-            );
-            let atr = if snapshot.indicators.atr > 0.0 {
-                snapshot.indicators.atr
-            } else {
-                fill_price * 0.02
+            let atr = match self
+                .market_data_provider
+                .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
+                .await
+            {
+                Ok(s) => match AutoMarketSnapshot::from_base(s) {
+                    Ok(snap) if snap.indicators.atr > 0.0 => snap.indicators.atr,
+                    Ok(_) => {
+                        warn!(bot_id = %self.bot.id, "ATR is zero in snapshot, using fill_price * 2% as fallback for SL/TP");
+                        fill_price * 0.02
+                    }
+                    Err(e) => {
+                        warn!(bot_id = %self.bot.id, error = %e, "Failed to parse indicators for SL/TP recalculation, using fill_price * 2%");
+                        fill_price * 0.02
+                    }
+                },
+                Err(e) => {
+                    warn!(bot_id = %self.bot.id, error = %e, "Failed to fetch market snapshot for SL/TP recalculation, using fill_price * 2%");
+                    fill_price * 0.02
+                }
             };
             let sl = strategy::compute_stop_loss(fill_price, &pending.side, atr);
             let tp = strategy::compute_take_profit(fill_price, &pending.side, atr);

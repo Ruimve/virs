@@ -49,8 +49,12 @@ pub async fn create_bot(
     let leverage = body["leverage"].as_i64().ok_or_else(|| {
         VirsError::bad_request("leverage is required and must be greater than 0")
     })? as i32;
-    let max_position_pct = body["max_position_pct"].as_f64().unwrap_or(80.0);
-    let decide_interval_secs = body["decide_interval_secs"].as_i64().unwrap_or(300) as i32;
+    let max_position_pct = body["max_position_pct"].as_f64().ok_or_else(|| {
+        VirsError::bad_request("max_position_pct is required and must be between 0 and 100 (exclusive)")
+    })?;
+    let decide_interval_secs = body["decide_interval_secs"].as_i64().ok_or_else(|| {
+        VirsError::bad_request("decide_interval_secs is required and must be greater than 0")
+    })? as i32;
     let name = body["name"].as_str().unwrap_or("Auto Bot");
     let paper_mode = body["paper_mode"].as_bool().ok_or_else(|| {
         VirsError::bad_request("paper_mode is required (must be true or false)")
@@ -70,7 +74,12 @@ pub async fn create_bot(
     }
     if max_position_pct <= 0.0 || max_position_pct > 100.0 {
         return Err(VirsError::bad_request(
-            "max_position_pct is required and must be between 0 and 100 (exclusive)",
+            "max_position_pct must be between 0 and 100 (exclusive)",
+        ));
+    }
+    if decide_interval_secs <= 0 {
+        return Err(VirsError::bad_request(
+            "decide_interval_secs must be greater than 0",
         ));
     }
 

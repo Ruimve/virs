@@ -909,10 +909,17 @@ impl GridWorker {
     }
 
     async fn build_llm_prompt(&self) -> Option<(String, String)> {
-        let snapshot = self
+        let snapshot = match self
             .market_data_provider
             .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
-            .await;
+            .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to fetch market snapshot for LLM prompt");
+                return None;
+            }
+        };
         if snapshot.current_price <= 0.0 {
             warn!(bot_id = %self.bot.id, "Market snapshot has zero price, skipping LLM decision");
             return None;
@@ -1004,19 +1011,23 @@ impl GridWorker {
             &self.levels,
         );
 
-        let account = self
+        let account = match self
             .market_data_provider
             .get_account_balance(&self.bot.exchange)
-            .await;
+            .await
+        {
+            Ok(b) => b,
+            Err(e) => {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to fetch account balance for grid LLM prompt");
+                return None;
+            }
+        };
 
         let indicators: virs_strategy::market::MarketIndicators =
-            serde_json::from_value(snapshot.indicators_json.clone()).unwrap_or_else(|e| {
-                tracing::warn!(
-                    error = %e,
-                    "Failed to deserialize indicators_json for grid LLM — using all-zero defaults"
-                );
-                virs_strategy::market::MarketIndicators::default()
-            });
+            serde_json::from_value(snapshot.indicators_json.clone()).map_err(|e| {
+                warn!(bot_id = %self.bot.id, error = %e, "Failed to deserialize indicators_json for grid LLM");
+                e
+            }).ok()?;
 
         let last_adjust_time = self
             .bot

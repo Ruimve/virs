@@ -21,11 +21,21 @@ pub async fn create_bot(
 
     let symbol = body["symbol"].as_str().unwrap_or("");
     let exchange = body["exchange"].as_str().unwrap_or("");
-    let grid_count = body["grid_count"].as_i64().unwrap_or(10) as i32;
-    let upper_price = body["upper_price"].as_f64().unwrap_or(0.0);
-    let lower_price = body["lower_price"].as_f64().unwrap_or(0.0);
-    let grid_profit_pct = body["grid_profit_pct"].as_f64().unwrap_or(0.5);
-    let quantity_per_grid = body["quantity_per_grid"].as_f64().unwrap_or(10.0);
+    let grid_count = body["grid_count"].as_i64().ok_or_else(|| {
+        VirsError::bad_request("grid_count is required and must be greater than 0")
+    })? as i32;
+    let upper_price = body["upper_price"].as_f64().ok_or_else(|| {
+        VirsError::bad_request("upper_price is required and must be greater than 0")
+    })?;
+    let lower_price = body["lower_price"].as_f64().ok_or_else(|| {
+        VirsError::bad_request("lower_price is required and must be greater than 0")
+    })?;
+    let grid_profit_pct = body["grid_profit_pct"].as_f64().ok_or_else(|| {
+        VirsError::bad_request("grid_profit_pct is required and must be greater than 0")
+    })?;
+    let quantity_per_grid = body["quantity_per_grid"].as_f64().ok_or_else(|| {
+        VirsError::bad_request("quantity_per_grid is required and must be greater than 0")
+    })?;
     let leverage = body["leverage"].as_i64().ok_or_else(|| {
         VirsError::bad_request("leverage is required and must be greater than 0")
     })? as i32;
@@ -40,25 +50,19 @@ pub async fn create_bot(
         ));
     }
 
-
-    if upper_price <= 0.0 {
-        return Err(VirsError::bad_request(
-            "upper_price is required and must be greater than 0",
-        ));
-    }
-    if lower_price <= 0.0 {
-        return Err(VirsError::bad_request(
-            "lower_price is required and must be greater than 0",
-        ));
-    }
     if upper_price <= lower_price {
         return Err(VirsError::bad_request(
             "upper_price must be greater than lower_price",
         ));
     }
-    if quantity_per_grid <= 0.0 {
+    if grid_count <= 0 {
         return Err(VirsError::bad_request(
-            "quantity_per_grid is required and must be greater than 0",
+            "grid_count must be greater than 0",
+        ));
+    }
+    if grid_profit_pct <= 0.0 {
+        return Err(VirsError::bad_request(
+            "grid_profit_pct must be greater than 0",
         ));
     }
     if leverage <= 0 {

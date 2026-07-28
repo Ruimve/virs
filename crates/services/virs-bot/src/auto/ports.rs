@@ -1,23 +1,24 @@
-#[derive(Debug, Clone, Default)]
+use virs_error::{BotError, BotResult};
+
+#[derive(Debug, Clone)]
 pub struct AutoMarketSnapshot {
     pub base: virs_types::bot::MarketSnapshot,
     pub indicators: virs_strategy::market::MarketIndicators,
 }
 
 impl AutoMarketSnapshot {
-    pub fn from_base(snapshot: virs_types::bot::MarketSnapshot) -> Self {
+    pub fn from_base(snapshot: virs_types::bot::MarketSnapshot) -> BotResult<Self> {
         let indicators: virs_strategy::market::MarketIndicators =
-            serde_json::from_value(snapshot.indicators_json.clone()).unwrap_or_else(|e| {
-                tracing::warn!(
-                    error = %e,
-                    "Failed to deserialize indicators_json — using all-zero defaults. \
-                     LLM decisions based on zero indicators may be incorrect."
-                );
-                virs_strategy::market::MarketIndicators::default()
-            });
-        Self {
+            serde_json::from_value(snapshot.indicators_json.clone()).map_err(|e| {
+                BotError::Validation(format!(
+                    "Failed to deserialize indicators_json: {}. \
+                     LLM decisions cannot be made with corrupted indicator data.",
+                    e
+                ))
+            })?;
+        Ok(Self {
             base: snapshot,
             indicators,
-        }
+        })
     }
 }

@@ -58,9 +58,19 @@ pub async fn select_strategy_by_llm(
 
     // 计算基础指标
     let close_prices = closes(&klines);
-    let current_price = close_prices.last().copied().unwrap_or(0.0);
+    let current_price = close_prices.last().copied().ok_or_else(|| {
+        VirsError::bad_request(format!(
+            "No close price data available for {} on {} — cannot select strategy",
+            symbol, exchange
+        ))
+    })?;
     let atr_series = atr(&klines, 14);
-    let atr_val = atr_series.last().copied().unwrap_or(0.0);
+    let atr_val = atr_series.last().copied().ok_or_else(|| {
+        VirsError::bad_request(format!(
+            "No ATR data available for {} on {} — cannot select strategy",
+            symbol, exchange
+        ))
+    })?;
     let rsi_val = rsi_at(&klines, klines.len().saturating_sub(1), 14);
 
     // 获取策略元数据

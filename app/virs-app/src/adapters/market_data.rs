@@ -7,6 +7,7 @@ use virs_exchange::Exchanges;
 use virs_market::KlineEngine;
 use virs_market::Timeframe;
 use virs_types::Kline;
+use virs_error::{VirsError, VirsResult};
 use virs_types::bot::{MarketDataProvider, MarketSnapshot};
 use virs_types::market::Balance;
 use virs_types::exchange_pe::ExchangePe;
@@ -156,7 +157,7 @@ impl ExchangeMarketDataProvider {
 
 #[async_trait]
 impl MarketDataProvider for ExchangeMarketDataProvider {
-    async fn get_market_snapshot(&self, exchange: &str, symbol: &str) -> MarketSnapshot {
+    async fn get_market_snapshot(&self, exchange: &str, symbol: &str) -> VirsResult<MarketSnapshot> {
         let now_ms = chrono::Utc::now().timestamp_millis();
 
         let klines_1h = match self
@@ -172,7 +173,10 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             .await
         {
             Some(k) => k,
-            None => return MarketSnapshot::default(),
+            None => return Err(VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                "No H1 kline data available for {} on {} — cannot build market snapshot",
+                symbol, exchange
+            )))),
         };
 
         let klines_4h = self
@@ -208,22 +212,23 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             ex.get_funding_rate(symbol)
                 .await
                 .map(|fr| fr.rate)
-                .unwrap_or_else(|e| {
+                .map_err(|e| {
                     warn!(
                         exchange = %exchange,
                         symbol = %symbol,
                         error = %e,
-                        "Funding rate fetch failed — defaulting to 0.0"
+                        "Funding rate fetch failed"
                     );
-                    0.0
-                })
+                    VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                        "Funding rate fetch failed for {} on {}: {}",
+                        symbol, exchange, e
+                    )))
+                })?
         } else {
-            warn!(
-                exchange = %exchange,
-                symbol = %symbol,
-                "No exchange found for funding rate — defaulting to 0.0"
-            );
-            0.0
+            return Err(VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                "No exchange found for funding rate: {}",
+                exchange
+            ))));
         };
 
         let ind = virs_strategy::market::compute_market_indicators(
@@ -232,7 +237,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             &klines_15m,
             funding_rate,
             "N/A".to_string(),
-        );
+        )?;
 
         let effective_price = if current_price > 0.0 {
             current_price
@@ -242,35 +247,32 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
 
         let exchange_key = format!("{}:perpetual", exchange);
         let min_qty = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
-            match ex.get_min_qty(symbol).await {
-                Ok(q) => q,
-                Err(e) => {
-                    tracing::warn!(error = %e, "Failed to fetch min_qty — using 0.0 (precision check will be skipped, orders may be rejected by exchange)");
-                    0.0
-                }
-            }
+            ex.get_min_qty(symbol).await.map_err(|e| {
+                VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                    "Failed to fetch min_qty for {} on {}: {}",
+                    symbol, exchange, e
+                )))
+            })?
         } else {
-            tracing::warn!(
-                exchange = %exchange,
-                symbol = %symbol,
-                "No exchange found for min_qty — using 0.0 (precision check will be skipped)"
-            );
-            0.0
+            return Err(VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                "No exchange found for min_qty: {}",
+                exchange
+            ))));
         };
 
-        MarketSnapshot {
+        Ok(MarketSnapshot {
             current_price: effective_price,
             funding_rate,
             funding_next_time: "N/A".to_string(),
             min_qty,
             indicators_json: serde_json::to_value(&ind).unwrap_or_default(),
-        }
+        })
     }
 
-    async fn get_account_balance(&self, exchange: &str) -> Balance {
+    async fn get_account_balance(&self, exchange: &str) -> VirsResult<Balance> {
         if let Some(ref pe_ex) = self.pe_exchange {
             match pe_ex.get_balance().await {
-                Ok(b) => return b,
+                Ok(b) => return Ok(b),
                 Err(e) => {
                     warn!(error = %e, "PE exchange get_balance failed, falling back to registry");
                 }
@@ -278,18 +280,17 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         }
 
         let exchange_key = format!("{}:perpetual", exchange);
-        let ex = match self.exchange_registry.get(&exchange_key) {
-            Some(e) => e,
-            None => return Balance { asset: "USDT".to_string(), free: 0.0, used: 0.0, total: 0.0 },
-        };
+        let ex = self.exchange_registry.get(&exchange_key)
+            .ok_or_else(|| VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                "No exchange found for balance: {}", exchange
+            ))))?;
 
-        match ex.get_balance().await {
-            Ok(b) => b,
-            Err(e) => {
-                warn!(error = %e, "get_account_balance error");
-                Balance { asset: "USDT".to_string(), free: 0.0, used: 0.0, total: 0.0 }
-            }
-        }
+        ex.get_balance().await.map_err(|e| {
+            warn!(error = %e, "get_account_balance error");
+            VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                "Failed to fetch balance for {}: {}", exchange, e
+            )))
+        })
     }
 }
 
@@ -421,7 +422,7 @@ impl AutoExchangeMarketDataProvider {
 
 #[async_trait]
 impl MarketDataProvider for AutoExchangeMarketDataProvider {
-    async fn get_market_snapshot(&self, exchange: &str, symbol: &str) -> MarketSnapshot {
+    async fn get_market_snapshot(&self, exchange: &str, symbol: &str) -> VirsResult<MarketSnapshot> {
         let now_ms = chrono::Utc::now().timestamp_millis();
 
         let klines_1h = match self
@@ -437,7 +438,10 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             .await
         {
             Some(k) => k,
-            None => return MarketSnapshot::default(),
+            None => return Err(VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                "No H1 kline data available for {} on {} — cannot build market snapshot",
+                symbol, exchange
+            )))),
         };
 
         let klines_4h = self
@@ -480,22 +484,17 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
                         (fr.rate, next)
                     }
                     Err(e) => {
-                        warn!(
-                            exchange = %exchange,
-                            symbol = %symbol,
-                            error = %e,
-                            "Funding rate fetch failed — defaulting to 0.0"
-                        );
-                        (0.0, "N/A".to_string())
+                        return Err(VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                            "Funding rate fetch failed for {} on {}: {}",
+                            symbol, exchange, e
+                        ))));
                     }
                 }
             } else {
-                warn!(
-                    exchange = %exchange,
-                    symbol = %symbol,
-                    "No exchange found for funding rate — defaulting to 0.0"
-                );
-                (0.0, "N/A".to_string())
+                return Err(VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                    "No exchange found for funding rate: {}",
+                    exchange
+                ))));
             };
 
         let ind = virs_strategy::market::compute_market_indicators(
@@ -504,7 +503,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             &klines_15m,
             funding_rate,
             funding_next_time.clone(),
-        );
+        )?;
 
         let effective_price = if current_price > 0.0 {
             current_price
@@ -512,36 +511,34 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             ind.current_price
         };
 
+        let exchange_key = format!("{}:perpetual", exchange);
         let min_qty = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
-            match ex.get_min_qty(symbol).await {
-                Ok(q) => q,
-                Err(e) => {
-                    tracing::warn!(error = %e, "Failed to fetch min_qty — using 0.0 (precision check will be skipped, orders may be rejected by exchange)");
-                    0.0
-                }
-            }
+            ex.get_min_qty(symbol).await.map_err(|e| {
+                VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                    "Failed to fetch min_qty for {} on {}: {}",
+                    symbol, exchange, e
+                )))
+            })?
         } else {
-            tracing::warn!(
-                exchange = %exchange,
-                symbol = %symbol,
-                "No exchange found for min_qty — using 0.0 (precision check will be skipped)"
-            );
-            0.0
+            return Err(VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                "No exchange found for min_qty: {}",
+                exchange
+            ))));
         };
 
-        MarketSnapshot {
+        Ok(MarketSnapshot {
             current_price: effective_price,
             funding_rate,
             funding_next_time,
             min_qty,
             indicators_json: serde_json::to_value(&ind).unwrap_or_default(),
-        }
+        })
     }
 
-    async fn get_account_balance(&self, exchange: &str) -> Balance {
+    async fn get_account_balance(&self, exchange: &str) -> VirsResult<Balance> {
         if let Some(ref pe_ex) = self.pe_exchange {
             match pe_ex.get_balance().await {
-                Ok(b) => return b,
+                Ok(b) => return Ok(b),
                 Err(e) => {
                     warn!(error = %e, "PE exchange get_balance failed, falling back to registry");
                 }
@@ -549,17 +546,16 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
         }
 
         let exchange_key = format!("{}:perpetual", exchange);
-        let ex = match self.exchange_registry.get(&exchange_key) {
-            Some(e) => e,
-            None => return Balance { asset: "USDT".to_string(), free: 0.0, used: 0.0, total: 0.0 },
-        };
+        let ex = self.exchange_registry.get(&exchange_key)
+            .ok_or_else(|| VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                "No exchange found for balance: {}", exchange
+            ))))?;
 
-        match ex.get_balance().await {
-            Ok(b) => b,
-            Err(e) => {
-                warn!(error = %e, "get_account_balance error");
-                Balance { asset: "USDT".to_string(), free: 0.0, used: 0.0, total: 0.0 }
-            }
-        }
+        ex.get_balance().await.map_err(|e| {
+            warn!(error = %e, "get_account_balance error");
+            VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                "Failed to fetch balance for {}: {}", exchange, e
+            )))
+        })
     }
 }

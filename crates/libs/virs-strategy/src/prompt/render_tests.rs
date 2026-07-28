@@ -1,8 +1,36 @@
 use crate::market::MarketIndicators;
 use crate::prompt::render::{format_bars_outside, render, RenderContext};
 
+/// 测试辅助：构造全零 MarketIndicators（仅用于测试，生产代码不允许使用默认值）。
+fn zero_indicators() -> MarketIndicators {
+    serde_json::from_str(r#"{
+        "current_price": 0.0, "rsi": 0.0, "atr": 0.0, "atr_pct": 0.0,
+        "bb_width": 0.0, "bb_upper": 0.0, "bb_middle": 0.0, "bb_lower": 0.0,
+        "ema12": 0.0, "ema20": 0.0, "ema26": 0.0, "ema50": 0.0,
+        "macd": 0.0, "macd_signal": 0.0, "macd_histogram": 0.0, "adx": 0.0,
+        "change_1h": 0.0, "h1_atr_sma20": 0.0, "h1_candle_body": 0.0,
+        "h1_bars_outside_band": 0, "h1_bandwidth_5bars_ago": 0.0,
+        "h1_high_20": 0.0, "h1_low_20": 0.0,
+        "nearest_round_up": 0.0, "nearest_round_down": 0.0,
+        "h1_volume": 0.0, "h1_volume_sma20": 0.0,
+        "h1_ema_cross_bars_ago": 0, "h1_ema_gap_pct": 0.0,
+        "h1_ema_gap_trend": "", "h1_high_50": 0.0, "h1_low_50": 0.0,
+        "m15_current_price": 0.0, "m15_rsi": 0.0,
+        "m15_macd": 0.0, "m15_macd_signal": 0.0, "m15_macd_histogram": 0.0,
+        "m15_bb_width_pct": 0.0, "m15_atr": 0.0, "m15_atr_sma20": 0.0,
+        "m15_adx": 0.0, "m15_bars_outside_band": 0,
+        "m15_ema20": 0.0, "m15_ema50": 0.0,
+        "m15_volume": 0.0, "m15_volume_sma20": 0.0,
+        "m15_ema_cross_bars_ago": 0, "m15_high_50": 0.0, "m15_low_50": 0.0,
+        "h4_ema20": 0.0, "h4_ema50": 0.0, "h4_adx": 0.0,
+        "h4_bb_width_pct": 0.0, "h4_rsi": 0.0,
+        "h4_macd": 0.0, "h4_macd_signal": 0.0, "h4_macd_histogram": 0.0,
+        "funding_rate": 0.0, "funding_next_time": ""
+    }"#).expect("valid zero indicators JSON")
+}
+
 fn make_ctx() -> RenderContext {
-    let mut ind = MarketIndicators::default();
+    let mut ind = zero_indicators();
     ind.current_price = 50000.0;
     ind.ema20 = 49500.0;
     ind.ema50 = 49000.0;
@@ -109,13 +137,37 @@ fn r9_no_op_for_absent_placeholders() {
 
 #[test]
 fn r10_ema_cross_bars_none_when_negative() {
+    let mut ind = zero_indicators();
+    ind.h1_ema_cross_bars_ago = -1;
+    ind.m15_ema_cross_bars_ago = -1;
     let ctx = RenderContext {
-        ind: MarketIndicators {
-            h1_ema_cross_bars_ago: -1,
-            m15_ema_cross_bars_ago: -1,
-            ..MarketIndicators::default()
-        },
-        ..Default::default()
+        timestamp: "2026-07-19 12:00:00 UTC".to_string(),
+        symbol: "BTC/USDT".to_string(),
+        exchange: "binance".to_string(),
+        total_balance: 0.0,
+        available_balance: 0.0,
+        used_margin: 0.0,
+        margin_usage_rate: 0.0,
+        leverage: 0,
+        funding_rate: 0.0,
+        funding_next_time: "".to_string(),
+        total_trades: 0,
+        win_trades: 0,
+        loss_trades: 0,
+        total_pnl: 0.0,
+        consecutive_losses: 0,
+        grid_status: "".to_string(),
+        last_adjust_time: "".to_string(),
+        current_grid_config: "".to_string(),
+        event_flag: false,
+        event_description: "".to_string(),
+        trigger_reason: "".to_string(),
+        min_qty: 0.0,
+        position_info: "".to_string(),
+        position_duration: "".to_string(),
+        stop_take_profit_info: "".to_string(),
+        recent_close_info: "".to_string(),
+        ind,
     };
     let result = render("{h1_ema_cross_bars_ago} {m15_ema_cross_bars_ago}", &ctx);
     assert_eq!(result, "无近期交叉 无近期交叉");
