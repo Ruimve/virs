@@ -26,7 +26,7 @@ struct PaperPendingOrder {
     amount: f64,
     price: Option<f64>,
     position_side: Option<PositionSide>,
-    client_order_id: Option<String>,
+    client_order_id: String,
 }
 
 type PaperPosition = ExchangePosition;
@@ -159,8 +159,7 @@ impl PaperExchangeAdapter {
             let fee = current_price * order.amount * 0.0002;
             let ccxt_order = CcxtOrder {
                 order_id: order.id,
-                client_order_id: order.client_order_id.clone()
-                    .unwrap_or_else(|| order.id.to_string()),
+                client_order_id: order.client_order_id.clone(),
                 symbol: order.symbol.clone(),
                 side: order.side.clone(),
                 order_type: order.order_type.clone(),
@@ -438,6 +437,14 @@ impl ExchangePe for PaperExchangeAdapter {
         let order_id = self.next_order_id();
         let is_market = params.order_type == OrderType::Market || params.price.is_none();
 
+        let client_order_id = params.client_order_id.clone().ok_or_else(|| {
+            VirsError::config(format!(
+                "client_order_id is required for place_order on {} — \
+                 all callers must generate one via client_order_id::format_* before placing orders",
+                params.symbol
+            ))
+        })?;
+
         if is_market {
             let fill_price = self
                 .last_prices
@@ -457,18 +464,13 @@ impl ExchangePe for PaperExchangeAdapter {
                 amount: params.amount,
                 price: Some(fill_price),
                 position_side: params.position_side.clone(),
-                client_order_id: params.client_order_id.clone(),
+                client_order_id: client_order_id.clone(),
             };
             let realized_pnl = self
                 .update_position_on_fill(&pending_for_fill, fill_price)
                 .await?;
 
             let fee = fill_price * params.amount * 0.0005;
-
-            let client_order_id = params
-                .client_order_id
-                .clone()
-                .unwrap_or_else(|| order_id.to_string());
 
             let order_result = OrderResult {
                 order_id: order_id.to_string(),
@@ -541,16 +543,13 @@ impl ExchangePe for PaperExchangeAdapter {
                 amount: params.amount,
                 price: params.price,
                 position_side: params.position_side,
-                client_order_id: params.client_order_id.clone(),
+                client_order_id: client_order_id.clone(),
             };
             self.pending.insert(order_id, pending);
             // 限价单挂单未成交，不发送 WS 推送
             let order_result = OrderResult {
                 order_id: order_id.to_string(),
-                client_order_id: params
-                    .client_order_id
-                    .clone()
-                    .unwrap_or_else(|| order_id.to_string()),
+                client_order_id,
             };
             Ok(order_result)
         }
@@ -563,7 +562,7 @@ impl ExchangePe for PaperExchangeAdapter {
         match self.pending.remove(&id) {
             Some((_, pending)) => Ok(OrderResult {
                 order_id: order_id.to_string(),
-                client_order_id: pending.client_order_id.unwrap_or_else(|| order_id.to_string()),
+                client_order_id: pending.client_order_id,
             }),
             None => Err(VirsError::Exchange(ExchangeError::OrderNotFound(
                 order_id.to_string(),
@@ -583,7 +582,7 @@ impl ExchangePe for PaperExchangeAdapter {
             if let Some((_, pending)) = self.pending.remove(&key) {
                 canceled.push(OrderResult {
                     order_id: key.to_string(),
-                    client_order_id: pending.client_order_id.unwrap_or_else(|| key.to_string()),
+                    client_order_id: pending.client_order_id,
                 });
             }
         }

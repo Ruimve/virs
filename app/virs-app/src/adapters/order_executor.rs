@@ -156,6 +156,26 @@ pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
 }
 
 fn ccxt_order_to_order_info(order: &CcxtOrder) -> OrderInfo {
+    let filled = order.filled_qty.parse::<f64>().unwrap_or_else(|_| {
+        warn!(
+            order_id = %order.order_id,
+            symbol = %order.symbol,
+            filled_qty = %order.filled_qty,
+            "Failed to parse filled_qty as f64 — defaulting to 0.0. \
+             This indicates malformed data from exchange."
+        );
+        0.0
+    });
+    let fee = order.commission.parse::<f64>().unwrap_or_else(|_| {
+        warn!(
+            order_id = %order.order_id,
+            symbol = %order.symbol,
+            commission = %order.commission,
+            "Failed to parse commission as f64 — defaulting to 0.0. \
+             This indicates malformed data from exchange."
+        );
+        0.0
+    });
     OrderInfo {
         id: Uuid::from_u128(order.order_id as u128),
         position_id: None,
@@ -163,8 +183,8 @@ fn ccxt_order_to_order_info(order: &CcxtOrder) -> OrderInfo {
         side: order.side.clone(),
         fill_price: order.avg_fill_price.as_deref().and_then(|s| s.parse::<f64>().ok()),
         request_price: order.original_price.parse::<f64>().ok(),
-        filled: order.filled_qty.parse::<f64>().unwrap_or(0.0),
+        filled,
         client_order_id: Some(order.client_order_id.clone()),
-        fee: order.commission.parse::<f64>().unwrap_or(0.0),
+        fee,
     }
 }

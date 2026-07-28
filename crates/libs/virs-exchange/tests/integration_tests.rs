@@ -65,7 +65,7 @@ async fn int_2_2_paper_market_order_updates_balance() {
         amount: 0.1,
         price: None,
         position_id: None,
-        client_order_id: None,
+        client_order_id: Some("test-paper-order-001".into()),
         position_side: Some(PositionSide::Long),
         stop_price: None,
         time_in_force: None,

@@ -993,8 +993,16 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
                         symbol = %params.symbol,
                         "position_side unresolved (side is Unknown), cannot place order"
                     );
+                    let cid = params.client_order_id.clone().unwrap_or_else(|| {
+                        warn!(
+                            symbol = %params.symbol,
+                            "client_order_id is None in OrderFailed path — \
+                             caller must provide client_order_id for order tracking"
+                        );
+                        "UNTRACKABLE_NO_CLIENT_ORDER_ID".to_string()
+                    });
                     inner.emit_event(EngineEvent::OrderFailed {
-                        client_order_id: params.client_order_id.clone().unwrap_or_default(),
+                        client_order_id: cid,
                         reason: "position_side unresolved (side is Unknown)".into(),
                     });
                     return;

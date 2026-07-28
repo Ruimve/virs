@@ -471,12 +471,34 @@ impl GridWorker {
         self.update_consecutive_losses(pnl);
 
         if is_open {
-            let client_order_id = order.client_order_id.as_deref().unwrap_or("unknown");
+            let client_order_id = match order.client_order_id.as_deref() {
+                Some(cid) => cid,
+                None => {
+                    error!(
+                        bot_id = %self.bot.id,
+                        level = level_num,
+                        symbol = %order.symbol,
+                        "OrderInfo.client_order_id is None — cannot record open trade without client_order_id"
+                    );
+                    return;
+                }
+            };
             if self.record_open_trade(level_num, client_order_id).await {
                 self.levels[idx].open_client_order_id = Some(client_order_id.to_string());
             }
         } else {
-            let close_client_order_id = order.client_order_id.as_deref().unwrap_or("unknown");
+            let close_client_order_id = match order.client_order_id.as_deref() {
+                Some(cid) => cid,
+                None => {
+                    error!(
+                        bot_id = %self.bot.id,
+                        level = level_num,
+                        symbol = %order.symbol,
+                        "OrderInfo.client_order_id is None — cannot record close trade without client_order_id"
+                    );
+                    return;
+                }
+            };
             let open_client_order_id = if let Some(ref oid) = self.levels[idx].open_client_order_id
             {
                 Some(oid.clone())
