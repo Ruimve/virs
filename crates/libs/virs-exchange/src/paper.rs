@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -6,7 +6,6 @@ use dashmap::DashMap;
 use tokio::sync::{mpsc, Mutex};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, warn};
-use uuid::Uuid;
 
 use virs_types::enums::*;
 use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
@@ -20,7 +19,7 @@ use crate::registry::Exchanges;
 
 #[derive(Debug, Clone)]
 struct PaperPendingOrder {
-    id: Uuid,
+    id: i64,
     symbol: String,
     side: Side,
     order_type: OrderType,
@@ -35,7 +34,7 @@ type PaperPosition = ExchangePosition;
 pub struct PaperExchangeAdapter {
     name: String,
     market_type: MarketType,
-    pending: Arc<DashMap<Uuid, PaperPendingOrder>>,
+    pending: Arc<DashMap<i64, PaperPendingOrder>>,
     positions: Arc<DashMap<String, PaperPosition>>,
     balance: Arc<Mutex<Balance>>,
     price_tx: Arc<Mutex<Option<mpsc::Sender<WsFeedEvent>>>>,
@@ -44,7 +43,8 @@ pub struct PaperExchangeAdapter {
     balance_initialized: Arc<AtomicBool>,
 
     configured_leverage: Arc<DashMap<String, u32>>,
-    trade_id_counter: Arc<std::sync::atomic::AtomicI64>,
+    order_id_counter: Arc<AtomicI64>,
+    trade_id_counter: Arc<AtomicI64>,
 }
 
 impl PaperExchangeAdapter {
@@ -65,7 +65,8 @@ impl PaperExchangeAdapter {
             exchange_registry: None,
             balance_initialized: Arc::new(AtomicBool::new(initial_balance > 0.0)),
             configured_leverage: Arc::new(DashMap::new()),
-            trade_id_counter: Arc::new(std::sync::atomic::AtomicI64::new(1)),
+            order_id_counter: Arc::new(AtomicI64::new(1)),
+            trade_id_counter: Arc::new(AtomicI64::new(1)),
         }
     }
 
@@ -74,10 +75,16 @@ impl PaperExchangeAdapter {
         self
     }
 
+    /// 生成递增的 order_id，与币安原生 i64 订单ID对齐
+    fn next_order_id(&self) -> i64 {
+        self.order_id_counter
+            .fetch_add(1, Ordering::Relaxed)
+    }
+
     /// 生成递增的 trade_id，确保同一订单多笔成交不会因 trade_id 冲突被丢弃
     fn next_trade_id(&self) -> i64 {
         self.trade_id_counter
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            .fetch_add(1, Ordering::Relaxed)
     }
 
     async fn ensure_balance_initialized(&self) {
@@ -151,8 +158,9 @@ impl PaperExchangeAdapter {
 
             let fee = current_price * order.amount * 0.0002;
             let ccxt_order = CcxtOrder {
-                order_id: order.id.to_string().parse().unwrap_or(0),
-                client_order_id: order.client_order_id.clone().unwrap_or_default(),
+                order_id: order.id,
+                client_order_id: order.client_order_id.clone()
+                    .unwrap_or_else(|| order.id.to_string()),
                 symbol: order.symbol.clone(),
                 side: order.side.clone(),
                 order_type: order.order_type.clone(),
@@ -164,7 +172,7 @@ impl PaperExchangeAdapter {
                 status: CcxtOrderStatus::Filled,
                 execution_type: ExecutionType::Trade,
                 orig_qty: order.amount.to_string(),
-                original_price: order.price.map(|p| p.to_string()).unwrap_or_default(),
+                original_price: order.price.map(|p| p.to_string()).unwrap_or_else(|| "0".to_string()),
                 avg_fill_price: Some(current_price.to_string()),
                 filled_qty: order.amount.to_string(),
                 last_fill_qty: order.amount.to_string(),
@@ -427,7 +435,7 @@ impl ExchangePe for PaperExchangeAdapter {
     }
 
     async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<OrderResult> {
-        let order_id = Uuid::new_v4();
+        let order_id = self.next_order_id();
         let is_market = params.order_type == OrderType::Market || params.price.is_none();
 
         if is_market {
@@ -436,10 +444,6 @@ impl ExchangePe for PaperExchangeAdapter {
                 .get(&params.symbol)
                 .map(|r| *r)
                 .ok_or_else(|| {
-                    tracing::error!(
-                        symbol = %params.symbol,
-                        "No last price available for paper market order — returning NoData instead of 0.0"
-                    );
                     VirsError::Exchange(ExchangeError::no_data(format!(
                         "No last price for paper market order on {}",
                         params.symbol
@@ -461,17 +465,19 @@ impl ExchangePe for PaperExchangeAdapter {
 
             let fee = fill_price * params.amount * 0.0005;
 
+            let client_order_id = params
+                .client_order_id
+                .clone()
+                .unwrap_or_else(|| order_id.to_string());
+
             let order_result = OrderResult {
                 order_id: order_id.to_string(),
-                client_order_id: params
-                    .client_order_id
-                    .clone()
-                    .unwrap_or_else(|| order_id.to_string()),
+                client_order_id: client_order_id.clone(),
             };
 
             let ccxt_order = CcxtOrder {
-                order_id: order_id.to_string().parse().unwrap_or(0),
-                client_order_id: params.client_order_id.clone().unwrap_or_default(),
+                order_id,
+                client_order_id,
                 symbol: params.symbol.clone(),
                 side: params.side,
                 order_type: params.order_type.clone(),
@@ -482,7 +488,7 @@ impl ExchangePe for PaperExchangeAdapter {
                 status: CcxtOrderStatus::Filled,
                 execution_type: ExecutionType::Trade,
                 orig_qty: params.amount.to_string(),
-                original_price: params.price.map(|p| p.to_string()).unwrap_or_default(),
+                original_price: params.price.map(|p| p.to_string()).unwrap_or_else(|| "0".to_string()),
                 avg_fill_price: Some(fill_price.to_string()),
                 filled_qty: params.amount.to_string(),
                 last_fill_qty: params.amount.to_string(),
@@ -551,12 +557,13 @@ impl ExchangePe for PaperExchangeAdapter {
     }
 
     async fn cancel_order(&self, _symbol: &str, order_id: &str) -> VirsResult<OrderResult> {
-        let uuid = Uuid::parse_str(order_id)
+        let id = order_id
+            .parse::<i64>()
             .map_err(|_| ExchangeError::Internal(format!("Invalid order ID: {}", order_id)))?;
-        match self.pending.remove(&uuid) {
+        match self.pending.remove(&id) {
             Some((_, pending)) => Ok(OrderResult {
                 order_id: order_id.to_string(),
-                client_order_id: pending.client_order_id.unwrap_or_default(),
+                client_order_id: pending.client_order_id.unwrap_or_else(|| order_id.to_string()),
             }),
             None => Err(VirsError::Exchange(ExchangeError::OrderNotFound(
                 order_id.to_string(),
@@ -565,7 +572,7 @@ impl ExchangePe for PaperExchangeAdapter {
     }
 
     async fn cancel_all_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<OrderResult>> {
-        let keys: Vec<Uuid> = self
+        let keys: Vec<i64> = self
             .pending
             .iter()
             .filter(|e| symbol.is_none_or(|s| e.value().symbol == s))
@@ -576,7 +583,7 @@ impl ExchangePe for PaperExchangeAdapter {
             if let Some((_, pending)) = self.pending.remove(&key) {
                 canceled.push(OrderResult {
                     order_id: key.to_string(),
-                    client_order_id: pending.client_order_id.unwrap_or_default(),
+                    client_order_id: pending.client_order_id.unwrap_or_else(|| key.to_string()),
                 });
             }
         }

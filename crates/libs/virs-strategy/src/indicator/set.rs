@@ -1,13 +1,10 @@
 //! 指标集合：批量计算 + 查询。
 //!
 //! [`IndicatorSet::compute`] 接收策略声明的 specs，去重后逐个调用
-//! [`library`] 原子函数计算。计算行为与原 `compute_market_indicators` 完全一致，
-//! 包括数据不足时的 `0.0` 兜底与 `warn!` 日志（保留既有行为）。
-//!
-//! 查询时 [`IndicatorSet::get`] 返回 `Option`，缺失返回 `None`，
-//! 由调用方决定是报错还是降级 —— 不在指标库内隐式默认。
+//! [`library`] 原子函数计算。K 线数据不足时返回 `Err`，不使用默认值。
 
 use std::collections::{HashMap, HashSet};
+use virs_error::VirsError;
 use virs_types::Kline;
 
 use crate::indicator::library as lib;
@@ -38,22 +35,20 @@ pub struct IndicatorSet {
 impl IndicatorSet {
     /// 按策略声明的 specs 批量计算指标。自动去重。
     ///
-    /// 注意：本函数保留与原 `compute_market_indicators` 一致的兜底行为
-    /// （数据不足时返回 0.0 + warn!），不返回 `Result`。
-    /// 消除 `unwrap_or(0.0)` 属于后续独立任务。
+    /// K 线数据不足时返回 `Err`，不使用默认值。
     pub fn compute(
         specs: &[IndicatorSpec],
         klines: &KlineSet,
         funding_rate: f64,
         funding_next_time: &str,
-    ) -> Self {
+    ) -> Result<Self, VirsError> {
         let unique: HashSet<&IndicatorSpec> = specs.iter().collect();
         let mut values = HashMap::with_capacity(unique.len());
         for spec in unique {
-            let val = compute_one(spec, klines, funding_rate, funding_next_time);
+            let val = compute_one(spec, klines, funding_rate, funding_next_time)?;
             values.insert(spec.clone(), val);
         }
-        Self { values }
+        Ok(Self { values })
     }
 
     /// 查询指标值。缺失返回 `None`（不隐式默认）。
@@ -104,39 +99,45 @@ fn klines_for_tf<'a>(tf: Timeframe, klines: &KlineSet<'a>) -> &'a [Kline] {
     }
 }
 
-/// 计算单个指标。逻辑与原 `compute_market_indicators` 对应分支逐一对应。
+/// 构造数据不足的错误。
+fn no_data(spec: &IndicatorSpec, tf: Option<Timeframe>, len: usize) -> VirsError {
+    let tf_str = tf.map(|t| t.as_str()).unwrap_or("N/A");
+    VirsError::config(format!(
+        "Insufficient K-line data for indicator {:?} (tf={}, klines_len={}) — \
+         cannot compute indicator with default value",
+        spec, tf_str, len
+    ))
+}
+
+/// 计算单个指标。K 线数据不足时返回 `Err`。
 fn compute_one(
     spec: &IndicatorSpec,
     klines: &KlineSet,
     funding_rate: f64,
     funding_next_time: &str,
-) -> IndicatorValue {
+) -> Result<IndicatorValue, VirsError> {
     use IndicatorSpec::*;
     match spec {
         // ── 资金费率（无周期）──
-        FundingRate => IndicatorValue::Num(funding_rate),
-        FundingNextTime => IndicatorValue::Str(funding_next_time.to_string()),
+        FundingRate => Ok(IndicatorValue::Num(funding_rate)),
+        FundingNextTime => Ok(IndicatorValue::Str(funding_next_time.to_string())),
 
         // ── 整数关口（基于 H1 当前价）──
         RoundNumberUp => {
-            let price = klines.h1.last().map(|k| k.close).unwrap_or_else(|| {
-                tracing::warn!(
-                    indicator = "round_number_up",
-                    "H1 klines empty — defaulting round number to 0.0"
-                );
-                0.0
-            });
-            IndicatorValue::Num(lib::find_round_number(price, true))
+            let price = klines
+                .h1
+                .last()
+                .map(|k| k.close)
+                .ok_or_else(|| no_data(spec, None, klines.h1.len()))?;
+            Ok(IndicatorValue::Num(lib::find_round_number(price, true)))
         }
         RoundNumberDown => {
-            let price = klines.h1.last().map(|k| k.close).unwrap_or_else(|| {
-                tracing::warn!(
-                    indicator = "round_number_down",
-                    "H1 klines empty — defaulting round number to 0.0"
-                );
-                0.0
-            });
-            IndicatorValue::Num(lib::find_round_number(price, false))
+            let price = klines
+                .h1
+                .last()
+                .map(|k| k.close)
+                .ok_or_else(|| no_data(spec, None, klines.h1.len()))?;
+            Ok(IndicatorValue::Num(lib::find_round_number(price, false)))
         }
 
         // ── 有周期的指标：先取对应周期的 klines 与 last_idx ──
@@ -145,172 +146,264 @@ fn compute_one(
             let k = klines_for_tf(tf, klines);
             let last_idx = k.len().saturating_sub(1);
 
+            // 所有需要 K 线数据的指标统一校验：klines 不能为空
+            if k.is_empty() {
+                return Err(no_data(spec, Some(tf), 0));
+            }
+
             match spec {
                 CurrentPrice { .. } => {
-                    // M15 当前价在 klines 为空时回退到 H1 当前价（保留原行为）
+                    // M15 当前价在 klines 为空时回退到 H1 当前价
                     let v = if matches!(tf, Timeframe::M15) {
                         k.last().map(|k| k.close).unwrap_or_else(|| {
-                            klines.h1.last().map(|k| k.close).unwrap_or(0.0)
+                            klines
+                                .h1
+                                .last()
+                                .map(|k| k.close)
+                                .expect("H1 klines validated non-empty by caller")
                         })
                     } else {
-                        k.last().map(|k| k.close).unwrap_or_else(|| {
-                            tracing::warn!(
-                                indicator = "current_price",
-                                tf = tf.as_str(),
-                                len = k.len(),
-                                "Insufficient data for indicator calculation — defaulting to 0.0"
-                            );
-                            0.0
-                        })
+                        k.last().map(|k| k.close).expect("k validated non-empty above")
                     };
-                    IndicatorValue::Num(v)
+                    Ok(IndicatorValue::Num(v))
                 }
                 ChangePct { period, .. } => {
-                    let curr = k.last().map(|k| k.close).unwrap_or(0.0);
+                    let curr = k.last().map(|k| k.close).expect("k validated non-empty above");
                     let v = if last_idx >= *period && *period > 0 {
-                        let prev = k.get(last_idx - period).map(|k| k.close).unwrap_or(0.0);
+                        let prev = k
+                            .get(last_idx - period)
+                            .map(|k| k.close)
+                            .ok_or_else(|| no_data(spec, Some(tf), k.len()))?;
                         if prev > 0.0 {
                             (curr - prev) / prev * 100.0
                         } else {
-                            0.0
+                            return Err(VirsError::config(format!(
+                                "ChangePct: previous close price is 0.0 (tf={}, idx={}) — \
+                                 cannot compute percentage change with zero base",
+                                tf.as_str(),
+                                last_idx - period
+                            )));
                         }
                     } else {
-                        0.0
+                        return Err(no_data(spec, Some(tf), k.len()));
                     };
-                    IndicatorValue::Num(v)
+                    Ok(IndicatorValue::Num(v))
                 }
                 CandleBody { .. } => {
-                    let v = k.last().map(|k| k.close - k.open).unwrap_or_else(|| {
-                        tracing::warn!(
-                            indicator = "candle_body",
-                            tf = tf.as_str(),
-                            len = k.len(),
-                            "Insufficient data for indicator calculation — defaulting to 0.0"
-                        );
-                        0.0
-                    });
-                    IndicatorValue::Num(v)
+                    let last = k.last().expect("k validated non-empty above");
+                    Ok(IndicatorValue::Num(last.close - last.open))
                 }
                 LastCompletedVolume { .. } => {
                     let last_completed = k.len().saturating_sub(2);
-                    let v = k.get(last_completed).map(|k| k.volume).unwrap_or_else(|| {
-                        tracing::warn!(
-                            indicator = "last_completed_volume",
-                            tf = tf.as_str(),
-                            idx = last_completed,
-                            "Insufficient data for indicator calculation — defaulting to 0.0"
-                        );
-                        0.0
-                    });
-                    IndicatorValue::Num(v)
+                    let v = k
+                        .get(last_completed)
+                        .map(|k| k.volume)
+                        .ok_or_else(|| no_data(spec, Some(tf), k.len()))?;
+                    Ok(IndicatorValue::Num(v))
                 }
 
-                Ema { period, .. } => IndicatorValue::Num(lib::ema_at(k, last_idx, *period)),
-                Rsi { period, .. } => IndicatorValue::Num(lib::rsi_at(k, last_idx, *period)),
-                Adx { period, .. } => IndicatorValue::Num(lib::adx_at(k, last_idx, *period)),
-                Atr { period, .. } => IndicatorValue::Num(lib::atr_at(k, last_idx, *period)),
+                Ema { period, .. } => {
+                    if last_idx < *period - 1 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    Ok(IndicatorValue::Num(lib::ema_at(k, last_idx, *period)))
+                }
+                Rsi { period, .. } => {
+                    if last_idx < *period {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    Ok(IndicatorValue::Num(lib::rsi_at(k, last_idx, *period)))
+                }
+                Adx { period, .. } => {
+                    if last_idx < *period * 2 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    Ok(IndicatorValue::Num(lib::adx_at(k, last_idx, *period)))
+                }
+                Atr { period, .. } => {
+                    if last_idx < *period {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    Ok(IndicatorValue::Num(lib::atr_at(k, last_idx, *period)))
+                }
 
                 AtrPct { period, .. } => {
+                    if last_idx < *period {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
                     let atr_val = lib::atr_at(k, last_idx, *period);
-                    let price = k.last().map(|k| k.close).unwrap_or(0.0);
-                    let v = if price > 0.0 {
-                        atr_val / price * 100.0
-                    } else {
-                        0.0
-                    };
-                    IndicatorValue::Num(v)
+                    let price = k.last().map(|k| k.close).expect("k validated non-empty above");
+                    if price <= 0.0 {
+                        return Err(VirsError::config(format!(
+                            "AtrPct: current price is {} (tf={}) — cannot compute ATR percentage",
+                            price,
+                            tf.as_str()
+                        )));
+                    }
+                    Ok(IndicatorValue::Num(atr_val / price * 100.0))
                 }
                 AtrSma { atr_period, sma_period, .. } => {
-                    let v = if k.len() >= *sma_period {
-                        let atr_series = lib::atr(k, *atr_period);
-                        lib::sma_at_from(&atr_series, last_idx, *sma_period)
-                    } else {
-                        0.0
-                    };
-                    IndicatorValue::Num(v)
+                    if k.len() < *sma_period {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    let atr_series = lib::atr(k, *atr_period);
+                    Ok(IndicatorValue::Num(lib::sma_at_from(
+                        &atr_series,
+                        last_idx,
+                        *sma_period,
+                    )))
                 }
 
                 BbandsUpper { period, stddev, .. } => {
+                    if last_idx < *period - 1 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
                     let (u, _, _) = lib::bbands_at(k, last_idx, *period, *stddev as f64);
-                    IndicatorValue::Num(u)
+                    Ok(IndicatorValue::Num(u))
                 }
                 BbandsMiddle { period, stddev, .. } => {
+                    if last_idx < *period - 1 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
                     let (_, m, _) = lib::bbands_at(k, last_idx, *period, *stddev as f64);
-                    IndicatorValue::Num(m)
+                    Ok(IndicatorValue::Num(m))
                 }
                 BbandsLower { period, stddev, .. } => {
+                    if last_idx < *period - 1 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
                     let (_, _, l) = lib::bbands_at(k, last_idx, *period, *stddev as f64);
-                    IndicatorValue::Num(l)
+                    Ok(IndicatorValue::Num(l))
                 }
                 BbandsWidth { period, stddev, .. } => {
-                    IndicatorValue::Num(lib::bbands_width_at(k, last_idx, *period, *stddev as f64))
+                    if last_idx < *period - 1 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    Ok(IndicatorValue::Num(lib::bbands_width_at(
+                        k,
+                        last_idx,
+                        *period,
+                        *stddev as f64,
+                    )))
                 }
                 BandwidthBarsAgo { period, stddev, bars_ago, .. } => {
-                    let v = if last_idx >= *bars_ago {
-                        lib::bbands_width_at(k, last_idx - bars_ago, *period, *stddev as f64)
-                    } else {
-                        0.0
-                    };
-                    IndicatorValue::Num(v)
+                    if last_idx < *bars_ago || last_idx - bars_ago < *period - 1 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    Ok(IndicatorValue::Num(lib::bbands_width_at(
+                        k,
+                        last_idx - bars_ago,
+                        *period,
+                        *stddev as f64,
+                    )))
                 }
 
                 Macd { fast, slow, .. } => {
-                    IndicatorValue::Num(lib::macd_at(k, last_idx, *fast, *slow))
+                    if last_idx < *slow - 1 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    Ok(IndicatorValue::Num(lib::macd_at(k, last_idx, *fast, *slow)))
                 }
                 MacdSignal { fast, slow, signal, .. } => {
-                    IndicatorValue::Num(lib::macd_signal_at(k, last_idx, *fast, *slow, *signal))
+                    if last_idx < *slow + *signal - 2 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    Ok(IndicatorValue::Num(lib::macd_signal_at(
+                        k,
+                        last_idx,
+                        *fast,
+                        *slow,
+                        *signal,
+                    )))
                 }
-                MacdHistogram { fast, slow, signal, .. } => IndicatorValue::Num(
-                    lib::macd_histogram_at(k, last_idx, *fast, *slow, *signal),
-                ),
+                MacdHistogram { fast, slow, signal, .. } => {
+                    if last_idx < *slow + *signal - 2 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    Ok(IndicatorValue::Num(lib::macd_histogram_at(
+                        k,
+                        last_idx,
+                        *fast,
+                        *slow,
+                        *signal,
+                    )))
+                }
 
                 Highest { period, .. } => {
-                    IndicatorValue::Num(lib::highest_at(k, last_idx, *period))
+                    if last_idx < *period - 1 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    Ok(IndicatorValue::Num(lib::highest_at(k, last_idx, *period)))
                 }
                 Lowest { period, .. } => {
-                    IndicatorValue::Num(lib::lowest_at(k, last_idx, *period))
+                    if last_idx < *period - 1 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    Ok(IndicatorValue::Num(lib::lowest_at(k, last_idx, *period)))
                 }
 
                 VolumeSma { period, .. } => {
                     let last_completed = k.len().saturating_sub(2);
-                    let v = if last_completed + 1 >= *period {
-                        lib::volume_sma_at(k, last_completed, *period)
-                    } else {
-                        0.0
-                    };
-                    IndicatorValue::Num(v)
+                    if last_completed + 1 < *period {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    Ok(IndicatorValue::Num(lib::volume_sma_at(
+                        k,
+                        last_completed,
+                        *period,
+                    )))
                 }
 
                 BarsOutsideBand { period, stddev, .. } => {
+                    if last_idx < *period - 1 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
                     let (upper, _, lower) = lib::bbands_at(k, last_idx, *period, *stddev as f64);
-                    IndicatorValue::Int(lib::compute_bars_outside_band(k, upper, lower))
+                    Ok(IndicatorValue::Int(lib::compute_bars_outside_band(
+                        k, upper, lower,
+                    )))
                 }
 
                 EmaCrossBarsAgo { fast, slow, .. } => {
-                    IndicatorValue::Int(lib::compute_ema_cross_bars_ago(k, *fast, *slow, last_idx))
+                    if k.len() < *slow + 5 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
+                    Ok(IndicatorValue::Int(lib::compute_ema_cross_bars_ago(
+                        k,
+                        *fast,
+                        *slow,
+                        last_idx,
+                    )))
                 }
 
                 EmaGapPct { fast, slow, .. } => {
+                    if last_idx < *slow - 1 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
                     let ema_fast = lib::ema_at(k, last_idx, *fast);
                     let ema_slow = lib::ema_at(k, last_idx, *slow);
-                    let v = if ema_slow != 0.0 {
-                        (ema_fast - ema_slow) / ema_slow * 100.0
-                    } else {
-                        0.0
-                    };
-                    IndicatorValue::Num(v)
+                    if ema_slow == 0.0 {
+                        return Err(VirsError::config(format!(
+                            "EmaGapPct: ema_slow is 0.0 (tf={}, period={}) — cannot divide by zero",
+                            tf.as_str(),
+                            slow
+                        )));
+                    }
+                    Ok(IndicatorValue::Num((ema_fast - ema_slow) / ema_slow * 100.0))
                 }
                 EmaGapTrend { fast, slow, .. } => {
+                    if last_idx < *slow - 1 {
+                        return Err(no_data(spec, Some(tf), k.len()));
+                    }
                     let ema_fast = lib::ema_at(k, last_idx, *fast);
                     let ema_slow = lib::ema_at(k, last_idx, *slow);
                     let lookback = 5.min(last_idx);
                     let ema_fast_prev = lib::ema_at(k, last_idx - lookback, *fast);
-                    let ema_slow_prev =
-                        if k.len() >= *slow + lookback {
-                            lib::ema_at(k, last_idx - lookback, *slow)
-                        } else {
-                            ema_slow
-                        };
+                    let ema_slow_prev = if k.len() >= *slow + lookback {
+                        lib::ema_at(k, last_idx - lookback, *slow)
+                    } else {
+                        ema_slow
+                    };
                     let curr_gap_abs = (ema_fast - ema_slow).abs();
                     let prev_gap_abs = (ema_fast_prev - ema_slow_prev).abs();
                     let trend = if curr_gap_abs > prev_gap_abs * 1.01 {
@@ -320,7 +413,7 @@ fn compute_one(
                     } else {
                         "持平"
                     };
-                    IndicatorValue::Str(trend.to_string())
+                    Ok(IndicatorValue::Str(trend.to_string()))
                 }
 
                 // 无周期指标已在上方处理，这里不会到达
@@ -333,9 +426,6 @@ fn compute_one(
 }
 
 /// 返回与原 `compute_market_indicators` 完全对应的全部指标 specs。
-///
-/// 用于过渡期：`compute_market_indicators` 内部调用本函数 + `IndicatorSet::compute`
-/// + `MarketIndicators::from_indicator_set`，实现行为等价的重构。
 pub fn all_market_indicators_specs() -> Vec<IndicatorSpec> {
     use IndicatorSpec::*;
     use Timeframe::*;

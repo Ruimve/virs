@@ -203,6 +203,6 @@ pub fn compute_market_indicators(
         m15: klines_15m,
     };
     let specs = all_market_indicators_specs();
-    let set = IndicatorSet::compute(&specs, &kline_set, funding_rate, &funding_next_time);
+    let set = IndicatorSet::compute(&specs, &kline_set, funding_rate, &funding_next_time)?;
     MarketIndicators::from_indicator_set(&set)
 }

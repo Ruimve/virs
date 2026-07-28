@@ -501,7 +501,8 @@ pub async fn create_order(
     // 只提取 orderId + clientOrderId，完整订单数据由 WS ORDER_TRADE_UPDATE 推送
     let order_id = parse_str(&data, "orderId")
         .ok_or_else(|| ExchangeError::no_data("orderId missing in create_order response".into()))?;
-    let client_order_id = parse_str(&data, "clientOrderId").unwrap_or_default();
+    let client_order_id = parse_str(&data, "clientOrderId")
+        .ok_or_else(|| ExchangeError::no_data("clientOrderId missing in create_order response".into()))?;
 
     Ok(OrderResult {
         order_id,
@@ -533,7 +534,8 @@ pub async fn cancel_order(
     // 只提取 orderId + clientOrderId，完整订单数据由 WS ORDER_TRADE_UPDATE 推送
     let order_id = parse_str(&data, "orderId")
         .ok_or_else(|| ExchangeError::no_data("orderId missing in cancel_order response".into()))?;
-    let client_order_id = parse_str(&data, "clientOrderId").unwrap_or_default();
+    let client_order_id = parse_str(&data, "clientOrderId")
+        .ok_or_else(|| ExchangeError::no_data("clientOrderId missing in cancel_order response".into()))?;
 
     Ok(OrderResult {
         order_id,

@@ -1,8 +1,10 @@
 //! 原子指标计算函数（TA-Lib 封装 + 手写辅助）。
 //!
 //! 本模块从 `common/indicators.rs` 原样迁移，保持计算行为完全一致。
-//! 所有函数在数据不足时返回 `0.0` 并通过 `warn!` 记录（保留既有行为，
-//! 消除 `unwrap_or(0.0)` 属于后续独立任务）。
+//!
+//! **调用方契约**：调用方（如 [`IndicatorSet::compute`](super::set::IndicatorSet::compute)）
+//! 必须在调用前校验 K 线数据充足性。本模块的 `0.0` 兜底仅作为 TA-Lib 内部计算失败的
+//! 防御性回退，正常流程下不应触发。
 
 use talib_rs::{ma_type::MaType, math_operator, momentum, overlap, volatility};
 use tracing::warn;
