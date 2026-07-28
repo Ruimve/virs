@@ -571,7 +571,7 @@ impl Exchange for BinanceExchange {
     }
 
     // 查询持仓: GET /fapi/v2/positionRisk (签名)
-    async fn fetch_positions(&self, symbol: Option<&str>) -> Result<Vec<Position>, ExchangeError> {
+    async fn fetch_positions(&self, symbol: Option<&str>) -> Result<Vec<ExchangePosition>, ExchangeError> {
         fapi::fetch_positions(&self.client, self.signer.as_ref(), symbol).await
     }
 

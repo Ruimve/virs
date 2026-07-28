@@ -146,14 +146,13 @@ impl Clone for PositionEngine {
 
 impl PositionEngine {
     pub fn new(
-        exchange: Box<dyn ExchangePe>,
+        exchange: Arc<dyn ExchangePe>,
         persistence: Box<dyn PositionPersistence>,
         persist_max_retries: u32,
         persist_retry_base_ms: u64,
     ) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel(256);
         let event_tx = broadcast::channel(256).0;
-        let exchange: Arc<dyn ExchangePe> = Arc::from(exchange);
 
         let inner = EngineInner {
             persistence,
@@ -321,6 +320,8 @@ impl PositionEngine {
                 side: p.side.clone(),
                 quantity: p.quantity,
                 entry_price: p.entry_price,
+                margin_mode: MarginMode::Cross,
+                info: Default::default(),
             })
             .collect();
         self.inner
@@ -783,6 +784,8 @@ pub(crate) async fn handle_open_position(
             position_side: Some(side),
             position_id: Some(position_id),
             client_order_id: client_order_id.clone(),
+            stop_price: None,
+            time_in_force: None,
         };
         handle_place_order(inner, params).await;
         return;
@@ -850,6 +853,8 @@ pub(crate) async fn handle_open_position(
         position_side: Some(side),
         position_id: Some(position_id),
         client_order_id: client_order_id.clone(),
+        stop_price: None,
+        time_in_force: None,
     };
     handle_place_order(inner, params).await;
 }
@@ -912,6 +917,8 @@ pub(crate) async fn handle_close_position(
         position_side: Some(position.side.clone()),
         position_id: Some(position.id),
         client_order_id: client_order_id.clone(),
+        stop_price: None,
+        time_in_force: None,
     };
 
     // 将仓位状态改为 Closing

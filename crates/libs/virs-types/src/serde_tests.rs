@@ -60,6 +60,8 @@ fn s2_3_exchange_position_roundtrip() {
     let pos = ExchangePosition {
         symbol: "BTC/USDT".into(), side: PositionSide::Long,
         quantity: 1.0, entry_price: 50000.0,
+        margin_mode: MarginMode::Cross,
+        info: serde_json::json!({}),
     };
     let json = serde_json::to_string(&pos).unwrap();
     let de: ExchangePosition = serde_json::from_str(&json).unwrap();

@@ -2,8 +2,6 @@ use virs_exchange::Exchanges;
 use virs_models as models;
 use virs_types::enums::*;
 
-use virs_error::ExchangeError;
-
 #[test]
 fn int_1_1_side_roundtrip() {
     let original = Side::Buy;
@@ -69,6 +67,8 @@ async fn int_2_2_paper_market_order_updates_balance() {
         position_id: None,
         client_order_id: None,
         position_side: Some(PositionSide::Long),
+        stop_price: None,
+        time_in_force: None,
     };
     let order = paper.place_order(params).await.unwrap();
     assert!(
@@ -110,31 +110,4 @@ fn int_3_3_registry_list_names() {
     let registry = Exchanges::new();
     let names = registry.registered_names();
     assert!(names.is_empty());
-}
-
-#[test]
-fn int_4_1_no_exchange_error() {
-    let err = virs_exchange::pe_adapter::no_exchange_error();
-    match err {
-        ExchangeError::Internal(msg) => {
-            assert!(msg.contains("No perpetual exchange"));
-        }
-        _ => panic!("Expected Internal variant"),
-    }
-}
-
-#[test]
-fn int_6_2_position_conversion_full_chain() {
-    let ep = models::ExchangePosition {
-        symbol: "BTC/USDT".into(),
-        side: models::PositionSide::Short,
-        quantity: 2.0,
-        entry_price: 45000.0,
-    };
-
-    let result = virs_exchange::pe_adapter::convert_exchange_position(&ep);
-    assert_eq!(result.symbol, "BTC/USDT");
-    assert_eq!(result.side, PositionSide::Short);
-    assert_eq!(result.quantity, 2.0);
-    assert_eq!(result.entry_price, 45000.0);
 }

@@ -95,19 +95,15 @@ impl PaperExchangeAdapter {
             .find(|n| n.contains("perpetual"))
             .and_then(|key| registry.get(key));
         if let Some(ex) = exchange {
-            match ex.get_balances().await {
-                Ok(balances) => {
-                    if let Some(usdt) = balances
-                        .iter()
-                        .find(|b| b.asset.eq_ignore_ascii_case("USDT"))
-                    {
-                        let mut balance = self.balance.lock().await;
-                        if !self.balance_initialized.load(Ordering::Relaxed) {
-                            balance.free = usdt.free;
-                            balance.used = usdt.used;
-                            balance.total = usdt.total;
-                            self.balance_initialized.store(true, Ordering::Relaxed);
-                        }
+            // ExchangePe::get_balance() 直接返回单个 USDT Balance（无需再从 Vec 中筛选）
+            match ex.get_balance().await {
+                Ok(usdt) => {
+                    let mut balance = self.balance.lock().await;
+                    if !self.balance_initialized.load(Ordering::Relaxed) {
+                        balance.free = usdt.free;
+                        balance.used = usdt.used;
+                        balance.total = usdt.total;
+                        self.balance_initialized.store(true, Ordering::Relaxed);
                     }
                 }
                 Err(e) => {
@@ -291,6 +287,8 @@ impl PaperExchangeAdapter {
                         side: position_side,
                         quantity: size_delta,
                         entry_price: fill_price,
+                        margin_mode: MarginMode::Cross,
+                        info: Default::default(),
                     },
                 );
             }
@@ -363,6 +361,8 @@ impl ExchangePe for PaperExchangeAdapter {
                     side: pos.side.clone(),
                     quantity: pos.quantity,
                     entry_price: pos.entry_price,
+                    margin_mode: pos.margin_mode,
+                    info: pos.info.clone(),
                 }
             })
             .collect())
@@ -379,6 +379,58 @@ impl ExchangePe for PaperExchangeAdapter {
             rate: 0.0,
             next_funding_time: Some(Utc::now()),
         })
+    }
+
+    async fn get_klines(
+        &self,
+        _symbol: &str,
+        _interval: &str,
+        _limit: u32,
+        _since: Option<i64>,
+    ) -> VirsResult<Vec<Kline>> {
+        Err(VirsError::Exchange(ExchangeError::NotSupported(
+            "PaperExchange does not support get_klines — no historical K-line data in paper mode".into(),
+        )))
+    }
+
+    async fn get_klines_range(
+        &self,
+        _symbol: &str,
+        _interval: &str,
+        _start_ms: i64,
+        _end_ms: i64,
+    ) -> VirsResult<Vec<Kline>> {
+        Err(VirsError::Exchange(ExchangeError::NotSupported(
+            "PaperExchange does not support get_klines_range — no historical K-line data in paper mode".into(),
+        )))
+    }
+
+    async fn get_symbols(&self) -> VirsResult<Vec<String>> {
+        // Paper exchange 不维护交易对元数据，返回已收到价格更新的 symbol 列表
+        Ok(self
+            .last_prices
+            .iter()
+            .map(|e| e.key().clone())
+            .collect())
+    }
+
+    async fn get_min_qty(&self, _symbol: &str) -> VirsResult<f64> {
+        // Paper 模式固定最小下单量，无实际交易所限制
+        Ok(0.001)
+    }
+
+    async fn create_listen_key(&self) -> VirsResult<String> {
+        Ok("paper-listen-key".to_string())
+    }
+
+    async fn ping(&self) -> VirsResult<bool> {
+        Ok(true)
+    }
+
+    async fn get_api_restrictions(&self) -> VirsResult<ApiRestrictions> {
+        Err(VirsError::Exchange(ExchangeError::NotSupported(
+            "PaperExchange does not support get_api_restrictions".into(),
+        )))
     }
 
     async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<OrderResult> {
@@ -584,6 +636,8 @@ impl ExchangePe for PaperExchangeAdapter {
                     side: pos.side,
                     quantity: pos.quantity,
                     entry_price: pos.entry_price,
+                    margin_mode: pos.margin_mode,
+                    info: pos.info.clone(),
                 },
             );
 

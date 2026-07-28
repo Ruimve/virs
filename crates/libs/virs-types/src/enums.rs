@@ -1,6 +1,24 @@
 use serde::{Deserialize, Serialize};
 
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MarginMode {
+    Cross,
+    Isolated,
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TimeInForce {
+    Gtc,
+    Ioc,
+    Fok,
+    Poc,
+}
+
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Side {
     #[serde(rename = "BUY")]

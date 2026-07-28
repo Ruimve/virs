@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::enums::PositionSide;
+use crate::enums::{MarginMode, PositionSide};
 
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -68,6 +68,8 @@ pub struct ExchangePosition {
     pub side: PositionSide,
     pub quantity: f64,
     pub entry_price: f64,
+    pub margin_mode: MarginMode,
+    pub info: serde_json::Value,
 }
 
 
@@ -76,4 +78,22 @@ pub struct FundingRate {
     pub symbol: String,
     pub rate: f64,
     pub next_funding_time: Option<DateTime<Utc>>,
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiRestrictions {
+    pub ip_restrict: bool,
+    pub ip_whitelist: Vec<String>,
+    pub ip_not_restricted: bool,
+    pub create_sub_account: bool,
+    pub read_info: bool,
+    pub enable_withdrawals: bool,
+    pub enable_internal_transfer: bool,
+    pub enable_futures: bool,
+    pub enable_vanilla_options: bool,
+    pub enable_portfolio_margin_trading: bool,
+    pub enable_fix_api_trade: bool,
+    pub enable_fix_api_read: bool,
+    pub info: serde_json::Value,
 }

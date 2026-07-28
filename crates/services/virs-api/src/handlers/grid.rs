@@ -120,18 +120,22 @@ pub async fn create_bot(
     let fallback = if paper_mode { 10000.0 } else { 0.0 };
     let initial_capital = match state.exchange_registry.get(&exchange_key) {
         Some(ex) => {
+            // ExchangePe::get_balance() 直接返回单个（通常为 USDT）余额，不再返回多币种 Vec
             let quote_asset = extract_quote_asset(symbol);
-            match ex.get_balances().await {
-                Ok(balances) => balances
-                    .iter()
-                    .find(|b| b.asset.eq_ignore_ascii_case(&quote_asset))
-                    .map(|b| b.total)
-                    .unwrap_or_else(|| {
-                        tracing::warn!(asset = %quote_asset, paper_mode, fallback, "quote asset not found in balances");
+            match ex.get_balance().await {
+                Ok(b) => {
+                    if !b.asset.eq_ignore_ascii_case(&quote_asset) {
+                        tracing::warn!(asset = %quote_asset, balance_asset = %b.asset, paper_mode, fallback, "get_balance asset != quote asset; using balance total");
+                    }
+                    if b.total > 0.0 {
+                        b.total
+                    } else {
+                        tracing::warn!(paper_mode, fallback, "balance total is zero; using fallback");
                         fallback
-                    }),
+                    }
+                }
                 Err(e) => {
-                    tracing::warn!(error = %e, paper_mode, fallback, "failed to fetch balances");
+                    tracing::warn!(error = %e, paper_mode, fallback, "failed to fetch balance");
                     fallback
                 }
             }

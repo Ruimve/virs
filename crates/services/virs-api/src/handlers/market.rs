@@ -275,15 +275,11 @@ pub async fn get_order_book(
 
     let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
-        Some(ex) => match ex.get_order_book(symbol, 20).await {
-            Ok(ob) => Ok(Json(ApiResponse::ok(serde_json::json!({
-                "symbol": symbol,
-                "exchange": exchange,
-                "bids": ob.bids.iter().take(20).map(|(price, amount)| serde_json::json!([price, amount])).collect::<Vec<_>>(),
-                "asks": ob.asks.iter().take(20).map(|(price, amount)| serde_json::json!([price, amount])).collect::<Vec<_>>(),
-            })))),
-            Err(e) => Err(VirsError::bad_request(format!("OrderBook error: {}", e))),
-        },
+        // ExchangePe 统一 trait 不再提供 get_order_book 接口
+        Some(_ex) => Err(VirsError::bad_request(format!(
+            "Order book for symbol '{}' is not supported via the unified ExchangePe interface",
+            symbol
+        ))),
         None => Err(VirsError::bad_request(format!(
             "Exchange '{}' not registered",
             exchange
@@ -302,20 +298,19 @@ pub async fn get_balances(
 
     let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
-        Some(ex) => match ex.get_balances().await {
-            Ok(balances) => {
-                let filtered: Vec<_> = balances
-                    .into_iter()
-                    .filter(|b| b.total > 0.0)
-                    .map(|b| {
-                        serde_json::json!({
-                            "asset": b.asset,
-                            "total": b.total,
-                            "free": b.free,
-                            "used": b.used,
-                        })
-                    })
-                    .collect();
+        // ExchangePe::get_balance() 返回单个（通常为 USDT）余额
+        Some(ex) => match ex.get_balance().await {
+            Ok(b) => {
+                let filtered: Vec<_> = if b.total > 0.0 {
+                    vec![serde_json::json!({
+                        "asset": b.asset,
+                        "total": b.total,
+                        "free": b.free,
+                        "used": b.used,
+                    })]
+                } else {
+                    vec![]
+                };
                 Ok(Json(ApiResponse::ok(serde_json::json!({ "balances": filtered }))))
             }
             Err(e) => Err(VirsError::bad_request(format!("Balances error: {}", e))),

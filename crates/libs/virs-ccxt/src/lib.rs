@@ -14,9 +14,9 @@ use virs_error::ExchangeError;
 
 pub use types::{
     ApiRestrictions, Balance, CcxtFundingRate, CcxtKline, CcxtOrder,
-    CcxtOrderBook, CcxtOrderStatus, CcxtTicker, ExecutionType, FundingRate,
+    CcxtOrderBook, CcxtOrderStatus, CcxtTicker, ExecutionType, ExchangePosition, FundingRate,
     Kline, MarginMode, MarketInfo, MarketType, OrderBook, OrderFee, OrderResult, OrderStatus,
-    OrderType, PlaceOrderParams, PositionMode, PositionSide, Side, Ticker,
+    OrderType, PlaceOrderParams, PositionMode, PositionSide, Side, Ticker, TimeInForce,
 };
 
 #[async_trait]
@@ -98,7 +98,7 @@ pub trait Exchange: Send + Sync {
     async fn fetch_positions(
         &self,
         symbol: Option<&str>,
-    ) -> Result<Vec<types::Position>, ExchangeError>;
+    ) -> Result<Vec<ExchangePosition>, ExchangeError>;
     async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError>;
     async fn fetch_funding_rate(&self, symbol: &str) -> Result<CcxtFundingRate, ExchangeError>;
     async fn create_listen_key(&self) -> Result<String, ExchangeError>;

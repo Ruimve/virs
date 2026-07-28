@@ -189,6 +189,8 @@ pub struct PlaceOrderParams {
     pub position_side: Option<PositionSide>,
     pub position_id: Option<Uuid>,
     pub client_order_id: Option<String>,
+    pub stop_price: Option<f64>,
+    pub time_in_force: Option<crate::enums::TimeInForce>,
 }
 
 

@@ -1,9 +1,12 @@
 use async_trait::async_trait;
-use virs_ccxt::{self, Exchange as CcxtExchange, PlaceOrderParams};
-use virs_error::ExchangeError;
-use virs_models::*;
-
-use crate::Exchange;
+use tokio_stream::wrappers::ReceiverStream;
+use virs_ccxt::{self, Exchange as CcxtExchange, PlaceOrderParams as CcxtPlaceOrderParams};
+use virs_error::{ExchangeError, VirsResult};
+use virs_types::enums::*;
+use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
+use virs_types::market::*;
+use virs_types::position::PlaceOrderParams;
+use virs_types::OrderResult;
 
 pub struct CcxtAdapter {
     inner: Box<dyn CcxtExchange>,
@@ -37,25 +40,10 @@ impl CcxtAdapter {
     }
 }
 
-pub fn to_ccxt_market_type(mt: &MarketType) -> MarketType {
-    match mt {
-        MarketType::Perpetual => MarketType::Perpetual,
-    }
-}
-
-pub fn to_ccxt_side(side: &Side) -> virs_ccxt::Side {
-    match side {
-        Side::Buy => virs_ccxt::Side::Buy,
-        Side::Sell => virs_ccxt::Side::Sell,
-        Side::Unknown(s) => virs_ccxt::Side::Unknown(s.clone()),
-    }
-}
-
-pub fn to_ccxt_order_type(ot: &OrderType) -> virs_ccxt::OrderType {
-    // models::OrderType 与 virs_ccxt::OrderType 均为 virs_types::enums::OrderType 的重新导出，类型一致
-    ot.clone()
-}
-
+/// 将 CcxtKline 转换为 Kline，补充 symbol/exchange/interval 字段。
+///
+/// CcxtKline 是 ccxt 层的原始 K 线数据（无 symbol/exchange/interval），
+/// Kline 是业务层完整 K 线，需要补充这三个上下文字段。
 pub fn to_models_kline(
     ck: virs_ccxt::CcxtKline,
     symbol: &str,
@@ -95,47 +83,19 @@ pub fn to_models_kline(
     }
 }
 
-pub fn to_models_balance(cb: virs_ccxt::Balance) -> Balance {
-    Balance {
-        asset: cb.asset,
-        free: cb.free,
-        used: cb.used,
-        total: cb.total,
-    }
-}
-
-pub fn to_models_order(result: virs_ccxt::OrderResult) -> Order {
-    Order {
-        id: result.order_id,
-        client_order_id: Some(result.client_order_id),
-        symbol: String::new(),
-        side: Side::Buy,
-        order_type: OrderType::Market,
-        price: None,
-        amount: 0.0,
-        cost: None,
-        filled: 0.0,
-        remaining: 0.0,
-        status: OrderStatus::Pending,
-        fee: 0.0,
-        fee_currency: String::new(),
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-    }
-}
-
 #[async_trait]
-impl Exchange for CcxtAdapter {
+impl ExchangePe for CcxtAdapter {
     fn name(&self) -> &str {
         self.inner.id()
     }
+
     fn market_type(&self) -> MarketType {
         self.market_type
     }
 
-    async fn get_ticker(&self, symbol: &str) -> Result<Ticker, ExchangeError> {
+    async fn get_ticker(&self, symbol: &str) -> VirsResult<Ticker> {
         let ct = self.inner.fetch_ticker(symbol).await?;
-        ct.try_into()
+        ct.try_into().map_err(Into::into)
     }
 
     async fn get_klines(
@@ -144,7 +104,7 @@ impl Exchange for CcxtAdapter {
         interval: &str,
         limit: u32,
         since: Option<i64>,
-    ) -> Result<Vec<Kline>, ExchangeError> {
+    ) -> VirsResult<Vec<Kline>> {
         let cks = self
             .inner
             .fetch_ohlcv(symbol, interval, limit, since)
@@ -162,7 +122,7 @@ impl Exchange for CcxtAdapter {
         interval: &str,
         start_ms: i64,
         end_ms: i64,
-    ) -> Result<Vec<Kline>, ExchangeError> {
+    ) -> VirsResult<Vec<Kline>> {
         let cks = self
             .inner
             .fetch_ohlcv_range(symbol, interval, start_ms, end_ms)
@@ -174,140 +134,146 @@ impl Exchange for CcxtAdapter {
             .collect())
     }
 
-    async fn get_order_book(&self, symbol: &str, depth: u32) -> Result<OrderBook, ExchangeError> {
-        let cob = self.inner.fetch_order_book(symbol, depth).await?;
-        Ok(cob.into())
+    async fn get_balance(&self) -> VirsResult<Balance> {
+        let balances = self.inner.fetch_balance().await?;
+        let usdt = balances
+            .iter()
+            .find(|b| b.asset.eq_ignore_ascii_case("USDT"))
+            .ok_or_else(|| {
+                ExchangeError::NoData(
+                    "USDT balance not found in exchange balances — cannot return 0.0 as it would bypass risk checks".to_string(),
+                )
+            })?;
+        Ok(Balance {
+            asset: "USDT".to_string(),
+            free: usdt.free,
+            used: usdt.used,
+            total: usdt.total,
+        })
     }
 
-    async fn get_balances(&self) -> Result<Vec<Balance>, ExchangeError> {
-        let cbs = self.inner.fetch_balance().await?;
-        Ok(cbs.into_iter().map(to_models_balance).collect())
+    async fn get_positions(&self, symbol: Option<&str>) -> VirsResult<Vec<ExchangePosition>> {
+        // virs_ccxt::ExchangePosition 已与 virs_types::ExchangePosition 统一（同一类型），
+        // 无需任何转换，直接返回。
+        self.inner
+            .fetch_positions(symbol)
+            .await
+            .map_err(Into::into)
     }
 
-    async fn place_order_with_options(
-        &self,
-        symbol: &str,
-        side: Side,
-        order_type: OrderType,
-        amount: f64,
-        price: Option<f64>,
-        position_side: Option<PositionSide>,
-        client_order_id: Option<&str>,
-    ) -> Result<Order, ExchangeError> {
-        let ccxt_position_side = position_side.map(|ps| match ps {
-            PositionSide::Long => virs_ccxt::PositionSide::Long,
-            PositionSide::Short => virs_ccxt::PositionSide::Short,
-            PositionSide::Unknown(s) => virs_ccxt::PositionSide::Unknown(s),
-        });
-        let params = PlaceOrderParams {
-            symbol: symbol.to_string(),
-            side: to_ccxt_side(&side),
-            order_type: to_ccxt_order_type(&order_type),
-            amount,
-            price,
-            market_type: to_ccxt_market_type(&self.market_type),
-            client_order_id: client_order_id.map(|s| s.to_string()),
-            stop_price: None,
-            time_in_force: None,
-            leverage: None,
-            margin_mode: None,
-            position_side: ccxt_position_side,
-        };
-        let result = self.inner.create_order(params).await?;
-        Ok(to_models_order(result))
+    async fn get_funding_rate(&self, symbol: &str) -> VirsResult<FundingRate> {
+        let fr = self.inner.fetch_funding_rate(symbol).await?;
+        Ok(fr.into())
     }
 
-    async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<Order, ExchangeError> {
-        let result = self.inner.cancel_order(symbol, order_id).await?;
-        Ok(to_models_order(result))
-    }
-
-    async fn cancel_all_orders(&self, symbol: &str) -> Result<(), ExchangeError> {
-        self.inner.cancel_all_orders(symbol).await
-    }
-
-    async fn get_symbols(&self) -> Result<Vec<String>, ExchangeError> {
+    async fn get_symbols(&self) -> VirsResult<Vec<String>> {
         let markets = self.get_markets_cached().await?;
-        let ccxt_mt = to_ccxt_market_type(&self.market_type);
         Ok(markets
             .into_iter()
-            .filter(|m| m.market_type == ccxt_mt && m.active)
+            .filter(|m| m.market_type == self.market_type && m.active)
             .map(|m| m.symbol)
             .collect())
     }
 
-    async fn get_min_qty(&self, symbol: &str) -> Result<f64, ExchangeError> {
+    async fn get_min_qty(&self, symbol: &str) -> VirsResult<f64> {
         let markets = self.get_markets_cached().await?;
         let found = markets
             .iter()
             .find(|m| m.symbol == symbol || m.id == symbol);
         match found {
-            Some(m) => {
-                m.min_amount.ok_or_else(|| {
-                    ExchangeError::NoData(format!(
-                        "symbol {} found but min_amount is None — exchange did not return minimum order amount",
-                        symbol
-                    ))
-                })
-            }
+            Some(m) => Ok(m.min_amount.ok_or_else(|| {
+                ExchangeError::NoData(format!(
+                    "symbol {} found but min_amount is None — exchange did not return minimum order amount",
+                    symbol
+                ))
+            })?),
             None => Err(ExchangeError::NoData(format!(
                 "symbol {} not found in markets",
                 symbol
-            ))),
+            ))
+            .into()),
         }
     }
 
-    async fn ping(&self) -> Result<bool, ExchangeError> {
-        self.inner.ping().await
-    }
-
-    async fn set_leverage(&self, symbol: &str, leverage: u32) -> Result<(), ExchangeError> {
+    async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<OrderResult> {
+        // 从 virs_types::PlaceOrderParams（10 字段）构造 virs_ccxt::PlaceOrderParams（12 字段）。
+        // 补充 adapter 层独有字段：market_type（来自自身）、leverage=None、margin_mode=Cross。
+        let ccxt_params = CcxtPlaceOrderParams {
+            symbol: params.symbol,
+            side: params.side,
+            order_type: params.order_type,
+            amount: params.amount,
+            price: params.price,
+            market_type: self.market_type,
+            client_order_id: params.client_order_id,
+            stop_price: params.stop_price,
+            time_in_force: params.time_in_force,
+            leverage: None,
+            margin_mode: Some(MarginMode::Cross),
+            position_side: params.position_side,
+        };
         self.inner
-            .set_leverage(symbol, leverage, virs_ccxt::MarginMode::Cross)
+            .create_order(ccxt_params)
             .await
+            .map_err(Into::into)
     }
 
-    async fn get_positions(
-        &self,
-        symbol: Option<&str>,
-    ) -> Result<Vec<ExchangePosition>, ExchangeError> {
-        let positions = self.inner.fetch_positions(symbol).await?;
-        Ok(positions
-            .into_iter()
-            .map(|p| ExchangePosition {
-                symbol: p.symbol,
-                side: match p.side {
-                    virs_ccxt::PositionSide::Long => PositionSide::Long,
-                    virs_ccxt::PositionSide::Short => PositionSide::Short,
-                    virs_ccxt::PositionSide::Unknown(s) => PositionSide::Unknown(s),
-                },
-                quantity: p.quantity,
-                entry_price: p.entry_price,
-            })
-            .collect())
+    async fn cancel_order(&self, symbol: &str, order_id: &str) -> VirsResult<OrderResult> {
+        self.inner
+            .cancel_order(symbol, order_id)
+            .await
+            .map_err(Into::into)
     }
 
-    async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError> {
-        self.inner.get_position_mode().await
+    async fn cancel_all_orders(&self, symbol: Option<&str>) -> VirsResult<Vec<OrderResult>> {
+        // ccxt 层 cancel_all_orders 需要 symbol（Binance DELETE /fapi/v1/allOpenOrders 必填），
+        // None 时返回错误。ccxt 返回 ()，这里返回空 Vec。
+        let sym = symbol.ok_or_else(|| {
+            ExchangeError::InvalidRequest(
+                "cancel_all_orders requires a symbol for DELETE /fapi/v1/allOpenOrders".into(),
+            )
+        })?;
+        self.inner.cancel_all_orders(sym).await?;
+        Ok(Vec::new())
     }
 
-    async fn get_funding_rate(&self, symbol: &str) -> Result<FundingRate, ExchangeError> {
-        let fr = self.inner.fetch_funding_rate(symbol).await?;
-        Ok(fr.into())
+    async fn set_leverage(&self, symbol: &str, leverage: u32) -> VirsResult<()> {
+        // ExchangePe 的 set_leverage 不接收 margin_mode，内部固定使用 Cross。
+        self.inner
+            .set_leverage(symbol, leverage, MarginMode::Cross)
+            .await
+            .map_err(Into::into)
     }
 
-    async fn create_listen_key(&self) -> Result<String, ExchangeError> {
-        self.inner.create_listen_key().await
+    async fn get_position_mode(&self) -> VirsResult<PositionMode> {
+        self.inner
+            .get_position_mode()
+            .await
+            .map_err(Into::into)
     }
 
-    async fn get_api_restrictions(&self) -> Result<virs_ccxt::ApiRestrictions, ExchangeError> {
-        self.inner.fetch_api_restrictions().await
+    async fn create_listen_key(&self) -> VirsResult<String> {
+        self.inner
+            .create_listen_key()
+            .await
+            .map_err(Into::into)
     }
 
-    async fn start_listenkey_order_ws(
-        &self,
-        listen_key_hint: Option<&str>,
-    ) -> Result<tokio::sync::mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError> {
-        self.inner.start_listenkey_order_ws(listen_key_hint).await
+    async fn ping(&self) -> VirsResult<bool> {
+        self.inner.ping().await.map_err(Into::into)
+    }
+
+    async fn get_api_restrictions(&self) -> VirsResult<ApiRestrictions> {
+        self.inner
+            .fetch_api_restrictions()
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn subscribe_order_updates(&self, _symbols: &[&str]) -> VirsResult<OrderUpdateStream> {
+        // ccxt start_listenkey_order_ws 返回 mpsc::Receiver<WsFeedEvent>，
+        // 用 ReceiverStream 包装后转为 OrderUpdateStream（Pin<Box<dyn Stream>>）。
+        let rx = self.inner.start_listenkey_order_ws(None).await?;
+        Ok(Box::pin(ReceiverStream::new(rx)))
     }
 }

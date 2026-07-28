@@ -123,6 +123,8 @@ impl OrderExecutor for PeOrderExecutor {
                     }),
                     position_id,
                     client_order_id,
+                    stop_price: None,
+                    time_in_force: None,
                 },
             },
             OrderCommand::CancelAllOrders { symbol } => EngineCommand::CancelAllOrders {

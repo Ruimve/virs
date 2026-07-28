@@ -288,18 +288,12 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             None => return AccountBalance::default(),
         };
 
-        match ex.get_balances().await {
-            Ok(bs) => {
-                let usdt = bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT"));
-                match usdt {
-                    Some(b) => AccountBalance {
-                        total: b.total,
-                        free: b.free,
-                        used: b.used,
-                    },
-                    None => AccountBalance::default(),
-                }
-            }
+        match ex.get_balance().await {
+            Ok(b) => AccountBalance {
+                total: b.total,
+                free: b.free,
+                used: b.used,
+            },
             Err(e) => {
                 warn!(error = %e, "get_account_balance error");
                 AccountBalance::default()
@@ -575,18 +569,12 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             None => return AccountBalance::default(),
         };
 
-        match ex.get_balances().await {
-            Ok(bs) => {
-                let usdt = bs.iter().find(|b| b.asset.eq_ignore_ascii_case("USDT"));
-                match usdt {
-                    Some(b) => AccountBalance {
-                        total: b.total,
-                        free: b.free,
-                        used: b.used,
-                    },
-                    None => AccountBalance::default(),
-                }
-            }
+        match ex.get_balance().await {
+            Ok(b) => AccountBalance {
+                total: b.total,
+                free: b.free,
+                used: b.used,
+            },
             Err(e) => {
                 warn!(error = %e, "get_account_balance error");
                 AccountBalance::default()

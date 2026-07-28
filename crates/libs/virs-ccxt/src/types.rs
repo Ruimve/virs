@@ -5,9 +5,11 @@ use virs_error::ExchangeError;
 // 从 virs-types 重导出 (CcxtOrder 等类型已移至 virs-types 避免循环依赖)
 pub use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderResult};
 
-pub use virs_types::enums::{MarketType, OrderStatus, OrderType, PositionMode, PositionSide, Side};
+pub use virs_types::enums::{
+    MarketType, MarginMode, OrderStatus, OrderType, PositionMode, PositionSide, Side, TimeInForce,
+};
 pub use virs_types::market::{
-    Balance, ExchangePosition, FundingRate, Kline, OrderBook, Ticker,
+    ApiRestrictions, Balance, ExchangePosition, FundingRate, Kline, OrderBook, Ticker,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,6 +30,8 @@ pub struct MarketInfo {
     pub info: serde_json::Value,
 }
 
+/// ccxt 层下单参数。包含 adapter 层独有的字段（market_type/leverage/margin_mode），
+/// 这些字段由 CcxtAdapter 从 virs_types::PlaceOrderParams 构造时填充。
 #[derive(Debug, Clone)]
 pub struct PlaceOrderParams {
     pub symbol: String,
@@ -44,37 +48,11 @@ pub struct PlaceOrderParams {
     pub position_side: Option<PositionSide>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "lowercase")]
-pub enum MarginMode {
-    Cross,
-    Isolated,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrderFee {
     pub cost: f64,
     pub currency: String,
     pub rate: Option<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum TimeInForce {
-    Gtc,
-    Ioc,
-    Fok,
-    Poc,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Position {
-    pub symbol: String,
-    pub side: PositionSide,
-    pub quantity: f64,
-    pub entry_price: f64,
-    pub margin_mode: MarginMode,
-    pub info: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -199,21 +177,4 @@ impl From<CcxtFundingRate> for FundingRate {
             next_funding_time: fr.next_funding_time,
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ApiRestrictions {
-    pub ip_restrict: bool,
-    pub ip_whitelist: Vec<String>,
-    pub ip_not_restricted: bool,
-    pub create_sub_account: bool,
-    pub read_info: bool,
-    pub enable_withdrawals: bool,
-    pub enable_internal_transfer: bool,
-    pub enable_futures: bool,
-    pub enable_vanilla_options: bool,
-    pub enable_portfolio_margin_trading: bool,
-    pub enable_fix_api_trade: bool,
-    pub enable_fix_api_read: bool,
-    pub info: serde_json::Value,
 }

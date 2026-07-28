@@ -1,62 +1,7 @@
-use virs_ccxt::{CcxtKline, OrderResult};
-use virs_models::Order;
-use virs_types::enums::*;
-use virs_types::market::{Balance, Kline};
+use virs_ccxt::CcxtKline;
+use virs_types::market::Kline;
 
-use crate::adapter::{
-    to_ccxt_market_type, to_ccxt_order_type, to_ccxt_side, to_models_balance, to_models_kline,
-    to_models_order,
-};
-
-#[test]
-fn a1_2_perpetual_to_ccxt() {
-    assert_eq!(
-        to_ccxt_market_type(&MarketType::Perpetual),
-        MarketType::Perpetual
-    );
-}
-
-#[test]
-fn a2_1_buy_to_ccxt() {
-    assert_eq!(to_ccxt_side(&Side::Buy), virs_ccxt::Side::Buy);
-}
-
-#[test]
-fn a2_2_sell_to_ccxt() {
-    assert_eq!(to_ccxt_side(&Side::Sell), virs_ccxt::Side::Sell);
-}
-
-#[test]
-fn a3_1_market_to_ccxt() {
-    assert_eq!(
-        to_ccxt_order_type(&OrderType::Market),
-        virs_ccxt::OrderType::Market
-    );
-}
-
-#[test]
-fn a3_2_limit_to_ccxt() {
-    assert_eq!(
-        to_ccxt_order_type(&OrderType::Limit),
-        virs_ccxt::OrderType::Limit
-    );
-}
-
-#[test]
-fn a3_3_stop_market_to_ccxt() {
-    assert_eq!(
-        to_ccxt_order_type(&OrderType::StopMarket),
-        virs_ccxt::OrderType::StopMarket
-    );
-}
-
-#[test]
-fn a3_5_take_profit_market_to_ccxt() {
-    assert_eq!(
-        to_ccxt_order_type(&OrderType::TakeProfitMarket),
-        virs_ccxt::OrderType::TakeProfitMarket
-    );
-}
+use crate::adapter::to_models_kline;
 
 #[test]
 fn a4_1_kline_normal_conversion() {
@@ -169,49 +114,4 @@ fn a4_4_kline_close_time_from_exchange() {
 
     assert_eq!(kline.close_time, 1700000059000);
     assert_ne!(kline.close_time, 1700000000000 + 60_000 - 1);
-}
-
-#[test]
-fn a5_1_balance_normal() {
-    let cb = Balance {
-        asset: "USDT".into(),
-        free: 10000.0,
-        used: 5000.0,
-        total: 15000.0,
-    };
-    let balance = to_models_balance(cb);
-    assert_eq!(balance.asset, "USDT");
-    assert_eq!(balance.free, 10000.0);
-    assert_eq!(balance.used, 5000.0);
-    assert_eq!(balance.total, 15000.0);
-}
-
-#[test]
-fn a6_1_order_normal() {
-    let result = OrderResult {
-        order_id: "order_123".into(),
-        client_order_id: "client_456".into(),
-    };
-    let order: Order = to_models_order(result);
-    assert_eq!(order.id, "order_123");
-    assert_eq!(order.client_order_id, Some("client_456".into()));
-    assert_eq!(order.side, Side::Buy);
-    assert_eq!(order.order_type, OrderType::Market);
-    assert_eq!(order.status, OrderStatus::Pending);
-}
-
-#[test]
-fn a6_2_order_empty_client_order_id() {
-    let result = OrderResult {
-        order_id: "order_789".into(),
-        client_order_id: String::new(),
-    };
-    let order: Order = to_models_order(result);
-    assert_eq!(order.id, "order_789");
-    assert_eq!(order.client_order_id, Some(String::new()));
-    assert_eq!(order.price, None);
-    assert_eq!(order.cost, None);
-    assert_eq!(order.fee, 0.0);
-    assert_eq!(order.fee_currency, "");
-    assert_eq!(order.status, OrderStatus::Pending);
 }

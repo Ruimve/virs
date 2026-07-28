@@ -16,9 +16,7 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 dashmap = { workspace = true }
 tokio-stream = { workspace = true }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-serde_json = { workspace = true }

@@ -615,7 +615,7 @@ pub async fn fetch_positions(
     client: &ExchangeClient,
     signer: &dyn Signer,
     symbol: Option<&str>,
-) -> Result<Vec<Position>, ExchangeError> {
+) -> Result<Vec<ExchangePosition>, ExchangeError> {
     // symbol 可选，传则查指定交易对，不传查全部
     let mut params: Vec<(String, String)> = vec![];
     if let Some(sym) = symbol {
@@ -634,7 +634,7 @@ pub async fn fetch_positions(
         ExchangeError::Internal("Invalid positionRisk response from Binance".into())
     })?;
 
-    let mut positions: Vec<Position> = Vec::new();
+    let mut positions: Vec<ExchangePosition> = Vec::new();
     for p in arr.iter() {
         // 持仓数量: 正数为多，负数为空，0 表示无持仓
         let pos_amt = parse_f64(p, "positionAmt").unwrap_or_else(|| {
@@ -684,7 +684,7 @@ pub async fn fetch_positions(
             }
         };
 
-        positions.push(Position {
+        positions.push(ExchangePosition {
             // 转回统一格式符号 (如 BTCUSDT -> BTC/USDT)
             symbol: crate::adapter::binance::BinanceExchange::to_unified_symbol(&symbol_str),
             side,
