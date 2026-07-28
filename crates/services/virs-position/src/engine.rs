@@ -321,7 +321,7 @@ impl PositionEngine {
                 quantity: p.quantity,
                 entry_price: p.entry_price,
                 margin_mode: MarginMode::Cross,
-                info: Default::default(),
+                info: serde_json::Value::Null,
             })
             .collect();
         self.inner
@@ -453,8 +453,18 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
         (&ws_order.side, &ws_order.position_side),
         (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short)
     );
-    let timestamp =
-        chrono::DateTime::from_timestamp_millis(ws_order.trade_time).unwrap_or_else(Utc::now);
+    let timestamp = match chrono::DateTime::from_timestamp_millis(ws_order.trade_time) {
+        Some(ts) => ts,
+        None => {
+            tracing::error!(
+                symbol = %ws_order.symbol,
+                client_order_id = %ws_order.client_order_id,
+                trade_time = ws_order.trade_time,
+                "Invalid trade_time timestamp — skipping order"
+            );
+            return;
+        }
+    };
 
     // 1. 检查 pending_orders 中是否有此 client_order_id
     if let Some(mut pending) = inner.pending_orders.get_mut(&client_order_id) {
@@ -683,9 +693,17 @@ async fn process_order_fill(
     }
 
     if !skip_trade {
+        let trade_position_id = position_id.unwrap_or_else(|| {
+            warn!(
+                client_order_id = %client_order_id,
+                symbol = %ws_order.symbol,
+                "Trade has no position_id — writing with Uuid::nil() (orphan trade record)"
+            );
+            Uuid::nil()
+        });
         let trade = Trade {
             id: Uuid::new_v4(),
-            position_id: position_id.unwrap_or(Uuid::nil()),
+            position_id: trade_position_id,
             order_id: Uuid::nil(),
             exchange: inner.exchange.name().to_string(),
             symbol: ws_order.symbol.clone(),
@@ -785,7 +803,7 @@ pub(crate) async fn handle_open_position(
             position_id: Some(position_id),
             client_order_id: client_order_id.clone(),
             stop_price: None,
-            time_in_force: None,
+            time_in_force: Some(TimeInForce::Gtc),
         };
         handle_place_order(inner, params).await;
         return;
@@ -854,7 +872,7 @@ pub(crate) async fn handle_open_position(
         position_id: Some(position_id),
         client_order_id: client_order_id.clone(),
         stop_price: None,
-        time_in_force: None,
+        time_in_force: Some(TimeInForce::Gtc),
     };
     handle_place_order(inner, params).await;
 }
@@ -918,7 +936,7 @@ pub(crate) async fn handle_close_position(
         position_id: Some(position.id),
         client_order_id: client_order_id.clone(),
         stop_price: None,
-        time_in_force: None,
+        time_in_force: Some(TimeInForce::Gtc),
     };
 
     // 将仓位状态改为 Closing
@@ -993,14 +1011,17 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
                         symbol = %params.symbol,
                         "position_side unresolved (side is Unknown), cannot place order"
                     );
-                    let cid = params.client_order_id.clone().unwrap_or_else(|| {
-                        warn!(
-                            symbol = %params.symbol,
-                            "client_order_id is None in OrderFailed path — \
-                             caller must provide client_order_id for order tracking"
-                        );
-                        "UNTRACKABLE_NO_CLIENT_ORDER_ID".to_string()
-                    });
+                    let cid = match params.client_order_id.clone() {
+                        Some(cid) => cid,
+                        None => {
+                            error!(
+                                symbol = %params.symbol,
+                                "client_order_id is None in OrderFailed path — \
+                                 cannot emit OrderFailed event without client_order_id"
+                            );
+                            return;
+                        }
+                    };
                     inner.emit_event(EngineEvent::OrderFailed {
                         client_order_id: cid,
                         reason: "position_side unresolved (side is Unknown)".into(),
@@ -1029,11 +1050,17 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
     };
     params.position_id = Some(position_id);
 
-    // 生成 client_order_id
-    let client_order_id = params
-        .client_order_id
-        .clone()
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    // client_order_id 必须由调用方提供，不允许自动生成
+    let client_order_id = match params.client_order_id.clone() {
+        Some(cid) => cid,
+        None => {
+            error!(
+                symbol = %params.symbol,
+                "client_order_id is required for order placement — skipping"
+            );
+            return;
+        }
+    };
     params.client_order_id = Some(client_order_id.clone());
 
     // Pre-register: 先存入 pending

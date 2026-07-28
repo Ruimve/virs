@@ -40,17 +40,22 @@ pub async fn save_credential(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let exchange = body["exchange"].as_str().unwrap_or("");
-    let label = body["label"].as_str().unwrap_or("");
-    let api_key = body["api_key"].as_str().unwrap_or("");
-    let api_secret = body["api_secret"].as_str().unwrap_or("");
+    let exchange = body["exchange"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("exchange is required"))?;
+    let label = body["label"]
+        .as_str()
+        .ok_or_else(|| VirsError::bad_request("label is required"))?;
+    let api_key = body["api_key"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("api_key is required"))?;
+    let api_secret = body["api_secret"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("api_secret is required"))?;
     let passphrase = body["passphrase"].as_str();
-
-    if exchange.is_empty() || api_key.is_empty() || api_secret.is_empty() {
-        return Err(VirsError::bad_request(
-            "exchange, api_key, api_secret are required",
-        ));
-    }
 
     let id = uuid::Uuid::new_v4();
 
@@ -196,36 +201,44 @@ pub async fn check_permissions(
             permissions.push(serde_json::json!({
                 "name": "read_info",
                 "label": "Read Info",
-                "status": if restrictions.read_info { "ok" } else { "error" },
-                "detail": if restrictions.read_info { "Reading account info enabled" } else { "Reading account info disabled" }
+                "status": match restrictions.read_info {
+                    Some(true) => "ok",
+                    Some(false) => "error",
+                    None => "unknown",
+                },
+                "detail": match restrictions.read_info {
+                    Some(true) => "Reading account info enabled",
+                    Some(false) => "Reading account info disabled",
+                    None => "Reading account info status unknown (API did not return enableReading)",
+                }
             }));
 
             permissions.push(serde_json::json!({
                 "name": "futures",
                 "label": "Futures Trading",
-                "status": if restrictions.enable_futures { "ok" } else { "error" },
-                "detail": if restrictions.enable_futures { "Futures trading enabled" } else { "Futures trading disabled" }
+                "status": if restrictions.enable_futures == Some(true) { "ok" } else { "error" },
+                "detail": if restrictions.enable_futures == Some(true) { "Futures trading enabled" } else { "Futures trading disabled" }
             }));
 
             permissions.push(serde_json::json!({
                 "name": "withdrawals",
                 "label": "Withdrawals",
-                "status": if restrictions.enable_withdrawals { "warn" } else { "ok" },
-                "detail": if restrictions.enable_withdrawals { "Withdrawals enabled (not required, consider disabling)" } else { "Withdrawals disabled (recommended)" }
+                "status": if restrictions.enable_withdrawals == Some(true) { "warn" } else { "ok" },
+                "detail": if restrictions.enable_withdrawals == Some(true) { "Withdrawals enabled (not required, consider disabling)" } else { "Withdrawals disabled (recommended)" }
             }));
 
             permissions.push(serde_json::json!({
                 "name": "internal_transfer",
                 "label": "Internal Transfer",
-                "status": if restrictions.enable_internal_transfer { "warn" } else { "ok" },
-                "detail": if restrictions.enable_internal_transfer { "Internal transfer enabled (not required, consider disabling)" } else { "Internal transfer disabled (recommended)" }
+                "status": if restrictions.enable_internal_transfer == Some(true) { "warn" } else { "ok" },
+                "detail": if restrictions.enable_internal_transfer == Some(true) { "Internal transfer enabled (not required, consider disabling)" } else { "Internal transfer disabled (recommended)" }
             }));
 
             permissions.push(serde_json::json!({
                 "name": "ip_restriction",
                 "label": "IP Restriction",
-                "status": if restrictions.ip_restrict { "ok" } else { "warn" },
-                "detail": if restrictions.ip_restrict { "IP restriction enabled" } else { "IP restriction not enabled (consider enabling)" }
+                "status": if restrictions.ip_restrict == Some(true) { "ok" } else { "warn" },
+                "detail": if restrictions.ip_restrict == Some(true) { "IP restriction enabled" } else { "IP restriction not enabled (consider enabling)" }
             }));
 
             Ok(Json(ApiResponse::ok(serde_json::json!({
@@ -273,36 +286,44 @@ pub async fn verify_permissions(
             permissions.push(serde_json::json!({
                 "name": "read_info",
                 "label": "Read Info",
-                "status": if restrictions.read_info { "ok" } else { "error" },
-                "detail": if restrictions.read_info { "Reading account info enabled" } else { "Reading account info disabled" }
+                "status": match restrictions.read_info {
+                    Some(true) => "ok",
+                    Some(false) => "error",
+                    None => "unknown",
+                },
+                "detail": match restrictions.read_info {
+                    Some(true) => "Reading account info enabled",
+                    Some(false) => "Reading account info disabled",
+                    None => "Reading account info status unknown (API did not return enableReading)",
+                }
             }));
 
             permissions.push(serde_json::json!({
                 "name": "futures",
                 "label": "Futures Trading",
-                "status": if restrictions.enable_futures { "ok" } else { "error" },
-                "detail": if restrictions.enable_futures { "Futures trading enabled" } else { "Futures trading disabled" }
+                "status": if restrictions.enable_futures == Some(true) { "ok" } else { "error" },
+                "detail": if restrictions.enable_futures == Some(true) { "Futures trading enabled" } else { "Futures trading disabled" }
             }));
 
             permissions.push(serde_json::json!({
                 "name": "withdrawals",
                 "label": "Withdrawals",
-                "status": if restrictions.enable_withdrawals { "warn" } else { "ok" },
-                "detail": if restrictions.enable_withdrawals { "Withdrawals enabled (not required, consider disabling)" } else { "Withdrawals disabled (recommended)" }
+                "status": if restrictions.enable_withdrawals == Some(true) { "warn" } else { "ok" },
+                "detail": if restrictions.enable_withdrawals == Some(true) { "Withdrawals enabled (not required, consider disabling)" } else { "Withdrawals disabled (recommended)" }
             }));
 
             permissions.push(serde_json::json!({
                 "name": "internal_transfer",
                 "label": "Internal Transfer",
-                "status": if restrictions.enable_internal_transfer { "warn" } else { "ok" },
-                "detail": if restrictions.enable_internal_transfer { "Internal transfer enabled (not required, consider disabling)" } else { "Internal transfer disabled (recommended)" }
+                "status": if restrictions.enable_internal_transfer == Some(true) { "warn" } else { "ok" },
+                "detail": if restrictions.enable_internal_transfer == Some(true) { "Internal transfer enabled (not required, consider disabling)" } else { "Internal transfer disabled (recommended)" }
             }));
 
             permissions.push(serde_json::json!({
                 "name": "ip_restriction",
                 "label": "IP Restriction",
-                "status": if restrictions.ip_restrict { "ok" } else { "warn" },
-                "detail": if restrictions.ip_restrict { "IP restriction enabled" } else { "IP restriction not enabled (consider enabling)" }
+                "status": if restrictions.ip_restrict == Some(true) { "ok" } else { "warn" },
+                "detail": if restrictions.ip_restrict == Some(true) { "IP restriction enabled" } else { "IP restriction not enabled (consider enabling)" }
             }));
 
             Ok(Json(ApiResponse::ok(serde_json::json!({

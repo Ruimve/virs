@@ -72,12 +72,7 @@ impl BinanceDepthMessage {
 
         // 扁平格式：直接取 b/a/s/E
         if let (Some(bids), Some(asks)) = (self.bids_perp_flat, self.asks_perp_flat) {
-            let ts = self.event_time_flat.unwrap_or_else(|| {
-                tracing::warn!(
-                    "orderbook_ws: event_time_flat is None — using 0 as fallback timestamp"
-                );
-                0
-            });
+            let ts = self.event_time_flat?; // missing event_time → skip this depth update
             return Some(ParsedDepth {
                 bids,
                 asks,
@@ -98,12 +93,7 @@ pub(crate) fn parse_payload(v: &serde_json::Value) -> Option<ParsedDepth> {
         let bids = parse_levels(bids)?;
         let asks = parse_levels(asks)?;
         let sym = v.get("s").and_then(|s| s.as_str()).map(String::from);
-        let ts = v.get("E").and_then(|t| t.as_i64()).unwrap_or_else(|| {
-            tracing::warn!(
-                "orderbook_ws: event time 'E' missing in perpetual payload — using 0 as fallback"
-            );
-            0
-        });
+        let ts = v.get("E").and_then(|t| t.as_i64())?; // missing event_time → skip
         return Some(ParsedDepth {
             bids,
             asks,

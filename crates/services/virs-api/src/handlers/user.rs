@@ -41,16 +41,16 @@ pub async fn create_user(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let username = body["username"].as_str().unwrap_or("");
-    let password = body["password"].as_str().unwrap_or("");
+    let username = body["username"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("username is required"))?;
+    let password = body["password"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("password is required"))?;
     let role = body["role"].as_str().unwrap_or("user");
     let email = body["email"].as_str();
-
-    if username.is_empty() || password.is_empty() {
-        return Err(VirsError::bad_request(
-            "Username and password are required",
-        ));
-    }
 
     let password_hash = virs_utils::crypto::hash_password(password)?;
 
@@ -79,7 +79,9 @@ pub async fn update_user(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let id = body["id"].as_str().unwrap_or("");
+    let id = body["id"]
+        .as_str()
+        .ok_or_else(|| VirsError::bad_request("id is required"))?;
     let uuid_id = uuid::Uuid::parse_str(id)
         .map_err(|_| VirsError::bad_request("Invalid user ID"))?;
 
@@ -108,7 +110,9 @@ pub async fn delete_user(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let id = body["id"].as_str().unwrap_or("");
+    let id = body["id"]
+        .as_str()
+        .ok_or_else(|| VirsError::bad_request("id is required"))?;
     let uuid_id = uuid::Uuid::parse_str(id)
         .map_err(|_| VirsError::bad_request("Invalid user ID"))?;
 

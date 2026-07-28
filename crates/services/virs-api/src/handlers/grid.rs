@@ -19,8 +19,14 @@ pub async fn create_bot(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let symbol = body["symbol"].as_str().unwrap_or("");
-    let exchange = body["exchange"].as_str().unwrap_or("");
+    let symbol = body["symbol"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("symbol is required"))?;
+    let exchange = body["exchange"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("exchange is required"))?;
     let grid_count = body["grid_count"].as_i64().ok_or_else(|| {
         VirsError::bad_request("grid_count is required and must be greater than 0")
     })? as i32;
@@ -43,12 +49,6 @@ pub async fn create_bot(
     let paper_mode = body["paper_mode"].as_bool().ok_or_else(|| {
         VirsError::bad_request("paper_mode is required (must be true or false)")
     })?;
-
-    if symbol.is_empty() || exchange.is_empty() {
-        return Err(VirsError::bad_request(
-            "symbol and exchange are required",
-        ));
-    }
 
     if upper_price <= lower_price {
         return Err(VirsError::bad_request(
@@ -591,8 +591,8 @@ pub async fn get_trades(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let page = params.page.unwrap_or(1).max(1);
-    let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
+    let page = params.page.max(1);
+    let page_size = params.page_size.clamp(1, 100);
     let offset = (page - 1) * page_size;
 
 
@@ -849,8 +849,8 @@ pub async fn get_analysis_logs(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let page = params.page.unwrap_or(1).max(1);
-    let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
+    let page = params.page.max(1);
+    let page_size = params.page_size.clamp(1, 100);
     let offset = (page - 1) * page_size;
 
 

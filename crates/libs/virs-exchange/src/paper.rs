@@ -132,8 +132,20 @@ impl PaperExchangeAdapter {
                 continue;
             }
             let filled = match &order.side {
-                Side::Buy => current_price <= order.price.unwrap_or(current_price),
-                Side::Sell => current_price >= order.price.unwrap_or(current_price),
+                Side::Buy => match order.price {
+                    Some(price) => current_price <= price,
+                    None => {
+                        error!(order_id = %order.id, symbol = %order.symbol, "Buy order has no limit price — skipping");
+                        continue;
+                    }
+                },
+                Side::Sell => match order.price {
+                    Some(price) => current_price >= price,
+                    None => {
+                        error!(order_id = %order.id, symbol = %order.symbol, "Sell order has no limit price — skipping");
+                        continue;
+                    }
+                },
                 Side::Unknown(_) => unreachable!("validate ensures side is Buy/Sell"),
             };
             if filled {
@@ -171,7 +183,7 @@ impl PaperExchangeAdapter {
                 status: CcxtOrderStatus::Filled,
                 execution_type: ExecutionType::Trade,
                 orig_qty: order.amount.to_string(),
-                original_price: order.price.map(|p| p.to_string()).unwrap_or_else(|| "0".to_string()),
+                original_price: order.price.map(|p| p.to_string()).unwrap_or_default(),
                 avg_fill_price: Some(current_price.to_string()),
                 filled_qty: order.amount.to_string(),
                 last_fill_qty: order.amount.to_string(),
@@ -304,7 +316,7 @@ impl PaperExchangeAdapter {
                         quantity: size_delta,
                         entry_price: fill_price,
                         margin_mode: MarginMode::Cross,
-                        info: Default::default(),
+                        info: serde_json::Value::Null,
                     },
                 );
             }
@@ -490,7 +502,7 @@ impl ExchangePe for PaperExchangeAdapter {
                 status: CcxtOrderStatus::Filled,
                 execution_type: ExecutionType::Trade,
                 orig_qty: params.amount.to_string(),
-                original_price: params.price.map(|p| p.to_string()).unwrap_or_else(|| "0".to_string()),
+                original_price: params.price.map(|p| p.to_string()).unwrap_or_default(),
                 avg_fill_price: Some(fill_price.to_string()),
                 filled_qty: params.amount.to_string(),
                 last_fill_qty: params.amount.to_string(),

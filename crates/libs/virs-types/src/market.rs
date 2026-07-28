@@ -83,17 +83,17 @@ pub struct FundingRate {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiRestrictions {
-    pub ip_restrict: bool,
+    pub ip_restrict: Option<bool>,
     pub ip_whitelist: Vec<String>,
-    pub ip_not_restricted: bool,
-    pub create_sub_account: bool,
-    pub read_info: bool,
-    pub enable_withdrawals: bool,
-    pub enable_internal_transfer: bool,
-    pub enable_futures: bool,
-    pub enable_vanilla_options: bool,
-    pub enable_portfolio_margin_trading: bool,
-    pub enable_fix_api_trade: bool,
-    pub enable_fix_api_read: bool,
+    pub ip_not_restricted: Option<bool>,
+    pub create_sub_account: Option<bool>,
+    pub read_info: Option<bool>,
+    pub enable_withdrawals: Option<bool>,
+    pub enable_internal_transfer: Option<bool>,
+    pub enable_futures: Option<bool>,
+    pub enable_vanilla_options: Option<bool>,
+    pub enable_portfolio_margin_trading: Option<bool>,
+    pub enable_fix_api_trade: Option<bool>,
+    pub enable_fix_api_read: Option<bool>,
     pub info: serde_json::Value,
 }

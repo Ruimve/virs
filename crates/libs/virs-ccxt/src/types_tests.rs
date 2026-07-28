@@ -102,8 +102,7 @@ fn t2_2_ticker_none_fields_return_error() {
 }
 
 #[test]
-fn t2_3_ticker_timestamp_none_uses_now() {
-    let before = Utc::now();
+fn t2_3_ticker_timestamp_none_returns_error() {
     let ccxt = CcxtTicker {
         symbol: "BTC/USDT".into(),
         exchange: "binance".into(),
@@ -121,10 +120,8 @@ fn t2_3_ticker_timestamp_none_uses_now() {
         timestamp: None,
         info: serde_json::json!({}),
     };
-    let ticker: Ticker = ccxt.try_into().unwrap();
-    let after = Utc::now();
-    assert!(ticker.timestamp >= before);
-    assert!(ticker.timestamp <= after);
+    let result: Result<Ticker, _> = ccxt.try_into();
+    assert!(result.is_err());
 }
 
 #[test]
@@ -137,7 +134,7 @@ fn t3_1_order_book_normal() {
         timestamp: Some(now),
         nonce: Some(12345),
     };
-    let ob: OrderBook = ccxt.into();
+    let ob: OrderBook = ccxt.try_into().expect("timestamp present");
     assert_eq!(ob.symbol, "BTC/USDT");
     assert_eq!(ob.bids, vec![(50000.0, 1.5), (49999.0, 2.0)]);
     assert_eq!(ob.asks, vec![(50001.0, 1.0), (50002.0, 0.5)]);
@@ -146,7 +143,6 @@ fn t3_1_order_book_normal() {
 
 #[test]
 fn t3_2_order_book_timestamp_none() {
-    let before = Utc::now();
     let ccxt = CcxtOrderBook {
         symbol: "ETH/USDT".into(),
         bids: vec![],
@@ -154,10 +150,8 @@ fn t3_2_order_book_timestamp_none() {
         timestamp: None,
         nonce: None,
     };
-    let ob: OrderBook = ccxt.into();
-    let after = Utc::now();
-    assert!(ob.timestamp >= before);
-    assert!(ob.timestamp <= after);
+    let result: Result<OrderBook, _> = ccxt.try_into();
+    assert!(result.is_err());
 }
 
 #[test]

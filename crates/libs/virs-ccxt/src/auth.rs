@@ -17,16 +17,6 @@ pub struct SignedRequest {
     pub body: Option<serde_json::Value>,
 }
 
-impl Default for SignedRequest {
-    fn default() -> Self {
-        Self {
-            headers: HeaderMap::new(),
-            query_params: Vec::new(),
-            body: None,
-        }
-    }
-}
-
 // 交易所签名接口，sign_get用于GET/DELETE，sign_post用于POST/PUT
 pub trait Signer: Send + Sync {
     // 签名 GET/DELETE 请求，在 query_params 中追加签名参数

@@ -373,7 +373,7 @@ fn t8_3_single_stream_event_time_parsed() {
 }
 
 #[test]
-fn t8_4_single_stream_event_time_missing_defaults_zero() {
+fn t8_4_single_stream_event_time_missing_returns_none() {
     let json = r#"{
         "e": "kline",
         "s": "BTCUSDT",
@@ -394,6 +394,6 @@ fn t8_4_single_stream_event_time_missing_defaults_zero() {
     }"#;
 
     let msg: BinanceKlineMessage = serde_json::from_str(json).unwrap();
-    let data = msg.into_kline_data().unwrap();
-    assert_eq!(data.event_time, 0, "missing E field should default to 0");
+    let result = msg.into_kline_data();
+    assert!(result.is_none(), "missing E field should return None");
 }

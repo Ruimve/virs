@@ -4,6 +4,7 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 use uuid::Uuid;
+use virs_error::VirsError;
 
 use crate::auto::ai::{AutoAction, AutoAiService, AutoDecision};
 use crate::auto::ports::AutoMarketSnapshot;
@@ -156,8 +157,7 @@ impl AutoWorker {
 
     pub(crate) fn has_position_side(&self, side: PositionSide) -> bool {
         self.get_position(&side)
-            .map(|p| p.is_open() && p.quantity.abs() > 1e-8)
-            .unwrap_or(false)
+            .is_some_and(|p| p.is_open() && p.quantity.abs() > 1e-8)
     }
 
     pub(crate) fn has_any_position(&self) -> bool {
@@ -406,23 +406,19 @@ impl AutoWorker {
                 let open_long = self
                     .pending_open_long
                     .as_ref()
-                    .map(|p| p.client_order_id == cid)
-                    .unwrap_or(false);
+                    .is_some_and(|p| p.client_order_id == cid);
                 let open_short = self
                     .pending_open_short
                     .as_ref()
-                    .map(|p| p.client_order_id == cid)
-                    .unwrap_or(false);
+                    .is_some_and(|p| p.client_order_id == cid);
                 let close_long = self
                     .pending_close_long
                     .as_ref()
-                    .map(|p| p.client_order_id == cid)
-                    .unwrap_or(false);
+                    .is_some_and(|p| p.client_order_id == cid);
                 let close_short = self
                     .pending_close_short
                     .as_ref()
-                    .map(|p| p.client_order_id == cid)
-                    .unwrap_or(false);
+                    .is_some_and(|p| p.client_order_id == cid);
                 open_long || open_short || close_long || close_short
             }
             None => false,
@@ -1954,14 +1950,17 @@ impl AutoWorker {
 
                 let order_position_id = order.position_id;
 
-                let fill_price = order.fill_price.or(order.request_price).unwrap_or_else(|| {
-                    warn!(
-                        order_id = %order.id,
-                        "Order has no fill_price and no request_price — \
-                         using current_price as fallback (PnL may be inaccurate)"
-                    );
-                    self.current_price
-                });
+                let fill_price = match order.fill_price.or(order.request_price) {
+                    Some(p) => p,
+                    None => {
+                        error!(
+                            order_id = %order.id,
+                            error = %VirsError::bad_request("Order has no fill_price and no request_price"),
+                            "Skipping order — cannot determine fill price"
+                        );
+                        return;
+                    }
+                };
                 let filled_qty = if order.filled > 0.0 {
                     order.filled
                 } else {
@@ -1976,23 +1975,19 @@ impl AutoWorker {
                 let is_open_long = self
                     .pending_open_long
                     .as_ref()
-                    .map(|p| p.client_order_id == cid)
-                    .unwrap_or(false);
+                    .is_some_and(|p| p.client_order_id == cid);
                 let is_open_short = self
                     .pending_open_short
                     .as_ref()
-                    .map(|p| p.client_order_id == cid)
-                    .unwrap_or(false);
+                    .is_some_and(|p| p.client_order_id == cid);
                 let is_close_long = self
                     .pending_close_long
                     .as_ref()
-                    .map(|p| p.client_order_id == cid)
-                    .unwrap_or(false);
+                    .is_some_and(|p| p.client_order_id == cid);
                 let is_close_short = self
                     .pending_close_short
                     .as_ref()
-                    .map(|p| p.client_order_id == cid)
-                    .unwrap_or(false);
+                    .is_some_and(|p| p.client_order_id == cid);
 
                 if is_open_long {
                     self.apply_pending_open(PositionSide::Long, fill_price, filled_qty, order.fee, order_position_id)

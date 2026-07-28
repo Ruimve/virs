@@ -49,7 +49,9 @@ pub async fn call_llm_api(
 
     let content_str = json["choices"][0]["message"]["content"]
         .as_str()
-        .unwrap_or("")
+        .ok_or_else(|| {
+            BotError::llm("LLM response missing 'choices[0].message.content'".to_string())
+        })?
         .to_string();
 
     if content_str.is_empty() {

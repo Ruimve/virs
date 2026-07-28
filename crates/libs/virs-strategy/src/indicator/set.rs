@@ -206,32 +206,32 @@ fn compute_one(
                     if last_idx < *period - 1 {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    Ok(IndicatorValue::Num(lib::ema_at(k, last_idx, *period)))
+                    Ok(IndicatorValue::Num(lib::ema_at(k, last_idx, *period)?))
                 }
                 Rsi { period, .. } => {
                     if last_idx < *period {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    Ok(IndicatorValue::Num(lib::rsi_at(k, last_idx, *period)))
+                    Ok(IndicatorValue::Num(lib::rsi_at(k, last_idx, *period)?))
                 }
                 Adx { period, .. } => {
                     if last_idx < *period * 2 {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    Ok(IndicatorValue::Num(lib::adx_at(k, last_idx, *period)))
+                    Ok(IndicatorValue::Num(lib::adx_at(k, last_idx, *period)?))
                 }
                 Atr { period, .. } => {
                     if last_idx < *period {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    Ok(IndicatorValue::Num(lib::atr_at(k, last_idx, *period)))
+                    Ok(IndicatorValue::Num(lib::atr_at(k, last_idx, *period)?))
                 }
 
                 AtrPct { period, .. } => {
                     if last_idx < *period {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    let atr_val = lib::atr_at(k, last_idx, *period);
+                    let atr_val = lib::atr_at(k, last_idx, *period)?;
                     let price = k.last().map(|k| k.close).expect("k validated non-empty above");
                     if price <= 0.0 {
                         return Err(VirsError::config(format!(
@@ -246,33 +246,33 @@ fn compute_one(
                     if k.len() < *sma_period {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    let atr_series = lib::atr(k, *atr_period);
+                    let atr_series = lib::atr(k, *atr_period)?;
                     Ok(IndicatorValue::Num(lib::sma_at_from(
                         &atr_series,
                         last_idx,
                         *sma_period,
-                    )))
+                    )?))
                 }
 
                 BbandsUpper { period, stddev, .. } => {
                     if last_idx < *period - 1 {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    let (u, _, _) = lib::bbands_at(k, last_idx, *period, *stddev as f64);
+                    let (u, _, _) = lib::bbands_at(k, last_idx, *period, *stddev as f64)?;
                     Ok(IndicatorValue::Num(u))
                 }
                 BbandsMiddle { period, stddev, .. } => {
                     if last_idx < *period - 1 {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    let (_, m, _) = lib::bbands_at(k, last_idx, *period, *stddev as f64);
+                    let (_, m, _) = lib::bbands_at(k, last_idx, *period, *stddev as f64)?;
                     Ok(IndicatorValue::Num(m))
                 }
                 BbandsLower { period, stddev, .. } => {
                     if last_idx < *period - 1 {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    let (_, _, l) = lib::bbands_at(k, last_idx, *period, *stddev as f64);
+                    let (_, _, l) = lib::bbands_at(k, last_idx, *period, *stddev as f64)?;
                     Ok(IndicatorValue::Num(l))
                 }
                 BbandsWidth { period, stddev, .. } => {
@@ -284,7 +284,7 @@ fn compute_one(
                         last_idx,
                         *period,
                         *stddev as f64,
-                    )))
+                    )?))
                 }
                 BandwidthBarsAgo { period, stddev, bars_ago, .. } => {
                     if last_idx < *bars_ago || last_idx - bars_ago < *period - 1 {
@@ -295,14 +295,14 @@ fn compute_one(
                         last_idx - bars_ago,
                         *period,
                         *stddev as f64,
-                    )))
+                    )?))
                 }
 
                 Macd { fast, slow, .. } => {
                     if last_idx < *slow - 1 {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    Ok(IndicatorValue::Num(lib::macd_at(k, last_idx, *fast, *slow)))
+                    Ok(IndicatorValue::Num(lib::macd_at(k, last_idx, *fast, *slow)?))
                 }
                 MacdSignal { fast, slow, signal, .. } => {
                     if last_idx < *slow + *signal - 2 {
@@ -314,7 +314,7 @@ fn compute_one(
                         *fast,
                         *slow,
                         *signal,
-                    )))
+                    )?))
                 }
                 MacdHistogram { fast, slow, signal, .. } => {
                     if last_idx < *slow + *signal - 2 {
@@ -326,20 +326,20 @@ fn compute_one(
                         *fast,
                         *slow,
                         *signal,
-                    )))
+                    )?))
                 }
 
                 Highest { period, .. } => {
                     if last_idx < *period - 1 {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    Ok(IndicatorValue::Num(lib::highest_at(k, last_idx, *period)))
+                    Ok(IndicatorValue::Num(lib::highest_at(k, last_idx, *period)?))
                 }
                 Lowest { period, .. } => {
                     if last_idx < *period - 1 {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    Ok(IndicatorValue::Num(lib::lowest_at(k, last_idx, *period)))
+                    Ok(IndicatorValue::Num(lib::lowest_at(k, last_idx, *period)?))
                 }
 
                 VolumeSma { period, .. } => {
@@ -351,14 +351,14 @@ fn compute_one(
                         k,
                         last_completed,
                         *period,
-                    )))
+                    )?))
                 }
 
                 BarsOutsideBand { period, stddev, .. } => {
                     if last_idx < *period - 1 {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    let (upper, _, lower) = lib::bbands_at(k, last_idx, *period, *stddev as f64);
+                    let (upper, _, lower) = lib::bbands_at(k, last_idx, *period, *stddev as f64)?;
                     Ok(IndicatorValue::Int(lib::compute_bars_outside_band(
                         k, upper, lower,
                     )))
@@ -373,15 +373,15 @@ fn compute_one(
                         *fast,
                         *slow,
                         last_idx,
-                    )))
+                    )?))
                 }
 
                 EmaGapPct { fast, slow, .. } => {
                     if last_idx < *slow - 1 {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    let ema_fast = lib::ema_at(k, last_idx, *fast);
-                    let ema_slow = lib::ema_at(k, last_idx, *slow);
+                    let ema_fast = lib::ema_at(k, last_idx, *fast)?;
+                    let ema_slow = lib::ema_at(k, last_idx, *slow)?;
                     if ema_slow == 0.0 {
                         return Err(VirsError::config(format!(
                             "EmaGapPct: ema_slow is 0.0 (tf={}, period={}) — cannot divide by zero",
@@ -395,12 +395,12 @@ fn compute_one(
                     if last_idx < *slow - 1 {
                         return Err(no_data(spec, Some(tf), k.len()));
                     }
-                    let ema_fast = lib::ema_at(k, last_idx, *fast);
-                    let ema_slow = lib::ema_at(k, last_idx, *slow);
+                    let ema_fast = lib::ema_at(k, last_idx, *fast)?;
+                    let ema_slow = lib::ema_at(k, last_idx, *slow)?;
                     let lookback = 5.min(last_idx);
-                    let ema_fast_prev = lib::ema_at(k, last_idx - lookback, *fast);
+                    let ema_fast_prev = lib::ema_at(k, last_idx - lookback, *fast)?;
                     let ema_slow_prev = if k.len() >= *slow + lookback {
-                        lib::ema_at(k, last_idx - lookback, *slow)
+                        lib::ema_at(k, last_idx - lookback, *slow)?
                     } else {
                         ema_slow
                     };

@@ -64,14 +64,14 @@ pub async fn select_strategy_by_llm(
             symbol, exchange
         ))
     })?;
-    let atr_series = atr(&klines, 14);
+    let atr_series = atr(&klines, 14)?;
     let atr_val = atr_series.last().copied().ok_or_else(|| {
         VirsError::bad_request(format!(
             "No ATR data available for {} on {} — cannot select strategy",
             symbol, exchange
         ))
     })?;
-    let rsi_val = rsi_at(&klines, klines.len().saturating_sub(1), 14);
+    let rsi_val = rsi_at(&klines, klines.len().saturating_sub(1), 14)?;
 
     // 获取策略元数据
     let mut strategy_details: Vec<serde_json::Value> = Vec::new();

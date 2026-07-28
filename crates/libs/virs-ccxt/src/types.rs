@@ -119,7 +119,10 @@ impl TryFrom<CcxtTicker> for Ticker {
             volume_24h,
             price_change_24h,
             price_change_pct_24h,
-            timestamp: t.timestamp.unwrap_or_else(chrono::Utc::now),
+            timestamp: t.timestamp.ok_or_else(|| {
+                tracing::warn!(symbol = %symbol, "Ticker timestamp missing");
+                ExchangeError::no_data(format!("Ticker timestamp missing for {}", symbol))
+            })?,
         })
     }
 }
@@ -147,14 +150,21 @@ pub struct CcxtOrderBook {
     pub nonce: Option<u64>,
 }
 
-impl From<CcxtOrderBook> for OrderBook {
-    fn from(ob: CcxtOrderBook) -> Self {
-        OrderBook {
+impl TryFrom<CcxtOrderBook> for OrderBook {
+    type Error = ExchangeError;
+
+    fn try_from(ob: CcxtOrderBook) -> Result<Self, Self::Error> {
+        let symbol = ob.symbol.clone();
+        let timestamp = ob.timestamp.ok_or_else(|| {
+            tracing::warn!(symbol = %symbol, "OrderBook timestamp missing");
+            ExchangeError::no_data(format!("OrderBook timestamp missing for {}", symbol))
+        })?;
+        Ok(OrderBook {
             symbol: ob.symbol,
             bids: ob.bids,
             asks: ob.asks,
-            timestamp: ob.timestamp.unwrap_or_else(chrono::Utc::now),
-        }
+            timestamp,
+        })
     }
 }
 

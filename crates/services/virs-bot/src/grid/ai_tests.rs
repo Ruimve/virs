@@ -94,18 +94,14 @@ fn g2_1_parse_decision_complete() {
 }
 
 #[test]
-fn g2_2_parse_decision_defaults() {
+fn g2_2_parse_decision_missing_fields_returns_error() {
     let json = serde_json::json!({});
 
-    let decision = parse_grid_decision(&json).expect("empty JSON should parse with defaults");
-    assert_eq!(decision.action, "hold");
-    assert_eq!(decision.reason, "No reason provided");
-    assert!((decision.confidence - 0.0).abs() < 1e-10);
-    assert!((decision.upper_price - 0.0).abs() < 1e-10);
-    assert_eq!(decision.grid_count, 0);
-    assert!((decision.grid_profit_pct - 0.0).abs() < 1e-10);
-    assert!((decision.quantity_per_grid - 0.0).abs() < 1e-10);
-    assert_eq!(decision.market_regime, "unknown");
+    let result = parse_grid_decision(&json);
+    assert!(
+        result.is_err(),
+        "empty JSON should return error, not defaults"
+    );
 }
 
 #[test]

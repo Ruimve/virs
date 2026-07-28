@@ -55,7 +55,7 @@ fn a3_1_decision_from_json_complete() {
         "risk_warning": "Watch for RSI divergence"
     });
 
-    let decision = AutoDecision::from_json(&json);
+    let decision = AutoDecision::from_json(&json).expect("should parse");
     assert_eq!(decision.action, AutoAction::OpenLong);
     assert_eq!(decision.reason, "EMA golden cross");
     assert!((decision.confidence - 0.85).abs() < 1e-10);
@@ -67,13 +67,13 @@ fn a3_1_decision_from_json_complete() {
 }
 
 #[test]
-fn a3_2_decision_from_json_missing_fields() {
+fn a3_2_decision_from_json_missing_fields_returns_error() {
     let json = serde_json::json!({});
-    let decision = AutoDecision::from_json(&json);
-    assert_eq!(decision.action, AutoAction::Hold);
-    assert_eq!(decision.reason, "No reason provided");
-    assert!((decision.confidence - 0.0).abs() < 1e-10);
-    assert!(decision.market_regime.is_none());
+    let result = AutoDecision::from_json(&json);
+    assert!(
+        result.is_err(),
+        "empty JSON should return error, not defaults"
+    );
 }
 
 #[test]
@@ -81,10 +81,11 @@ fn a3_4_decision_from_json_confidence_clamped() {
     let json = serde_json::json!({
         "decision": {
             "action": "hold",
+            "reason": "testing clamp",
             "confidence": 1.5
         }
     });
-    let decision = AutoDecision::from_json(&json);
+    let decision = AutoDecision::from_json(&json).expect("should parse");
     assert!((decision.confidence - 1.0).abs() < 1e-10);
 }
 

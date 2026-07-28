@@ -49,7 +49,7 @@ impl BinanceKlineMessage {
                     return None;
                 }
 
-                let event_time = self.event_time_flat.unwrap_or(0);
+                let event_time = self.event_time_flat?; // missing event_time → skip
                 self.kline_flat.map(|kline| BinanceKlineData {
                     event_type: et.to_string(),
                     event_time,

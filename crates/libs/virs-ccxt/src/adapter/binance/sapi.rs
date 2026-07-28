@@ -24,58 +24,48 @@ pub async fn fetch_api_restrictions(
     // 解析 IP 限制开关
     let ip_restrict = data
         .get("ipRestrict")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .and_then(|v| v.as_bool());
 
     Ok(ApiRestrictions {
         ip_restrict,
         ip_whitelist: Vec::new(),
-        ip_not_restricted: !ip_restrict,
+        ip_not_restricted: ip_restrict.map(|v| !v),
         // 是否允许创建子账户
         create_sub_account: data
             .get("enableSubAccountCreation")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
-        // 是否允许读取信息 (默认 true)
+            .and_then(|v| v.as_bool()),
+        // 是否允许读取信息
         read_info: data
             .get("enableReading")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true),
+            .and_then(|v| v.as_bool()),
         // 是否允许提币
         enable_withdrawals: data
             .get("enableWithdrawals")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
+            .and_then(|v| v.as_bool()),
         // 是否允许内部转账
         enable_internal_transfer: data
             .get("enableInternalTransfer")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
+            .and_then(|v| v.as_bool()),
         // 是否允许合约交易
         enable_futures: data
             .get("enableFutures")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
+            .and_then(|v| v.as_bool()),
         // 是否允许欧式期权交易
         enable_vanilla_options: data
             .get("enableVanillaOptions")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
+            .and_then(|v| v.as_bool()),
         // 是否允许组合保证金交易
         enable_portfolio_margin_trading: data
             .get("enablePortfolioMarginTrading")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
+            .and_then(|v| v.as_bool()),
         // 是否允许 FIX 协议交易
         enable_fix_api_trade: data
             .get("enableFixApiTrade")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
+            .and_then(|v| v.as_bool()),
         // 是否允许 FIX 协议读取
         enable_fix_api_read: data
             .get("enableFixApiRead")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
+            .and_then(|v| v.as_bool()),
         info: data,
     })
 }

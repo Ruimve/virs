@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use tracing::warn;
 use uuid::Uuid;
+use virs_error::{BotError, BotResult};
 
 use crate::common::llm_client::LlmClient;
 use virs_types::bot::{CredentialStore, LlmProviderResolver};
@@ -57,24 +58,24 @@ pub struct AutoDecision {
 }
 
 impl AutoDecision {
-    pub fn from_json(json: &serde_json::Value) -> Self {
+    pub fn from_json(json: &serde_json::Value) -> BotResult<Self> {
         let decision = &json["decision"];
         let market = &json["market"];
 
-        let action_str = decision["action"].as_str().unwrap_or_else(|| {
-            warn!("LLM response missing 'action' field — defaulting to hold");
-            "hold"
-        });
+        let action_str = decision["action"].as_str().ok_or_else(|| {
+            BotError::Validation("LLM response missing 'decision.action'".to_string())
+        })?;
         let reason = decision["reason"]
             .as_str()
-            .unwrap_or("No reason provided")
+            .ok_or_else(|| {
+                BotError::Validation("LLM response missing 'decision.reason'".to_string())
+            })?
             .to_string();
         let confidence = decision["confidence"]
             .as_f64()
-            .unwrap_or_else(|| {
-                warn!("LLM response missing 'confidence' field — defaulting to 0.0");
-                0.0
-            })
+            .ok_or_else(|| {
+                BotError::Validation("LLM response missing 'decision.confidence'".to_string())
+            })?
             .clamp(0.0, 1.0);
 
         let market_regime = market["market_regime"].as_str().map(|s| s.to_string());
@@ -95,7 +96,7 @@ impl AutoDecision {
 
         let action = AutoAction::from_str(action_str);
 
-        AutoDecision {
+        Ok(AutoDecision {
             action,
             reason,
             confidence,
@@ -104,7 +105,7 @@ impl AutoDecision {
             event_impact,
             analysis,
             risk_warning,
-        }
+        })
     }
 }
 
@@ -162,9 +163,14 @@ impl AutoAiService {
             .await
         {
             Ok(result) => {
-                let decision = AutoDecision::from_json(&result.content);
                 let used_model = result.used_model;
-                Some((decision, result.content, used_model))
+                match AutoDecision::from_json(&result.content) {
+                    Ok(decision) => Some((decision, result.content, used_model)),
+                    Err(e) => {
+                        warn!("Failed to parse auto decision: {}", e);
+                        None
+                    }
+                }
             }
             Err(e) => {
                 warn!("LLM auto decision failed: {}", e);

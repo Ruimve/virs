@@ -283,10 +283,7 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
             let min_cost = filters
                 .and_then(|arr| {
                     arr.iter().find(|f| {
-                        f.get("filterType")
-                            .and_then(|v| v.as_str())
-                            .map(|t| t == "MIN_NOTIONAL")
-                            .unwrap_or(false)
+                        f.get("filterType").and_then(|v| v.as_str()) == Some("MIN_NOTIONAL")
                     })
                 })
                 .and_then(|f| parse_f64(f, "notional"));
@@ -442,19 +439,20 @@ pub async fn create_order(
         "quantity": params.amount,
     });
 
-    // 限价单需要价格与 timeInForce (默认 GTC)
+    // 限价单需要价格与 timeInForce
     if let Some(price) = params.price {
         body["price"] = serde_json::json!(price);
-        body["timeInForce"] = serde_json::json!(params
-            .time_in_force
-            .as_ref()
-            .map(|tif| match tif {
-                TimeInForce::Gtc => "GTC",
-                TimeInForce::Ioc => "IOC",
-                TimeInForce::Fok => "FOK",
-                TimeInForce::Poc => "GTX", // POC 对币安 GTX (只做 Maker)
-            })
-            .unwrap_or("GTC"));
+        let tif = params.time_in_force.as_ref().ok_or_else(|| {
+            ExchangeError::InvalidRequest(
+                "time_in_force is required for limit orders".into(),
+            )
+        })?;
+        body["timeInForce"] = serde_json::json!(match tif {
+            TimeInForce::Gtc => "GTC",
+            TimeInForce::Ioc => "IOC",
+            TimeInForce::Fok => "FOK",
+            TimeInForce::Poc => "GTX", // POC 对币安 GTX (只做 Maker)
+        });
     }
 
     // 止损/止盈触发价
@@ -669,13 +667,20 @@ pub async fn fetch_positions(
         };
 
         // 保证金模式: isolated 逐仓 / crossed 全仓
-        let margin_type_str = parse_str(p, "marginType").unwrap_or_else(|| {
-                tracing::warn!(symbol = %symbol_str, "positionRisk marginType missing — defaulting to Cross");
-                String::new()
-            });
+        let margin_type_str = match parse_str(p, "marginType") {
+            Some(s) => s,
+            None => {
+                tracing::warn!(symbol = %symbol_str, "positionRisk marginType missing — skipping position");
+                continue;
+            }
+        };
         let margin_mode = match margin_type_str.as_str() {
             "isolated" => MarginMode::Isolated,
-            _ => MarginMode::Cross,
+            "cross" => MarginMode::Cross,
+            other => {
+                tracing::warn!(symbol = %symbol_str, margin_type = other, "positionRisk unknown marginType — skipping position");
+                continue;
+            }
         };
 
         // 开仓均价，缺失则跳过
@@ -716,11 +721,15 @@ pub async fn get_position_mode(
         .signed_get(signer, &url("/fapi/v1/positionSide/dual"), vec![])
         .await?;
 
-    // 解析 dualSidePosition 布尔值，默认 false (单向)
+    // 解析 dualSidePosition 布尔值
     let dual_side = data
         .get("dualSidePosition")
         .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .ok_or_else(|| {
+            ExchangeError::InvalidRequest(
+                "Unexpected response from Binance: 'dualSidePosition' field missing or not a boolean".into(),
+            )
+        })?;
 
     if dual_side {
         Ok(PositionMode::Hedge)

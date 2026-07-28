@@ -2,8 +2,8 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct TradesQuery {
-    pub page: Option<u32>,
-    pub page_size: Option<u32>,
+    pub page: u32,
+    pub page_size: u32,
 }
 
 pub fn format_duration(ms: i64) -> String {

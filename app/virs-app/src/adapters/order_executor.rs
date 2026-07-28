@@ -1,14 +1,14 @@
 use async_trait::async_trait;
 use tokio::sync::broadcast;
-use tracing::warn;
+use tracing::{error, warn};
 
 use uuid::Uuid;
-use virs_error::{BotError, BotResult};
+use virs_error::{BotError, BotResult, VirsError};
 use virs_position::PositionEngine;
 use virs_types::bot::{
     OrderCommand, OrderEvent, OrderExecutor, OrderInfo,
 };
-use virs_types::enums::OrderType;
+use virs_types::enums::{OrderType, TimeInForce};
 use virs_types::position::*;
 use virs_types::CcxtOrder;
 
@@ -112,7 +112,7 @@ impl OrderExecutor for PeOrderExecutor {
                     position_id,
                     client_order_id,
                     stop_price: None,
-                    time_in_force: None,
+                    time_in_force: Some(TimeInForce::Gtc),
                 },
             },
             OrderCommand::CancelAllOrders { symbol } => EngineCommand::CancelAllOrders {
@@ -137,8 +137,10 @@ impl OrderExecutor for PeOrderExecutor {
 
 pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
     match event {
-        EngineEvent::OrderPlaced { order } => Some(OrderEvent::OrderPlaced { order: ccxt_order_to_order_info(&order) }),
-        EngineEvent::OrderFilled { order, .. } => Some(OrderEvent::OrderFilled { order: ccxt_order_to_order_info(&order) }),
+        EngineEvent::OrderPlaced { order } => ccxt_order_to_order_info(&order)
+            .map(|order_info| OrderEvent::OrderPlaced { order: order_info }),
+        EngineEvent::OrderFilled { order, .. } => ccxt_order_to_order_info(&order)
+            .map(|order_info| OrderEvent::OrderFilled { order: order_info }),
         EngineEvent::OrderCanceled { order } => Some(OrderEvent::OrderCanceled {
             order_id: Uuid::from_u128(order.order_id as u128),
             symbol: Some(order.symbol.clone()),
@@ -155,28 +157,26 @@ pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
     }
 }
 
-fn ccxt_order_to_order_info(order: &CcxtOrder) -> OrderInfo {
-    let filled = order.filled_qty.parse::<f64>().unwrap_or_else(|_| {
-        warn!(
+fn ccxt_order_to_order_info(order: &CcxtOrder) -> Option<OrderInfo> {
+    let filled = order.filled_qty.parse::<f64>().map_err(|_| {
+        error!(
             order_id = %order.order_id,
             symbol = %order.symbol,
             filled_qty = %order.filled_qty,
-            "Failed to parse filled_qty as f64 — defaulting to 0.0. \
-             This indicates malformed data from exchange."
+            error = %VirsError::bad_request("Failed to parse filled_qty as f64"),
+            "Skipping order — malformed filled_qty from exchange"
         );
-        0.0
-    });
-    let fee = order.commission.parse::<f64>().unwrap_or_else(|_| {
-        warn!(
+    }).ok()?;
+    let fee = order.commission.parse::<f64>().map_err(|_| {
+        error!(
             order_id = %order.order_id,
             symbol = %order.symbol,
             commission = %order.commission,
-            "Failed to parse commission as f64 — defaulting to 0.0. \
-             This indicates malformed data from exchange."
+            error = %VirsError::bad_request("Failed to parse commission as f64"),
+            "Skipping order — malformed commission from exchange"
         );
-        0.0
-    });
-    OrderInfo {
+    }).ok()?;
+    Some(OrderInfo {
         id: Uuid::from_u128(order.order_id as u128),
         position_id: None,
         symbol: order.symbol.clone(),
@@ -186,5 +186,5 @@ fn ccxt_order_to_order_info(order: &CcxtOrder) -> OrderInfo {
         filled,
         client_order_id: Some(order.client_order_id.clone()),
         fee,
-    }
+    })
 }

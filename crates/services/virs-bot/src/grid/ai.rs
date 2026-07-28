@@ -4,9 +4,8 @@ use crate::common::llm_client::LlmClient;
 use virs_types::bot::{CredentialStore, LlmProviderResolver};
 use virs_types::grid_port::GridBotConfig;
 use virs_strategy::output::{StrategyAction, StrategyOutput, ToStrategyOutput};
-use tracing::warn;
 use uuid::Uuid;
-use virs_error::BotResult;
+use virs_error::{BotError, BotResult};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum GridAction {
@@ -135,58 +134,50 @@ pub fn parse_grid_decision(json: &serde_json::Value) -> BotResult<GridAiDecision
     let risk = &json["risk"];
     let market = &json["market"];
 
-    let action = decision["action"].as_str().unwrap_or_else(|| {
-        warn!("LLM response missing 'decision.action' field — defaulting to hold");
-        "hold"
-    });
+    let action = decision["action"]
+        .as_str()
+        .ok_or_else(|| BotError::Validation("LLM response missing 'decision.action'".to_string()))?;
     let reason = decision["reason"]
         .as_str()
-        .unwrap_or("No reason provided")
+        .ok_or_else(|| BotError::Validation("LLM response missing 'decision.reason'".to_string()))?
         .to_string();
     let confidence = decision["confidence"]
         .as_f64()
-        .unwrap_or_else(|| {
-            warn!("LLM response missing 'decision.confidence' field — defaulting to 0.0");
-            0.0
-        })
+        .ok_or_else(|| {
+            BotError::Validation("LLM response missing 'decision.confidence'".to_string())
+        })?
         .clamp(0.0, 1.0);
 
-    let upper_price = grid["upper_price"].as_f64().unwrap_or_else(|| {
-        warn!("LLM response missing 'grid.upper_price' — grid range is invalid (0.0)");
-        0.0
-    });
-    let lower_price = grid["lower_price"].as_f64().unwrap_or_else(|| {
-        warn!("LLM response missing 'grid.lower_price' — grid range is invalid (0.0)");
-        0.0
-    });
-    let grid_count = grid["grid_count"].as_i64().unwrap_or_else(|| {
-        warn!("LLM response missing 'grid.grid_count' — defaulting to 0");
-        0
-    }) as i32;
-    let grid_profit_pct = grid["grid_profit_pct"].as_f64().unwrap_or_else(|| {
-        warn!("LLM response missing 'grid.grid_profit_pct' — defaulting to 0.0");
-        0.0
-    });
+    let upper_price = grid["upper_price"].as_f64().ok_or_else(|| {
+        BotError::Validation("LLM response missing 'grid.upper_price'".to_string())
+    })?;
+    let lower_price = grid["lower_price"].as_f64().ok_or_else(|| {
+        BotError::Validation("LLM response missing 'grid.lower_price'".to_string())
+    })?;
+    let grid_count = grid["grid_count"].as_i64().ok_or_else(|| {
+        BotError::Validation("LLM response missing 'grid.grid_count'".to_string())
+    })? as i32;
+    let grid_profit_pct = grid["grid_profit_pct"].as_f64().ok_or_else(|| {
+        BotError::Validation("LLM response missing 'grid.grid_profit_pct'".to_string())
+    })?;
 
-    let quantity_per_grid = risk["quantity_per_grid"].as_f64().unwrap_or_else(|| {
-        warn!("LLM response missing 'risk.quantity_per_grid' — defaulting to 0.0");
-        0.0
-    });
+    let quantity_per_grid = risk["quantity_per_grid"].as_f64().ok_or_else(|| {
+        BotError::Validation("LLM response missing 'risk.quantity_per_grid'".to_string())
+    })?;
 
     let market_regime = market["market_regime"]
         .as_str()
-        .unwrap_or_else(|| {
-            warn!("LLM response missing 'market.market_regime' — defaulting to 'unknown'");
-            "unknown"
-        })
+        .ok_or_else(|| {
+            BotError::Validation("LLM response missing 'market.market_regime'".to_string())
+        })?
         .to_string();
     let analysis = json["analysis"]
         .as_str()
-        .unwrap_or("No analysis provided")
+        .ok_or_else(|| BotError::Validation("LLM response missing 'analysis'".to_string()))?
         .to_string();
     let risk_warning = json["risk_warning"]
         .as_str()
-        .unwrap_or("No risk warning")
+        .ok_or_else(|| BotError::Validation("LLM response missing 'risk_warning'".to_string()))?
         .to_string();
 
     Ok(GridAiDecision {

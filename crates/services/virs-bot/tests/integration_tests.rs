@@ -107,7 +107,7 @@ fn int_2_2_auto_decision_json_roundtrip() {
         }
     });
 
-    let decision = AutoDecision::from_json(&json);
+    let decision = AutoDecision::from_json(&json).expect("should parse");
     assert_eq!(decision.action, AutoAction::OpenLong);
 
     assert_eq!(decision.action.as_str(), "open_long");
@@ -141,7 +141,12 @@ fn int_3_2_grid_decision_parse_chain() {
         },
         "risk": {
             "quantity_per_grid": 50.0
-        }
+        },
+        "market": {
+            "market_regime": "trending"
+        },
+        "analysis": "Volatility expanding",
+        "risk_warning": "Watch for false breakouts"
     });
 
     let decision = parse_grid_decision(&json).expect("JSON should parse");

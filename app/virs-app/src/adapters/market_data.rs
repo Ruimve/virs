@@ -145,12 +145,10 @@ impl ExchangeMarketDataProvider {
         }
 
         klines_1h.last().map(|k| k.close).unwrap_or_else(|| {
-            warn!(
-                exchange = %exchange,
-                symbol = %symbol,
-                "All price sources failed (KlineEngine M1, REST ticker, klines_1h) — returning 0.0 as last resort"
+            panic!(
+                "All price sources failed for {} on {} — refusing to return 0.0 as price",
+                symbol, exchange
             );
-            0.0
         })
     }
 }
@@ -410,12 +408,10 @@ impl AutoExchangeMarketDataProvider {
         }
 
         klines_1h.last().map(|k| k.close).unwrap_or_else(|| {
-            warn!(
-                exchange = %exchange,
-                symbol = %symbol,
-                "All price sources failed (KlineEngine M1, REST ticker, klines_1h) — returning 0.0 as last resort"
+            panic!(
+                "All price sources failed for {} on {} — refusing to return 0.0 as price",
+                symbol, exchange
             );
-            0.0
         })
     }
 }

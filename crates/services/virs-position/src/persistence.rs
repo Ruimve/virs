@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
 use sqlx::PgPool;
-use virs_error::{Context, VirsResult};
+use virs_error::{Context, VirsError, VirsResult};
 use virs_types::enums::PositionSide;
 use virs_types::position::Position;
 use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderType, Side};
@@ -127,7 +127,10 @@ impl Persistence {
 
                 // generation_filtered 保证每组首单为开仓单（零持仓后只能开仓）
                 let created_at = DateTime::from_timestamp_millis(row.trade_time)
-                    .unwrap_or_else(Utc::now);
+                    .ok_or_else(|| VirsError::bad_request(format!(
+                        "Invalid trade_time {} for order {} during replay",
+                        row.trade_time, row.client_order_id
+                    )))?;
 
                 current_pos = Some(Position::new_for_replay(
                     exchange,
@@ -170,7 +173,10 @@ impl Persistence {
             };
 
             let timestamp = DateTime::from_timestamp_millis(row.trade_time)
-                .unwrap_or_else(Utc::now);
+                .ok_or_else(|| VirsError::bad_request(format!(
+                    "Invalid trade_time {} for order {} during replay",
+                    row.trade_time, row.client_order_id
+                )))?;
 
             pos.apply_fill(is_close, fill_price, trade_fill, realized_pnl, timestamp);
         }

@@ -69,17 +69,17 @@ CREATE TABLE IF NOT EXISTS qd_grid_bots (
     user_id UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     symbol TEXT NOT NULL,
-    exchange TEXT NOT NULL DEFAULT 'binance',
-    paper_mode BOOLEAN NOT NULL DEFAULT true,
+    exchange TEXT NOT NULL,
+    paper_mode BOOLEAN NOT NULL,
     status TEXT NOT NULL DEFAULT 'stopped' CHECK (status IN ('draft', 'running', 'paused', 'stopped', 'error')),
 
     -- Grid 配置参数
     upper_price DOUBLE PRECISION NOT NULL,
     lower_price DOUBLE PRECISION NOT NULL,
     grid_count INT NOT NULL,
-    grid_profit_pct DOUBLE PRECISION NOT NULL DEFAULT 0.5,
+    grid_profit_pct DOUBLE PRECISION NOT NULL,
     quantity_per_grid DOUBLE PRECISION NOT NULL,
-    leverage INT NOT NULL DEFAULT 1,
+    leverage INT NOT NULL,
     initial_capital DOUBLE PRECISION NOT NULL DEFAULT 0,
 
     -- AI 分析相关（内部字段，API 不返回）
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS qd_grid_bots (
     strategy_file TEXT,
 
     -- 动态调整（内部字段，API 不返回）
-    dynamic_adjust BOOLEAN NOT NULL DEFAULT true,
+    dynamic_adjust BOOLEAN NOT NULL,
     adjust_interval_secs INT NOT NULL DEFAULT 300,
     last_adjusted_at TIMESTAMPTZ,
 
@@ -464,14 +464,14 @@ CREATE TABLE IF NOT EXISTS qd_auto_bots (
     user_id UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     symbol TEXT NOT NULL,
-    exchange TEXT NOT NULL DEFAULT 'binance',
-    paper_mode BOOLEAN NOT NULL DEFAULT true,
+    exchange TEXT NOT NULL,
+    paper_mode BOOLEAN NOT NULL,
     status TEXT NOT NULL DEFAULT 'stopped' CHECK (status IN ('draft', 'running', 'paused', 'stopped', 'error')),
 
     -- 交易参数
-    leverage INT NOT NULL DEFAULT 1,
-    max_position_pct DOUBLE PRECISION NOT NULL DEFAULT 80.0,
-    decide_interval_secs INT NOT NULL DEFAULT 300,
+    leverage INT NOT NULL,
+    max_position_pct DOUBLE PRECISION NOT NULL,
+    decide_interval_secs INT NOT NULL,
     initial_capital DOUBLE PRECISION NOT NULL DEFAULT 0,
 
     -- AI 分析相关（内部字段，API 不返回）

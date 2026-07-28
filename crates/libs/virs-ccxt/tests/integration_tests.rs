@@ -210,7 +210,7 @@ fn int_6_1_ticker_json_to_ticker_via_parse() {
         close: None,
         price_change: parse_f64(&raw, "priceChange"),
         price_change_pct: parse_f64(&raw, "priceChangePercent"),
-        timestamp: None,
+        timestamp: Some(chrono::Utc::now()),
         info: raw,
     };
 

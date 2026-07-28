@@ -2,12 +2,12 @@
 //!
 //! 本模块从 `common/indicators.rs` 原样迁移，保持计算行为完全一致。
 //!
-//! **调用方契约**：调用方（如 [`IndicatorSet::compute`](super::set::IndicatorSet::compute)）
-//! 必须在调用前校验 K 线数据充足性。本模块的 `0.0` 兜底仅作为 TA-Lib 内部计算失败的
-//! 防御性回退，正常流程下不应触发。
+//! **调用方契约**：本模块的指标函数在 K 线数据不足或 TA-Lib 计算失败时返回 `Err`，
+//! 不再使用 `0.0`/`50.0` 兜底。调用方（如 [`IndicatorSet::compute`](super::set::IndicatorSet::compute)）
+//! 应通过 `?` 传播错误。
 
 use talib_rs::{ma_type::MaType, math_operator, momentum, overlap, volatility};
-use tracing::warn;
+use virs_error::{Context, VirsError, VirsResult};
 use virs_types::Kline;
 
 pub fn closes(klines: &[Kline]) -> Vec<f64> {
@@ -22,91 +22,91 @@ pub fn lows(klines: &[Kline]) -> Vec<f64> {
     klines.iter().map(|k| k.low).collect()
 }
 
-pub fn atr(klines: &[Kline], period: usize) -> Vec<f64> {
-    volatility::atr(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_else(|e| {
-        warn!(indicator = "atr", error = %e, "TA-Lib ATR calculation failed — returning empty series");
-        Vec::new()
-    })
+pub fn atr(klines: &[Kline], period: usize) -> VirsResult<Vec<f64>> {
+    Ok(volatility::atr(&highs(klines), &lows(klines), &closes(klines), period)
+        .context("indicator atr: TA-Lib ATR calculation failed")?)
 }
 
-pub fn sma_at_from(series: &[f64], idx: usize, period: usize) -> f64 {
+pub fn sma_at_from(series: &[f64], idx: usize, period: usize) -> VirsResult<f64> {
     if series.is_empty() || period == 0 {
-        return 0.0;
+        return Err(VirsError::config(format!(
+            "indicator sma_at_from: insufficient data at idx={idx} (empty series or period=0, period={period})"
+        )));
     }
     let nan_count = series.iter().take(idx + 1).filter(|v| v.is_nan()).count();
     let valid: Vec<f64> = series.iter().filter(|v| !v.is_nan()).copied().collect();
     if valid.len() < period {
         if valid.is_empty() {
-            return 0.0;
+            return Err(VirsError::config(format!(
+                "indicator sma_at_from: insufficient data at idx={idx} (no valid values, period={period})"
+            )));
         }
-        return valid
+        return Ok(valid
             .iter()
             .rev()
             .take(period.min(valid.len()))
             .sum::<f64>()
-            / period.min(valid.len()) as f64;
+            / period.min(valid.len()) as f64);
     }
     let mapped_idx = idx.saturating_sub(nan_count);
-    let result = overlap::sma(&valid, period).unwrap_or_else(|e| {
-        warn!(indicator = "sma_at_from", error = %e, "TA-Lib SMA calculation failed — returning empty series");
-        Vec::new()
-    });
-    result.get(mapped_idx).copied().unwrap_or_else(|| {
-        result.last().copied().unwrap_or_else(|| {
-            warn!(
-                indicator = "sma_at_from",
-                idx, "Insufficient data for indicator calculation — defaulting to 0.0"
-            );
-            0.0
+    let result = overlap::sma(&valid, period)
+        .context("indicator sma_at_from: TA-Lib SMA calculation failed")?;
+    result
+        .get(mapped_idx)
+        .copied()
+        .or_else(|| result.last().copied())
+        .ok_or_else(|| {
+            VirsError::config(format!(
+                "indicator sma_at_from: insufficient data at idx={idx} (no result produced, period={period})"
+            ))
         })
-    })
 }
 
 #[inline(always)]
-pub fn ema_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
+pub fn ema_at(klines: &[Kline], idx: usize, period: usize) -> VirsResult<f64> {
     if klines.is_empty() || idx < period - 1 || period == 0 {
-        return 0.0;
+        return Err(VirsError::config(format!(
+            "indicator ema_at: insufficient data at idx={idx} (period={period})"
+        )));
     }
-    let result = overlap::ema(&closes(klines), period).unwrap_or_else(|e| {
-        warn!(indicator = "ema_at", error = %e, "TA-Lib EMA calculation failed — returning empty series");
-        Vec::new()
-    });
-    result.get(idx).copied().unwrap_or_else(|| {
-        warn!(
-            indicator = "ema_at",
-            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
-        );
-        0.0
+    let result = overlap::ema(&closes(klines), period)
+        .context("indicator ema_at: TA-Lib EMA calculation failed")?;
+    result.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator ema_at: insufficient data at idx={idx} (no result produced, period={period})"
+        ))
     })
 }
 
 #[inline(always)]
-pub fn rsi_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
+pub fn rsi_at(klines: &[Kline], idx: usize, period: usize) -> VirsResult<f64> {
     if klines.is_empty() || idx < period || period == 0 {
-        return 50.0;
+        return Err(VirsError::config(format!(
+            "indicator rsi_at: insufficient data at idx={idx} (period={period})"
+        )));
     }
-    let result = momentum::rsi(&closes(klines), period).unwrap_or_else(|e| {
-        warn!(indicator = "rsi_at", error = %e, "TA-Lib RSI calculation failed — returning empty series");
-        Vec::new()
-    });
-    result.get(idx).copied().unwrap_or(50.0)
+    let result = momentum::rsi(&closes(klines), period)
+        .context("indicator rsi_at: TA-Lib RSI calculation failed")?;
+    result.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator rsi_at: insufficient data at idx={idx} (no result produced, period={period})"
+        ))
+    })
 }
 
 #[inline(always)]
-pub fn macd_at(klines: &[Kline], idx: usize, fast: usize, slow: usize) -> f64 {
+pub fn macd_at(klines: &[Kline], idx: usize, fast: usize, slow: usize) -> VirsResult<f64> {
     if klines.is_empty() || idx < slow - 1 {
-        return 0.0;
+        return Err(VirsError::config(format!(
+            "indicator macd_at: insufficient data at idx={idx} (fast={fast}, slow={slow})"
+        )));
     }
-    let (macd, _, _) = momentum::macd(&closes(klines), fast, slow, 9).unwrap_or_else(|e| {
-        warn!(indicator = "macd_at", error = %e, "TA-Lib MACD calculation failed — returning empty series");
-        (Vec::new(), Vec::new(), Vec::new())
-    });
-    macd.get(idx).copied().unwrap_or_else(|| {
-        warn!(
-            indicator = "macd_at",
-            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
-        );
-        0.0
+    let (macd, _, _) = momentum::macd(&closes(klines), fast, slow, 9)
+        .context("indicator macd_at: TA-Lib MACD calculation failed")?;
+    macd.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator macd_at: insufficient data at idx={idx} (no result produced, fast={fast}, slow={slow})"
+        ))
     })
 }
 
@@ -117,93 +117,85 @@ pub fn macd_signal_at(
     fast: usize,
     slow: usize,
     signal: usize,
-) -> f64 {
+) -> VirsResult<f64> {
     if klines.is_empty() || idx < slow + signal - 2 {
-        return 0.0;
+        return Err(VirsError::config(format!(
+            "indicator macd_signal_at: insufficient data at idx={idx} (fast={fast}, slow={slow}, signal={signal})"
+        )));
     }
-    let (_, sig, _) = momentum::macd(&closes(klines), fast, slow, signal).unwrap_or_else(|e| {
-        warn!(indicator = "macd_signal_at", error = %e, "TA-Lib MACD calculation failed — returning empty series");
-        (Vec::new(), Vec::new(), Vec::new())
-    });
-    sig.get(idx).copied().unwrap_or_else(|| {
-        warn!(
-            indicator = "macd_signal_at",
-            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
-        );
-        0.0
+    let (_, sig, _) = momentum::macd(&closes(klines), fast, slow, signal)
+        .context("indicator macd_signal_at: TA-Lib MACD calculation failed")?;
+    sig.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator macd_signal_at: insufficient data at idx={idx} (no result produced, fast={fast}, slow={slow}, signal={signal})"
+        ))
     })
 }
 
 #[inline(always)]
-pub fn bbands_at(klines: &[Kline], idx: usize, period: usize, std_dev: f64) -> (f64, f64, f64) {
+pub fn bbands_at(
+    klines: &[Kline],
+    idx: usize,
+    period: usize,
+    std_dev: f64,
+) -> VirsResult<(f64, f64, f64)> {
     if klines.is_empty() || idx < period - 1 {
-        return (0.0, 0.0, 0.0);
+        return Err(VirsError::config(format!(
+            "indicator bbands_at: insufficient data at idx={idx} (period={period}, std_dev={std_dev})"
+        )));
     }
     let (upper, middle, lower) =
-        overlap::bbands(&closes(klines), period, std_dev, std_dev, MaType::Sma).unwrap_or_else(|e| {
-            warn!(indicator = "bbands_at", error = %e, "TA-Lib BBands calculation failed — returning empty series");
-            (Vec::new(), Vec::new(), Vec::new())
-        });
-    (
-        upper.get(idx).copied().unwrap_or_else(|| {
-            warn!(
-                indicator = "bbands_at.upper",
-                idx, "Insufficient data for indicator calculation — defaulting to 0.0"
-            );
-            0.0
-        }),
-        middle.get(idx).copied().unwrap_or_else(|| {
-            warn!(
-                indicator = "bbands_at.middle",
-                idx, "Insufficient data for indicator calculation — defaulting to 0.0"
-            );
-            0.0
-        }),
-        lower.get(idx).copied().unwrap_or_else(|| {
-            warn!(
-                indicator = "bbands_at.lower",
-                idx, "Insufficient data for indicator calculation — defaulting to 0.0"
-            );
-            0.0
-        }),
-    )
+        overlap::bbands(&closes(klines), period, std_dev, std_dev, MaType::Sma)
+            .context("indicator bbands_at: TA-Lib BBands calculation failed")?;
+    let upper = upper.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator bbands_at.upper: insufficient data at idx={idx} (no result produced, period={period})"
+        ))
+    })?;
+    let middle = middle.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator bbands_at.middle: insufficient data at idx={idx} (no result produced, period={period})"
+        ))
+    })?;
+    let lower = lower.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator bbands_at.lower: insufficient data at idx={idx} (no result produced, period={period})"
+        ))
+    })?;
+    Ok((upper, middle, lower))
 }
 
 #[inline(always)]
-pub fn atr_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
+pub fn atr_at(klines: &[Kline], idx: usize, period: usize) -> VirsResult<f64> {
     if klines.is_empty() || idx < period {
-        return 0.0;
+        return Err(VirsError::config(format!(
+            "indicator atr_at: insufficient data at idx={idx} (period={period})"
+        )));
     }
     let result =
-        volatility::atr(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_else(|e| {
-            warn!(indicator = "atr_at", error = %e, "TA-Lib ATR calculation failed — returning empty series");
-            Vec::new()
-        });
-    result.get(idx).copied().unwrap_or_else(|| {
-        warn!(
-            indicator = "atr_at",
-            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
-        );
-        0.0
+        volatility::atr(&highs(klines), &lows(klines), &closes(klines), period)
+            .context("indicator atr_at: TA-Lib ATR calculation failed")?;
+    result.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator atr_at: insufficient data at idx={idx} (no result produced, period={period})"
+        ))
     })
 }
 
 #[inline(always)]
-pub fn adx_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
+pub fn adx_at(klines: &[Kline], idx: usize, period: usize) -> VirsResult<f64> {
     if klines.is_empty() || idx < period * 2 {
-        return 0.0;
+        return Err(VirsError::config(format!(
+            "indicator adx_at: insufficient data at idx={idx} (period={period})"
+        )));
     }
     let result =
-        momentum::adx(&highs(klines), &lows(klines), &closes(klines), period).unwrap_or_else(|e| {
-            warn!(indicator = "adx_at", error = %e, "TA-Lib ADX calculation failed — returning empty series");
-            Vec::new()
-        });
-    result.get(idx).copied().unwrap_or_else(|| {
-        warn!(
-            indicator = "adx_at",
-            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
-        );
-        0.0
+        momentum::adx(&highs(klines), &lows(klines), &closes(klines), period)
+            .context("indicator adx_at: TA-Lib ADX calculation failed")?;
+    result.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator adx_at: insufficient data at idx={idx} (no result produced, period={period})"
+        ))
     })
 }
 
@@ -214,83 +206,79 @@ pub fn macd_histogram_at(
     fast: usize,
     slow: usize,
     signal: usize,
-) -> f64 {
+) -> VirsResult<f64> {
     if klines.is_empty() || idx < slow + signal - 2 {
-        return 0.0;
+        return Err(VirsError::config(format!(
+            "indicator macd_histogram_at: insufficient data at idx={idx} (fast={fast}, slow={slow}, signal={signal})"
+        )));
     }
-    let (macd, sig, _) = momentum::macd(&closes(klines), fast, slow, signal).unwrap_or_else(|e| {
-        warn!(indicator = "macd_histogram_at", error = %e, "TA-Lib MACD calculation failed — returning empty series");
-        (Vec::new(), Vec::new(), Vec::new())
-    });
-    let m = macd.get(idx).copied().unwrap_or_else(|| {
-        warn!(
-            indicator = "macd_histogram_at.macd",
-            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
-        );
-        0.0
-    });
-    let s = sig.get(idx).copied().unwrap_or_else(|| {
-        warn!(
-            indicator = "macd_histogram_at.signal",
-            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
-        );
-        0.0
-    });
-    m - s
+    let (macd, sig, _) = momentum::macd(&closes(klines), fast, slow, signal)
+        .context("indicator macd_histogram_at: TA-Lib MACD calculation failed")?;
+    let m = macd.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator macd_histogram_at.macd: insufficient data at idx={idx} (no result produced, fast={fast}, slow={slow}, signal={signal})"
+        ))
+    })?;
+    let s = sig.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator macd_histogram_at.signal: insufficient data at idx={idx} (no result produced, fast={fast}, slow={slow}, signal={signal})"
+        ))
+    })?;
+    Ok(m - s)
 }
 
 #[inline(always)]
-pub fn bbands_width_at(klines: &[Kline], idx: usize, period: usize, std_dev: f64) -> f64 {
-    let (upper, middle, lower) = bbands_at(klines, idx, period, std_dev);
+pub fn bbands_width_at(klines: &[Kline], idx: usize, period: usize, std_dev: f64) -> VirsResult<f64> {
+    let (upper, middle, lower) = bbands_at(klines, idx, period, std_dev)?;
     if middle == 0.0 {
-        return 0.0;
+        return Err(VirsError::config(format!(
+            "indicator bbands_width_at: middle band is 0.0 at idx={idx} (period={period}, std_dev={std_dev}) — cannot divide by zero"
+        )));
     }
-    (upper - lower) / middle
+    Ok((upper - lower) / middle)
 }
 
 #[inline(always)]
-pub fn highest_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
+pub fn highest_at(klines: &[Kline], idx: usize, period: usize) -> VirsResult<f64> {
     if klines.is_empty() || idx < period - 1 || period == 0 {
-        return 0.0;
+        return Err(VirsError::config(format!(
+            "indicator highest_at: insufficient data at idx={idx} (period={period})"
+        )));
     }
-    let result = math_operator::max(&highs(klines), period).unwrap_or_else(|e| {
-        warn!(indicator = "highest_at", error = %e, "TA-Lib MAX calculation failed — returning empty series");
-        Vec::new()
-    });
-    result.get(idx).copied().unwrap_or_else(|| {
-        warn!(
-            indicator = "highest_at",
-            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
-        );
-        0.0
+    let result = math_operator::max(&highs(klines), period)
+        .context("indicator highest_at: TA-Lib MAX calculation failed")?;
+    result.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator highest_at: insufficient data at idx={idx} (no result produced, period={period})"
+        ))
     })
 }
 
 #[inline(always)]
-pub fn lowest_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
+pub fn lowest_at(klines: &[Kline], idx: usize, period: usize) -> VirsResult<f64> {
     if klines.is_empty() || idx < period - 1 || period == 0 {
-        return 0.0;
+        return Err(VirsError::config(format!(
+            "indicator lowest_at: insufficient data at idx={idx} (period={period})"
+        )));
     }
-    let result = math_operator::min(&lows(klines), period).unwrap_or_else(|e| {
-        warn!(indicator = "lowest_at", error = %e, "TA-Lib MIN calculation failed — returning empty series");
-        Vec::new()
-    });
-    result.get(idx).copied().unwrap_or_else(|| {
-        warn!(
-            indicator = "lowest_at",
-            idx, "Insufficient data for indicator calculation — defaulting to 0.0"
-        );
-        0.0
+    let result = math_operator::min(&lows(klines), period)
+        .context("indicator lowest_at: TA-Lib MIN calculation failed")?;
+    result.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator lowest_at: insufficient data at idx={idx} (no result produced, period={period})"
+        ))
     })
 }
 
-pub fn volume_sma_at(klines: &[Kline], idx: usize, period: usize) -> f64 {
+pub fn volume_sma_at(klines: &[Kline], idx: usize, period: usize) -> VirsResult<f64> {
     if idx < period - 1 || klines.is_empty() {
-        return 0.0;
+        return Err(VirsError::config(format!(
+            "indicator volume_sma_at: insufficient data at idx={idx} (period={period})"
+        )));
     }
     let start = idx + 1 - period;
     let sum: f64 = (start..=idx).map(|i| klines[i].volume).sum();
-    sum / period as f64
+    Ok(sum / period as f64)
 }
 
 pub fn compute_bars_outside_band(klines: &[Kline], bb_upper: f64, bb_lower: f64) -> i32 {
@@ -335,9 +323,13 @@ pub fn compute_ema_cross_bars_ago(
     fast_period: usize,
     slow_period: usize,
     last_idx: usize,
-) -> i32 {
+) -> VirsResult<i32> {
     if klines.len() < slow_period + 5 {
-        return -1;
+        return Err(VirsError::config(format!(
+            "indicator compute_ema_cross_bars_ago: insufficient data (klines={}, need {})",
+            klines.len(),
+            slow_period + 5
+        )));
     }
     let lookback = 20.min(last_idx);
     for i in 0..lookback {
@@ -345,15 +337,15 @@ pub fn compute_ema_cross_bars_ago(
         if idx < 1 {
             break;
         }
-        let fast_curr = ema_at(klines, idx, fast_period);
-        let slow_curr = ema_at(klines, idx, slow_period);
-        let fast_prev = ema_at(klines, idx - 1, fast_period);
-        let slow_prev = ema_at(klines, idx - 1, slow_period);
+        let fast_curr = ema_at(klines, idx, fast_period)?;
+        let slow_curr = ema_at(klines, idx, slow_period)?;
+        let fast_prev = ema_at(klines, idx - 1, fast_period)?;
+        let slow_prev = ema_at(klines, idx - 1, slow_period)?;
         if (fast_prev <= slow_prev && fast_curr > slow_curr)
             || (fast_prev >= slow_prev && fast_curr < slow_curr)
         {
-            return i as i32;
+            return Ok(i as i32);
         }
     }
-    -1
+    Ok(-1)
 }

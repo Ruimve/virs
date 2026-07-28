@@ -35,10 +35,10 @@
 | P1.1 | `p1_1_open_is_open` | Position(status=Open) → is_open=true |
 | P6.1 | `p6_1_long_pnl` | Long, entry=50000, current=51000 → +1000 |
 | P6.2 | `p6_2_short_pnl` | Short, entry=50000, current=49000 → +1000 |
-| P12.1 | `p12_1_default_valid` | RiskConfig::default() → Ok |
-| P12.2 | `p12_2_zero_leverage` | max_leverage=0 → Err |
-| P12.3 | `p12_3_negative_drawdown` | max_drawdown_pct<0 → Err |
-| P12.4 | `p12_4_negative_position_pct` | max_position_per_symbol_pct<0 → Err |
+| P12.1 | `p12_1_default_valid` | (deleted — RiskConfig removed) |
+| P12.2 | `p12_2_zero_leverage` | (deleted — RiskConfig removed) |
+| P12.3 | `p12_3_negative_drawdown` | (deleted — RiskConfig removed) |
+| P12.4 | `p12_4_negative_position_pct` | (deleted — RiskConfig removed) |
 
 ### serde_tests.rs — 序列化/反序列化 (11)
 
@@ -67,8 +67,8 @@
 | INT-1.1 | `int_1_1_long_position_pnl_chain` | Long Position → unrealized_pnl_at 链路 |
 | INT-1.2 | `int_1_2_short_position_pnl_chain` | Short Position → unrealized_pnl_at 链路 |
 | INT-3.1 | `int_3_1_exchange_position_pnl_chain` | ExchangePosition → unrealized_pnl_at 链路 |
-| INT-6.1 | `int_6_1_default_config_valid` | RiskConfig::default() → validate Ok |
-| INT-6.2 | `int_6_2_invalid_config` | max_leverage=0 → validate Err |
+| INT-6.1 | `int_6_1_default_config_valid` | (deleted — RiskConfig removed) |
+| INT-6.2 | `int_6_2_invalid_config` | (deleted — RiskConfig removed) |
 | INT-8.1 | `int_8_1_exchange_position_serde_then_pnl` | serde 往返后 unrealized_pnl_at 一致 |
 | INT-8.3 | `int_8_3_auto_market_type_from_str` | (deleted — AutoMarketType removed) |
 

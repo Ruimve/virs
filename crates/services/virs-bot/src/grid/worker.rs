@@ -5,6 +5,7 @@ use chrono::Utc;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 use uuid::Uuid;
+use virs_error::VirsError;
 use virs_types::client_order_id;
 use virs_types::enums::{PositionSide, Side};
 
@@ -447,10 +448,18 @@ impl GridWorker {
             }
         };
 
-        let price = order.fill_price.unwrap_or_else(|| {
-            error!(bot_id = %self.bot.id, order_id = %order.id, "Order filled but no fill_price — falling back to current_price (PnL may be inaccurate)");
-            self.current_price
-        });
+        let price = match order.fill_price {
+            Some(p) => p,
+            None => {
+                error!(
+                    bot_id = %self.bot.id,
+                    order_id = %order.id,
+                    error = %VirsError::bad_request("Order filled but no fill_price"),
+                    "Skipping order — fill_price is required for PnL calculation"
+                );
+                return;
+            }
+        };
         let level_side = self.levels[idx].side.clone();
         let level_num = self.levels[idx].level;
         let entry_price = self.levels[idx].avg_buy_price;
@@ -1352,7 +1361,7 @@ impl GridWorker {
             .store
             .update_ai_analysis(
                 self.bot.id,
-                self.bot.market_regime.as_deref().unwrap_or("ranging"),
+                self.bot.market_regime.as_deref().unwrap_or("unanalyzed"),
                 self.bot.upper_price,
                 self.bot.lower_price,
                 self.bot.grid_count,

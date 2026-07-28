@@ -45,13 +45,14 @@ pub async fn optimize(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let symbol = body["symbol"].as_str().unwrap_or("");
-    let exchange = body["exchange"].as_str().unwrap_or("");
-
-    if symbol.is_empty() {
-        return Err(VirsError::bad_request("symbol is required"));
-    }
-
+    let symbol = body["symbol"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("symbol is required"))?;
+    let exchange = body["exchange"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("exchange is required"))?;
 
     let current_price = fetch_price_from_kline(&state, exchange, symbol).await?;
 
@@ -85,12 +86,14 @@ pub async fn explain(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let symbol = body["symbol"].as_str().unwrap_or("");
-    let question = body["question"].as_str().unwrap_or("");
-
-    if symbol.is_empty() || question.is_empty() {
-        return Err(VirsError::bad_request("symbol and question are required"));
-    }
+    let symbol = body["symbol"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("symbol is required"))?;
+    let question = body["question"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("question is required"))?;
 
     let system_prompt = r#"You are a trading education assistant. Explain trading concepts and market conditions clearly.
 Respond in JSON format with:
@@ -115,15 +118,17 @@ pub async fn recommend_strategy(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let symbol = body["symbol"].as_str().unwrap_or("");
-    let exchange = body["exchange"].as_str().unwrap_or("");
+    let symbol = body["symbol"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("symbol is required"))?;
+    let exchange = body["exchange"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("exchange is required"))?;
     let risk_tolerance = body["risk_tolerance"].as_str().ok_or_else(|| {
         VirsError::bad_request("risk_tolerance is required")
     })?;
-
-    if symbol.is_empty() {
-        return Err(VirsError::bad_request("symbol is required"));
-    }
 
     let current_price = fetch_price_from_kline(&state, exchange, symbol).await?;
 
