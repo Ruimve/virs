@@ -38,9 +38,9 @@ pub async fn select_strategy_by_llm(
         )));
     }
 
-    let klines: Vec<virs_models::Kline> = candles
+    let klines: Vec<virs_types::Kline> = candles
         .iter()
-        .map(|c| virs_models::Kline {
+        .map(|c| virs_types::Kline {
             open_time: c.open_time,
             open: c.open,
             high: c.high,

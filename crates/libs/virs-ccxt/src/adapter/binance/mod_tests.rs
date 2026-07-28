@@ -4,7 +4,7 @@ use crate::adapter::binance::{
     parse_order_book_side, try_build_ed25519, BinanceExchange, TIME_OFFSET_WARN_THRESHOLD_MS,
     TIME_SYNC_INTERVAL_SECS,
 };
-use crate::types::{CcxtOrderStatus, OrderType, Side};
+use virs_types::{CcxtOrderStatus, OrderType, Side};
 
 #[test]
 fn b1_1_native_symbol_with_slash() {

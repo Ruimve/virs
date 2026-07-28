@@ -6,6 +6,7 @@ use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use virs_types::client_order_id;
+use virs_types::enums::{PositionSide, Side};
 
 use crate::grid::ai::{GridAction, GridAiDecision, GridAiService};
 use crate::grid::ports::*;
@@ -300,8 +301,8 @@ impl GridWorker {
 
     pub(crate) async fn place_order(&mut self, level: &GridLevel, dir: &OrderDir) {
         let (side, price, key_side) = match dir {
-            OrderDir::Buy => (OrderSide::Buy, level.buy_price, "buy"),
-            OrderDir::Sell => (OrderSide::Sell, level.sell_price, "sell"),
+            OrderDir::Buy => (Side::Buy, level.buy_price, "buy"),
+            OrderDir::Sell => (Side::Sell, level.sell_price, "sell"),
         };
 
         let key = (level.level as usize, key_side.to_string());
@@ -313,14 +314,14 @@ impl GridWorker {
             (OrderDir::Buy, "sell") => (
                 level.hold_quantity.abs().min(level.quantity),
                 true,
-                BotPositionSide::Short,
+                PositionSide::Short,
             ),
-            (OrderDir::Buy, _) => (level.quantity, false, BotPositionSide::Long),
-            (OrderDir::Sell, "sell") => (level.quantity, false, BotPositionSide::Short),
+            (OrderDir::Buy, _) => (level.quantity, false, PositionSide::Long),
+            (OrderDir::Sell, "sell") => (level.quantity, false, PositionSide::Short),
             (OrderDir::Sell, _) => (
                 level.hold_quantity.min(level.quantity),
                 true,
-                BotPositionSide::Long,
+                PositionSide::Long,
             ),
         };
 
@@ -428,7 +429,14 @@ impl GridWorker {
     }
 
     async fn on_order_filled(&mut self, order: &OrderInfo) {
-        let side_str = order.side.as_str();
+        let side_str = match &order.side {
+            Side::Buy => "buy",
+            Side::Sell => "sell",
+            Side::Unknown(s) => {
+                warn!(bot_id = %self.bot.id, order_id = %order.id, side = %s, "Order filled with unknown side — skipping");
+                return;
+            }
+        };
 
         let idx = match self.find_level_by_order_id(order.id) {
             Some((i, ref side)) if side == side_str => i,

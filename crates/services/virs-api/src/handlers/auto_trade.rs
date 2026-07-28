@@ -105,7 +105,7 @@ pub async fn create_bot(
     state.engine_manager.ensure_started(paper_mode).await?;
 
 
-    let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
+    let exchange_key = format!("{}:{}", exchange, virs_types::MarketType::Perpetual);
     if state.exchange_registry.get(&exchange_key).is_none() {
         return Err(VirsError::Http {
             status: 412,
@@ -114,7 +114,7 @@ pub async fn create_bot(
     }
 
 
-    state.kline_engine.subscribe(exchange, symbol, virs_models::MarketType::Perpetual).await?;
+    state.kline_engine.subscribe(exchange, symbol, virs_types::MarketType::Perpetual).await?;
 
 
     if paper_mode {

@@ -4,11 +4,11 @@ use virs_ccxt::{
     adapter::binance::{user_data_ws_events::dispatch_event, BinanceExchange},
     auth::hmac_sha256_hex,
     create_exchange, parse_f64, parse_str,
-    types::{CcxtOrderStatus, CcxtTicker},
+    types::CcxtTicker,
 };
 use virs_error::ExchangeError;
 
-use virs_types::enums::OrderStatus;
+use virs_types::{enums::OrderStatus, CcxtOrderStatus};
 
 #[test]
 fn int_1_1_symbol_roundtrip_usdt() {
@@ -249,7 +249,7 @@ fn int_6_3_order_status_expired_to_canceled_chain() {
 
 #[test]
 fn int_7_1_order_type_roundtrip() {
-    use virs_ccxt::types::OrderType;
+    use virs_types::OrderType;
 
     let types = vec![
         OrderType::Market,
@@ -270,7 +270,7 @@ fn int_7_1_order_type_roundtrip() {
 
 #[test]
 fn int_7_2_side_roundtrip() {
-    use virs_ccxt::types::Side;
+    use virs_types::Side;
 
     assert_eq!(BinanceExchange::side_str(&Side::Buy), "BUY");
     assert_eq!(BinanceExchange::side_str(&Side::Sell), "SELL");

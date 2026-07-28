@@ -3221,6 +3221,7 @@ dependencies = [
  "uuid",
  "virs-error",
  "virs-models",
+ "virs-types",
 ]
 
 [[package]]

@@ -1,7 +1,9 @@
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::{GridBot, StrategyStatus};
+use virs_types::StrategyStatus;
+
+use crate::GridBot;
 
 fn make_grid_bot(
     upper: f64,

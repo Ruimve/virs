@@ -5,6 +5,10 @@ use crate::types::*;
 use crate::ExchangeClient;
 use crate::{parse_f64, parse_str, parse_u32};
 use virs_error::ExchangeError;
+use virs_types::{
+    Balance, ExchangePosition, MarginMode, MarketType, OrderResult, PositionMode, PositionSide,
+    Side, TimeInForce,
+};
 
 use super::parse_order_book_side;
 

@@ -19,7 +19,10 @@ use crate::auth::{hmac_sha256_hex, insert_header, SignedRequest, Signer};
 use crate::types::*;
 use crate::{Exchange, ExchangeClient};
 use virs_error::ExchangeError;
-use virs_types::WsFeedEvent;
+use virs_types::{
+    ApiRestrictions, Balance, CcxtOrderStatus, ExchangePosition, MarginMode, OrderResult,
+    OrderType, PositionMode, Side, WsFeedEvent,
+};
 
 // 币安 HMAC-SHA256 签名器
 pub struct BinanceSigner {

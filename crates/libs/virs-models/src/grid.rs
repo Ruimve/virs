@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::StrategyStatus;
+use virs_types::StrategyStatus;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct GridBot {

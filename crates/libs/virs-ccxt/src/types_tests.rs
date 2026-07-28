@@ -1,6 +1,7 @@
 use chrono::Utc;
 
 use crate::types::*;
+use virs_types::CcxtOrderStatus;
 use virs_types::enums::{OrderStatus, Side};
 use virs_types::market::{FundingRate, OrderBook, Ticker};
 

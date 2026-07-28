@@ -2,6 +2,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use virs_models::*;
+use virs_types::StrategyStatus;
 
 #[test]
 fn int_2_1_spacing_and_return_pct() {

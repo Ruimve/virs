@@ -2,14 +2,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use virs_error::ExchangeError;
 
-// 从 virs-types 重导出 (CcxtOrder 等类型已移至 virs-types 避免循环依赖)
-pub use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderResult};
-
-pub use virs_types::enums::{
-    MarketType, MarginMode, OrderStatus, OrderType, PositionMode, PositionSide, Side, TimeInForce,
-};
-pub use virs_types::market::{
-    ApiRestrictions, Balance, ExchangePosition, FundingRate, Kline, OrderBook, Ticker,
+// 本文件定义 ccxt 适配层的本地类型。virs_types 中的类型通过 `use` 直接引入，
+// 不再从此处重导出 —— 调用方应直接使用 `virs_types::...`。
+use virs_types::{
+    market::{FundingRate, OrderBook, Ticker},
+    MarginMode, MarketType, OrderType, PositionSide, Side, TimeInForce,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

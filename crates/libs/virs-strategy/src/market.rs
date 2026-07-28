@@ -7,7 +7,7 @@
 //! 原子计算函数从本模块迁移至 `indicator::library`，此处通过 `pub use`
 //! 转发以保持向后兼容（`market_data.rs` 等外部调用方无需改动）。
 
-use virs_models::Kline;
+use virs_types::Kline;
 
 use crate::indicator::{
     all_market_indicators_specs, IndicatorSet, IndicatorSpec, KlineSet, Timeframe,

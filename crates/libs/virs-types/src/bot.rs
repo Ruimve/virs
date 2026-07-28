@@ -1,33 +1,11 @@
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use virs_error::BotResult;
 
+use crate::enums::{PositionSide, Side};
+use crate::market::Balance;
 use crate::position::Position;
-
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum OrderSide {
-    Buy,
-    Sell,
-}
-
-impl OrderSide {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Buy => "buy",
-            Self::Sell => "sell",
-        }
-    }
-}
-
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum BotPositionSide {
-    Long,
-    Short,
-}
 
 
 #[derive(Debug, Clone)]
@@ -35,7 +13,7 @@ pub struct OrderInfo {
     pub id: Uuid,
     pub position_id: Option<Uuid>,
     pub symbol: String,
-    pub side: OrderSide,
+    pub side: Side,
     pub fill_price: Option<f64>,
     pub request_price: Option<f64>,
     pub filled: f64,
@@ -49,8 +27,8 @@ pub struct OrderInfo {
 pub enum OrderCommand {
     OpenPosition {
         symbol: String,
-        side: BotPositionSide,
-        order_side: OrderSide,
+        side: PositionSide,
+        order_side: Side,
         amount: f64,
         leverage: u32,
         price: Option<f64>,
@@ -63,10 +41,10 @@ pub enum OrderCommand {
     },
     PlaceOrder {
         symbol: String,
-        side: OrderSide,
+        side: Side,
         amount: f64,
         price: Option<f64>,
-        position_side: Option<BotPositionSide>,
+        position_side: Option<PositionSide>,
         position_id: Option<Uuid>,
         client_order_id: Option<String>,
     },
@@ -120,14 +98,6 @@ pub trait OrderExecutor: Send + Sync {
 }
 
 
-#[derive(Debug, Clone, Default)]
-pub struct AccountBalance {
-    pub total: f64,
-    pub free: f64,
-    pub used: f64,
-}
-
-
 #[async_trait]
 pub trait CredentialStore: Send + Sync {
     async fn load_credentials(
@@ -161,7 +131,7 @@ pub trait MarketDataProvider: Send + Sync {
         exchange: &str,
         symbol: &str,
     ) -> MarketSnapshot;
-    async fn get_account_balance(&self, exchange: &str) -> AccountBalance;
+    async fn get_account_balance(&self, exchange: &str) -> Balance;
 }
 
 

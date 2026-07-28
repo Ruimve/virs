@@ -6,8 +6,9 @@ use tracing::warn;
 use virs_exchange::Exchanges;
 use virs_market::KlineEngine;
 use virs_market::Timeframe;
-use virs_models::Kline;
-use virs_types::bot::{AccountBalance, MarketDataProvider, MarketSnapshot};
+use virs_types::Kline;
+use virs_types::bot::{MarketDataProvider, MarketSnapshot};
+use virs_types::market::Balance;
 use virs_types::exchange_pe::ExchangePe;
 
 pub fn candle_to_kline(c: &virs_market::Candle) -> Kline {
@@ -266,16 +267,10 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         }
     }
 
-    async fn get_account_balance(&self, exchange: &str) -> AccountBalance {
+    async fn get_account_balance(&self, exchange: &str) -> Balance {
         if let Some(ref pe_ex) = self.pe_exchange {
             match pe_ex.get_balance().await {
-                Ok(b) => {
-                    return AccountBalance {
-                        total: b.total,
-                        free: b.free,
-                        used: b.used,
-                    };
-                }
+                Ok(b) => return b,
                 Err(e) => {
                     warn!(error = %e, "PE exchange get_balance failed, falling back to registry");
                 }
@@ -285,18 +280,14 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = match self.exchange_registry.get(&exchange_key) {
             Some(e) => e,
-            None => return AccountBalance::default(),
+            None => return Balance { asset: "USDT".to_string(), free: 0.0, used: 0.0, total: 0.0 },
         };
 
         match ex.get_balance().await {
-            Ok(b) => AccountBalance {
-                total: b.total,
-                free: b.free,
-                used: b.used,
-            },
+            Ok(b) => b,
             Err(e) => {
                 warn!(error = %e, "get_account_balance error");
-                AccountBalance::default()
+                Balance { asset: "USDT".to_string(), free: 0.0, used: 0.0, total: 0.0 }
             }
         }
     }
@@ -547,16 +538,10 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
         }
     }
 
-    async fn get_account_balance(&self, exchange: &str) -> AccountBalance {
+    async fn get_account_balance(&self, exchange: &str) -> Balance {
         if let Some(ref pe_ex) = self.pe_exchange {
             match pe_ex.get_balance().await {
-                Ok(b) => {
-                    return AccountBalance {
-                        total: b.total,
-                        free: b.free,
-                        used: b.used,
-                    };
-                }
+                Ok(b) => return b,
                 Err(e) => {
                     warn!(error = %e, "PE exchange get_balance failed, falling back to registry");
                 }
@@ -566,18 +551,14 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
         let exchange_key = format!("{}:perpetual", exchange);
         let ex = match self.exchange_registry.get(&exchange_key) {
             Some(e) => e,
-            None => return AccountBalance::default(),
+            None => return Balance { asset: "USDT".to_string(), free: 0.0, used: 0.0, total: 0.0 },
         };
 
         match ex.get_balance().await {
-            Ok(b) => AccountBalance {
-                total: b.total,
-                free: b.free,
-                used: b.used,
-            },
+            Ok(b) => b,
             Err(e) => {
                 warn!(error = %e, "get_account_balance error");
-                AccountBalance::default()
+                Balance { asset: "USDT".to_string(), free: 0.0, used: 0.0, total: 0.0 }
             }
         }
     }

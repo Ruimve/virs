@@ -1,7 +1,7 @@
 use serde::Deserialize;
-use virs_types::{PositionSide, WsFeedEvent};
-
-use crate::types::{CcxtOrder, CcxtOrderStatus, ExecutionType as CcxtExecutionType};
+use virs_types::{
+    CcxtOrder, CcxtOrderStatus, ExecutionType as CcxtExecutionType, PositionSide, WsFeedEvent,
+};
 
 // ORDER_TRADE_UPDATE事件外层结构
 #[derive(Debug, Clone, Deserialize)]

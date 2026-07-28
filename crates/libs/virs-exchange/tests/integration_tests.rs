@@ -1,36 +1,35 @@
 use virs_exchange::Exchanges;
-use virs_models as models;
 use virs_types::enums::*;
 
 #[test]
 fn int_1_1_side_roundtrip() {
     let original = Side::Buy;
-    let ccxt = virs_ccxt::Side::Buy;
+    let ccxt = virs_types::Side::Buy;
     assert_eq!(original, Side::Buy);
-    assert_eq!(ccxt, virs_ccxt::Side::Buy);
+    assert_eq!(ccxt, virs_types::Side::Buy);
 }
 
 #[test]
 fn int_1_2_order_type_roundtrip() {
     let ot = OrderType::Limit;
-    let models_ot = models::OrderType::Limit;
+    let models_ot = virs_types::OrderType::Limit;
     assert_eq!(ot, OrderType::Limit);
-    assert_eq!(models_ot, models::OrderType::Limit);
+    assert_eq!(models_ot, virs_types::OrderType::Limit);
 }
 
 #[test]
 fn int_1_3_position_side_consistency() {
-    let models_long = models::PositionSide::Long;
+    let models_long = virs_types::PositionSide::Long;
     let pe_long = PositionSide::Long;
-    assert_eq!(models_long, models::PositionSide::Long);
+    assert_eq!(models_long, virs_types::PositionSide::Long);
     assert_eq!(pe_long, PositionSide::Long);
 }
 
 #[test]
 fn int_1_4_market_type_consistency() {
-    let models_perp = models::MarketType::Perpetual;
+    let models_perp = virs_types::MarketType::Perpetual;
     let pe_perp = MarketType::Perpetual;
-    assert_eq!(models_perp, models::MarketType::Perpetual);
+    assert_eq!(models_perp, virs_types::MarketType::Perpetual);
     assert_eq!(pe_perp, MarketType::Perpetual);
 }
 

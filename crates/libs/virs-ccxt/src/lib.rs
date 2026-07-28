@@ -11,12 +11,12 @@ use tokio::sync::mpsc;
 
 use auth::Signer;
 use virs_error::ExchangeError;
+use virs_types::{
+    ApiRestrictions, Balance, ExchangePosition, MarginMode, OrderResult, PositionMode,
+};
 
 pub use types::{
-    ApiRestrictions, Balance, CcxtFundingRate, CcxtKline, CcxtOrder,
-    CcxtOrderBook, CcxtOrderStatus, CcxtTicker, ExecutionType, ExchangePosition, FundingRate,
-    Kline, MarginMode, MarketInfo, MarketType, OrderBook, OrderFee, OrderResult, OrderStatus,
-    OrderType, PlaceOrderParams, PositionMode, PositionSide, Side, Ticker, TimeInForce,
+    CcxtFundingRate, CcxtKline, CcxtOrderBook, CcxtTicker, MarketInfo, OrderFee, PlaceOrderParams,
 };
 
 #[async_trait]
@@ -102,7 +102,7 @@ pub trait Exchange: Send + Sync {
     async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError>;
     async fn fetch_funding_rate(&self, symbol: &str) -> Result<CcxtFundingRate, ExchangeError>;
     async fn create_listen_key(&self) -> Result<String, ExchangeError>;
-    async fn fetch_api_restrictions(&self) -> Result<types::ApiRestrictions, ExchangeError> {
+    async fn fetch_api_restrictions(&self) -> Result<ApiRestrictions, ExchangeError> {
         Err(ExchangeError::NotSupported(
             "fetch_api_restrictions not supported".into(),
         ))

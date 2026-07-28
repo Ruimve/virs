@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use virs_types::enums::*;
 
-use crate::{AutoBot, GridBot, Order, StrategyStatus};
+use crate::{AutoBot, GridBot, Order};
 
 #[test]
 fn s1_1_order_roundtrip() {

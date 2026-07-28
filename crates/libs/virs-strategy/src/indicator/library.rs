@@ -6,7 +6,7 @@
 
 use talib_rs::{ma_type::MaType, math_operator, momentum, overlap, volatility};
 use tracing::warn;
-use virs_models::Kline;
+use virs_types::Kline;
 
 pub fn closes(klines: &[Kline]) -> Vec<f64> {
     klines.iter().map(|k| k.close).collect()

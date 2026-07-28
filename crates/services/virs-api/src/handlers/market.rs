@@ -32,7 +32,7 @@ pub async fn kline_subscribe(
     State(state): State<AppState>,
     Json(body): Json<KlineSubscribeRequest>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let market_type = virs_models::MarketType::Perpetual;
+    let market_type = virs_types::MarketType::Perpetual;
 
 
     let exchange_key = format!("{}:{}", body.exchange, market_type);
@@ -61,7 +61,7 @@ pub async fn orderbook_subscribe(
     State(state): State<AppState>,
     Json(body): Json<KlineSubscribeRequest>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let market_type = virs_models::MarketType::Perpetual;
+    let market_type = virs_types::MarketType::Perpetual;
 
     match state
         .orderbook_engine
@@ -153,7 +153,7 @@ pub async fn get_ticker(
     }
 
 
-    let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
+    let exchange_key = format!("{}:{}", exchange, virs_types::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_ticker(symbol).await {
             Ok(ticker) => Ok(Json(ApiResponse::ok(serde_json::json!({
@@ -225,7 +225,7 @@ pub async fn get_klines(
     }
 
 
-    let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
+    let exchange_key = format!("{}:{}", exchange, virs_types::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => {
             let tf_str = match requested_tf {
@@ -273,7 +273,7 @@ pub async fn get_order_book(
         None => return Err(VirsError::bad_request("symbol is required")),
     };
 
-    let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
+    let exchange_key = format!("{}:{}", exchange, virs_types::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         // ExchangePe 统一 trait 不再提供 get_order_book 接口
         Some(_ex) => Err(VirsError::bad_request(format!(
@@ -296,7 +296,7 @@ pub async fn get_balances(
         None => return Err(VirsError::bad_request("exchange is required")),
     };
 
-    let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
+    let exchange_key = format!("{}:{}", exchange, virs_types::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         // ExchangePe::get_balance() 返回单个（通常为 USDT）余额
         Some(ex) => match ex.get_balance().await {
@@ -331,7 +331,7 @@ pub async fn get_symbols(
         None => return Err(VirsError::bad_request("exchange is required")),
     };
 
-    let exchange_key = format!("{}:{}", exchange, virs_models::MarketType::Perpetual);
+    let exchange_key = format!("{}:{}", exchange, virs_types::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_symbols().await {
             Ok(symbols) => Ok(Json(ApiResponse::ok(serde_json::json!({

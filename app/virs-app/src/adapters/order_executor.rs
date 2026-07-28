@@ -6,9 +6,9 @@ use uuid::Uuid;
 use virs_error::{BotError, BotResult};
 use virs_position::PositionEngine;
 use virs_types::bot::{
-    BotPositionSide, OrderCommand, OrderEvent, OrderExecutor, OrderInfo, OrderSide,
+    OrderCommand, OrderEvent, OrderExecutor, OrderInfo,
 };
-use virs_types::enums::{OrderType, PositionSide, Side};
+use virs_types::enums::OrderType;
 use virs_types::position::*;
 use virs_types::CcxtOrder;
 
@@ -63,14 +63,8 @@ impl OrderExecutor for PeOrderExecutor {
             } => EngineCommand::OpenPosition {
                 exchange: String::new(),
                 symbol,
-                side: match side {
-                    BotPositionSide::Long => PositionSide::Long,
-                    BotPositionSide::Short => PositionSide::Short,
-                },
-                order_side: match order_side {
-                    OrderSide::Buy => Side::Buy,
-                    OrderSide::Sell => Side::Sell,
-                },
+                side,
+                order_side,
                 quantity: amount,
                 leverage,
                 order_type: if price.is_some() {
@@ -106,10 +100,7 @@ impl OrderExecutor for PeOrderExecutor {
             } => EngineCommand::PlaceOrder {
                 params: PlaceOrderParams {
                     symbol,
-                    side: match side {
-                        OrderSide::Buy => Side::Buy,
-                        OrderSide::Sell => Side::Sell,
-                    },
+                    side,
                     order_type: if price.is_some() {
                         OrderType::Limit
                     } else {
@@ -117,10 +108,7 @@ impl OrderExecutor for PeOrderExecutor {
                     },
                     amount,
                     price,
-                    position_side: position_side.map(|ps| match ps {
-                        BotPositionSide::Long => PositionSide::Long,
-                        BotPositionSide::Short => PositionSide::Short,
-                    }),
+                    position_side,
                     position_id,
                     client_order_id,
                     stop_price: None,
@@ -168,18 +156,11 @@ pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
 }
 
 fn ccxt_order_to_order_info(order: &CcxtOrder) -> OrderInfo {
-    let side = match &order.side {
-        Side::Buy => OrderSide::Buy,
-        Side::Sell => OrderSide::Sell,
-        Side::Unknown(ref s) => {
-            unreachable!("validate ensures side is Buy/Sell: {}", s)
-        }
-    };
     OrderInfo {
         id: Uuid::from_u128(order.order_id as u128),
         position_id: None,
         symbol: order.symbol.clone(),
-        side,
+        side: order.side.clone(),
         fill_price: order.avg_fill_price.as_deref().and_then(|s| s.parse::<f64>().ok()),
         request_price: order.original_price.parse::<f64>().ok(),
         filled: order.filled_qty.parse::<f64>().unwrap_or(0.0),

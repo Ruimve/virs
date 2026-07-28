@@ -8,7 +8,7 @@ use virs_app::adapters::order_executor::convert_pe_event;
 use virs_market::Candle;
 use virs_models::AutoBot;
 use virs_models::GridBot;
-use virs_types::bot::{OrderEvent, OrderSide};
+use virs_types::bot::OrderEvent;
 use virs_types::enums::{OrderType, PositionSide, Side, StrategyStatus, TradeType};
 use virs_types::position::{EngineEvent, Trade};
 use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType};
@@ -278,7 +278,7 @@ fn int_4_1_convert_event_order_placed_filled() {
     match result2.unwrap() {
         OrderEvent::OrderFilled { order } => {
             assert_eq!(order.id, expected_id);
-            assert_eq!(order.side, OrderSide::Buy);
+            assert_eq!(order.side, Side::Buy);
         }
         _ => panic!("Expected OrderFilled"),
     }

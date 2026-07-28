@@ -12,7 +12,7 @@ use crate::auto::types::AutoBotConfig;
 use virs_strategy::prompt::{render, PromptLoader, RenderContext, StrategyType};
 use virs_config::TimeConfig;
 use virs_types::client_order_id;
-use virs_types::enums::PositionSide;
+use virs_types::enums::{PositionSide, Side};
 use virs_types::position::{EngineEvent, Position};
 
 #[derive(Debug)]
@@ -1544,8 +1544,8 @@ impl AutoWorker {
         let tp_source = "formula";
 
         let position_side = match side {
-            "long" => BotPositionSide::Long,
-            "short" => BotPositionSide::Short,
+            "long" => PositionSide::Long,
+            "short" => PositionSide::Short,
             _ => {
                 error!(side = %side, "Unknown position side — refusing to place order");
                 return;
@@ -1553,8 +1553,8 @@ impl AutoWorker {
         };
 
         let order_side = match side {
-            "long" => OrderSide::Buy,
-            "short" => OrderSide::Sell,
+            "long" => Side::Buy,
+            "short" => Side::Sell,
             _ => {
                 error!(side = %side, "Unknown position side — refusing to place order");
                 return;
@@ -1662,8 +1662,8 @@ impl AutoWorker {
         } else {
             // 回退路径：缓存 position_id 为 nil 时使用 PlaceOrder 反向单
             let (order_side, position_side_field) = match side {
-                PositionSide::Long => (OrderSide::Sell, Some(BotPositionSide::Long)),
-                PositionSide::Short => (OrderSide::Buy, Some(BotPositionSide::Short)),
+                PositionSide::Long => (Side::Sell, Some(PositionSide::Long)),
+                PositionSide::Short => (Side::Buy, Some(PositionSide::Short)),
                 PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
             };
 

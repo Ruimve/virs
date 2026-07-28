@@ -1,7 +1,7 @@
 use crate::adapters::order_executor::convert_pe_event;
 use chrono::Utc;
 use uuid::Uuid;
-use virs_types::bot::{OrderEvent, OrderSide};
+use virs_types::bot::OrderEvent;
 use virs_types::enums::{OrderType, PositionSide, Side, TradeType};
 use virs_types::position::{EngineEvent, Trade};
 use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType};
@@ -78,7 +78,7 @@ fn o1_1_convert_order_placed() {
     assert!(result.is_some());
     match result.unwrap() {
         OrderEvent::OrderPlaced { order } => {
-            assert_eq!(order.side, OrderSide::Buy);
+            assert_eq!(order.side, Side::Buy);
             assert_eq!(order.symbol, "BTC/USDT");
             assert!((order.fill_price.unwrap() - 101.0).abs() < 1e-10);
         }
@@ -97,7 +97,7 @@ fn o1_2_convert_order_filled() {
     assert!(result.is_some());
     match result.unwrap() {
         OrderEvent::OrderFilled { order } => {
-            assert_eq!(order.side, OrderSide::Sell);
+            assert_eq!(order.side, Side::Sell);
         }
         _ => panic!("Expected OrderFilled"),
     }

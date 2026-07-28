@@ -8,7 +8,7 @@
 //! 由调用方决定是报错还是降级 —— 不在指标库内隐式默认。
 
 use std::collections::{HashMap, HashSet};
-use virs_models::Kline;
+use virs_types::Kline;
 
 use crate::indicator::library as lib;
 use crate::indicator::spec::{IndicatorSpec, Timeframe};
