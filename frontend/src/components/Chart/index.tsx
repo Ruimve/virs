@@ -1,3 +1,1 @@
-import KlineChart from './KlineChart';
-
-export { KlineChart };
+export { KlineChart } from './KlineChart';

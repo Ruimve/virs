@@ -76,138 +76,138 @@ const applyVisibleRange = (chart: IChartApi, dataLength: number) => {
   }
 };
 
-const KlineChart = forwardRef<KlineChartHandle, KlineChartProps>(function KlineChart(
-  { data, height, markers },
-  ref,
-) {
-  const chartRef = useRef<IChartApi>(null);
-  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'>>(null);
-  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'>>(null);
-
-  const markersPluginRef = useRef<{ detach: () => void } | null>(null);
-  const initializedRef = useRef(false);
-
-  const colorsRef = useRef({
-    up: '',
-    upVolume: '',
-    down: '',
-    downVolume: '',
-  });
-
-  useImperativeHandle(
+export const KlineChart = memo(
+  forwardRef<KlineChartHandle, KlineChartProps>(function KlineChart(
+    { data, height, markers },
     ref,
-    () => ({
-      update(candle) {
-        const candleSeries = candleSeriesRef.current;
-        const volumeSeries = volumeSeriesRef.current;
-        const colors = colorsRef.current;
-        if (!candleSeries || !volumeSeries || !colors) return;
+  ) {
+    const chartRef = useRef<IChartApi>(null);
+    const candleSeriesRef = useRef<ISeriesApi<'Candlestick'>>(null);
+    const volumeSeriesRef = useRef<ISeriesApi<'Histogram'>>(null);
 
-        candleSeries.update({
-          time: toLocaleTime(candle.time),
-          open: candle.open,
-          high: candle.high,
-          low: candle.low,
-          close: candle.close,
-        });
+    const markersPluginRef = useRef<{ detach: () => void } | null>(null);
+    const initializedRef = useRef(false);
 
-        if (candle.volume !== undefined) {
-          const { upVolume, downVolume } = colors;
-          volumeSeries.update({
+    const colorsRef = useRef({
+      up: '',
+      upVolume: '',
+      down: '',
+      downVolume: '',
+    });
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        update(candle) {
+          const candleSeries = candleSeriesRef.current;
+          const volumeSeries = volumeSeriesRef.current;
+          const colors = colorsRef.current;
+          if (!candleSeries || !volumeSeries || !colors) return;
+
+          candleSeries.update({
             time: toLocaleTime(candle.time),
-            value: candle.volume,
-            color: candle.close >= candle.open ? upVolume : downVolume,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
           });
+
+          if (candle.volume !== undefined) {
+            const { upVolume, downVolume } = colors;
+            volumeSeries.update({
+              time: toLocaleTime(candle.time),
+              value: candle.volume,
+              color: candle.close >= candle.open ? upVolume : downVolume,
+            });
+          }
+        },
+      }),
+      [],
+    );
+
+    useEffect(() => {
+      const chart = chartRef.current;
+      if (!chart || data.length === 0) return;
+
+      const isFirstInit = !initializedRef.current;
+
+      if (isFirstInit) {
+        initializedRef.current = true;
+
+        const colors = getColors();
+        colorsRef.current = colors;
+
+        const candleSeries = chart.addSeries(CandlestickSeries, {
+          upColor: colors.up,
+          downColor: colors.down,
+          borderDownColor: colors.down,
+          borderUpColor: colors.up,
+          wickDownColor: colors.down,
+          wickUpColor: colors.up,
+        });
+        candleSeriesRef.current = candleSeries;
+
+        if (data[0].volume !== undefined) {
+          const volumeSeries = chart.addSeries(HistogramSeries, {
+            priceFormat: { type: 'volume' },
+            priceScaleId: 'volume',
+          });
+          chart.priceScale('volume').applyOptions({
+            scaleMargins: { top: 0.8, bottom: 0 },
+          });
+          volumeSeriesRef.current = volumeSeries;
         }
-      },
-    }),
-    [],
-  );
-
-  useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart || data.length === 0) return;
-
-    const isFirstInit = !initializedRef.current;
-
-    if (isFirstInit) {
-      initializedRef.current = true;
-
-      const colors = getColors();
-      colorsRef.current = colors;
-
-      const candleSeries = chart.addSeries(CandlestickSeries, {
-        upColor: colors.up,
-        downColor: colors.down,
-        borderDownColor: colors.down,
-        borderUpColor: colors.up,
-        wickDownColor: colors.down,
-        wickUpColor: colors.up,
-      });
-      candleSeriesRef.current = candleSeries;
-
-      if (data[0].volume !== undefined) {
-        const volumeSeries = chart.addSeries(HistogramSeries, {
-          priceFormat: { type: 'volume' },
-          priceScaleId: 'volume',
-        });
-        chart.priceScale('volume').applyOptions({
-          scaleMargins: { top: 0.8, bottom: 0 },
-        });
-        volumeSeriesRef.current = volumeSeries;
       }
-    }
 
-    const colors = colorsRef.current;
-    const candleSeries = candleSeriesRef.current;
-    if (!candleSeries) return;
+      const colors = colorsRef.current;
+      const candleSeries = candleSeriesRef.current;
+      if (!candleSeries) return;
 
-    const chartData: CandlestickData[] = data.map((item) => ({
-      time: toLocaleTime(item.time),
-      open: item.open,
-      high: item.high,
-      low: item.low,
-      close: item.close,
-    }));
-    candleSeries.setData(chartData);
+      const chartData: CandlestickData[] = data.map((item) => ({
+        time: toLocaleTime(item.time),
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        close: item.close,
+      }));
+      candleSeries.setData(chartData);
 
-    const volumeSeries = volumeSeriesRef.current;
-    if (volumeSeries) {
-      volumeSeries.setData(
-        data.map((item) => ({
-          time: toLocaleTime(item.time),
-          value: item.volume || 0,
-          color: item.close >= item.open ? colors.upVolume : colors.downVolume,
-        })),
-      );
-    }
+      const volumeSeries = volumeSeriesRef.current;
+      if (volumeSeries) {
+        volumeSeries.setData(
+          data.map((item) => ({
+            time: toLocaleTime(item.time),
+            value: item.volume || 0,
+            color: item.close >= item.open ? colors.upVolume : colors.downVolume,
+          })),
+        );
+      }
 
-    if (markersPluginRef.current) {
-      markersPluginRef.current.detach();
-      markersPluginRef.current = null;
-    }
+      if (markersPluginRef.current) {
+        markersPluginRef.current.detach();
+        markersPluginRef.current = null;
+      }
 
-    if (markers && markers.length > 0) {
-      markersPluginRef.current = createSeriesMarkers(
-        candleSeries,
-        markers.map((m) => ({
-          time: toLocaleTime(m.time),
-          position: m.position,
-          color: m.color,
-          shape: m.shape,
-          text: m.text,
-        })),
-      );
-    }
+      if (markers && markers.length > 0) {
+        markersPluginRef.current = createSeriesMarkers(
+          candleSeries,
+          markers.map((m) => ({
+            time: toLocaleTime(m.time),
+            position: m.position,
+            color: m.color,
+            shape: m.shape,
+            text: m.text,
+          })),
+        );
+      }
 
-    applyVisibleRange(chart, data.length);
-  }, [data, markers]);
+      applyVisibleRange(chart, data.length);
+    }, [data, markers]);
 
-  const onLoad = useCallback((c: IChartApi) => {
-    chartRef.current = c;
-  }, []);
+    const onLoad = useCallback((c: IChartApi) => {
+      chartRef.current = c;
+    }, []);
 
-  return <ReactChart onLoad={onLoad} height={height} />;
-});
-
-export default memo(KlineChart);
+    return <ReactChart onLoad={onLoad} height={height} />;
+  }),
+);

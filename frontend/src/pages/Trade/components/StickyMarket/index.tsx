@@ -1,6 +1,6 @@
 import { memo, useMemo, useState, type RefObject } from 'react';
 import type { KlineCandle } from '@/service';
-import KlineChart, { type KlineChartHandle } from '@/components/Chart/KlineChart';
+import { type KlineChartHandle, KlineChart } from '@/components/Chart/KlineChart';
 import { TradeLoading } from '@/components/Transition/Icon';
 import { FlashPrice } from '../FlashPrice';
 
