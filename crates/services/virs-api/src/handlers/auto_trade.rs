@@ -3,22 +3,14 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use serde::Deserialize;
 use sqlx::FromRow;
 use virs_strategy::prompt::StrategyType;
 use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::handlers::strategy_selection::select_strategy_by_llm;
-use crate::handlers::utils::format_duration;
+use crate::handlers::utils::{format_duration, TradesQuery};
 use crate::state::AppState;
-
-
-#[derive(Debug, Deserialize)]
-pub struct TradesQuery {
-    pub page: Option<u32>,
-    pub page_size: Option<u32>,
-}
 
 
 #[derive(Debug, FromRow)]
