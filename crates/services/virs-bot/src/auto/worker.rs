@@ -1515,13 +1515,21 @@ impl AutoWorker {
             }
         };
 
+        let analysis = match d.analysis.as_deref() {
+            Some(a) => a,
+            None => {
+                tracing::warn!(bot_id = %self.bot.id, "analysis is None — skipping AI analysis update to avoid overwriting historical value");
+                return;
+            }
+        };
+
         if let Err(e) = self
             .store
             .update_ai_analysis(
                 self.bot.id,
                 regime,
                 self.bot.leverage,
-                d.analysis.as_deref().unwrap_or(""),
+                analysis,
             )
             .await
         {

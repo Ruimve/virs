@@ -206,35 +206,42 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         let current_price = self.fetch_current_price(exchange, symbol, &klines_1h).await;
 
         let exchange_key = format!("{}:perpetual", exchange);
-        let funding_rate = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
-            ex.get_funding_rate(symbol)
-                .await
-                .map(|fr| fr.rate)
-                .map_err(|e| {
-                    warn!(
-                        exchange = %exchange,
-                        symbol = %symbol,
-                        error = %e,
-                        "Funding rate fetch failed"
-                    );
-                    VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
-                        "Funding rate fetch failed for {} on {}: {}",
-                        symbol, exchange, e
-                    )))
-                })?
-        } else {
-            return Err(VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
-                "No exchange found for funding rate: {}",
-                exchange
-            ))));
-        };
+        let (funding_rate, funding_next_time) =
+            if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+                match ex.get_funding_rate(symbol).await {
+                    Ok(fr) => {
+                        let next = fr
+                            .next_funding_time
+                            .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                            .unwrap_or_else(|| "N/A".to_string());
+                        (fr.rate, next)
+                    }
+                    Err(e) => {
+                        warn!(
+                            exchange = %exchange,
+                            symbol = %symbol,
+                            error = %e,
+                            "Funding rate fetch failed"
+                        );
+                        return Err(VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                            "Funding rate fetch failed for {} on {}: {}",
+                            symbol, exchange, e
+                        ))));
+                    }
+                }
+            } else {
+                return Err(VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
+                    "No exchange found for funding rate: {}",
+                    exchange
+                ))));
+            };
 
         let ind = virs_strategy::market::compute_market_indicators(
             &klines_1h,
             &klines_4h,
             &klines_15m,
             funding_rate,
-            "N/A".to_string(),
+            funding_next_time.clone(),
         )?;
 
         let effective_price = if current_price > 0.0 {
@@ -261,9 +268,10 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         Ok(MarketSnapshot {
             current_price: effective_price,
             funding_rate,
-            funding_next_time: "N/A".to_string(),
+            funding_next_time,
             min_qty,
-            indicators_json: serde_json::to_value(&ind).unwrap_or_default(),
+            indicators_json: serde_json::to_value(&ind)
+                .map_err(|e| VirsError::config(format!("Failed to serialize indicators: {}", e)))?,
         })
     }
 
@@ -527,7 +535,8 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             funding_rate,
             funding_next_time,
             min_qty,
-            indicators_json: serde_json::to_value(&ind).unwrap_or_default(),
+            indicators_json: serde_json::to_value(&ind)
+                .map_err(|e| VirsError::config(format!("Failed to serialize indicators: {}", e)))?,
         })
     }
 

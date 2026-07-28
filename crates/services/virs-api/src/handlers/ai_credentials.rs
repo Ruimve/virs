@@ -84,17 +84,17 @@ pub async fn save_credential(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let provider = body["provider"].as_str().unwrap_or("");
+    let provider = body["provider"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("provider is required"))?;
     let label = body["label"].as_str().unwrap_or("");
-    let api_key = body["api_key"].as_str().unwrap_or("");
-    let model = body["model"].as_str().unwrap_or("");
+    let api_key = body["api_key"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| VirsError::bad_request("api_key is required"))?;
+    let model = body["model"].as_str();
     let is_default = body["is_default"].as_bool().unwrap_or(false);
-
-    if provider.is_empty() || api_key.is_empty() {
-        return Err(VirsError::bad_request(
-            "provider and api_key are required",
-        ));
-    }
 
     let id = uuid::Uuid::new_v4();
 
@@ -112,7 +112,7 @@ pub async fn save_credential(
     .bind(user_id)
     .bind(provider)
     .bind(&encrypted_key)
-    .bind(if model.is_empty() { None as Option<&str> } else { Some(model) })
+    .bind(model)
     .bind(label)
     .bind(is_default)
     .execute(&state.db_pool)
@@ -178,7 +178,8 @@ pub async fn test_credential(
         }
     };
 
-    let model = resolve_provider_model(&provider).unwrap_or("deepseek-chat");
+    let model = resolve_provider_model(&provider)
+        .expect("provider validated by resolve_provider_base_url above; get_provider_config shared");
 
     let http_client = &state.http_client;
     match virs_strategy::llm_client::call_llm_api(
