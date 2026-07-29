@@ -9,13 +9,6 @@ fn g1_meta_system_prompt_contains_json_constraint() {
 }
 
 #[test]
-fn g2_meta_system_prompt_grid_contains_grid_actions() {
-    let s = build_meta_system_prompt(StrategyType::Grid);
-    assert!(s.contains("adjust_grid"));
-    assert!(s.contains("pause_grid"));
-}
-
-#[test]
 fn g3_meta_user_prompt_contains_intent() {
     let req = GenerateRequest {
         strategy_type: StrategyType::Auto,

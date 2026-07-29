@@ -3,7 +3,7 @@
 //! [`RenderContext`] 封装渲染 prompt 所需的全部输入数据（账户、持仓、统计、指标等），
 //! [`render`] 将模板中的 `{placeholder}` 占位符替换为 context 的实际值。
 //!
-//! 任何 bot（auto / grid / 未来扩展）都使用同一个渲染器，各自构建 context。
+//! 任何 bot 都使用同一个渲染器，各自构建 context。
 //! 模板中未出现的占位符 replace 是 no-op，无副作用。
 
 use crate::market::MarketIndicators;
@@ -64,14 +64,6 @@ pub struct RenderContext {
     pub loss_trades: i32,
     /// 累计盈亏（USDT）
     pub total_pnl: f64,
-
-    // ── 网格状态 ──
-    /// 网格运行状态（"running" / "paused" / "empty" / "none"）
-    pub grid_status: String,
-    /// 上次调整时间
-    pub last_adjust_time: String,
-    /// 当前网格配置（人类可读字符串）
-    pub current_grid_config: String,
 
     // ── 事件标记 ──
     /// 是否有重大事件
@@ -142,10 +134,6 @@ pub fn render(template: &str, ctx: &RenderContext) -> String {
         .replace("{win_trades}", &ctx.win_trades.to_string())
         .replace("{loss_trades}", &ctx.loss_trades.to_string())
         .replace("{total_pnl}", &format!("{:.2}", ctx.total_pnl))
-        // ── 网格状态 ──
-        .replace("{grid_status}", &ctx.grid_status)
-        .replace("{last_adjust_time}", &ctx.last_adjust_time)
-        .replace("{current_grid_config}", &ctx.current_grid_config)
         // ── 事件标记 ──
         .replace("{event_flag}", if ctx.event_flag { "true" } else { "false" })
         .replace("{event_description}", &ctx.event_description)

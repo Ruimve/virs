@@ -12,11 +12,10 @@ interface Props {
   logs: AnalysisLog[];
   loading: boolean;
   onLoadMore?: () => void;
-  botType: 'auto' | 'grid';
   botId: string;
 }
 
-const LogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
+const LogList = ({ logs, loading, onLoadMore, botId }: Props) => {
   const navigate = useNavigate();
 
   const getDecision = (log: AnalysisLog) => {
@@ -41,7 +40,7 @@ const LogList = ({ logs, loading, onLoadMore, botType, botId }: Props) => {
         return (
           <div
             key={log.id}
-            onClick={() => navigate(`/trade/${botType}/${botId}/log/${log.id}`)}
+            onClick={() => navigate(`/trade/auto/${botId}/log/${log.id}`)}
             className="bg-surface-1 rounded-xl border border-line-default shadow-sm overflow-hidden cursor-pointer hover:bg-surface-2/50 transition-colors"
           >
             <div className="flex items-center justify-between px-4 py-3">

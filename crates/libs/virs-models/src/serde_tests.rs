@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use virs_types::enums::*;
 
-use crate::{AutoBot, GridBot, Order};
+use crate::{AutoBot, Order};
 
 #[test]
 fn s1_1_order_roundtrip() {
@@ -28,51 +28,6 @@ fn s1_1_order_roundtrip() {
     let json = serde_json::to_string(&order).unwrap();
     let de: Order = serde_json::from_str(&json).unwrap();
     assert_eq!(de, order);
-}
-
-#[test]
-fn s3_1_grid_bot_roundtrip() {
-    let now = Utc::now();
-    let bot = GridBot {
-        id: Uuid::nil(),
-        user_id: Uuid::nil(),
-        name: "grid_bot".into(),
-        symbol: "BTC/USDT".into(),
-        exchange: "binance".into(),
-        paper_mode: true,
-        status: StrategyStatus::Running,
-        upper_price: 50000.0,
-        lower_price: 40000.0,
-        grid_count: 10,
-        grid_profit_pct: 0.5,
-        quantity_per_grid: 0.01,
-        leverage: 10,
-        initial_capital: 10000.0,
-        market_regime: None,
-        ai_analysis: None,
-        grid_levels_json: None,
-        system_prompt: None,
-        user_prompt: None,
-        dynamic_adjust: false,
-        adjust_interval_secs: 3600,
-        last_adjusted_at: None,
-        strategy_file: None,
-        total_pnl: 500.0,
-        unrealized_pnl: 100.0,
-        total_trades: 20,
-        grid_filled_count: 5,
-        created_at: now,
-        updated_at: now,
-        started_at: Some(now),
-        stopped_at: None,
-    };
-    let json = serde_json::to_string(&bot).unwrap();
-    let de: GridBot = serde_json::from_str(&json).unwrap();
-    assert_eq!(de.id, bot.id);
-    assert_eq!(de.upper_price, bot.upper_price);
-    assert_eq!(de.grid_count, bot.grid_count);
-    assert_eq!(de.status, bot.status);
-    assert_eq!(de.total_pnl, bot.total_pnl);
 }
 
 #[test]

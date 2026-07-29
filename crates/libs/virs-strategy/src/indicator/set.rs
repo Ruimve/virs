@@ -79,16 +79,6 @@ impl IndicatorSet {
             _ => None,
         }
     }
-
-    /// 已计算的指标数量。
-    pub fn len(&self) -> usize {
-        self.values.len()
-    }
-
-    /// 是否为空。
-    pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
-    }
 }
 
 fn klines_for_tf<'a>(tf: Timeframe, klines: &KlineSet<'a>) -> &'a [Kline] {

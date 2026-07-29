@@ -56,11 +56,7 @@ function scheduleReconnect<T>(
   inst.reconnectTimer = setTimeout(() => connectWs(inst, getUrl, parse), delay);
 }
 
-export function connectWs<T>(
-  inst: WsInstance<T>,
-  getUrl: () => string,
-  parse: (raw: string) => T | null,
-) {
+function connectWs<T>(inst: WsInstance<T>, getUrl: () => string, parse: (raw: string) => T | null) {
   // 已有可用连接则跳过
   if (inst.ws && inst.ws.readyState < WebSocket.CLOSING) return;
 

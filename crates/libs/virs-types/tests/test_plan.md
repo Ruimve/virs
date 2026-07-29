@@ -2,45 +2,48 @@
 
 > 生成日期: 2026-07-01
 > Crate: `crates/libs/virs-types`
-> 状态: **34 个测试全部通过** (27 单元 + 7 集成)
+> 状态: **34 个测试全部通过** (32 单元 + 2 集成)
 
 ---
 
 ## 单元测试用例
 
-### enums_tests.rs — 枚举方法 (3)
+### enums_tests.rs — 枚举方法 (2)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
-| E7.1 | `e7_1_filled_is_filled` | OrderStatus::Filled → true, Open → false |
 | E11.1 | `e11_1_open_is_open` | PositionStatus::Open → true, Closed → false |
 | E14.1 | `e14_1_running_is_running` | EngineState::Running → true, Stopped → false |
 
-### market_tests.rs — 市场类型方法 (5)
+### market_tests.rs — 市场类型方法 (2)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
 | M1.1 | `m1_1_normal_total` | free=100, used=50 → total=150 |
 | M1.2 | `m1_2_zero_total` | free=0, used=0 → total=0 |
-| M10.1 | `m10_1_long_profit` | Long, entry=50000, current=51000 → +1000 |
-| M10.2 | `m10_2_short_profit` | Short, entry=50000, current=49000 → +1000 |
-| M10.3 | `m10_3_long_loss` | Long, entry=50000, current=49000 → -1000 |
 
-### auto_port_tests.rs — (deleted, AutoMarketType removed)
-
-### position_tests.rs — Position/RiskConfig 方法 (7)
+### position_tests.rs — Position/apply_fill 方法 (16)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
 | P1.1 | `p1_1_open_is_open` | Position(status=Open) → is_open=true |
 | P6.1 | `p6_1_long_pnl` | Long, entry=50000, current=51000 → +1000 |
 | P6.2 | `p6_2_short_pnl` | Short, entry=50000, current=49000 → +1000 |
-| P12.1 | `p12_1_default_valid` | (deleted — RiskConfig removed) |
-| P12.2 | `p12_2_zero_leverage` | (deleted — RiskConfig removed) |
-| P12.3 | `p12_3_negative_drawdown` | (deleted — RiskConfig removed) |
-| P12.4 | `p12_4_negative_position_pct` | (deleted — RiskConfig removed) |
+| P2.1 | `p2_1_open_first_fill` | 开仓首次 fill：status=Open, qty=1, entry=100, rp=0 |
+| P2.2 | `p2_2_open_add_to_existing_weighted_avg` | 加仓加权平均：(100*1+120*1)/2=110 |
+| P2.3 | `p2_3_open_zero_fill_price_does_not_update_entry` | fill_price=0 时 quantity 更新但 entry_price 不变 |
+| P2.4 | `p2_4_close_partial_entry_unchanged` | 部分平仓：entry 不变, qty 减半, rp=50 |
+| P2.5 | `p2_5_close_full_returns_closed` | 全平：status=Closed, qty=0, rp=100 |
+| P2.6 | `p2_6_close_with_zero_fill_price_still_updates` | REG-1 回归：平仓 fill_price=0 仓位仍更新 |
+| P2.7 | `p2_7_open_after_partial_close_marginal_cost` | 平仓后重开边际成本法：(100*1+120*1)/2=110 |
+| P2.8 | `p2_8_full_replay_sequence_matches_runtime` | 完整回放序列：开→平→开跨代际 rp 保留 |
+| P3.1 | `p3_1_new_for_replay_initial_state` | new_for_replay 初始状态：Opening, qty/entry/rp=0 |
+| P3.2 | `p3_2_new_for_replay_then_apply_fill_matches_runtime` | new_for_replay + apply_fill 与 runtime 一致 |
+| P4.1 | `p4_1_uuid_deterministic_same_inputs` | 相同输入生成相同 UUID |
+| P4.2 | `p4_2_uuid_differs_by_side` | 不同 side 生成不同 UUID |
+| P4.3 | `p4_3_uuid_differs_by_symbol` | 不同 symbol 生成不同 UUID |
 
-### serde_tests.rs — 序列化/反序列化 (11)
+### serde_tests.rs — 序列化/反序列化 (7)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
@@ -51,26 +54,27 @@
 | S2.1 | `s2_1_ticker_roundtrip` | Ticker serde 往返 |
 | S2.2 | `s2_2_balance_roundtrip` | Balance serde 往返 |
 | S2.3 | `s2_3_exchange_position_roundtrip` | ExchangePosition serde 往返 |
-| S2.5 | `s2_5_risk_config_default_roundtrip` | RiskConfig serde 往返 |
-| S4.1 | `s4_1_perpetual` | (deleted — AutoMarketType removed) |
-| S4.2 | `s4_2_spot` | (deleted — AutoMarketType removed) |
-| S4.3 | `s4_3_unknown_defaults_to_perpetual` | (deleted — AutoMarketType removed) |
+
+### client_order_id_tests.rs — 客户端订单 ID 生成 (5)
+
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| C1.1 | `test_auto_open_long` | format_auto_open(long) → 前缀 `AOL__`, 长度 27 |
+| C1.2 | `test_auto_open_short` | format_auto_open(short) → 前缀 `AOS__`, 长度 27 |
+| C2.1 | `test_auto_close_long` | format_auto_close(long) → 前缀 `ACL__`, 长度 27 |
+| C2.2 | `test_auto_close_short` | format_auto_close(short) → 前缀 `ACS__`, 长度 27 |
+| C3.1 | `test_uniqueness` | 同一 bot_id 生成 1000 个 ID 全部唯一 |
 
 ---
 
 ## 集成测试用例
 
-### integration_tests.rs (7)
+### integration_tests.rs (2)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
 | INT-1.1 | `int_1_1_long_position_pnl_chain` | Long Position → unrealized_pnl_at 链路 |
 | INT-1.2 | `int_1_2_short_position_pnl_chain` | Short Position → unrealized_pnl_at 链路 |
-| INT-3.1 | `int_3_1_exchange_position_pnl_chain` | ExchangePosition → unrealized_pnl_at 链路 |
-| INT-6.1 | `int_6_1_default_config_valid` | (deleted — RiskConfig removed) |
-| INT-6.2 | `int_6_2_invalid_config` | (deleted — RiskConfig removed) |
-| INT-8.1 | `int_8_1_exchange_position_serde_then_pnl` | serde 往返后 unrealized_pnl_at 一致 |
-| INT-8.3 | `int_8_3_auto_market_type_from_str` | (deleted — AutoMarketType removed) |
 
 ---
 
@@ -80,12 +84,12 @@
 
 | 测试文件 | 被测模块 | 测试数 |
 |----------|----------|--------|
-| `src/enums_tests.rs` | enums.rs (3 个存活方法) | 3 |
-| `src/market_tests.rs` | market.rs (2 个存活方法) | 5 |
-| `src/auto_port_tests.rs` | auto_port.rs (1 个存活方法) | 1 |
-| `src/position_tests.rs` | position.rs (2 个存活方法 + RiskConfig) | 7 |
-| `src/serde_tests.rs` | 全部结构体 serde | 11 |
-| `tests/integration_tests.rs` | 跨模块计算链 + serde 联合 | 7 |
+| `src/enums_tests.rs` | enums.rs | 2 |
+| `src/market_tests.rs` | market.rs | 2 |
+| `src/position_tests.rs` | position.rs | 16 |
+| `src/serde_tests.rs` | 全部结构体 serde | 7 |
+| `src/client_order_id_tests.rs` | client_order_id.rs | 5 |
+| `tests/integration_tests.rs` | 跨模块计算链 + serde 联合 | 2 |
 | **合计** | | **34** |
 
 ### 死代码清理记录
@@ -126,7 +130,7 @@
 
 ### 存活方法验证
 
-以下 11 个方法有外部 crate 非测试代码调用，予以保留：
+以下方法有外部 crate 非测试代码调用，予以保留：
 
 | 方法 | 业务调用位置 |
 |------|-------------|
@@ -138,4 +142,4 @@
 | `Position::is_open` | `virs-bot/src/auto/worker.rs`, `virs-position/src/engine.rs` |
 | `Position::unrealized_pnl_at` | `virs-bot/src/auto/strategy.rs` |
 | `RiskConfig::validate` | `virs-position/src/risk.rs` |
-| `OrderSide::as_str` | `virs-bot/src/grid/worker.rs` |
+| `OrderSide::as_str` | `virs-bot/src/auto/worker.rs` |

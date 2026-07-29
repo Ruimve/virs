@@ -1,4 +1,4 @@
-import { api, setToken, removeToken } from './client';
+import { api, setToken } from './client';
 import type { ApiResponse, LoginResponse, UserInfo } from './types';
 
 export async function login(
@@ -10,11 +10,6 @@ export async function login(
     setToken(result.data.token);
   }
   return result;
-}
-
-export function logout(): void {
-  removeToken();
-  window.dispatchEvent(new CustomEvent('auth:unauthorized'));
 }
 
 export function getUserInfo(): Promise<ApiResponse<UserInfo>> {

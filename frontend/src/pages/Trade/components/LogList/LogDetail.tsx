@@ -167,29 +167,12 @@ const LogDetail = ({ log, loading }: Props) => {
           )}
 
           {}
-          {log.result?.grid && (log.result.grid.upper_price || log.result.grid.lower_price) && (
-            <Card>
-              <Title className="mb-2">网格参数</Title>
-              <div className="flex flex-wrap gap-3 text-xs text-on-surface-secondary">
-                {log.result.grid.upper_price && <span>上界 {log.result.grid.upper_price}</span>}
-                {log.result.grid.lower_price && <span>下界 {log.result.grid.lower_price}</span>}
-                {log.result.grid.grid_count && <span>层数 {log.result.grid.grid_count}</span>}
-                {log.result.grid.grid_profit_pct && (
-                  <span>利润率 {log.result.grid.grid_profit_pct}%</span>
-                )}
-              </div>
-            </Card>
-          )}
 
-          {}
-          {log.result?.risk && (log.result.risk.leverage || log.result.risk.quantity_per_grid) && (
+          {log.result?.risk && log.result.risk.leverage && (
             <Card>
               <Title className="mb-2">风控参数</Title>
               <div className="flex flex-wrap gap-3 text-xs text-on-surface-secondary">
                 {log.result.risk.leverage && <span>杠杆 {log.result.risk.leverage}x</span>}
-                {log.result.risk.quantity_per_grid && (
-                  <span>每格 {log.result.risk.quantity_per_grid} USDT</span>
-                )}
               </div>
             </Card>
           )}

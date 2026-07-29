@@ -24,7 +24,7 @@ use crate::state::AppState;
 /// 请求体：
 /// ```json
 /// {
-///   "strategy_type": "auto" | "grid",
+///   "strategy_type": "auto",
 ///   "user_intent": "做一个趋势跟随策略，4h定方向，1h入场",
 ///   "name_hint": "trend_following"  // 可选
 /// }
@@ -38,11 +38,10 @@ pub async fn generate(
 
     let strategy_type = body["strategy_type"]
         .as_str()
-        .ok_or_else(|| VirsError::bad_request("strategy_type is required (auto/grid)"))?;
+        .ok_or_else(|| VirsError::bad_request("strategy_type is required (auto)"))?;
     let strategy_type = match strategy_type {
         "auto" => StrategyType::Auto,
-        "grid" => StrategyType::Grid,
-        _ => return Err(VirsError::bad_request("strategy_type must be 'auto' or 'grid'")),
+        _ => return Err(VirsError::bad_request("strategy_type must be 'auto'")),
     };
 
     let user_intent = body["user_intent"]
@@ -81,11 +80,9 @@ pub async fn list(State(state): State<AppState>, headers: HeaderMap) -> Result<J
 
     let loader = state.prompt_loader.clone();
     let auto_list = loader.list(StrategyType::Auto).await;
-    let grid_list = loader.list(StrategyType::Grid).await;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "auto": auto_list,
-        "grid": grid_list,
     }))))
 }
 
@@ -156,7 +153,6 @@ pub async fn delete(
 fn parse_strategy_type(s: &str) -> Result<StrategyType, VirsError> {
     match s {
         "auto" => Ok(StrategyType::Auto),
-        "grid" => Ok(StrategyType::Grid),
-        _ => Err(VirsError::bad_request("strategy_type must be 'auto' or 'grid'")),
+        _ => Err(VirsError::bad_request("strategy_type must be 'auto'")),
     }
 }

@@ -2,7 +2,7 @@ use chrono::Utc;
 
 use crate::types::*;
 use virs_types::CcxtOrderStatus;
-use virs_types::enums::{OrderStatus, Side};
+use virs_types::enums::OrderStatus;
 use virs_types::market::{FundingRate, OrderBook, Ticker};
 
 #[test]
@@ -167,11 +167,6 @@ fn t4_1_funding_rate_normal() {
     assert_eq!(fr.symbol, "BTC/USDT");
     assert!((fr.rate - 0.0001).abs() < f64::EPSILON);
     assert_eq!(fr.next_funding_time, Some(now));
-}
-
-#[allow(dead_code)]
-fn _suppress_warning() -> Side {
-    Side::Buy
 }
 
 #[test]

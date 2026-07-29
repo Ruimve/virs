@@ -6,7 +6,6 @@ use virs_error::{BotError, BotResult};
 
 use crate::common::llm_client::LlmClient;
 use virs_types::bot::{CredentialStore, LlmProviderResolver};
-use virs_strategy::output::{StrategyAction, StrategyOutput, ToStrategyOutput};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AutoAction {
@@ -106,29 +105,6 @@ impl AutoDecision {
             analysis,
             risk_warning,
         })
-    }
-}
-
-impl ToStrategyOutput for AutoDecision {
-    fn to_output(&self, raw: serde_json::Value, bot_id: Option<Uuid>) -> StrategyOutput {
-        let action = match self.action {
-            AutoAction::OpenLong => StrategyAction::OpenLong,
-            AutoAction::OpenShort => StrategyAction::OpenShort,
-            AutoAction::ClosePosition => StrategyAction::ClosePosition,
-            AutoAction::Hold => StrategyAction::Hold,
-        };
-        StrategyOutput {
-            action,
-            reason: self.reason.clone(),
-            confidence: self.confidence,
-            market_regime: self.market_regime.clone(),
-            analysis: self.analysis.clone(),
-            risk_warning: self.risk_warning.clone(),
-            funding_rate_warning: self.funding_rate_warning.clone(),
-            event_impact: self.event_impact.clone(),
-            decision_raw: raw,
-            bot_id,
-        }
     }
 }
 

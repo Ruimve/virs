@@ -7,7 +7,6 @@ use tracing::{error, info, warn};
 
 use virs_api::EngineManager;
 use virs_bot::auto::types::AutoCommand;
-use virs_bot::grid::types::GridCommand;
 use virs_error::VirsResult;
 use virs_exchange::{Exchanges, PaperExchangeAdapter};
 use virs_market::{KlineEngine, OrderBookEngine};
@@ -22,7 +21,6 @@ use crate::adapters::*;
 
 struct EngineState {
     paper_mode: bool,
-    grid_cmd_tx: StdMutex<Option<mpsc::Sender<GridCommand>>>,
     auto_cmd_tx: StdMutex<Option<mpsc::Sender<AutoCommand>>>,
 
     pe_event_tx: StdMutex<Option<broadcast::Sender<EngineEvent>>>,
@@ -34,8 +32,6 @@ struct EngineState {
     paper_tick_handle: StdMutex<Option<tokio::task::JoinHandle<()>>>,
 
     pe_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
-
-    grid_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 
     auto_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
@@ -93,13 +89,10 @@ impl AppEngineManager {
 
     async fn restore_inner(&self) -> VirsResult<()> {
         let has_bots: bool = {
-            let grid_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_grid_bots"#)
-                .fetch_one(&self.db_pool)
-                .await?;
             let auto_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_auto_bots"#)
                 .fetch_one(&self.db_pool)
                 .await?;
-            grid_count + auto_count > 0
+            auto_count > 0
         };
 
         if !has_bots {
@@ -180,11 +173,7 @@ impl AppEngineManager {
         }
 
         let bot_symbols: Vec<(String, String)> = sqlx::query_as(
-            r#"
-            SELECT exchange, symbol FROM qd_auto_bots WHERE status = 'running'
-            UNION
-            SELECT exchange, symbol FROM qd_grid_bots WHERE status = 'running'
-            "#,
+            r#"SELECT exchange, symbol FROM qd_auto_bots WHERE status = 'running'"#,
         )
         .fetch_all(&self.db_pool)
         .await?;
@@ -215,11 +204,7 @@ impl AppEngineManager {
         }
 
         let paper_modes: Vec<bool> = sqlx::query_scalar(
-            r#"SELECT DISTINCT paper_mode FROM (
-                SELECT paper_mode FROM qd_auto_bots WHERE status = 'running'
-                UNION ALL
-                SELECT paper_mode FROM qd_grid_bots WHERE status = 'running'
-            ) AS combined"#,
+            r#"SELECT DISTINCT paper_mode FROM qd_auto_bots WHERE status = 'running'"#,
         )
         .fetch_all(&self.db_pool)
         .await?;
@@ -245,9 +230,6 @@ impl AppEngineManager {
     }
 
     async fn mark_running_bots_as_error(&self) -> VirsResult<()> {
-        sqlx::query(r#"UPDATE qd_grid_bots SET status = 'error', stopped_at = NOW() WHERE status = 'running'"#)
-            .execute(&self.db_pool)
-            .await?;
         sqlx::query(r#"UPDATE qd_auto_bots SET status = 'error', stopped_at = NOW() WHERE status = 'running'"#)
             .execute(&self.db_pool)
             .await?;
@@ -310,7 +292,6 @@ impl EngineManager for AppEngineManager {
         );
         let pe_cmd_tx = position_engine.command_sender();
         let pe_event_sender = position_engine.event_sender();
-        let grid_pe_event_rx = position_engine.subscribe_events();
         let auto_pe_event_rx = position_engine.subscribe_events();
         let pe_exchange_ref = position_engine.exchange();
 
@@ -323,60 +304,14 @@ impl EngineManager for AppEngineManager {
         });
         info!(paper_mode, "Position Engine started");
 
-        let (grid_event_tx, _grid_event_rx) = tokio::sync::broadcast::channel(256);
-
-        let grid_store = Arc::new(PgGridStore::new(self.db_pool.clone()));
-        let grid_price_provider = Arc::new(
-            ExchangePriceProvider::new(self.exchange_registry.clone())
-                .with_kline_engine(self.kline_engine.clone()),
-        );
-        let grid_market_data_provider = Arc::new(
-            ExchangeMarketDataProvider::new(self.exchange_registry.clone())
-                .with_kline_engine(self.kline_engine.clone())
-                .with_pe_exchange(pe_exchange_ref.clone()),
-        );
-        let grid_order_executor = Arc::new(PeOrderExecutor::new(
-            pe_cmd_tx.clone(),
-            grid_event_tx.clone(),
-            grid_pe_event_rx,
-            position_engine_clone.clone(),
-        ));
-        let grid_credential_store: Arc<dyn virs_types::bot::CredentialStore> =
-            Arc::new(PgCredentialStore::new(
-                self.db_pool.clone(),
-                virs_utils::crypto::derive_key(&self.llm_key),
-            ));
-        let grid_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> =
-            Arc::new(DefaultLlmResolver::new());
-        let grid_ai_service = Arc::new(virs_bot::grid::ai::GridAiService::new(
-            grid_llm_resolver,
-            grid_credential_store,
-            std::time::Duration::from_secs(self.time_config.llm_timeout_secs),
-        ));
-
         // 复用 AppEngineManager 持有的全局 PromptLoader（启动时一次性加载）。
         let prompt_loader = self.prompt_loader.clone();
-
-        let (mut grid_engine, grid_cmd_tx, _grid_event_broadcast) = virs_bot::grid::GridEngine::new(
-            grid_store,
-            grid_ai_service,
-            grid_price_provider.clone(),
-            grid_order_executor,
-            grid_market_data_provider,
-            grid_event_tx.clone(),
-            self.time_config.clone(),
-            prompt_loader.clone(),
-        );
 
         let paper_symbols: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
 
         if paper_mode {
             let paper_bots: Vec<(String, String)> = sqlx::query_as(
-                r#"SELECT DISTINCT exchange, symbol FROM (
-                    SELECT exchange, symbol FROM qd_auto_bots WHERE status = 'running'
-                    UNION ALL
-                    SELECT exchange, symbol FROM qd_grid_bots WHERE status = 'running'
-                ) AS combined"#,
+                r#"SELECT DISTINCT exchange, symbol FROM qd_auto_bots WHERE status = 'running'"#,
             )
             .fetch_all(&self.db_pool)
             .await?;
@@ -388,8 +323,13 @@ impl EngineManager for AppEngineManager {
             }
         }
 
+        let auto_price_provider = Arc::new(
+            AutoExchangePriceProvider::new(self.exchange_registry.clone())
+                .with_kline_engine(self.kline_engine.clone()),
+        );
+
         let paper_tick_handle: Option<tokio::task::JoinHandle<()>> = if paper_mode {
-            let price_provider_for_paper: Arc<dyn PriceProvider> = grid_price_provider.clone();
+            let price_provider_for_paper: Arc<dyn PriceProvider> = auto_price_provider.clone();
             let kline_engine_for_paper = self.kline_engine.clone();
             let pe_cmd_tx_for_tick = pe_cmd_tx.clone();
             let paper_symbols_for_tick = paper_symbols.clone();
@@ -425,16 +365,7 @@ impl EngineManager for AppEngineManager {
             None
         };
 
-        let grid_handle = tokio::spawn(async move {
-            grid_engine.run().await;
-        });
-        info!("Grid engine started");
-
         let auto_store = Arc::new(PgAutoStore::new(self.db_pool.clone()));
-        let auto_price_provider = Arc::new(
-            AutoExchangePriceProvider::new(self.exchange_registry.clone())
-                .with_kline_engine(self.kline_engine.clone()),
-        );
         let auto_market_data_provider = Arc::new(
             AutoExchangeMarketDataProvider::new(self.exchange_registry.clone())
                 .with_kline_engine(self.kline_engine.clone())
@@ -479,26 +410,18 @@ impl EngineManager for AppEngineManager {
 
         let _ = self.state.set(EngineState {
             paper_mode,
-            grid_cmd_tx: StdMutex::new(Some(grid_cmd_tx)),
             auto_cmd_tx: StdMutex::new(Some(auto_cmd_tx)),
             pe_event_tx: StdMutex::new(Some(pe_event_sender)),
             position_engine: StdMutex::new(Some(position_engine_clone)),
             paper_symbols: paper_symbols.clone(),
             paper_tick_handle: StdMutex::new(paper_tick_handle),
             pe_handle: Mutex::new(Some(pe_handle)),
-            grid_handle: Mutex::new(Some(grid_handle)),
             auto_handle: Mutex::new(Some(auto_handle)),
         });
         self.started.store(true, Ordering::SeqCst);
 
         info!("All trading engines started successfully");
         Ok(())
-    }
-
-    fn grid_cmd_tx(&self) -> Option<mpsc::Sender<GridCommand>> {
-        self.state
-            .get()
-            .and_then(|s| s.grid_cmd_tx.lock().unwrap().clone())
     }
 
     fn auto_cmd_tx(&self) -> Option<mpsc::Sender<AutoCommand>> {
@@ -585,13 +508,11 @@ impl EngineManager for AppEngineManager {
                 handle.abort();
             }
 
-            drop(state.grid_cmd_tx.lock().unwrap().take());
             drop(state.auto_cmd_tx.lock().unwrap().take());
 
             drop(state.pe_event_tx.lock().unwrap().take());
 
             let pe_handle = state.pe_handle.lock().await.take();
-            let grid_handle = state.grid_handle.lock().await.take();
             let auto_handle = state.auto_handle.lock().await.take();
 
             let timeout = std::time::Duration::from_secs(5);
@@ -601,17 +522,12 @@ impl EngineManager for AppEngineManager {
                         let _ = h.await;
                     }
                 };
-                let grid_fut = async {
-                    if let Some(h) = grid_handle {
-                        let _ = h.await;
-                    }
-                };
                 let auto_fut = async {
                     if let Some(h) = auto_handle {
                         let _ = h.await;
                     }
                 };
-                tokio::join!(pe_fut, grid_fut, auto_fut);
+                tokio::join!(pe_fut, auto_fut);
             })
             .await;
 

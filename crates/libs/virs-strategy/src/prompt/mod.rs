@@ -1,7 +1,7 @@
 //! 策略 prompt 模板管理。
 //!
 //! 设计目标：
-//! - AI 生成 prompt 写入 `strategies/auto/{name}/` 或 `strategies/grid/{name}/` 文件夹
+//! - AI 生成 prompt 写入 `strategies/auto/{name}/` 文件夹
 //! - [`PromptLoader`] 启动时扫描 `STRATEGIES_DIR` 环境变量指向的目录，
 //!   按 `strategy_type/name/` 文件夹建立缓存
 //! - worker 的 `build_llm_prompt` 优先查 loader，缺失或未配置时回退到

@@ -4,7 +4,6 @@ pub mod ccxt_order;
 pub mod client_order_id;
 pub mod enums;
 pub mod exchange_pe;
-pub mod grid_port;
 
 // 重导出 ExchangePe trait，方便调用方直接通过 `virs_types::ExchangePe` 使用
 pub use exchange_pe::ExchangePe;

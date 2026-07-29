@@ -8,7 +8,7 @@ use virs_strategy::llm_client::{self as ai_client, LlmCallResult};
 
 /// 共享的 LLM 客户端：封装凭证加载 + provider 解析 + HTTP 调用。
 ///
-/// `AutoAiService` 和 `GridAiService` 内部各持有一个实例，
+/// `AutoAiService` 内部持有一个实例，
 /// 避免重复实现 `load_credentials → resolve → call_llm_api` 链路。
 pub struct LlmClient {
     http_client: reqwest::Client,
@@ -42,7 +42,7 @@ impl LlmClient {
 
     /// 加载用户凭证 → 解析 provider → 调用 LLM API。
     ///
-    /// `provider_name` 仅用于错误日志标识调用方（如 "auto-ai" / "grid-ai"）。
+    /// `provider_name` 仅用于错误日志标识调用方（如 "auto-ai"）。
     pub async fn call(
         &self,
         user_id: Uuid,

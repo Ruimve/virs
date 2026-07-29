@@ -1,7 +1,7 @@
 # virs-bot 测试用例文档
 
 > Crate: `crates/services/virs-bot`
-> 状态: **66 个测试全部通过** (55 单元 + 11 集成)
+> 状态: **50 个测试全部通过** (41 单元 + 9 集成)
 
 ---
 
@@ -38,7 +38,7 @@
 | S5.4 | `s5_4_cooldown_llm_decision` | llm_decision → 900s |
 | S5.5 | `s5_5_cooldown_unknown_reason` | unknown → 900s |
 
-### 1.2 ai_tests.rs — 自动交易 AI 解析 (10)
+### 1.2 ai_tests.rs — 自动交易 AI 解析 (9)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
@@ -49,54 +49,25 @@
 | A1.5 | `a1_5_action_from_str_unknown` | "unknown" → Hold |
 | A2.1 | `a2_1_action_as_str_all_variants` | 所有变体 → 正确字符串 |
 | A3.1 | `a3_1_decision_from_json_complete` | 完整 JSON → 所有字段正确 |
-| A3.2 | `a3_2_decision_from_json_missing_fields` | 缺失字段 → 默认值 |
-| A3.3 | `a3_3_decision_from_json_sl_tp_zero` | sl=0/tp=0 → None |
+| A3.2 | `a3_2_decision_from_json_missing_fields_returns_error` | 缺失字段 → 返回 error |
 | A3.4 | `a3_4_decision_from_json_confidence_clamped` | confidence=1.5 → 1.0 |
 
-### 1.3 grid_ai_tests.rs — 网格 AI 解析 (8)
+### 1.3 worker_tests.rs — 持仓时间 Instant 恢复 (6)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
-| G1.1 | `g1_1_action_from_str_adjust` | "adjust_grid" → AdjustGrid |
-| G1.2 | `g1_2_action_from_str_pause` | "pause_grid" → PauseGrid |
-| G1.3 | `g1_3_action_from_str_run` | "run_grid" → RunGrid |
-| G1.4 | `g1_4_action_from_str_reduce` | "reduce_position" → ReducePosition |
-| G1.5 | `g1_5_action_from_str_hold` | "unknown" → Hold |
-| G1.6 | `g1_6_action_as_str_all_variants` | 所有变体 → 正确字符串 |
-| G2.1 | `g2_1_parse_decision_complete` | 完整 JSON → 所有字段正确 |
-| G2.2 | `g2_2_parse_decision_defaults` | 缺失字段 → 默认值 |
-
-### 1.4 grid_utils_tests.rs — 网格层级计算 (6)
-
-| ID | 测试函数 | 描述 |
-|----|---------|------|
-| U1.1 | `u1_1_calculate_levels_basic` | 标准参数 → 正确层级数和首层价格 |
-| U1.2 | `u1_2_calculate_levels_zero_width` | upper=lower → 空列表 |
-| U1.3 | `u1_3_calculate_levels_zero_count` | grid_count=0 → 空列表 |
-| U1.4 | `u1_4_calculate_levels_side_assignment` | price<current → "buy", ≥current → "sell" |
-| U1.5 | `u1_5_calculate_levels_sell_price` | sell_price = price * (1 + profit_pct/100) |
-| U1.6 | `u1_6_calculate_levels_uses_current_price_for_qty` | quantity = qty_per_grid / current_price |
-
-### 1.5 grid_types_tests.rs — 网格类型 (2)
-
-| ID | 测试函数 | 描述 |
-|----|---------|------|
-| T1.1 | `t1_1_reset_for_relist_clears_state` | 运行时字段清零 |
-| T1.2 | `t1_2_reset_for_relist_preserves_config` | price/side/quantity 保持不变 |
-
-### 1.6 prompt_tests.rs — Prompt 格式化 (3)
-
-| ID | 测试函数 | 描述 |
-|----|---------|------|
-| P1.1 | `p1_1_format_bars_positive` | count>0 → "向上N根" |
-| P1.2 | `p1_2_format_bars_negative` | count<0 → "向下N根" |
-| P1.3 | `p1_3_format_bars_zero` | count=0 → "无" |
+| T11.1 | `t11_1_restored_instant_reflects_actual_elapsed_time` | 2h 持仓 → Instant elapsed ≈ 2h |
+| T11.2 | `t11_2_restored_instant_for_recent_open` | 5s 持仓 → Instant elapsed ≈ 5s |
+| T11.3 | `t11_3_restored_instant_near_max_position_duration` | 47h 持仓 → elapsed < 48h 上限 |
+| T11.4 | `t11_4_restored_instant_exceeds_max_position_duration` | 49h 持仓 → elapsed > 48h 上限 |
+| T11.5 | `t11_5_future_opened_at_clamped_to_zero` | 未来 opened_at → clamp 至 ~0 |
+| T11.6 | `t11_6_checked_sub_returns_none_for_extreme_duration` | 极端 duration → checked_sub None |
 
 ---
 
 ## 2. 集成测试用例
 
-### integration_tests.rs (11)
+### integration_tests.rs (8)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
@@ -105,12 +76,15 @@
 | INT-1.3 | `int_1_3_position_pct_full_chain` | ADX + losses + funding 级联衰减 |
 | INT-2.1 | `int_2_1_auto_action_roundtrip` | from_str → as_str 一致性 |
 | INT-2.2 | `int_2_2_auto_decision_json_roundtrip` | JSON → AutoDecision → 字段验证 |
-| INT-3.1 | `int_3_1_grid_action_roundtrip` | from_str → as_str 一致性 |
-| INT-3.2 | `int_3_2_grid_decision_parse_chain` | JSON → parse → calculate_levels 链路 |
-| INT-4.1 | `int_4_1_calculate_levels_then_reset` | calculate_levels → reset_for_relist 链路 |
 | INT-4.2 | `int_4_2_format_stop_take_with_position_pct` | 风控链路: position_pct → format_stop_take |
 | INT-5.1 | `int_5_1_cooldown_then_position_pct` | 冷却计算 → 仓位百分比链路 |
 | INT-6.1 | `int_6_1_format_bars_outside_all_cases` | format_bars_outside 三种情况 |
+
+### strategy_seed_files.rs (1)
+
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| SEED-1 | `seed_auto_default_loads_and_validates` | seed 文件加载并通过校验 (`#[tokio::test]`) |
 
 ---
 
@@ -119,10 +93,8 @@
 | 测试文件 | 被测模块 | 测试数 |
 |----------|----------|--------|
 | `src/auto/strategy_tests.rs` | auto/strategy.rs | 26 |
-| `src/auto/ai_tests.rs` | auto/ai.rs | 10 |
-| `src/grid/ai_tests.rs` | grid/ai.rs | 8 |
-| `src/grid/utils_tests.rs` | grid/utils/mod.rs | 6 |
-| `src/grid/types_tests.rs` | grid/types.rs | 2 |
-| `src/grid/utils/prompt_tests.rs` | grid/utils/prompt.rs | 3 |
-| `tests/integration_tests.rs` | 跨模块链路 | 11 |
-| **合计** | | **66** |
+| `src/auto/ai_tests.rs` | auto/ai.rs | 9 |
+| `src/auto/worker_tests.rs` | auto/worker.rs | 6 |
+| `tests/integration_tests.rs` | 跨模块链路 | 8 |
+| `tests/strategy_seed_files.rs` | strategies seed 文件加载 | 1 |
+| **合计** | | **50** |

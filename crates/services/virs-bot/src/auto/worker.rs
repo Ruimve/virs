@@ -176,19 +176,6 @@ impl AutoWorker {
         self.is_pending_side(PositionSide::Long) || self.is_pending_side(PositionSide::Short)
     }
 
-    /// 返回当前持仓方向字符串："long" / "short" / "long+short" / "none"
-    #[allow(dead_code)]
-    pub(crate) fn current_sides_str(&self) -> String {
-        let has_long = self.has_position_side(PositionSide::Long);
-        let has_short = self.has_position_side(PositionSide::Short);
-        match (has_long, has_short) {
-            (true, true) => "long+short".to_string(),
-            (true, false) => "long".to_string(),
-            (false, true) => "short".to_string(),
-            (false, false) => "none".to_string(),
-        }
-    }
-
     pub(crate) fn cooldown_remaining_secs(&self, new_side: &str) -> Option<i64> {
         let last_event = match new_side {
             "long" => self.last_close_event_long.as_ref(),
@@ -1193,9 +1180,6 @@ impl AutoWorker {
             min_qty: snapshot.base.min_qty,
             ind: snapshot.indicators,
             // Auto bot 不使用以下字段，填默认值
-            grid_status: String::new(),
-            last_adjust_time: String::new(),
-            current_grid_config: String::new(),
             event_flag: false,
             event_description: String::new(),
         };

@@ -216,37 +216,6 @@ pre,
     'lnum' 1;
 }
 
-/* ===== 淡入动画 ===== */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.4s ease-out both;
-}
-
-.animate-fade-in-up {
-  animation: fadeInUp 0.5s ease-out both;
-}
-
 /* ===== 滚动条美化 ===== */
 ::-webkit-scrollbar {
   width: 6px;
@@ -303,67 +272,6 @@ tbody tr:hover {
   color: var(--text-on-base);
 }
 
-/* ===== Loading 页面动画 ===== */
-@keyframes pulse-ring {
-  0%,
-  100% {
-    opacity: 0.3;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.1;
-    transform: scale(1.1);
-  }
-}
-
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.2;
-  }
-  50% {
-    transform: translateY(-20px);
-    opacity: 0.5;
-  }
-}
-
-@keyframes float-delayed {
-  0%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.15;
-  }
-  50% {
-    transform: translateY(-15px);
-    opacity: 0.4;
-  }
-}
-
-.animate-float {
-  animation: float 4s ease-in-out infinite;
-}
-
-.animate-float-delayed {
-  animation: float-delayed 5s ease-in-out 1s infinite;
-}
-
-/* ===== Slide-in notification ===== */
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.animate-slide-in {
-  animation: slideIn 0.3s ease-out both;
-}
-
 .animate-drawer-in {
   animation: drawerSlideIn 0.25s ease-out both;
 }
@@ -413,16 +321,6 @@ tbody tr:hover {
   }
 }
 
-@keyframes virs-shimmer {
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-}
-
 /* ===== Terminal Luxe — additional animations ===== */
 @keyframes subtle-pulse {
   0%,
@@ -431,16 +329,6 @@ tbody tr:hover {
   }
   50% {
     opacity: 0.5;
-  }
-}
-
-@keyframes glow-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(124, 106, 239, 0);
-  }
-  50% {
-    box-shadow: 0 0 12px 2px rgba(124, 106, 239, 0.15);
   }
 }
 
@@ -454,38 +342,6 @@ tbody tr:hover {
   }
 }
 
-@keyframes gradient-shift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-@keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 @keyframes error-enter {
   from {
     opacity: 0;
@@ -494,17 +350,6 @@ tbody tr:hover {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes error-exit {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-4px);
   }
 }
 
@@ -524,17 +369,8 @@ tbody tr:hover {
   animation: subtle-pulse 2s ease-in-out infinite;
 }
 
-.animate-glow-pulse {
-  animation: glow-pulse 3s ease-in-out infinite;
-}
-
 .animate-border-pulse {
   animation: border-pulse 2s ease-in-out infinite;
-}
-
-.animate-gradient-shift {
-  background-size: 200% 200%;
-  animation: gradient-shift 8s ease infinite;
 }
 
 .animate-error-enter {
@@ -547,23 +383,4 @@ tbody tr:hover {
     linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
   background-size: 48px 48px;
-}
-
-/* ===== Component Layer — shared utility classes ===== */
-@layer components {
-  .section-title {
-    @apply text-caption uppercase tracking-wider text-on-surface-tertiary font-medium;
-  }
-
-  .data-value {
-    @apply text-sm font-mono tabular-nums;
-  }
-
-  .hero-value {
-    @apply text-xl font-mono font-semibold tabular-nums text-on-surface;
-  }
-
-  .mono-label {
-    @apply text-caption font-mono tabular-nums;
-  }
 }

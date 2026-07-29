@@ -13,9 +13,9 @@ use std::collections::HashSet;
 
 use virs_error::BotError;
 
-use crate::prompt::template::{PromptSource, PromptTemplate, StrategyType};
+use crate::prompt::template::PromptTemplate;
 
-/// 占位符白名单。覆盖 auto + grid 两个默认 prompt 中出现的全部占位符。
+/// 占位符白名单。覆盖 auto 默认 prompt 中出现的全部占位符。
 ///
 /// 新增占位符必须在此注册，否则校验失败。
 pub const KNOWN_PLACEHOLDERS: &[&str] = &[
@@ -47,7 +47,7 @@ pub const KNOWN_PLACEHOLDERS: &[&str] = &[
     "h1_current_price",
     "h1_volume",
     "h1_volume_sma20",
-    // ── Auto grid 共享的指标占位符 ──
+    // ── Auto 指标占位符 ──
     "h4_ema20",
     "h4_ema50",
     "h4_rsi",
@@ -87,10 +87,6 @@ pub const KNOWN_PLACEHOLDERS: &[&str] = &[
     "m15_volume_sma20",
     "m15_high_50",
     "m15_low_50",
-    // ── Grid 专属 ──
-    "grid_status",
-    "last_adjust_time",
-    "current_grid_config",
     "h1_atr_sma20",
     "h1_candle_body",
     "h1_bars_outside_band",
@@ -118,7 +114,7 @@ pub fn validate(tpl: &PromptTemplate) -> Result<(), BotError> {
             "user_prompt_template 不能为空".to_string(),
         ));
     }
-    // system_prompt 必须约束 LLM 的输出格式（auto/grid 默认 prompt 均含 "JSON" 字样）
+    // system_prompt 必须约束 LLM 的输出格式（auto 默认 prompt 含 "JSON" 字样）
     if !tpl.system_prompt.contains("JSON") && !tpl.system_prompt.contains("json") {
         return Err(BotError::Validation(
             "system_prompt 必须包含 JSON 输出格式约束（未找到 'JSON' 字样）".to_string(),
@@ -215,17 +211,4 @@ fn is_valid_placeholder(s: &str) -> bool {
         return false;
     }
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
-/// 判断是否为 AI 生成模板。
-pub fn is_ai_generated(tpl: &PromptTemplate) -> bool {
-    matches!(tpl.source, PromptSource::AiGenerated { .. })
-}
-
-/// 按策略类型返回该类型允许的占位符白名单子集。
-///
-/// 当前实现：auto 与 grid 共享同一白名单（指标占位符通用）。
-/// 若未来需要严格隔离，可在此按 `strategy_type` 过滤。
-pub fn allowed_placeholders(_strategy_type: StrategyType) -> &'static [&'static str] {
-    KNOWN_PLACEHOLDERS
 }

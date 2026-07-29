@@ -1,53 +1,15 @@
 use chrono::Utc;
 use uuid::Uuid;
 use virs_app::adapters::auto_store::bot_to_config as auto_bot_to_config;
-use virs_app::adapters::grid_store::bot_to_config as grid_bot_to_config;
 use virs_app::adapters::llm_resolver::resolve_llm_provider;
 use virs_app::adapters::market_data::candle_to_kline;
 use virs_app::adapters::order_executor::convert_pe_event;
 use virs_ccxt::ws_types::Candle;
 use virs_models::AutoBot;
-use virs_models::GridBot;
 use virs_types::bot::OrderEvent;
-use virs_types::enums::{OrderType, PositionSide, Side, StrategyStatus, TradeType};
+use virs_types::enums::{OrderType, PositionSide, Side, TradeType};
 use virs_types::position::{EngineEvent, Trade};
 use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType};
-
-fn make_grid_bot() -> GridBot {
-    GridBot {
-        id: Uuid::new_v4(),
-        user_id: Uuid::new_v4(),
-        name: "grid-int".to_string(),
-        symbol: "BTC/USDT".to_string(),
-        exchange: "binance".to_string(),
-        paper_mode: false,
-        status: StrategyStatus::Running,
-        upper_price: 120.0,
-        lower_price: 80.0,
-        grid_count: 20,
-        grid_profit_pct: 0.8,
-        quantity_per_grid: 50.0,
-        leverage: 5,
-        initial_capital: 20000.0,
-        market_regime: Some("trending".to_string()),
-        ai_analysis: Some("bullish".to_string()),
-        grid_levels_json: Some(serde_json::json!([{"price": 100}])),
-        system_prompt: Some("system".to_string()),
-        user_prompt: Some("user".to_string()),
-        dynamic_adjust: true,
-        adjust_interval_secs: 600,
-        last_adjusted_at: Some(Utc::now()),
-        strategy_file: None,
-        total_pnl: 500.0,
-        unrealized_pnl: 100.0,
-        total_trades: 30,
-        grid_filled_count: 15,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-        started_at: Some(Utc::now()),
-        stopped_at: None,
-    }
-}
 
 fn make_auto_bot() -> AutoBot {
     AutoBot {
@@ -158,26 +120,6 @@ fn make_trade() -> Trade {
         trade_type: TradeType::Open,
         created_at: Utc::now(),
     }
-}
-
-#[test]
-fn int_1_1_grid_bot_to_config_then_compare() {
-    let bot = make_grid_bot();
-    let config = grid_bot_to_config(&bot);
-    assert_eq!(config.id, bot.id);
-    assert_eq!(config.name, bot.name);
-    assert_eq!(config.symbol, bot.symbol);
-    assert_eq!(config.exchange, bot.exchange);
-    assert_eq!(config.upper_price, bot.upper_price);
-    assert_eq!(config.lower_price, bot.lower_price);
-    assert_eq!(config.grid_count, bot.grid_count);
-    assert_eq!(config.leverage, bot.leverage);
-    assert_eq!(config.market_regime, bot.market_regime);
-    assert_eq!(config.grid_levels_json, bot.grid_levels_json);
-    assert_eq!(config.system_prompt, bot.system_prompt);
-    assert_eq!(config.dynamic_adjust, bot.dynamic_adjust);
-    assert_eq!(config.adjust_interval_secs, bot.adjust_interval_secs);
-    assert_eq!(config.last_adjusted_at, bot.last_adjusted_at);
 }
 
 #[test]
@@ -315,23 +257,6 @@ fn int_4_2_convert_event_canceled_failed() {
         }
         _ => panic!("Expected OrderFailed"),
     }
-}
-
-#[test]
-fn int_6_1_grid_auto_bot_to_config_consistency() {
-    let grid_bot = make_grid_bot();
-    let auto_bot = make_auto_bot();
-
-    let grid_config = grid_bot_to_config(&grid_bot);
-    let auto_config = auto_bot_to_config(&auto_bot);
-
-    assert_eq!(grid_config.name, "grid-int");
-    assert_eq!(auto_config.name, "auto-int");
-    assert_ne!(grid_config.symbol, auto_config.symbol);
-
-    assert_eq!(grid_config.id, grid_bot.id);
-    assert_eq!(auto_config.id, auto_bot.id);
-    assert_ne!(grid_config.id, auto_config.id);
 }
 
 #[test]

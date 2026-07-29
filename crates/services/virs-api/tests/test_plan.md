@@ -1,7 +1,7 @@
 # virs-api 测试用例文档
 
 > Crate: `crates/services/virs-api`
-> 状态: **36 个测试全部通过** (28 单元 + 8 集成)
+> 状态: **40 个测试全部通过** (32 单元 + 8 集成)
 
 ---
 
@@ -52,8 +52,17 @@
 | R1.1 | `r1_1_ok_success_true` | ok() → success=true |
 | R1.2 | `r1_2_ok_data_preserved` | ok(data) → data 一致 |
 | R1.3 | `r1_3_ok_message_none` | ok() → message=None |
-| R2.1 | `r2_1_err_success_false` | err() → success=false |
+| R2.1 | `r2_1_err_success_false` | ApiError::from(VirsError) → success=false |
 | R2.2 | `r2_2_err_message_set` | err("msg") → message=Some("msg") |
+
+### 1.5 utils_tests.rs — format_duration 时长格式化 (4)
+
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| T13.1 | `t13_1_format_duration_zero_or_negative` | 0/负值 → "-" |
+| T13.2 | `t13_2_format_duration_seconds` | <60s → "Ns" |
+| T13.3 | `t13_3_format_duration_minutes` | <60m → "NmMs" |
+| T13.4 | `t13_4_format_duration_hours` | ≥1h → "NhMm" |
 
 ---
 
@@ -68,7 +77,7 @@
 | INT-2.1 | `int_2_1_position_serde_then_ws_json` | Position → position_to_ws_json → 序列化验证 |
 | INT-2.2 | `int_2_2_kline_event_to_json_chain` | KlineEvent (H1/Closed) → kline_event_to_json → 字段验证 |
 | INT-3.1 | `int_3_1_api_response_ok_then_serialize` | ApiResponse::ok → serde_json → success=true |
-| INT-3.2 | `int_3_2_api_response_err_then_serialize` | ApiResponse::err → serde_json → success=false |
+| INT-3.2 | `int_3_2_api_error_from_virs_error_then_serialize` | ApiError::from(VirsError) → serde_json → success=false |
 | INT-4.1 | `int_4_1_models_response_parse_chain` | /models JSON → parse_models_response → ApiResponse 包装 |
 | INT-4.2 | `int_4_2_balance_response_parse_chain` | balance JSON → parse_balance_response → ApiResponse 包装 |
 
@@ -84,5 +93,6 @@
 | `src/handlers/ai_credentials_tests.rs` | handlers/ai_credentials.rs | 6 |
 | `src/ws_tests.rs` | ws.rs | 9 |
 | `src/handlers/response_tests.rs` | handlers/response.rs | 5 |
+| `src/handlers/utils_tests.rs` | handlers/utils.rs | 4 |
 | `tests/integration_tests.rs` | 跨模块链路 | 8 |
-| **合计** | | **36** |
+| **合计** | | **40** |

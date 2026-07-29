@@ -110,20 +110,6 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::ai_credentials::fetch_balance),
         )
 
-        .route("/api/grid/create", post(handlers::grid::create_bot))
-        .route("/api/grid/list", get(handlers::grid::list_bots))
-        .route(
-            "/api/grid/{id}/analysis-logs",
-            get(handlers::grid::get_analysis_logs),
-        )
-        .route("/api/grid/{id}", get(handlers::grid::get_bot))
-        .route("/api/grid/{id}", put(handlers::grid::update_bot))
-        .route("/api/grid/{id}/start", post(handlers::grid::start_bot))
-        .route("/api/grid/{id}/stop", post(handlers::grid::stop_bot))
-        .route("/api/grid/{id}/delete", delete(handlers::grid::delete_bot))
-        .route("/api/grid/{id}/trades", get(handlers::grid::get_trades))
-        .route("/api/grid/{id}/stats", get(handlers::grid::get_stats))
-
         .route("/api/auto/create", post(handlers::auto_trade::create_bot))
         .route("/api/auto/list", get(handlers::auto_trade::list_bots))
         .route(

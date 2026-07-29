@@ -2,13 +2,13 @@
 
 > 生成日期: 2026-06-30
 > Crate: `crates/libs/virs-ccxt`
-> 状态: **163 个测试全部通过** (144 单元 + 19 集成)
+> 状态: **158 个测试全部通过** (140 单元 + 18 集成)
 
 ---
 
 ## 单元测试用例
 
-### lib_tests.rs — lib.rs 工具函数 (28)
+### lib_tests.rs — lib.rs 工具函数 (32)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
@@ -40,6 +40,10 @@
 | L7.5 | `l7_5_extract_error_message_field` | message 字段 |
 | L7.6 | `l7_6_extract_error_detail_field` | detail 字段 |
 | L7.7 | `l7_7_extract_error_no_matching_field` | 无匹配 → JSON 字符串 |
+| L8.1 | `l8_1_parse_timestamp_ms_from_i64` | i64 字段 → DateTime |
+| L8.2 | `l8_2_parse_timestamp_ms_from_string` | 字符串字段 → DateTime |
+| L8.3 | `l8_3_parse_timestamp_ms_missing_field` | 字段不存在 → None |
+| L8.4 | `l8_4_parse_timestamp_ms_invalid_string` | 无效字符串 → None |
 
 ### auth_tests.rs — 签名函数 (9)
 
@@ -65,22 +69,22 @@
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
-| T1.1 | `t1_1_open_to_open` | Open → Open |
+| T1.1 | `t1_1_new_to_open` | New → Open |
 | T1.2 | `t1_2_partially_filled` | PartiallyFilled → PartiallyFilled |
 | T1.3 | `t1_3_filled` | Filled → Filled |
 | T1.4 | `t1_4_canceled` | Canceled → Canceled |
 | T1.5 | `t1_5_expired_maps_to_canceled` | Expired → Canceled |
-| T1.6 | `t1_6_failed` | Failed → Failed |
-| T1.7 | `t1_7_rejected_maps_to_failed` | Rejected → Failed |
+| T1.6 | `t1_6_expired_in_match_maps_to_canceled` | ExpiredInMatch → Canceled |
 | T2.1 | `t2_1_ticker_all_fields` | 所有字段有值 → 正确转换 |
-| T2.2 | `t2_2_ticker_none_fields_default_to_zero` | None 字段 → 0.0 |
-| T2.3 | `t2_3_ticker_timestamp_none_uses_now` | timestamp None → 当前时间 |
+| T2.2 | `t2_2_ticker_none_fields_return_error` | None 字段 → Err |
+| T2.3 | `t2_3_ticker_timestamp_none_returns_error` | timestamp None → Err |
 | T3.1 | `t3_1_order_book_normal` | 正常转换 → bids/asks 保留 |
-| T3.2 | `t3_2_order_book_timestamp_none` | timestamp None → 当前时间 |
+| T3.2 | `t3_2_order_book_timestamp_none` | timestamp None → Err |
 | T4.1 | `t4_1_funding_rate_normal` | 正常转换 |
-| T5.1 | `t5_1_funding_history_normal` | 正常转换 |
+| T7.1 | `t7_1_funding_time_zero_is_epoch` | timestamp 0 → 有效 epoch |
+| T7.2 | `t7_2_filter_zero_before_from_timestamp_millis` | 0 → 过滤为 None |
 
-### adapter/binance/mod_tests.rs — Binance 映射函数 (43)
+### adapter/binance/mod_tests.rs — Binance 映射函数 (54)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
@@ -91,52 +95,98 @@
 | B1.5 | `b1_5_native_symbol_empty` | 空字符串 → 空字符串 |
 | B2.1 | `b2_1_unified_symbol_usdt` | BTCUSDT → BTC/USDT |
 | B2.2 | `b2_2_unified_symbol_usdc` | ETHUSDC → ETH/USDC |
-| B2.3 | `b2_3_unified_symbol_btc` | BNBBTC → BNB/BTC |
+| B2.3 | `b2_3_unified_symbol_btc_pair` | BNBBTC → BNB/BTC |
 | B2.4 | `b2_4_unified_symbol_busd` | BTCBUSD → BTC/BUSD |
 | B2.5 | `b2_5_unified_symbol_unknown_quote` | 未知报价货币 → 原样返回 |
 | B2.6 | `b2_6_unified_symbol_only_quote` | 仅报价货币 → 原样返回 |
-| B3.1–B3.9 | `b3_*` | parse_order_status: NEW/PARTIALLY_FILLED/FILLED/CANCELED/CANCELLED/EXPIRED/REJECTED/PENDING_CANCEL/未知 |
-| B4.1–B4.8 | `b4_*` | parse_order_type: MARKET/LIMIT/STOP_MARKET/STOP_LOSS/STOP_LOSS_LIMIT/TAKE_PROFIT_LIMIT/TAKE_PROFIT_MARKET/未知 |
+| B3.1 | `b3_1_status_new` | NEW → New |
+| B3.2 | `b3_2_status_partially_filled` | PARTIALLY_FILLED → PartiallyFilled |
+| B3.3 | `b3_3_status_filled` | FILLED → Filled |
+| B3.4 | `b3_4_status_canceled` | CANCELED → Canceled |
+| B3.5 | `b3_5_status_cancelled_variant` | CANCELLED → Canceled |
+| B3.6 | `b3_6_status_expired` | EXPIRED → Expired |
+| B3.7 | `b3_7_status_expired_in_match` | EXPIRED_IN_MATCH → ExpiredInMatch |
+| B3.8 | `b3_8_status_unknown_returns_unknown` | 未知状态 → Unknown |
+| B4.1 | `b4_1_type_market` | MARKET → Market |
+| B4.2 | `b4_2_type_limit` | LIMIT → Limit |
+| B4.3 | `b4_3_type_stop_market` | STOP_MARKET → StopMarket |
+| B4.4 | `b4_4_type_stop` | STOP → Stop |
+| B4.5 | `b4_5_type_trailing_stop_market` | TRAILING_STOP_MARKET → TrailingStopMarket |
+| B4.6 | `b4_6_type_liquidation` | LIQUIDATION → Liquidation |
+| B4.7 | `b4_7_type_take_profit_market` | TAKE_PROFIT_MARKET → TakeProfitMarket |
+| B4.7b | `b4_7b_type_take_profit` | TAKE_PROFIT → TakeProfit |
+| B4.8 | `b4_8_type_unknown_returns_unknown` | 未知类型 → Unknown |
 | B5.1 | `b5_1_side_buy` | Side::Buy → "BUY" |
 | B5.2 | `b5_2_side_sell` | Side::Sell → "SELL" |
-| B6.1–B6.5 | `b6_*` | order_type_str: Market/Limit/StopMarket/StopLimit/TakeProfitMarket |
-| B7.1 | `b7_1_ed25519_pem` | PEM 格式密钥 → Ok |
-| B7.2 | `b7_2_ed25519_seed` | 32 字节 base64 seed → Ok |
-| B7.3 | `b7_3_ed25519_wrong_length` | 非 32 字节 base64 → Err |
-| B7.4 | `b7_4_ed25519_not_base64` | 非 base64 → HMAC fallback |
-| F1.* | `f1_*` | parse_order_book_side 解析测试 |
+| B6.1 | `b6_1_order_type_market` | Market → "MARKET" |
+| B6.2 | `b6_2_order_type_limit` | Limit → "LIMIT" |
+| B6.3 | `b6_3_order_type_stop_market` | StopMarket → "STOP_MARKET" |
+| B6.4 | `b6_4_order_type_stop` | Stop → "STOP" |
+| B6.5 | `b6_5_order_type_take_profit_market` | TakeProfitMarket → "TAKE_PROFIT_MARKET" |
+| B6.6 | `b6_6_futures_stop_market_unchanged` | StopMarket → "STOP_MARKET"（不变） |
+| B6.7 | `b6_7_futures_take_profit_market_unchanged` | TakeProfitMarket → "TAKE_PROFIT_MARKET"（不变） |
+| B6.8 | `b6_8_order_type_take_profit` | TakeProfit → "TAKE_PROFIT" |
+| B6.9 | `b6_9_order_type_trailing_stop_market` | TrailingStopMarket → "TRAILING_STOP_MARKET" |
+| B6.10 | `b6_10_order_type_liquidation` | Liquidation → "LIQUIDATION" |
+| B7.1 | `b7_1_try_build_ed25519_with_seed` | 32 字节 base64 seed → Ok |
+| B7.2 | `b7_2_try_build_ed25519_with_pem` | PEM 格式密钥 → Ok |
+| B7.3 | `b7_3_try_build_ed25519_wrong_byte_count` | 非 32 字节 base64 → Err |
+| B7.4 | `b7_4_try_build_ed25519_not_base64` | 非 base64/PEM → Err |
+| F1.1 | `f1_1_parse_order_book_side_bids` | bids 数组解析 |
+| F1.2 | `f1_2_parse_order_book_side_asks` | asks 数组解析 |
+| F1.3 | `f1_3_parse_order_book_side_missing` | 字段缺失 → 空 |
+| F1.4 | `f1_4_parse_order_book_side_empty` | 空数组 → 空 |
+| T1.1 | `t1_1_time_sync_interval_is_one_hour` | TIME_SYNC_INTERVAL_SECS = 3600 |
+| T1.2 | `t1_2_time_offset_warn_threshold_is_2000ms` | TIME_OFFSET_WARN_THRESHOLD_MS = 2000 |
+| T1.3 | `t1_3_time_sync_started_initialized_false` | time_sync_started 初始为 false |
+| T1.4 | `t1_4_time_sync_started_swap_prevents_double_start` | swap 防止重复启动 |
+| T1.5 | `t1_5_drop_sets_time_sync_running_false` | drop 后 time_sync_running 重置 |
+| T1.6 | `t1_6_time_sync_running_initialized_false` | time_sync_running 初始为 false |
 
-### adapter/binance/orderbook_ws_tests.rs — OrderBook WS 解析 (18)
+### adapter/binance/orderbook_ws_tests.rs — OrderBook WS 解析 (15)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
-| W1.1–W1.5 | `w1_*` | parse_levels: 标准数组/数字/空数组/非数组/元素不足 |
-| W2.1–W2.5 | `w2_*` | to_levels: 正常/amount=0/amount<0/无效数字/空输入 |
-| W3.1–W3.3 | `w3_*` | parse_payload: Perpetual/缺少字段 |
-| W4.1–W4.5 | `w4_*` | into_depth: 组合流perp/单流perp/无效消息 |
+| W1.1 | `w1_1_parse_levels_standard` | 标准数组 → 字符串二维数组 |
+| W1.2 | `w1_2_parse_levels_numeric_elements` | 数字元素 → 解析为字符串 |
+| W1.3 | `w1_3_parse_levels_empty_array` | 空数组 → Some(vec![]) |
+| W1.4 | `w1_4_parse_levels_not_array` | 非数组 → None |
+| W1.5 | `w1_5_parse_levels_short_element` | 元素不足 → None |
+| W2.1 | `w2_1_to_levels_normal` | 正常 → OrderBookLevel |
+| W2.2 | `w2_2_to_levels_filter_zero_amount` | amount=0 → 过滤 |
+| W2.3 | `w2_3_to_levels_filter_negative_amount` | amount<0 → 过滤 |
+| W2.4 | `w2_4_to_levels_filter_invalid_number` | 无效数字 → 过滤 |
+| W2.5 | `w2_5_to_levels_empty` | 空输入 → 空 |
+| W3.2 | `w3_2_parse_payload_perpetual_format` | Perpetual 格式 → 解析成功 |
+| W3.3 | `w3_3_parse_payload_no_matching_format` | 无匹配格式 → None |
+| W4.2 | `w4_2_into_depth_combined_stream_perpetual` | 组合流 Perpetual → 解析成功 |
+| W4.4 | `w4_4_into_depth_single_stream_perpetual` | 单流 Perpetual → 解析成功 |
+| W4.5 | `w4_5_into_depth_invalid_message` | 无效消息 → None |
 
-### adapter/binance/ws_api_tests.rs — (deleted, spot Ed25519 WS API removed)
+### adapter/binance/kline_ws_tests.rs — Kline WS 解析 (13)
 
-### adapter/binance/kline_ws.rs — 内联测试
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| K1.1 | `test_parse_binance_kline_message` | 解析组合流 kline 消息 |
+| K1.2 | `test_parse_binance_kline_message_without_stream` | 解析无 stream 字段 kline 消息 |
+| K1.3 | `test_parse_invalid_json` | 无效 JSON → Err |
+| K1.4 | `test_parse_non_kline_event` | 非 kline 事件 → Err |
+| K2.1 | `test_to_candle_basic` | kline → candle 基础转换 |
+| K2.2 | `test_to_candle_invalid_numbers` | 无效 OHLCV → Err(NoData) |
+| K2.3 | `test_ws_symbol` | kline data → ws_symbol |
+| K2.4 | `test_binance_ws_symbol_basic` | WS symbol 基础格式转换 |
+| K3.1 | `test_subscribe_without_start` | 未启动时订阅 → 订阅集合正确 |
+| T8.1 | `t8_1_event_time_parsed_and_accessible` | 组合流 E 字段解析 |
+| T8.2 | `t8_2_delay_threshold_is_5000ms` | 延迟阈值 5000ms |
+| T8.3 | `t8_3_single_stream_event_time_parsed` | 单流 E 字段解析 |
+| T8.4 | `t8_4_single_stream_event_time_missing_returns_none` | 单流缺 E → None |
 
-| 测试函数 | 描述 |
-|---------|------|
-| `test_binance_ws_symbol_basic` | WS symbol 基础格式 |
-| `test_ws_symbol` | WS symbol 转换 |
-| `test_new_perpetual` | 合约 WS URL 构建 |
-| `test_parse_binance_kline_message` | 解析组合流 kline 消息 |
-| `test_parse_binance_kline_message_without_stream` | 解析单流 kline 消息 |
-| `test_parse_non_kline_event` | 非 kline 事件解析 |
-| `test_parse_invalid_json` | 无效 JSON 处理 |
-| `test_to_candle_basic` | kline → candle 基础转换 |
-| `test_to_candle_invalid_numbers` | 无效数字处理 |
+### adapter/binance/user_data_ws_tests.rs — User Data WS (2)
 
-### adapter/binance/user_data_ws.rs — 内联测试 (2)
-
-| 测试函数 | 描述 |
-|---------|------|
-| `test_parse_invalid_json` | 无效 JSON 处理 |
-| `test_new_perpetual` | 合约 WS URL |
+| ID | 测试函数 | 描述 |
+|----|---------|------|
+| U1.1 | `test_parse_invalid_json` | 无效 JSON → Err |
+| U1.2 | `test_new_perpetual` | 合约 WS URL 构建 |
 
 ---
 
@@ -173,17 +223,16 @@
 
 | 测试文件 | 被测模块 | 测试数 |
 |----------|----------|--------|
-| `src/lib_tests.rs` | lib.rs | 28 |
+| `src/lib_tests.rs` | lib.rs | 32 |
 | `src/auth_tests.rs` | auth.rs | 9 |
 | `src/errors_tests.rs` | errors.rs | 1 |
 | `src/types_tests.rs` | types.rs | 14 |
-| `src/adapter/binance/mod_tests.rs` | adapter/binance/mod.rs | 43 |
-| `src/adapter/binance/orderbook_ws_tests.rs` | orderbook_ws.rs | 18 |
-| `src/adapter/binance/ws_api_tests.rs` | ws_api.rs | 5 |
-| `src/adapter/binance/kline_ws.rs` (内联) | kline_ws.rs | 11 |
-| `src/adapter/binance/order_ws.rs` (内联) | order_ws.rs | 15 |
-| `tests/integration_tests.rs` | 跨模块 | 19 |
-| **合计** | | **163** |
+| `src/adapter/binance/mod_tests.rs` | adapter/binance/mod.rs | 54 |
+| `src/adapter/binance/orderbook_ws_tests.rs` | orderbook_ws.rs | 15 |
+| `src/adapter/binance/kline_ws_tests.rs` | kline_ws.rs | 13 |
+| `src/adapter/binance/user_data_ws_tests.rs` | user_data_ws.rs | 2 |
+| `tests/integration_tests.rs` | 跨模块 | 18 |
+| **合计** | | **158** |
 
 ### 死代码清理记录
 
@@ -194,4 +243,4 @@
 | `ExchangeError::exchange()` | errors.rs | 零生产调用，零外部引用，仅被测试引用 |
 | `ExchangeError::is_retryable()` | errors.rs | 零生产调用，零外部引用，仅被测试引用 |
 
-> 清理后测试数从 190 降至 163（删除 27 个仅测试死代码的用例），全部通过。
+> 清理后测试数从 190 降至 158（删除 27 个仅测试死代码的用例，并移除已删除的 spot Ed25519 WS API 5 个用例），全部通过。

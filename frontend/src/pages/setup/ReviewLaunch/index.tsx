@@ -4,7 +4,7 @@ import { ShieldCheck, Flame, Warning } from '@/components/Icon';
 import { Button } from '@/components/Button';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
-import { createGridBot, createAutoBot, startGridBot, startAutoBot } from '../../../service';
+import { createAutoBot, startAutoBot } from '../../../service';
 import { Title } from '@/components/Title';
 import { WizardStep } from '../context/WizardContext/consts';
 
@@ -22,67 +22,38 @@ const ReviewLaunch = () => {
     setLaunching(true);
     setLaunchError('');
 
-    const isGrid = wizard.bot_type === 'grid';
     const botParams = wizard.bot_params;
     try {
-      let botId: string;
-      if (isGrid) {
-        const result = await createGridBot({
-          symbol: botParams.symbol,
-          exchange: wizard.exchange,
-          grid_count: parseInt(botParams.grid_levels || '10'),
-          upper_price: parseFloat(botParams.upper_price || '0'),
-          lower_price: parseFloat(botParams.lower_price || '0'),
-          quantity_per_grid: parseFloat(botParams.investment || '0'),
-          leverage: parseInt(botParams.leverage || '5'),
-          name: `Grid ${botParams.symbol || 'Bot'}`,
-          paper_mode: paperMode,
-        });
-        if (!result.success || !result.data?.id) {
-          setLaunchError(`Failed to create grid bot: ${result.error || 'Unknown error'}`);
-          return;
-        }
-        botId = result.data.id;
-      } else {
-        const result = await createAutoBot({
-          symbol: botParams.symbol,
-          exchange: wizard.exchange,
-          leverage: parseInt(botParams.leverage || '10'),
-          decide_interval_secs: parseInt(botParams.decision_interval || '300'),
-          name: `Auto ${botParams.symbol || 'Bot'}`,
-          paper_mode: paperMode,
-        });
-        if (!result.success || !result.data?.id) {
-          setLaunchError(`Failed to create auto bot: ${result.error || 'Unknown error'}`);
-          return;
-        }
-        botId = result.data.id;
+      const result = await createAutoBot({
+        symbol: botParams.symbol,
+        exchange: wizard.exchange,
+        leverage: parseInt(botParams.leverage || '10'),
+        decide_interval_secs: parseInt(botParams.decision_interval || '300'),
+        name: `Auto ${botParams.symbol || 'Bot'}`,
+        paper_mode: paperMode,
+      });
+      if (!result.success || !result.data?.id) {
+        setLaunchError(`Failed to create auto bot: ${result.error || 'Unknown error'}`);
+        return;
       }
+      const botId = result.data.id;
 
-      if (isGrid) {
-        const result = await startGridBot(botId);
-        if (!result.success) {
-          setLaunchError(`Bot created but failed to start: ${result.error || 'Unknown error'}`);
-          return;
-        }
-      } else {
-        const result = await startAutoBot(botId);
-        if (!result.success) {
-          setLaunchError(`Bot created but failed to start: ${result.error || 'Unknown error'}`);
-          return;
-        }
+      const startResult = await startAutoBot(botId);
+      if (!startResult.success) {
+        setLaunchError(`Bot created but failed to start: ${startResult.error || 'Unknown error'}`);
+        return;
       }
 
       updateWizard({ paper_mode: paperMode, bot_id: botId });
       startTransition(() => {
-        navigate(`/trade/${wizard.bot_type}/${botId}/health`, { replace: true });
+        navigate(`/trade/auto/${botId}/health`, { replace: true });
       });
     } catch (err) {
       setLaunchError(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLaunching(false);
     }
-  }, [wizard.bot_type, wizard.bot_params, wizard.exchange, paperMode, navigate, updateWizard]);
+  }, [wizard.bot_params, wizard.exchange, paperMode, navigate, updateWizard]);
 
   const handleBack = useCallback(() => {
     navigate('/setup/params', { replace: true });
@@ -204,27 +175,14 @@ const ReviewLaunch = () => {
   }, [paperMode]);
 
   const summary = useMemo(() => {
-    const isGrid = wizard.bot_type === 'grid';
     const botParams = wizard.bot_params;
     const rows = [
       { label: 'Exchange', value: wizard.exchange },
-      { label: 'Strategy', value: isGrid ? 'Grid Bot' : 'Auto Bot' },
+      { label: 'Strategy', value: 'Auto Bot' },
       { label: 'Symbol', value: botParams.symbol || '-' },
       { label: 'AI Model', value: wizard.llm_model },
-      ...(isGrid
-        ? [
-            { label: 'Grid Levels', value: botParams.grid_levels || '-' },
-            {
-              label: 'Price Range',
-              value: `${botParams.lower_price || '-'} ~ ${botParams.upper_price || '-'}`,
-            },
-            { label: 'Investment', value: `${botParams.investment || '-'} USDT` },
-          ]
-        : []),
       { label: 'Leverage', value: `${botParams.leverage || '-'}x` },
-      ...(!isGrid
-        ? [{ label: 'Decision Interval', value: `${botParams.decision_interval || '300'}s` }]
-        : []),
+      { label: 'Decision Interval', value: `${botParams.decision_interval || '300'}s` },
       {
         label: 'Mode',
         value: paperMode ? 'Paper' : 'Real',
@@ -238,6 +196,7 @@ const ReviewLaunch = () => {
         <div className="space-y-0">
           {rows.map((row, i) => (
             <div
+              key={row.label}
               className={`flex items-center justify-between px-4 py-3 ${i !== rows.length - 1 ? 'border-b border-line-subtle/50' : ''}`}
             >
               <span className="text-xs text-on-surface-tertiary">{row.label}</span>
@@ -251,7 +210,7 @@ const ReviewLaunch = () => {
         </div>
       </div>
     );
-  }, [wizard.bot_params, wizard.bot_type, wizard.exchange, wizard.llm_model, paperMode]);
+  }, [wizard.bot_params, wizard.exchange, wizard.llm_model, paperMode]);
 
   return (
     <Wizard

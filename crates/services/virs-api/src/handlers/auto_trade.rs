@@ -84,17 +84,12 @@ pub async fn create_bot(
 
 
     {
-        let grid_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM qd_grid_bots WHERE user_id = $1")
-                .bind(user_id)
-                .fetch_one(&state.db_pool)
-                .await?;
         let auto_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM qd_auto_bots WHERE user_id = $1")
                 .bind(user_id)
                 .fetch_one(&state.db_pool)
                 .await?;
-        if grid_count + auto_count > 0 {
+        if auto_count > 0 {
             return Err(VirsError::conflict(
                 "Each account can only have one bot. Please delete your existing bot first.",
             ));

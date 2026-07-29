@@ -23,7 +23,7 @@ const Loading = () => {
       const bot = await findActiveBot();
       setStage('routing');
       if (bot) {
-        navigate(`/trade/${bot.bot_type}/${bot.id}/bot`, { replace: true });
+        navigate(`/trade/auto/${bot.id}/bot`, { replace: true });
       } else {
         navigate('/setup/bot-type', { replace: true });
       }

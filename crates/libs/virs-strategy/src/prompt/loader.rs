@@ -2,7 +2,7 @@
 //!
 //! 启动流程：
 //! 1. 读取 `STRATEGIES_DIR` 环境变量。未设置时返回空 loader（worker 回退默认常量）
-//! 2. 扫描 `{dir}/auto/*/` 和 `{dir}/grid/*/` 子目录（每个子目录 = 一个策略）
+//! 2. 扫描 `{dir}/auto/*/` 子目录（每个子目录 = 一个策略）
 //! 3. 每个子目录读取 `meta.json` + `system_prompt.md` + `user_prompt_template.md`，
 //!    组装为 [`PromptTemplate`]，调用 [`validator::validate`] 校验
 //! 4. 校验通过则缓存，失败则 `warn!` 记录并跳过（不中断启动）
@@ -67,7 +67,7 @@ impl PromptLoader {
         }
     }
 
-    /// 从指定目录加载。扫描 `{dir}/auto/*/` 和 `{dir}/grid/*/` 子目录。
+    /// 从指定目录加载。扫描 `{dir}/auto/*/` 子目录。
     pub async fn from_dir(dir: PathBuf) -> Self {
         let mut inner = Inner {
             templates: HashMap::new(),
@@ -84,13 +84,12 @@ impl PromptLoader {
             };
         }
 
-        for st in [StrategyType::Auto, StrategyType::Grid] {
-            let sub = dir.join(st.as_dir());
-            if !sub.exists() {
-                info!(subdir = %sub.display(), "strategy subdir not found, skipping");
-                continue;
-            }
+        let st = StrategyType::Auto;
+        let sub = dir.join(st.as_dir());
+        if sub.exists() {
             load_subdir(&sub, st, &mut inner).await;
+        } else {
+            info!(subdir = %sub.display(), "strategy subdir not found, skipping");
         }
 
         info!(
@@ -254,79 +253,4 @@ async fn load_strategy_folder(
     validate(&tpl).context("校验失败")?;
 
     Ok(tpl)
-}
-
-/// 同步加载辅助函数（用于测试或非 async 上下文）。
-pub fn load_dir_blocking(dir: PathBuf) -> PromptLoader {
-    let mut inner = Inner {
-        templates: HashMap::new(),
-        root_dir: Some(dir.clone()),
-    };
-    if !dir.exists() {
-        return PromptLoader {
-            inner: Arc::new(RwLock::new(inner)),
-        };
-    }
-    for st in [StrategyType::Auto, StrategyType::Grid] {
-        let sub = dir.join(st.as_dir());
-        if !sub.exists() {
-            continue;
-        }
-        if let Ok(entries) = std::fs::read_dir(&sub) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if !path.is_dir() {
-                    continue;
-                }
-                let name = match path.file_name().and_then(|s| s.to_str()) {
-                    Some(s) => s.to_string(),
-                    None => continue,
-                };
-
-                let meta_path = path.join("meta.json");
-                let system_path = path.join("system_prompt.md");
-                let user_path = path.join("user_prompt_template.md");
-
-                let meta_data = match std::fs::read(&meta_path) {
-                    Ok(d) => d,
-                    Err(_) => continue,
-                };
-                let mut meta: MetaFile = match serde_json::from_slice(&meta_data) {
-                    Ok(m) => m,
-                    Err(_) => continue,
-                };
-                let system_prompt = match std::fs::read_to_string(&system_path) {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                let user_prompt_template = match std::fs::read_to_string(&user_path) {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-
-                meta.name = name;
-                meta.strategy_type = st;
-
-                let tpl = PromptTemplate {
-                    name: meta.name,
-                    strategy_type: meta.strategy_type,
-                    system_prompt,
-                    user_prompt_template,
-                    required_placeholders: meta.required_placeholders,
-                    source: meta.source,
-                    version: meta.version,
-                    description: meta.description,
-                    created_at: meta.created_at,
-                };
-
-                if let Err(_e) = validate(&tpl) {
-                    continue;
-                }
-                inner.templates.insert((st, tpl.name.clone()), tpl);
-            }
-        }
-    }
-    PromptLoader {
-        inner: Arc::new(RwLock::new(inner)),
-    }
 }

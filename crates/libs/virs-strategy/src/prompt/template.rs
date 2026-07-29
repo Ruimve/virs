@@ -1,6 +1,6 @@
 //! Prompt 模板数据结构。
 //!
-//! 一个 [`PromptTemplate`] 对应 `strategies/{auto,grid}/{name}/` 一个文件夹，
+//! 一个 [`PromptTemplate`] 对应 `strategies/auto/{name}/` 一个文件夹，
 //! 内含 `meta.json` + `system_prompt.md` + `user_prompt_template.md` 三个文件。
 //! API 传输时仍使用单个 JSON（[`PromptTemplate`] 本身），仅磁盘存储拆分为三文件。
 //! 字段设计与 AI 生成产物对齐：LLM 生成 JSON → 校验 → 写文件夹 → loader 加载。
@@ -8,19 +8,17 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// 策略类型。对应 `strategies/` 下的两个子目录。
+/// 策略类型。对应 `strategies/auto/{name}/` 子目录。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum StrategyType {
     Auto,
-    Grid,
 }
 
 impl StrategyType {
     pub fn as_dir(&self) -> &'static str {
         match self {
             StrategyType::Auto => "auto",
-            StrategyType::Grid => "grid",
         }
     }
 }

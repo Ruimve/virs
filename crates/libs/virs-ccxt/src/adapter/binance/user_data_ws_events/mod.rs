@@ -2,7 +2,6 @@ pub mod account_config_update;
 pub mod account_update;
 pub mod algo_update;
 pub mod conditional_order_trigger_reject;
-pub mod grid_update;
 pub mod listen_key_expired;
 pub mod margin_call;
 pub mod order_trade_update;
@@ -35,7 +34,6 @@ pub fn dispatch_event(text: &str) -> Option<WsFeedEvent> {
             conditional_order_trigger_reject::process(&payload_str)
         }
         "STRATEGY_UPDATE" => strategy_update::process(&payload_str),
-        "GRID_UPDATE" => grid_update::process(&payload_str),
         "ALGO_UPDATE" => algo_update::process(&payload_str),
         "listenKeyExpired" => listen_key_expired::process(&payload_str),
         other => {

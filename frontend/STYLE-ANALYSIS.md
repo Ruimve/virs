@@ -1,26 +1,18 @@
 # VIRS 前端样式分析报告
 
-> 全量扫描范围: `src/` 下全部 93 个文件，涵盖 components、pages、service、context、layout
+> 全量扫描范围: `src/` 下全部文件，涵盖 components、pages、service、context、layout
 
 ---
 
 ## 一、重复样式模式 — 应抽取为公共组件
 
-### 1. Stat 字段组件（label + value）— 出现 6 处
+### 1. Stat 字段组件（label + value）— 出现 4 处
 
-**完全相同的本地 `Stat` 组件定义了 2 次：**
-
-| 文件                                  | 行号     | 说明                                                                                                                                                         |
-| ------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `AutoBot/Bot/PositionStats/index.tsx` | L169-177 | `<div className="min-w-0"><div text-[11px] uppercase tracking-wider text-on-surface-tertiary mb-0.5">...</div><div text-sm font-mono tabular-nums truncate>` |
-| `GridBot/Bot/PositionStats/index.tsx` | L164-172 | **完全相同**                                                                                                                                                 |
-
-**相同的 label + value 行内模式出现 4 处（未封装）：**
+**相同的 label + value 行内模式出现（未封装）：**
 
 | 文件                               | 场景                                                            |
 | ---------------------------------- | --------------------------------------------------------------- |
 | `AutoBot/Bot/TradeStats/index.tsx` | 13 个统计指标（L114-123）                                       |
-| `GridBot/Bot/TradeStats/index.tsx` | 13 个统计指标（L109-118）                                       |
 | `Trade/AutoBot/System/index.tsx`   | Card 内 label-value 对（如 L155-156 主机名、L159-160 操作系统） |
 | `Setup/ReviewLaunch/index.tsx`     | Summary 表格行（L183-248 共 9 行）                              |
 
@@ -32,7 +24,7 @@ Props: { label: string; value: ReactNode; sub?: string; color?: string; highligh
 
 ---
 
-### 2. 侧边栏 Section 容器（title + count + scrollable list + empty）— 出现 4 处
+### 2. 侧边栏 Section 容器（title + count + scrollable list + empty）— 出现 2 处
 
 **完全相同的结构模式：**
 
@@ -56,8 +48,6 @@ Props: { label: string; value: ReactNode; sub?: string; color?: string; highligh
 | --------------------------------------- | ---------- |
 | `AutoBot/Bot/RecentDecisions/index.tsx` | "最近决策" |
 | `AutoBot/Bot/RecentTrades/index.tsx`    | "最近交易" |
-| `GridBot/Bot/RecentTrades/index.tsx`    | "最近成交" |
-| `GridBot/Bot/LevelsOverview/index.tsx`  | "网格层级" |
 
 **建议：** 抽取 `src/components/Panel/index.tsx`
 
@@ -67,7 +57,7 @@ Props: { title: string; count?: number; children: ReactNode; empty?: boolean; em
 
 ---
 
-### 3. pnlColor 函数 — 出现 4 处
+### 3. pnlColor 函数 — 出现 2 处
 
 ```typescript
 const pnlColor = (v: number) =>
@@ -77,23 +67,22 @@ const pnlColor = (v: number) =>
 | 文件                                          | 行号                                 |
 | --------------------------------------------- | ------------------------------------ |
 | `AutoBot/Bot/PositionStats/index.tsx`         | L17-18                               |
-| `GridBot/Bot/PositionStats/index.tsx`         | L17-18                               |
 | `AutoBot/Bot/RecentTrades/index.tsx`          | L9-10                                |
 | `utils/utils.tsx` (formatPnl, formatPnlShort) | L3-16 — 已有类似逻辑但返回 ReactNode |
 
-**建议：** 在 `utils/utils.tsx` 中统一导出 `pnlColor` 纯函数，4 处统一引用
+**建议：** 在 `utils/utils.tsx` 中统一导出 `pnlColor` 纯函数，统一引用
 
 ---
 
-### 4. Card 卡片容器 — 出现 10+ 处，样式不统一
+### 4. Card 卡片容器 — 出现 8+ 处，样式不统一
 
 **三种不同的 Card 样式变体：**
 
-| 变体 | className                                                      | 使用位置                                          |
-| ---- | -------------------------------------------------------------- | ------------------------------------------------- |
-| A    | `bg-surface-1 rounded-xl border border-line-default shadow-sm` | LogList、LogDetail、GridLevelsTab、GridBot/Trades |
-| B    | `bg-surface-1 border border-line-subtle rounded-xl p-4`        | System page（本地 Card 组件）                     |
-| C    | `bg-surface-1 rounded-xl border border-line-default p-4`       | LogDetail 内各 section                            |
+| 变体 | className                                                      | 使用位置                      |
+| ---- | -------------------------------------------------------------- | ----------------------------- |
+| A    | `bg-surface-1 rounded-xl border border-line-default shadow-sm` | LogList、LogDetail            |
+| B    | `bg-surface-1 border border-line-subtle rounded-xl p-4`        | System page（本地 Card 组件） |
+| C    | `bg-surface-1 rounded-xl border border-line-default p-4`       | LogDetail 内各 section        |
 
 **差异：** border 用 `line-default` 还是 `line-subtle`，有无 `shadow-sm`，有无 `p-4`
 
@@ -106,7 +95,7 @@ Props: { children: ReactNode; title?: string; padding?: boolean; border?: 'subtl
 
 ---
 
-### 5. 方向/动作 Badge（小标签）— 出现 10+ 处
+### 5. 方向/动作 Badge（小标签）— 出现 8+ 处
 
 **三种 Badge 类型，样式高度重复：**
 
@@ -116,7 +105,7 @@ Props: { children: ReactNode; title?: string; padding?: boolean; border?: 'subtl
 className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${buy ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'}`}
 ```
 
-出现: RecentTrades(AutoBot)、GridLevelsTab、GridBot/Trades、LevelsOverview — 共 6 处
+出现: RecentTrades(AutoBot) — 共 3 处
 
 **B) 决策动作 Badge（使用 actionColor）：**
 
@@ -132,7 +121,7 @@ className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${actionColor(action)}
 className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${statusColor}`}
 ```
 
-出现: GridBot/Trades(已平/持仓)、HealthCheck(CheckDetail Paper/Live)、DecisionCard(失败) — 共 5 处
+出现: HealthCheck(CheckDetail Paper/Live)、DecisionCard(失败) — 共 3 处
 
 **建议：** 抽取 `src/components/Badge/index.tsx`
 
@@ -142,7 +131,7 @@ Props: { variant: 'success' | 'danger' | 'warning' | 'info' | 'neutral'; size?: 
 
 ---
 
-### 6. Loading / Empty 状态 — 出现 7 处
+### 6. Loading / Empty 状态 — 出现 5 处
 
 **Loading 状态（图标 + 文字）：**
 
@@ -153,7 +142,7 @@ Props: { variant: 'success' | 'danger' | 'warning' | 'info' | 'neutral'; size?: 
 </div>
 ```
 
-出现: AutoBot/Trades、GridBot/Trades、LogList、LogDetail — 4 处
+出现: AutoBot/Trades、LogList、LogDetail — 3 处
 
 **Empty 状态：**
 
@@ -161,7 +150,7 @@ Props: { variant: 'success' | 'danger' | 'warning' | 'info' | 'neutral'; size?: 
 <div className="text-center py-6 text-sm text-on-surface-tertiary">暂无数据</div>
 ```
 
-出现: RecentDecisions、RecentTrades(AutoBot)、GridBot/RecentTrades、LevelsOverview、GridLevelsTab、ConfigureLlm — 6 处
+出现: RecentDecisions、RecentTrades(AutoBot)、ConfigureLlm — 3 处
 
 **Center Spinner：**
 
@@ -218,38 +207,7 @@ Props: { label: string; value: ReactNode; valueColor?: string }
 
 ---
 
-### 9. Table 公共结构 — 出现 2 处
-
-几乎相同的 `<table>` 结构：
-
-| 文件                               | 表头列数 |
-| ---------------------------------- | -------- |
-| `GridBot/Levels/GridLevelsTab.tsx` | 7 列     |
-| `GridBot/Trades/index.tsx`         | 9 列     |
-
-**相同的表头样式：**
-
-```tsx
-<thead>
-  <tr className="text-on-surface-tertiary border-b border-line-subtle bg-base-secondary">
-    <th className="text-left/right/center px-3 py-2.5 font-medium">...</th>
-  </tr>
-</thead>
-```
-
-**相同的行样式：**
-
-```tsx
-<tr className="border-b border-line-subtle">
-  <td className="px-3 py-2 ...">...</td>
-</tr>
-```
-
-**建议：** 抽取 `src/components/Table/index.tsx`（含 thead/td 样式封装）
-
----
-
-### 10. Pagination 分页 — 出现 2 处，完全相同
+### 9. Pagination 分页 — 出现 1 处
 
 ```tsx
 <div className="flex items-center justify-between px-5 py-3 border-t border-line-subtle text-xs">
@@ -263,13 +221,13 @@ Props: { label: string; value: ReactNode; valueColor?: string }
 </div>
 ```
 
-出现: AutoBot/Trades、GridBot/Trades — 结构完全一致
+出现: AutoBot/Trades — 1 处
 
 **建议：** 抽取 `src/components/Pagination/index.tsx`
 
 ---
 
-### 11. formatVolume 函数 — 出现 2 处，实现略有差异
+### 10. formatVolume 函数 — 出现 2 处，实现略有差异
 
 | 文件                                       | 支持范围 |
 | ------------------------------------------ | -------- |
@@ -282,7 +240,7 @@ Props: { label: string; value: ReactNode; valueColor?: string }
 
 ---
 
-### 12. Section Title 样式 — 出现 15+ 处，有 2 种变体
+### 11. Section Title 样式 — 出现 15+ 处，有 2 种变体
 
 | 变体 | className                                                                   | 使用位置                                                                    |
 | ---- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
@@ -300,8 +258,7 @@ Props: { label: string; value: ReactNode; valueColor?: string }
 ### 1. Badge 字号不统一
 
 - 决策动作 Badge: `text-[10px]` (LogList L55)
-- 买卖方向 Badge: `text-[11px]` (RecentTrades L35, GridLevelsTab L55)
-- 状态 Badge: `text-[10px]` (GridBot/Trades L97)
+- 买卖方向 Badge: `text-[11px]` (RecentTrades L35)
 - 失败 Badge: `text-[11px]` (DecisionCard L79) vs `text-[10px]` (LogList L60)
 
 ### 2. Card border 语义不统一
@@ -339,16 +296,15 @@ gap:
 
 | #   | 组件名          | 路径                                     | 替代文件数 | 优先级 |
 | --- | --------------- | ---------------------------------------- | ---------- | ------ |
-| 1   | `Stat`          | `src/components/Stat/index.tsx`          | 6          | **高** |
-| 2   | `Panel`         | `src/components/Panel/index.tsx`         | 4          | **高** |
-| 3   | `Badge`         | `src/components/Badge/index.tsx`         | 10+        | **高** |
-| 4   | `Card`          | `src/components/Card/index.tsx`          | 10+        | **高** |
-| 5   | `StateFeedback` | `src/components/StateFeedback/index.tsx` | 7          | **高** |
+| 1   | `Stat`          | `src/components/Stat/index.tsx`          | 4          | **高** |
+| 2   | `Panel`         | `src/components/Panel/index.tsx`         | 2          | **高** |
+| 3   | `Badge`         | `src/components/Badge/index.tsx`         | 8+         | **高** |
+| 4   | `Card`          | `src/components/Card/index.tsx`          | 8+         | **高** |
+| 5   | `StateFeedback` | `src/components/StateFeedback/index.tsx` | 5          | **高** |
 | 6   | `KeyValueRow`   | `src/components/KeyValueRow/index.tsx`   | 12+        | 中     |
 | 7   | `Progress`      | `src/components/Progress/index.tsx`      | 3          | 中     |
-| 8   | `Pagination`    | `src/components/Pagination/index.tsx`    | 2          | 中     |
-| 9   | `Table`         | `src/components/Table/index.tsx`         | 2          | 低     |
-| 10  | `Title`         | `src/components/Title/index.tsx`         | 15+        | 中     |
+| 8   | `Pagination`    | `src/components/Pagination/index.tsx`    | 1          | 中     |
+| 9   | `Title`         | `src/components/Title/index.tsx`         | 15+        | 中     |
 
 ---
 
@@ -356,7 +312,7 @@ gap:
 
 | 函数                | 统一到                                       | 当前分布                   |
 | ------------------- | -------------------------------------------- | -------------------------- |
-| `pnlColor(v)`       | `src/pages/Trade/components/utils/utils.tsx` | 4 处重复定义               |
+| `pnlColor(v)`       | `src/pages/Trade/components/utils/utils.tsx` | 2 处重复定义               |
 | `formatVolume(v)`   | 同上                                         | 2 处重复定义（取更完整版） |
 | `barColor/pctColor` | 同上（或放入 Progress 组件内部）             | 3 处不同阈值               |
 
@@ -394,13 +350,13 @@ gap:
 
 ## 六、优先级实施建议
 
-**Phase 1（立即执行 — 影响 50+ 处）：**
+**Phase 1（立即执行 — 影响 30+ 处）：**
 
-1. `Stat` 组件 — 消除 PositionStats 中 2 处完全相同的本地定义 + TradeStats 4 处内联
-2. `Badge` 组件 — 统一 10+ 处不同尺寸/样式的标签
+1. `Stat` 组件 — 消除 TradeStats 内联
+2. `Badge` 组件 — 统一 8+ 处不同尺寸/样式的标签
 3. `Card` 组件 — 统一 3 种 Card 样式变体
 4. `pnlColor` / `formatVolume` 工具函数统一
 
-**Phase 2（短期 — 影响舒适度）：** 5. `Panel` 组件 — 4 处侧边栏面板统一 6. `StateFeedback` 组件 — 7 处 loading/empty 状态统一 7. `KeyValueRow` 组件 — ReviewLaunch 等 12+ 处键值对统一 8. 全局 CSS layer 工具类 — `section-title`、`data-value`
+**Phase 2（短期 — 影响舒适度）：** 5. `Panel` 组件 — 2 处侧边栏面板统一 6. `StateFeedback` 组件 — 5 处 loading/empty 状态统一 7. `KeyValueRow` 组件 — ReviewLaunch 等 12+ 处键值对统一 8. 全局 CSS layer 工具类 — `section-title`、`data-value`
 
-**Phase 3（中期 — 锦上添花）：** 9. `Progress` 组件 — 统一阈值和样式 10. `Pagination` 组件 — 2 处分页统一 11. `Table` 组件 — 2 处表格结构统一
+**Phase 3（中期 — 锦上添花）：** 9. `Progress` 组件 — 统一阈值和样式 10. `Pagination` 组件 — 1 处分页统一

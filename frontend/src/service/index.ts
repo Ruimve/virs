@@ -1,12 +1,11 @@
 export { api, getToken, setToken, removeToken } from './client';
-export { login, logout, getUserInfo } from './auth';
-export { fetchPlugins, validateScript, getAiStatus, generateStrategy } from './ai';
+export { login, getUserInfo } from './auth';
+export { getAiStatus } from './ai';
 export {
   saveCredential,
   saveAiCredential,
   testCredential,
   checkPermissions,
-  verifyPermissions,
   fetchPositionMode,
   fetchCredentialStatus,
   fetchAiModels,
@@ -14,14 +13,6 @@ export {
   testAiCredential,
 } from './credentials';
 export {
-  createGridBot,
-  startGridBot,
-  stopGridBot,
-  deleteGridBot,
-  getGridBotDetail,
-  getGridTrades,
-  getGridStats,
-  getGridAnalysisLogs,
   createAutoBot,
   startAutoBot,
   stopAutoBot,
@@ -32,7 +23,7 @@ export {
   getAutoAnalysisLogs,
   findActiveBot,
 } from './bot';
-export { fetchKlines, fetchOrderBook } from './market';
+export { fetchKlines } from './market';
 export { checkHealth, getPaperStatus } from './system';
 export { useKlineWs } from './ws';
 export type { KlineWsEvent } from './ws';

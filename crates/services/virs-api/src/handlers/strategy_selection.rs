@@ -1,6 +1,6 @@
 //! LLM 策略选择共享逻辑。
 //!
-//! 被 auto_trade 和 grid handler 复用,避免两份近乎相同的 `select_strategy_by_llm`。
+//! 被 auto_trade handler 复用,避免重复实现 `select_strategy_by_llm`。
 
 use virs_error::VirsError;
 use virs_strategy::indicator::library::{atr, closes, rsi_at};
@@ -10,7 +10,7 @@ use crate::state::AppState;
 
 /// LLM 选择策略:获取市场快照 + 构造选择 prompt + 调用 LLM + 解析返回。
 ///
-/// `strategy_type` 区分 Auto / Grid,决定从 PromptLoader 取哪类策略模板的元数据。
+/// `strategy_type` 决定从 PromptLoader 取哪类策略模板的元数据。
 pub async fn select_strategy_by_llm(
     state: &AppState,
     loader: &PromptLoader,

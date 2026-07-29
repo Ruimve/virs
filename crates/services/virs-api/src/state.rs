@@ -5,7 +5,6 @@ use axum::extract::FromRef;
 use tokio::sync::{broadcast, mpsc};
 
 use virs_bot::auto::types::AutoCommand;
-use virs_bot::grid::types::GridCommand;
 use virs_error::{VirsError, VirsResult};
 use virs_exchange::Exchanges;
 use virs_market::{KlineEngine, OrderBookEngine};
@@ -19,9 +18,6 @@ pub trait EngineManager: Send + Sync {
 
 
     async fn ensure_started(&self, paper_mode: bool) -> VirsResult<()>;
-
-
-    fn grid_cmd_tx(&self) -> Option<mpsc::Sender<GridCommand>>;
 
 
     fn auto_cmd_tx(&self) -> Option<mpsc::Sender<AutoCommand>>;

@@ -135,12 +135,8 @@ pub async fn recommend_strategy(
     let system_prompt = r#"You are a trading strategy advisor. Recommend a trading strategy based on market conditions.
 Respond in JSON format with:
 {
-  "strategy": "grid|auto|manual",
+  "strategy": "auto|manual",
   "strategy_details": {
-    "grid_count": 10,
-    "upper_price": 0,
-    "lower_price": 0,
-    "grid_profit_pct": 0.5,
     "leverage": 5
   },
   "reasoning": "...",

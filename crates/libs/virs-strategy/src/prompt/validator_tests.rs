@@ -1,5 +1,5 @@
 use crate::prompt::template::{PromptSource, PromptTemplate, StrategyType};
-use crate::prompt::validator::{extract_placeholders, is_ai_generated, validate};
+use crate::prompt::validator::{extract_placeholders, validate};
 use std::collections::HashSet;
 use virs_error::BotError;
 
@@ -77,15 +77,4 @@ fn v8_escape_braces_not_extracted() {
     let ph: HashSet<String> = extract_placeholders("{{not_a_placeholder}} {real}");
     assert_eq!(ph.len(), 1);
     assert!(ph.contains("real"));
-}
-
-#[test]
-fn v9_ai_generated_detection() {
-    let mut t = make_valid_template();
-    assert!(!is_ai_generated(&t));
-    t.source = PromptSource::AiGenerated {
-        model: "deepseek".to_string(),
-        generation_prompt: "生成趋势策略".to_string(),
-    };
-    assert!(is_ai_generated(&t));
 }

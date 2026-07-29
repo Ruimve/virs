@@ -3,7 +3,7 @@
 //! 通过 LLM 生成符合 [`PromptTemplate`] 格式的策略 prompt。
 //!
 //! 流程：
-//! 1. 调用方提供策略类型（auto/grid）+ 用户意图描述
+//! 1. 调用方提供策略类型（auto）+ 用户意图描述
 //! 2. 构造元 prompt（教 LLM 如何生成策略 prompt）
 //! 3. 调用 LLM（复用 [`crate::llm_client::call_llm_api`])
 //! 4. 解析 LLM 返回的 JSON 为 [`PromptTemplate`]
@@ -94,9 +94,6 @@ pub(crate) fn build_meta_system_prompt(strategy_type: StrategyType) -> String {
         StrategyType::Auto => {
             "Auto 趋势策略（单仓位方向判断：open_long/open_short/close_position/hold）"
         }
-        StrategyType::Grid => {
-            "Grid 网格策略（网格结构调整：adjust_grid/pause_grid/run_grid/reduce_position/hold）"
-        }
     };
 
     format!(
@@ -118,14 +115,13 @@ pub(crate) fn build_meta_system_prompt(strategy_type: StrategyType) -> String {
 - H1 指标：h1_current_price, h1_rsi, h1_atr, h1_adx, h1_macd, h1_macd_signal, h1_macd_histogram, h1_ema20, h1_ema50, h1_ema_cross_bars_ago, h1_ema_gap_pct, h1_ema_gap_trend, h1_bb_upper, h1_bb_middle, h1_bb_lower, h1_high_20, h1_low_20, h1_high_50, h1_low_50, h1_volume, h1_volume_sma20, h1_candle_body, h1_bars_outside_band, h1_bandwidth_5bars_ago, h1_ema_cross, h1_change, h1_bb_width_pct, nearest_round_up, nearest_round_down, h1_atr_sma20
 - M15 指标：m15_current_price, m15_rsi, m15_macd, m15_macd_signal, m15_macd_histogram, m15_atr, m15_adx, m15_ema20, m15_ema50, m15_ema_cross, m15_ema_cross_bars_ago, m15_volume, m15_volume_sma20, m15_high_50, m15_low_50, m15_bb_width_pct, m15_atr_sma20, m15_bars_outside_band
 - H4 指标：h4_ema20, h4_ema50, h4_adx, h4_rsi, h4_macd, h4_macd_signal, h4_macd_histogram, h4_bb_width_pct
-- Grid 专属：grid_status, last_adjust_time, current_grid_config, event_flag, event_description
+- 事件：event_flag, event_description
 
 system_prompt 要求：
 1. 定义 LLM 角色（如"你是趋势跟随交易引擎"）
 2. 明确交易规则（入场条件、出场条件、风控规则）
 3. 必须规定输出 JSON 格式（包含 decision.action / decision.reason / decision.confidence 等字段）
-4. 对于 Auto 策略，action 可选值：open_long, open_short, close_position, hold
-5. 对于 Grid 策略，action 可选值：adjust_grid, pause_grid, run_grid, reduce_position, hold
+4. action 可选值：open_long, open_short, close_position, hold
 
 user_prompt_template 要求：
 1. 用 {{placeholder}} 引用指标值，不得硬编码数值
@@ -135,7 +131,6 @@ user_prompt_template 要求：
 只返回 JSON 对象，不要包含其他文字。"#,
         strategy_type_str = match strategy_type {
             StrategyType::Auto => "auto",
-            StrategyType::Grid => "grid",
         }
     )
 }
@@ -153,7 +148,6 @@ pub(crate) fn build_meta_user_prompt(req: &GenerateRequest<'_>) -> String {
 请生成完整的策略 prompt JSON。"#,
         strategy_type = match req.strategy_type {
             StrategyType::Auto => "Auto 趋势策略",
-            StrategyType::Grid => "Grid 网格策略",
         },
         name_hint = name_hint,
         user_intent = req.user_intent,

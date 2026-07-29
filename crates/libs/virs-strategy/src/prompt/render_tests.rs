@@ -57,9 +57,6 @@ fn make_ctx() -> RenderContext {
         loss_trades: 20,
         total_pnl: 500.0,
         consecutive_losses: 2,
-        grid_status: "running".to_string(),
-        last_adjust_time: "2026-07-19 10:00:00".to_string(),
-        current_grid_config: "upper=52000, lower=48000, count=10".to_string(),
         event_flag: false,
         event_description: "".to_string(),
         trigger_reason: "scheduled".to_string(),
@@ -115,13 +112,6 @@ fn r6_replaces_bars_outside_band() {
 }
 
 #[test]
-fn r7_replaces_grid_placeholders() {
-    let ctx = make_ctx();
-    let result = render("{grid_status} {last_adjust_time} {current_grid_config}", &ctx);
-    assert_eq!(result, "running 2026-07-19 10:00:00 upper=52000, lower=48000, count=10");
-}
-
-#[test]
 fn r8_replaces_statistics() {
     let ctx = make_ctx();
     let result = render("{total_trades} {win_trades} {loss_trades} {total_pnl} {consecutive_losses}", &ctx);
@@ -156,9 +146,6 @@ fn r10_ema_cross_bars_none_when_negative() {
         loss_trades: 0,
         total_pnl: 0.0,
         consecutive_losses: 0,
-        grid_status: "".to_string(),
-        last_adjust_time: "".to_string(),
-        current_grid_config: "".to_string(),
         event_flag: false,
         event_description: "".to_string(),
         trigger_reason: "".to_string(),

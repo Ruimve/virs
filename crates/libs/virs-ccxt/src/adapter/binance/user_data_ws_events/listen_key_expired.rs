@@ -14,13 +14,6 @@ pub struct ListenKeyExpiredEvent {
     pub listen_key: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ListenKeyExpiredAction {
-    NeedRecreate,
-
-    LogOnly,
-}
-
 pub fn process(json: &str) -> Option<WsFeedEvent> {
     let event: ListenKeyExpiredEvent = match serde_json::from_str(json) {
         Ok(e) => e,

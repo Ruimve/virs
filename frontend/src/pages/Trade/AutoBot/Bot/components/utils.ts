@@ -75,14 +75,6 @@ export function computeLiqDistance(
   return dist;
 }
 
-/** 体积缩写格式化 */
-export function formatVolume(v: number): string {
-  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
-  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
-  if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
-  return v.toFixed(2);
-}
-
 /** 紧凑数字格式化（千分位，最多 2 位小数） */
 export function formatCompact(n: number, decimals = 2): string {
   return n.toLocaleString('en-US', {

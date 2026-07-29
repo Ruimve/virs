@@ -25,14 +25,6 @@ const AutoBotLogDetail = lazy(() => import('./pages/Trade/AutoBot/Log/Detail'));
 const AutoBotTrades = lazy(() => import('./pages/Trade/AutoBot/Trades'));
 const AutoBotSystem = lazy(() => import('./pages/Trade/AutoBot/System'));
 
-const GridBot = lazy(() => import('./pages/Trade/GridBot'));
-const GridBotMain = lazy(() => import('./pages/Trade/GridBot/Bot'));
-const GridBotLog = lazy(() => import('./pages/Trade/GridBot/Log'));
-const GridBotLogDetail = lazy(() => import('./pages/Trade/GridBot/Log/Detail'));
-const GridBotTrades = lazy(() => import('./pages/Trade/GridBot/Trades'));
-const GridBotLevels = lazy(() => import('./pages/Trade/GridBot/Levels'));
-const GridBotSystem = lazy(() => import('./pages/Trade/GridBot/System'));
-
 const HealthCheck = lazy(() => import('./pages/Trade/HealthCheck'));
 
 const App = () => {
@@ -78,14 +70,6 @@ const App = () => {
                 <Route path="/trade/auto/:botId/log/:logId" element={<AutoBotLogDetail />} />
                 <Route path="/trade/auto/:botId/trades" element={<AutoBotTrades />} />
                 <Route path="/trade/auto/:botId/system" element={<AutoBotSystem />} />
-              </Route>
-              <Route path="/trade/grid/:botId" element={<GridBot />}>
-                <Route path="/trade/grid/:botId/bot" element={<GridBotMain />} />
-                <Route path="/trade/grid/:botId/log" element={<GridBotLog />} />
-                <Route path="/trade/grid/:botId/log/:logId" element={<GridBotLogDetail />} />
-                <Route path="/trade/grid/:botId/trades" element={<GridBotTrades />} />
-                <Route path="/trade/grid/:botId/levels" element={<GridBotLevels />} />
-                <Route path="/trade/grid/:botId/system" element={<GridBotSystem />} />
               </Route>
               <Route path="/trade/:botType/:botId/health" element={<HealthCheck />} />
             </Route>

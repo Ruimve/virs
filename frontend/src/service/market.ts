@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse, KlineCandle, OrderBookData } from './types';
+import type { ApiResponse, KlineCandle } from './types';
 
 export async function fetchKlines(params: {
   exchange: string;
@@ -26,35 +26,4 @@ export async function fetchKlines(params: {
     };
   }
   return { success: false, error: res.error || '获取K线失败' };
-}
-
-export async function fetchOrderBook(params: {
-  exchange: string;
-  symbol: string;
-}): Promise<ApiResponse<OrderBookData>> {
-  const { exchange, symbol } = params;
-  const res = await api.get<{ bids: number[][]; asks: number[][] }>(
-    `/market/orderbook?exchange=${exchange}&symbol=${symbol}`,
-  );
-  if (res.success && res.data) {
-    return {
-      success: true,
-      data: {
-        bids: (res.data.bids || []).map(([price, amount]: number[]) => ({ price, amount })),
-        asks: (res.data.asks || []).map(([price, amount]: number[]) => ({ price, amount })),
-      },
-    };
-  }
-  return { success: false, error: res.error || '获取订单簿失败' };
-}
-
-export async function subscribeOrderBook(params: {
-  exchange: string;
-  symbol: string;
-}): Promise<ApiResponse> {
-  const res = await api.post('/orderbook/subscribe', {
-    exchange: params.exchange,
-    symbol: params.symbol,
-  });
-  return res;
 }

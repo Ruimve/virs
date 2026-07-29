@@ -5,14 +5,6 @@ export interface ApiResponse<T = unknown> {
   message?: string;
 }
 
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
-}
-
 export interface UserInfo {
   id: string;
   username: string;
@@ -23,42 +15,6 @@ export interface UserInfo {
 export interface LoginResponse {
   token: string;
   user: UserInfo;
-}
-
-export interface PluginParam {
-  name: string;
-  label: string;
-  param_type: 'int' | 'float';
-  default: number;
-  min?: number;
-  max?: number;
-  step?: number;
-}
-
-export interface Plugin {
-  name: string;
-  description: string;
-  category: string;
-  params: PluginParam[];
-  required_timeframes?: string[];
-}
-
-export interface AiGeneratedParam {
-  name: string;
-  label: string;
-  default: number;
-  min: number | null;
-  max: number | null;
-  step: number | null;
-}
-
-export interface AiGenerateResult {
-  code: string;
-  name: string;
-  description: string;
-  params: AiGeneratedParam[];
-  provider: string;
-  model: string;
 }
 
 export interface PermissionItem {
@@ -76,16 +32,6 @@ export interface PositionModeResult {
 
 export interface BotSummary {
   id: string;
-  bot_type: 'grid' | 'auto';
-}
-
-export interface BotHeaderInfo {
-  id: string;
-  name: string;
-  symbol: string;
-  exchange: string;
-  status: string;
-  leverage: number;
 }
 
 export interface StrategyDetail {
@@ -186,96 +132,6 @@ export interface AutoBotStats {
   net_pnl_after_fee: number;
 }
 
-export interface GridBot {
-  id: string;
-  name: string;
-  symbol: string;
-  exchange: string;
-  status: string;
-  leverage: number;
-  initial_capital: number;
-  grid_count: number;
-  upper_price: number;
-  lower_price: number;
-  grid_profit_pct: number;
-  quantity_per_grid: number;
-  total_pnl: number;
-  unrealized_pnl: number;
-  total_trades: number;
-  grid_filled_count: number;
-  market_regime: string | null;
-  dynamic_adjust: boolean;
-  ai_analysis: string | null;
-  strategy_file: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface GridLevelInfo {
-  level: number;
-  price: number;
-  side: string;
-  buy_price: number;
-  sell_price: number;
-  quantity: number;
-  buy_filled: boolean;
-  sell_filled: boolean;
-  hold_quantity: number;
-  avg_buy_price: number;
-  last_fill_price: number;
-}
-
-export interface GridTrade {
-  id: string;
-  bot_id: string;
-  grid_level: number;
-  open_side: string;
-  open_price: number;
-  open_quantity: number;
-  opened_at: string;
-  close_side: string | null;
-  close_price: number | null;
-  close_quantity: number | null;
-  pnl: number;
-  pnl_pct: number;
-  status: string;
-  closed_at: string | null;
-}
-
-export interface GridBotDetail {
-  bot: GridBot;
-  strategy: StrategyDetail | null;
-  grid_levels: GridLevelInfo[];
-}
-
-export interface GridTradesPage {
-  trades: GridTrade[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-
-export interface GridBotStats {
-  win_rate: number;
-  profit_loss_ratio: number;
-  max_drawdown: number;
-  avg_hold_time: string;
-  max_win_streak: number;
-  max_loss_streak: number;
-  net_pnl: number;
-  realized_pnl: number;
-  unrealized_pnl: number;
-  total_pnl: number;
-  total_trades: number;
-  closed_trades: number;
-  win_trades: number;
-  loss_trades: number;
-  grid_filled_count: number;
-  avg_pnl: number;
-  max_profit: number;
-  max_loss: number;
-}
-
 export interface AnalysisLog {
   id: string;
   bot_id: string;
@@ -294,7 +150,6 @@ export interface AnalysisLog {
       confidence: number;
     };
     market?: Record<string, any>;
-    grid?: Record<string, any>;
     risk?: Record<string, any>;
     risk_warning?: string;
     raw_llm_response?: string | Record<string, any>;
@@ -313,16 +168,6 @@ export interface KlineCandle {
   low: number;
   close: number;
   volume: number;
-}
-
-export interface OrderBookEntry {
-  price: number;
-  amount: number;
-}
-
-export interface OrderBookData {
-  bids: OrderBookEntry[];
-  asks: OrderBookEntry[];
 }
 
 export interface HealthStatus {

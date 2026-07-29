@@ -59,7 +59,7 @@ fn w2_save_without_overwrite_rejects_existing() {
     let tmp = tempdir().unwrap();
     std::env::set_var(ENV_STRATEGIES_DIR, tmp.path());
 
-    let tpl = make_valid_template("test_dup", StrategyType::Grid);
+    let tpl = make_valid_template("test_dup", StrategyType::Auto);
     save_template(&tpl, false).unwrap();
 
     // 再次保存，不覆盖 → 应该报错

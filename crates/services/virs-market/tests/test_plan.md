@@ -1,22 +1,20 @@
 # virs-market 测试用例文档
 
 > Crate: `crates/services/virs-market`
-> 状态: **49 个测试全部通过** (37 单元 + 12 集成)
+> 状态: **38 个测试全部通过** (30 单元 + 8 集成)
 
 ---
 
 ## 1. 单元测试用例
 
-### 1.1 types_tests.rs — 类型与工具函数 (18)
+### 1.1 types_tests.rs — 类型与工具函数 (11)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
 | T1.1 | `t1_1_timeframe_all_count` | all() → 6 个变体 |
 | T1.2 | `t1_2_timeframe_as_str` | 每个变体 → 正确字符串 |
-| T1.3 | `t1_3_timeframe_ms` | M1=60000, M5=300000, H1=3600000, D1=86400000 |
-| T1.4 | `t1_4_timeframe_minutes` | M1=1, M5=5, H1=60, D1=1440 |
+| T1.3 | `t1_3_timeframe_ms` | 各变体 ms 值正确 |
 | T1.5 | `t1_5_timeframe_default_limit` | 所有 → 1000 |
-| T1.6 | `t1_6_timeframe_from_str_lossy` | "1m"→M1, "1d"→D1, "1D"→D1, "invalid"→None |
 | T1.7 | `t1_7_timeframe_display` | format!("{}", M1) → "1m" |
 | T2.1 | `t2_1_subscription_key_basic` | ("binance", "BTC/USDT") → "binance:BTC/USDT" |
 | T2.2 | `t2_2_subscription_key_case` | exchange 小写, symbol 大写 |
@@ -24,11 +22,6 @@
 | T3.2 | `t3_2_align_open_time_h1` | 任意时间 → 对齐到小时 |
 | T3.3 | `t3_3_align_open_time_d1` | 任意时间 → 对齐到天 |
 | T3.4 | `t3_4_align_open_time_exact` | 已对齐 → 不变 |
-| T4.1 | `t4_1_backtest_range_m1` | M1: max_days=7, recommended=3 |
-| T4.2 | `t4_2_backtest_range_d1` | D1: max_days=1825, recommended=365 |
-| T4.3 | `t4_3_backtest_range_all_limits` | all_limits() → 6 个条目 |
-| T4.4 | `t4_4_backtest_range_info_from` | From 转换 → timeframe 字符串正确 |
-| T4.5 | `t4_5_backtest_range_estimates` | M5: estimated_candles = 30*24*12 |
 
 ### 1.2 aggregator_tests.rs — K线聚合 (12)
 
@@ -63,19 +56,15 @@
 
 ## 2. 集成测试用例
 
-### integration_tests.rs (12)
+### integration_tests.rs (8)
 
 | ID | 测试函数 | 描述 |
 |----|---------|------|
-| INT-1.1 | `int_1_1_timeframe_roundtrip` | as_str → from_str_lossy 一致性 |
 | INT-1.2 | `int_1_2_align_then_aggregate` | align_open_time → aggregate 链路 |
 | INT-2.1 | `int_2_1_candle_from_1m_then_aggregate` | candle_from_1m → aggregate_1m 一致性 |
 | INT-2.2 | `int_2_2_aggregate_then_cache_update` | aggregate → cache.update_candle 链路 |
-| INT-2.3 | `int_2_3_cache_get_all_timeframes` | 多周期数据写入 → get_all_timeframes |
 | INT-3.1 | `int_3_1_subscription_key_then_check` | subscription_key → 一致性验证 |
 | INT-3.2 | `int_3_2_align_multi_timeframe` | 同一 open_time 不同周期对齐 |
-| INT-4.1 | `int_4_1_backtest_range_all_consistent` | all_limits 与 for_timeframe 一致 |
-| INT-4.2 | `int_4_2_backtest_range_info_chain` | for_timeframe → Into<BacktestRangeInfo> |
 | INT-5.1 | `int_5_1_gap_detection_logic` | 模拟缺口: 2根1m间隔 → 聚合验证 |
 | INT-5.2 | `int_5_2_aggregate_full_day_to_d1` | 1440根1m → 1根D1, OHLCV 正确 |
 | INT-6.1 | `int_6_1_timeframe_str_to_ms` | "1m"→60000, "1h"→3600000 等 |
@@ -86,8 +75,8 @@
 
 | 测试文件 | 被测模块 | 测试数 |
 |----------|----------|--------|
-| `src/types_tests.rs` | types.rs | 18 |
+| `src/types_tests.rs` | types.rs | 11 |
 | `src/aggregator_tests.rs` | aggregator.rs | 12 |
 | `src/cache_tests.rs` | cache.rs | 7 |
-| `tests/integration_tests.rs` | 跨模块链路 | 12 |
-| **合计** | | **49** |
+| `tests/integration_tests.rs` | 跨模块链路 | 8 |
+| **合计** | | **38** |

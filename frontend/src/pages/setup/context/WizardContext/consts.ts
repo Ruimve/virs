@@ -14,7 +14,7 @@ export type WizardStepValue = (typeof WizardStep)[keyof typeof WizardStep];
 export interface WizardState {
   current_step: WizardStepValue;
   exchange: string;
-  bot_type: 'grid' | 'auto';
+  bot_type: 'auto';
   paper_mode: boolean;
   llm_provider: string;
   llm_model: string;

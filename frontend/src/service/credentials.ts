@@ -41,12 +41,6 @@ export async function fetchPositionMode(): Promise<ApiResponse<PositionModeResul
   return api.get('/credentials/position-mode');
 }
 
-export async function verifyPermissions(): Promise<
-  ApiResponse<{ connected: boolean; permissions: PermissionItem[] }>
-> {
-  return api.post('/credentials/verify');
-}
-
 export async function fetchCredentialStatus(): Promise<
   ApiResponse<{ connected: boolean; exchange?: string }>
 > {

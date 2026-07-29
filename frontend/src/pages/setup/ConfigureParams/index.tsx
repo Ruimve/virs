@@ -6,45 +6,6 @@ import { WizardStep } from '../context/WizardContext/consts';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
 
-const GRID_PARAMS = [
-  {
-    key: 'symbol',
-    label: 'Trading Pair',
-    type: 'text' as const,
-    placeholder: 'BTCUSDT',
-    required: true,
-  },
-  {
-    key: 'upper_price',
-    label: 'Upper Price',
-    type: 'number' as const,
-    placeholder: '70000',
-    required: true,
-  },
-  {
-    key: 'lower_price',
-    label: 'Lower Price',
-    type: 'number' as const,
-    placeholder: '60000',
-    required: true,
-  },
-  {
-    key: 'grid_levels',
-    label: 'Grid Levels',
-    type: 'number' as const,
-    placeholder: '10',
-    required: true,
-  },
-  {
-    key: 'investment',
-    label: 'Investment (USDT)',
-    type: 'number' as const,
-    placeholder: '1000',
-    required: true,
-  },
-  { key: 'leverage', label: 'Leverage', type: 'number' as const, placeholder: '5', required: true },
-];
-
 const AUTO_PARAMS = [
   {
     key: 'symbol',
@@ -78,9 +39,8 @@ const ConfigureParams = () => {
   const [values, setValues] = useState<Record<string, string>>(wizard.bot_params);
 
   const params = useMemo(() => {
-    const isGrid = wizard.bot_type === 'grid';
-    return isGrid ? GRID_PARAMS : AUTO_PARAMS;
-  }, [wizard.bot_type]);
+    return AUTO_PARAMS;
+  }, []);
 
   const handleBack = useCallback(() => {
     navigate('/setup/exchange', { replace: true });
