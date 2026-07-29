@@ -209,9 +209,17 @@ impl WsHandler<WsEvent> for KlineWsHandler {
                 let raw_sym = data.ws_symbol().to_lowercase();
                 let original_symbol = {
                     let map = self.symbol_map.read().await;
-                    map.get(&raw_sym)
-                        .cloned()
-                        .unwrap_or_else(|| raw_sym.clone())
+                    map.get(&raw_sym).cloned()
+                };
+                let original_symbol = match original_symbol {
+                    Some(s) => s,
+                    None => {
+                        tracing::warn!(
+                            ws_symbol = %data.ws_symbol(),
+                            "symbol_map miss — skipping kline update (symbol not in subscription map)"
+                        );
+                        return Ok(MessageOutcome::Continue(vec![]));
+                    }
                 };
 
                 let candle = match data.to_candle() {

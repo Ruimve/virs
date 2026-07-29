@@ -121,7 +121,7 @@ impl ExchangeMarketDataProvider {
         }
     }
 
-    async fn fetch_current_price(&self, exchange: &str, symbol: &str, klines_1h: &[Kline]) -> f64 {
+    async fn fetch_current_price(&self, exchange: &str, symbol: &str, klines_1h: &[Kline]) -> VirsResult<f64> {
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine
                 .get_klines_async(exchange, symbol, Timeframe::M1)
@@ -129,7 +129,7 @@ impl ExchangeMarketDataProvider {
             {
                 if let Some(last) = candles.last() {
                     if last.close > 0.0 {
-                        return last.close;
+                        return Ok(last.close);
                     }
                 }
             }
@@ -139,16 +139,16 @@ impl ExchangeMarketDataProvider {
         if let Some(ex) = self.exchange_registry.get(&exchange_key) {
             if let Ok(t) = ex.get_ticker(symbol).await {
                 if t.last > 0.0 {
-                    return t.last;
+                    return Ok(t.last);
                 }
             }
         }
 
-        klines_1h.last().map(|k| k.close).unwrap_or_else(|| {
-            panic!(
+        klines_1h.last().map(|k| k.close).ok_or_else(|| {
+            VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
                 "All price sources failed for {} on {} — refusing to return 0.0 as price",
                 symbol, exchange
-            );
+            )))
         })
     }
 }
@@ -203,18 +203,18 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             .await
             .unwrap_or_default();
 
-        let current_price = self.fetch_current_price(exchange, symbol, &klines_1h).await;
+        let current_price = self.fetch_current_price(exchange, symbol, &klines_1h).await?;
 
         let exchange_key = format!("{}:perpetual", exchange);
-        let (funding_rate, funding_next_time) =
-            if let Some(ex) = self.exchange_registry.get(&exchange_key) {
+        let funding_next_time;
+        let funding_rate = if let Some(ex) = self.exchange_registry.get(&exchange_key) {
                 match ex.get_funding_rate(symbol).await {
                     Ok(fr) => {
-                        let next = fr
+                        funding_next_time = fr
                             .next_funding_time
                             .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
                             .unwrap_or_else(|| "N/A".to_string());
-                        (fr.rate, next)
+                        fr.rate
                     }
                     Err(e) => {
                         warn!(
@@ -392,7 +392,7 @@ impl AutoExchangeMarketDataProvider {
         }
     }
 
-    async fn fetch_current_price(&self, exchange: &str, symbol: &str, klines_1h: &[Kline]) -> f64 {
+    async fn fetch_current_price(&self, exchange: &str, symbol: &str, klines_1h: &[Kline]) -> VirsResult<f64> {
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine
                 .get_klines_async(exchange, symbol, Timeframe::M1)
@@ -400,7 +400,7 @@ impl AutoExchangeMarketDataProvider {
             {
                 if let Some(last) = candles.last() {
                     if last.close > 0.0 {
-                        return last.close;
+                        return Ok(last.close);
                     }
                 }
             }
@@ -410,16 +410,16 @@ impl AutoExchangeMarketDataProvider {
         if let Some(ex) = self.exchange_registry.get(&exchange_key) {
             if let Ok(t) = ex.get_ticker(symbol).await {
                 if t.last > 0.0 {
-                    return t.last;
+                    return Ok(t.last);
                 }
             }
         }
 
-        klines_1h.last().map(|k| k.close).unwrap_or_else(|| {
-            panic!(
+        klines_1h.last().map(|k| k.close).ok_or_else(|| {
+            VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
                 "All price sources failed for {} on {} — refusing to return 0.0 as price",
                 symbol, exchange
-            );
+            )))
         })
     }
 }
@@ -474,7 +474,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             .await
             .unwrap_or_default();
 
-        let current_price = self.fetch_current_price(exchange, symbol, &klines_1h).await;
+        let current_price = self.fetch_current_price(exchange, symbol, &klines_1h).await?;
 
         let exchange_key = format!("{}:perpetual", exchange);
         let (funding_rate, funding_next_time) =

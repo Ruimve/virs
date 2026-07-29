@@ -33,14 +33,15 @@ pub fn parse_balance_response(data: &serde_json::Value) -> Vec<serde_json::Value
         .or_else(|| data["data"].as_array())
         .map(|arr| {
             arr.iter().map(|b| {
-                let total_balance = b["total_balance"].as_str().unwrap_or_else(|| {
-                    tracing::warn!("total_balance field missing in balance response — defaulting to '0'");
-                    "0"
-                });
-                let currency = b["currency"].as_str().unwrap_or_else(|| {
-                    tracing::warn!("currency field missing in balance response — defaulting to 'USD'");
-                    "USD"
-                });
+                let total_balance = b["total_balance"].as_str();
+                let currency = b["currency"].as_str();
+                if total_balance.is_none() || currency.is_none() {
+                    tracing::warn!(
+                        total_balance = ?total_balance,
+                        currency = ?currency,
+                        "balance fields missing in response — returning null"
+                    );
+                }
                 serde_json::json!({
                     "total_balance": total_balance,
                     "currency": currency,

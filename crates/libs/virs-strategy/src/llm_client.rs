@@ -79,5 +79,11 @@ pub fn create_llm_http_client(llm_timeout: std::time::Duration) -> reqwest::Clie
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(llm_timeout)
         .build()
-        .unwrap_or_else(|_| reqwest::Client::new())
+        .unwrap_or_else(|_| {
+            tracing::warn!("LLM HTTP client builder failed — creating fallback with timeout only");
+            reqwest::Client::builder()
+                .timeout(llm_timeout)
+                .build()
+                .expect("fallback client with timeout must succeed")
+        })
 }
