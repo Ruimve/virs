@@ -12,6 +12,7 @@ export async function createAutoBot(params: {
   symbol: string;
   exchange: string;
   leverage?: number;
+  max_position_pct?: number;
   decide_interval_secs?: number;
   name?: string;
   paper_mode?: boolean;

@@ -28,6 +28,7 @@ const ReviewLaunch = () => {
         symbol: botParams.symbol,
         exchange: wizard.exchange,
         leverage: parseInt(botParams.leverage || '10'),
+        max_position_pct: parseFloat(botParams.max_position_pct || '20'),
         decide_interval_secs: parseInt(botParams.decision_interval || '300'),
         name: `Auto ${botParams.symbol || 'Bot'}`,
         paper_mode: paperMode,
@@ -182,6 +183,7 @@ const ReviewLaunch = () => {
       { label: 'Symbol', value: botParams.symbol || '-' },
       { label: 'AI Model', value: wizard.llm_model },
       { label: 'Leverage', value: `${botParams.leverage || '-'}x` },
+      { label: 'Max Position %', value: `${botParams.max_position_pct || '-'}%` },
       { label: 'Decision Interval', value: `${botParams.decision_interval || '300'}s` },
       {
         label: 'Mode',

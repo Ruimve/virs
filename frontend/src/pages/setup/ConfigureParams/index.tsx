@@ -11,24 +11,36 @@ const AUTO_PARAMS = [
     key: 'symbol',
     label: 'Trading Pair',
     type: 'text' as const,
-    placeholder: 'BTCUSDT',
+    defaultValue: 'BTCUSDT',
     required: true,
   },
   {
     key: 'leverage',
     label: 'Leverage',
     type: 'number' as const,
-    placeholder: '10',
+    defaultValue: '10',
+    required: true,
+  },
+  {
+    key: 'max_position_pct',
+    label: 'Max Position %',
+    type: 'number' as const,
+    defaultValue: '20',
     required: true,
   },
   {
     key: 'decision_interval',
     label: 'Decision Interval (seconds)',
     type: 'number' as const,
-    placeholder: '300',
+    defaultValue: '300',
     required: true,
   },
 ];
+
+const DEFAULT_VALUES: Record<string, string> = AUTO_PARAMS.reduce(
+  (acc, p) => ({ ...acc, [p.key]: p.defaultValue }),
+  {},
+);
 
 const ConfigureParams = () => {
   const navigate = useNavigate();
@@ -36,7 +48,10 @@ const ConfigureParams = () => {
   const { wizard, updateWizard, advanceStep } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.ConfigureParams);
 
-  const [values, setValues] = useState<Record<string, string>>(wizard.bot_params);
+  const [values, setValues] = useState<Record<string, string>>({
+    ...DEFAULT_VALUES,
+    ...wizard.bot_params,
+  });
 
   const params = useMemo(() => {
     return AUTO_PARAMS;
@@ -89,7 +104,6 @@ const ConfigureParams = () => {
               onChange={(e) => {
                 setValues((prev) => ({ ...prev, [param.key]: e.target.value }));
               }}
-              placeholder={param.placeholder}
             />
           </div>
         ))}
