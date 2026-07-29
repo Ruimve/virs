@@ -389,7 +389,7 @@ pub async fn update_bot(
 
     tracing::info!(
         bot_id = %id,
-        old_strategy = ?bot.strategy_file,
+        old_strategy = %bot.strategy_file.as_deref().unwrap_or("none"),
         new_strategy = %new_strategy_file,
         "Bot strategy updated"
     );

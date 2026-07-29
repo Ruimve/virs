@@ -88,12 +88,12 @@ impl ExchangeMarketDataProvider {
                 Ok(k) if !required => Some(k),
                 Ok(k) => {
                     warn!(
-                        exchange,
-                        symbol,
+                        exchange = %exchange,
+                        symbol = %symbol,
+                        interval = %interval_str,
                         count = k.len(),
                         required = min_count,
-                        "{} klines insufficient",
-                        interval_str
+                        "klines insufficient"
                     );
                     if required {
                         None
@@ -102,7 +102,7 @@ impl ExchangeMarketDataProvider {
                     }
                 }
                 Err(e) => {
-                    warn!(exchange, symbol, error = %e, "Failed to fetch {} klines", interval_str);
+                    warn!(exchange = %exchange, symbol = %symbol, interval = %interval_str, error = %e, "Failed to fetch klines");
                     if required {
                         None
                     } else {
@@ -111,7 +111,7 @@ impl ExchangeMarketDataProvider {
                 }
             },
             None => {
-                warn!(exchange, symbol, "No exchange for {} klines", interval_str);
+                warn!(exchange = %exchange, symbol = %symbol, interval = %interval_str, "No exchange for klines");
                 if required {
                     None
                 } else {
@@ -280,7 +280,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             match pe_ex.get_balance().await {
                 Ok(b) => return Ok(b),
                 Err(e) => {
-                    warn!(error = %e, "PE exchange get_balance failed, falling back to registry");
+                    warn!(exchange = %exchange, error = %e, "PE exchange get_balance failed, falling back to registry");
                 }
             }
         }
@@ -292,7 +292,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
             ))))?;
 
         ex.get_balance().await.map_err(|e| {
-            warn!(error = %e, "get_account_balance error");
+            warn!(exchange = %exchange, error = %e, "get_account_balance error");
             VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
                 "Failed to fetch balance for {}: {}", exchange, e
             )))
@@ -359,12 +359,12 @@ impl AutoExchangeMarketDataProvider {
                 Ok(k) if !required => Some(k),
                 Ok(k) => {
                     warn!(
-                        exchange,
-                        symbol,
+                        exchange = %exchange,
+                        symbol = %symbol,
+                        interval = %interval_str,
                         count = k.len(),
                         required = min_count,
-                        "{} klines insufficient",
-                        interval_str
+                        "klines insufficient"
                     );
                     if required {
                         None
@@ -373,7 +373,7 @@ impl AutoExchangeMarketDataProvider {
                     }
                 }
                 Err(e) => {
-                    warn!(exchange, symbol, error = %e, "Failed to fetch {} klines", interval_str);
+                    warn!(exchange = %exchange, symbol = %symbol, interval = %interval_str, error = %e, "Failed to fetch klines");
                     if required {
                         None
                     } else {
@@ -382,7 +382,7 @@ impl AutoExchangeMarketDataProvider {
                 }
             },
             None => {
-                warn!(exchange, symbol, "No exchange for {} klines", interval_str);
+                warn!(exchange = %exchange, symbol = %symbol, interval = %interval_str, "No exchange for klines");
                 if required {
                     None
                 } else {
@@ -545,7 +545,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             match pe_ex.get_balance().await {
                 Ok(b) => return Ok(b),
                 Err(e) => {
-                    warn!(error = %e, "PE exchange get_balance failed, falling back to registry");
+                    warn!(exchange = %exchange, error = %e, "PE exchange get_balance failed, falling back to registry");
                 }
             }
         }
@@ -557,7 +557,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
             ))))?;
 
         ex.get_balance().await.map_err(|e| {
-            warn!(error = %e, "get_account_balance error");
+            warn!(exchange = %exchange, error = %e, "get_account_balance error");
             VirsError::Exchange(virs_error::ExchangeError::no_data(format!(
                 "Failed to fetch balance for {}: {}", exchange, e
             )))

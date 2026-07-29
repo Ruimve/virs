@@ -114,7 +114,7 @@ impl BinanceKlineData {
         let symbol = &self.kline.symbol;
         let parse = |field: &str, raw: &str| -> Result<f64, virs_error::ExchangeError> {
             raw.parse::<f64>().map_err(|e| {
-                tracing::error!(symbol = %symbol, field = field, raw = %raw, error = %e, "Failed to parse kline OHLCV field — returning NoData instead of 0.0");
+                tracing::error!(symbol = %symbol, field = %field, raw = %raw, error = %e, "Failed to parse kline OHLCV field — returning NoData instead of 0.0");
                 virs_error::ExchangeError::no_data(format!(
                     "kline {field} parse failed for {symbol}: {raw} ({e})"
                 ))
@@ -181,8 +181,8 @@ impl WsHandler<WsEvent> for KlineWsHandler {
             Ok(m) => m,
             Err(_) => {
                 tracing::warn!(
-                    preview = &text[..text.len().min(200)],
-                    "[KlineWs] Failed to parse WS message"
+                    preview = %&text[..text.len().min(200)],
+                    "Failed to parse WS message"
                 );
                 return Ok(MessageOutcome::Continue(vec![]));
             }
@@ -200,7 +200,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
                             event_time = data.event_time,
                             local_time = local_now,
                             symbol = %data.kline.symbol,
-                            "[KlineWs] Message delay exceeds threshold"
+                            "Message delay exceeds threshold"
                         );
                     }
                 }
@@ -248,12 +248,12 @@ impl WsHandler<WsEvent> for KlineWsHandler {
                         id = ?resp.get("id"),
                         code = ?code,
                         msg = ?resp.get("msg"),
-                        "[KlineWs] Subscription rejected by Binance"
+                        "Subscription rejected by Binance"
                     );
                 } else if resp.get("result").is_some() {
                     tracing::info!(
                         id = ?resp.get("id"),
-                        "[KlineWs] Subscription confirmed by Binance"
+                        "Subscription confirmed by Binance"
                     );
                 }
             }
@@ -279,7 +279,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
         tracing::info!(
             id = id,
             count = subs_vec.len(),
-            "[KlineWs] Batch subscription request sent on connect"
+            "Batch subscription request sent on connect"
         );
 
         vec![msg.to_string()]
@@ -303,10 +303,9 @@ impl WsHandler<WsEvent> for KlineWsHandler {
 
         tracing::info!(
             id = id,
-            method = method,
+            method = %method,
             stream = %stream_name,
-            "[KlineWs] Dynamic {} request sent",
-            method
+            "Dynamic subscription request sent"
         );
 
         Some(msg.to_string())
@@ -372,14 +371,14 @@ impl KlineWsClient for KlineWs {
                     WsManagerEvent::CircuitBreakerTripped { retry_count } => {
                         tracing::error!(
                             retry_count = retry_count,
-                            "[KlineWs] Circuit breaker tripped — WS stopped after max retries"
+                            "Circuit breaker tripped — WS stopped after max retries"
                         );
                         continue;
                     }
                 };
 
                 if update_tx.send(ws_event).is_err() {
-                    tracing::warn!("[KlineWs] All receivers dropped, stopping forwarder");
+                    tracing::warn!("All receivers dropped, stopping forwarder");
                     break;
                 }
             }

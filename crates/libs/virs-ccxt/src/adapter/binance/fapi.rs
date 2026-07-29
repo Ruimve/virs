@@ -678,7 +678,7 @@ pub async fn fetch_positions(
             "isolated" => MarginMode::Isolated,
             "cross" => MarginMode::Cross,
             other => {
-                tracing::warn!(symbol = %symbol_str, margin_type = other, "positionRisk unknown marginType — skipping position");
+                tracing::warn!(symbol = %symbol_str, margin_type = %other, "positionRisk unknown marginType — skipping position");
                 continue;
             }
         };

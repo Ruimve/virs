@@ -189,8 +189,8 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
             Ok(m) => m,
             Err(_) => {
                 tracing::warn!(
-                    preview = &text[..text.len().min(200)],
-                    "[OrderBookWs] Failed to parse WS message"
+                    preview = %&text[..text.len().min(200)],
+                    "Failed to parse WS message"
                 );
                 return Ok(MessageOutcome::Continue(vec![]));
             }
@@ -206,7 +206,7 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
                         delay_ms = delay_ms,
                         event_time = pd.timestamp_ms,
                         local_time = local_now,
-                        "[OrderBookWs] Message delay exceeds threshold"
+                        "Message delay exceeds threshold"
                     );
                 }
             }
@@ -241,12 +241,12 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
                         id = ?resp.get("id"),
                         code = ?code,
                         msg = ?resp.get("msg"),
-                        "[OrderBookWs] Subscription rejected by Binance"
+                        "Subscription rejected by Binance"
                     );
                 } else if resp.get("result").is_some() {
                     tracing::info!(
                         id = ?resp.get("id"),
-                        "[OrderBookWs] Subscription confirmed by Binance"
+                        "Subscription confirmed by Binance"
                     );
                 }
             }
@@ -272,7 +272,7 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
         tracing::info!(
             id = id,
             count = subs_vec.len(),
-            "[OrderBookWs] Batch subscription request sent on connect"
+            "Batch subscription request sent on connect"
         );
 
         vec![msg.to_string()]
@@ -296,10 +296,9 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
 
         tracing::info!(
             id = id,
-            method = method,
+            method = %method,
             stream = %stream_name,
-            "[OrderBookWs] Dynamic {} request sent",
-            method
+            "Dynamic subscription request sent"
         );
 
         Some(msg.to_string())
@@ -365,13 +364,13 @@ impl OrderBookWsClient for OrderBookWs {
                     WsManagerEvent::CircuitBreakerTripped { retry_count } => {
                         tracing::error!(
                             retry_count = retry_count,
-                            "[OrderBookWs] Circuit breaker tripped — WS stopped after max retries"
+                            "Circuit breaker tripped — WS stopped after max retries"
                         );
                         continue;
                     }
                 };
                 if update_tx.send(ws_event).is_err() {
-                    tracing::warn!("[OrderBookWs] All receivers dropped, stopping forwarder");
+                    tracing::warn!("All receivers dropped, stopping forwarder");
                     break;
                 }
             }

@@ -36,7 +36,7 @@ pub async fn call_llm_api(
     if !response.status().is_success() {
         let status = response.status();
         let body_text = response.text().await.unwrap_or_else(|e| {
-            tracing::warn!(error = %e, "Failed to read LLM API error response body — using empty string");
+            warn!(error = %e, "Failed to read LLM API error response body — using empty string");
             String::new()
         });
         return Err(BotError::llm(format!(
@@ -62,8 +62,9 @@ pub async fn call_llm_api(
 
     let content: serde_json::Value = serde_json::from_str(&content_str).map_err(|e| {
         warn!(
-            "Failed to parse AI JSON response: {}, raw: {}",
-            e, content_str
+            error = %e,
+            raw = %content_str,
+            "Failed to parse AI JSON response"
         );
         BotError::llm(e.to_string())
     })?;
@@ -80,7 +81,7 @@ pub fn create_llm_http_client(llm_timeout: std::time::Duration) -> reqwest::Clie
         .timeout(llm_timeout)
         .build()
         .unwrap_or_else(|_| {
-            tracing::warn!("LLM HTTP client builder failed — creating fallback with timeout only");
+            warn!("LLM HTTP client builder failed — creating fallback with timeout only");
             reqwest::Client::builder()
                 .timeout(llm_timeout)
                 .build()

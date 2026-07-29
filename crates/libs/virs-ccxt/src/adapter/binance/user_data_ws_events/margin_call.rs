@@ -51,8 +51,8 @@ pub fn process(json: &str) -> Option<WsFeedEvent> {
         Err(e) => {
             tracing::warn!(
                 error = %e,
-                "[MARGIN_CALL] 解析失败: {}",
-                &json[..json.len().min(200)]
+                raw = &json[..json.len().min(200)],
+                "解析失败"
             );
             return None;
         }

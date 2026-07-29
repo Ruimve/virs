@@ -97,7 +97,7 @@ impl WsHandler<WsFeedEvent> for UserDataWsHandler {
         // 更新共享的current_key
         *self.current_key.write().expect("listenKey RwLock poisoned") = new_key.clone();
         let url = format!("wss://fstream.binance.com/private/ws?listenKey={}", new_key);
-        tracing::info!("[UserDataWs] Refreshed listenKey for reconnect");
+        tracing::info!("Refreshed listenKey for reconnect");
         Ok(url)
     }
 
@@ -117,7 +117,7 @@ impl WsHandler<WsFeedEvent> for UserDataWsHandler {
                             delay_ms = delay_ms,
                             event_time = et,
                             event_type = %event_type,
-                            "[UserDataWs] Order event delay exceeds threshold"
+                            "Order event delay exceeds threshold"
                         );
                     }
                 }
@@ -135,12 +135,12 @@ impl WsHandler<WsFeedEvent> for UserDataWsHandler {
             if let Some(et) = payload.get("e").and_then(|v| v.as_str()) {
                 if et == "listenKeyExpired" {
                     tracing::warn!(
-                        "[UserDataWs] listenKey expired — requesting reconnect with fresh key"
+                        "listenKey expired — requesting reconnect with fresh key"
                     );
                     return Ok(MessageOutcome::Reconnect);
                 }
                 if et == "serverShutdown" {
-                    tracing::warn!("[UserDataWs] Server shutdown event — requesting reconnect");
+                    tracing::warn!("Server shutdown event — requesting reconnect");
                     return Ok(MessageOutcome::Reconnect);
                 }
             }
@@ -224,14 +224,14 @@ impl UserDataWs {
                     WsManagerEvent::CircuitBreakerTripped { retry_count } => {
                         tracing::error!(
                             retry_count = retry_count,
-                            "[UserDataWs] Circuit breaker tripped — WS stopped after max retries"
+                            "Circuit breaker tripped — WS stopped after max retries"
                         );
                         WsFeedEvent::ConnectionChanged { connected: false }
                     }
                 };
                 if event_tx.send(feed_event).await.is_err() {
                     tracing::warn!(
-                        "[UserDataWs] External event channel closed, stopping forwarder"
+                        "External event channel closed, stopping forwarder"
                     );
                     break;
                 }

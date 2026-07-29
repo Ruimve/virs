@@ -5,7 +5,7 @@ use dashmap::DashMap;
 use futures_util::StreamExt;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use virs_error::{VirsError, VirsResult};
@@ -30,7 +30,7 @@ fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
 }
 
 macro_rules! persist {
-    ($expr:expr, $label:expr, $max_retries:expr, $base_ms:expr) => {
+    ($expr:expr, $label:expr, $max_retries:expr, $base_ms:expr $(, $ctx_key:ident = $ctx_val:expr)* $(,)?) => {
         let mut attempts = 0u32;
         loop {
             match $expr.await {
@@ -38,10 +38,10 @@ macro_rules! persist {
                 Err(e) => {
                     attempts += 1;
                     if attempts >= $max_retries {
-                        error!(error = %e, attempts, $label);
+                        error!(error = %e, attempts $(, $ctx_key = %$ctx_val)*, $label);
                         break;
                     }
-                    warn!(error = %e, attempt = attempts, $label);
+                    warn!(error = %e, attempt = attempts $(, $ctx_key = %$ctx_val)*, $label);
                     tokio::time::sleep(std::time::Duration::from_millis($base_ms * attempts as u64)).await;
                 }
             }
@@ -110,7 +110,7 @@ impl EngineInner {
     fn emit_event(&self, event: EngineEvent) {
         if self.event_tx.receiver_count() > 0 {
             if self.event_tx.send(event).is_err() {
-                tracing::debug!("EngineEvent broadcast — receiver dropped between check and send");
+                debug!("EngineEvent broadcast — receiver dropped between check and send");
             }
         }
     }
@@ -424,7 +424,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
     };
 
     if let Some(reason) = rejection_reason {
-        tracing::error!(
+        error!(
             symbol = %ws_order.symbol,
             client_order_id = %ws_order.client_order_id,
             order_id = ws_order.order_id,
@@ -435,7 +435,9 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
             inner.persistence.persist_rejected_order(&ws_order, &reason),
             "persist_rejected_order",
             inner.persist_max_retries,
-            inner.persist_retry_base_ms
+            inner.persist_retry_base_ms,
+            symbol = ws_order.symbol,
+            client_order_id = ws_order.client_order_id
         );
         return;
     }
@@ -456,7 +458,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
     let timestamp = match chrono::DateTime::from_timestamp_millis(ws_order.trade_time) {
         Some(ts) => ts,
         None => {
-            tracing::error!(
+            error!(
                 symbol = %ws_order.symbol,
                 client_order_id = %ws_order.client_order_id,
                 trade_time = ws_order.trade_time,
@@ -473,7 +475,9 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
             inner.persistence.persist_order(&ws_order),
             "persist_order (pending)",
             inner.persist_max_retries,
-            inner.persist_retry_base_ms
+            inner.persist_retry_base_ms,
+            symbol = ws_order.symbol,
+            client_order_id = ws_order.client_order_id
         );
 
         let position_id = pending.position_id;
@@ -534,7 +538,9 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
             inner.persistence.persist_order(&ws_order),
             "persist_order",
             inner.persist_max_retries,
-            inner.persist_retry_base_ms
+            inner.persist_retry_base_ms,
+            symbol = ws_order.symbol,
+            client_order_id = ws_order.client_order_id
         );
 
         let trade_fill = filled - prev_filled;
@@ -603,7 +609,9 @@ async fn finalize_pending_order(
         inner.persistence.persist_order(&ws_order),
         "persist_order",
         inner.persist_max_retries,
-        inner.persist_retry_base_ms
+        inner.persist_retry_base_ms,
+        symbol = ws_order.symbol,
+        client_order_id = ws_order.client_order_id
     );
 
     let order_status: OrderStatus = ws_order.status.clone().into();
@@ -898,8 +906,8 @@ pub(crate) async fn handle_close_position(
     let position = match position {
         Some(p) => p,
         None => {
+            warn!(position_id = %position_id, "Position not found");
             let msg = format!("Position not found: {}", position_id);
-            warn!(msg);
             let client_order_id = Uuid::new_v4().to_string();
             inner.emit_event(EngineEvent::OrderFailed {
                 client_order_id,
@@ -1007,7 +1015,7 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
                 Some(ps) => ps,
                 None => {
                     error!(
-                        client_order_id = ?params.client_order_id,
+                        client_order_id = %params.client_order_id.as_deref().unwrap_or("none"),
                         symbol = %params.symbol,
                         "position_side unresolved (side is Unknown), cannot place order"
                     );

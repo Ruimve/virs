@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 
 use async_trait::async_trait;
 use tokio::sync::{broadcast, mpsc, Mutex};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use virs_api::EngineManager;
 use virs_bot::auto::types::AutoCommand;
@@ -165,9 +165,9 @@ impl AppEngineManager {
                 })?;
 
                 if let Err(e) = ccxt_ex.sync_time().await {
-                    tracing::warn!(
+                    warn!(
                         error = %e,
-                        exchange,
+                        exchange = %exchange,
                         "Server time sync failed, using local clock (recvWindow 5000ms tolerates small drift)"
                     );
                 }
@@ -175,7 +175,7 @@ impl AppEngineManager {
                 let app_mt = MarketType::Perpetual;
                 let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, app_mt);
                 self.exchange_registry.register(Box::new(adapter));
-                info!(exchange, "Restored exchange credential");
+                info!(exchange = %exchange, "Restored exchange credential");
             }
         }
 
@@ -200,7 +200,7 @@ impl AppEngineManager {
                         exchange, symbol, e
                     ))
                 })?;
-            info!(exchange, symbol, "Restored kline subscription");
+            info!(exchange = %exchange, symbol = %symbol, "Restored kline subscription");
 
             self.orderbook_engine
                 .subscribe(exchange, symbol, mt)
@@ -211,7 +211,7 @@ impl AppEngineManager {
                         exchange, symbol, e
                     ))
                 })?;
-            info!(exchange, symbol, "Restored orderbook subscription");
+            info!(exchange = %exchange, symbol = %symbol, "Restored orderbook subscription");
         }
 
         let paper_modes: Vec<bool> = sqlx::query_scalar(
@@ -251,7 +251,7 @@ impl AppEngineManager {
         sqlx::query(r#"UPDATE qd_auto_bots SET status = 'error', stopped_at = NOW() WHERE status = 'running'"#)
             .execute(&self.db_pool)
             .await?;
-        info!("Marked all running bots as 'error' due to restore failure");
+        error!("Marked all running bots as 'error' due to restore failure");
         Ok(())
     }
 }
@@ -269,7 +269,7 @@ impl EngineManager for AppEngineManager {
             return Ok(());
         }
 
-        info!("Starting trading engines (paper_mode={})...", paper_mode);
+        info!(paper_mode, "Starting trading engines");
 
         let pe_exchange: Arc<dyn ExchangePe> = if paper_mode {
             // paper 模式：直接从 registry 获取真实 perpetual 交易所的余额作为初始资金，
@@ -278,12 +278,12 @@ impl EngineManager for AppEngineManager {
                 Some(ex) => match ex.get_balance().await {
                     Ok(b) => b.total,
                     Err(e) => {
-                        tracing::warn!(error = %e, "Paper mode: failed to fetch real balance, using 0");
+                        warn!(error = %e, mode = "paper", "Failed to fetch real balance, using 0");
                         0.0
                     }
                 },
                 None => {
-                    tracing::warn!("Paper mode: no perpetual exchange registered, using 0 balance");
+                    warn!(mode = "paper", "No perpetual exchange registered, using 0 balance");
                     0.0
                 }
             };
@@ -318,10 +318,10 @@ impl EngineManager for AppEngineManager {
 
         let pe_handle = tokio::spawn(async move {
             if let Err(e) = position_engine.run().await {
-                tracing::error!(error = %e, "Position Engine run failed");
+                error!(error = %e, "Position Engine run failed");
             }
         });
-        info!("Position Engine started (paper={})", paper_mode);
+        info!(paper_mode, "Position Engine started");
 
         let (grid_event_tx, _grid_event_rx) = tokio::sync::broadcast::channel(256);
 
@@ -557,7 +557,7 @@ impl EngineManager for AppEngineManager {
         }
 
         if let Err(e) = self.restore_inner().await {
-            error!("Service restore failed: {}", e);
+            error!(error = %e, "Service restore failed");
 
             if let Err(db_err) = self.mark_running_bots_as_error().await {
                 error!(error = %db_err, "Failed to mark bots as error during restore failure");

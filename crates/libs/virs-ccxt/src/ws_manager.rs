@@ -197,7 +197,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                     Err(e) => {
                         tracing::error!(
                             error = %e,
-                            "[WsManager] refresh_url failed — will retry after backoff"
+                            "refresh_url failed — will retry after backoff"
                         );
                         if !Self::do_backoff(
                             &running,
@@ -236,7 +236,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                             .await
                             .is_err()
                         {
-                            tracing::warn!("[WsManager] Event channel closed on connect, stopping");
+                            tracing::warn!("Event channel closed on connect, stopping");
                             running.store(false, Ordering::Relaxed);
                             break;
                         }
@@ -254,7 +254,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                 .is_err()
                             {
                                 tracing::warn!(
-                                    "[WsManager] Failed to send on_connected message, reconnecting"
+                                    "Failed to send on_connected message, reconnecting"
                                 );
                                 write_ok = false;
                                 break;
@@ -276,8 +276,8 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                 // 连接达到最大存活时间，主动重连
                                 if connect_start.elapsed() > max_lifetime {
                                     tracing::info!(
-                                        "[WsManager] Max lifetime ({}s) reached, reconnecting",
-                                        config.max_lifetime_secs
+                                        max_lifetime_secs = config.max_lifetime_secs,
+                                        "Max lifetime reached, reconnecting"
                                     );
                                     break;
                                 }
@@ -288,7 +288,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                 {
                                     tracing::warn!(
                                     pong_timeout_secs = config.pong_timeout_secs,
-                                    "[WsManager] No message received within pong timeout, forcing reconnect"
+                                    "No message received within pong timeout, forcing reconnect"
                                 );
                                     break;
                                 }
@@ -304,7 +304,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                                         for ev in events {
                                                             if event_tx.send(WsManagerEvent::Message(ev)).await.is_err() {
                                                                 tracing::warn!(
-                                                                    "[WsManager] Event channel closed — stopping WS"
+                                                                    "Event channel closed — stopping WS"
                                                                 );
                                                                 running.store(false, Ordering::Relaxed);
                                                                 break;
@@ -313,15 +313,15 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                                     }
                                                     Ok(MessageOutcome::Reconnect) => {
                                                         tracing::info!(
-                                                            "[WsManager] Handler requested reconnect"
+                                                            "Handler requested reconnect"
                                                         );
                                                         break;
                                                     }
                                                     Err(e) => {
                                                         tracing::warn!(
                                                             error = %e,
-                                                            msg_preview = &text[..text.len().min(200)],
-                                                            "[WsManager] on_message error — skipping, WS continues"
+                                                            msg_preview = %&text[..text.len().min(200)],
+                                                            "on_message error — skipping, WS continues"
                                                         );
                                                     }
                                                 }
@@ -331,17 +331,17 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                             }
                                             Some(Ok(tungstenite::Message::Pong(_))) => {}
                                             Some(Ok(tungstenite::Message::Close(_))) => {
-                                                tracing::warn!("[WsManager] Server closed connection");
+                                                tracing::warn!("Server closed connection");
                                                 break;
                                             }
                                             Some(Ok(tungstenite::Message::Binary(_))) => {}
                                             Some(Ok(tungstenite::Message::Frame(_))) => {}
                                             Some(Err(e)) => {
-                                                tracing::error!(error = %e, "[WsManager] Read error");
+                                                tracing::error!(error = %e, "Read error");
                                                 break;
                                             }
                                             None => {
-                                                tracing::warn!("[WsManager] Stream ended");
+                                                tracing::warn!("Stream ended");
                                                 break;
                                             }
                                         }
@@ -349,7 +349,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                     _ = ping_tick.tick() => {
                                         let ping = tungstenite::Message::Ping(vec![].into());
                                         if write.send(ping).await.is_err() {
-                                            tracing::warn!("[WsManager] Ping failed, reconnecting");
+                                            tracing::warn!("Ping failed, reconnecting");
                                             break;
                                         }
                                     }
@@ -367,7 +367,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                                     .is_err()
                                                 {
                                                     tracing::warn!(
-                                                        "[WsManager] Command send failed, reconnecting"
+                                                        "Command send failed, reconnecting"
                                                     );
                                                     break;
                                                 }
@@ -377,7 +377,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                         }
                                     }
                                     _ = shutdown_rx.recv() => {
-                                        tracing::info!("[WsManager] Shutdown signal received, closing");
+                                        tracing::info!("Shutdown signal received, closing");
                                         let _ = write.send(tungstenite::Message::Close(None)).await;
                                         running.store(false, Ordering::Relaxed);
                                         handler.on_disconnected().await;
@@ -398,19 +398,19 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                             .is_err()
                         {
                             tracing::warn!(
-                                "[WsManager] Event channel closed on disconnect, stopping"
+                                "Event channel closed on disconnect, stopping"
                             );
                             running.store(false, Ordering::Relaxed);
                             break;
                         }
                     }
                     Ok(Err(e)) => {
-                        tracing::error!(error = %e, "[WsManager] Connection failed");
+                        tracing::error!(error = %e, "Connection failed");
                     }
                     Err(_) => {
                         tracing::error!(
                             timeout_secs = config.connect_timeout_secs,
-                            "[WsManager] Connection timeout"
+                            "Connection timeout"
                         );
                     }
                 }
@@ -473,7 +473,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                 tracing::error!(
                     retries = retries,
                     max_retries = config.max_retries,
-                    "[WsManager] Max retries exceeded — circuit breaker tripped"
+                    "Max retries exceeded — circuit breaker tripped"
                 );
                 let _ = event_tx
                     .send(WsManagerEvent::CircuitBreakerTripped {

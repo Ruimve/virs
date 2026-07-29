@@ -167,13 +167,13 @@ impl AutoAiService {
                 match AutoDecision::from_json(&result.content) {
                     Ok(decision) => Some((decision, result.content, used_model)),
                     Err(e) => {
-                        warn!("Failed to parse auto decision: {}", e);
+                        warn!(error = %e, "Failed to parse auto decision");
                         None
                     }
                 }
             }
             Err(e) => {
-                warn!("LLM auto decision failed: {}", e);
+                warn!(error = %e, "LLM auto decision failed");
                 None
             }
         }

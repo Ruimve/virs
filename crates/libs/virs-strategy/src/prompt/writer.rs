@@ -86,7 +86,7 @@ pub fn save_template(template: &PromptTemplate, overwrite: bool) -> BotResult<Pa
     tracing::info!(
         path = %strategy_dir.display(),
         name = %template.name,
-        strategy_type = ?template.strategy_type,
+        strategy_type = %template.strategy_type.as_dir(),
         "策略模板已保存"
     );
 
@@ -122,7 +122,7 @@ pub fn delete_template(
 
     tracing::info!(
         path = %strategy_dir.display(),
-        name = name,
+        name = %name,
         "策略模板已删除"
     );
 

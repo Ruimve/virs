@@ -326,7 +326,7 @@ impl AutoWorker {
             )
             .await
         {
-            warn!(bot_id = %self.bot.id, error = %e, "Failed to update stats");
+            error!(bot_id = %self.bot.id, error = %e, "Failed to update stats");
         }
     }
 
@@ -439,7 +439,7 @@ impl AutoWorker {
             .await;
         }
         if self.current_price <= 0.0 {
-            error!(bot_id = %self.bot.id, "Failed to fetch initial price after {} attempts, setting error status", max_retries);
+            error!(bot_id = %self.bot.id, attempts = max_retries, "Failed to fetch initial price, setting error status");
             if let Err(e) = self.store.update_bot_status(self.bot.id, "error").await {
                 error!(error = %e, "Failed to update bot status to error");
             }
@@ -804,7 +804,7 @@ impl AutoWorker {
             };
             info!(
                 bot_id = %self.bot.id, side = %side_str,
-                close_reason, price = self.current_price,
+                close_reason = %close_reason, price = self.current_price,
                 stop_loss, take_profit,
                 "Stop/take profit triggered"
             );
@@ -1280,12 +1280,13 @@ impl AutoWorker {
                     if let Some(obj) = result.as_object_mut() {
                         obj.insert("raw_llm_response".to_string(), raw_llm_response.clone());
                     } else {
-                        tracing::error!(
+                        error!(
+                            bot_id = %self.bot.id,
                             "LLM result is not a JSON object — cannot insert raw_llm_response"
                         );
                     }
                 }
-                let log_id = self
+                let log_id = match self
                     .store
                     .save_analysis_log(
                         self.bot.id,
@@ -1298,7 +1299,13 @@ impl AutoWorker {
                         &self.bot.strategy_file,
                     )
                     .await
-                    .ok();
+                {
+                    Ok(id) => Some(id),
+                    Err(e) => {
+                        error!(bot_id = %self.bot.id, error = %e, "Failed to save analysis log");
+                        None
+                    }
+                };
 
                 (d.action.clone(), log_id)
             }
@@ -1319,7 +1326,7 @@ impl AutoWorker {
                     "analysis": null,
                     "risk_warning": null,
                 });
-                let log_id = self
+                let log_id = match self
                     .store
                     .save_analysis_log(
                         self.bot.id,
@@ -1332,7 +1339,13 @@ impl AutoWorker {
                         &self.bot.strategy_file,
                     )
                     .await
-                    .ok();
+                {
+                    Ok(id) => Some(id),
+                    Err(e) => {
+                        error!(bot_id = %self.bot.id, error = %e, "Failed to save analysis log");
+                        None
+                    }
+                };
 
                 (AutoAction::Hold, log_id)
             }
@@ -1358,7 +1371,7 @@ impl AutoWorker {
                 if d.confidence < 0.6 {
                     warn!(
                         bot_id = %self.bot.id,
-                        action = action.as_str(),
+                        action = %action.as_str(),
                         confidence = d.confidence,
                         "Confidence below 0.6 threshold for opening position, downgrading to Hold"
                     );
@@ -1510,7 +1523,7 @@ impl AutoWorker {
         let regime = match self.bot.market_regime.as_deref() {
             Some(r) => r,
             None => {
-                tracing::warn!(bot_id = %self.bot.id, "market_regime is None — skipping AI analysis update to avoid default value");
+                warn!(bot_id = %self.bot.id, "market_regime is None — skipping AI analysis update to avoid default value");
                 return;
             }
         };
@@ -1518,7 +1531,7 @@ impl AutoWorker {
         let analysis = match d.analysis.as_deref() {
             Some(a) => a,
             None => {
-                tracing::warn!(bot_id = %self.bot.id, "analysis is None — skipping AI analysis update to avoid overwriting historical value");
+                warn!(bot_id = %self.bot.id, "analysis is None — skipping AI analysis update to avoid overwriting historical value");
                 return;
             }
         };
@@ -1603,7 +1616,7 @@ impl AutoWorker {
             "long" => PositionSide::Long,
             "short" => PositionSide::Short,
             _ => {
-                error!(side = %side, "Unknown position side — refusing to place order");
+                error!(bot_id = %self.bot.id, side = %side, "Unknown position side — refusing to place order");
                 return;
             }
         };
@@ -1612,7 +1625,7 @@ impl AutoWorker {
             "long" => Side::Buy,
             "short" => Side::Sell,
             _ => {
-                error!(side = %side, "Unknown position side — refusing to place order");
+                error!(bot_id = %self.bot.id, side = %side, "Unknown position side — refusing to place order");
                 return;
             }
         };
@@ -1658,7 +1671,7 @@ impl AutoWorker {
                 }
             }
             Err(e) => {
-                warn!(bot_id = %self.bot.id, error = %e, "Failed to send open position order");
+                error!(bot_id = %self.bot.id, client_order_id = %client_order_id, symbol = %self.bot.symbol, error = %e, "Failed to send open position order");
             }
         }
     }
@@ -1712,7 +1725,7 @@ impl AutoWorker {
                     }
                 }
                 Err(e) => {
-                    error!(bot_id = %self.bot.id, side = %side_str, error = %e, "Failed to send close position order");
+                    error!(bot_id = %self.bot.id, client_order_id = %client_order_id, symbol = %self.bot.symbol, side = %side_str, error = %e, "Failed to send close position order");
                 }
             }
         } else {
@@ -1763,7 +1776,7 @@ impl AutoWorker {
                     }
                 }
                 Err(e) => {
-                    error!(bot_id = %self.bot.id, side = %side_str, error = %e, "Failed to send close position order (fallback path)");
+                    error!(bot_id = %self.bot.id, client_order_id = %client_order_id, symbol = %self.bot.symbol, side = %side_str, error = %e, "Failed to send close position order (fallback path)");
                 }
             }
         }
@@ -1889,7 +1902,7 @@ impl AutoWorker {
                     PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
                 }
                 warn!(
-                    bot_id = %self.bot.id, side = ?side,
+                    bot_id = %self.bot.id, side = %side_str(&side),
                     "Position closed by external event (not initiated by worker) — \
                      per-side state cleared, cooldown armed with reason=external_close"
                 );
@@ -2109,7 +2122,7 @@ impl AutoWorker {
             warn!(
                 bot_id = %self.bot.id,
                 requested_price = pending.entry_price, fill_price,
-                deviation_pct = format!("{:.2}%", price_deviation * 100.0),
+                deviation_pct = price_deviation * 100.0,
                 old_sl = pending.stop_loss, new_sl = sl,
                 old_tp = pending.take_profit, new_tp = tp,
                 "Fill price deviated, recalculating stop/take profit"
@@ -2166,7 +2179,7 @@ impl AutoWorker {
             "long" => "open_long",
             "short" => "open_short",
             _ => {
-                error!(side = %pending.side, "Unknown pending side — skipping trade record");
+                error!(bot_id = %self.bot.id, side = %pending.side, "Unknown pending side — skipping trade record");
                 return;
             }
         };
@@ -2252,7 +2265,7 @@ impl AutoWorker {
             "long" => (fill_price - pending.entry_price) * actual_qty,
             "short" => (pending.entry_price - fill_price) * actual_qty,
             _ => {
-                error!(side = %pending.side, "Unknown pending side — skipping trade record");
+                error!(bot_id = %self.bot.id, side = %pending.side, "Unknown pending side — skipping trade record");
                 return;
             }
         };

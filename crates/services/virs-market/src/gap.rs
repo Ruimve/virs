@@ -61,9 +61,9 @@ impl GapDetector {
 
         if fetched.is_empty() {
             tracing::warn!(
-                "[GapDetector] No data returned for gap backfill: {}/{}",
-                exchange,
-                symbol
+                exchange = %exchange,
+                symbol = %symbol,
+                "No data returned for gap backfill"
             );
             return Ok(0);
         }
@@ -288,10 +288,10 @@ impl GapDetector {
                     }
                     Ok(_) => {
                         tracing::warn!(
-                            "[GapDetector] No {} candles for {}/{}",
-                            tf.as_str(),
-                            exchange,
-                            symbol
+                            exchange = %exchange,
+                            symbol = %symbol,
+                            timeframe = %tf.as_str(),
+                            "No candles for timeframe"
                         );
                         if let Some(unclosed) = unclosed_high.iter().find(|(t, _)| *t == *tf) {
                             guard.replace_timeframe(*tf, vec![unclosed.1.clone()]);
@@ -300,11 +300,11 @@ impl GapDetector {
                     }
                     Err(e) => {
                         tracing::error!(
-                            "[GapDetector] Failed to load {} candles for {}/{}: {}",
-                            tf.as_str(),
-                            exchange,
-                            symbol,
-                            e
+                            exchange = %exchange,
+                            symbol = %symbol,
+                            timeframe = %tf.as_str(),
+                            error = %e,
+                            "Failed to load candles"
                         );
                         if let Some(unclosed) = unclosed_high.iter().find(|(t, _)| *t == *tf) {
                             guard.replace_timeframe(*tf, vec![unclosed.1.clone()]);

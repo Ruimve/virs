@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tracing::info;
+use tracing::{error, info};
 use uuid::Uuid;
 use virs_api::EngineManager;
 use virs_error::{Context, VirsResult};
@@ -18,13 +18,13 @@ async fn main() -> VirsResult<()> {
     let mut config = load_config()?;
 
     if config.server.encryption_key == "change-me-to-a-random-64-char-string-in-production" {
-        tracing::warn!("WARNING: Using default ENCRYPTION_KEY. Change this in production!");
+        error!(key = "ENCRYPTION_KEY", "Using default key — change in production");
     }
     if config.server.llm_key == "change-me-to-a-random-64-char-string-in-production" {
-        tracing::warn!("WARNING: Using default LLM_KEY. Change this in production!");
+        error!(key = "LLM_KEY", "Using default key — change in production");
     }
     if config.server.jwt_secret == "change-me-to-a-random-32-char-or-longer-string-in-production" {
-        tracing::warn!("WARNING: Using default JWT_SECRET. Change this in production!");
+        error!(key = "JWT_SECRET", "Using default key — change in production");
     }
 
     tracing_subscriber::fmt()
@@ -36,8 +36,7 @@ async fn main() -> VirsResult<()> {
         )
         .init();
 
-    info!("VIRS starting up...");
-    info!("Version: {}", env!("CARGO_PKG_VERSION"));
+    info!(version = env!("CARGO_PKG_VERSION"), "VIRS starting up");
 
     let db_pool = sqlx::postgres::PgPoolOptions::new()
         .min_connections(config.database.pool_min)
@@ -79,8 +78,9 @@ async fn main() -> VirsResult<()> {
         .fetch_one(&db_pool)
         .await?;
         info!(
-            "Admin user '{}' created (id={})",
-            config.admin.username, row.0
+            username = %config.admin.username,
+            admin_id = %row.0,
+            "Admin user created"
         );
         row.0
     } else {
@@ -160,7 +160,7 @@ async fn main() -> VirsResult<()> {
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .context(format!("Failed to bind to {}", addr))?;
-    info!("API server listening on http://{}", addr);
+    info!(addr = %addr, "API server listening");
 
     axum::serve(
         listener,

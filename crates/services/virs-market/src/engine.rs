@@ -155,7 +155,7 @@ impl KlineEngine {
                             {
                                 Ok(_) => {}
                                 Err(e) => {
-                                    tracing::error!("[KlineEngine] Post-reconnect backfill failed for {}/{}: {}", exchange, symbol, e);
+                                    tracing::error!(exchange = %exchange, symbol = %symbol, error = %e, "Post-reconnect backfill failed");
                                 }
                             }
                         }
@@ -259,7 +259,7 @@ impl KlineEngine {
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {
-                        tracing::warn!("[KlineEngine] WS update lagged by {} messages", n);
+                        tracing::warn!(lagged = n, "WS update lagged");
                     }
                     Err(broadcast::error::RecvError::Closed) => {
                         break;
@@ -303,10 +303,10 @@ impl KlineEngine {
                             Ok(_) => {}
                             Err(e) => {
                                 tracing::error!(
-                                    "[KlineEngine] Backfill failed for {}/{}: {}",
-                                    exchange,
-                                    symbol,
-                                    e
+                                    exchange = %exchange,
+                                    symbol = %symbol,
+                                    error = %e,
+                                    "Backfill failed"
                                 );
                             }
                         }

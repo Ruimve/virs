@@ -85,23 +85,23 @@ impl TryFrom<CcxtTicker> for Ticker {
             ExchangeError::no_data(format!("Ticker last missing for {}", symbol))
         })?;
         let high_24h = t.high.ok_or_else(|| {
-            tracing::warn!(symbol = %symbol, "Ticker high_24h missing");
+            tracing::error!(symbol = %symbol, "Ticker high_24h missing");
             ExchangeError::no_data(format!("Ticker high_24h missing for {}", symbol))
         })?;
         let low_24h = t.low.ok_or_else(|| {
-            tracing::warn!(symbol = %symbol, "Ticker low_24h missing");
+            tracing::error!(symbol = %symbol, "Ticker low_24h missing");
             ExchangeError::no_data(format!("Ticker low_24h missing for {}", symbol))
         })?;
         let volume_24h = t.volume.ok_or_else(|| {
-            tracing::warn!(symbol = %symbol, "Ticker volume_24h missing");
+            tracing::error!(symbol = %symbol, "Ticker volume_24h missing");
             ExchangeError::no_data(format!("Ticker volume_24h missing for {}", symbol))
         })?;
         let price_change_24h = t.price_change.ok_or_else(|| {
-            tracing::warn!(symbol = %symbol, "Ticker price_change_24h missing");
+            tracing::error!(symbol = %symbol, "Ticker price_change_24h missing");
             ExchangeError::no_data(format!("Ticker price_change_24h missing for {}", symbol))
         })?;
         let price_change_pct_24h = t.price_change_pct.ok_or_else(|| {
-            tracing::warn!(symbol = %symbol, "Ticker price_change_pct_24h missing");
+            tracing::error!(symbol = %symbol, "Ticker price_change_pct_24h missing");
             ExchangeError::no_data(format!(
                 "Ticker price_change_pct_24h missing for {}",
                 symbol
@@ -120,7 +120,7 @@ impl TryFrom<CcxtTicker> for Ticker {
             price_change_24h,
             price_change_pct_24h,
             timestamp: t.timestamp.ok_or_else(|| {
-                tracing::warn!(symbol = %symbol, "Ticker timestamp missing");
+                tracing::error!(symbol = %symbol, "Ticker timestamp missing");
                 ExchangeError::no_data(format!("Ticker timestamp missing for {}", symbol))
             })?,
         })

@@ -170,7 +170,7 @@ impl GridStore for PgGridStore {
         .await?;
 
         if result.rows_affected() == 0 {
-            warn!(open_client_order_id = %open_client_order_id, "close_trade: no open trade found");
+            warn!(open_client_order_id = %open_client_order_id, "No open trade found for close");
         }
 
         sqlx::query(

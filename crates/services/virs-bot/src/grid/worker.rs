@@ -108,7 +108,7 @@ impl GridWorker {
             .await;
         }
         if self.current_price <= 0.0 {
-            error!(bot_id = %self.bot.id, "Failed to fetch initial price after {} attempts", max_retries);
+            error!(bot_id = %self.bot.id, attempts = max_retries, "Failed to fetch initial price");
         }
 
         self.load_existing_trades().await;
@@ -551,7 +551,7 @@ impl GridWorker {
                 level: level_num,
                 pnl,
             }) {
-                tracing::warn!(error = %e, event = "GridTradeClosed", "Failed to send event — receiver may be dropped");
+                warn!(bot_id = %self.bot.id, error = %e, event = "GridTradeClosed", "Failed to send event — receiver may be dropped");
             }
         }
         if let Err(e) = self.grid_event_tx.send(GridEvent::GridFilled {
@@ -561,7 +561,7 @@ impl GridWorker {
             price,
             quantity: order.filled,
         }) {
-            tracing::warn!(error = %e, event = "GridFilled", "Failed to send event — receiver may be dropped");
+            warn!(bot_id = %self.bot.id, error = %e, event = "GridFilled", "Failed to send event — receiver may be dropped");
         }
 
         self.save_stats().await;
@@ -628,7 +628,7 @@ impl GridWorker {
             {
                 warn!(bot_id = %self.bot.id, error = %e, "Failed to send CancelAllOrders command");
             }
-            warn!(bot_id = %self.bot.id, "Grid paused due to {}", reason);
+            warn!(bot_id = %self.bot.id, reason = %reason, "Grid paused");
         }
     }
 
@@ -749,7 +749,7 @@ impl GridWorker {
 
     pub(crate) fn find_level_by_price_within(&self, price: f64, max_dist: f64) -> Option<usize> {
         if price.is_nan() || price.is_infinite() {
-            tracing::error!(price, "Price is NaN or infinite — cannot find grid level");
+            error!(bot_id = %self.bot.id, price, "Price is NaN or infinite — cannot find grid level");
             return None;
         }
         let (idx, dist) = self
@@ -759,7 +759,8 @@ impl GridWorker {
             .map(|(i, l)| (i, (l.price - price).abs()))
             .min_by(|a, b| {
                 if a.1.is_nan() || b.1.is_nan() {
-                    tracing::warn!(
+                    warn!(
+                        bot_id = %self.bot.id,
                         "NaN detected in grid level price comparison — treating as equal"
                     );
                     std::cmp::Ordering::Equal
@@ -838,7 +839,7 @@ impl GridWorker {
             bot_id: self.bot.id,
             state,
         }) {
-            tracing::warn!(error = %e, event = "StatusUpdate", "Failed to send event — receiver may be dropped");
+            warn!(bot_id = %self.bot.id, error = %e, event = "StatusUpdate", "Failed to send event — receiver may be dropped");
         }
     }
 
@@ -857,11 +858,11 @@ impl GridWorker {
             .await
         {
             Ok(()) => {
-                info!(bot_id = %self.bot.id, level, client_order_id, "Open trade recorded");
+                info!(bot_id = %self.bot.id, level, client_order_id = %client_order_id, "Open trade recorded");
                 true
             }
             Err(e) => {
-                warn!(bot_id = %self.bot.id, level, error = %e, "Failed to record open trade");
+                error!(bot_id = %self.bot.id, level, error = %e, "Failed to record open trade");
                 false
             }
         }
@@ -878,7 +879,7 @@ impl GridWorker {
             .close_trade(&open_client_order_id, close_client_order_id)
             .await
         {
-            warn!(bot_id = %self.bot.id, level, open_client_order_id = %open_client_order_id, error = %e, "Failed to close trade record");
+            error!(bot_id = %self.bot.id, level, open_client_order_id = %open_client_order_id, error = %e, "Failed to close trade record");
         } else {
             info!(bot_id = %self.bot.id, level, open_client_order_id = %open_client_order_id, "Close trade recorded");
         }
@@ -1173,7 +1174,8 @@ impl GridWorker {
                     if let Some(obj) = result.as_object_mut() {
                         obj.insert("raw_llm_response".to_string(), raw.clone());
                     } else {
-                        tracing::error!(
+                        error!(
+                            bot_id = %self.bot.id,
                             "LLM result is not a JSON object — cannot insert raw_llm_response"
                         );
                     }
@@ -1192,14 +1194,14 @@ impl GridWorker {
                     )
                     .await
                 {
-                    warn!(bot_id = %self.bot.id, error = %e, "Failed to save analysis log");
+                    error!(bot_id = %self.bot.id, error = %e, "Failed to save analysis log");
                 }
 
                 GridAction::from_str(&d.action, d.upper_price, d.lower_price)
             }
             None => {
                 let rule_action = self.simple_rule_decision();
-                warn!(bot_id = %self.bot.id, action = rule_action.as_str(), source = "rule_fallback", "LLM call failed, falling back to rule-based decision");
+                warn!(bot_id = %self.bot.id, action = %rule_action.as_str(), source = "rule_fallback", "LLM call failed, falling back to rule-based decision");
 
                 let result = serde_json::json!({ "action": rule_action.as_str(), "reason": "LLM call failed, using rule-based fallback" });
                 if let Err(e) = self
@@ -1216,14 +1218,14 @@ impl GridWorker {
                     )
                     .await
                 {
-                    warn!(bot_id = %self.bot.id, error = %e, "Failed to save analysis log");
+                    error!(bot_id = %self.bot.id, error = %e, "Failed to save analysis log");
                 }
 
                 if let Err(e) = self.grid_event_tx.send(GridEvent::BotError {
                     bot_id: self.bot.id,
                     error: "LLM call failed, using rule-based fallback".to_string(),
                 }) {
-                    tracing::warn!(error = %e, event = "BotError", "Failed to send event — receiver may be dropped");
+                    warn!(bot_id = %self.bot.id, error = %e, event = "BotError", "Failed to send event — receiver may be dropped");
                 }
                 rule_action
             }
@@ -1511,7 +1513,7 @@ impl GridWorker {
             lower_price: self.bot.lower_price,
             level_count: self.levels.len(),
         }) {
-            tracing::warn!(error = %e, event = "GridAdjusted", "Failed to send event — receiver may be dropped");
+            warn!(bot_id = %self.bot.id, error = %e, event = "GridAdjusted", "Failed to send event — receiver may be dropped");
         }
     }
 

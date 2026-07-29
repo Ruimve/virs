@@ -176,7 +176,7 @@ impl AutoEngine {
 
         self.graceful_shutdown_worker(bot_id).await;
         if let Err(e) = self.store.update_bot_status(bot_id, target_status).await {
-            warn!(bot_id = %bot_id, error = %e, "Failed to update bot status to {}", target_status);
+            warn!(bot_id = %bot_id, error = %e, target_status = %target_status, "Failed to update bot status");
         }
     }
 

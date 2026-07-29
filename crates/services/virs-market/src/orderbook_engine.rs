@@ -110,12 +110,12 @@ impl OrderBookEngine {
 
                         if event_tx.receiver_count() > 0 {
                             if event_tx.send(event).is_err() {
-                                tracing::debug!("[OrderBookEngine] OrderBookEvent broadcast — receiver dropped between check and send");
+                                tracing::debug!("OrderBookEvent broadcast — receiver dropped between check and send");
                             }
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {
-                        tracing::warn!("[OrderBookEngine] WS update lagged by {} messages", n);
+                        tracing::warn!(lagged = n, "WS update lagged");
                     }
                     Err(broadcast::error::RecvError::Closed) => {
                         break;

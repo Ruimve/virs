@@ -40,7 +40,7 @@ pub fn dispatch_event(text: &str) -> Option<WsFeedEvent> {
         "listenKeyExpired" => listen_key_expired::process(&payload_str),
         other => {
             // 其他事件类型仅日志记录
-            tracing::trace!(event_type = other, "[UserDataWs] 未知事件类型，忽略");
+            tracing::trace!(event_type = %other, "未知事件类型，忽略");
             None
         }
     }

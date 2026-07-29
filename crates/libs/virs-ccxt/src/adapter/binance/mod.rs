@@ -1,4 +1,4 @@
-use tracing::info;
+use tracing::{info, warn};
 
 pub mod fapi;
 pub mod kline_ws;
@@ -654,9 +654,9 @@ impl Exchange for BinanceExchange {
                 match result {
                     Ok(()) => {}
                     Err(e) => {
-                        tracing::warn!(
+                        warn!(
                             error = %e,
-                            "[BinanceExchange] listenKey keepalive failed, \
+                            "listenKey keepalive failed, \
                              WS may disconnect when listenKey expires"
                         );
                     }
@@ -680,7 +680,7 @@ impl Exchange for BinanceExchange {
 
         // 偏移超过阈值时告警
         if offset.abs() > TIME_OFFSET_WARN_THRESHOLD_MS {
-            tracing::warn!(
+            warn!(
                 time_offset_ms = offset,
                 threshold_ms = TIME_OFFSET_WARN_THRESHOLD_MS,
                 "Server time offset exceeds threshold — clock drift detected"
@@ -714,13 +714,13 @@ impl BinanceExchange {
             loop {
                 // 检查运行状态
                 if !running.load(Ordering::Acquire) {
-                    tracing::info!("[PeriodicSync] Exchange dropped, stopping time sync task");
+                    info!("Exchange dropped, stopping time sync task");
                     break;
                 }
                 interval.tick().await;
 
                 if !running.load(Ordering::Acquire) {
-                    tracing::info!("[PeriodicSync] Exchange dropped during sleep, stopping");
+                    info!("Exchange dropped during sleep, stopping");
                     break;
                 }
                 // 重新获取服务器时间并校正偏移
@@ -732,22 +732,22 @@ impl BinanceExchange {
                         signer.set_time_offset(offset);
 
                         if offset.abs() > TIME_OFFSET_WARN_THRESHOLD_MS {
-                            tracing::warn!(
+                            warn!(
                                 time_offset_ms = offset,
                                 threshold_ms = TIME_OFFSET_WARN_THRESHOLD_MS,
-                                "[PeriodicSync] Server time offset exceeds threshold — clock drift detected"
+                                "Server time offset exceeds threshold — clock drift detected"
                             );
                         } else {
-                            tracing::info!(
+                            info!(
                                 time_offset_ms = offset,
-                                "[PeriodicSync] Server time re-synced successfully"
+                                "Server time re-synced successfully"
                             );
                         }
                     }
                     Err(e) => {
-                        tracing::warn!(
+                        warn!(
                             error = %e,
-                            "[PeriodicSync] Failed to re-sync server time — will retry next cycle"
+                            "Failed to re-sync server time — will retry next cycle"
                         );
                     }
                 }

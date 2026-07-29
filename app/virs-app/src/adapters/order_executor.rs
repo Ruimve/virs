@@ -35,7 +35,7 @@ impl PeOrderExecutor {
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {
-                        warn!(lagged = n, "PeOrderExecutor: EngineEvent lagged");
+                        warn!(lagged = n, "EngineEvent lagged");
                     }
                     Err(broadcast::error::RecvError::Closed) => {
                         break;
