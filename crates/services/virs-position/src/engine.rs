@@ -115,6 +115,36 @@ impl EngineInner {
         }
     }
 
+    /// Roll back a position after an order is canceled or fails.
+    /// - Ghost Opening (qty=0): remove entirely.
+    /// - Closing: rollback to Open so the worker can operate on it again.
+    /// - Other states: no-op.
+    fn rollback_position_on_order_terminal(&self, position_id: Uuid, context: &str) {
+        let pos_key = self
+            .position_id_index
+            .get(&position_id)
+            .map(|r| r.value().clone());
+        if let Some(key) = pos_key {
+            if let Some(mut pos) = self.positions.get_mut(&key) {
+                if pos.is_ghost() {
+                    let id = pos.id;
+                    drop(pos);
+                    self.positions.remove(&key);
+                    self.position_id_index.remove(&id);
+                    warn!(position_id = %position_id, context = %context, "Removed ghost Opening position after order terminal");
+                } else if pos.status == PositionStatus::Closing {
+                    pos.rollback_to_open(Utc::now());
+                    let pos_clone = pos.clone();
+                    drop(pos);
+                    warn!(position_id = %position_id, context = %context, "Rolled back Closing position to Open after order terminal");
+                    self.emit_event(EngineEvent::PositionUpdated {
+                        position: pos_clone,
+                    });
+                }
+            }
+        }
+    }
+
     fn is_running(&self) -> bool {
         self.get_state().is_running()
     }
@@ -575,9 +605,15 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
 
         // 处理取消终态
         if order_status == OrderStatus::Canceled {
+            // 先取 position_id（order_position 在 remove 前查），再清理
+            let pos_id = inner.order_position.get(&client_order_id).map(|r| *r.value());
             if let Some((_, order)) = inner.orders.remove(&client_order_id) {
                 inner.order_position.remove(&client_order_id);
                 inner.emit_event(EngineEvent::OrderCanceled { order });
+            }
+            // 回滚 ghost Opening 或 Closing position
+            if let Some(pid) = pos_id {
+                inner.rollback_position_on_order_terminal(pid, "ws_canceled");
             }
         }
         return;
@@ -628,6 +664,10 @@ async fn finalize_pending_order(
         });
         inner.orders.remove(client_order_id);
         inner.order_position.remove(client_order_id);
+        // 回滚 ghost Opening 或 Closing position（平仓单被取消时恢复仓位为可操作状态）
+        if let Some(pid) = position_id {
+            inner.rollback_position_on_order_terminal(pid, "finalize_canceled");
+        }
     } else if ws_order.execution_type == ExecutionType::New {
         // NEW 事件：emit OrderPlaced
         inner.emit_event(EngineEvent::OrderPlaced { order: ws_order });
@@ -1064,30 +1104,7 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
                 "client_order_id is required for order placement — rolling back ghost position and emitting OrderFailed"
             );
 
-            // 回滚 ghost Opening 仓位或 Closing 仓位（与 REST 失败路径一致）
-            let pos_key = inner
-                .position_id_index
-                .get(&position_id)
-                .map(|r| r.value().clone());
-            if let Some(key) = pos_key {
-                if let Some(mut pos) = inner.positions.get_mut(&key) {
-                    if pos.is_ghost() {
-                        let id = pos.id;
-                        drop(pos);
-                        inner.positions.remove(&key);
-                        inner.position_id_index.remove(&id);
-                        warn!(position_id = %position_id, "Removed ghost Opening position after client_order_id None");
-                    } else if pos.status == PositionStatus::Closing {
-                        pos.rollback_to_open(Utc::now());
-                        let pos_clone = pos.clone();
-                        drop(pos);
-                        warn!(position_id = %position_id, "Rolled back Closing position to Open after client_order_id None");
-                        inner.emit_event(EngineEvent::PositionUpdated {
-                            position: pos_clone,
-                        });
-                    }
-                }
-            }
+            inner.rollback_position_on_order_terminal(position_id, "place_order_no_client_order_id");
 
             inner.emit_event(EngineEvent::OrderFailed {
                 client_order_id: Uuid::new_v4().to_string(),
@@ -1138,30 +1155,8 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
             let msg = format!("Failed to place order: {}", e);
             error!(error = %e, symbol = %symbol_for_error, "Failed to place order");
 
-            // 回滚幽灵 Opening 仓位：place_order 失败后，若仓位仍为 Opening + size=0，说明无订单成功下达
-            let pos_key = inner
-                .position_id_index
-                .get(&position_id)
-                .map(|r| r.value().clone());
-            if let Some(key) = pos_key {
-                if let Some(mut pos) = inner.positions.get_mut(&key) {
-                    if pos.is_ghost() {
-                        let id = pos.id;
-                        drop(pos);
-                        inner.positions.remove(&key);
-                        inner.position_id_index.remove(&id);
-                        warn!(position_id = %position_id, "Removed ghost Opening position after place_order failure");
-                    } else if pos.status == PositionStatus::Closing {
-                        pos.rollback_to_open(Utc::now());
-                        let pos_clone = pos.clone();
-                        drop(pos);
-                        warn!(position_id = %position_id, "Rolled back Closing position to Open after place_order failure");
-                        inner.emit_event(EngineEvent::PositionUpdated {
-                            position: pos_clone,
-                        });
-                    }
-                }
-            }
+            // 回滚 ghost Opening 或 Closing position
+            inner.rollback_position_on_order_terminal(position_id, "place_order_rest_failure");
 
             inner.emit_event(EngineEvent::OrderFailed {
                 client_order_id,
@@ -1196,6 +1191,8 @@ pub(crate) async fn handle_cancel_all_orders(
         Ok(results) => {
             for result in &results {
                 let cid = &result.client_order_id;
+                // 先取 position_id（order_position 在 remove 前查）
+                let pos_id = inner.order_position.get(cid).map(|r| *r.value());
                 // 从 orders 中查找 CcxtOrder
                 if let Some((_, order)) = inner.orders.remove(cid) {
                     inner.order_position.remove(cid);
@@ -1204,6 +1201,10 @@ pub(crate) async fn handle_cancel_all_orders(
                     // 可能在 pending 中
                     inner.pending_orders.remove(cid);
                     // 没有 CcxtOrder，无法 emit OrderCanceled，等待 WS 推送
+                }
+                // 回滚 ghost Opening 或 Closing position
+                if let Some(pid) = pos_id {
+                    inner.rollback_position_on_order_terminal(pid, "cancel_all_orders");
                 }
             }
         }
