@@ -821,9 +821,8 @@ pub(crate) async fn handle_open_position(
     if leverage == 0 {
         let msg = "leverage must be > 0".to_string();
         error!(symbol = %symbol, "open_position rejected: leverage is 0");
-        let client_order_id = Uuid::new_v4().to_string();
         inner.emit_event(EngineEvent::OrderFailed {
-            client_order_id,
+            client_order_id: client_order_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
             reason: msg,
         });
         return;
@@ -839,7 +838,7 @@ pub(crate) async fn handle_open_position(
                 leverage, symbol, e
             ),
         });
-        let client_order_id = Uuid::new_v4().to_string();
+        let client_order_id = client_order_id.unwrap_or_else(|| Uuid::new_v4().to_string());
         inner.emit_event(EngineEvent::OrderFailed {
             client_order_id,
             reason: msg,
@@ -908,9 +907,8 @@ pub(crate) async fn handle_close_position(
         None => {
             warn!(position_id = %position_id, "Position not found");
             let msg = format!("Position not found: {}", position_id);
-            let client_order_id = Uuid::new_v4().to_string();
             inner.emit_event(EngineEvent::OrderFailed {
-                client_order_id,
+                client_order_id: client_order_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
                 reason: msg,
             });
             return;
@@ -918,9 +916,8 @@ pub(crate) async fn handle_close_position(
     };
 
     if position.quantity == 0.0 {
-        let client_order_id = Uuid::new_v4().to_string();
         inner.emit_event(EngineEvent::OrderFailed {
-            client_order_id,
+            client_order_id: client_order_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
             reason: format!("Position {} has zero quantity", position_id),
         });
         return;

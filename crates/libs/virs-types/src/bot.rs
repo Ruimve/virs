@@ -72,6 +72,7 @@ pub enum OrderEvent {
     },
     OrderFailed {
         order_id: Uuid,
+        client_order_id: Option<String>,
         reason: String,
     },
     RiskAlert {

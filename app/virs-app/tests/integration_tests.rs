@@ -251,9 +251,11 @@ fn int_4_2_convert_event_canceled_failed() {
     match result2.unwrap() {
         OrderEvent::OrderFailed {
             order_id: _,
+            client_order_id,
             reason,
         } => {
             assert_eq!(reason, "timeout");
+            assert_eq!(client_order_id.as_deref(), Some("CL999"));
         }
         _ => panic!("Expected OrderFailed"),
     }

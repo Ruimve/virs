@@ -146,10 +146,11 @@ pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
             symbol: Some(order.symbol.clone()),
         }),
         EngineEvent::OrderFailed {
-            client_order_id: _,
+            client_order_id,
             reason,
         } => Some(OrderEvent::OrderFailed {
             order_id: Uuid::new_v4(),
+            client_order_id: Some(client_order_id),
             reason,
         }),
         EngineEvent::RiskAlert { level, message } => Some(OrderEvent::RiskAlert { level, message }),

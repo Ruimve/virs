@@ -244,23 +244,67 @@ impl AutoWorker {
             }
             OrderEvent::OrderFailed {
                 order_id: _,
+                client_order_id,
                 reason,
             } if self.is_pending() => {
-                let was_open_long = self.long.pending_open.is_some();
-                let was_open_short = self.short.pending_open.is_some();
-                let was_open = was_open_long || was_open_short;
-                warn!(
-                    bot_id = %self.bot.id,
-                    reason = %reason,
-                    was_open,
-                    "Order failed, rolling back pending state"
-                );
-                self.rollback_pending_open(PositionSide::Long);
-                self.rollback_pending_open(PositionSide::Short);
-                self.rollback_pending_close(PositionSide::Long);
-                self.rollback_pending_close(PositionSide::Short);
+                let mut rolled_back_open = false;
 
-                let exec_status = if was_open {
+                match client_order_id.as_deref() {
+                    Some(cid) => {
+                        // Precise rollback: only roll back the pending that matches this client_order_id
+                        let mut rolled_back_close = false;
+                        if self.long.pending_open.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                            self.rollback_pending_open(PositionSide::Long);
+                            rolled_back_open = true;
+                        }
+                        if self.short.pending_open.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                            self.rollback_pending_open(PositionSide::Short);
+                            rolled_back_open = true;
+                        }
+                        if self.long.pending_close.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                            self.rollback_pending_close(PositionSide::Long);
+                            rolled_back_close = true;
+                        }
+                        if self.short.pending_close.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                            self.rollback_pending_close(PositionSide::Short);
+                            rolled_back_close = true;
+                        }
+
+                        if !rolled_back_open && !rolled_back_close {
+                            warn!(
+                                bot_id = %self.bot.id,
+                                client_order_id = %cid,
+                                reason = %reason,
+                                "OrderFailed received but no matching pending order found — no rollback performed"
+                            );
+                            return;
+                        }
+                        warn!(
+                            bot_id = %self.bot.id,
+                            client_order_id = %cid,
+                            reason = %reason,
+                            was_open = rolled_back_open,
+                            "Order failed, rolling back matching pending state"
+                        );
+                    }
+                    None => {
+                        // Fallback: no client_order_id available, roll back all pending (legacy behavior)
+                        rolled_back_open = self.long.pending_open.is_some()
+                            || self.short.pending_open.is_some();
+                        warn!(
+                            bot_id = %self.bot.id,
+                            reason = %reason,
+                            was_open = rolled_back_open,
+                            "Order failed (no client_order_id), rolling back all pending state"
+                        );
+                        self.rollback_pending_open(PositionSide::Long);
+                        self.rollback_pending_open(PositionSide::Short);
+                        self.rollback_pending_close(PositionSide::Long);
+                        self.rollback_pending_close(PositionSide::Short);
+                    }
+                }
+
+                let exec_status = if rolled_back_open {
                     "open_failed"
                 } else {
                     "close_failed"

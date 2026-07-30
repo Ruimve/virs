@@ -133,9 +133,11 @@ fn o1_4_convert_order_failed() {
     match result.unwrap() {
         OrderEvent::OrderFailed {
             order_id: _,
+            client_order_id,
             reason,
         } => {
             assert_eq!(reason, "Insufficient balance");
+            assert_eq!(client_order_id.as_deref(), Some("CL456"));
         }
         _ => panic!("Expected OrderFailed"),
     }
