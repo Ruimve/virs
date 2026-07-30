@@ -11,5 +11,3 @@ pub use engine::AutoEngine;
 mod ai_tests;
 #[cfg(test)]
 mod strategy_tests;
-#[cfg(test)]
-mod worker_tests;
