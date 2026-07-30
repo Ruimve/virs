@@ -326,6 +326,86 @@ impl AutoWorker {
                     }
                 }
             }
+            OrderEvent::OrderCanceled {
+                order_id: _,
+                client_order_id,
+                symbol: _,
+            } if self.is_pending() => {
+                // OrderCanceled 与 OrderFailed 一样需要回滚匹配的 pending 状态
+                let mut rolled_back_open = false;
+
+                match client_order_id.as_deref() {
+                    Some(cid) => {
+                        let mut rolled_back_close = false;
+                        if self.long.pending_open.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                            self.rollback_pending_open(PositionSide::Long);
+                            rolled_back_open = true;
+                        }
+                        if self.short.pending_open.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                            self.rollback_pending_open(PositionSide::Short);
+                            rolled_back_open = true;
+                        }
+                        if self.long.pending_close.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                            self.rollback_pending_close(PositionSide::Long);
+                            rolled_back_close = true;
+                        }
+                        if self.short.pending_close.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                            self.rollback_pending_close(PositionSide::Short);
+                            rolled_back_close = true;
+                        }
+
+                        if !rolled_back_open && !rolled_back_close {
+                            warn!(
+                                bot_id = %self.bot.id,
+                                client_order_id = %cid,
+                                "OrderCanceled received but no matching pending order found — no rollback performed"
+                            );
+                            return;
+                        }
+                        warn!(
+                            bot_id = %self.bot.id,
+                            client_order_id = %cid,
+                            was_open = rolled_back_open,
+                            "Order canceled, rolling back matching pending state"
+                        );
+                    }
+                    None => {
+                        rolled_back_open = self.long.pending_open.is_some()
+                            || self.short.pending_open.is_some();
+                        warn!(
+                            bot_id = %self.bot.id,
+                            was_open = rolled_back_open,
+                            "Order canceled (no client_order_id), rolling back all pending state"
+                        );
+                        self.rollback_pending_open(PositionSide::Long);
+                        self.rollback_pending_open(PositionSide::Short);
+                        self.rollback_pending_close(PositionSide::Long);
+                        self.rollback_pending_close(PositionSide::Short);
+                    }
+                }
+
+                let exec_status = if rolled_back_open {
+                    "open_canceled"
+                } else {
+                    "close_canceled"
+                };
+                let log_ids: Vec<Uuid> = [
+                    self.long.log_id.take(),
+                    self.short.log_id.take(),
+                ]
+                .into_iter()
+                .flatten()
+                .collect();
+                for log_id in log_ids {
+                    if let Err(e) = self
+                        .store
+                        .update_analysis_log_execution(log_id, exec_status, Some("order canceled"))
+                        .await
+                    {
+                        error!(bot_id = %self.bot.id, error = %e, "Failed to update log on order canceled");
+                    }
+                }
+            }
             _ => {}
         }
     }

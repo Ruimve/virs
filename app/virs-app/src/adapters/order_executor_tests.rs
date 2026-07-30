@@ -113,9 +113,11 @@ fn o1_3_convert_order_canceled() {
     match result.unwrap() {
         OrderEvent::OrderCanceled {
             order_id: id,
+            client_order_id,
             symbol,
         } => {
             assert_eq!(id, order_id);
+            assert!(client_order_id.is_some());
             assert_eq!(symbol.as_deref(), Some("BTC/USDT"));
         }
         _ => panic!("Expected OrderCanceled"),

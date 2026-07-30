@@ -1061,8 +1061,38 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
         None => {
             error!(
                 symbol = %params.symbol,
-                "client_order_id is required for order placement — skipping"
+                "client_order_id is required for order placement — rolling back ghost position and emitting OrderFailed"
             );
+
+            // 回滚 ghost Opening 仓位或 Closing 仓位（与 REST 失败路径一致）
+            let pos_key = inner
+                .position_id_index
+                .get(&position_id)
+                .map(|r| r.value().clone());
+            if let Some(key) = pos_key {
+                if let Some(mut pos) = inner.positions.get_mut(&key) {
+                    if pos.is_ghost() {
+                        let id = pos.id;
+                        drop(pos);
+                        inner.positions.remove(&key);
+                        inner.position_id_index.remove(&id);
+                        warn!(position_id = %position_id, "Removed ghost Opening position after client_order_id None");
+                    } else if pos.status == PositionStatus::Closing {
+                        pos.rollback_to_open(Utc::now());
+                        let pos_clone = pos.clone();
+                        drop(pos);
+                        warn!(position_id = %position_id, "Rolled back Closing position to Open after client_order_id None");
+                        inner.emit_event(EngineEvent::PositionUpdated {
+                            position: pos_clone,
+                        });
+                    }
+                }
+            }
+
+            inner.emit_event(EngineEvent::OrderFailed {
+                client_order_id: Uuid::new_v4().to_string(),
+                reason: "client_order_id is required for order placement but was None".into(),
+            });
             return;
         }
     };

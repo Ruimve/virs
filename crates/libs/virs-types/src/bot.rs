@@ -66,8 +66,12 @@ pub enum OrderEvent {
     OrderFilled {
         order: OrderInfo,
     },
+    OrderPartiallyFilled {
+        order: OrderInfo,
+    },
     OrderCanceled {
         order_id: Uuid,
+        client_order_id: Option<String>,
         symbol: Option<String>,
     },
     OrderFailed {

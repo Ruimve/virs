@@ -141,8 +141,11 @@ pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
             .map(|order_info| OrderEvent::OrderPlaced { order: order_info }),
         EngineEvent::OrderFilled { order, .. } => ccxt_order_to_order_info(&order)
             .map(|order_info| OrderEvent::OrderFilled { order: order_info }),
+        EngineEvent::OrderPartiallyFilled { order, .. } => ccxt_order_to_order_info(&order)
+            .map(|order_info| OrderEvent::OrderPartiallyFilled { order: order_info }),
         EngineEvent::OrderCanceled { order } => Some(OrderEvent::OrderCanceled {
             order_id: Uuid::from_u128(order.order_id as u128),
+            client_order_id: Some(order.client_order_id.clone()),
             symbol: Some(order.symbol.clone()),
         }),
         EngineEvent::OrderFailed {
