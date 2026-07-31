@@ -375,10 +375,11 @@ pub async fn update_bot(
         )));
     }
 
-    // UPDATE
-    sqlx::query("UPDATE qd_auto_bots SET strategy_file = $2, updated_at = NOW() WHERE id = $1")
+    // UPDATE — include user_id in WHERE as defense-in-depth against TOCTOU
+    sqlx::query("UPDATE qd_auto_bots SET strategy_file = $2, updated_at = NOW() WHERE id = $1 AND user_id = $3")
         .bind(id)
         .bind(new_strategy_file)
+        .bind(user_id)
         .execute(&state.db_pool)
         .await?;
 
@@ -397,8 +398,13 @@ pub async fn update_bot(
 
 pub async fn start_bot(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, VirsError> {
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
+
+    verify_bot_ownership(&state, id, user_id).await?;
+
     let tx = state.engine_manager.auto_cmd_tx().ok_or_else(|| VirsError::Http {
         status: 503,
         message: "Auto trade engine not running".into(),
@@ -427,10 +433,33 @@ fn extract_quote_asset(symbol: &str) -> String {
     "USDT".to_string()
 }
 
+/// Verify that the bot belongs to the user. Returns 404 (not "forbidden") to avoid
+/// leaking existence of other users' bots.
+async fn verify_bot_ownership(
+    state: &AppState,
+    bot_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+) -> Result<(), VirsError> {
+    let exists: Option<bool> = sqlx::query_scalar("SELECT true FROM qd_auto_bots WHERE id = $1 AND user_id = $2")
+        .bind(bot_id)
+        .bind(user_id)
+        .fetch_optional(&state.db_pool)
+        .await?;
+    if exists.is_none() {
+        return Err(VirsError::not_found("Bot not found"));
+    }
+    Ok(())
+}
+
 pub async fn stop_bot(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, VirsError> {
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
+
+    verify_bot_ownership(&state, id, user_id).await?;
+
     let tx = state.engine_manager.auto_cmd_tx().ok_or_else(|| VirsError::Http {
         status: 503,
         message: "Auto trade engine not running".into(),
@@ -446,31 +475,43 @@ pub async fn stop_bot(
 
 pub async fn delete_bot(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse>, VirsError> {
+    let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    if let Some(tx) = state.engine_manager.auto_cmd_tx() {
-        tx.send(virs_bot::auto::types::AutoCommand::DeleteBot {
-            bot_id: id,
-            close_position: true,
-        })
-        .await
-        .map_err(|_| VirsError::Http {
+    verify_bot_ownership(&state, id, user_id).await?;
+
+    // Engine owns the full delete lifecycle: stop worker → close positions → delete DB row.
+    // Handler awaits engine confirmation via oneshot channel before responding.
+    let tx = state.engine_manager.auto_cmd_tx().ok_or_else(|| VirsError::Http {
+        status: 503,
+        message: "Auto trade engine not running — cannot safely delete bot (positions would not be closed)".into(),
+    })?;
+
+    let (response_tx, response_rx) = tokio::sync::oneshot::channel();
+    tx.send(virs_bot::auto::types::AutoCommand::DeleteBot {
+        bot_id: id,
+        close_position: true,
+        response_tx,
+    })
+    .await
+    .map_err(|_| VirsError::Http {
+        status: 500,
+        message: "Failed to send command to auto trade engine".into(),
+    })?;
+
+    match response_rx.await {
+        Ok(Ok(())) => Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true})))),
+        Ok(Err(msg)) => Err(VirsError::Http {
             status: 500,
-            message: "Failed to send command to auto trade engine".into(),
-        })?;
-    } else {
-
+            message: format!("Engine failed to delete bot: {msg}"),
+        }),
+        Err(_) => Err(VirsError::Http {
+            status: 500,
+            message: "Engine dropped response channel without responding".into(),
+        }),
     }
-
-    let result = sqlx::query(r#"DELETE FROM qd_auto_bots WHERE id = $1"#)
-        .bind(id)
-        .execute(&state.db_pool)
-        .await?;
-    if result.rows_affected() == 0 {
-        return Err(VirsError::not_found("Bot not found"));
-    }
-    Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
 
 pub async fn get_trades(
@@ -480,6 +521,8 @@ pub async fn get_trades(
     axum::extract::Query(params): axum::extract::Query<TradesQuery>,
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
+
+    verify_bot_ownership(&state, id, user_id).await?;
 
     let page = params.page.max(1);
     let page_size = params.page_size.clamp(1, 100);
@@ -533,8 +576,9 @@ pub async fn get_trades(
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "trades": trades.iter().map(|t| {
+            let net_pnl = t.pnl - t.open_fee - t.close_fee;
             let pnl_pct = if t.open_price > 0.0 && t.open_quantity > 0.0 {
-                t.pnl / (t.open_price * t.open_quantity) * 100.0
+                net_pnl / (t.open_price * t.open_quantity) * 100.0
             } else {
                 0.0
             };
@@ -556,6 +600,7 @@ pub async fn get_trades(
                 "close_fee": t.close_fee,
                 "closed_at": t.closed_at.map(|c| c.to_rfc3339()),
                 "pnl": t.pnl,
+                "net_pnl": net_pnl,
                 "pnl_pct": pnl_pct,
                 "stop_loss": t.stop_loss,
                 "take_profit": t.take_profit,
@@ -576,6 +621,7 @@ pub async fn get_stats(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
+    verify_bot_ownership(&state, id, user_id).await?;
 
     let trades = sqlx::query_as::<
         _,
@@ -611,21 +657,31 @@ pub async fn get_stats(
 
 
     let bot = sqlx::query_as::<_, virs_models::AutoBot>(
-        "SELECT * FROM qd_auto_bots WHERE id = $1",
+        "SELECT * FROM qd_auto_bots WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
+    .bind(user_id)
     .fetch_optional(&state.db_pool)
     .await?;
 
-    let total_trades = bot.as_ref().map_or(0, |b| b.total_trades);
-    let win_trades = bot.as_ref().map_or(0, |b| b.win_trades);
-    let loss_trades = bot.as_ref().map_or(0, |b| b.loss_trades);
-    let win_rate = bot.as_ref().map_or(0.0, |b| b.win_rate());
-    let loss_rate = bot.as_ref().map_or(0.0, |b| b.loss_rate());
+    let bot = match bot {
+        Some(b) => b,
+        None => return Err(VirsError::not_found("Bot not found")),
+    };
 
+    let total_trades = bot.total_trades;
+    let win_trades = bot.win_trades;
+    let loss_trades = bot.loss_trades;
+    let win_rate = bot.win_rate();
+    let loss_rate = bot.loss_rate();
 
-    let profits: Vec<f64> = trades.iter().filter(|t| t.4 > 0.0).map(|t| t.4).collect();
-    let losses: Vec<f64> = trades.iter().filter(|t| t.4 < 0.0).map(|t| t.4).collect();
+    // Compute net PnL per trade (gross realized_pnl - open_fee - close_fee) for all analytics.
+    // This aligns with the worker's net PnL calculation (events.rs: realized_pnl = gross_pnl - total_fee).
+    let net_pnl_per_trade: Vec<f64> = trades.iter().map(|t| t.4 - t.2 - t.3).collect();
+
+    // Win/loss boundary aligned with worker (events.rs L607: realized_pnl >= 0.0 → win).
+    let profits: Vec<f64> = net_pnl_per_trade.iter().filter(|&&p| p >= 0.0).copied().collect();
+    let losses: Vec<f64> = net_pnl_per_trade.iter().filter(|&&p| p < 0.0).copied().collect();
     let avg_profit = if !profits.is_empty() {
         profits.iter().sum::<f64>() / profits.len() as f64
     } else {
@@ -648,8 +704,8 @@ pub async fn get_stats(
     let mut cumulative = 0.0f64;
     let mut peak = 0.0f64;
     let mut max_drawdown = 0.0f64;
-    for t in &trades {
-        cumulative += t.4;
+    for &pnl in &net_pnl_per_trade {
+        cumulative += pnl;
         if cumulative > peak {
             peak = cumulative;
         }
@@ -681,14 +737,14 @@ pub async fn get_stats(
     let mut max_loss_streak = 0i32;
     let mut current_win = 0i32;
     let mut current_loss = 0i32;
-    for t in &trades {
-        if t.4 > 0.0 {
+    for &pnl in &net_pnl_per_trade {
+        if pnl >= 0.0 {
             current_win += 1;
             current_loss = 0;
             if current_win > max_win_streak {
                 max_win_streak = current_win;
             }
-        } else if t.4 < 0.0 {
+        } else if pnl < 0.0 {
             current_loss += 1;
             current_win = 0;
             if current_loss > max_loss_streak {
@@ -699,24 +755,22 @@ pub async fn get_stats(
 
 
     let total_fee: f64 = trades.iter().map(|t| t.2 + t.3).sum();
-    let net_pnl: f64 = trades.iter().map(|t| t.4).sum();
+    let gross_pnl: f64 = trades.iter().map(|t| t.4).sum();
 
 
     let total_volume: f64 = trades.iter().map(|t| t.0 * t.1).sum();
 
+    let net_pnl_after_fee = gross_pnl - total_fee;
 
     let avg_pnl = if !trades.is_empty() {
-        net_pnl / trades.len() as f64
+        net_pnl_after_fee / trades.len() as f64
     } else {
         0.0
     };
 
 
-    let max_profit: f64 = trades.iter().map(|t| t.4).fold(0.0f64, |a, b| a.max(b));
-    let max_loss: f64 = trades.iter().map(|t| t.4).fold(0.0f64, |a, b| a.min(b));
-
-
-    let net_pnl_after_fee = net_pnl;
+    let max_profit: f64 = net_pnl_per_trade.iter().fold(0.0f64, |a, &b| a.max(b));
+    let max_loss: f64 = net_pnl_per_trade.iter().fold(0.0f64, |a, &b| a.min(b));
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "win_rate": win_rate,
@@ -727,7 +781,9 @@ pub async fn get_stats(
         "max_win_streak": max_win_streak,
         "max_loss_streak": max_loss_streak,
         "total_fee": total_fee,
-        "net_pnl": net_pnl,
+        "gross_pnl": gross_pnl,
+        "net_pnl_after_fee": net_pnl_after_fee,
+        "total_pnl": bot.total_pnl,
         "total_trades": total_trades,
         "win_trades": win_trades,
         "loss_trades": loss_trades,
@@ -735,7 +791,6 @@ pub async fn get_stats(
         "avg_pnl": avg_pnl,
         "max_profit": max_profit,
         "max_loss": max_loss,
-        "net_pnl_after_fee": net_pnl_after_fee,
     }))))
 }
 
@@ -746,6 +801,8 @@ pub async fn get_analysis_logs(
     axum::extract::Query(params): axum::extract::Query<TradesQuery>,
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
+
+    verify_bot_ownership(&state, id, user_id).await?;
 
     let page = params.page.max(1);
     let page_size = params.page_size.clamp(1, 100);

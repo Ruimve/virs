@@ -81,7 +81,8 @@ impl AutoEngine {
                 AutoCommand::DeleteBot {
                     bot_id,
                     close_position,
-                } => self.delete_bot(bot_id, close_position).await,
+                    response_tx,
+                } => self.delete_bot(bot_id, close_position, response_tx).await,
             }
         }
         info!("AutoEngine shutdown complete");
@@ -159,19 +160,33 @@ impl AutoEngine {
     }
 
     async fn stop_bot(&mut self, bot_id: Uuid, reason: &str) {
-        self.stop_or_pause_bot(bot_id, reason, "stopped").await;
+        self.stop_or_pause_bot(bot_id, reason, "stopped", true).await;
     }
 
-    async fn stop_or_pause_bot(&mut self, bot_id: Uuid, _reason: &str, target_status: &str) {
-        let cancel_symbol = self.bot_symbols.get(&bot_id).cloned();
-        if let Err(e) = self
-            .order_executor
-            .send_command(OrderCommand::CancelAllOrders {
-                symbol: cancel_symbol,
-            })
-            .await
-        {
-            warn!(bot_id = %bot_id, error = %e, "Failed to send CancelAllOrders command");
+    /// Stop or pause a bot.
+    ///
+    /// `cancel_orders`: when true, cancel all open orders for the bot's symbol first.
+    /// Set to false when the caller has already cancelled orders (e.g. delete_bot
+    /// cancels before closing positions).
+    async fn stop_or_pause_bot(
+        &mut self,
+        bot_id: Uuid,
+        _reason: &str,
+        target_status: &str,
+        cancel_orders: bool,
+    ) {
+        if cancel_orders {
+            if let Some(sym) = self.bot_symbols.get(&bot_id).cloned() {
+                if let Err(e) = self
+                    .order_executor
+                    .send_command(OrderCommand::CancelAllOrders {
+                        symbol: Some(sym),
+                    })
+                    .await
+                {
+                    warn!(bot_id = %bot_id, error = %e, "Failed to send CancelAllOrders command");
+                }
+            }
         }
 
         self.graceful_shutdown_worker(bot_id).await;
@@ -202,44 +217,70 @@ impl AutoEngine {
         }
     }
 
-    async fn delete_bot(&mut self, bot_id: Uuid, close_position: bool) {
+    async fn delete_bot(
+        &mut self,
+        bot_id: Uuid,
+        close_position: bool,
+        response_tx: tokio::sync::oneshot::Sender<Result<(), String>>,
+    ) {
+        // 1. Load bot info — if DB fails, must NOT proceed (would risk orphan positions)
         let bot_info = match self.store.load_bot(bot_id).await {
-            Ok(info) => info,
+            Ok(Some(info)) => info,
+            Ok(None) => {
+                // Bot already deleted — idempotent success
+                warn!(bot_id = %bot_id, "Bot not found during deletion (already deleted?)");
+                let _ = response_tx.send(Ok(()));
+                return;
+            }
             Err(e) => {
-                warn!(bot_id = %bot_id, error = %e, "Failed to load bot info for deletion");
-                None
+                error!(bot_id = %bot_id, error = %e, "Failed to load bot info for deletion — aborting");
+                let _ = response_tx.send(Err(format!("Failed to load bot: {e}")));
+                return;
             }
         };
-        let symbol = bot_info.as_ref().map(|b| b.symbol.clone());
-        let exchange = bot_info.as_ref().map(|b| b.exchange.clone());
 
+        let symbol = &bot_info.symbol;
+        let exchange = &bot_info.exchange;
+
+        // 2. Cancel orders and close positions (abort on failure to avoid orphan positions)
         if close_position {
-            if let (Some(ref sym), Some(ref ex)) = (&symbol, &exchange) {
-                if let Err(e) = self
-                    .order_executor
-                    .send_command(OrderCommand::CancelAllOrders {
-                        symbol: Some(sym.clone()),
-                    })
-                    .await
-                {
-                    warn!(bot_id = %bot_id, error = %e, "Failed to cancel orders during bot deletion");
-                }
-                if let Err(e) = self
-                    .order_executor
-                    .send_command(OrderCommand::CloseAllPositions {
-                        symbol: sym.clone(),
-                        exchange: ex.clone(),
-                    })
-                    .await
-                {
-                    error!(bot_id = %bot_id, error = %e, "Failed to close positions during bot deletion");
-                }
+            if let Err(e) = self
+                .order_executor
+                .send_command(OrderCommand::CancelAllOrders {
+                    symbol: Some(symbol.clone()),
+                })
+                .await
+            {
+                error!(bot_id = %bot_id, error = %e, "Failed to cancel orders during deletion — aborting");
+                let _ = response_tx.send(Err(format!("Failed to cancel orders: {e}")));
+                return;
+            }
+            if let Err(e) = self
+                .order_executor
+                .send_command(OrderCommand::CloseAllPositions {
+                    symbol: symbol.clone(),
+                    exchange: exchange.clone(),
+                })
+                .await
+            {
+                error!(bot_id = %bot_id, error = %e, "Failed to close positions during deletion — aborting");
+                let _ = response_tx.send(Err(format!("Failed to close positions: {e}")));
+                return;
             }
         }
 
-        self.stop_or_pause_bot(bot_id, "deleted", "stopped").await;
+        // 3. Stop worker (skip CancelAllOrders — already done above when close_position=true)
+        self.stop_or_pause_bot(bot_id, "deleted", "stopped", !close_position)
+            .await;
+
+        // 4. Delete from DB
         if let Err(e) = self.store.delete_bot(bot_id).await {
             error!(bot_id = %bot_id, error = %e, "Failed to delete bot from database");
+            let _ = response_tx.send(Err(format!("Failed to delete bot from database: {e}")));
+            return;
         }
+
+        info!(bot_id = %bot_id, "Bot deleted successfully");
+        let _ = response_tx.send(Ok(()));
     }
 }
