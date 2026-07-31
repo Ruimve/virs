@@ -13,13 +13,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::broadcast;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::strategy;
 use virs_types::auto_port::{AutoBotConfig, AutoStore};
-use virs_types::bot::{MarketDataProvider, OrderEvent, OrderExecutor, PriceProvider};
+use virs_types::bot::{MarketDataProvider, OrderEvent, OrderExecutor};
+use virs_market::KlineEvent;
 use virs_strategy::prompt::PromptLoader;
 use virs_config::TimeConfig;
 use virs_types::enums::PositionSide;
@@ -29,7 +30,7 @@ pub(crate) use side_state::{PendingClose, PendingOpen, SideState};
 
 pub struct AutoWorker {
     pub(crate) bot: AutoBotConfig,
-    price_provider: Arc<dyn PriceProvider>,
+    kline_rx: broadcast::Receiver<KlineEvent>,
     order_executor: Arc<dyn OrderExecutor>,
     ai_service: Arc<AutoAiService>,
     store: Arc<dyn AutoStore>,
@@ -73,7 +74,7 @@ impl AutoWorker {
 impl AutoWorker {
     pub fn new(
         bot: AutoBotConfig,
-        price_provider: Arc<dyn PriceProvider>,
+        kline_rx: broadcast::Receiver<KlineEvent>,
         order_executor: Arc<dyn OrderExecutor>,
         ai_service: Arc<AutoAiService>,
         store: Arc<dyn AutoStore>,
@@ -85,7 +86,7 @@ impl AutoWorker {
     ) -> Self {
         Self {
             bot,
-            price_provider,
+            kline_rx,
             order_executor,
             ai_service,
             store,
@@ -225,17 +226,6 @@ impl AutoWorker {
         }
     }
 
-    pub(crate) async fn fetch_current_price(&self) -> f64 {
-        match self
-            .price_provider
-            .get_price(&self.bot.exchange, &self.bot.symbol)
-            .await
-        {
-            Some(price) if price > 0.0 => price,
-            _ => self.current_price,
-        }
-    }
-
     pub(crate) async fn save_position(&self) {
         if let Err(e) = self
             .store
@@ -338,24 +328,38 @@ impl AutoWorker {
     }
 
     pub async fn run(&mut self, mut shutdown_rx: tokio::sync::mpsc::Receiver<()>) {
-        let max_retries = self.time_config.retry.initial_price_max_retries;
-        for attempt in 1..=max_retries {
-            self.current_price = self.fetch_current_price().await;
-            if self.current_price > 0.0 {
-                break;
+        // 等待第一个 KlineEvent 获取初始价格
+        info!(bot_id = %self.bot.id, "Waiting for first kline event to initialize price...");
+        loop {
+            tokio::select! {
+                ev = self.kline_rx.recv() => {
+                    match ev {
+                        Ok(event) => {
+                            if event.exchange == self.bot.exchange
+                                && event.symbol == self.bot.symbol
+                                && event.candle.close > 0.0
+                            {
+                                self.current_price = event.candle.close;
+                                info!(bot_id = %self.bot.id, price = self.current_price, "Initial price obtained from kline event");
+                                break;
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(n)) => {
+                            warn!(bot_id = %self.bot.id, lagged = n, "KlineEvent lagged while waiting for initial price");
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            error!(bot_id = %self.bot.id, "KlineEvent channel closed while waiting for initial price, setting error status");
+                            if let Err(e) = self.store.update_bot_status(self.bot.id, "error").await {
+                                error!(error = %e, "Failed to update bot status to error");
+                            }
+                            return;
+                        }
+                    }
+                }
+                _ = shutdown_rx.recv() => {
+                    return;
+                }
             }
-            warn!(bot_id = %self.bot.id, attempt, "Failed to fetch initial price, retrying...");
-            tokio::time::sleep(Duration::from_secs(
-                self.time_config.price_poll_interval_secs,
-            ))
-            .await;
-        }
-        if self.current_price <= 0.0 {
-            error!(bot_id = %self.bot.id, attempts = max_retries, "Failed to fetch initial price, setting error status");
-            if let Err(e) = self.store.update_bot_status(self.bot.id, "error").await {
-                error!(error = %e, "Failed to update bot status to error");
-            }
-            return;
         }
 
         match self.store.load_consecutive_losses(self.bot.id).await {
@@ -559,10 +563,6 @@ impl AutoWorker {
             self.on_llm_decision().await;
         }
 
-        let mut price_tick = tokio::time::interval(Duration::from_secs(
-            self.time_config.price_poll_interval_secs,
-        ));
-
         let (llm_signal_tx, mut llm_signal_rx) = tokio::sync::mpsc::channel::<()>(1);
         {
             let interval_secs = self.bot.decide_interval_secs.max(60) as u64;
@@ -583,10 +583,25 @@ impl AutoWorker {
                 _ = shutdown_rx.recv() => {
                     break;
                 }
-                _ = price_tick.tick() => {
-                    self.current_price = self.fetch_current_price().await;
-                    if !self.paused {
-                        self.on_price_tick().await;
+                ev = self.kline_rx.recv() => {
+                    match ev {
+                        Ok(event) => {
+                            if event.exchange == self.bot.exchange && event.symbol == self.bot.symbol {
+                                if event.candle.close > 0.0 {
+                                    self.current_price = event.candle.close;
+                                }
+                                if !self.paused {
+                                    self.on_price_tick().await;
+                                }
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(n)) => {
+                            warn!(bot_id = %self.bot.id, lagged = n, "KlineEvent lagged");
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            warn!(bot_id = %self.bot.id, "KlineEvent channel closed");
+                            break;
+                        }
                     }
                 }
                 Some(()) = llm_signal_rx.recv() => {

@@ -3086,6 +3086,7 @@ dependencies = [
  "uuid",
  "virs-config",
  "virs-error",
+ "virs-market",
  "virs-models",
  "virs-strategy",
  "virs-types",

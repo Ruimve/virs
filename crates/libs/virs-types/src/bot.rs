@@ -112,12 +112,6 @@ pub trait CredentialStore: Send + Sync {
 }
 
 
-#[async_trait]
-pub trait PriceProvider: Send + Sync {
-    async fn get_price(&self, exchange: &str, symbol: &str) -> Option<f64>;
-}
-
-
 #[derive(Debug, Clone)]
 pub struct MarketSnapshot {
     pub current_price: f64,

@@ -9,15 +9,16 @@ use crate::auto::ai::AutoAiService;
 use crate::auto::types::AutoCommand;
 use crate::auto::worker::AutoWorker;
 use virs_types::auto_port::AutoStore;
-use virs_types::bot::{MarketDataProvider, OrderCommand, OrderEvent, OrderExecutor, PriceProvider};
+use virs_types::bot::{MarketDataProvider, OrderCommand, OrderEvent, OrderExecutor};
 use virs_strategy::prompt::PromptLoader;
 use virs_config::TimeConfig;
+use virs_market::KlineEngine;
 use virs_types::position::EngineEvent;
 
 pub struct AutoEngine {
     store: Arc<dyn AutoStore>,
     ai_service: Arc<AutoAiService>,
-    price_provider: Arc<dyn PriceProvider>,
+    kline_engine: Arc<KlineEngine>,
     order_executor: Arc<dyn OrderExecutor>,
     market_data_provider: Arc<dyn MarketDataProvider>,
     event_tx: broadcast::Sender<OrderEvent>,
@@ -35,7 +36,7 @@ impl AutoEngine {
     pub fn new(
         store: Arc<dyn AutoStore>,
         ai_service: Arc<AutoAiService>,
-        price_provider: Arc<dyn PriceProvider>,
+        kline_engine: Arc<KlineEngine>,
         order_executor: Arc<dyn OrderExecutor>,
         market_data_provider: Arc<dyn MarketDataProvider>,
         event_tx: broadcast::Sender<OrderEvent>,
@@ -48,7 +49,7 @@ impl AutoEngine {
         let engine = Self {
             store,
             ai_service,
-            price_provider,
+            kline_engine,
             order_executor,
             market_data_provider,
             event_tx,
@@ -126,7 +127,7 @@ impl AutoEngine {
         let event_rx = self.event_tx.subscribe();
         let pe_event_rx = self.pe_event_tx.subscribe();
         let store = self.store.clone();
-        let price_provider = self.price_provider.clone();
+        let kline_rx = self.kline_engine.subscribe_events();
         let order_executor = self.order_executor.clone();
         let ai_service = self.ai_service.clone();
         let market_data_provider = self.market_data_provider.clone();
@@ -137,7 +138,7 @@ impl AutoEngine {
         let handle = tokio::spawn(async move {
             let mut worker = AutoWorker::new(
                 bot,
-                price_provider,
+                kline_rx,
                 order_executor,
                 ai_service,
                 store,

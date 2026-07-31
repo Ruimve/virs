@@ -3,14 +3,12 @@ mod credential_store;
 pub mod llm_resolver;
 pub mod market_data;
 pub mod order_executor;
-mod price_provider;
 
 pub use auto_store::PgAutoStore;
 pub use credential_store::PgCredentialStore;
 pub use llm_resolver::DefaultLlmResolver;
 pub use market_data::{AutoExchangeMarketDataProvider, ExchangeMarketDataProvider};
 pub use order_executor::PeOrderExecutor;
-pub use price_provider::{AutoExchangePriceProvider, ExchangePriceProvider};
 
 #[cfg(test)]
 mod auto_store_tests;

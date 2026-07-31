@@ -112,14 +112,6 @@ pub async fn create_bot(
     state.kline_engine.subscribe(exchange, symbol, virs_types::MarketType::Perpetual).await?;
 
 
-    if paper_mode {
-        state
-            .engine_manager
-            .register_paper_symbol(exchange.to_string(), symbol.to_string())
-            .await;
-    }
-
-
     let fallback = if paper_mode { 10000.0 } else { 0.0 };
     let initial_capital = match state.exchange_registry.get(&exchange_key) {
         Some(ex) => {

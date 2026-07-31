@@ -29,9 +29,6 @@ pub trait EngineManager: Send + Sync {
     fn restore_error(&self) -> Option<String>;
 
 
-    async fn register_paper_symbol(&self, exchange: String, symbol: String);
-
-
     fn pe_event_subscribe(&self) -> Option<broadcast::Receiver<EngineEvent>>;
 
 

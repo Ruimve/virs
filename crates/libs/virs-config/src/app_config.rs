@@ -11,12 +11,10 @@ pub(crate) const DEFAULT_DB_ACQUIRE_TIMEOUT_SECS: &str = "10";
 
 pub(crate) const DEFAULT_MAX_POSITION_DURATION_SECS: &str = "172800";
 pub(crate) const DEFAULT_PENDING_ORDER_TIMEOUT_SECS: &str = "60";
-pub(crate) const DEFAULT_PRICE_POLL_INTERVAL_SECS: &str = "5";
 pub(crate) const DEFAULT_CLOSE_ORDER_TIMEOUT_SECS: &str = "15";
 pub(crate) const DEFAULT_HTTP_TIMEOUT_SECS: &str = "30";
 pub(crate) const DEFAULT_LLM_TIMEOUT_SECS: &str = "120";
 
-pub(crate) const DEFAULT_INITIAL_PRICE_MAX_RETRIES: &str = "10";
 pub(crate) const DEFAULT_PERSIST_MAX_RETRIES: &str = "3";
 pub(crate) const DEFAULT_PERSIST_RETRY_BASE_MS: &str = "100";
 
@@ -76,8 +74,6 @@ pub struct TimeConfig {
 
     pub pending_order_timeout_secs: u64,
 
-    pub price_poll_interval_secs: u64,
-
     pub close_order_timeout_secs: u64,
 
     pub http_timeout_secs: u64,
@@ -93,8 +89,6 @@ pub struct TimeConfig {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RetryConfig {
-    pub initial_price_max_retries: u32,
-
     pub persist_max_retries: u32,
 
     pub persist_retry_base_ms: u64,
@@ -115,7 +109,6 @@ pub struct ListenKeyConfig {
 impl Default for RetryConfig {
     fn default() -> Self {
         Self {
-            initial_price_max_retries: DEFAULT_INITIAL_PRICE_MAX_RETRIES.parse().unwrap(),
             persist_max_retries: DEFAULT_PERSIST_MAX_RETRIES.parse().unwrap(),
             persist_retry_base_ms: DEFAULT_PERSIST_RETRY_BASE_MS.parse().unwrap(),
         }
@@ -150,7 +143,6 @@ impl Default for TimeConfig {
         Self {
             max_position_duration_secs: DEFAULT_MAX_POSITION_DURATION_SECS.parse().unwrap(),
             pending_order_timeout_secs: DEFAULT_PENDING_ORDER_TIMEOUT_SECS.parse().unwrap(),
-            price_poll_interval_secs: DEFAULT_PRICE_POLL_INTERVAL_SECS.parse().unwrap(),
             close_order_timeout_secs: DEFAULT_CLOSE_ORDER_TIMEOUT_SECS.parse().unwrap(),
             http_timeout_secs: DEFAULT_HTTP_TIMEOUT_SECS.parse().unwrap(),
             llm_timeout_secs: DEFAULT_LLM_TIMEOUT_SECS.parse().unwrap(),
@@ -230,10 +222,6 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
             std::env::var("TIME_PENDING_ORDER_TIMEOUT_SECS").ok(),
             DEFAULT_PENDING_ORDER_TIMEOUT_SECS,
         )?,
-        price_poll_interval_secs: parse_env_num(
-            std::env::var("TIME_PRICE_POLL_INTERVAL_SECS").ok(),
-            DEFAULT_PRICE_POLL_INTERVAL_SECS,
-        )?,
         close_order_timeout_secs: parse_env_num(
             std::env::var("TIME_CLOSE_ORDER_TIMEOUT_SECS").ok(),
             DEFAULT_CLOSE_ORDER_TIMEOUT_SECS,
@@ -247,10 +235,6 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
             DEFAULT_LLM_TIMEOUT_SECS,
         )?,
         retry: RetryConfig {
-            initial_price_max_retries: parse_env_num(
-                std::env::var("INITIAL_PRICE_MAX_RETRIES").ok(),
-                DEFAULT_INITIAL_PRICE_MAX_RETRIES,
-            )?,
             persist_max_retries: parse_env_num(
                 std::env::var("PERSIST_MAX_RETRIES").ok(),
                 DEFAULT_PERSIST_MAX_RETRIES,

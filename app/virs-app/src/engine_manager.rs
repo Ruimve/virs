@@ -12,7 +12,7 @@ use virs_exchange::{Exchanges, PaperExchangeAdapter};
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
 use virs_strategy::prompt::PromptLoader;
-use virs_types::bot::{OrderEvent, PriceProvider};
+use virs_types::bot::OrderEvent;
 use virs_types::enums::MarketType;
 use virs_types::exchange_pe::ExchangePe;
 use virs_types::position::{EngineCommand, EngineEvent};
@@ -26,8 +26,6 @@ struct EngineState {
     pe_event_tx: StdMutex<Option<broadcast::Sender<EngineEvent>>>,
 
     position_engine: StdMutex<Option<PositionEngine>>,
-
-    paper_symbols: Arc<Mutex<Vec<(String, String)>>>,
 
     paper_tick_handle: StdMutex<Option<tokio::task::JoinHandle<()>>>,
 
@@ -307,56 +305,47 @@ impl EngineManager for AppEngineManager {
         // 复用 AppEngineManager 持有的全局 PromptLoader（启动时一次性加载）。
         let prompt_loader = self.prompt_loader.clone();
 
-        let paper_symbols: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
-
         if paper_mode {
             let paper_bots: Vec<(String, String)> = sqlx::query_as(
                 r#"SELECT DISTINCT exchange, symbol FROM qd_auto_bots WHERE status = 'running'"#,
             )
             .fetch_all(&self.db_pool)
             .await?;
-            let mut symbols = paper_symbols.lock().await;
-            for (exchange, symbol) in paper_bots {
-                if !symbols.contains(&(exchange.clone(), symbol.clone())) {
-                    symbols.push((exchange, symbol));
-                }
+            for (exchange, symbol) in &paper_bots {
+                info!(exchange = %exchange, symbol = %symbol, "Paper mode: kline subscription already restored");
             }
         }
 
-        let auto_price_provider = Arc::new(
-            AutoExchangePriceProvider::new(self.exchange_registry.clone())
-                .with_kline_engine(self.kline_engine.clone()),
-        );
-
+        // paper 模式下，将 KlineEvent 转发给 PositionEngine 作为 PriceTick（事件驱动）
         let paper_tick_handle: Option<tokio::task::JoinHandle<()>> = if paper_mode {
-            let price_provider_for_paper: Arc<dyn PriceProvider> = auto_price_provider.clone();
             let kline_engine_for_paper = self.kline_engine.clone();
             let pe_cmd_tx_for_tick = pe_cmd_tx.clone();
-            let paper_symbols_for_tick = paper_symbols.clone();
             Some(tokio::spawn(async move {
-                let mut tick = tokio::time::interval(std::time::Duration::from_secs(3));
+                let mut kline_rx = kline_engine_for_paper.subscribe_events();
+                info!("Paper mode kline event bridge started");
                 loop {
-                    tick.tick().await;
-                    let kline_symbols = kline_engine_for_paper.subscribed_symbols();
-                    let symbols: Vec<(String, String)> = if kline_symbols.is_empty() {
-                        paper_symbols_for_tick.lock().await.clone()
-                    } else {
-                        kline_symbols.into_iter().map(|(e, s, _)| (e, s)).collect()
-                    };
-                    for (exchange, symbol) in symbols {
-                        if let Some(price) =
-                            price_provider_for_paper.get_price(&exchange, &symbol).await
-                        {
-                            if pe_cmd_tx_for_tick
-                                .send(EngineCommand::PriceTick {
-                                    symbol: symbol.clone(),
-                                    price,
-                                })
-                                .await
-                                .is_err()
-                            {
-                                return;
+                    match kline_rx.recv().await {
+                        Ok(event) => {
+                            if event.candle.close > 0.0 {
+                                if pe_cmd_tx_for_tick
+                                    .send(EngineCommand::PriceTick {
+                                        symbol: event.symbol,
+                                        price: event.candle.close,
+                                    })
+                                    .await
+                                    .is_err()
+                                {
+                                    info!("PE command channel closed, stopping paper kline bridge");
+                                    return;
+                                }
                             }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(n)) => {
+                            warn!(lagged = n, "KlineEvent lagged in paper tick bridge");
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            info!("KlineEvent channel closed, stopping paper kline bridge");
+                            break;
                         }
                     }
                 }
@@ -394,7 +383,7 @@ impl EngineManager for AppEngineManager {
         let (mut auto_engine, auto_cmd_tx) = virs_bot::auto::AutoEngine::new(
             auto_store,
             auto_ai_service,
-            auto_price_provider,
+            self.kline_engine.clone(),
             auto_order_executor,
             auto_market_data_provider,
             auto_order_event_tx.clone(),
@@ -413,7 +402,6 @@ impl EngineManager for AppEngineManager {
             auto_cmd_tx: StdMutex::new(Some(auto_cmd_tx)),
             pe_event_tx: StdMutex::new(Some(pe_event_sender)),
             position_engine: StdMutex::new(Some(position_engine_clone)),
-            paper_symbols: paper_symbols.clone(),
             paper_tick_handle: StdMutex::new(paper_tick_handle),
             pe_handle: Mutex::new(Some(pe_handle)),
             auto_handle: Mutex::new(Some(auto_handle)),
@@ -436,15 +424,6 @@ impl EngineManager for AppEngineManager {
 
     fn restore_error(&self) -> Option<String> {
         self.restore_error.lock().unwrap().clone()
-    }
-
-    async fn register_paper_symbol(&self, exchange: String, symbol: String) {
-        if let Some(state) = self.state.get() {
-            let mut symbols = state.paper_symbols.lock().await;
-            if !symbols.contains(&(exchange.clone(), symbol.clone())) {
-                symbols.push((exchange, symbol));
-            }
-        }
     }
 
     fn pe_event_subscribe(&self) -> Option<broadcast::Receiver<EngineEvent>> {

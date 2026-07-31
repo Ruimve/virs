@@ -25,12 +25,10 @@ fn s1_1_app_config_full_roundtrip() {
         time: TimeConfig {
             max_position_duration_secs: 172800,
             pending_order_timeout_secs: 60,
-            price_poll_interval_secs: 5,
             close_order_timeout_secs: 15,
             http_timeout_secs: 30,
             llm_timeout_secs: 120,
             retry: RetryConfig {
-                initial_price_max_retries: 10,
                 persist_max_retries: 3,
                 persist_retry_base_ms: 100,
             },

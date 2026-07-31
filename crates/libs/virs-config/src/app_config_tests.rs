@@ -47,7 +47,6 @@ fn s3_1_default_constants_values() {
     assert_eq!(DEFAULT_DB_POOL_MIN, "5");
     assert_eq!(DEFAULT_DB_POOL_MAX, "50");
     assert_eq!(DEFAULT_DB_ACQUIRE_TIMEOUT_SECS, "10");
-    assert_eq!(DEFAULT_INITIAL_PRICE_MAX_RETRIES, "10");
     assert_eq!(DEFAULT_PERSIST_MAX_RETRIES, "3");
     assert_eq!(DEFAULT_PERSIST_RETRY_BASE_MS, "100");
 }
@@ -57,12 +56,10 @@ fn t12_1_time_config_default_values() {
     let tc = TimeConfig::default();
     assert_eq!(tc.max_position_duration_secs, 172800, "48h = 172800s");
     assert_eq!(tc.pending_order_timeout_secs, 60);
-    assert_eq!(tc.price_poll_interval_secs, 5);
     assert_eq!(tc.close_order_timeout_secs, 15);
     assert_eq!(tc.http_timeout_secs, 30);
     assert_eq!(tc.llm_timeout_secs, 120);
 
-    assert_eq!(tc.retry.initial_price_max_retries, 10);
     assert_eq!(tc.retry.persist_max_retries, 3);
     assert_eq!(tc.retry.persist_retry_base_ms, 100);
 
@@ -76,7 +73,6 @@ fn t12_1_time_config_default_values() {
 fn t12_2_time_config_default_constants() {
     assert_eq!(DEFAULT_MAX_POSITION_DURATION_SECS, "172800");
     assert_eq!(DEFAULT_PENDING_ORDER_TIMEOUT_SECS, "60");
-    assert_eq!(DEFAULT_PRICE_POLL_INTERVAL_SECS, "5");
     assert_eq!(DEFAULT_CLOSE_ORDER_TIMEOUT_SECS, "15");
     assert_eq!(DEFAULT_HTTP_TIMEOUT_SECS, "30");
     assert_eq!(DEFAULT_LLM_TIMEOUT_SECS, "120");
@@ -87,12 +83,10 @@ fn t12_3_time_config_serde_roundtrip() {
     let tc = TimeConfig {
         max_position_duration_secs: 3600,
         pending_order_timeout_secs: 30,
-        price_poll_interval_secs: 10,
         close_order_timeout_secs: 20,
         http_timeout_secs: 60,
         llm_timeout_secs: 240,
         retry: RetryConfig {
-            initial_price_max_retries: 5,
             persist_max_retries: 2,
             persist_retry_base_ms: 50,
         },
