@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use super::types::{Candle, Timeframe};
+use virs_types::{Candle, Timeframe};
 
 struct TimeframeBuffer {
     candles: VecDeque<Candle>,

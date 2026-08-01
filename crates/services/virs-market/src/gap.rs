@@ -6,9 +6,8 @@ use virs_error::{ExchangeError, VirsError, VirsResult};
 
 use super::aggregator::Aggregator;
 use super::cache::SymbolCache;
-use super::types::{
-    align_open_time, Candle, KlineEvent, KlineEventType, KlineSource, MarketType, Timeframe,
-};
+use super::types::{align_open_time, KlineSource};
+use virs_types::{Candle, KlineEvent, KlineEventType, MarketType, Timeframe};
 
 pub struct GapDetector;
 

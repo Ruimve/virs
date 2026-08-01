@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use tokio_stream::wrappers::ReceiverStream;
-use virs_ccxt::{self, Exchange as CcxtExchange, PlaceOrderParams as CcxtPlaceOrderParams};
+use virs_ccxt::{self, Exchange as CcxtExchange, CcxtPlaceOrderParams};
 use virs_error::{ExchangeError, VirsResult};
 use virs_types::*;
 use virs_types::exchange::{ExchangePe, OrderUpdateStream};

@@ -427,7 +427,7 @@ pub async fn fetch_balance(
 pub async fn create_order(
     client: &ExchangeClient,
     signer: &dyn Signer,
-    params: PlaceOrderParams,
+    params: CcxtPlaceOrderParams,
 ) -> Result<OrderResult, ExchangeError> {
     // 转换为币安原生交易对符号
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(&params.symbol);

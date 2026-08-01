@@ -15,7 +15,7 @@ pub struct KlineWsMsg<'a> {
     exchange: &'a str,
     symbol: &'a str,
     timeframe: &'a str,
-    candle: &'a virs_ccxt::ws_types::Candle,
+    candle: &'a virs_types::Candle,
     event_type: &'a str,
 }
 
@@ -142,16 +142,16 @@ async fn fetch_stop_loss_take_profit(
 }
 
 
-pub fn kline_event_to_json(event: &virs_market::KlineEvent) -> KlineWsMsg<'_> {
+pub fn kline_event_to_json(event: &virs_types::KlineEvent) -> KlineWsMsg<'_> {
     KlineWsMsg {
         exchange: &event.exchange,
         symbol: &event.symbol,
         timeframe: event.timeframe.as_str(),
         candle: &event.candle,
         event_type: match event.event_type {
-            virs_market::KlineEventType::Update => "Update",
-            virs_market::KlineEventType::Closed => "Closed",
-            virs_market::KlineEventType::Backfilled => "Backfilled",
+            virs_types::KlineEventType::Update => "Update",
+            virs_types::KlineEventType::Closed => "Closed",
+            virs_types::KlineEventType::Backfilled => "Backfilled",
         },
     }
 }

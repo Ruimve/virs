@@ -1,8 +1,9 @@
-use virs_ccxt::ws_types::Candle;
+use virs_types::Candle;
 use virs_market::aggregator::{candle_from_1m, Aggregator};
 use virs_market::cache::SymbolCache;
 use virs_market::source::timeframe_str_to_ms;
-use virs_market::{align_open_time, subscription_key, Timeframe};
+use virs_market::{align_open_time, subscription_key};
+use virs_types::Timeframe;
 
 const BASE: i64 = 1_700_000_040_000;
 

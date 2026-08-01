@@ -4,7 +4,8 @@
 //! 该测试需要 `STRATEGIES_DIR` 环境变量指向项目根的 `strategies/` 目录，
 //! 否则跳过（CI 中应设置该变量）。
 
-use virs_strategy::prompt::{PromptLoader, StrategyType};
+use virs_strategy::prompt::PromptLoader;
+use virs_types::StrategyType;
 
 #[tokio::test]
 async fn seed_auto_default_loads_and_validates() {

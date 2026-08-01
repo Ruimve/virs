@@ -1,5 +1,6 @@
 use super::cache::SymbolCache;
-use super::types::{align_open_time, Candle, Timeframe};
+use super::types::align_open_time;
+use virs_types::{Candle, Timeframe};
 
 pub struct Aggregator;
 

@@ -11,8 +11,8 @@ pub use gap::ContinuityReport;
 pub use orderbook_engine::OrderBookEngine;
 pub use source::ExchangeKlineSource;
 pub use types::{
-    align_open_time, subscription_key, KlineEngineConfig, KlineEvent, KlineEventType,
-    KlinePersistence, KlineSource, OrderBookEngineConfig, OrderBookEvent, Timeframe,
+    align_open_time, subscription_key, KlineEngineConfig,
+    KlinePersistence, KlineSource, OrderBookEngineConfig, OrderBookEvent,
 };
 
 #[cfg(test)]

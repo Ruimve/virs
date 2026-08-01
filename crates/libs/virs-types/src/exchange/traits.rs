@@ -6,7 +6,7 @@ use crate::exchange::{MarketType, PositionMode};
 use crate::market::*;
 use crate::order::OrderResult;
 use crate::position::PlaceOrderParams;
-use super::types::OrderUpdateStream;
+use super::structs::OrderUpdateStream;
 
 
 /// 统一交易所接口 trait。

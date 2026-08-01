@@ -16,7 +16,8 @@ use virs_types::{
 };
 
 pub use types::{
-    CcxtFundingRate, CcxtKline, CcxtOrderBook, CcxtTicker, MarketInfo, OrderFee, PlaceOrderParams,
+    CcxtFundingRate, CcxtKline, CcxtOrderBook, CcxtPlaceOrderParams, CcxtTicker, MarketInfo,
+    OrderFee,
 };
 
 #[async_trait]
@@ -82,7 +83,7 @@ pub trait Exchange: Send + Sync {
     ) -> Result<CcxtOrderBook, ExchangeError>;
     async fn fetch_balance(&self) -> Result<Vec<Balance>, ExchangeError>;
     async fn fetch_markets(&self) -> Result<Vec<MarketInfo>, ExchangeError>;
-    async fn create_order(&self, params: PlaceOrderParams) -> Result<OrderResult, ExchangeError>;
+    async fn create_order(&self, params: CcxtPlaceOrderParams) -> Result<OrderResult, ExchangeError>;
     async fn cancel_order(
         &self,
         symbol: &str,

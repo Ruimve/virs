@@ -6,7 +6,7 @@
 //! 任何 bot 都使用同一个渲染器，各自构建 context。
 //! 模板中未出现的占位符 replace 是 no-op，无副作用。
 
-use crate::market::MarketIndicators;
+use virs_types::MarketIndicators;
 
 /// 渲染 prompt 所需的全部上下文数据。
 ///

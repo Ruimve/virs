@@ -85,13 +85,13 @@ pub async fn kline_data(
     Query(params): Query<KlineDataQuery>,
 ) -> Result<Json<ApiResponse>, VirsError> {
     let tf = match params.timeframe.as_deref() {
-        Some("1m") => virs_market::Timeframe::M1,
-        Some("5m") => virs_market::Timeframe::M5,
-        Some("15m") => virs_market::Timeframe::M15,
-        Some("1h") => virs_market::Timeframe::H1,
-        Some("4h") => virs_market::Timeframe::H4,
-        Some("1d") => virs_market::Timeframe::D1,
-        _ => virs_market::Timeframe::M1,
+        Some("1m") => virs_types::Timeframe::M1,
+        Some("5m") => virs_types::Timeframe::M5,
+        Some("15m") => virs_types::Timeframe::M15,
+        Some("1h") => virs_types::Timeframe::H1,
+        Some("4h") => virs_types::Timeframe::H4,
+        Some("1d") => virs_types::Timeframe::D1,
+        _ => virs_types::Timeframe::M1,
     };
 
     if let Some(candles) = state
@@ -134,7 +134,7 @@ pub async fn get_ticker(
 
     if let Some(candles) = state
         .kline_engine
-        .get_klines_async(exchange, symbol, virs_market::Timeframe::M1)
+        .get_klines_async(exchange, symbol, virs_types::Timeframe::M1)
         .await
     {
         if let Some(last) = candles.last() {
@@ -192,13 +192,13 @@ pub async fn get_klines(
 
 
     let requested_tf = match params.timeframe.as_deref() {
-        Some("1m") => virs_market::Timeframe::M1,
-        Some("5m") => virs_market::Timeframe::M5,
-        Some("15m") => virs_market::Timeframe::M15,
-        Some("1h") => virs_market::Timeframe::H1,
-        Some("4h") => virs_market::Timeframe::H4,
-        Some("1d") => virs_market::Timeframe::D1,
-        _ => virs_market::Timeframe::M15,
+        Some("1m") => virs_types::Timeframe::M1,
+        Some("5m") => virs_types::Timeframe::M5,
+        Some("15m") => virs_types::Timeframe::M15,
+        Some("1h") => virs_types::Timeframe::H1,
+        Some("4h") => virs_types::Timeframe::H4,
+        Some("1d") => virs_types::Timeframe::D1,
+        _ => virs_types::Timeframe::M15,
     };
 
 
@@ -229,12 +229,12 @@ pub async fn get_klines(
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => {
             let tf_str = match requested_tf {
-                virs_market::Timeframe::M1 => "1m",
-                virs_market::Timeframe::M5 => "5m",
-                virs_market::Timeframe::M15 => "15m",
-                virs_market::Timeframe::H1 => "1h",
-                virs_market::Timeframe::H4 => "4h",
-                virs_market::Timeframe::D1 => "1d",
+                virs_types::Timeframe::M1 => "1m",
+                virs_types::Timeframe::M5 => "5m",
+                virs_types::Timeframe::M15 => "15m",
+                virs_types::Timeframe::H1 => "1h",
+                virs_types::Timeframe::H4 => "4h",
+                virs_types::Timeframe::D1 => "1d",
             };
             match ex.get_klines(symbol, tf_str, 500, None).await {
                 Ok(klines) => Ok(Json(ApiResponse::ok(serde_json::json!({

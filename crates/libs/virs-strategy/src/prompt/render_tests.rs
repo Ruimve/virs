@@ -1,4 +1,4 @@
-use crate::market::MarketIndicators;
+use virs_types::MarketIndicators;
 use crate::prompt::render::{format_bars_outside, render, RenderContext};
 
 /// 测试辅助：构造全零 MarketIndicators（仅用于测试，生产代码不允许使用默认值）。

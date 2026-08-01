@@ -5,14 +5,14 @@ use tracing::warn;
 
 use virs_exchange::Exchanges;
 use virs_market::KlineEngine;
-use virs_market::Timeframe;
+use virs_types::Timeframe;
 use virs_types::Kline;
 use virs_error::{VirsError, VirsResult};
 use virs_types::bot::{MarketDataProvider, MarketSnapshot};
 use virs_types::market::Balance;
 use virs_types::exchange::ExchangePe;
 
-pub fn candle_to_kline(c: &virs_ccxt::ws_types::Candle) -> Kline {
+pub fn candle_to_kline(c: &virs_types::Candle) -> Kline {
     Kline {
         open_time: c.open_time,
         open: c.open,

@@ -21,7 +21,7 @@ use crate::auto::ai::AutoAiService;
 use crate::auto::strategy;
 use virs_types::auto::{AutoBotConfig, AutoStore};
 use virs_types::bot::{MarketDataProvider, OrderEvent, OrderExecutor};
-use virs_market::KlineEvent;
+use virs_types::KlineEvent;
 use virs_strategy::prompt::PromptLoader;
 use virs_config::TimeConfig;
 use virs_types::PositionSide;

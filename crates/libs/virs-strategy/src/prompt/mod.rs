@@ -13,7 +13,7 @@
 //! - `user_prompt_template.md` — user prompt 模板原文
 //!
 //! 模块组成：
-//! - [`template`]：数据结构（PromptTemplate / MetaFile / StrategyType / PromptSource）
+//! - [`template`]：数据结构（PromptTemplate / MetaFile / PromptSource）
 //! - [`validator`]：占位符白名单 + 校验逻辑
 //! - [`loader`]：文件夹扫描 + 缓存 + 查询
 //! - [`ai_generator`]：AI 生成器（LLM → PromptTemplate）
@@ -30,7 +30,7 @@ pub mod writer;
 pub use ai_generator::{generate_prompt, GenerateRequest, GenerateResult};
 pub use loader::PromptLoader;
 pub use render::{render, RenderContext};
-pub use template::{MetaFile, PromptSource, PromptTemplate, StrategyType};
+pub use template::{MetaFile, PromptSource, PromptTemplate};
 pub use writer::{delete_template, save_template};
 
 #[cfg(test)]

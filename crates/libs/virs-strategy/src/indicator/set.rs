@@ -8,7 +8,8 @@ use virs_error::VirsError;
 use virs_types::Kline;
 
 use crate::indicator::library as lib;
-use crate::indicator::spec::{IndicatorSpec, Timeframe};
+use crate::indicator::spec::IndicatorSpec;
+use virs_types::Timeframe;
 
 /// 三周期 K 线输入。对应现有 `compute_market_indicators` 的三个参数。
 #[derive(Debug, Clone, Copy)]
@@ -86,6 +87,7 @@ fn klines_for_tf<'a>(tf: Timeframe, klines: &KlineSet<'a>) -> &'a [Kline] {
         Timeframe::H1 => klines.h1,
         Timeframe::H4 => klines.h4,
         Timeframe::M15 => klines.m15,
+        _ => &[],
     }
 }
 

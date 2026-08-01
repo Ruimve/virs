@@ -8,20 +8,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// 策略类型。对应 `strategies/auto/{name}/` 子目录。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum StrategyType {
-    Auto,
-}
-
-impl StrategyType {
-    pub fn as_dir(&self) -> &'static str {
-        match self {
-            StrategyType::Auto => "auto",
-        }
-    }
-}
+use virs_types::StrategyType;
 
 /// Prompt 来源标记。AI 生成时记录模型与元 prompt，便于追溯。
 #[derive(Debug, Clone, Serialize, Deserialize)]

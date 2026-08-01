@@ -11,9 +11,9 @@ use crate::cache::SymbolCache;
 use crate::gap::GapDetector;
 pub use crate::source::ExchangeKlineSource;
 use crate::types::{
-    subscription_key, Candle, KlineEngineConfig, KlineEvent, KlineEventType, KlinePersistence,
-    KlineSource, KlineWsClient, MarketType, Timeframe, WsEvent,
+    subscription_key, KlineEngineConfig, KlinePersistence, KlineSource, KlineWsClient, WsEvent,
 };
+use virs_types::{Candle, KlineEvent, KlineEventType, MarketType, Timeframe};
 
 struct NoOpPersistence;
 

@@ -3,12 +3,12 @@ use virs_error::{BotError, BotResult};
 #[derive(Debug, Clone)]
 pub struct AutoMarketSnapshot {
     pub base: virs_types::bot::MarketSnapshot,
-    pub indicators: virs_strategy::market::MarketIndicators,
+    pub indicators: virs_types::MarketIndicators,
 }
 
 impl AutoMarketSnapshot {
     pub fn from_base(snapshot: virs_types::bot::MarketSnapshot) -> BotResult<Self> {
-        let indicators: virs_strategy::market::MarketIndicators =
+        let indicators: virs_types::MarketIndicators =
             serde_json::from_value(snapshot.indicators_json.clone()).map_err(|e| {
                 BotError::Validation(format!(
                     "Failed to deserialize indicators_json: {}. \

@@ -11,7 +11,8 @@ use crate::ws_manager::{
     WsManagerEvent,
 };
 use crate::ws_types::KlineWsClient;
-pub use crate::ws_types::{Candle, WsCandleUpdate, WsEvent};
+pub use crate::ws_types::{WsCandleUpdate, WsEvent};
+use virs_types::Candle;
 
 // 统一交易对格式转为币安WS小写格式，如 BTC/USDT → btcusdt
 pub(crate) fn binance_ws_symbol(symbol: &str) -> String {

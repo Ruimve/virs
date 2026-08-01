@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use sqlx::FromRow;
-use virs_strategy::prompt::StrategyType;
+use virs_types::StrategyType;
 use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};

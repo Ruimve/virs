@@ -9,24 +9,7 @@
 //!   计算时内部调用原子函数，避免依赖其他 spec 的查找结果
 
 use serde::{Deserialize, Serialize};
-
-/// K 线周期。当前策略仅使用三个固定周期。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Timeframe {
-    M15,
-    H1,
-    H4,
-}
-
-impl Timeframe {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Timeframe::M15 => "m15",
-            Timeframe::H1 => "h1",
-            Timeframe::H4 => "h4",
-        }
-    }
-}
+use virs_types::Timeframe;
 
 /// 指标规格。覆盖现有 `MarketIndicators` 的全部字段语义。
 ///

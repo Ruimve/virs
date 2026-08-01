@@ -1,10 +1,10 @@
 mod enums;
+mod structs;
 mod traits;
-mod types;
 
 pub use enums::*;
+pub use structs::*;
 pub use traits::*;
-pub use types::*;
 
 #[cfg(test)]
 mod enums_tests;

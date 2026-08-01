@@ -4,7 +4,8 @@
 
 use virs_error::VirsError;
 use virs_strategy::indicator::library::{atr, closes, rsi_at};
-use virs_strategy::prompt::{PromptLoader, StrategyType};
+use virs_strategy::prompt::PromptLoader;
+use virs_types::StrategyType;
 
 use crate::state::AppState;
 
@@ -22,7 +23,7 @@ pub async fn select_strategy_by_llm(
     // 获取 H1 K 线数据
     let candles = state
         .kline_engine
-        .get_klines_async(exchange, symbol, virs_market::Timeframe::H1)
+        .get_klines_async(exchange, symbol, virs_types::Timeframe::H1)
         .await
         .ok_or_else(|| {
             VirsError::bad_request(format!(

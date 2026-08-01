@@ -3,7 +3,8 @@ use virs_error::{VirsError, VirsResult};
 use virs_exchange::Exchanges;
 use virs_types::MarketType;
 
-use crate::types::{Candle, KlineSource};
+use crate::types::KlineSource;
+use virs_types::Candle;
 
 pub fn timeframe_str_to_ms(tf: &str) -> i64 {
     match tf {

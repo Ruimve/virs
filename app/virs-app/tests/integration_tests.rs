@@ -4,7 +4,7 @@ use virs_app::adapters::auto_store::bot_to_config as auto_bot_to_config;
 use virs_app::adapters::llm_resolver::resolve_llm_provider;
 use virs_app::adapters::market_data::candle_to_kline;
 use virs_app::adapters::order_executor::convert_pe_event;
-use virs_ccxt::ws_types::Candle;
+use virs_types::Candle;
 use virs_types::AutoBot;
 use virs_types::bot::OrderEvent;
 use virs_types::{OrderType, PositionSide, Side, TradeType};

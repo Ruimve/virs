@@ -1,5 +1,5 @@
 use crate::cache::SymbolCache;
-use crate::types::{Candle, Timeframe};
+use virs_types::{Candle, Timeframe};
 
 fn make_candle(open_time: i64, close: f64, closed: bool) -> Candle {
     Candle {

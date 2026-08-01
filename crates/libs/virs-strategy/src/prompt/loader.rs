@@ -17,8 +17,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 use virs_error::{Context, VirsResult};
+use virs_types::StrategyType;
 
-use crate::prompt::template::{MetaFile, PromptTemplate, StrategyType};
+use crate::prompt::template::{MetaFile, PromptTemplate};
 use crate::prompt::validator::validate;
 
 /// 环境变量名。

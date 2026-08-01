@@ -4,9 +4,9 @@ use virs_api::handlers::ai::{resolve_provider_base_url, resolve_provider_model};
 use virs_api::handlers::ai_credentials::{parse_balance_response, parse_models_response};
 use virs_api::handlers::response::ApiResponse;
 use virs_api::ws::{kline_event_to_json, position_to_ws_json};
-use virs_ccxt::ws_types::Candle;
+use virs_types::Candle;
 use virs_error::{ApiError, VirsError};
-use virs_market::types::{KlineEvent, KlineEventType, Timeframe};
+use virs_types::{KlineEvent, KlineEventType, Timeframe};
 use virs_types::{PositionSide, PositionStatus};
 use virs_types::position::Position;
 

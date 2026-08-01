@@ -30,7 +30,7 @@ pub struct MarketInfo {
 /// ccxt 层下单参数。包含 adapter 层独有的字段（market_type/leverage/margin_mode），
 /// 这些字段由 CcxtAdapter 从 virs_types::PlaceOrderParams 构造时填充。
 #[derive(Debug, Clone)]
-pub struct PlaceOrderParams {
+pub struct CcxtPlaceOrderParams {
     pub symbol: String,
     pub side: Side,
     pub order_type: OrderType,

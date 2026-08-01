@@ -544,7 +544,7 @@ impl Exchange for BinanceExchange {
     }
 
     // 创建订单: POST /fapi/v1/order (签名)，只返回 orderId + clientOrderId
-    async fn create_order(&self, params: PlaceOrderParams) -> Result<OrderResult, ExchangeError> {
+    async fn create_order(&self, params: CcxtPlaceOrderParams) -> Result<OrderResult, ExchangeError> {
         fapi::create_order(&self.client, self.signer.as_ref(), params).await
     }
 

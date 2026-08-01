@@ -1,20 +1,7 @@
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Candle {
-    pub open_time: i64,
-    pub close_time: i64,
-    pub open: f64,
-    pub high: f64,
-    pub low: f64,
-    pub close: f64,
-    pub volume: f64,
-    pub quote_volume: f64,
-    pub trades: i64,
-    pub closed: bool,
-}
+use virs_types::Candle;
 
 #[derive(Debug, Clone)]
 pub struct WsCandleUpdate {

@@ -14,4 +14,4 @@ pub mod spec;
 
 pub use library::*;
 pub use set::{all_market_indicators_specs, IndicatorSet, IndicatorValue, KlineSet};
-pub use spec::{IndicatorSpec, Timeframe};
+pub use spec::IndicatorSpec;
