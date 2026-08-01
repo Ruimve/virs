@@ -3,14 +3,16 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use virs_error::VirsResult;
 
+use super::structs::AutoBotConfig;
+
 
 #[async_trait]
 pub trait AutoStore: Send + Sync {
-    async fn load_running_bots(&self) -> VirsResult<Vec<crate::auto_port::AutoBotConfig>>;
+    async fn load_running_bots(&self) -> VirsResult<Vec<AutoBotConfig>>;
     async fn load_bot(
         &self,
         bot_id: Uuid,
-    ) -> VirsResult<Option<crate::auto_port::AutoBotConfig>>;
+    ) -> VirsResult<Option<AutoBotConfig>>;
     async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> VirsResult<()>;
     async fn update_last_decided(&self, bot_id: Uuid) -> VirsResult<()>;
     async fn update_position(
@@ -111,32 +113,4 @@ pub trait AutoStore: Send + Sync {
     /// 加载连续亏损次数 — JOIN pe_order_latest 取 close 订单的 realized_pnl
     async fn load_consecutive_losses(&self, bot_id: Uuid) -> VirsResult<i32>;
     async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()>;
-}
-
-
-#[derive(Debug, Clone)]
-pub struct AutoBotConfig {
-    pub id: Uuid,
-    pub user_id: Uuid,
-    pub name: String,
-    pub symbol: String,
-    pub exchange: String,
-    pub paper_mode: bool,
-    pub leverage: i32,
-    pub max_position_pct: f64,
-    pub decide_interval_secs: i32,
-    pub position_id_long: Option<Uuid>,
-    pub position_id_short: Option<Uuid>,
-    pub market_regime: Option<String>,
-    pub ai_analysis: Option<String>,
-    pub system_prompt: Option<String>,
-    pub user_prompt: Option<String>,
-    pub total_pnl: f64,
-    pub total_trades: i32,
-    pub win_trades: i32,
-    pub loss_trades: i32,
-    pub last_decided_at: Option<DateTime<Utc>>,
-    /// 策略 prompt 文件夹名。加载时查 `strategies/auto/{strategy_file}/`。
-    /// 必填项，创建 bot 时由策略选择逻辑写入。worker 缺失时报错并跳过决策。
-    pub strategy_file: Option<String>,
 }

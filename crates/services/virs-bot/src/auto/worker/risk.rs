@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use tracing::{info, warn};
-use virs_types::enums::PositionSide;
+use virs_types::PositionSide;
 
 use crate::auto::ports::AutoMarketSnapshot;
 use crate::auto::strategy;

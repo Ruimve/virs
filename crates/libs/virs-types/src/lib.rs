@@ -1,31 +1,16 @@
-pub mod auto_port;
+pub mod auto;
 pub mod bot;
-pub mod ccxt_order;
-pub mod client_order_id;
-pub mod enums;
-pub mod exchange_pe;
-
-// 重导出 ExchangePe trait，方便调用方直接通过 `virs_types::ExchangePe` 使用
-pub use exchange_pe::ExchangePe;
+pub mod exchange;
 pub mod llm;
 pub mod market;
+pub mod order;
 pub mod position;
 
-
+// 顶层 re-export：保持 `virs_types::CcxtOrder` 等扁平路径可用
+pub use auto::*;
 pub use bot::*;
-pub use ccxt_order::*;
-pub use enums::*;
+pub use exchange::*;
+pub use llm::*;
 pub use market::*;
+pub use order::*;
 pub use position::*;
-
-
-#[cfg(test)]
-mod enums_tests;
-#[cfg(test)]
-mod market_tests;
-#[cfg(test)]
-mod position_tests;
-#[cfg(test)]
-mod serde_tests;
-#[cfg(test)]
-mod client_order_id_tests;

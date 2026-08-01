@@ -1,5 +1,5 @@
 use virs_exchange::Exchanges;
-use virs_types::enums::*;
+use virs_types::*;
 
 #[test]
 fn int_1_1_side_roundtrip() {
@@ -35,7 +35,7 @@ fn int_1_4_market_type_consistency() {
 
 #[tokio::test]
 async fn int_2_1_paper_exchange_creation_and_balance() {
-    use virs_types::exchange_pe::ExchangePe;
+    use virs_types::exchange::ExchangePe;
     let paper =
         virs_exchange::paper::PaperExchangeAdapter::new("binance", MarketType::Perpetual, 100000.0);
     assert_eq!(paper.name(), "binance");
@@ -50,7 +50,7 @@ async fn int_2_1_paper_exchange_creation_and_balance() {
 
 #[tokio::test]
 async fn int_2_2_paper_market_order_updates_balance() {
-    use virs_types::exchange_pe::ExchangePe;
+    use virs_types::exchange::ExchangePe;
     use virs_types::position::PlaceOrderParams;
     let paper =
         virs_exchange::paper::PaperExchangeAdapter::new("binance", MarketType::Perpetual, 50000.0);

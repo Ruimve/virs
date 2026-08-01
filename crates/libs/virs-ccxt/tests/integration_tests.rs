@@ -8,7 +8,7 @@ use virs_ccxt::{
 };
 use virs_error::ExchangeError;
 
-use virs_types::{enums::OrderStatus, CcxtOrderStatus};
+use virs_types::{OrderStatus, CcxtOrderStatus};
 
 #[test]
 fn int_1_1_symbol_roundtrip_usdt() {

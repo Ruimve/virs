@@ -1,17 +1,12 @@
-use std::pin::Pin;
-
 use async_trait::async_trait;
-use futures_core::Stream;
 
 use virs_error::VirsResult;
 
-use crate::ccxt_order::OrderResult;
-use crate::enums::*;
+use crate::exchange::{MarketType, PositionMode};
 use crate::market::*;
-use crate::position::*;
-
-
-pub type OrderUpdateStream = Pin<Box<dyn Stream<Item = WsFeedEvent> + Send>>;
+use crate::order::OrderResult;
+use crate::position::PlaceOrderParams;
+use super::types::OrderUpdateStream;
 
 
 /// 统一交易所接口 trait。

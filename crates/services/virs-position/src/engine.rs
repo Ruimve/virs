@@ -9,8 +9,8 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use virs_error::{VirsError, VirsResult};
-use virs_types::enums::*;
-use virs_types::exchange_pe::{ExchangePe, OrderUpdateStream};
+use virs_types::*;
+use virs_types::exchange::{ExchangePe, OrderUpdateStream};
 use virs_types::market::ExchangePosition;
 use virs_types::position::*;
 use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType};

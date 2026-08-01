@@ -8,7 +8,7 @@ pub(crate) use virs_ccxt::ws_types::{
     OrderBookLevel, OrderBookWsClient, WsOrderBookEvent,
 };
 
-pub(crate) use virs_types::enums::MarketType;
+pub(crate) use virs_types::MarketType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Timeframe {

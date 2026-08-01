@@ -2,7 +2,7 @@ use crate::adapters::order_executor::convert_pe_event;
 use chrono::Utc;
 use uuid::Uuid;
 use virs_types::bot::OrderEvent;
-use virs_types::enums::{OrderType, PositionSide, Side, TradeType};
+use virs_types::{OrderType, PositionSide, Side, TradeType};
 use virs_types::position::{EngineEvent, Trade};
 use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType};
 
@@ -168,8 +168,8 @@ fn o1_6_convert_position_opened_none() {
         id: Uuid::new_v4(),
         exchange: "binance".to_string(),
         symbol: "BTC/USDT".to_string(),
-        side: virs_types::enums::PositionSide::Long,
-        status: virs_types::enums::PositionStatus::Open,
+        side: virs_types::PositionSide::Long,
+        status: virs_types::PositionStatus::Open,
         quantity: 1.0,
         entry_price: 100.0,
         realized_pnl: 0.0,

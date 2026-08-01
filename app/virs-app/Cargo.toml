@@ -13,7 +13,6 @@ virs-api = { path = "../../crates/services/virs-api" }
 virs-strategy = { path = "../../crates/libs/virs-strategy" }
 virs-types = { path = "../../crates/libs/virs-types" }
 virs-error = { path = "../../crates/libs/virs-error", features = ["sqlx"] }
-virs-models = { path = "../../crates/libs/virs-models" }
 virs-config = { path = "../../crates/libs/virs-config" }
 virs-utils = { path = "../../crates/libs/virs-utils" }
 virs-exchange = { path = "../../crates/libs/virs-exchange" }

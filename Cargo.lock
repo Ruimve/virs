@@ -3034,7 +3034,6 @@ dependencies = [
  "virs-error",
  "virs-exchange",
  "virs-market",
- "virs-models",
  "virs-strategy",
  "virs-types",
  "virs-utils",
@@ -3062,7 +3061,6 @@ dependencies = [
  "virs-error",
  "virs-exchange",
  "virs-market",
- "virs-models",
  "virs-position",
  "virs-strategy",
  "virs-types",
@@ -3087,7 +3085,6 @@ dependencies = [
  "virs-config",
  "virs-error",
  "virs-market",
- "virs-models",
  "virs-strategy",
  "virs-types",
 ]
@@ -3155,7 +3152,6 @@ dependencies = [
  "uuid",
  "virs-ccxt",
  "virs-error",
- "virs-models",
  "virs-types",
 ]
 
@@ -3173,18 +3169,6 @@ dependencies = [
  "virs-ccxt",
  "virs-error",
  "virs-exchange",
- "virs-types",
-]
-
-[[package]]
-name = "virs-models"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde",
- "serde_json",
- "sqlx",
- "uuid",
  "virs-types",
 ]
 
@@ -3221,7 +3205,6 @@ dependencies = [
  "tracing",
  "uuid",
  "virs-error",
- "virs-models",
  "virs-types",
 ]
 

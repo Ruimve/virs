@@ -8,7 +8,7 @@ use virs_position::PositionEngine;
 use virs_types::bot::{
     OrderCommand, OrderEvent, OrderExecutor, OrderInfo,
 };
-use virs_types::enums::{OrderType, TimeInForce};
+use virs_types::{OrderType, TimeInForce};
 use virs_types::position::*;
 use virs_types::CcxtOrder;
 

@@ -5,9 +5,9 @@ use tracing::warn;
 use uuid::Uuid;
 use virs_error::VirsResult;
 
-use virs_models::AutoBot;
-use virs_types::auto_port::AutoBotConfig;
-use virs_types::auto_port::*;
+use virs_types::AutoBot;
+use virs_types::auto::AutoBotConfig;
+use virs_types::auto::*;
 
 pub struct PgAutoStore {
     db: PgPool,

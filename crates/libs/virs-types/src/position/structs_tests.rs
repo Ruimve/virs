@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::enums::*;
-use crate::position::{position_uuid_v5, Position};
+use super::*;
+use crate::position::{PositionSide, PositionStatus};
 
 
 #[test]

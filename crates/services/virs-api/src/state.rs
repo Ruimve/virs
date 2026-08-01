@@ -84,10 +84,12 @@ impl AppState {
             Some((provider, encrypted_key)) => {
                 let api_key =
                     virs_utils::crypto::decrypt_with_key(&encrypted_key, &self.llm_key)?;
-                let base_url = virs_types::llm::resolve_provider_base_url(&provider)
+                let base_url = virs_types::llm::LlmProviderConfig::for_provider(&provider)
+                    .map(|c| c.base_url)
                     .ok_or_else(|| VirsError::config(format!("Unknown AI provider: {provider}")))?
                     .to_string();
-                let model = virs_types::llm::resolve_provider_model(&provider)
+                let model = virs_types::llm::LlmProviderConfig::for_provider(&provider)
+                    .map(|c| c.default_model)
                     .ok_or_else(|| VirsError::config(format!("Unknown AI provider: {provider}")))?
                     .to_string();
                 Ok((api_key, base_url, model))

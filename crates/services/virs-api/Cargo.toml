@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 virs-types = { path = "../../libs/virs-types" }
 virs-error = { path = "../../libs/virs-error", features = ["axum", "sqlx"] }
-virs-models = { path = "../../libs/virs-models" }
 virs-utils = { path = "../../libs/virs-utils" }
 virs-bot = { path = "../virs-bot" }
 virs-strategy = { path = "../../libs/virs-strategy" }

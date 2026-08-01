@@ -1,7 +1,7 @@
 use crate::adapters::auto_store::bot_to_config;
 use chrono::Utc;
 use uuid::Uuid;
-use virs_models::AutoBot;
+use virs_types::AutoBot;
 
 fn make_bot() -> AutoBot {
     AutoBot {

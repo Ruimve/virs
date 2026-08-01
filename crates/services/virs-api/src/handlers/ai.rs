@@ -4,18 +4,18 @@ use axum::{
     Json,
 };
 use virs_error::VirsError;
+use virs_types::llm::LlmProviderConfig;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
 
 
 pub fn resolve_provider_base_url(provider: &str) -> Option<&'static str> {
-    virs_types::llm::resolve_provider_base_url(provider)
+    LlmProviderConfig::for_provider(provider).map(|c| c.base_url)
 }
 
-
 pub fn resolve_provider_model(provider: &str) -> Option<&'static str> {
-    virs_types::llm::resolve_provider_model(provider)
+    LlmProviderConfig::for_provider(provider).map(|c| c.default_model)
 }
 
 pub async fn ai_status(

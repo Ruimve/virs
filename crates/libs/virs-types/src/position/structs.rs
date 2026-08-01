@@ -2,8 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::ccxt_order::{CcxtOrder, OrderResult};
-use crate::enums::*;
+use crate::order::{CcxtOrder, OrderResult, Side, OrderType};
+use crate::position::{PositionSide, PositionStatus, TradeType};
 
 
 /// 基于 (exchange, symbol, side) 生成确定性 UUID v5，
@@ -168,17 +168,6 @@ pub struct Trade {
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum WsFeedEvent {
-    OrderUpdate {
-        order: CcxtOrder,
-    },
-    ConnectionChanged {
-        connected: bool,
-    },
-}
-
-
 #[derive(Debug, Clone)]
 pub struct PlaceOrderParams {
     pub symbol: String,
@@ -190,7 +179,7 @@ pub struct PlaceOrderParams {
     pub position_id: Option<Uuid>,
     pub client_order_id: Option<String>,
     pub stop_price: Option<f64>,
-    pub time_in_force: Option<crate::enums::TimeInForce>,
+    pub time_in_force: Option<crate::order::TimeInForce>,
 }
 
 
@@ -203,76 +192,4 @@ pub struct PendingOrder {
     pub ws_order: Option<CcxtOrder>,
     pub position_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
-}
-
-
-#[derive(Debug, Clone)]
-pub enum EngineCommand {
-    OpenPosition {
-        exchange: String,
-        symbol: String,
-        side: PositionSide,
-        order_side: Side,
-        quantity: f64,
-        leverage: u32,
-        order_type: OrderType,
-        price: Option<f64>,
-        client_order_id: Option<String>,
-    },
-    ClosePosition {
-        position_id: Uuid,
-        order_type: OrderType,
-        price: Option<f64>,
-        client_order_id: Option<String>,
-    },
-    PlaceOrder {
-        params: PlaceOrderParams,
-    },
-    CancelAllOrders {
-        position_id: Option<Uuid>,
-        symbol: Option<String>,
-    },
-    CloseAllPositions {
-        symbol: String,
-    },
-    PriceTick {
-        symbol: String,
-        price: f64,
-    },
-}
-
-
-#[derive(Debug, Clone)]
-pub enum EngineEvent {
-    PositionOpened {
-        position: Position,
-    },
-    PositionClosed {
-        position: Position,
-    },
-    PositionUpdated {
-        position: Position,
-    },
-    OrderPlaced {
-        order: CcxtOrder,
-    },
-    OrderFilled {
-        order: CcxtOrder,
-        trade: Trade,
-    },
-    OrderPartiallyFilled {
-        order: CcxtOrder,
-        trade: Trade,
-    },
-    OrderCanceled {
-        order: CcxtOrder,
-    },
-    OrderFailed {
-        client_order_id: String,
-        reason: String,
-    },
-    RiskAlert {
-        level: String,
-        message: String,
-    },
 }

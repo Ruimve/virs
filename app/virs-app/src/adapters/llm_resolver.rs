@@ -1,6 +1,6 @@
 use virs_error::{BotError, BotResult};
 use virs_types::bot::LlmProviderResolver;
-use virs_types::llm;
+use virs_types::llm::LlmProviderConfig;
 
 pub fn resolve_llm_provider(
     user_credentials: &[(String, String, Option<String>)],
@@ -24,7 +24,7 @@ pub fn resolve_llm_provider(
         ("openrouter", user_openrouter),
     ] {
         if let Some((key, model)) = creds {
-            let config = llm::get_provider_config(provider)
+            let config = LlmProviderConfig::for_provider(provider)
                 .ok_or_else(|| BotError::Llm(format!("Unknown provider: {}", provider)))?;
             let model = model.unwrap_or_else(|| config.default_model.to_string());
             return Ok((

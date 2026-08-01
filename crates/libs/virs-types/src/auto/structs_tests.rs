@@ -1,7 +1,7 @@
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::AutoBot;
+use super::AutoBot;
 
 fn make_auto_bot(
     status: &str,
@@ -112,4 +112,45 @@ fn a5_1_stopped_status() {
 fn a5_2_running_status() {
     let bot = make_auto_bot("running", 0, 0, 0, 0.0, 10000.0);
     assert!(!bot.is_stopped());
+}
+
+// ── AutoBot serde roundtrip（原 virs-models::serde_tests） ──
+
+#[test]
+fn s4_1_auto_bot_roundtrip() {
+    let now = Utc::now();
+    let bot = AutoBot {
+        id: Uuid::nil(),
+        user_id: Uuid::nil(),
+        name: "auto_bot".into(),
+        symbol: "ETH/USDT".into(),
+        exchange: "binance".into(),
+        paper_mode: false,
+        status: "running".into(),
+        leverage: 5,
+        max_position_pct: 80.0,
+        decide_interval_secs: 1800,
+        initial_capital: 5000.0,
+        position_id_long: None,
+        position_id_short: None,
+        market_regime: None,
+        ai_analysis: None,
+        system_prompt: None,
+        user_prompt: None,
+        total_pnl: 250.0,
+        total_trades: 15,
+        win_trades: 10,
+        loss_trades: 5,
+        last_decided_at: Some(now),
+        strategy_file: None,
+        created_at: now,
+        updated_at: now,
+        started_at: Some(now),
+        stopped_at: None,
+    };
+    let json = serde_json::to_string(&bot).unwrap();
+    let de: AutoBot = serde_json::from_str(&json).unwrap();
+    assert_eq!(de.win_trades, bot.win_trades);
+    assert_eq!(de.total_pnl, bot.total_pnl);
+    assert_eq!(de.status, bot.status);
 }

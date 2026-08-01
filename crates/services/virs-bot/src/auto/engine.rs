@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::auto::ai::AutoAiService;
 use crate::auto::types::AutoCommand;
 use crate::auto::worker::AutoWorker;
-use virs_types::auto_port::AutoStore;
+use virs_types::auto::AutoStore;
 use virs_types::bot::{MarketDataProvider, OrderCommand, OrderEvent, OrderExecutor};
 use virs_strategy::prompt::PromptLoader;
 use virs_config::TimeConfig;

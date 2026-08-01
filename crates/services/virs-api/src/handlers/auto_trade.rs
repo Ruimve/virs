@@ -263,7 +263,7 @@ pub async fn get_bot(
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
 
-    let bot = sqlx::query_as::<_, virs_models::AutoBot>(
+    let bot = sqlx::query_as::<_, virs_types::AutoBot>(
         "SELECT * FROM qd_auto_bots WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
@@ -334,7 +334,7 @@ pub async fn update_bot(
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     // 查询 bot 当前状态
-    let bot = sqlx::query_as::<_, virs_models::AutoBot>(
+    let bot = sqlx::query_as::<_, virs_types::AutoBot>(
         "SELECT * FROM qd_auto_bots WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
@@ -648,7 +648,7 @@ pub async fn get_stats(
     .await?;
 
 
-    let bot = sqlx::query_as::<_, virs_models::AutoBot>(
+    let bot = sqlx::query_as::<_, virs_types::AutoBot>(
         "SELECT * FROM qd_auto_bots WHERE id = $1 AND user_id = $2",
     )
     .bind(id)

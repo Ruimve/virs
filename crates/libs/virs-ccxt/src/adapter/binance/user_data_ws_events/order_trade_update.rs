@@ -150,11 +150,11 @@ impl OrderTradeUpdateData {
     }
 
     /// WS 事件合法性校验：在转换为 CcxtOrder 之前，对影响业务逻辑的必需字段做原始字符串校验。
-    /// 校验逻辑由 `virs_types::validate_order_fields` 共享函数提供，WS 路径和 DB 读取路径共用。
+    /// 校验逻辑由 `virs_types::CcxtOrder::validate_fields` 共享函数提供，WS 路径和 DB 读取路径共用。
     ///
     /// 返回 false 时已记录 error 日志，调用方应跳过该订单（return None）。
     pub fn validate(&self) -> bool {
-        if let Err(e) = virs_types::validate_order_fields(
+        if let Err(e) = virs_types::CcxtOrder::validate_fields(
             &self.side,
             self.position_side.as_deref(),
             &self.status,

@@ -1,37 +1,24 @@
 use chrono::Utc;
 
-use crate::enums::*;
-use crate::market::*;
+use super::*;
+use crate::exchange::MarginMode;
+use crate::position::PositionSide;
 
 
 #[test]
-fn s1_1_side_roundtrip() {
-    let json = serde_json::to_string(&Side::Buy).unwrap();
-    let de: Side = serde_json::from_str(&json).unwrap();
-    assert_eq!(de, Side::Buy);
+fn m1_1_normal_total() {
+    let balance = Balance { asset: "USDT".into(), free: 100.0, used: 50.0, total: 150.0 };
+    assert!((balance.compute_total() - 150.0).abs() < 0.01);
 }
 
 #[test]
-fn s1_2_order_status_roundtrip() {
-    let json = serde_json::to_string(&OrderStatus::Filled).unwrap();
-    let de: OrderStatus = serde_json::from_str(&json).unwrap();
-    assert_eq!(de, OrderStatus::Filled);
+fn m1_2_zero_total() {
+    let balance = Balance { asset: "USDT".into(), free: 0.0, used: 0.0, total: 0.0 };
+    assert!((balance.compute_total() - 0.0).abs() < 0.01);
 }
 
-#[test]
-fn s1_3_market_type_roundtrip() {
-    let json = serde_json::to_string(&MarketType::Perpetual).unwrap();
-    let de: MarketType = serde_json::from_str(&json).unwrap();
-    assert_eq!(de, MarketType::Perpetual);
-}
 
-#[test]
-fn s1_4_strategy_status_roundtrip() {
-    let json = serde_json::to_string(&StrategyStatus::Running).unwrap();
-    let de: StrategyStatus = serde_json::from_str(&json).unwrap();
-    assert_eq!(de, StrategyStatus::Running);
-}
-
+// ── 行情类型 serde roundtrip ──
 
 #[test]
 fn s2_1_ticker_roundtrip() {

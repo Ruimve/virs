@@ -13,8 +13,8 @@ use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
 use virs_strategy::prompt::PromptLoader;
 use virs_types::bot::OrderEvent;
-use virs_types::enums::MarketType;
-use virs_types::exchange_pe::ExchangePe;
+use virs_types::MarketType;
+use virs_types::exchange::ExchangePe;
 use virs_types::position::{EngineCommand, EngineEvent};
 
 use crate::adapters::*;

@@ -3,6 +3,7 @@ mod risk;
 mod decision;
 mod executor;
 mod events;
+mod client_order_id;
 
 #[cfg(test)]
 mod side_state_tests;
@@ -18,12 +19,12 @@ use uuid::Uuid;
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::strategy;
-use virs_types::auto_port::{AutoBotConfig, AutoStore};
+use virs_types::auto::{AutoBotConfig, AutoStore};
 use virs_types::bot::{MarketDataProvider, OrderEvent, OrderExecutor};
 use virs_market::KlineEvent;
 use virs_strategy::prompt::PromptLoader;
 use virs_config::TimeConfig;
-use virs_types::enums::PositionSide;
+use virs_types::PositionSide;
 use virs_types::position::{EngineEvent, Position};
 
 pub(crate) use side_state::{PendingClose, PendingOpen, SideState};

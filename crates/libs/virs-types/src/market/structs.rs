@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::enums::{MarginMode, PositionSide};
+use crate::exchange::MarginMode;
+use crate::position::PositionSide;
 
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

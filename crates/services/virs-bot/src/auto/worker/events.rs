@@ -7,7 +7,7 @@ use virs_error::VirsError;
 use crate::auto::ports::AutoMarketSnapshot;
 use crate::auto::strategy;
 use virs_types::bot::OrderEvent;
-use virs_types::enums::PositionSide;
+use virs_types::PositionSide;
 use virs_types::position::EngineEvent;
 
 use crate::auto::worker::{side_str, AutoWorker};

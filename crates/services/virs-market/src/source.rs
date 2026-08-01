@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use virs_error::{VirsError, VirsResult};
 use virs_exchange::Exchanges;
-use virs_types::enums::MarketType;
+use virs_types::MarketType;
 
 use crate::types::{Candle, KlineSource};
 

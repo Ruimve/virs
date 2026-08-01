@@ -6,8 +6,8 @@ use uuid::Uuid;
 use crate::auto::ports::AutoMarketSnapshot;
 use crate::auto::strategy;
 use virs_types::bot::OrderCommand;
-use virs_types::client_order_id;
-use virs_types::enums::{PositionSide, Side};
+use crate::auto::worker::client_order_id::{format_auto_open, format_auto_close};
+use virs_types::{PositionSide, Side};
 
 use crate::auto::worker::{side_str, AutoWorker, PendingClose, PendingOpen};
 
@@ -92,7 +92,7 @@ impl AutoWorker {
             }
         };
 
-        let client_order_id = client_order_id::format_auto_open(self.bot.id, side);
+        let client_order_id = format_auto_open(self.bot.id, side);
 
         let result = self
             .order_executor
@@ -151,7 +151,7 @@ impl AutoWorker {
 
         // 优先使用 per-side 缓存的 position_id；若为 nil 则回退到 PlaceOrder 路径
         if position_id != Uuid::nil() {
-            let client_order_id = client_order_id::format_auto_close(self.bot.id, side_str);
+            let client_order_id = format_auto_close(self.bot.id, side_str);
 
             let result = self
                 .order_executor
@@ -198,7 +198,7 @@ impl AutoWorker {
                 PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
             };
 
-            let client_order_id = client_order_id::format_auto_close(self.bot.id, side_str);
+            let client_order_id = format_auto_close(self.bot.id, side_str);
 
             let result = self
                 .order_executor

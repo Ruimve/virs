@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 virs-types = { path = "../virs-types" }
 virs-ccxt = { path = "../virs-ccxt" }
-virs-models = { path = "../virs-models" }
 virs-error = { path = "../virs-error" }
 serde = { workspace = true }
 chrono = { workspace = true }

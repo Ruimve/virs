@@ -5,9 +5,9 @@ use virs_app::adapters::llm_resolver::resolve_llm_provider;
 use virs_app::adapters::market_data::candle_to_kline;
 use virs_app::adapters::order_executor::convert_pe_event;
 use virs_ccxt::ws_types::Candle;
-use virs_models::AutoBot;
+use virs_types::AutoBot;
 use virs_types::bot::OrderEvent;
-use virs_types::enums::{OrderType, PositionSide, Side, TradeType};
+use virs_types::{OrderType, PositionSide, Side, TradeType};
 use virs_types::position::{EngineEvent, Trade};
 use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType};
 
