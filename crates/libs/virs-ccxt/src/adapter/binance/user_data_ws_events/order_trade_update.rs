@@ -44,11 +44,13 @@ pub struct OrderTradeUpdateData {
     #[serde(rename = "p")]
     pub original_price: String, // p→原始价格
 
+    #[serde(default)]
     #[serde(rename = "ap")]
-    pub avg_fill_price: Option<String>, // ap→平均成交价
+    pub avg_fill_price: String, // ap→平均成交价
 
+    #[serde(default)]
     #[serde(rename = "sp")]
-    pub stop_price: Option<String>, // sp→触发价格
+    pub stop_price: String, // sp→触发价格
 
     #[serde(rename = "x")]
     pub execution_type: String, // x→执行类型
@@ -83,11 +85,13 @@ pub struct OrderTradeUpdateData {
     #[serde(rename = "t")]
     pub trade_id: i64, // t→成交ID
 
+    #[serde(default)]
     #[serde(rename = "b")]
-    pub bids_notional: Option<String>, // b→买方名义价值
+    pub bids_notional: String, // b→买方名义价值
 
+    #[serde(default)]
     #[serde(rename = "a")]
-    pub ask_notional: Option<String>, // a→卖方名义价值
+    pub ask_notional: String, // a→卖方名义价值
 
     #[serde(rename = "m")]
     pub is_maker: bool, // m→是否为maker
@@ -95,17 +99,19 @@ pub struct OrderTradeUpdateData {
     #[serde(rename = "R")]
     pub reduce_only: bool, // R→是否仅减仓 (exchange-native, 业务层不使用)
 
+    #[serde(default)]
     #[serde(rename = "wt")]
-    pub working_type: Option<String>, // wt→工作类型
+    pub working_type: String, // wt→工作类型
 
+    #[serde(default)]
     #[serde(rename = "ot")]
-    pub original_order_type: Option<String>, // ot→原始订单类型
+    pub original_order_type: String, // ot→原始订单类型
 
     #[serde(rename = "ps")]
     pub position_side: Option<String>, // ps→持仓方向
 
     #[serde(rename = "cp")]
-    pub is_close_all: Option<bool>, // cp→是否全部平仓
+    pub close_position: Option<bool>, // cp→是否为触发平仓单
 
     #[serde(rename = "AP")]
     pub activation_price: Option<String>, // AP→触发价格(追踪止损)
@@ -113,23 +119,29 @@ pub struct OrderTradeUpdateData {
     #[serde(rename = "cr")]
     pub callback_rate: Option<String>, // cr→回调比率
 
+    #[serde(default)]
     #[serde(rename = "pP")]
-    pub price_protection: Option<bool>, // pP→价格保护
+    pub price_protection: bool, // pP→价格保护
 
+    #[serde(default)]
     #[serde(rename = "rp")]
-    pub realized_pnl: Option<String>, // rp→已实现盈亏
+    pub realized_pnl: String, // rp→已实现盈亏
 
+    #[serde(default)]
     #[serde(rename = "V")]
-    pub stp_mode: Option<String>, // V→STP模式
+    pub stp_mode: String, // V→STP模式
 
+    #[serde(default)]
     #[serde(rename = "pm")]
-    pub price_match_mode: Option<String>, // pm→价格匹配模式
+    pub price_match_mode: String, // pm→价格匹配模式
 
+    #[serde(default)]
     #[serde(rename = "gtd")]
-    pub gtd_auto_cancel_time: Option<i64>, // gtd→GTD自动撤单时间
+    pub gtd_auto_cancel_time: i64, // gtd→GTD自动撤单时间
 
+    #[serde(default)]
     #[serde(rename = "er")]
-    pub expiry_reason: Option<String>, // er→过期原因
+    pub expiry_reason: String, // er→过期原因
 
     #[serde(rename = "si")]
     pub si: Option<i64>, // si→忽略
@@ -245,7 +257,7 @@ impl OrderTradeUpdateData {
             side,
             order_type,
             position_side,
-            original_order_type: self.original_order_type.clone(),
+            original_order_type: crate::adapter::binance::BinanceExchange::parse_order_type(&self.original_order_type),
             status,
             execution_type,
             orig_qty: self.orig_qty.clone(),
@@ -260,7 +272,7 @@ impl OrderTradeUpdateData {
             realized_pnl: self.realized_pnl.clone(),
             reduce_only: self.reduce_only,
             is_maker: self.is_maker,
-            close_position: self.is_close_all,
+            close_position: self.close_position,
             time_in_force: self.time_in_force.clone(),
             working_type: self.working_type.clone(),
             bids_notional: self.bids_notional.clone(),

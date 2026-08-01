@@ -451,7 +451,8 @@ pub async fn create_order(
             TimeInForce::Gtc => "GTC",
             TimeInForce::Ioc => "IOC",
             TimeInForce::Fok => "FOK",
-            TimeInForce::Poc => "GTX", // POC 对币安 GTX (只做 Maker)
+            TimeInForce::Gtx => "GTX",
+            TimeInForce::Gtd => "GTD",
         });
     }
 

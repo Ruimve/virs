@@ -30,15 +30,15 @@ fn t1_4_canceled() {
 }
 
 #[test]
-fn t1_5_expired_maps_to_canceled() {
+fn t1_5_expired() {
     let status: OrderStatus = CcxtOrderStatus::Expired.into();
-    assert_eq!(status, OrderStatus::Canceled);
+    assert_eq!(status, OrderStatus::Expired);
 }
 
 #[test]
-fn t1_6_expired_in_match_maps_to_canceled() {
+fn t1_6_expired_in_match() {
     let status: OrderStatus = CcxtOrderStatus::ExpiredInMatch.into();
-    assert_eq!(status, OrderStatus::Canceled);
+    assert_eq!(status, OrderStatus::Expired);
 }
 
 #[test]

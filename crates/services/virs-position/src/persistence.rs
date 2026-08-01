@@ -210,6 +210,17 @@ impl Persistence {
             OrderType::Liquidation => "LIQUIDATION",
             OrderType::Unknown(raw) => raw,
         };
+        let original_order_type_str = match &order.original_order_type {
+            OrderType::Limit => "LIMIT",
+            OrderType::Market => "MARKET",
+            OrderType::Stop => "STOP",
+            OrderType::StopMarket => "STOP_MARKET",
+            OrderType::TakeProfit => "TAKE_PROFIT",
+            OrderType::TakeProfitMarket => "TAKE_PROFIT_MARKET",
+            OrderType::TrailingStopMarket => "TRAILING_STOP_MARKET",
+            OrderType::Liquidation => "LIQUIDATION",
+            OrderType::Unknown(raw) => raw,
+        };
         let position_side_str = match &order.position_side {
             PositionSide::Long => "LONG",
             PositionSide::Short => "SHORT",
@@ -274,7 +285,7 @@ impl Persistence {
             .bind(side_str)
             .bind(order_type_str)
             .bind(position_side_str)
-            .bind(&order.original_order_type)
+            .bind(original_order_type_str)
             .bind(status_str)
             .bind(execution_type_str)
             .bind(&order.orig_qty)
@@ -347,7 +358,7 @@ impl Persistence {
             .bind(side_str)
             .bind(order_type_str)
             .bind(position_side_str)
-            .bind(&order.original_order_type)
+            .bind(original_order_type_str)
             .bind(status_str)
             .bind(execution_type_str)
             .bind(&order.orig_qty)
@@ -403,6 +414,17 @@ impl Persistence {
             Side::Unknown(raw) => raw,
         };
         let order_type_str = match &order.order_type {
+            OrderType::Limit => "LIMIT",
+            OrderType::Market => "MARKET",
+            OrderType::Stop => "STOP",
+            OrderType::StopMarket => "STOP_MARKET",
+            OrderType::TakeProfit => "TAKE_PROFIT",
+            OrderType::TakeProfitMarket => "TAKE_PROFIT_MARKET",
+            OrderType::TrailingStopMarket => "TRAILING_STOP_MARKET",
+            OrderType::Liquidation => "LIQUIDATION",
+            OrderType::Unknown(raw) => raw,
+        };
+        let original_order_type_str = match &order.original_order_type {
             OrderType::Limit => "LIMIT",
             OrderType::Market => "MARKET",
             OrderType::Stop => "STOP",
@@ -473,7 +495,7 @@ impl Persistence {
         .bind(side_str)
         .bind(order_type_str)
         .bind(position_side_str)
-        .bind(&order.original_order_type)
+        .bind(original_order_type_str)
         .bind(status_str)
         .bind(execution_type_str)
         .bind(&order.orig_qty)
@@ -553,33 +575,33 @@ struct OrderRow {
     side: String,
     order_type: String,
     position_side: String,
-    original_order_type: Option<String>,
+    original_order_type: String,
     status: String,
     execution_type: String,
     orig_qty: String,
     original_price: String,
-    avg_fill_price: Option<String>,
+    avg_fill_price: String,
     filled_qty: String,
     last_fill_qty: String,
     last_fill_price: String,
-    stop_price: Option<String>,
+    stop_price: String,
     commission: String,
     commission_asset: String,
-    realized_pnl: Option<String>,
+    realized_pnl: String,
     reduce_only: bool,
     is_maker: bool,
     close_position: Option<bool>,
     time_in_force: String,
-    working_type: Option<String>,
-    bids_notional: Option<String>,
-    ask_notional: Option<String>,
+    working_type: String,
+    bids_notional: String,
+    ask_notional: String,
     activation_price: Option<String>,
     callback_rate: Option<String>,
-    price_protection: Option<bool>,
-    stp_mode: Option<String>,
-    price_match_mode: Option<String>,
-    gtd_auto_cancel_time: Option<i64>,
-    expiry_reason: Option<String>,
+    price_protection: bool,
+    stp_mode: String,
+    price_match_mode: String,
+    gtd_auto_cancel_time: i64,
+    expiry_reason: String,
     si: Option<i64>,
     ss: Option<i64>,
     trade_time: i64,
@@ -622,6 +644,18 @@ impl OrderRow {
             "LIQUIDATION" => OrderType::Liquidation,
             other => OrderType::Unknown(other.to_string()),
         };
+        // original_order_type: 纯信息字段，透传保留原始字符串
+        let original_order_type = match self.original_order_type.as_str() {
+            "LIMIT" => OrderType::Limit,
+            "MARKET" => OrderType::Market,
+            "STOP" => OrderType::Stop,
+            "STOP_MARKET" => OrderType::StopMarket,
+            "TAKE_PROFIT" => OrderType::TakeProfit,
+            "TAKE_PROFIT_MARKET" => OrderType::TakeProfitMarket,
+            "TRAILING_STOP_MARKET" => OrderType::TrailingStopMarket,
+            "LIQUIDATION" => OrderType::Liquidation,
+            other => OrderType::Unknown(other.to_string()),
+        };
         let position_side = match self.position_side.as_str() {
             "LONG" => PositionSide::Long,
             "SHORT" => PositionSide::Short,
@@ -637,7 +671,7 @@ impl OrderRow {
             side,
             order_type,
             position_side,
-            original_order_type: self.original_order_type,
+            original_order_type,
             status,
             execution_type,
             orig_qty: self.orig_qty,

@@ -238,13 +238,13 @@ fn int_6_2_order_status_chain() {
 }
 
 #[test]
-fn int_6_3_order_status_expired_to_canceled_chain() {
+fn int_6_3_order_status_expired_chain() {
     let binance_status = "EXPIRED";
     let ccxt_status = BinanceExchange::parse_order_status(binance_status);
     assert_eq!(ccxt_status, CcxtOrderStatus::Expired);
 
     let app_status: OrderStatus = ccxt_status.into();
-    assert_eq!(app_status, OrderStatus::Canceled);
+    assert_eq!(app_status, OrderStatus::Expired);
 }
 
 #[test]

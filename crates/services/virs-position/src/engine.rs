@@ -479,7 +479,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
     // 必须用 last_fill_price(本笔成交价) 而非 avg_fill_price(累计均价) 做边际成本
     let fill_price: f64 = parse_field!(ws_order.last_fill_price.parse(), "last_fill_price", client_order_id);
     let commission: f64 = parse_field!(ws_order.commission.parse(), "commission", client_order_id);
-    let realized_pnl: f64 = parse_opt_field!(ws_order.realized_pnl, "realized_pnl", client_order_id);
+    let realized_pnl: f64 = parse_field!(ws_order.realized_pnl.parse(), "realized_pnl", client_order_id);
     // Hedge 模式下开平仓由 side + position_side 组合判断
     let is_close = matches!(
         (&ws_order.side, &ws_order.position_side),
@@ -604,7 +604,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
         }
 
         // 处理取消终态
-        if order_status == OrderStatus::Canceled {
+        if order_status == OrderStatus::Canceled || order_status == OrderStatus::Expired {
             // 先取 position_id（order_position 在 remove 前查），再清理
             let pos_id = inner.order_position.get(&client_order_id).map(|r| *r.value());
             if let Some((_, order)) = inner.orders.remove(&client_order_id) {
@@ -658,7 +658,7 @@ async fn finalize_pending_order(
         // Filled 终态清理
         inner.orders.remove(client_order_id);
         inner.order_position.remove(client_order_id);
-    } else if order_status == OrderStatus::Canceled {
+    } else if order_status == OrderStatus::Canceled || order_status == OrderStatus::Expired {
         inner.emit_event(EngineEvent::OrderCanceled {
             order: ws_order.clone(),
         });

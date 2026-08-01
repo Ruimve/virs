@@ -17,7 +17,7 @@ pub struct OrderResult {
 
 
 // WS ORDER_TRADE_UPDATE 订单结构体
-// 完整映射币安官方文档中 o 对象的 37 个字段
+// 完整映射币安官方文档中 o 对象的 38 个字段 + 3 个信封字段
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CcxtOrder {
     // --- 订单标识 ---
@@ -29,45 +29,45 @@ pub struct CcxtOrder {
     pub side: Side,
     pub order_type: OrderType,
     pub position_side: PositionSide,
-    pub original_order_type: Option<String>,
+    pub original_order_type: OrderType,
     pub status: crate::order::enums::CcxtOrderStatus,
     pub execution_type: crate::order::enums::ExecutionType,
 
     // --- 价格与数量 (币安返回字符串，保持原样) ---
     pub orig_qty: String,
     pub original_price: String,
-    pub avg_fill_price: Option<String>,
+    pub avg_fill_price: String,
     pub filled_qty: String,
     pub last_fill_qty: String,
     pub last_fill_price: String,
-    pub stop_price: Option<String>,
+    pub stop_price: String,
 
     // --- 手续费与盈亏 ---
     pub commission: String,
     pub commission_asset: String,
-    pub realized_pnl: Option<String>,
+    pub realized_pnl: String,
 
     // --- 订单属性 ---
     pub reduce_only: bool,
     pub is_maker: bool,
     pub close_position: Option<bool>,
     pub time_in_force: String,
-    pub working_type: Option<String>,
+    pub working_type: String,
 
     // --- 名义价值 ---
-    pub bids_notional: Option<String>,
-    pub ask_notional: Option<String>,
+    pub bids_notional: String,
+    pub ask_notional: String,
 
-    // --- 追踪止损 ---
+    // --- 追踪止损 (条件推送) ---
     pub activation_price: Option<String>,
     pub callback_rate: Option<String>,
 
     // --- 价格保护与模式 ---
-    pub price_protection: Option<bool>,
-    pub stp_mode: Option<String>,
-    pub price_match_mode: Option<String>,
-    pub gtd_auto_cancel_time: Option<i64>,
-    pub expiry_reason: Option<String>,
+    pub price_protection: bool,
+    pub stp_mode: String,
+    pub price_match_mode: String,
+    pub gtd_auto_cancel_time: i64,
+    pub expiry_reason: String,
 
     // --- 忽略字段 ---
     pub si: Option<i64>,
@@ -77,7 +77,7 @@ pub struct CcxtOrder {
     pub trade_time: i64,
     pub trade_id: i64,
 
-    // --- 改单标识 ---
+    // --- 改单标识 (条件推送) ---
     pub modify_id: Option<String>,
 
     // --- 信封字段 ---

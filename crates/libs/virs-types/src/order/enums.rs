@@ -15,21 +15,21 @@ pub enum Side {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum OrderType {
     #[serde(rename = "LIMIT")]
-    Limit,               // 限价单
+    Limit,
     #[serde(rename = "MARKET")]
-    Market,              // 市价单
+    Market,
     #[serde(rename = "STOP")]
-    Stop,                // 止损限价单
+    Stop,
     #[serde(rename = "STOP_MARKET")]
-    StopMarket,          // 止损市价单
+    StopMarket,
     #[serde(rename = "TAKE_PROFIT")]
-    TakeProfit,          // 止盈限价单
+    TakeProfit,
     #[serde(rename = "TAKE_PROFIT_MARKET")]
-    TakeProfitMarket,    // 止盈市价单
+    TakeProfitMarket,
     #[serde(rename = "TRAILING_STOP_MARKET")]
-    TrailingStopMarket,  // 跟踪止损单
+    TrailingStopMarket,
     #[serde(rename = "LIQUIDATION")]
-    Liquidation,         // 爆仓
+    Liquidation,
     #[serde(untagged)]
     Unknown(String),
 }
@@ -42,17 +42,32 @@ pub enum OrderStatus {
     PartiallyFilled,
     Filled,
     Canceled,
+    Expired,
     Failed,
 }
 
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+/// 币安合约 timeInForce 枚举。
+///
+/// 值域来源：币安 exchangeInfo `timeInForce: ['GTC', 'IOC', 'FOK', 'GTX']`，
+/// 以及用户指南中的 GTD（Good Till Date）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TimeInForce {
+    /// GTC — Good Till Canceled
+    #[serde(rename = "GTC")]
     Gtc,
+    /// IOC — Immediate Or Cancel
+    #[serde(rename = "IOC")]
     Ioc,
+    /// FOK — Fill Or Kill
+    #[serde(rename = "FOK")]
     Fok,
-    Poc,
+    /// GTX — Good Till Crossing (Post-Only / 只做 Maker)
+    #[serde(rename = "GTX")]
+    Gtx,
+    /// GTD — Good Till Date
+    #[serde(rename = "GTD")]
+    Gtd,
 }
 
 
@@ -84,6 +99,52 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Side {
             Side::Buy => "buy",
             Side::Sell => "sell",
             Side::Unknown(other) => other.as_str(),
+        };
+        <&str as sqlx::Encode<sqlx::Postgres>>::encode_by_ref(&s, buf)
+    }
+}
+
+
+// ── sqlx 编解码：OrderType ──
+
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for OrderType {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <&str as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(match s {
+            "LIMIT" => OrderType::Limit,
+            "MARKET" => OrderType::Market,
+            "STOP" => OrderType::Stop,
+            "STOP_MARKET" => OrderType::StopMarket,
+            "TAKE_PROFIT" => OrderType::TakeProfit,
+            "TAKE_PROFIT_MARKET" => OrderType::TakeProfitMarket,
+            "TRAILING_STOP_MARKET" => OrderType::TrailingStopMarket,
+            "LIQUIDATION" => OrderType::Liquidation,
+            other => OrderType::Unknown(other.to_string()),
+        })
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for OrderType {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("text")
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for OrderType {
+    fn encode_by_ref(
+        &self,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
+    ) -> sqlx::encode::IsNull {
+        let s = match self {
+            OrderType::Limit => "LIMIT",
+            OrderType::Market => "MARKET",
+            OrderType::Stop => "STOP",
+            OrderType::StopMarket => "STOP_MARKET",
+            OrderType::TakeProfit => "TAKE_PROFIT",
+            OrderType::TakeProfitMarket => "TAKE_PROFIT_MARKET",
+            OrderType::TrailingStopMarket => "TRAILING_STOP_MARKET",
+            OrderType::Liquidation => "LIQUIDATION",
+            OrderType::Unknown(other) => other.as_str(),
         };
         <&str as sqlx::Encode<sqlx::Postgres>>::encode_by_ref(&s, buf)
     }
@@ -164,11 +225,8 @@ impl From<CcxtOrderStatus> for OrderStatus {
             CcxtOrderStatus::PartiallyFilled => OrderStatus::PartiallyFilled,
             CcxtOrderStatus::Filled => OrderStatus::Filled,
             CcxtOrderStatus::Canceled => OrderStatus::Canceled,
-            CcxtOrderStatus::Expired => OrderStatus::Canceled,
-            CcxtOrderStatus::ExpiredInMatch => OrderStatus::Canceled,
-            CcxtOrderStatus::Unknown(_) => {
-                unreachable!("CcxtOrder::validate_fields ensures status is known before CcxtOrderStatus is created")
-            }
+            CcxtOrderStatus::Expired | CcxtOrderStatus::ExpiredInMatch => OrderStatus::Expired,
+            CcxtOrderStatus::Unknown(_) => OrderStatus::Failed,
         }
     }
 }
