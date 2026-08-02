@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use tokio::sync::{broadcast, mpsc, RwLock};
 
-use crate::ws_manager::{
+use virs_ws::{
     MessageOutcome, WsCommand as ManagerWsCommand, WsHandler, WsManager, WsManagerConfig,
     WsManagerEvent,
 };
@@ -177,7 +177,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
     async fn on_message(
         &self,
         text: &str,
-    ) -> Result<MessageOutcome<WsEvent>, virs_error::ExchangeError> {
+    ) -> Result<MessageOutcome<WsEvent>, virs_error::VirsError> {
         let bmsg: BinanceKlineMessage = match serde_json::from_str(text) {
             Ok(m) => m,
             Err(_) => {

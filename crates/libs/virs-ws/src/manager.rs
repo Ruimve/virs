@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite};
-use virs_error::ExchangeError;
+use virs_error::VirsError;
 
 // 动态订阅/退订命令
 #[derive(Debug, Clone)]
@@ -57,33 +57,13 @@ pub const WS_MAX_RETRIES: u64 = 100;
 // WS管理器配置
 #[derive(Debug, Clone)]
 pub struct WsManagerConfig {
-    ping_interval_secs: u64,
-    pong_timeout_secs: u64,
-    connect_timeout_secs: u64,
-    reconnect_initial_delay_secs: u64,
-    reconnect_max_delay_secs: u64,
-    max_lifetime_secs: u64,
-    max_retries: u64,
-}
-
-impl WsManagerConfig {
-    #[cfg(test)]
-    pub fn with_pong_timeout(mut self, secs: u64) -> Self {
-        self.pong_timeout_secs = secs;
-        self
-    }
-
-    #[cfg(test)]
-    pub fn with_max_retries(mut self, n: u64) -> Self {
-        self.max_retries = n;
-        self
-    }
-
-    #[cfg(test)]
-    pub fn with_connect_timeout(mut self, secs: u64) -> Self {
-        self.connect_timeout_secs = secs;
-        self
-    }
+    pub ping_interval_secs: u64,
+    pub pong_timeout_secs: u64,
+    pub connect_timeout_secs: u64,
+    pub reconnect_initial_delay_secs: u64,
+    pub reconnect_max_delay_secs: u64,
+    pub max_lifetime_secs: u64,
+    pub max_retries: u64,
 }
 
 impl Default for WsManagerConfig {
@@ -112,12 +92,12 @@ pub trait WsHandler<T: Send + Clone + 'static>: Send + Sync {
     }
 
     // 重连时刷新 URL（如 listenKey 场景需重新获取），默认返回 base_url
-    async fn refresh_url(&self) -> Result<String, ExchangeError> {
+    async fn refresh_url(&self) -> Result<String, VirsError> {
         Ok(self.base_url().to_string())
     }
 
     // 消息解析，返回 MessageOutcome
-    async fn on_message(&self, text: &str) -> Result<MessageOutcome<T>, ExchangeError>;
+    async fn on_message(&self, text: &str) -> Result<MessageOutcome<T>, VirsError>;
 
     // 连接后发送的初始订阅消息列表
     async fn on_connected(&self, is_reconnect: bool) -> Vec<String>;

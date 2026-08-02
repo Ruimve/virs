@@ -3110,6 +3110,7 @@ dependencies = [
  "tracing",
  "virs-error",
  "virs-types",
+ "virs-ws",
 ]
 
 [[package]]
@@ -3236,6 +3237,19 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tracing",
+ "virs-error",
+]
+
+[[package]]
+name = "virs-ws"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures-util",
+ "rand 0.8.6",
+ "tokio",
+ "tokio-tungstenite 0.26.2",
  "tracing",
  "virs-error",
 ]

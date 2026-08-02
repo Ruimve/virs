@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 virs-types = { path = "../virs-types" }
 virs-error = { path = "../virs-error", features = ["reqwest"] }
+virs-ws = { path = "../virs-ws" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }

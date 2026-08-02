@@ -1,8 +1,11 @@
 pub mod adapter;
 pub mod auth;
 pub mod types;
-pub mod ws_manager;
 pub mod ws_types;
+
+pub use virs_ws::{
+    MessageOutcome, WsCommand, WsHandler, WsManager, WsManagerConfig, WsManagerEvent,
+};
 
 use async_trait::async_trait;
 use reqwest::Client;

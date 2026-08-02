@@ -2,14 +2,13 @@ use std::sync::{Arc, RwLock};
 
 use serde::Deserialize;
 use tokio::sync::mpsc;
-use virs_error::ExchangeError;
 
 use virs_types::WsFeedEvent;
 
 use crate::adapter::binance::fapi;
 use crate::adapter::binance::user_data_ws_events::dispatch_event;
 use crate::auth::Signer;
-use crate::ws_manager::{MessageOutcome, WsHandler, WsManager, WsManagerConfig, WsManagerEvent};
+use virs_ws::{MessageOutcome, WsHandler, WsManager, WsManagerConfig, WsManagerEvent};
 use crate::ExchangeClient;
 
 // Binance用户数据WebSocket消息，兼容两种格式：
@@ -90,7 +89,7 @@ impl WsHandler<WsFeedEvent> for UserDataWsHandler {
     }
 
     // 重连时重新创建listenKey，确保不过期
-    async fn refresh_url(&self) -> Result<String, ExchangeError> {
+    async fn refresh_url(&self) -> Result<String, virs_error::VirsError> {
         // 调用fapi创建新的listenKey
         let new_key = fapi::create_listen_key(&self.client, self.signer.as_ref()).await?;
 
@@ -102,7 +101,7 @@ impl WsHandler<WsFeedEvent> for UserDataWsHandler {
     }
 
     // 收到消息: 先做延迟检测(阈值3秒)，再dispatch_event分发，最后检查listenKeyExpired和serverShutdown
-    async fn on_message(&self, text: &str) -> Result<MessageOutcome<WsFeedEvent>, ExchangeError> {
+    async fn on_message(&self, text: &str) -> Result<MessageOutcome<WsFeedEvent>, virs_error::VirsError> {
         // 延迟检测: 比较事件时间与本地时间
         if let Ok(bmsg) = serde_json::from_str::<BinanceOrderMessage>(text) {
             if let Some(et) = bmsg.event_time() {

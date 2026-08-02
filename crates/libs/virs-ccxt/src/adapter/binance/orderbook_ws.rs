@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use tokio::sync::{broadcast, mpsc, RwLock};
 
-use crate::ws_manager::{
+use virs_ws::{
     MessageOutcome, WsCommand as ManagerWsCommand, WsHandler, WsManager, WsManagerConfig,
     WsManagerEvent,
 };
@@ -184,7 +184,7 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
     async fn on_message(
         &self,
         text: &str,
-    ) -> Result<MessageOutcome<WsOrderBookEvent>, virs_error::ExchangeError> {
+    ) -> Result<MessageOutcome<WsOrderBookEvent>, virs_error::VirsError> {
         let bmsg: BinanceDepthMessage = match serde_json::from_str(text) {
             Ok(m) => m,
             Err(_) => {
