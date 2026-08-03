@@ -7,8 +7,8 @@ use serde::Deserialize;
 use tokio::sync::{broadcast, mpsc, RwLock};
 
 use virs_ws::{
-    MessageOutcome, WsCommand as ManagerWsCommand, WsHandler, WsManager, WsManagerConfig,
-    WsManagerEvent,
+    ConnectionReason, MessageOutcome, WsCommand as ManagerWsCommand, WsHandler, WsManager,
+    WsManagerConfig, WsManagerEvent,
 };
 use crate::ws_types::KlineWsClient;
 pub use crate::ws_types::{WsCandleUpdate, WsEvent};
@@ -181,8 +181,9 @@ impl WsHandler<WsEvent> for KlineWsHandler {
         let bmsg: BinanceKlineMessage = match serde_json::from_str(text) {
             Ok(m) => m,
             Err(_) => {
+                let preview: String = text.chars().take(200).collect();
                 tracing::warn!(
-                    preview = %&text[..text.len().min(200)],
+                    preview = %preview,
                     "Failed to parse WS message"
                 );
                 return Ok(MessageOutcome::Continue(vec![]));
@@ -316,16 +317,17 @@ impl WsHandler<WsEvent> for KlineWsHandler {
 // K线WS客户端，封装 WsManager 与 KlineWsHandler
 pub struct KlineWs {
     manager: WsManager<WsEvent>,
+    config: WsManagerConfig,
     pub(crate) handler: Arc<KlineWsHandler>,
 }
 
 impl KlineWs {
     pub fn new(ws_url: String) -> Self {
         let handler = Arc::new(KlineWsHandler::new(ws_url));
-        let config = WsManagerConfig::default();
 
         Self {
-            manager: WsManager::new(config, handler.clone()),
+            manager: WsManager::new(handler.clone()),
+            config: WsManagerConfig::default(),
             handler,
         }
     }
@@ -346,7 +348,9 @@ impl KlineWsClient for KlineWs {
         // 转发 WsManager 事件为 WsEvent 并广播给上层
         let (manager_tx, mut manager_rx) = mpsc::channel::<WsManagerEvent<WsEvent>>(256);
 
-        self.manager.start(manager_tx).await;
+        self.manager
+            .start(self.config.clone(), manager_tx)
+            .await;
 
         tokio::spawn(async move {
             while let Some(ev) = manager_rx.recv().await {
@@ -354,11 +358,11 @@ impl KlineWsClient for KlineWs {
                     WsManagerEvent::Message(e) => e,
                     WsManagerEvent::ConnectionChanged {
                         connected: true,
-                        is_reconnect: true,
+                        reason: ConnectionReason::Reconnected,
                     } => WsEvent::Reconnected,
                     WsManagerEvent::ConnectionChanged {
                         connected: true,
-                        is_reconnect: false,
+                        ..
                     } => {
                         // 首次连接成功，不向上层广播
                         continue;

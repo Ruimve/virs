@@ -4,7 +4,8 @@ pub mod types;
 pub mod ws_types;
 
 pub use virs_ws::{
-    MessageOutcome, WsCommand, WsHandler, WsManager, WsManagerConfig, WsManagerEvent,
+    ConnectionReason, MessageOutcome, WsCommand, WsHandler, WsManager, WsManagerConfig,
+    WsManagerEvent,
 };
 
 use async_trait::async_trait;
@@ -397,11 +398,12 @@ async fn handle_response(
     }
 
     serde_json::from_str::<Value>(&text).map_err(|e| {
+        let preview: String = text.chars().take(200).collect();
         ExchangeError::Internal(format!(
             "Failed to parse response from {}: {} (body: {})",
             display_url,
             e,
-            &text[..text.len().min(200)]
+            preview
         ))
     })
 }

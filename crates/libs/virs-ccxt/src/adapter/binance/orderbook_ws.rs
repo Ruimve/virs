@@ -7,8 +7,8 @@ use serde::Deserialize;
 use tokio::sync::{broadcast, mpsc, RwLock};
 
 use virs_ws::{
-    MessageOutcome, WsCommand as ManagerWsCommand, WsHandler, WsManager, WsManagerConfig,
-    WsManagerEvent,
+    ConnectionReason, MessageOutcome, WsCommand as ManagerWsCommand, WsHandler, WsManager,
+    WsManagerConfig, WsManagerEvent,
 };
 use crate::ws_types::{OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate};
 
@@ -188,8 +188,9 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
         let bmsg: BinanceDepthMessage = match serde_json::from_str(text) {
             Ok(m) => m,
             Err(_) => {
+                let preview: String = text.chars().take(200).collect();
                 tracing::warn!(
-                    preview = %&text[..text.len().min(200)],
+                    preview = %preview,
                     "Failed to parse WS message"
                 );
                 return Ok(MessageOutcome::Continue(vec![]));
@@ -308,16 +309,17 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
 // 订单簿WS客户端，封装 WsManager 与 OrderBookWsHandler
 pub struct OrderBookWs {
     manager: WsManager<WsOrderBookEvent>,
+    config: WsManagerConfig,
     pub(crate) handler: Arc<OrderBookWsHandler>,
 }
 
 impl OrderBookWs {
     pub fn new(ws_url: String) -> Self {
         let handler = Arc::new(OrderBookWsHandler::new(ws_url));
-        let config = WsManagerConfig::default();
 
         Self {
-            manager: WsManager::new(config, handler.clone()),
+            manager: WsManager::new(handler.clone()),
+            config: WsManagerConfig::default(),
             handler,
         }
     }
@@ -338,7 +340,9 @@ impl OrderBookWsClient for OrderBookWs {
         // 转发 WsManager 事件为 WsOrderBookEvent 并广播给上层
         let (manager_tx, mut manager_rx) = mpsc::channel::<WsManagerEvent<WsOrderBookEvent>>(256);
 
-        self.manager.start(manager_tx).await;
+        self.manager
+            .start(self.config.clone(), manager_tx)
+            .await;
 
         tokio::spawn(async move {
             while let Some(ev) = manager_rx.recv().await {
@@ -346,11 +350,11 @@ impl OrderBookWsClient for OrderBookWs {
                     WsManagerEvent::Message(e) => e,
                     WsManagerEvent::ConnectionChanged {
                         connected: true,
-                        is_reconnect: true,
+                        reason: ConnectionReason::Reconnected,
                     } => WsOrderBookEvent::Reconnected,
                     WsManagerEvent::ConnectionChanged {
                         connected: true,
-                        is_reconnect: false,
+                        ..
                     } => {
                         // 首次连接成功，不向上层广播
                         continue;

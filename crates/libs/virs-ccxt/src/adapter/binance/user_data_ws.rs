@@ -159,7 +159,9 @@ impl WsHandler<WsFeedEvent> for UserDataWsHandler {
 
 // 用户数据WebSocket封装，管理连接生命周期和事件转发
 pub struct UserDataWs {
-    manager: WsManager<WsFeedEvent>, // WS连接管理器
+    manager: WsManager<WsFeedEvent>,
+
+    config: WsManagerConfig,
 
     pub ws_url: String, // 连接URL: wss://fstream.binance.com/private/ws?listenKey=xxx
 
@@ -185,10 +187,9 @@ impl UserDataWs {
             Arc::clone(&current_key),
         ));
 
-        let config = WsManagerConfig::default();
-
         Self {
-            manager: WsManager::new(config, handler),
+            manager: WsManager::new(handler),
+            config: WsManagerConfig::default(),
             ws_url,
             current_key,
         }
@@ -210,7 +211,9 @@ impl UserDataWs {
         let (manager_tx, mut manager_rx) = mpsc::channel::<WsManagerEvent<WsFeedEvent>>(256);
 
         // 启动WsManager
-        self.manager.start(manager_tx).await;
+        self.manager
+            .start(self.config.clone(), manager_tx)
+            .await;
 
         // 转发任务: 将WsManagerEvent转为WsFeedEvent发送到外部channel
         tokio::spawn(async move {
