@@ -1,4 +1,5 @@
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use serde::Deserialize;
 use tokio::sync::mpsc;
@@ -10,7 +11,7 @@ use crate::adapter::binance::user_data_ws_events::dispatch_event;
 use crate::auth::Signer;
 use virs_ws::{MessageOutcome, WsHandler, WsManager, WsManagerConfig, WsManagerEvent};
 use crate::ExchangeClient;
-use virs_runtime::{CancellationToken, TaskSupervisor};
+use virs_task::{spawn, TaskHandle};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct BinanceOrderMessage {
@@ -139,7 +140,7 @@ pub struct UserDataWs {
     config: WsManagerConfig,
     pub ws_url: String,
     current_key: Arc<RwLock<String>>,
-    supervisor: TaskSupervisor,
+    forward_task: std::sync::Mutex<Option<TaskHandle>>,
 }
 
 impl UserDataWs {
@@ -147,7 +148,6 @@ impl UserDataWs {
         listen_key: String,
         client: ExchangeClient,
         signer: Arc<dyn Signer>,
-        parent_cancel: CancellationToken,
     ) -> Self {
         let base_url = "wss://fstream.binance.com/private/ws".to_string();
         let ws_url = format!("{}?listenKey={}", base_url, listen_key);
@@ -162,20 +162,16 @@ impl UserDataWs {
         ));
 
         Self {
-            manager: WsManager::new(handler, parent_cancel.clone()),
+            manager: WsManager::new(handler),
             config: WsManagerConfig::default(),
             ws_url,
             current_key,
-            supervisor: TaskSupervisor::new(parent_cancel.child_token()),
+            forward_task: std::sync::Mutex::new(None),
         }
     }
 
     pub fn running_handle(&self) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
         self.manager.running_handle()
-    }
-
-    pub async fn cancellation_token(&self) -> Option<virs_runtime::CancellationToken> {
-        self.manager.cancellation_token().await
     }
 
     pub fn listen_key_handle(&self) -> Arc<RwLock<String>> {
@@ -189,48 +185,45 @@ impl UserDataWs {
             .start(self.config.clone(), manager_tx)
             .await;
 
-        let ws_cancel = self
-            .manager
-            .cancellation_token()
-            .await
-            .unwrap_or_else(|| self.supervisor.child_token());
-
-        self.supervisor
-            .spawn_raw("user_data_forward", move |supervisor_cancel| async move {
-                loop {
-                    tokio::select! {
-                        _ = supervisor_cancel.cancelled() => break,
-                        _ = ws_cancel.cancelled() => break,
-                        ev = manager_rx.recv() => {
-                            let Some(ev) = ev else { break };
-                            let feed_event = match ev {
-                                WsManagerEvent::Message(e) => e,
-                                WsManagerEvent::ConnectionChanged { connected, .. } => {
-                                    WsFeedEvent::ConnectionChanged { connected }
-                                }
-                                WsManagerEvent::CircuitBreakerTripped { retry_count } => {
-                                    tracing::error!(
-                                        retry_count = retry_count,
-                                        "Circuit breaker tripped — WS stopped after max retries"
-                                    );
-                                    WsFeedEvent::ConnectionChanged { connected: false }
-                                }
-                            };
-                            if event_tx.send(feed_event).await.is_err() {
-                                tracing::warn!(
-                                    "External event channel closed, stopping forwarder"
-                                );
-                                break;
+        let handle = spawn("user_data_forward", move |cancel| async move {
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => break,
+                    ev = manager_rx.recv() => {
+                        let Some(ev) = ev else { break };
+                        let feed_event = match ev {
+                            WsManagerEvent::Message(e) => e,
+                            WsManagerEvent::ConnectionChanged { connected, .. } => {
+                                WsFeedEvent::ConnectionChanged { connected }
                             }
+                            WsManagerEvent::CircuitBreakerTripped { retry_count } => {
+                                tracing::error!(
+                                    retry_count = retry_count,
+                                    "Circuit breaker tripped — WS stopped after max retries"
+                                );
+                                WsFeedEvent::ConnectionChanged { connected: false }
+                            }
+                        };
+                        if event_tx.send(feed_event).await.is_err() {
+                            tracing::warn!(
+                                "External event channel closed, stopping forwarder"
+                            );
+                            break;
                         }
                     }
                 }
-            })
-            .await;
+            }
+        });
+
+        *self.forward_task.lock().unwrap() = Some(handle);
     }
 
     pub async fn stop(&self) {
         self.manager.stop().await;
-        self.supervisor.shutdown().await;
+        let handle = self.forward_task.lock().unwrap().take();
+        if let Some(h) = handle {
+            h.cancel();
+            h.join_with_timeout(Duration::from_secs(5)).await;
+        }
     }
 }

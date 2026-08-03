@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::{broadcast, mpsc};
 use tracing::{error, info, warn};
 use uuid::Uuid;
-use virs_runtime::{CancellationToken, TaskSupervisor};
+use virs_task::{spawn, CancellationToken, TaskHandle};
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::types::AutoCommand;
@@ -25,8 +26,7 @@ pub struct AutoEngine {
     event_tx: broadcast::Sender<OrderEvent>,
     pe_event_tx: broadcast::Sender<EngineEvent>,
     cmd_rx: Option<mpsc::Receiver<AutoCommand>>,
-    workers: HashMap<Uuid, (CancellationToken, tokio::task::JoinHandle<()>)>,
-    supervisor: TaskSupervisor,
+    workers: HashMap<Uuid, TaskHandle>,
     bot_symbols: HashMap<Uuid, String>,
 
     time_config: TimeConfig,
@@ -44,11 +44,8 @@ impl AutoEngine {
         pe_event_tx: broadcast::Sender<EngineEvent>,
         time_config: TimeConfig,
         prompt_loader: PromptLoader,
-        parent_cancel: CancellationToken,
     ) -> (Self, mpsc::Sender<AutoCommand>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
-
-        let supervisor = TaskSupervisor::new(parent_cancel.child_token());
 
         let engine = Self {
             store,
@@ -60,7 +57,6 @@ impl AutoEngine {
             pe_event_tx,
             cmd_rx: Some(cmd_rx),
             workers: HashMap::new(),
-            supervisor,
             bot_symbols: HashMap::new(),
             time_config,
             prompt_loader,
@@ -69,7 +65,7 @@ impl AutoEngine {
         (engine, cmd_tx)
     }
 
-    pub async fn run(&mut self) {
+    pub async fn run(&mut self, cancel: CancellationToken) {
         let mut cmd_rx = match self.cmd_rx.take() {
             Some(rx) => rx,
             None => {
@@ -79,39 +75,33 @@ impl AutoEngine {
         };
         self.restore_running_bots().await;
 
-        while let Some(cmd) = cmd_rx.recv().await {
-            match cmd {
-                AutoCommand::StartBot { bot_id } => self.start_bot(bot_id).await,
-                AutoCommand::StopBot { bot_id } => self.stop_bot(bot_id, "user requested").await,
-                AutoCommand::DeleteBot {
-                    bot_id,
-                    close_position,
-                    response_tx,
-                } => self.delete_bot(bot_id, close_position, response_tx).await,
+        loop {
+            tokio::select! {
+                _ = cancel.cancelled() => break,
+                cmd = cmd_rx.recv() => {
+                    match cmd {
+                        Some(AutoCommand::StartBot { bot_id }) => self.start_bot(bot_id).await,
+                        Some(AutoCommand::StopBot { bot_id }) => self.stop_bot(bot_id, "user requested").await,
+                        Some(AutoCommand::DeleteBot {
+                            bot_id,
+                            close_position,
+                            response_tx,
+                        }) => self.delete_bot(bot_id, close_position, response_tx).await,
+                        None => break,
+                    }
+                }
             }
         }
 
-        info!("AutoEngine command channel closed, shutting down all workers");
+        info!("AutoEngine shutting down all workers");
 
-        self.supervisor.cancel();
-
-        let workers: Vec<(Uuid, CancellationToken, tokio::task::JoinHandle<()>)> =
-            self.workers.drain().map(|(id, (cancel, handle))| (id, cancel, handle)).collect();
+        let handles: Vec<TaskHandle> = self.workers.drain().map(|(_, h)| h).collect();
+        for h in &handles {
+            h.cancel();
+        }
         let mut join_set = tokio::task::JoinSet::new();
-        for (bot_id, _worker_cancel, handle) in workers {
-            join_set.spawn(async move {
-                let abort_handle = handle.abort_handle();
-                match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
-                    Ok(Ok(())) => {}
-                    Ok(Err(e)) => {
-                        warn!(bot_id = %bot_id, error = %e, "Auto worker exited with error during shutdown");
-                    }
-                    Err(_) => {
-                        abort_handle.abort();
-                        warn!(bot_id = %bot_id, "Auto worker shutdown timed out during engine shutdown, aborted");
-                    }
-                }
-            });
+        for h in handles {
+            join_set.spawn(h.join_with_timeout(Duration::from_secs(5)));
         }
         while join_set.join_next().await.is_some() {}
 
@@ -154,8 +144,6 @@ impl AutoEngine {
             }
         };
 
-        let worker_cancel = self.supervisor.child_token();
-        let worker_cancel_for_shutdown = worker_cancel.clone();
         let event_rx = self.event_tx.subscribe();
         let pe_event_rx = self.pe_event_tx.subscribe();
         let store = self.store.clone();
@@ -167,7 +155,7 @@ impl AutoEngine {
         let time_config = self.time_config.clone();
         let prompt_loader = self.prompt_loader.clone();
 
-        let handle = tokio::spawn(async move {
+        let handle = spawn("auto_worker", move |cancel| async move {
             let worker = AutoWorker::new(
                 bot,
                 kline_rx,
@@ -180,10 +168,10 @@ impl AutoEngine {
                 time_config,
                 prompt_loader,
             );
-            worker.run(worker_cancel).await;
+            worker.run(cancel).await;
         });
 
-        self.workers.insert(bot_id, (worker_cancel_for_shutdown, handle));
+        self.workers.insert(bot_id, handle);
         self.bot_symbols.insert(bot_id, bot_symbol);
 
         if let Err(e) = self.store.update_bot_status(bot_id, "running").await {
@@ -224,19 +212,9 @@ impl AutoEngine {
 
     async fn graceful_shutdown_worker(&mut self, bot_id: Uuid) {
         self.bot_symbols.remove(&bot_id);
-        if let Some((worker_cancel, handle)) = self.workers.remove(&bot_id) {
-            worker_cancel.cancel();
-            let abort_handle = handle.abort_handle();
-            match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => {
-                    warn!(bot_id = %bot_id, error = %e, "Auto worker exited with error");
-                }
-                Err(_) => {
-                    abort_handle.abort();
-                    warn!(bot_id = %bot_id, "Auto worker shutdown timed out, aborted");
-                }
-            }
+        if let Some(handle) = self.workers.remove(&bot_id) {
+            handle.cancel();
+            handle.join_with_timeout(Duration::from_secs(5)).await;
         }
     }
 

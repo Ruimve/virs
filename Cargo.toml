@@ -6,7 +6,7 @@ members = [
     "crates/libs/virs-config",
     "crates/libs/virs-utils",
     "crates/libs/virs-ws",
-    "crates/libs/virs-runtime",
+    "crates/libs/virs-task",
     "crates/libs/virs-ccxt",
     "crates/libs/virs-exchange",
     "crates/libs/virs-strategy",

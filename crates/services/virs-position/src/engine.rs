@@ -1,14 +1,15 @@
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use chrono::Utc;
 use dashmap::DashMap;
 use futures_util::StreamExt;
 use tokio::sync::{broadcast, mpsc};
+use virs_task::{spawn, CancellationToken, TaskHandle};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use virs_error::{VirsError, VirsResult};
-use virs_runtime::{CancellationToken, TaskSupervisor};
 use virs_types::*;
 use virs_types::exchange::{ExchangePe, OrderUpdateStream};
 use virs_types::market::ExchangePosition;
@@ -162,7 +163,8 @@ pub struct PositionEngine {
     inner: Arc<EngineInner>,
     cmd_tx: mpsc::Sender<EngineCommand>,
     cmd_rx: Option<mpsc::Receiver<EngineCommand>>,
-    supervisor: Option<TaskSupervisor>,
+    cmd_loop_task: Option<TaskHandle>,
+    ws_feed_loop_task: Option<TaskHandle>,
 }
 
 impl Clone for PositionEngine {
@@ -171,7 +173,8 @@ impl Clone for PositionEngine {
             inner: Arc::clone(&self.inner),
             cmd_tx: self.cmd_tx.clone(),
             cmd_rx: None,
-            supervisor: None,
+            cmd_loop_task: None,
+            ws_feed_loop_task: None,
         }
     }
 }
@@ -182,11 +185,10 @@ impl PositionEngine {
         persistence: Box<dyn PositionPersistence>,
         persist_max_retries: u32,
         persist_retry_base_ms: u64,
-        parent_cancel: CancellationToken,
     ) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel(256);
         let event_tx = broadcast::channel(256).0;
-        let cancel = parent_cancel.child_token();
+        let cancel = CancellationToken::new();
 
         let inner = EngineInner {
             persistence,
@@ -200,14 +202,15 @@ impl PositionEngine {
             position_id_index: DashMap::new(),
             persist_max_retries,
             persist_retry_base_ms,
-            cancel: cancel.clone(),
+            cancel,
         };
 
         Self {
             inner: Arc::new(inner),
             cmd_tx,
             cmd_rx: Some(cmd_rx),
-            supervisor: Some(TaskSupervisor::new(cancel.clone())),
+            cmd_loop_task: None,
+            ws_feed_loop_task: None,
         }
     }
 
@@ -269,34 +272,28 @@ impl PositionEngine {
             message: "Channel closed".to_string(),
         })?;
         let inner = Arc::clone(&self.inner);
-        let supervisor = self
-            .supervisor
-            .as_ref()
-            .expect("only owner (created via new()) can call run()");
 
         let (exit_tx, mut exit_rx) = mpsc::channel::<()>(2);
 
-        supervisor
-            .spawn_raw("position_command_loop", {
-                let inner = inner.clone();
-                let exit_tx = exit_tx.clone();
-                move |cancel| async move {
-                    command_loop(inner, cmd_rx, cancel).await;
-                    let _ = exit_tx.try_send(());
-                }
-            })
-            .await;
+        let cmd_cancel = inner.cancel.clone();
+        self.cmd_loop_task = Some(spawn("position_command_loop", {
+            let inner = inner.clone();
+            let exit_tx = exit_tx.clone();
+            move |_cancel| async move {
+                command_loop(inner, cmd_rx, cmd_cancel).await;
+                let _ = exit_tx.try_send(());
+            }
+        }));
 
-        supervisor
-            .spawn_raw("position_ws_feed_loop", {
-                let inner = inner.clone();
-                let exit_tx = exit_tx;
-                move |cancel| async move {
-                    ws_feed_loop(inner, ws_feed_rx, cancel).await;
-                    let _ = exit_tx.try_send(());
-                }
-            })
-            .await;
+        let ws_cancel = inner.cancel.clone();
+        self.ws_feed_loop_task = Some(spawn("position_ws_feed_loop", {
+            let inner = inner.clone();
+            let exit_tx = exit_tx;
+            move |_cancel| async move {
+                ws_feed_loop(inner, ws_feed_rx, ws_cancel).await;
+                let _ = exit_tx.try_send(());
+            }
+        }));
 
         tokio::select! {
             _ = exit_rx.recv() => {}
@@ -304,8 +301,13 @@ impl PositionEngine {
         }
 
         self.inner.set_state(EngineState::ShuttingDown);
-        supervisor.cancel();
-        supervisor.shutdown().await;
+        inner.cancel.cancel();
+        if let Some(h) = self.cmd_loop_task.take() {
+            h.join_with_timeout(Duration::from_secs(5)).await;
+        }
+        if let Some(h) = self.ws_feed_loop_task.take() {
+            h.join_with_timeout(Duration::from_secs(5)).await;
+        }
 
         self.inner.set_state(EngineState::Stopped);
         info!("Position engine stopped");
@@ -314,11 +316,7 @@ impl PositionEngine {
 
     pub fn stop(&self) {
         self.inner.set_state(EngineState::ShuttingDown);
-        if let Some(ref s) = self.supervisor {
-            s.cancel();
-        } else {
-            self.inner.cancel.cancel();
-        }
+        self.inner.cancel.cancel();
         info!("Position engine stop requested");
     }
 

@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 virs-error = { path = "../virs-error" }
-virs-runtime = { path = "../virs-runtime" }
+virs-task = { path = "../virs-task" }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = { workspace = true }

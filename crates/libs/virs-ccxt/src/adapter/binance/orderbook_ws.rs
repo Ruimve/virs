@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -11,7 +12,7 @@ use virs_ws::{
     WsManagerConfig, WsManagerEvent,
 };
 use crate::ws_types::{OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate};
-use virs_runtime::{CancellationToken, TaskSupervisor};
+use virs_task::{spawn, TaskHandle};
 
 fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
@@ -291,23 +292,23 @@ pub struct OrderBookWs {
     manager: WsManager<WsOrderBookEvent>,
     config: WsManagerConfig,
     pub(crate) handler: Arc<OrderBookWsHandler>,
-    supervisor: TaskSupervisor,
+    forward_task: std::sync::Mutex<Option<TaskHandle>>,
 }
 
 impl OrderBookWs {
-    pub fn new(ws_url: String, parent_cancel: CancellationToken) -> Self {
+    pub fn new(ws_url: String) -> Self {
         let handler = Arc::new(OrderBookWsHandler::new(ws_url));
 
         Self {
-            manager: WsManager::new(handler.clone(), parent_cancel.clone()),
+            manager: WsManager::new(handler.clone()),
             config: WsManagerConfig::default(),
             handler,
-            supervisor: TaskSupervisor::new(parent_cancel.child_token()),
+            forward_task: std::sync::Mutex::new(None),
         }
     }
 
-    pub fn new_perpetual(_proxy_url: Option<&str>, parent_cancel: CancellationToken) -> Self {
-        Self::new("wss://fstream.binance.com/public/stream".to_string(), parent_cancel)
+    pub fn new_perpetual(_proxy_url: Option<&str>) -> Self {
+        Self::new("wss://fstream.binance.com/public/stream".to_string())
     }
 
     pub fn running_handle(&self) -> Arc<AtomicBool> {
@@ -324,59 +325,56 @@ impl OrderBookWsClient for OrderBookWs {
             .start(self.config.clone(), manager_tx)
             .await;
 
-        let ws_cancel = self
-            .manager
-            .cancellation_token()
-            .await
-            .unwrap_or_else(|| self.supervisor.child_token());
-
-        self.supervisor
-            .spawn_raw("orderbook_forward", move |supervisor_cancel| async move {
-                loop {
-                    tokio::select! {
-                        _ = supervisor_cancel.cancelled() => break,
-                        _ = ws_cancel.cancelled() => break,
-                        ev = manager_rx.recv() => {
-                            let Some(ev) = ev else { break };
-                            let ws_event = match ev {
-                                WsManagerEvent::Message(e) => e,
-                                WsManagerEvent::ConnectionChanged {
-                                    connected: true,
-                                    reason: ConnectionReason::Reconnected,
-                                } => WsOrderBookEvent::Reconnected,
-                                WsManagerEvent::ConnectionChanged {
-                                    connected: true,
-                                    ..
-                                } => {
-                                    continue;
-                                }
-                                WsManagerEvent::ConnectionChanged {
-                                    connected: false, ..
-                                } => {
-                                    continue;
-                                }
-                                WsManagerEvent::CircuitBreakerTripped { retry_count } => {
-                                    tracing::error!(
-                                        retry_count = retry_count,
-                                        "Circuit breaker tripped — WS stopped after max retries"
-                                    );
-                                    continue;
-                                }
-                            };
-                            if update_tx.send(ws_event).is_err() {
-                                tracing::warn!("All receivers dropped, stopping forwarder");
-                                break;
+        let handle = spawn("orderbook_forward", move |cancel| async move {
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => break,
+                    ev = manager_rx.recv() => {
+                        let Some(ev) = ev else { break };
+                        let ws_event = match ev {
+                            WsManagerEvent::Message(e) => e,
+                            WsManagerEvent::ConnectionChanged {
+                                connected: true,
+                                reason: ConnectionReason::Reconnected,
+                            } => WsOrderBookEvent::Reconnected,
+                            WsManagerEvent::ConnectionChanged {
+                                connected: true,
+                                ..
+                            } => {
+                                continue;
                             }
+                            WsManagerEvent::ConnectionChanged {
+                                connected: false, ..
+                            } => {
+                                continue;
+                            }
+                            WsManagerEvent::CircuitBreakerTripped { retry_count } => {
+                                tracing::error!(
+                                    retry_count = retry_count,
+                                    "Circuit breaker tripped — WS stopped after max retries"
+                                );
+                                continue;
+                            }
+                        };
+                        if update_tx.send(ws_event).is_err() {
+                            tracing::warn!("All receivers dropped, stopping forwarder");
+                            break;
                         }
                     }
                 }
-            })
-            .await;
+            }
+        });
+
+        *self.forward_task.lock().unwrap() = Some(handle);
     }
 
     async fn stop(&mut self) {
         self.manager.stop().await;
-        self.supervisor.shutdown().await;
+        let handle = self.forward_task.lock().unwrap().take();
+        if let Some(h) = handle {
+            h.cancel();
+            h.join_with_timeout(Duration::from_secs(5)).await;
+        }
     }
 
     async fn subscribe(&self, symbol: &str) {

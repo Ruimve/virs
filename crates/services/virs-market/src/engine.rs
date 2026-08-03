@@ -6,7 +6,7 @@ use dashmap::DashMap;
 use tokio::sync::{broadcast, Mutex};
 use tracing;
 use virs_error::VirsResult;
-use virs_runtime::{CancellationToken, PeriodicTask, TaskSupervisor};
+use virs_task::{spawn, spawn_periodic, TaskHandle};
 
 use crate::aggregator::Aggregator;
 use crate::cache::SymbolCache;
@@ -78,8 +78,8 @@ pub struct KlineEngine {
     event_tx: broadcast::Sender<KlineEvent>,
     perpetual_handler: MarketWsHandler,
     started: Arc<std::sync::atomic::AtomicBool>,
-    parent_cancel: CancellationToken,
-    supervisor: std::sync::Mutex<Option<TaskSupervisor>>,
+    ws_loop_task: std::sync::Mutex<Option<TaskHandle>>,
+    gap_detection_task: std::sync::Mutex<Option<TaskHandle>>,
 }
 
 impl KlineEngine {
@@ -87,7 +87,6 @@ impl KlineEngine {
         config: KlineEngineConfig,
         source: Arc<dyn KlineSource>,
         perpetual_ws: Arc<Mutex<dyn KlineWsClient>>,
-        parent_cancel: CancellationToken,
     ) -> Self {
         let (event_tx, _) = broadcast::channel(config.event_channel_capacity);
 
@@ -100,8 +99,8 @@ impl KlineEngine {
             event_tx,
             perpetual_handler: MarketWsHandler::new(perpetual_ws),
             started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            parent_cancel,
-            supervisor: std::sync::Mutex::new(None),
+            ws_loop_task: std::sync::Mutex::new(None),
+            gap_detection_task: std::sync::Mutex::new(None),
         }
     }
 
@@ -117,8 +116,6 @@ impl KlineEngine {
             return;
         }
 
-        let supervisor = TaskSupervisor::new(self.parent_cancel.child_token());
-
         let event_tx = self.event_tx.clone();
         let subscriptions = self.subscriptions.clone();
         let symbol_index = self.symbol_index.clone();
@@ -133,161 +130,158 @@ impl KlineEngine {
 
         self.perpetual_handler.start(ws_update_tx).await;
 
-        supervisor
-            .spawn_raw("kline_ws_loop", move |task_cancel| async move {
-                loop {
-                    tokio::select! {
-                        _ = task_cancel.cancelled() => break,
-                        result = ws_update_rx.recv() => {
-                            match result {
-                                Ok(WsEvent::Reconnected) => {
-                                    let entries: Vec<_> = subscriptions
-                                        .iter()
-                                        .map(|e| {
-                                            let sub = e.value();
-                                            (
-                                                sub.exchange.clone(),
-                                                sub.symbol.clone(),
-                                                sub.cache.clone(),
-                                                sub.market_type,
-                                            )
-                                        })
-                                        .collect();
-                                    for (exchange, symbol, cache, market_type) in entries {
-                                        match GapDetector::detect_and_backfill(
-                                            &exchange,
-                                            &symbol,
-                                            &cache,
-                                            &source,
-                                            &event_tx,
-                                            market_type,
+        let handle = spawn("kline_ws_loop", move |task_cancel| async move {
+            loop {
+                tokio::select! {
+                    _ = task_cancel.cancelled() => break,
+                    result = ws_update_rx.recv() => {
+                        match result {
+                            Ok(WsEvent::Reconnected) => {
+                                let entries: Vec<_> = subscriptions
+                                    .iter()
+                                    .map(|e| {
+                                        let sub = e.value();
+                                        (
+                                            sub.exchange.clone(),
+                                            sub.symbol.clone(),
+                                            sub.cache.clone(),
+                                            sub.market_type,
                                         )
-                                        .await
-                                        {
-                                            Ok(_) => {}
-                                            Err(e) => {
-                                                tracing::error!(exchange = %exchange, symbol = %symbol, error = %e, "Post-reconnect backfill failed");
-                                            }
+                                    })
+                                    .collect();
+                                for (exchange, symbol, cache, market_type) in entries {
+                                    match GapDetector::detect_and_backfill(
+                                        &exchange,
+                                        &symbol,
+                                        &cache,
+                                        &source,
+                                        &event_tx,
+                                        market_type,
+                                    )
+                                    .await
+                                    {
+                                        Ok(_) => {}
+                                        Err(e) => {
+                                            tracing::error!(exchange = %exchange, symbol = %symbol, error = %e, "Post-reconnect backfill failed");
                                         }
                                     }
                                 }
-                                Ok(WsEvent::Candle(update)) => {
-                                    let symbol = update.symbol;
-                                    let sub_key = match symbol_index.get(&symbol).map(|r| r.value().clone()) {
-                                        Some(key) => key,
+                            }
+                            Ok(WsEvent::Candle(update)) => {
+                                let symbol = update.symbol;
+                                let sub_key = match symbol_index.get(&symbol).map(|r| r.value().clone()) {
+                                    Some(key) => key,
+                                    None => continue,
+                                };
+
+                                let cache = match subscriptions.get(&sub_key) {
+                                    Some(entry) => entry.cache.clone(),
+                                    None => continue,
+                                };
+
+                                let candle_1m = update.candle;
+                                let is_closed = candle_1m.closed;
+
+                                let (exchange, persist_data, higher_updates) = {
+                                    let mut guard = cache.lock().await;
+                                    guard.update_candle(Timeframe::M1, candle_1m.clone());
+                                    if is_closed {
+                                        guard.close_candle(Timeframe::M1, candle_1m.open_time);
+                                    }
+                                    let higher_updates =
+                                        Aggregator::update_higher_timeframes(&candle_1m, &mut guard);
+                                    let exchange = match subscriptions.get(&sub_key) {
+                                        Some(e) => e.exchange.clone(),
                                         None => continue,
                                     };
-
-                                    let cache = match subscriptions.get(&sub_key) {
-                                        Some(entry) => entry.cache.clone(),
-                                        None => continue,
-                                    };
-
-                                    let candle_1m = update.candle;
-                                    let is_closed = candle_1m.closed;
-
-                                    let (exchange, persist_data, higher_updates) = {
-                                        let mut guard = cache.lock().await;
-                                        guard.update_candle(Timeframe::M1, candle_1m.clone());
-                                        if is_closed {
-                                            guard.close_candle(Timeframe::M1, candle_1m.open_time);
-                                        }
-                                        let higher_updates =
-                                            Aggregator::update_higher_timeframes(&candle_1m, &mut guard);
-                                        let exchange = match subscriptions.get(&sub_key) {
-                                            Some(e) => e.exchange.clone(),
-                                            None => continue,
-                                        };
-                                        let persist_data = if is_closed {
-                                            Some(guard.get_klines(Timeframe::M1))
-                                        } else {
-                                            None
-                                        };
-                                        (exchange, persist_data, higher_updates)
-                                    };
-
-                                    let event_type = if is_closed {
-                                        KlineEventType::Closed
+                                    let persist_data = if is_closed {
+                                        Some(guard.get_klines(Timeframe::M1))
                                     } else {
-                                        KlineEventType::Update
+                                        None
                                     };
+                                    (exchange, persist_data, higher_updates)
+                                };
 
-                                    if event_tx.receiver_count() > 0 {
+                                let event_type = if is_closed {
+                                    KlineEventType::Closed
+                                } else {
+                                    KlineEventType::Update
+                                };
+
+                                if event_tx.receiver_count() > 0 {
+                                    if event_tx
+                                        .send(KlineEvent {
+                                            exchange: exchange.clone(),
+                                            symbol: symbol.clone(),
+                                            timeframe: Timeframe::M1,
+                                            candle: candle_1m.clone(),
+                                            event_type,
+                                        })
+                                        .is_err()
+                                    {
+                                        tracing::debug!(
+                                            exchange = %exchange,
+                                            symbol = %symbol,
+                                            "KlineEvent (M1) broadcast — receiver dropped between check and send"
+                                        );
+                                    }
+
+                                    for (tf, candle) in higher_updates {
+                                        let ht_event_type = if candle.closed {
+                                            KlineEventType::Closed
+                                        } else {
+                                            KlineEventType::Update
+                                        };
                                         if event_tx
                                             .send(KlineEvent {
                                                 exchange: exchange.clone(),
                                                 symbol: symbol.clone(),
-                                                timeframe: Timeframe::M1,
-                                                candle: candle_1m.clone(),
-                                                event_type,
+                                                timeframe: tf,
+                                                candle,
+                                                event_type: ht_event_type,
                                             })
                                             .is_err()
                                         {
                                             tracing::debug!(
                                                 exchange = %exchange,
                                                 symbol = %symbol,
-                                                "KlineEvent (M1) broadcast — receiver dropped between check and send"
-                                            );
-                                        }
-
-                                        for (tf, candle) in higher_updates {
-                                            let ht_event_type = if candle.closed {
-                                                KlineEventType::Closed
-                                            } else {
-                                                KlineEventType::Update
-                                            };
-                                            if event_tx
-                                                .send(KlineEvent {
-                                                    exchange: exchange.clone(),
-                                                    symbol: symbol.clone(),
-                                                    timeframe: tf,
-                                                    candle,
-                                                    event_type: ht_event_type,
-                                                })
-                                                .is_err()
-                                            {
-                                                tracing::debug!(
-                                                    exchange = %exchange,
-                                                    symbol = %symbol,
-                                                    "KlineEvent (higher tf) broadcast — receiver dropped between check and send"
-                                                );
-                                            }
-                                        }
-                                    }
-
-                                    if let Some(data) = persist_data {
-                                        if let Err(e) = persistence
-                                            .save_candles(&exchange, &symbol, "1m", data.as_slice())
-                                            .await
-                                        {
-                                            tracing::warn!(
-                                                exchange = %exchange,
-                                                symbol = %symbol,
-                                                error = %e,
-                                                "Failed to save candles"
+                                                "KlineEvent (higher tf) broadcast — receiver dropped between check and send"
                                             );
                                         }
                                     }
                                 }
-                                Err(broadcast::error::RecvError::Lagged(n)) => {
-                                    tracing::warn!(lagged = n, "WS update lagged");
+
+                                if let Some(data) = persist_data {
+                                    if let Err(e) = persistence
+                                        .save_candles(&exchange, &symbol, "1m", data.as_slice())
+                                        .await
+                                    {
+                                        tracing::warn!(
+                                            exchange = %exchange,
+                                            symbol = %symbol,
+                                            error = %e,
+                                            "Failed to save candles"
+                                        );
+                                    }
                                 }
-                                Err(broadcast::error::RecvError::Closed) => {
-                                    break;
-                                }
+                            }
+                            Err(broadcast::error::RecvError::Lagged(n)) => {
+                                tracing::warn!(lagged = n, "WS update lagged");
+                            }
+                            Err(broadcast::error::RecvError::Closed) => {
+                                break;
                             }
                         }
                     }
                 }
-            })
-            .await;
+            }
+        });
+        *self.ws_loop_task.lock().unwrap() = Some(handle);
 
-        PeriodicTask::spawn(
+        let gap_handle = spawn_periodic(
             "kline_gap_detection",
             Duration::from_secs(60),
             false,
-            None,
-            &supervisor,
             move || {
                 let gap_check_subscriptions = gap_check_subscriptions.clone();
                 let gap_check_source = gap_check_source.clone();
@@ -333,10 +327,8 @@ impl KlineEngine {
                     }
                 }
             },
-        )
-        .await;
-
-        *self.supervisor.lock().unwrap() = Some(supervisor);
+        );
+        *self.gap_detection_task.lock().unwrap() = Some(gap_handle);
     }
 
     pub async fn stop(&self) {
@@ -346,10 +338,26 @@ impl KlineEngine {
         {
             return;
         }
-        let supervisor = self.supervisor.lock().unwrap().take();
-        if let Some(s) = supervisor {
-            s.shutdown().await;
+
+        let ws_h = self.ws_loop_task.lock().unwrap().take();
+        let gap_h = self.gap_detection_task.lock().unwrap().take();
+
+        if let Some(h) = &ws_h {
+            h.cancel();
         }
+        if let Some(h) = &gap_h {
+            h.cancel();
+        }
+
+        let mut join_set = tokio::task::JoinSet::new();
+        if let Some(h) = ws_h {
+            join_set.spawn(h.join_with_timeout(Duration::from_secs(5)));
+        }
+        if let Some(h) = gap_h {
+            join_set.spawn(h.join_with_timeout(Duration::from_secs(5)));
+        }
+        while join_set.join_next().await.is_some() {}
+
         self.perpetual_handler.stop().await;
     }
 

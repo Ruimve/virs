@@ -2,7 +2,6 @@ use crate::adapter::binance::user_data_ws::*;
 use crate::adapter::binance::BinanceSigner;
 use crate::ExchangeClient;
 use std::sync::Arc;
-use virs_runtime::CancellationToken;
 
 #[test]
 fn test_parse_invalid_json() {
@@ -25,12 +24,7 @@ fn test_new_perpetual() {
         "test_api_key".to_string(),
         "test_api_secret".to_string(),
     ));
-    let ws = UserDataWs::new_perpetual(
-        "test_listen_key".to_string(),
-        client,
-        signer,
-        CancellationToken::root(),
-    );
+    let ws = UserDataWs::new_perpetual("test_listen_key".to_string(), client, signer);
     assert_eq!(
         ws.ws_url,
         "wss://fstream.binance.com/private/ws?listenKey=test_listen_key"

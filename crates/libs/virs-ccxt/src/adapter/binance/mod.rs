@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use virs_runtime::{CancellationToken, PeriodicTask, TaskSupervisor};
+use virs_task::{spawn_periodic, TaskHandle};
 
 use crate::auth::{hmac_sha256_hex, insert_header, SignedRequest, Signer};
 use crate::types::*;
@@ -333,8 +333,9 @@ pub struct BinanceExchange {
     client: ExchangeClient,
     signer: Arc<dyn Signer>,
     time_sync_started: AtomicBool,
-    supervisor: TaskSupervisor,
     listenkey_keepalive_futures_secs: u64,
+    time_sync_task: std::sync::Mutex<Option<TaskHandle>>,
+    listenkey_task: std::sync::Mutex<Option<TaskHandle>>,
     user_data_ws: std::sync::Mutex<Option<user_data_ws::UserDataWs>>,
 }
 
@@ -347,7 +348,6 @@ impl BinanceExchange {
         connect_timeout: std::time::Duration,
         pool_max_idle_per_host: usize,
         listenkey_keepalive_futures_secs: u64,
-        parent_cancel: CancellationToken,
     ) -> Result<Self, ExchangeError> {
         let max_concurrent: u32 = 40;
         let client = ExchangeClient::with_api_key(
@@ -374,8 +374,9 @@ impl BinanceExchange {
             client,
             signer,
             time_sync_started: AtomicBool::new(false),
-            supervisor: TaskSupervisor::new(parent_cancel.child_token()),
             listenkey_keepalive_futures_secs,
+            time_sync_task: std::sync::Mutex::new(None),
+            listenkey_task: std::sync::Mutex::new(None),
             user_data_ws: std::sync::Mutex::new(None),
         })
     }
@@ -562,7 +563,6 @@ impl Exchange for BinanceExchange {
             listen_key,
             self.client.clone(),
             Arc::clone(&self.signer),
-            self.supervisor.child_token(),
         );
 
         let listen_key_handle = ws.listen_key_handle();
@@ -571,27 +571,19 @@ impl Exchange for BinanceExchange {
         ws.start(tx).await;
         info!("listenKey order WS started (perpetual)");
 
-        let ws_cancel = ws
-            .cancellation_token()
-            .await
-            .unwrap_or_else(|| self.supervisor.child_token());
-
         let client = self.client.clone();
         let signer = Arc::clone(&self.signer);
         let keepalive_interval = Duration::from_secs(self.listenkey_keepalive_futures_secs);
 
-        PeriodicTask::spawn(
+        let handle = spawn_periodic(
             "listenkey_keepalive",
             keepalive_interval,
             false,
-            Some(ws_cancel),
-            &self.supervisor,
             move || {
                 let client = client.clone();
                 let signer = Arc::clone(&signer);
                 let listen_key_handle = Arc::clone(&listen_key_handle);
                 async move {
-                    // 定期续期listenKey
                     let current_key = listen_key_handle
                         .read()
                         .expect("listenKey RwLock poisoned")
@@ -610,8 +602,9 @@ impl Exchange for BinanceExchange {
                     }
                 }
             },
-        )
-        .await;
+        );
+
+        *self.listenkey_task.lock().unwrap() = Some(handle);
 
         *self.user_data_ws.lock().unwrap() = Some(ws);
 
@@ -642,12 +635,10 @@ impl Exchange for BinanceExchange {
             let client = self.client.clone();
             let signer = self.signer.clone();
 
-            PeriodicTask::spawn(
+            let handle = spawn_periodic(
                 "time_sync",
                 Duration::from_secs(TIME_SYNC_INTERVAL_SECS),
                 false,
-                None,
-                &self.supervisor,
                 move || {
                     let client = client.clone();
                     let signer = signer.clone();
@@ -681,11 +672,23 @@ impl Exchange for BinanceExchange {
                         }
                     }
                 },
-            )
-            .await;
+            );
+
+            *self.time_sync_task.lock().unwrap() = Some(handle);
         }
 
         Ok(())
+    }
+}
+
+impl Drop for BinanceExchange {
+    fn drop(&mut self) {
+        if let Some(h) = self.time_sync_task.lock().unwrap().take() {
+            h.cancel();
+        }
+        if let Some(h) = self.listenkey_task.lock().unwrap().take() {
+            h.cancel();
+        }
     }
 }
 

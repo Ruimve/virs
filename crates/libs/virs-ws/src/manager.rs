@@ -7,26 +7,15 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite};
 use virs_error::VirsError;
-use virs_runtime::{CancellationToken, TaskSupervisor};
+use virs_task::{spawn, CancellationToken, TaskHandle};
 
-// ── 公共常量 ──
-
-/// PING 间隔：30秒
 pub const WS_PING_INTERVAL_SECS: u64 = 30;
-/// PONG 超时：90秒无消息则强制重连
 pub const WS_PONG_TIMEOUT_SECS: u64 = 90;
-/// 连接超时：10秒
 pub const WS_CONNECT_TIMEOUT_SECS: u64 = 10;
-/// 重连初始退避：1秒
 pub const WS_RECONNECT_INITIAL_DELAY_SECS: u64 = 1;
-/// 重连最大退避：60秒
 pub const WS_RECONNECT_MAX_DELAY_SECS: u64 = 60;
-/// 连接最大存活：23小时（82800秒），到期主动重连
 pub const WS_MAX_LIFETIME_SECS: u64 = 82_800;
-/// 最大重连次数：超过则熔断
 pub const WS_MAX_RETRIES: u64 = 100;
-
-// ── 配置 ──
 
 #[derive(Debug, Clone)]
 pub struct WsManagerConfig {
@@ -53,127 +42,86 @@ impl Default for WsManagerConfig {
     }
 }
 
-// ── 事件与命令 ──
-
-/// 连接状态变化原因
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectionReason {
-    /// 首次连接成功
     Connected,
-    /// 重连成功
     Reconnected,
-    /// 临时断连，即将自动重连
     DisconnectedReconnecting,
-    /// 主动停止（stop() 或 shutdown）
     Stopped,
 }
 
-/// WS管理器事件
 #[derive(Debug, Clone)]
 pub enum WsManagerEvent<T: Send + Clone + 'static> {
-    /// 消息事件
     Message(T),
 
-    /// 连接状态变化
     ConnectionChanged {
         connected: bool,
         reason: ConnectionReason,
     },
 
-    /// 熔断触发
     CircuitBreakerTripped { retry_count: u64 },
 }
 
-/// 动态订阅/退订命令
 #[derive(Debug, Clone)]
 pub enum WsCommand {
     Subscribe(String),
     Unsubscribe(String),
 }
 
-/// 消息处理结果
 #[derive(Debug, Clone)]
 pub enum MessageOutcome<T: Send + Clone + 'static> {
-    /// 继续运行并产出事件
     Continue(Vec<T>),
-    /// 请求重连
     Reconnect,
 }
 
-/// 退避结果
 enum BackoffOutcome {
-    /// 退避结束，可以重连
     Proceed,
-    /// 熔断
     CircuitBroken,
-    /// 收到 shutdown
     Shutdown,
 }
 
-// ── Handler trait ──
-
 #[async_trait]
 pub trait WsHandler<T: Send + Clone + 'static>: Send + Sync {
-    /// 返回连接 URL
     fn base_url(&self) -> &str;
 
-    /// 是否支持动态订阅/退订命令，默认 false
     fn supports_commands(&self) -> bool {
         false
     }
 
-    /// 重连时刷新 URL（如 listenKey 场景需重新获取），默认返回 base_url
     async fn refresh_url(&self) -> Result<String, VirsError> {
         Ok(self.base_url().to_string())
     }
 
-    /// 解析 Text 消息
     async fn on_message(&self, text: &str) -> Result<MessageOutcome<T>, VirsError>;
 
-    /// 解析 Binary 消息，默认返回空事件列表
     async fn on_binary(&self, _data: &[u8]) -> Result<MessageOutcome<T>, VirsError> {
         Ok(MessageOutcome::Continue(vec![]))
     }
 
-    /// 连接后发送的初始订阅消息列表
     async fn on_connected(&self, is_reconnect: bool) -> Vec<String>;
 
-    /// 断连回调
     async fn on_disconnected(&self);
 
-    /// 动态订阅命令转 JSON 文本，不支持时返回 None
     async fn on_command(&self, _cmd: WsCommand) -> Option<String> {
         None
     }
 }
 
-// ── WsManager ──
-
 pub struct WsManager<T: Send + Clone + 'static> {
     handler: Arc<dyn WsHandler<T>>,
     running: Arc<AtomicBool>,
     retry_count: Arc<AtomicU64>,
-    /// 父取消令牌 — start() 时通过 child_token() 创建 TaskSupervisor
-    parent_cancel: CancellationToken,
-    /// 任务监督器 — 管理 JoinHandle + 统一取消信号 + 优雅关闭
-    /// std::sync::Mutex：锁仅在 start/stop/cancellation_token 中短暂持有，不跨 await，Drop 中安全
-    /// TaskSupervisor 自带 Drop（触发 cancel），无需 WsManager 自定义 Drop
-    supervisor: std::sync::Mutex<Option<TaskSupervisor>>,
+    task: std::sync::Mutex<Option<TaskHandle>>,
     command_tx: Mutex<Option<mpsc::UnboundedSender<WsCommand>>>,
 }
 
 impl<T: Send + Clone + 'static> WsManager<T> {
-    /// 创建 WsManager。接收 parent_cancel 以接入上层 cancel 树。
-    /// start() 时创建的 TaskSupervisor 使用 parent_cancel.child_token()，
-    /// 确保父取消时级联取消 WS 任务。
-    pub fn new(handler: Arc<dyn WsHandler<T>>, parent_cancel: CancellationToken) -> Self {
-        let _ = &parent_cancel; // 暂存：start() 时使用 child_token
+    pub fn new(handler: Arc<dyn WsHandler<T>>) -> Self {
         Self {
             handler,
             running: Arc::new(AtomicBool::new(false)),
             retry_count: Arc::new(AtomicU64::new(0)),
-            parent_cancel,
-            supervisor: std::sync::Mutex::new(None),
+            task: std::sync::Mutex::new(None),
             command_tx: Mutex::new(None),
         }
     }
@@ -190,22 +138,11 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         self.retry_count.load(Ordering::Relaxed)
     }
 
-    /// 获取当前 CancellationToken 的克隆（如果正在运行）。
-    /// 外部可通过此令牌监听 WsManager 的关闭信号。
-    pub async fn cancellation_token(&self) -> Option<CancellationToken> {
-        self.supervisor
-            .lock()
-            .unwrap()
-            .as_ref()
-            .map(|s| s.cancellation_token())
-    }
-
     pub async fn start(
         &self,
         config: WsManagerConfig,
         event_tx: mpsc::Sender<WsManagerEvent<T>>,
     ) {
-        // 防止重复启动
         if self
             .running
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -214,7 +151,6 @@ impl<T: Send + Clone + 'static> WsManager<T> {
             return;
         }
 
-        // D3 修复：每次 start 重置 retry_count
         self.retry_count.store(0, Ordering::Relaxed);
 
         let mut command_rx = if self.handler.supports_commands() {
@@ -229,19 +165,12 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         let running = Arc::clone(&self.running);
         let retry_count = Arc::clone(&self.retry_count);
 
-        // 创建 TaskSupervisor 统一管理 JoinHandle + 取消信号
-        // 使用 parent_cancel.child_token() 接入上层 cancel 树
-        let supervisor = TaskSupervisor::new(self.parent_cancel.child_token());
-
-        supervisor
-            .spawn_raw("ws_main", move |cancel| async move {
+        let handle = spawn("ws_main", move |cancel| async move {
             let mut reconnect_delay = config.reconnect_initial_delay_secs;
             let mut is_first_connect = true;
 
             while !cancel.is_cancelled() {
                 let connect_start = tokio::time::Instant::now();
-
-                // ── Connecting 阶段 ──
 
                 let ws_url = match handler.refresh_url().await {
                     Ok(url) => url,
@@ -274,7 +203,6 @@ impl<T: Send + Clone + 'static> WsManager<T> {
 
                 match connect_result {
                     Ok(Ok((ws_stream, _))) => {
-                        // 连接成功：重置退避与重试计数
                         reconnect_delay = config.reconnect_initial_delay_secs;
                         retry_count.store(0, Ordering::Relaxed);
 
@@ -291,7 +219,6 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                             .await
                             .is_err()
                         {
-                            // 消费者已断开：连接已建立，需调用 on_disconnected 清理
                             handler.on_disconnected().await;
                             running.store(false, Ordering::Relaxed);
                             break;
@@ -299,11 +226,8 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                         let is_reconnect = !is_first_connect;
                         is_first_connect = false;
 
-                        // ── Connected 阶段 ──
-
                         let (mut write, mut read) = ws_stream.split();
 
-                        // 发送初始订阅消息
                         let connect_msgs = handler.on_connected(is_reconnect).await;
                         let mut write_ok = true;
                         for msg in &connect_msgs {
@@ -318,9 +242,8 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                         }
 
                         if write_ok {
-                            // D8 修复：延迟首次 Ping 到一个完整间隔后
-                            let ping_start =
-                                tokio::time::Instant::now() + Duration::from_secs(config.ping_interval_secs);
+                            let ping_start = tokio::time::Instant::now()
+                                + Duration::from_secs(config.ping_interval_secs);
                             let mut ping_tick = tokio::time::interval_at(
                                 ping_start,
                                 Duration::from_secs(config.ping_interval_secs),
@@ -363,14 +286,12 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                                         break;
                                                     }
                                                     Err(e) => {
-                                                        // D7 修复：安全的 msg_preview
                                                         let preview: String = text.chars().take(200).collect();
                                                         tracing::warn!(error = %e, msg_preview = %preview, "on_message error — skipping");
                                                     }
                                                 }
                                             }
                                             Some(Ok(tungstenite::Message::Binary(data))) => {
-                                                // D9 修复：Binary 消息交给 handler
                                                 match handler.on_binary(&data).await {
                                                     Ok(MessageOutcome::Continue(events)) => {
                                                         for ev in events {
@@ -427,7 +348,6 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                         }
                                     }
                                     _ = cancel.cancelled() => {
-                                        // D5 修复：shutdown 路径也发送断连事件
                                         tracing::info!("Shutdown signal received, closing");
                                         let _ = write.send(tungstenite::Message::Close(None)).await;
                                         handler.on_disconnected().await;
@@ -442,7 +362,6 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                             }
                         }
 
-                        // 正常断连路径
                         handler.on_disconnected().await;
                         if event_tx
                             .send(WsManagerEvent::ConnectionChanged {
@@ -452,7 +371,6 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                             .await
                             .is_err()
                         {
-                            // 消费者已断开：无需重连，直接退出
                             running.store(false, Ordering::Relaxed);
                             break;
                         }
@@ -464,8 +382,6 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                         tracing::error!("Connection timeout");
                     }
                 }
-
-                // ── BackingOff 阶段 ──
 
                 match backoff_with_cancel(
                     &cancel,
@@ -485,21 +401,18 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                 }
             }
 
-            // while 循环退出唯一路径：CircuitBroken（Shutdown 已 return）
             send_stopped(&event_tx, &running).await;
-        })
-        .await;
+        });
 
-        // 存储 TaskSupervisor 供 stop() 调用 shutdown()
-        *self.supervisor.lock().unwrap() = Some(supervisor);
+        *self.task.lock().unwrap() = Some(handle);
     }
 
     pub async fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
-        // 通过 TaskSupervisor::shutdown 统一关闭：cancel + 并发等待 + 超时 abort
-        let supervisor = self.supervisor.lock().unwrap().take();
-        if let Some(s) = supervisor {
-            s.shutdown().await;
+        let handle = self.task.lock().unwrap().take();
+        if let Some(h) = handle {
+            h.cancel();
+            h.join_with_timeout(Duration::from_secs(5)).await;
         }
     }
 
@@ -510,12 +423,6 @@ impl<T: Send + Clone + 'static> WsManager<T> {
     }
 }
 
-// WsManager 无需自定义 Drop — TaskSupervisor 自带 Drop（触发 cancel），
-// Option<TaskSupervisor> drop 时自动 cancel WS 任务。
-
-// ── 自由函数 ──
-
-/// 退避+熔断+CancellationToken 感知的自由函数
 async fn backoff_with_cancel<T: Send + Clone + 'static>(
     cancel: &CancellationToken,
     retry_count: &AtomicU64,
@@ -527,7 +434,6 @@ async fn backoff_with_cancel<T: Send + Clone + 'static>(
         return BackoffOutcome::Shutdown;
     }
 
-    // 熔断检查
     if config.max_retries > 0 {
         let retries = retry_count.fetch_add(1, Ordering::Relaxed) + 1;
         if retries >= config.max_retries {
@@ -549,7 +455,6 @@ async fn backoff_with_cancel<T: Send + Clone + 'static>(
         }
     }
 
-    // D1 修复：退避 sleep 期间响应 shutdown（通过 CancellationToken）
     let jitter = rand::random::<f64>() * *reconnect_delay as f64 * 0.2;
     let delay = *reconnect_delay as f64 + jitter;
 
@@ -564,8 +469,6 @@ async fn backoff_with_cancel<T: Send + Clone + 'static>(
     }
 }
 
-/// 统一发送 Stopped 事件并标记 running=false。
-/// 不调用 on_disconnected()——该回调由实际持有连接的路径负责调用。
 async fn send_stopped<T: Send + Clone + 'static>(
     event_tx: &mpsc::Sender<WsManagerEvent<T>>,
     running: &AtomicBool,

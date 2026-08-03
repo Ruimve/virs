@@ -1,14 +1,12 @@
 [package]
-name = "virs-runtime"
+name = "virs-task"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-error = { path = "../virs-error" }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
-rand = { workspace = true }
 
 [lints]
 workspace = true

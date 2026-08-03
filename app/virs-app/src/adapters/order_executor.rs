@@ -5,7 +5,7 @@ use tracing::{error, warn};
 use uuid::Uuid;
 use virs_error::{BotError, BotResult, VirsError};
 use virs_position::PositionEngine;
-use virs_runtime::{CancellationToken, TaskSupervisor};
+use virs_task::{spawn, TaskHandle};
 use virs_types::bot::{
     OrderCommand, OrderEvent, OrderExecutor, OrderInfo,
 };
@@ -16,7 +16,7 @@ use virs_types::CcxtOrder;
 pub struct PeOrderExecutor {
     cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,
     engine: PositionEngine,
-    supervisor: TaskSupervisor,
+    forward_task: std::sync::Mutex<Option<TaskHandle>>,
 }
 
 impl PeOrderExecutor {
@@ -25,45 +25,45 @@ impl PeOrderExecutor {
         event_tx: broadcast::Sender<OrderEvent>,
         mut engine_event_rx: broadcast::Receiver<EngineEvent>,
         engine: PositionEngine,
-        cancel: CancellationToken,
     ) -> Self {
-        let supervisor = TaskSupervisor::new(cancel.child_token());
-        supervisor
-            .spawn_raw("order_event_forward", move |task_cancel| async move {
-                loop {
-                    tokio::select! {
-                        _ = task_cancel.cancelled() => break,
-                        result = engine_event_rx.recv() => {
-                            match result {
-                                Ok(engine_event) => {
-                                    if let Some(order_event) = convert_pe_event(engine_event) {
-                                        if event_tx.send(order_event).is_err() {
-                                            warn!("OrderEvent broadcast failed — no receivers, event dropped");
-                                        }
+        let handle = spawn("order_event_forward", move |cancel| async move {
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => break,
+                    result = engine_event_rx.recv() => {
+                        match result {
+                            Ok(engine_event) => {
+                                if let Some(order_event) = convert_pe_event(engine_event) {
+                                    if event_tx.send(order_event).is_err() {
+                                        warn!("OrderEvent broadcast failed — no receivers, event dropped");
                                     }
                                 }
-                                Err(broadcast::error::RecvError::Lagged(n)) => {
-                                    warn!(lagged = n, "EngineEvent lagged");
-                                }
-                                Err(broadcast::error::RecvError::Closed) => {
-                                    break;
-                                }
+                            }
+                            Err(broadcast::error::RecvError::Lagged(n)) => {
+                                warn!(lagged = n, "EngineEvent lagged");
+                            }
+                            Err(broadcast::error::RecvError::Closed) => {
+                                break;
                             }
                         }
                     }
                 }
-            })
-            .await;
+            }
+        });
 
         Self {
             cmd_tx,
             engine,
-            supervisor,
+            forward_task: std::sync::Mutex::new(Some(handle)),
         }
     }
 
     pub async fn stop(&self) {
-        self.supervisor.shutdown().await;
+        let handle = self.forward_task.lock().unwrap().take();
+        if let Some(h) = handle {
+            h.cancel();
+            h.join_with_timeout(std::time::Duration::from_secs(5)).await;
+        }
     }
 }
 

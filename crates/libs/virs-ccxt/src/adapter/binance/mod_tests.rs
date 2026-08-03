@@ -4,7 +4,6 @@ use crate::adapter::binance::{
     parse_order_book_side, try_build_ed25519, BinanceExchange, TIME_OFFSET_WARN_THRESHOLD_MS,
     TIME_SYNC_INTERVAL_SECS,
 };
-use virs_runtime::CancellationToken;
 use virs_types::{CcxtOrderStatus, OrderType, Side};
 
 #[test]
@@ -359,7 +358,6 @@ fn t1_3_time_sync_started_initialized_false() {
         std::time::Duration::from_secs(10),
         10,
         900,
-        CancellationToken::root(),
     )
     .unwrap();
 
@@ -378,7 +376,6 @@ fn t1_4_time_sync_started_swap_prevents_double_start() {
         std::time::Duration::from_secs(10),
         10,
         900,
-        CancellationToken::root(),
     )
     .unwrap();
 
@@ -403,7 +400,6 @@ fn t1_5_drop_cancels_time_sync() {
         std::time::Duration::from_secs(10),
         10,
         900,
-        CancellationToken::root(),
     )
     .unwrap();
 
@@ -411,7 +407,7 @@ fn t1_5_drop_cancels_time_sync() {
 }
 
 #[tokio::test]
-async fn t1_6_supervisor_no_tasks_on_init() {
+async fn t1_6_no_tasks_on_init() {
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",
@@ -420,12 +416,15 @@ async fn t1_6_supervisor_no_tasks_on_init() {
         std::time::Duration::from_secs(10),
         10,
         900,
-        CancellationToken::root(),
     )
     .unwrap();
-    assert_eq!(
-        ex.supervisor.task_count().await,
-        0,
-        "supervisor should have 0 tasks on init (before sync_time)"
+
+    assert!(
+        ex.time_sync_task.lock().unwrap().is_none(),
+        "time_sync_task should be None on init (before sync_time)"
+    );
+    assert!(
+        ex.listenkey_task.lock().unwrap().is_none(),
+        "listenkey_task should be None on init"
     );
 }

@@ -3052,6 +3052,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -3063,8 +3064,8 @@ dependencies = [
  "virs-exchange",
  "virs-market",
  "virs-position",
- "virs-runtime",
  "virs-strategy",
+ "virs-task",
  "virs-types",
  "virs-utils",
 ]
@@ -3087,8 +3088,8 @@ dependencies = [
  "virs-config",
  "virs-error",
  "virs-market",
- "virs-runtime",
  "virs-strategy",
+ "virs-task",
  "virs-types",
 ]
 
@@ -3110,7 +3111,7 @@ dependencies = [
  "tokio",
  "tracing",
  "virs-error",
- "virs-runtime",
+ "virs-task",
  "virs-types",
  "virs-ws",
 ]
@@ -3172,7 +3173,7 @@ dependencies = [
  "virs-ccxt",
  "virs-error",
  "virs-exchange",
- "virs-runtime",
+ "virs-task",
  "virs-types",
 ]
 
@@ -3192,19 +3193,8 @@ dependencies = [
  "uuid",
  "virs-error",
  "virs-exchange",
- "virs-runtime",
+ "virs-task",
  "virs-types",
-]
-
-[[package]]
-name = "virs-runtime"
-version = "0.1.0"
-dependencies = [
- "rand 0.8.6",
- "tokio",
- "tokio-util",
- "tracing",
- "virs-error",
 ]
 
 [[package]]
@@ -3222,6 +3212,15 @@ dependencies = [
  "uuid",
  "virs-error",
  "virs-types",
+]
+
+[[package]]
+name = "virs-task"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -3267,7 +3266,7 @@ dependencies = [
  "tokio-tungstenite 0.26.2",
  "tracing",
  "virs-error",
- "virs-runtime",
+ "virs-task",
 ]
 
 [[package]]

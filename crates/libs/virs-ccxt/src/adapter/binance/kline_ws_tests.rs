@@ -3,7 +3,6 @@ use crate::adapter::binance::kline_ws::{
     KLINE_WS_DELAY_THRESHOLD_MS,
 };
 use crate::ws_types::KlineWsClient;
-use virs_runtime::CancellationToken;
 
 #[test]
 fn test_parse_binance_kline_message() {
@@ -283,7 +282,7 @@ fn test_binance_ws_symbol_basic() {
 
 #[tokio::test]
 async fn test_subscribe_without_start() {
-    let ws = KlineWs::new_perpetual(None, CancellationToken::root());
+    let ws = KlineWs::new_perpetual(None);
     assert!(!ws.is_running());
 
     ws.subscribe("BTCUSDT").await;

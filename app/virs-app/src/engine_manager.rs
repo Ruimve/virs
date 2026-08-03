@@ -1,10 +1,11 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::sync::{broadcast, mpsc, Mutex};
 use tracing::{error, info, warn};
-use virs_runtime::{CancellationToken, TaskSupervisor};
+use virs_task::{spawn, TaskHandle};
 
 use virs_api::EngineManager;
 use virs_bot::auto::types::AutoCommand;
@@ -23,13 +24,11 @@ use crate::adapters::*;
 struct EngineState {
     paper_mode: bool,
     auto_cmd_tx: StdMutex<Option<mpsc::Sender<AutoCommand>>>,
-
     pe_event_tx: StdMutex<Option<broadcast::Sender<EngineEvent>>>,
-
     position_engine: StdMutex<Option<PositionEngine>>,
-
-    supervisor: TaskSupervisor,
-
+    position_engine_task: StdMutex<Option<TaskHandle>>,
+    paper_tick_task: StdMutex<Option<TaskHandle>>,
+    auto_engine_task: StdMutex<Option<TaskHandle>>,
     order_executor: StdMutex<Option<Arc<PeOrderExecutor>>>,
 }
 
@@ -278,14 +277,11 @@ impl EngineManager for AppEngineManager {
 
         let pe_persistence = Box::new(PePersistence::new(self.db_pool.clone()));
 
-        let supervisor = TaskSupervisor::new(CancellationToken::root());
-
         let mut position_engine = PositionEngine::new(
             pe_exchange,
             pe_persistence,
             self.time_config.retry.persist_max_retries,
             self.time_config.retry.persist_retry_base_ms,
-            supervisor.child_token(),
         );
         let pe_cmd_tx = position_engine.command_sender();
         let pe_event_sender = position_engine.event_sender();
@@ -294,14 +290,14 @@ impl EngineManager for AppEngineManager {
 
         let position_engine_clone = position_engine.clone();
 
-        supervisor
-            .spawn_raw("position_engine", move |_| async move {
-                if let Err(e) = position_engine.run().await {
-                    error!(error = %e, "Position Engine run failed");
-                }
-            })
-            .await;
+        let pe_task = spawn("position_engine", move |_| async move {
+            if let Err(e) = position_engine.run().await {
+                error!(error = %e, "Position Engine run failed");
+            }
+        });
         info!(paper_mode, "Position Engine started");
+
+        let mut paper_tick_task_opt: Option<TaskHandle> = None;
 
         let prompt_loader = self.prompt_loader.clone();
 
@@ -319,46 +315,45 @@ impl EngineManager for AppEngineManager {
         if paper_mode {
             let kline_engine_for_paper = self.kline_engine.clone();
             let pe_cmd_tx_for_tick = pe_cmd_tx.clone();
-            supervisor
-                .spawn_raw("paper_tick", move |task_cancel| async move {
-                    let mut kline_rx = kline_engine_for_paper.subscribe_events();
-                    info!("Paper mode kline event bridge started");
-                    loop {
-                        tokio::select! {
-                            _ = task_cancel.cancelled() => {
-                                info!("Paper tick bridge cancelled, stopping");
-                                return;
-                            }
-                            result = kline_rx.recv() => {
-                                match result {
-                                    Ok(event) => {
-                                        if event.candle.close > 0.0 {
-                                            if pe_cmd_tx_for_tick
-                                                .send(EngineCommand::PriceTick {
-                                                    symbol: event.symbol,
-                                                    price: event.candle.close,
-                                                })
-                                                .await
-                                                .is_err()
-                                            {
-                                                info!("PE command channel closed, stopping paper kline bridge");
-                                                return;
-                                            }
+            let paper_task = spawn("paper_tick", move |task_cancel| async move {
+                let mut kline_rx = kline_engine_for_paper.subscribe_events();
+                info!("Paper mode kline event bridge started");
+                loop {
+                    tokio::select! {
+                        _ = task_cancel.cancelled() => {
+                            info!("Paper tick bridge cancelled, stopping");
+                            return;
+                        }
+                        result = kline_rx.recv() => {
+                            match result {
+                                Ok(event) => {
+                                    if event.candle.close > 0.0 {
+                                        if pe_cmd_tx_for_tick
+                                            .send(EngineCommand::PriceTick {
+                                                symbol: event.symbol,
+                                                price: event.candle.close,
+                                            })
+                                            .await
+                                            .is_err()
+                                        {
+                                            info!("PE command channel closed, stopping paper kline bridge");
+                                            return;
                                         }
                                     }
-                                    Err(broadcast::error::RecvError::Lagged(n)) => {
-                                        warn!(lagged = n, "KlineEvent lagged in paper tick bridge");
-                                    }
-                                    Err(broadcast::error::RecvError::Closed) => {
-                                        info!("KlineEvent channel closed, stopping paper kline bridge");
-                                        break;
-                                    }
+                                }
+                                Err(broadcast::error::RecvError::Lagged(n)) => {
+                                    warn!(lagged = n, "KlineEvent lagged in paper tick bridge");
+                                }
+                                Err(broadcast::error::RecvError::Closed) => {
+                                    info!("KlineEvent channel closed, stopping paper kline bridge");
+                                    break;
                                 }
                             }
                         }
                     }
-                })
-                .await;
+                }
+            });
+            paper_tick_task_opt = Some(paper_task);
         }
 
         let auto_store = Arc::new(PgAutoStore::new(self.db_pool.clone()));
@@ -373,7 +368,6 @@ impl EngineManager for AppEngineManager {
             auto_order_event_tx.clone(),
             auto_pe_event_rx,
             position_engine_clone.clone(),
-            supervisor.child_token(),
         )
         .await);
         let order_executor_for_state = Arc::clone(&auto_order_executor);
@@ -400,14 +394,11 @@ impl EngineManager for AppEngineManager {
             pe_event_sender.clone(),
             self.time_config.clone(),
             prompt_loader.clone(),
-            supervisor.child_token(),
         );
 
-        supervisor
-            .spawn_raw("auto_engine", move |_| async move {
-                auto_engine.run().await;
-            })
-            .await;
+        let auto_task = spawn("auto_engine", move |cancel| async move {
+            auto_engine.run(cancel).await;
+        });
         info!("Auto trade engine started");
 
         let _ = self.state.set(EngineState {
@@ -415,7 +406,9 @@ impl EngineManager for AppEngineManager {
             auto_cmd_tx: StdMutex::new(Some(auto_cmd_tx)),
             pe_event_tx: StdMutex::new(Some(pe_event_sender)),
             position_engine: StdMutex::new(Some(position_engine_clone)),
-            supervisor,
+            position_engine_task: StdMutex::new(Some(pe_task)),
+            paper_tick_task: StdMutex::new(paper_tick_task_opt),
+            auto_engine_task: StdMutex::new(Some(auto_task)),
             order_executor: StdMutex::new(Some(order_executor_for_state)),
         });
         self.started.store(true, Ordering::SeqCst);
@@ -503,7 +496,25 @@ impl EngineManager for AppEngineManager {
                 oe.stop().await;
             }
 
-            state.supervisor.shutdown().await;
+            let pe_task = state.position_engine_task.lock().unwrap().take();
+            let paper_task = state.paper_tick_task.lock().unwrap().take();
+            let auto_task = state.auto_engine_task.lock().unwrap().take();
+
+            if let Some(h) = &pe_task { h.cancel(); }
+            if let Some(h) = &paper_task { h.cancel(); }
+            if let Some(h) = &auto_task { h.cancel(); }
+
+            let mut join_set = tokio::task::JoinSet::new();
+            if let Some(h) = pe_task {
+                join_set.spawn(h.join_with_timeout(Duration::from_secs(5)));
+            }
+            if let Some(h) = paper_task {
+                join_set.spawn(h.join_with_timeout(Duration::from_secs(5)));
+            }
+            if let Some(h) = auto_task {
+                join_set.spawn(h.join_with_timeout(Duration::from_secs(5)));
+            }
+            while join_set.join_next().await.is_some() {}
 
             drop(pe_opt);
 

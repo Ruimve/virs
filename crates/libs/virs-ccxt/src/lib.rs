@@ -15,7 +15,6 @@ use tokio::sync::mpsc;
 
 use auth::Signer;
 use virs_error::ExchangeError;
-use virs_runtime::CancellationToken;
 use virs_types::{
     ApiRestrictions, Balance, ExchangePosition, MarginMode, OrderResult, PositionMode,
 };
@@ -454,7 +453,6 @@ pub fn create_exchange(
             connect_timeout,
             pool_max_idle_per_host,
             listenkey_keepalive_futures_secs,
-            CancellationToken::root(),
         )?)),
 
         _ => Err(ExchangeError::NotSupported(format!(

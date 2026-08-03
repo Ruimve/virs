@@ -7,7 +7,7 @@ edition = "2021"
 virs-types = { path = "../../libs/virs-types" }
 virs-error = { path = "../../libs/virs-error", features = ["sqlx"] }
 virs-exchange = { path = "../../libs/virs-exchange" }
-virs-runtime = { path = "../../libs/virs-runtime" }
+virs-task = { path = "../../libs/virs-task" }
 
 serde = { workspace = true }
 serde_json = { workspace = true }

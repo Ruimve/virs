@@ -16,7 +16,7 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 use uuid::Uuid;
-use virs_runtime::CancellationToken;
+use virs_task::{spawn_periodic, CancellationToken};
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::strategy;
@@ -551,21 +551,17 @@ impl AutoWorker {
         let (llm_signal_tx, mut llm_signal_rx) = tokio::sync::mpsc::channel::<()>(1);
         let llm_handle = {
             let interval_secs = self.bot.decide_interval_secs.max(60) as u64;
-            let llm_cancel = cancel.child_token();
-            tokio::spawn(async move {
-                let mut tick = tokio::time::interval(Duration::from_secs(interval_secs));
-                tick.tick().await;
-                loop {
-                    tokio::select! {
-                        _ = llm_cancel.cancelled() => break,
-                        _ = tick.tick() => {
-                            if llm_signal_tx.send(()).await.is_err() {
-                                break;
-                            }
-                        }
+            spawn_periodic(
+                "llm_timer",
+                Duration::from_secs(interval_secs),
+                false,
+                move || {
+                    let tx = llm_signal_tx.clone();
+                    async move {
+                        let _ = tx.send(()).await;
                     }
-                }
-            })
+                },
+            )
         };
 
         loop {
@@ -623,7 +619,8 @@ impl AutoWorker {
             }
         }
 
-        let _ = llm_handle.await;
+        llm_handle.cancel();
+        llm_handle.join_with_timeout(Duration::from_secs(5)).await;
 
         self.save_position().await;
         self.save_stats().await;
