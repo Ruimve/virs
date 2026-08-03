@@ -8,6 +8,7 @@ virs-types = { path = "../../libs/virs-types" }
 virs-ccxt = { path = "../../libs/virs-ccxt" }
 virs-exchange = { path = "../../libs/virs-exchange" }
 virs-error = { path = "../../libs/virs-error" }
+virs-runtime = { path = "../../libs/virs-runtime" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }

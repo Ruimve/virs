@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use async_trait::async_trait;
 use tokio::sync::{broadcast, mpsc, Mutex};
 use tracing::{error, info, warn};
+use virs_runtime::{CancellationToken, TaskSupervisor};
 
 use virs_api::EngineManager;
 use virs_bot::auto::types::AutoCommand;
@@ -27,11 +28,12 @@ struct EngineState {
 
     position_engine: StdMutex<Option<PositionEngine>>,
 
-    paper_tick_handle: StdMutex<Option<tokio::task::JoinHandle<()>>>,
+    /// 任务监督器 — 统一管理 paper_tick / position_engine / auto_engine 后台任务的
+    /// JoinHandle + CancellationToken + 优雅关闭（cancel + 并发等待 + 5s 超时 abort）
+    supervisor: TaskSupervisor,
 
-    pe_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
-
-    auto_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// PeOrderExecutor 引用 — shutdown 时调用 stop() 停止转发任务
+    order_executor: StdMutex<Option<Arc<PeOrderExecutor>>>,
 }
 
 pub struct AppEngineManager {
@@ -282,11 +284,17 @@ impl EngineManager for AppEngineManager {
 
         let pe_persistence = Box::new(PePersistence::new(self.db_pool.clone()));
 
+        // 创建根取消令牌和任务监督器，统一管理所有后台任务的 JoinHandle + 取消信号 + 优雅关闭
+        let cancel = CancellationToken::root();
+        let supervisor = TaskSupervisor::new(cancel.clone());
+
+        // PositionEngine 作为 cancel 树的子节点：父取消时级联取消 PE
         let mut position_engine = PositionEngine::new(
             pe_exchange,
             pe_persistence,
             self.time_config.retry.persist_max_retries,
             self.time_config.retry.persist_retry_base_ms,
+            cancel.child_token(),
         );
         let pe_cmd_tx = position_engine.command_sender();
         let pe_event_sender = position_engine.event_sender();
@@ -295,11 +303,15 @@ impl EngineManager for AppEngineManager {
 
         let position_engine_clone = position_engine.clone();
 
-        let pe_handle = tokio::spawn(async move {
-            if let Err(e) = position_engine.run().await {
-                error!(error = %e, "Position Engine run failed");
-            }
-        });
+        // PositionEngine 内部通过 child_token 接入 cancel 树，
+        // run() 内部 select! on self.cancel，父取消时级联退出
+        supervisor
+            .spawn_raw("position_engine", move |_| async move {
+                if let Err(e) = position_engine.run().await {
+                    error!(error = %e, "Position Engine run failed");
+                }
+            })
+            .await;
         info!(paper_mode, "Position Engine started");
 
         // 复用 AppEngineManager 持有的全局 PromptLoader（启动时一次性加载）。
@@ -317,42 +329,51 @@ impl EngineManager for AppEngineManager {
         }
 
         // paper 模式下，将 KlineEvent 转发给 PositionEngine 作为 PriceTick（事件驱动）
-        let paper_tick_handle: Option<tokio::task::JoinHandle<()>> = if paper_mode {
+        if paper_mode {
             let kline_engine_for_paper = self.kline_engine.clone();
             let pe_cmd_tx_for_tick = pe_cmd_tx.clone();
-            Some(tokio::spawn(async move {
-                let mut kline_rx = kline_engine_for_paper.subscribe_events();
-                info!("Paper mode kline event bridge started");
-                loop {
-                    match kline_rx.recv().await {
-                        Ok(event) => {
-                            if event.candle.close > 0.0 {
-                                if pe_cmd_tx_for_tick
-                                    .send(EngineCommand::PriceTick {
-                                        symbol: event.symbol,
-                                        price: event.candle.close,
-                                    })
-                                    .await
-                                    .is_err()
-                                {
-                                    info!("PE command channel closed, stopping paper kline bridge");
-                                    return;
+            // 闭包内用 task_cancel 替代手动 cancel，supervisor 统一管理 handle 和 cancel
+            supervisor
+                .spawn_raw("paper_tick", move |task_cancel| async move {
+                    let mut kline_rx = kline_engine_for_paper.subscribe_events();
+                    info!("Paper mode kline event bridge started");
+                    loop {
+                        tokio::select! {
+                            _ = task_cancel.cancelled() => {
+                                info!("Paper tick bridge cancelled, stopping");
+                                return;
+                            }
+                            result = kline_rx.recv() => {
+                                match result {
+                                    Ok(event) => {
+                                        if event.candle.close > 0.0 {
+                                            if pe_cmd_tx_for_tick
+                                                .send(EngineCommand::PriceTick {
+                                                    symbol: event.symbol,
+                                                    price: event.candle.close,
+                                                })
+                                                .await
+                                                .is_err()
+                                            {
+                                                info!("PE command channel closed, stopping paper kline bridge");
+                                                return;
+                                            }
+                                        }
+                                    }
+                                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                                        warn!(lagged = n, "KlineEvent lagged in paper tick bridge");
+                                    }
+                                    Err(broadcast::error::RecvError::Closed) => {
+                                        info!("KlineEvent channel closed, stopping paper kline bridge");
+                                        break;
+                                    }
                                 }
                             }
                         }
-                        Err(broadcast::error::RecvError::Lagged(n)) => {
-                            warn!(lagged = n, "KlineEvent lagged in paper tick bridge");
-                        }
-                        Err(broadcast::error::RecvError::Closed) => {
-                            info!("KlineEvent channel closed, stopping paper kline bridge");
-                            break;
-                        }
                     }
-                }
-            }))
-        } else {
-            None
-        };
+                })
+                .await;
+        }
 
         let auto_store = Arc::new(PgAutoStore::new(self.db_pool.clone()));
         let auto_market_data_provider = Arc::new(
@@ -366,7 +387,12 @@ impl EngineManager for AppEngineManager {
             auto_order_event_tx.clone(),
             auto_pe_event_rx,
             position_engine_clone.clone(),
-        ));
+            // 传入 engine supervisor 的 child token，shutdown 时随父令牌级联取消
+            cancel.child_token(),
+        )
+        .await);
+        // 保存 Arc 引用以便 shutdown 时调用 stop()
+        let order_executor_for_state = Arc::clone(&auto_order_executor);
         let auto_credential_store: Arc<dyn virs_types::bot::CredentialStore> =
             Arc::new(PgCredentialStore::new(
                 self.db_pool.clone(),
@@ -380,6 +406,7 @@ impl EngineManager for AppEngineManager {
             std::time::Duration::from_secs(self.time_config.llm_timeout_secs),
         ));
 
+        // AutoEngine 作为 cancel 树的子节点：父取消时级联取消 engine 及所有 worker
         let (mut auto_engine, auto_cmd_tx) = virs_bot::auto::AutoEngine::new(
             auto_store,
             auto_ai_service,
@@ -390,11 +417,16 @@ impl EngineManager for AppEngineManager {
             pe_event_sender.clone(),
             self.time_config.clone(),
             prompt_loader.clone(),
+            cancel.child_token(),
         );
 
-        let auto_handle = tokio::spawn(async move {
-            auto_engine.run().await;
-        });
+        // AutoEngine 通过 child_token 接入 cancel 树，
+        // 父取消时级联取消 engine → worker（tree-shaped propagation）
+        supervisor
+            .spawn_raw("auto_engine", move |_| async move {
+                auto_engine.run().await;
+            })
+            .await;
         info!("Auto trade engine started");
 
         let _ = self.state.set(EngineState {
@@ -402,9 +434,8 @@ impl EngineManager for AppEngineManager {
             auto_cmd_tx: StdMutex::new(Some(auto_cmd_tx)),
             pe_event_tx: StdMutex::new(Some(pe_event_sender)),
             position_engine: StdMutex::new(Some(position_engine_clone)),
-            paper_tick_handle: StdMutex::new(paper_tick_handle),
-            pe_handle: Mutex::new(Some(pe_handle)),
-            auto_handle: Mutex::new(Some(auto_handle)),
+            supervisor,
+            order_executor: StdMutex::new(Some(order_executor_for_state)),
         });
         self.started.store(true, Ordering::SeqCst);
 
@@ -478,38 +509,28 @@ impl EngineManager for AppEngineManager {
         if let Some(state) = self.state.get() {
             info!("Shutting down trading engines...");
 
+            // 1. 停止 PositionEngine（内部 cancel，run() 会自行 shutdown 其内部 supervisor）
             let pe_opt = state.position_engine.lock().unwrap().take();
             if let Some(pe) = &pe_opt {
                 pe.stop();
             }
 
-            if let Some(handle) = state.paper_tick_handle.lock().unwrap().take() {
-                handle.abort();
-            }
-
+            // 2. 关闭 AutoEngine 的命令通道（AutoEngine 通过 channel 关闭退出）
             drop(state.auto_cmd_tx.lock().unwrap().take());
-
             drop(state.pe_event_tx.lock().unwrap().take());
 
-            let pe_handle = state.pe_handle.lock().await.take();
-            let auto_handle = state.auto_handle.lock().await.take();
+            // 3. 停止 OrderExecutor 的转发任务（cancel + 并发等待 + 5s 超时 abort）
+            let oe_opt = state.order_executor.lock().unwrap().take();
+            if let Some(oe) = oe_opt {
+                oe.stop().await;
+            }
 
-            let timeout = std::time::Duration::from_secs(5);
-            let _ = tokio::time::timeout(timeout, async {
-                let pe_fut = async {
-                    if let Some(h) = pe_handle {
-                        let _ = h.await;
-                    }
-                };
-                let auto_fut = async {
-                    if let Some(h) = auto_handle {
-                        let _ = h.await;
-                    }
-                };
-                tokio::join!(pe_fut, auto_fut);
-            })
-            .await;
+            // 4. 通过 TaskSupervisor 统一关闭所有后台任务
+            //    （paper_tick / position_engine / auto_engine）
+            //    cancel + 并发等待 + 5s 超时 abort
+            state.supervisor.shutdown().await;
 
+            // 5. drop PositionEngine
             drop(pe_opt);
 
             info!("All trading engines stopped");

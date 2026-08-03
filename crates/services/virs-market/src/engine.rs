@@ -5,6 +5,7 @@ use dashmap::DashMap;
 use tokio::sync::{broadcast, Mutex};
 use tracing;
 use virs_error::VirsResult;
+use virs_runtime::{CancellationToken, TaskSupervisor};
 
 use crate::aggregator::Aggregator;
 use crate::cache::SymbolCache;
@@ -76,6 +77,9 @@ pub struct KlineEngine {
     event_tx: broadcast::Sender<KlineEvent>,
     perpetual_handler: MarketWsHandler,
     started: Arc<std::sync::atomic::AtomicBool>,
+    /// 任务监督器 — 统一管理 JoinHandle + 取消信号 + 优雅关闭
+    /// std::sync::Mutex：锁仅在 start/stop/Drop 中短暂持有，不跨 await，Drop 中安全
+    supervisor: std::sync::Mutex<Option<TaskSupervisor>>,
 }
 
 impl KlineEngine {
@@ -95,6 +99,7 @@ impl KlineEngine {
             event_tx,
             perpetual_handler: MarketWsHandler::new(perpetual_ws),
             started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            supervisor: std::sync::Mutex::new(None),
         }
     }
 
@@ -110,210 +115,229 @@ impl KlineEngine {
             return;
         }
 
+        let cancel = CancellationToken::root();
+        let supervisor = TaskSupervisor::new(cancel.clone());
+
         let event_tx = self.event_tx.clone();
         let subscriptions = self.subscriptions.clone();
         let symbol_index = self.symbol_index.clone();
         let source = self.source.clone();
         let persistence = self.persistence.clone();
-        let started = self.started.clone();
 
         let gap_check_subscriptions = subscriptions.clone();
         let gap_check_source = source.clone();
         let gap_check_event_tx = self.event_tx.clone();
-        let gap_check_started = started.clone();
 
         let (ws_update_tx, mut ws_update_rx) = broadcast::channel::<WsEvent>(512);
 
         self.perpetual_handler.start(ws_update_tx).await;
 
-        tokio::spawn(async move {
-            while started.load(std::sync::atomic::Ordering::Relaxed) {
-                match ws_update_rx.recv().await {
-                    Ok(WsEvent::Reconnected) => {
-                        let entries: Vec<_> = subscriptions
-                            .iter()
-                            .map(|e| {
-                                let sub = e.value();
-                                (
-                                    sub.exchange.clone(),
-                                    sub.symbol.clone(),
-                                    sub.cache.clone(),
-                                    sub.market_type,
-                                )
-                            })
-                            .collect();
-                        for (exchange, symbol, cache, market_type) in entries {
+        // Task 1: WS 事件处理循环（CancellationToken 可中断）
+        supervisor
+            .spawn_raw("kline_ws_loop", move |task_cancel| async move {
+                loop {
+                    tokio::select! {
+                        _ = task_cancel.cancelled() => break,
+                        result = ws_update_rx.recv() => {
+                            match result {
+                                Ok(WsEvent::Reconnected) => {
+                                    let entries: Vec<_> = subscriptions
+                                        .iter()
+                                        .map(|e| {
+                                            let sub = e.value();
+                                            (
+                                                sub.exchange.clone(),
+                                                sub.symbol.clone(),
+                                                sub.cache.clone(),
+                                                sub.market_type,
+                                            )
+                                        })
+                                        .collect();
+                                    for (exchange, symbol, cache, market_type) in entries {
+                                        match GapDetector::detect_and_backfill(
+                                            &exchange,
+                                            &symbol,
+                                            &cache,
+                                            &source,
+                                            &event_tx,
+                                            market_type,
+                                        )
+                                        .await
+                                        {
+                                            Ok(_) => {}
+                                            Err(e) => {
+                                                tracing::error!(exchange = %exchange, symbol = %symbol, error = %e, "Post-reconnect backfill failed");
+                                            }
+                                        }
+                                    }
+                                }
+                                Ok(WsEvent::Candle(update)) => {
+                                    let symbol = update.symbol;
+                                    let sub_key = match symbol_index.get(&symbol).map(|r| r.value().clone()) {
+                                        Some(key) => key,
+                                        None => continue,
+                                    };
+
+                                    let cache = match subscriptions.get(&sub_key) {
+                                        Some(entry) => entry.cache.clone(),
+                                        None => continue,
+                                    };
+
+                                    let candle_1m = update.candle;
+                                    let is_closed = candle_1m.closed;
+
+                                    let (exchange, persist_data, higher_updates) = {
+                                        let mut guard = cache.lock().await;
+                                        guard.update_candle(Timeframe::M1, candle_1m.clone());
+                                        if is_closed {
+                                            guard.close_candle(Timeframe::M1, candle_1m.open_time);
+                                        }
+                                        let higher_updates =
+                                            Aggregator::update_higher_timeframes(&candle_1m, &mut guard);
+                                        let exchange = match subscriptions.get(&sub_key) {
+                                            Some(e) => e.exchange.clone(),
+                                            None => continue,
+                                        };
+                                        let persist_data = if is_closed {
+                                            Some(guard.get_klines(Timeframe::M1))
+                                        } else {
+                                            None
+                                        };
+                                        (exchange, persist_data, higher_updates)
+                                    };
+
+                                    let event_type = if is_closed {
+                                        KlineEventType::Closed
+                                    } else {
+                                        KlineEventType::Update
+                                    };
+
+                                    if event_tx.receiver_count() > 0 {
+                                        if event_tx
+                                            .send(KlineEvent {
+                                                exchange: exchange.clone(),
+                                                symbol: symbol.clone(),
+                                                timeframe: Timeframe::M1,
+                                                candle: candle_1m.clone(),
+                                                event_type,
+                                            })
+                                            .is_err()
+                                        {
+                                            tracing::debug!(
+                                                exchange = %exchange,
+                                                symbol = %symbol,
+                                                "KlineEvent (M1) broadcast — receiver dropped between check and send"
+                                            );
+                                        }
+
+                                        for (tf, candle) in higher_updates {
+                                            let ht_event_type = if candle.closed {
+                                                KlineEventType::Closed
+                                            } else {
+                                                KlineEventType::Update
+                                            };
+                                            if event_tx
+                                                .send(KlineEvent {
+                                                    exchange: exchange.clone(),
+                                                    symbol: symbol.clone(),
+                                                    timeframe: tf,
+                                                    candle,
+                                                    event_type: ht_event_type,
+                                                })
+                                                .is_err()
+                                            {
+                                                tracing::debug!(
+                                                    exchange = %exchange,
+                                                    symbol = %symbol,
+                                                    "KlineEvent (higher tf) broadcast — receiver dropped between check and send"
+                                                );
+                                            }
+                                        }
+                                    }
+
+                                    if let Some(data) = persist_data {
+                                        if let Err(e) = persistence
+                                            .save_candles(&exchange, &symbol, "1m", data.as_slice())
+                                            .await
+                                        {
+                                            tracing::warn!(
+                                                exchange = %exchange,
+                                                symbol = %symbol,
+                                                error = %e,
+                                                "Failed to save candles"
+                                            );
+                                        }
+                                    }
+                                }
+                                Err(broadcast::error::RecvError::Lagged(n)) => {
+                                    tracing::warn!(lagged = n, "WS update lagged");
+                                }
+                                Err(broadcast::error::RecvError::Closed) => {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            })
+            .await;
+
+        // Task 2: K 线缺口检测周期任务（CancellationToken 可中断 interval.tick()）
+        supervisor
+            .spawn_raw("kline_gap_detection", move |task_cancel| async move {
+                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
+                interval.tick().await; // 跳过首次
+
+                loop {
+                    tokio::select! {
+                        _ = task_cancel.cancelled() => break,
+                        _ = interval.tick() => {}
+                    }
+
+                    let entries: Vec<_> = gap_check_subscriptions
+                        .iter()
+                        .map(|e| {
+                            let sub = e.value();
+                            (
+                                sub.exchange.clone(),
+                                sub.symbol.clone(),
+                                sub.cache.clone(),
+                                sub.market_type,
+                            )
+                        })
+                        .collect();
+                    for (exchange, symbol, cache, market_type) in entries {
+                        let report = GapDetector::check_continuity(&exchange, &symbol, &cache).await;
+
+                        if !report.is_continuous {
                             match GapDetector::detect_and_backfill(
                                 &exchange,
                                 &symbol,
                                 &cache,
-                                &source,
-                                &event_tx,
+                                &gap_check_source,
+                                &gap_check_event_tx,
                                 market_type,
                             )
                             .await
                             {
                                 Ok(_) => {}
                                 Err(e) => {
-                                    tracing::error!(exchange = %exchange, symbol = %symbol, error = %e, "Post-reconnect backfill failed");
-                                }
-                            }
-                        }
-                    }
-                    Ok(WsEvent::Candle(update)) => {
-                        let symbol = update.symbol;
-                        let sub_key = match symbol_index.get(&symbol).map(|r| r.value().clone()) {
-                            Some(key) => key,
-                            None => continue,
-                        };
-
-                        let cache = match subscriptions.get(&sub_key) {
-                            Some(entry) => entry.cache.clone(),
-                            None => continue,
-                        };
-
-                        let candle_1m = update.candle;
-                        let is_closed = candle_1m.closed;
-
-                        let (exchange, persist_data, higher_updates) = {
-                            let mut guard = cache.lock().await;
-                            guard.update_candle(Timeframe::M1, candle_1m.clone());
-                            if is_closed {
-                                guard.close_candle(Timeframe::M1, candle_1m.open_time);
-                            }
-                            let higher_updates =
-                                Aggregator::update_higher_timeframes(&candle_1m, &mut guard);
-                            let exchange = match subscriptions.get(&sub_key) {
-                                Some(e) => e.exchange.clone(),
-                                None => continue,
-                            };
-                            let persist_data = if is_closed {
-                                Some(guard.get_klines(Timeframe::M1))
-                            } else {
-                                None
-                            };
-                            (exchange, persist_data, higher_updates)
-                        };
-
-                        let event_type = if is_closed {
-                            KlineEventType::Closed
-                        } else {
-                            KlineEventType::Update
-                        };
-
-                        if event_tx.receiver_count() > 0 {
-                            if event_tx
-                                .send(KlineEvent {
-                                    exchange: exchange.clone(),
-                                    symbol: symbol.clone(),
-                                    timeframe: Timeframe::M1,
-                                    candle: candle_1m.clone(),
-                                    event_type,
-                                })
-                                .is_err()
-                            {
-                                tracing::debug!(
-                                    exchange = %exchange,
-                                    symbol = %symbol,
-                                    "KlineEvent (M1) broadcast — receiver dropped between check and send"
-                                );
-                            }
-
-                            for (tf, candle) in higher_updates {
-                                let ht_event_type = if candle.closed {
-                                    KlineEventType::Closed
-                                } else {
-                                    KlineEventType::Update
-                                };
-                                if event_tx
-                                    .send(KlineEvent {
-                                        exchange: exchange.clone(),
-                                        symbol: symbol.clone(),
-                                        timeframe: tf,
-                                        candle,
-                                        event_type: ht_event_type,
-                                    })
-                                    .is_err()
-                                {
-                                    tracing::debug!(
+                                    tracing::error!(
                                         exchange = %exchange,
                                         symbol = %symbol,
-                                        "KlineEvent (higher tf) broadcast — receiver dropped between check and send"
+                                        error = %e,
+                                        "Backfill failed"
                                     );
                                 }
                             }
                         }
-
-                        if let Some(data) = persist_data {
-                            if let Err(e) = persistence
-                                .save_candles(&exchange, &symbol, "1m", data.as_slice())
-                                .await
-                            {
-                                tracing::warn!(
-                                    exchange = %exchange,
-                                    symbol = %symbol,
-                                    error = %e,
-                                    "Failed to save candles"
-                                );
-                            }
-                        }
-                    }
-                    Err(broadcast::error::RecvError::Lagged(n)) => {
-                        tracing::warn!(lagged = n, "WS update lagged");
-                    }
-                    Err(broadcast::error::RecvError::Closed) => {
-                        break;
                     }
                 }
-            }
-        });
+            })
+            .await;
 
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
-
-            while gap_check_started.load(std::sync::atomic::Ordering::Relaxed) {
-                interval.tick().await;
-
-                let entries: Vec<_> = gap_check_subscriptions
-                    .iter()
-                    .map(|e| {
-                        let sub = e.value();
-                        (
-                            sub.exchange.clone(),
-                            sub.symbol.clone(),
-                            sub.cache.clone(),
-                            sub.market_type,
-                        )
-                    })
-                    .collect();
-                for (exchange, symbol, cache, market_type) in entries {
-                    let report = GapDetector::check_continuity(&exchange, &symbol, &cache).await;
-
-                    if !report.is_continuous {
-                        match GapDetector::detect_and_backfill(
-                            &exchange,
-                            &symbol,
-                            &cache,
-                            &gap_check_source,
-                            &gap_check_event_tx,
-                            market_type,
-                        )
-                        .await
-                        {
-                            Ok(_) => {}
-                            Err(e) => {
-                                tracing::error!(
-                                    exchange = %exchange,
-                                    symbol = %symbol,
-                                    error = %e,
-                                    "Backfill failed"
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        });
+        // 存储 TaskSupervisor 供 stop() 调用 shutdown()
+        *self.supervisor.lock().unwrap() = Some(supervisor);
     }
 
     pub async fn stop(&self) {
@@ -322,6 +346,11 @@ impl KlineEngine {
             .swap(false, std::sync::atomic::Ordering::Relaxed)
         {
             return;
+        }
+        // 通过 TaskSupervisor::shutdown 统一关闭：cancel + 并发等待 + 超时 abort
+        let supervisor = self.supervisor.lock().unwrap().take();
+        if let Some(s) = supervisor {
+            s.shutdown().await;
         }
         self.perpetual_handler.stop().await;
     }
@@ -397,5 +426,14 @@ impl KlineEngine {
                 )
             })
             .collect()
+    }
+}
+
+impl Drop for KlineEngine {
+    fn drop(&mut self) {
+        // RAII 兜底：即使未调用 stop()，也确保取消信号被触发
+        if let Some(s) = self.supervisor.lock().unwrap().take() {
+            s.cancel().cancel();
+        }
     }
 }

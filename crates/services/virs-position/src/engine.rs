@@ -3,12 +3,12 @@ use std::sync::{Arc, RwLock};
 use chrono::Utc;
 use dashmap::DashMap;
 use futures_util::StreamExt;
-use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use virs_error::{VirsError, VirsResult};
+use virs_runtime::{CancellationToken, TaskSupervisor};
 use virs_types::*;
 use virs_types::exchange::{ExchangePe, OrderUpdateStream};
 use virs_types::market::ExchangePosition;
@@ -30,7 +30,8 @@ fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
 }
 
 macro_rules! persist {
-    ($expr:expr, $label:expr, $max_retries:expr, $base_ms:expr $(, $ctx_key:ident = $ctx_val:expr)* $(,)?) => {
+    ($expr:expr, $label:expr, $max_retries:expr, $base_ms:expr, $cancel:expr $(, $ctx_key:ident = $ctx_val:expr)* $(,)?) => {
+        let cancel = $cancel;
         let mut attempts = 0u32;
         loop {
             match $expr.await {
@@ -42,7 +43,14 @@ macro_rules! persist {
                         break;
                     }
                     warn!(error = %e, attempt = attempts $(, $ctx_key = %$ctx_val)*, $label);
-                    tokio::time::sleep(std::time::Duration::from_millis($base_ms * attempts as u64)).await;
+                    let sleep_dur = std::time::Duration::from_millis($base_ms * attempts as u64);
+                    tokio::select! {
+                        _ = cancel.cancelled() => {
+                            warn!(label = $label, "persist retry interrupted by cancellation, aborting persist");
+                            return;
+                        }
+                        _ = tokio::time::sleep(sleep_dur) => {}
+                    }
                 }
             }
         }
@@ -104,6 +112,8 @@ pub(crate) struct EngineInner {
     pub(crate) position_id_index: DashMap<Uuid, (String, String, PositionSide)>,
     pub(crate) persist_max_retries: u32,
     pub(crate) persist_retry_base_ms: u64,
+    /// 引擎级取消令牌 — persist! 宏的重试 sleep 可被此令牌中断，确保关闭时立即退出
+    pub(crate) cancel: CancellationToken,
 }
 
 impl EngineInner {
@@ -162,6 +172,12 @@ pub struct PositionEngine {
     inner: Arc<EngineInner>,
     cmd_tx: mpsc::Sender<EngineCommand>,
     cmd_rx: Option<mpsc::Receiver<EngineCommand>>,
+    cancel: CancellationToken,
+    /// 任务监督器 — 统一管理后台 loop 的 JoinHandle + 取消信号 + 优雅关闭
+    supervisor: TaskSupervisor,
+    /// 标记是否为 new() 创建的原始 owner（非 Clone）。
+    /// 只有 owner 的 Drop 才触发 cancel，避免 clone drop 误杀整个 engine。
+    is_owner: bool,
 }
 
 impl Clone for PositionEngine {
@@ -170,6 +186,21 @@ impl Clone for PositionEngine {
             inner: Arc::clone(&self.inner),
             cmd_tx: self.cmd_tx.clone(),
             cmd_rx: None,
+            cancel: self.cancel.clone(),
+            // clone 不执行 run()，supervisor 为空但共享 cancel 令牌；
+            // stop() 仅触发 cancel（实际等待由原始 engine 的 run() 中 shutdown 完成）
+            supervisor: TaskSupervisor::new(self.cancel.clone()),
+            is_owner: false,
+        }
+    }
+}
+
+impl Drop for PositionEngine {
+    fn drop(&mut self) {
+        // 只有 owner（new() 创建的原始实例）的 Drop 才触发 cancel。
+        // clone 的 Drop 不触发 cancel，避免误杀正在运行的 engine。
+        if self.is_owner {
+            self.cancel.cancel();
         }
     }
 }
@@ -180,9 +211,12 @@ impl PositionEngine {
         persistence: Box<dyn PositionPersistence>,
         persist_max_retries: u32,
         persist_retry_base_ms: u64,
+        parent_cancel: CancellationToken,
     ) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel(256);
         let event_tx = broadcast::channel(256).0;
+        // 作为 parent_cancel 的子令牌：父取消时级联取消 PE，PE 的 stop() 只取消自身
+        let cancel = parent_cancel.child_token();
 
         let inner = EngineInner {
             persistence,
@@ -196,12 +230,16 @@ impl PositionEngine {
             position_id_index: DashMap::new(),
             persist_max_retries,
             persist_retry_base_ms,
+            cancel: cancel.clone(),
         };
 
         Self {
             inner: Arc::new(inner),
             cmd_tx,
             cmd_rx: Some(cmd_rx),
+            supervisor: TaskSupervisor::new(cancel.clone()),
+            cancel,
+            is_owner: true,
         }
     }
 
@@ -264,22 +302,49 @@ impl PositionEngine {
             message: "Channel closed".to_string(),
         })?;
         let inner = Arc::clone(&self.inner);
+        let cancel = self.cancel.clone();
 
-        let mut cmd_handle = tokio::spawn(command_loop(inner.clone(), cmd_rx));
-        let mut ws_handle = tokio::spawn(ws_feed_loop(inner.clone(), ws_feed_rx));
+        // 使用 supervisor.spawn_raw 管理 JoinHandle — 统一 cancel + 并发等待 + 超时 abort。
+        // spawn_raw 的闭包接收 CancellationToken 参数，但 command_loop/ws_feed_loop 已有自己的
+        // cancel 参数，所以闭包参数用 _ 忽略。
+        // exit_tx 用于在任一 loop 退出时唤醒 run() 的 select!，保留原有"任一 loop 退出即停止"语义。
+        let (exit_tx, mut exit_rx) = mpsc::channel::<()>(2);
 
-        let _ = tokio::select! {
-            r = &mut cmd_handle => r,
-            r = &mut ws_handle => r,
-        };
+        self.supervisor
+            .spawn_raw("position_command_loop", {
+                let inner = inner.clone();
+                let cancel = cancel.clone();
+                let exit_tx = exit_tx.clone();
+                move |_| async move {
+                    command_loop(inner, cmd_rx, cancel).await;
+                    let _ = exit_tx.try_send(());
+                }
+            })
+            .await;
+
+        self.supervisor
+            .spawn_raw("position_ws_feed_loop", {
+                let inner = inner.clone();
+                let cancel = cancel.clone();
+                let exit_tx = exit_tx;
+                move |_| async move {
+                    ws_feed_loop(inner, ws_feed_rx, cancel).await;
+                    let _ = exit_tx.try_send(());
+                }
+            })
+            .await;
+
+        // 保留 select! 等待任一 loop 退出（exit_tx）或外部取消信号（stop()/Drop 触发 cancel）
+        tokio::select! {
+            _ = exit_rx.recv() => {}
+            _ = self.cancel.cancelled() => {}
+        }
 
         self.inner.set_state(EngineState::ShuttingDown);
-
-        let timeout = Duration::from_secs(5);
-        let _ = tokio::time::timeout(timeout, async {
-            let _ = tokio::join!(cmd_handle, ws_handle);
-        })
-        .await;
+        // supervisor.shutdown() 已包含 cancel + 并发等待 + 5s 超时 + abort，
+        // 替代原来的手动 tokio::time::timeout + tokio::join!
+        self.cancel.cancel();
+        self.supervisor.shutdown().await;
 
         self.inner.set_state(EngineState::Stopped);
         info!("Position engine stopped");
@@ -288,6 +353,7 @@ impl PositionEngine {
 
     pub fn stop(&self) {
         self.inner.set_state(EngineState::ShuttingDown);
+        self.cancel.cancel();
         info!("Position engine stop requested");
     }
 
@@ -366,65 +432,77 @@ impl PositionEngine {
 pub(crate) async fn command_loop(
     inner: Arc<EngineInner>,
     mut cmd_rx: mpsc::Receiver<EngineCommand>,
+    cancel: CancellationToken,
 ) {
-    while let Some(cmd) = cmd_rx.recv().await {
-        match cmd {
-            EngineCommand::OpenPosition {
-                exchange,
-                symbol,
-                side,
-                order_side,
-                quantity,
-                leverage,
-                order_type,
-                price,
-                client_order_id,
-            } => {
-                handle_open_position(
-                    &inner,
-                    exchange,
-                    symbol,
-                    side,
-                    order_side,
-                    quantity,
-                    leverage,
-                    order_type,
-                    price,
-                    client_order_id,
-                )
-                .await;
-            }
-            EngineCommand::ClosePosition {
-                position_id,
-                order_type,
-                price,
-                client_order_id,
-            } => {
-                handle_close_position(&inner, position_id, order_type, price, client_order_id)
-                    .await;
-            }
-            EngineCommand::PlaceOrder { params } => {
-                handle_place_order(&inner, params).await;
-            }
-            EngineCommand::CancelAllOrders {
-                position_id,
-                symbol,
-            } => {
-                handle_cancel_all_orders(&inner, position_id, symbol).await;
-            }
-            EngineCommand::CloseAllPositions { symbol } => {
-                handle_close_all_positions(&inner, &symbol).await;
-            }
-            EngineCommand::PriceTick { symbol, price } => {
-                inner.exchange.on_price_tick(&symbol, price).await;
+    loop {
+        tokio::select! {
+            _ = cancel.cancelled() => break,
+            cmd = cmd_rx.recv() => {
+                let Some(cmd) = cmd else { break };
+                match cmd {
+                    EngineCommand::OpenPosition {
+                        exchange,
+                        symbol,
+                        side,
+                        order_side,
+                        quantity,
+                        leverage,
+                        order_type,
+                        price,
+                        client_order_id,
+                    } => {
+                        handle_open_position(
+                            &inner,
+                            exchange,
+                            symbol,
+                            side,
+                            order_side,
+                            quantity,
+                            leverage,
+                            order_type,
+                            price,
+                            client_order_id,
+                        )
+                        .await;
+                    }
+                    EngineCommand::ClosePosition {
+                        position_id,
+                        order_type,
+                        price,
+                        client_order_id,
+                    } => {
+                        handle_close_position(&inner, position_id, order_type, price, client_order_id)
+                            .await;
+                    }
+                    EngineCommand::PlaceOrder { params } => {
+                        handle_place_order(&inner, params).await;
+                    }
+                    EngineCommand::CancelAllOrders {
+                        position_id,
+                        symbol,
+                    } => {
+                        handle_cancel_all_orders(&inner, position_id, symbol).await;
+                    }
+                    EngineCommand::CloseAllPositions { symbol } => {
+                        handle_close_all_positions(&inner, &symbol).await;
+                    }
+                    EngineCommand::PriceTick { symbol, price } => {
+                        inner.exchange.on_price_tick(&symbol, price).await;
+                    }
+                }
             }
         }
     }
 }
 
-pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdateStream) {
+pub(crate) async fn ws_feed_loop(
+    inner: Arc<EngineInner>,
+    mut ws_rx: OrderUpdateStream,
+    cancel: CancellationToken,
+) {
     loop {
         tokio::select! {
+            _ = cancel.cancelled() => break,
             event = ws_rx.next() => {
                 match event {
                     Some(WsFeedEvent::OrderUpdate { order }) => {
@@ -432,11 +510,6 @@ pub(crate) async fn ws_feed_loop(inner: Arc<EngineInner>, mut ws_rx: OrderUpdate
                     }
                     Some(WsFeedEvent::ConnectionChanged { .. }) => {}
                     None => break,
-                }
-            }
-            _ = tokio::time::sleep(Duration::from_secs(1)) => {
-                if !inner.is_running() {
-                    break;
                 }
             }
         }
@@ -466,6 +539,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
             "persist_rejected_order",
             inner.persist_max_retries,
             inner.persist_retry_base_ms,
+            inner.cancel.clone(),
             symbol = ws_order.symbol,
             client_order_id = ws_order.client_order_id
         );
@@ -506,6 +580,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
             "persist_order (pending)",
             inner.persist_max_retries,
             inner.persist_retry_base_ms,
+            inner.cancel.clone(),
             symbol = ws_order.symbol,
             client_order_id = ws_order.client_order_id
         );
@@ -569,6 +644,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
             "persist_order",
             inner.persist_max_retries,
             inner.persist_retry_base_ms,
+            inner.cancel.clone(),
             symbol = ws_order.symbol,
             client_order_id = ws_order.client_order_id
         );
@@ -646,6 +722,7 @@ async fn finalize_pending_order(
         "persist_order",
         inner.persist_max_retries,
         inner.persist_retry_base_ms,
+        inner.cancel.clone(),
         symbol = ws_order.symbol,
         client_order_id = ws_order.client_order_id
     );

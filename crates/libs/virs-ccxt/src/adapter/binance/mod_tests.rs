@@ -391,7 +391,7 @@ fn t1_4_time_sync_started_swap_prevents_double_start() {
 }
 
 #[test]
-fn t1_5_drop_sets_time_sync_running_false() {
+fn t1_5_drop_cancels_time_sync() {
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",
@@ -403,19 +403,12 @@ fn t1_5_drop_sets_time_sync_running_false() {
     )
     .unwrap();
 
-    ex.time_sync_running
-        .store(true, std::sync::atomic::Ordering::Release);
-    assert!(
-        ex.time_sync_running
-            .load(std::sync::atomic::Ordering::Acquire),
-        "should be true after sync_time"
-    );
-
+    // Drop 应正常执行，不 panic（CancellationToken 在 Drop 中被 cancel）
     drop(ex);
 }
 
-#[test]
-fn t1_6_time_sync_running_initialized_false() {
+#[tokio::test]
+async fn t1_6_supervisor_no_tasks_on_init() {
     let ex = BinanceExchange::new(
         "test_key",
         "test_secret",
@@ -426,9 +419,9 @@ fn t1_6_time_sync_running_initialized_false() {
         900,
     )
     .unwrap();
-    assert!(
-        !ex.time_sync_running
-            .load(std::sync::atomic::Ordering::Acquire),
-        "time_sync_running should be false on init"
+    assert_eq!(
+        ex.supervisor.task_count().await,
+        0,
+        "supervisor should have 0 tasks on init (before sync_time)"
     );
 }

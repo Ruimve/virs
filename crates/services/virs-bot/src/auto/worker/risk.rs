@@ -24,7 +24,7 @@ impl AutoWorker {
 
         if self.has_any_position() {
             if let Some(atr) = self.fetch_current_atr().await {
-                self.update_trailing_stop(atr);
+                self.update_trailing_stop(atr).await;
             }
 
             if self.check_position_timeout().await {
@@ -111,15 +111,15 @@ impl AutoWorker {
         false
     }
 
-    fn update_trailing_stop(&mut self, atr: f64) {
+    async fn update_trailing_stop(&mut self, atr: f64) {
         if atr <= 0.0 {
             return;
         }
-        self.update_trailing_stop_side(PositionSide::Long, atr);
-        self.update_trailing_stop_side(PositionSide::Short, atr);
+        self.update_trailing_stop_side(PositionSide::Long, atr).await;
+        self.update_trailing_stop_side(PositionSide::Short, atr).await;
     }
 
-    fn update_trailing_stop_side(&mut self, side: PositionSide, atr: f64) {
+    async fn update_trailing_stop_side(&mut self, side: PositionSide, atr: f64) {
         let entry_price = match self.get_position(&side) {
             Some(p) if p.is_open() => p.entry_price,
             _ => return,
@@ -148,15 +148,15 @@ impl AutoWorker {
             self.trailing_stop_dirty = true;
 
             if let Some(client_order_id) = client_order_id {
-                let store = self.store.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = store
-                        .update_trade_stop_loss(&client_order_id, new_stop)
-                        .await
-                    {
-                        warn!(client_order_id = %client_order_id, error = %e, "Failed to update trade stop_loss");
-                    }
-                });
+                // 修复 P0 数据安全隐患：改为同步写入而非 fire-and-forget spawn
+                // 确保 shutdown 时 stop_loss 更新不会丢失
+                if let Err(e) = self
+                    .store
+                    .update_trade_stop_loss(&client_order_id, new_stop)
+                    .await
+                {
+                    warn!(client_order_id = %client_order_id, error = %e, "Failed to update trade stop_loss");
+                }
             }
         }
     }

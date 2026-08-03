@@ -1,15 +1,12 @@
 [package]
-name = "virs-ws"
+name = "virs-runtime"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 virs-error = { path = "../virs-error" }
-virs-runtime = { path = "../virs-runtime" }
-async-trait = { workspace = true }
 tokio = { workspace = true }
-tokio-tungstenite = { workspace = true }
-futures-util = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 rand = { workspace = true }
 

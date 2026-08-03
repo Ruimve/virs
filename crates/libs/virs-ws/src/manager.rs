@@ -5,9 +5,9 @@ use std::time::Duration;
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc, Mutex};
-use tokio::task::JoinHandle;
 use tokio_tungstenite::{connect_async, tungstenite};
 use virs_error::VirsError;
+use virs_runtime::{CancellationToken, TaskSupervisor};
 
 // ── 公共常量 ──
 
@@ -153,9 +153,10 @@ pub struct WsManager<T: Send + Clone + 'static> {
     handler: Arc<dyn WsHandler<T>>,
     running: Arc<AtomicBool>,
     retry_count: Arc<AtomicU64>,
-    shutdown_tx: Mutex<Option<mpsc::Sender<()>>>,
+    /// 任务监督器 — 管理 JoinHandle + 统一取消信号 + 优雅关闭
+    /// std::sync::Mutex：锁仅在 start/stop/cancellation_token 中短暂持有，不跨 await，Drop 中安全
+    supervisor: std::sync::Mutex<Option<TaskSupervisor>>,
     command_tx: Mutex<Option<mpsc::UnboundedSender<WsCommand>>>,
-    task_handle: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl<T: Send + Clone + 'static> WsManager<T> {
@@ -164,9 +165,8 @@ impl<T: Send + Clone + 'static> WsManager<T> {
             handler,
             running: Arc::new(AtomicBool::new(false)),
             retry_count: Arc::new(AtomicU64::new(0)),
-            shutdown_tx: Mutex::new(None),
+            supervisor: std::sync::Mutex::new(None),
             command_tx: Mutex::new(None),
-            task_handle: Mutex::new(None),
         }
     }
 
@@ -180,6 +180,16 @@ impl<T: Send + Clone + 'static> WsManager<T> {
 
     pub fn retry_count(&self) -> u64 {
         self.retry_count.load(Ordering::Relaxed)
+    }
+
+    /// 获取当前 CancellationToken 的克隆（如果正在运行）。
+    /// 外部可通过此令牌监听 WsManager 的关闭信号。
+    pub async fn cancellation_token(&self) -> Option<CancellationToken> {
+        self.supervisor
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|s| s.cancel())
     }
 
     pub async fn start(
@@ -199,9 +209,6 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         // D3 修复：每次 start 重置 retry_count
         self.retry_count.store(0, Ordering::Relaxed);
 
-        let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
-        *self.shutdown_tx.lock().await = Some(shutdown_tx);
-
         let mut command_rx = if self.handler.supports_commands() {
             let (tx, rx) = mpsc::unbounded_channel::<WsCommand>();
             *self.command_tx.lock().await = Some(tx);
@@ -214,11 +221,15 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         let running = Arc::clone(&self.running);
         let retry_count = Arc::clone(&self.retry_count);
 
-        let handle = tokio::spawn(async move {
+        // 创建 TaskSupervisor 统一管理 JoinHandle + 取消信号
+        let supervisor = TaskSupervisor::new(CancellationToken::root());
+
+        supervisor
+            .spawn_raw("ws_main", move |cancel| async move {
             let mut reconnect_delay = config.reconnect_initial_delay_secs;
             let mut is_first_connect = true;
 
-            while running.load(Ordering::Relaxed) {
+            while !cancel.is_cancelled() {
                 let connect_start = tokio::time::Instant::now();
 
                 // ── Connecting 阶段 ──
@@ -227,12 +238,11 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                     Ok(url) => url,
                     Err(e) => {
                         tracing::error!(error = %e, "refresh_url failed");
-                        match backoff_with_shutdown(
-                            &running,
+                        match backoff_with_cancel(
+                            &cancel,
                             &retry_count,
                             &config,
                             &mut reconnect_delay,
-                            &mut shutdown_rx,
                             &event_tx,
                         )
                         .await
@@ -310,7 +320,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                             let mut last_msg_time = tokio::time::Instant::now();
 
                             loop {
-                                if !running.load(Ordering::Relaxed) {
+                                if cancel.is_cancelled() {
                                     break;
                                 }
 
@@ -407,7 +417,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                             break;
                                         }
                                     }
-                                    _ = shutdown_rx.recv() => {
+                                    _ = cancel.cancelled() => {
                                         // D5 修复：shutdown 路径也发送断连事件
                                         tracing::info!("Shutdown signal received, closing");
                                         let _ = write.send(tungstenite::Message::Close(None)).await;
@@ -448,12 +458,11 @@ impl<T: Send + Clone + 'static> WsManager<T> {
 
                 // ── BackingOff 阶段 ──
 
-                match backoff_with_shutdown(
-                    &running,
+                match backoff_with_cancel(
+                    &cancel,
                     &retry_count,
                     &config,
                     &mut reconnect_delay,
-                    &mut shutdown_rx,
                     &event_tx,
                 )
                 .await
@@ -469,20 +478,19 @@ impl<T: Send + Clone + 'static> WsManager<T> {
 
             // while 循环退出唯一路径：CircuitBroken（Shutdown 已 return）
             send_stopped(&event_tx, &running).await;
-        });
+        })
+        .await;
 
-        // D2 修复：存储 JoinHandle 供 stop() 等待
-        *self.task_handle.lock().await = Some(handle);
+        // 存储 TaskSupervisor 供 stop() 调用 shutdown()
+        *self.supervisor.lock().unwrap() = Some(supervisor);
     }
 
     pub async fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
-        if let Some(tx) = self.shutdown_tx.lock().await.take() {
-            let _ = tx.send(()).await;
-        }
-        // D2 修复：等待 task 真正结束
-        if let Some(handle) = self.task_handle.lock().await.take() {
-            let _ = handle.await;
+        // 通过 TaskSupervisor::shutdown 统一关闭：cancel + 并发等待 + 超时 abort
+        let supervisor = self.supervisor.lock().unwrap().take();
+        if let Some(s) = supervisor {
+            s.shutdown().await;
         }
     }
 
@@ -493,18 +501,26 @@ impl<T: Send + Clone + 'static> WsManager<T> {
     }
 }
 
+impl<T: Send + Clone + 'static> Drop for WsManager<T> {
+    fn drop(&mut self) {
+        // RAII 兜底：即使未调用 stop()，也确保取消信号被触发
+        if let Some(s) = self.supervisor.lock().unwrap().take() {
+            s.cancel().cancel();
+        }
+    }
+}
+
 // ── 自由函数 ──
 
-/// D10 修复：退避+熔断+shutdown 感知的自由函数
-async fn backoff_with_shutdown<T: Send + Clone + 'static>(
-    running: &AtomicBool,
+/// 退避+熔断+CancellationToken 感知的自由函数
+async fn backoff_with_cancel<T: Send + Clone + 'static>(
+    cancel: &CancellationToken,
     retry_count: &AtomicU64,
     config: &WsManagerConfig,
     reconnect_delay: &mut u64,
-    shutdown_rx: &mut mpsc::Receiver<()>,
     event_tx: &mpsc::Sender<WsManagerEvent<T>>,
 ) -> BackoffOutcome {
-    if !running.load(Ordering::Relaxed) {
+    if cancel.is_cancelled() {
         return BackoffOutcome::Shutdown;
     }
 
@@ -530,7 +546,7 @@ async fn backoff_with_shutdown<T: Send + Clone + 'static>(
         }
     }
 
-    // D1 修复：退避 sleep 期间响应 shutdown
+    // D1 修复：退避 sleep 期间响应 shutdown（通过 CancellationToken）
     let jitter = rand::random::<f64>() * *reconnect_delay as f64 * 0.2;
     let delay = *reconnect_delay as f64 + jitter;
 
@@ -539,7 +555,7 @@ async fn backoff_with_shutdown<T: Send + Clone + 'static>(
             *reconnect_delay = (*reconnect_delay * 2).min(config.reconnect_max_delay_secs);
             BackoffOutcome::Proceed
         }
-        _ = shutdown_rx.recv() => {
+        _ = cancel.cancelled() => {
             BackoffOutcome::Shutdown
         }
     }

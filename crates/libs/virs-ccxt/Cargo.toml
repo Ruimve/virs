@@ -7,6 +7,7 @@ edition = "2021"
 virs-types = { path = "../virs-types" }
 virs-error = { path = "../virs-error", features = ["reqwest"] }
 virs-ws = { path = "../virs-ws" }
+virs-runtime = { path = "../virs-runtime" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }

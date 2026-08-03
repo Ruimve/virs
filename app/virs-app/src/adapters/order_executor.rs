@@ -5,6 +5,7 @@ use tracing::{error, warn};
 use uuid::Uuid;
 use virs_error::{BotError, BotResult, VirsError};
 use virs_position::PositionEngine;
+use virs_runtime::{CancellationToken, TaskSupervisor};
 use virs_types::bot::{
     OrderCommand, OrderEvent, OrderExecutor, OrderInfo,
 };
@@ -15,36 +16,56 @@ use virs_types::CcxtOrder;
 pub struct PeOrderExecutor {
     cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,
     engine: PositionEngine,
+    /// 任务监督器 — 管理 order_event_forward 转发任务的 JoinHandle + 取消信号 + 优雅关闭
+    supervisor: TaskSupervisor,
 }
 
 impl PeOrderExecutor {
-    pub fn new(
+    pub async fn new(
         cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,
         event_tx: broadcast::Sender<OrderEvent>,
         mut engine_event_rx: broadcast::Receiver<EngineEvent>,
         engine: PositionEngine,
+        cancel: CancellationToken,
     ) -> Self {
-        tokio::spawn(async move {
-            loop {
-                match engine_event_rx.recv().await {
-                    Ok(engine_event) => {
-                        if let Some(order_event) = convert_pe_event(engine_event) {
-                            if event_tx.send(order_event).is_err() {
-                                warn!("OrderEvent broadcast failed — no receivers, event dropped");
+        let supervisor = TaskSupervisor::new(cancel);
+        supervisor
+            .spawn_raw("order_event_forward", move |task_cancel| async move {
+                loop {
+                    tokio::select! {
+                        _ = task_cancel.cancelled() => break,
+                        result = engine_event_rx.recv() => {
+                            match result {
+                                Ok(engine_event) => {
+                                    if let Some(order_event) = convert_pe_event(engine_event) {
+                                        if event_tx.send(order_event).is_err() {
+                                            warn!("OrderEvent broadcast failed — no receivers, event dropped");
+                                        }
+                                    }
+                                }
+                                Err(broadcast::error::RecvError::Lagged(n)) => {
+                                    warn!(lagged = n, "EngineEvent lagged");
+                                }
+                                Err(broadcast::error::RecvError::Closed) => {
+                                    break;
+                                }
                             }
                         }
                     }
-                    Err(broadcast::error::RecvError::Lagged(n)) => {
-                        warn!(lagged = n, "EngineEvent lagged");
-                    }
-                    Err(broadcast::error::RecvError::Closed) => {
-                        break;
-                    }
                 }
-            }
-        });
+            })
+            .await;
 
-        Self { cmd_tx, engine }
+        Self {
+            cmd_tx,
+            engine,
+            supervisor,
+        }
+    }
+
+    /// 优雅停止转发任务：cancel + 并发等待 + 5s 超时 abort
+    pub async fn stop(&self) {
+        self.supervisor.shutdown().await;
     }
 }
 

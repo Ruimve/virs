@@ -6,6 +6,7 @@ members = [
     "crates/libs/virs-config",
     "crates/libs/virs-utils",
     "crates/libs/virs-ws",
+    "crates/libs/virs-runtime",
     "crates/libs/virs-ccxt",
     "crates/libs/virs-exchange",
     "crates/libs/virs-strategy",
@@ -26,6 +27,7 @@ serde_json = "1"
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
+tokio-util = { version = "0.7", features = ["rt"] }
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }

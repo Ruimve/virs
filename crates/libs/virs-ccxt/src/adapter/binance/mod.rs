@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
+use virs_runtime::{CancellationToken, TaskSupervisor};
 
 use crate::auth::{hmac_sha256_hex, insert_header, SignedRequest, Signer};
 use crate::types::*;
@@ -362,11 +363,14 @@ pub struct BinanceExchange {
 
     // 标记周期性时间同步任务是否已启动
     time_sync_started: AtomicBool,
-
-    // 控制周期性时间同步任务的运行状态
-    time_sync_running: Arc<AtomicBool>,
+    /// 任务监督器 — 统一管理 time_sync / listenKey 保活等后台任务的 JoinHandle + 取消信号
+    supervisor: TaskSupervisor,
 
     listenkey_keepalive_futures_secs: u64,
+
+    /// 用户数据 WS 实例 — 持有所有权以保持 WsManager 生命周期
+    /// std::sync::Mutex：锁仅在 start/stop 中短暂持有，不跨 await
+    user_data_ws: std::sync::Mutex<Option<user_data_ws::UserDataWs>>,
 }
 
 impl BinanceExchange {
@@ -406,8 +410,9 @@ impl BinanceExchange {
             client,
             signer,
             time_sync_started: AtomicBool::new(false),
-            time_sync_running: Arc::new(AtomicBool::new(false)),
+            supervisor: TaskSupervisor::new(CancellationToken::root()),
             listenkey_keepalive_futures_secs,
+            user_data_ws: std::sync::Mutex::new(None),
         })
     }
 
@@ -615,8 +620,7 @@ impl Exchange for BinanceExchange {
             Arc::clone(&self.signer),
         );
 
-        // 获取WS运行状态和listenKey句柄
-        let ws_running = ws.running_handle();
+        // 获取listenKey句柄
         let listen_key_handle = ws.listen_key_handle();
 
         // 启动WS，创建事件通道
@@ -624,45 +628,59 @@ impl Exchange for BinanceExchange {
         ws.start(tx).await;
         info!("listenKey order WS started (perpetual)");
 
-        // 启动listenKey保活定时任务
+        // 在 start() 之后获取 CancellationToken，确保拿到的是真实令牌而非 None
+        let ws_cancel = ws
+            .cancellation_token()
+            .await
+            .unwrap_or_else(|| CancellationToken::root());
+
+        // 启动listenKey保活定时任务（通过 TaskSupervisor 管理 JoinHandle + 取消信号）
         let client = self.client.clone();
         let signer = Arc::clone(&self.signer);
         let keepalive_interval = Duration::from_secs(self.listenkey_keepalive_futures_secs);
 
-        tokio::spawn(async move {
-            let mut tick = tokio::time::interval(keepalive_interval);
+        self.supervisor
+            .spawn_raw("listenkey_keepalive", move |supervisor_cancel| async move {
+                let mut tick = tokio::time::interval(keepalive_interval);
+                tick.tick().await; // 跳过首次立即触发
 
-            tick.tick().await; // 跳过首次立即触发
+                loop {
+                    tokio::select! {
+                        _ = supervisor_cancel.cancelled() => {
+                            info!("listenKey keepalive cancelled by supervisor, stopping");
+                            return;
+                        }
+                        _ = ws_cancel.cancelled() => {
+                            info!("listenKey keepalive cancelled by WS shutdown, stopping");
+                            return;
+                        }
+                        _ = tick.tick() => {}
+                    }
 
-            loop {
-                // 检查WS是否仍在运行
-                if !ws_running.load(Ordering::Relaxed) {
-                    return;
-                }
-                tick.tick().await;
-                if !ws_running.load(Ordering::Relaxed) {
-                    return;
-                }
-
-                // 定期续期listenKey
-                let current_key = listen_key_handle
-                    .read()
-                    .expect("listenKey RwLock poisoned")
-                    .clone();
-                let result =
-                    fapi::keepalive_listen_key(&client, signer.as_ref(), &current_key).await;
-                match result {
-                    Ok(()) => {}
-                    Err(e) => {
-                        warn!(
-                            error = %e,
-                            "listenKey keepalive failed, \
-                             WS may disconnect when listenKey expires"
-                        );
+                    // 定期续期listenKey
+                    let current_key = listen_key_handle
+                        .read()
+                        .expect("listenKey RwLock poisoned")
+                        .clone();
+                    let result =
+                        fapi::keepalive_listen_key(&client, signer.as_ref(), &current_key).await;
+                    match result {
+                        Ok(()) => {}
+                        Err(e) => {
+                            warn!(
+                                error = %e,
+                                "listenKey keepalive failed, \
+                                 WS may disconnect when listenKey expires"
+                            );
+                        }
                     }
                 }
-            }
-        });
+            })
+            .await;
+
+        // 持有 UserDataWs 所有权，防止函数返回时 Drop 触发 WsManager 取消 WS 任务
+        // 若已有旧 WS，drop 旧实例会通过 WsManager::Drop 自动取消旧连接
+        *self.user_data_ws.lock().unwrap() = Some(ws);
 
         Ok(rx)
     }
@@ -691,76 +709,66 @@ impl Exchange for BinanceExchange {
 
         // 首次同步时启动周期性时间同步任务
         if !self.time_sync_started.swap(true, Ordering::SeqCst) {
-            self.time_sync_running.store(true, Ordering::Release);
-            self.spawn_periodic_time_sync();
+            let client = self.client.clone();
+            let signer = self.signer.clone();
+
+            self.supervisor
+                .spawn_raw("time_sync", move |cancel| async move {
+                    let mut interval =
+                        tokio::time::interval(Duration::from_secs(TIME_SYNC_INTERVAL_SECS));
+                    interval.tick().await; // 跳过首次立即触发
+
+                    loop {
+                        tokio::select! {
+                            _ = cancel.cancelled() => {
+                                info!("Time sync task cancelled, stopping");
+                                break;
+                            }
+                            _ = interval.tick() => {}
+                        }
+
+                        // 重新获取服务器时间并校正偏移
+                        let result = fapi::fetch_server_time(&client).await;
+                        match result {
+                            Ok(server_time) => {
+                                let local_time = chrono::Utc::now().timestamp_millis();
+                                let offset = server_time - local_time;
+                                signer.set_time_offset(offset);
+
+                                if offset.abs() > TIME_OFFSET_WARN_THRESHOLD_MS {
+                                    warn!(
+                                        time_offset_ms = offset,
+                                        threshold_ms = TIME_OFFSET_WARN_THRESHOLD_MS,
+                                        "Server time offset exceeds threshold — clock drift detected"
+                                    );
+                                } else {
+                                    info!(
+                                        time_offset_ms = offset,
+                                        "Server time re-synced successfully"
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                warn!(
+                                    error = %e,
+                                    "Failed to re-sync server time — will retry next cycle"
+                                );
+                            }
+                        }
+                    }
+                })
+                .await;
         }
 
         Ok(())
     }
 }
 
-impl BinanceExchange {
-    // 周期性时间同步(每小时)，防止时钟漂移
-    fn spawn_periodic_time_sync(&self) {
-        let client = self.client.clone();
-        let signer = self.signer.clone();
-        let running = self.time_sync_running.clone();
-
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(TIME_SYNC_INTERVAL_SECS));
-
-            interval.tick().await; // 跳过首次立即触发
-
-            loop {
-                // 检查运行状态
-                if !running.load(Ordering::Acquire) {
-                    info!("Exchange dropped, stopping time sync task");
-                    break;
-                }
-                interval.tick().await;
-
-                if !running.load(Ordering::Acquire) {
-                    info!("Exchange dropped during sleep, stopping");
-                    break;
-                }
-                // 重新获取服务器时间并校正偏移
-                let result = fapi::fetch_server_time(&client).await;
-                match result {
-                    Ok(server_time) => {
-                        let local_time = chrono::Utc::now().timestamp_millis();
-                        let offset = server_time - local_time;
-                        signer.set_time_offset(offset);
-
-                        if offset.abs() > TIME_OFFSET_WARN_THRESHOLD_MS {
-                            warn!(
-                                time_offset_ms = offset,
-                                threshold_ms = TIME_OFFSET_WARN_THRESHOLD_MS,
-                                "Server time offset exceeds threshold — clock drift detected"
-                            );
-                        } else {
-                            info!(
-                                time_offset_ms = offset,
-                                "Server time re-synced successfully"
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        warn!(
-                            error = %e,
-                            "Failed to re-sync server time — will retry next cycle"
-                        );
-                    }
-                }
-            }
-        });
-    }
-}
-
-// Drop时停止周期性时间同步任务
+// Drop时取消所有后台任务（time_sync / listenKey 保活等）
 impl Drop for BinanceExchange {
     fn drop(&mut self) {
-        // 通知后台任务停止
-        self.time_sync_running.store(false, Ordering::Release);
+        // 通过 TaskSupervisor 的取消令牌统一取消所有后台任务
+        self.supervisor.cancel().cancel();
     }
 }
 

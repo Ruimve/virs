@@ -19,6 +19,7 @@ virs-exchange = { path = "../../crates/libs/virs-exchange" }
 virs-ccxt = { path = "../../crates/libs/virs-ccxt" }
 virs-market = { path = "../../crates/services/virs-market" }
 virs-position = { path = "../../crates/services/virs-position" }
+virs-runtime = { path = "../../crates/libs/virs-runtime" }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

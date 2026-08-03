@@ -11,6 +11,7 @@ use virs_ws::{
     WsManagerConfig, WsManagerEvent,
 };
 use crate::ws_types::{OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate};
+use virs_runtime::TaskSupervisor;
 
 // 统一交易对格式转为币安WS小写格式，如 BTC/USDT → btcusdt
 fn binance_ws_symbol(symbol: &str) -> String {
@@ -311,6 +312,8 @@ pub struct OrderBookWs {
     manager: WsManager<WsOrderBookEvent>,
     config: WsManagerConfig,
     pub(crate) handler: Arc<OrderBookWsHandler>,
+    /// 转发任务监督器
+    supervisor: TaskSupervisor,
 }
 
 impl OrderBookWs {
@@ -321,6 +324,7 @@ impl OrderBookWs {
             manager: WsManager::new(handler.clone()),
             config: WsManagerConfig::default(),
             handler,
+            supervisor: TaskSupervisor::new(virs_runtime::CancellationToken::root()),
         }
     }
 
@@ -344,45 +348,59 @@ impl OrderBookWsClient for OrderBookWs {
             .start(self.config.clone(), manager_tx)
             .await;
 
-        tokio::spawn(async move {
-            while let Some(ev) = manager_rx.recv().await {
-                let ws_event = match ev {
-                    WsManagerEvent::Message(e) => e,
-                    WsManagerEvent::ConnectionChanged {
-                        connected: true,
-                        reason: ConnectionReason::Reconnected,
-                    } => WsOrderBookEvent::Reconnected,
-                    WsManagerEvent::ConnectionChanged {
-                        connected: true,
-                        ..
-                    } => {
-                        // 首次连接成功，不向上层广播
-                        continue;
+        let ws_cancel = self
+            .manager
+            .cancellation_token()
+            .await
+            .unwrap_or_else(|| virs_runtime::CancellationToken::root());
+
+        self.supervisor
+            .spawn_raw("orderbook_forward", move |supervisor_cancel| async move {
+                loop {
+                    tokio::select! {
+                        _ = supervisor_cancel.cancelled() => break,
+                        _ = ws_cancel.cancelled() => break,
+                        ev = manager_rx.recv() => {
+                            let Some(ev) = ev else { break };
+                            let ws_event = match ev {
+                                WsManagerEvent::Message(e) => e,
+                                WsManagerEvent::ConnectionChanged {
+                                    connected: true,
+                                    reason: ConnectionReason::Reconnected,
+                                } => WsOrderBookEvent::Reconnected,
+                                WsManagerEvent::ConnectionChanged {
+                                    connected: true,
+                                    ..
+                                } => {
+                                    continue;
+                                }
+                                WsManagerEvent::ConnectionChanged {
+                                    connected: false, ..
+                                } => {
+                                    continue;
+                                }
+                                WsManagerEvent::CircuitBreakerTripped { retry_count } => {
+                                    tracing::error!(
+                                        retry_count = retry_count,
+                                        "Circuit breaker tripped — WS stopped after max retries"
+                                    );
+                                    continue;
+                                }
+                            };
+                            if update_tx.send(ws_event).is_err() {
+                                tracing::warn!("All receivers dropped, stopping forwarder");
+                                break;
+                            }
+                        }
                     }
-                    WsManagerEvent::ConnectionChanged {
-                        connected: false, ..
-                    } => {
-                        // 断连由重连事件覆盖，此处忽略
-                        continue;
-                    }
-                    WsManagerEvent::CircuitBreakerTripped { retry_count } => {
-                        tracing::error!(
-                            retry_count = retry_count,
-                            "Circuit breaker tripped — WS stopped after max retries"
-                        );
-                        continue;
-                    }
-                };
-                if update_tx.send(ws_event).is_err() {
-                    tracing::warn!("All receivers dropped, stopping forwarder");
-                    break;
                 }
-            }
-        });
+            })
+            .await;
     }
 
     async fn stop(&mut self) {
         self.manager.stop().await;
+        self.supervisor.shutdown().await;
     }
 
     async fn subscribe(&self, symbol: &str) {

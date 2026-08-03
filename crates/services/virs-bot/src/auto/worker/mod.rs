@@ -16,6 +16,7 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 use uuid::Uuid;
+use virs_runtime::CancellationToken;
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::strategy;
@@ -328,7 +329,11 @@ impl AutoWorker {
         }
     }
 
-    pub async fn run(&mut self, mut shutdown_rx: tokio::sync::mpsc::Receiver<()>) {
+    /// 启动 worker 主循环。
+    ///
+    /// 使用 CancellationToken 作为统一关闭信号，替代 mpsc::Receiver<()>。
+    /// LLM 决策定时器也使用同一个 cancel token，确保关闭时可中断 interval.tick()。
+    pub async fn run(mut self, cancel: CancellationToken) {
         // 等待第一个 KlineEvent 获取初始价格
         info!(bot_id = %self.bot.id, "Waiting for first kline event to initialize price...");
         loop {
@@ -357,7 +362,7 @@ impl AutoWorker {
                         }
                     }
                 }
-                _ = shutdown_rx.recv() => {
+                _ = cancel.cancelled() => {
                     return;
                 }
             }
@@ -533,7 +538,7 @@ impl AutoWorker {
                                 }
                             }
                         }
-                        _ = shutdown_rx.recv() => {
+                        _ = cancel.cancelled() => {
                             return;
                         }
                         _ = tokio::time::sleep(Duration::from_millis(200)) => {}
@@ -565,23 +570,28 @@ impl AutoWorker {
         }
 
         let (llm_signal_tx, mut llm_signal_rx) = tokio::sync::mpsc::channel::<()>(1);
-        {
+        let llm_handle = {
             let interval_secs = self.bot.decide_interval_secs.max(60) as u64;
+            let llm_cancel = cancel.child_token();
             tokio::spawn(async move {
                 let mut tick = tokio::time::interval(Duration::from_secs(interval_secs));
-                tick.tick().await;
+                tick.tick().await; // 跳过首次
                 loop {
-                    tick.tick().await;
-                    if llm_signal_tx.send(()).await.is_err() {
-                        break;
+                    tokio::select! {
+                        _ = llm_cancel.cancelled() => break,
+                        _ = tick.tick() => {
+                            if llm_signal_tx.send(()).await.is_err() {
+                                break;
+                            }
+                        }
                     }
                 }
-            });
-        }
+            })
+        };
 
         loop {
             tokio::select! {
-                _ = shutdown_rx.recv() => {
+                _ = cancel.cancelled() => {
                     break;
                 }
                 ev = self.kline_rx.recv() => {
@@ -633,6 +643,9 @@ impl AutoWorker {
                 }
             }
         }
+
+        // 等待 LLM 定时器退出（cancel 已触发，child_token 会立即取消定时器）
+        let _ = llm_handle.await;
 
         self.save_position().await;
         self.save_stats().await;

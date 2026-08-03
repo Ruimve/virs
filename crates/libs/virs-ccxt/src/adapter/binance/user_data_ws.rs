@@ -10,6 +10,7 @@ use crate::adapter::binance::user_data_ws_events::dispatch_event;
 use crate::auth::Signer;
 use virs_ws::{MessageOutcome, WsHandler, WsManager, WsManagerConfig, WsManagerEvent};
 use crate::ExchangeClient;
+use virs_runtime::TaskSupervisor;
 
 // Binance用户数据WebSocket消息，兼容两种格式：
 // 组合流: {"stream":...,"data":{"e":"...",...}}
@@ -166,6 +167,9 @@ pub struct UserDataWs {
     pub ws_url: String, // 连接URL: wss://fstream.binance.com/private/ws?listenKey=xxx
 
     current_key: Arc<RwLock<String>>, // 当前listenKey
+
+    /// 转发任务监督器 — 管理转发任务的 JoinHandle + 取消信号
+    supervisor: TaskSupervisor,
 }
 
 impl UserDataWs {
@@ -192,12 +196,18 @@ impl UserDataWs {
             config: WsManagerConfig::default(),
             ws_url,
             current_key,
+            supervisor: TaskSupervisor::new(virs_runtime::CancellationToken::root()),
         }
     }
 
     // 获取运行状态句柄
     pub fn running_handle(&self) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
         self.manager.running_handle()
+    }
+
+    /// 获取 CancellationToken（如果正在运行）
+    pub async fn cancellation_token(&self) -> Option<virs_runtime::CancellationToken> {
+        self.manager.cancellation_token().await
     }
 
     // 获取listenKey句柄
@@ -215,34 +225,52 @@ impl UserDataWs {
             .start(self.config.clone(), manager_tx)
             .await;
 
+        // 获取 WsManager 的取消令牌，用于转发任务响应 WS 关闭
+        let ws_cancel = self
+            .manager
+            .cancellation_token()
+            .await
+            .unwrap_or_else(|| virs_runtime::CancellationToken::root());
+
         // 转发任务: 将WsManagerEvent转为WsFeedEvent发送到外部channel
-        tokio::spawn(async move {
-            while let Some(ev) = manager_rx.recv().await {
-                let feed_event = match ev {
-                    WsManagerEvent::Message(e) => e,
-                    WsManagerEvent::ConnectionChanged { connected, .. } => {
-                        WsFeedEvent::ConnectionChanged { connected }
+        // 通过 TaskSupervisor 管理 JoinHandle + 取消信号
+        self.supervisor
+            .spawn_raw("user_data_forward", move |supervisor_cancel| async move {
+                loop {
+                    tokio::select! {
+                        _ = supervisor_cancel.cancelled() => break,
+                        _ = ws_cancel.cancelled() => break,
+                        ev = manager_rx.recv() => {
+                            let Some(ev) = ev else { break };
+                            let feed_event = match ev {
+                                WsManagerEvent::Message(e) => e,
+                                WsManagerEvent::ConnectionChanged { connected, .. } => {
+                                    WsFeedEvent::ConnectionChanged { connected }
+                                }
+                                WsManagerEvent::CircuitBreakerTripped { retry_count } => {
+                                    tracing::error!(
+                                        retry_count = retry_count,
+                                        "Circuit breaker tripped — WS stopped after max retries"
+                                    );
+                                    WsFeedEvent::ConnectionChanged { connected: false }
+                                }
+                            };
+                            if event_tx.send(feed_event).await.is_err() {
+                                tracing::warn!(
+                                    "External event channel closed, stopping forwarder"
+                                );
+                                break;
+                            }
+                        }
                     }
-                    WsManagerEvent::CircuitBreakerTripped { retry_count } => {
-                        tracing::error!(
-                            retry_count = retry_count,
-                            "Circuit breaker tripped — WS stopped after max retries"
-                        );
-                        WsFeedEvent::ConnectionChanged { connected: false }
-                    }
-                };
-                if event_tx.send(feed_event).await.is_err() {
-                    tracing::warn!(
-                        "External event channel closed, stopping forwarder"
-                    );
-                    break;
                 }
-            }
-        });
+            })
+            .await;
     }
 
     // 停止WS
     pub async fn stop(&self) {
         self.manager.stop().await;
+        self.supervisor.shutdown().await;
     }
 }
