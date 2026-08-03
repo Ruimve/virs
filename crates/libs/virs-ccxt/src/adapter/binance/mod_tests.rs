@@ -4,6 +4,7 @@ use crate::adapter::binance::{
     parse_order_book_side, try_build_ed25519, BinanceExchange, TIME_OFFSET_WARN_THRESHOLD_MS,
     TIME_SYNC_INTERVAL_SECS,
 };
+use virs_runtime::CancellationToken;
 use virs_types::{CcxtOrderStatus, OrderType, Side};
 
 #[test]
@@ -358,6 +359,7 @@ fn t1_3_time_sync_started_initialized_false() {
         std::time::Duration::from_secs(10),
         10,
         900,
+        CancellationToken::root(),
     )
     .unwrap();
 
@@ -376,6 +378,7 @@ fn t1_4_time_sync_started_swap_prevents_double_start() {
         std::time::Duration::from_secs(10),
         10,
         900,
+        CancellationToken::root(),
     )
     .unwrap();
 
@@ -400,10 +403,10 @@ fn t1_5_drop_cancels_time_sync() {
         std::time::Duration::from_secs(10),
         10,
         900,
+        CancellationToken::root(),
     )
     .unwrap();
 
-    // Drop 应正常执行，不 panic（CancellationToken 在 Drop 中被 cancel）
     drop(ex);
 }
 
@@ -417,6 +420,7 @@ async fn t1_6_supervisor_no_tasks_on_init() {
         std::time::Duration::from_secs(10),
         10,
         900,
+        CancellationToken::root(),
     )
     .unwrap();
     assert_eq!(

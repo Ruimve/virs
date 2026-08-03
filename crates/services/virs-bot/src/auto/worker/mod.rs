@@ -40,7 +40,6 @@ pub struct AutoWorker {
     event_rx: broadcast::Receiver<OrderEvent>,
     pe_event_rx: broadcast::Receiver<EngineEvent>,
 
-    // ===== 全局状态（不 per-side） =====
     pub(crate) current_price: f64,
     pub(crate) consecutive_losses: i32,
     pub(crate) paused: bool,
@@ -48,12 +47,9 @@ pub struct AutoWorker {
     pub(crate) time_config: TimeConfig,
     pub(crate) prompt_loader: PromptLoader,
 
-    // ===== Per-side 状态（20 个字段 → 2 个 SideState） =====
     pub(crate) long: SideState,
     pub(crate) short: SideState,
 }
-
-// ===== Per-side 访问器 =====
 
 impl AutoWorker {
     pub(crate) fn side(&self, side: &PositionSide) -> &SideState {
@@ -105,8 +101,6 @@ impl AutoWorker {
             short: SideState::default(),
         }
     }
-
-    // ===== Per-side 辅助方法 =====
 
     pub(crate) fn get_position(&self, side: &PositionSide) -> Option<&virs_types::position::Position> {
         self.side(side).get_position()
@@ -167,7 +161,6 @@ impl AutoWorker {
                     }
                 }
 
-                // 恢复日志：缓存为空但 PE 有仓位
                 if !self.has_position_side(PositionSide::Long) && found_long.is_some() {
                     let p = found_long.as_ref().unwrap();
                     warn!(
@@ -189,7 +182,6 @@ impl AutoWorker {
                     );
                 }
 
-                // per-side 回填 position_id（PE 已从 pe_trades 聚合恢复）
                 let mut position_updated = false;
                 if self.bot.position_id_long.is_none() || self.bot.position_id_long == Some(Uuid::nil()) {
                     if let Some(ref p) = found_long {
@@ -329,12 +321,7 @@ impl AutoWorker {
         }
     }
 
-    /// 启动 worker 主循环。
-    ///
-    /// 使用 CancellationToken 作为统一关闭信号，替代 mpsc::Receiver<()>。
-    /// LLM 决策定时器也使用同一个 cancel token，确保关闭时可中断 interval.tick()。
     pub async fn run(mut self, cancel: CancellationToken) {
-        // 等待第一个 KlineEvent 获取初始价格
         info!(bot_id = %self.bot.id, "Waiting for first kline event to initialize price...");
         loop {
             tokio::select! {
@@ -384,7 +371,6 @@ impl AutoWorker {
                     "long" => self.long.last_close_event = Some(event),
                     "short" => self.short.last_close_event = Some(event),
                     _ => {
-                        // 未知 side，回退到两边都设置
                         self.long.last_close_event = Some(event.clone());
                         self.short.last_close_event = Some(event);
                     }
@@ -396,12 +382,8 @@ impl AutoWorker {
             }
         }
 
-        // 先从 PE 查询当前仓位，可能恢复 position_id（PE 已从 pe_trades 聚合恢复）
-        // 避免在 PE 有仓位时误判为孤儿 trade
         let pe_ok = self.refresh_position_from_pe().await;
 
-        // 仅在 PE 查询成功且确认无仓位时才检测孤儿 trade
-        // PE 报错时跳过，避免误标
         if pe_ok
             && self
                 .bot
@@ -443,8 +425,6 @@ impl AutoWorker {
                 .filter(|id| *id != Uuid::nil())
                 .is_some()
         {
-            // DB 单行 find_open_trade：根据 client_order_id 前缀判断 side，
-            // 仅能恢复一个方向的 SL/TP（DB 多 side 恢复留待阶段 3）
             match self.store.find_open_trade(self.bot.id).await {
                 Ok(Some((client_order_id, sl, tp, opened_at))) => {
                     let side = parse_side_from_client_order_id(&client_order_id);
@@ -548,7 +528,6 @@ impl AutoWorker {
         }
 
         let skip_llm = if self.has_any_position() {
-            // 为每个有持仓的方向确保 opened_at 已设置
             if self.long.has_position() && self.long.position_opened_at.is_none() {
                 self.long.position_opened_at = Some(tokio::time::Instant::now());
             }
@@ -575,7 +554,7 @@ impl AutoWorker {
             let llm_cancel = cancel.child_token();
             tokio::spawn(async move {
                 let mut tick = tokio::time::interval(Duration::from_secs(interval_secs));
-                tick.tick().await; // 跳过首次
+                tick.tick().await;
                 loop {
                     tokio::select! {
                         _ = llm_cancel.cancelled() => break,
@@ -644,15 +623,12 @@ impl AutoWorker {
             }
         }
 
-        // 等待 LLM 定时器退出（cancel 已触发，child_token 会立即取消定时器）
         let _ = llm_handle.await;
 
         self.save_position().await;
         self.save_stats().await;
     }
 }
-
-// ===== 模块级辅助函数 =====
 
 pub(super) fn side_str(side: &PositionSide) -> &'static str {
     match side {
@@ -662,8 +638,6 @@ pub(super) fn side_str(side: &PositionSide) -> &'static str {
     }
 }
 
-/// 从 client_order_id 前缀解析 side。
-/// `AOL__` / `ACL__` → Long，`AOS__` / `ACS__` → Short
 pub(super) fn parse_side_from_client_order_id(cid: &str) -> Option<PositionSide> {
     if cid.starts_with("AOL") || cid.starts_with("ACL") {
         Some(PositionSide::Long)

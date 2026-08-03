@@ -57,8 +57,6 @@ macro_rules! persist {
     };
 }
 
-/// 解析 String 字段为 f64，失败时记录 error 并从当前函数 return（跳过该 WS 事件）。
-/// 用于关键交易参数（filled_qty、last_fill_price、commission 等），不允许默认值。
 macro_rules! parse_field {
     ($expr:expr, $field:expr, $coid:expr) => {
         match $expr {
@@ -76,9 +74,6 @@ macro_rules! parse_field {
     };
 }
 
-/// 解析 Option<String> 字段为 f64。
-/// None → 0.0（语义正确：开仓单 rp=0、NEW 状态 avg_fill_price 无意义）
-/// Some(s) 解析失败 → error + return（不允许默认值）
 macro_rules! parse_opt_field {
     ($opt:expr, $field:expr, $coid:expr) => {
         match $opt.as_deref() {
@@ -112,7 +107,6 @@ pub(crate) struct EngineInner {
     pub(crate) position_id_index: DashMap<Uuid, (String, String, PositionSide)>,
     pub(crate) persist_max_retries: u32,
     pub(crate) persist_retry_base_ms: u64,
-    /// 引擎级取消令牌 — persist! 宏的重试 sleep 可被此令牌中断，确保关闭时立即退出
     pub(crate) cancel: CancellationToken,
 }
 
@@ -125,10 +119,6 @@ impl EngineInner {
         }
     }
 
-    /// Roll back a position after an order is canceled or fails.
-    /// - Ghost Opening (qty=0): remove entirely.
-    /// - Closing: rollback to Open so the worker can operate on it again.
-    /// - Other states: no-op.
     fn rollback_position_on_order_terminal(&self, position_id: Uuid, context: &str) {
         let pos_key = self
             .position_id_index
@@ -172,12 +162,7 @@ pub struct PositionEngine {
     inner: Arc<EngineInner>,
     cmd_tx: mpsc::Sender<EngineCommand>,
     cmd_rx: Option<mpsc::Receiver<EngineCommand>>,
-    cancel: CancellationToken,
-    /// 任务监督器 — 统一管理后台 loop 的 JoinHandle + 取消信号 + 优雅关闭
-    supervisor: TaskSupervisor,
-    /// 标记是否为 new() 创建的原始 owner（非 Clone）。
-    /// 只有 owner 的 Drop 才触发 cancel，避免 clone drop 误杀整个 engine。
-    is_owner: bool,
+    supervisor: Option<TaskSupervisor>,
 }
 
 impl Clone for PositionEngine {
@@ -186,21 +171,7 @@ impl Clone for PositionEngine {
             inner: Arc::clone(&self.inner),
             cmd_tx: self.cmd_tx.clone(),
             cmd_rx: None,
-            cancel: self.cancel.clone(),
-            // clone 不执行 run()，supervisor 为空但共享 cancel 令牌；
-            // stop() 仅触发 cancel（实际等待由原始 engine 的 run() 中 shutdown 完成）
-            supervisor: TaskSupervisor::new(self.cancel.clone()),
-            is_owner: false,
-        }
-    }
-}
-
-impl Drop for PositionEngine {
-    fn drop(&mut self) {
-        // 只有 owner（new() 创建的原始实例）的 Drop 才触发 cancel。
-        // clone 的 Drop 不触发 cancel，避免误杀正在运行的 engine。
-        if self.is_owner {
-            self.cancel.cancel();
+            supervisor: None,
         }
     }
 }
@@ -215,7 +186,6 @@ impl PositionEngine {
     ) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel(256);
         let event_tx = broadcast::channel(256).0;
-        // 作为 parent_cancel 的子令牌：父取消时级联取消 PE，PE 的 stop() 只取消自身
         let cancel = parent_cancel.child_token();
 
         let inner = EngineInner {
@@ -237,9 +207,7 @@ impl PositionEngine {
             inner: Arc::new(inner),
             cmd_tx,
             cmd_rx: Some(cmd_rx),
-            supervisor: TaskSupervisor::new(cancel.clone()),
-            cancel,
-            is_owner: true,
+            supervisor: Some(TaskSupervisor::new(cancel.clone())),
         }
     }
 
@@ -263,7 +231,6 @@ impl PositionEngine {
             .collect()
     }
 
-    /// 查询指定 symbol 下所有 open 仓位（Hedge 模式下可能同时返回 Long 和 Short）。
     pub fn get_open_positions_by_symbol(&self, symbol: &str) -> Vec<Position> {
         self.inner
             .positions
@@ -302,49 +269,43 @@ impl PositionEngine {
             message: "Channel closed".to_string(),
         })?;
         let inner = Arc::clone(&self.inner);
-        let cancel = self.cancel.clone();
+        let supervisor = self
+            .supervisor
+            .as_ref()
+            .expect("only owner (created via new()) can call run()");
 
-        // 使用 supervisor.spawn_raw 管理 JoinHandle — 统一 cancel + 并发等待 + 超时 abort。
-        // spawn_raw 的闭包接收 CancellationToken 参数，但 command_loop/ws_feed_loop 已有自己的
-        // cancel 参数，所以闭包参数用 _ 忽略。
-        // exit_tx 用于在任一 loop 退出时唤醒 run() 的 select!，保留原有"任一 loop 退出即停止"语义。
         let (exit_tx, mut exit_rx) = mpsc::channel::<()>(2);
 
-        self.supervisor
+        supervisor
             .spawn_raw("position_command_loop", {
                 let inner = inner.clone();
-                let cancel = cancel.clone();
                 let exit_tx = exit_tx.clone();
-                move |_| async move {
+                move |cancel| async move {
                     command_loop(inner, cmd_rx, cancel).await;
                     let _ = exit_tx.try_send(());
                 }
             })
             .await;
 
-        self.supervisor
+        supervisor
             .spawn_raw("position_ws_feed_loop", {
                 let inner = inner.clone();
-                let cancel = cancel.clone();
                 let exit_tx = exit_tx;
-                move |_| async move {
+                move |cancel| async move {
                     ws_feed_loop(inner, ws_feed_rx, cancel).await;
                     let _ = exit_tx.try_send(());
                 }
             })
             .await;
 
-        // 保留 select! 等待任一 loop 退出（exit_tx）或外部取消信号（stop()/Drop 触发 cancel）
         tokio::select! {
             _ = exit_rx.recv() => {}
-            _ = self.cancel.cancelled() => {}
+            _ = inner.cancel.cancelled() => {}
         }
 
         self.inner.set_state(EngineState::ShuttingDown);
-        // supervisor.shutdown() 已包含 cancel + 并发等待 + 5s 超时 + abort，
-        // 替代原来的手动 tokio::time::timeout + tokio::join!
-        self.cancel.cancel();
-        self.supervisor.shutdown().await;
+        supervisor.cancel();
+        supervisor.shutdown().await;
 
         self.inner.set_state(EngineState::Stopped);
         info!("Position engine stopped");
@@ -353,14 +314,17 @@ impl PositionEngine {
 
     pub fn stop(&self) {
         self.inner.set_state(EngineState::ShuttingDown);
-        self.cancel.cancel();
+        if let Some(ref s) = self.supervisor {
+            s.cancel();
+        } else {
+            self.inner.cancel.cancel();
+        }
         info!("Position engine stop requested");
     }
 
     async fn recover_state(&self) -> VirsResult<()> {
         let exchange_name = self.inner.exchange.name().to_string();
 
-        // 1. 从 pe_trades 聚合恢复仓位
         let positions = self
             .inner
             .persistence
@@ -372,7 +336,6 @@ impl PositionEngine {
             self.inner.positions.insert(key, pos.clone());
         }
 
-        // 2. 恢复活跃订单和 order_position 映射
         let active_orders = self.inner.persistence.get_active_orders().await?;
         for order in &active_orders {
             let pos_id = position_uuid_v5(&exchange_name, &order.symbol, &order.position_side);
@@ -383,8 +346,6 @@ impl PositionEngine {
                 .orders
                 .insert(order.client_order_id.clone(), order.clone());
 
-            // NEW 开仓订单（无成交）对应的 Opening 仓位不会被聚合 SQL 恢复
-            // 需手动创建，否则 WS 成交时 position_id_index 查不到 key，仓位更新被跳过
             let is_open_order = matches!(
                 (&order.side, &order.position_side),
                 (Side::Buy, PositionSide::Long) | (Side::Sell, PositionSide::Short)
@@ -408,7 +369,6 @@ impl PositionEngine {
             }
         }
 
-        // 3. 恢复仓位到交易所适配器
         let exchange_positions: Vec<ExchangePosition> = positions
             .iter()
             .map(|p| ExchangePosition {
@@ -517,8 +477,6 @@ pub(crate) async fn ws_feed_loop(
 }
 
 pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: CcxtOrder) {
-    // 校验: side/position_side/status 是否合法 (Unknown 变体表示非法原始值)
-    // 非法订单持久化到 pe_rejected_orders 并跳过业务处理
     let rejection_reason = match (&ws_order.side, &ws_order.position_side, &ws_order.status) {
         (Side::Unknown(raw), _, _) => Some(format!("InvalidSide({})", raw)),
         (_, PositionSide::Unknown(raw), _) => Some(format!("InvalidPositionSide({})", raw)),
@@ -549,12 +507,9 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
     let client_order_id = ws_order.client_order_id.clone();
     let order_status: OrderStatus = ws_order.status.clone().into();
     let filled: f64 = parse_field!(ws_order.filled_qty.parse(), "filled_qty", client_order_id);
-    // 路径2（增量更新）: 每个 WS 事件代表一笔成交, trade_fill 是增量量,
-    // 必须用 last_fill_price(本笔成交价) 而非 avg_fill_price(累计均价) 做边际成本
     let fill_price: f64 = parse_field!(ws_order.last_fill_price.parse(), "last_fill_price", client_order_id);
     let commission: f64 = parse_field!(ws_order.commission.parse(), "commission", client_order_id);
     let realized_pnl: f64 = parse_field!(ws_order.realized_pnl.parse(), "realized_pnl", client_order_id);
-    // Hedge 模式下开平仓由 side + position_side 组合判断
     let is_close = matches!(
         (&ws_order.side, &ws_order.position_side),
         (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short)
@@ -572,9 +527,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
         }
     };
 
-    // 1. 检查 pending_orders 中是否有此 client_order_id
     if let Some(mut pending) = inner.pending_orders.get_mut(&client_order_id) {
-        // 每笔 WS 事件立即持久化到 DB（每笔事件独立一行，不能只存内存）
         persist!(
             inner.persistence.persist_order(&ws_order),
             "persist_order (pending)",
@@ -590,9 +543,6 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
         pending.ws_order = Some(ws_order.clone());
         drop(pending);
 
-        // TRADE 事件且有成交：立即用增量字段处理 fill
-        // 使用 last_fill_qty（本笔量）和 last_fill_price（本笔价），
-        // 与 path 2（运行时增量）和 DB 回放逻辑完全一致
         if ws_order.execution_type == ExecutionType::Trade
             && (order_status == OrderStatus::Filled
                 || order_status == OrderStatus::PartiallyFilled)
@@ -620,15 +570,12 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
             }
         }
 
-        // 双确认：检查 rest_result 是否也存在
         if rest_ready {
             finalize_pending_order(inner, &client_order_id, ws_order, position_id).await;
         }
-        // REST 还没返回，WS 数据暂存 pending，等 REST 到达后再处理
         return;
     }
 
-    // 2. 如果不在 pending，检查 orders 中是否已存在（后续 WS 更新）
     if let Some(mut existing) = inner.orders.get_mut(&client_order_id) {
         let prev_filled: f64 = parse_field!(
             existing.filled_qty.parse(),
@@ -638,7 +585,6 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
         *existing = ws_order.clone();
         drop(existing);
 
-        // 持久化订单更新到 DB
         persist!(
             inner.persistence.persist_order(&ws_order),
             "persist_order",
@@ -673,21 +619,17 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
             .await;
         }
 
-        // Filled 终态清理：即使无新增成交（重复推送），也需清理避免泄漏
         if order_status == OrderStatus::Filled {
             inner.orders.remove(&client_order_id);
             inner.order_position.remove(&client_order_id);
         }
 
-        // 处理取消终态
         if order_status == OrderStatus::Canceled || order_status == OrderStatus::Expired {
-            // 先取 position_id（order_position 在 remove 前查），再清理
             let pos_id = inner.order_position.get(&client_order_id).map(|r| *r.value());
             if let Some((_, order)) = inner.orders.remove(&client_order_id) {
                 inner.order_position.remove(&client_order_id);
                 inner.emit_event(EngineEvent::OrderCanceled { order });
             }
-            // 回滚 ghost Opening 或 Closing position
             if let Some(pid) = pos_id {
                 inner.rollback_position_on_order_terminal(pid, "ws_canceled");
             }
@@ -695,11 +637,9 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
         return;
     }
 
-    // 3. 既不在 pending 也不在 orders，忽略
     warn!(client_order_id = %client_order_id, "WS order update for unknown order, ignoring");
 }
 
-/// 双确认成功后，将订单从 pending 移入 orders，并处理终态（成交处理已在 pending 路径完成）。
 async fn finalize_pending_order(
     inner: &Arc<EngineInner>,
     client_order_id: &str,
@@ -716,7 +656,6 @@ async fn finalize_pending_order(
             .insert(client_order_id.to_string(), pid);
     }
 
-    // 持久化订单到 DB（幂等：pending 路径已持久化，ON CONFLICT DO NOTHING 保证不重复）
     persist!(
         inner.persistence.persist_order(&ws_order),
         "persist_order",
@@ -729,10 +668,7 @@ async fn finalize_pending_order(
 
     let order_status: OrderStatus = ws_order.status.clone().into();
 
-    // 成交处理已在 pending 路径完成（process_order_fill 用 last_fill_qty/last_fill_price），
-    // 此处只处理订单终态清理和事件发射
     if order_status == OrderStatus::Filled {
-        // Filled 终态清理
         inner.orders.remove(client_order_id);
         inner.order_position.remove(client_order_id);
     } else if order_status == OrderStatus::Canceled || order_status == OrderStatus::Expired {
@@ -741,18 +677,14 @@ async fn finalize_pending_order(
         });
         inner.orders.remove(client_order_id);
         inner.order_position.remove(client_order_id);
-        // 回滚 ghost Opening 或 Closing position（平仓单被取消时恢复仓位为可操作状态）
         if let Some(pid) = position_id {
             inner.rollback_position_on_order_terminal(pid, "finalize_canceled");
         }
     } else if ws_order.execution_type == ExecutionType::New {
-        // NEW 事件：emit OrderPlaced
         inner.emit_event(EngineEvent::OrderPlaced { order: ws_order });
     }
-    // PartiallyFilled / TRADE：fill 事件已在 pending 路径 emit，订单留在 orders 中等待后续更新
 }
 
-/// 处理订单成交：构造 Trade、更新仓位、emit 成交事件。
 async fn process_order_fill(
     inner: &Arc<EngineInner>,
     ws_order: &CcxtOrder,
@@ -769,7 +701,6 @@ async fn process_order_fill(
     let pos_key_opt =
         position_id.and_then(|pid| inner.position_id_index.get(&pid).map(|r| r.value().clone()));
 
-    // 使用 Binance 推送的 rp 作为已实现盈亏，开仓时 rp=0
     let (pnl, trade_side, trade_type) = match &pos_key_opt {
         Some(key) => {
             let pos_entry = inner.positions.get(key);
@@ -802,11 +733,6 @@ async fn process_order_fill(
         None => (0.0, Side::Buy, TradeType::Open),
     };
 
-    // fill_price <= 0.0: 跳过 Trade 记录构造（防止 0.0 价格传播给回测），
-    // 但仓位更新必须执行——apply_fill 对平仓单不读 fill_price，
-    // 对开仓单有内部 `if fill_price > 0.0` 守卫。
-    // 若此处 return 会导致仓位状态与 DB replay 不一致（project_memory lesson:
-    // "fill_price <= 0.0 时直接返回不更新仓位会导致订单状态与仓位不一致"）。
     let skip_trade = fill_price <= 0.0;
     if skip_trade {
         error!(
@@ -859,7 +785,6 @@ async fn process_order_fill(
         }
     }
 
-    // 仓位更新：原子更新 realized_pnl + quantity + entry_price + status
     if let Some(key) = &pos_key_opt {
         if let Some(mut pos) = inner.positions.get_mut(key) {
             let is_closed = pos.apply_fill(is_close, fill_price, trade_fill, pnl, timestamp);
@@ -882,8 +807,6 @@ async fn process_order_fill(
             }
         }
     }
-    // 注：终态清理（orders/order_position remove）由调用点统一负责，
-    // 确保 Filled 状态无论 trade_fill 是否 > 0 都能清理，避免泄漏。
 }
 
 pub(crate) async fn handle_open_position(
@@ -905,7 +828,6 @@ pub(crate) async fn handle_open_position(
     };
     let key = (exchange_name.clone(), symbol.clone(), side.clone());
 
-    // 如果仓位已存在，直接下单
     if let Some(existing) = inner.positions.get(&key) {
         let position_id = existing.id;
         drop(existing);
@@ -934,7 +856,6 @@ pub(crate) async fn handle_open_position(
         return;
     }
 
-    // 仓位不存在，创建新仓位
     if leverage == 0 {
         let msg = "leverage must be > 0".to_string();
         error!(symbol = %symbol, "open_position rejected: leverage is 0");
@@ -1061,7 +982,6 @@ pub(crate) async fn handle_close_position(
         time_in_force: Some(TimeInForce::Gtc),
     };
 
-    // 将仓位状态改为 Closing
     let key = (
         position.exchange.clone(),
         position.symbol.clone(),
@@ -1121,7 +1041,6 @@ pub(crate) fn resolve_position_side_for_hedge(params: &mut PlaceOrderParams) {
 pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: PlaceOrderParams) {
     resolve_position_side_for_hedge(&mut params);
 
-    // 解析 position_id
     let position_id = match params.position_id {
         Some(pid) => pid,
         None => {
@@ -1172,7 +1091,6 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
     };
     params.position_id = Some(position_id);
 
-    // client_order_id 必须由调用方提供，不允许自动生成
     let client_order_id = match params.client_order_id.clone() {
         Some(cid) => cid,
         None => {
@@ -1192,7 +1110,6 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
     };
     params.client_order_id = Some(client_order_id.clone());
 
-    // Pre-register: 先存入 pending
     inner.pending_orders.insert(
         client_order_id.clone(),
         PendingOrder {
@@ -1205,34 +1122,28 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
         },
     );
 
-    // 调用 REST（params 在此处 move）
     let symbol_for_error = params.symbol.clone();
     match inner.exchange.place_order(params).await {
         Ok(result) => {
-            // 填入 rest_result
             if let Some(mut pending) = inner.pending_orders.get_mut(&client_order_id) {
                 pending.rest_result = Some(result);
                 drop(pending);
             }
 
-            // 检查 WS 是否已到达
             let ws_order = inner
                 .pending_orders
                 .get(&client_order_id)
                 .and_then(|p| p.ws_order.clone());
 
             if let Some(ws_order) = ws_order {
-                // 双确认成功，移除 pending，存入 orders
                 finalize_pending_order(inner, &client_order_id, ws_order, Some(position_id)).await;
             }
-            // 如果 WS 未到达，等待 WS 回调处理
         }
         Err(e) => {
             inner.pending_orders.remove(&client_order_id);
             let msg = format!("Failed to place order: {}", e);
             error!(error = %e, symbol = %symbol_for_error, "Failed to place order");
 
-            // 回滚 ghost Opening 或 Closing position
             inner.rollback_position_on_order_terminal(position_id, "place_order_rest_failure");
 
             inner.emit_event(EngineEvent::OrderFailed {
@@ -1268,18 +1179,13 @@ pub(crate) async fn handle_cancel_all_orders(
         Ok(results) => {
             for result in &results {
                 let cid = &result.client_order_id;
-                // 先取 position_id（order_position 在 remove 前查）
                 let pos_id = inner.order_position.get(cid).map(|r| *r.value());
-                // 从 orders 中查找 CcxtOrder
                 if let Some((_, order)) = inner.orders.remove(cid) {
                     inner.order_position.remove(cid);
                     inner.emit_event(EngineEvent::OrderCanceled { order });
                 } else {
-                    // 可能在 pending 中
                     inner.pending_orders.remove(cid);
-                    // 没有 CcxtOrder，无法 emit OrderCanceled，等待 WS 推送
                 }
-                // 回滚 ghost Opening 或 Closing position
                 if let Some(pid) = pos_id {
                     inner.rollback_position_on_order_terminal(pid, "cancel_all_orders");
                 }

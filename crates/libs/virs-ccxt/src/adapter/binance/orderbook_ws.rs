@@ -11,18 +11,14 @@ use virs_ws::{
     WsManagerConfig, WsManagerEvent,
 };
 use crate::ws_types::{OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate};
-use virs_runtime::TaskSupervisor;
+use virs_runtime::{CancellationToken, TaskSupervisor};
 
-// 统一交易对格式转为币安WS小写格式，如 BTC/USDT → btcusdt
 fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
 }
 
-// 订单簿WS消息延迟阈值：超过2秒告警
 pub(crate) const ORDERBOOK_WS_DELAY_THRESHOLD_MS: i64 = 2_000;
 
-// 币安深度WS消息，兼容组合流({"stream":..,"data":{..}})和扁平格式
-// 字段映射：b=bids, a=asks, s=symbol, E=event_time
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct BinanceDepthMessage {
     stream: Option<String>,
@@ -45,7 +41,6 @@ pub(crate) struct BinanceDepthMessage {
     asks_perp_flat: Option<Vec<[String; 2]>>,
 }
 
-// 解析后的深度数据：bids/asks + 来源 stream/symbol + 时间戳
 pub(crate) struct ParsedDepth {
     pub bids: Vec<[String; 2]>,
     pub asks: Vec<[String; 2]>,
@@ -56,11 +51,9 @@ pub(crate) struct ParsedDepth {
 }
 
 impl BinanceDepthMessage {
-    // 统一两种消息格式为 ParsedDepth；优先组合流 data，其次扁平字段
     pub(crate) fn into_depth(self) -> Option<ParsedDepth> {
         let stream = self.stream.clone();
 
-        // 组合流：解析 data 内层 payload
         if let Some(data) = self.data {
             if let Some(pd) = parse_payload(&data) {
                 return Some(ParsedDepth {
@@ -71,9 +64,8 @@ impl BinanceDepthMessage {
             return None;
         }
 
-        // 扁平格式：直接取 b/a/s/E
         if let (Some(bids), Some(asks)) = (self.bids_perp_flat, self.asks_perp_flat) {
-            let ts = self.event_time_flat?; // missing event_time → skip this depth update
+            let ts = self.event_time_flat?;
             return Some(ParsedDepth {
                 bids,
                 asks,
@@ -88,13 +80,12 @@ impl BinanceDepthMessage {
     }
 }
 
-// 解析组合流 data 内层 payload，提取 b/a/s/E
 pub(crate) fn parse_payload(v: &serde_json::Value) -> Option<ParsedDepth> {
     if let (Some(bids), Some(asks)) = (v.get("b"), v.get("a")) {
         let bids = parse_levels(bids)?;
         let asks = parse_levels(asks)?;
         let sym = v.get("s").and_then(|s| s.as_str()).map(String::from);
-        let ts = v.get("E").and_then(|t| t.as_i64())?; // missing event_time → skip
+        let ts = v.get("E").and_then(|t| t.as_i64())?;
         return Some(ParsedDepth {
             bids,
             asks,
@@ -107,7 +98,6 @@ pub(crate) fn parse_payload(v: &serde_json::Value) -> Option<ParsedDepth> {
     None
 }
 
-// 解析价位数组 [[price, amount], ...]，兼容字符串与数值形式
 pub(crate) fn parse_levels(v: &serde_json::Value) -> Option<Vec<[String; 2]>> {
     let arr = v.as_array()?;
     let mut out = Vec::with_capacity(arr.len());
@@ -134,7 +124,6 @@ pub(crate) fn parse_levels(v: &serde_json::Value) -> Option<Vec<[String; 2]>> {
     Some(out)
 }
 
-// 将原始价位数组转为 OrderBookLevel，过滤 amount>0 的档位
 pub(crate) fn to_levels(raw: &[[String; 2]]) -> Vec<OrderBookLevel> {
     raw.iter()
         .filter_map(|[p, a]| {
@@ -149,15 +138,10 @@ pub(crate) fn to_levels(raw: &[[String; 2]]) -> Vec<OrderBookLevel> {
         .collect()
 }
 
-// 订单簿WS处理器：维护订阅列表与 symbol 映射，实现 WsHandler 接口
 pub struct OrderBookWsHandler {
     ws_url: String,
-
     pub(crate) subscriptions: Arc<RwLock<Vec<String>>>,
-
-    // ws_symbol → 原始统一格式 symbol 的反查表
     pub(crate) symbol_map: Arc<RwLock<HashMap<String, String>>>,
-
     request_id: Arc<AtomicU64>,
 }
 
@@ -199,7 +183,6 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
         };
 
         if let Some(pd) = bmsg.into_depth() {
-            // 延迟检测：本地时间与事件时间差超过阈值则告警
             if pd.timestamp_ms > 0 {
                 let local_now = chrono::Utc::now().timestamp_millis();
                 let delay_ms = local_now - pd.timestamp_ms;
@@ -213,7 +196,6 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
                 }
             }
 
-            // symbol 反查：优先 stream_name，其次 payload 的 s 字段，最后单订阅兜底
             let original_symbol = resolve_symbol(
                 pd.stream_name.as_deref(),
                 pd.symbol.as_deref(),
@@ -258,7 +240,6 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
     }
 
     async fn on_connected(&self, _is_reconnect: bool) -> Vec<String> {
-        // 连接建立后批量发送订阅：{"method":"SUBSCRIBE","params":[...],"id":N}
         let subs_vec = self.subscriptions.read().await.clone();
         if subs_vec.is_empty() {
             return vec![];
@@ -282,7 +263,6 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
 
     async fn on_disconnected(&self) {}
 
-    // 动态订阅/退订命令转 JSON：{"method":"SUBSCRIBE|UNSUBSCRIBE","params":[stream],"id":N}
     async fn on_command(&self, cmd: ManagerWsCommand) -> Option<String> {
         let (method, stream_name) = match cmd {
             ManagerWsCommand::Subscribe(s) => ("SUBSCRIBE", s),
@@ -307,30 +287,27 @@ impl WsHandler<WsOrderBookEvent> for OrderBookWsHandler {
     }
 }
 
-// 订单簿WS客户端，封装 WsManager 与 OrderBookWsHandler
 pub struct OrderBookWs {
     manager: WsManager<WsOrderBookEvent>,
     config: WsManagerConfig,
     pub(crate) handler: Arc<OrderBookWsHandler>,
-    /// 转发任务监督器
     supervisor: TaskSupervisor,
 }
 
 impl OrderBookWs {
-    pub fn new(ws_url: String) -> Self {
+    pub fn new(ws_url: String, parent_cancel: CancellationToken) -> Self {
         let handler = Arc::new(OrderBookWsHandler::new(ws_url));
 
         Self {
-            manager: WsManager::new(handler.clone()),
+            manager: WsManager::new(handler.clone(), parent_cancel.clone()),
             config: WsManagerConfig::default(),
             handler,
-            supervisor: TaskSupervisor::new(virs_runtime::CancellationToken::root()),
+            supervisor: TaskSupervisor::new(parent_cancel.child_token()),
         }
     }
 
-    // 永续合约订单簿WS：wss://fstream.binance.com/public/stream（注意与K线WS的/market/ws不同）
-    pub fn new_perpetual(_proxy_url: Option<&str>) -> Self {
-        Self::new("wss://fstream.binance.com/public/stream".to_string())
+    pub fn new_perpetual(_proxy_url: Option<&str>, parent_cancel: CancellationToken) -> Self {
+        Self::new("wss://fstream.binance.com/public/stream".to_string(), parent_cancel)
     }
 
     pub fn running_handle(&self) -> Arc<AtomicBool> {
@@ -341,7 +318,6 @@ impl OrderBookWs {
 #[async_trait]
 impl OrderBookWsClient for OrderBookWs {
     async fn start(&mut self, update_tx: broadcast::Sender<WsOrderBookEvent>) {
-        // 转发 WsManager 事件为 WsOrderBookEvent 并广播给上层
         let (manager_tx, mut manager_rx) = mpsc::channel::<WsManagerEvent<WsOrderBookEvent>>(256);
 
         self.manager
@@ -352,7 +328,7 @@ impl OrderBookWsClient for OrderBookWs {
             .manager
             .cancellation_token()
             .await
-            .unwrap_or_else(|| virs_runtime::CancellationToken::root());
+            .unwrap_or_else(|| self.supervisor.child_token());
 
         self.supervisor
             .spawn_raw("orderbook_forward", move |supervisor_cancel| async move {
@@ -404,7 +380,6 @@ impl OrderBookWsClient for OrderBookWs {
     }
 
     async fn subscribe(&self, symbol: &str) {
-        // stream 名称：{symbol}@depth20@500ms（深度20档，500ms推送）
         let stream_name = format!("{}@depth20@500ms", binance_ws_symbol(symbol));
         let ws_sym = binance_ws_symbol(symbol);
 
@@ -424,7 +399,6 @@ impl OrderBookWsClient for OrderBookWs {
     }
 
     async fn unsubscribe(&self, symbol: &str) {
-        // stream 名称：{symbol}@depth20@500ms
         let stream_name = format!("{}@depth20@500ms", binance_ws_symbol(symbol));
         let ws_sym = binance_ws_symbol(symbol);
 
@@ -449,7 +423,6 @@ impl OrderBookWsClient for OrderBookWs {
     }
 }
 
-// symbol 反查：优先从 stream_name 提取 @ 前部分，其次从 payload 的 s 字段，最后单订阅兜底
 async fn resolve_symbol(
     stream_name: Option<&str>,
     sym_from_payload: Option<&str>,
@@ -457,7 +430,6 @@ async fn resolve_symbol(
 ) -> Option<String> {
     let map = symbol_map.read().await;
 
-    // 优先：从 stream_name 的 @ 前部分反查
     if let Some(stream) = stream_name {
         if let Some(symbol_part) = stream.split('@').next() {
             let key = symbol_part.to_lowercase();
@@ -467,7 +439,6 @@ async fn resolve_symbol(
         }
     }
 
-    // 其次：从 payload 的 s 字段反查
     if let Some(s) = sym_from_payload {
         let key = s.to_lowercase();
         if let Some(unified) = map.get(&key) {
@@ -475,7 +446,6 @@ async fn resolve_symbol(
         }
     }
 
-    // 兜底：仅订阅单个 symbol 时直接返回
     if map.len() == 1 {
         return map.values().next().cloned();
     }

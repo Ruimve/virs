@@ -28,11 +28,8 @@ struct EngineState {
 
     position_engine: StdMutex<Option<PositionEngine>>,
 
-    /// 任务监督器 — 统一管理 paper_tick / position_engine / auto_engine 后台任务的
-    /// JoinHandle + CancellationToken + 优雅关闭（cancel + 并发等待 + 5s 超时 abort）
     supervisor: TaskSupervisor,
 
-    /// PeOrderExecutor 引用 — shutdown 时调用 stop() 停止转发任务
     order_executor: StdMutex<Option<Arc<PeOrderExecutor>>>,
 }
 
@@ -254,8 +251,6 @@ impl EngineManager for AppEngineManager {
         info!(paper_mode, "Starting trading engines");
 
         let pe_exchange: Arc<dyn ExchangePe> = if paper_mode {
-            // paper 模式：直接从 registry 获取真实 perpetual 交易所的余额作为初始资金，
-            // 然后用 PaperExchangeAdapter 模拟交易（无需 CcxtExchangeAdapter 中间层）。
             let initial_balance = match self.exchange_registry.get_perpetual() {
                 Some(ex) => match ex.get_balance().await {
                     Ok(b) => b.total,
@@ -274,7 +269,6 @@ impl EngineManager for AppEngineManager {
                     .with_exchange_registry(self.exchange_registry.clone()),
             )
         } else {
-            // 实盘模式：直接从 registry 获取 perpetual 交易所（无需 CcxtExchangeAdapter 中间层）
             self.exchange_registry.get_perpetual().ok_or_else(|| {
                 virs_error::VirsError::config(
                     "No perpetual exchange registered; please save API credentials first.",
@@ -284,17 +278,14 @@ impl EngineManager for AppEngineManager {
 
         let pe_persistence = Box::new(PePersistence::new(self.db_pool.clone()));
 
-        // 创建根取消令牌和任务监督器，统一管理所有后台任务的 JoinHandle + 取消信号 + 优雅关闭
-        let cancel = CancellationToken::root();
-        let supervisor = TaskSupervisor::new(cancel.clone());
+        let supervisor = TaskSupervisor::new(CancellationToken::root());
 
-        // PositionEngine 作为 cancel 树的子节点：父取消时级联取消 PE
         let mut position_engine = PositionEngine::new(
             pe_exchange,
             pe_persistence,
             self.time_config.retry.persist_max_retries,
             self.time_config.retry.persist_retry_base_ms,
-            cancel.child_token(),
+            supervisor.child_token(),
         );
         let pe_cmd_tx = position_engine.command_sender();
         let pe_event_sender = position_engine.event_sender();
@@ -303,8 +294,6 @@ impl EngineManager for AppEngineManager {
 
         let position_engine_clone = position_engine.clone();
 
-        // PositionEngine 内部通过 child_token 接入 cancel 树，
-        // run() 内部 select! on self.cancel，父取消时级联退出
         supervisor
             .spawn_raw("position_engine", move |_| async move {
                 if let Err(e) = position_engine.run().await {
@@ -314,7 +303,6 @@ impl EngineManager for AppEngineManager {
             .await;
         info!(paper_mode, "Position Engine started");
 
-        // 复用 AppEngineManager 持有的全局 PromptLoader（启动时一次性加载）。
         let prompt_loader = self.prompt_loader.clone();
 
         if paper_mode {
@@ -328,11 +316,9 @@ impl EngineManager for AppEngineManager {
             }
         }
 
-        // paper 模式下，将 KlineEvent 转发给 PositionEngine 作为 PriceTick（事件驱动）
         if paper_mode {
             let kline_engine_for_paper = self.kline_engine.clone();
             let pe_cmd_tx_for_tick = pe_cmd_tx.clone();
-            // 闭包内用 task_cancel 替代手动 cancel，supervisor 统一管理 handle 和 cancel
             supervisor
                 .spawn_raw("paper_tick", move |task_cancel| async move {
                     let mut kline_rx = kline_engine_for_paper.subscribe_events();
@@ -387,11 +373,9 @@ impl EngineManager for AppEngineManager {
             auto_order_event_tx.clone(),
             auto_pe_event_rx,
             position_engine_clone.clone(),
-            // 传入 engine supervisor 的 child token，shutdown 时随父令牌级联取消
-            cancel.child_token(),
+            supervisor.child_token(),
         )
         .await);
-        // 保存 Arc 引用以便 shutdown 时调用 stop()
         let order_executor_for_state = Arc::clone(&auto_order_executor);
         let auto_credential_store: Arc<dyn virs_types::bot::CredentialStore> =
             Arc::new(PgCredentialStore::new(
@@ -406,7 +390,6 @@ impl EngineManager for AppEngineManager {
             std::time::Duration::from_secs(self.time_config.llm_timeout_secs),
         ));
 
-        // AutoEngine 作为 cancel 树的子节点：父取消时级联取消 engine 及所有 worker
         let (mut auto_engine, auto_cmd_tx) = virs_bot::auto::AutoEngine::new(
             auto_store,
             auto_ai_service,
@@ -417,11 +400,9 @@ impl EngineManager for AppEngineManager {
             pe_event_sender.clone(),
             self.time_config.clone(),
             prompt_loader.clone(),
-            cancel.child_token(),
+            supervisor.child_token(),
         );
 
-        // AutoEngine 通过 child_token 接入 cancel 树，
-        // 父取消时级联取消 engine → worker（tree-shaped propagation）
         supervisor
             .spawn_raw("auto_engine", move |_| async move {
                 auto_engine.run().await;
@@ -509,28 +490,21 @@ impl EngineManager for AppEngineManager {
         if let Some(state) = self.state.get() {
             info!("Shutting down trading engines...");
 
-            // 1. 停止 PositionEngine（内部 cancel，run() 会自行 shutdown 其内部 supervisor）
             let pe_opt = state.position_engine.lock().unwrap().take();
             if let Some(pe) = &pe_opt {
                 pe.stop();
             }
 
-            // 2. 关闭 AutoEngine 的命令通道（AutoEngine 通过 channel 关闭退出）
             drop(state.auto_cmd_tx.lock().unwrap().take());
             drop(state.pe_event_tx.lock().unwrap().take());
 
-            // 3. 停止 OrderExecutor 的转发任务（cancel + 并发等待 + 5s 超时 abort）
             let oe_opt = state.order_executor.lock().unwrap().take();
             if let Some(oe) = oe_opt {
                 oe.stop().await;
             }
 
-            // 4. 通过 TaskSupervisor 统一关闭所有后台任务
-            //    （paper_tick / position_engine / auto_engine）
-            //    cancel + 并发等待 + 5s 超时 abort
             state.supervisor.shutdown().await;
 
-            // 5. drop PositionEngine
             drop(pe_opt);
 
             info!("All trading engines stopped");

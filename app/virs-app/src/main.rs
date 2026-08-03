@@ -4,6 +4,7 @@ use tracing::{error, info};
 use uuid::Uuid;
 use virs_api::EngineManager;
 use virs_error::{Context, VirsResult};
+use virs_runtime::CancellationToken;
 
 use virs_api::{build_router, AppState};
 use virs_app::engine_manager::AppEngineManager;
@@ -102,20 +103,31 @@ async fn main() -> VirsResult<()> {
         ..Default::default()
     };
     let kline_source = Arc::new(ExchangeKlineSource::new(exchange_registry.clone()));
+    let ws_parent_cancel = CancellationToken::root();
     let perpetual_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::kline_ws::KlineWs::new_perpetual(config.proxy.as_deref()),
+        virs_ccxt::adapter::binance::kline_ws::KlineWs::new_perpetual(
+            config.proxy.as_deref(),
+            ws_parent_cancel.clone(),
+        ),
     ));
-    let kline_engine = Arc::new(KlineEngine::new(kline_config, kline_source, perpetual_ws));
+    let kline_engine = Arc::new(KlineEngine::new(
+        kline_config,
+        kline_source,
+        perpetual_ws,
+        ws_parent_cancel.clone(),
+    ));
     info!("Kline engine created (lazy — will start on first subscribe)");
 
     let ob_perpetual_ws = Arc::new(tokio::sync::Mutex::new(
         virs_ccxt::adapter::binance::orderbook_ws::OrderBookWs::new_perpetual(
             config.proxy.as_deref(),
+            ws_parent_cancel.clone(),
         ),
     ));
     let orderbook_engine = Arc::new(OrderBookEngine::new(
         OrderBookEngineConfig::default(),
         ob_perpetual_ws,
+        ws_parent_cancel,
     ));
     info!("OrderBook engine created (lazy — will start on first subscribe)");
 

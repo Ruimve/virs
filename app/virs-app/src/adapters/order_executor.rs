@@ -16,7 +16,6 @@ use virs_types::CcxtOrder;
 pub struct PeOrderExecutor {
     cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,
     engine: PositionEngine,
-    /// 任务监督器 — 管理 order_event_forward 转发任务的 JoinHandle + 取消信号 + 优雅关闭
     supervisor: TaskSupervisor,
 }
 
@@ -28,7 +27,7 @@ impl PeOrderExecutor {
         engine: PositionEngine,
         cancel: CancellationToken,
     ) -> Self {
-        let supervisor = TaskSupervisor::new(cancel);
+        let supervisor = TaskSupervisor::new(cancel.child_token());
         supervisor
             .spawn_raw("order_event_forward", move |task_cancel| async move {
                 loop {
@@ -63,7 +62,6 @@ impl PeOrderExecutor {
         }
     }
 
-    /// 优雅停止转发任务：cancel + 并发等待 + 5s 超时 abort
     pub async fn stop(&self) {
         self.supervisor.shutdown().await;
     }

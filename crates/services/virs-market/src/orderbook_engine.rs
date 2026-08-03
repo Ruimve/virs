@@ -46,8 +46,7 @@ pub struct OrderBookEngine {
     event_tx: broadcast::Sender<OrderBookEvent>,
     perpetual_handler: MarketWsHandler,
     started: Arc<std::sync::atomic::AtomicBool>,
-    /// 任务监督器 — 统一管理 JoinHandle + 取消信号 + 优雅关闭
-    /// std::sync::Mutex：锁仅在 start/stop/Drop 中短暂持有，不跨 await，Drop 中安全
+    parent_cancel: CancellationToken,
     supervisor: std::sync::Mutex<Option<TaskSupervisor>>,
 }
 
@@ -55,6 +54,7 @@ impl OrderBookEngine {
     pub fn new(
         config: OrderBookEngineConfig,
         perpetual_ws: Arc<Mutex<dyn OrderBookWsClient>>,
+        parent_cancel: CancellationToken,
     ) -> Self {
         let (event_tx, _) = broadcast::channel(config.event_channel_capacity);
 
@@ -64,6 +64,7 @@ impl OrderBookEngine {
             event_tx,
             perpetual_handler: MarketWsHandler::new(perpetual_ws),
             started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            parent_cancel,
             supervisor: std::sync::Mutex::new(None),
         }
     }
@@ -80,8 +81,7 @@ impl OrderBookEngine {
             return;
         }
 
-        let cancel = CancellationToken::root();
-        let supervisor = TaskSupervisor::new(cancel.clone());
+        let supervisor = TaskSupervisor::new(self.parent_cancel.child_token());
 
         let (ws_update_tx, mut ws_update_rx) = broadcast::channel::<WsOrderBookEvent>(512);
 
@@ -138,7 +138,6 @@ impl OrderBookEngine {
             })
             .await;
 
-        // 存储 TaskSupervisor 供 stop() 调用 shutdown()
         *self.supervisor.lock().unwrap() = Some(supervisor);
     }
 
@@ -149,7 +148,6 @@ impl OrderBookEngine {
         {
             return;
         }
-        // 通过 TaskSupervisor::shutdown 统一关闭：cancel + 并发等待 + 超时 abort
         let supervisor = self.supervisor.lock().unwrap().take();
         if let Some(s) = supervisor {
             s.shutdown().await;
@@ -183,14 +181,5 @@ impl OrderBookEngine {
         self.perpetual_handler.subscribe(symbol).await;
 
         Ok(())
-    }
-}
-
-impl Drop for OrderBookEngine {
-    fn drop(&mut self) {
-        // RAII 兜底：即使未调用 stop()，也确保取消信号被触发
-        if let Some(s) = self.supervisor.lock().unwrap().take() {
-            s.cancel().cancel();
-        }
     }
 }

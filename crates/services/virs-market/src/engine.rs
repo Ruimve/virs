@@ -1,11 +1,12 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use dashmap::DashMap;
 use tokio::sync::{broadcast, Mutex};
 use tracing;
 use virs_error::VirsResult;
-use virs_runtime::{CancellationToken, TaskSupervisor};
+use virs_runtime::{CancellationToken, PeriodicTask, TaskSupervisor};
 
 use crate::aggregator::Aggregator;
 use crate::cache::SymbolCache;
@@ -77,8 +78,7 @@ pub struct KlineEngine {
     event_tx: broadcast::Sender<KlineEvent>,
     perpetual_handler: MarketWsHandler,
     started: Arc<std::sync::atomic::AtomicBool>,
-    /// 任务监督器 — 统一管理 JoinHandle + 取消信号 + 优雅关闭
-    /// std::sync::Mutex：锁仅在 start/stop/Drop 中短暂持有，不跨 await，Drop 中安全
+    parent_cancel: CancellationToken,
     supervisor: std::sync::Mutex<Option<TaskSupervisor>>,
 }
 
@@ -87,6 +87,7 @@ impl KlineEngine {
         config: KlineEngineConfig,
         source: Arc<dyn KlineSource>,
         perpetual_ws: Arc<Mutex<dyn KlineWsClient>>,
+        parent_cancel: CancellationToken,
     ) -> Self {
         let (event_tx, _) = broadcast::channel(config.event_channel_capacity);
 
@@ -99,6 +100,7 @@ impl KlineEngine {
             event_tx,
             perpetual_handler: MarketWsHandler::new(perpetual_ws),
             started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            parent_cancel,
             supervisor: std::sync::Mutex::new(None),
         }
     }
@@ -115,8 +117,7 @@ impl KlineEngine {
             return;
         }
 
-        let cancel = CancellationToken::root();
-        let supervisor = TaskSupervisor::new(cancel.clone());
+        let supervisor = TaskSupervisor::new(self.parent_cancel.child_token());
 
         let event_tx = self.event_tx.clone();
         let subscriptions = self.subscriptions.clone();
@@ -132,7 +133,6 @@ impl KlineEngine {
 
         self.perpetual_handler.start(ws_update_tx).await;
 
-        // Task 1: WS 事件处理循环（CancellationToken 可中断）
         supervisor
             .spawn_raw("kline_ws_loop", move |task_cancel| async move {
                 loop {
@@ -282,18 +282,17 @@ impl KlineEngine {
             })
             .await;
 
-        // Task 2: K 线缺口检测周期任务（CancellationToken 可中断 interval.tick()）
-        supervisor
-            .spawn_raw("kline_gap_detection", move |task_cancel| async move {
-                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
-                interval.tick().await; // 跳过首次
-
-                loop {
-                    tokio::select! {
-                        _ = task_cancel.cancelled() => break,
-                        _ = interval.tick() => {}
-                    }
-
+        PeriodicTask::spawn(
+            "kline_gap_detection",
+            Duration::from_secs(60),
+            false,
+            None,
+            &supervisor,
+            move || {
+                let gap_check_subscriptions = gap_check_subscriptions.clone();
+                let gap_check_source = gap_check_source.clone();
+                let gap_check_event_tx = gap_check_event_tx.clone();
+                async move {
                     let entries: Vec<_> = gap_check_subscriptions
                         .iter()
                         .map(|e| {
@@ -333,10 +332,10 @@ impl KlineEngine {
                         }
                     }
                 }
-            })
-            .await;
+            },
+        )
+        .await;
 
-        // 存储 TaskSupervisor 供 stop() 调用 shutdown()
         *self.supervisor.lock().unwrap() = Some(supervisor);
     }
 
@@ -347,7 +346,6 @@ impl KlineEngine {
         {
             return;
         }
-        // 通过 TaskSupervisor::shutdown 统一关闭：cancel + 并发等待 + 超时 abort
         let supervisor = self.supervisor.lock().unwrap().take();
         if let Some(s) = supervisor {
             s.shutdown().await;
@@ -426,14 +424,5 @@ impl KlineEngine {
                 )
             })
             .collect()
-    }
-}
-
-impl Drop for KlineEngine {
-    fn drop(&mut self) {
-        // RAII 兜底：即使未调用 stop()，也确保取消信号被触发
-        if let Some(s) = self.supervisor.lock().unwrap().take() {
-            s.cancel().cancel();
-        }
     }
 }

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 use tracing::{error, info, warn};
 use uuid::Uuid;
-use virs_runtime::CancellationToken;
+use virs_runtime::{CancellationToken, TaskSupervisor};
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::types::AutoCommand;
@@ -25,9 +25,8 @@ pub struct AutoEngine {
     event_tx: broadcast::Sender<OrderEvent>,
     pe_event_tx: broadcast::Sender<EngineEvent>,
     cmd_rx: Option<mpsc::Receiver<AutoCommand>>,
-    /// worker 的 child_token + JoinHandle，用于单个 worker 优雅停止
     workers: HashMap<Uuid, (CancellationToken, tokio::task::JoinHandle<()>)>,
-    cancel: CancellationToken,
+    supervisor: TaskSupervisor,
     bot_symbols: HashMap<Uuid, String>,
 
     time_config: TimeConfig,
@@ -49,8 +48,7 @@ impl AutoEngine {
     ) -> (Self, mpsc::Sender<AutoCommand>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
 
-        // 作为 parent_cancel 的子令牌：父取消时级联取消 engine 及所有 worker
-        let cancel = parent_cancel.child_token();
+        let supervisor = TaskSupervisor::new(parent_cancel.child_token());
 
         let engine = Self {
             store,
@@ -62,7 +60,7 @@ impl AutoEngine {
             pe_event_tx,
             cmd_rx: Some(cmd_rx),
             workers: HashMap::new(),
-            cancel,
+            supervisor,
             bot_symbols: HashMap::new(),
             time_config,
             prompt_loader,
@@ -93,13 +91,10 @@ impl AutoEngine {
             }
         }
 
-        // cmd_rx 返回 None：所有 sender 已 drop，开始关闭流程
         info!("AutoEngine command channel closed, shutting down all workers");
 
-        // 1. 取消所有 worker 的 CancellationToken（child_token 随父取消自动传播）
-        self.cancel.cancel();
+        self.supervisor.cancel();
 
-        // 2. 并发等待所有 worker 退出（总超时 5 秒，而非 N × 5 秒）
         let workers: Vec<(Uuid, CancellationToken, tokio::task::JoinHandle<()>)> =
             self.workers.drain().map(|(id, (cancel, handle))| (id, cancel, handle)).collect();
         let mut join_set = tokio::task::JoinSet::new();
@@ -120,7 +115,6 @@ impl AutoEngine {
         }
         while join_set.join_next().await.is_some() {}
 
-        // 3. 清理 bot_symbols
         self.bot_symbols.clear();
 
         info!("AutoEngine shutdown complete");
@@ -160,7 +154,7 @@ impl AutoEngine {
             }
         };
 
-        let worker_cancel = self.cancel.child_token();
+        let worker_cancel = self.supervisor.child_token();
         let worker_cancel_for_shutdown = worker_cancel.clone();
         let event_rx = self.event_tx.subscribe();
         let pe_event_rx = self.pe_event_tx.subscribe();
@@ -201,11 +195,6 @@ impl AutoEngine {
         self.stop_or_pause_bot(bot_id, reason, "stopped", true).await;
     }
 
-    /// Stop or pause a bot.
-    ///
-    /// `cancel_orders`: when true, cancel all open orders for the bot's symbol first.
-    /// Set to false when the caller has already cancelled orders (e.g. delete_bot
-    /// cancels before closing positions).
     async fn stop_or_pause_bot(
         &mut self,
         bot_id: Uuid,
@@ -234,7 +223,6 @@ impl AutoEngine {
     }
 
     async fn graceful_shutdown_worker(&mut self, bot_id: Uuid) {
-        // 先取消 child_token，让 worker 通过 select! 优雅退出
         self.bot_symbols.remove(&bot_id);
         if let Some((worker_cancel, handle)) = self.workers.remove(&bot_id) {
             worker_cancel.cancel();
@@ -258,11 +246,9 @@ impl AutoEngine {
         close_position: bool,
         response_tx: tokio::sync::oneshot::Sender<Result<(), String>>,
     ) {
-        // 1. Load bot info — if DB fails, must NOT proceed (would risk orphan positions)
         let bot_info = match self.store.load_bot(bot_id).await {
             Ok(Some(info)) => info,
             Ok(None) => {
-                // Bot already deleted — idempotent success
                 warn!(bot_id = %bot_id, "Bot not found during deletion (already deleted?)");
                 let _ = response_tx.send(Ok(()));
                 return;
@@ -277,7 +263,6 @@ impl AutoEngine {
         let symbol = &bot_info.symbol;
         let exchange = &bot_info.exchange;
 
-        // 2. Cancel orders and close positions (abort on failure to avoid orphan positions)
         if close_position {
             if let Err(e) = self
                 .order_executor
@@ -304,11 +289,9 @@ impl AutoEngine {
             }
         }
 
-        // 3. Stop worker (skip CancelAllOrders — already done above when close_position=true)
         self.stop_or_pause_bot(bot_id, "deleted", "stopped", !close_position)
             .await;
 
-        // 4. Delete from DB
         if let Err(e) = self.store.delete_bot(bot_id).await {
             error!(bot_id = %bot_id, error = %e, "Failed to delete bot from database");
             let _ = response_tx.send(Err(format!("Failed to delete bot from database: {e}")));

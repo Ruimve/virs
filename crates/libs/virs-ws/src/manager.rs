@@ -153,18 +153,26 @@ pub struct WsManager<T: Send + Clone + 'static> {
     handler: Arc<dyn WsHandler<T>>,
     running: Arc<AtomicBool>,
     retry_count: Arc<AtomicU64>,
+    /// 父取消令牌 — start() 时通过 child_token() 创建 TaskSupervisor
+    parent_cancel: CancellationToken,
     /// 任务监督器 — 管理 JoinHandle + 统一取消信号 + 优雅关闭
     /// std::sync::Mutex：锁仅在 start/stop/cancellation_token 中短暂持有，不跨 await，Drop 中安全
+    /// TaskSupervisor 自带 Drop（触发 cancel），无需 WsManager 自定义 Drop
     supervisor: std::sync::Mutex<Option<TaskSupervisor>>,
     command_tx: Mutex<Option<mpsc::UnboundedSender<WsCommand>>>,
 }
 
 impl<T: Send + Clone + 'static> WsManager<T> {
-    pub fn new(handler: Arc<dyn WsHandler<T>>) -> Self {
+    /// 创建 WsManager。接收 parent_cancel 以接入上层 cancel 树。
+    /// start() 时创建的 TaskSupervisor 使用 parent_cancel.child_token()，
+    /// 确保父取消时级联取消 WS 任务。
+    pub fn new(handler: Arc<dyn WsHandler<T>>, parent_cancel: CancellationToken) -> Self {
+        let _ = &parent_cancel; // 暂存：start() 时使用 child_token
         Self {
             handler,
             running: Arc::new(AtomicBool::new(false)),
             retry_count: Arc::new(AtomicU64::new(0)),
+            parent_cancel,
             supervisor: std::sync::Mutex::new(None),
             command_tx: Mutex::new(None),
         }
@@ -189,7 +197,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
             .lock()
             .unwrap()
             .as_ref()
-            .map(|s| s.cancel())
+            .map(|s| s.cancellation_token())
     }
 
     pub async fn start(
@@ -222,7 +230,8 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         let retry_count = Arc::clone(&self.retry_count);
 
         // 创建 TaskSupervisor 统一管理 JoinHandle + 取消信号
-        let supervisor = TaskSupervisor::new(CancellationToken::root());
+        // 使用 parent_cancel.child_token() 接入上层 cancel 树
+        let supervisor = TaskSupervisor::new(self.parent_cancel.child_token());
 
         supervisor
             .spawn_raw("ws_main", move |cancel| async move {
@@ -501,14 +510,8 @@ impl<T: Send + Clone + 'static> WsManager<T> {
     }
 }
 
-impl<T: Send + Clone + 'static> Drop for WsManager<T> {
-    fn drop(&mut self) {
-        // RAII 兜底：即使未调用 stop()，也确保取消信号被触发
-        if let Some(s) = self.supervisor.lock().unwrap().take() {
-            s.cancel().cancel();
-        }
-    }
-}
+// WsManager 无需自定义 Drop — TaskSupervisor 自带 Drop（触发 cancel），
+// Option<TaskSupervisor> drop 时自动 cancel WS 任务。
 
 // ── 自由函数 ──
 
