@@ -506,13 +506,13 @@ impl EngineManager for AppEngineManager {
 
             let mut join_set = tokio::task::JoinSet::new();
             if let Some(h) = pe_task {
-                join_set.spawn(h.join_with_timeout(Duration::from_secs(5)));
+                join_set.spawn(h.join());
             }
             if let Some(h) = paper_task {
-                join_set.spawn(h.join_with_timeout(Duration::from_secs(5)));
+                join_set.spawn(h.join());
             }
             if let Some(h) = auto_task {
-                join_set.spawn(h.join_with_timeout(Duration::from_secs(5)));
+                join_set.spawn(h.join());
             }
             while join_set.join_next().await.is_some() {}
 

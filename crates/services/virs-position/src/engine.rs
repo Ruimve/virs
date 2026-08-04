@@ -303,11 +303,11 @@ impl PositionEngine {
         inner.cancel.cancel();
         if let Some(h) = self.cmd_loop_task.take() {
             h.cancel();
-            h.join_with_timeout(Duration::from_secs(5)).await;
+            h.join().await;
         }
         if let Some(h) = self.ws_feed_loop_task.take() {
             h.cancel();
-            h.join_with_timeout(Duration::from_secs(5)).await;
+            h.join().await;
         }
 
         self.inner.set_state(EngineState::Stopped);

@@ -351,10 +351,10 @@ impl KlineEngine {
 
         let mut join_set = tokio::task::JoinSet::new();
         if let Some(h) = ws_h {
-            join_set.spawn(h.join_with_timeout(Duration::from_secs(5)));
+            join_set.spawn(h.join());
         }
         if let Some(h) = gap_h {
-            join_set.spawn(h.join_with_timeout(Duration::from_secs(5)));
+            join_set.spawn(h.join());
         }
         while join_set.join_next().await.is_some() {}
 

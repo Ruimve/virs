@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::time::Duration;
 
-use tracing::error;
+use tracing::Instrument;
 
 use crate::{Stop, TaskHandle};
 
@@ -12,8 +12,8 @@ where
 {
     let stop = Stop::new();
     let stop_clone = stop.clone();
-    let _name = name.to_string();
-    let handle = tokio::spawn(f(stop_clone));
+    let span = tracing::info_span!("task", name = name);
+    let handle = tokio::spawn(f(stop_clone).instrument(span));
     TaskHandle::new(stop, handle)
 }
 
@@ -28,7 +28,7 @@ where
     Fut: Future<Output = ()> + Send + 'static,
 {
     let stop = Stop::new();
-    let cancel_clone = stop.clone();
+    let stop_clone = stop.clone();
     let f = std::sync::Arc::new(f);
     let log_name = name.to_string();
 
@@ -42,13 +42,13 @@ where
 
         loop {
             tokio::select! {
-                _ = cancel_clone.cancelled() => break,
+                _ = stop_clone.cancelled() => break,
                 _ = tick.tick() => {
                     let f = std::sync::Arc::clone(&f);
                     let inner_handle = tokio::spawn(f());
                     if let Err(join_err) = inner_handle.await {
                         if join_err.is_panic() {
-                            error!(task = %log_name, "periodic task panic recovered");
+                            tracing::error!(task = %log_name, "periodic task panic recovered");
                         }
                     }
                 }

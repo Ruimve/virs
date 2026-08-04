@@ -101,7 +101,7 @@ impl AutoEngine {
         }
         let mut join_set = tokio::task::JoinSet::new();
         for h in handles {
-            join_set.spawn(h.join_with_timeout(Duration::from_secs(5)));
+            join_set.spawn(h.join());
         }
         while join_set.join_next().await.is_some() {}
 
@@ -214,7 +214,7 @@ impl AutoEngine {
         self.bot_symbols.remove(&bot_id);
         if let Some(handle) = self.workers.remove(&bot_id) {
             handle.cancel();
-            handle.join_with_timeout(Duration::from_secs(5)).await;
+            handle.join().await;
         }
     }
 

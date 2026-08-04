@@ -620,7 +620,7 @@ impl AutoWorker {
         }
 
         llm_handle.cancel();
-        llm_handle.join_with_timeout(Duration::from_secs(5)).await;
+        llm_handle.join().await;
 
         self.save_position().await;
         self.save_stats().await;

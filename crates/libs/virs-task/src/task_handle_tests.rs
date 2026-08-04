@@ -23,7 +23,21 @@ async fn test_drop_cancels() {
 }
 
 #[tokio::test]
-async fn test_join_with_timeout() {
+async fn test_join_default_timeout() {
+    let handle = spawn("test", |stop| async move {
+        tokio::select! {
+            _ = stop.cancelled() => {}
+            _ = tokio::time::sleep(Duration::from_secs(60)) => {}
+        }
+    });
+
+    let start = std::time::Instant::now();
+    handle.join().await;
+    assert!(start.elapsed() < Duration::from_secs(6));
+}
+
+#[tokio::test]
+async fn test_join_custom_timeout() {
     let handle = spawn("test", |stop| async move {
         tokio::select! {
             _ = stop.cancelled() => {}

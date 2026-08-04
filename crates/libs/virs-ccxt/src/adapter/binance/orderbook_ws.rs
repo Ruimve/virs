@@ -373,7 +373,7 @@ impl OrderBookWsClient for OrderBookWs {
         let handle = self.forward_task.lock().unwrap().take();
         if let Some(h) = handle {
             h.cancel();
-            h.join_with_timeout(Duration::from_secs(5)).await;
+            h.join().await;
         }
     }
 

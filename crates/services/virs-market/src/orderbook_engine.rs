@@ -149,7 +149,7 @@ impl OrderBookEngine {
         }
 
         if let Some(h) = ws_h {
-            h.join_with_timeout(Duration::from_secs(5)).await;
+            h.join().await;
         }
 
         self.perpetual_handler.stop().await;

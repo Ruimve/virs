@@ -5,6 +5,8 @@ use tracing::error;
 
 use crate::Stop;
 
+const DEFAULT_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+
 pub struct TaskHandle {
     stop: Stop,
     handle: Option<JoinHandle<()>>,
@@ -20,6 +22,10 @@ impl TaskHandle {
 
     pub fn cancel(&self) {
         self.stop.cancel();
+    }
+
+    pub async fn join(self) {
+        self.join_with_timeout(DEFAULT_SHUTDOWN_TIMEOUT).await;
     }
 
     pub async fn join_with_timeout(mut self, timeout: Duration) {
