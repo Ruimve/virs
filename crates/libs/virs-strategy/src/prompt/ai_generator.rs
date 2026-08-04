@@ -96,6 +96,7 @@ pub(crate) fn build_meta_system_prompt(strategy_type: StrategyType) -> String {
             "Auto 趋势策略（单仓位方向判断：open_long/open_short/close_position/hold）"
         }
     };
+    let placeholder_text = crate::placeholder::to_prompt_text();
 
     format!(
         r#"你是一个策略 prompt 生成器。你的任务是根据用户的意图描述，生成一个 {strategy_desc} 的策略 prompt。
@@ -111,12 +112,7 @@ pub(crate) fn build_meta_system_prompt(strategy_type: StrategyType) -> String {
 }}
 
 可用占位符白名单（只能使用以下占位符，不得发明新的）：
-- 通用：timestamp, symbol, exchange, leverage, total_balance, available_balance, used_margin, margin_usage_rate, min_qty, funding_rate, funding_next_time
-- 仓位：position_info, position_duration, stop_take_profit_info, recent_close_info, total_trades, win_trades, loss_trades, total_pnl, consecutive_losses, trigger_reason
-- H1 指标：h1_current_price, h1_rsi, h1_atr, h1_adx, h1_macd, h1_macd_signal, h1_macd_histogram, h1_ema20, h1_ema50, h1_ema_cross_bars_ago, h1_ema_gap_pct, h1_ema_gap_trend, h1_bb_upper, h1_bb_middle, h1_bb_lower, h1_high_20, h1_low_20, h1_high_50, h1_low_50, h1_volume, h1_volume_sma20, h1_candle_body, h1_bars_outside_band, h1_bandwidth_5bars_ago, h1_ema_cross, h1_change, h1_bb_width_pct, nearest_round_up, nearest_round_down, h1_atr_sma20
-- M15 指标：m15_current_price, m15_rsi, m15_macd, m15_macd_signal, m15_macd_histogram, m15_atr, m15_adx, m15_ema20, m15_ema50, m15_ema_cross, m15_ema_cross_bars_ago, m15_volume, m15_volume_sma20, m15_high_50, m15_low_50, m15_bb_width_pct, m15_atr_sma20, m15_bars_outside_band
-- H4 指标：h4_ema20, h4_ema50, h4_adx, h4_rsi, h4_macd, h4_macd_signal, h4_macd_histogram, h4_bb_width_pct
-- 事件：event_flag, event_description
+{placeholder_text}
 
 system_prompt 要求：
 1. 定义 LLM 角色（如"你是趋势跟随交易引擎"）

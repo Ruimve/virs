@@ -3,9 +3,9 @@
 //! 被 auto_trade handler 复用,避免重复实现 `select_strategy_by_llm`。
 
 use virs_error::VirsError;
-use virs_strategy::indicator::library::{atr, closes, rsi_at};
+use virs_indicator::IndicatorSpec;
 use virs_strategy::prompt::PromptLoader;
-use virs_types::StrategyType;
+use virs_types::{StrategyType, Timeframe};
 
 use crate::state::AppState;
 
@@ -57,22 +57,33 @@ pub async fn select_strategy_by_llm(
         })
         .collect();
 
-    // 计算基础指标
-    let close_prices = closes(&klines);
-    let current_price = close_prices.last().copied().ok_or_else(|| {
-        VirsError::bad_request(format!(
-            "No close price data available for {} on {} — cannot select strategy",
+    // 计算基础指标（只计算策略选择所需的 3 个：当前价、ATR、RSI）
+    let specs = [
+        IndicatorSpec::CurrentPrice { tf: Timeframe::H1 },
+        IndicatorSpec::Atr { tf: Timeframe::H1, period: 14 },
+        IndicatorSpec::Rsi { tf: Timeframe::H1, period: 14 },
+    ];
+    let indicator_set = virs_indicator::compute_indicators(
+        &klines, &[], &[], 0.0, "", Some(&specs),
+    )?;
+    let current_price = indicator_set
+        .get_num(&IndicatorSpec::CurrentPrice { tf: Timeframe::H1 })
+        .ok_or_else(|| VirsError::bad_request(format!(
+            "No current price available for {} on {} — cannot select strategy",
             symbol, exchange
-        ))
-    })?;
-    let atr_series = atr(&klines, 14)?;
-    let atr_val = atr_series.last().copied().ok_or_else(|| {
-        VirsError::bad_request(format!(
+        )))?;
+    let atr_val = indicator_set
+        .get_num(&IndicatorSpec::Atr { tf: Timeframe::H1, period: 14 })
+        .ok_or_else(|| VirsError::bad_request(format!(
             "No ATR data available for {} on {} — cannot select strategy",
             symbol, exchange
-        ))
-    })?;
-    let rsi_val = rsi_at(&klines, klines.len().saturating_sub(1), 14)?;
+        )))?;
+    let rsi_val = indicator_set
+        .get_num(&IndicatorSpec::Rsi { tf: Timeframe::H1, period: 14 })
+        .ok_or_else(|| VirsError::bad_request(format!(
+            "No RSI data available for {} on {} — cannot select strategy",
+            symbol, exchange
+        )))?;
 
     // 获取策略元数据
     let mut strategy_details: Vec<serde_json::Value> = Vec::new();

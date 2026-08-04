@@ -34,12 +34,13 @@ impl AutoWorker {
             return;
         }
 
-        let atr = if snapshot.indicators.atr > 0.0 {
-            snapshot.indicators.atr
-        } else {
-            snapshot.base.current_price * 0.02
-        };
-        let adx = snapshot.indicators.adx;
+        let atr = snapshot.indicators
+            .get_num(&virs_indicator::IndicatorSpec::Atr { tf: virs_types::Timeframe::H1, period: 14 })
+            .filter(|&v| v > 0.0)
+            .unwrap_or(snapshot.base.current_price * 0.02);
+        let adx = snapshot.indicators
+            .get_num(&virs_indicator::IndicatorSpec::Adx { tf: virs_types::Timeframe::H1, period: 14 })
+            .unwrap_or(0.0);
         let funding_rate = snapshot.base.funding_rate;
         let price = snapshot.base.current_price;
 

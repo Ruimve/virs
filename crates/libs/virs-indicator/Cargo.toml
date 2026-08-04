@@ -1,0 +1,13 @@
+[package]
+name = "virs-indicator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+virs-error = { path = "../virs-error" }
+virs-types = { path = "../virs-types" }
+talib-rs = { workspace = true }
+serde = { workspace = true }
+
+[lints]
+workspace = true

@@ -6,101 +6,14 @@
 //! 3. system_prompt 非空且包含 JSON schema 约束（防止 AI 生成无格式约束的 prompt）
 //! 4. user_prompt_template 非空
 //!
-//! 白名单维护：新增占位符时，同步更新 [`KNOWN_PLACEHOLDERS`] 和
-//! [`placeholder::placeholder_to_indicator`]（如该占位符对应指标）。
+//! 白名单来源：[`crate::placeholder::registry::names()`]，不再硬编码。
 
 use std::collections::HashSet;
 
 use virs_error::BotError;
 
+use crate::placeholder;
 use crate::prompt::template::PromptTemplate;
-
-/// 占位符白名单。覆盖 auto 默认 prompt 中出现的全部占位符。
-///
-/// 新增占位符必须在此注册，否则校验失败。
-pub const KNOWN_PLACEHOLDERS: &[&str] = &[
-    // ── 通用上下文（非指标）──
-    "timestamp",
-    "total_balance",
-    "available_balance",
-    "used_margin",
-    "margin_usage_rate",
-    "symbol",
-    "exchange",
-    "leverage",
-    "min_qty",
-    "position_info",
-    "position_duration",
-    "stop_take_profit_info",
-    "recent_close_info",
-    "funding_rate",
-    "funding_next_time",
-    "total_trades",
-    "win_trades",
-    "loss_trades",
-    "total_pnl",
-    "consecutive_losses",
-    "trigger_reason",
-    "h1_ema_cross",
-    "h1_change",
-    "h1_bb_width_pct",
-    "h1_current_price",
-    "h1_volume",
-    "h1_volume_sma20",
-    // ── Auto 指标占位符 ──
-    "h4_ema20",
-    "h4_ema50",
-    "h4_rsi",
-    "h4_macd_histogram",
-    "h4_adx",
-    "h4_macd",
-    "h4_macd_signal",
-    "h4_bb_width_pct",
-    "h1_ema20",
-    "h1_ema50",
-    "h1_ema_cross_bars_ago",
-    "h1_ema_gap_pct",
-    "h1_ema_gap_trend",
-    "h1_rsi",
-    "h1_macd",
-    "h1_macd_signal",
-    "h1_macd_histogram",
-    "h1_adx",
-    "h1_atr",
-    "h1_bb_upper",
-    "h1_bb_middle",
-    "h1_bb_lower",
-    "h1_high_50",
-    "h1_low_50",
-    "m15_current_price",
-    "m15_ema20",
-    "m15_ema50",
-    "m15_ema_cross",
-    "m15_ema_cross_bars_ago",
-    "m15_rsi",
-    "m15_macd",
-    "m15_macd_signal",
-    "m15_macd_histogram",
-    "m15_atr",
-    "m15_adx",
-    "m15_volume",
-    "m15_volume_sma20",
-    "m15_high_50",
-    "m15_low_50",
-    "h1_atr_sma20",
-    "h1_candle_body",
-    "h1_bars_outside_band",
-    "h1_bandwidth_5bars_ago",
-    "h1_high_20",
-    "h1_low_20",
-    "nearest_round_up",
-    "nearest_round_down",
-    "m15_bb_width_pct",
-    "m15_atr_sma20",
-    "m15_bars_outside_band",
-    "event_flag",
-    "event_description",
-];
 
 /// 校验单个模板。
 pub fn validate(tpl: &PromptTemplate) -> Result<(), BotError> {
@@ -138,7 +51,7 @@ pub fn validate(tpl: &PromptTemplate) -> Result<(), BotError> {
         ));
     }
 
-    let known: HashSet<&str> = KNOWN_PLACEHOLDERS.iter().copied().collect();
+    let known = placeholder::names();
     let used = extract_placeholders(&tpl.user_prompt_template);
 
     // 白名单校验

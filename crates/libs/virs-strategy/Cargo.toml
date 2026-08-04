@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 virs-error = { path = "../virs-error", features = ["reqwest"] }
 virs-types = { path = "../virs-types" }
+virs-indicator = { path = "../virs-indicator" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
@@ -13,7 +14,6 @@ uuid = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }
-talib-rs = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

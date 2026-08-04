@@ -236,18 +236,19 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
                 ))));
             };
 
-        let ind = virs_strategy::market::compute_market_indicators(
+        let ind = virs_indicator::compute_indicators(
             &klines_1h,
             &klines_4h,
             &klines_15m,
             funding_rate,
-            funding_next_time.clone(),
+            &funding_next_time,
+            None,
         )?;
 
         let effective_price = if current_price > 0.0 {
             current_price
         } else {
-            ind.current_price
+            ind.get_num(&virs_indicator::IndicatorSpec::CurrentPrice { tf: virs_types::Timeframe::H1 }).unwrap_or(0.0)
         };
 
         let exchange_key = format!("{}:perpetual", exchange);
@@ -501,18 +502,19 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
                 ))));
             };
 
-        let ind = virs_strategy::market::compute_market_indicators(
+        let ind = virs_indicator::compute_indicators(
             &klines_1h,
             &klines_4h,
             &klines_15m,
             funding_rate,
-            funding_next_time.clone(),
+            &funding_next_time,
+            None,
         )?;
 
         let effective_price = if current_price > 0.0 {
             current_price
         } else {
-            ind.current_price
+            ind.get_num(&virs_indicator::IndicatorSpec::CurrentPrice { tf: virs_types::Timeframe::H1 }).unwrap_or(0.0)
         };
 
         let exchange_key = format!("{}:perpetual", exchange);

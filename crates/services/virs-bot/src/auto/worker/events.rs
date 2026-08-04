@@ -440,10 +440,16 @@ impl AutoWorker {
                 .await
             {
                 Ok(s) => match AutoMarketSnapshot::from_base(s) {
-                    Ok(snap) if snap.indicators.atr > 0.0 => snap.indicators.atr,
-                    Ok(_) => {
-                        warn!(bot_id = %self.bot.id, "ATR is zero in snapshot, using fill_price * 2% as fallback for SL/TP");
-                        fill_price * 0.02
+                    Ok(snap) => {
+                        let atr = snap.indicators
+                            .get_num(&virs_indicator::IndicatorSpec::Atr { tf: virs_types::Timeframe::H1, period: 14 })
+                            .unwrap_or(0.0);
+                        if atr > 0.0 {
+                            atr
+                        } else {
+                            warn!(bot_id = %self.bot.id, "ATR is zero in snapshot, using fill_price * 2% as fallback for SL/TP");
+                            fill_price * 0.02
+                        }
                     }
                     Err(e) => {
                         warn!(bot_id = %self.bot.id, error = %e, "Failed to parse indicators for SL/TP recalculation, using fill_price * 2%");

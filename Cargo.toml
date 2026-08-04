@@ -9,6 +9,7 @@ members = [
     "crates/libs/virs-task",
     "crates/libs/virs-ccxt",
     "crates/libs/virs-exchange",
+    "crates/libs/virs-indicator",
     "crates/libs/virs-strategy",
     # Phase 5+:逐步添加
     # "crates/libs/virs-ai",

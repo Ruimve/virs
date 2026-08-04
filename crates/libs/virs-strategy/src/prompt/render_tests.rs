@@ -1,46 +1,25 @@
-use virs_types::MarketIndicators;
+use virs_indicator::{IndicatorSet, IndicatorValue, IndicatorSpec};
+use virs_types::Timeframe;
 use crate::prompt::render::{format_bars_outside, render, RenderContext};
 
-/// 测试辅助：构造全零 MarketIndicators（仅用于测试，生产代码不允许使用默认值）。
-fn zero_indicators() -> MarketIndicators {
-    serde_json::from_str(r#"{
-        "current_price": 0.0, "rsi": 0.0, "atr": 0.0, "atr_pct": 0.0,
-        "bb_width": 0.0, "bb_upper": 0.0, "bb_middle": 0.0, "bb_lower": 0.0,
-        "ema12": 0.0, "ema20": 0.0, "ema26": 0.0, "ema50": 0.0,
-        "macd": 0.0, "macd_signal": 0.0, "macd_histogram": 0.0, "adx": 0.0,
-        "change_1h": 0.0, "h1_atr_sma20": 0.0, "h1_candle_body": 0.0,
-        "h1_bars_outside_band": 0, "h1_bandwidth_5bars_ago": 0.0,
-        "h1_high_20": 0.0, "h1_low_20": 0.0,
-        "nearest_round_up": 0.0, "nearest_round_down": 0.0,
-        "h1_volume": 0.0, "h1_volume_sma20": 0.0,
-        "h1_ema_cross_bars_ago": 0, "h1_ema_gap_pct": 0.0,
-        "h1_ema_gap_trend": "", "h1_high_50": 0.0, "h1_low_50": 0.0,
-        "m15_current_price": 0.0, "m15_rsi": 0.0,
-        "m15_macd": 0.0, "m15_macd_signal": 0.0, "m15_macd_histogram": 0.0,
-        "m15_bb_width_pct": 0.0, "m15_atr": 0.0, "m15_atr_sma20": 0.0,
-        "m15_adx": 0.0, "m15_bars_outside_band": 0,
-        "m15_ema20": 0.0, "m15_ema50": 0.0,
-        "m15_volume": 0.0, "m15_volume_sma20": 0.0,
-        "m15_ema_cross_bars_ago": 0, "m15_high_50": 0.0, "m15_low_50": 0.0,
-        "h4_ema20": 0.0, "h4_ema50": 0.0, "h4_adx": 0.0,
-        "h4_bb_width_pct": 0.0, "h4_rsi": 0.0,
-        "h4_macd": 0.0, "h4_macd_signal": 0.0, "h4_macd_histogram": 0.0,
-        "funding_rate": 0.0, "funding_next_time": ""
-    }"#).expect("valid zero indicators JSON")
+/// 测试辅助：构造含特定指标值的 IndicatorSet。
+fn make_indicators() -> IndicatorSet {
+    IndicatorSet::with_value(IndicatorSpec::CurrentPrice { tf: Timeframe::H1 }, IndicatorValue::Num(50000.0))
+        .insert(IndicatorSpec::Ema { tf: Timeframe::H1, period: 20 }, IndicatorValue::Num(49500.0))
+        .insert(IndicatorSpec::Ema { tf: Timeframe::H1, period: 50 }, IndicatorValue::Num(49000.0))
+        .insert(IndicatorSpec::EmaCrossState { tf: Timeframe::H1, fast: 20, slow: 50 }, IndicatorValue::Str("金叉(多头)".to_string()))
+        .insert(IndicatorSpec::EmaCrossBarsAgo { tf: Timeframe::H1, fast: 20, slow: 50 }, IndicatorValue::Int(5))
+        .insert(IndicatorSpec::CurrentPrice { tf: Timeframe::M15 }, IndicatorValue::Num(50000.0))
+        .insert(IndicatorSpec::Ema { tf: Timeframe::M15, period: 20 }, IndicatorValue::Num(50100.0))
+        .insert(IndicatorSpec::Ema { tf: Timeframe::M15, period: 50 }, IndicatorValue::Num(49900.0))
+        .insert(IndicatorSpec::EmaCrossState { tf: Timeframe::M15, fast: 20, slow: 50 }, IndicatorValue::Str("金叉(多头)".to_string()))
+        .insert(IndicatorSpec::EmaCrossBarsAgo { tf: Timeframe::M15, fast: 20, slow: 50 }, IndicatorValue::Int(3))
+        .insert(IndicatorSpec::BarsOutsideBand { tf: Timeframe::H1, period: 20, stddev: 2 }, IndicatorValue::Int(2))
+        .insert(IndicatorSpec::BarsOutsideBand { tf: Timeframe::M15, period: 20, stddev: 2 }, IndicatorValue::Int(-1))
+        .clone()
 }
 
 fn make_ctx() -> RenderContext {
-    let mut ind = zero_indicators();
-    ind.current_price = 50000.0;
-    ind.ema20 = 49500.0;
-    ind.ema50 = 49000.0;
-    ind.h1_ema_cross_bars_ago = 5;
-    ind.m15_current_price = 50000.0;
-    ind.m15_ema20 = 50100.0;
-    ind.m15_ema50 = 49900.0;
-    ind.m15_ema_cross_bars_ago = 3;
-    ind.h1_bars_outside_band = 2;
-    ind.m15_bars_outside_band = -1;
     RenderContext {
         timestamp: "2026-07-19 12:00:00 UTC".to_string(),
         symbol: "BTC/USDT".to_string(),
@@ -58,14 +37,14 @@ fn make_ctx() -> RenderContext {
         total_pnl: 500.0,
         consecutive_losses: 2,
         event_flag: false,
-        event_description: "".to_string(),
+        event_description: String::new(),
         trigger_reason: "scheduled".to_string(),
         min_qty: 0.001,
         position_info: "无仓位".to_string(),
         position_duration: "无".to_string(),
         stop_take_profit_info: "未设置".to_string(),
         recent_close_info: "无".to_string(),
-        ind,
+        ind: make_indicators(),
     }
 }
 
@@ -127,33 +106,33 @@ fn r9_no_op_for_absent_placeholders() {
 
 #[test]
 fn r10_ema_cross_bars_none_when_negative() {
-    let mut ind = zero_indicators();
-    ind.h1_ema_cross_bars_ago = -1;
-    ind.m15_ema_cross_bars_ago = -1;
+    let ind = IndicatorSet::with_value(IndicatorSpec::EmaCrossBarsAgo { tf: Timeframe::H1, fast: 20, slow: 50 }, IndicatorValue::Int(-1))
+        .insert(IndicatorSpec::EmaCrossBarsAgo { tf: Timeframe::M15, fast: 20, slow: 50 }, IndicatorValue::Int(-1))
+        .clone();
     let ctx = RenderContext {
-        timestamp: "2026-07-19 12:00:00 UTC".to_string(),
-        symbol: "BTC/USDT".to_string(),
-        exchange: "binance".to_string(),
+        timestamp: String::new(),
+        symbol: String::new(),
+        exchange: String::new(),
         total_balance: 0.0,
         available_balance: 0.0,
         used_margin: 0.0,
         margin_usage_rate: 0.0,
         leverage: 0,
         funding_rate: 0.0,
-        funding_next_time: "".to_string(),
+        funding_next_time: String::new(),
         total_trades: 0,
         win_trades: 0,
         loss_trades: 0,
         total_pnl: 0.0,
         consecutive_losses: 0,
         event_flag: false,
-        event_description: "".to_string(),
-        trigger_reason: "".to_string(),
+        event_description: String::new(),
+        trigger_reason: String::new(),
         min_qty: 0.0,
-        position_info: "".to_string(),
-        position_duration: "".to_string(),
-        stop_take_profit_info: "".to_string(),
-        recent_close_info: "".to_string(),
+        position_info: String::new(),
+        position_duration: String::new(),
+        stop_take_profit_info: String::new(),
+        recent_close_info: String::new(),
         ind,
     };
     let result = render("{h1_ema_cross_bars_ago} {m15_ema_cross_bars_ago}", &ctx);

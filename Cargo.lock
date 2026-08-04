@@ -3034,6 +3034,7 @@ dependencies = [
  "virs-ccxt",
  "virs-error",
  "virs-exchange",
+ "virs-indicator",
  "virs-market",
  "virs-strategy",
  "virs-types",
@@ -3061,6 +3062,7 @@ dependencies = [
  "virs-config",
  "virs-error",
  "virs-exchange",
+ "virs-indicator",
  "virs-market",
  "virs-position",
  "virs-strategy",
@@ -3079,13 +3081,13 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "talib-rs",
  "tempfile",
  "tokio",
  "tracing",
  "uuid",
  "virs-config",
  "virs-error",
+ "virs-indicator",
  "virs-market",
  "virs-strategy",
  "virs-task",
@@ -3159,6 +3161,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "virs-indicator"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "talib-rs",
+ "virs-error",
+ "virs-types",
+]
+
+[[package]]
 name = "virs-market"
 version = "0.1.0"
 dependencies = [
@@ -3205,12 +3217,12 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "talib-rs",
  "tempfile",
  "tokio",
  "tracing",
  "uuid",
  "virs-error",
+ "virs-indicator",
  "virs-types",
 ]
 

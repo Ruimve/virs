@@ -1,0 +1,45 @@
+//! MACD 指标（TA-Lib `momentum::macd`）。
+
+use talib_rs::momentum;
+use virs_error::{Context, VirsError, VirsResult};
+use virs_types::Kline;
+
+use crate::indicators::closes;
+
+/// 计算指定索引处的 MACD 值（快线 - 慢线）。
+pub fn macd_at(klines: &[Kline], idx: usize, fast: usize, slow: usize) -> VirsResult<f64> {
+    if klines.is_empty() || idx < slow - 1 {
+        return Err(VirsError::config(format!(
+            "indicator macd_at: insufficient data at idx={idx} (fast={fast}, slow={slow})"
+        )));
+    }
+    let (macd, _, _) = momentum::macd(&closes(klines), fast, slow, 9)
+        .context("indicator macd_at: TA-Lib MACD calculation failed")?;
+    macd.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator macd_at: insufficient data at idx={idx} (no result produced, fast={fast}, slow={slow})"
+        ))
+    })
+}
+
+/// 计算指定索引处的 MACD 信号线值。
+pub fn macd_signal_at(
+    klines: &[Kline],
+    idx: usize,
+    fast: usize,
+    slow: usize,
+    signal: usize,
+) -> VirsResult<f64> {
+    if klines.is_empty() || idx < slow + signal - 2 {
+        return Err(VirsError::config(format!(
+            "indicator macd_signal_at: insufficient data at idx={idx} (fast={fast}, slow={slow}, signal={signal})"
+        )));
+    }
+    let (_, sig, _) = momentum::macd(&closes(klines), fast, slow, signal)
+        .context("indicator macd_signal_at: TA-Lib MACD calculation failed")?;
+    sig.get(idx).copied().ok_or_else(|| {
+        VirsError::config(format!(
+            "indicator macd_signal_at: insufficient data at idx={idx} (no result produced, fast={fast}, slow={slow}, signal={signal})"
+        ))
+    })
+}

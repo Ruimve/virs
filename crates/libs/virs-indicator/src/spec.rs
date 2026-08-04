@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 use virs_types::Timeframe;
 
-/// 指标规格。覆盖现有 `MarketIndicators` 的全部字段语义。
+/// 指标规格。每个 variant 自包含计算所需的全部参数。
 ///
 /// 每个 variant 自包含计算所需的全部参数（周期、标准差等），
 /// 不依赖外部上下文，便于去重与独立计算。
@@ -65,6 +65,8 @@ pub enum IndicatorSpec {
     EmaGapPct { tf: Timeframe, fast: usize, slow: usize },
     /// EMA 间距趋势（"扩大" / "缩小" / "持平"）
     EmaGapTrend { tf: Timeframe, fast: usize, slow: usize },
+    /// EMA 交叉状态（"金叉(多头)" / "死叉(空头)"）
+    EmaCrossState { tf: Timeframe, fast: usize, slow: usize },
     /// N 根 K 线前的布林带宽度
     BandwidthBarsAgo { tf: Timeframe, period: usize, stddev: u32, bars_ago: usize },
     /// 向上取整的整数关口
@@ -107,6 +109,7 @@ impl IndicatorSpec {
             | IndicatorSpec::EmaCrossBarsAgo { tf, .. }
             | IndicatorSpec::EmaGapPct { tf, .. }
             | IndicatorSpec::EmaGapTrend { tf, .. }
+            | IndicatorSpec::EmaCrossState { tf, .. }
             | IndicatorSpec::BandwidthBarsAgo { tf, .. } => Some(*tf),
         }
     }
