@@ -9,6 +9,9 @@ pub mod atomic;
 pub mod derived;
 pub mod primitive;
 
+#[cfg(test)]
+pub mod test_utils;
+
 use virs_types::Kline;
 
 /// 提取收盘价序列。
