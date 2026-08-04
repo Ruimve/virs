@@ -2,11 +2,11 @@ use async_trait::async_trait;
 use tokio_stream::wrappers::ReceiverStream;
 use virs_ccxt::{self, Exchange as CcxtExchange, CcxtPlaceOrderParams};
 use virs_error::{ExchangeError, VirsResult};
-use virs_types::*;
-use virs_types::exchange::{ExchangePe, OrderUpdateStream};
-use virs_types::market::*;
-use virs_types::position::PlaceOrderParams;
-use virs_types::OrderResult;
+use virs_type::*;
+use virs_type::exchange::{ExchangePe, OrderUpdateStream};
+use virs_type::market::*;
+use virs_type::position::PlaceOrderParams;
+use virs_type::OrderResult;
 
 pub struct CcxtAdapter {
     inner: Box<dyn CcxtExchange>,
@@ -153,7 +153,7 @@ impl ExchangePe for CcxtAdapter {
     }
 
     async fn get_positions(&self, symbol: Option<&str>) -> VirsResult<Vec<ExchangePosition>> {
-        // virs_ccxt::ExchangePosition 已与 virs_types::ExchangePosition 统一（同一类型），
+        // virs_ccxt::ExchangePosition 已与 virs_type::ExchangePosition 统一（同一类型），
         // 无需任何转换，直接返回。
         self.inner
             .fetch_positions(symbol)
@@ -196,7 +196,7 @@ impl ExchangePe for CcxtAdapter {
     }
 
     async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<OrderResult> {
-        // 从 virs_types::PlaceOrderParams（10 字段）构造 virs_ccxt::PlaceOrderParams（12 字段）。
+        // 从 virs_type::PlaceOrderParams（10 字段）构造 virs_ccxt::PlaceOrderParams（12 字段）。
         // 补充 adapter 层独有字段：market_type（来自自身）、leverage=None、margin_mode=Cross。
         let ccxt_params = CcxtPlaceOrderParams {
             symbol: params.symbol,

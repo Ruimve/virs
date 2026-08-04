@@ -6,12 +6,12 @@ use uuid::Uuid;
 use virs_error::{BotError, BotResult, VirsError};
 use virs_position::PositionEngine;
 use virs_task::{spawn, Stop, TaskHandle};
-use virs_types::bot::{
+use virs_type::bot::{
     OrderCommand, OrderEvent, OrderExecutor, OrderInfo,
 };
-use virs_types::{OrderType, TimeInForce};
-use virs_types::position::*;
-use virs_types::CcxtOrder;
+use virs_type::{OrderType, TimeInForce};
+use virs_type::position::*;
+use virs_type::CcxtOrder;
 
 pub struct PeOrderExecutor {
     cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,

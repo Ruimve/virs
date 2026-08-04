@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use virs_types::WsFeedEvent;
+use virs_type::WsFeedEvent;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AlgoStatus {

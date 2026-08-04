@@ -95,7 +95,7 @@ pub fn save_template(template: &PromptTemplate, overwrite: bool) -> BotResult<Pa
 
 /// 删除策略模板文件夹。
 pub fn delete_template(
-    strategy_type: virs_types::StrategyType,
+    strategy_type: virs_type::StrategyType,
     name: &str,
 ) -> BotResult<()> {
     let dir = std::env::var(ENV_STRATEGIES_DIR).map_err(|_| {

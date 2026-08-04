@@ -1,7 +1,7 @@
 //! 成交量 SMA 指标（手写，非 TA-Lib）。
 
 use virs_error::{VirsError, VirsResult};
-use virs_types::Kline;
+use virs_type::Kline;
 
 /// 计算指定索引处过去 N 根 K 线的成交量 SMA。
 pub fn volume_sma_at(klines: &[Kline], idx: usize, period: usize) -> VirsResult<f64> {

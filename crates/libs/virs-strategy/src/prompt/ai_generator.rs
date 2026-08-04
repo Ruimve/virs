@@ -11,7 +11,7 @@
 //! 6. 返回校验通过的模板
 
 use virs_error::{BotError, BotResult};
-use virs_types::StrategyType;
+use virs_type::StrategyType;
 
 use crate::prompt::template::{PromptSource, PromptTemplate};
 use crate::prompt::validator::validate;

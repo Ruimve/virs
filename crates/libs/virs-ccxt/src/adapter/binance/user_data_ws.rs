@@ -4,7 +4,7 @@ use std::time::Duration;
 use serde::Deserialize;
 use tokio::sync::mpsc;
 
-use virs_types::WsFeedEvent;
+use virs_type::WsFeedEvent;
 
 use crate::adapter::binance::fapi;
 use crate::adapter::binance::user_data_ws_events::dispatch_event;

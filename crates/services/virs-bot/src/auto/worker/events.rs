@@ -6,9 +6,9 @@ use virs_error::VirsError;
 
 use crate::auto::ports::AutoMarketSnapshot;
 use crate::auto::strategy;
-use virs_types::bot::OrderEvent;
-use virs_types::PositionSide;
-use virs_types::position::EngineEvent;
+use virs_type::bot::OrderEvent;
+use virs_type::PositionSide;
+use virs_type::position::EngineEvent;
 
 use crate::auto::worker::{side_str, AutoWorker};
 
@@ -442,7 +442,7 @@ impl AutoWorker {
                 Ok(s) => match AutoMarketSnapshot::from_base(s) {
                     Ok(snap) => {
                         let atr = snap.indicators
-                            .get_num(&virs_indicator::IndicatorSpec::Atr { tf: virs_types::Timeframe::H1, period: 14 })
+                            .get_num(&virs_indicator::IndicatorSpec::Atr { tf: virs_type::Timeframe::H1, period: 14 })
                             .unwrap_or(0.0);
                         if atr > 0.0 {
                             atr

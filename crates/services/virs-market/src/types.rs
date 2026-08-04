@@ -3,13 +3,13 @@ use virs_error::VirsResult;
 
 pub(crate) use virs_ccxt::ws_types::{KlineWsClient, WsEvent};
 
-use virs_types::{Candle, Timeframe};
+use virs_type::{Candle, Timeframe};
 
 pub(crate) use virs_ccxt::ws_types::{
     OrderBookLevel, OrderBookWsClient, WsOrderBookEvent,
 };
 
-pub(crate) use virs_types::MarketType;
+pub(crate) use virs_type::MarketType;
 
 #[derive(Debug, Clone)]
 pub struct KlineEngineConfig {

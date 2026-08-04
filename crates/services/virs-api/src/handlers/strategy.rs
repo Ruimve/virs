@@ -13,7 +13,7 @@ use axum::Json;
 use virs_strategy::prompt::{
     delete_template, generate_prompt, save_template, GenerateRequest, PromptTemplate,
 };
-use virs_types::StrategyType;
+use virs_type::StrategyType;
 use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};

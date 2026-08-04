@@ -1,5 +1,5 @@
 use crate::types::*;
-use virs_types::Timeframe;
+use virs_type::Timeframe;
 
 #[test]
 fn t1_1_timeframe_all_count() {

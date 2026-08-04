@@ -5,14 +5,14 @@ use tracing::warn;
 
 use virs_exchange::Exchanges;
 use virs_market::KlineEngine;
-use virs_types::Timeframe;
-use virs_types::Kline;
+use virs_type::Timeframe;
+use virs_type::Kline;
 use virs_error::{VirsError, VirsResult};
-use virs_types::bot::{MarketDataProvider, MarketSnapshot};
-use virs_types::market::Balance;
-use virs_types::exchange::ExchangePe;
+use virs_type::bot::{MarketDataProvider, MarketSnapshot};
+use virs_type::market::Balance;
+use virs_type::exchange::ExchangePe;
 
-pub fn candle_to_kline(c: &virs_types::Candle) -> Kline {
+pub fn candle_to_kline(c: &virs_type::Candle) -> Kline {
     Kline {
         open_time: c.open_time,
         open: c.open,
@@ -248,7 +248,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         let effective_price = if current_price > 0.0 {
             current_price
         } else {
-            ind.get_num(&virs_indicator::IndicatorSpec::CurrentPrice { tf: virs_types::Timeframe::H1 }).unwrap_or(0.0)
+            ind.get_num(&virs_indicator::IndicatorSpec::CurrentPrice { tf: virs_type::Timeframe::H1 }).unwrap_or(0.0)
         };
 
         let exchange_key = format!("{}:perpetual", exchange);
@@ -514,7 +514,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
         let effective_price = if current_price > 0.0 {
             current_price
         } else {
-            ind.get_num(&virs_indicator::IndicatorSpec::CurrentPrice { tf: virs_types::Timeframe::H1 }).unwrap_or(0.0)
+            ind.get_num(&virs_indicator::IndicatorSpec::CurrentPrice { tf: virs_type::Timeframe::H1 }).unwrap_or(0.0)
         };
 
         let exchange_key = format!("{}:perpetual", exchange);

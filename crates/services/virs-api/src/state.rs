@@ -10,7 +10,7 @@ use virs_exchange::Exchanges;
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_strategy::llm_client::{call_llm_api, LlmCallResult};
 use virs_strategy::prompt::PromptLoader;
-use virs_types::position::EngineEvent;
+use virs_type::position::EngineEvent;
 
 
 #[async_trait]
@@ -32,7 +32,7 @@ pub trait EngineManager: Send + Sync {
     fn pe_event_subscribe(&self) -> Option<broadcast::Receiver<EngineEvent>>;
 
 
-    fn get_positions_by_symbol(&self, symbol: &str) -> Vec<virs_types::position::Position>;
+    fn get_positions_by_symbol(&self, symbol: &str) -> Vec<virs_type::position::Position>;
 
 
     async fn restore_if_needed(&self) -> VirsResult<()>;
@@ -84,11 +84,11 @@ impl AppState {
             Some((provider, encrypted_key)) => {
                 let api_key =
                     virs_utils::crypto::decrypt_with_key(&encrypted_key, &self.llm_key)?;
-                let base_url = virs_types::llm::LlmProviderConfig::for_provider(&provider)
+                let base_url = virs_type::llm::LlmProviderConfig::for_provider(&provider)
                     .map(|c| c.base_url)
                     .ok_or_else(|| VirsError::config(format!("Unknown AI provider: {provider}")))?
                     .to_string();
-                let model = virs_types::llm::LlmProviderConfig::for_provider(&provider)
+                let model = virs_type::llm::LlmProviderConfig::for_provider(&provider)
                     .map(|c| c.default_model)
                     .ok_or_else(|| VirsError::config(format!("Unknown AI provider: {provider}")))?
                     .to_string();

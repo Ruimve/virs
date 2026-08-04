@@ -3037,7 +3037,7 @@ dependencies = [
  "virs-indicator",
  "virs-market",
  "virs-strategy",
- "virs-types",
+ "virs-type",
  "virs-utils",
 ]
 
@@ -3067,7 +3067,7 @@ dependencies = [
  "virs-position",
  "virs-strategy",
  "virs-task",
- "virs-types",
+ "virs-type",
  "virs-utils",
 ]
 
@@ -3091,7 +3091,7 @@ dependencies = [
  "virs-market",
  "virs-strategy",
  "virs-task",
- "virs-types",
+ "virs-type",
 ]
 
 [[package]]
@@ -3113,7 +3113,7 @@ dependencies = [
  "tracing",
  "virs-error",
  "virs-task",
- "virs-types",
+ "virs-type",
  "virs-ws",
 ]
 
@@ -3157,7 +3157,7 @@ dependencies = [
  "uuid",
  "virs-ccxt",
  "virs-error",
- "virs-types",
+ "virs-type",
 ]
 
 [[package]]
@@ -3167,7 +3167,7 @@ dependencies = [
  "serde",
  "talib-rs",
  "virs-error",
- "virs-types",
+ "virs-type",
 ]
 
 [[package]]
@@ -3185,7 +3185,7 @@ dependencies = [
  "virs-error",
  "virs-exchange",
  "virs-task",
- "virs-types",
+ "virs-type",
 ]
 
 [[package]]
@@ -3206,7 +3206,7 @@ dependencies = [
  "virs-error",
  "virs-exchange",
  "virs-task",
- "virs-types",
+ "virs-type",
 ]
 
 [[package]]
@@ -3223,7 +3223,7 @@ dependencies = [
  "uuid",
  "virs-error",
  "virs-indicator",
- "virs-types",
+ "virs-type",
 ]
 
 [[package]]
@@ -3236,7 +3236,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "virs-types"
+name = "virs-type"
 version = "0.1.0"
 dependencies = [
  "async-trait",

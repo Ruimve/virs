@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use virs_error::{BotError, BotResult};
-use virs_types::bot::CredentialStore;
+use virs_type::bot::CredentialStore;
 
 pub struct PgCredentialStore {
     db: PgPool,

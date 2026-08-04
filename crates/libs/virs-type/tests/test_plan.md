@@ -1,7 +1,7 @@
-# virs-types 测试用例文档
+# virs-type 测试用例文档
 
 > 生成日期: 2026-07-01
-> Crate: `crates/libs/virs-types`
+> Crate: `crates/libs/virs-type`
 > 状态: **34 个测试全部通过** (32 单元 + 2 集成)
 
 ---
@@ -135,7 +135,7 @@
 | 方法 | 业务调用位置 |
 |------|-------------|
 | `OrderStatus::is_filled` | `virs-position/src/engine.rs` |
-| `PositionStatus::is_open` | `virs-types/src/position.rs` (Position::is_open 实现) |
+| `PositionStatus::is_open` | `virs-type/src/position.rs` (Position::is_open 实现) |
 | `EngineState::is_running` | `virs-position/src/engine.rs` |
 | `Balance::compute_total` | `virs-exchange/src/paper.rs` |
 | `ExchangePosition::unrealized_pnl_at` | `virs-exchange/src/paper.rs` |

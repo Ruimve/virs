@@ -2,7 +2,7 @@
 
 use talib_rs::overlap;
 use virs_error::{Context, VirsError, VirsResult};
-use virs_types::Kline;
+use virs_type::Kline;
 
 use crate::indicators::closes;
 

@@ -8,7 +8,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use virs_types::StrategyType;
+use virs_type::StrategyType;
 
 /// Prompt 来源标记。AI 生成时记录模型与元 prompt，便于追溯。
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -13,7 +13,7 @@ use virs_ws::{
 };
 use crate::ws_types::KlineWsClient;
 pub use crate::ws_types::{WsCandleUpdate, WsEvent};
-use virs_types::Candle;
+use virs_type::Candle;
 use virs_task::{spawn, Stop, TaskHandle};
 
 pub(crate) fn binance_ws_symbol(symbol: &str) -> String {

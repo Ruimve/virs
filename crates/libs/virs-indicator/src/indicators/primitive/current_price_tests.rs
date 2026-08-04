@@ -17,6 +17,6 @@ fn returns_single_kline_close() {
 
 #[test]
 fn errors_on_empty_klines() {
-    let klines: Vec<virs_types::Kline> = vec![];
+    let klines: Vec<virs_type::Kline> = vec![];
     assert!(compute(&klines).is_err());
 }

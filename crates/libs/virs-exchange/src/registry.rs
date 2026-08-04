@@ -1,4 +1,4 @@
-use virs_types::ExchangePe;
+use virs_type::ExchangePe;
 use dashmap::DashMap;
 use std::sync::Arc;
 

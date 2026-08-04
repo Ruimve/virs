@@ -14,10 +14,10 @@ use virs_exchange::{Exchanges, PaperExchangeAdapter};
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
 use virs_strategy::prompt::PromptLoader;
-use virs_types::bot::OrderEvent;
-use virs_types::MarketType;
-use virs_types::exchange::ExchangePe;
-use virs_types::position::{EngineCommand, EngineEvent};
+use virs_type::bot::OrderEvent;
+use virs_type::MarketType;
+use virs_type::exchange::ExchangePe;
+use virs_type::position::{EngineCommand, EngineEvent};
 
 use crate::adapters::*;
 
@@ -371,12 +371,12 @@ impl EngineManager for AppEngineManager {
         )
         .await);
         let order_executor_for_state = Arc::clone(&auto_order_executor);
-        let auto_credential_store: Arc<dyn virs_types::bot::CredentialStore> =
+        let auto_credential_store: Arc<dyn virs_type::bot::CredentialStore> =
             Arc::new(PgCredentialStore::new(
                 self.db_pool.clone(),
                 virs_utils::crypto::derive_key(&self.llm_key),
             ));
-        let auto_llm_resolver: Arc<dyn virs_types::bot::LlmProviderResolver> =
+        let auto_llm_resolver: Arc<dyn virs_type::bot::LlmProviderResolver> =
             Arc::new(DefaultLlmResolver::new());
         let auto_ai_service = Arc::new(virs_bot::auto::ai::AutoAiService::new(
             auto_llm_resolver,
@@ -441,7 +441,7 @@ impl EngineManager for AppEngineManager {
         })
     }
 
-    fn get_positions_by_symbol(&self, symbol: &str) -> Vec<virs_types::position::Position> {
+    fn get_positions_by_symbol(&self, symbol: &str) -> Vec<virs_type::position::Position> {
         match self.state.get() {
             Some(s) => {
                 let guard = s.position_engine.lock().unwrap();

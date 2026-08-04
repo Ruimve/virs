@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 
 use virs_indicator::IndicatorSpec;
-use virs_types::Timeframe;
+use virs_type::Timeframe;
 
 // ── 分类（用于 ai_generator 的 prompt 文本分组）──
 

@@ -1,6 +1,6 @@
 //! 测试公共辅助：构造 K 线数据。
 
-use virs_types::Kline;
+use virs_type::Kline;
 
 /// 构造一条 K 线。
 pub fn kline(open: f64, high: f64, low: f64, close: f64, volume: f64) -> Kline {

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 use virs_error::BotResult;
 
-use virs_types::bot::{CredentialStore, LlmProviderResolver};
+use virs_type::bot::{CredentialStore, LlmProviderResolver};
 use virs_strategy::llm_client::{self as ai_client, LlmCallResult};
 
 /// 共享的 LLM 客户端：封装凭证加载 + provider 解析 + HTTP 调用。

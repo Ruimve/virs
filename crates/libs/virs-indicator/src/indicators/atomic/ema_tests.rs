@@ -36,6 +36,6 @@ fn ema_errors_on_insufficient_data() {
 
 #[test]
 fn ema_errors_on_empty_klines() {
-    let klines: Vec<virs_types::Kline> = vec![];
+    let klines: Vec<virs_type::Kline> = vec![];
     assert!(ema_at(&klines, 0, 20).is_err());
 }

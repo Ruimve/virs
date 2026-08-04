@@ -305,7 +305,7 @@ pub async fn fetch_balance(
         }
     };
 
-    let balance_url = match virs_types::llm::LlmProviderConfig::for_provider(&provider).and_then(|c| c.balance_url) {
+    let balance_url = match virs_type::llm::LlmProviderConfig::for_provider(&provider).and_then(|c| c.balance_url) {
         Some(url) => url,
         None => return Ok(Json(ApiResponse::ok(serde_json::json!({ "balances": [] })))),
     };

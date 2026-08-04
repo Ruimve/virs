@@ -1,7 +1,7 @@
 use crate::auth::Signer;
 use crate::ExchangeClient;
 use virs_error::ExchangeError;
-use virs_types::ApiRestrictions;
+use virs_type::ApiRestrictions;
 
 // 币安现货 API 基础域名 (注意: 现货域名，非合约域名 fapi.binance.com)
 const BASE_URL: &str = "https://api.binance.com";

@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use virs_error::VirsError;
-use virs_types::{Kline, Timeframe};
+use virs_type::{Kline, Timeframe};
 
 use crate::indicators;
 use crate::spec::IndicatorSpec;

@@ -8,7 +8,7 @@ pub mod order_trade_update;
 pub mod strategy_update;
 pub mod trade_lite;
 
-use virs_types::WsFeedEvent;
+use virs_type::WsFeedEvent;
 
 // 事件分发器，按e字段路由到各处理器
 pub fn dispatch_event(text: &str) -> Option<WsFeedEvent> {

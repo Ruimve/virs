@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use sqlx::FromRow;
-use virs_types::StrategyType;
+use virs_type::StrategyType;
 use virs_error::VirsError;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
@@ -100,7 +100,7 @@ pub async fn create_bot(
     state.engine_manager.ensure_started(paper_mode).await?;
 
 
-    let exchange_key = format!("{}:{}", exchange, virs_types::MarketType::Perpetual);
+    let exchange_key = format!("{}:{}", exchange, virs_type::MarketType::Perpetual);
     if state.exchange_registry.get(&exchange_key).is_none() {
         return Err(VirsError::Http {
             status: 412,
@@ -109,7 +109,7 @@ pub async fn create_bot(
     }
 
 
-    state.kline_engine.subscribe(exchange, symbol, virs_types::MarketType::Perpetual).await?;
+    state.kline_engine.subscribe(exchange, symbol, virs_type::MarketType::Perpetual).await?;
 
 
     let fallback = if paper_mode { 10000.0 } else { 0.0 };
@@ -263,7 +263,7 @@ pub async fn get_bot(
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
 
-    let bot = sqlx::query_as::<_, virs_types::AutoBot>(
+    let bot = sqlx::query_as::<_, virs_type::AutoBot>(
         "SELECT * FROM qd_auto_bots WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
@@ -334,7 +334,7 @@ pub async fn update_bot(
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     // 查询 bot 当前状态
-    let bot = sqlx::query_as::<_, virs_types::AutoBot>(
+    let bot = sqlx::query_as::<_, virs_type::AutoBot>(
         "SELECT * FROM qd_auto_bots WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
@@ -648,7 +648,7 @@ pub async fn get_stats(
     .await?;
 
 
-    let bot = sqlx::query_as::<_, virs_types::AutoBot>(
+    let bot = sqlx::query_as::<_, virs_type::AutoBot>(
         "SELECT * FROM qd_auto_bots WHERE id = $1 AND user_id = $2",
     )
     .bind(id)

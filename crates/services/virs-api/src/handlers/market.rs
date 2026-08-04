@@ -32,7 +32,7 @@ pub async fn kline_subscribe(
     State(state): State<AppState>,
     Json(body): Json<KlineSubscribeRequest>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let market_type = virs_types::MarketType::Perpetual;
+    let market_type = virs_type::MarketType::Perpetual;
 
 
     let exchange_key = format!("{}:{}", body.exchange, market_type);
@@ -61,7 +61,7 @@ pub async fn orderbook_subscribe(
     State(state): State<AppState>,
     Json(body): Json<KlineSubscribeRequest>,
 ) -> Result<Json<ApiResponse>, VirsError> {
-    let market_type = virs_types::MarketType::Perpetual;
+    let market_type = virs_type::MarketType::Perpetual;
 
     match state
         .orderbook_engine
@@ -85,13 +85,13 @@ pub async fn kline_data(
     Query(params): Query<KlineDataQuery>,
 ) -> Result<Json<ApiResponse>, VirsError> {
     let tf = match params.timeframe.as_deref() {
-        Some("1m") => virs_types::Timeframe::M1,
-        Some("5m") => virs_types::Timeframe::M5,
-        Some("15m") => virs_types::Timeframe::M15,
-        Some("1h") => virs_types::Timeframe::H1,
-        Some("4h") => virs_types::Timeframe::H4,
-        Some("1d") => virs_types::Timeframe::D1,
-        _ => virs_types::Timeframe::M1,
+        Some("1m") => virs_type::Timeframe::M1,
+        Some("5m") => virs_type::Timeframe::M5,
+        Some("15m") => virs_type::Timeframe::M15,
+        Some("1h") => virs_type::Timeframe::H1,
+        Some("4h") => virs_type::Timeframe::H4,
+        Some("1d") => virs_type::Timeframe::D1,
+        _ => virs_type::Timeframe::M1,
     };
 
     if let Some(candles) = state
@@ -134,7 +134,7 @@ pub async fn get_ticker(
 
     if let Some(candles) = state
         .kline_engine
-        .get_klines_async(exchange, symbol, virs_types::Timeframe::M1)
+        .get_klines_async(exchange, symbol, virs_type::Timeframe::M1)
         .await
     {
         if let Some(last) = candles.last() {
@@ -153,7 +153,7 @@ pub async fn get_ticker(
     }
 
 
-    let exchange_key = format!("{}:{}", exchange, virs_types::MarketType::Perpetual);
+    let exchange_key = format!("{}:{}", exchange, virs_type::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_ticker(symbol).await {
             Ok(ticker) => Ok(Json(ApiResponse::ok(serde_json::json!({
@@ -192,13 +192,13 @@ pub async fn get_klines(
 
 
     let requested_tf = match params.timeframe.as_deref() {
-        Some("1m") => virs_types::Timeframe::M1,
-        Some("5m") => virs_types::Timeframe::M5,
-        Some("15m") => virs_types::Timeframe::M15,
-        Some("1h") => virs_types::Timeframe::H1,
-        Some("4h") => virs_types::Timeframe::H4,
-        Some("1d") => virs_types::Timeframe::D1,
-        _ => virs_types::Timeframe::M15,
+        Some("1m") => virs_type::Timeframe::M1,
+        Some("5m") => virs_type::Timeframe::M5,
+        Some("15m") => virs_type::Timeframe::M15,
+        Some("1h") => virs_type::Timeframe::H1,
+        Some("4h") => virs_type::Timeframe::H4,
+        Some("1d") => virs_type::Timeframe::D1,
+        _ => virs_type::Timeframe::M15,
     };
 
 
@@ -225,16 +225,16 @@ pub async fn get_klines(
     }
 
 
-    let exchange_key = format!("{}:{}", exchange, virs_types::MarketType::Perpetual);
+    let exchange_key = format!("{}:{}", exchange, virs_type::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => {
             let tf_str = match requested_tf {
-                virs_types::Timeframe::M1 => "1m",
-                virs_types::Timeframe::M5 => "5m",
-                virs_types::Timeframe::M15 => "15m",
-                virs_types::Timeframe::H1 => "1h",
-                virs_types::Timeframe::H4 => "4h",
-                virs_types::Timeframe::D1 => "1d",
+                virs_type::Timeframe::M1 => "1m",
+                virs_type::Timeframe::M5 => "5m",
+                virs_type::Timeframe::M15 => "15m",
+                virs_type::Timeframe::H1 => "1h",
+                virs_type::Timeframe::H4 => "4h",
+                virs_type::Timeframe::D1 => "1d",
             };
             match ex.get_klines(symbol, tf_str, 500, None).await {
                 Ok(klines) => Ok(Json(ApiResponse::ok(serde_json::json!({
@@ -273,7 +273,7 @@ pub async fn get_order_book(
         None => return Err(VirsError::bad_request("symbol is required")),
     };
 
-    let exchange_key = format!("{}:{}", exchange, virs_types::MarketType::Perpetual);
+    let exchange_key = format!("{}:{}", exchange, virs_type::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         // ExchangePe 统一 trait 不再提供 get_order_book 接口
         Some(_ex) => Err(VirsError::bad_request(format!(
@@ -296,7 +296,7 @@ pub async fn get_balances(
         None => return Err(VirsError::bad_request("exchange is required")),
     };
 
-    let exchange_key = format!("{}:{}", exchange, virs_types::MarketType::Perpetual);
+    let exchange_key = format!("{}:{}", exchange, virs_type::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         // ExchangePe::get_balance() 返回单个（通常为 USDT）余额
         Some(ex) => match ex.get_balance().await {
@@ -331,7 +331,7 @@ pub async fn get_symbols(
         None => return Err(VirsError::bad_request("exchange is required")),
     };
 
-    let exchange_key = format!("{}:{}", exchange, virs_types::MarketType::Perpetual);
+    let exchange_key = format!("{}:{}", exchange, virs_type::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
         Some(ex) => match ex.get_symbols().await {
             Ok(symbols) => Ok(Json(ApiResponse::ok(serde_json::json!({

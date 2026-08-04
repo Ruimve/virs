@@ -11,7 +11,7 @@ use super::structs::OrderUpdateStream;
 
 /// 统一交易所接口 trait。
 ///
-/// 合并了原 `virs_exchange::Exchange` 和 `virs_types::ExchangePe` 两个 trait。
+/// 合并了原 `virs_exchange::Exchange` 和 `virs_type::ExchangePe` 两个 trait。
 /// 底层交易所连接（如 `BinanceExchange`）实现 `virs_ccxt::Exchange`，
 /// 适配器（如 `CcxtAdapter`）将其包装为实现本 trait。
 #[async_trait]

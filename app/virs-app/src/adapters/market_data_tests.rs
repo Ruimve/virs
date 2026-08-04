@@ -1,5 +1,5 @@
 use crate::adapters::market_data::candle_to_kline;
-use virs_types::Candle;
+use virs_type::Candle;
 
 fn make_candle() -> Candle {
     Candle {

@@ -5,9 +5,9 @@ use uuid::Uuid;
 
 use crate::auto::ports::AutoMarketSnapshot;
 use crate::auto::strategy;
-use virs_types::bot::OrderCommand;
+use virs_type::bot::OrderCommand;
 use crate::auto::worker::client_order_id::{format_auto_open, format_auto_close};
-use virs_types::{PositionSide, Side};
+use virs_type::{PositionSide, Side};
 
 use crate::auto::worker::{side_str, AutoWorker, PendingClose, PendingOpen};
 
@@ -35,11 +35,11 @@ impl AutoWorker {
         }
 
         let atr = snapshot.indicators
-            .get_num(&virs_indicator::IndicatorSpec::Atr { tf: virs_types::Timeframe::H1, period: 14 })
+            .get_num(&virs_indicator::IndicatorSpec::Atr { tf: virs_type::Timeframe::H1, period: 14 })
             .filter(|&v| v > 0.0)
             .unwrap_or(snapshot.base.current_price * 0.02);
         let adx = snapshot.indicators
-            .get_num(&virs_indicator::IndicatorSpec::Adx { tf: virs_types::Timeframe::H1, period: 14 })
+            .get_num(&virs_indicator::IndicatorSpec::Adx { tf: virs_type::Timeframe::H1, period: 14 })
             .unwrap_or(0.0);
         let funding_rate = snapshot.base.funding_rate;
         let price = snapshot.base.current_price;

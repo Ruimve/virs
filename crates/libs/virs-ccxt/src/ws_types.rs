@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use tokio::sync::broadcast;
 
-use virs_types::Candle;
+use virs_type::Candle;
 
 #[derive(Debug, Clone)]
 pub struct WsCandleUpdate {

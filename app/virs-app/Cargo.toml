@@ -12,7 +12,7 @@ virs-bot = { path = "../../crates/services/virs-bot" }
 virs-api = { path = "../../crates/services/virs-api" }
 virs-strategy = { path = "../../crates/libs/virs-strategy" }
 virs-indicator = { path = "../../crates/libs/virs-indicator" }
-virs-types = { path = "../../crates/libs/virs-types" }
+virs-type = { path = "../../crates/libs/virs-type" }
 virs-error = { path = "../../crates/libs/virs-error", features = ["sqlx"] }
 virs-config = { path = "../../crates/libs/virs-config" }
 virs-utils = { path = "../../crates/libs/virs-utils" }

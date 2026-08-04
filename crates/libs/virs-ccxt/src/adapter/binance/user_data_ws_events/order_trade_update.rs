@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use virs_types::{
+use virs_type::{
     CcxtOrder, CcxtOrderStatus, ExecutionType as CcxtExecutionType, PositionSide, WsFeedEvent,
 };
 
@@ -162,11 +162,11 @@ impl OrderTradeUpdateData {
     }
 
     /// WS 事件合法性校验：在转换为 CcxtOrder 之前，对影响业务逻辑的必需字段做原始字符串校验。
-    /// 校验逻辑由 `virs_types::CcxtOrder::validate_fields` 共享函数提供，WS 路径和 DB 读取路径共用。
+    /// 校验逻辑由 `virs_type::CcxtOrder::validate_fields` 共享函数提供，WS 路径和 DB 读取路径共用。
     ///
     /// 返回 false 时已记录 error 日志，调用方应跳过该订单（return None）。
     pub fn validate(&self) -> bool {
-        if let Err(e) = virs_types::CcxtOrder::validate_fields(
+        if let Err(e) = virs_type::CcxtOrder::validate_fields(
             &self.side,
             self.position_side.as_deref(),
             &self.status,
@@ -231,9 +231,9 @@ impl OrderTradeUpdateData {
         envelope_transaction_time: i64,
     ) -> CcxtOrder {
         let side = match self.side.as_str() {
-            "BUY" => virs_types::Side::Buy,
-            "SELL" => virs_types::Side::Sell,
-            other => virs_types::Side::Unknown(other.to_string()),
+            "BUY" => virs_type::Side::Buy,
+            "SELL" => virs_type::Side::Sell,
+            other => virs_type::Side::Unknown(other.to_string()),
         };
 
         let order_type =

@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use virs_error::VirsError;
-use virs_types::llm::LlmProviderConfig;
+use virs_type::llm::LlmProviderConfig;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -164,7 +164,7 @@ async fn fetch_price_from_kline(
 ) -> Result<f64, VirsError> {
     let candles = state
         .kline_engine
-        .get_klines_async(exchange, symbol, virs_types::Timeframe::M1)
+        .get_klines_async(exchange, symbol, virs_type::Timeframe::M1)
         .await
         .ok_or_else(|| {
             VirsError::not_found(format!(

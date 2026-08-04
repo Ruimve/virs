@@ -1,5 +1,5 @@
-use virs_types::{PositionSide, PositionStatus};
-use virs_types::position::Position;
+use virs_type::{PositionSide, PositionStatus};
+use virs_type::position::Position;
 
 use super::side_state::{PendingClose, PendingOpen, SideState};
 

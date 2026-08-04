@@ -5,7 +5,7 @@
 //! 否则跳过（CI 中应设置该变量）。
 
 use virs_strategy::prompt::PromptLoader;
-use virs_types::StrategyType;
+use virs_type::StrategyType;
 
 #[tokio::test]
 async fn seed_auto_default_loads_and_validates() {

@@ -12,7 +12,7 @@ pub mod primitive;
 #[cfg(test)]
 pub mod test_utils;
 
-use virs_types::Kline;
+use virs_type::Kline;
 
 /// 提取收盘价序列。
 pub fn closes(klines: &[Kline]) -> Vec<f64> {

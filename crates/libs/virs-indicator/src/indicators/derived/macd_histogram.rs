@@ -3,7 +3,7 @@
 //! 依赖 [`crate::indicators::atomic::macd`]。
 
 use virs_error::{VirsError, VirsResult};
-use virs_types::Kline;
+use virs_type::Kline;
 
 use crate::indicators::atomic::macd::{macd_at, macd_signal_at};
 

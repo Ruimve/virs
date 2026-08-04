@@ -3,7 +3,7 @@ use crate::prompt::template::{MetaFile, PromptSource, PromptTemplate};
 use crate::prompt::writer::{delete_template, save_template};
 use std::sync::Mutex;
 use tempfile::tempdir;
-use virs_types::StrategyType;
+use virs_type::StrategyType;
 
 /// 所有 writer 测试都依赖全局 `STRATEGIES_DIR` 环境变量，
 /// 并行运行会互相污染 —— 用此 Mutex 串行化。

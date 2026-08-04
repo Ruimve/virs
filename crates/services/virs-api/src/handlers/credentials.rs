@@ -104,7 +104,7 @@ pub async fn save_credential(
                 "Server time sync failed, using local clock (recvWindow 5000ms tolerates small drift)"
             );
         }
-        let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, virs_types::MarketType::Perpetual);
+        let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, virs_type::MarketType::Perpetual);
         state.exchange_registry.register(Box::new(adapter));
     }
 

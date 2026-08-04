@@ -1,5 +1,5 @@
 use crate::prompt::loader::PromptLoader;
-use virs_types::StrategyType;
+use virs_type::StrategyType;
 use std::path::PathBuf;
 
 #[tokio::test]

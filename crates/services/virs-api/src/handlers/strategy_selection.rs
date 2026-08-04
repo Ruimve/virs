@@ -5,7 +5,7 @@
 use virs_error::VirsError;
 use virs_indicator::IndicatorSpec;
 use virs_strategy::prompt::PromptLoader;
-use virs_types::{StrategyType, Timeframe};
+use virs_type::{StrategyType, Timeframe};
 
 use crate::state::AppState;
 
@@ -23,7 +23,7 @@ pub async fn select_strategy_by_llm(
     // 获取 H1 K 线数据
     let candles = state
         .kline_engine
-        .get_klines_async(exchange, symbol, virs_types::Timeframe::H1)
+        .get_klines_async(exchange, symbol, virs_type::Timeframe::H1)
         .await
         .ok_or_else(|| {
             VirsError::bad_request(format!(
@@ -39,9 +39,9 @@ pub async fn select_strategy_by_llm(
         )));
     }
 
-    let klines: Vec<virs_types::Kline> = candles
+    let klines: Vec<virs_type::Kline> = candles
         .iter()
-        .map(|c| virs_types::Kline {
+        .map(|c| virs_type::Kline {
             open_time: c.open_time,
             open: c.open,
             high: c.high,

@@ -15,7 +15,7 @@ pub use crate::source::ExchangeKlineSource;
 use crate::types::{
     subscription_key, KlineEngineConfig, KlinePersistence, KlineSource, KlineWsClient, WsEvent,
 };
-use virs_types::{Candle, KlineEvent, KlineEventType, MarketType, Timeframe};
+use virs_type::{Candle, KlineEvent, KlineEventType, MarketType, Timeframe};
 
 struct NoOpPersistence;
 

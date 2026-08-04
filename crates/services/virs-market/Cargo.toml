@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-types = { path = "../../libs/virs-types" }
+virs-type = { path = "../../libs/virs-type" }
 virs-ccxt = { path = "../../libs/virs-ccxt" }
 virs-exchange = { path = "../../libs/virs-exchange" }
 virs-error = { path = "../../libs/virs-error" }

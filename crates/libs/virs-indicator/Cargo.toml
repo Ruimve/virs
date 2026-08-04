@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 virs-error = { path = "../virs-error" }
-virs-types = { path = "../virs-types" }
+virs-type = { path = "../virs-type" }
 talib-rs = { workspace = true }
 serde = { workspace = true }
 

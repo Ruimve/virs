@@ -2,12 +2,12 @@ use virs_error::{BotError, BotResult};
 
 #[derive(Debug, Clone)]
 pub struct AutoMarketSnapshot {
-    pub base: virs_types::bot::MarketSnapshot,
+    pub base: virs_type::bot::MarketSnapshot,
     pub indicators: virs_indicator::IndicatorSet,
 }
 
 impl AutoMarketSnapshot {
-    pub fn from_base(snapshot: virs_types::bot::MarketSnapshot) -> BotResult<Self> {
+    pub fn from_base(snapshot: virs_type::bot::MarketSnapshot) -> BotResult<Self> {
         let indicators: virs_indicator::IndicatorSet =
             serde_json::from_value(snapshot.indicators_json.clone()).map_err(|e| {
                 BotError::Validation(format!(

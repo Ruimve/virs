@@ -9,7 +9,7 @@
 //!   计算时内部调用原子函数，避免依赖其他 spec 的查找结果
 
 use serde::{Deserialize, Serialize};
-use virs_types::Timeframe;
+use virs_type::Timeframe;
 
 /// 指标规格。每个 variant 自包含计算所需的全部参数。
 ///

@@ -3,7 +3,7 @@
 //! 依赖 [`crate::indicators::atomic::atr`] + [`crate::indicators::atomic::sma`]。
 
 use virs_error::{VirsError, VirsResult};
-use virs_types::Kline;
+use virs_type::Kline;
 
 use crate::indicators::atomic::atr::atr;
 use crate::indicators::atomic::sma::sma_at_from;

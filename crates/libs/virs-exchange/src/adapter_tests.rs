@@ -1,5 +1,5 @@
 use virs_ccxt::CcxtKline;
-use virs_types::market::Kline;
+use virs_type::market::Kline;
 
 use crate::adapter::to_models_kline;
 

@@ -5,7 +5,7 @@
 //! 和持仓格式化辅助函数。
 
 pub fn format_position_info(
-    position: &virs_types::position::Position,
+    position: &virs_type::position::Position,
     current_side: Option<&str>,
     current_price: f64,
 ) -> String {

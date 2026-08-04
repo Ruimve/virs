@@ -1,6 +1,6 @@
 use virs_error::{BotError, BotResult};
-use virs_types::bot::LlmProviderResolver;
-use virs_types::llm::LlmProviderConfig;
+use virs_type::bot::LlmProviderResolver;
+use virs_type::llm::LlmProviderConfig;
 
 pub fn resolve_llm_provider(
     user_credentials: &[(String, String, Option<String>)],

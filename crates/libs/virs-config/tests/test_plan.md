@@ -72,5 +72,5 @@
 
 | 已删除项 | 位置 | 删除原因 |
 |---------|------|---------|
-| `virs-types` 依赖 | Cargo.toml | 源码中零引用，未使用依赖 |
+| `virs-type` 依赖 | Cargo.toml | 源码中零引用，未使用依赖 |
 | `build_notification_config` 文档条目 | test_plan.md | 计划中列出但从未实现，phantom 条目 |

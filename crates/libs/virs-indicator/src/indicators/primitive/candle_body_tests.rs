@@ -24,6 +24,6 @@ fn zero_for_doji() {
 
 #[test]
 fn errors_on_empty_klines() {
-    let klines: Vec<virs_types::Kline> = vec![];
+    let klines: Vec<virs_type::Kline> = vec![];
     assert!(compute(&klines).is_err());
 }

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-types = { path = "../virs-types" }
+virs-type = { path = "../virs-type" }
 virs-error = { path = "../virs-error", features = ["reqwest"] }
 virs-ws = { path = "../virs-ws" }
 virs-task = { path = "../virs-task" }

@@ -1,9 +1,9 @@
 use chrono::Utc;
 
 use crate::types::*;
-use virs_types::CcxtOrderStatus;
-use virs_types::OrderStatus;
-use virs_types::market::{FundingRate, OrderBook, Ticker};
+use virs_type::CcxtOrderStatus;
+use virs_type::OrderStatus;
+use virs_type::market::{FundingRate, OrderBook, Ticker};
 
 #[test]
 fn t1_1_new_to_open() {

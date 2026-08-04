@@ -3,7 +3,7 @@
 //! 依赖 [`crate::indicators::atomic::bbands`]。
 
 use virs_error::{VirsError, VirsResult};
-use virs_types::Kline;
+use virs_type::Kline;
 
 use crate::indicators::atomic::bbands::bbands_at;
 

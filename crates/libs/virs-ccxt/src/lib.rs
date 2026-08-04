@@ -15,7 +15,7 @@ use tokio::sync::mpsc;
 
 use auth::Signer;
 use virs_error::ExchangeError;
-use virs_types::{
+use virs_type::{
     ApiRestrictions, Balance, ExchangePosition, MarginMode, OrderResult, PositionMode,
 };
 
@@ -116,7 +116,7 @@ pub trait Exchange: Send + Sync {
     async fn start_listenkey_order_ws(
         &self,
         _listen_key_hint: Option<&str>,
-    ) -> Result<mpsc::Receiver<virs_types::WsFeedEvent>, ExchangeError> {
+    ) -> Result<mpsc::Receiver<virs_type::WsFeedEvent>, ExchangeError> {
         Err(ExchangeError::NotSupported(
             "start_listenkey_order_ws not supported".into(),
         ))

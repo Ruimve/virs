@@ -8,7 +8,7 @@
 
 ## 背景
 
-三个并行 Exchange trait（`virs_ccxt::Exchange`、`virs_exchange::Exchange`、`virs_types::ExchangePe`）已合并为统一的 `ExchangePe`。原 `pe_adapter.rs`（268 行恒等转换中间层）和 `pe_adapter_tests.rs`（32 个测试）已删除。原 `adapter_tests.rs` 中 7 个引用已删除转换函数的测试已删除，保留 4 个 Kline 转换测试。
+三个并行 Exchange trait（`virs_ccxt::Exchange`、`virs_exchange::Exchange`、`virs_type::ExchangePe`）已合并为统一的 `ExchangePe`。原 `pe_adapter.rs`（268 行恒等转换中间层）和 `pe_adapter_tests.rs`（32 个测试）已删除。原 `adapter_tests.rs` 中 7 个引用已删除转换函数的测试已删除，保留 4 个 Kline 转换测试。
 
 ---
 

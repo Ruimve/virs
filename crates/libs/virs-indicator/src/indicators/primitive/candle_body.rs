@@ -1,7 +1,7 @@
 //! K 线实体（close - open）。
 
 use virs_error::{VirsError, VirsResult};
-use virs_types::Kline;
+use virs_type::Kline;
 
 /// 计算最新 K 线的实体大小。
 pub fn compute(klines: &[Kline]) -> VirsResult<f64> {

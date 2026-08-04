@@ -15,7 +15,7 @@ pub struct KlineWsMsg<'a> {
     exchange: &'a str,
     symbol: &'a str,
     timeframe: &'a str,
-    candle: &'a virs_types::Candle,
+    candle: &'a virs_type::Candle,
     event_type: &'a str,
 }
 
@@ -50,11 +50,11 @@ pub struct OrderBookWsMsg<'a> {
 }
 
 
-fn position_side_str(side: &virs_types::PositionSide) -> String {
+fn position_side_str(side: &virs_type::PositionSide) -> String {
     match side {
-        virs_types::PositionSide::Long => "long".to_string(),
-        virs_types::PositionSide::Short => "short".to_string(),
-        virs_types::PositionSide::Unknown(_) => {
+        virs_type::PositionSide::Long => "long".to_string(),
+        virs_type::PositionSide::Short => "short".to_string(),
+        virs_type::PositionSide::Unknown(_) => {
             unreachable!("validate ensures position_side is Long/Short")
         }
     }
@@ -62,29 +62,29 @@ fn position_side_str(side: &virs_types::PositionSide) -> String {
 
 
 // pe_order_latest.position_side 列存储大写形式（见 virs-position persistence.rs）。
-fn position_side_db_str(side: &virs_types::PositionSide) -> String {
+fn position_side_db_str(side: &virs_type::PositionSide) -> String {
     match side {
-        virs_types::PositionSide::Long => "LONG".to_string(),
-        virs_types::PositionSide::Short => "SHORT".to_string(),
-        virs_types::PositionSide::Unknown(_) => {
+        virs_type::PositionSide::Long => "LONG".to_string(),
+        virs_type::PositionSide::Short => "SHORT".to_string(),
+        virs_type::PositionSide::Unknown(_) => {
             unreachable!("validate ensures position_side is Long/Short")
         }
     }
 }
 
 
-fn position_status_str(status: &virs_types::PositionStatus) -> &'static str {
+fn position_status_str(status: &virs_type::PositionStatus) -> &'static str {
     match status {
-        virs_types::PositionStatus::Opening => "opening",
-        virs_types::PositionStatus::Open => "open",
-        virs_types::PositionStatus::Closing => "closing",
-        virs_types::PositionStatus::Closed => "closed",
+        virs_type::PositionStatus::Opening => "opening",
+        virs_type::PositionStatus::Open => "open",
+        virs_type::PositionStatus::Closing => "closing",
+        virs_type::PositionStatus::Closed => "closed",
     }
 }
 
 
 pub fn position_to_ws_json(
-    pos: &virs_types::Position,
+    pos: &virs_type::Position,
     stop_loss: Option<f64>,
     take_profit: Option<f64>,
 ) -> PositionWsMsg<'_> {
@@ -111,7 +111,7 @@ async fn fetch_stop_loss_take_profit(
     db: &sqlx::PgPool,
     symbol: &str,
     exchange: &str,
-    side: &virs_types::PositionSide,
+    side: &virs_type::PositionSide,
 ) -> (Option<f64>, Option<f64>) {
     // pe_auto_order_context 表本身没有 position_side 列，通过 client_order_id
     // JOIN pe_order_latest 表按 position_side 过滤（pe_order_latest.position_side 存储大写 LONG/SHORT）。
@@ -142,16 +142,16 @@ async fn fetch_stop_loss_take_profit(
 }
 
 
-pub fn kline_event_to_json(event: &virs_types::KlineEvent) -> KlineWsMsg<'_> {
+pub fn kline_event_to_json(event: &virs_type::KlineEvent) -> KlineWsMsg<'_> {
     KlineWsMsg {
         exchange: &event.exchange,
         symbol: &event.symbol,
         timeframe: event.timeframe.as_str(),
         candle: &event.candle,
         event_type: match event.event_type {
-            virs_types::KlineEventType::Update => "Update",
-            virs_types::KlineEventType::Closed => "Closed",
-            virs_types::KlineEventType::Backfilled => "Backfilled",
+            virs_type::KlineEventType::Update => "Update",
+            virs_type::KlineEventType::Closed => "Closed",
+            virs_type::KlineEventType::Backfilled => "Backfilled",
         },
     }
 }
@@ -330,9 +330,9 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
                         // 每次推送一个仓位消息（PositionWsMsg 结构体保持不变），
                         // 前端按 side 分桶存储。
                         let position = match event {
-                            virs_types::position::EngineEvent::PositionOpened { position } => Some(position),
-                            virs_types::position::EngineEvent::PositionClosed { position } => Some(position),
-                            virs_types::position::EngineEvent::PositionUpdated { position } => Some(position),
+                            virs_type::position::EngineEvent::PositionOpened { position } => Some(position),
+                            virs_type::position::EngineEvent::PositionClosed { position } => Some(position),
+                            virs_type::position::EngineEvent::PositionUpdated { position } => Some(position),
                             _ => None,
                         };
 

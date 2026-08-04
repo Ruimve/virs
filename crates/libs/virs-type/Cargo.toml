@@ -1,5 +1,5 @@
 [package]
-name = "virs-types"
+name = "virs-type"
 version = "0.1.0"
 edition = "2021"
 

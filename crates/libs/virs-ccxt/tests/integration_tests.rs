@@ -8,7 +8,7 @@ use virs_ccxt::{
 };
 use virs_error::ExchangeError;
 
-use virs_types::{OrderStatus, CcxtOrderStatus};
+use virs_type::{OrderStatus, CcxtOrderStatus};
 
 #[test]
 fn int_1_1_symbol_roundtrip_usdt() {
@@ -214,7 +214,7 @@ fn int_6_1_ticker_json_to_ticker_via_parse() {
         info: raw,
     };
 
-    let ticker: virs_types::market::Ticker = ccxt.try_into().unwrap();
+    let ticker: virs_type::market::Ticker = ccxt.try_into().unwrap();
     assert_eq!(ticker.symbol, "BTC/USDT");
     assert_eq!(ticker.exchange, "binance");
     assert_eq!(ticker.bid, Some(50000.0));
@@ -249,7 +249,7 @@ fn int_6_3_order_status_expired_chain() {
 
 #[test]
 fn int_7_1_order_type_roundtrip() {
-    use virs_types::OrderType;
+    use virs_type::OrderType;
 
     let types = vec![
         OrderType::Market,
@@ -270,7 +270,7 @@ fn int_7_1_order_type_roundtrip() {
 
 #[test]
 fn int_7_2_side_roundtrip() {
-    use virs_types::Side;
+    use virs_type::Side;
 
     assert_eq!(BinanceExchange::side_str(&Side::Buy), "BUY");
     assert_eq!(BinanceExchange::side_str(&Side::Sell), "SELL");

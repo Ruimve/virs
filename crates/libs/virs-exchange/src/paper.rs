@@ -7,11 +7,11 @@ use tokio::sync::{mpsc, Mutex};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, warn};
 
-use virs_types::*;
-use virs_types::exchange::{ExchangePe, OrderUpdateStream};
-use virs_types::market::*;
-use virs_types::position::*;
-use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderResult};
+use virs_type::*;
+use virs_type::exchange::{ExchangePe, OrderUpdateStream};
+use virs_type::market::*;
+use virs_type::position::*;
+use virs_type::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderResult};
 
 use virs_error::{ExchangeError, VirsError, VirsResult};
 

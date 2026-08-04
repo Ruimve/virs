@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 use virs_error::{Context, VirsResult};
-use virs_types::StrategyType;
+use virs_type::StrategyType;
 
 use crate::prompt::template::{MetaFile, PromptTemplate};
 use crate::prompt::validator::validate;

@@ -1,9 +1,9 @@
 use chrono::DateTime;
 use sqlx::PgPool;
 use virs_error::{Context, VirsError, VirsResult};
-use virs_types::PositionSide;
-use virs_types::position::Position;
-use virs_types::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderType, Side};
+use virs_type::PositionSide;
+use virs_type::position::Position;
+use virs_type::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderType, Side};
 
 #[async_trait::async_trait]
 pub trait PositionPersistence: Send + Sync {
@@ -117,7 +117,7 @@ impl Persistence {
                 }
 
                 // 校验 position_side
-                virs_types::CcxtOrder::validate_position_side(Some(&row.position_side))
+                virs_type::CcxtOrder::validate_position_side(Some(&row.position_side))
                     .context("DB replay position_side validation")?;
                 let side = match row.position_side.as_str() {
                     "LONG" => PositionSide::Long,
@@ -615,7 +615,7 @@ struct OrderRow {
 impl OrderRow {
     fn into_ccxt_order(self) -> Option<CcxtOrder> {
         // DB 读取校验：side/position_side/status 非法值直接跳过（与 WS validate 共用校验逻辑）
-        if let Err(e) = virs_types::CcxtOrder::validate_fields(
+        if let Err(e) = virs_type::CcxtOrder::validate_fields(
             &self.side,
             Some(&self.position_side),
             &self.status,

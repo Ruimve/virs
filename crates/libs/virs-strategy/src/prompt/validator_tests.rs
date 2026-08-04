@@ -2,7 +2,7 @@ use crate::prompt::template::{PromptSource, PromptTemplate};
 use crate::prompt::validator::{extract_placeholders, validate};
 use std::collections::HashSet;
 use virs_error::BotError;
-use virs_types::StrategyType;
+use virs_type::StrategyType;
 
 fn make_valid_template() -> PromptTemplate {
     PromptTemplate {

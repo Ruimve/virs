@@ -7,7 +7,7 @@ use crate::auto::ai::{AutoAction, AutoDecision};
 use crate::auto::ports::AutoMarketSnapshot;
 use crate::auto::strategy;
 use virs_strategy::prompt::{render, RenderContext};
-use virs_types::{PositionSide, StrategyType};
+use virs_type::{PositionSide, StrategyType};
 
 use crate::auto::worker::AutoWorker;
 use super::format_close_event;

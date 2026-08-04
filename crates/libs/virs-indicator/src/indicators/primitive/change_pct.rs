@@ -1,7 +1,7 @@
 //! 涨跌幅（N 根 K 线前收盘价到当前的百分比变化）。
 
 use virs_error::{VirsError, VirsResult};
-use virs_types::Kline;
+use virs_type::Kline;
 
 /// 计算最新 K 线相对 N 根前的涨跌幅（百分比）。
 pub fn compute(klines: &[Kline], period: usize) -> VirsResult<f64> {

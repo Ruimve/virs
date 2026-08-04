@@ -2,9 +2,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use virs_error::ExchangeError;
 
-// 本文件定义 ccxt 适配层的本地类型。virs_types 中的类型通过 `use` 直接引入，
-// 不再从此处重导出 —— 调用方应直接使用 `virs_types::...`。
-use virs_types::{
+// 本文件定义 ccxt 适配层的本地类型。virs_type 中的类型通过 `use` 直接引入，
+// 不再从此处重导出 —— 调用方应直接使用 `virs_type::...`。
+use virs_type::{
     market::{FundingRate, OrderBook, Ticker},
     MarginMode, MarketType, OrderType, PositionSide, Side, TimeInForce,
 };
@@ -28,7 +28,7 @@ pub struct MarketInfo {
 }
 
 /// ccxt 层下单参数。包含 adapter 层独有的字段（market_type/leverage/margin_mode），
-/// 这些字段由 CcxtAdapter 从 virs_types::PlaceOrderParams 构造时填充。
+/// 这些字段由 CcxtAdapter 从 virs_type::PlaceOrderParams 构造时填充。
 #[derive(Debug, Clone)]
 pub struct CcxtPlaceOrderParams {
     pub symbol: String,

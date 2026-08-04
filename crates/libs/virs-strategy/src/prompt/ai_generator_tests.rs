@@ -1,5 +1,5 @@
 use crate::prompt::ai_generator::{build_meta_system_prompt, build_meta_user_prompt, GenerateRequest};
-use virs_types::StrategyType;
+use virs_type::StrategyType;
 
 #[test]
 fn g1_meta_system_prompt_contains_json_constraint() {

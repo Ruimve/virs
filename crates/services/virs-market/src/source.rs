@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use virs_error::{VirsError, VirsResult};
 use virs_exchange::Exchanges;
-use virs_types::MarketType;
+use virs_type::MarketType;
 
 use crate::types::KlineSource;
-use virs_types::Candle;
+use virs_type::Candle;
 
 pub fn timeframe_str_to_ms(tf: &str) -> i64 {
     match tf {

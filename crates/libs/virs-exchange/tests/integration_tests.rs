@@ -1,41 +1,41 @@
 use virs_exchange::Exchanges;
-use virs_types::*;
+use virs_type::*;
 
 #[test]
 fn int_1_1_side_roundtrip() {
     let original = Side::Buy;
-    let ccxt = virs_types::Side::Buy;
+    let ccxt = virs_type::Side::Buy;
     assert_eq!(original, Side::Buy);
-    assert_eq!(ccxt, virs_types::Side::Buy);
+    assert_eq!(ccxt, virs_type::Side::Buy);
 }
 
 #[test]
 fn int_1_2_order_type_roundtrip() {
     let ot = OrderType::Limit;
-    let models_ot = virs_types::OrderType::Limit;
+    let models_ot = virs_type::OrderType::Limit;
     assert_eq!(ot, OrderType::Limit);
-    assert_eq!(models_ot, virs_types::OrderType::Limit);
+    assert_eq!(models_ot, virs_type::OrderType::Limit);
 }
 
 #[test]
 fn int_1_3_position_side_consistency() {
-    let models_long = virs_types::PositionSide::Long;
+    let models_long = virs_type::PositionSide::Long;
     let pe_long = PositionSide::Long;
-    assert_eq!(models_long, virs_types::PositionSide::Long);
+    assert_eq!(models_long, virs_type::PositionSide::Long);
     assert_eq!(pe_long, PositionSide::Long);
 }
 
 #[test]
 fn int_1_4_market_type_consistency() {
-    let models_perp = virs_types::MarketType::Perpetual;
+    let models_perp = virs_type::MarketType::Perpetual;
     let pe_perp = MarketType::Perpetual;
-    assert_eq!(models_perp, virs_types::MarketType::Perpetual);
+    assert_eq!(models_perp, virs_type::MarketType::Perpetual);
     assert_eq!(pe_perp, MarketType::Perpetual);
 }
 
 #[tokio::test]
 async fn int_2_1_paper_exchange_creation_and_balance() {
-    use virs_types::exchange::ExchangePe;
+    use virs_type::exchange::ExchangePe;
     let paper =
         virs_exchange::paper::PaperExchangeAdapter::new("binance", MarketType::Perpetual, 100000.0);
     assert_eq!(paper.name(), "binance");
@@ -50,8 +50,8 @@ async fn int_2_1_paper_exchange_creation_and_balance() {
 
 #[tokio::test]
 async fn int_2_2_paper_market_order_updates_balance() {
-    use virs_types::exchange::ExchangePe;
-    use virs_types::position::PlaceOrderParams;
+    use virs_type::exchange::ExchangePe;
+    use virs_type::position::PlaceOrderParams;
     let paper =
         virs_exchange::paper::PaperExchangeAdapter::new("binance", MarketType::Perpetual, 50000.0);
 

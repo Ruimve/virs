@@ -1,6 +1,6 @@
 use crate::aggregator::{candle_from_1m, Aggregator};
 use crate::types::align_open_time;
-use virs_types::{Candle, Timeframe};
+use virs_type::{Candle, Timeframe};
 
 const BASE: i64 = 1_700_000_040_000;
 

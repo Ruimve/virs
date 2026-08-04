@@ -4,7 +4,7 @@
 //! 调用方按需通过 [`IndicatorSet::get`] / [`get_num`] / [`get_str`] 查询具体指标值。
 
 use virs_error::VirsResult;
-use virs_types::Kline;
+use virs_type::Kline;
 
 use crate::set::{IndicatorSet, KlineSet};
 use crate::spec::IndicatorSpec;
@@ -43,7 +43,7 @@ pub fn compute_indicators(
 /// 新增 `EmaCrossState`（原在 render 层 if-else 派生）。
 pub fn default_specs() -> Vec<IndicatorSpec> {
     use IndicatorSpec::*;
-    use virs_types::Timeframe::*;
+    use virs_type::Timeframe::*;
     vec![
         // H1 主周期
         CurrentPrice { tf: H1 },

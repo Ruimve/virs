@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "crates/libs/virs-error",
-    "crates/libs/virs-types",
+    "crates/libs/virs-type",
     "crates/libs/virs-config",
     "crates/libs/virs-utils",
     "crates/libs/virs-ws",
@@ -119,7 +119,7 @@ unused_must_use = "warn"      # 必须使用返回值的情况未处理
 # ---- 允许的 lint（本项目场景下不适用或噪音过大）----
 too_many_arguments = "allow"          # 交易系统参数较多，放宽限制
 type_complexity = "allow"             # 复杂类型在金融数据处理中常见
-module_name_repetitions = "allow"     # 允许模块名重复（如 virs_types::types）
+module_name_repetitions = "allow"     # 允许模块名重复（如 virs_type::types）
 must_use_candidate = "allow"          # 过于激进，产生大量噪音
 missing_errors_doc = "allow"          # 文档缺失不强制
 missing_panics_doc = "allow"          # 文档缺失不强制
