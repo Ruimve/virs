@@ -6,7 +6,7 @@ use dashmap::DashMap;
 use tokio::sync::{broadcast, Mutex};
 use tracing;
 use virs_error::VirsResult;
-use virs_task::{spawn, spawn_periodic, TaskHandle};
+use virs_task::{spawn, spawn_periodic, Stop, TaskHandle};
 
 use crate::aggregator::Aggregator;
 use crate::cache::SymbolCache;
@@ -130,10 +130,10 @@ impl KlineEngine {
 
         self.perpetual_handler.start(ws_update_tx).await;
 
-        let handle = spawn("kline_ws_loop", move |task_cancel| async move {
+        let handle = spawn("kline_ws_loop", move |stop: Stop| async move {
             loop {
                 tokio::select! {
-                    _ = task_cancel.cancelled() => break,
+                    _ = stop.cancelled() => break,
                     result = ws_update_rx.recv() => {
                         match result {
                             Ok(WsEvent::Reconnected) => {

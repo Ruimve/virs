@@ -8,9 +8,9 @@ async fn test_spawn_cancel() {
     let flag = Arc::new(AtomicBool::new(false));
     let flag_clone = Arc::clone(&flag);
 
-    let handle = spawn("test", |cancel| async move {
+    let handle = spawn("test", |stop| async move {
         tokio::select! {
-            _ = cancel.cancelled() => {}
+            _ = stop.cancelled() => {}
             _ = async {
                 tokio::time::sleep(Duration::from_secs(60)).await;
                 flag_clone.store(true, Ordering::Relaxed);
@@ -30,18 +30,18 @@ async fn test_independent_tasks() {
     let flag_a_clone = Arc::clone(&flag_a);
     let flag_b_clone = Arc::clone(&flag_b);
 
-    let handle_a = spawn("a", |cancel| async move {
+    let handle_a = spawn("a", |stop| async move {
         tokio::select! {
-            _ = cancel.cancelled() => {}
+            _ = stop.cancelled() => {}
             _ = tokio::time::sleep(Duration::from_secs(60)) => {
                 flag_a_clone.store(true, Ordering::Relaxed);
             }
         }
     });
 
-    let handle_b = spawn("b", |cancel| async move {
+    let handle_b = spawn("b", |stop| async move {
         tokio::select! {
-            _ = cancel.cancelled() => {}
+            _ = stop.cancelled() => {}
             _ = tokio::time::sleep(Duration::from_secs(60)) => {
                 flag_b_clone.store(true, Ordering::Relaxed);
             }

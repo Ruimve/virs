@@ -16,7 +16,7 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 use uuid::Uuid;
-use virs_task::{spawn_periodic, CancellationToken};
+use virs_task::{spawn_periodic, Stop};
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::strategy;
@@ -321,7 +321,7 @@ impl AutoWorker {
         }
     }
 
-    pub async fn run(mut self, cancel: CancellationToken) {
+    pub async fn run(mut self, stop: Stop) {
         info!(bot_id = %self.bot.id, "Waiting for first kline event to initialize price...");
         loop {
             tokio::select! {
@@ -349,7 +349,7 @@ impl AutoWorker {
                         }
                     }
                 }
-                _ = cancel.cancelled() => {
+                _ = stop.cancelled() => {
                     return;
                 }
             }
@@ -518,7 +518,7 @@ impl AutoWorker {
                                 }
                             }
                         }
-                        _ = cancel.cancelled() => {
+                        _ = stop.cancelled() => {
                             return;
                         }
                         _ = tokio::time::sleep(Duration::from_millis(200)) => {}
@@ -566,7 +566,7 @@ impl AutoWorker {
 
         loop {
             tokio::select! {
-                _ = cancel.cancelled() => {
+                _ = stop.cancelled() => {
                     break;
                 }
                 ev = self.kline_rx.recv() => {

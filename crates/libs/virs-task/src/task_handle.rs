@@ -3,43 +3,23 @@ use std::time::Duration;
 use tokio::task::JoinHandle;
 use tracing::error;
 
-use crate::CancellationToken;
+use crate::Stop;
 
 pub struct TaskHandle {
-    cancel: CancellationToken,
+    stop: Stop,
     handle: Option<JoinHandle<()>>,
 }
 
 impl TaskHandle {
-    pub(crate) fn new(cancel: CancellationToken, handle: JoinHandle<()>) -> Self {
+    pub(crate) fn new(stop: Stop, handle: JoinHandle<()>) -> Self {
         TaskHandle {
-            cancel,
+            stop,
             handle: Some(handle),
         }
     }
 
     pub fn cancel(&self) {
-        self.cancel.cancel();
-    }
-
-    pub fn is_cancelled(&self) -> bool {
-        self.cancel.is_cancelled()
-    }
-
-    pub async fn join(mut self) {
-        if let Some(h) = self.handle.take() {
-            if let Err(e) = h.await {
-                if e.is_panic() {
-                    error!("task panicked");
-                }
-            }
-        }
-    }
-
-    pub fn abort(&mut self) {
-        if let Some(h) = &self.handle {
-            h.abort();
-        }
+        self.stop.cancel();
     }
 
     pub async fn join_with_timeout(mut self, timeout: Duration) {
@@ -63,6 +43,6 @@ impl TaskHandle {
 
 impl Drop for TaskHandle {
     fn drop(&mut self) {
-        self.cancel.cancel();
+        self.stop.cancel();
     }
 }

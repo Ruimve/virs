@@ -5,7 +5,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use tokio::sync::{broadcast, mpsc, Mutex};
 use tracing::{error, info, warn};
-use virs_task::{spawn, TaskHandle};
+use virs_task::{spawn, Stop, TaskHandle};
 
 use virs_api::EngineManager;
 use virs_bot::auto::types::AutoCommand;
@@ -315,12 +315,12 @@ impl EngineManager for AppEngineManager {
         if paper_mode {
             let kline_engine_for_paper = self.kline_engine.clone();
             let pe_cmd_tx_for_tick = pe_cmd_tx.clone();
-            let paper_task = spawn("paper_tick", move |task_cancel| async move {
+            let paper_task = spawn("paper_tick", move |stop: Stop| async move {
                 let mut kline_rx = kline_engine_for_paper.subscribe_events();
                 info!("Paper mode kline event bridge started");
                 loop {
                     tokio::select! {
-                        _ = task_cancel.cancelled() => {
+                        _ = stop.cancelled() => {
                             info!("Paper tick bridge cancelled, stopping");
                             return;
                         }
@@ -396,8 +396,8 @@ impl EngineManager for AppEngineManager {
             prompt_loader.clone(),
         );
 
-        let auto_task = spawn("auto_engine", move |cancel| async move {
-            auto_engine.run(cancel).await;
+        let auto_task = spawn("auto_engine", move |stop: Stop| async move {
+            auto_engine.run(stop).await;
         });
         info!("Auto trade engine started");
 

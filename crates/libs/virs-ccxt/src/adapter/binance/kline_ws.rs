@@ -14,7 +14,7 @@ use virs_ws::{
 use crate::ws_types::KlineWsClient;
 pub use crate::ws_types::{WsCandleUpdate, WsEvent};
 use virs_types::Candle;
-use virs_task::{spawn, TaskHandle};
+use virs_task::{spawn, Stop, TaskHandle};
 
 pub(crate) fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
@@ -336,10 +336,10 @@ impl KlineWsClient for KlineWs {
             .start(self.config.clone(), manager_tx)
             .await;
 
-        let handle = spawn("kline_forward", move |cancel| async move {
+        let handle = spawn("kline_forward", move |stop: Stop| async move {
             loop {
                 tokio::select! {
-                    _ = cancel.cancelled() => break,
+                    _ = stop.cancelled() => break,
                     ev = manager_rx.recv() => {
                         let Some(ev) = ev else { break };
                         let ws_event = match ev {

@@ -11,7 +11,7 @@ use crate::adapter::binance::user_data_ws_events::dispatch_event;
 use crate::auth::Signer;
 use virs_ws::{MessageOutcome, WsHandler, WsManager, WsManagerConfig, WsManagerEvent};
 use crate::ExchangeClient;
-use virs_task::{spawn, TaskHandle};
+use virs_task::{spawn, Stop, TaskHandle};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct BinanceOrderMessage {
@@ -185,10 +185,10 @@ impl UserDataWs {
             .start(self.config.clone(), manager_tx)
             .await;
 
-        let handle = spawn("user_data_forward", move |cancel| async move {
+        let handle = spawn("user_data_forward", move |stop: Stop| async move {
             loop {
                 tokio::select! {
-                    _ = cancel.cancelled() => break,
+                    _ = stop.cancelled() => break,
                     ev = manager_rx.recv() => {
                         let Some(ev) = ev else { break };
                         let feed_event = match ev {

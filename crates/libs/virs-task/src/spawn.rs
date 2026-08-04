@@ -3,18 +3,18 @@ use std::time::Duration;
 
 use tracing::error;
 
-use crate::{CancellationToken, TaskHandle};
+use crate::{Stop, TaskHandle};
 
 pub fn spawn<F, Fut>(name: &str, f: F) -> TaskHandle
 where
-    F: FnOnce(CancellationToken) -> Fut + Send + 'static,
+    F: FnOnce(Stop) -> Fut + Send + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
+    let stop = Stop::new();
+    let stop_clone = stop.clone();
     let _name = name.to_string();
-    let handle = tokio::spawn(f(cancel_clone));
-    TaskHandle::new(cancel, handle)
+    let handle = tokio::spawn(f(stop_clone));
+    TaskHandle::new(stop, handle)
 }
 
 pub fn spawn_periodic<F, Fut>(
@@ -27,8 +27,8 @@ where
     F: Fn() -> Fut + Send + Sync + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
+    let stop = Stop::new();
+    let cancel_clone = stop.clone();
     let f = std::sync::Arc::new(f);
     let log_name = name.to_string();
 
@@ -56,5 +56,5 @@ where
         }
     });
 
-    TaskHandle::new(cancel, handle)
+    TaskHandle::new(stop, handle)
 }

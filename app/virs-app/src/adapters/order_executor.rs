@@ -5,7 +5,7 @@ use tracing::{error, warn};
 use uuid::Uuid;
 use virs_error::{BotError, BotResult, VirsError};
 use virs_position::PositionEngine;
-use virs_task::{spawn, TaskHandle};
+use virs_task::{spawn, Stop, TaskHandle};
 use virs_types::bot::{
     OrderCommand, OrderEvent, OrderExecutor, OrderInfo,
 };
@@ -26,10 +26,10 @@ impl PeOrderExecutor {
         mut engine_event_rx: broadcast::Receiver<EngineEvent>,
         engine: PositionEngine,
     ) -> Self {
-        let handle = spawn("order_event_forward", move |cancel| async move {
+        let handle = spawn("order_event_forward", move |stop: Stop| async move {
             loop {
                 tokio::select! {
-                    _ = cancel.cancelled() => break,
+                    _ = stop.cancelled() => break,
                     result = engine_event_rx.recv() => {
                         match result {
                             Ok(engine_event) => {

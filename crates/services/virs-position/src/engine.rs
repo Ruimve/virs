@@ -5,7 +5,8 @@ use chrono::Utc;
 use dashmap::DashMap;
 use futures_util::StreamExt;
 use tokio::sync::{broadcast, mpsc};
-use virs_task::{spawn, CancellationToken, TaskHandle};
+use tokio_util::sync::CancellationToken;
+use virs_task::{spawn, Stop, TaskHandle};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -275,22 +276,20 @@ impl PositionEngine {
 
         let (exit_tx, mut exit_rx) = mpsc::channel::<()>(2);
 
-        let cmd_cancel = inner.cancel.clone();
         self.cmd_loop_task = Some(spawn("position_command_loop", {
             let inner = inner.clone();
             let exit_tx = exit_tx.clone();
-            move |_cancel| async move {
-                command_loop(inner, cmd_rx, cmd_cancel).await;
+            move |task_stop| async move {
+                command_loop(inner, cmd_rx, task_stop).await;
                 let _ = exit_tx.try_send(());
             }
         }));
 
-        let ws_cancel = inner.cancel.clone();
         self.ws_feed_loop_task = Some(spawn("position_ws_feed_loop", {
             let inner = inner.clone();
             let exit_tx = exit_tx;
-            move |_cancel| async move {
-                ws_feed_loop(inner, ws_feed_rx, ws_cancel).await;
+            move |task_stop| async move {
+                ws_feed_loop(inner, ws_feed_rx, task_stop).await;
                 let _ = exit_tx.try_send(());
             }
         }));
@@ -303,9 +302,11 @@ impl PositionEngine {
         self.inner.set_state(EngineState::ShuttingDown);
         inner.cancel.cancel();
         if let Some(h) = self.cmd_loop_task.take() {
+            h.cancel();
             h.join_with_timeout(Duration::from_secs(5)).await;
         }
         if let Some(h) = self.ws_feed_loop_task.take() {
+            h.cancel();
             h.join_with_timeout(Duration::from_secs(5)).await;
         }
 
@@ -390,11 +391,11 @@ impl PositionEngine {
 pub(crate) async fn command_loop(
     inner: Arc<EngineInner>,
     mut cmd_rx: mpsc::Receiver<EngineCommand>,
-    cancel: CancellationToken,
+    stop: Stop,
 ) {
     loop {
         tokio::select! {
-            _ = cancel.cancelled() => break,
+            _ = stop.cancelled() => break,
             cmd = cmd_rx.recv() => {
                 let Some(cmd) = cmd else { break };
                 match cmd {
@@ -456,11 +457,11 @@ pub(crate) async fn command_loop(
 pub(crate) async fn ws_feed_loop(
     inner: Arc<EngineInner>,
     mut ws_rx: OrderUpdateStream,
-    cancel: CancellationToken,
+    stop: Stop,
 ) {
     loop {
         tokio::select! {
-            _ = cancel.cancelled() => break,
+            _ = stop.cancelled() => break,
             event = ws_rx.next() => {
                 match event {
                     Some(WsFeedEvent::OrderUpdate { order }) => {

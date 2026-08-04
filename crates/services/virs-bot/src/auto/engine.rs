@@ -5,7 +5,7 @@ use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 use tracing::{error, info, warn};
 use uuid::Uuid;
-use virs_task::{spawn, CancellationToken, TaskHandle};
+use virs_task::{spawn, Stop, TaskHandle};
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::types::AutoCommand;
@@ -65,7 +65,7 @@ impl AutoEngine {
         (engine, cmd_tx)
     }
 
-    pub async fn run(&mut self, cancel: CancellationToken) {
+    pub async fn run(&mut self, stop: Stop) {
         let mut cmd_rx = match self.cmd_rx.take() {
             Some(rx) => rx,
             None => {
@@ -77,7 +77,7 @@ impl AutoEngine {
 
         loop {
             tokio::select! {
-                _ = cancel.cancelled() => break,
+                _ = stop.cancelled() => break,
                 cmd = cmd_rx.recv() => {
                     match cmd {
                         Some(AutoCommand::StartBot { bot_id }) => self.start_bot(bot_id).await,
@@ -155,7 +155,7 @@ impl AutoEngine {
         let time_config = self.time_config.clone();
         let prompt_loader = self.prompt_loader.clone();
 
-        let handle = spawn("auto_worker", move |cancel| async move {
+        let handle = spawn("auto_worker", move |stop: Stop| async move {
             let worker = AutoWorker::new(
                 bot,
                 kline_rx,
@@ -168,7 +168,7 @@ impl AutoEngine {
                 time_config,
                 prompt_loader,
             );
-            worker.run(cancel).await;
+            worker.run(stop).await;
         });
 
         self.workers.insert(bot_id, handle);

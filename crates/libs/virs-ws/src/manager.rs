@@ -7,7 +7,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite};
 use virs_error::VirsError;
-use virs_task::{spawn, CancellationToken, TaskHandle};
+use virs_task::{spawn, Stop, TaskHandle};
 
 pub const WS_PING_INTERVAL_SECS: u64 = 30;
 pub const WS_PONG_TIMEOUT_SECS: u64 = 90;
@@ -165,11 +165,11 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         let running = Arc::clone(&self.running);
         let retry_count = Arc::clone(&self.retry_count);
 
-        let handle = spawn("ws_main", move |cancel| async move {
+        let handle = spawn("ws_main", move |stop| async move {
             let mut reconnect_delay = config.reconnect_initial_delay_secs;
             let mut is_first_connect = true;
 
-            while !cancel.is_cancelled() {
+            while !stop.is_cancelled() {
                 let connect_start = tokio::time::Instant::now();
 
                 let ws_url = match handler.refresh_url().await {
@@ -177,7 +177,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                     Err(e) => {
                         tracing::error!(error = %e, "refresh_url failed");
                         match backoff_with_cancel(
-                            &cancel,
+                            &stop,
                             &retry_count,
                             &config,
                             &mut reconnect_delay,
@@ -252,7 +252,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                             let mut last_msg_time = tokio::time::Instant::now();
 
                             loop {
-                                if cancel.is_cancelled() {
+                                if stop.is_cancelled() {
                                     break;
                                 }
 
@@ -347,7 +347,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                             break;
                                         }
                                     }
-                                    _ = cancel.cancelled() => {
+                                    _ = stop.cancelled() => {
                                         tracing::info!("Shutdown signal received, closing");
                                         let _ = write.send(tungstenite::Message::Close(None)).await;
                                         handler.on_disconnected().await;
@@ -384,7 +384,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                 }
 
                 match backoff_with_cancel(
-                    &cancel,
+                    &stop,
                     &retry_count,
                     &config,
                     &mut reconnect_delay,
@@ -424,13 +424,13 @@ impl<T: Send + Clone + 'static> WsManager<T> {
 }
 
 async fn backoff_with_cancel<T: Send + Clone + 'static>(
-    cancel: &CancellationToken,
+    stop: &Stop,
     retry_count: &AtomicU64,
     config: &WsManagerConfig,
     reconnect_delay: &mut u64,
     event_tx: &mpsc::Sender<WsManagerEvent<T>>,
 ) -> BackoffOutcome {
-    if cancel.is_cancelled() {
+    if stop.is_cancelled() {
         return BackoffOutcome::Shutdown;
     }
 
@@ -463,7 +463,7 @@ async fn backoff_with_cancel<T: Send + Clone + 'static>(
             *reconnect_delay = (*reconnect_delay * 2).min(config.reconnect_max_delay_secs);
             BackoffOutcome::Proceed
         }
-        _ = cancel.cancelled() => {
+        _ = stop.cancelled() => {
             BackoffOutcome::Shutdown
         }
     }

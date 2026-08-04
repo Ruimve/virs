@@ -8,9 +8,9 @@ async fn test_drop_cancels() {
     let flag = Arc::new(AtomicBool::new(false));
     let flag_clone = Arc::clone(&flag);
 
-    let handle = spawn("test", |cancel| async move {
+    let handle = spawn("test", |stop| async move {
         tokio::select! {
-            _ = cancel.cancelled() => {}
+            _ = stop.cancelled() => {}
             _ = tokio::time::sleep(Duration::from_secs(60)) => {
                 flag_clone.store(true, Ordering::Relaxed);
             }
@@ -23,23 +23,10 @@ async fn test_drop_cancels() {
 }
 
 #[tokio::test]
-async fn test_join_completes() {
-    let flag = Arc::new(AtomicBool::new(false));
-    let flag_clone = Arc::clone(&flag);
-
-    let handle = spawn("test", |_cancel| async move {
-        flag_clone.store(true, Ordering::Relaxed);
-    });
-
-    handle.join().await;
-    assert!(flag.load(Ordering::Relaxed));
-}
-
-#[tokio::test]
 async fn test_join_with_timeout() {
-    let handle = spawn("test", |cancel| async move {
+    let handle = spawn("test", |stop| async move {
         tokio::select! {
-            _ = cancel.cancelled() => {}
+            _ = stop.cancelled() => {}
             _ = tokio::time::sleep(Duration::from_secs(60)) => {}
         }
     });

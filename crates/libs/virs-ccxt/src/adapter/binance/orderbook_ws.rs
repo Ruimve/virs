@@ -12,7 +12,7 @@ use virs_ws::{
     WsManagerConfig, WsManagerEvent,
 };
 use crate::ws_types::{OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate};
-use virs_task::{spawn, TaskHandle};
+use virs_task::{spawn, Stop, TaskHandle};
 
 fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
@@ -325,10 +325,10 @@ impl OrderBookWsClient for OrderBookWs {
             .start(self.config.clone(), manager_tx)
             .await;
 
-        let handle = spawn("orderbook_forward", move |cancel| async move {
+        let handle = spawn("orderbook_forward", move |stop: Stop| async move {
             loop {
                 tokio::select! {
-                    _ = cancel.cancelled() => break,
+                    _ = stop.cancelled() => break,
                     ev = manager_rx.recv() => {
                         let Some(ev) = ev else { break };
                         let ws_event = match ev {

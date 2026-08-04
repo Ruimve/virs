@@ -4,7 +4,7 @@ use std::time::Duration;
 use dashmap::DashMap;
 use tokio::sync::{broadcast, Mutex};
 use virs_error::VirsResult;
-use virs_task::{spawn, TaskHandle};
+use virs_task::{spawn, Stop, TaskHandle};
 
 use crate::types::{
     subscription_key, MarketType, OrderBookEngineConfig, OrderBookEvent, OrderBookWsClient,
@@ -87,10 +87,10 @@ impl OrderBookEngine {
         let subscriptions = self.subscriptions.clone();
         let symbol_index = self.symbol_index.clone();
 
-        let handle = spawn("orderbook_ws_loop", move |task_cancel| async move {
+        let handle = spawn("orderbook_ws_loop", move |stop: Stop| async move {
             loop {
                 tokio::select! {
-                    _ = task_cancel.cancelled() => break,
+                    _ = stop.cancelled() => break,
                     result = ws_update_rx.recv() => {
                         match result {
                             Ok(WsOrderBookEvent::Reconnected) => {}
