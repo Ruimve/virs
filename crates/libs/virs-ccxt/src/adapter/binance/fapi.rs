@@ -99,6 +99,16 @@ pub async fn fetch_ticker(
         ))
     })?;
 
+    // 解析交易所原生时间戳：closeTime 是 24h 滚动窗口的结束时间
+    let timestamp = data
+        .get("closeTime")
+        .and_then(|v| v.as_i64())
+        .and_then(chrono::DateTime::from_timestamp_millis)
+        .unwrap_or_else(|| {
+            tracing::warn!(symbol = %symbol, "Ticker closeTime missing — falling back to Utc::now()");
+            Utc::now()
+        });
+
     Ok(Ticker {
         symbol: symbol.to_string(),
         exchange: "binance".into(),
@@ -110,7 +120,7 @@ pub async fn fetch_ticker(
         volume_24h,
         price_change_24h,
         price_change_pct_24h,
-        timestamp: Utc::now(),
+        timestamp,
     })
 }
 
@@ -247,11 +257,32 @@ pub async fn fetch_order_book(
         )));
     }
 
+    // 解析交易所原生时间戳：优先 T（transaction time），回退 lastUpdateId 对应时间
+    let timestamp = data
+        .get("T")
+        .and_then(|v| v.as_i64())
+        .or_else(|| data.get("E").and_then(|v| v.as_i64()))
+        .and_then(chrono::DateTime::from_timestamp_millis)
+        .unwrap_or_else(|| {
+            tracing::warn!(symbol = %symbol, "OrderBook T/E timestamp missing — falling back to Utc::now()");
+            Utc::now()
+        });
+
+    // 解析 lastUpdateId：用于 WS 增量深度同步时判断快照是否过期
+    let last_update_id = data
+        .get("lastUpdateId")
+        .and_then(|v| v.as_u64())
+        .or_else(|| {
+            tracing::warn!(symbol = %symbol, "OrderBook lastUpdateId missing");
+            None
+        });
+
     Ok(OrderBook {
         symbol: symbol.to_string(),
         bids,
         asks,
-        timestamp: Utc::now(),
+        timestamp,
+        last_update_id,
     })
 }
 

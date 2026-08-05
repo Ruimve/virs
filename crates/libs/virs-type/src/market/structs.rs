@@ -64,6 +64,9 @@ pub struct OrderBook {
     pub bids: Vec<(f64, f64)>,
     pub asks: Vec<(f64, f64)>,
     pub timestamp: DateTime<Utc>,
+    /// 交易所订单簿快照的最后一次更新ID（Binance `lastUpdateId`）。
+    /// 用于 WS 增量深度同步时判断快照是否过期。
+    pub last_update_id: Option<u64>,
 }
 
 

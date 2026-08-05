@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -15,8 +15,6 @@ use virs_type::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderResult};
 
 use virs_error::{ExchangeError, VirsError, VirsResult};
 
-use crate::registry::Exchanges;
-
 #[derive(Debug, Clone)]
 struct PaperPendingOrder {
     id: i64,
@@ -31,6 +29,10 @@ struct PaperPendingOrder {
 
 type PaperPosition = ExchangePosition;
 
+/// 模拟交易引擎，仅处理私有数据（余额、持仓、订单）。
+///
+/// 公共数据（行情、K线、资金费率等）由 `PaperModeExchange` 路由层转发到真实交易所。
+/// 不持有任何外部引用，无循环依赖。
 pub struct PaperExchangeAdapter {
     name: String,
     market_type: MarketType,
@@ -39,8 +41,6 @@ pub struct PaperExchangeAdapter {
     balance: Arc<Mutex<Balance>>,
     price_tx: Arc<Mutex<Option<mpsc::Sender<WsFeedEvent>>>>,
     last_prices: Arc<DashMap<String, f64>>,
-    exchange_registry: Option<Arc<Exchanges>>,
-    balance_initialized: Arc<AtomicBool>,
 
     configured_leverage: Arc<DashMap<String, u32>>,
     order_id_counter: Arc<AtomicI64>,
@@ -62,17 +62,10 @@ impl PaperExchangeAdapter {
             })),
             price_tx: Arc::new(Mutex::new(None)),
             last_prices: Arc::new(DashMap::new()),
-            exchange_registry: None,
-            balance_initialized: Arc::new(AtomicBool::new(initial_balance > 0.0)),
             configured_leverage: Arc::new(DashMap::new()),
             order_id_counter: Arc::new(AtomicI64::new(1)),
             trade_id_counter: Arc::new(AtomicI64::new(1)),
         }
-    }
-
-    pub fn with_exchange_registry(mut self, registry: Arc<Exchanges>) -> Self {
-        self.exchange_registry = Some(registry);
-        self
     }
 
     /// 生成递增的 order_id，与币安原生 i64 订单ID对齐
@@ -85,38 +78,6 @@ impl PaperExchangeAdapter {
     fn next_trade_id(&self) -> i64 {
         self.trade_id_counter
             .fetch_add(1, Ordering::Relaxed)
-    }
-
-    async fn ensure_balance_initialized(&self) {
-        if self.balance_initialized.load(Ordering::Relaxed) {
-            return;
-        }
-        let registry = match &self.exchange_registry {
-            Some(r) => r.clone(),
-            None => return,
-        };
-        let exchange = registry
-            .registered_names()
-            .iter()
-            .find(|n| n.contains("perpetual"))
-            .and_then(|key| registry.get(key));
-        if let Some(ex) = exchange {
-            // ExchangePe::get_balance() 直接返回单个 USDT Balance（无需再从 Vec 中筛选）
-            match ex.get_balance().await {
-                Ok(usdt) => {
-                    let mut balance = self.balance.lock().await;
-                    if !self.balance_initialized.load(Ordering::Relaxed) {
-                        balance.free = usdt.free;
-                        balance.used = usdt.used;
-                        balance.total = usdt.total;
-                        self.balance_initialized.store(true, Ordering::Relaxed);
-                    }
-                }
-                Err(e) => {
-                    warn!(error = %e, "PaperExchangeAdapter: failed to fetch balance from real exchange");
-                }
-            }
-        }
     }
 
     pub async fn on_price_tick(&self, symbol: &str, current_price: f64) {
@@ -346,17 +307,88 @@ impl ExchangePe for PaperExchangeAdapter {
         self.market_type
     }
 
+    // ---- 公共数据：返回 NotSupported，由 PaperModeExchange 路由到真实交易所 ----
+
     async fn get_ticker(&self, symbol: &str) -> VirsResult<Ticker> {
         Err(VirsError::Exchange(ExchangeError::NotSupported(
             format!(
-                "PaperExchange does not support get_ticker for {} — no real market data in paper mode",
+                "PaperExchange does not support get_ticker for {} — use PaperModeExchange for routing",
                 symbol
             )
         )))
     }
 
+    async fn get_klines(
+        &self,
+        _symbol: &str,
+        _interval: &str,
+        _limit: u32,
+        _since: Option<i64>,
+    ) -> VirsResult<Vec<Kline>> {
+        Err(VirsError::Exchange(ExchangeError::NotSupported(
+            "PaperExchange does not support get_klines — use PaperModeExchange for routing".into(),
+        )))
+    }
+
+    async fn get_klines_range(
+        &self,
+        _symbol: &str,
+        _interval: &str,
+        _start_ms: i64,
+        _end_ms: i64,
+    ) -> VirsResult<Vec<Kline>> {
+        Err(VirsError::Exchange(ExchangeError::NotSupported(
+            "PaperExchange does not support get_klines_range — use PaperModeExchange for routing".into(),
+        )))
+    }
+
+    async fn get_funding_rate(&self, symbol: &str) -> VirsResult<FundingRate> {
+        Err(VirsError::Exchange(ExchangeError::NotSupported(
+            format!(
+                "PaperExchange does not support get_funding_rate for {} — use PaperModeExchange for routing",
+                symbol
+            )
+        )))
+    }
+
+    async fn get_symbols(&self) -> VirsResult<Vec<String>> {
+        Err(VirsError::Exchange(ExchangeError::NotSupported(
+            "PaperExchange does not support get_symbols — use PaperModeExchange for routing".into(),
+        )))
+    }
+
+    async fn get_min_qty(&self, _symbol: &str) -> VirsResult<f64> {
+        Err(VirsError::Exchange(ExchangeError::NotSupported(
+            "PaperExchange does not support get_min_qty — use PaperModeExchange for routing".into(),
+        )))
+    }
+
+    async fn create_listen_key(&self) -> VirsResult<String> {
+        Err(VirsError::Exchange(ExchangeError::NotSupported(
+            "PaperExchange does not support create_listen_key — use PaperModeExchange for routing".into(),
+        )))
+    }
+
+    async fn ping(&self) -> VirsResult<bool> {
+        Err(VirsError::Exchange(ExchangeError::NotSupported(
+            "PaperExchange does not support ping — use PaperModeExchange for routing".into(),
+        )))
+    }
+
+    async fn get_api_restrictions(&self) -> VirsResult<ApiRestrictions> {
+        Err(VirsError::Exchange(ExchangeError::NotSupported(
+            "PaperExchange does not support get_api_restrictions — use PaperModeExchange for routing".into(),
+        )))
+    }
+
+    async fn get_position_mode(&self) -> VirsResult<PositionMode> {
+        // Paper 模式默认 Hedge，真实持仓模式由 PaperModeExchange 路由到真实交易所
+        Ok(PositionMode::Hedge)
+    }
+
+    // ---- 私有数据：Paper 自己处理 ----
+
     async fn get_balance(&self) -> VirsResult<Balance> {
-        self.ensure_balance_initialized().await;
         let mut balance = self.balance.lock().await;
         balance.total = balance.compute_total();
         Ok(balance.clone())
@@ -382,67 +414,6 @@ impl ExchangePe for PaperExchangeAdapter {
                 }
             })
             .collect())
-    }
-
-    async fn get_funding_rate(&self, symbol: &str) -> VirsResult<FundingRate> {
-        Err(VirsError::Exchange(ExchangeError::NotSupported(
-            format!(
-                "PaperExchange does not support get_funding_rate for {} — no real funding data in paper mode",
-                symbol
-            )
-        )))
-    }
-
-    async fn get_klines(
-        &self,
-        _symbol: &str,
-        _interval: &str,
-        _limit: u32,
-        _since: Option<i64>,
-    ) -> VirsResult<Vec<Kline>> {
-        Err(VirsError::Exchange(ExchangeError::NotSupported(
-            "PaperExchange does not support get_klines — no historical K-line data in paper mode".into(),
-        )))
-    }
-
-    async fn get_klines_range(
-        &self,
-        _symbol: &str,
-        _interval: &str,
-        _start_ms: i64,
-        _end_ms: i64,
-    ) -> VirsResult<Vec<Kline>> {
-        Err(VirsError::Exchange(ExchangeError::NotSupported(
-            "PaperExchange does not support get_klines_range — no historical K-line data in paper mode".into(),
-        )))
-    }
-
-    async fn get_symbols(&self) -> VirsResult<Vec<String>> {
-        // Paper exchange 不维护交易对元数据，返回已收到价格更新的 symbol 列表
-        Ok(self
-            .last_prices
-            .iter()
-            .map(|e| e.key().clone())
-            .collect())
-    }
-
-    async fn get_min_qty(&self, _symbol: &str) -> VirsResult<f64> {
-        // Paper 模式固定最小下单量，无实际交易所限制
-        Ok(0.001)
-    }
-
-    async fn create_listen_key(&self) -> VirsResult<String> {
-        Ok("paper-listen-key".to_string())
-    }
-
-    async fn ping(&self) -> VirsResult<bool> {
-        Ok(true)
-    }
-
-    async fn get_api_restrictions(&self) -> VirsResult<ApiRestrictions> {
-        Err(VirsError::Exchange(ExchangeError::NotSupported(
-            "PaperExchange does not support get_api_restrictions".into(),
-        )))
     }
 
     async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<OrderResult> {
@@ -605,22 +576,6 @@ impl ExchangePe for PaperExchangeAdapter {
         self.configured_leverage
             .insert(symbol.to_string(), leverage);
         Ok(())
-    }
-
-    async fn get_position_mode(&self) -> VirsResult<PositionMode> {
-        let registry = match &self.exchange_registry {
-            Some(r) => r.clone(),
-            None => return Ok(PositionMode::Hedge),
-        };
-        let exchange = registry
-            .registered_names()
-            .iter()
-            .find(|n| n.contains("perpetual"))
-            .and_then(|key| registry.get(key));
-        match exchange {
-            Some(ex) => ex.get_position_mode().await.map_err(Into::into),
-            None => Ok(PositionMode::Hedge),
-        }
     }
 
     async fn subscribe_order_updates(&self, _symbols: &[&str]) -> VirsResult<OrderUpdateStream> {

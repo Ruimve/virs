@@ -16,5 +16,10 @@ dashmap = { workspace = true }
 tokio-stream = { workspace = true }
 serde_json = { workspace = true }
 
+[dev-dependencies]
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio-stream = { workspace = true }
+
 [lints]
 workspace = true

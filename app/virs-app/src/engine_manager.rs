@@ -10,7 +10,7 @@ use virs_task::{spawn, Stop, TaskHandle};
 use virs_api::EngineManager;
 use virs_bot::auto::types::AutoCommand;
 use virs_error::VirsResult;
-use virs_exchange::{Exchanges, PaperExchangeAdapter};
+use virs_exchange::{Exchanges, PaperModeExchange};
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
 use virs_strategy::prompt::PromptLoader;
@@ -240,30 +240,23 @@ impl EngineManager for AppEngineManager {
 
         info!(paper_mode, "Starting trading engines");
 
+        let real_exchange = self.exchange_registry.get_perpetual().ok_or_else(|| {
+            virs_error::VirsError::config(
+                "No perpetual exchange registered; please save API credentials first.",
+            )
+        })?;
+
         let pe_exchange: Arc<dyn ExchangePe> = if paper_mode {
-            let initial_balance = match self.exchange_registry.get_perpetual() {
-                Some(ex) => match ex.get_balance().await {
-                    Ok(b) => b.total,
-                    Err(e) => {
-                        warn!(error = %e, mode = "paper", "Failed to fetch real balance, using 0");
-                        0.0
-                    }
-                },
-                None => {
-                    warn!(mode = "paper", "No perpetual exchange registered, using 0 balance");
+            let initial_balance = match real_exchange.get_balance().await {
+                Ok(b) => b.total,
+                Err(e) => {
+                    warn!(error = %e, mode = "paper", "Failed to fetch real balance, using 0");
                     0.0
                 }
             };
-            Arc::new(
-                PaperExchangeAdapter::new("paper", MarketType::Perpetual, initial_balance)
-                    .with_exchange_registry(self.exchange_registry.clone()),
-            )
+            Arc::new(PaperModeExchange::new(real_exchange, initial_balance))
         } else {
-            self.exchange_registry.get_perpetual().ok_or_else(|| {
-                virs_error::VirsError::config(
-                    "No perpetual exchange registered; please save API credentials first.",
-                )
-            })?
+            real_exchange
         };
 
         let pe_persistence = Box::new(PePersistence::new(self.db_pool.clone()));
