@@ -30,7 +30,7 @@ async fn main() -> VirsResult<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                "virs_app=info,virs_bot=info,virs_position=info,virs_market=info,virs_api=info"
+                "virs_app=info,virs_trading_bot=info,virs_position=info,virs_market=info,virs_api=info"
                     .into()
             }),
         )
@@ -117,7 +117,7 @@ async fn main() -> VirsResult<()> {
     ));
     info!("OrderBook engine created (lazy — will start on first subscribe)");
 
-    let prompt_loader = virs_strategy::prompt::PromptLoader::from_env().await;
+    let prompt_loader = virs_tactical_bot::prompt::PromptLoader::from_env().await;
 
     let engine_manager = Arc::new(AppEngineManager::new(
         db_pool.clone(),

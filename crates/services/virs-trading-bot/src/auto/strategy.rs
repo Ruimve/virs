@@ -1,6 +1,6 @@
 //! Auto 策略交易数学计算。
 //!
-//! Prompt 渲染已统一到 [`virs_strategy::prompt::render`]，
+//! Prompt 渲染已统一到 [`virs_tactical_bot::prompt::render`]，
 //! 本模块仅保留 Auto 专属的交易数学函数（止损止盈、移动止损、仓位百分比、冷却时间）
 //! 和持仓格式化辅助函数。
 

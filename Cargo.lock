@@ -3030,13 +3030,13 @@ dependencies = [
  "tower-http",
  "tracing",
  "uuid",
- "virs-bot",
  "virs-ccxt",
  "virs-error",
  "virs-exchange",
  "virs-indicator",
  "virs-market",
- "virs-strategy",
+ "virs-tactical-bot",
+ "virs-trading-bot",
  "virs-type",
  "virs-utils",
 ]
@@ -3057,7 +3057,6 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "virs-api",
- "virs-bot",
  "virs-ccxt",
  "virs-config",
  "virs-error",
@@ -3065,33 +3064,11 @@ dependencies = [
  "virs-indicator",
  "virs-market",
  "virs-position",
- "virs-strategy",
+ "virs-tactical-bot",
  "virs-task",
+ "virs-trading-bot",
  "virs-type",
  "virs-utils",
-]
-
-[[package]]
-name = "virs-bot"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "dashmap",
- "reqwest",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
- "uuid",
- "virs-config",
- "virs-error",
- "virs-indicator",
- "virs-market",
- "virs-strategy",
- "virs-task",
- "virs-type",
 ]
 
 [[package]]
@@ -3209,7 +3186,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "virs-strategy"
+name = "virs-tactical-bot"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -3232,6 +3209,29 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+]
+
+[[package]]
+name = "virs-trading-bot"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "dashmap",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "uuid",
+ "virs-config",
+ "virs-error",
+ "virs-indicator",
+ "virs-market",
+ "virs-tactical-bot",
+ "virs-task",
+ "virs-type",
 ]
 
 [[package]]

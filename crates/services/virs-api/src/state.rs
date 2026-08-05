@@ -4,12 +4,12 @@ use async_trait::async_trait;
 use axum::extract::FromRef;
 use tokio::sync::{broadcast, mpsc};
 
-use virs_bot::auto::types::AutoCommand;
+use virs_trading_bot::auto::types::AutoCommand;
 use virs_error::{VirsError, VirsResult};
 use virs_exchange::Exchanges;
 use virs_market::{KlineEngine, OrderBookEngine};
-use virs_strategy::llm_client::{call_llm_api, LlmCallResult};
-use virs_strategy::prompt::PromptLoader;
+use virs_tactical_bot::llm_client::{call_llm_api, LlmCallResult};
+use virs_tactical_bot::prompt::PromptLoader;
 use virs_type::position::EngineEvent;
 
 

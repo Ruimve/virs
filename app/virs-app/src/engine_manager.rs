@@ -8,12 +8,12 @@ use tracing::{error, info, warn};
 use virs_task::{spawn, Stop, TaskHandle};
 
 use virs_api::EngineManager;
-use virs_bot::auto::types::AutoCommand;
+use virs_trading_bot::auto::types::AutoCommand;
 use virs_error::VirsResult;
 use virs_exchange::{Exchanges, PaperModeExchange};
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
-use virs_strategy::prompt::PromptLoader;
+use virs_tactical_bot::prompt::PromptLoader;
 use virs_type::bot::OrderEvent;
 use virs_type::MarketType;
 use virs_type::exchange::ExchangePe;
@@ -362,13 +362,13 @@ impl EngineManager for AppEngineManager {
             ));
         let auto_llm_resolver: Arc<dyn virs_type::bot::LlmProviderResolver> =
             Arc::new(DefaultLlmResolver::new());
-        let auto_ai_service = Arc::new(virs_bot::auto::ai::AutoAiService::new(
+        let auto_ai_service = Arc::new(virs_trading_bot::auto::ai::AutoAiService::new(
             auto_llm_resolver,
             auto_credential_store,
             std::time::Duration::from_secs(self.time_config.llm_timeout_secs),
         ));
 
-        let (mut auto_engine, auto_cmd_tx) = virs_bot::auto::AutoEngine::new(
+        let (mut auto_engine, auto_cmd_tx) = virs_trading_bot::auto::AutoEngine::new(
             auto_store,
             auto_ai_service,
             self.kline_engine.clone(),

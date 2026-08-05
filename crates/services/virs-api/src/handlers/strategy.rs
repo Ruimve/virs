@@ -10,7 +10,7 @@
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::Json;
-use virs_strategy::prompt::{
+use virs_tactical_bot::prompt::{
     delete_template, generate_prompt, save_template, GenerateRequest, PromptTemplate,
 };
 use virs_type::StrategyType;

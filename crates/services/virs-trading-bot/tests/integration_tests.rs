@@ -1,9 +1,9 @@
-use virs_bot::auto::ai::{AutoAction, AutoDecision};
-use virs_bot::auto::strategy::{
+use virs_trading_bot::auto::ai::{AutoAction, AutoDecision};
+use virs_trading_bot::auto::strategy::{
     compute_cooldown_secs, compute_position_pct, compute_stop_loss, compute_take_profit,
     compute_trailing_stop, format_stop_take_profit,
 };
-use virs_strategy::prompt::render::format_bars_outside;
+use virs_tactical_bot::prompt::render::format_bars_outside;
 
 #[test]
 fn int_1_1_stop_loss_take_profit_consistency() {

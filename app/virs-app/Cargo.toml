@@ -8,9 +8,9 @@ name = "virs"
 path = "src/main.rs"
 
 [dependencies]
-virs-bot = { path = "../../crates/services/virs-bot" }
+virs-trading-bot = { path = "../../crates/services/virs-trading-bot" }
 virs-api = { path = "../../crates/services/virs-api" }
-virs-strategy = { path = "../../crates/libs/virs-strategy" }
+virs-tactical-bot = { path = "../../crates/services/virs-tactical-bot" }
 virs-indicator = { path = "../../crates/libs/virs-indicator" }
 virs-type = { path = "../../crates/libs/virs-type" }
 virs-error = { path = "../../crates/libs/virs-error", features = ["sqlx"] }

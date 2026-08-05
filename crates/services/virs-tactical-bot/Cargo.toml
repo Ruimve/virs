@@ -1,12 +1,12 @@
 [package]
-name = "virs-strategy"
+name = "virs-tactical-bot"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-error = { path = "../virs-error", features = ["reqwest"] }
-virs-type = { path = "../virs-type" }
-virs-indicator = { path = "../virs-indicator" }
+virs-error = { path = "../../libs/virs-error", features = ["reqwest"] }
+virs-type = { path = "../../libs/virs-type" }
+virs-indicator = { path = "../../libs/virs-indicator" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }

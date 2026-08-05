@@ -7,8 +7,8 @@ edition = "2021"
 virs-type = { path = "../../libs/virs-type" }
 virs-error = { path = "../../libs/virs-error", features = ["axum", "sqlx"] }
 virs-utils = { path = "../../libs/virs-utils" }
-virs-bot = { path = "../virs-bot" }
-virs-strategy = { path = "../../libs/virs-strategy" }
+virs-trading-bot = { path = "../virs-trading-bot" }
+virs-tactical-bot = { path = "../virs-tactical-bot" }
 virs-indicator = { path = "../../libs/virs-indicator" }
 virs-exchange = { path = "../../libs/virs-exchange" }
 virs-market = { path = "../virs-market" }
