@@ -30,7 +30,7 @@ async fn main() -> VirsResult<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                "virs_app=info,virs_bot=info,virs_position=info,virs_market=info,virs_api=info,binance_api=info"
+                "virs_app=info,virs_bot=info,virs_position=info,virs_market=info,virs_api=info"
                     .into()
             }),
         )
@@ -102,11 +102,7 @@ async fn main() -> VirsResult<()> {
         ..Default::default()
     };
     let kline_source = Arc::new(ExchangeKlineSource::new(exchange_registry.clone()));
-    let perpetual_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::kline_ws::KlineWs::new_perpetual(
-            config.proxy.as_deref(),
-        ),
-    ));
+    let perpetual_ws = virs_ccxt::create_kline_ws(config.proxy.as_deref());
     let kline_engine = Arc::new(KlineEngine::new(
         kline_config,
         kline_source,
@@ -114,11 +110,7 @@ async fn main() -> VirsResult<()> {
     ));
     info!("Kline engine created (lazy — will start on first subscribe)");
 
-    let ob_perpetual_ws = Arc::new(tokio::sync::Mutex::new(
-        virs_ccxt::adapter::binance::orderbook_ws::OrderBookWs::new_perpetual(
-            config.proxy.as_deref(),
-        ),
-    ));
+    let ob_perpetual_ws = virs_ccxt::create_orderbook_ws(config.proxy.as_deref());
     let orderbook_engine = Arc::new(OrderBookEngine::new(
         OrderBookEngineConfig::default(),
         ob_perpetual_ws,

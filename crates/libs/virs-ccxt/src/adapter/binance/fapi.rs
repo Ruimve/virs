@@ -6,8 +6,9 @@ use crate::ExchangeClient;
 use crate::{parse_f64, parse_str, parse_u32};
 use virs_error::ExchangeError;
 use virs_type::{
-    Balance, ExchangePosition, MarginMode, MarketType, OrderResult, PositionMode, PositionSide,
-    Side, TimeInForce,
+    market::{FundingRate, Kline, OrderBook, Ticker},
+    Balance, ExchangePosition, MarginMode, MarketType, OrderResult, PlaceOrderParams,
+    PositionMode, PositionSide, Side, TimeInForce,
 };
 
 use super::parse_order_book_side;
@@ -20,18 +21,30 @@ fn url(path: &str) -> String {
     format!("{BASE_URL}{path}")
 }
 
+/// 将 interval 字符串转为毫秒数
+fn timeframe_to_ms(interval: &str) -> i64 {
+    match interval {
+        "1m" => 60_000,
+        "5m" => 300_000,
+        "15m" => 900_000,
+        "30m" => 1_800_000,
+        "1h" => 3_600_000,
+        "4h" => 14_400_000,
+        "1d" => 86_400_000,
+        "1w" => 604_800_000,
+        _ => 3_600_000,
+    }
+}
+
 // 连通性检测
-// GET /fapi/v1/ping - 测试与币安合约服务器的连通性，返回非空即视为成功
 pub async fn ping(client: &ExchangeClient) -> Result<bool, ExchangeError> {
     let data = client.public_get(&url("/fapi/v1/ping"), &[]).await?;
     Ok(!data.is_null())
 }
 
-// 获取服务器时间，用于时间同步
-// GET /fapi/v1/time - 返回 serverTime (毫秒)，用于校准本地时钟避免签名时间戳偏移
+// 获取服务器时间
 pub async fn fetch_server_time(client: &ExchangeClient) -> Result<i64, ExchangeError> {
     let data = client.public_get(&url("/fapi/v1/time"), &[]).await?;
-    // 解析 serverTime 字段 (毫秒时间戳)
     data.get("serverTime")
         .and_then(|v| v.as_i64())
         .ok_or_else(|| {
@@ -40,12 +53,10 @@ pub async fn fetch_server_time(client: &ExchangeClient) -> Result<i64, ExchangeE
 }
 
 // 24小时行情统计 + 最优挂单
-// GET /fapi/v1/ticker/24hr - 返回 symbol 的滚动24小时价格变动、成交量等统计
-// GET /fapi/v1/ticker/bookTicker - 返回最优买一/卖一价 (bidPrice/askPrice)
 pub async fn fetch_ticker(
     client: &ExchangeClient,
     symbol: &str,
-) -> Result<CcxtTicker, ExchangeError> {
+) -> Result<Ticker, ExchangeError> {
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let data = client
         .public_get(&url("/fapi/v1/ticker/24hr"), &[("symbol", native.as_str())])
@@ -58,8 +69,8 @@ pub async fn fetch_ticker(
             symbol
         )));
     }
+    let last = last.unwrap();
 
-    // 请求 bookTicker 获取 bidPrice/askPrice
     let book = client
         .public_get(
             &url("/fapi/v1/ticker/bookTicker"),
@@ -67,43 +78,56 @@ pub async fn fetch_ticker(
         )
         .await?;
 
-    Ok(CcxtTicker {
+    let bid = parse_f64(&book, "bidPrice");
+    let ask = parse_f64(&book, "askPrice");
+    let high_24h = parse_f64(&data, "highPrice").ok_or_else(|| {
+        ExchangeError::no_data(format!("Ticker high_24h missing for {}", symbol))
+    })?;
+    let low_24h = parse_f64(&data, "lowPrice").ok_or_else(|| {
+        ExchangeError::no_data(format!("Ticker low_24h missing for {}", symbol))
+    })?;
+    let volume_24h = parse_f64(&data, "volume").ok_or_else(|| {
+        ExchangeError::no_data(format!("Ticker volume_24h missing for {}", symbol))
+    })?;
+    let price_change_24h = parse_f64(&data, "priceChange").ok_or_else(|| {
+        ExchangeError::no_data(format!("Ticker price_change_24h missing for {}", symbol))
+    })?;
+    let price_change_pct_24h = parse_f64(&data, "priceChangePercent").ok_or_else(|| {
+        ExchangeError::no_data(format!(
+            "Ticker price_change_pct_24h missing for {}",
+            symbol
+        ))
+    })?;
+
+    Ok(Ticker {
         symbol: symbol.to_string(),
         exchange: "binance".into(),
-        bid: parse_f64(&book, "bidPrice"),
-        ask: parse_f64(&book, "askPrice"),
+        bid,
+        ask,
         last,
-        high: parse_f64(&data, "highPrice"),
-        low: parse_f64(&data, "lowPrice"),
-        volume: parse_f64(&data, "volume"),
-        quote_volume: parse_f64(&data, "quoteVolume"),
-        open: parse_f64(&data, "openPrice"),
-        close: parse_f64(&data, "lastPrice"),
-        price_change: parse_f64(&data, "priceChange"),
-        price_change_pct: parse_f64(&data, "priceChangePercent"),
-        timestamp: Some(Utc::now()),
-        info: data,
+        high_24h,
+        low_24h,
+        volume_24h,
+        price_change_24h,
+        price_change_pct_24h,
+        timestamp: Utc::now(),
     })
 }
 
 // K线数据
-// GET /fapi/v1/klines - 返回K线数组，每个元素为顺序数组:
-// [openTime, open, high, low, close, volume, closeTime, quoteVolume, trades, buyBaseVolume, buyQuoteVolume, ignore]
 pub async fn fetch_ohlcv(
     client: &ExchangeClient,
     symbol: &str,
     timeframe: &str,
     limit: u32,
     since: Option<i64>,
-) -> Result<Vec<CcxtKline>, ExchangeError> {
-    // 转换为币安原生交易对符号
+) -> Result<Vec<Kline>, ExchangeError> {
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let mut params: Vec<(&str, String)> = vec![
         ("symbol", native),
-        ("interval", timeframe.to_string()), // K线周期 (如 1m, 1h, 1d)
-        ("limit", limit.to_string()),        // 返回K线数量上限
+        ("interval", timeframe.to_string()),
+        ("limit", limit.to_string()),
     ];
-    // 可选起始时间 (毫秒)
     if let Some(s) = since {
         params.push(("startTime", s.to_string()));
     }
@@ -118,7 +142,6 @@ pub async fn fetch_ohlcv(
         )
         .await?;
 
-    // 响应应为数组
     let arr = data.as_array().ok_or_else(|| {
         ExchangeError::no_data(format!(
             "Invalid kline response for {} on Binance Futures",
@@ -133,34 +156,51 @@ pub async fn fetch_ohlcv(
         )));
     }
 
-    // 逐根解析K线，按币安数组下标映射
-    let klines: Vec<CcxtKline> = arr
+    let interval_ms = timeframe_to_ms(timeframe);
+    let exchange_name = "binance";
+
+    let klines: Vec<Kline> = arr
         .iter()
         .filter_map(|k| {
             let a = match k.as_array() {
                 Some(a) if a.len() >= 6 => a,
                 _ => return None,
             };
-            let timestamp = a[0].as_i64()?; // [0] openTime
-            let close_time = a.get(6).and_then(|v| v.as_i64()); // [6] closeTime
-            let open = a[1].as_str().and_then(|s| s.parse().ok())?; // [1] open
-            let high = a[2].as_str().and_then(|s| s.parse().ok())?; // [2] high
-            let low = a[3].as_str().and_then(|s| s.parse().ok())?; // [3] low
-            let close = a[4].as_str().and_then(|s| s.parse().ok())?; // [4] close
-            let volume = a[5].as_str().and_then(|s| s.parse().ok())?; // [5] volume
-            Some(CcxtKline {
-                timestamp,
-                close_time,
+            let timestamp = a[0].as_i64()?;
+            let close_time_raw = a.get(6).and_then(|v| v.as_i64());
+            let open = a[1].as_str().and_then(|s| s.parse().ok())?;
+            let high = a[2].as_str().and_then(|s| s.parse().ok())?;
+            let low = a[3].as_str().and_then(|s| s.parse().ok())?;
+            let close = a[4].as_str().and_then(|s| s.parse().ok())?;
+            let volume = a[5].as_str().and_then(|s| s.parse().ok())?;
+            let quote_volume = a
+                .get(7)
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse().ok())
+                .unwrap_or_else(|| {
+                    tracing::warn!("Kline quote_volume is None — defaulting to 0.0");
+                    0.0
+                });
+            let trades = a
+                .get(8)
+                .and_then(|v| v.as_i64())
+                .unwrap_or_else(|| {
+                    tracing::warn!("Kline trades count is None — defaulting to 0");
+                    0
+                });
+            Some(Kline {
+                open_time: timestamp,
                 open,
                 high,
                 low,
                 close,
                 volume,
-                quote_volume: a
-                    .get(7)
-                    .and_then(|v| v.as_str())
-                    .and_then(|s| s.parse().ok()), // [7] quoteVolume
-                trades: a.get(8).and_then(|v| v.as_i64()), // [8] 成交笔数
+                close_time: close_time_raw.unwrap_or(timestamp + interval_ms - 1),
+                quote_volume,
+                trades,
+                symbol: symbol.to_string(),
+                exchange: exchange_name.to_string(),
+                interval: timeframe.to_string(),
             })
         })
         .collect();
@@ -176,14 +216,11 @@ pub async fn fetch_ohlcv(
 }
 
 // 订单簿
-// GET /fapi/v1/depth - 返回 symbol 的买卖盘深度
-// 参数: symbol, limit (有效值: 5,10,20,50,100,500,1000)
 pub async fn fetch_order_book(
     client: &ExchangeClient,
     symbol: &str,
     limit: u32,
-) -> Result<CcxtOrderBook, ExchangeError> {
-    // 校验 limit 取值在币安允许的范围内
+) -> Result<OrderBook, ExchangeError> {
     const VALID_FUTURES_DEPTH_LIMITS: &[u32] = &[5, 10, 20, 50, 100, 500, 1000];
     if !VALID_FUTURES_DEPTH_LIMITS.contains(&limit) {
         return Err(ExchangeError::InvalidRequest(format!(
@@ -192,7 +229,6 @@ pub async fn fetch_order_book(
         )));
     }
 
-    // 转换为币安原生交易对符号
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let data = client
         .public_get(
@@ -201,7 +237,6 @@ pub async fn fetch_order_book(
         )
         .await?;
 
-    // 解析 bids/asks 数组，每个元素为 [价格, 数量]
     let bids = parse_order_book_side(&data, "bids");
     let asks = parse_order_book_side(&data, "asks");
 
@@ -212,23 +247,20 @@ pub async fn fetch_order_book(
         )));
     }
 
-    Ok(CcxtOrderBook {
+    Ok(OrderBook {
         symbol: symbol.to_string(),
         bids,
         asks,
-        timestamp: Some(Utc::now()),
-        nonce: None,
+        timestamp: Utc::now(),
     })
 }
 
 // 交易对信息
-// GET /fapi/v1/exchangeInfo - 返回所有合约交易对的规格、精度、过滤器等
 pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, ExchangeError> {
     let data = client
         .public_get(&url("/fapi/v1/exchangeInfo"), &[])
         .await?;
 
-    // 解析 symbols 数组
     let symbols = data
         .get("symbols")
         .and_then(|s| s.as_array())
@@ -237,25 +269,21 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
     let markets: Vec<MarketInfo> = symbols
         .iter()
         .filter_map(|s| {
-            // 仅保留交易中 (TRADING) 的交易对
             let status = parse_str(s, "status")?;
             if status != "TRADING" {
                 return None;
             }
 
-            // 仅保留永续合约 (PERPETUAL)
             let contract_type = parse_str(s, "contractType")?;
             if contract_type != "PERPETUAL" {
                 return None;
             }
 
-            let base = parse_str(s, "baseAsset")?; // 基础资产 (如 BTC)
-            let quote = parse_str(s, "quoteAsset")?; // 计价资产 (如 USDT)
+            let base = parse_str(s, "baseAsset")?;
+            let quote = parse_str(s, "quoteAsset")?;
             let symbol = format!("{}/{}", base, quote);
 
-            // 解析 filters 数组，提取各过滤器的限额
             let filters = s.get("filters").and_then(|f| f.as_array());
-            // LOT_SIZE 过滤器: 数量上下限
             let (min_amount, max_amount) = filters
                 .map(|arr| {
                     let lot = arr
@@ -267,7 +295,6 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
                     )
                 })
                 .unwrap_or((None, None));
-            // PRICE_FILTER 过滤器: 价格上下限
             let (min_price, max_price) = filters
                 .map(|arr| {
                     let pf = arr.iter().find(|f| {
@@ -279,7 +306,6 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
                     )
                 })
                 .unwrap_or((None, None));
-            // MIN_NOTIONAL 过滤器: 最小名义价值
             let min_cost = filters
                 .and_then(|arr| {
                     arr.iter().find(|f| {
@@ -289,7 +315,7 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
                 .and_then(|f| parse_f64(f, "notional"));
 
             Some(MarketInfo {
-                id: parse_str(s, "symbol")?, // 币安原生符号 (如 BTCUSDT)
+                id: parse_str(s, "symbol")?,
                 symbol,
                 base,
                 quote,
@@ -300,8 +326,8 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
                 min_price,
                 max_price,
                 min_cost,
-                price_precision: parse_u32(s, "pricePrecision"), // 价格精度小数位
-                amount_precision: parse_u32(s, "quantityPrecision"), // 数量精度小数位
+                price_precision: parse_u32(s, "pricePrecision"),
+                amount_precision: parse_u32(s, "quantityPrecision"),
                 info: s.clone(),
             })
         })
@@ -311,14 +337,10 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
 }
 
 // 标记价格和资金费率
-// GET /fapi/v1/premiumIndex - 返回 symbol 的标记价、资金费率及下次结算时间
-// 响应字段: symbol, markPrice, indexPrice, estimatedSettlePrice, lastFundingRate,
-//           interestRate, nextFundingTime, time
 pub async fn fetch_funding_rate(
     client: &ExchangeClient,
     symbol: &str,
-) -> Result<CcxtFundingRate, ExchangeError> {
-    // 转换为币安原生交易对符号
+) -> Result<FundingRate, ExchangeError> {
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let data = client
         .public_get(
@@ -327,12 +349,10 @@ pub async fn fetch_funding_rate(
         )
         .await?;
 
-    // 解析资金费率，缺失则报错 (避免误用 0.0)
     let rate = parse_f64(&data, "lastFundingRate").ok_or_else(|| {
         tracing::warn!(symbol = %symbol, "lastFundingRate missing — returning NoData instead of 0.0");
         ExchangeError::no_data(format!("lastFundingRate missing for {symbol}"))
     })?;
-    // 解析下次资金结算时间 (毫秒)，过滤无效时间戳
     let next_funding_time = data
         .get("nextFundingTime")
         .and_then(|t| t.as_i64())
@@ -344,18 +364,14 @@ pub async fn fetch_funding_rate(
             })
         });
 
-    Ok(CcxtFundingRate {
+    Ok(FundingRate {
         symbol: symbol.to_string(),
         rate,
         next_funding_time,
-        info: data,
     })
 }
 
-// 合约账户余额 (V3)
-// GET /fapi/v3/balance - 签名请求，返回合约账户各资产余额
-// 响应字段: accountAlias, asset, balance, crossWalletBalance, crossUnPnl,
-//           availableBalance, maxWithdrawAmount, marginAvailable, updateTime
+// 合约账户余额
 pub async fn fetch_balance(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -364,7 +380,6 @@ pub async fn fetch_balance(
         .signed_get(signer, &url("/fapi/v3/balance"), vec![])
         .await?;
 
-    // 响应为余额数组
     let balances = data.as_array().ok_or_else(|| {
         ExchangeError::Internal("Invalid futures balance response from Binance".into())
     })?;
@@ -372,7 +387,6 @@ pub async fn fetch_balance(
     let result: Vec<Balance> = balances
         .iter()
         .filter_map(|b| {
-            // 资产名称 (如 USDT)
             let asset = parse_str(b, "asset").unwrap_or_else(|| {
                 tracing::warn!("Balance asset field missing — skipping entry");
                 String::new()
@@ -380,7 +394,6 @@ pub async fn fetch_balance(
             if asset.is_empty() {
                 return None;
             }
-            // 可用余额，缺失则跳过 (避免误用 0.0)
             let free = parse_f64(b, "availableBalance").unwrap_or_else(|| {
                 tracing::warn!(asset = %asset, "Balance 'availableBalance' field missing or unparseable — skipping entry to avoid 0.0 propagation");
                 f64::NAN
@@ -388,7 +401,6 @@ pub async fn fetch_balance(
             if free.is_nan() {
                 return None;
             }
-            // 总余额，缺失则跳过
             let total = parse_f64(b, "balance").unwrap_or_else(|| {
                 tracing::warn!(asset = %asset, "Balance 'balance' field missing or unparseable — skipping entry to avoid 0.0 propagation");
                 f64::NAN
@@ -396,9 +408,7 @@ pub async fn fetch_balance(
             if total.is_nan() {
                 return None;
             }
-            // 已用 = 总额 - 可用
             let used = total - free;
-            // 跳过全零资产
             if free == 0.0 && used == 0.0 {
                 return None;
             }
@@ -414,24 +424,13 @@ pub async fn fetch_balance(
     Ok(result)
 }
 
-// 下单 (签名)
-// POST /fapi/v1/order - 提交合约订单
-// 请求参数: symbol, side, type, quantity, price, timeInForce(GTC/IOC/FOK/GTX),
-//           reduceOnly, positionSide(LONG/SHORT/BOTH), newClientOrderId, stopPrice,
-//           closePosition, workingType, priceProtect, newOrderRespType, goodTillDate
-// 响应字段: orderId, clientOrderId, cumQty, cumQuote, executedQty, avgPrice, origQty,
-//           price, reduceOnly, side, positionSide, status, stopPrice, closePosition,
-//           symbol, timeInForce, origType, type, updateTime, workingType, priceProtect,
-//           priceMatch, selfTradePreventionMode, goodTillDate
-// 注意: positionSide 在双向持仓模式下必须指定 LONG 或 SHORT
+// 下单
 pub async fn create_order(
     client: &ExchangeClient,
     signer: &dyn Signer,
-    params: CcxtPlaceOrderParams,
+    params: PlaceOrderParams,
 ) -> Result<OrderResult, ExchangeError> {
-    // 转换为币安原生交易对符号
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(&params.symbol);
-    // 构建请求体基础字段: 交易对、方向、类型、数量
     let mut body = serde_json::json!({
         "symbol": native,
         "side": crate::adapter::binance::BinanceExchange::side_str(&params.side),
@@ -439,7 +438,6 @@ pub async fn create_order(
         "quantity": params.amount,
     });
 
-    // 限价单需要价格与 timeInForce
     if let Some(price) = params.price {
         body["price"] = serde_json::json!(price);
         let tif = params.time_in_force.as_ref().ok_or_else(|| {
@@ -456,18 +454,14 @@ pub async fn create_order(
         });
     }
 
-    // 止损/止盈触发价
     if let Some(stop_price) = params.stop_price {
         body["stopPrice"] = serde_json::json!(stop_price);
     }
 
-    // 自定义客户端订单ID
     if let Some(ref client_id) = params.client_order_id {
         body["newClientOrderId"] = serde_json::json!(client_id);
     }
 
-    // 双向持仓模式下根据买卖方向和持仓方向推导 positionSide
-    // 注意: 单向模式 (BOTH) 不被支持，本实现要求账户开启双向持仓
     let position_side = match (&params.side, &params.position_side) {
         (Side::Buy, Some(PositionSide::Long)) => "LONG",
         (Side::Sell, Some(PositionSide::Short)) => "SHORT",
@@ -497,7 +491,6 @@ pub async fn create_order(
         .signed_post(signer, &url("/fapi/v1/order"), body)
         .await?;
 
-    // 只提取 orderId + clientOrderId，完整订单数据由 WS ORDER_TRADE_UPDATE 推送
     let order_id = parse_str(&data, "orderId")
         .ok_or_else(|| ExchangeError::no_data("orderId missing in create_order response".into()))?;
     let client_order_id = parse_str(&data, "clientOrderId")
@@ -509,17 +502,13 @@ pub async fn create_order(
     })
 }
 
-// 撤单 (签名)
-// DELETE /fapi/v1/order - 撤销指定订单
-// 参数: symbol, orderId (或 origClientOrderId)
-// 注意: 响应无 time 字段，只有 updateTime
+// 撤单
 pub async fn cancel_order(
     client: &ExchangeClient,
     signer: &dyn Signer,
     symbol: &str,
     order_id: &str,
 ) -> Result<OrderResult, ExchangeError> {
-    // 转换为币安原生交易对符号
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let params = vec![
         ("symbol".into(), native),
@@ -530,7 +519,6 @@ pub async fn cancel_order(
         .signed_delete(signer, &url("/fapi/v1/order"), params)
         .await?;
 
-    // 只提取 orderId + clientOrderId，完整订单数据由 WS ORDER_TRADE_UPDATE 推送
     let order_id = parse_str(&data, "orderId")
         .ok_or_else(|| ExchangeError::no_data("orderId missing in cancel_order response".into()))?;
     let client_order_id = parse_str(&data, "clientOrderId")
@@ -542,10 +530,7 @@ pub async fn cancel_order(
     })
 }
 
-// 批量撤单 (签名)
-// DELETE /fapi/v1/allOpenOrders - 撤销指定交易对全部挂单
-// 参数: symbol (必填)
-// 响应: {"code": 200, "msg": "The operation of cancel all open order is done."}
+// 批量撤单
 pub async fn cancel_all_orders(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -561,45 +546,36 @@ pub async fn cancel_all_orders(
     Ok(())
 }
 
-// 变换逐全仓模式 (签名)
-// POST /fapi/v1/marginType - 切换指定交易对的保证金模式
-// 参数: symbol, marginType (ISOLATED 逐仓 / CROSSED 全仓)
-// 注意: 忽略错误，因为重复设置会返回 -4046 (无需变更)
+// 变换逐全仓模式
 pub async fn set_margin_type(
     client: &ExchangeClient,
     signer: &dyn Signer,
     symbol: &str,
     margin_mode: MarginMode,
 ) -> Result<(), ExchangeError> {
-    // 转换为币安原生交易对符号
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
-    // 映射保证金模式为币安字符串
     let margin_type_str = match margin_mode {
-        MarginMode::Cross => "CROSSED",     // 全仓
-        MarginMode::Isolated => "ISOLATED", // 逐仓
+        MarginMode::Cross => "CROSSED",
+        MarginMode::Isolated => "ISOLATED",
     };
     let body = serde_json::json!({
         "symbol": native,
         "marginType": margin_type_str,
     });
 
-    // 忽略结果: 重复设置同一模式会报 -4046，属正常情况
     let _ = client
         .signed_post(signer, &url("/fapi/v1/marginType"), body)
         .await;
     Ok(())
 }
 
-// 调整杠杆 (签名)
-// POST /fapi/v1/leverage - 调整指定交易对的杠杆倍数
-// 参数: symbol, leverage (1-125)
+// 调整杠杆
 pub async fn set_leverage(
     client: &ExchangeClient,
     signer: &dyn Signer,
     symbol: &str,
     leverage: u32,
 ) -> Result<(), ExchangeError> {
-    // 转换为币安原生交易对符号
     let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let body = serde_json::json!({
         "symbol": native,
@@ -611,17 +587,12 @@ pub async fn set_leverage(
     Ok(())
 }
 
-// 持仓信息 (V2)
-// GET /fapi/v2/positionRisk - 签名请求，返回账户持仓信息
-// 响应字段: entryPrice, breakEvenPrice, marginType, isAutoAddMargin, isolatedMargin,
-//           leverage, liquidationPrice, markPrice, maxNotionalValue, positionAmt,
-//           notional, isolatedWallet, symbol, unRealizedProfit, positionSide, updateTime
+// 持仓信息
 pub async fn fetch_positions(
     client: &ExchangeClient,
     signer: &dyn Signer,
     symbol: Option<&str>,
 ) -> Result<Vec<ExchangePosition>, ExchangeError> {
-    // symbol 可选，传则查指定交易对，不传查全部
     let mut params: Vec<(String, String)> = vec![];
     if let Some(sym) = symbol {
         params.push((
@@ -634,24 +605,20 @@ pub async fn fetch_positions(
         .signed_get(signer, &url("/fapi/v2/positionRisk"), params)
         .await?;
 
-    // 响应为持仓数组
     let arr = data.as_array().ok_or_else(|| {
         ExchangeError::Internal("Invalid positionRisk response from Binance".into())
     })?;
 
     let mut positions: Vec<ExchangePosition> = Vec::new();
     for p in arr.iter() {
-        // 持仓数量: 正数为多，负数为空，0 表示无持仓
         let pos_amt = parse_f64(p, "positionAmt").unwrap_or_else(|| {
             tracing::warn!("positionAmt missing — skipping entry to avoid silent position drop");
             f64::NAN
         });
-        // 跳过空仓
         if pos_amt.is_nan() || pos_amt == 0.0 {
             continue;
         }
 
-        // 根据数量正负判定多空方向
         let side = if pos_amt > 0.0 {
             PositionSide::Long
         } else {
@@ -667,7 +634,6 @@ pub async fn fetch_positions(
             }
         };
 
-        // 保证金模式: isolated 逐仓 / crossed 全仓
         let margin_type_str = match parse_str(p, "marginType") {
             Some(s) => s,
             None => {
@@ -684,7 +650,6 @@ pub async fn fetch_positions(
             }
         };
 
-        // 开仓均价，缺失则跳过
         let entry_price = match parse_f64(p, "entryPrice") {
             Some(v) => v,
             None => {
@@ -697,7 +662,6 @@ pub async fn fetch_positions(
         };
 
         positions.push(ExchangePosition {
-            // 转回统一格式符号 (如 BTCUSDT -> BTC/USDT)
             symbol: crate::adapter::binance::BinanceExchange::to_unified_symbol(&symbol_str),
             side,
             quantity: size,
@@ -710,10 +674,7 @@ pub async fn fetch_positions(
     Ok(positions)
 }
 
-// 查询持仓模式 (签名)
-// GET /fapi/v1/positionSide/dual - 查询账户是否为双向持仓模式
-// 响应: { "dualSidePosition": true } - true=双向持仓, false=单向持仓
-// 注意: 本实现要求双向持仓 (Hedge) 模式，单向模式会返回错误
+// 查询持仓模式
 pub async fn get_position_mode(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -722,7 +683,6 @@ pub async fn get_position_mode(
         .signed_get(signer, &url("/fapi/v1/positionSide/dual"), vec![])
         .await?;
 
-    // 解析 dualSidePosition 布尔值
     let dual_side = data
         .get("dualSidePosition")
         .and_then(|v| v.as_bool())
@@ -735,7 +695,6 @@ pub async fn get_position_mode(
     if dual_side {
         Ok(PositionMode::Hedge)
     } else {
-        // 单向模式不支持，要求用户切换为双向持仓
         Err(ExchangeError::InvalidRequest(
             "Exchange account is in OneWay (single-position) mode. \
              VIRS requires Hedge mode. Switch to Hedge mode in Binance futures \
@@ -745,9 +704,7 @@ pub async fn get_position_mode(
     }
 }
 
-// 创建 listenKey (签名)
-// POST /fapi/v1/listenKey - 创建用于 WebSocket 用户数据流的 listenKey
-// 响应: { "listenKey": "...", "createdAt": ... }
+// 创建 listenKey
 pub async fn create_listen_key(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -756,22 +713,18 @@ pub async fn create_listen_key(
     let data = client
         .signed_post(signer, &url("/fapi/v1/listenKey"), body)
         .await?;
-    // 解析 listenKey 字符串，缺失则报错
     data.get("listenKey")
         .and_then(|v| v.as_str())
         .map(String::from)
         .ok_or_else(|| ExchangeError::Internal("listenKey missing in response".into()))
 }
 
-// 续期 listenKey (签名)
-// PUT /fapi/v1/listenKey - 续期 listenKey，防止 WebSocket 连接断开
-// 参数: listenKey (需在请求体中携带)
+// 续期 listenKey
 pub async fn keepalive_listen_key(
     client: &ExchangeClient,
     signer: &dyn Signer,
     listen_key: &str,
 ) -> Result<(), ExchangeError> {
-    // 请求体携带 listenKey
     let body = serde_json::json!({ "listenKey": listen_key });
     client
         .signed_put(signer, &url("/fapi/v1/listenKey"), body)

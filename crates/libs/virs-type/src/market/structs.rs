@@ -6,6 +6,25 @@ use crate::position::PositionSide;
 use super::enums::{KlineEventType, Timeframe};
 
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketInfo {
+    pub id: String,
+    pub symbol: String,
+    pub base: String,
+    pub quote: String,
+    pub active: bool,
+    pub market_type: crate::exchange::MarketType,
+    pub min_amount: Option<f64>,
+    pub max_amount: Option<f64>,
+    pub min_price: Option<f64>,
+    pub max_price: Option<f64>,
+    pub min_cost: Option<f64>,
+    pub price_precision: Option<u32>,
+    pub amount_precision: Option<u32>,
+    pub info: serde_json::Value,
+}
+
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Ticker {
     pub symbol: String,

@@ -85,7 +85,7 @@ pub async fn save_credential(
     .await?;
 
 
-    if let Ok(ccxt_ex) = virs_ccxt::create_exchange(
+    if let Ok(exchange) = virs_ccxt::create_exchange(
         exchange,
         api_key,
         api_secret,
@@ -95,17 +95,10 @@ pub async fn save_credential(
         std::time::Duration::from_secs(state.http_connect_timeout_secs),
         state.http_pool_max_idle_per_host,
         state.listenkey_keepalive_futures_secs,
-    ) {
-
-        if let Err(e) = ccxt_ex.sync_time().await {
-            tracing::warn!(
-                error = %e,
-                exchange,
-                "Server time sync failed, using local clock (recvWindow 5000ms tolerates small drift)"
-            );
-        }
-        let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, virs_type::MarketType::Perpetual);
-        state.exchange_registry.register(Box::new(adapter));
+    )
+    .await
+    {
+        state.exchange_registry.register(exchange);
     }
 
     Ok(Json(ApiResponse::ok(

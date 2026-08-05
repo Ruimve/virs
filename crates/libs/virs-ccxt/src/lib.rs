@@ -2,125 +2,14 @@ pub mod adapter;
 pub mod auth;
 pub mod types;
 
-use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::Value;
-use tokio::sync::mpsc;
 
 use auth::Signer;
 use virs_error::ExchangeError;
-use virs_type::{
-    ApiRestrictions, Balance, ExchangePosition, MarginMode, OrderResult, PositionMode,
-};
+use virs_type::ExchangePe;
 
-pub use types::{
-    CcxtFundingRate, CcxtKline, CcxtOrderBook, CcxtPlaceOrderParams, CcxtTicker, MarketInfo,
-    OrderFee,
-};
-
-#[async_trait]
-pub trait Exchange: Send + Sync {
-    fn id(&self) -> &str;
-    fn name(&self) -> &str;
-
-    async fn fetch_ticker(&self, symbol: &str) -> Result<CcxtTicker, ExchangeError>;
-    async fn fetch_ohlcv(
-        &self,
-        symbol: &str,
-        timeframe: &str,
-        limit: u32,
-        since: Option<i64>,
-    ) -> Result<Vec<CcxtKline>, ExchangeError>;
-
-    async fn fetch_ohlcv_range(
-        &self,
-        symbol: &str,
-        timeframe: &str,
-        start_ms: i64,
-        end_ms: i64,
-    ) -> Result<Vec<CcxtKline>, ExchangeError> {
-        let page_limit: u32 = 1000;
-        let mut all_klines: Vec<CcxtKline> = Vec::new();
-        let mut cursor = start_ms;
-
-        while cursor < end_ms {
-            let batch = self
-                .fetch_ohlcv(symbol, timeframe, page_limit, Some(cursor))
-                .await?;
-            if batch.is_empty() {
-                break;
-            }
-            for k in &batch {
-                if k.timestamp > end_ms {
-                    return Ok(all_klines);
-                }
-                if let Some(last) = all_klines.last() {
-                    if k.timestamp <= last.timestamp {
-                        continue;
-                    }
-                }
-                all_klines.push(k.clone());
-            }
-            let last = batch.last().ok_or_else(|| {
-                ExchangeError::Internal(
-                    "batch unexpectedly empty after is_empty check — pagination logic error".into(),
-                )
-            })?;
-            cursor = last.timestamp + 1;
-            if (batch.len() as u32) < page_limit {
-                break;
-            }
-        }
-        Ok(all_klines)
-    }
-
-    async fn fetch_order_book(
-        &self,
-        symbol: &str,
-        limit: u32,
-    ) -> Result<CcxtOrderBook, ExchangeError>;
-    async fn fetch_balance(&self) -> Result<Vec<Balance>, ExchangeError>;
-    async fn fetch_markets(&self) -> Result<Vec<MarketInfo>, ExchangeError>;
-    async fn create_order(&self, params: CcxtPlaceOrderParams) -> Result<OrderResult, ExchangeError>;
-    async fn cancel_order(
-        &self,
-        symbol: &str,
-        order_id: &str,
-    ) -> Result<OrderResult, ExchangeError>;
-    async fn cancel_all_orders(&self, symbol: &str) -> Result<(), ExchangeError>;
-    async fn set_leverage(
-        &self,
-        symbol: &str,
-        leverage: u32,
-        margin_mode: MarginMode,
-    ) -> Result<(), ExchangeError>;
-    async fn fetch_positions(
-        &self,
-        symbol: Option<&str>,
-    ) -> Result<Vec<ExchangePosition>, ExchangeError>;
-    async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError>;
-    async fn fetch_funding_rate(&self, symbol: &str) -> Result<CcxtFundingRate, ExchangeError>;
-    async fn create_listen_key(&self) -> Result<String, ExchangeError>;
-    async fn fetch_api_restrictions(&self) -> Result<ApiRestrictions, ExchangeError> {
-        Err(ExchangeError::NotSupported(
-            "fetch_api_restrictions not supported".into(),
-        ))
-    }
-
-    async fn start_listenkey_order_ws(
-        &self,
-        _listen_key_hint: Option<&str>,
-    ) -> Result<mpsc::Receiver<virs_type::WsFeedEvent>, ExchangeError> {
-        Err(ExchangeError::NotSupported(
-            "start_listenkey_order_ws not supported".into(),
-        ))
-    }
-    async fn ping(&self) -> Result<bool, ExchangeError>;
-
-    async fn sync_time(&self) -> Result<(), ExchangeError> {
-        Ok(())
-    }
-}
+pub use types::{MarketInfo, OrderFee};
 
 #[derive(Clone)]
 pub struct ExchangeClient {
@@ -427,7 +316,28 @@ pub(crate) fn extract_error_message(json: &Value) -> String {
     json.to_string()
 }
 
-pub fn create_exchange(
+/// 独立创建 K线 WS 客户端（启动时使用，此时尚无 exchange 实例）。
+pub fn create_kline_ws(
+    proxy: Option<&str>,
+) -> std::sync::Arc<tokio::sync::Mutex<dyn virs_type::ws_types::KlineWsClient>> {
+    std::sync::Arc::new(tokio::sync::Mutex::new(
+        adapter::binance::kline_ws::KlineWs::new_perpetual(proxy),
+    ))
+}
+
+/// 独立创建订单簿 WS 客户端（启动时使用，此时尚无 exchange 实例）。
+pub fn create_orderbook_ws(
+    proxy: Option<&str>,
+) -> std::sync::Arc<tokio::sync::Mutex<dyn virs_type::ws_types::OrderBookWsClient>> {
+    std::sync::Arc::new(tokio::sync::Mutex::new(
+        adapter::binance::orderbook_ws::OrderBookWs::new_perpetual(proxy),
+    ))
+}
+
+/// 创建交易所实例，返回 `Box<dyn ExchangePe>`。
+///
+/// 内部完成时间同步（启动周期同步任务），调用方无需再调 sync_time。
+pub async fn create_exchange(
     id: &str,
     api_key: &str,
     api_secret: &str,
@@ -437,17 +347,23 @@ pub fn create_exchange(
     connect_timeout: std::time::Duration,
     pool_max_idle_per_host: usize,
     listenkey_keepalive_futures_secs: u64,
-) -> Result<Box<dyn Exchange>, ExchangeError> {
+) -> Result<Box<dyn ExchangePe>, ExchangeError> {
     match id.to_lowercase().as_str() {
-        "binance" => Ok(Box::new(adapter::binance::BinanceExchange::new(
-            api_key,
-            api_secret,
-            proxy_url,
-            http_timeout,
-            connect_timeout,
-            pool_max_idle_per_host,
-            listenkey_keepalive_futures_secs,
-        )?)),
+        "binance" => {
+            let exchange = adapter::binance::BinanceExchange::new(
+                api_key,
+                api_secret,
+                proxy_url,
+                http_timeout,
+                connect_timeout,
+                pool_max_idle_per_host,
+                listenkey_keepalive_futures_secs,
+            )?;
+            if let Err(e) = exchange.sync_time().await {
+                tracing::warn!(error = %e, "Failed to sync server time");
+            }
+            Ok(Box::new(exchange))
+        }
 
         _ => Err(ExchangeError::NotSupported(format!(
             "Exchange '{}' is not supported. Currently implemented: binance. \

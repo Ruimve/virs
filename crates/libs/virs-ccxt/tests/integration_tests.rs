@@ -4,7 +4,6 @@ use virs_ccxt::{
     adapter::binance::{user_data_ws_events::dispatch_event, BinanceExchange},
     auth::hmac_sha256_hex,
     create_exchange, parse_f64, parse_str,
-    types::CcxtTicker,
 };
 use virs_error::ExchangeError;
 
@@ -88,8 +87,8 @@ fn int_4_3_non_order_event_returns_none() {
     assert!(event.is_none());
 }
 
-#[test]
-fn int_5_1_create_exchange_binance_hmac() {
+#[tokio::test]
+async fn int_5_1_create_exchange_binance_hmac() {
     let result = create_exchange(
         "binance",
         "test_api_key",
@@ -100,15 +99,15 @@ fn int_5_1_create_exchange_binance_hmac() {
         std::time::Duration::from_secs(10),
         10,
         900,
-    );
+    )
+    .await;
     assert!(result.is_ok());
     let exchange = result.unwrap();
-    assert_eq!(exchange.id(), "binance");
-    assert_eq!(exchange.name(), "Binance");
+    assert_eq!(exchange.name(), "binance");
 }
 
-#[test]
-fn int_5_2_create_exchange_binance_ed25519() {
+#[tokio::test]
+async fn int_5_2_create_exchange_binance_ed25519() {
     let seed_b64 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
     let result = create_exchange(
         "binance",
@@ -120,14 +119,15 @@ fn int_5_2_create_exchange_binance_ed25519() {
         std::time::Duration::from_secs(10),
         10,
         900,
-    );
+    )
+    .await;
     assert!(result.is_ok());
     let exchange = result.unwrap();
-    assert_eq!(exchange.id(), "binance");
+    assert_eq!(exchange.name(), "binance");
 }
 
-#[test]
-fn int_5_3_create_exchange_bybit_not_supported() {
+#[tokio::test]
+async fn int_5_3_create_exchange_bybit_not_supported() {
     let result = create_exchange(
         "bybit",
         "key",
@@ -138,7 +138,8 @@ fn int_5_3_create_exchange_bybit_not_supported() {
         std::time::Duration::from_secs(10),
         10,
         900,
-    );
+    )
+    .await;
     assert!(result.is_err());
     match result.err().unwrap() {
         ExchangeError::NotSupported(_) => {}
@@ -146,8 +147,8 @@ fn int_5_3_create_exchange_bybit_not_supported() {
     }
 }
 
-#[test]
-fn int_5_4_create_exchange_okx_not_supported() {
+#[tokio::test]
+async fn int_5_4_create_exchange_okx_not_supported() {
     let result = create_exchange(
         "okx",
         "key",
@@ -158,7 +159,8 @@ fn int_5_4_create_exchange_okx_not_supported() {
         std::time::Duration::from_secs(10),
         10,
         900,
-    );
+    )
+    .await;
     assert!(result.is_err());
     match result.err().unwrap() {
         ExchangeError::NotSupported(_) => {}
@@ -166,8 +168,8 @@ fn int_5_4_create_exchange_okx_not_supported() {
     }
 }
 
-#[test]
-fn int_5_5_create_exchange_case_insensitive() {
+#[tokio::test]
+async fn int_5_5_create_exchange_case_insensitive() {
     let result = create_exchange(
         "BINANCE",
         "key",
@@ -178,53 +180,9 @@ fn int_5_5_create_exchange_case_insensitive() {
         std::time::Duration::from_secs(10),
         10,
         900,
-    );
+    )
+    .await;
     assert!(result.is_ok());
-}
-
-#[test]
-fn int_6_1_ticker_json_to_ticker_via_parse() {
-    let raw = json!({
-        "symbol": "BTCUSDT",
-        "bidPrice": "50000.0",
-        "askPrice": "50001.0",
-        "lastPrice": "50000.5",
-        "highPrice": "51000.0",
-        "lowPrice": "49000.0",
-        "volume": "1000.5",
-        "priceChange": "500.5",
-        "priceChangePercent": "1.01",
-    });
-
-    let ccxt = CcxtTicker {
-        symbol: "BTC/USDT".into(),
-        exchange: "binance".into(),
-        bid: parse_f64(&raw, "bidPrice"),
-        ask: parse_f64(&raw, "askPrice"),
-        last: parse_f64(&raw, "lastPrice"),
-        high: parse_f64(&raw, "highPrice"),
-        low: parse_f64(&raw, "lowPrice"),
-        volume: parse_f64(&raw, "volume"),
-        quote_volume: None,
-        open: None,
-        close: None,
-        price_change: parse_f64(&raw, "priceChange"),
-        price_change_pct: parse_f64(&raw, "priceChangePercent"),
-        timestamp: Some(chrono::Utc::now()),
-        info: raw,
-    };
-
-    let ticker: virs_type::market::Ticker = ccxt.try_into().unwrap();
-    assert_eq!(ticker.symbol, "BTC/USDT");
-    assert_eq!(ticker.exchange, "binance");
-    assert_eq!(ticker.bid, Some(50000.0));
-    assert_eq!(ticker.ask, Some(50001.0));
-    assert_eq!(ticker.last, 50000.5);
-    assert_eq!(ticker.high_24h, 51000.0);
-    assert_eq!(ticker.low_24h, 49000.0);
-    assert_eq!(ticker.volume_24h, 1000.5);
-    assert_eq!(ticker.price_change_24h, 500.5);
-    assert!((ticker.price_change_pct_24h - 1.01).abs() < 0.001);
 }
 
 #[test]

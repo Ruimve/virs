@@ -3110,6 +3110,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tokio",
+ "tokio-stream",
  "tracing",
  "virs-error",
  "virs-task",
@@ -3155,7 +3156,6 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "uuid",
- "virs-ccxt",
  "virs-error",
  "virs-type",
 ]

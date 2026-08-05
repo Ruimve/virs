@@ -135,7 +135,7 @@ impl AppEngineManager {
                     continue;
                 }
 
-                let ccxt_ex = virs_ccxt::create_exchange(
+                let exchange_instance = virs_ccxt::create_exchange(
                     exchange,
                     &api_key,
                     &api_secret,
@@ -146,6 +146,7 @@ impl AppEngineManager {
                     self.time_config.http.http_pool_max_idle_per_host,
                     self.time_config.listenkey.listenkey_keepalive_futures_secs,
                 )
+                .await
                 .map_err(|e| {
                     virs_error::VirsError::config(format!(
                         "Failed to create exchange '{}' ({}): {}",
@@ -153,17 +154,7 @@ impl AppEngineManager {
                     ))
                 })?;
 
-                if let Err(e) = ccxt_ex.sync_time().await {
-                    warn!(
-                        error = %e,
-                        exchange = %exchange,
-                        "Server time sync failed, using local clock (recvWindow 5000ms tolerates small drift)"
-                    );
-                }
-
-                let app_mt = MarketType::Perpetual;
-                let adapter = virs_exchange::CcxtAdapter::new(ccxt_ex, app_mt);
-                self.exchange_registry.register(Box::new(adapter));
+                self.exchange_registry.register(exchange_instance);
                 info!(exchange = %exchange, "Restored exchange credential");
             }
         }

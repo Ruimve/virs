@@ -7,23 +7,29 @@ pub mod sapi;
 pub mod user_data_ws;
 pub mod user_data_ws_events;
 
-use async_trait::async_trait;
-use base64::Engine;
-use ed25519_dalek::pkcs8::DecodePrivateKey;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+
+use async_trait::async_trait;
+use base64::Engine;
+use ed25519_dalek::pkcs8::DecodePrivateKey;
 use tokio::sync::mpsc;
 use virs_task::{spawn_periodic, TaskHandle};
 
 use crate::auth::{hmac_sha256_hex, insert_header, SignedRequest, Signer};
 use crate::types::*;
-use crate::{Exchange, ExchangeClient};
-use virs_error::ExchangeError;
+use crate::ExchangeClient;
+use virs_error::{ExchangeError, VirsError};
 use virs_type::{
-    ApiRestrictions, Balance, CcxtOrderStatus, ExchangePosition, MarginMode, OrderResult,
-    OrderType, PositionMode, Side, WsFeedEvent,
+    exchange::OrderUpdateStream,
+    market::{FundingRate, Kline, Ticker},
+    ws_types::{KlineWsClient, OrderBookWsClient},
+    ApiRestrictions, Balance, CcxtOrderStatus, ExchangePe, ExchangePosition, MarginMode,
+    MarketType, OrderResult, OrderType, PlaceOrderParams, PositionMode, Side, WsFeedEvent,
 };
+
+// ─── Signer 实现（保持不变） ───
 
 pub struct BinanceSigner {
     api_key: String,
@@ -50,7 +56,6 @@ fn url_encode_signature(s: &str) -> String {
 }
 
 const TIME_SYNC_INTERVAL_SECS: u64 = 3600;
-
 const TIME_OFFSET_WARN_THRESHOLD_MS: i64 = 2_000;
 
 impl Signer for BinanceSigner {
@@ -329,9 +334,13 @@ pub(crate) fn try_build_ed25519(
     }
 }
 
+// ─── BinanceExchange ───
+
 pub struct BinanceExchange {
     client: ExchangeClient,
     signer: Arc<dyn Signer>,
+    market_type: MarketType,
+    markets_cache: tokio::sync::RwLock<Option<Vec<MarketInfo>>>,
     time_sync_started: AtomicBool,
     listenkey_keepalive_futures_secs: u64,
     time_sync_task: std::sync::Mutex<Option<TaskHandle>>,
@@ -373,6 +382,8 @@ impl BinanceExchange {
         Ok(Self {
             client,
             signer,
+            market_type: MarketType::Perpetual,
+            markets_cache: tokio::sync::RwLock::new(None),
             time_sync_started: AtomicBool::new(false),
             listenkey_keepalive_futures_secs,
             time_sync_task: std::sync::Mutex::new(None),
@@ -446,176 +457,9 @@ impl BinanceExchange {
             OrderType::Unknown(raw) => raw.clone(),
         }
     }
-}
 
-pub(crate) fn parse_order_book_side(data: &serde_json::Value, side: &str) -> Vec<(f64, f64)> {
-    data.get(side)
-        .and_then(|b| b.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|b| {
-                    let a = b.as_array()?;
-                    Some((a[0].as_str()?.parse().ok()?, a[1].as_str()?.parse().ok()?))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-#[async_trait]
-impl Exchange for BinanceExchange {
-    fn id(&self) -> &str {
-        "binance"
-    }
-    fn name(&self) -> &str {
-        "Binance"
-    }
-
-    async fn fetch_ticker(&self, symbol: &str) -> Result<CcxtTicker, ExchangeError> {
-        fapi::fetch_ticker(&self.client, symbol).await
-    }
-
-    async fn fetch_ohlcv(
-        &self,
-        symbol: &str,
-        timeframe: &str,
-        limit: u32,
-        since: Option<i64>,
-    ) -> Result<Vec<CcxtKline>, ExchangeError> {
-        fapi::fetch_ohlcv(&self.client, symbol, timeframe, limit, since).await
-    }
-
-    async fn fetch_order_book(
-        &self,
-        symbol: &str,
-        limit: u32,
-    ) -> Result<CcxtOrderBook, ExchangeError> {
-        fapi::fetch_order_book(&self.client, symbol, limit).await
-    }
-
-    async fn fetch_balance(&self) -> Result<Vec<Balance>, ExchangeError> {
-        fapi::fetch_balance(&self.client, self.signer.as_ref()).await
-    }
-
-    async fn fetch_markets(&self) -> Result<Vec<MarketInfo>, ExchangeError> {
-        fapi::fetch_markets(&self.client).await
-    }
-
-    async fn create_order(&self, params: CcxtPlaceOrderParams) -> Result<OrderResult, ExchangeError> {
-        fapi::create_order(&self.client, self.signer.as_ref(), params).await
-    }
-
-    async fn cancel_order(
-        &self,
-        symbol: &str,
-        order_id: &str,
-    ) -> Result<OrderResult, ExchangeError> {
-        fapi::cancel_order(&self.client, self.signer.as_ref(), symbol, order_id).await
-    }
-
-    async fn cancel_all_orders(&self, symbol: &str) -> Result<(), ExchangeError> {
-        fapi::cancel_all_orders(&self.client, self.signer.as_ref(), symbol).await
-    }
-
-    async fn set_leverage(
-        &self,
-        symbol: &str,
-        leverage: u32,
-        margin_mode: MarginMode,
-    ) -> Result<(), ExchangeError> {
-        fapi::set_margin_type(&self.client, self.signer.as_ref(), symbol, margin_mode).await?;
-        fapi::set_leverage(&self.client, self.signer.as_ref(), symbol, leverage).await
-    }
-
-    async fn fetch_positions(
-        &self,
-        symbol: Option<&str>,
-    ) -> Result<Vec<ExchangePosition>, ExchangeError> {
-        fapi::fetch_positions(&self.client, self.signer.as_ref(), symbol).await
-    }
-
-    async fn get_position_mode(&self) -> Result<PositionMode, ExchangeError> {
-        fapi::get_position_mode(&self.client, self.signer.as_ref()).await
-    }
-
-    async fn fetch_funding_rate(&self, symbol: &str) -> Result<CcxtFundingRate, ExchangeError> {
-        fapi::fetch_funding_rate(&self.client, symbol).await
-    }
-
-    async fn create_listen_key(&self) -> Result<String, ExchangeError> {
-        fapi::create_listen_key(&self.client, self.signer.as_ref()).await
-    }
-
-    async fn fetch_api_restrictions(&self) -> Result<ApiRestrictions, ExchangeError> {
-        sapi::fetch_api_restrictions(&self.client, self.signer.as_ref()).await
-    }
-
-    async fn start_listenkey_order_ws(
-        &self,
-        listen_key_hint: Option<&str>,
-    ) -> Result<mpsc::Receiver<WsFeedEvent>, ExchangeError> {
-        let listen_key = match listen_key_hint {
-            Some(k) => k.to_string(),
-            None => self.create_listen_key().await?,
-        };
-
-        let ws = user_data_ws::UserDataWs::new_perpetual(
-            listen_key,
-            self.client.clone(),
-            Arc::clone(&self.signer),
-        );
-
-        let listen_key_handle = ws.listen_key_handle();
-
-        let (tx, rx) = mpsc::channel(256);
-        ws.start(tx).await;
-        info!("listenKey order WS started (perpetual)");
-
-        let client = self.client.clone();
-        let signer = Arc::clone(&self.signer);
-        let keepalive_interval = Duration::from_secs(self.listenkey_keepalive_futures_secs);
-
-        let handle = spawn_periodic(
-            "listenkey_keepalive",
-            keepalive_interval,
-            false,
-            move || {
-                let client = client.clone();
-                let signer = Arc::clone(&signer);
-                let listen_key_handle = Arc::clone(&listen_key_handle);
-                async move {
-                    let current_key = listen_key_handle
-                        .read()
-                        .expect("listenKey RwLock poisoned")
-                        .clone();
-                    let result =
-                        fapi::keepalive_listen_key(&client, signer.as_ref(), &current_key).await;
-                    match result {
-                        Ok(()) => {}
-                        Err(e) => {
-                            warn!(
-                                error = %e,
-                                "listenKey keepalive failed, \
-                                 WS may disconnect when listenKey expires"
-                            );
-                        }
-                    }
-                }
-            },
-        );
-
-        *self.listenkey_task.lock().unwrap() = Some(handle);
-
-        *self.user_data_ws.lock().unwrap() = Some(ws);
-
-        Ok(rx)
-    }
-
-    async fn ping(&self) -> Result<bool, ExchangeError> {
-        fapi::ping(&self.client).await
-    }
-
-    async fn sync_time(&self) -> Result<(), ExchangeError> {
+    /// 同步服务器时间，启动周期同步任务。由 create_exchange 内部调用。
+    pub async fn sync_time(&self) -> Result<(), ExchangeError> {
         let server_time = fapi::fetch_server_time(&self.client).await?;
         let local_time = chrono::Utc::now().timestamp_millis();
         let offset = server_time - local_time;
@@ -678,6 +522,289 @@ impl Exchange for BinanceExchange {
         }
 
         Ok(())
+    }
+
+    /// 启动 listenKey 订单 WS，返回事件接收器。
+    async fn start_listenkey_order_ws(
+        &self,
+        listen_key_hint: Option<&str>,
+    ) -> Result<mpsc::Receiver<WsFeedEvent>, ExchangeError> {
+        let listen_key = match listen_key_hint {
+            Some(k) => k.to_string(),
+            None => fapi::create_listen_key(&self.client, self.signer.as_ref()).await?,
+        };
+
+        let ws = user_data_ws::UserDataWs::new_perpetual(
+            listen_key,
+            self.client.clone(),
+            Arc::clone(&self.signer),
+        );
+
+        let listen_key_handle = ws.listen_key_handle();
+
+        let (tx, rx) = mpsc::channel(256);
+        ws.start(tx).await;
+        info!("listenKey order WS started (perpetual)");
+
+        let client = self.client.clone();
+        let signer = Arc::clone(&self.signer);
+        let keepalive_interval = Duration::from_secs(self.listenkey_keepalive_futures_secs);
+
+        let handle = spawn_periodic(
+            "listenkey_keepalive",
+            keepalive_interval,
+            false,
+            move || {
+                let client = client.clone();
+                let signer = Arc::clone(&signer);
+                let listen_key_handle = Arc::clone(&listen_key_handle);
+                async move {
+                    let current_key = listen_key_handle
+                        .read()
+                        .expect("listenKey RwLock poisoned")
+                        .clone();
+                    let result =
+                        fapi::keepalive_listen_key(&client, signer.as_ref(), &current_key).await;
+                    match result {
+                        Ok(()) => {}
+                        Err(e) => {
+                            warn!(
+                                error = %e,
+                                "listenKey keepalive failed, \
+                                 WS may disconnect when listenKey expires"
+                            );
+                        }
+                    }
+                }
+            },
+        );
+
+        *self.listenkey_task.lock().unwrap() = Some(handle);
+        *self.user_data_ws.lock().unwrap() = Some(ws);
+
+        Ok(rx)
+    }
+
+    /// 获取市场信息（带缓存）
+    async fn get_markets_cached(&self) -> Result<Vec<MarketInfo>, ExchangeError> {
+        {
+            let cache = self.markets_cache.read().await;
+            if let Some(ref cached) = *cache {
+                return Ok(cached.clone());
+            }
+        }
+        let markets = fapi::fetch_markets(&self.client).await?;
+        let mut cache = self.markets_cache.write().await;
+        *cache = Some(markets.clone());
+        Ok(markets)
+    }
+}
+
+pub(crate) fn parse_order_book_side(data: &serde_json::Value, side: &str) -> Vec<(f64, f64)> {
+    data.get(side)
+        .and_then(|b| b.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|b| {
+                    let a = b.as_array()?;
+                    Some((a[0].as_str()?.parse().ok()?, a[1].as_str()?.parse().ok()?))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+// ─── ExchangePe 实现 ───
+
+#[async_trait]
+impl ExchangePe for BinanceExchange {
+    fn name(&self) -> &str {
+        "binance"
+    }
+
+    fn market_type(&self) -> MarketType {
+        self.market_type
+    }
+
+    async fn get_ticker(&self, symbol: &str) -> Result<Ticker, VirsError> {
+        fapi::fetch_ticker(&self.client, symbol)
+            .await
+            .map_err(VirsError::from)
+    }
+
+    async fn get_klines(
+        &self,
+        symbol: &str,
+        interval: &str,
+        limit: u32,
+        since: Option<i64>,
+    ) -> Result<Vec<Kline>, VirsError> {
+        fapi::fetch_ohlcv(&self.client, symbol, interval, limit, since)
+            .await
+            .map_err(VirsError::from)
+    }
+
+    async fn get_klines_range(
+        &self,
+        symbol: &str,
+        interval: &str,
+        start_ms: i64,
+        end_ms: i64,
+    ) -> Result<Vec<Kline>, VirsError> {
+        let mut all = Vec::new();
+        let mut current_since = Some(start_ms);
+        loop {
+            let batch =
+                fapi::fetch_ohlcv(&self.client, symbol, interval, 1000, current_since)
+                    .await?;
+            if batch.is_empty() {
+                break;
+            }
+            let last_close_time = batch.last().unwrap().close_time;
+            all.extend(batch);
+            if last_close_time >= end_ms {
+                break;
+            }
+            current_since = Some(last_close_time + 1);
+            if all.len() >= 10000 {
+                break;
+            }
+        }
+        Ok(all)
+    }
+
+    async fn get_balance(&self) -> Result<Balance, VirsError> {
+        let balances = fapi::fetch_balance(&self.client, self.signer.as_ref()).await?;
+        balances
+            .into_iter()
+            .find(|b| b.asset.eq_ignore_ascii_case("USDT"))
+            .ok_or_else(|| {
+                VirsError::Exchange(ExchangeError::no_data(
+                    "No USDT balance found on Binance Futures".into(),
+                ))
+            })
+    }
+
+    async fn get_positions(
+        &self,
+        symbol: Option<&str>,
+    ) -> Result<Vec<ExchangePosition>, VirsError> {
+        fapi::fetch_positions(&self.client, self.signer.as_ref(), symbol)
+            .await
+            .map_err(VirsError::from)
+    }
+
+    async fn get_funding_rate(&self, symbol: &str) -> Result<FundingRate, VirsError> {
+        fapi::fetch_funding_rate(&self.client, symbol)
+            .await
+            .map_err(VirsError::from)
+    }
+
+    async fn get_symbols(&self) -> Result<Vec<String>, VirsError> {
+        let markets = self.get_markets_cached().await?;
+        Ok(markets.iter().map(|m| m.symbol.clone()).collect())
+    }
+
+    async fn get_min_qty(&self, symbol: &str) -> Result<f64, VirsError> {
+        let markets = self.get_markets_cached().await?;
+        markets
+            .iter()
+            .find(|m| m.symbol.eq_ignore_ascii_case(symbol))
+            .and_then(|m| m.min_amount)
+            .ok_or_else(|| {
+                VirsError::Exchange(ExchangeError::no_data(format!(
+                    "No min_qty found for {} on Binance Futures",
+                    symbol
+                )))
+            })
+    }
+
+    async fn place_order(&self, params: PlaceOrderParams) -> Result<OrderResult, VirsError> {
+        fapi::create_order(&self.client, self.signer.as_ref(), params)
+            .await
+            .map_err(VirsError::from)
+    }
+
+    async fn cancel_order(
+        &self,
+        symbol: &str,
+        order_id: &str,
+    ) -> Result<OrderResult, VirsError> {
+        fapi::cancel_order(&self.client, self.signer.as_ref(), symbol, order_id)
+            .await
+            .map_err(VirsError::from)
+    }
+
+    async fn cancel_all_orders(&self, symbol: Option<&str>) -> Result<Vec<OrderResult>, VirsError> {
+        let sym = symbol.ok_or_else(|| {
+            VirsError::Exchange(ExchangeError::InvalidRequest(
+                "symbol is required for cancel_all_orders on Binance".into(),
+            ))
+        })?;
+        fapi::cancel_all_orders(&self.client, self.signer.as_ref(), sym)
+            .await
+            .map_err(VirsError::from)?;
+        Ok(Vec::new())
+    }
+
+    async fn set_leverage(&self, symbol: &str, leverage: u32) -> Result<(), VirsError> {
+        fapi::set_margin_type(&self.client, self.signer.as_ref(), symbol, MarginMode::Cross)
+            .await
+            .map_err(VirsError::from)?;
+        fapi::set_leverage(&self.client, self.signer.as_ref(), symbol, leverage)
+            .await
+            .map_err(VirsError::from)
+    }
+
+    async fn get_position_mode(&self) -> Result<PositionMode, VirsError> {
+        fapi::get_position_mode(&self.client, self.signer.as_ref())
+            .await
+            .map_err(VirsError::from)
+    }
+
+    async fn create_listen_key(&self) -> Result<String, VirsError> {
+        fapi::create_listen_key(&self.client, self.signer.as_ref())
+            .await
+            .map_err(VirsError::from)
+    }
+
+    async fn ping(&self) -> Result<bool, VirsError> {
+        fapi::ping(&self.client).await.map_err(VirsError::from)
+    }
+
+    async fn get_api_restrictions(&self) -> Result<ApiRestrictions, VirsError> {
+        sapi::fetch_api_restrictions(&self.client, self.signer.as_ref())
+            .await
+            .map_err(VirsError::from)
+    }
+
+    async fn subscribe_order_updates(
+        &self,
+        _symbols: &[&str],
+    ) -> Result<OrderUpdateStream, VirsError> {
+        let rx = self
+            .start_listenkey_order_ws(None)
+            .await
+            .map_err(VirsError::from)?;
+        Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)))
+    }
+
+    fn create_kline_ws(
+        &self,
+        proxy: Option<&str>,
+    ) -> Result<Arc<tokio::sync::Mutex<dyn KlineWsClient>>, VirsError> {
+        Ok(Arc::new(tokio::sync::Mutex::new(
+            kline_ws::KlineWs::new_perpetual(proxy),
+        )))
+    }
+
+    fn create_orderbook_ws(
+        &self,
+        proxy: Option<&str>,
+    ) -> Result<Arc<tokio::sync::Mutex<dyn OrderBookWsClient>>, VirsError> {
+        Ok(Arc::new(tokio::sync::Mutex::new(
+            orderbook_ws::OrderBookWs::new_perpetual(proxy),
+        )))
     }
 }
 

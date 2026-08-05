@@ -1,4 +1,7 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
+use tokio::sync::Mutex;
 
 use virs_error::VirsResult;
 
@@ -6,14 +9,15 @@ use crate::exchange::{MarketType, PositionMode};
 use crate::market::*;
 use crate::order::OrderResult;
 use crate::position::PlaceOrderParams;
+use crate::ws_types::{KlineWsClient, OrderBookWsClient};
 use super::structs::OrderUpdateStream;
 
 
 /// 统一交易所接口 trait。
 ///
-/// 合并了原 `virs_exchange::Exchange` 和 `virs_type::ExchangePe` 两个 trait。
-/// 底层交易所连接（如 `BinanceExchange`）实现 `virs_ccxt::Exchange`，
-/// 适配器（如 `CcxtAdapter`）将其包装为实现本 trait。
+/// 底层交易所连接（如 `BinanceExchange`）直接实现本 trait，
+/// 通过 `create_exchange()` 返回 `Box<dyn ExchangePe>`。
+/// Paper 交易引擎通过 `PaperExchangeAdapter` 实现。
 #[async_trait]
 pub trait ExchangePe: Send + Sync {
     fn name(&self) -> &str;
@@ -63,4 +67,22 @@ pub trait ExchangePe: Send + Sync {
     // ---- 回调（默认空实现） ----
     async fn on_price_tick(&self, _symbol: &str, _price: f64) {}
     async fn restore_positions(&self, _positions: Vec<ExchangePosition>) {}
+
+    // ---- WS 工厂（默认返回 NotSupported） ----
+    fn create_kline_ws(
+        &self,
+        _proxy: Option<&str>,
+    ) -> VirsResult<Arc<Mutex<dyn KlineWsClient>>> {
+        Err(virs_error::VirsError::Exchange(
+            virs_error::ExchangeError::NotSupported("kline WS not supported".into()),
+        ))
+    }
+    fn create_orderbook_ws(
+        &self,
+        _proxy: Option<&str>,
+    ) -> VirsResult<Arc<Mutex<dyn OrderBookWsClient>>> {
+        Err(virs_error::VirsError::Exchange(
+            virs_error::ExchangeError::NotSupported("orderbook WS not supported".into()),
+        ))
+    }
 }
