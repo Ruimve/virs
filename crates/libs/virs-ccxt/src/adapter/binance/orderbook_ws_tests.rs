@@ -3,7 +3,7 @@ use serde_json::json;
 use crate::adapter::binance::orderbook_ws::{
     parse_levels, parse_payload, to_levels, BinanceDepthMessage,
 };
-use crate::ws_types::OrderBookLevel;
+use virs_type::ws_types::OrderBookLevel;
 
 #[test]
 fn w1_1_parse_levels_standard() {

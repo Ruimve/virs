@@ -1,7 +1,6 @@
 pub mod adapter;
 pub mod auth;
 pub mod types;
-pub mod ws_types;
 
 pub use virs_ws::{
     ConnectionReason, MessageOutcome, WsCommand, WsHandler, WsManager, WsManagerConfig,

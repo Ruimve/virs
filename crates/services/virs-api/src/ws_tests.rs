@@ -2,7 +2,7 @@ use crate::ws::{kline_event_to_json, orderbook_event_to_json, position_to_ws_jso
 use chrono::Utc;
 use uuid::Uuid;
 use virs_type::Candle;
-use virs_ccxt::ws_types::OrderBookLevel;
+use virs_type::ws_types::OrderBookLevel;
 use virs_market::types::OrderBookEvent;
 use virs_type::{KlineEvent, KlineEventType, Timeframe};
 use virs_type::{PositionSide, PositionStatus};

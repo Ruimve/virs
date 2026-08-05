@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 use virs_error::VirsResult;
 
-pub(crate) use virs_ccxt::ws_types::{KlineWsClient, WsEvent};
+pub(crate) use virs_type::ws_types::{KlineWsClient, WsEvent};
 
 use virs_type::{Candle, Timeframe};
 
-pub(crate) use virs_ccxt::ws_types::{
+pub(crate) use virs_type::ws_types::{
     OrderBookLevel, OrderBookWsClient, WsOrderBookEvent,
 };
 
