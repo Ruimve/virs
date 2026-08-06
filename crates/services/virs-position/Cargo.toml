@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-type = { path = "../../core/virs-type" }
-virs-error = { path = "../../infra/virs-error", features = ["sqlx"] }
-virs-exchange = { path = "../../domain/virs-exchange" }
-virs-task = { path = "../../infra/virs-task" }
+virs-type = { path = "../../infra/virs-type" }
+virs-error = { path = "../../foundation/virs-error", features = ["sqlx"] }
+virs-exchange = { path = "../../core/virs-exchange" }
+virs-task = { path = "../../foundation/virs-task" }
 
 serde = { workspace = true }
 serde_json = { workspace = true }

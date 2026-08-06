@@ -12,18 +12,16 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::Utc;
 use tokio::sync::watch;
 use tracing::{error, info, warn};
 use virs_error::{VirsError, VirsResult};
+use virs_prompt::{PromptLoader, StrategyHotSwapSource, StrategySwapEvent, save_template};
 use virs_task::{spawn_periodic, TaskHandle};
 use virs_type::StrategyType;
 
-use crate::prompt::{PromptLoader, save_template};
-
 use super::evaluator::{StrategyEvaluator, TradeHistoryProvider};
 use super::optimizer::StrategyOptimizer;
-use super::types::{StrategyEngineConfig, StrategyUpdate};
+use super::types::StrategyEngineConfig;
 
 /// 策略引擎。
 pub struct StrategyEngine {
@@ -31,7 +29,7 @@ pub struct StrategyEngine {
     prompt_loader: PromptLoader,
     evaluator: Arc<StrategyEvaluator>,
     optimizer: Arc<StrategyOptimizer>,
-    update_tx: watch::Sender<Option<StrategyUpdate>>,
+    update_tx: watch::Sender<Option<StrategySwapEvent>>,
 }
 
 impl StrategyEngine {
@@ -66,8 +64,8 @@ impl StrategyEngine {
     /// 订阅策略热切换通知。每个调用者获得独立的 receiver。
     ///
     /// 返回的 receiver 初始值为 `None`；当 StrategyEngine 完成一次优化后，
-    /// 会发送 `Some(StrategyUpdate)` 通知所有订阅者。
-    pub fn subscribe(&self) -> watch::Receiver<Option<StrategyUpdate>> {
+    /// 会发送 `Some(StrategySwapEvent)` 通知所有订阅者。
+    pub fn subscribe(&self) -> watch::Receiver<Option<StrategySwapEvent>> {
         self.update_tx.subscribe()
     }
 
@@ -207,12 +205,10 @@ impl StrategyEngine {
             .await;
 
         // 8. 通知 virs-trading-bot
-        let update = StrategyUpdate {
+        let event = StrategySwapEvent {
             strategy_name: name.to_string(),
             old_version,
             new_version,
-            metrics,
-            optimized_at: Utc::now(),
         };
 
         info!(
@@ -222,10 +218,16 @@ impl StrategyEngine {
             "Strategy hot-swapped"
         );
 
-        if self.update_tx.send(Some(update)).is_err() {
+        if self.update_tx.send(Some(event)).is_err() {
             warn!("Strategy update receiver dropped — no active subscribers");
         }
 
         Ok(())
+    }
+}
+
+impl StrategyHotSwapSource for StrategyEngine {
+    fn subscribe(&self) -> watch::Receiver<Option<StrategySwapEvent>> {
+        self.update_tx.subscribe()
     }
 }

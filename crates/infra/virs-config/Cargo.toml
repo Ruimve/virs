@@ -9,7 +9,7 @@ serde_json = { workspace = true }
 dotenvy = { workspace = true }
 uuid = { workspace = true }
 tracing = { workspace = true }
-virs-error = { path = "../virs-error" }
+virs-error = { path = "../../foundation/virs-error" }
 
 [lints]
 workspace = true

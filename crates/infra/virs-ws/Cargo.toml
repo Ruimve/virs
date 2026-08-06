@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-error = { path = "../virs-error" }
-virs-task = { path = "../virs-task" }
+virs-error = { path = "../../foundation/virs-error" }
+virs-task = { path = "../../foundation/virs-task" }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = { workspace = true }

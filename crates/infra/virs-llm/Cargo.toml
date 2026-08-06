@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-error = { path = "../virs-error", features = ["reqwest"] }
+virs-error = { path = "../../foundation/virs-error", features = ["reqwest"] }
 reqwest = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }

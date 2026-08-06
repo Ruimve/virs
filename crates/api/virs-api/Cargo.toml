@@ -4,15 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-type = { path = "../../core/virs-type" }
-virs-error = { path = "../../infra/virs-error", features = ["axum", "sqlx"] }
+virs-type = { path = "../../infra/virs-type" }
+virs-error = { path = "../../foundation/virs-error", features = ["axum", "sqlx"] }
 virs-llm = { path = "../../infra/virs-llm" }
 virs-utils = { path = "../../infra/virs-utils" }
-virs-trading-bot = { path = "../virs-trading-bot" }
-virs-tactical-bot = { path = "../virs-tactical-bot" }
+virs-prompt = { path = "../../core/virs-prompt" }
+virs-trading-bot = { path = "../../services/virs-trading-bot" }
+virs-tactical-bot = { path = "../../services/virs-tactical-bot" }
 virs-indicator = { path = "../../core/virs-indicator" }
-virs-exchange = { path = "../../domain/virs-exchange" }
-virs-market = { path = "../virs-market" }
+virs-exchange = { path = "../../core/virs-exchange" }
+virs-market = { path = "../../services/virs-market" }
 virs-ccxt = { path = "../../core/virs-ccxt" }
 serde = { workspace = true }
 serde_json = { workspace = true }

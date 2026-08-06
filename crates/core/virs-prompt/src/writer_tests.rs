@@ -1,6 +1,6 @@
-use crate::prompt::loader::ENV_STRATEGIES_DIR;
-use crate::prompt::template::{MetaFile, PromptSource, PromptTemplate};
-use crate::prompt::writer::{delete_template, save_template};
+use crate::loader::ENV_STRATEGIES_DIR;
+use crate::template::{MetaFile, PromptSource, PromptTemplate};
+use crate::writer::{delete_template, save_template};
 use std::sync::Mutex;
 use tempfile::tempdir;
 use virs_type::StrategyType;

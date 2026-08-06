@@ -13,7 +13,7 @@ use crate::gap::GapDetector;
 use crate::types::{
     subscription_key, KlineEngineConfig, KlinePersistence, KlineSource, KlineWsClient, WsEvent,
 };
-use virs_type::{Candle, KlineEvent, KlineEventType, MarketType, Timeframe};
+use virs_type::{Candle, KlineEvent, KlineEventSource, KlineEventType, MarketType, Timeframe};
 
 struct NoOpPersistence;
 
@@ -430,5 +430,11 @@ impl KlineEngine {
                 )
             })
             .collect()
+    }
+}
+
+impl KlineEventSource for KlineEngine {
+    fn subscribe_kline_events(&self) -> broadcast::Receiver<KlineEvent> {
+        self.subscribe_events()
     }
 }

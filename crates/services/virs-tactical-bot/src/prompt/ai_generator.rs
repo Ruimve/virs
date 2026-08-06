@@ -12,10 +12,8 @@
 
 use virs_error::{BotError, BotResult};
 use virs_llm::call_llm_api;
+use virs_prompt::{PromptSource, PromptTemplate, validate, to_prompt_text};
 use virs_type::StrategyType;
-
-use crate::prompt::template::{PromptSource, PromptTemplate};
-use crate::prompt::validator::validate;
 
 /// AI 生成请求。
 pub struct GenerateRequest<'a> {
@@ -97,7 +95,7 @@ pub(crate) fn build_meta_system_prompt(strategy_type: StrategyType) -> String {
             "Auto 趋势策略（单仓位方向判断：open_long/open_short/close_position/hold）"
         }
     };
-    let placeholder_text = crate::placeholder::to_prompt_text();
+    let placeholder_text = to_prompt_text();
 
     format!(
         r#"你是一个策略 prompt 生成器。你的任务是根据用户的意图描述，生成一个 {strategy_desc} 的策略 prompt。

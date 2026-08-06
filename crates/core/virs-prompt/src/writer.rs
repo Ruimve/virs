@@ -15,9 +15,9 @@ use std::path::PathBuf;
 
 use virs_error::{BotError, BotResult};
 
-use crate::prompt::loader::ENV_STRATEGIES_DIR;
-use crate::prompt::template::{MetaFile, PromptTemplate};
-use crate::prompt::validator::validate;
+use crate::loader::ENV_STRATEGIES_DIR;
+use crate::template::{MetaFile, PromptTemplate};
+use crate::validator::validate;
 
 /// 保存策略模板到文件夹。
 ///

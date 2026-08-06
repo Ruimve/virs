@@ -13,7 +13,7 @@ use std::collections::HashSet;
 use virs_error::BotError;
 
 use crate::placeholder;
-use crate::prompt::template::PromptTemplate;
+use crate::template::PromptTemplate;
 
 /// 校验单个模板。
 pub fn validate(tpl: &PromptTemplate) -> Result<(), BotError> {

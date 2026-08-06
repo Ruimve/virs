@@ -1,4 +1,4 @@
-use crate::prompt::loader::PromptLoader;
+use crate::loader::PromptLoader;
 use virs_type::StrategyType;
 use std::path::PathBuf;
 

@@ -2,8 +2,7 @@
 
 use virs_error::{BotError, BotResult};
 use virs_llm::call_llm_api;
-
-use crate::prompt::{PromptSource, PromptTemplate, validate};
+use virs_prompt::{PromptSource, PromptTemplate, validate};
 
 use super::types::StrategyMetrics;
 
@@ -98,7 +97,7 @@ impl StrategyOptimizer {
 
 /// 构建优化 system prompt。
 fn build_optimization_system_prompt() -> String {
-    let placeholder_text = crate::placeholder::to_prompt_text();
+    let placeholder_text = virs_prompt::to_prompt_text();
 
     format!(
         r#"你是一个策略 prompt 优化器。你的任务是分析一个交易策略的绩效数据，找出问题，并输出改进后的策略 prompt。

@@ -12,7 +12,8 @@ use virs_error::VirsResult;
 use virs_exchange::{Exchanges, PaperModeExchange};
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
-use virs_tactical_bot::{PromptLoader, StrategyEngine, StrategyEngineConfig};
+use virs_prompt::PromptLoader;
+use virs_tactical_bot::{StrategyEngine, StrategyEngineConfig};
 use virs_type::OrderEvent;
 use virs_type::MarketType;
 use virs_type::ExchangePe;
@@ -434,8 +435,8 @@ impl EngineManager for AppEngineManager {
             auto_order_event_tx.clone(),
             pe_event_sender.clone(),
             self.time_config.clone(),
-            prompt_loader.clone(),
-            strategy_engine,
+            Arc::new(prompt_loader.clone()),
+            strategy_engine.map(|se| se as Arc<dyn virs_prompt::StrategyHotSwapSource>),
         );
 
         let auto_task = spawn("auto_engine", move |stop: Stop| async move {

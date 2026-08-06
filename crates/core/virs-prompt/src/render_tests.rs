@@ -1,6 +1,6 @@
 use virs_indicator::{IndicatorSet, IndicatorValue, IndicatorSpec};
 use virs_type::Timeframe;
-use crate::prompt::render::{format_bars_outside, render, RenderContext};
+use crate::render::{format_bars_outside, render, RenderContext};
 
 /// 测试辅助：构造含特定指标值的 IndicatorSet。
 fn make_indicators() -> IndicatorSet {

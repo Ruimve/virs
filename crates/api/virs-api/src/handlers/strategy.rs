@@ -10,9 +10,8 @@
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::Json;
-use virs_tactical_bot::{
-    delete_template, generate_prompt, save_template, GenerateRequest, PromptTemplate,
-};
+use virs_prompt::{delete_template, save_template, PromptTemplate};
+use virs_tactical_bot::{generate_prompt, GenerateRequest};
 use virs_type::StrategyType;
 use virs_error::VirsError;
 

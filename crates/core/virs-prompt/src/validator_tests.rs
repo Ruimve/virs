@@ -1,5 +1,5 @@
-use crate::prompt::template::{PromptSource, PromptTemplate};
-use crate::prompt::validator::{extract_placeholders, validate};
+use crate::template::{PromptSource, PromptTemplate};
+use crate::validator::{extract_placeholders, validate};
 use std::collections::HashSet;
 use virs_error::BotError;
 use virs_type::StrategyType;

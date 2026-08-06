@@ -19,8 +19,8 @@ use tracing::{info, warn};
 use virs_error::{Context, VirsResult};
 use virs_type::StrategyType;
 
-use crate::prompt::template::{MetaFile, PromptTemplate};
-use crate::prompt::validator::validate;
+use crate::template::{MetaFile, PromptTemplate};
+use crate::validator::validate;
 
 /// 环境变量名。
 pub const ENV_STRATEGIES_DIR: &str = "STRATEGIES_DIR";

@@ -117,7 +117,7 @@ async fn main() -> VirsResult<()> {
     ));
     info!("OrderBook engine created (lazy — will start on first subscribe)");
 
-    let prompt_loader = virs_tactical_bot::PromptLoader::from_env().await;
+    let prompt_loader = virs_prompt::PromptLoader::from_env().await;
 
     let engine_manager = Arc::new(AppEngineManager::new(
         db_pool.clone(),

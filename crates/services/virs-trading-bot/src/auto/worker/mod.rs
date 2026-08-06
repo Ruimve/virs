@@ -17,14 +17,14 @@ use tokio::sync::{broadcast, watch};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use virs_task::{spawn_periodic, Stop};
-use virs_tactical_bot::StrategyUpdate;
+use virs_prompt::StrategySwapEvent;
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::strategy;
 use virs_type::{AutoBotConfig, AutoStore};
 use virs_type::{MarketDataProvider, OrderEvent, OrderExecutor};
 use virs_type::KlineEvent;
-use virs_tactical_bot::PromptLoader;
+use virs_prompt::PromptProvider;
 use virs_config::TimeConfig;
 use virs_type::PositionSide;
 use virs_type::{EngineEvent, Position};
@@ -40,14 +40,14 @@ pub struct AutoWorker {
     market_data_provider: Arc<dyn MarketDataProvider>,
     event_rx: broadcast::Receiver<OrderEvent>,
     pe_event_rx: broadcast::Receiver<EngineEvent>,
-    strategy_update_rx: Option<watch::Receiver<Option<StrategyUpdate>>>,
+    strategy_update_rx: Option<watch::Receiver<Option<StrategySwapEvent>>>,
 
     pub(crate) current_price: f64,
     pub(crate) consecutive_losses: i32,
     pub(crate) paused: bool,
     pub(crate) trailing_stop_dirty: bool,
     pub(crate) time_config: TimeConfig,
-    pub(crate) prompt_loader: PromptLoader,
+    pub(crate) prompt_loader: Arc<dyn PromptProvider>,
 
     pub(crate) long: SideState,
     pub(crate) short: SideState,
@@ -82,8 +82,8 @@ impl AutoWorker {
         event_rx: broadcast::Receiver<OrderEvent>,
         pe_event_rx: broadcast::Receiver<EngineEvent>,
         time_config: TimeConfig,
-        prompt_loader: PromptLoader,
-        strategy_update_rx: Option<watch::Receiver<Option<StrategyUpdate>>>,
+        prompt_loader: Arc<dyn PromptProvider>,
+        strategy_update_rx: Option<watch::Receiver<Option<StrategySwapEvent>>>,
     ) -> Self {
         Self {
             bot,
@@ -631,7 +631,7 @@ impl AutoWorker {
                             Ok(()) => Ok(rx.borrow_and_update().clone()),
                             Err(_) => Err(()),
                         },
-                        None => std::future::pending::<Result<Option<StrategyUpdate>, ()>>().await,
+                        None => std::future::pending::<Result<Option<StrategySwapEvent>, ()>>().await,
                     }
                 } => {
                     match change {

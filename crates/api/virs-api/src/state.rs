@@ -8,8 +8,8 @@ use virs_trading_bot::AutoCommand;
 use virs_error::{VirsError, VirsResult};
 use virs_exchange::Exchanges;
 use virs_market::{KlineEngine, OrderBookEngine};
-use virs_tactical_bot::PromptLoader;
 use virs_llm::{call_llm_api, LlmCallResult};
+use virs_prompt::PromptLoader;
 use virs_type::EngineEvent;
 
 

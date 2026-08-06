@@ -2910,6 +2910,7 @@ dependencies = [
  "virs-indicator",
  "virs-llm",
  "virs-market",
+ "virs-prompt",
  "virs-tactical-bot",
  "virs-trading-bot",
  "virs-type",
@@ -2939,6 +2940,7 @@ dependencies = [
  "virs-indicator",
  "virs-market",
  "virs-position",
+ "virs-prompt",
  "virs-tactical-bot",
  "virs-task",
  "virs-trading-bot",
@@ -3071,6 +3073,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "virs-prompt"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "virs-error",
+ "virs-indicator",
+ "virs-type",
+]
+
+[[package]]
 name = "virs-tactical-bot"
 version = "0.1.0"
 dependencies = [
@@ -3079,13 +3097,12 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "tempfile",
  "tokio",
  "tracing",
  "uuid",
  "virs-error",
- "virs-indicator",
  "virs-llm",
+ "virs-prompt",
  "virs-task",
  "virs-type",
 ]
@@ -3117,8 +3134,7 @@ dependencies = [
  "virs-error",
  "virs-indicator",
  "virs-llm",
- "virs-market",
- "virs-tactical-bot",
+ "virs-prompt",
  "virs-task",
  "virs-type",
 ]

@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::auto::ai::{AutoAction, AutoDecision};
 use crate::auto::ports::AutoMarketSnapshot;
 use crate::auto::strategy;
-use virs_tactical_bot::{render, RenderContext};
+use virs_prompt::{render, RenderContext};
 use virs_type::{PositionSide, StrategyType};
 
 use crate::auto::worker::AutoWorker;
@@ -297,7 +297,7 @@ impl AutoWorker {
 
             match self
                 .prompt_loader
-                .get(StrategyType::Auto, file_name)
+                .get_prompt(StrategyType::Auto, file_name)
                 .await
             {
                 Some(tpl) => {

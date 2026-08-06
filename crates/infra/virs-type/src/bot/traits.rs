@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use virs_error::{BotResult, VirsResult};
 
-use crate::market::Balance;
+use crate::market::{Balance, KlineEvent};
 use crate::position::Position;
 
 use super::structs::MarketSnapshot;
@@ -52,4 +52,11 @@ pub trait LlmProviderResolver: Send + Sync {
         &self,
         user_credentials: &[(String, String, Option<String>)],
     ) -> BotResult<(String, String, String, String)>;
+}
+
+/// K 线事件源 trait。
+///
+/// `virs-trading-bot` 通过此 trait 订阅 K 线事件，无需依赖 `virs-market` 的 `KlineEngine` 具体类型。
+pub trait KlineEventSource: Send + Sync {
+    fn subscribe_kline_events(&self) -> tokio::sync::broadcast::Receiver<KlineEvent>;
 }

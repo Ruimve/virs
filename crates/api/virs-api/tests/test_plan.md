@@ -1,6 +1,6 @@
 # virs-api 测试用例文档
 
-> Crate: `crates/services/virs-api`
+> Crate: `crates/api/virs-api`
 > 状态: **40 个测试全部通过** (32 单元 + 8 集成)
 
 ---

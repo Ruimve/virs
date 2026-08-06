@@ -5,22 +5,20 @@ use tokio::sync::{broadcast, mpsc};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use virs_task::{spawn, Stop, TaskHandle};
-use virs_tactical_bot::StrategyEngine;
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::types::AutoCommand;
 use crate::auto::worker::AutoWorker;
-use virs_type::AutoStore;
+use virs_type::{AutoStore, KlineEventSource};
 use virs_type::{MarketDataProvider, OrderCommand, OrderEvent, OrderExecutor};
-use virs_tactical_bot::PromptLoader;
+use virs_prompt::PromptProvider;
 use virs_config::TimeConfig;
-use virs_market::KlineEngine;
 use virs_type::EngineEvent;
 
 pub struct AutoEngine {
     store: Arc<dyn AutoStore>,
     ai_service: Arc<AutoAiService>,
-    kline_engine: Arc<KlineEngine>,
+    kline_engine: Arc<dyn KlineEventSource>,
     order_executor: Arc<dyn OrderExecutor>,
     market_data_provider: Arc<dyn MarketDataProvider>,
     event_tx: broadcast::Sender<OrderEvent>,
@@ -30,22 +28,22 @@ pub struct AutoEngine {
     bot_symbols: HashMap<Uuid, String>,
 
     time_config: TimeConfig,
-    prompt_loader: PromptLoader,
-    strategy_engine: Option<Arc<StrategyEngine>>,
+    prompt_loader: Arc<dyn PromptProvider>,
+    strategy_engine: Option<Arc<dyn virs_prompt::StrategyHotSwapSource>>,
 }
 
 impl AutoEngine {
     pub fn new(
         store: Arc<dyn AutoStore>,
         ai_service: Arc<AutoAiService>,
-        kline_engine: Arc<KlineEngine>,
+        kline_engine: Arc<dyn KlineEventSource>,
         order_executor: Arc<dyn OrderExecutor>,
         market_data_provider: Arc<dyn MarketDataProvider>,
         event_tx: broadcast::Sender<OrderEvent>,
         pe_event_tx: broadcast::Sender<EngineEvent>,
         time_config: TimeConfig,
-        prompt_loader: PromptLoader,
-        strategy_engine: Option<Arc<StrategyEngine>>,
+        prompt_loader: Arc<dyn PromptProvider>,
+        strategy_engine: Option<Arc<dyn virs_prompt::StrategyHotSwapSource>>,
     ) -> (Self, mpsc::Sender<AutoCommand>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
 
@@ -150,7 +148,7 @@ impl AutoEngine {
         let event_rx = self.event_tx.subscribe();
         let pe_event_rx = self.pe_event_tx.subscribe();
         let store = self.store.clone();
-        let kline_rx = self.kline_engine.subscribe_events();
+        let kline_rx = self.kline_engine.subscribe_kline_events();
         let order_executor = self.order_executor.clone();
         let ai_service = self.ai_service.clone();
         let market_data_provider = self.market_data_provider.clone();

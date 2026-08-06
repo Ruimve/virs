@@ -9,18 +9,19 @@ path = "src/main.rs"
 
 [dependencies]
 virs-trading-bot = { path = "../../crates/services/virs-trading-bot" }
-virs-api = { path = "../../crates/services/virs-api" }
+virs-api = { path = "../../crates/api/virs-api" }
 virs-tactical-bot = { path = "../../crates/services/virs-tactical-bot" }
+virs-prompt = { path = "../../crates/core/virs-prompt" }
 virs-indicator = { path = "../../crates/core/virs-indicator" }
-virs-type = { path = "../../crates/core/virs-type" }
-virs-error = { path = "../../crates/infra/virs-error", features = ["sqlx"] }
+virs-type = { path = "../../crates/infra/virs-type" }
+virs-error = { path = "../../crates/foundation/virs-error", features = ["sqlx"] }
 virs-config = { path = "../../crates/infra/virs-config" }
 virs-utils = { path = "../../crates/infra/virs-utils" }
-virs-exchange = { path = "../../crates/domain/virs-exchange" }
+virs-exchange = { path = "../../crates/core/virs-exchange" }
 virs-ccxt = { path = "../../crates/core/virs-ccxt" }
 virs-market = { path = "../../crates/services/virs-market" }
 virs-position = { path = "../../crates/services/virs-position" }
-virs-task = { path = "../../crates/infra/virs-task" }
+virs-task = { path = "../../crates/foundation/virs-task" }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
