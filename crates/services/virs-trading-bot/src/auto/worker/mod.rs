@@ -13,10 +13,11 @@ mod worker_tests;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use virs_task::{spawn_periodic, Stop};
+use virs_tactical_bot::StrategyUpdate;
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::strategy;
@@ -39,6 +40,7 @@ pub struct AutoWorker {
     market_data_provider: Arc<dyn MarketDataProvider>,
     event_rx: broadcast::Receiver<OrderEvent>,
     pe_event_rx: broadcast::Receiver<EngineEvent>,
+    strategy_update_rx: Option<watch::Receiver<Option<StrategyUpdate>>>,
 
     pub(crate) current_price: f64,
     pub(crate) consecutive_losses: i32,
@@ -81,6 +83,7 @@ impl AutoWorker {
         pe_event_rx: broadcast::Receiver<EngineEvent>,
         time_config: TimeConfig,
         prompt_loader: PromptLoader,
+        strategy_update_rx: Option<watch::Receiver<Option<StrategyUpdate>>>,
     ) -> Self {
         Self {
             bot,
@@ -91,6 +94,7 @@ impl AutoWorker {
             market_data_provider,
             event_rx,
             pe_event_rx,
+            strategy_update_rx,
             current_price: 0.0,
             consecutive_losses: 0,
             paused: false,
@@ -566,6 +570,8 @@ impl AutoWorker {
             )
         };
 
+        let mut strategy_rx = self.strategy_update_rx.take();
+
         loop {
             tokio::select! {
                 _ = stop.cancelled() => {
@@ -615,6 +621,35 @@ impl AutoWorker {
                         }
                         Err(broadcast::error::RecvError::Closed) => {
                             warn!(bot_id = %self.bot.id, "PE event channel closed");
+                        }
+                    }
+                }
+                // 策略热切换通知（仅 auto_optimize 启用时激活）
+                change = async {
+                    match &mut strategy_rx {
+                        Some(rx) => match rx.changed().await {
+                            Ok(()) => Ok(rx.borrow_and_update().clone()),
+                            Err(_) => Err(()),
+                        },
+                        None => std::future::pending::<Result<Option<StrategyUpdate>, ()>>().await,
+                    }
+                } => {
+                    match change {
+                        Ok(Some(update)) => {
+                            if update.strategy_name == self.bot.strategy_file.as_deref().unwrap_or("") {
+                                info!(
+                                    bot_id = %self.bot.id,
+                                    strategy = %update.strategy_name,
+                                    old_version = update.old_version,
+                                    new_version = update.new_version,
+                                    "Strategy hot-swapped by StrategyEngine"
+                                );
+                            }
+                        }
+                        Ok(None) => {}
+                        Err(()) => {
+                            warn!(bot_id = %self.bot.id, "StrategyEngine watch channel closed — disabling strategy update listener");
+                            strategy_rx = None;
                         }
                     }
                 }

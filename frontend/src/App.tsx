@@ -14,6 +14,7 @@ const SelectBotType = lazy(() => import('./pages/Setup/SelectBotType'));
 const ConfigureLlm = lazy(() => import('./pages/Setup/ConfigureLlm'));
 const ConfigureExchange = lazy(() => import('./pages/Setup/ConfigureExchange'));
 const ConfigureParams = lazy(() => import('./pages/Setup/ConfigureParams'));
+const ConfigureOptimization = lazy(() => import('./pages/Setup/ConfigureOptimization'));
 const ReviewLaunch = lazy(() => import('./pages/Setup/ReviewLaunch'));
 
 const TradeLayout = lazy(() => import('./pages/Trade/Layout'));
@@ -54,6 +55,7 @@ const App = () => {
               <Route path="/setup/llm" element={<ConfigureLlm />} />
               <Route path="/setup/exchange" element={<ConfigureExchange />} />
               <Route path="/setup/params" element={<ConfigureParams />} />
+              <Route path="/setup/optimization" element={<ConfigureOptimization />} />
               <Route path="/setup/review" element={<ReviewLaunch />} />
             </Route>
             <Route

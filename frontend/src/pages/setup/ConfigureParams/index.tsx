@@ -63,9 +63,9 @@ const ConfigureParams = () => {
 
   const handleContinue = useCallback(() => {
     updateWizard({ bot_params: values });
-    advanceStep(WizardStep.ReviewLaunch);
+    advanceStep(WizardStep.ConfigureOptimization);
     startTransition(() => {
-      navigate('/setup/review', { replace: true });
+      navigate('/setup/optimization', { replace: true });
     });
   }, [values, updateWizard, advanceStep, navigate]);
 

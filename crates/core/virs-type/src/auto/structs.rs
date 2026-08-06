@@ -30,6 +30,7 @@ pub struct AutoBot {
     pub loss_trades: i32,
     pub last_decided_at: Option<DateTime<Utc>>,
     pub strategy_file: Option<String>,
+    pub auto_optimize_enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
@@ -97,6 +98,8 @@ pub struct AutoBotConfig {
     /// 策略 prompt 文件夹名。加载时查 `strategies/auto/{strategy_file}/`。
     /// 必填项，创建 bot 时由策略选择逻辑写入。worker 缺失时报错并跳过决策。
     pub strategy_file: Option<String>,
+    /// 是否启用策略自动优化
+    pub auto_optimize_enabled: bool,
 }
 
 impl From<&AutoBot> for AutoBotConfig {
@@ -123,6 +126,7 @@ impl From<&AutoBot> for AutoBotConfig {
             loss_trades: bot.loss_trades,
             last_decided_at: bot.last_decided_at,
             strategy_file: bot.strategy_file.clone(),
+            auto_optimize_enabled: bot.auto_optimize_enabled,
         }
     }
 }

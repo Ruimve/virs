@@ -38,13 +38,12 @@ impl StrategyEngine {
     /// 创建策略引擎。
     ///
     /// `history` 由应用层提供（从数据库查询交易记录）。
-    /// 返回引擎实例和 watch receiver（用于 virs-trading-bot 接收热切换通知）。
     pub fn new(
         config: StrategyEngineConfig,
         prompt_loader: PromptLoader,
         history: Box<dyn TradeHistoryProvider>,
         http_client: reqwest::Client,
-    ) -> (Self, watch::Receiver<Option<StrategyUpdate>>) {
+    ) -> Self {
         let evaluator = Arc::new(StrategyEvaluator::new(history));
         let optimizer = Arc::new(StrategyOptimizer::new(
             http_client,
@@ -53,17 +52,23 @@ impl StrategyEngine {
             config.llm_model.clone(),
         ));
 
-        let (update_tx, update_rx) = watch::channel(None);
+        let (update_tx, _initial_rx) = watch::channel(None);
 
-        let engine = Self {
+        Self {
             config,
             prompt_loader,
             evaluator,
             optimizer,
             update_tx,
-        };
+        }
+    }
 
-        (engine, update_rx)
+    /// 订阅策略热切换通知。每个调用者获得独立的 receiver。
+    ///
+    /// 返回的 receiver 初始值为 `None`；当 StrategyEngine 完成一次优化后，
+    /// 会发送 `Some(StrategyUpdate)` 通知所有订阅者。
+    pub fn subscribe(&self) -> watch::Receiver<Option<StrategyUpdate>> {
+        self.update_tx.subscribe()
     }
 
     /// 启动定时分析循环。返回 TaskHandle 用于停止。

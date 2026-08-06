@@ -65,6 +65,9 @@ pub async fn create_bot(
     let paper_mode = body["paper_mode"].as_bool().ok_or_else(|| {
         VirsError::bad_request("paper_mode is required (must be true or false)")
     })?;
+    let auto_optimize = body["auto_optimize"].as_bool().ok_or_else(|| {
+        VirsError::bad_request("auto_optimize is required (must be true or false)")
+    })?;
 
     if leverage <= 0 {
         return Err(VirsError::bad_request(
@@ -163,8 +166,8 @@ pub async fn create_bot(
     }
 
     sqlx::query(
-        r#"INSERT INTO qd_auto_bots (id, user_id, name, symbol, exchange, leverage, max_position_pct, decide_interval_secs, paper_mode, initial_capital, status, strategy_file, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'stopped', $11, NOW(), NOW())"#,
+        r#"INSERT INTO qd_auto_bots (id, user_id, name, symbol, exchange, leverage, max_position_pct, decide_interval_secs, paper_mode, initial_capital, status, strategy_file, auto_optimize_enabled, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'stopped', $11, $12, NOW(), NOW())"#,
     )
     .bind(id)
     .bind(user_id)
@@ -177,6 +180,7 @@ pub async fn create_bot(
     .bind(paper_mode)
     .bind(initial_capital)
     .bind(&strategy_file)
+    .bind(auto_optimize)
     .execute(&state.db_pool)
     .await?;
 

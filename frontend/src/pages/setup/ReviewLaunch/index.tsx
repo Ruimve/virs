@@ -32,6 +32,7 @@ const ReviewLaunch = () => {
         decide_interval_secs: parseInt(botParams.decision_interval || '300'),
         name: `Auto ${botParams.symbol || 'Bot'}`,
         paper_mode: paperMode,
+        auto_optimize: wizard.auto_optimize,
       });
       if (!result.success || !result.data?.id) {
         setLaunchError(`Failed to create auto bot: ${result.error || 'Unknown error'}`);
@@ -54,10 +55,10 @@ const ReviewLaunch = () => {
     } finally {
       setLaunching(false);
     }
-  }, [wizard.bot_params, wizard.exchange, paperMode, navigate, updateWizard]);
+  }, [wizard.bot_params, wizard.exchange, wizard.auto_optimize, paperMode, navigate, updateWizard]);
 
   const handleBack = useCallback(() => {
-    navigate('/setup/params', { replace: true });
+    navigate('/setup/optimization', { replace: true });
   }, [navigate]);
 
   const actions = useMemo(() => {
@@ -186,6 +187,11 @@ const ReviewLaunch = () => {
       { label: 'Max Position %', value: `${botParams.max_position_pct || '-'}%` },
       { label: 'Decision Interval', value: `${botParams.decision_interval || '300'}s` },
       {
+        label: 'Auto-Optimization',
+        value: wizard.auto_optimize ? 'Enabled' : 'Disabled',
+        valueClass: wizard.auto_optimize ? 'text-accent' : undefined,
+      },
+      {
         label: 'Mode',
         value: paperMode ? 'Paper' : 'Real',
         valueClass: paperMode ? 'text-info' : 'text-warning-text',
@@ -212,7 +218,7 @@ const ReviewLaunch = () => {
         </div>
       </div>
     );
-  }, [wizard.bot_params, wizard.exchange, wizard.llm_model, paperMode]);
+  }, [wizard.bot_params, wizard.exchange, wizard.llm_model, wizard.auto_optimize, paperMode]);
 
   return (
     <Wizard

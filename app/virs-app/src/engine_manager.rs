@@ -12,7 +12,7 @@ use virs_error::VirsResult;
 use virs_exchange::{Exchanges, PaperModeExchange};
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
-use virs_tactical_bot::PromptLoader;
+use virs_tactical_bot::{PromptLoader, StrategyEngine, StrategyEngineConfig};
 use virs_type::OrderEvent;
 use virs_type::MarketType;
 use virs_type::ExchangePe;
@@ -28,6 +28,7 @@ struct EngineState {
     position_engine_task: StdMutex<Option<TaskHandle>>,
     paper_tick_task: StdMutex<Option<TaskHandle>>,
     auto_engine_task: StdMutex<Option<TaskHandle>>,
+    strategy_engine_task: StdMutex<Option<TaskHandle>>,
     order_executor: StdMutex<Option<Arc<PeOrderExecutor>>>,
 }
 
@@ -366,6 +367,64 @@ impl EngineManager for AppEngineManager {
             std::time::Duration::from_secs(self.time_config.llm_timeout_secs),
         ));
 
+        // 尝试创建 StrategyEngine（策略自动优化引擎）
+        // 如果没有 LLM 凭证则跳过，不影响正常交易
+        let strategy_engine: Option<Arc<StrategyEngine>> = {
+            let llm_creds: Option<(String, String)> = sqlx::query_as(
+                r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials ORDER BY created_at DESC LIMIT 1"#,
+            )
+            .fetch_optional(&self.db_pool)
+            .await
+            .map_err(|e| {
+                virs_error::VirsError::config(format!("Failed to query LLM credentials: {}", e))
+            })?;
+
+            match llm_creds {
+                Some((provider, encrypted_key)) => {
+                    let api_key = virs_utils::decrypt_with_key(&encrypted_key, &self.llm_key)
+                        .map_err(|e| {
+                            virs_error::VirsError::config(format!(
+                                "Failed to decrypt LLM API key: {}",
+                                e
+                            ))
+                        })?;
+                    let provider_config = virs_type::LlmProviderConfig::for_provider(&provider)
+                        .ok_or_else(|| {
+                            virs_error::VirsError::config(format!(
+                                "Unknown AI provider: {provider}"
+                            ))
+                        })?;
+
+                    let config = StrategyEngineConfig {
+                        llm_api_key: api_key,
+                        llm_base_url: provider_config.base_url.to_string(),
+                        llm_model: provider_config.default_model.to_string(),
+                        ..Default::default()
+                    };
+
+                    let history_provider = Box::new(PgTradeHistoryProvider::new(self.db_pool.clone()));
+                    let engine = StrategyEngine::new(
+                        config,
+                        prompt_loader.clone(),
+                        history_provider,
+                        reqwest::Client::new(),
+                    );
+                    let engine_arc = Arc::new(engine);
+                    info!("StrategyEngine created — strategy auto-optimization enabled");
+                    Some(engine_arc)
+                }
+                None => {
+                    warn!("No LLM credentials found — StrategyEngine will not start; strategy auto-optimization disabled");
+                    None
+                }
+            }
+        };
+
+        let strategy_engine_task = strategy_engine.as_ref().map(|se| {
+            let se = Arc::clone(se);
+            se.start()
+        });
+
         let (mut auto_engine, auto_cmd_tx) = virs_trading_bot::AutoEngine::new(
             auto_store,
             auto_ai_service,
@@ -376,6 +435,7 @@ impl EngineManager for AppEngineManager {
             pe_event_sender.clone(),
             self.time_config.clone(),
             prompt_loader.clone(),
+            strategy_engine,
         );
 
         let auto_task = spawn("auto_engine", move |stop: Stop| async move {
@@ -391,6 +451,7 @@ impl EngineManager for AppEngineManager {
             position_engine_task: StdMutex::new(Some(pe_task)),
             paper_tick_task: StdMutex::new(paper_tick_task_opt),
             auto_engine_task: StdMutex::new(Some(auto_task)),
+            strategy_engine_task: StdMutex::new(strategy_engine_task),
             order_executor: StdMutex::new(Some(order_executor_for_state)),
         });
         self.started.store(true, Ordering::SeqCst);
@@ -481,10 +542,12 @@ impl EngineManager for AppEngineManager {
             let pe_task = state.position_engine_task.lock().unwrap().take();
             let paper_task = state.paper_tick_task.lock().unwrap().take();
             let auto_task = state.auto_engine_task.lock().unwrap().take();
+            let strategy_task = state.strategy_engine_task.lock().unwrap().take();
 
             if let Some(h) = &pe_task { h.cancel(); }
             if let Some(h) = &paper_task { h.cancel(); }
             if let Some(h) = &auto_task { h.cancel(); }
+            if let Some(h) = &strategy_task { h.cancel(); }
 
             let mut join_set = tokio::task::JoinSet::new();
             if let Some(h) = pe_task {
@@ -494,6 +557,9 @@ impl EngineManager for AppEngineManager {
                 join_set.spawn(h.join());
             }
             if let Some(h) = auto_task {
+                join_set.spawn(h.join());
+            }
+            if let Some(h) = strategy_task {
                 join_set.spawn(h.join());
             }
             while join_set.join_next().await.is_some() {}

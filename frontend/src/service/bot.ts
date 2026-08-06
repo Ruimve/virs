@@ -16,6 +16,7 @@ export async function createAutoBot(params: {
   decide_interval_secs?: number;
   name?: string;
   paper_mode?: boolean;
+  auto_optimize?: boolean;
 }): Promise<ApiResponse<{ id: string }>> {
   return api.post('/auto/create', params);
 }

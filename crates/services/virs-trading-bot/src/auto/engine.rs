@@ -5,6 +5,7 @@ use tokio::sync::{broadcast, mpsc};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use virs_task::{spawn, Stop, TaskHandle};
+use virs_tactical_bot::StrategyEngine;
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::types::AutoCommand;
@@ -30,6 +31,7 @@ pub struct AutoEngine {
 
     time_config: TimeConfig,
     prompt_loader: PromptLoader,
+    strategy_engine: Option<Arc<StrategyEngine>>,
 }
 
 impl AutoEngine {
@@ -43,6 +45,7 @@ impl AutoEngine {
         pe_event_tx: broadcast::Sender<EngineEvent>,
         time_config: TimeConfig,
         prompt_loader: PromptLoader,
+        strategy_engine: Option<Arc<StrategyEngine>>,
     ) -> (Self, mpsc::Sender<AutoCommand>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
 
@@ -59,6 +62,7 @@ impl AutoEngine {
             bot_symbols: HashMap::new(),
             time_config,
             prompt_loader,
+            strategy_engine,
         };
 
         (engine, cmd_tx)
@@ -153,6 +157,11 @@ impl AutoEngine {
         let bot_symbol = bot.symbol.clone();
         let time_config = self.time_config.clone();
         let prompt_loader = self.prompt_loader.clone();
+        let strategy_update_rx = if bot.auto_optimize_enabled {
+            self.strategy_engine.as_ref().map(|se| se.subscribe())
+        } else {
+            None
+        };
 
         let handle = spawn("auto_worker", move |stop: Stop| async move {
             let worker = AutoWorker::new(
@@ -166,6 +175,7 @@ impl AutoEngine {
                 pe_event_rx,
                 time_config,
                 prompt_loader,
+                strategy_update_rx,
             );
             worker.run(stop).await;
         });

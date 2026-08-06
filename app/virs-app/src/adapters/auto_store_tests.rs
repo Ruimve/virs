@@ -28,6 +28,7 @@ fn make_bot() -> AutoBot {
         loss_trades: 0,
         last_decided_at: None,
         strategy_file: None,
+        auto_optimize_enabled: false,
         created_at: Utc::now(),
         updated_at: Utc::now(),
         started_at: None,

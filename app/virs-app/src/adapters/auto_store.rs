@@ -42,6 +42,7 @@ pub fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
         loss_trades: bot.loss_trades,
         last_decided_at: bot.last_decided_at,
         strategy_file: bot.strategy_file.clone(),
+        auto_optimize_enabled: bot.auto_optimize_enabled,
     }
 }
 

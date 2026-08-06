@@ -383,6 +383,9 @@ CREATE TABLE IF NOT EXISTS qd_auto_bots (
     -- 策略 prompt 文件名（STRATEGIES_DIR/auto/{strategy_file}/）；必填，创建 bot 时由策略选择逻辑写入
     strategy_file TEXT,
 
+    -- 是否启用策略自动优化（per-bot 开关；启用后 StrategyEngine 定时评估并优化该策略）
+    auto_optimize_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+
     -- 统计缓存（denormalized，由 worker 定期同步）
     total_pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
     total_trades INT NOT NULL DEFAULT 0,
