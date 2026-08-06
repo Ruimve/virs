@@ -7,6 +7,7 @@ virs/
 ├── crates/
 │   ├── infra/              ← 基建层：通用技术基础设施
 │   │   ├── virs-error/     错误类型（VirsError / BotError / ExchangeError / ApiError）
+│   │   ├── virs-llm/       LLM HTTP 客户端（OpenAI 兼容 /chat/completions 调用）
 │   │   ├── virs-task/      tokio 任务调度（spawn / spawn_periodic / TaskHandle）
 │   │   ├── virs-utils/     认证 + 加密（JWT / PBKDF2 / AES-GCM）
 │   │   ├── virs-config/    应用配置（AppConfig / TimeConfig / SerdeHex）
@@ -42,6 +43,7 @@ virs/
 | crate | 职责 | 关键类型 |
 |-------|------|---------|
 | `virs-error` | 统一错误类型，支持分类（Exchange/Bot/Api）和上下文链 | `VirsError`, `BotError`, `ExchangeError` |
+| `virs-llm` | LLM HTTP 客户端，OpenAI 兼容 `/chat/completions` 调用 | `call_llm_api()`, `create_llm_http_client()`, `LlmCallResult` |
 | `virs-task` | tokio 异步任务调度，支持周期执行和优雅停止 | `spawn()`, `spawn_periodic()`, `TaskHandle` |
 | `virs-utils` | 用户认证（JWT 签发/验证）和数据加密（PBKDF2 / AES-GCM） | `create_token()`, `verify_token()`, `encrypt()` |
 | `virs-config` | 应用配置解析，从环境变量加载 | `AppConfig`, `TimeConfig` |
@@ -113,13 +115,14 @@ virs/
 
 ```
 infra          ← core          ← domain         ← services        ← app
-(5 crates)      (3 crates)      (1 crate)        (5 crates)        (1 crate)
+(6 crates)      (3 crates)      (1 crate)        (5 crates)        (1 crate)
 
 virs-error      virs-type       virs-exchange    virs-market       virs-app
-virs-task       virs-indicator                   virs-position
-virs-utils      virs-ccxt                        virs-api
-virs-config                                      virs-trading-bot
-virs-ws                                          virs-tactical-bot
+virs-llm        virs-indicator                   virs-position
+virs-task       virs-ccxt                        virs-api
+virs-utils                                       virs-trading-bot
+virs-config                                      virs-tactical-bot
+virs-ws
 ```
 
 **规则：依赖只向下不向上。** 例如 infra 不依赖 core，core 不依赖 domain。

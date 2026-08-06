@@ -1,8 +1,8 @@
 //! 策略优化器：基于绩效指标，通过 LLM 优化策略 prompt。
 
 use virs_error::{BotError, BotResult};
-
 use virs_llm::call_llm_api;
+
 use crate::prompt::{PromptSource, PromptTemplate, validate};
 
 use super::types::StrategyMetrics;
