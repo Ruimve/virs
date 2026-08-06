@@ -58,21 +58,6 @@ impl StrategyMetrics {
     }
 }
 
-/// 策略热切换通知。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StrategyUpdate {
-    /// 策略名称
-    pub strategy_name: String,
-    /// 旧版本号
-    pub old_version: i32,
-    /// 新版本号
-    pub new_version: i32,
-    /// 触发优化的评估指标
-    pub metrics: StrategyMetrics,
-    /// 优化时间
-    pub optimized_at: DateTime<Utc>,
-}
-
 /// 策略引擎配置。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategyEngineConfig {

@@ -12,7 +12,6 @@ virs-task = { path = "../../foundation/virs-task" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
-uuid = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }

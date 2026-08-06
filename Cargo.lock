@@ -3009,7 +3009,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
- "uuid",
  "virs-error",
  "virs-type",
 ]
@@ -3067,7 +3066,6 @@ dependencies = [
  "tracing",
  "uuid",
  "virs-error",
- "virs-exchange",
  "virs-task",
  "virs-type",
 ]
@@ -3099,7 +3097,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "uuid",
  "virs-error",
  "virs-llm",
  "virs-prompt",
@@ -3120,7 +3117,6 @@ dependencies = [
 name = "virs-trading-bot"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "chrono",
  "dashmap",
  "reqwest",
@@ -3150,7 +3146,6 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tokio",
- "tracing",
  "uuid",
  "virs-error",
 ]

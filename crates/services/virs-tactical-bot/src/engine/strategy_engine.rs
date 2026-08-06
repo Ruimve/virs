@@ -61,14 +61,6 @@ impl StrategyEngine {
         }
     }
 
-    /// 订阅策略热切换通知。每个调用者获得独立的 receiver。
-    ///
-    /// 返回的 receiver 初始值为 `None`；当 StrategyEngine 完成一次优化后，
-    /// 会发送 `Some(StrategySwapEvent)` 通知所有订阅者。
-    pub fn subscribe(&self) -> watch::Receiver<Option<StrategySwapEvent>> {
-        self.update_tx.subscribe()
-    }
-
     /// 启动定时分析循环。返回 TaskHandle 用于停止。
     pub fn start(self: Arc<Self>) -> TaskHandle {
         let interval = Duration::from_secs(self.config.analysis_interval_secs);

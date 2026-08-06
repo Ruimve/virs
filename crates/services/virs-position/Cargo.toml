@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 virs-type = { path = "../../infra/virs-type" }
 virs-error = { path = "../../foundation/virs-error", features = ["sqlx"] }
-virs-exchange = { path = "../../core/virs-exchange" }
 virs-task = { path = "../../foundation/virs-task" }
 
 serde = { workspace = true }
