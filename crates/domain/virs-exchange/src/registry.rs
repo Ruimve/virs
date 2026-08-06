@@ -6,6 +6,12 @@ pub struct Exchanges {
     exchanges: Arc<DashMap<String, Arc<dyn ExchangePe>>>,
 }
 
+impl Default for Exchanges {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Exchanges {
     pub fn new() -> Self {
         Self {
@@ -34,7 +40,7 @@ impl Exchanges {
         self.exchanges.iter().map(|r| r.key().clone()).collect()
     }
 
-    /// 获取已注册的 perpetual 合约交易所（返回可共享的 Arc<dyn ExchangePe>）。
+    /// 获取已注册的 perpetual 合约交易所（返回可共享的 `Arc<dyn ExchangePe>`）。
     /// 供 PositionEngine 等需要直接持有 `Arc<dyn ExchangePe>` 的调用方使用。
     pub fn get_perpetual(&self) -> Option<Arc<dyn ExchangePe>> {
         self.exchanges

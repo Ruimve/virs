@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use crate::order::CcxtOrder;
@@ -75,7 +77,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for PositionSide {
     fn encode_by_ref(
         &self,
         buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> sqlx::encode::IsNull {
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = match self {
             PositionSide::Long => "long",
             PositionSide::Short => "short",
@@ -91,7 +93,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for PositionSide {
 #[derive(Debug, Clone, PartialEq)]
 pub enum WsFeedEvent {
     OrderUpdate {
-        order: CcxtOrder,
+        order: Arc<CcxtOrder>,
     },
     ConnectionChanged {
         connected: bool,
@@ -147,18 +149,18 @@ pub enum EngineEvent {
         position: Position,
     },
     OrderPlaced {
-        order: CcxtOrder,
+        order: Arc<CcxtOrder>,
     },
     OrderFilled {
-        order: CcxtOrder,
+        order: Arc<CcxtOrder>,
         trade: Trade,
     },
     OrderPartiallyFilled {
-        order: CcxtOrder,
+        order: Arc<CcxtOrder>,
         trade: Trade,
     },
     OrderCanceled {
-        order: CcxtOrder,
+        order: Arc<CcxtOrder>,
     },
     OrderFailed {
         client_order_id: String,

@@ -37,7 +37,7 @@ pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
         .cpus()
         .first()
         .map(|c| c.brand().to_string())
-        .unwrap_or(String::new());
+        .unwrap_or_default();
 
     let cpu_frequency_mhz = sys
         .cpus()
@@ -103,9 +103,9 @@ pub async fn system_info() -> Result<Json<ApiResponse>, VirsError> {
     let uptime_secs = System::uptime();
 
 
-    let host_name = System::host_name().unwrap_or(String::new());
-    let os_name = System::name().unwrap_or(String::new());
-    let os_version = System::os_version().unwrap_or(String::new());
+    let host_name = System::host_name().unwrap_or_default();
+    let os_name = System::name().unwrap_or_default();
+    let os_version = System::os_version().unwrap_or_default();
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "cpu": {

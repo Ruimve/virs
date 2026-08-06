@@ -60,7 +60,7 @@ pub struct RenderContext {
 }
 
 /// 从 RenderContext 提取 Context 字段值并格式化。
-fn context_value<'a>(ctx: &'a RenderContext, field: ContextField, format: Format) -> String {
+fn context_value(ctx: &RenderContext, field: ContextField, format: Format) -> String {
     use ContextField::*;
     match field {
         Timestamp         => format.apply_str(&ctx.timestamp),

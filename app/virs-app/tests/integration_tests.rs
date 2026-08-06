@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use chrono::Utc;
 use uuid::Uuid;
 use virs_app::bot_to_config as auto_bot_to_config;
@@ -204,16 +206,16 @@ fn int_3_2_llm_resolve_user_model_override() {
 
 #[test]
 fn int_4_1_convert_event_order_placed_filled() {
-    let order = make_order(Side::Buy);
+    let order = Arc::new(make_order(Side::Buy));
     let expected_id = Uuid::from_u128(order.order_id as u128);
     let event1 = EngineEvent::OrderPlaced {
-        order: order.clone(),
+        order: Arc::clone(&order),
     };
     let result1 = convert_pe_event(event1);
     assert!(matches!(result1, Some(OrderEvent::OrderPlaced { .. })));
 
     let event2 = EngineEvent::OrderFilled {
-        order: order.clone(),
+        order: Arc::clone(&order),
         trade: make_trade(),
     };
     let result2 = convert_pe_event(event2);
@@ -228,9 +230,9 @@ fn int_4_1_convert_event_order_placed_filled() {
 
 #[test]
 fn int_4_2_convert_event_canceled_failed() {
-    let order = make_order(Side::Sell);
+    let order = Arc::new(make_order(Side::Sell));
     let expected_id = Uuid::from_u128(order.order_id as u128);
-    let event1 = EngineEvent::OrderCanceled { order };
+    let event1 = EngineEvent::OrderCanceled { order: Arc::clone(&order) };
     let result1 = convert_pe_event(event1);
     match result1.unwrap() {
         OrderEvent::OrderCanceled {

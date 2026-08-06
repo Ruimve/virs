@@ -4,7 +4,6 @@ use std::time::Duration;
 use async_trait::async_trait;
 use dashmap::DashMap;
 use tokio::sync::{broadcast, Mutex};
-use tracing;
 use virs_error::VirsResult;
 use virs_task::{spawn, spawn_periodic, Stop, TaskHandle};
 

@@ -13,8 +13,10 @@ use virs_type::StrategyType;
 /// Prompt 来源标记。AI 生成时记录模型与元 prompt，便于追溯。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
+#[derive(Default)]
 pub enum PromptSource {
     /// 人工编写或 crate 内置默认值
+    #[default]
     Human,
     /// AI 生成。记录生成模型与生成时的元 prompt（描述意图）
     AiGenerated {
@@ -23,11 +25,6 @@ pub enum PromptSource {
     },
 }
 
-impl Default for PromptSource {
-    fn default() -> Self {
-        PromptSource::Human
-    }
-}
 
 /// Prompt 模板（内存表示，同时用于 API JSON 传输）。
 ///

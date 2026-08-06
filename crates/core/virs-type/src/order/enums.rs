@@ -94,7 +94,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Side {
     fn encode_by_ref(
         &self,
         buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> sqlx::encode::IsNull {
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = match self {
             Side::Buy => "buy",
             Side::Sell => "sell",
@@ -134,7 +134,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for OrderType {
     fn encode_by_ref(
         &self,
         buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> sqlx::encode::IsNull {
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = match self {
             OrderType::Limit => "LIMIT",
             OrderType::Market => "MARKET",
@@ -171,9 +171,11 @@ pub enum ExecutionType {
     Unknown(String),
 }
 
-impl ExecutionType {
-    pub fn from_str(s: &str) -> Self {
-        match s {
+impl std::str::FromStr for ExecutionType {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
             "NEW" => Self::New,
             "TRADE" => Self::Trade,
             "CANCELED" => Self::Canceled,
@@ -181,7 +183,7 @@ impl ExecutionType {
             "EXPIRED" => Self::Expired,
             "AMENDMENT" => Self::Amendment,
             other => Self::Unknown(other.to_string()),
-        }
+        })
     }
 }
 
@@ -204,9 +206,11 @@ pub enum CcxtOrderStatus {
     Unknown(String),
 }
 
-impl CcxtOrderStatus {
-    pub fn from_str(s: &str) -> Self {
-        match s {
+impl std::str::FromStr for CcxtOrderStatus {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
             "NEW" => Self::New,
             "PARTIALLY_FILLED" => Self::PartiallyFilled,
             "FILLED" => Self::Filled,
@@ -214,7 +218,7 @@ impl CcxtOrderStatus {
             "EXPIRED" => Self::Expired,
             "EXPIRED_IN_MATCH" => Self::ExpiredInMatch,
             other => Self::Unknown(other.to_string()),
-        }
+        })
     }
 }
 

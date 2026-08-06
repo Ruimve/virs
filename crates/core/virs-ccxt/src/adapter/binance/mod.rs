@@ -598,20 +598,6 @@ impl BinanceExchange {
     }
 }
 
-pub(crate) fn parse_order_book_side(data: &serde_json::Value, side: &str) -> Vec<(f64, f64)> {
-    data.get(side)
-        .and_then(|b| b.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|b| {
-                    let a = b.as_array()?;
-                    Some((a[0].as_str()?.parse().ok()?, a[1].as_str()?.parse().ok()?))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 // ─── ExchangePe 实现 ───
 
 #[async_trait]

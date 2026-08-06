@@ -45,16 +45,14 @@ impl AutoWorker {
     /// 对 Long 和 Short 分别检查止损止盈；任意方向触发平仓即返回 true
     pub(crate) async fn check_stop_take_profit(&mut self) -> bool {
         let mut triggered = false;
-        if self.has_position_side(PositionSide::Long) {
-            if self.check_stop_take_profit_side(PositionSide::Long).await {
+        if self.has_position_side(PositionSide::Long)
+            && self.check_stop_take_profit_side(PositionSide::Long).await {
                 triggered = true;
             }
-        }
-        if self.has_position_side(PositionSide::Short) {
-            if self.check_stop_take_profit_side(PositionSide::Short).await {
+        if self.has_position_side(PositionSide::Short)
+            && self.check_stop_take_profit_side(PositionSide::Short).await {
                 triggered = true;
             }
-        }
         triggered
     }
 
@@ -85,7 +83,7 @@ impl AutoWorker {
         };
 
         if should_close {
-            let stop_triggered = stop_loss > 0.0
+            let _stop_triggered = stop_loss > 0.0
                 && ((side == PositionSide::Long && self.current_price <= stop_loss)
                     || (side == PositionSide::Short && self.current_price >= stop_loss));
             let take_triggered = take_profit > 0.0
@@ -94,8 +92,6 @@ impl AutoWorker {
 
             let close_reason = if take_triggered {
                 "take_profit"
-            } else if stop_triggered {
-                "stop_loss"
             } else {
                 "stop_loss"
             };

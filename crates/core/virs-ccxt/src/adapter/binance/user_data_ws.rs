@@ -137,7 +137,6 @@ impl WsHandler<WsFeedEvent> for UserDataWsHandler {
 pub struct UserDataWs {
     manager: WsManager<WsFeedEvent>,
     config: WsManagerConfig,
-    pub ws_url: String,
     current_key: Arc<RwLock<String>>,
     forward_task: std::sync::Mutex<Option<TaskHandle>>,
 }
@@ -163,14 +162,9 @@ impl UserDataWs {
         Self {
             manager: WsManager::new(handler),
             config: WsManagerConfig::default(),
-            ws_url,
             current_key,
             forward_task: std::sync::Mutex::new(None),
         }
-    }
-
-    pub fn running_handle(&self) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
-        self.manager.running_handle()
     }
 
     pub fn listen_key_handle(&self) -> Arc<RwLock<String>> {
@@ -215,14 +209,5 @@ impl UserDataWs {
         });
 
         *self.forward_task.lock().unwrap() = Some(handle);
-    }
-
-    pub async fn stop(&self) {
-        self.manager.stop().await;
-        let handle = self.forward_task.lock().unwrap().take();
-        if let Some(h) = handle {
-            h.cancel();
-            h.join().await;
-        }
     }
 }

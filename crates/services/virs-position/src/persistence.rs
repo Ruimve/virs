@@ -661,8 +661,8 @@ impl OrderRow {
             "SHORT" => PositionSide::Short,
             _ => unreachable!("CcxtOrder::validate_fields 已保证到达此处时 position_side 为 LONG/SHORT"),
         };
-        let status = CcxtOrderStatus::from_str(&self.status);
-        let execution_type = ExecutionType::from_str(&self.execution_type);
+        let status: CcxtOrderStatus = self.status.parse().unwrap();
+        let execution_type: ExecutionType = self.execution_type.parse().unwrap();
 
         Some(CcxtOrder {
             order_id: self.order_id,

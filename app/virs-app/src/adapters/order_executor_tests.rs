@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::adapters::order_executor::convert_pe_event;
 use chrono::Utc;
 use uuid::Uuid;
@@ -72,7 +74,7 @@ fn make_trade() -> Trade {
 
 #[test]
 fn o1_1_convert_order_placed() {
-    let order = make_order(Side::Buy);
+    let order = Arc::new(make_order(Side::Buy));
     let event = EngineEvent::OrderPlaced { order };
     let result = convert_pe_event(event);
     assert!(result.is_some());
@@ -88,7 +90,7 @@ fn o1_1_convert_order_placed() {
 
 #[test]
 fn o1_2_convert_order_filled() {
-    let order = make_order(Side::Sell);
+    let order = Arc::new(make_order(Side::Sell));
     let event = EngineEvent::OrderFilled {
         order,
         trade: make_trade(),
@@ -105,7 +107,7 @@ fn o1_2_convert_order_filled() {
 
 #[test]
 fn o1_3_convert_order_canceled() {
-    let order = make_order(Side::Buy);
+    let order = Arc::new(make_order(Side::Buy));
     let order_id = Uuid::from_u128(order.order_id as u128);
     let event = EngineEvent::OrderCanceled { order };
     let result = convert_pe_event(event);

@@ -178,7 +178,7 @@ impl PaperExchangeAdapter {
             let tx = self.price_tx.lock().await;
             if let Some(ref tx) = *tx {
                 if tx
-                    .send(WsFeedEvent::OrderUpdate { order: ccxt_order })
+                    .send(WsFeedEvent::OrderUpdate { order: Arc::new(ccxt_order) })
                     .await
                     .is_err()
                 {
@@ -508,7 +508,7 @@ impl ExchangePe for PaperExchangeAdapter {
             let tx = self.price_tx.lock().await;
             if let Some(ref tx) = *tx {
                 if tx
-                    .send(WsFeedEvent::OrderUpdate { order: ccxt_order })
+                    .send(WsFeedEvent::OrderUpdate { order: Arc::new(ccxt_order) })
                     .await
                     .is_err()
                 {

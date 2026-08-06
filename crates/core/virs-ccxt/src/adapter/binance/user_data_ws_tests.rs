@@ -25,8 +25,5 @@ fn test_new_perpetual() {
         "test_api_secret".to_string(),
     ));
     let ws = UserDataWs::new_perpetual("test_listen_key".to_string(), client, signer);
-    assert_eq!(
-        ws.ws_url,
-        "wss://fstream.binance.com/private/ws?listenKey=test_listen_key"
-    );
+    let _ = ws;
 }

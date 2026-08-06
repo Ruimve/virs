@@ -51,7 +51,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for MarketType {
     fn encode_by_ref(
         &self,
         buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> sqlx::encode::IsNull {
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = match self {
             MarketType::Perpetual => "perpetual",
         };

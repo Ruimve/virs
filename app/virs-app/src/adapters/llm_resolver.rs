@@ -43,6 +43,12 @@ pub fn resolve_llm_provider(
 
 pub struct DefaultLlmResolver;
 
+impl Default for DefaultLlmResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DefaultLlmResolver {
     pub fn new() -> Self {
         Self

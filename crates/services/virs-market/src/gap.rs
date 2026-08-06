@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
-use tracing;
 use virs_error::{ExchangeError, VirsError, VirsResult};
 
 use super::aggregator::Aggregator;
@@ -109,8 +108,8 @@ impl GapDetector {
             }
         }
 
-        if backfilled_count > 0 {
-            if event_tx.receiver_count() > 0 {
+        if backfilled_count > 0
+            && event_tx.receiver_count() > 0 {
                 if let Some(last_candle) = fetched.last().cloned() {
                     if event_tx.send(KlineEvent {
                         exchange: exchange.to_string(),
@@ -133,7 +132,6 @@ impl GapDetector {
                     );
                 }
             }
-        }
 
         Ok(backfilled_count)
     }
@@ -314,8 +312,8 @@ impl GapDetector {
             }
         }
 
-        if total > 0 {
-            if event_tx.receiver_count() > 0 {
+        if total > 0
+            && event_tx.receiver_count() > 0 {
                 if let Some(last_candle) = candles_1m.last().cloned() {
                     if event_tx.send(KlineEvent {
                         exchange: exchange.to_string(),
@@ -338,7 +336,6 @@ impl GapDetector {
                     );
                 }
             }
-        }
 
         Ok(total)
     }

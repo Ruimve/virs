@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -189,7 +191,7 @@ pub struct PendingOrder {
     pub client_order_id: String,
     pub params: PlaceOrderParams,
     pub rest_result: Option<OrderResult>,
-    pub ws_order: Option<CcxtOrder>,
+    pub ws_order: Option<Arc<CcxtOrder>>,
     pub position_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
 }

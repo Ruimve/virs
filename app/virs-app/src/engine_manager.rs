@@ -310,8 +310,8 @@ impl EngineManager for AppEngineManager {
                         result = kline_rx.recv() => {
                             match result {
                                 Ok(event) => {
-                                    if event.candle.close > 0.0 {
-                                        if pe_cmd_tx_for_tick
+                                    if event.candle.close > 0.0
+                                        && pe_cmd_tx_for_tick
                                             .send(EngineCommand::PriceTick {
                                                 symbol: event.symbol,
                                                 price: event.candle.close,
@@ -322,7 +322,6 @@ impl EngineManager for AppEngineManager {
                                             info!("PE command channel closed, stopping paper kline bridge");
                                             return;
                                         }
-                                    }
                                 }
                                 Err(broadcast::error::RecvError::Lagged(n)) => {
                                     warn!(lagged = n, "KlineEvent lagged in paper tick bridge");

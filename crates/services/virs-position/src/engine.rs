@@ -74,32 +74,11 @@ macro_rules! parse_field {
     };
 }
 
-macro_rules! parse_opt_field {
-    ($opt:expr, $field:expr, $coid:expr) => {
-        match $opt.as_deref() {
-            None => 0.0,
-            Some(s) => match s.parse::<f64>() {
-                Ok(v) => v,
-                Err(e) => {
-                    error!(
-                        client_order_id = %$coid,
-                        field = $field,
-                        raw_value = s,
-                        error = %e,
-                        "parse failed — skipping WS event to prevent default value propagation"
-                    );
-                    return;
-                }
-            },
-        }
-    };
-}
-
 pub(crate) struct EngineInner {
     pub(crate) exchange: Arc<dyn ExchangePe>,
     pub(crate) persistence: Box<dyn PositionPersistence>,
     pub(crate) positions: DashMap<(String, String, PositionSide), Position>,
-    pub(crate) orders: DashMap<String, CcxtOrder>,
+    pub(crate) orders: DashMap<String, Arc<CcxtOrder>>,
     pub(crate) pending_orders: DashMap<String, PendingOrder>,
     pub(crate) order_position: DashMap<String, Uuid>,
     pub(crate) event_tx: broadcast::Sender<EngineEvent>,
@@ -112,11 +91,10 @@ pub(crate) struct EngineInner {
 
 impl EngineInner {
     fn emit_event(&self, event: EngineEvent) {
-        if self.event_tx.receiver_count() > 0 {
-            if self.event_tx.send(event).is_err() {
+        if self.event_tx.receiver_count() > 0
+            && self.event_tx.send(event).is_err() {
                 debug!("EngineEvent broadcast — receiver dropped between check and send");
             }
-        }
     }
 
     fn rollback_position_on_order_terminal(&self, position_id: Uuid, context: &str) {
@@ -145,16 +123,8 @@ impl EngineInner {
         }
     }
 
-    fn is_running(&self) -> bool {
-        self.get_state().is_running()
-    }
-
     fn set_state(&self, new_state: EngineState) {
         *recover_lock(self.state.write()) = new_state;
-    }
-
-    fn get_state(&self) -> EngineState {
-        *recover_lock(self.state.read())
     }
 }
 
@@ -341,7 +311,7 @@ impl PositionEngine {
                 .insert(order.client_order_id.clone(), pos_id);
             self.inner
                 .orders
-                .insert(order.client_order_id.clone(), order.clone());
+                .insert(order.client_order_id.clone(), Arc::new(order.clone()));
 
             let is_open_order = matches!(
                 (&order.side, &order.position_side),
@@ -473,7 +443,7 @@ pub(crate) async fn ws_feed_loop(
     }
 }
 
-pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: CcxtOrder) {
+pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: Arc<CcxtOrder>) {
     let rejection_reason = match (&ws_order.side, &ws_order.position_side, &ws_order.status) {
         (Side::Unknown(raw), _, _) => Some(format!("InvalidSide({})", raw)),
         (_, PositionSide::Unknown(raw), _) => Some(format!("InvalidPositionSide({})", raw)),
@@ -640,7 +610,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: C
 async fn finalize_pending_order(
     inner: &Arc<EngineInner>,
     client_order_id: &str,
-    ws_order: CcxtOrder,
+    ws_order: Arc<CcxtOrder>,
     position_id: Option<Uuid>,
 ) {
     inner.pending_orders.remove(client_order_id);
@@ -684,7 +654,7 @@ async fn finalize_pending_order(
 
 async fn process_order_fill(
     inner: &Arc<EngineInner>,
-    ws_order: &CcxtOrder,
+    ws_order: &Arc<CcxtOrder>,
     client_order_id: &str,
     position_id: Option<Uuid>,
     trade_fill: f64,

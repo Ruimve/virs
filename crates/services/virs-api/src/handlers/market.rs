@@ -18,7 +18,6 @@ pub struct SymbolQuery {
 pub struct KlineSubscribeRequest {
     pub exchange: String,
     pub symbol: String,
-    pub timeframe: Option<String>,
 }
 
 #[derive(serde::Deserialize)]

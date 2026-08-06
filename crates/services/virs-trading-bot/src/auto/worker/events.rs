@@ -253,19 +253,19 @@ impl AutoWorker {
                     Some(cid) => {
                         // Precise rollback: only roll back the pending that matches this client_order_id
                         let mut rolled_back_close = false;
-                        if self.long.pending_open.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                        if self.long.pending_open.as_ref().is_some_and(|p| p.client_order_id == cid) {
                             self.rollback_pending_open(PositionSide::Long);
                             rolled_back_open = true;
                         }
-                        if self.short.pending_open.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                        if self.short.pending_open.as_ref().is_some_and(|p| p.client_order_id == cid) {
                             self.rollback_pending_open(PositionSide::Short);
                             rolled_back_open = true;
                         }
-                        if self.long.pending_close.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                        if self.long.pending_close.as_ref().is_some_and(|p| p.client_order_id == cid) {
                             self.rollback_pending_close(PositionSide::Long);
                             rolled_back_close = true;
                         }
-                        if self.short.pending_close.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                        if self.short.pending_close.as_ref().is_some_and(|p| p.client_order_id == cid) {
                             self.rollback_pending_close(PositionSide::Short);
                             rolled_back_close = true;
                         }
@@ -337,19 +337,19 @@ impl AutoWorker {
                 match client_order_id.as_deref() {
                     Some(cid) => {
                         let mut rolled_back_close = false;
-                        if self.long.pending_open.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                        if self.long.pending_open.as_ref().is_some_and(|p| p.client_order_id == cid) {
                             self.rollback_pending_open(PositionSide::Long);
                             rolled_back_open = true;
                         }
-                        if self.short.pending_open.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                        if self.short.pending_open.as_ref().is_some_and(|p| p.client_order_id == cid) {
                             self.rollback_pending_open(PositionSide::Short);
                             rolled_back_open = true;
                         }
-                        if self.long.pending_close.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                        if self.long.pending_close.as_ref().is_some_and(|p| p.client_order_id == cid) {
                             self.rollback_pending_close(PositionSide::Long);
                             rolled_back_close = true;
                         }
-                        if self.short.pending_close.as_ref().is_some_and(|p| &p.client_order_id == cid) {
+                        if self.short.pending_close.as_ref().is_some_and(|p| p.client_order_id == cid) {
                             self.rollback_pending_close(PositionSide::Short);
                             rolled_back_close = true;
                         }

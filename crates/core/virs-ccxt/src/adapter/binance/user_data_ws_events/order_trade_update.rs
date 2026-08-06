@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::Deserialize;
 use virs_type::{
     CcxtOrder, CcxtOrderStatus, ExecutionType as CcxtExecutionType, PositionSide, WsFeedEvent,
@@ -161,29 +163,6 @@ impl OrderTradeUpdateData {
         self.execution_type == "CALCULATED" && self.client_order_id == "adl_autoclose"
     }
 
-    /// WS 事件合法性校验：在转换为 CcxtOrder 之前，对影响业务逻辑的必需字段做原始字符串校验。
-    /// 校验逻辑由 `virs_type::CcxtOrder::validate_fields` 共享函数提供，WS 路径和 DB 读取路径共用。
-    ///
-    /// 返回 false 时已记录 error 日志，调用方应跳过该订单（return None）。
-    pub fn validate(&self) -> bool {
-        if let Err(e) = virs_type::CcxtOrder::validate_fields(
-            &self.side,
-            self.position_side.as_deref(),
-            &self.status,
-        ) {
-            tracing::error!(
-                symbol = %self.symbol,
-                client_order_id = %self.client_order_id,
-                order_id = self.order_id,
-                error = %e,
-                "WS ORDER_TRADE_UPDATE 字段校验失败，跳过该订单"
-            );
-            false
-        } else {
-            true
-        }
-    }
-
     // 转换为WsFeedEvent::OrderUpdate
     // 先做合法性校验，通过后再转换为 CcxtOrder
     // 信封字段 (e/E/T) 从 OrderTradeUpdateEvent 传入
@@ -218,7 +197,7 @@ impl OrderTradeUpdateData {
             envelope_event_time,
             envelope_transaction_time,
         );
-        Some(WsFeedEvent::OrderUpdate { order: ccxt_order })
+        Some(WsFeedEvent::OrderUpdate { order: Arc::new(ccxt_order) })
     }
 
     // 转换为 CcxtOrder，字段类型与币安原生返回保持一致
@@ -246,9 +225,9 @@ impl OrderTradeUpdateData {
             None => PositionSide::Unknown("None".to_string()),
         };
 
-        let status = CcxtOrderStatus::from_str(&self.status);
+        let status: CcxtOrderStatus = self.status.parse().unwrap();
 
-        let execution_type = CcxtExecutionType::from_str(&self.execution_type);
+        let execution_type: CcxtExecutionType = self.execution_type.parse().unwrap();
 
         CcxtOrder {
             order_id: self.order_id,

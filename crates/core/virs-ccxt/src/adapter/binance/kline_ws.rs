@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -319,10 +319,6 @@ impl KlineWs {
 
     pub fn new_perpetual(_proxy_url: Option<&str>) -> Self {
         Self::new("wss://fstream.binance.com/market/ws".to_string())
-    }
-
-    pub fn running_handle(&self) -> Arc<AtomicBool> {
-        self.manager.running_handle()
     }
 }
 

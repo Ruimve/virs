@@ -6,11 +6,9 @@ use crate::ExchangeClient;
 use crate::{parse_f64, parse_str, parse_u32};
 use virs_error::ExchangeError;
 use virs_type::{
-    FundingRate, Kline, OrderBook, Ticker, Balance, ExchangePosition, MarginMode, MarketType,
+    FundingRate, Kline, Ticker, Balance, ExchangePosition, MarginMode, MarketType,
     OrderResult, PlaceOrderParams, PositionMode, PositionSide, Side, TimeInForce,
 };
-
-use super::parse_order_book_side;
 
 // 币安U本位合约 API 基础域名
 const BASE_URL: &str = "https://fapi.binance.com";
@@ -222,67 +220,6 @@ pub async fn fetch_ohlcv(
     }
 
     Ok(klines)
-}
-
-// 订单簿
-pub async fn fetch_order_book(
-    client: &ExchangeClient,
-    symbol: &str,
-    limit: u32,
-) -> Result<OrderBook, ExchangeError> {
-    const VALID_FUTURES_DEPTH_LIMITS: &[u32] = &[5, 10, 20, 50, 100, 500, 1000];
-    if !VALID_FUTURES_DEPTH_LIMITS.contains(&limit) {
-        return Err(ExchangeError::InvalidRequest(format!(
-            "Invalid depth limit {} for futures /fapi/v1/depth — valid values: {:?}",
-            limit, VALID_FUTURES_DEPTH_LIMITS
-        )));
-    }
-
-    let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
-    let data = client
-        .public_get(
-            &url("/fapi/v1/depth"),
-            &[("symbol", native.as_str()), ("limit", &limit.to_string())],
-        )
-        .await?;
-
-    let bids = parse_order_book_side(&data, "bids");
-    let asks = parse_order_book_side(&data, "asks");
-
-    if bids.is_empty() && asks.is_empty() {
-        return Err(ExchangeError::no_data(format!(
-            "No order book data for {} on Binance Futures",
-            symbol
-        )));
-    }
-
-    // 解析交易所原生时间戳：优先 T（transaction time），回退 lastUpdateId 对应时间
-    let timestamp = data
-        .get("T")
-        .and_then(|v| v.as_i64())
-        .or_else(|| data.get("E").and_then(|v| v.as_i64()))
-        .and_then(chrono::DateTime::from_timestamp_millis)
-        .unwrap_or_else(|| {
-            tracing::warn!(symbol = %symbol, "OrderBook T/E timestamp missing — falling back to Utc::now()");
-            Utc::now()
-        });
-
-    // 解析 lastUpdateId：用于 WS 增量深度同步时判断快照是否过期
-    let last_update_id = data
-        .get("lastUpdateId")
-        .and_then(|v| v.as_u64())
-        .or_else(|| {
-            tracing::warn!(symbol = %symbol, "OrderBook lastUpdateId missing");
-            None
-        });
-
-    Ok(OrderBook {
-        symbol: symbol.to_string(),
-        bids,
-        asks,
-        timestamp,
-        last_update_id,
-    })
 }
 
 // 交易对信息

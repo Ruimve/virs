@@ -161,25 +161,27 @@ impl AutoWorker {
                     }
                 }
 
-                if !self.has_position_side(PositionSide::Long) && found_long.is_some() {
-                    let p = found_long.as_ref().unwrap();
-                    warn!(
-                        bot_id = %self.bot.id,
-                        position_id = %p.id,
-                        side = "long",
-                        quantity = p.quantity,
-                        "Long position cache was empty but PE has open position — recovered to prevent duplicate open"
-                    );
+                if !self.has_position_side(PositionSide::Long) {
+                    if let Some(p) = &found_long {
+                        warn!(
+                            bot_id = %self.bot.id,
+                            position_id = %p.id,
+                            side = "long",
+                            quantity = p.quantity,
+                            "Long position cache was empty but PE has open position — recovered to prevent duplicate open"
+                        );
+                    }
                 }
-                if !self.has_position_side(PositionSide::Short) && found_short.is_some() {
-                    let p = found_short.as_ref().unwrap();
-                    warn!(
-                        bot_id = %self.bot.id,
-                        position_id = %p.id,
-                        side = "short",
-                        quantity = p.quantity,
-                        "Short position cache was empty but PE has open position — recovered to prevent duplicate open"
-                    );
+                if !self.has_position_side(PositionSide::Short) {
+                    if let Some(p) = &found_short {
+                        warn!(
+                            bot_id = %self.bot.id,
+                            position_id = %p.id,
+                            side = "short",
+                            quantity = p.quantity,
+                            "Short position cache was empty but PE has open position — recovered to prevent duplicate open"
+                        );
+                    }
                 }
 
                 let mut position_updated = false;

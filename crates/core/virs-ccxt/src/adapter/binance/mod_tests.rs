@@ -1,7 +1,5 @@
-use serde_json::json;
-
 use crate::adapter::binance::{
-    parse_order_book_side, try_build_ed25519, BinanceExchange, TIME_OFFSET_WARN_THRESHOLD_MS,
+    try_build_ed25519, BinanceExchange, TIME_OFFSET_WARN_THRESHOLD_MS,
     TIME_SYNC_INTERVAL_SECS,
 };
 use virs_type::{CcxtOrderStatus, OrderType, Side};
@@ -302,40 +300,6 @@ fn b7_3_try_build_ed25519_wrong_byte_count() {
 fn b7_4_try_build_ed25519_not_base64() {
     let result = try_build_ed25519("key", "this_is_not_base64_or_pem!");
     assert!(result.is_err());
-}
-
-#[test]
-fn f1_1_parse_order_book_side_bids() {
-    let data = json!({
-        "bids": [["50000.0", "1.5"], ["49999.0", "2.0"]],
-        "asks": [["50001.0", "1.0"]]
-    });
-    let bids = parse_order_book_side(&data, "bids");
-    assert_eq!(bids, vec![(50000.0, 1.5), (49999.0, 2.0)]);
-}
-
-#[test]
-fn f1_2_parse_order_book_side_asks() {
-    let data = json!({
-        "bids": [["50000.0", "1.5"]],
-        "asks": [["50001.0", "1.0"], ["50002.0", "0.5"]]
-    });
-    let asks = parse_order_book_side(&data, "asks");
-    assert_eq!(asks, vec![(50001.0, 1.0), (50002.0, 0.5)]);
-}
-
-#[test]
-fn f1_3_parse_order_book_side_missing() {
-    let data = json!({"bids": [["50000.0", "1.0"]]});
-    let asks = parse_order_book_side(&data, "asks");
-    assert!(asks.is_empty());
-}
-
-#[test]
-fn f1_4_parse_order_book_side_empty() {
-    let data = json!({"bids": [], "asks": []});
-    let bids = parse_order_book_side(&data, "bids");
-    assert!(bids.is_empty());
 }
 
 #[test]
