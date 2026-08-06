@@ -3,8 +3,7 @@
 //! 职责：
 //! - [`IndicatorSpec`]：声明式指标规格（策略通过它声明所需指标）
 //! - [`IndicatorSet`]：批量去重计算 + 查询
-//! - [`indicators`]：指标实现（分三层：atomic / derived / primitive）
-//! - [`compute`]：统一计算入口
+//! - [`compute_indicators`]：统一计算入口
 //!
 //! 本 crate 是纯计算层，不依赖 prompt / LLM / 异步运行时。
 

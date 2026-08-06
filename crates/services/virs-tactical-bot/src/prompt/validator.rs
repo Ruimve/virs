@@ -6,7 +6,7 @@
 //! 3. system_prompt 非空且包含 JSON schema 约束（防止 AI 生成无格式约束的 prompt）
 //! 4. user_prompt_template 非空
 //!
-//! 白名单来源：[`crate::placeholder::registry::names()`]，不再硬编码。
+//! 白名单来源：`crate::placeholder::registry::names()`，不再硬编码。
 
 use std::collections::HashSet;
 

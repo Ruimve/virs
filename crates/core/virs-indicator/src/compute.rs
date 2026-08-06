@@ -11,7 +11,7 @@ use crate::spec::IndicatorSpec;
 
 /// 计算指标并返回 [`IndicatorSet`]。
 ///
-/// - `specs` 为 `None` 时计算 [`default_specs`] 全量指标。
+/// - `specs` 为 `None` 时计算全量指标（`default_specs`）。
 /// - `specs` 为 `Some` 时只计算声明的指标（自动去重）。
 ///
 /// K 线数据不足时返回 `Err`，不使用默认值。

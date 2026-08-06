@@ -3,7 +3,7 @@
 //! [`RenderContext`] 封装渲染 prompt 所需的全部输入数据（账户、持仓、统计、指标等），
 //! [`render`] 将模板中的 `{placeholder}` 占位符替换为 context 的实际值。
 //!
-//! 渲染逻辑由 [`crate::placeholder::registry`] 驱动：遍历注册表，
+//! 渲染逻辑由 `crate::placeholder::registry` 驱动：遍历注册表，
 //! 按 `PlaceholderSource` 从 Context 或 IndicatorSet 取值，按 `Format` 格式化。
 //! 不再有硬编码的 75 行 `.replace()` 链。
 
@@ -100,7 +100,7 @@ fn indicator_value(set: &IndicatorSet, spec: &virs_indicator::IndicatorSpec, for
 
 /// 将模板中的 `{placeholder}` 占位符替换为 context 的实际值。
 ///
-/// 遍历 [`crate::placeholder::registry`] 注册表，按 `PlaceholderSource` 取值并格式化。
+/// 遍历 `crate::placeholder::registry` 注册表，按 `PlaceholderSource` 取值并格式化。
 /// 模板中未出现的占位符 replace 是 no-op，无副作用。
 /// 指标值缺失时跳过替换（保留原 `{placeholder}` 文本）。
 pub fn render(template: &str, ctx: &RenderContext) -> String {

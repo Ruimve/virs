@@ -11,7 +11,6 @@ use virs_task::{spawn, spawn_periodic, Stop, TaskHandle};
 use crate::aggregator::Aggregator;
 use crate::cache::SymbolCache;
 use crate::gap::GapDetector;
-pub use crate::source::ExchangeKlineSource;
 use crate::types::{
     subscription_key, KlineEngineConfig, KlinePersistence, KlineSource, KlineWsClient, WsEvent,
 };
