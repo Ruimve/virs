@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-type = { path = "../../libs/virs-type" }
-virs-error = { path = "../../libs/virs-error", features = ["reqwest"] }
-virs-config = { path = "../../libs/virs-config" }
+virs-type = { path = "../../core/virs-type" }
+virs-error = { path = "../../infra/virs-error", features = ["reqwest"] }
+virs-config = { path = "../../infra/virs-config" }
 virs-tactical-bot = { path = "../virs-tactical-bot" }
-virs-indicator = { path = "../../libs/virs-indicator" }
+virs-indicator = { path = "../../core/virs-indicator" }
 virs-market = { path = "../virs-market" }
-virs-task = { path = "../../libs/virs-task" }
+virs-task = { path = "../../infra/virs-task" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }

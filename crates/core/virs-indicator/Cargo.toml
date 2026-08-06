@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-error = { path = "../virs-error" }
+virs-error = { path = "../../infra/virs-error" }
 virs-type = { path = "../virs-type" }
 talib-rs = { workspace = true }
 serde = { workspace = true }

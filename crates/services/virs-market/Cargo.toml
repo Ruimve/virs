@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-type = { path = "../../libs/virs-type" }
-virs-exchange = { path = "../../libs/virs-exchange" }
-virs-error = { path = "../../libs/virs-error" }
-virs-task = { path = "../../libs/virs-task" }
+virs-type = { path = "../../core/virs-type" }
+virs-exchange = { path = "../../domain/virs-exchange" }
+virs-error = { path = "../../infra/virs-error" }
+virs-task = { path = "../../infra/virs-task" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }

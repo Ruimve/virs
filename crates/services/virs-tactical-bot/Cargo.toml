@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-error = { path = "../../libs/virs-error", features = ["reqwest"] }
-virs-type = { path = "../../libs/virs-type" }
-virs-indicator = { path = "../../libs/virs-indicator" }
+virs-error = { path = "../../infra/virs-error", features = ["reqwest"] }
+virs-type = { path = "../../core/virs-type" }
+virs-indicator = { path = "../../core/virs-indicator" }
+virs-task = { path = "../../infra/virs-task" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
@@ -14,6 +15,7 @@ uuid = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }
+async-trait = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

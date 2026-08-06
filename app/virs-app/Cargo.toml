@@ -11,16 +11,16 @@ path = "src/main.rs"
 virs-trading-bot = { path = "../../crates/services/virs-trading-bot" }
 virs-api = { path = "../../crates/services/virs-api" }
 virs-tactical-bot = { path = "../../crates/services/virs-tactical-bot" }
-virs-indicator = { path = "../../crates/libs/virs-indicator" }
-virs-type = { path = "../../crates/libs/virs-type" }
-virs-error = { path = "../../crates/libs/virs-error", features = ["sqlx"] }
-virs-config = { path = "../../crates/libs/virs-config" }
-virs-utils = { path = "../../crates/libs/virs-utils" }
-virs-exchange = { path = "../../crates/libs/virs-exchange" }
-virs-ccxt = { path = "../../crates/libs/virs-ccxt" }
+virs-indicator = { path = "../../crates/core/virs-indicator" }
+virs-type = { path = "../../crates/core/virs-type" }
+virs-error = { path = "../../crates/infra/virs-error", features = ["sqlx"] }
+virs-config = { path = "../../crates/infra/virs-config" }
+virs-utils = { path = "../../crates/infra/virs-utils" }
+virs-exchange = { path = "../../crates/domain/virs-exchange" }
+virs-ccxt = { path = "../../crates/core/virs-ccxt" }
 virs-market = { path = "../../crates/services/virs-market" }
 virs-position = { path = "../../crates/services/virs-position" }
-virs-task = { path = "../../crates/libs/virs-task" }
+virs-task = { path = "../../crates/infra/virs-task" }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-virs-type = { path = "../virs-type" }
-virs-error = { path = "../virs-error" }
+virs-type = { path = "../../core/virs-type" }
+virs-error = { path = "../../infra/virs-error" }
 serde = { workspace = true }
 chrono = { workspace = true }
 async-trait = { workspace = true }

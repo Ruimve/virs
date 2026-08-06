@@ -1,18 +1,20 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/libs/virs-error",
-    "crates/libs/virs-type",
-    "crates/libs/virs-config",
-    "crates/libs/virs-utils",
-    "crates/libs/virs-ws",
-    "crates/libs/virs-task",
-    "crates/libs/virs-ccxt",
-    "crates/libs/virs-exchange",
-    "crates/libs/virs-indicator",
+    # ── 基建层 ──
+    "crates/infra/virs-error",
+    "crates/infra/virs-task",
+    "crates/infra/virs-utils",
+    "crates/infra/virs-config",
+    "crates/infra/virs-ws",
+    # ── 基础包层 ──
+    "crates/core/virs-type",
+    "crates/core/virs-indicator",
+    "crates/core/virs-ccxt",
+    # ── 业务包层 ──
+    "crates/domain/virs-exchange",
+    # ── 服务层 ──
     "crates/services/virs-tactical-bot",
-    # Phase 5+:逐步添加
-    # "crates/libs/virs-ai",
     "crates/services/virs-market",
     "crates/services/virs-position",
     "crates/services/virs-trading-bot",
