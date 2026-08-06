@@ -2,7 +2,7 @@
 
 use virs_error::{BotError, BotResult};
 
-use crate::llm_client::call_llm_api;
+use virs_llm::call_llm_api;
 use crate::prompt::{PromptSource, PromptTemplate, validate};
 
 use super::types::StrategyMetrics;

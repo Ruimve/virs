@@ -4,7 +4,7 @@ use uuid::Uuid;
 use virs_error::BotResult;
 
 use virs_type::{CredentialStore, LlmProviderResolver};
-use virs_tactical_bot::{call_llm_api, create_llm_http_client, LlmCallResult};
+use virs_llm::{call_llm_api, create_llm_http_client, LlmCallResult};
 
 /// 共享的 LLM 客户端：封装凭证加载 + provider 解析 + HTTP 调用。
 ///

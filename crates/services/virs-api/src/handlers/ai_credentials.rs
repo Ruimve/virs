@@ -183,7 +183,7 @@ pub async fn test_credential(
         .expect("provider validated by resolve_provider_base_url above; get_provider_config shared");
 
     let http_client = &state.http_client;
-    match virs_tactical_bot::call_llm_api(
+    match virs_llm::call_llm_api(
         http_client,
         &api_key,
         base_url,

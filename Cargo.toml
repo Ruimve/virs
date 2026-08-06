@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     # ── 基建层 ──
     "crates/infra/virs-error",
+    "crates/infra/virs-llm",
     "crates/infra/virs-task",
     "crates/infra/virs-utils",
     "crates/infra/virs-config",

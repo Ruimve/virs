@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 virs-type = { path = "../../core/virs-type" }
 virs-error = { path = "../../infra/virs-error", features = ["reqwest"] }
+virs-llm = { path = "../../infra/virs-llm" }
 virs-config = { path = "../../infra/virs-config" }
 virs-tactical-bot = { path = "../virs-tactical-bot" }
 virs-indicator = { path = "../../core/virs-indicator" }
