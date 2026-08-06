@@ -4,13 +4,13 @@ use async_trait::async_trait;
 use axum::extract::FromRef;
 use tokio::sync::{broadcast, mpsc};
 
-use virs_trading_bot::auto::types::AutoCommand;
+use virs_trading_bot::AutoCommand;
 use virs_error::{VirsError, VirsResult};
 use virs_exchange::Exchanges;
 use virs_market::{KlineEngine, OrderBookEngine};
-use virs_tactical_bot::llm_client::{call_llm_api, LlmCallResult};
-use virs_tactical_bot::prompt::PromptLoader;
-use virs_type::position::EngineEvent;
+use virs_tactical_bot::{call_llm_api, LlmCallResult};
+use virs_tactical_bot::PromptLoader;
+use virs_type::EngineEvent;
 
 
 #[async_trait]
@@ -32,7 +32,7 @@ pub trait EngineManager: Send + Sync {
     fn pe_event_subscribe(&self) -> Option<broadcast::Receiver<EngineEvent>>;
 
 
-    fn get_positions_by_symbol(&self, symbol: &str) -> Vec<virs_type::position::Position>;
+    fn get_positions_by_symbol(&self, symbol: &str) -> Vec<virs_type::Position>;
 
 
     async fn restore_if_needed(&self) -> VirsResult<()>;
@@ -83,12 +83,12 @@ impl AppState {
         match row {
             Some((provider, encrypted_key)) => {
                 let api_key =
-                    virs_utils::crypto::decrypt_with_key(&encrypted_key, &self.llm_key)?;
-                let base_url = virs_type::llm::LlmProviderConfig::for_provider(&provider)
+                    virs_utils::decrypt_with_key(&encrypted_key, &self.llm_key)?;
+                let base_url = virs_type::LlmProviderConfig::for_provider(&provider)
                     .map(|c| c.base_url)
                     .ok_or_else(|| VirsError::config(format!("Unknown AI provider: {provider}")))?
                     .to_string();
-                let model = virs_type::llm::LlmProviderConfig::for_provider(&provider)
+                let model = virs_type::LlmProviderConfig::for_provider(&provider)
                     .map(|c| c.default_model)
                     .ok_or_else(|| VirsError::config(format!("Unknown AI provider: {provider}")))?
                     .to_string();

@@ -1,5 +1,8 @@
-pub mod auth;
-pub mod crypto;
+mod auth;
+mod crypto;
+
+pub use auth::*;
+pub use crypto::*;
 
 #[cfg(test)]
 mod auth_tests;

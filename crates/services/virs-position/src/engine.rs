@@ -12,10 +12,9 @@ use uuid::Uuid;
 
 use virs_error::{VirsError, VirsResult};
 use virs_type::*;
-use virs_type::exchange::{ExchangePe, OrderUpdateStream};
-use virs_type::market::ExchangePosition;
-use virs_type::position::*;
-use virs_type::{CcxtOrder, CcxtOrderStatus, ExecutionType};
+use virs_type::{
+    CcxtOrder, CcxtOrderStatus, ExchangePe, ExchangePosition, ExecutionType, OrderUpdateStream,
+};
 
 use crate::persistence::PositionPersistence;
 

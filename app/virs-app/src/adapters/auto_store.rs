@@ -6,8 +6,8 @@ use uuid::Uuid;
 use virs_error::VirsResult;
 
 use virs_type::AutoBot;
-use virs_type::auto::AutoBotConfig;
-use virs_type::auto::*;
+use virs_type::AutoBotConfig;
+use virs_type::*;
 
 pub struct PgAutoStore {
     db: PgPool,

@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use virs_error::VirsError;
-use virs_type::llm::LlmProviderConfig;
+use virs_type::LlmProviderConfig;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;

@@ -8,16 +8,16 @@ use tracing::{error, info, warn};
 use virs_task::{spawn, Stop, TaskHandle};
 
 use virs_api::EngineManager;
-use virs_trading_bot::auto::types::AutoCommand;
+use virs_trading_bot::AutoCommand;
 use virs_error::VirsResult;
 use virs_exchange::{Exchanges, PaperModeExchange};
 use virs_market::{KlineEngine, OrderBookEngine};
 use virs_position::{Persistence as PePersistence, PositionEngine};
-use virs_tactical_bot::prompt::PromptLoader;
-use virs_type::bot::OrderEvent;
+use virs_tactical_bot::PromptLoader;
+use virs_type::OrderEvent;
 use virs_type::MarketType;
-use virs_type::exchange::ExchangePe;
-use virs_type::position::{EngineCommand, EngineEvent};
+use virs_type::ExchangePe;
+use virs_type::{EngineCommand, EngineEvent};
 
 use crate::adapters::*;
 
@@ -103,14 +103,14 @@ impl AppEngineManager {
         .await?;
 
         for (exchange, enc_key, enc_secret, enc_passphrase) in &rows {
-            let api_key = virs_utils::crypto::decrypt_with_key(enc_key, &self.encryption_key)
+            let api_key = virs_utils::decrypt_with_key(enc_key, &self.encryption_key)
                 .map_err(|e| {
                     virs_error::VirsError::config(format!(
                         "Failed to decrypt API key for exchange '{}': {}",
                         exchange, e
                     ))
                 })?;
-            let api_secret = virs_utils::crypto::decrypt_with_key(enc_secret, &self.encryption_key)
+            let api_secret = virs_utils::decrypt_with_key(enc_secret, &self.encryption_key)
                 .map_err(|e| {
                     virs_error::VirsError::config(format!(
                         "Failed to decrypt API secret for exchange '{}': {}",
@@ -119,7 +119,7 @@ impl AppEngineManager {
                 })?;
             let passphrase = match enc_passphrase.as_ref() {
                 Some(p) => Some(
-                    virs_utils::crypto::decrypt_with_key(p, &self.encryption_key).map_err(|e| {
+                    virs_utils::decrypt_with_key(p, &self.encryption_key).map_err(|e| {
                         virs_error::VirsError::config(format!(
                             "Failed to decrypt passphrase for exchange '{}': {}",
                             exchange, e
@@ -355,20 +355,20 @@ impl EngineManager for AppEngineManager {
         )
         .await);
         let order_executor_for_state = Arc::clone(&auto_order_executor);
-        let auto_credential_store: Arc<dyn virs_type::bot::CredentialStore> =
+        let auto_credential_store: Arc<dyn virs_type::CredentialStore> =
             Arc::new(PgCredentialStore::new(
                 self.db_pool.clone(),
-                virs_utils::crypto::derive_key(&self.llm_key),
+                virs_utils::derive_key(&self.llm_key),
             ));
-        let auto_llm_resolver: Arc<dyn virs_type::bot::LlmProviderResolver> =
+        let auto_llm_resolver: Arc<dyn virs_type::LlmProviderResolver> =
             Arc::new(DefaultLlmResolver::new());
-        let auto_ai_service = Arc::new(virs_trading_bot::auto::ai::AutoAiService::new(
+        let auto_ai_service = Arc::new(virs_trading_bot::AutoAiService::new(
             auto_llm_resolver,
             auto_credential_store,
             std::time::Duration::from_secs(self.time_config.llm_timeout_secs),
         ));
 
-        let (mut auto_engine, auto_cmd_tx) = virs_trading_bot::auto::AutoEngine::new(
+        let (mut auto_engine, auto_cmd_tx) = virs_trading_bot::AutoEngine::new(
             auto_store,
             auto_ai_service,
             self.kline_engine.clone(),
@@ -425,7 +425,7 @@ impl EngineManager for AppEngineManager {
         })
     }
 
-    fn get_positions_by_symbol(&self, symbol: &str) -> Vec<virs_type::position::Position> {
+    fn get_positions_by_symbol(&self, symbol: &str) -> Vec<virs_type::Position> {
         match self.state.get() {
             Some(s) => {
                 let guard = s.position_engine.lock().unwrap();

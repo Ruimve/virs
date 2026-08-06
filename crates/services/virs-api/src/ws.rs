@@ -330,9 +330,9 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
                         // 每次推送一个仓位消息（PositionWsMsg 结构体保持不变），
                         // 前端按 side 分桶存储。
                         let position = match event {
-                            virs_type::position::EngineEvent::PositionOpened { position } => Some(position),
-                            virs_type::position::EngineEvent::PositionClosed { position } => Some(position),
-                            virs_type::position::EngineEvent::PositionUpdated { position } => Some(position),
+                            virs_type::EngineEvent::PositionOpened { position } => Some(position),
+                            virs_type::EngineEvent::PositionClosed { position } => Some(position),
+                            virs_type::EngineEvent::PositionUpdated { position } => Some(position),
                             _ => None,
                         };
 

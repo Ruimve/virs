@@ -1,5 +1,5 @@
 use uuid::Uuid;
-use virs_type::position::Position;
+use virs_type::Position;
 
 /// Per-side pending open order state.
 #[derive(Debug)]

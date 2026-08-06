@@ -3,8 +3,7 @@
 use virs_error::{BotError, BotResult};
 
 use crate::llm_client::call_llm_api;
-use crate::prompt::template::{PromptSource, PromptTemplate};
-use crate::prompt::validator::validate;
+use crate::prompt::{PromptSource, PromptTemplate, validate};
 
 use super::types::StrategyMetrics;
 

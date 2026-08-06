@@ -11,8 +11,8 @@ use virs_ws::{
     ConnectionReason, MessageOutcome, WsCommand as ManagerWsCommand, WsHandler, WsManager,
     WsManagerConfig, WsManagerEvent,
 };
-use virs_type::ws_types::KlineWsClient;
-pub use virs_type::ws_types::{WsCandleUpdate, WsEvent};
+use virs_type::KlineWsClient;
+pub use virs_type::{WsCandleUpdate, WsEvent};
 use virs_type::Candle;
 use virs_task::{spawn, Stop, TaskHandle};
 

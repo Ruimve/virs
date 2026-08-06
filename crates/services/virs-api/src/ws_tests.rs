@@ -2,11 +2,11 @@ use crate::ws::{kline_event_to_json, orderbook_event_to_json, position_to_ws_jso
 use chrono::Utc;
 use uuid::Uuid;
 use virs_type::Candle;
-use virs_type::ws_types::OrderBookLevel;
-use virs_market::types::OrderBookEvent;
+use virs_type::OrderBookLevel;
+use virs_market::OrderBookEvent;
 use virs_type::{KlineEvent, KlineEventType, Timeframe};
 use virs_type::{PositionSide, PositionStatus};
-use virs_type::position::Position;
+use virs_type::Position;
 
 
 fn ws_value<T: serde::Serialize>(v: T) -> serde_json::Value {

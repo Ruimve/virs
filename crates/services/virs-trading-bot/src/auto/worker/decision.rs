@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::auto::ai::{AutoAction, AutoDecision};
 use crate::auto::ports::AutoMarketSnapshot;
 use crate::auto::strategy;
-use virs_tactical_bot::prompt::{render, RenderContext};
+use virs_tactical_bot::{render, RenderContext};
 use virs_type::{PositionSide, StrategyType};
 
 use crate::auto::worker::AutoWorker;

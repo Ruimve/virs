@@ -1,8 +1,7 @@
 use serde_json::json;
 
 use virs_ccxt::{
-    adapter::binance::{user_data_ws_events::dispatch_event, BinanceExchange},
-    auth::hmac_sha256_hex,
+    BinanceExchange, dispatch_event, hmac_sha256_hex,
     create_exchange, parse_f64, parse_str,
 };
 use virs_error::ExchangeError;

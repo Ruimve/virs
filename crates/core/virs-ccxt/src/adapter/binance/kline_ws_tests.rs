@@ -2,7 +2,7 @@ use crate::adapter::binance::kline_ws::{
     binance_ws_symbol, BinanceKlineData, BinanceKlineInner, BinanceKlineMessage, KlineWs,
     KLINE_WS_DELAY_THRESHOLD_MS,
 };
-use virs_type::ws_types::KlineWsClient;
+use virs_type::KlineWsClient;
 
 #[test]
 fn test_parse_binance_kline_message() {

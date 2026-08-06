@@ -401,7 +401,7 @@ pub async fn start_bot(
         status: 503,
         message: "Auto trade engine not running".into(),
     })?;
-    tx.send(virs_trading_bot::auto::types::AutoCommand::StartBot { bot_id: id })
+    tx.send(virs_trading_bot::AutoCommand::StartBot { bot_id: id })
         .await
         .map_err(|_| VirsError::Http {
             status: 500,
@@ -456,7 +456,7 @@ pub async fn stop_bot(
         status: 503,
         message: "Auto trade engine not running".into(),
     })?;
-    tx.send(virs_trading_bot::auto::types::AutoCommand::StopBot { bot_id: id })
+    tx.send(virs_trading_bot::AutoCommand::StopBot { bot_id: id })
         .await
         .map_err(|_| VirsError::Http {
             status: 500,
@@ -482,7 +482,7 @@ pub async fn delete_bot(
     })?;
 
     let (response_tx, response_rx) = tokio::sync::oneshot::channel();
-    tx.send(virs_trading_bot::auto::types::AutoCommand::DeleteBot {
+    tx.send(virs_trading_bot::AutoCommand::DeleteBot {
         bot_id: id,
         close_position: true,
         response_tx,

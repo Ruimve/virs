@@ -1,14 +1,14 @@
-pub mod auto_store;
+mod auto_store;
 mod credential_store;
-pub mod llm_resolver;
-pub mod market_data;
-pub mod order_executor;
+mod llm_resolver;
+mod market_data;
+mod order_executor;
 
-pub use auto_store::PgAutoStore;
+pub use auto_store::{PgAutoStore, bot_to_config};
 pub use credential_store::PgCredentialStore;
-pub use llm_resolver::DefaultLlmResolver;
-pub use market_data::{AutoExchangeMarketDataProvider, ExchangeMarketDataProvider};
-pub use order_executor::PeOrderExecutor;
+pub use llm_resolver::{DefaultLlmResolver, resolve_llm_provider};
+pub use market_data::{AutoExchangeMarketDataProvider, ExchangeMarketDataProvider, candle_to_kline};
+pub use order_executor::{PeOrderExecutor, convert_pe_event};
 
 #[cfg(test)]
 mod auto_store_tests;

@@ -1,14 +1,14 @@
 use chrono::Utc;
 use uuid::Uuid;
-use virs_api::handlers::ai::{resolve_provider_base_url, resolve_provider_model};
-use virs_api::handlers::ai_credentials::{parse_balance_response, parse_models_response};
-use virs_api::handlers::response::ApiResponse;
-use virs_api::ws::{kline_event_to_json, position_to_ws_json};
+use virs_api::{
+    kline_event_to_json, parse_balance_response, parse_models_response, position_to_ws_json,
+    resolve_provider_base_url, resolve_provider_model, ApiResponse,
+};
 use virs_type::Candle;
 use virs_error::{ApiError, VirsError};
 use virs_type::{KlineEvent, KlineEventType, Timeframe};
 use virs_type::{PositionSide, PositionStatus};
-use virs_type::position::Position;
+use virs_type::Position;
 
 
 #[test]

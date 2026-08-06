@@ -61,11 +61,11 @@ pub async fn save_credential(
 
 
     let encrypted_api_key =
-        virs_utils::crypto::encrypt_with_key(api_key, &state.encryption_key)?;
+        virs_utils::encrypt_with_key(api_key, &state.encryption_key)?;
     let encrypted_secret =
-        virs_utils::crypto::encrypt_with_key(api_secret, &state.encryption_key)?;
+        virs_utils::encrypt_with_key(api_secret, &state.encryption_key)?;
     let encrypted_passphrase = passphrase
-        .map(|p| virs_utils::crypto::encrypt_with_key(p, &state.encryption_key))
+        .map(|p| virs_utils::encrypt_with_key(p, &state.encryption_key))
         .transpose()?;
 
     sqlx::query(

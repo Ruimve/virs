@@ -1,13 +1,12 @@
-pub mod auto;
-pub mod bot;
-pub mod exchange;
-pub mod llm;
-pub mod market;
-pub mod order;
-pub mod position;
-pub mod ws_types;
+mod auto;
+mod bot;
+mod exchange;
+mod llm;
+mod market;
+mod order;
+mod position;
+mod ws_types;
 
-// 顶层 re-export：保持 `virs_type::CcxtOrder` 等扁平路径可用
 pub use auto::*;
 pub use bot::*;
 pub use exchange::*;

@@ -1,9 +1,9 @@
 use chrono::Utc;
 use uuid::Uuid;
 
-use virs_type::auto::AutoBot;
+use virs_type::AutoBot;
 use virs_type::*;
-use virs_type::position::*;
+use virs_type::*;
 
 #[test]
 fn int_1_1_long_position_pnl_chain() {

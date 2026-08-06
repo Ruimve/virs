@@ -4,7 +4,7 @@
 
 use virs_error::VirsError;
 use virs_indicator::IndicatorSpec;
-use virs_tactical_bot::prompt::PromptLoader;
+use virs_tactical_bot::PromptLoader;
 use virs_type::{StrategyType, Timeframe};
 
 use crate::state::AppState;

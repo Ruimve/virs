@@ -19,8 +19,7 @@ use virs_error::{VirsError, VirsResult};
 use virs_task::{spawn_periodic, TaskHandle};
 use virs_type::StrategyType;
 
-use crate::prompt::loader::PromptLoader;
-use crate::prompt::writer::save_template;
+use crate::prompt::{PromptLoader, save_template};
 
 use super::evaluator::{StrategyEvaluator, TradeHistoryProvider};
 use super::optimizer::StrategyOptimizer;

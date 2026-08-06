@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::auto::ports::AutoMarketSnapshot;
 use crate::auto::strategy;
-use virs_type::bot::OrderCommand;
+use virs_type::OrderCommand;
 use crate::auto::worker::client_order_id::{format_auto_open, format_auto_close};
 use virs_type::{PositionSide, Side};
 

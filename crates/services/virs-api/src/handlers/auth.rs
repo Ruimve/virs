@@ -54,7 +54,7 @@ pub async fn login(
         });
     }
 
-    let valid = virs_utils::crypto::verify_password(&req.password, &password_hash);
+    let valid = virs_utils::verify_password(&req.password, &password_hash);
     if !valid {
         return Err(VirsError::unauthorized("Invalid credentials"));
     }
@@ -63,13 +63,13 @@ pub async fn login(
     let secret = &state.jwt_secret;
     let expiration_hours: i64 = state.jwt_expiration_hours;
 
-    let claims = virs_utils::auth::Claims::new(
+    let claims = virs_utils::Claims::new(
         &id.to_string(),
         &username,
         &role,
         expiration_hours * 3600,
     );
-    let token = virs_utils::auth::encode_jwt(&claims, secret)?;
+    let token = virs_utils::encode_jwt(&claims, secret)?;
 
     let login_resp = serde_json::to_value(LoginResponse {
         token,

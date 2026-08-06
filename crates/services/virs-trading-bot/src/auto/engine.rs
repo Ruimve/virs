@@ -10,12 +10,12 @@ use virs_task::{spawn, Stop, TaskHandle};
 use crate::auto::ai::AutoAiService;
 use crate::auto::types::AutoCommand;
 use crate::auto::worker::AutoWorker;
-use virs_type::auto::AutoStore;
-use virs_type::bot::{MarketDataProvider, OrderCommand, OrderEvent, OrderExecutor};
-use virs_tactical_bot::prompt::PromptLoader;
+use virs_type::AutoStore;
+use virs_type::{MarketDataProvider, OrderCommand, OrderEvent, OrderExecutor};
+use virs_tactical_bot::PromptLoader;
 use virs_config::TimeConfig;
 use virs_market::KlineEngine;
-use virs_type::position::EngineEvent;
+use virs_type::EngineEvent;
 
 pub struct AutoEngine {
     store: Arc<dyn AutoStore>,

@@ -1,4 +1,4 @@
-pub mod auto;
-pub mod common;
+mod auto;
+mod common;
 
-pub use auto::AutoEngine;
+pub use auto::*;

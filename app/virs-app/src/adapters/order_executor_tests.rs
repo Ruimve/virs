@@ -1,9 +1,9 @@
 use crate::adapters::order_executor::convert_pe_event;
 use chrono::Utc;
 use uuid::Uuid;
-use virs_type::bot::OrderEvent;
+use virs_type::OrderEvent;
 use virs_type::{OrderType, PositionSide, Side, TradeType};
-use virs_type::position::{EngineEvent, Trade};
+use virs_type::{EngineEvent, Trade};
 use virs_type::{CcxtOrder, CcxtOrderStatus, ExecutionType};
 
 fn make_order(side: Side) -> CcxtOrder {
@@ -164,7 +164,7 @@ fn o1_5_convert_risk_alert() {
 
 #[test]
 fn o1_6_convert_position_opened_none() {
-    let pos = virs_type::position::Position {
+    let pos = virs_type::Position {
         id: Uuid::new_v4(),
         exchange: "binance".to_string(),
         symbol: "BTC/USDT".to_string(),

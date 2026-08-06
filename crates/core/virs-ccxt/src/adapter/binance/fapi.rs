@@ -6,9 +6,8 @@ use crate::ExchangeClient;
 use crate::{parse_f64, parse_str, parse_u32};
 use virs_error::ExchangeError;
 use virs_type::{
-    market::{FundingRate, Kline, OrderBook, Ticker},
-    Balance, ExchangePosition, MarginMode, MarketType, OrderResult, PlaceOrderParams,
-    PositionMode, PositionSide, Side, TimeInForce,
+    FundingRate, Kline, OrderBook, Ticker, Balance, ExchangePosition, MarginMode, MarketType,
+    OrderResult, PlaceOrderParams, PositionMode, PositionSide, Side, TimeInForce,
 };
 
 use super::parse_order_book_side;

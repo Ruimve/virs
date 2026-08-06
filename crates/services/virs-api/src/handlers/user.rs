@@ -58,7 +58,7 @@ pub async fn create_user(
     }
     let email = body["email"].as_str();
 
-    let password_hash = virs_utils::crypto::hash_password(password)?;
+    let password_hash = virs_utils::hash_password(password)?;
 
     let id = uuid::Uuid::new_v4();
     sqlx::query(

@@ -11,7 +11,7 @@ use virs_ws::{
     ConnectionReason, MessageOutcome, WsCommand as ManagerWsCommand, WsHandler, WsManager,
     WsManagerConfig, WsManagerEvent,
 };
-use virs_type::ws_types::{OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate};
+use virs_type::{OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBookUpdate};
 use virs_task::{spawn, Stop, TaskHandle};
 
 fn binance_ws_symbol(symbol: &str) -> String {

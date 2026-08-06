@@ -1,6 +1,6 @@
-pub mod paper;
-pub mod paper_mode;
-pub mod registry;
+mod paper;
+mod paper_mode;
+mod registry;
 
 pub use paper::PaperExchangeAdapter;
 pub use paper_mode::PaperModeExchange;

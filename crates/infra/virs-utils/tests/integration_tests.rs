@@ -1,5 +1,5 @@
-use virs_utils::auth::{decode_jwt, encode_jwt, Claims};
-use virs_utils::crypto::{
+use virs_utils::{decode_jwt, encode_jwt, Claims};
+use virs_utils::{
     decrypt, decrypt_with_key, derive_key, encrypt, encrypt_with_key, hash_password,
     verify_password,
 };

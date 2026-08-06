@@ -2,7 +2,7 @@ use chrono::DateTime;
 use sqlx::PgPool;
 use virs_error::{Context, VirsError, VirsResult};
 use virs_type::PositionSide;
-use virs_type::position::Position;
+use virs_type::Position;
 use virs_type::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderType, Side};
 
 #[async_trait::async_trait]

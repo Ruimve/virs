@@ -6,11 +6,11 @@ use uuid::Uuid;
 use virs_error::{BotError, BotResult, VirsError};
 use virs_position::PositionEngine;
 use virs_task::{spawn, Stop, TaskHandle};
-use virs_type::bot::{
+use virs_type::{
     OrderCommand, OrderEvent, OrderExecutor, OrderInfo,
 };
 use virs_type::{OrderType, TimeInForce};
-use virs_type::position::*;
+use virs_type::*;
 use virs_type::CcxtOrder;
 
 pub struct PeOrderExecutor {

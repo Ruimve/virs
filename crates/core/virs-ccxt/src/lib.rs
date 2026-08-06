@@ -1,6 +1,6 @@
-pub mod adapter;
-pub mod auth;
-pub mod types;
+mod adapter;
+mod auth;
+mod types;
 
 use reqwest::Client;
 use serde_json::Value;
@@ -9,6 +9,8 @@ use auth::Signer;
 use virs_error::ExchangeError;
 use virs_type::ExchangePe;
 
+pub use adapter::{BinanceExchange, dispatch_event};
+pub use auth::hmac_sha256_hex;
 pub use types::{MarketInfo, OrderFee};
 
 #[derive(Clone)]
@@ -319,18 +321,18 @@ pub(crate) fn extract_error_message(json: &Value) -> String {
 /// 独立创建 K线 WS 客户端（启动时使用，此时尚无 exchange 实例）。
 pub fn create_kline_ws(
     proxy: Option<&str>,
-) -> std::sync::Arc<tokio::sync::Mutex<dyn virs_type::ws_types::KlineWsClient>> {
+) -> std::sync::Arc<tokio::sync::Mutex<dyn virs_type::KlineWsClient>> {
     std::sync::Arc::new(tokio::sync::Mutex::new(
-        adapter::binance::kline_ws::KlineWs::new_perpetual(proxy),
+        adapter::KlineWs::new_perpetual(proxy),
     ))
 }
 
 /// 独立创建订单簿 WS 客户端（启动时使用，此时尚无 exchange 实例）。
 pub fn create_orderbook_ws(
     proxy: Option<&str>,
-) -> std::sync::Arc<tokio::sync::Mutex<dyn virs_type::ws_types::OrderBookWsClient>> {
+) -> std::sync::Arc<tokio::sync::Mutex<dyn virs_type::OrderBookWsClient>> {
     std::sync::Arc::new(tokio::sync::Mutex::new(
-        adapter::binance::orderbook_ws::OrderBookWs::new_perpetual(proxy),
+        adapter::OrderBookWs::new_perpetual(proxy),
     ))
 }
 
@@ -350,7 +352,7 @@ pub async fn create_exchange(
 ) -> Result<Box<dyn ExchangePe>, ExchangeError> {
     match id.to_lowercase().as_str() {
         "binance" => {
-            let exchange = adapter::binance::BinanceExchange::new(
+            let exchange = adapter::BinanceExchange::new(
                 api_key,
                 api_secret,
                 proxy_url,

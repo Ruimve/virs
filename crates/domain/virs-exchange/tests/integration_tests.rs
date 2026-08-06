@@ -4,12 +4,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use async_trait::async_trait;
 
 use virs_exchange::Exchanges;
-use virs_exchange::paper_mode::PaperModeExchange;
-use virs_type::exchange::{ExchangePe, OrderUpdateStream};
-use virs_type::market::*;
-use virs_type::position::*;
-use virs_type::ws_types::{KlineWsClient, OrderBookWsClient};
+use virs_exchange::PaperModeExchange;
 use virs_type::*;
+use virs_type::{ExchangePe, KlineWsClient, OrderBookWsClient, OrderUpdateStream};
 use virs_error::VirsResult;
 
 // ─── Mock 真实交易所，用于测试路由 ───
@@ -142,7 +139,7 @@ fn int_1_4_market_type_consistency() {
 #[tokio::test]
 async fn int_2_1_paper_exchange_creation_and_balance() {
     let paper =
-        virs_exchange::paper::PaperExchangeAdapter::new("binance", MarketType::Perpetual, 100000.0);
+        virs_exchange::PaperExchangeAdapter::new("binance", MarketType::Perpetual, 100000.0);
     assert_eq!(paper.name(), "binance");
     assert_eq!(paper.market_type(), MarketType::Perpetual);
 
@@ -155,9 +152,9 @@ async fn int_2_1_paper_exchange_creation_and_balance() {
 
 #[tokio::test]
 async fn int_2_2_paper_market_order_updates_balance() {
-    use virs_type::position::PlaceOrderParams;
+    use virs_type::PlaceOrderParams;
     let paper =
-        virs_exchange::paper::PaperExchangeAdapter::new("binance", MarketType::Perpetual, 50000.0);
+        virs_exchange::PaperExchangeAdapter::new("binance", MarketType::Perpetual, 50000.0);
 
     paper.on_price_tick("BTC/USDT", 50000.0).await;
     paper.set_leverage("BTC/USDT", 10).await.unwrap();

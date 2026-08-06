@@ -5,7 +5,7 @@ use uuid::Uuid;
 use virs_error::{BotError, BotResult};
 
 use crate::common::llm_client::LlmClient;
-use virs_type::bot::{CredentialStore, LlmProviderResolver};
+use virs_type::{CredentialStore, LlmProviderResolver};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AutoAction {

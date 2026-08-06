@@ -22,9 +22,7 @@ use crate::types::*;
 use crate::ExchangeClient;
 use virs_error::{ExchangeError, VirsError};
 use virs_type::{
-    exchange::OrderUpdateStream,
-    market::{FundingRate, Kline, Ticker},
-    ws_types::{KlineWsClient, OrderBookWsClient},
+    OrderUpdateStream, FundingRate, Kline, Ticker, KlineWsClient, OrderBookWsClient,
     ApiRestrictions, Balance, CcxtOrderStatus, ExchangePe, ExchangePosition, MarginMode,
     MarketType, OrderResult, OrderType, PlaceOrderParams, PositionMode, Side, WsFeedEvent,
 };

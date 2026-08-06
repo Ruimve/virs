@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use virs_error::{BotError, BotResult};
-use virs_type::bot::CredentialStore;
+use virs_type::CredentialStore;
 
 pub struct PgCredentialStore {
     db: PgPool,
@@ -40,7 +40,7 @@ impl CredentialStore for PgCredentialStore {
         let mut result = Vec::new();
         for row in rows {
             let decrypted =
-                virs_utils::crypto::decrypt(&row.encrypted_api_key, &self.encryption_key)
+                virs_utils::decrypt(&row.encrypted_api_key, &self.encryption_key)
                     .map_err(|e| BotError::Credential(format!("Decryption failed: {}", e)))?;
             result.push((row.provider, decrypted, row.model));
         }

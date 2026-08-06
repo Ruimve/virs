@@ -1,15 +1,17 @@
-pub mod aggregator;
-pub mod cache;
-pub mod engine;
-pub mod gap;
-pub mod orderbook_engine;
-pub mod source;
-pub mod types;
+mod aggregator;
+mod cache;
+mod engine;
+mod gap;
+mod orderbook_engine;
+mod source;
+mod types;
 
+pub use aggregator::{candle_from_1m, Aggregator};
+pub use cache::SymbolCache;
 pub use engine::KlineEngine;
 pub use gap::ContinuityReport;
 pub use orderbook_engine::OrderBookEngine;
-pub use source::ExchangeKlineSource;
+pub use source::{timeframe_str_to_ms, ExchangeKlineSource};
 pub use types::{
     align_open_time, subscription_key, KlineEngineConfig,
     KlinePersistence, KlineSource, OrderBookEngineConfig, OrderBookEvent,

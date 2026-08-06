@@ -20,13 +20,13 @@ use virs_task::{spawn_periodic, Stop};
 
 use crate::auto::ai::AutoAiService;
 use crate::auto::strategy;
-use virs_type::auto::{AutoBotConfig, AutoStore};
-use virs_type::bot::{MarketDataProvider, OrderEvent, OrderExecutor};
+use virs_type::{AutoBotConfig, AutoStore};
+use virs_type::{MarketDataProvider, OrderEvent, OrderExecutor};
 use virs_type::KlineEvent;
-use virs_tactical_bot::prompt::PromptLoader;
+use virs_tactical_bot::PromptLoader;
 use virs_config::TimeConfig;
 use virs_type::PositionSide;
-use virs_type::position::{EngineEvent, Position};
+use virs_type::{EngineEvent, Position};
 
 pub(crate) use side_state::{PendingClose, PendingOpen, SideState};
 
@@ -102,7 +102,7 @@ impl AutoWorker {
         }
     }
 
-    pub(crate) fn get_position(&self, side: &PositionSide) -> Option<&virs_type::position::Position> {
+    pub(crate) fn get_position(&self, side: &PositionSide) -> Option<&virs_type::Position> {
         self.side(side).get_position()
     }
 

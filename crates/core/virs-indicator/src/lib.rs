@@ -8,10 +8,10 @@
 //!
 //! 本 crate 是纯计算层，不依赖 prompt / LLM / 异步运行时。
 
-pub mod compute;
-pub mod indicators;
-pub mod set;
-pub mod spec;
+mod compute;
+mod indicators;
+mod set;
+mod spec;
 
 // 向后兼容：重导出原子函数供外部直接调用
 // （如 virs-api 的 strategy_selection.rs）

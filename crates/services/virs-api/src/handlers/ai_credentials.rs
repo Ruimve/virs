@@ -101,7 +101,7 @@ pub async fn save_credential(
 
 
     let encrypted_key =
-        virs_utils::crypto::encrypt_with_key(api_key, &state.llm_key)?;
+        virs_utils::encrypt_with_key(api_key, &state.llm_key)?;
 
     sqlx::query(
         r#"INSERT INTO qd_ai_credentials (id, user_id, provider, encrypted_api_key, model, label, is_default, created_at)
@@ -158,7 +158,7 @@ pub async fn test_credential(
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
             let key =
-                virs_utils::crypto::decrypt_with_key(&enc_key, &state.llm_key)?;
+                virs_utils::decrypt_with_key(&enc_key, &state.llm_key)?;
             (p, key)
         }
         None => {
@@ -183,7 +183,7 @@ pub async fn test_credential(
         .expect("provider validated by resolve_provider_base_url above; get_provider_config shared");
 
     let http_client = &state.http_client;
-    match virs_tactical_bot::llm_client::call_llm_api(
+    match virs_tactical_bot::call_llm_api(
         http_client,
         &api_key,
         base_url,
@@ -222,7 +222,7 @@ pub async fn fetch_models(
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
             let key =
-                virs_utils::crypto::decrypt_with_key(&enc_key, &state.llm_key)?;
+                virs_utils::decrypt_with_key(&enc_key, &state.llm_key)?;
             (p, key)
         }
         None => {
@@ -295,7 +295,7 @@ pub async fn fetch_balance(
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
             let key =
-                virs_utils::crypto::decrypt_with_key(&enc_key, &state.llm_key)?;
+                virs_utils::decrypt_with_key(&enc_key, &state.llm_key)?;
             (p, key)
         }
         None => {
@@ -305,7 +305,7 @@ pub async fn fetch_balance(
         }
     };
 
-    let balance_url = match virs_type::llm::LlmProviderConfig::for_provider(&provider).and_then(|c| c.balance_url) {
+    let balance_url = match virs_type::LlmProviderConfig::for_provider(&provider).and_then(|c| c.balance_url) {
         Some(url) => url,
         None => return Ok(Json(ApiResponse::ok(serde_json::json!({ "balances": [] })))),
     };

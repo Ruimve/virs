@@ -8,10 +8,9 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, warn};
 
 use virs_type::*;
-use virs_type::exchange::{ExchangePe, OrderUpdateStream};
-use virs_type::market::*;
-use virs_type::position::*;
-use virs_type::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderResult};
+use virs_type::{
+    CcxtOrder, CcxtOrderStatus, ExecutionType, ExchangePe, OrderResult, OrderUpdateStream,
+};
 
 use virs_error::{ExchangeError, VirsError, VirsResult};
 

@@ -6,7 +6,7 @@ use virs_api::EngineManager;
 use virs_error::{Context, VirsResult};
 
 use virs_api::{build_router, AppState};
-use virs_app::engine_manager::AppEngineManager;
+use virs_app::AppEngineManager;
 use virs_config::load_config;
 use virs_exchange::Exchanges;
 use virs_market::{
@@ -69,7 +69,7 @@ async fn main() -> VirsResult<()> {
             .await?;
 
     let admin_id: Uuid = if !admin_exists {
-        let password_hash = virs_utils::crypto::hash_password(&config.admin.password)?;
+        let password_hash = virs_utils::hash_password(&config.admin.password)?;
         let row: (Uuid,) = sqlx::query_as(
             "INSERT INTO qd_users (username, password_hash, role, is_active) VALUES ($1, $2, 'admin', true) RETURNING id",
         )
@@ -117,7 +117,7 @@ async fn main() -> VirsResult<()> {
     ));
     info!("OrderBook engine created (lazy — will start on first subscribe)");
 
-    let prompt_loader = virs_tactical_bot::prompt::PromptLoader::from_env().await;
+    let prompt_loader = virs_tactical_bot::PromptLoader::from_env().await;
 
     let engine_manager = Arc::new(AppEngineManager::new(
         db_pool.clone(),

@@ -3,13 +3,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use virs_error::VirsResult;
-use virs_type::exchange::{ExchangePe, OrderUpdateStream};
-use virs_type::market::*;
-use virs_type::position::*;
-use virs_type::ws_types::{KlineWsClient, OrderBookWsClient};
+use virs_type::*;
 use virs_type::{
-    ApiRestrictions, Balance, ExchangePosition, MarketType, OrderResult, PlaceOrderParams,
-    PositionMode,
+    ApiRestrictions, Balance, ExchangePe, ExchangePosition, KlineWsClient, MarketType,
+    OrderBookWsClient, OrderResult, OrderUpdateStream, PlaceOrderParams, PositionMode,
 };
 
 use crate::paper::PaperExchangeAdapter;

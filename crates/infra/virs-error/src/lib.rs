@@ -1,8 +1,8 @@
-pub mod api;
-pub mod bot;
-pub mod classify;
-pub mod context;
-pub mod exchange;
+mod api;
+mod bot;
+mod classify;
+mod context;
+mod exchange;
 
 pub use api::ApiError;
 pub use bot::{BotError, BotResult};

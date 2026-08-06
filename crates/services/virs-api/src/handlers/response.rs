@@ -37,7 +37,7 @@ pub fn extract_user_id(
         }
     };
 
-    match virs_utils::auth::decode_jwt(token, jwt_secret) {
+    match virs_utils::decode_jwt(token, jwt_secret) {
         Ok(claims) => uuid::Uuid::parse_str(&claims.sub)
             .map_err(|_| VirsError::unauthorized("Invalid user ID in token")),
         Err(_) => Err(VirsError::unauthorized("Invalid token")),

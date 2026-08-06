@@ -4,7 +4,7 @@
 //! 该测试需要 `STRATEGIES_DIR` 环境变量指向项目根的 `strategies/` 目录，
 //! 否则跳过（CI 中应设置该变量）。
 
-use virs_tactical_bot::prompt::PromptLoader;
+use virs_tactical_bot::PromptLoader;
 use virs_type::StrategyType;
 
 #[tokio::test]

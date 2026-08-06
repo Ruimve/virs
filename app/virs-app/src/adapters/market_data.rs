@@ -8,9 +8,9 @@ use virs_market::KlineEngine;
 use virs_type::Timeframe;
 use virs_type::Kline;
 use virs_error::{VirsError, VirsResult};
-use virs_type::bot::{MarketDataProvider, MarketSnapshot};
-use virs_type::market::Balance;
-use virs_type::exchange::ExchangePe;
+use virs_type::{MarketDataProvider, MarketSnapshot};
+use virs_type::Balance;
+use virs_type::ExchangePe;
 
 pub fn candle_to_kline(c: &virs_type::Candle) -> Kline {
     Kline {
