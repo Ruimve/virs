@@ -2,10 +2,10 @@ use super::cache::SymbolCache;
 use super::types::align_open_time;
 use virs_type::{Candle, Timeframe};
 
-pub struct Aggregator;
+pub(crate) struct Aggregator;
 
 impl Aggregator {
-    pub fn update_higher_timeframes(
+    pub(crate) fn update_higher_timeframes(
         candle_1m: &Candle,
         cache: &mut SymbolCache,
     ) -> Vec<(Timeframe, Candle)> {
@@ -90,7 +90,7 @@ impl Aggregator {
         }
     }
 
-    pub fn is_last_1m_in_group(candle_1m: &Candle, tf: Timeframe) -> bool {
+    pub(crate) fn is_last_1m_in_group(candle_1m: &Candle, tf: Timeframe) -> bool {
         let tf_ms = tf.ms();
         let aligned_open = align_open_time(candle_1m.open_time, tf);
         let group_end = aligned_open + tf_ms - 1;
@@ -98,7 +98,7 @@ impl Aggregator {
         candle_1m_end >= group_end
     }
 
-    pub fn aggregate_1m_to_timeframe(candles_1m: &[Candle], tf: Timeframe) -> Vec<Candle> {
+    pub(crate) fn aggregate_1m_to_timeframe(candles_1m: &[Candle], tf: Timeframe) -> Vec<Candle> {
         if candles_1m.is_empty() {
             return Vec::new();
         }

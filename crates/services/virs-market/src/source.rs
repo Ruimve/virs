@@ -18,12 +18,12 @@ pub fn timeframe_str_to_ms(tf: &str) -> i64 {
     }
 }
 
-pub struct ExchangeKlineSource {
+pub(crate) struct ExchangeKlineSource {
     registry: std::sync::Arc<Exchanges>,
 }
 
 impl ExchangeKlineSource {
-    pub fn new(registry: std::sync::Arc<Exchanges>) -> Self {
+    pub(crate) fn new(registry: std::sync::Arc<Exchanges>) -> Self {
         Self { registry }
     }
 }
@@ -87,4 +87,14 @@ impl KlineSource for ExchangeKlineSource {
             })
             .collect())
     }
+}
+
+/// 工厂函数：创建 ExchangeKlineSource 并返回 trait 对象。
+///
+/// `ExchangeKlineSource` 为 `pub(crate)`，外部 crate 无法直接构造。
+/// 该类型无运行循环，仅封装 `Exchanges` 注册表的 K 线拉取能力，无需 spawn。
+pub fn create_exchange_kline_source(
+    registry: std::sync::Arc<Exchanges>,
+) -> std::sync::Arc<dyn KlineSource> {
+    std::sync::Arc::new(ExchangeKlineSource::new(registry))
 }

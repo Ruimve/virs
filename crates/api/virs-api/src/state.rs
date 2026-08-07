@@ -4,10 +4,10 @@ use async_trait::async_trait;
 use axum::extract::FromRef;
 use tokio::sync::{broadcast, mpsc};
 
-use virs_trading_bot::AutoCommand;
+use virs_type::AutoCommand;
 use virs_error::{VirsError, VirsResult};
 use virs_exchange::Exchanges;
-use virs_market::{KlineEngine, OrderBookEngine};
+use virs_type::{KlineEngineHandle, OrderBookEngineHandle};
 use virs_llm::{call_llm_api, LlmCallResult};
 use virs_prompt::PromptLoader;
 use virs_type::EngineEvent;
@@ -48,8 +48,8 @@ pub struct AppState {
     pub engine_manager: Arc<dyn EngineManager>,
     pub http_client: reqwest::Client,
     pub exchange_registry: Arc<Exchanges>,
-    pub kline_engine: Arc<KlineEngine>,
-    pub orderbook_engine: Arc<OrderBookEngine>,
+    pub kline_engine: Arc<dyn KlineEngineHandle>,
+    pub orderbook_engine: Arc<dyn OrderBookEngineHandle>,
     pub encryption_key: String,
     pub llm_key: String,
     pub jwt_secret: String,

@@ -108,12 +108,12 @@ impl AutoDecision {
     }
 }
 
-pub struct AutoAiService {
+pub(crate) struct AutoAiService {
     llm_client: LlmClient,
 }
 
 impl AutoAiService {
-    pub fn new(
+    pub(crate) fn new(
         llm_resolver: Arc<dyn LlmProviderResolver>,
         credential_store: Arc<dyn CredentialStore>,
         llm_timeout: std::time::Duration,
@@ -123,11 +123,11 @@ impl AutoAiService {
         }
     }
 
-    pub async fn is_available_for_user(&self, user_id: Uuid) -> bool {
+    pub(crate) async fn is_available_for_user(&self, user_id: Uuid) -> bool {
         self.llm_client.is_available_for_user(user_id).await
     }
 
-    pub async fn auto_decision(
+    pub(crate) async fn auto_decision(
         &self,
         user_id: Uuid,
         system_prompt: &str,

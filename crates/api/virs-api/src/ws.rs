@@ -157,7 +157,7 @@ pub fn kline_event_to_json(event: &virs_type::KlineEvent) -> KlineWsMsg<'_> {
 }
 
 
-pub fn orderbook_event_to_json(event: &virs_market::OrderBookEvent) -> OrderBookWsMsg<'_> {
+pub fn orderbook_event_to_json(event: &virs_type::OrderBookEvent) -> OrderBookWsMsg<'_> {
     OrderBookWsMsg {
         exchange: &event.exchange,
         symbol: &event.symbol,
@@ -175,8 +175,8 @@ pub async fn kline_ws_handler(
     ws.on_upgrade(move |socket| handle_kline_ws(socket, state.kline_engine))
 }
 
-async fn handle_kline_ws(mut socket: WebSocket, kline_engine: Arc<virs_market::KlineEngine>) {
-    let mut rx = kline_engine.subscribe_events();
+async fn handle_kline_ws(mut socket: WebSocket, kline_engine: Arc<dyn virs_type::KlineEngineHandle>) {
+    let mut rx = kline_engine.subscribe_kline_events();
 
 
     let mut timeframe_filter: Option<String> = None;
@@ -236,9 +236,9 @@ pub async fn orderbook_ws_handler(
 
 async fn handle_orderbook_ws(
     mut socket: WebSocket,
-    orderbook_engine: Arc<virs_market::OrderBookEngine>,
+    orderbook_engine: Arc<dyn virs_type::OrderBookEngineHandle>,
 ) {
-    let mut rx = orderbook_engine.subscribe_events();
+    let mut rx = orderbook_engine.subscribe_orderbook_events();
 
 
     let mut subscribed_symbols: std::collections::HashSet<String> =

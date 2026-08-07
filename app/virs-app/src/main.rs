@@ -10,7 +10,8 @@ use virs_app::AppEngineManager;
 use virs_config::load_config;
 use virs_exchange::Exchanges;
 use virs_market::{
-    ExchangeKlineSource, KlineEngine, KlineEngineConfig, OrderBookEngine, OrderBookEngineConfig,
+    create_exchange_kline_source, create_kline_engine, create_orderbook_engine,
+    KlineEngineConfig, OrderBookEngineConfig,
 };
 
 #[tokio::main]
@@ -101,20 +102,20 @@ async fn main() -> VirsResult<()> {
         proxy_url: config.proxy.clone(),
         ..Default::default()
     };
-    let kline_source = Arc::new(ExchangeKlineSource::new(exchange_registry.clone()));
+    let kline_source = create_exchange_kline_source(exchange_registry.clone());
     let perpetual_ws = virs_ccxt::create_kline_ws(config.proxy.as_deref());
-    let kline_engine = Arc::new(KlineEngine::new(
+    let kline_engine = create_kline_engine(
         kline_config,
         kline_source,
         perpetual_ws,
-    ));
+    );
     info!("Kline engine created (lazy — will start on first subscribe)");
 
     let ob_perpetual_ws = virs_ccxt::create_orderbook_ws(config.proxy.as_deref());
-    let orderbook_engine = Arc::new(OrderBookEngine::new(
+    let orderbook_engine = create_orderbook_engine(
         OrderBookEngineConfig::default(),
         ob_perpetual_ws,
-    ));
+    );
     info!("OrderBook engine created (lazy — will start on first subscribe)");
 
     let prompt_loader = virs_prompt::PromptLoader::from_env().await;

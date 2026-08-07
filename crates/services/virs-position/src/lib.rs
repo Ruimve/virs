@@ -1,5 +1,5 @@
 mod engine;
 mod persistence;
 
-pub use engine::PositionEngine;
+pub use engine::create_position_engine;
 pub use persistence::{Persistence, PositionPersistence};

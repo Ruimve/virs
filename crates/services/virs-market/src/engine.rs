@@ -13,7 +13,7 @@ use crate::gap::GapDetector;
 use crate::types::{
     subscription_key, KlineEngineConfig, KlinePersistence, KlineSource, KlineWsClient, WsEvent,
 };
-use virs_type::{Candle, KlineEvent, KlineEventSource, KlineEventType, MarketType, Timeframe};
+use virs_type::{Candle, KlineEngineHandle, KlineEvent, KlineEventSource, KlineEventType, MarketType, Timeframe};
 
 struct NoOpPersistence;
 
@@ -67,7 +67,7 @@ impl MarketWsHandler {
     }
 }
 
-pub struct KlineEngine {
+pub(crate) struct KlineEngine {
     config: KlineEngineConfig,
     source: Arc<dyn KlineSource>,
     persistence: Arc<dyn KlinePersistence>,
@@ -81,7 +81,7 @@ pub struct KlineEngine {
 }
 
 impl KlineEngine {
-    pub fn new(
+    pub(crate) fn new(
         config: KlineEngineConfig,
         source: Arc<dyn KlineSource>,
         perpetual_ws: Arc<Mutex<dyn KlineWsClient>>,
@@ -102,11 +102,11 @@ impl KlineEngine {
         }
     }
 
-    pub fn subscribe_events(&self) -> broadcast::Receiver<KlineEvent> {
+    pub(crate) fn subscribe_events(&self) -> broadcast::Receiver<KlineEvent> {
         self.event_tx.subscribe()
     }
 
-    pub async fn start(&self) {
+    pub(crate) async fn start(&self) {
         if self
             .started
             .swap(true, std::sync::atomic::Ordering::Relaxed)
@@ -301,6 +301,14 @@ impl KlineEngine {
                         let report = GapDetector::check_continuity(&exchange, &symbol, &cache).await;
 
                         if !report.is_continuous {
+                            tracing::debug!(
+                                exchange = %exchange,
+                                symbol = %symbol,
+                                gap_start = ?report.gap_start,
+                                gap_end = ?report.gap_end,
+                                missing_minutes = report.missing_minutes,
+                                "Continuity check detected gap, triggering backfill"
+                            );
                             match GapDetector::detect_and_backfill(
                                 &exchange,
                                 &symbol,
@@ -329,7 +337,7 @@ impl KlineEngine {
         *self.gap_detection_task.lock().unwrap() = Some(gap_handle);
     }
 
-    pub async fn stop(&self) {
+    pub(crate) async fn stop(&self) {
         if !self
             .started
             .swap(false, std::sync::atomic::Ordering::Relaxed)
@@ -359,7 +367,7 @@ impl KlineEngine {
         self.perpetual_handler.stop().await;
     }
 
-    pub async fn subscribe(
+    pub(crate) async fn subscribe(
         &self,
         exchange: &str,
         symbol: &str,
@@ -403,7 +411,7 @@ impl KlineEngine {
         Ok(())
     }
 
-    pub async fn get_klines_async(
+    pub(crate) async fn get_klines_async(
         &self,
         exchange: &str,
         symbol: &str,
@@ -418,23 +426,47 @@ impl KlineEngine {
             None => None,
         }
     }
-
-    pub fn subscribed_symbols(&self) -> Vec<(String, String, MarketType)> {
-        self.subscriptions
-            .iter()
-            .map(|entry| {
-                (
-                    entry.exchange.clone(),
-                    entry.symbol.clone(),
-                    entry.market_type,
-                )
-            })
-            .collect()
-    }
 }
 
 impl KlineEventSource for KlineEngine {
     fn subscribe_kline_events(&self) -> broadcast::Receiver<KlineEvent> {
         self.subscribe_events()
     }
+}
+
+#[async_trait]
+impl KlineEngineHandle for KlineEngine {
+    async fn subscribe_market(
+        &self,
+        exchange: &str,
+        symbol: &str,
+        market_type: MarketType,
+    ) -> VirsResult<()> {
+        self.subscribe(exchange, symbol, market_type).await
+    }
+
+    async fn stop(&self) {
+        KlineEngine::stop(self).await
+    }
+
+    async fn get_klines(
+        &self,
+        exchange: &str,
+        symbol: &str,
+        timeframe: Timeframe,
+    ) -> Option<Vec<Candle>> {
+        self.get_klines_async(exchange, symbol, timeframe).await
+    }
+}
+
+/// 工厂函数：创建 KlineEngine 并返回 trait 对象。
+///
+/// `KlineEngine` 为 `pub(crate)`，外部 crate 无法直接构造。
+/// 引擎在首次 `subscribe_market` 时懒启动（lazy start），无需在工厂函数中 spawn。
+pub fn create_kline_engine(
+    config: KlineEngineConfig,
+    source: Arc<dyn KlineSource>,
+    perpetual_ws: Arc<Mutex<dyn KlineWsClient>>,
+) -> Arc<dyn KlineEngineHandle> {
+    Arc::new(KlineEngine::new(config, source, perpetual_ws))
 }

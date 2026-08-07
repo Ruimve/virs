@@ -3,7 +3,7 @@ use chrono::Utc;
 use uuid::Uuid;
 use virs_type::Candle;
 use virs_type::OrderBookLevel;
-use virs_market::OrderBookEvent;
+use virs_type::OrderBookEvent;
 use virs_type::{KlineEvent, KlineEventType, Timeframe};
 use virs_type::{PositionSide, PositionStatus};
 use virs_type::Position;

@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use virs_error::VirsResult;
 
-use super::structs::AutoBotConfig;
+use super::structs::{AutoBotConfig, TradeRecord};
 
 
 #[async_trait]
@@ -113,4 +113,16 @@ pub trait AutoStore: Send + Sync {
     /// 加载连续亏损次数 — JOIN pe_order_latest 取 close 订单的 realized_pnl
     async fn load_consecutive_losses(&self, bot_id: Uuid) -> VirsResult<i32>;
     async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()>;
+}
+
+/// 交易历史数据源 trait。
+/// 由应用层实现（从数据库查询已平仓交易记录）。
+#[async_trait]
+pub trait TradeHistoryProvider: Send + Sync {
+    /// 查询指定策略在时间窗口内的已平仓交易记录。
+    async fn query_trades(
+        &self,
+        strategy_name: &str,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Vec<TradeRecord>;
 }

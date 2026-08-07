@@ -7,7 +7,7 @@ use virs_prompt::{PromptSource, PromptTemplate, validate};
 use super::types::StrategyMetrics;
 
 /// 策略优化器。
-pub struct StrategyOptimizer {
+pub(crate) struct StrategyOptimizer {
     http_client: reqwest::Client,
     api_key: String,
     base_url: String,
@@ -15,15 +15,15 @@ pub struct StrategyOptimizer {
 }
 
 /// 优化结果。
-pub struct OptimizationResult {
+pub(crate) struct OptimizationResult {
     /// 优化后的模板（版本号已递增）
-    pub template: PromptTemplate,
+    pub(crate) template: PromptTemplate,
     /// 使用的 LLM 模型
-    pub used_model: String,
+    pub(crate) used_model: String,
 }
 
 impl StrategyOptimizer {
-    pub fn new(
+    pub(crate) fn new(
         http_client: reqwest::Client,
         api_key: String,
         base_url: String,
@@ -41,7 +41,7 @@ impl StrategyOptimizer {
     ///
     /// 将当前 prompt + 绩效指标发送给 LLM，要求 LLM 分析问题并输出改进版本。
     /// 返回的模板版本号已递增，来源标记为 AI 生成。
-    pub async fn optimize(
+    pub(crate) async fn optimize(
         &self,
         current: &PromptTemplate,
         metrics: &StrategyMetrics,

@@ -130,3 +130,26 @@ impl From<&AutoBot> for AutoBotConfig {
         }
     }
 }
+
+/// 单笔历史交易记录（用于策略评估）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TradeRecord {
+    /// 策略名称
+    pub strategy_name: String,
+    /// 交易对
+    pub symbol: String,
+    /// 方向
+    pub side: String,
+    /// 开仓时间
+    pub opened_at: DateTime<Utc>,
+    /// 平仓时间
+    pub closed_at: DateTime<Utc>,
+    /// 入场价
+    pub entry_price: f64,
+    /// 出场价
+    pub exit_price: f64,
+    /// 数量
+    pub quantity: f64,
+    /// 已实现盈亏（USDT）
+    pub realized_pnl: f64,
+}

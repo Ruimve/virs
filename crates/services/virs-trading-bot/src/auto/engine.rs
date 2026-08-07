@@ -7,15 +7,15 @@ use uuid::Uuid;
 use virs_task::{spawn, Stop, TaskHandle};
 
 use crate::auto::ai::AutoAiService;
-use crate::auto::types::AutoCommand;
+use virs_type::AutoCommand;
 use crate::auto::worker::AutoWorker;
-use virs_type::{AutoStore, KlineEventSource};
+use virs_type::{AutoStore, CredentialStore, KlineEventSource, LlmProviderResolver};
 use virs_type::{MarketDataProvider, OrderCommand, OrderEvent, OrderExecutor};
 use virs_prompt::PromptProvider;
 use virs_config::TimeConfig;
 use virs_type::EngineEvent;
 
-pub struct AutoEngine {
+pub(crate) struct AutoEngine {
     store: Arc<dyn AutoStore>,
     ai_service: Arc<AutoAiService>,
     kline_engine: Arc<dyn KlineEventSource>,
@@ -33,7 +33,7 @@ pub struct AutoEngine {
 }
 
 impl AutoEngine {
-    pub fn new(
+    pub(crate) fn new(
         store: Arc<dyn AutoStore>,
         ai_service: Arc<AutoAiService>,
         kline_engine: Arc<dyn KlineEventSource>,
@@ -66,7 +66,7 @@ impl AutoEngine {
         (engine, cmd_tx)
     }
 
-    pub async fn run(&mut self, stop: Stop) {
+    pub(crate) async fn run(&mut self, stop: Stop) {
         let mut cmd_rx = match self.cmd_rx.take() {
             Some(rx) => rx,
             None => {
@@ -286,4 +286,46 @@ impl AutoEngine {
         info!(bot_id = %bot_id, "Bot deleted successfully");
         let _ = response_tx.send(Ok(()));
     }
+}
+
+/// 工厂函数：创建 AutoEngine，启动运行循环，并返回命令通道和任务句柄。
+///
+/// `run()` 需要 `&mut self`，无法通过 trait 对象调用，
+/// 因此在工厂函数内部 spawn 后返回 `mpsc::Sender<AutoCommand>` 和 `TaskHandle`。
+/// `AutoAiService` 也在此函数内部创建，外部无需感知其具体类型。
+pub fn create_auto_engine(
+    store: Arc<dyn AutoStore>,
+    llm_resolver: Arc<dyn LlmProviderResolver>,
+    credential_store: Arc<dyn CredentialStore>,
+    llm_timeout: std::time::Duration,
+    kline_engine: Arc<dyn KlineEventSource>,
+    order_executor: Arc<dyn OrderExecutor>,
+    market_data_provider: Arc<dyn MarketDataProvider>,
+    event_tx: broadcast::Sender<OrderEvent>,
+    pe_event_tx: broadcast::Sender<EngineEvent>,
+    time_config: TimeConfig,
+    prompt_loader: Arc<dyn PromptProvider>,
+    strategy_engine: Option<Arc<dyn virs_prompt::StrategyHotSwapSource>>,
+) -> (mpsc::Sender<AutoCommand>, TaskHandle) {
+    let ai_service = Arc::new(AutoAiService::new(
+        llm_resolver,
+        credential_store,
+        llm_timeout,
+    ));
+    let (mut engine, cmd_tx) = AutoEngine::new(
+        store,
+        ai_service,
+        kline_engine,
+        order_executor,
+        market_data_provider,
+        event_tx,
+        pe_event_tx,
+        time_config,
+        prompt_loader,
+        strategy_engine,
+    );
+    let task = spawn("auto_engine", move |stop: Stop| async move {
+        engine.run(stop).await;
+    });
+    (cmd_tx, task)
 }

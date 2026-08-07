@@ -44,7 +44,7 @@ pub async fn kline_subscribe(
 
     match state
         .kline_engine
-        .subscribe(&body.exchange, &body.symbol, market_type)
+        .subscribe_market(&body.exchange, &body.symbol, market_type)
         .await
     {
         Ok(_) => Ok(Json(ApiResponse::ok(serde_json::json!({
@@ -64,7 +64,7 @@ pub async fn orderbook_subscribe(
 
     match state
         .orderbook_engine
-        .subscribe(&body.exchange, &body.symbol, market_type)
+        .subscribe_market(&body.exchange, &body.symbol, market_type)
         .await
     {
         Ok(_) => Ok(Json(ApiResponse::ok(serde_json::json!({
@@ -95,7 +95,7 @@ pub async fn kline_data(
 
     if let Some(candles) = state
         .kline_engine
-        .get_klines_async(&params.exchange, &params.symbol, tf)
+        .get_klines(&params.exchange, &params.symbol, tf)
         .await
     {
         if !candles.is_empty() {
@@ -133,7 +133,7 @@ pub async fn get_ticker(
 
     if let Some(candles) = state
         .kline_engine
-        .get_klines_async(exchange, symbol, virs_type::Timeframe::M1)
+        .get_klines(exchange, symbol, virs_type::Timeframe::M1)
         .await
     {
         if let Some(last) = candles.last() {
@@ -203,7 +203,7 @@ pub async fn get_klines(
 
     if let Some(candles) = state
         .kline_engine
-        .get_klines_async(exchange, symbol, requested_tf)
+        .get_klines(exchange, symbol, requested_tf)
         .await
     {
         if !candles.is_empty() {

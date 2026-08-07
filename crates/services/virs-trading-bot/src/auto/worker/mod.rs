@@ -31,7 +31,7 @@ use virs_type::{EngineEvent, Position};
 
 pub(crate) use side_state::{PendingClose, PendingOpen, SideState};
 
-pub struct AutoWorker {
+pub(crate) struct AutoWorker {
     pub(crate) bot: AutoBotConfig,
     kline_rx: broadcast::Receiver<KlineEvent>,
     order_executor: Arc<dyn OrderExecutor>,
@@ -72,7 +72,7 @@ impl AutoWorker {
 }
 
 impl AutoWorker {
-    pub fn new(
+    pub(crate) fn new(
         bot: AutoBotConfig,
         kline_rx: broadcast::Receiver<KlineEvent>,
         order_executor: Arc<dyn OrderExecutor>,
@@ -327,7 +327,7 @@ impl AutoWorker {
         }
     }
 
-    pub async fn run(mut self, stop: Stop) {
+    pub(crate) async fn run(mut self, stop: Stop) {
         info!(bot_id = %self.bot.id, "Waiting for first kline event to initialize price...");
         loop {
             tokio::select! {

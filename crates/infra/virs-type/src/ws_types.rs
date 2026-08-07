@@ -30,6 +30,16 @@ pub struct OrderBookLevel {
     pub amount: f64,
 }
 
+/// OrderBook 引擎对外广播的事件。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct OrderBookEvent {
+    pub exchange: String,
+    pub symbol: String,
+    pub bids: Vec<OrderBookLevel>,
+    pub asks: Vec<OrderBookLevel>,
+    pub timestamp: i64,
+}
+
 #[derive(Debug, Clone)]
 pub struct WsOrderBookUpdate {
     pub symbol: String,

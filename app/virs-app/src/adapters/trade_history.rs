@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use tracing::warn;
-use virs_tactical_bot::{TradeHistoryProvider, TradeRecord};
+use virs_type::{TradeHistoryProvider, TradeRecord};
 
 /// 基于 PostgreSQL 的交易历史数据源。
 ///

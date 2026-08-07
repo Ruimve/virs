@@ -1,34 +1,22 @@
 //! 策略评估器：从历史交易记录计算绩效指标。
 
-use async_trait::async_trait;
 use chrono::Utc;
 
-use super::types::{StrategyMetrics, TradeRecord};
-
-/// 交易历史数据源 trait。
-/// 由应用层实现（从数据库查询已平仓交易记录）。
-#[async_trait]
-pub trait TradeHistoryProvider: Send + Sync {
-    /// 查询指定策略在时间窗口内的已平仓交易记录。
-    async fn query_trades(
-        &self,
-        strategy_name: &str,
-        since: chrono::DateTime<chrono::Utc>,
-    ) -> Vec<TradeRecord>;
-}
+use super::types::StrategyMetrics;
+use virs_type::{TradeHistoryProvider, TradeRecord};
 
 /// 策略评估器。
-pub struct StrategyEvaluator {
+pub(crate) struct StrategyEvaluator {
     history: Box<dyn TradeHistoryProvider>,
 }
 
 impl StrategyEvaluator {
-    pub fn new(history: Box<dyn TradeHistoryProvider>) -> Self {
+    pub(crate) fn new(history: Box<dyn TradeHistoryProvider>) -> Self {
         Self { history }
     }
 
     /// 评估单个策略的绩效。
-    pub async fn evaluate(
+    pub(crate) async fn evaluate(
         &self,
         strategy_name: &str,
         window_secs: u64,
@@ -135,6 +123,7 @@ fn compute_max_drawdown(trades: &[TradeRecord]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use chrono::Utc;
 
     struct MockHistory {

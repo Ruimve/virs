@@ -1,10 +1,11 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use tokio::sync::broadcast;
 use tracing::{error, warn};
 
 use uuid::Uuid;
 use virs_error::{BotError, BotResult, VirsError};
-use virs_position::PositionEngine;
 use virs_task::{spawn, Stop, TaskHandle};
 use virs_type::{
     OrderCommand, OrderEvent, OrderExecutor, OrderInfo,
@@ -12,10 +13,11 @@ use virs_type::{
 use virs_type::{OrderType, TimeInForce};
 use virs_type::*;
 use virs_type::CcxtOrder;
+use virs_type::PositionEngineHandle;
 
 pub struct PeOrderExecutor {
     cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,
-    engine: PositionEngine,
+    engine: Arc<dyn PositionEngineHandle>,
     forward_task: std::sync::Mutex<Option<TaskHandle>>,
 }
 
@@ -24,7 +26,7 @@ impl PeOrderExecutor {
         cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,
         event_tx: broadcast::Sender<OrderEvent>,
         mut engine_event_rx: broadcast::Receiver<EngineEvent>,
-        engine: PositionEngine,
+        engine: Arc<dyn PositionEngineHandle>,
     ) -> Self {
         let handle = spawn("order_event_forward", move |stop: Stop| async move {
             loop {

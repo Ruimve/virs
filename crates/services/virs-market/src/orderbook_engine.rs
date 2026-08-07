@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use dashmap::DashMap;
 use tokio::sync::{broadcast, Mutex};
 use virs_error::VirsResult;
 use virs_task::{spawn, Stop, TaskHandle};
+use virs_type::{OrderBookEngineHandle, OrderBookEvent};
 
 use crate::types::{
-    subscription_key, MarketType, OrderBookEngineConfig, OrderBookEvent, OrderBookWsClient,
+    subscription_key, MarketType, OrderBookEngineConfig, OrderBookWsClient,
     WsOrderBookEvent,
 };
 
@@ -39,7 +41,7 @@ impl MarketWsHandler {
     }
 }
 
-pub struct OrderBookEngine {
+pub(crate) struct OrderBookEngine {
     subscriptions: Arc<DashMap<String, SubscriptionEntry>>,
 
     symbol_index: Arc<DashMap<String, String>>,
@@ -50,7 +52,7 @@ pub struct OrderBookEngine {
 }
 
 impl OrderBookEngine {
-    pub fn new(
+    pub(crate) fn new(
         config: OrderBookEngineConfig,
         perpetual_ws: Arc<Mutex<dyn OrderBookWsClient>>,
     ) -> Self {
@@ -66,11 +68,11 @@ impl OrderBookEngine {
         }
     }
 
-    pub fn subscribe_events(&self) -> broadcast::Receiver<OrderBookEvent> {
+    pub(crate) fn subscribe_events(&self) -> broadcast::Receiver<OrderBookEvent> {
         self.event_tx.subscribe()
     }
 
-    pub async fn start(&self) {
+    pub(crate) async fn start(&self) {
         if self
             .started
             .swap(true, std::sync::atomic::Ordering::Relaxed)
@@ -132,7 +134,7 @@ impl OrderBookEngine {
         *self.ws_loop_task.lock().unwrap() = Some(handle);
     }
 
-    pub async fn stop(&self) {
+    pub(crate) async fn stop(&self) {
         if !self
             .started
             .swap(false, std::sync::atomic::Ordering::Relaxed)
@@ -153,7 +155,7 @@ impl OrderBookEngine {
         self.perpetual_handler.stop().await;
     }
 
-    pub async fn subscribe(
+    pub(crate) async fn subscribe(
         &self,
         exchange: &str,
         symbol: &str,
@@ -180,4 +182,35 @@ impl OrderBookEngine {
 
         Ok(())
     }
+}
+
+#[async_trait]
+impl OrderBookEngineHandle for OrderBookEngine {
+    fn subscribe_orderbook_events(&self) -> broadcast::Receiver<OrderBookEvent> {
+        self.subscribe_events()
+    }
+
+    async fn subscribe_market(
+        &self,
+        exchange: &str,
+        symbol: &str,
+        market_type: MarketType,
+    ) -> VirsResult<()> {
+        self.subscribe(exchange, symbol, market_type).await
+    }
+
+    async fn stop(&self) {
+        OrderBookEngine::stop(self).await
+    }
+}
+
+/// 工厂函数：创建 OrderBookEngine 并返回 trait 对象。
+///
+/// `OrderBookEngine` 为 `pub(crate)`，外部 crate 无法直接构造。
+/// 引擎在首次 `subscribe_market` 时懒启动（lazy start），无需在工厂函数中 spawn。
+pub fn create_orderbook_engine(
+    config: OrderBookEngineConfig,
+    perpetual_ws: Arc<Mutex<dyn OrderBookWsClient>>,
+) -> Arc<dyn OrderBookEngineHandle> {
+    Arc::new(OrderBookEngine::new(config, perpetual_ws))
 }

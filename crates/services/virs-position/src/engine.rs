@@ -1,5 +1,6 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
+use async_trait::async_trait;
 use chrono::Utc;
 use dashmap::DashMap;
 use futures_util::StreamExt;
@@ -13,6 +14,7 @@ use virs_error::{VirsError, VirsResult};
 use virs_type::*;
 use virs_type::{
     CcxtOrder, CcxtOrderStatus, ExchangePe, ExchangePosition, ExecutionType, OrderUpdateStream,
+    PositionEngineHandle,
 };
 
 use crate::persistence::PositionPersistence;
@@ -87,6 +89,7 @@ pub(crate) struct EngineInner {
     pub(crate) persist_max_retries: u32,
     pub(crate) persist_retry_base_ms: u64,
     pub(crate) cancel: CancellationToken,
+    pub(crate) run_task: Mutex<Option<TaskHandle>>,
 }
 
 impl EngineInner {
@@ -128,7 +131,7 @@ impl EngineInner {
     }
 }
 
-pub struct PositionEngine {
+pub(crate) struct PositionEngine {
     inner: Arc<EngineInner>,
     cmd_tx: mpsc::Sender<EngineCommand>,
     cmd_rx: Option<mpsc::Receiver<EngineCommand>>,
@@ -149,7 +152,7 @@ impl Clone for PositionEngine {
 }
 
 impl PositionEngine {
-    pub fn new(
+    pub(crate) fn new(
         exchange: Arc<dyn ExchangePe>,
         persistence: Box<dyn PositionPersistence>,
         persist_max_retries: u32,
@@ -172,6 +175,7 @@ impl PositionEngine {
             persist_max_retries,
             persist_retry_base_ms,
             cancel,
+            run_task: Mutex::new(None),
         };
 
         Self {
@@ -183,19 +187,19 @@ impl PositionEngine {
         }
     }
 
-    pub fn command_sender(&self) -> mpsc::Sender<EngineCommand> {
+    pub(crate) fn command_sender(&self) -> mpsc::Sender<EngineCommand> {
         self.cmd_tx.clone()
     }
 
-    pub fn subscribe_events(&self) -> broadcast::Receiver<EngineEvent> {
+    pub(crate) fn subscribe_events(&self) -> broadcast::Receiver<EngineEvent> {
         self.inner.event_tx.subscribe()
     }
 
-    pub fn event_sender(&self) -> broadcast::Sender<EngineEvent> {
+    pub(crate) fn event_sender(&self) -> broadcast::Sender<EngineEvent> {
         self.inner.event_tx.clone()
     }
 
-    pub fn get_all_positions(&self) -> Vec<Position> {
+    pub(crate) fn get_all_positions(&self) -> Vec<Position> {
         self.inner
             .positions
             .iter()
@@ -203,7 +207,7 @@ impl PositionEngine {
             .collect()
     }
 
-    pub fn get_open_positions_by_symbol(&self, symbol: &str) -> Vec<Position> {
+    pub(crate) fn get_open_positions_by_symbol(&self, symbol: &str) -> Vec<Position> {
         self.inner
             .positions
             .iter()
@@ -212,11 +216,11 @@ impl PositionEngine {
             .collect()
     }
 
-    pub fn exchange(&self) -> Arc<dyn ExchangePe> {
+    pub(crate) fn exchange(&self) -> Arc<dyn ExchangePe> {
         Arc::clone(&self.inner.exchange)
     }
 
-    pub async fn run(&mut self) -> VirsResult<()> {
+    pub(crate) async fn run(&mut self) -> VirsResult<()> {
         self.recover_state().await?;
 
         let symbols: Vec<String> = self
@@ -283,10 +287,17 @@ impl PositionEngine {
         Ok(())
     }
 
-    pub fn stop(&self) {
+    pub(crate) async fn stop(&self) {
         self.inner.set_state(EngineState::ShuttingDown);
         self.inner.cancel.cancel();
         info!("Position engine stop requested");
+        let task = self.inner.run_task.lock().unwrap().take();
+        if let Some(h) = &task {
+            h.cancel();
+        }
+        if let Some(h) = task {
+            h.join().await;
+        }
     }
 
     async fn recover_state(&self) -> VirsResult<()> {
@@ -354,6 +365,59 @@ impl PositionEngine {
 
         Ok(())
     }
+}
+
+#[async_trait]
+impl PositionEngineHandle for PositionEngine {
+    fn command_sender(&self) -> mpsc::Sender<EngineCommand> {
+        PositionEngine::command_sender(self)
+    }
+
+    fn subscribe_events(&self) -> broadcast::Receiver<EngineEvent> {
+        PositionEngine::subscribe_events(self)
+    }
+
+    fn event_sender(&self) -> broadcast::Sender<EngineEvent> {
+        PositionEngine::event_sender(self)
+    }
+
+    fn exchange(&self) -> Arc<dyn ExchangePe> {
+        PositionEngine::exchange(self)
+    }
+
+    fn get_all_positions(&self) -> Vec<Position> {
+        PositionEngine::get_all_positions(self)
+    }
+
+    fn get_open_positions_by_symbol(&self, symbol: &str) -> Vec<Position> {
+        PositionEngine::get_open_positions_by_symbol(self, symbol)
+    }
+
+    async fn stop(&self) {
+        PositionEngine::stop(self).await
+    }
+}
+
+/// 工厂函数：创建 PositionEngine，启动运行循环，并返回 trait 对象。
+///
+/// `run()` 需要 `&mut self`，无法通过 trait 对象调用，
+/// 因此在工厂函数内部 spawn 后将 `TaskHandle` 存入 `EngineInner`（共享 Arc），
+/// 外部仅通过 `Arc<dyn PositionEngineHandle>` 交互，`stop()` 内部完成 cancel + join。
+pub fn create_position_engine(
+    exchange: Arc<dyn ExchangePe>,
+    persistence: Box<dyn PositionPersistence>,
+    persist_max_retries: u32,
+    persist_retry_base_ms: u64,
+) -> Arc<dyn PositionEngineHandle> {
+    let mut engine = PositionEngine::new(exchange, persistence, persist_max_retries, persist_retry_base_ms);
+    let handle = Arc::new(engine.clone());
+    let task = spawn("position_engine", move |_| async move {
+        if let Err(e) = engine.run().await {
+            error!(error = %e, "Position Engine run failed");
+        }
+    });
+    *handle.inner.run_task.lock().unwrap() = Some(task);
+    handle
 }
 
 pub(crate) async fn command_loop(

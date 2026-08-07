@@ -10,14 +10,14 @@ use virs_llm::{call_llm_api, create_llm_http_client, LlmCallResult};
 ///
 /// `AutoAiService` 内部持有一个实例，
 /// 避免重复实现 `load_credentials → resolve → call_llm_api` 链路。
-pub struct LlmClient {
+pub(crate) struct LlmClient {
     http_client: reqwest::Client,
     llm_resolver: Arc<dyn LlmProviderResolver>,
     credential_store: Arc<dyn CredentialStore>,
 }
 
 impl LlmClient {
-    pub fn new(
+    pub(crate) fn new(
         llm_resolver: Arc<dyn LlmProviderResolver>,
         credential_store: Arc<dyn CredentialStore>,
         llm_timeout: std::time::Duration,
@@ -30,7 +30,7 @@ impl LlmClient {
     }
 
     /// 检查指定用户是否有可用的 LLM 凭证。
-    pub async fn is_available_for_user(&self, user_id: Uuid) -> bool {
+    pub(crate) async fn is_available_for_user(&self, user_id: Uuid) -> bool {
         if self.llm_resolver.is_available() {
             return true;
         }
@@ -43,7 +43,7 @@ impl LlmClient {
     /// 加载用户凭证 → 解析 provider → 调用 LLM API。
     ///
     /// `provider_name` 仅用于错误日志标识调用方（如 "auto-ai"）。
-    pub async fn call(
+    pub(crate) async fn call(
         &self,
         user_id: Uuid,
         system_prompt: &str,

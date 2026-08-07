@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use tracing::warn;
 
 use virs_exchange::Exchanges;
-use virs_market::KlineEngine;
+use virs_type::KlineEngineHandle;
 use virs_type::Timeframe;
 use virs_type::Kline;
 use virs_error::{VirsError, VirsResult};
@@ -31,7 +31,7 @@ pub fn candle_to_kline(c: &virs_type::Candle) -> Kline {
 
 pub struct ExchangeMarketDataProvider {
     exchange_registry: Arc<Exchanges>,
-    kline_engine: Option<Arc<KlineEngine>>,
+    kline_engine: Option<Arc<dyn KlineEngineHandle>>,
     pe_exchange: Option<Arc<dyn ExchangePe>>,
 }
 
@@ -44,7 +44,7 @@ impl ExchangeMarketDataProvider {
         }
     }
 
-    pub fn with_kline_engine(mut self, engine: Arc<KlineEngine>) -> Self {
+    pub fn with_kline_engine(mut self, engine: Arc<dyn KlineEngineHandle>) -> Self {
         self.kline_engine = Some(engine);
         self
     }
@@ -65,7 +65,7 @@ impl ExchangeMarketDataProvider {
         required: bool,
     ) -> Option<Vec<Kline>> {
         if let Some(ref engine) = self.kline_engine {
-            if let Some(candles) = engine.get_klines_async(exchange, symbol, timeframe).await {
+            if let Some(candles) = engine.get_klines(exchange, symbol, timeframe).await {
                 if candles.len() >= min_count {
                     return Some(candles.iter().map(candle_to_kline).collect());
                 }
@@ -124,7 +124,7 @@ impl ExchangeMarketDataProvider {
     async fn fetch_current_price(&self, exchange: &str, symbol: &str, klines_1h: &[Kline]) -> VirsResult<f64> {
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine
-                .get_klines_async(exchange, symbol, Timeframe::M1)
+                .get_klines(exchange, symbol, Timeframe::M1)
                 .await
             {
                 if let Some(last) = candles.last() {
@@ -303,7 +303,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
 
 pub struct AutoExchangeMarketDataProvider {
     exchange_registry: Arc<Exchanges>,
-    kline_engine: Option<Arc<KlineEngine>>,
+    kline_engine: Option<Arc<dyn KlineEngineHandle>>,
     pe_exchange: Option<Arc<dyn ExchangePe>>,
 }
 
@@ -316,7 +316,7 @@ impl AutoExchangeMarketDataProvider {
         }
     }
 
-    pub fn with_kline_engine(mut self, engine: Arc<KlineEngine>) -> Self {
+    pub fn with_kline_engine(mut self, engine: Arc<dyn KlineEngineHandle>) -> Self {
         self.kline_engine = Some(engine);
         self
     }
@@ -337,7 +337,7 @@ impl AutoExchangeMarketDataProvider {
         required: bool,
     ) -> Option<Vec<Kline>> {
         if let Some(ref engine) = self.kline_engine {
-            if let Some(candles) = engine.get_klines_async(exchange, symbol, timeframe).await {
+            if let Some(candles) = engine.get_klines(exchange, symbol, timeframe).await {
                 if candles.len() >= min_count {
                     return Some(candles.iter().map(candle_to_kline).collect());
                 }
@@ -396,7 +396,7 @@ impl AutoExchangeMarketDataProvider {
     async fn fetch_current_price(&self, exchange: &str, symbol: &str, klines_1h: &[Kline]) -> VirsResult<f64> {
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine
-                .get_klines_async(exchange, symbol, Timeframe::M1)
+                .get_klines(exchange, symbol, Timeframe::M1)
                 .await
             {
                 if let Some(last) = candles.last() {

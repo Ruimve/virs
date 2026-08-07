@@ -19,12 +19,13 @@ use virs_prompt::{PromptLoader, StrategyHotSwapSource, StrategySwapEvent, save_t
 use virs_task::{spawn_periodic, TaskHandle};
 use virs_type::StrategyType;
 
-use super::evaluator::{StrategyEvaluator, TradeHistoryProvider};
+use super::evaluator::StrategyEvaluator;
 use super::optimizer::StrategyOptimizer;
 use super::types::StrategyEngineConfig;
+use virs_type::TradeHistoryProvider;
 
 /// 策略引擎。
-pub struct StrategyEngine {
+pub(crate) struct StrategyEngine {
     config: StrategyEngineConfig,
     prompt_loader: PromptLoader,
     evaluator: Arc<StrategyEvaluator>,
@@ -36,7 +37,7 @@ impl StrategyEngine {
     /// 创建策略引擎。
     ///
     /// `history` 由应用层提供（从数据库查询交易记录）。
-    pub fn new(
+    pub(crate) fn new(
         config: StrategyEngineConfig,
         prompt_loader: PromptLoader,
         history: Box<dyn TradeHistoryProvider>,
@@ -62,7 +63,7 @@ impl StrategyEngine {
     }
 
     /// 启动定时分析循环。返回 TaskHandle 用于停止。
-    pub fn start(self: Arc<Self>) -> TaskHandle {
+    pub(crate) fn start(self: Arc<Self>) -> TaskHandle {
         let interval = Duration::from_secs(self.config.analysis_interval_secs);
         let engine = Arc::clone(&self);
 
@@ -82,7 +83,7 @@ impl StrategyEngine {
     }
 
     /// 执行一次完整的评估 + 优化循环。
-    pub async fn run_cycle(&self) -> VirsResult<()> {
+    pub(crate) async fn run_cycle(&self) -> VirsResult<()> {
         info!("StrategyEngine cycle started");
 
         // 获取所有已加载的 Auto 策略名
@@ -222,4 +223,19 @@ impl StrategyHotSwapSource for StrategyEngine {
     fn subscribe(&self) -> watch::Receiver<Option<StrategySwapEvent>> {
         self.update_tx.subscribe()
     }
+}
+
+/// 工厂函数：创建 StrategyEngine，启动定时分析循环，并返回 trait 对象和任务句柄。
+///
+/// `start()` 需要 `self: Arc<Self>`，且 `StrategyEngine` 为 `pub(crate)`，
+/// 因此在工厂函数内部创建并启动后返回 `Arc<dyn StrategyHotSwapSource>` 和 `TaskHandle`。
+pub fn create_strategy_engine(
+    config: StrategyEngineConfig,
+    prompt_loader: PromptLoader,
+    history: Box<dyn TradeHistoryProvider>,
+    http_client: reqwest::Client,
+) -> (Arc<dyn StrategyHotSwapSource>, TaskHandle) {
+    let engine = Arc::new(StrategyEngine::new(config, prompt_loader, history, http_client));
+    let task = Arc::clone(&engine).start();
+    (engine, task)
 }

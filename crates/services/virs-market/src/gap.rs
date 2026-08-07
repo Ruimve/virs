@@ -8,13 +8,13 @@ use super::cache::SymbolCache;
 use super::types::{align_open_time, KlineSource};
 use virs_type::{Candle, KlineEvent, KlineEventType, MarketType, Timeframe};
 
-pub struct GapDetector;
+pub(crate) struct GapDetector;
 
 const INITIAL_1M_LIMIT: u32 = 1000;
 const INITIAL_HIGH_TF_LIMIT: u32 = 1000;
 
 impl GapDetector {
-    pub async fn detect_and_backfill(
+    pub(crate) async fn detect_and_backfill(
         exchange: &str,
         symbol: &str,
         cache: &Arc<Mutex<SymbolCache>>,
@@ -340,7 +340,7 @@ impl GapDetector {
         Ok(total)
     }
 
-    pub async fn check_continuity(
+    pub(crate) async fn check_continuity(
         _exchange: &str,
         _symbol: &str,
         cache: &Arc<Mutex<SymbolCache>>,
@@ -381,9 +381,9 @@ impl GapDetector {
 }
 
 #[derive(Debug)]
-pub struct ContinuityReport {
-    pub is_continuous: bool,
-    pub gap_start: Option<i64>,
-    pub gap_end: Option<i64>,
-    pub missing_minutes: u32,
+pub(crate) struct ContinuityReport {
+    pub(crate) is_continuous: bool,
+    pub(crate) gap_start: Option<i64>,
+    pub(crate) gap_end: Option<i64>,
+    pub(crate) missing_minutes: u32,
 }

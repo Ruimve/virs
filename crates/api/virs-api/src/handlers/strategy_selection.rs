@@ -23,7 +23,7 @@ pub async fn select_strategy_by_llm(
     // 获取 H1 K 线数据
     let candles = state
         .kline_engine
-        .get_klines_async(exchange, symbol, virs_type::Timeframe::H1)
+        .get_klines(exchange, symbol, virs_type::Timeframe::H1)
         .await
         .ok_or_else(|| {
             VirsError::bad_request(format!(

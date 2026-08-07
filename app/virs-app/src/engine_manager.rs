@@ -7,13 +7,13 @@ use tracing::{error, info, warn};
 use virs_task::{spawn, Stop, TaskHandle};
 
 use virs_api::EngineManager;
-use virs_trading_bot::AutoCommand;
+use virs_type::AutoCommand;
 use virs_error::VirsResult;
 use virs_exchange::{Exchanges, PaperModeExchange};
-use virs_market::{KlineEngine, OrderBookEngine};
-use virs_position::{Persistence as PePersistence, PositionEngine};
+use virs_type::{KlineEngineHandle, OrderBookEngineHandle, PositionEngineHandle};
+use virs_position::{Persistence as PePersistence, create_position_engine};
 use virs_prompt::PromptLoader;
-use virs_tactical_bot::{StrategyEngine, StrategyEngineConfig};
+use virs_tactical_bot::{create_strategy_engine, StrategyEngineConfig};
 use virs_type::OrderEvent;
 use virs_type::MarketType;
 use virs_type::ExchangePe;
@@ -25,8 +25,7 @@ struct EngineState {
     paper_mode: bool,
     auto_cmd_tx: StdMutex<Option<mpsc::Sender<AutoCommand>>>,
     pe_event_tx: StdMutex<Option<broadcast::Sender<EngineEvent>>>,
-    position_engine: StdMutex<Option<PositionEngine>>,
-    position_engine_task: StdMutex<Option<TaskHandle>>,
+    position_engine: StdMutex<Option<Arc<dyn PositionEngineHandle>>>,
     paper_tick_task: StdMutex<Option<TaskHandle>>,
     auto_engine_task: StdMutex<Option<TaskHandle>>,
     strategy_engine_task: StdMutex<Option<TaskHandle>>,
@@ -36,8 +35,8 @@ struct EngineState {
 pub struct AppEngineManager {
     db_pool: sqlx::PgPool,
     exchange_registry: Arc<Exchanges>,
-    kline_engine: Arc<KlineEngine>,
-    orderbook_engine: Arc<OrderBookEngine>,
+    kline_engine: Arc<dyn KlineEngineHandle>,
+    orderbook_engine: Arc<dyn OrderBookEngineHandle>,
     encryption_key: String,
     llm_key: String,
     proxy: Option<String>,
@@ -59,8 +58,8 @@ impl AppEngineManager {
     pub fn new(
         db_pool: sqlx::PgPool,
         exchange_registry: Arc<Exchanges>,
-        kline_engine: Arc<KlineEngine>,
-        orderbook_engine: Arc<OrderBookEngine>,
+        kline_engine: Arc<dyn KlineEngineHandle>,
+        orderbook_engine: Arc<dyn OrderBookEngineHandle>,
         encryption_key: String,
         llm_key: String,
         proxy: Option<String>,
@@ -169,7 +168,7 @@ impl AppEngineManager {
         for (exchange, symbol) in &bot_symbols {
             let mt = MarketType::Perpetual;
             self.kline_engine
-                .subscribe(exchange, symbol, mt)
+                .subscribe_market(exchange, symbol, mt)
                 .await
                 .map_err(|e| {
                     virs_error::VirsError::config(format!(
@@ -180,7 +179,7 @@ impl AppEngineManager {
             info!(exchange = %exchange, symbol = %symbol, "Restored kline subscription");
 
             self.orderbook_engine
-                .subscribe(exchange, symbol, mt)
+                .subscribe_market(exchange, symbol, mt)
                 .await
                 .map_err(|e| {
                     virs_error::VirsError::config(format!(
@@ -262,7 +261,7 @@ impl EngineManager for AppEngineManager {
 
         let pe_persistence = Box::new(PePersistence::new(self.db_pool.clone()));
 
-        let mut position_engine = PositionEngine::new(
+        let position_engine = create_position_engine(
             pe_exchange,
             pe_persistence,
             self.time_config.retry.persist_max_retries,
@@ -272,14 +271,6 @@ impl EngineManager for AppEngineManager {
         let pe_event_sender = position_engine.event_sender();
         let auto_pe_event_rx = position_engine.subscribe_events();
         let pe_exchange_ref = position_engine.exchange();
-
-        let position_engine_clone = position_engine.clone();
-
-        let pe_task = spawn("position_engine", move |_| async move {
-            if let Err(e) = position_engine.run().await {
-                error!(error = %e, "Position Engine run failed");
-            }
-        });
         info!(paper_mode, "Position Engine started");
 
         let mut paper_tick_task_opt: Option<TaskHandle> = None;
@@ -301,7 +292,7 @@ impl EngineManager for AppEngineManager {
             let kline_engine_for_paper = self.kline_engine.clone();
             let pe_cmd_tx_for_tick = pe_cmd_tx.clone();
             let paper_task = spawn("paper_tick", move |stop: Stop| async move {
-                let mut kline_rx = kline_engine_for_paper.subscribe_events();
+                let mut kline_rx = kline_engine_for_paper.subscribe_kline_events();
                 info!("Paper mode kline event bridge started");
                 loop {
                     tokio::select! {
@@ -351,7 +342,7 @@ impl EngineManager for AppEngineManager {
             pe_cmd_tx.clone(),
             auto_order_event_tx.clone(),
             auto_pe_event_rx,
-            position_engine_clone.clone(),
+            position_engine.clone(),
         )
         .await);
         let order_executor_for_state = Arc::clone(&auto_order_executor);
@@ -362,15 +353,13 @@ impl EngineManager for AppEngineManager {
             ));
         let auto_llm_resolver: Arc<dyn virs_type::LlmProviderResolver> =
             Arc::new(DefaultLlmResolver::new());
-        let auto_ai_service = Arc::new(virs_trading_bot::AutoAiService::new(
-            auto_llm_resolver,
-            auto_credential_store,
-            std::time::Duration::from_secs(self.time_config.llm_timeout_secs),
-        ));
 
         // 尝试创建 StrategyEngine（策略自动优化引擎）
         // 如果没有 LLM 凭证则跳过，不影响正常交易
-        let strategy_engine: Option<Arc<StrategyEngine>> = {
+        let (strategy_engine_handle, strategy_engine_task): (
+            Option<Arc<dyn virs_prompt::StrategyHotSwapSource>>,
+            Option<TaskHandle>,
+        ) = {
             let llm_creds: Option<(String, String)> = sqlx::query_as(
                 r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials ORDER BY created_at DESC LIMIT 1"#,
             )
@@ -404,31 +393,27 @@ impl EngineManager for AppEngineManager {
                     };
 
                     let history_provider = Box::new(PgTradeHistoryProvider::new(self.db_pool.clone()));
-                    let engine = StrategyEngine::new(
+                    let (handle, task) = create_strategy_engine(
                         config,
                         prompt_loader.clone(),
                         history_provider,
                         reqwest::Client::new(),
                     );
-                    let engine_arc = Arc::new(engine);
                     info!("StrategyEngine created — strategy auto-optimization enabled");
-                    Some(engine_arc)
+                    (Some(handle), Some(task))
                 }
                 None => {
                     warn!("No LLM credentials found — StrategyEngine will not start; strategy auto-optimization disabled");
-                    None
+                    (None, None)
                 }
             }
         };
 
-        let strategy_engine_task = strategy_engine.as_ref().map(|se| {
-            let se = Arc::clone(se);
-            se.start()
-        });
-
-        let (mut auto_engine, auto_cmd_tx) = virs_trading_bot::AutoEngine::new(
+        let (auto_cmd_tx, auto_task) = virs_trading_bot::create_auto_engine(
             auto_store,
-            auto_ai_service,
+            auto_llm_resolver,
+            auto_credential_store,
+            std::time::Duration::from_secs(self.time_config.llm_timeout_secs),
             self.kline_engine.clone(),
             auto_order_executor,
             auto_market_data_provider,
@@ -436,20 +421,15 @@ impl EngineManager for AppEngineManager {
             pe_event_sender.clone(),
             self.time_config.clone(),
             Arc::new(prompt_loader.clone()),
-            strategy_engine.map(|se| se as Arc<dyn virs_prompt::StrategyHotSwapSource>),
+            strategy_engine_handle,
         );
-
-        let auto_task = spawn("auto_engine", move |stop: Stop| async move {
-            auto_engine.run(stop).await;
-        });
         info!("Auto trade engine started");
 
         let _ = self.state.set(EngineState {
             paper_mode,
             auto_cmd_tx: StdMutex::new(Some(auto_cmd_tx)),
             pe_event_tx: StdMutex::new(Some(pe_event_sender)),
-            position_engine: StdMutex::new(Some(position_engine_clone)),
-            position_engine_task: StdMutex::new(Some(pe_task)),
+            position_engine: StdMutex::new(Some(position_engine)),
             paper_tick_task: StdMutex::new(paper_tick_task_opt),
             auto_engine_task: StdMutex::new(Some(auto_task)),
             strategy_engine_task: StdMutex::new(strategy_engine_task),
@@ -529,7 +509,7 @@ impl EngineManager for AppEngineManager {
 
             let pe_opt = state.position_engine.lock().unwrap().take();
             if let Some(pe) = &pe_opt {
-                pe.stop();
+                pe.stop().await;
             }
 
             drop(state.auto_cmd_tx.lock().unwrap().take());
@@ -540,20 +520,15 @@ impl EngineManager for AppEngineManager {
                 oe.stop().await;
             }
 
-            let pe_task = state.position_engine_task.lock().unwrap().take();
             let paper_task = state.paper_tick_task.lock().unwrap().take();
             let auto_task = state.auto_engine_task.lock().unwrap().take();
             let strategy_task = state.strategy_engine_task.lock().unwrap().take();
 
-            if let Some(h) = &pe_task { h.cancel(); }
             if let Some(h) = &paper_task { h.cancel(); }
             if let Some(h) = &auto_task { h.cancel(); }
             if let Some(h) = &strategy_task { h.cancel(); }
 
             let mut join_set = tokio::task::JoinSet::new();
-            if let Some(h) = pe_task {
-                join_set.spawn(h.join());
-            }
             if let Some(h) = paper_task {
                 join_set.spawn(h.join());
             }

@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use virs_error::VirsResult;
 
 pub(crate) use virs_type::{KlineWsClient, WsEvent};
@@ -6,7 +5,7 @@ pub(crate) use virs_type::{KlineWsClient, WsEvent};
 use virs_type::{Candle, Timeframe};
 
 pub(crate) use virs_type::{
-    OrderBookLevel, OrderBookWsClient, WsOrderBookEvent,
+    OrderBookWsClient, WsOrderBookEvent,
 };
 
 pub(crate) use virs_type::MarketType;
@@ -50,7 +49,7 @@ pub trait KlineSource: Send + Sync {
 }
 
 #[async_trait::async_trait]
-pub trait KlinePersistence: Send + Sync {
+pub(crate) trait KlinePersistence: Send + Sync {
     async fn save_candles(
         &self,
         exchange: &str,
@@ -66,15 +65,6 @@ pub fn subscription_key(exchange: &str, symbol: &str) -> String {
 
 pub fn align_open_time(open_time: i64, timeframe: Timeframe) -> i64 {
     (open_time / timeframe.ms()) * timeframe.ms()
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OrderBookEvent {
-    pub exchange: String,
-    pub symbol: String,
-    pub bids: Vec<OrderBookLevel>,
-    pub asks: Vec<OrderBookLevel>,
-    pub timestamp: i64,
 }
 
 #[derive(Debug, Clone)]

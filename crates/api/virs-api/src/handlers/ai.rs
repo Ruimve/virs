@@ -164,7 +164,7 @@ async fn fetch_price_from_kline(
 ) -> Result<f64, VirsError> {
     let candles = state
         .kline_engine
-        .get_klines_async(exchange, symbol, virs_type::Timeframe::M1)
+        .get_klines(exchange, symbol, virs_type::Timeframe::M1)
         .await
         .ok_or_else(|| {
             VirsError::not_found(format!(

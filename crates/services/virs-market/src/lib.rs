@@ -6,15 +6,13 @@ mod orderbook_engine;
 mod source;
 mod types;
 
-pub use aggregator::{candle_from_1m, Aggregator};
-pub use cache::SymbolCache;
-pub use engine::KlineEngine;
-pub use gap::ContinuityReport;
-pub use orderbook_engine::OrderBookEngine;
-pub use source::{timeframe_str_to_ms, ExchangeKlineSource};
+pub use aggregator::candle_from_1m;
+pub use engine::create_kline_engine;
+pub use orderbook_engine::create_orderbook_engine;
+pub use source::{create_exchange_kline_source, timeframe_str_to_ms};
 pub use types::{
     align_open_time, subscription_key, KlineEngineConfig,
-    KlinePersistence, KlineSource, OrderBookEngineConfig, OrderBookEvent,
+    KlineSource, OrderBookEngineConfig,
 };
 
 #[cfg(test)]
