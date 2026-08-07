@@ -14,6 +14,8 @@ use super::format_close_event;
 
 impl AutoWorker {
     pub(crate) async fn on_llm_decision(&mut self) {
+        /* LLM决策流程：有pending订单时跳过 -> 刷新持仓 -> 检查AI可用性 ->
+         * 构建Prompt -> 调用LLM -> 保存分析日志 -> 执行决策(开仓/平仓/观望) */
         if self.is_pending() {
             warn!(bot_id = %self.bot.id, "Pending order in progress, skipping LLM decision");
             return;
@@ -281,6 +283,7 @@ impl AutoWorker {
         };
 
 
+        /* strategy_file必须在bot创建时绑定，不能为NULL，否则无法构建Prompt */
         let (system_prompt, user_prompt) = {
             let file_name = match self.bot.strategy_file.as_deref() {
                 Some(f) => f,
@@ -436,6 +439,7 @@ impl AutoWorker {
         action: &AutoAction,
         decision: Option<&AutoDecision>,
     ) -> Option<String> {
+        /* 执行LLM决策：开仓需置信度>=0.6且无同方向持仓且不在冷却期；平仓需有持仓 */
         if matches!(action, AutoAction::Hold) {
             return None;
         }
@@ -445,6 +449,7 @@ impl AutoWorker {
             return Some("有待确认订单，跳过本次决策".to_string());
         }
 
+        /* 开仓置信度阈值0.6：低于此值降级为Hold，避免低质量信号导致亏损 */
         if matches!(action, AutoAction::OpenLong | AutoAction::OpenShort) {
             if let Some(d) = decision {
                 if d.confidence < 0.6 {

@@ -6,17 +6,20 @@ use crate::order::CcxtOrder;
 use super::structs::{Position, Trade};
 
 
+/* 持仓方向枚举：支持 LONG/SHORT 及未知值（保留原始字符串用于容错） */
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PositionSide {
     #[serde(rename = "LONG")]
     Long,
     #[serde(rename = "SHORT")]
     Short,
+    /* unagged 用于捕获未知的持仓方向值，避免反序列化失败 */
     #[serde(untagged)]
     Unknown(String),
 }
 
 
+/* 持仓状态机：Opening→Open→Closing→Closed */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PositionStatus {
     Opening,
@@ -32,6 +35,7 @@ impl PositionStatus {
 }
 
 
+/* 引擎状态枚举：Created→Running→ShuttingDown→Stopped */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EngineState {
     Created,
@@ -54,6 +58,7 @@ pub enum TradeType {
 }
 
 
+/* PositionSide 的 Postgres 反序列化：数据库存储为小写 long/short，未知值保留原始字符串 */
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for PositionSide {
     fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
         let s = <&str as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
@@ -86,6 +91,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for PositionSide {
 }
 
 
+/* WsFeed 事件枚举：WebSocket 订单更新和连接状态变化 */
 #[derive(Debug, Clone, PartialEq)]
 pub enum WsFeedEvent {
     OrderUpdate {
@@ -97,6 +103,7 @@ pub enum WsFeedEvent {
 }
 
 
+/* 引擎命令枚举：外部通过这些命令控制引擎的开仓、平仓、下单和撤单操作 */
 #[derive(Debug, Clone)]
 pub enum EngineCommand {
     OpenPosition {
@@ -133,6 +140,7 @@ pub enum EngineCommand {
 }
 
 
+/* 引擎事件枚举：引擎内部状态变化通知，由引擎广播给外部订阅者 */
 #[derive(Debug, Clone)]
 pub enum EngineEvent {
     PositionOpened {

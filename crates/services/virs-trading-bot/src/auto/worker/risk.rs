@@ -12,6 +12,7 @@ use crate::auto::worker::AutoWorker;
 
 impl AutoWorker {
     pub(crate) async fn on_price_tick(&mut self) {
+        /* 价格更新时的风控检查：pending超时 -> 移动止损更新 -> 持仓超时 -> 止损止盈触发 */
         if self.current_price <= 0.0 {
             return;
         }
@@ -43,6 +44,7 @@ impl AutoWorker {
     }
 
 
+    /* 止损止盈检查：多头价格<=止损或>=止盈时平仓，空头反之 */
     pub(crate) async fn check_stop_take_profit(&mut self) -> bool {
         let mut triggered = false;
         if self.has_position_side(PositionSide::Long)
@@ -189,6 +191,7 @@ impl AutoWorker {
         triggered
     }
 
+    /* 持仓超时检查：超过max_position_duration_secs强制平仓，防止长期持有风险 */
     async fn check_position_timeout_side(&mut self, side: PositionSide) -> bool {
         let max_duration = Duration::from_secs(self.time_config.max_position_duration_secs);
         let opened_at = self.side(&side).position_opened_at;

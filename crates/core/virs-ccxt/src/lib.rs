@@ -13,9 +13,11 @@ pub use adapter::{BinanceExchange, dispatch_event};
 pub use auth::hmac_sha256_hex;
 pub use types::{MarketInfo, OrderFee};
 
+/* 交易所 HTTP 客户端，封装 reqwest 并通过 Semaphore 实现并发限流 */
 #[derive(Clone)]
 pub struct ExchangeClient {
     client: Client,
+    /* 信号量限流器，控制最大并发请求数，避免触发币安频率限制 */
     rate_limiter: std::sync::Arc<tokio::sync::Semaphore>,
 
     api_key: Option<String>,
@@ -218,6 +220,7 @@ pub(crate) fn build_display_url<'a>(
     let mut has_params = false;
     for (k, v) in params {
         has_params = true;
+        /* 签名参数在日志中脱敏，避免泄露 API 密钥 */
         let v = if k == "signature" { "***MASKED***" } else { v };
         param_strs.push(format!("{}={}", k, v));
     }
@@ -256,6 +259,7 @@ async fn handle_response(
     if !status.is_success() {
         if let Ok(json) = serde_json::from_str::<Value>(&text) {
             let msg = extract_error_message(&json);
+            /* 根据 HTTP 状态码映射到具体业务错误类型，503+Unknown error 表示订单状态未知 */
             return Err(match status.as_u16() {
                 401 | 403 => ExchangeError::Authentication(msg),
                 418 => ExchangeError::IpBanned(msg),
@@ -359,6 +363,7 @@ pub async fn create_exchange(
                 pool_max_idle_per_host,
                 listenkey_keepalive_futures_secs,
             )?;
+            /* 创建后立即同步服务器时间，防止因时钟偏移导致签名校验失败 */
             if let Err(e) = exchange.sync_time().await {
                 tracing::warn!(error = %e, "Failed to sync server time");
             }
@@ -375,6 +380,7 @@ pub async fn create_exchange(
 }
 
 pub fn parse_f64(v: &Value, field: &str) -> Option<f64> {
+    /* 币安返回的数值字段可能是数字或字符串，两种格式都要兼容 */
     v.get(field).and_then(|f| {
         f.as_f64()
             .or_else(|| f.as_str().and_then(|s| s.parse().ok()))

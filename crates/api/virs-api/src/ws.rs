@@ -106,6 +106,8 @@ pub fn position_to_ws_json(
 }
 
 
+/* 从pe_auto_order_context表查询持仓的止损止盈价：
+ * 关联pe_order_latest表，筛选order_role='open'且status='open'的最新记录 */
 async fn fetch_stop_loss_take_profit(
     db: &sqlx::PgPool,
     symbol: &str,

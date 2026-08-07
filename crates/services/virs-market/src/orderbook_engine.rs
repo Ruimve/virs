@@ -73,6 +73,7 @@ impl OrderBookEngine {
     }
 
     pub(crate) async fn start(&self) {
+        /* CAS保证start幂等：已启动则直接返回 */
         if self
             .started
             .swap(true, std::sync::atomic::Ordering::Relaxed)
@@ -135,6 +136,7 @@ impl OrderBookEngine {
     }
 
     pub(crate) async fn stop(&self) {
+        /* CAS保证stop幂等，cancel后join等待任务退出 */
         if !self
             .started
             .swap(false, std::sync::atomic::Ordering::Relaxed)
@@ -205,6 +207,7 @@ impl OrderBookEngineHandle for OrderBookEngine {
 }
 
 
+/* 工厂函数：创建OrderBookEngine并返回trait object */
 pub fn create_orderbook_engine(
     config: OrderBookEngineConfig,
     perpetual_ws: Arc<Mutex<dyn OrderBookWsClient>>,

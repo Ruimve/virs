@@ -4,6 +4,7 @@ use virs_error::{VirsError, VirsResult};
 use virs_type::Kline;
 
 
+/* 成交量 SMA：对最近 period 根 K 线的成交量做简单移动平均 */
 pub fn volume_sma_at(klines: &[Kline], idx: usize, period: usize) -> VirsResult<f64> {
     if idx < period - 1 || klines.is_empty() {
         return Err(VirsError::config(format!(

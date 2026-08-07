@@ -38,6 +38,8 @@ impl StrategyOptimizer {
     }
 
 
+    /* LLM策略优化：将当前策略prompt和绩效指标发给LLM，生成改进后的prompt模板。
+     * 优化后保留原始name和strategy_type，版本号自增，并校验合法性。 */
     pub(crate) async fn optimize(
         &self,
         current: &PromptTemplate,
@@ -63,10 +65,11 @@ impl StrategyOptimizer {
             })?;
 
 
+        /* 保留原始策略名和类型，LLM不应修改这些标识字段 */
         optimized.name = current.name.clone();
         optimized.strategy_type = current.strategy_type;
 
-
+        /* 版本号自增，标记为LLM优化生成的新版本 */
         optimized.version = current.version + 1;
 
 

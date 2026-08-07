@@ -41,6 +41,7 @@ impl Timeframe {
         }
     }
 
+    /* 将时间周期转换为毫秒数，用于时间戳计算和间隔比较 */
     pub fn ms(&self) -> i64 {
         match self {
             Timeframe::M1 => 60_000,

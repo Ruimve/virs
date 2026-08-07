@@ -60,6 +60,7 @@ pub async fn save_credential(
     let id = uuid::Uuid::new_v4();
 
 
+    /* 保存凭据时加密API Key/Secret/Passphrase，使用AES加密后存入数据库 */
     let encrypted_api_key =
         virs_utils::encrypt_with_key(api_key, &state.encryption_key)?;
     let encrypted_secret =
@@ -359,6 +360,7 @@ pub async fn check_position_mode(
         }
     };
 
+    /* 仅支持Hedge（双向持仓）模式：OneWay模式被标记为不支持，系统不接受OneWay模式 */
     match exchange.get_position_mode().await {
         Ok(_) => {
 

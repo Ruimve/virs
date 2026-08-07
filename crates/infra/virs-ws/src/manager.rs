@@ -9,12 +9,17 @@ use tokio_tungstenite::{connect_async, tungstenite};
 use virs_error::VirsError;
 use virs_task::{spawn, Stop, TaskHandle};
 
+/* WebSocket 连接管理常量：控制心跳、重连、熔断等关键参数 */
 pub const WS_PING_INTERVAL_SECS: u64 = 30;
 pub const WS_PONG_TIMEOUT_SECS: u64 = 90;
 pub const WS_CONNECT_TIMEOUT_SECS: u64 = 10;
+/* 重连初始延迟：1 秒，后续指数退避加倍 */
 pub const WS_RECONNECT_INITIAL_DELAY_SECS: u64 = 1;
+/* 重连最大延迟：60 秒，指数退避上限 */
 pub const WS_RECONNECT_MAX_DELAY_SECS: u64 = 60;
+/* 连接最大生命周期：约 23 小时，超过后主动重连防止交易所端连接老化 */
 pub const WS_MAX_LIFETIME_SECS: u64 = 82_800;
+/* 最大重试次数：超过后触发熔断器，停止重连 */
 pub const WS_MAX_RETRIES: u64 = 100;
 
 #[derive(Debug, Clone)]
@@ -42,6 +47,7 @@ impl Default for WsManagerConfig {
     }
 }
 
+/* 连接状态原因：区分首次连接、重连、断开重连和主动停止 */
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectionReason {
     Connected,
@@ -50,6 +56,7 @@ pub enum ConnectionReason {
     Stopped,
 }
 
+/* WebSocket 管理器事件：消息、连接状态变化和熔断器触发 */
 #[derive(Debug, Clone)]
 pub enum WsManagerEvent<T: Send + Clone + 'static> {
     Message(T),
@@ -59,6 +66,7 @@ pub enum WsManagerEvent<T: Send + Clone + 'static> {
         reason: ConnectionReason,
     },
 
+    /* 熔断器触发：重试次数超过上限时通知上层 */
     CircuitBreakerTripped { retry_count: u64 },
 }
 
@@ -68,18 +76,24 @@ pub enum WsCommand {
     Unsubscribe(String),
 }
 
+/* 消息处理结果：Continue 表示继续处理并产生事件，Reconnect 表示需要强制重连 */
 #[derive(Debug, Clone)]
 pub enum MessageOutcome<T: Send + Clone + 'static> {
     Continue(Vec<T>),
     Reconnect,
 }
 
+/* 退避结果：Proceed 继续/重连，CircuitBroken 熔断，Shutdown 关闭 */
 enum BackoffOutcome {
     Proceed,
     CircuitBroken,
     Shutdown,
 }
 
+/*
+ * WebSocket 处理器 trait：由具体业务实现，定义 URL 刷新、消息解析、连接/断开回调和命令处理。
+ * on_message 返回 MessageOutcome，可指示继续处理或强制重连。
+ */
 #[async_trait]
 pub trait WsHandler<T: Send + Clone + 'static>: Send + Sync {
     fn base_url(&self) -> &str;
@@ -107,6 +121,10 @@ pub trait WsHandler<T: Send + Clone + 'static>: Send + Sync {
     }
 }
 
+/*
+ * WebSocket 管理器：封装连接、重连、心跳、熔断和命令处理的完整生命周期。
+ * 通过 virs_task::spawn 启动后台任务，使用 Stop 令牌实现优雅关闭。
+ */
 pub struct WsManager<T: Send + Clone + 'static> {
     handler: Arc<dyn WsHandler<T>>,
     running: Arc<AtomicBool>,
@@ -138,11 +156,16 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         self.retry_count.load(Ordering::Relaxed)
     }
 
+    /*
+     * 启动 WebSocket 管理器：使用 CAS 保证只启动一次，通过 virs_task::spawn 创建后台任务。
+     * 后台任务循环执行：连接→消息处理→断开→指数退避重连，直到收到取消信号或熔断。
+     */
     pub async fn start(
         &self,
         config: WsManagerConfig,
         event_tx: mpsc::Sender<WsManagerEvent<T>>,
     ) {
+        /* CAS 保证 start 只执行一次，已运行时直接返回 */
         if self
             .running
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -166,6 +189,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         let retry_count = Arc::clone(&self.retry_count);
 
         let handle = spawn("ws_main", move |stop| async move {
+            /* 重连延迟从初始值开始，每次失败后指数加倍直到最大值 */
             let mut reconnect_delay = config.reconnect_initial_delay_secs;
             let mut is_first_connect = true;
 
@@ -203,6 +227,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
 
                 match connect_result {
                     Ok(Ok((ws_stream, _))) => {
+                        /* 连接成功：重置重连延迟和重试计数 */
                         reconnect_delay = config.reconnect_initial_delay_secs;
                         retry_count.store(0, Ordering::Relaxed);
 
@@ -242,6 +267,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                         }
 
                         if write_ok {
+                            /* 心跳定时器：首次 ping 在一个间隔后触发 */
                             let ping_start = tokio::time::Instant::now()
                                 + Duration::from_secs(config.ping_interval_secs);
                             let mut ping_tick = tokio::time::interval_at(
@@ -251,16 +277,19 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                             let max_lifetime = Duration::from_secs(config.max_lifetime_secs);
                             let mut last_msg_time = tokio::time::Instant::now();
 
+                            /* 主事件循环：处理消息、ping、命令和取消信号 */
                             loop {
                                 if stop.is_cancelled() {
                                     break;
                                 }
 
+                                /* 连接生命周期上限：超过后主动断开重连 */
                                 if connect_start.elapsed() > max_lifetime {
                                     tracing::info!("Max lifetime reached, reconnecting");
                                     break;
                                 }
 
+                                /* Pong 超时：超过阈值未收到消息，强制重连 */
                                 if last_msg_time.elapsed()
                                     > Duration::from_secs(config.pong_timeout_secs)
                                 {
@@ -348,6 +377,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
                                         }
                                     }
                                     _ = stop.cancelled() => {
+                                        /* 收到取消信号：发送 Close 帧并优雅退出 */
                                         tracing::info!("Shutdown signal received, closing");
                                         let _ = write.send(tungstenite::Message::Close(None)).await;
                                         handler.on_disconnected().await;
@@ -407,6 +437,7 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         *self.task.lock().unwrap() = Some(handle);
     }
 
+    /* 停止 WebSocket 管理器：取消任务并等待优雅关闭（使用默认超时） */
     pub async fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
         let handle = self.task.lock().unwrap().take();
@@ -423,6 +454,11 @@ impl<T: Send + Clone + 'static> WsManager<T> {
     }
 }
 
+/*
+ * 指数退避重连逻辑：检查取消信号→重试计数→带抖动的指数退避等待。
+ * 抖动量为延迟的 20%，避免多个客户端同时重连导致的惊群效应。
+ * 重试次数超过上限时触发熔断器，返回 CircuitBroken。
+ */
 async fn backoff_with_cancel<T: Send + Clone + 'static>(
     stop: &Stop,
     retry_count: &AtomicU64,
@@ -436,6 +472,7 @@ async fn backoff_with_cancel<T: Send + Clone + 'static>(
 
     if config.max_retries > 0 {
         let retries = retry_count.fetch_add(1, Ordering::Relaxed) + 1;
+        /* 重试次数达到上限：触发熔断器 */
         if retries >= config.max_retries {
             tracing::error!(
                 retries = retries,
@@ -455,11 +492,13 @@ async fn backoff_with_cancel<T: Send + Clone + 'static>(
         }
     }
 
+    /* 抖动：随机 0~20% 的延迟，避免惊群效应 */
     let jitter = rand::random::<f64>() * *reconnect_delay as f64 * 0.2;
     let delay = *reconnect_delay as f64 + jitter;
 
     tokio::select! {
         _ = tokio::time::sleep(Duration::from_secs_f64(delay)) => {
+            /* 退避后延迟加倍，但不超过最大值 */
             *reconnect_delay = (*reconnect_delay * 2).min(config.reconnect_max_delay_secs);
             BackoffOutcome::Proceed
         }

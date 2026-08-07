@@ -54,6 +54,8 @@ impl ExchangeMarketDataProvider {
         self
     }
 
+    /* K线数据获取策略：优先从KlineEngine缓存读取（低延迟），
+     * 缓存不足时回退到交易所REST API拉取（高延迟但数据完整） */
     async fn fetch_klines(
         &self,
         exchange: &str,
@@ -121,6 +123,8 @@ impl ExchangeMarketDataProvider {
         }
     }
 
+    /* 当前价格获取：优先1m K线最新close -> 交易所ticker -> H1 K线最新close，
+     * 所有数据源均失败时返回错误，拒绝返回0.0作为价格 */
     async fn fetch_current_price(&self, exchange: &str, symbol: &str, klines_1h: &[Kline]) -> VirsResult<f64> {
         if let Some(ref engine) = self.kline_engine {
             if let Some(candles) = engine

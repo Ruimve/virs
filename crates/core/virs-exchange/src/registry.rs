@@ -2,6 +2,7 @@ use virs_type::ExchangePe;
 use dashmap::DashMap;
 use std::sync::Arc;
 
+/* 交易所注册表：以 "交易所名:市场类型" 为 key 存储 ExchangePe trait 对象 */
 pub struct Exchanges {
     exchanges: Arc<DashMap<String, Arc<dyn ExchangePe>>>,
 }
@@ -20,6 +21,7 @@ impl Exchanges {
     }
 
 
+    /* 注册交易所：用 "交易所名:市场类型" 作为复合 key，支持同一交易所的不同市场类型 */
     pub fn register(&self, exchange: Box<dyn ExchangePe>) {
         let name = exchange.name().to_string();
         let mt = exchange.market_type();

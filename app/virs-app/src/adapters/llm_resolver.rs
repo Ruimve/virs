@@ -2,6 +2,8 @@ use virs_error::{BotError, BotResult};
 use virs_type::LlmProviderResolver;
 use virs_type::LlmProviderConfig;
 
+/* LLM provider解析：按优先级选择可用provider（deepseek > openai > openrouter），
+ * model为None时使用provider默认模型 */
 pub fn resolve_llm_provider(
     user_credentials: &[(String, String, Option<String>)],
 ) -> BotResult<(String, String, String, String)> {

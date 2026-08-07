@@ -5,6 +5,7 @@ use sha2::Sha256;
 use virs_error::ExchangeError;
 
 
+/* HMAC-SHA256 类型别名，用于币安 API 请求签名 */
 type HmacSha256 = Hmac<Sha256>;
 
 
@@ -18,6 +19,7 @@ pub struct SignedRequest {
 }
 
 
+/* 签名器 trait 抽象，支持 HMAC-SHA256 和 Ed25519 两种签名方式，实现多态切换 */
 pub trait Signer: Send + Sync {
 
     fn sign_get(
@@ -43,6 +45,7 @@ pub trait Signer: Send + Sync {
     }
 
 
+    /* 设置本地时间与交易所服务器时间的偏移量，用于签名时校正 timestamp */
     fn set_time_offset(&self, _offset_ms: i64) {}
 
 
@@ -52,6 +55,7 @@ pub trait Signer: Send + Sync {
 }
 
 
+/* HMAC-SHA256 签名核心函数：用 api_secret 对请求参数生成十六进制签名，币安用于验证请求合法性 */
 pub fn hmac_sha256_hex(secret: &str, message: &str) -> String {
     let mut mac =
         HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");

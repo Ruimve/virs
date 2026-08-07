@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 
+/* 保证金模式：全仓(Cross) 或 逐仓(Isolated) */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MarginMode {
@@ -9,12 +10,14 @@ pub enum MarginMode {
 }
 
 
+/* 持仓模式：仅支持双向持仓(Hedge)，不支持 OneWay 模式 */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PositionMode {
     Hedge,
 }
 
 
+/* 市场类型：当前仅支持永续合约(Perpetual) */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MarketType {
     Perpetual,

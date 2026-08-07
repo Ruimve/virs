@@ -15,6 +15,8 @@ use virs_type::*;
 use virs_type::CcxtOrder;
 use virs_type::PositionEngineHandle;
 
+/* PE订单执行器：将AutoEngine的OrderCommand转换为PE的EngineCommand，
+ * 并通过virs-task启动事件转发任务将PE的EngineEvent转换为OrderEvent广播给AutoEngine */
 pub struct PeOrderExecutor {
     cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,
     engine: Arc<dyn PositionEngineHandle>,
@@ -156,6 +158,7 @@ impl OrderExecutor for PeOrderExecutor {
     }
 }
 
+/* 引擎事件到订单事件的映射：将PE的EngineEvent（持仓/订单状态变更）转换为AutoEngine可消费的OrderEvent */
 pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
     match event {
         EngineEvent::OrderPlaced { order } => ccxt_order_to_order_info(&order)
@@ -183,6 +186,8 @@ pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
 }
 
 fn ccxt_order_to_order_info(order: &CcxtOrder) -> Option<OrderInfo> {
+    /* 解析交易所返回的字符串字段为f64：filled_qty和commission解析失败时跳过该订单，
+     * 防止脏数据进入引擎导致后续计算异常 */
     let filled = order.filled_qty.parse::<f64>().map_err(|_| {
         error!(
             order_id = %order.order_id,

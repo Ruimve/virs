@@ -5,6 +5,8 @@ use tracing::warn;
 use virs_type::{TradeHistoryProvider, TradeRecord};
 
 
+/* 交易历史查询：通过关联pe_auto_order_context和pe_order_latest表，
+ * 查询指定策略在给定时间后的已平仓交易记录，供策略评估使用 */
 pub struct PgTradeHistoryProvider {
     db: PgPool,
 }

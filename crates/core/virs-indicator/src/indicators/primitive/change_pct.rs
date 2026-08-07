@@ -4,6 +4,7 @@ use virs_error::{VirsError, VirsResult};
 use virs_type::Kline;
 
 
+/* 涨跌幅百分比：(当前收盘价 - N 根前收盘价) / N 根前收盘价 * 100 */
 pub fn compute(klines: &[Kline], period: usize) -> VirsResult<f64> {
     let last_idx = klines.len().saturating_sub(1);
     if last_idx < period || period == 0 {

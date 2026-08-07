@@ -15,6 +15,10 @@ pub struct OrderResult {
 }
 
 
+/*
+ * 交易所原生订单结构体：字段严格对应交易所 WS/REST 返回的原始字段。
+ * 注意：entry_price 应使用 last_fill_price（边际成交价）而非 avg_fill_price。
+ */
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CcxtOrder {
 
@@ -86,6 +90,7 @@ pub struct CcxtOrder {
 impl CcxtOrder {
 
 
+    /* 校验订单字段合法性：side 必须为 BUY/SELL，position_side 必须为 LONG/SHORT（拒绝 OneWay 模式） */
     pub fn validate_fields(
         side: &str,
         position_side: Option<&str>,
@@ -98,6 +103,7 @@ impl CcxtOrder {
     }
 
 
+    /* 校验订单方向：仅允许大写 BUY 或 SELL */
     fn validate_side(side: &str) -> Result<(), ExchangeError> {
         match side {
             "BUY" | "SELL" => Ok(()),
@@ -108,6 +114,10 @@ impl CcxtOrder {
     }
 
 
+    /*
+     * 校验持仓方向：仅支持双向持仓（Hedge）模式，即 LONG/SHORT。
+     * None 表示 OneWay 模式，必须拒绝。
+     */
     pub fn validate_position_side(position_side: Option<&str>) -> Result<(), ExchangeError> {
         match position_side {
             Some("LONG") | Some("SHORT") => Ok(()),

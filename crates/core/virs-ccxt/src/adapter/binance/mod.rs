@@ -28,9 +28,11 @@ use virs_type::{
 };
 
 
+/* 币安 HMAC-SHA256 签名器，用 api_secret 对请求参数签名，用于 REST API 鉴权 */
 pub struct BinanceSigner {
     api_key: String,
     api_secret: String,
+    /* 本地与服务器时间偏移（毫秒），签名时校正 timestamp，避免因时钟漂移被拒绝 */
     time_offset_ms: Arc<AtomicI64>,
 }
 
@@ -44,15 +46,19 @@ impl BinanceSigner {
     }
 }
 
+/* 请求接收窗口（毫秒），币安允许的最大请求与服务器时间差 */
 const RECV_WINDOW: &str = "5000";
 
+/* Ed25519 签名的 base64 签名中包含 +/= 字符，URL 编码后才能安全传输 */
 fn url_encode_signature(s: &str) -> String {
     s.replace('+', "%2B")
         .replace('/', "%2F")
         .replace('=', "%3D")
 }
 
+/* 时间同步周期：每小时重新校准一次服务器时间偏移 */
 const TIME_SYNC_INTERVAL_SECS: u64 = 3600;
+/* 时间偏移告警阈值：超过 2 秒说明本地时钟漂移严重，可能导致签名失败 */
 const TIME_OFFSET_WARN_THRESHOLD_MS: i64 = 2_000;
 
 impl Signer for BinanceSigner {
@@ -69,17 +75,20 @@ impl Signer for BinanceSigner {
         _path: &str,
         query_params: &mut Vec<(String, String)>,
     ) -> Result<SignedRequest, ExchangeError> {
+        /* 加入时间偏移校正后的 timestamp 和 recvWindow，防止因时钟漂移导致签名失效 */
         let timestamp =
             chrono::Utc::now().timestamp_millis() + self.time_offset_ms.load(Ordering::Acquire);
         query_params.push(("recvWindow".into(), RECV_WINDOW.into()));
         query_params.push(("timestamp".into(), timestamp.to_string()));
 
+        /* 将所有参数拼接成 query string 作为签名原文 */
         let query_string = query_params
             .iter()
             .map(|(k, v)| format!("{}={}", k, v))
             .collect::<Vec<_>>()
             .join("&");
 
+        /* 用 api_secret 对 query string 做 HMAC-SHA256 签名，附加到参数末尾 */
         let signature = hmac_sha256_hex(&self.api_secret, &query_string);
         query_params.push(("signature".into(), signature));
 
@@ -152,6 +161,7 @@ impl Signer for BinanceSigner {
     }
 }
 
+/* 币安 Ed25519 签名器，比 HMAC 性能更高且更安全，优先使用 */
 pub struct BinanceEd25519Signer {
     api_key: String,
     signing_key: ed25519_dalek::SigningKey,
@@ -308,6 +318,7 @@ impl Signer for BinanceEd25519Signer {
     }
 }
 
+/* 尝试构建 Ed25519 签名器：若 api_secret 是 PEM 格式或 32 字节 base64 则用 Ed25519，否则回退到 HMAC */
 pub(crate) fn try_build_ed25519(
     api_key: &str,
     api_secret: &str,
@@ -332,10 +343,12 @@ pub(crate) fn try_build_ed25519(
 }
 
 
+/* 币安交易所实现，封装 HTTP 客户端、签名器、市场信息缓存及后台任务（时间同步、listenKey 续期） */
 pub struct BinanceExchange {
     client: ExchangeClient,
     signer: Arc<dyn Signer>,
     market_type: MarketType,
+    /* 市场信息缓存，避免频繁请求 exchangeInfo 接口 */
     markets_cache: tokio::sync::RwLock<Option<Vec<MarketInfo>>>,
     time_sync_started: AtomicBool,
     listenkey_keepalive_futures_secs: u64,
@@ -364,6 +377,7 @@ impl BinanceExchange {
             pool_max_idle_per_host,
         )?;
 
+        /* 优先尝试 Ed25519 签名（更安全高效），失败则回退到 HMAC-SHA256 */
         let signer = match try_build_ed25519(api_key, api_secret) {
             Ok(ed) => {
                 let arc: Arc<dyn Signer> = Arc::new(ed);
@@ -388,10 +402,12 @@ impl BinanceExchange {
         })
     }
 
+    /* 统一格式 BTC/USDT 转为币安原生格式 BTCUSDT，去掉分隔符 */
     pub fn to_native_symbol(symbol: &str) -> String {
         symbol.replace(['/', '-'], "")
     }
 
+    /* 币安原生格式 BTCUSDT 转为统一格式 BTC/USDT，通过已知计价币种反推分隔位置 */
     pub fn to_unified_symbol(native: &str) -> String {
         let quotes = [
             "USDT", "USDC", "BUSD", "BTC", "ETH", "BNB", "EUR", "GBP", "TRY", "BRL", "ARS",
@@ -406,6 +422,7 @@ impl BinanceExchange {
         native.to_string()
     }
 
+    /* 将币安订单状态字符串映射为统一枚举，未知状态保留原始值便于排查 */
     pub fn parse_order_status(status: &str) -> CcxtOrderStatus {
         match status {
             "NEW" => CcxtOrderStatus::New,
@@ -455,6 +472,7 @@ impl BinanceExchange {
     }
 
 
+    /* 同步服务器时间：计算本地与交易所时间偏移，并启动每小时定时校准的后台任务 */
     pub async fn sync_time(&self) -> Result<(), ExchangeError> {
         let server_time = fapi::fetch_server_time(&self.client).await?;
         let local_time = chrono::Utc::now().timestamp_millis();
@@ -471,6 +489,7 @@ impl BinanceExchange {
 
         info!(time_offset_ms = offset, "Server time synced");
 
+        /* 用 CAS 确保周期性时间同步任务只启动一次 */
         if !self.time_sync_started.swap(true, Ordering::SeqCst) {
             let client = self.client.clone();
             let signer = self.signer.clone();
@@ -521,6 +540,7 @@ impl BinanceExchange {
     }
 
 
+    /* 启动 listenKey 用户数据 WebSocket 并定期续期 listenKey，防止 WS 因 key 过期而断开 */
     async fn start_listenkey_order_ws(
         &self,
         listen_key_hint: Option<&str>,
@@ -546,6 +566,7 @@ impl BinanceExchange {
         let signer = Arc::clone(&self.signer);
         let keepalive_interval = Duration::from_secs(self.listenkey_keepalive_futures_secs);
 
+        /* 定时续期 listenKey：币安 U 本位合约 listenKey 有效期 60 分钟，需在过期前 PUT 续期 */
         let handle = spawn_periodic(
             "listenkey_keepalive",
             keepalive_interval,
@@ -582,6 +603,7 @@ impl BinanceExchange {
     }
 
 
+    /* 获取市场信息（带缓存）：首次从 exchangeInfo 接口拉取后缓存，后续直接返回缓存数据 */
     async fn get_markets_cached(&self) -> Result<Vec<MarketInfo>, ExchangeError> {
         {
             let cache = self.markets_cache.read().await;
@@ -632,6 +654,7 @@ impl ExchangePe for BinanceExchange {
         start_ms: i64,
         end_ms: i64,
     ) -> Result<Vec<Kline>, VirsError> {
+        /* 分页拉取 K 线数据：每次取 1000 条，以最后一条收盘时间 +1ms 为下一批起点，最多取 10000 条 */
         let mut all = Vec::new();
         let mut current_since = Some(start_ms);
         loop {
@@ -729,6 +752,7 @@ impl ExchangePe for BinanceExchange {
     }
 
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> Result<(), VirsError> {
+        /* 先设置保证金模式为全仓，再设置杠杆倍数（币安要求两者配合使用） */
         fapi::set_margin_type(&self.client, self.signer.as_ref(), symbol, MarginMode::Cross)
             .await
             .map_err(VirsError::from)?;
@@ -789,6 +813,7 @@ impl ExchangePe for BinanceExchange {
     }
 }
 
+/* 析构时取消后台任务，避免时间同步和 listenKey 续期任务泄漏 */
 impl Drop for BinanceExchange {
     fn drop(&mut self) {
         if let Some(h) = self.time_sync_task.lock().unwrap().take() {

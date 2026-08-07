@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use virs_type::Timeframe;
 
 
+/* 技术指标规格枚举：定义所有支持的指标类型及其参数，tf 字段指定 K 线周期 */
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum IndicatorSpec {
 
@@ -69,6 +70,7 @@ pub enum IndicatorSpec {
 
 impl IndicatorSpec {
 
+    /* 返回指标的时间周期：RoundNumber 和 Funding 类指标无周期返回 None，其余返回对应 Timeframe */
     pub fn timeframe(&self) -> Option<Timeframe> {
         match self {
             IndicatorSpec::RoundNumberUp | IndicatorSpec::RoundNumberDown => None,

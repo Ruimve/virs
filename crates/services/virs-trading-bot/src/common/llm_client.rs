@@ -7,6 +7,7 @@ use virs_type::{CredentialStore, LlmProviderResolver};
 use virs_llm::{call_llm_api, create_llm_http_client, LlmCallResult};
 
 
+/* LLM客户端：创建HTTP客户端时设置应用级超时，防止LLM调用无限挂起 */
 pub(crate) struct LlmClient {
     http_client: reqwest::Client,
     llm_resolver: Arc<dyn LlmProviderResolver>,

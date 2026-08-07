@@ -58,6 +58,10 @@ pub struct Kline {
 }
 
 
+/*
+ * 订单簿结构体：包含买卖盘快照和 last_update_id。
+ * last_update_id 用于增量更新同步校验，确保本地订单簿与交易所一致。
+ */
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OrderBook {
     pub symbol: String,
@@ -65,7 +69,7 @@ pub struct OrderBook {
     pub asks: Vec<(f64, f64)>,
     pub timestamp: DateTime<Utc>,
 
-
+    /* 最后更新 ID：用于订单簿增量同步校验 */
     pub last_update_id: Option<u64>,
 }
 
@@ -80,6 +84,7 @@ pub struct Balance {
 
 impl Balance {
 
+    /* 计算总余额：可用余额 + 已用余额 */
     pub fn compute_total(&self) -> f64 {
         self.free + self.used
     }

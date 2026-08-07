@@ -5,6 +5,7 @@ use uuid::Uuid;
 use virs_error::{BotError, BotResult};
 use virs_type::CredentialStore;
 
+/* 凭据存储适配器：从PostgreSQL加载加密的AI凭据并解密，供AutoEngine使用 */
 pub struct PgCredentialStore {
     db: PgPool,
     encryption_key: [u8; 32],

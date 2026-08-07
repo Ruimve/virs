@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 
+/* 订单方向枚举：BUY/SELL 及未知值（保留原始字符串用于容错） */
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Side {
     #[serde(rename = "BUY")]
@@ -143,6 +144,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for OrderType {
 }
 
 
+/* 执行类型枚举：表示订单事件类型（新订单、成交、取消、计算、过期、修改） */
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ExecutionType {
     #[serde(rename = "NEW")]
@@ -196,6 +198,7 @@ pub enum CcxtOrderStatus {
     Unknown(String),
 }
 
+/* CcxtOrderStatus 字符串解析：将交易所返回的状态字符串转为枚举，CANCELED 和 CANCELLED 均映射为 Canceled */
 impl std::str::FromStr for CcxtOrderStatus {
     type Err = std::convert::Infallible;
 
@@ -204,6 +207,7 @@ impl std::str::FromStr for CcxtOrderStatus {
             "NEW" => Self::New,
             "PARTIALLY_FILLED" => Self::PartiallyFilled,
             "FILLED" => Self::Filled,
+            /* 交易所可能返回 CANCELED 或 CANCELLED（拼写差异），两者均视为已取消 */
             "CANCELED" | "CANCELLED" => Self::Canceled,
             "EXPIRED" => Self::Expired,
             "EXPIRED_IN_MATCH" => Self::ExpiredInMatch,
@@ -212,6 +216,7 @@ impl std::str::FromStr for CcxtOrderStatus {
     }
 }
 
+/* CcxtOrderStatus 到内部 OrderStatus 的转换：将交易所原生状态映射为内部统一状态 */
 impl From<CcxtOrderStatus> for OrderStatus {
     fn from(s: CcxtOrderStatus) -> Self {
         match s {
@@ -220,6 +225,7 @@ impl From<CcxtOrderStatus> for OrderStatus {
             CcxtOrderStatus::Filled => OrderStatus::Filled,
             CcxtOrderStatus::Canceled => OrderStatus::Canceled,
             CcxtOrderStatus::Expired | CcxtOrderStatus::ExpiredInMatch => OrderStatus::Expired,
+            /* 未知状态映射为失败，避免将不确定状态误判为可用 */
             CcxtOrderStatus::Unknown(_) => OrderStatus::Failed,
         }
     }

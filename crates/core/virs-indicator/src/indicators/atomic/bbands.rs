@@ -7,6 +7,7 @@ use virs_type::Kline;
 use crate::indicators::closes;
 
 
+/* 布林带指标计算：返回 (上轨, 中轨, 下轨)，中轨为 SMA，上下轨为 中轨 +/- stddev * 标准差 */
 pub fn bbands_at(
     klines: &[Kline],
     idx: usize,

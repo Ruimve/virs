@@ -25,6 +25,8 @@ pub(crate) struct PendingClose {
 }
 
 
+/* SideState：每个方向（多/空）的独立状态机，管理持仓、挂单、止损止盈等。
+ * 同一bot可同时持有多和空两个方向的SideState（Hedge模式）。 */
 #[derive(Debug, Default)]
 pub(crate) struct SideState {
 
@@ -87,6 +89,7 @@ impl SideState {
     }
 
 
+    /* 平仓后清理状态并记录平仓事件，用于后续冷却期计算 */
     pub(crate) fn clear_on_close(&mut self, close_event: (String, String, chrono::DateTime<chrono::Utc>)) {
         self.clear_position();
         self.log_id = None;

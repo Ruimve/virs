@@ -11,10 +11,11 @@ pub mod trade_lite;
 use virs_type::WsFeedEvent;
 
 
+/* 事件分发器：解析 WS 消息中的事件类型字段 e，路由到对应的事件处理器 */
 pub fn dispatch_event(text: &str) -> Option<WsFeedEvent> {
     let value: serde_json::Value = serde_json::from_str(text).ok()?;
 
-
+    /* 兼容组合流（带 data 包装）和裸流两种格式，统一提取 payload */
     let payload = value.get("data").unwrap_or(&value);
     let event_type = payload
         .get("e")
@@ -23,7 +24,7 @@ pub fn dispatch_event(text: &str) -> Option<WsFeedEvent> {
 
     let payload_str = payload.to_string();
 
-
+    /* 根据事件类型分发到各子模块处理器 */
     match event_type {
         "ORDER_TRADE_UPDATE" => order_trade_update::process(&payload_str),
         "ACCOUNT_UPDATE" => account_update::process(&payload_str),

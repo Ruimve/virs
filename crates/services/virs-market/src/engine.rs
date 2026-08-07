@@ -15,6 +15,7 @@ use crate::types::{
 };
 use virs_type::{Candle, KlineEngineHandle, KlineEvent, KlineEventSource, KlineEventType, MarketType, Timeframe};
 
+/* 默认空实现：当未配置持久化时，直接丢弃K线数据不报错 */
 struct NoOpPersistence;
 
 #[async_trait]
@@ -107,6 +108,7 @@ impl KlineEngine {
     }
 
     pub(crate) async fn start(&self) {
+        /* CAS保证start幂等：已启动则直接返回，避免重复创建WS循环和gap检测任务 */
         if self
             .started
             .swap(true, std::sync::atomic::Ordering::Relaxed)
@@ -135,6 +137,7 @@ impl KlineEngine {
                     result = ws_update_rx.recv() => {
                         match result {
                             Ok(WsEvent::Reconnected) => {
+                                /* WS重连后，对所有已订阅symbol触发回填以补齐断连期间缺失的K线 */
                                 let entries: Vec<_> = subscriptions
                                     .iter()
                                     .map(|e| {
@@ -180,6 +183,7 @@ impl KlineEngine {
                                 let candle_1m = update.candle;
                                 let is_closed = candle_1m.closed;
 
+                                /* 更新1m缓存，若K线已关闭则标记关闭状态，并聚合生成更高周期K线 */
                                 let (exchange, persist_data, higher_updates) = {
                                     let mut guard = cache.lock().await;
                                     guard.update_candle(Timeframe::M1, candle_1m.clone());
@@ -206,6 +210,7 @@ impl KlineEngine {
                                     KlineEventType::Update
                                 };
 
+                                /* 有接收者时广播K线事件：先发1m事件，再发更高周期聚合事件 */
                                 if event_tx.receiver_count() > 0 {
                                     if event_tx
                                         .send(KlineEvent {
@@ -276,6 +281,7 @@ impl KlineEngine {
         });
         *self.ws_loop_task.lock().unwrap() = Some(handle);
 
+        /* 周期性gap检测：每60秒检查所有订阅symbol的K线连续性，发现缺口自动回填 */
         let gap_handle = spawn_periodic(
             "kline_gap_detection",
             Duration::from_secs(60),
@@ -338,6 +344,7 @@ impl KlineEngine {
     }
 
     pub(crate) async fn stop(&self) {
+        /* CAS保证stop幂等：已停止则直接返回 */
         if !self
             .started
             .swap(false, std::sync::atomic::Ordering::Relaxed)
@@ -348,6 +355,7 @@ impl KlineEngine {
         let ws_h = self.ws_loop_task.lock().unwrap().take();
         let gap_h = self.gap_detection_task.lock().unwrap().take();
 
+        /* 先发送cancel信号，再join等待任务退出，确保资源完全释放 */
         if let Some(h) = &ws_h {
             h.cancel();
         }
@@ -373,12 +381,14 @@ impl KlineEngine {
         symbol: &str,
         market_type: MarketType,
     ) -> VirsResult<()> {
+        /* 引擎未启动时自动启动，延迟初始化 */
         if !self.started.load(std::sync::atomic::Ordering::Relaxed) {
             self.start().await;
         }
 
         let key = subscription_key(exchange, symbol);
 
+        /* 已订阅则去重返回，避免重复订阅和重复回填 */
         if self.subscriptions.contains_key(&key) {
             return Ok(());
         }
@@ -396,6 +406,7 @@ impl KlineEngine {
 
         self.perpetual_handler.subscribe(symbol).await;
 
+        /* 配置开启时，订阅后立即检测并回填历史缺口，确保K线连续性 */
         if self.config.backfill_on_start {
             GapDetector::detect_and_backfill(
                 exchange,
@@ -428,6 +439,7 @@ impl KlineEngine {
     }
 }
 
+/* KlineEngine实现KlineEventSource trait，供上层以trait object方式订阅K线事件 */
 impl KlineEventSource for KlineEngine {
     fn subscribe_kline_events(&self) -> broadcast::Receiver<KlineEvent> {
         self.subscribe_events()
@@ -435,6 +447,7 @@ impl KlineEventSource for KlineEngine {
 }
 
 #[async_trait]
+/* KlineEngine实现KlineEngineHandle trait，提供订阅行情、停止引擎、查询K线等对外接口 */
 impl KlineEngineHandle for KlineEngine {
     async fn subscribe_market(
         &self,
@@ -460,6 +473,7 @@ impl KlineEngineHandle for KlineEngine {
 }
 
 
+/* 工厂函数：创建KlineEngine并返回trait object，隐藏内部实现细节 */
 pub fn create_kline_engine(
     config: KlineEngineConfig,
     source: Arc<dyn KlineSource>,

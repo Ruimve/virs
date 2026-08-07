@@ -19,6 +19,7 @@ impl PgAutoStore {
     }
 }
 
+/* AutoBot到AutoBotConfig的转换：将数据库模型转换为引擎使用的配置对象 */
 pub fn bot_to_config(bot: &AutoBot) -> AutoBotConfig {
     AutoBotConfig {
         id: bot.id,
@@ -178,6 +179,7 @@ impl AutoStore for PgAutoStore {
         Ok(())
     }
 
+    /* 平仓交易记录：先标记开仓记录为closed，再插入关联的平仓记录（通过paired_client_order_id关联） */
     async fn close_trade(
         &self,
         open_client_order_id: &str,
@@ -356,6 +358,7 @@ impl AutoStore for PgAutoStore {
         Ok(())
     }
 
+    /* 加载连续亏损次数：从最近20笔平仓记录中，从新到旧统计连续亏损笔数，遇到盈利即停止 */
     async fn load_consecutive_losses(&self, bot_id: Uuid) -> VirsResult<i32> {
         let pnl_rows: Vec<(f64,)> = sqlx::query_as(
             r#"SELECT close_ord.realized_pnl::float AS pnl

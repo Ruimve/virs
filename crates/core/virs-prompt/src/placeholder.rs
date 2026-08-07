@@ -30,6 +30,7 @@ impl Category {
 }
 
 
+/* 占位符格式化枚举：定义数值/字符串的输出格式，如 Price2 保留两位小数、Percent4 保留四位百分比 */
 #[derive(Debug, Clone, Copy)]
 pub enum Format {
 
@@ -59,6 +60,7 @@ pub enum Format {
 }
 
 impl Format {
+    /* 数值格式化：Percent2 乘以 100 但不附加 %（调用方自行处理），Percent4 乘以 100 并附加 % */
     pub fn apply_num(&self, v: f64) -> String {
         match self {
             Format::Price2 => format!("{:.2}", v),
@@ -72,6 +74,7 @@ impl Format {
         }
     }
 
+    /* 整数格式化：BarsOutside 正数为"向上N根"，负数为"向下N根"；CrossBarsAgo -1 为"无近期交叉" */
     pub fn apply_int(&self, v: i32) -> String {
         match self {
             Format::Int => v.to_string(),
@@ -133,6 +136,7 @@ pub enum ContextField {
 }
 
 
+/* 占位符来源：Context（运行时上下文字段）或 Indicator（技术指标计算结果） */
 #[derive(Debug, Clone)]
 pub enum PlaceholderSource {
     Context(ContextField, Format),
@@ -148,6 +152,7 @@ pub struct PlaceholderDef {
 }
 
 
+/* 占位符注册表：定义所有可用占位符的名称、数据来源和格式，分为通用、仓位、H1/M15/H4 指标、事件六大类 */
 pub const REGISTRY: &[PlaceholderDef] = &[
 
     PlaceholderDef { name: "timestamp",         source: PlaceholderSource::Context(ContextField::Timestamp, Format::Str),       category: Category::General },
@@ -252,6 +257,7 @@ pub fn names() -> HashSet<&'static str> {
 }
 
 
+/* 生成占位符清单文本：按分类列出所有可用占位符名称，供 AI 生成策略模板时参考 */
 pub fn to_prompt_text() -> String {
     use Category::*;
     let categories = [General, Position, H1, M15, H4, Event];

@@ -7,6 +7,7 @@ use virs_type::Kline;
 use crate::indicators::closes;
 
 
+/* RSI 指标计算：相对强弱指数，衡量价格超买超卖程度，调用 TA-Lib 计算 */
 pub fn rsi_at(klines: &[Kline], idx: usize, period: usize) -> VirsResult<f64> {
     if klines.is_empty() || idx < period || period == 0 {
         return Err(VirsError::config(format!(

@@ -1,6 +1,7 @@
 use virs_error::VirsError;
 
 
+/* 统一API响应包装：所有API返回统一的{success, data, message}格式 */
 #[derive(serde::Serialize)]
 pub struct ApiResponse {
     pub success: bool,
@@ -19,6 +20,7 @@ impl ApiResponse {
 }
 
 
+/* 从Authorization Bearer token中提取用户ID：解析JWT并验证签名，失败返回401 */
 pub fn extract_user_id(
     headers: &axum::http::HeaderMap,
     jwt_secret: &str,

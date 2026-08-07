@@ -9,6 +9,7 @@ use crate::template::{MetaFile, PromptTemplate};
 use crate::validator::validate;
 
 
+/* 保存策略模板到磁盘：先校验合法性，再在 STRATEGIES_DIR 下创建策略文件夹，写入 meta.json、system_prompt.md 和 user_prompt_template.md */
 pub fn save_template(template: &PromptTemplate, overwrite: bool) -> BotResult<PathBuf> {
 
     validate(template).map_err(|e| {

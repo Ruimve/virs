@@ -12,6 +12,7 @@ use virs_type::{
 use crate::paper::PaperExchangeAdapter;
 
 
+/* 模拟交易模式适配器：行情数据（ticker/kline/WS）转发给真实交易所，交易操作（下单/持仓/余额）走本地模拟引擎 */
 pub struct PaperModeExchange {
     real: Arc<dyn ExchangePe>,
     paper: PaperExchangeAdapter,
@@ -141,6 +142,7 @@ impl ExchangePe for PaperModeExchange {
     }
 
 
+    /* 设置杠杆需同时更新真实交易所和本地模拟引擎，确保保证金计算一致 */
     async fn set_leverage(&self, symbol: &str, leverage: u32) -> VirsResult<()> {
 
         self.real.set_leverage(symbol, leverage).await?;

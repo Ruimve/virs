@@ -17,6 +17,7 @@ fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
 }
 
+/* 订单簿 WS 消息延迟告警阈值：超过 2 秒说明行情数据有延迟（比 K 线更严格） */
 pub(crate) const ORDERBOOK_WS_DELAY_THRESHOLD_MS: i64 = 2_000;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -47,10 +48,12 @@ pub(crate) struct ParsedDepth {
     pub stream_name: Option<String>,
     pub symbol: Option<String>,
     pub timestamp_ms: i64,
+    /* 最后更新 ID，用于增量深度同步时判断消息顺序 */
     pub last_update_id: Option<i64>,
 }
 
 impl BinanceDepthMessage {
+    /* 兼容两种深度消息格式：组合流（带 data 包装）和裸流（扁平字段），统一解析为 ParsedDepth */
     pub(crate) fn into_depth(self) -> Option<ParsedDepth> {
         let stream = self.stream.clone();
 
@@ -124,6 +127,7 @@ pub(crate) fn parse_levels(v: &serde_json::Value) -> Option<Vec<[String; 2]>> {
     Some(out)
 }
 
+/* 将原始价量对数组转换为 OrderBookLevel，过滤掉数量为 0 的无效档位 */
 pub(crate) fn to_levels(raw: &[[String; 2]]) -> Vec<OrderBookLevel> {
     raw.iter()
         .filter_map(|[p, a]| {
@@ -373,6 +377,7 @@ impl OrderBookWsClient for OrderBookWs {
     }
 
     async fn subscribe(&self, symbol: &str) {
+        /* 订阅 20 档深度快照流，每 500ms 推送一次，格式如 btcusdt@depth20@500ms */
         let stream_name = format!("{}@depth20@500ms", binance_ws_symbol(symbol));
         let ws_sym = binance_ws_symbol(symbol);
 
@@ -416,6 +421,7 @@ impl OrderBookWsClient for OrderBookWs {
     }
 }
 
+/* 通过 stream 名称或消息内 symbol 字段反查统一符号，若仅订阅了一个交易对则直接返回该符号 */
 async fn resolve_symbol(
     stream_name: Option<&str>,
     sym_from_payload: Option<&str>,
@@ -439,6 +445,7 @@ async fn resolve_symbol(
         }
     }
 
+    /* 退化策略：只有一个订阅时直接返回该符号，避免因映射缺失而丢数据 */
     if map.len() == 1 {
         return map.values().next().cloned();
     }

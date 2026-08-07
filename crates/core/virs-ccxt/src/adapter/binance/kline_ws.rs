@@ -15,6 +15,7 @@ pub use virs_type::{WsCandleUpdate, WsEvent};
 use virs_type::Candle;
 use virs_task::{spawn, Stop, TaskHandle};
 
+/* 将统一格式 BTC/USDT 转为币安 WS 流格式 btcusdt（去分隔符并转小写） */
 pub(crate) fn binance_ws_symbol(symbol: &str) -> String {
     symbol.replace('/', "").to_lowercase()
 }
@@ -38,6 +39,7 @@ pub(crate) struct BinanceKlineMessage {
 }
 
 impl BinanceKlineMessage {
+    /* 兼容两种 WS 消息格式：组合流（带 data 包装）和裸流（扁平字段），统一提取 K 线数据 */
     pub(crate) fn into_kline_data(self) -> Option<BinanceKlineData> {
         if let Some(data) = self.data {
             Some(data)
@@ -63,6 +65,7 @@ impl BinanceKlineMessage {
     }
 }
 
+/* K 线 WS 消息延迟告警阈值：超过 5 秒说明网络或服务端有延迟 */
 pub(crate) const KLINE_WS_DELAY_THRESHOLD_MS: i64 = 5_000;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -105,6 +108,7 @@ pub(crate) struct BinanceKlineInner {
 }
 
 impl BinanceKlineData {
+    /* 将币安 K 线 WS 消息转换为统一的 Candle 结构，OHLCV 字段解析失败时返回 NoData 错误 */
     pub(crate) fn to_candle(&self) -> Result<Candle, virs_error::ExchangeError> {
         let symbol = &self.kline.symbol;
         let parse = |field: &str, raw: &str| -> Result<f64, virs_error::ExchangeError> {
@@ -250,6 +254,7 @@ impl WsHandler<WsEvent> for KlineWsHandler {
         Ok(MessageOutcome::Continue(vec![]))
     }
 
+    /* 重连后自动重新订阅所有之前订阅的流，确保 WS 断线恢复后数据不中断 */
     async fn on_connected(&self, _is_reconnect: bool) -> Vec<String> {
         let subs_vec = self.subscriptions.read().await.clone();
         if subs_vec.is_empty() {
@@ -385,9 +390,11 @@ impl KlineWsClient for KlineWs {
     }
 
     async fn subscribe(&self, symbol: &str) {
+        /* 订阅 1 分钟 K 线流，格式如 btcusdt@kline_1m */
         let stream_name = format!("{}@kline_1m", binance_ws_symbol(symbol));
         let ws_sym = binance_ws_symbol(symbol);
 
+        /* 建立 WS 原生符号到统一符号的映射，用于消息回调时还原原始交易对 */
         {
             let mut map = self.handler.symbol_map.write().await;
             map.insert(ws_sym, symbol.to_string());

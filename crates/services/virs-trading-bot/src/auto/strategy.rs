@@ -39,6 +39,7 @@ pub fn format_stop_take_profit(stop_loss: f64, take_profit: f64) -> String {
     s
 }
 
+/* 计算止损价：基于ATR的1.5倍波动幅度，ATR无效时回退到入场价3%止损 */
 pub fn compute_stop_loss(entry_price: f64, side: &str, atr: f64) -> f64 {
     if atr <= 0.0 || entry_price <= 0.0 {
         return entry_price * 0.97;
@@ -50,6 +51,7 @@ pub fn compute_stop_loss(entry_price: f64, side: &str, atr: f64) -> f64 {
     }
 }
 
+/* 计算止盈价：基于ATR的3.0倍波动幅度，ATR无效时回退到入场价6%止盈 */
 pub fn compute_take_profit(entry_price: f64, side: &str, atr: f64) -> f64 {
     if atr <= 0.0 || entry_price <= 0.0 {
         return entry_price * 1.06;
@@ -61,6 +63,7 @@ pub fn compute_take_profit(entry_price: f64, side: &str, atr: f64) -> f64 {
     }
 }
 
+/* 计算移动止损：盈利达1倍ATR时移动止损到保本价，达2倍ATR时收紧到1倍ATR距离 */
 pub fn compute_trailing_stop(
     entry_price: f64,
     current_price: f64,
@@ -106,6 +109,7 @@ pub fn compute_trailing_stop(
     }
 }
 
+/* 计算仓位百分比：ADX越高仓位越大（趋势强），连续亏损或高资金费率时减半，最终限制在10%-100% */
 pub fn compute_position_pct(adx: f64, consecutive_losses: i32, funding_rate: f64) -> f64 {
     let base: f64 = if adx >= 25.0 {
         80.0
@@ -127,6 +131,7 @@ pub fn compute_position_pct(adx: f64, consecutive_losses: i32, funding_rate: f64
     after_funding.clamp(10.0, 100.0)
 }
 
+/* 计算冷却时间：止损后同方向冷却30分钟，止盈后同方向冷却15分钟，反方向不冷却 */
 pub fn compute_cooldown_secs(closed_side: &str, reason: &str, new_side: &str) -> i64 {
     match reason {
         "stop_loss" => {

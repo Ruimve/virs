@@ -17,6 +17,7 @@ pub struct KlineSet<'a> {
 }
 
 
+/* 指标值枚举：数值型(Num)、整型(Int)、字符串型(Str)，支持序列化为 JSON */
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum IndicatorValue {
@@ -53,13 +54,14 @@ impl<'de> Deserialize<'de> for IndicatorSet {
 }
 
 impl IndicatorSet {
-
+    /* 批量计算指标：对规格列表去重后逐一计算，结果存入 HashMap */
     pub fn compute(
         specs: &[IndicatorSpec],
         klines: &KlineSet,
         funding_rate: f64,
         funding_next_time: &str,
     ) -> Result<Self, VirsError> {
+        /* 去重避免重复计算相同指标 */
         let unique: HashSet<&IndicatorSpec> = specs.iter().collect();
         let mut values = HashMap::with_capacity(unique.len());
         for spec in unique {
@@ -112,6 +114,7 @@ impl IndicatorSet {
     }
 }
 
+/* 根据时间周期从 KlineSet 中选取对应的 K 线切片 */
 fn klines_for_tf<'a>(tf: Timeframe, klines: &KlineSet<'a>) -> &'a [Kline] {
     match tf {
         Timeframe::H1 => klines.h1,
@@ -132,6 +135,7 @@ fn no_data(spec: &IndicatorSpec, tf: Option<Timeframe>, len: usize) -> VirsError
 }
 
 
+/* 单个指标计算分发器：根据 IndicatorSpec 类型路由到对应的计算函数，并校验数据充分性 */
 fn compute_one(
     spec: &IndicatorSpec,
     klines: &KlineSet,
@@ -142,10 +146,12 @@ fn compute_one(
 
     match spec {
 
+        /* 无周期指标：资金费率和下次结算时间直接透传 */
         FundingRate => Ok(IndicatorValue::Num(funding_rate)),
         FundingNextTime => Ok(IndicatorValue::Str(funding_next_time.to_string())),
 
 
+        /* 整数关口支撑/阻力位：基于 H1 最新收盘价计算最近的整数关口 */
         RoundNumberUp => {
             let price = klines.h1.last().map(|k| k.close)
                 .ok_or_else(|| no_data(spec, None, klines.h1.len()))?;
@@ -159,6 +165,7 @@ fn compute_one(
 
 
         _ => {
+            /* 有周期指标：根据时间周期选取对应 K 线数据 */
             let tf = spec.timeframe().expect("无周期指标已在上方处理");
             let k = klines_for_tf(tf, klines);
             if k.is_empty() {
@@ -169,7 +176,7 @@ fn compute_one(
             match spec {
 
                 CurrentPrice { .. } => {
-
+                    /* M15 无数据时退化使用 H1 收盘价，确保总能返回当前价格 */
                     let v = if matches!(tf, Timeframe::M15) && k.is_empty() {
                         klines.h1.last().map(|k| k.close).expect("H1 validated non-empty by caller")
                     } else {
@@ -262,6 +269,7 @@ fn compute_one(
                 }
 
                 VolumeSma { period, .. } => {
+                    /* 成交量 SMA 使用倒数第二根（已完成的 K 线），而非最后一根（可能未收盘） */
                     let last_completed = k.len().saturating_sub(2);
                     if last_completed + 1 < *period {
                         return Err(no_data(spec, Some(tf), k.len()));

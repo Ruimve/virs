@@ -13,6 +13,11 @@ use crate::ws_types::{KlineWsClient, OrderBookWsClient};
 use super::structs::OrderUpdateStream;
 
 
+/*
+ * 交易所统一接口 trait：定义所有交易所实现必须提供的方法，
+ * 包括行情查询、账户查询、下单撤单、杠杆设置、WebSocket 订阅等。
+ * WS 客户端创建方法有默认实现，返回 NotSupported 错误。
+ */
 #[async_trait]
 pub trait ExchangePe: Send + Sync {
     fn name(&self) -> &str;

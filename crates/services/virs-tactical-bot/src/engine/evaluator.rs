@@ -16,6 +16,7 @@ impl StrategyEvaluator {
     }
 
 
+    /* 评估策略绩效：从交易历史中查询指定时间窗口内的交易，计算胜率、盈亏比、最大回撤等指标 */
     pub(crate) async fn evaluate(
         &self,
         strategy_name: &str,
@@ -97,6 +98,7 @@ impl StrategyEvaluator {
 }
 
 
+/* 计算最大回撤：按平仓时间排序，追踪累计盈亏的峰值，计算峰值到谷值的最大落差 */
 fn compute_max_drawdown(trades: &[TradeRecord]) -> f64 {
 
     let mut sorted: Vec<&TradeRecord> = trades.iter().collect();

@@ -3,6 +3,7 @@ use crate::position::PositionSide;
 use super::structs::OrderInfo;
 
 
+/* 交易命令枚举：开仓、平仓、下单、撤单、全平 */
 #[derive(Debug, Clone)]
 pub enum OrderCommand {
     OpenPosition {
@@ -38,6 +39,7 @@ pub enum OrderCommand {
 }
 
 
+/* 交易事件枚举：订单状态变化通知，由执行器广播给外部订阅者 */
 #[derive(Debug, Clone)]
 pub enum OrderEvent {
     OrderPlaced {

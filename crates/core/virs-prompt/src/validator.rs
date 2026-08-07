@@ -8,6 +8,7 @@ use crate::placeholder;
 use crate::template::PromptTemplate;
 
 
+/* 模板校验：检查提示词非空、系统提示词包含 JSON 约束、名称合法、占位符声明与使用一致 */
 pub fn validate(tpl: &PromptTemplate) -> Result<(), BotError> {
     if tpl.system_prompt.trim().is_empty() {
         return Err(BotError::Validation(
@@ -20,6 +21,7 @@ pub fn validate(tpl: &PromptTemplate) -> Result<(), BotError> {
         ));
     }
 
+    /* 系统提示词必须包含 JSON 输出格式约束，确保 AI 返回可解析的结构化数据 */
     if !tpl.system_prompt.contains("JSON") && !tpl.system_prompt.contains("json") {
         return Err(BotError::Validation(
             "system_prompt 必须包含 JSON 输出格式约束（未找到 'JSON' 字样）".to_string(),
@@ -56,6 +58,7 @@ pub fn validate(tpl: &PromptTemplate) -> Result<(), BotError> {
     }
 
 
+    /* 双向校验：模板中使用的占位符必须在 required_placeholders 中声明，声明的占位符必须在模板中使用 */
     let declared: HashSet<&str> = tpl.required_placeholders.iter().map(|s| s.as_str()).collect();
     for ph in &used {
         if !declared.contains(ph.as_str()) {
@@ -76,18 +79,19 @@ pub fn validate(tpl: &PromptTemplate) -> Result<(), BotError> {
 }
 
 
+/* 从模板文本中提取占位符：解析 {name} 语法，跳过 {{ }} 转义序列，仅保留合法标识符 */
 pub fn extract_placeholders(template: &str) -> HashSet<String> {
     let mut result = HashSet::new();
     let bytes = template.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'{' {
-
+            /* {{ 双花括号为转义序列，跳过不解析 */
             if i + 1 < bytes.len() && bytes[i + 1] == b'{' {
                 i += 2;
                 continue;
             }
-
+            /* 查找匹配的 } 提取占位符名称 */
             if let Some(end) = template[i + 1..].find('}') {
                 let ph = &template[i + 1..i + 1 + end];
                 if is_valid_placeholder(ph) {

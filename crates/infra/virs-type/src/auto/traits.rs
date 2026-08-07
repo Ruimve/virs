@@ -6,6 +6,10 @@ use virs_error::VirsResult;
 use super::structs::{AutoBotConfig, TradeRecord};
 
 
+/*
+ * 自动机器人持久化存储 trait：定义机器人状态、持仓、交易记录、分析日志的增删改查接口。
+ * 包含孤儿交易处理逻辑，用于处理引擎崩溃后未正常关闭的交易。
+ */
 #[async_trait]
 pub trait AutoStore: Send + Sync {
     async fn load_running_bots(&self) -> VirsResult<Vec<AutoBotConfig>>;

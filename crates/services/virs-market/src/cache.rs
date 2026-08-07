@@ -17,10 +17,12 @@ impl TimeframeBuffer {
 
     fn push_or_update(&mut self, candle: Candle) {
         if let Some(last) = self.candles.back_mut() {
+            /* 同一开盘时间则直接更新（WebSocket推送的实时更新） */
             if last.open_time == candle.open_time {
                 *last = candle;
                 return;
             }
+            /* 乱序到达的旧K线（如回填数据），查找并更新已存在的同开盘时间K线 */
             if candle.open_time < last.open_time {
                 if let Some(existing) = self
                     .candles
@@ -32,6 +34,7 @@ impl TimeframeBuffer {
                 }
             }
         }
+        /* 新K线入队，超出容量时淘汰最旧的 */
         self.candles.push_back(candle);
         while self.candles.len() > self.max_size {
             self.candles.pop_front();

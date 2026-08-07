@@ -1,5 +1,6 @@
 use crate::classify::{Categorized, ErrorCategory, ErrorCode, HttpStatus, Retryable};
 
+/* 交易所交互层错误枚举：覆盖网络、认证、限流、订单等交易所特有错误场景 */
 #[derive(Debug, thiserror::Error)]
 pub enum ExchangeError {
     #[error("Network error: {0}")]
@@ -54,6 +55,7 @@ impl ExchangeError {
 #[cfg(feature = "reqwest")]
 impl From<reqwest::Error> for ExchangeError {
     fn from(err: reqwest::Error) -> Self {
+        /* 超时或连接失败归为网络错误，可重试 */
         if err.is_timeout() || err.is_connect() {
             ExchangeError::Network(err.to_string())
         } else if let Some(status) = err.status() {
@@ -62,11 +64,13 @@ impl From<reqwest::Error> for ExchangeError {
                 body: err.to_string(),
             }
         } else {
+            /* 无法确定的请求错误也归为网络错误 */
             ExchangeError::Network(err.to_string())
         }
     }
 }
 
+/* 交易所错误重试策略：网络错误和限流可重试，5xx 服务端错误可重试，其余不重试 */
 impl Retryable for ExchangeError {
     fn is_retryable(&self) -> bool {
         match self {
@@ -83,6 +87,7 @@ impl Retryable for ExchangeError {
     }
 }
 
+/* 交易所错误分类：将具体错误映射为统一的 ErrorCategory */
 impl Categorized for ExchangeError {
     fn category(&self) -> ErrorCategory {
         match self {
@@ -101,6 +106,7 @@ impl Categorized for ExchangeError {
     }
 }
 
+/* 交易所错误的 HTTP 状态码映射：限流→429, IP 封禁→418, 网络错误→503, 不支持→501 */
 impl HttpStatus for ExchangeError {
     fn http_status(&self) -> u16 {
         match self {

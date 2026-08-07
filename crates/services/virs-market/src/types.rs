@@ -27,6 +27,7 @@ impl Default for KlineEngineConfig {
             reconnect_delay_secs: 1,
             max_reconnect_delay_secs: 60,
             ws_ping_interval_secs: 30,
+            /* WS连接最大生命周期23小时：定期重建连接，避免交易所长时间连接导致的潜在问题 */
             ws_max_lifetime_secs: 23 * 3600,
             backfill_on_start: true,
             event_channel_capacity: 512,
@@ -35,6 +36,7 @@ impl Default for KlineEngineConfig {
     }
 }
 
+/* K线数据源trait抽象：解耦K线获取逻辑，支持交易所REST API等不同实现 */
 #[async_trait::async_trait]
 pub trait KlineSource: Send + Sync {
     async fn fetch_klines(
@@ -59,10 +61,12 @@ pub(crate) trait KlinePersistence: Send + Sync {
     ) -> VirsResult<()>;
 }
 
+/* 生成订阅唯一键：exchange小写 + symbol大写，确保大小写不敏感匹配 */
 pub fn subscription_key(exchange: &str, symbol: &str) -> String {
     format!("{}:{}", exchange.to_lowercase(), symbol.to_uppercase())
 }
 
+/* 将任意时间戳对齐到指定周期的开盘时间（向下取整） */
 pub fn align_open_time(open_time: i64, timeframe: Timeframe) -> i64 {
     (open_time / timeframe.ms()) * timeframe.ms()
 }

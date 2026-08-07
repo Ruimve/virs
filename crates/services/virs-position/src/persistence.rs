@@ -6,6 +6,7 @@ use virs_type::Position;
 use virs_type::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderType, Side};
 
 #[async_trait::async_trait]
+/* 持仓持久化trait抽象：定义从订单数据重建持仓、持久化订单等接口 */
 pub trait PositionPersistence: Send + Sync {
 
     async fn get_positions_from_orders(&self, exchange: &str) -> VirsResult<Vec<Position>>;
@@ -51,6 +52,9 @@ impl PositionPersistence for Persistence {
 impl Persistence {
 
 
+    /* 通过聚合pe_trades表中的成交记录重建持仓状态，不依赖pe_positions表。
+     * SQL使用代际过滤（generation_filtered）确保只回放当前持仓代际，
+     * 避免历史已平仓订单污染当前持仓数据。 */
     async fn get_positions_from_orders_impl(&self, exchange: &str) -> VirsResult<Vec<Position>> {
         let rows = sqlx::query_as::<_, ReplayOrderRow>(
             r#"
@@ -190,6 +194,7 @@ impl Persistence {
 
 
     async fn persist_order_impl(&self, order: &CcxtOrder) -> VirsResult<()> {
+        /* 根据execution_type路由：Trade事件写入pe_trades表，其他事件写入pe_order_events表 */
         let side_str = match &order.side {
             Side::Buy => "BUY",
             Side::Sell => "SELL",
@@ -244,6 +249,7 @@ impl Persistence {
         let mut tx = self.db.begin().await.context("begin transaction for persist_order")?;
 
 
+        /* Trade事件：使用(client_order_id, trade_id)作为唯一约束去重，防止重复写入 */
         if order.execution_type == ExecutionType::Trade {
 
             sqlx::query(
@@ -531,6 +537,7 @@ impl Persistence {
         Ok(())
     }
 
+    /* 查询所有活跃订单（NEW/PARTIALLY_FILLED状态）用于重启恢复 */
     async fn get_active_orders_impl(&self) -> VirsResult<Vec<CcxtOrder>> {
 
         let rows = sqlx::query_as::<_, OrderRow>(
@@ -608,7 +615,7 @@ struct OrderRow {
 
 impl OrderRow {
     fn into_ccxt_order(self) -> Option<CcxtOrder> {
-
+        /* DB字段校验：side/position_side/status不合法时跳过该订单，防止脏数据进入引擎 */
         if let Err(e) = virs_type::CcxtOrder::validate_fields(
             &self.side,
             Some(&self.position_side),

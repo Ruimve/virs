@@ -1,5 +1,6 @@
 use crate::classify::{Categorized, ErrorCategory, ErrorCode, HttpStatus, Retryable};
 
+/* 机器人业务层错误枚举：覆盖订单执行、凭证、LLM 调用和参数校验 */
 #[derive(Debug, thiserror::Error)]
 pub enum BotError {
     #[error("Order execution failed: {0}")]
@@ -25,6 +26,7 @@ impl BotError {
 
 pub type BotResult<T> = std::result::Result<T, BotError>;
 
+/* 机器人错误重试策略：订单执行、LLM 调用和网络请求可重试，凭证和校验错误不重试 */
 impl Retryable for BotError {
     fn is_retryable(&self) -> bool {
         match self {

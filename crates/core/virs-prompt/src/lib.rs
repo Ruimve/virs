@@ -22,6 +22,7 @@ use tokio::sync::watch;
 use virs_type::StrategyType;
 
 
+/* 策略提示词提供者 trait：抽象提示词获取逻辑，支持 PromptLoader 实现和自定义实现 */
 #[async_trait]
 pub trait PromptProvider: Send + Sync {
     async fn get_prompt(&self, strategy_type: StrategyType, name: &str) -> Option<PromptTemplate>;
@@ -43,6 +44,7 @@ pub struct StrategySwapEvent {
 }
 
 
+/* 策略热替换事件源 trait：通过 watch channel 通知策略版本变更，实现运行时热更新 */
 pub trait StrategyHotSwapSource: Send + Sync {
     fn subscribe(&self) -> watch::Receiver<Option<StrategySwapEvent>>;
 }

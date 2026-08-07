@@ -5,6 +5,7 @@ use virs_type::{Candle, Timeframe};
 pub(crate) struct Aggregator;
 
 impl Aggregator {
+    /* 将1m K线增量合并到M5/M15/H1/H4/D1等更高周期，返回所有被更新的更高周期K线 */
     pub(crate) fn update_higher_timeframes(
         candle_1m: &Candle,
         cache: &mut SymbolCache,
@@ -38,6 +39,7 @@ impl Aggregator {
 
         let is_closing = Self::is_last_1m_in_group(candle_1m, tf);
 
+        /* 分三种情况处理：当前周期K线存在则合并更新、新周期开始则创建、属于历史周期则忽略 */
         match last {
             Some(last_candle) if last_candle.open_time == aligned_open => {
                 let mut merged = last_candle.clone();
@@ -49,6 +51,7 @@ impl Aggregator {
                 }
                 merged.close = candle_1m.close;
 
+                /* 合并时需重新从1m缓存中累加该周期内所有K线的成交量和成交额，确保数值准确 */
                 let m1_candles = cache.get_klines(Timeframe::M1);
                 let (group_volume, group_quote_volume, group_trades) = m1_candles
                     .iter()
@@ -90,6 +93,7 @@ impl Aggregator {
         }
     }
 
+    /* 判断当前1m K线是否是其所属高周期分组的最后一根（用于标记高周期K线是否收盘） */
     pub(crate) fn is_last_1m_in_group(candle_1m: &Candle, tf: Timeframe) -> bool {
         let tf_ms = tf.ms();
         let aligned_open = align_open_time(candle_1m.open_time, tf);
@@ -98,6 +102,7 @@ impl Aggregator {
         candle_1m_end >= group_end
     }
 
+    /* 批量聚合：将一段1m K线序列完整聚合为目标周期，用于回填和历史数据重建 */
     pub(crate) fn aggregate_1m_to_timeframe(candles_1m: &[Candle], tf: Timeframe) -> Vec<Candle> {
         if candles_1m.is_empty() {
             return Vec::new();

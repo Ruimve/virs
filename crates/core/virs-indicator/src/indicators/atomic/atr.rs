@@ -7,6 +7,7 @@ use virs_type::Kline;
 use crate::indicators::{closes, highs, lows};
 
 
+/* ATR 指标计算：平均真实波幅，衡量价格波动程度，需要高、低、收盘价三个序列 */
 pub fn atr(klines: &[Kline], period: usize) -> VirsResult<Vec<f64>> {
     Ok(volatility::atr(&highs(klines), &lows(klines), &closes(klines), period)
         .context("indicator atr: TA-Lib ATR calculation failed")?)

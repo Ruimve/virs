@@ -98,6 +98,8 @@ async fn main() -> VirsResult<()> {
     let exchange_registry = Arc::new(Exchanges::new());
     info!("Exchange registry initialized (empty — will be populated on first credential save)");
 
+    /* App层装配：创建具体实现并强制转换为trait object（Arc<dyn KlineEngineHandle>等），
+     * 供上层以trait抽象方式使用，实现依赖倒置。 */
     let kline_config = KlineEngineConfig {
         proxy_url: config.proxy.clone(),
         ..Default::default()
@@ -169,6 +171,7 @@ async fn main() -> VirsResult<()> {
     .await
     .context("axum server error")?;
 
+    /* 优雅关闭：先停止交易引擎（平仓+取消任务），再停止行情引擎，确保资源完全释放 */
     info!("Shutting down trading engines...");
     engine_manager.shutdown().await;
 

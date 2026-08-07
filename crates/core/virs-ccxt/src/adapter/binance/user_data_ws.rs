@@ -44,6 +44,7 @@ pub struct BinanceOrderData {
     pub event_time: i64,
 }
 
+/* 用户数据 WS（订单/账户推送）消息延迟告警阈值：超过 3 秒说明推送有延迟 */
 pub(crate) const ORDER_WS_DELAY_THRESHOLD_MS: i64 = 3_000;
 
 pub struct UserDataWsHandler {
@@ -75,6 +76,7 @@ impl WsHandler<WsFeedEvent> for UserDataWsHandler {
         &self.ws_url
     }
 
+    /* 重连时刷新 listenKey：旧 key 可能已过期，重新创建新 key 构建 WS URL */
     async fn refresh_url(&self) -> Result<String, virs_error::VirsError> {
         let new_key = fapi::create_listen_key(&self.client, self.signer.as_ref()).await?;
         *self.current_key.write().expect("listenKey RwLock poisoned") = new_key.clone();
@@ -111,12 +113,14 @@ impl WsHandler<WsFeedEvent> for UserDataWsHandler {
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(text) {
             let payload = value.get("data").unwrap_or(&value);
             if let Some(et) = payload.get("e").and_then(|v| v.as_str()) {
+                /* listenKey 过期：需重新创建 key 并重连，否则 WS 连接将断开 */
                 if et == "listenKeyExpired" {
                     tracing::warn!(
                         "listenKey expired — requesting reconnect with fresh key"
                     );
                     return Ok(MessageOutcome::Reconnect);
                 }
+                /* 服务器关闭事件：需重连恢复用户数据流 */
                 if et == "serverShutdown" {
                     tracing::warn!("Server shutdown event — requesting reconnect");
                     return Ok(MessageOutcome::Reconnect);

@@ -16,6 +16,7 @@ use super::types::StrategyEngineConfig;
 use virs_type::TradeHistoryProvider;
 
 
+/* 策略引擎：周期性评估策略绩效，低于阈值时调用LLM优化prompt，并通过watch::channel推送热更新 */
 pub(crate) struct StrategyEngine {
     config: StrategyEngineConfig,
     prompt_loader: PromptLoader,
@@ -53,6 +54,7 @@ impl StrategyEngine {
     }
 
 
+    /* 启动周期性策略评估任务，通过virs-task的spawn_periodic调度 */
     pub(crate) fn start(self: Arc<Self>) -> TaskHandle {
         let interval = Duration::from_secs(self.config.analysis_interval_secs);
         let engine = Arc::clone(&self);
@@ -97,6 +99,7 @@ impl StrategyEngine {
     }
 
 
+    /* 评估并优化单个策略：查询绩效 -> 判断是否需要优化 -> 调用LLM优化 -> 保存 -> 推送热更新 */
     async fn evaluate_and_optimize(&self, name: &str) -> VirsResult<()> {
 
         let metrics = self
@@ -120,6 +123,7 @@ impl StrategyEngine {
         );
 
 
+        /* 综合评分高于阈值且交易数充足时跳过优化，避免对表现良好的策略过度干预 */
         if !metrics.needs_optimization(
             self.config.min_trades_for_optimization,
             self.config.optimization_score_threshold,
@@ -141,6 +145,7 @@ impl StrategyEngine {
             })?;
 
 
+        /* 策略版本达到上限后停止优化，防止无限迭代 */
         if current.version >= self.config.max_version {
             warn!(
                 strategy = %name,
@@ -188,6 +193,7 @@ impl StrategyEngine {
             .await;
 
 
+        /* 通过watch::channel推送策略热更新事件，所有订阅的worker会收到通知 */
         let event = StrategySwapEvent {
             strategy_name: name.to_string(),
             old_version,
@@ -209,6 +215,7 @@ impl StrategyEngine {
     }
 }
 
+/* 实现StrategyHotSwapSource trait，供AutoEngine以Arc<dyn StrategyHotSwapSource>持有 */
 impl StrategyHotSwapSource for StrategyEngine {
     fn subscribe(&self) -> watch::Receiver<Option<StrategySwapEvent>> {
         self.update_tx.subscribe()
@@ -216,6 +223,7 @@ impl StrategyHotSwapSource for StrategyEngine {
 }
 
 
+/* 工厂函数：创建StrategyEngine并启动周期任务，返回trait object和任务句柄 */
 pub fn create_strategy_engine(
     config: StrategyEngineConfig,
     prompt_loader: PromptLoader,

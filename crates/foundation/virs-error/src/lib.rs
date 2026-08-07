@@ -10,6 +10,7 @@ pub use classify::{Categorized, ErrorCategory, ErrorCode, HttpStatus, Retryable}
 pub use context::Context;
 pub use exchange::ExchangeError;
 
+/* 工作区唯一的顶层统一错误类型，所有 crate 通过 From 自动转换将子错误提升为 VirsError */
 #[derive(Debug, thiserror::Error)]
 pub enum VirsError {
     #[error(transparent)]
@@ -76,6 +77,7 @@ impl VirsError {
 
 pub type VirsResult<T> = std::result::Result<T, VirsError>;
 
+/* 判断错误是否可重试：委托给子错误类型；数据库错误默认可重试，其余不可重试 */
 impl Retryable for VirsError {
     fn is_retryable(&self) -> bool {
         match self {
@@ -92,6 +94,7 @@ impl Retryable for VirsError {
     }
 }
 
+/* 错误分类：将具体错误映射为统一的 ErrorCategory，用于 API 响应和日志分析 */
 impl Categorized for VirsError {
     fn category(&self) -> ErrorCategory {
         match self {
@@ -100,6 +103,7 @@ impl Categorized for VirsError {
             #[cfg(feature = "sqlx")]
             Self::Database(_) => ErrorCategory::Database,
             Self::Http { status, .. } => match status {
+                /* 401→认证, 404→未找到, 409→冲突, 其余→参数校验 */
                 401 => ErrorCategory::Authentication,
                 404 => ErrorCategory::NotFound,
                 409 => ErrorCategory::Conflict,
@@ -113,6 +117,7 @@ impl Categorized for VirsError {
     }
 }
 
+/* HTTP 状态码映射：委托给子错误类型，未明确分类的错误返回 500 */
 impl HttpStatus for VirsError {
     fn http_status(&self) -> u16 {
         match self {
@@ -129,6 +134,7 @@ impl HttpStatus for VirsError {
     }
 }
 
+/* 错误码映射：为每种错误类型提供稳定的字符串标识，用于前端和日志追踪 */
 impl ErrorCode for VirsError {
     fn error_code(&self) -> &'static str {
         match self {

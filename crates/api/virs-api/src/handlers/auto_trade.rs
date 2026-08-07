@@ -86,6 +86,7 @@ pub async fn create_bot(
     }
 
 
+    /* 每个用户只能创建一个bot：避免多bot同时操作同一账户导致资金冲突 */
     {
         let auto_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM qd_auto_bots WHERE user_id = $1")
@@ -147,6 +148,7 @@ pub async fn create_bot(
     let loader = state.prompt_loader.clone();
     let strategies = loader.list(StrategyType::Auto).await;
 
+    /* strategy_file必须在创建时绑定：无策略时拒绝创建，多策略时由LLM自动选择 */
     let strategy_file = match strategies.len() {
         0 => return Err(VirsError::bad_request(
             "No auto strategy available. Please create a strategy first.",
@@ -349,6 +351,7 @@ pub async fn update_bot(
     };
 
 
+    /* 运行中的bot不能更新strategy_file：必须先停止bot再更新策略，然后重新启动 */
     if bot.is_running() {
         return Err(VirsError::conflict(
             "Cannot update bot while it is running. Please stop the bot first.",
@@ -480,6 +483,7 @@ pub async fn delete_bot(
         message: "Auto trade engine not running — cannot safely delete bot (positions would not be closed)".into(),
     })?;
 
+    /* 删除bot前先平仓：通过oneshot channel同步等待引擎确认，确保持仓已清理 */
     let (response_tx, response_rx) = tokio::sync::oneshot::channel();
     tx.send(virs_type::AutoCommand::DeleteBot {
         bot_id: id,
@@ -691,6 +695,7 @@ pub async fn get_stats(
     };
 
 
+    /* 计算最大回撤：按时间顺序累加净盈亏，追踪峰值并计算峰值到谷值的最大落差 */
     let mut cumulative = 0.0f64;
     let mut peak = 0.0f64;
     let mut max_drawdown = 0.0f64;

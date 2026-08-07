@@ -15,6 +15,7 @@ pub enum AutoAction {
     Hold,
 }
 
+/* LLM返回的未知action默认降级为Hold，避免执行不可预期的操作 */
 impl AutoAction {
     pub fn as_str(&self) -> &str {
         match self {
@@ -57,6 +58,8 @@ pub struct AutoDecision {
 }
 
 impl AutoDecision {
+    /* 从LLM返回的JSON解析决策：confidence被限制在[0,1]范围，
+     * "none"字符串的funding_rate_warning/event_impact/risk_warning被过滤为None */
     pub fn from_json(json: &serde_json::Value) -> BotResult<Self> {
         let decision = &json["decision"];
         let market = &json["market"];

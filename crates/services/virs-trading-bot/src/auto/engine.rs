@@ -15,6 +15,8 @@ use virs_prompt::PromptProvider;
 use virs_config::TimeConfig;
 use virs_type::EngineEvent;
 
+/* AutoEngine使用trait object组合依赖：Arc<dyn KlineEventSource>、Arc<dyn PromptProvider>等，
+ * 由App层在装配时将具体实现强制转换为trait object。 */
 pub(crate) struct AutoEngine {
     store: Arc<dyn AutoStore>,
     ai_service: Arc<AutoAiService>,
@@ -112,6 +114,8 @@ impl AutoEngine {
     }
 
     async fn restore_running_bots(&mut self) {
+        /* 重启恢复：将所有running状态的bot先标记为stopped，再逐个重新启动，
+         * 确保重启后bot状态与实际运行状态一致。 */
         let running_bots = match self.store.load_running_bots().await {
             Ok(bots) => bots,
             Err(e) => {
@@ -155,12 +159,14 @@ impl AutoEngine {
         let bot_symbol = bot.symbol.clone();
         let time_config = self.time_config.clone();
         let prompt_loader = self.prompt_loader.clone();
+        /* 仅当bot开启auto_optimize时才订阅策略热更新通道 */
         let strategy_update_rx = if bot.auto_optimize_enabled {
             self.strategy_engine.as_ref().map(|se| se.subscribe())
         } else {
             None
         };
 
+        /* 每个worker通过virs-task独立spawn，拥有独立的Stop和取消机制 */
         let handle = spawn("auto_worker", move |stop: Stop| async move {
             let worker = AutoWorker::new(
                 bot,
@@ -197,6 +203,7 @@ impl AutoEngine {
         target_status: &str,
         cancel_orders: bool,
     ) {
+        /* 停止前先取消该symbol的所有挂单，防止残留订单在bot停止后成交 */
         if cancel_orders {
             if let Some(sym) = self.bot_symbols.get(&bot_id).cloned() {
                 if let Err(e) = self
@@ -289,6 +296,8 @@ impl AutoEngine {
 }
 
 
+/* 工厂函数：创建AutoEngine并启动，返回命令发送者和任务句柄。
+ * llm_timeout用于设置LLM客户端的应用级超时，防止无限挂起。 */
 pub fn create_auto_engine(
     store: Arc<dyn AutoStore>,
     llm_resolver: Arc<dyn LlmProviderResolver>,

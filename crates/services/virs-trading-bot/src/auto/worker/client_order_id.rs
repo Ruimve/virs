@@ -2,6 +2,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 
+/* 生成client_order_id哈希后缀：将bot_id与当前时间纳秒异或，确保唯一性和可追溯性 */
 fn generate_hash(bot_id: Uuid) -> String {
     let nanos = Utc::now().timestamp_nanos_opt().unwrap_or(0) as u32;
     let bytes = bot_id.as_bytes();
@@ -25,6 +26,7 @@ fn timestamp_str() -> String {
 }
 
 
+/* 生成开仓client_order_id：格式为AO{L|S}__{时间戳}{哈希}，L=多/S=空 */
 pub fn format_auto_open(bot_id: Uuid, side: &str) -> String {
     let f3 = match side {
         "long" => "L",
@@ -35,6 +37,7 @@ pub fn format_auto_open(bot_id: Uuid, side: &str) -> String {
 }
 
 
+/* 生成平仓client_order_id：格式为AC{L|S}__{时间戳}{哈希}，L=多/S=空 */
 pub fn format_auto_close(bot_id: Uuid, side: &str) -> String {
     let f3 = match side {
         "long" => "L",

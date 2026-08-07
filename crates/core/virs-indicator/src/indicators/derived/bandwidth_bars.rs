@@ -6,6 +6,7 @@ use virs_type::Kline;
 use crate::indicators::derived::bbands_width;
 
 
+/* N 根 K 线前的布林带宽度：回退 bars_ago 根 K 线计算带宽，用于对比当前与历史波动率 */
 pub fn compute(
     klines: &[Kline],
     period: usize,

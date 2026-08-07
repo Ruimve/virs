@@ -146,6 +146,7 @@ impl AutoWorker {
     }
 
     pub(crate) async fn refresh_position_from_pe(&mut self) -> bool {
+        /* 从持仓引擎查询当前持仓并同步到worker缓存，防止缓存与实际持仓不一致导致重复开仓 */
         match self
             .order_executor
             .query_open_positions(&self.bot.symbol)
@@ -328,6 +329,12 @@ impl AutoWorker {
     }
 
     pub(crate) async fn run(mut self, stop: Stop) {
+        /* Worker启动流程：
+         * 1. 等待首个K线事件获取初始价格
+         * 2. 恢复连续亏损计数和上次平仓事件
+         * 3. 从PE同步持仓状态，处理孤儿交易
+         * 4. 执行初始止损止盈检查和LLM决策
+         * 5. 进入主事件循环：K线/LLM定时器/订单事件/PE事件/策略热更新 */
         info!(bot_id = %self.bot.id, "Waiting for first kline event to initialize price...");
         loop {
             tokio::select! {
@@ -390,6 +397,7 @@ impl AutoWorker {
 
         let pe_ok = self.refresh_position_from_pe().await;
 
+        /* 孤儿交易检测：bot记录有开仓交易但PE确认无持仓，标记为orphaned */
         if pe_ok
             && self
                 .bot
@@ -554,6 +562,7 @@ impl AutoWorker {
             self.on_llm_decision().await;
         }
 
+        /* LLM决策定时器：间隔不低于60秒，通过virs-task的spawn_periodic调度 */
         let (llm_signal_tx, mut llm_signal_rx) = tokio::sync::mpsc::channel::<()>(1);
         let llm_handle = {
             let interval_secs = self.bot.decide_interval_secs.max(60) as u64;
@@ -625,6 +634,7 @@ impl AutoWorker {
                     }
                 }
 
+                /* 策略热更新：通过watch::channel接收StrategyEngine推送的策略变更通知 */
                 change = async {
                     match &mut strategy_rx {
                         Some(rx) => match rx.changed().await {
@@ -672,6 +682,7 @@ pub(super) fn side_str(side: &PositionSide) -> &'static str {
     }
 }
 
+/* 从client_order_id前缀解析持仓方向：AOL/ACL->Long, AOS/ACS->Short */
 pub(super) fn parse_side_from_client_order_id(cid: &str) -> Option<PositionSide> {
     if cid.starts_with("AOL") || cid.starts_with("ACL") {
         Some(PositionSide::Long)

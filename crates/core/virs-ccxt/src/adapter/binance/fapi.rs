@@ -97,6 +97,7 @@ pub async fn fetch_ticker(
     })?;
 
 
+    /* 时间戳优先使用交易所原生的 closeTime，缺失时回退到 Utc::now() */
     let timestamp = data
         .get("closeTime")
         .and_then(|v| v.as_i64())
@@ -166,6 +167,7 @@ pub async fn fetch_ohlcv(
     let interval_ms = timeframe_to_ms(timeframe);
     let exchange_name = "binance";
 
+    /* 币安 K 线返回为嵌套数组：[openTime, open, high, low, close, volume, closeTime, quoteVolume, trades, ...] */
     let klines: Vec<Kline> = arr
         .iter()
         .filter_map(|k| {
@@ -202,6 +204,7 @@ pub async fn fetch_ohlcv(
                 low,
                 close,
                 volume,
+                /* 若收盘时间缺失，用开盘时间 + 周期 - 1ms 推算（币安 closeTime 是该周期的最后一毫秒） */
                 close_time: close_time_raw.unwrap_or(timestamp + interval_ms - 1),
                 quote_volume,
                 trades,
@@ -236,6 +239,7 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
     let markets: Vec<MarketInfo> = symbols
         .iter()
         .filter_map(|s| {
+            /* 仅保留状态为 TRADING 且合约类型为 PERPETUAL 的永续合约 */
             let status = parse_str(s, "status")?;
             if status != "TRADING" {
                 return None;
@@ -250,6 +254,7 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
             let quote = parse_str(s, "quoteAsset")?;
             let symbol = format!("{}/{}", base, quote);
 
+            /* 从 filters 数组中提取 LOT_SIZE、PRICE_FILTER、MIN_NOTIONAL 等交易规则 */
             let filters = s.get("filters").and_then(|f| f.as_array());
             let (min_amount, max_amount) = filters
                 .map(|arr| {
@@ -361,6 +366,7 @@ pub async fn fetch_balance(
             if asset.is_empty() {
                 return None;
             }
+            /* 余额字段缺失时跳过而非返回 0.0，避免错误数据传播 */
             let free = parse_f64(b, "availableBalance").unwrap_or_else(|| {
                 tracing::warn!(asset = %asset, "Balance 'availableBalance' field missing or unparseable — skipping entry to avoid 0.0 propagation");
                 f64::NAN
@@ -376,6 +382,7 @@ pub async fn fetch_balance(
                 return None;
             }
             let used = total - free;
+            /* 跳过可用和已用均为 0 的币种，减少无意义的余额数据 */
             if free == 0.0 && used == 0.0 {
                 return None;
             }
@@ -429,6 +436,7 @@ pub async fn create_order(
         body["newClientOrderId"] = serde_json::json!(client_id);
     }
 
+    /* 持仓方向映射：VIRS 仅支持双向持仓（Hedge）模式，单向持仓（OneWay/BOTH）会被拒绝 */
     let position_side = match (&params.side, &params.position_side) {
         (Side::Buy, Some(PositionSide::Long)) => "LONG",
         (Side::Sell, Some(PositionSide::Short)) => "SHORT",
@@ -530,6 +538,7 @@ pub async fn set_margin_type(
         "marginType": margin_type_str,
     });
 
+    /* 忽略返回值：若保证金模式已是目标模式，币安返回错误码 -4046，此处静默处理 */
     let _ = client
         .signed_post(signer, &url("/fapi/v1/marginType"), body)
         .await;
@@ -578,6 +587,7 @@ pub async fn fetch_positions(
 
     let mut positions: Vec<ExchangePosition> = Vec::new();
     for p in arr.iter() {
+        /* positionAmt 为正表示多头，为负表示空头，为 0 则跳过（无持仓） */
         let pos_amt = parse_f64(p, "positionAmt").unwrap_or_else(|| {
             tracing::warn!("positionAmt missing — skipping entry to avoid silent position drop");
             f64::NAN
@@ -659,6 +669,7 @@ pub async fn get_position_mode(
             )
         })?;
 
+    /* 检查账户持仓模式：仅支持 Hedge（双向持仓），OneWay（单向持仓）会被拒绝 */
     if dual_side {
         Ok(PositionMode::Hedge)
     } else {

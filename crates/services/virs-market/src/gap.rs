@@ -10,10 +10,12 @@ use virs_type::{Candle, KlineEvent, KlineEventType, MarketType, Timeframe};
 
 pub(crate) struct GapDetector;
 
+/* 初始加载和回填时从交易所拉取的最大1m K线数量 */
 const INITIAL_1M_LIMIT: u32 = 1000;
 const INITIAL_HIGH_TF_LIMIT: u32 = 1000;
 
 impl GapDetector {
+    /* 检测K线缺口并回填：若无缓存数据则触发初始加载，否则计算缺口并补齐缺失的1m K线 */
     pub(crate) async fn detect_and_backfill(
         exchange: &str,
         symbol: &str,
@@ -31,12 +33,14 @@ impl GapDetector {
         let expected_next = match last_closed_1m {
             Some(c) => c.open_time + 60_000,
             None => {
+                /* 缓存中无已收盘的1m K线，说明是首次加载，执行初始全量加载 */
                 return Self::initial_load(exchange, symbol, cache, source, event_tx, market_type)
                     .await;
             }
         };
 
         let current_1m_open = (now_ms / 60_000) * 60_000;
+        /* 期望的下一根K线已覆盖当前分钟，说明数据连续无需回填 */
         if expected_next >= current_1m_open {
             return Ok(0);
         }
@@ -66,6 +70,7 @@ impl GapDetector {
             return Ok(0);
         }
 
+        /* 回填1m K线后，需基于全量1m数据重新聚合更高周期，确保高周期数据一致 */
         let mut backfilled_count = 0;
         let aggregated_data: Vec<(Timeframe, Vec<Candle>)> = {
             let mut guard = cache.lock().await;
@@ -136,6 +141,7 @@ impl GapDetector {
         Ok(backfilled_count)
     }
 
+    /* 初始全量加载：并发拉取所有周期的历史K线，并用1m数据补全未收盘的高周期K线 */
     async fn initial_load(
         exchange: &str,
         symbol: &str,
@@ -210,6 +216,7 @@ impl GapDetector {
             (r_1m, high)
         };
 
+        /* 1m数据为空属于异常情况，无法构建任何周期数据 */
         let candles_1m = match result_1m {
             Ok(c) if !c.is_empty() => c,
             Ok(_) => {
@@ -226,6 +233,7 @@ impl GapDetector {
         let now_ms = chrono::Utc::now().timestamp_millis();
         let current_1m_open = (now_ms / 60_000) * 60_000;
 
+        /* 用当前未收盘的1m数据聚合出各高周期最新的未收盘K线，补充交易所接口返回的缺口 */
         let unclosed_high: Vec<(Timeframe, Candle)> = [
             Timeframe::M5,
             Timeframe::M15,
@@ -263,6 +271,7 @@ impl GapDetector {
                 match result {
                     Ok(candles) if !candles.is_empty() => {
                         let mut final_candles = candles.clone();
+                        /* 截断交易所返回的未收盘K线（可能不准确），用1m聚合结果替代 */
                         if let Some(pos) = final_candles.iter().rposition(|c| !c.closed) {
                             final_candles.truncate(pos);
                         }
@@ -340,6 +349,7 @@ impl GapDetector {
         Ok(total)
     }
 
+    /* 检查K线连续性：比较缓存中最后已收盘1m K线与当前时间的差距，判断是否存在缺口 */
     pub(crate) async fn check_continuity(
         _exchange: &str,
         _symbol: &str,

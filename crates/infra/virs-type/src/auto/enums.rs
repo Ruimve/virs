@@ -23,6 +23,7 @@ pub enum StrategyType {
 }
 
 impl StrategyType {
+    /* 将策略类型转换为目录名，用于策略文件查找 */
     pub fn as_dir(&self) -> &'static str {
         match self {
             StrategyType::Auto => "auto",
@@ -31,6 +32,7 @@ impl StrategyType {
 }
 
 
+/* 自动机器人命令枚举：启动、停止、删除机器人（删除操作通过 oneshot 返回结果） */
 #[derive(Debug)]
 pub enum AutoCommand {
     StartBot { bot_id: Uuid },
@@ -39,7 +41,7 @@ pub enum AutoCommand {
         bot_id: Uuid,
         close_position: bool,
 
-
+        /* oneshot 通道：删除操作完成后通过此通道返回结果 */
         response_tx: oneshot::Sender<Result<(), String>>,
     },
 }

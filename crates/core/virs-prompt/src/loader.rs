@@ -16,6 +16,7 @@ use crate::validator::validate;
 pub const ENV_STRATEGIES_DIR: &str = "STRATEGIES_DIR";
 
 
+/* 策略提示词加载器：从文件系统加载策略模板并缓存到内存，支持按策略类型和名称查询 */
 #[derive(Debug, Clone)]
 pub struct PromptLoader {
     inner: Arc<RwLock<Inner>>,
@@ -38,6 +39,7 @@ impl PromptLoader {
     }
 
 
+    /* 从环境变量 STRATEGIES_DIR 指定的目录加载策略模板，未设置或为空时返回空加载器 */
     pub async fn from_env() -> Self {
         match std::env::var(ENV_STRATEGIES_DIR) {
             Ok(dir) if !dir.trim().is_empty() => Self::from_dir(PathBuf::from(dir)).await,
@@ -59,6 +61,7 @@ impl PromptLoader {
     }
 
 
+    /* 从指定目录加载策略模板：扫描策略子目录，读取每个策略文件夹中的 meta.json 和提示词文件 */
     pub async fn from_dir(dir: PathBuf) -> Self {
         let mut inner = Inner {
             templates: HashMap::new(),
@@ -193,11 +196,13 @@ async fn load_subdir(sub: &Path, st: StrategyType, inner: &mut Inner) {
 }
 
 
+/* 加载单个策略文件夹：读取 meta.json 元数据、system_prompt.md 和 user_prompt_template.md，校验后组装为 PromptTemplate */
 async fn load_strategy_folder(
     dir: &Path,
     st: StrategyType,
     name: &str,
 ) -> VirsResult<PromptTemplate> {
+    /* 策略文件夹包含三个文件：meta.json（元数据）、system_prompt.md（系统提示词）、user_prompt_template.md（用户提示词模板） */
     let meta_path = dir.join("meta.json");
     let system_path = dir.join("system_prompt.md");
     let user_path = dir.join("user_prompt_template.md");
@@ -216,8 +221,9 @@ async fn load_strategy_folder(
         .context("读取 user_prompt_template.md 失败")?;
 
 
+    /* 文件夹名覆盖 meta.json 中的 name，确保文件系统结构与元数据一致 */
     meta.name = name.to_string();
-
+    /* 策略类型由目录层级决定，覆盖 meta.json 中的值 */
     meta.strategy_type = st;
 
     let tpl = PromptTemplate {
@@ -232,6 +238,7 @@ async fn load_strategy_folder(
         created_at: meta.created_at,
     };
 
+    /* 加载后立即校验模板合法性和占位符一致性 */
     validate(&tpl).context("校验失败")?;
 
     Ok(tpl)

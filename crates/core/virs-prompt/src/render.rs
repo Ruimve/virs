@@ -5,6 +5,7 @@ use virs_indicator::{IndicatorSet, IndicatorValue};
 use crate::placeholder::{ContextField, Format, PlaceholderSource};
 
 
+/* 提示词渲染上下文：包含运行时交易状态（余额、持仓、事件等）和技术指标集，用于占位符替换 */
 #[derive(Debug, Clone)]
 pub struct RenderContext {
 
@@ -90,6 +91,7 @@ fn indicator_value(set: &IndicatorSet, spec: &virs_indicator::IndicatorSpec, for
 }
 
 
+/* 模板渲染：遍历所有已注册占位符，将模板中的 {placeholder} 替换为上下文或指标计算结果 */
 pub fn render(template: &str, ctx: &RenderContext) -> String {
     let mut result = template.to_string();
     for def in crate::placeholder::all() {
@@ -98,12 +100,14 @@ pub fn render(template: &str, ctx: &RenderContext) -> String {
                 context_value(ctx, *field, *format)
             }
             PlaceholderSource::Indicator(spec, format) => {
+                /* 指标值缺失时跳过替换，保留原始占位符文本 */
                 match indicator_value(&ctx.ind, spec, *format) {
                     Some(s) => s,
                     None => continue,
                 }
             }
         };
+        /* 将 {占位符名} 替换为格式化后的值 */
         result = result.replace(&format!("{{{}}}", def.name), &replacement);
     }
     result

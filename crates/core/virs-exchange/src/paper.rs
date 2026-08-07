@@ -29,13 +29,18 @@ struct PaperPendingOrder {
 type PaperPosition = ExchangePosition;
 
 
+/* 模拟交易适配器：维护本地持仓、余额和挂单，通过价格回调撮合限价单，不连接真实交易所 */
 pub struct PaperExchangeAdapter {
     name: String,
     market_type: MarketType,
+    /* 挂单池：限价单等待价格触发后撮合 */
     pending: Arc<DashMap<i64, PaperPendingOrder>>,
+    /* 持仓表：key 格式为 "symbol:PositionSide"，支持双向持仓 */
     positions: Arc<DashMap<String, PaperPosition>>,
     balance: Arc<Mutex<Balance>>,
+    /* 订单更新事件通道：撮合后将 WsFeedEvent::OrderUpdate 推送给订阅者 */
     price_tx: Arc<Mutex<Option<mpsc::Sender<WsFeedEvent>>>>,
+    /* 最新价格缓存：市价单撮合和限价单触发都依赖此价格 */
     last_prices: Arc<DashMap<String, f64>>,
 
     configured_leverage: Arc<DashMap<String, u32>>,
@@ -76,6 +81,7 @@ impl PaperExchangeAdapter {
             .fetch_add(1, Ordering::Relaxed)
     }
 
+    /* 价格回调：收到新价格时检查所有限价单是否触发，触发后撮合并推送订单更新事件 */
     pub async fn on_price_tick(&self, symbol: &str, current_price: f64) {
         if current_price <= 0.0 {
             return;
@@ -88,6 +94,7 @@ impl PaperExchangeAdapter {
             if order.symbol != symbol {
                 continue;
             }
+            /* 限价单撮合规则：买单当价格 <= 限价时成交，卖单当价格 >= 限价时成交 */
             let filled = match &order.side {
                 Side::Buy => match order.price {
                     Some(price) => current_price <= price,
@@ -125,6 +132,7 @@ impl PaperExchangeAdapter {
                 }
             };
 
+            /* 限价单手续费率 0.02%（maker 费率） */
             let fee = current_price * order.amount * 0.0002;
             let ccxt_order = CcxtOrder {
                 order_id: order.id,
@@ -185,6 +193,7 @@ impl PaperExchangeAdapter {
         }
     }
 
+    /* 订单成交后更新持仓和余额：计算已实现盈亏、更新持仓均价和数量、调整保证金占用 */
     async fn update_position_on_fill(
         &self,
         order: &PaperPendingOrder,
@@ -215,8 +224,10 @@ impl PaperExchangeAdapter {
             })?;
         let leverage_f64 = leverage as f64;
         let notional = fill_price * order.amount;
+        /* 保证金 = 名义价值 / 杠杆倍数 */
         let margin = notional / leverage_f64;
 
+        /* 判断是开仓还是平仓：买多/卖空为开仓，卖多/买空为平仓 */
         let is_opening = match (&order.side, &position_side) {
             (Side::Buy, PositionSide::Long) => true,
             (Side::Sell, PositionSide::Short) => true,
@@ -232,6 +243,7 @@ impl PaperExchangeAdapter {
             .get(&key)
             .map(|p| (p.side.clone(), p.entry_price, p.quantity));
 
+        /* 平仓时计算已实现盈亏：多头 (成交价 - 开仓价) * 平仓数量，空头反之 */
         let realized_pnl: f64 = match (&old_pos_info, is_opening) {
             (Some((side, entry, old_qty)), false) => {
                 let closed = order.amount.min(*old_qty);
@@ -249,12 +261,14 @@ impl PaperExchangeAdapter {
         match self.positions.get_mut(&key) {
             Some(mut pos) => {
                 if is_opening {
+                    /* 开仓：新持仓均价 = (旧均价 * 旧数量 + 成交价 * 新增数量) / 总数量 */
                     let old_qty = pos.quantity;
                     let new_qty = old_qty + size_delta;
                     let total_cost = pos.entry_price * old_qty + fill_price * size_delta;
                     pos.quantity = new_qty;
                     pos.entry_price = total_cost / new_qty;
                 } else {
+                    /* 平仓：减少持仓数量，数量低于阈值时清除持仓 */
                     let new_qty = pos.quantity - size_delta;
                     if new_qty < 1e-8 {
                         drop(pos);
@@ -281,6 +295,7 @@ impl PaperExchangeAdapter {
 
         let mut balance = self.balance.lock().await;
 
+        /* 开仓冻结保证金，平仓释放保证金并计入已实现盈亏 */
         if is_opening {
             balance.used += margin;
             balance.free -= margin;
@@ -376,6 +391,7 @@ impl ExchangePe for PaperExchangeAdapter {
         )))
     }
 
+    /* 模拟模式固定返回双向持仓（Hedge），与真实交易所要求一致 */
     async fn get_position_mode(&self) -> VirsResult<PositionMode> {
 
         Ok(PositionMode::Hedge)
@@ -412,6 +428,7 @@ impl ExchangePe for PaperExchangeAdapter {
 
     async fn place_order(&self, params: PlaceOrderParams) -> VirsResult<OrderResult> {
         let order_id = self.next_order_id();
+        /* 无价格或市价单类型时按市价单处理，否则按限价单处理 */
         let is_market = params.order_type == OrderType::Market || params.price.is_none();
 
         let client_order_id = params.client_order_id.clone().ok_or_else(|| {
@@ -423,6 +440,7 @@ impl ExchangePe for PaperExchangeAdapter {
         })?;
 
         if is_market {
+            /* 市价单：用最新价格立即成交 */
             let fill_price = self
                 .last_prices
                 .get(&params.symbol)
@@ -447,6 +465,7 @@ impl ExchangePe for PaperExchangeAdapter {
                 .update_position_on_fill(&pending_for_fill, fill_price)
                 .await?;
 
+            /* 市价单手续费率 0.05%（taker 费率） */
             let fee = fill_price * params.amount * 0.0005;
 
             let order_result = OrderResult {
@@ -512,6 +531,7 @@ impl ExchangePe for PaperExchangeAdapter {
             }
             Ok(order_result)
         } else {
+            /* 限价单：存入挂单池，等待价格回调时触发撮合 */
             let pending = PaperPendingOrder {
                 id: order_id,
                 symbol: params.symbol.clone(),

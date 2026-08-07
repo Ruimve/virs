@@ -19,6 +19,7 @@ use virs_type::{
 
 use crate::persistence::PositionPersistence;
 
+/* 锁中毒恢复：持有锁的线程panic时直接panic，拒绝返回可能不一致的数据 */
 fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
     lock.unwrap_or_else(|_| {
         error!(
@@ -31,14 +32,15 @@ fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {
     })
 }
 
+/* 持久化重试宏：带指数退避重试，支持取消令牌中断，达到最大重试次数后放弃但不panic */
 macro_rules! persist {
     ($expr:expr, $label:expr, $max_retries:expr, $base_ms:expr, $cancel:expr $(, $ctx_key:ident = $ctx_val:expr)* $(,)?) => {
         let cancel = $cancel;
         let mut attempts = 0u32;
         loop {
             match $expr.await {
-                Ok(()) => break,
-                Err(e) => {
+                  Ok(()) => break,
+                  Err(e) => {
                     attempts += 1;
                     if attempts >= $max_retries {
                         error!(error = %e, attempts $(, $ctx_key = %$ctx_val)*, $label);
@@ -59,6 +61,7 @@ macro_rules! persist {
     };
 }
 
+/* 字段解析宏：解析失败时跳过整个WS事件，防止默认值污染持仓状态 */
 macro_rules! parse_field {
     ($expr:expr, $field:expr, $coid:expr) => {
         match $expr {
@@ -101,6 +104,9 @@ impl EngineInner {
     }
 
     fn rollback_position_on_order_terminal(&self, position_id: Uuid, context: &str) {
+        /* 订单终态（取消/过期/失败）后回滚持仓：
+         * - ghost Opening持仓（从未成交的开仓单）：直接删除
+         * - Closing持仓（平仓单失败）：回滚到Open状态，持仓仍然有效 */
         let pos_key = self
             .position_id_index
             .get(&position_id)
@@ -221,6 +227,7 @@ impl PositionEngine {
     }
 
     pub(crate) async fn run(&mut self) -> VirsResult<()> {
+        /* 启动前先从pe_orders表恢复持仓状态（不使用pe_positions表） */
         self.recover_state().await?;
 
         let symbols: Vec<String> = self
@@ -301,6 +308,8 @@ impl PositionEngine {
     }
 
     async fn recover_state(&self) -> VirsResult<()> {
+        /* 通过聚合pe_orders表重建持仓状态，而非读取pe_positions表。
+         * 这样保证了数据一致性：持仓状态完全由已成交订单推导。 */
         let exchange_name = self.inner.exchange.name().to_string();
 
         let positions = self
@@ -315,6 +324,7 @@ impl PositionEngine {
         }
 
         let active_orders = self.inner.persistence.get_active_orders().await?;
+        /* 恢复活跃订单：对于开仓方向且对应持仓不存在的订单，创建ghost Opening持仓占位 */
         for order in &active_orders {
             let pos_id = position_uuid_v5(&exchange_name, &order.symbol, &order.position_side);
             self.inner
@@ -347,6 +357,7 @@ impl PositionEngine {
             }
         }
 
+        /* 将恢复的持仓同步到交易所的持仓缓存，确保交易所侧状态一致 */
         let exchange_positions: Vec<ExchangePosition> = positions
             .iter()
             .map(|p| ExchangePosition {
@@ -399,6 +410,7 @@ impl PositionEngineHandle for PositionEngine {
 }
 
 
+/* 工厂函数：创建PositionEngine并在virs-task中启动run循环，返回trait object供上层使用 */
 pub fn create_position_engine(
     exchange: Arc<dyn ExchangePe>,
     persistence: Box<dyn PositionPersistence>,
@@ -504,6 +516,7 @@ pub(crate) async fn ws_feed_loop(
 }
 
 pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: Arc<CcxtOrder>) {
+    /* WS订单更新处理入口：先校验字段合法性，非法订单持久化到pe_rejected_orders并跳过 */
     let rejection_reason = match (&ws_order.side, &ws_order.position_side, &ws_order.status) {
         (Side::Unknown(raw), _, _) => Some(format!("InvalidSide({})", raw)),
         (_, PositionSide::Unknown(raw), _) => Some(format!("InvalidPositionSide({})", raw)),
@@ -537,6 +550,7 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: A
     let fill_price: f64 = parse_field!(ws_order.last_fill_price.parse(), "last_fill_price", client_order_id);
     let commission: f64 = parse_field!(ws_order.commission.parse(), "commission", client_order_id);
     let realized_pnl: f64 = parse_field!(ws_order.realized_pnl.parse(), "realized_pnl", client_order_id);
+    /* 判断是否为平仓方向：SELL+LONG 或 BUY+SHORT 为平仓 */
     let is_close = matches!(
         (&ws_order.side, &ws_order.position_side),
         (Side::Sell, PositionSide::Long) | (Side::Buy, PositionSide::Short)
@@ -554,6 +568,8 @@ pub(crate) async fn handle_ws_order_update(inner: &Arc<EngineInner>, ws_order: A
         }
     };
 
+    /* 待处理订单：REST下单后等待WS确认的阶段。
+     * WS先于REST返回时缓存ws_order，等REST完成后finalize。 */
     if let Some(mut pending) = inner.pending_orders.get_mut(&client_order_id) {
         persist!(
             inner.persistence.persist_order(&ws_order),
@@ -725,6 +741,7 @@ async fn process_order_fill(
     timestamp: chrono::DateTime<Utc>,
     order_status: OrderStatus,
 ) {
+    /* 处理订单成交：更新持仓数量、入场价、已实现盈亏，并在持仓归零时触发平仓事件 */
     let pos_key_opt =
         position_id.and_then(|pid| inner.position_id_index.get(&pid).map(|r| r.value().clone()));
 
@@ -760,6 +777,7 @@ async fn process_order_fill(
         None => (0.0, Side::Buy, TradeType::Open),
     };
 
+    /* fill_price <= 0 为异常数据，跳过Trade记录写入但仍更新持仓状态 */
     let skip_trade = fill_price <= 0.0;
     if skip_trade {
         error!(
@@ -814,6 +832,7 @@ async fn process_order_fill(
 
     if let Some(key) = &pos_key_opt {
         if let Some(mut pos) = inner.positions.get_mut(key) {
+            /* apply_fill使用last_fill_price（边际价格）更新入场价，避免使用avg_fill_price导致重复计算 */
             let is_closed = pos.apply_fill(is_close, fill_price, trade_fill, pnl, timestamp);
             let pos_clone = pos.clone();
             drop(pos);
@@ -855,6 +874,7 @@ pub(crate) async fn handle_open_position(
     };
     let key = (exchange_name.clone(), symbol.clone(), side.clone());
 
+    /* 持仓已存在时，直接追加下单（加仓），无需创建新持仓 */
     if let Some(existing) = inner.positions.get(&key) {
         let position_id = existing.id;
         drop(existing);
@@ -883,6 +903,7 @@ pub(crate) async fn handle_open_position(
         return;
     }
 
+    /* leverage为0属于无效参数，直接拒绝下单 */
     if leverage == 0 {
         let msg = "leverage must be > 0".to_string();
         error!(symbol = %symbol, "open_position rejected: leverage is 0");
@@ -893,6 +914,7 @@ pub(crate) async fn handle_open_position(
         return;
     }
 
+    /* 设置杠杆失败时发送风控告警并拒绝下单，防止杠杆不一致导致风险 */
     if let Err(e) = inner.exchange.set_leverage(&symbol, leverage).await {
         let msg = format!("Failed to set leverage: {}", e);
         error!(error = %e, symbol = %symbol, leverage = leverage, "Failed to set leverage");
@@ -911,6 +933,7 @@ pub(crate) async fn handle_open_position(
         return;
     }
 
+    /* 使用确定性UUID v5生成持仓ID：基于(exchange, symbol, position_side)确保同一持仓始终映射到同一ID */
     let position_id = position_uuid_v5(&exchange_name, &symbol, &side);
     let position = Position::new_opening(
         &exchange_name,
@@ -980,6 +1003,7 @@ pub(crate) async fn handle_close_position(
         }
     };
 
+    /* 持仓数量为0时无法平仓，直接返回失败 */
     if position.quantity == 0.0 {
         inner.emit_event(EngineEvent::OrderFailed {
             client_order_id: client_order_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
@@ -1014,6 +1038,7 @@ pub(crate) async fn handle_close_position(
         position.symbol.clone(),
         position.side.clone(),
     );
+    /* 将持仓状态切换为Closing，防止在平仓单执行期间重复平仓 */
     if let Some(mut pos) = inner.positions.get_mut(&key) {
         pos.set_closing(Utc::now());
         let pos_clone = pos.clone();
@@ -1054,6 +1079,7 @@ pub(crate) async fn handle_close_all_positions(inner: &Arc<EngineInner>, symbol:
 }
 
 pub(crate) fn resolve_position_side_for_hedge(params: &mut PlaceOrderParams) {
+    /* 仅支持Hedge（双向持仓）模式：根据订单方向推断持仓方向（Buy->Long, Sell->Short） */
     if params.position_side.is_none() {
         params.position_side = match &params.side {
             Side::Buy => Some(PositionSide::Long),
@@ -1137,6 +1163,7 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
     };
     params.client_order_id = Some(client_order_id.clone());
 
+    /* 将订单加入pending_orders表，等待REST响应和WS确认双重确认后才算下单完成 */
     inner.pending_orders.insert(
         client_order_id.clone(),
         PendingOrder {
@@ -1151,6 +1178,7 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
 
     let symbol_for_error = params.symbol.clone();
     match inner.exchange.place_order(params).await {
+        /* REST下单成功：若WS已先到达则直接finalize，否则等待WS事件 */
         Ok(result) => {
             if let Some(mut pending) = inner.pending_orders.get_mut(&client_order_id) {
                 pending.rest_result = Some(result);
@@ -1166,6 +1194,7 @@ pub(crate) async fn handle_place_order(inner: &Arc<EngineInner>, mut params: Pla
                 finalize_pending_order(inner, &client_order_id, ws_order, Some(position_id)).await;
             }
         }
+        /* REST下单失败：从pending_orders移除，回滚ghost持仓，发送OrderFailed事件 */
         Err(e) => {
             inner.pending_orders.remove(&client_order_id);
             let msg = format!("Failed to place order: {}", e);

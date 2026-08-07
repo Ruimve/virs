@@ -39,6 +39,7 @@ impl KlineSource for ExchangeKlineSource {
         since: Option<i64>,
         market_type: Option<MarketType>,
     ) -> VirsResult<Vec<Candle>> {
+        /* 查找交易所注册名：优先使用"exchange:market_type"精确匹配，找不到则回退到前缀匹配 */
         let key = if let Some(mt) = market_type {
             let key = format!("{}:{}", exchange, mt);
             if self.registry.get(&key).is_some() {
@@ -69,6 +70,7 @@ impl KlineSource for ExchangeKlineSource {
             VirsError::not_found(format!("Exchange '{}' not available", exchange))
         })?;
 
+        /* 交易所返回的K线无close_time，需根据timeframe推算（open_time + 周期 - 1ms） */
         let klines = ex.get_klines(symbol, timeframe, limit, since).await?;
 
         Ok(klines
@@ -90,6 +92,7 @@ impl KlineSource for ExchangeKlineSource {
 }
 
 
+/* 工厂函数：创建ExchangeKlineSource并返回trait object，供KlineEngine以Arc<dyn KlineSource>持有 */
 pub fn create_exchange_kline_source(
     registry: std::sync::Arc<Exchanges>,
 ) -> std::sync::Arc<dyn KlineSource> {

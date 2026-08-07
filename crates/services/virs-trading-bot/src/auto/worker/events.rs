@@ -14,6 +14,8 @@ use crate::auto::worker::{side_str, AutoWorker};
 
 impl AutoWorker {
     pub(crate) async fn on_pe_event(&mut self, event: EngineEvent) {
+        /* 处理持仓引擎事件：通过position_id和symbol匹配本bot的持仓，
+         * 更新缓存中的持仓状态。外部平仓事件会触发冷却期。 */
         match event {
             EngineEvent::PositionUpdated { position } => {
                 if position.symbol != self.bot.symbol {
@@ -173,6 +175,7 @@ impl AutoWorker {
     }
 
     pub(crate) async fn on_order_event(&mut self, event: OrderEvent) {
+        /* 处理订单事件：OrderFilled确认开仓/平仓，OrderFailed/OrderCanceled回滚pending状态 */
         match event {
             OrderEvent::OrderFilled { order } => {
                 if !self.matches_pending_order(order.client_order_id.as_deref()) {
@@ -414,6 +417,8 @@ impl AutoWorker {
         fee: f64,
         order_position_id: Option<Uuid>,
     ) {
+        /* 确认开仓成交：若实际成交价与请求价偏差>0.5%则重新计算止损止盈，
+         * 更新SideState并记录开仓交易到数据库 */
         let pending = self.side_mut(&side).pending_open.take();
         let Some(pending) = pending else { return };
 
@@ -429,6 +434,7 @@ impl AutoWorker {
             0.0
         };
 
+        /* 成交价偏差超过0.5%时，基于实际成交价重新计算止损止盈 */
         let (stop_loss, take_profit) = if price_deviation > 0.005 {
             let atr = match self
                 .market_data_provider
@@ -568,6 +574,8 @@ impl AutoWorker {
         filled_qty: f64,
         fee: f64,
     ) {
+        /* 确认平仓成交：计算已实现盈亏（毛利-总手续费），更新统计数据，
+         * 清理SideState，记录平仓事件和冷却期，关闭交易记录 */
         let pending = self.side_mut(&side).pending_close.take();
         let Some(pending) = pending else { return };
 

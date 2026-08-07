@@ -6,6 +6,7 @@ use virs_type::Kline;
 use crate::indicators::atomic::ema::ema_at;
 
 
+/* EMA 间距百分比：(快线 - 慢线) / 慢线 * 100，衡量快慢线偏离程度 */
 pub fn compute(klines: &[Kline], fast: usize, slow: usize) -> VirsResult<f64> {
     let last_idx = klines.len().saturating_sub(1);
     if last_idx < slow - 1 {

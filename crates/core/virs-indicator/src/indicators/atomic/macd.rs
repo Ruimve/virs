@@ -7,6 +7,7 @@ use virs_type::Kline;
 use crate::indicators::closes;
 
 
+/* MACD 指标计算：快慢线差值（DIF），调用 TA-Lib 计算，返回指定索引处的 MACD 柱值 */
 pub fn macd_at(klines: &[Kline], idx: usize, fast: usize, slow: usize) -> VirsResult<f64> {
     if klines.is_empty() || idx < slow - 1 {
         return Err(VirsError::config(format!(
@@ -23,6 +24,7 @@ pub fn macd_at(klines: &[Kline], idx: usize, fast: usize, slow: usize) -> VirsRe
 }
 
 
+/* MACD 信号线计算：对 DIF 做 signal 周期的 EMA 平滑，返回指定索引处的信号线值 */
 pub fn macd_signal_at(
     klines: &[Kline],
     idx: usize,

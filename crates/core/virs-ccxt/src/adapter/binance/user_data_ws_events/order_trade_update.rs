@@ -154,16 +154,19 @@ pub struct OrderTradeUpdateData {
 
 impl OrderTradeUpdateData {
 
+    /* 判断是否为强制平仓：执行类型为 CALCULATED 且 client_order_id 以 autoclose- 开头 */
     pub fn is_liquidation(&self) -> bool {
         self.execution_type == "CALCULATED" && self.client_order_id.starts_with("autoclose-")
     }
 
 
+    /* 判断是否为自动减仓（ADL）：执行类型为 CALCULATED 且 client_order_id 为 adl_autoclose */
     pub fn is_adl(&self) -> bool {
         self.execution_type == "CALCULATED" && self.client_order_id == "adl_autoclose"
     }
 
 
+    /* 将订单更新事件转换为 WsFeedEvent，强平和 ADL 事件会额外记录 error 级别日志 */
     pub fn to_ws_feed_event(
         &self,
         envelope_event_type: &str,
@@ -197,12 +200,14 @@ impl OrderTradeUpdateData {
     }
 
 
+    /* 将币安原始订单字段映射为统一的 CcxtOrder 结构，包括 side、status、execution_type 等枚举转换 */
     pub fn to_ccxt_order(
         &self,
         envelope_event_type: &str,
         envelope_event_time: i64,
         envelope_transaction_time: i64,
     ) -> CcxtOrder {
+        /* side 字段映射：仅接受 BUY/SELL，未知值保留原始字符串用于排查 */
         let side = match self.side.as_str() {
             "BUY" => virs_type::Side::Buy,
             "SELL" => virs_type::Side::Sell,
@@ -212,6 +217,7 @@ impl OrderTradeUpdateData {
         let order_type =
             crate::adapter::binance::BinanceExchange::parse_order_type(&self.order_type);
 
+        /* 持仓方向映射：Hedge 模式下为 LONG/SHORT，缺失时标记为 Unknown */
         let position_side = match self.position_side.as_deref() {
             Some("LONG") => PositionSide::Long,
             Some("SHORT") => PositionSide::Short,
@@ -219,6 +225,7 @@ impl OrderTradeUpdateData {
             None => PositionSide::Unknown("None".to_string()),
         };
 
+        /* status 和 execution_type 通过 FromStr 解析，解析失败时 panic（不应发生） */
         let status: CcxtOrderStatus = self.status.parse().unwrap();
 
         let execution_type: CcxtExecutionType = self.execution_type.parse().unwrap();

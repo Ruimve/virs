@@ -17,6 +17,8 @@ impl AutoWorker {
         side: &str,
         snapshot: &AutoMarketSnapshot,
     ) {
+        /* 开仓流程：获取账户余额 -> 计算仓位大小(基于ADX/连续亏损/资金费率) ->
+         * 对齐最小下单量 -> 计算止损止盈 -> 发送开仓指令 -> 记录pending_open状态 */
         let account = match self
             .market_data_provider
             .get_account_balance(&self.bot.exchange)
@@ -48,14 +50,17 @@ impl AutoWorker {
             strategy::compute_position_pct(adx, self.consecutive_losses, funding_rate)
                 .min(self.bot.max_position_pct);
 
+        /* 投资额 = 可用余额 * 95% * 仓位百分比，保留5%作为安全余量 */
         let invest_amount = account.free * 0.95 * position_size_pct / 100.0;
         if invest_amount < 1.0 {
             warn!(bot_id = %self.bot.id, invest_amount, "Insufficient funds for opening position");
             return;
         }
 
+        /* 下单数量 = 投资额 * 杠杆 / 当前价格 */
         let quantity = invest_amount * self.bot.leverage as f64 / price;
 
+        /* 对齐交易所最小下单量：低于最小量时使用最小量，否则向下取整为最小量的整数倍 */
         let min_qty = snapshot.base.min_qty;
         let quantity = if min_qty > 0.0 && quantity < min_qty {
             warn!(

@@ -22,6 +22,7 @@ pub struct GenerateResult {
 }
 
 
+/* AI策略prompt生成：根据用户意图描述，调用LLM生成完整的策略prompt模板，并校验合法性 */
 pub async fn generate_prompt(
     http_client: &reqwest::Client,
     api_key: &str,

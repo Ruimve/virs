@@ -13,6 +13,7 @@ use virs_prompt::PromptLoader;
 use virs_type::EngineEvent;
 
 
+/* 引擎管理trait：抽象持仓引擎和交易bot引擎的生命周期管理，供API层通过trait object调用 */
 #[async_trait]
 pub trait EngineManager: Send + Sync {
 
@@ -71,6 +72,7 @@ pub struct AppState {
 impl AppState {
 
 
+    /* 解析LLM凭据：从数据库查询最新AI凭据，解密API Key，并匹配provider对应的base_url和model */
     pub async fn resolve_llm_credentials(&self) -> VirsResult<(String, String, String)> {
         let row: Option<(String, String)> = sqlx::query_as(
             r#"SELECT provider, encrypted_api_key

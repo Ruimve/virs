@@ -139,6 +139,7 @@ pub fn process(json: &str) -> Option<WsFeedEvent> {
 
     let reason = AccountUpdateReason::from_str(&event.update_data.reason_type);
 
+    /* 资金费率结算事件：记录余额变更，用于追踪资金费率收入/支出 */
     if reason == AccountUpdateReason::FundingFee {
         for b in &event.update_data.balances {
             if let Ok(change) = b.balance_change.parse::<f64>() {

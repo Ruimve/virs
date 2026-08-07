@@ -37,6 +37,7 @@ pub struct AutoBot {
 }
 
 impl AutoBot {
+    /* 胜率计算：盈利交易数 / 总交易数 * 100，无交易时返回 0 */
     pub fn win_rate(&self) -> f64 {
         if self.total_trades <= 0 {
             0.0
@@ -45,6 +46,7 @@ impl AutoBot {
         }
     }
 
+    /* 亏损率计算：亏损交易数 / 总交易数 * 100，无交易时返回 0 */
     pub fn loss_rate(&self) -> f64 {
         if self.total_trades <= 0 {
             0.0
@@ -53,6 +55,7 @@ impl AutoBot {
         }
     }
 
+    /* 总收益率计算：总盈亏 / 初始资金 * 100，初始资金为 0 时返回 0 */
     pub fn total_return_pct(&self) -> f64 {
         if self.initial_capital == 0.0 {
             0.0
@@ -100,6 +103,7 @@ pub struct AutoBotConfig {
     pub auto_optimize_enabled: bool,
 }
 
+/* 从 AutoBot 转换为 AutoBotConfig：提取运行时所需的配置字段，去掉时间戳等管理字段 */
 impl From<&AutoBot> for AutoBotConfig {
     fn from(bot: &AutoBot) -> Self {
         Self {
@@ -130,6 +134,7 @@ impl From<&AutoBot> for AutoBotConfig {
 }
 
 
+/* 交易记录：用于策略回测和历史交易统计，记录开仓/平仓价格和已实现盈亏 */
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TradeRecord {
 

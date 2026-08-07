@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use virs_error::{VirsError, VirsResult};
 
+/* 配置默认值常量：所有数值型配置项都有默认值，可通过环境变量覆盖 */
+
 pub(crate) const DEFAULT_HOST: &str = "0.0.0.0";
 pub(crate) const DEFAULT_PORT: &str = "8080";
 pub(crate) const DEFAULT_JWT_HOURS: &str = "24";
@@ -9,10 +11,14 @@ pub(crate) const DEFAULT_DB_POOL_MIN: &str = "5";
 pub(crate) const DEFAULT_DB_POOL_MAX: &str = "50";
 pub(crate) const DEFAULT_DB_ACQUIRE_TIMEOUT_SECS: &str = "10";
 
+/* 持仓最大持续时间：默认 48 小时（172800 秒），超时后强制平仓 */
 pub(crate) const DEFAULT_MAX_POSITION_DURATION_SECS: &str = "172800";
+/* 挂单超时：默认 60 秒 */
 pub(crate) const DEFAULT_PENDING_ORDER_TIMEOUT_SECS: &str = "60";
+/* 平仓订单超时：默认 15 秒 */
 pub(crate) const DEFAULT_CLOSE_ORDER_TIMEOUT_SECS: &str = "15";
 pub(crate) const DEFAULT_HTTP_TIMEOUT_SECS: &str = "30";
+/* LLM 请求超时：默认 120 秒（LLM 响应较慢） */
 pub(crate) const DEFAULT_LLM_TIMEOUT_SECS: &str = "120";
 
 pub(crate) const DEFAULT_PERSIST_MAX_RETRIES: &str = "3";
@@ -21,8 +27,10 @@ pub(crate) const DEFAULT_PERSIST_RETRY_BASE_MS: &str = "100";
 pub(crate) const DEFAULT_HTTP_CONNECT_TIMEOUT_SECS: &str = "10";
 pub(crate) const DEFAULT_HTTP_POOL_MAX_IDLE_PER_HOST: &str = "10";
 
+/* ListenKey 保活间隔：默认 1800 秒（30 分钟），防止交易所断开 WS 连接 */
 pub(crate) const DEFAULT_LISTENKEY_KEEPALIVE_FUTURES_SECS: &str = "1800";
 
+/* 环境变量数值解析工具：未设置时使用默认值，解析失败返回配置错误 */
 pub(crate) fn parse_env_num<T: FromStr>(value: Option<String>, default: &str) -> VirsResult<T>
 where
     <T as FromStr>::Err: std::error::Error + Send + Sync + 'static,
@@ -68,6 +76,7 @@ pub struct AdminConfig {
     pub id: Option<uuid::Uuid>,
 }
 
+/* 超时与重试配置：控制持仓、订单、HTTP 请求和 LLM 调用的超时阈值 */
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TimeConfig {
     pub max_position_duration_secs: u64,
@@ -153,11 +162,13 @@ impl Default for TimeConfig {
     }
 }
 
+/* 加载配置：先加载 .env 文件，再从环境变量构建 AppConfig */
 pub fn load_config() -> VirsResult<AppConfig> {
     dotenvy::dotenv().ok();
     load_config_from_env()
 }
 
+/* 从环境变量构建 AppConfig：所有配置项优先从环境变量读取，未设置时使用默认值 */
 pub fn load_config_from_env() -> VirsResult<AppConfig> {
     let server = ServerConfig {
         host: std::env::var("HOST").unwrap_or_else(|_| DEFAULT_HOST.into()),
@@ -174,6 +185,7 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
         )?,
     };
 
+    /* 安全校验：加密密钥和 LLM 密钥必须不同，避免交易所凭证和 LLM 凭证的安全域混用 */
     if server.encryption_key == server.llm_key {
         return Err(VirsError::config(
             "ENCRYPTION_KEY and LLM_KEY must be different — \
@@ -199,6 +211,7 @@ pub fn load_config_from_env() -> VirsResult<AppConfig> {
             let pwd = std::env::var("ADMIN_PASSWORD").map_err(|_| {
                 VirsError::config("ADMIN_PASSWORD environment variable is required")
             })?;
+            /* 密码强度校验：至少 12 个字符 */
             if pwd.len() < 12 {
                 return Err(VirsError::config(
                     "ADMIN_PASSWORD must be at least 12 characters for security",

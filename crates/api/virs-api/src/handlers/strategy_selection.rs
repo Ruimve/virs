@@ -8,6 +8,7 @@ use virs_type::{StrategyType, Timeframe};
 use crate::state::AppState;
 
 
+/* LLM策略选择：基于H1 K线和指标(价格/ATR/RSI)构建Prompt，让LLM从候选策略中选择最适合当前市场的策略 */
 pub async fn select_strategy_by_llm(
     state: &AppState,
     loader: &PromptLoader,
@@ -126,6 +127,7 @@ Respond in JSON format with:
         .ok_or_else(|| VirsError::bad_request("LLM did not return strategy_name"))?;
 
 
+    /* 校验LLM返回的策略名是否在候选列表中，防止LLM幻觉返回不存在的策略 */
     if !strategies.iter().any(|s| s == selected) {
         return Err(VirsError::bad_request(format!(
             "LLM selected strategy '{selected}' which is not in the available list: {:?}",

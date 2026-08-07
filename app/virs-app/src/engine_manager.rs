@@ -83,6 +83,7 @@ impl AppEngineManager {
         }
     }
 
+    /* 重启恢复流程：解密交易所凭据 -> 注册交易所 -> 恢复K线/订单簿订阅 -> 启动交易引擎 */
     async fn restore_inner(&self) -> VirsResult<()> {
         let has_bots: bool = {
             let auto_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_auto_bots"#)
@@ -201,6 +202,7 @@ impl AppEngineManager {
             return Ok(());
         }
 
+        /* 所有running bot的paper_mode必须一致，否则无法确定引擎模式 */
         if paper_modes.len() > 1 {
             return Err(virs_error::VirsError::config(
                 "Inconsistent paper_mode values among running bots — \
@@ -216,6 +218,7 @@ impl AppEngineManager {
         Ok(())
     }
 
+    /* 恢复失败时将所有running bot标记为error状态，防止下次启动时重复尝试恢复失败 */
     async fn mark_running_bots_as_error(&self) -> VirsResult<()> {
         sqlx::query(r#"UPDATE qd_auto_bots SET status = 'error', stopped_at = NOW() WHERE status = 'running'"#)
             .execute(&self.db_pool)
@@ -227,6 +230,7 @@ impl AppEngineManager {
 
 #[async_trait]
 impl EngineManager for AppEngineManager {
+    /* 延迟初始化：首次创建bot时才启动交易引擎，通过init_lock防止并发初始化 */
     async fn ensure_started(&self, paper_mode: bool) -> VirsResult<()> {
         if self.started.load(Ordering::SeqCst) {
             return Ok(());
@@ -246,6 +250,7 @@ impl EngineManager for AppEngineManager {
             )
         })?;
 
+        /* Paper模式：用PaperModeExchange包装真实交易所，模拟成交不触达真实资金 */
         let pe_exchange: Arc<dyn ExchangePe> = if paper_mode {
             let initial_balance = match real_exchange.get_balance().await {
                 Ok(b) => b.total,
@@ -288,6 +293,8 @@ impl EngineManager for AppEngineManager {
             }
         }
 
+        /* Paper模式下K线事件桥接：监听KlineEngine的K线事件，将close价格作为PriceTick转发给PE，
+         * 使PaperModeExchange能基于实时价格模拟成交 */
         if paper_mode {
             let kline_engine_for_paper = self.kline_engine.clone();
             let pe_cmd_tx_for_tick = pe_cmd_tx.clone();
@@ -408,6 +415,8 @@ impl EngineManager for AppEngineManager {
             }
         };
 
+        /* App层装配AutoEngine：将具体adapter实现强制转换为trait object传入，
+         * 包括Arc<dyn KlineEventSource>、Arc<dyn PromptProvider>、Option<Arc<dyn StrategyHotSwapSource>> */
         let (auto_cmd_tx, auto_task) = virs_trading_bot::create_auto_engine(
             auto_store,
             auto_llm_resolver,
@@ -502,6 +511,7 @@ impl EngineManager for AppEngineManager {
         Ok(())
     }
 
+    /* 引擎关闭：先停止PE（平仓），再cancel所有任务，最后join等待退出 */
     async fn shutdown(&self) {
         if let Some(state) = self.state.get() {
             info!("Shutting down trading engines...");

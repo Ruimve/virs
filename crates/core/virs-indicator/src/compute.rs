@@ -7,6 +7,7 @@ use crate::set::{IndicatorSet, KlineSet};
 use crate::spec::IndicatorSpec;
 
 
+/* 技术指标计算入口：接收多周期 K 线和资金费率，按指标规格列表批量计算并返回 IndicatorSet */
 pub fn compute_indicators(
     klines_1h: &[Kline],
     klines_4h: &[Kline],
@@ -20,6 +21,7 @@ pub fn compute_indicators(
         h4: klines_4h,
         m15: klines_15m,
     };
+    /* 未指定指标列表时使用默认指标集 */
     match specs {
         Some(s) => IndicatorSet::compute(s, &kline_set, funding_rate, funding_next_time),
         None => {

@@ -6,6 +6,7 @@ use virs_type::Kline;
 use crate::indicators::atomic::macd::{macd_at, macd_signal_at};
 
 
+/* MACD 柱状图：DIF - DEA（信号线），反映多空力量强弱变化 */
 pub fn compute(klines: &[Kline], fast: usize, slow: usize, signal: usize) -> VirsResult<f64> {
     let last_idx = klines.len().saturating_sub(1);
     if last_idx < slow + signal - 2 {
