@@ -210,7 +210,7 @@ fn p4_2_uuid_differs_by_side() {
 #[test]
 fn p4_3_uuid_differs_by_symbol() {
     let btc = position_uuid_v5("binance", "BTCUSDT", &PositionSide::Long);
-    let eth = position_uuid_v5("binance", "ETH/USDT", &PositionSide::Long);
+    let eth = position_uuid_v5("binance", "ETHUSDT", &PositionSide::Long);
     assert_ne!(btc, eth);
 }
 

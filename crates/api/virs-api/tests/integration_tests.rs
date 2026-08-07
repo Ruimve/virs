@@ -49,7 +49,7 @@ fn int_2_1_position_serde_then_ws_json() {
 fn int_2_2_kline_event_to_json_chain() {
     let event = KlineEvent {
         exchange: "binance".into(),
-        symbol: "ETH/USDT".into(),
+        symbol: "ETHUSDT".into(),
         timeframe: Timeframe::H1,
         candle: Candle {
             open_time: 1700000000000,
@@ -67,7 +67,7 @@ fn int_2_2_kline_event_to_json_chain() {
     };
     let json = serde_json::to_value(kline_event_to_json(&event)).unwrap();
     assert_eq!(json["exchange"], "binance");
-    assert_eq!(json["symbol"], "ETH/USDT");
+    assert_eq!(json["symbol"], "ETHUSDT");
     assert_eq!(json["timeframe"], "1h");
     assert_eq!(json["candle"]["close"], 3020.0);
     assert_eq!(json["candle"]["closed"], true);

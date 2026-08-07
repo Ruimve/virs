@@ -8,7 +8,7 @@ fn make_bot() -> AutoBot {
         id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
         name: "auto-test".to_string(),
-        symbol: "ETH/USDT".to_string(),
+        symbol: "ETHUSDT".to_string(),
         exchange: "okx".to_string(),
         paper_mode: true,
         status: "running".to_string(),
@@ -41,7 +41,7 @@ fn a1_1_bot_to_config_basic() {
     let bot = make_bot();
     let config = bot_to_config(&bot);
     assert_eq!(config.name, "auto-test");
-    assert_eq!(config.symbol, "ETH/USDT");
+    assert_eq!(config.symbol, "ETHUSDT");
     assert_eq!(config.exchange, "okx");
     assert!(config.paper_mode);
     assert_eq!(config.leverage, 10);

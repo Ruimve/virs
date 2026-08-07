@@ -123,7 +123,7 @@ fn s4_1_auto_bot_roundtrip() {
         id: Uuid::nil(),
         user_id: Uuid::nil(),
         name: "auto_bot".into(),
-        symbol: "ETH/USDT".into(),
+        symbol: "ETHUSDT".into(),
         exchange: "binance".into(),
         paper_mode: false,
         status: "running".into(),

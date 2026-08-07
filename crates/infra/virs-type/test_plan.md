@@ -35,7 +35,7 @@
 | 13 | `p3_2_new_for_replay_then_apply_fill_matches_runtime` | 回放仓位应用成交后与运行时一致 | 回放仓位经 3 次成交: 开仓100@1, 加仓110@1, 平仓0.5@25 | status=Open, quantity=1.5, entry_price=105.0, realized_pnl=25.0 |
 | 14 | `p4_1_uuid_deterministic_same_inputs` | 相同输入生成确定性 UUID | exchange=binance, symbol=BTCUSDT, side=Long（两次调用） | 两次生成的 UUID 相等 |
 | 15 | `p4_2_uuid_differs_by_side` | 不同方向生成不同 UUID | Long vs Short（其余参数相同） | 两个 UUID 不相等 |
-| 16 | `p4_3_uuid_differs_by_symbol` | 不同交易对生成不同 UUID | BTCUSDT vs ETH/USDT（其余参数相同） | 两个 UUID 不相等 |
+| 16 | `p4_3_uuid_differs_by_symbol` | 不同交易对生成不同 UUID | BTCUSDT vs ETHUSDT（其余参数相同） | 两个 UUID 不相等 |
 
 ### `crates/infra/virs-type/src/auto/structs_tests.rs`
 
@@ -53,7 +53,7 @@
 | 10 | `a4_2_stopped_status` | 已停止状态判断（运行中） | status=running | is_running()=false（针对 is_stopped 检查的反例） |
 | 11 | `a5_1_stopped_status` | 已停止状态判断 | status=stopped | is_stopped()=true |
 | 12 | `a5_2_running_status` | 运行中状态判断（停止的反例） | status=running | is_stopped()=false |
-| 13 | `s4_1_auto_bot_roundtrip` | AutoBot 序列化反序列化往返 | name=auto_bot, symbol=ETH/USDT, status=running, total_pnl=250.0, win_trades=10, total_trades=15 | 反序列化后 win_trades、total_pnl、status 与原对象相等 |
+| 13 | `s4_1_auto_bot_roundtrip` | AutoBot 序列化反序列化往返 | name=auto_bot, symbol=ETHUSDT, status=running, total_pnl=250.0, win_trades=10, total_trades=15 | 反序列化后 win_trades、total_pnl、status 与原对象相等 |
 
 ### `crates/infra/virs-type/src/order/structs_tests.rs`
 

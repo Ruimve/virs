@@ -72,7 +72,7 @@
 | 1 | `int_1_1_provider_url_model_consistency` | 提供商 URL 与模型一致性 | deepseek, openai, openrouter 三种提供商 | 三者 URL 和 model 均为 Some |
 | 2 | `int_1_2_known_provider_roundtrip` | 已知提供商往返校验 | provider="deepseek" | url 以 "https://" 开头, model 非空 |
 | 3 | `int_2_1_position_serde_then_ws_json` | 仓位序列化后转 WS JSON 链路 | side=Long 仓位, stop_loss/take_profit=None | json type=position_updated, symbol=BTCUSDT, side=long, 序列化字符串含 "position_updated" |
-| 4 | `int_2_2_kline_event_to_json_chain` | K 线事件转 JSON 链路 | symbol=ETH/USDT, timeframe=H1, candle.close=3020.0, closed=true, event_type=Closed | exchange=binance, symbol=ETH/USDT, timeframe=1h, candle.close=3020.0, closed=true, event_type=Closed |
+| 4 | `int_2_2_kline_event_to_json_chain` | K 线事件转 JSON 链路 | symbol=ETHUSDT, timeframe=H1, candle.close=3020.0, closed=true, event_type=Closed | exchange=binance, symbol=ETHUSDT, timeframe=1h, candle.close=3020.0, closed=true, event_type=Closed |
 | 5 | `int_3_1_api_response_ok_then_serialize` | 成功响应序列化链路 | ApiResponse::ok(json!({"result": "success"})) | json success=true, data.result="success", message=null |
 | 6 | `int_3_2_api_error_from_virs_error_then_serialize` | 错误响应序列化链路 | VirsError::bad_request("operation failed") | json success=false, status=400, message="operation failed" |
 | 7 | `int_4_1_models_response_parse_chain` | 模型列表解析并包装响应链路 | data 数组含 2 个模型 | 解析长度=2, 每个模型包装为 ApiResponse 后 success=true |

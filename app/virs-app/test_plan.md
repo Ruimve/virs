@@ -10,7 +10,7 @@
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
-| 1 | `a1_1_bot_to_config_basic` | AutoBot 转配置基本字段 | bot: name=auto-test, symbol=ETH/USDT, exchange=okx, paper_mode=true, leverage=10 | config.name=auto-test, symbol=ETH/USDT, exchange=okx, paper_mode=true, leverage=10 |
+| 1 | `a1_1_bot_to_config_basic` | AutoBot 转配置基本字段 | bot: name=auto-test, symbol=ETHUSDT, exchange=okx, paper_mode=true, leverage=10 | config.name=auto-test, symbol=ETHUSDT, exchange=okx, paper_mode=true, leverage=10 |
 | 2 | `a1_3_bot_to_config_optional_fields` | AutoBot 转配置可选字段为 None | bot 各可选字段均为 None | position_id_long/short、market_regime、ai_analysis、system_prompt、user_prompt、last_decided_at 均为 None |
 | 3 | `a1_4_bot_to_config_stats` | AutoBot 转配置统计字段 | total_pnl=123.45, total_trades=10, win_trades=7, loss_trades=3 | config.total_pnl=123.45, total_trades=10, win_trades=7, loss_trades=3 |
 | 4 | `a1_5_bot_to_config_id_preserved` | AutoBot 转配置保留 ID | bot.id 和 bot.user_id | config.id 与 bot.id 相等, config.user_id 与 bot.user_id 相等 |

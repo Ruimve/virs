@@ -18,7 +18,7 @@ fn make_auto_bot() -> AutoBot {
         id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
         name: "auto-int".to_string(),
-        symbol: "ETH/USDT".to_string(),
+        symbol: "ETHUSDT".to_string(),
         exchange: "okx".to_string(),
         paper_mode: true,
         status: "running".to_string(),
