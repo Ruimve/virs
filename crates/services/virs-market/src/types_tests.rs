@@ -43,14 +43,14 @@ fn t1_7_timeframe_display() {
 
 #[test]
 fn t2_1_subscription_key_basic() {
-    let key = subscription_key("binance", "BTC/USDT");
-    assert_eq!(key, "binance:BTC/USDT");
+    let key = subscription_key("binance", "BTCUSDT");
+    assert_eq!(key, "binance:BTCUSDT");
 }
 
 #[test]
 fn t2_2_subscription_key_case() {
-    let key = subscription_key("Binance", "btc/usdt");
-    assert_eq!(key, "binance:BTC/USDT");
+    let key = subscription_key("Binance", "btcusdt");
+    assert_eq!(key, "binance:BTCUSDT");
 }
 
 #[test]

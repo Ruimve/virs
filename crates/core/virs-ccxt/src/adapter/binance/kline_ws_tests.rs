@@ -275,8 +275,6 @@ fn test_ws_symbol() {
 fn test_binance_ws_symbol_basic() {
     assert_eq!(binance_ws_symbol("BTCUSDT"), "btcusdt");
 
-    assert_eq!(binance_ws_symbol("BTC/USDT"), "btcusdt");
-
     assert_eq!(binance_ws_symbol("btcusdt"), "btcusdt");
 }
 

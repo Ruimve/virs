@@ -145,7 +145,7 @@ fn p3_1_new_for_replay_initial_state() {
     let created = ts(5000);
     let pos = Position::new_for_replay(
         "binance",
-        "BTC/USDT",
+        "BTCUSDT",
         PositionSide::Long,
         Some("CL123".into()),
         created,
@@ -166,7 +166,7 @@ fn p3_2_new_for_replay_then_apply_fill_matches_runtime() {
     let created = ts(1000);
     let mut replay_pos = Position::new_for_replay(
         "binance",
-        "BTC/USDT",
+        "BTCUSDT",
         PositionSide::Long,
         Some("CL001".into()),
         created,
@@ -179,7 +179,7 @@ fn p3_2_new_for_replay_then_apply_fill_matches_runtime() {
     let expected = Position {
         id: replay_pos.id,
         exchange: "binance".into(),
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         side: PositionSide::Long,
         status: PositionStatus::Open,
         quantity: 1.5,
@@ -195,21 +195,21 @@ fn p3_2_new_for_replay_then_apply_fill_matches_runtime() {
 
 #[test]
 fn p4_1_uuid_deterministic_same_inputs() {
-    let a = position_uuid_v5("binance", "BTC/USDT", &PositionSide::Long);
-    let b = position_uuid_v5("binance", "BTC/USDT", &PositionSide::Long);
+    let a = position_uuid_v5("binance", "BTCUSDT", &PositionSide::Long);
+    let b = position_uuid_v5("binance", "BTCUSDT", &PositionSide::Long);
     assert_eq!(a, b);
 }
 
 #[test]
 fn p4_2_uuid_differs_by_side() {
-    let long = position_uuid_v5("binance", "BTC/USDT", &PositionSide::Long);
-    let short = position_uuid_v5("binance", "BTC/USDT", &PositionSide::Short);
+    let long = position_uuid_v5("binance", "BTCUSDT", &PositionSide::Long);
+    let short = position_uuid_v5("binance", "BTCUSDT", &PositionSide::Short);
     assert_ne!(long, short);
 }
 
 #[test]
 fn p4_3_uuid_differs_by_symbol() {
-    let btc = position_uuid_v5("binance", "BTC/USDT", &PositionSide::Long);
+    let btc = position_uuid_v5("binance", "BTCUSDT", &PositionSide::Long);
     let eth = position_uuid_v5("binance", "ETH/USDT", &PositionSide::Long);
     assert_ne!(btc, eth);
 }
@@ -223,7 +223,7 @@ fn make_position(status: PositionStatus) -> Position {
     Position {
         id: Uuid::nil(),
         exchange: "binance".into(),
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         side: PositionSide::Long,
         status,
         quantity: 1.0,
@@ -238,7 +238,7 @@ fn make_position(status: PositionStatus) -> Position {
 fn make_opening_long() -> Position {
     Position::new_for_replay(
         "binance",
-        "BTC/USDT",
+        "BTCUSDT",
         PositionSide::Long,
         None,
         Utc::now(),

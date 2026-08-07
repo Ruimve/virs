@@ -12,9 +12,9 @@
 |------|---------|------|---------|---------|
 | 1 | `m1_1_normal_total` | 正常余额计算总额 | Balance: asset=USDT, free=100.0, used=50.0, total=150.0 | compute_total()=150.0 |
 | 2 | `m1_2_zero_total` | 零余额计算总额 | Balance: free=0.0, used=0.0, total=0.0 | compute_total()=0.0 |
-| 3 | `s2_1_ticker_roundtrip` | Ticker 序列化反序列化往返 | symbol=BTC/USDT, bid=99.0, ask=101.0, last=100.0 | 反序列化后与原对象相等 |
+| 3 | `s2_1_ticker_roundtrip` | Ticker 序列化反序列化往返 | symbol=BTCUSDT, bid=99.0, ask=101.0, last=100.0 | 反序列化后与原对象相等 |
 | 4 | `s2_2_balance_roundtrip` | Balance 序列化反序列化往返 | asset=USDT, free=100.0, used=50.0, total=150.0 | 反序列化后与原对象相等 |
-| 5 | `s2_3_exchange_position_roundtrip` | ExchangePosition 序列化反序列化往返 | symbol=BTC/USDT, side=Long, quantity=1.0, entry_price=50000.0, margin_mode=Cross | 反序列化后与原对象相等 |
+| 5 | `s2_3_exchange_position_roundtrip` | ExchangePosition 序列化反序列化往返 | symbol=BTCUSDT, side=Long, quantity=1.0, entry_price=50000.0, margin_mode=Cross | 反序列化后与原对象相等 |
 
 ### `crates/infra/virs-type/src/position/structs_tests.rs`
 
@@ -31,11 +31,11 @@
 | 9 | `p2_6_close_with_zero_fill_price_still_updates` | 平仓成交价为 0 时仍更新盈亏 | 已开仓 qty=1.0, entry=100.0, fill: 平仓, price=0.0, qty=0.5, pnl=50.0 | 未关闭, quantity=0.5, realized_pnl=50.0 |
 | 10 | `p2_7_open_after_partial_close_marginal_cost` | 部分平仓后加仓的边际成本 | 开仓 fill: price=100.0, qty=2.0; 平仓 qty=1.0, pnl=50.0; 加仓 fill: price=120.0, qty=1.0 | quantity=2.0, entry_price=110.0 |
 | 11 | `p2_8_full_replay_sequence_matches_runtime` | 完整回放序列与运行时一致 | 开仓 qty=2.0@100; 平仓 qty=2.0, pnl=200.0; 重新开仓 qty=1.0@110 | 第一次平仓 is_closed=true, realized_pnl=200.0; 重开后 status=Open, quantity=1.0, entry_price=110.0 |
-| 12 | `p3_1_new_for_replay_initial_state` | 回放新建仓位初始状态 | exchange=binance, symbol=BTC/USDT, side=Long, client_order_id=CL123, created_at=ts(5000) | status=Opening, quantity=0.0, entry_price=0.0, realized_pnl=0.0, client_order_id=CL123 |
+| 12 | `p3_1_new_for_replay_initial_state` | 回放新建仓位初始状态 | exchange=binance, symbol=BTCUSDT, side=Long, client_order_id=CL123, created_at=ts(5000) | status=Opening, quantity=0.0, entry_price=0.0, realized_pnl=0.0, client_order_id=CL123 |
 | 13 | `p3_2_new_for_replay_then_apply_fill_matches_runtime` | 回放仓位应用成交后与运行时一致 | 回放仓位经 3 次成交: 开仓100@1, 加仓110@1, 平仓0.5@25 | status=Open, quantity=1.5, entry_price=105.0, realized_pnl=25.0 |
-| 14 | `p4_1_uuid_deterministic_same_inputs` | 相同输入生成确定性 UUID | exchange=binance, symbol=BTC/USDT, side=Long（两次调用） | 两次生成的 UUID 相等 |
+| 14 | `p4_1_uuid_deterministic_same_inputs` | 相同输入生成确定性 UUID | exchange=binance, symbol=BTCUSDT, side=Long（两次调用） | 两次生成的 UUID 相等 |
 | 15 | `p4_2_uuid_differs_by_side` | 不同方向生成不同 UUID | Long vs Short（其余参数相同） | 两个 UUID 不相等 |
-| 16 | `p4_3_uuid_differs_by_symbol` | 不同交易对生成不同 UUID | BTC/USDT vs ETH/USDT（其余参数相同） | 两个 UUID 不相等 |
+| 16 | `p4_3_uuid_differs_by_symbol` | 不同交易对生成不同 UUID | BTCUSDT vs ETH/USDT（其余参数相同） | 两个 UUID 不相等 |
 
 ### `crates/infra/virs-type/src/auto/structs_tests.rs`
 
@@ -59,7 +59,7 @@
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
-| 1 | `s3_1_order_roundtrip` | Order 序列化反序列化往返 | id=order_123, symbol=BTC/USDT, side=Buy, type=Limit, price=50000.0, filled=0.5, status=PartiallyFilled | 反序列化后与原对象相等 |
+| 1 | `s3_1_order_roundtrip` | Order 序列化反序列化往返 | id=order_123, symbol=BTCUSDT, side=Buy, type=Limit, price=50000.0, filled=0.5, status=PartiallyFilled | 反序列化后与原对象相等 |
 
 ### `crates/infra/virs-type/src/exchange/enums_tests.rs`
 

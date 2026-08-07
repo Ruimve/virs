@@ -416,10 +416,6 @@ pub async fn start_bot(
 
 
 fn extract_quote_asset(symbol: &str) -> String {
-    if let Some(idx) = symbol.find('/') {
-        return symbol[idx + 1..].to_uppercase();
-    }
-
     let upper = symbol.to_uppercase();
     for quote in &["USDT", "USDC", "FDUSD", "BUSD", "TUSD", "BTC", "ETH", "BNB"] {
         if upper.ends_with(quote) {

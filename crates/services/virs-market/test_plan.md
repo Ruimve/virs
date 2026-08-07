@@ -37,8 +37,8 @@
 | 3 | `t1_3_timeframe_ms` | Timeframe 毫秒值 | M1, M5, M15, H1, H4, D1 | 60000, 300000, 900000, 3600000, 14400000, 86400000 |
 | 4 | `t1_5_timeframe_default_limit` | Timeframe 默认限制数 | 所有 Timeframe 变体 | default_limit()=1000 |
 | 5 | `t1_7_timeframe_display` | Timeframe Display 格式化 | M1, H1, D1 | "1m", "1h", "1d" |
-| 6 | `t2_1_subscription_key_basic` | 订阅键基本格式 | exchange=binance, symbol=BTC/USDT | "binance:BTC/USDT" |
-| 7 | `t2_2_subscription_key_case` | 订阅键大小写归一化 | exchange=Binance, symbol=btc/usdt | "binance:BTC/USDT" |
+| 6 | `t2_1_subscription_key_basic` | 订阅键基本格式 | exchange=binance, symbol=BTCUSDT | "binance:BTCUSDT" |
+| 7 | `t2_2_subscription_key_case` | 订阅键大小写归一化 | exchange=Binance, symbol=btc/usdt | "binance:BTCUSDT" |
 | 8 | `t3_1_align_open_time_m1` | M1 时间对齐 | 时间戳 1700000000500 | 对齐到 60_000 的整数倍 |
 | 9 | `t3_2_align_open_time_h1` | H1 时间对齐 | 时间戳 1700001234567 | 对齐值 % 3_600_000=0 |
 | 10 | `t3_3_align_open_time_d1` | D1 时间对齐 | 时间戳 1700001234567 | 对齐值 % 86_400_000=0 |
@@ -63,6 +63,6 @@
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
 | 1 | `int_2_1_candle_from_1m_basic` | 1m 转 M5 基本集成 | 1m 蜡烛: open=100.0, high=102.0, low=98.0, close=101.0, 转为 M5 | open_time % M5.ms()=0, open=100.0, close=101.0 |
-| 2 | `int_3_1_subscription_key_then_check` | 订阅键生成与一致性 | exchange=binance, symbol=BTC/USDT（两次调用） | 两次结果相等, 含 ':', 以 "binance:" 开头 |
+| 2 | `int_3_1_subscription_key_then_check` | 订阅键生成与一致性 | exchange=binance, symbol=BTCUSDT（两次调用） | 两次结果相等, 含 ':', 以 "binance:" 开头 |
 | 3 | `int_3_2_align_multi_timeframe` | 多周期时间对齐层级关系 | 时间戳 BASE+123456, 对齐到 M1/M5/H1/D1 | d1<=h1<=m5<=m1, 各周期对齐值取模为 0 |
 | 4 | `int_6_1_timeframe_str_to_ms` | 时间周期字符串转毫秒 | "1m","5m","15m","1h","4h","1d","invalid" | 60000, 300000, 900000, 3600000, 14400000, 86400000, 无效输入返回 60000 |

@@ -19,7 +19,7 @@ fn w1_1_position_all_fields() {
     let pos = make_position(PositionSide::Long, PositionStatus::Open);
     let json = ws_value(position_to_ws_json(&pos, Some(45000.0), Some(55000.0)));
     assert_eq!(json["type"], "position_updated");
-    assert_eq!(json["symbol"], "BTC/USDT");
+    assert_eq!(json["symbol"], "BTCUSDT");
     assert_eq!(json["exchange"], "binance");
     assert_eq!(json["side"], "long");
     assert_eq!(json["status"], "open");
@@ -50,7 +50,7 @@ fn w2_1_kline_normal() {
     let event = make_kline_event(KlineEventType::Update);
     let json = ws_value(kline_event_to_json(&event));
     assert_eq!(json["exchange"], "binance");
-    assert_eq!(json["symbol"], "BTC/USDT");
+    assert_eq!(json["symbol"], "BTCUSDT");
     assert_eq!(json["timeframe"], "1m");
     assert_eq!(json["candle"]["open"], 50000.0);
     assert_eq!(json["candle"]["close"], 50100.0);
@@ -78,7 +78,7 @@ fn w3_1_orderbook_normal() {
     let event = make_orderbook_event();
     let json = ws_value(orderbook_event_to_json(&event));
     assert_eq!(json["exchange"], "binance");
-    assert_eq!(json["symbol"], "BTC/USDT");
+    assert_eq!(json["symbol"], "BTCUSDT");
     assert_eq!(json["bids"].as_array().unwrap().len(), 2);
     assert_eq!(json["asks"].as_array().unwrap().len(), 2);
     assert_eq!(json["bids"][0][0], 50000.0);
@@ -89,7 +89,7 @@ fn w3_1_orderbook_normal() {
 fn w3_2_orderbook_empty_levels() {
     let event = OrderBookEvent {
         exchange: "binance".into(),
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         bids: vec![],
         asks: vec![],
         timestamp: 1700000000000,
@@ -114,7 +114,7 @@ fn make_position(side: PositionSide, status: PositionStatus) -> Position {
     Position {
         id: Uuid::nil(),
         exchange: "binance".into(),
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         side,
         status,
         quantity: 1.0,
@@ -129,7 +129,7 @@ fn make_position(side: PositionSide, status: PositionStatus) -> Position {
 fn make_kline_event(event_type: KlineEventType) -> KlineEvent {
     KlineEvent {
         exchange: "binance".into(),
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         timeframe: Timeframe::M1,
         candle: Candle {
             open_time: 1700000000000,
@@ -150,7 +150,7 @@ fn make_kline_event(event_type: KlineEventType) -> KlineEvent {
 fn make_orderbook_event() -> OrderBookEvent {
     OrderBookEvent {
         exchange: "binance".into(),
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         bids: vec![
             OrderBookLevel { price: 50000.0, amount: 1.5 },
             OrderBookLevel { price: 49990.0, amount: 2.0 },

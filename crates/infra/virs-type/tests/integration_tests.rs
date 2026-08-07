@@ -23,7 +23,7 @@ fn make_position(side: PositionSide, entry: f64, quantity: f64) -> Position {
     Position {
         id: Uuid::nil(),
         exchange: "binance".into(),
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         side,
         status: PositionStatus::Open,
         quantity,
@@ -47,7 +47,7 @@ fn make_auto_bot(
         id: Uuid::nil(),
         user_id: Uuid::nil(),
         name: "stats_bot".into(),
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         exchange: "binance".into(),
         paper_mode: false,
         status: status.into(),

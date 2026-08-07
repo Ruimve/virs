@@ -22,7 +22,7 @@ fn make_indicators() -> IndicatorSet {
 fn make_ctx() -> RenderContext {
     RenderContext {
         timestamp: "2026-07-19 12:00:00 UTC".to_string(),
-        symbol: "BTC/USDT".to_string(),
+        symbol: "BTCUSDT".to_string(),
         exchange: "binance".to_string(),
         total_balance: 10000.0,
         available_balance: 5000.0,
@@ -59,7 +59,7 @@ fn r1_replaces_account_placeholders() {
 fn r2_replaces_symbol_placeholders() {
     let ctx = make_ctx();
     let result = render("{symbol} {exchange} {min_qty}", &ctx);
-    assert_eq!(result, "BTC/USDT binance 0.001000");
+    assert_eq!(result, "BTCUSDT binance 0.001000");
 }
 
 #[test]

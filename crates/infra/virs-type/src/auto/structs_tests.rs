@@ -15,7 +15,7 @@ fn make_auto_bot(
         id: Uuid::nil(),
         user_id: Uuid::nil(),
         name: "test_auto".into(),
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         exchange: "binance".into(),
         paper_mode: false,
         status: status.into(),

@@ -37,7 +37,7 @@ fn int_2_1_position_serde_then_ws_json() {
     let pos = make_position(PositionSide::Long);
     let json = serde_json::to_value(position_to_ws_json(&pos, None, None)).unwrap();
     assert_eq!(json["type"], "position_updated");
-    assert_eq!(json["symbol"], "BTC/USDT");
+    assert_eq!(json["symbol"], "BTCUSDT");
     assert_eq!(json["side"], "long");
 
 
@@ -144,7 +144,7 @@ fn make_position(side: PositionSide) -> Position {
     Position {
         id: Uuid::nil(),
         exchange: "binance".into(),
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         side,
         status: PositionStatus::Open,
         quantity: 1.0,

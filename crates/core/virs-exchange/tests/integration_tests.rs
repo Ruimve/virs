@@ -36,7 +36,7 @@ impl ExchangePe for MockRealExchange {
     async fn get_ticker(&self, _symbol: &str) -> VirsResult<Ticker> {
         self.get_ticker_called.store(true, Ordering::SeqCst);
         Ok(Ticker {
-            symbol: "BTC/USDT".into(),
+            symbol: "BTCUSDT".into(),
             exchange: "binance".into(),
             bid: Some(49999.0),
             ask: Some(50001.0),
@@ -52,8 +52,8 @@ impl ExchangePe for MockRealExchange {
 
     async fn get_klines(&self, _: &str, _: &str, _: u32, _: Option<i64>) -> VirsResult<Vec<Kline>> { Ok(vec![]) }
     async fn get_klines_range(&self, _: &str, _: &str, _: i64, _: i64) -> VirsResult<Vec<Kline>> { Ok(vec![]) }
-    async fn get_funding_rate(&self, _: &str) -> VirsResult<FundingRate> { Ok(FundingRate { symbol: "BTC/USDT".into(), rate: 0.0001, next_funding_time: None }) }
-    async fn get_symbols(&self) -> VirsResult<Vec<String>> { Ok(vec!["BTC/USDT".into()]) }
+    async fn get_funding_rate(&self, _: &str) -> VirsResult<FundingRate> { Ok(FundingRate { symbol: "BTCUSDT".into(), rate: 0.0001, next_funding_time: None }) }
+    async fn get_symbols(&self) -> VirsResult<Vec<String>> { Ok(vec!["BTCUSDT".into()]) }
     async fn get_min_qty(&self, _: &str) -> VirsResult<f64> { Ok(0.001) }
     async fn get_balance(&self) -> VirsResult<Balance> {
         self.get_balance_called.store(true, Ordering::SeqCst);
@@ -154,11 +154,11 @@ async fn int_2_2_paper_market_order_updates_balance() {
     let paper =
         virs_exchange::PaperExchangeAdapter::new("binance", MarketType::Perpetual, 50000.0);
 
-    paper.on_price_tick("BTC/USDT", 50000.0).await;
-    paper.set_leverage("BTC/USDT", 10).await.unwrap();
+    paper.on_price_tick("BTCUSDT", 50000.0).await;
+    paper.set_leverage("BTCUSDT", 10).await.unwrap();
 
     let params = PlaceOrderParams {
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         side: Side::Buy,
         order_type: OrderType::Market,
         amount: 0.1,
@@ -185,7 +185,7 @@ async fn int_2_2_paper_market_order_updates_balance() {
         "free balance should be < initial after opening position"
     );
 
-    let positions = paper.get_positions(Some("BTC/USDT")).await.unwrap();
+    let positions = paper.get_positions(Some("BTCUSDT")).await.unwrap();
     assert_eq!(positions.len(), 1);
     assert_eq!(positions[0].side, PositionSide::Long);
     assert!((positions[0].quantity - 0.1).abs() < 1e-8);
@@ -217,7 +217,7 @@ async fn int_4_1_paper_mode_routes_public_to_real() {
     let ticker_called = Arc::clone(&mock.get_ticker_called);
     let pme = PaperModeExchange::new(mock, 10000.0);
 
-    let _ticker = pme.get_ticker("BTC/USDT").await.unwrap();
+    let _ticker = pme.get_ticker("BTCUSDT").await.unwrap();
     assert!(ticker_called.load(Ordering::SeqCst), "get_ticker should route to real");
 }
 
@@ -238,12 +238,12 @@ async fn int_4_3_paper_mode_set_leverage_calls_both() {
     let leverage_called = Arc::clone(&mock.set_leverage_called);
     let pme = PaperModeExchange::new(mock, 10000.0);
 
-    pme.set_leverage("BTC/USDT", 10).await.unwrap();
+    pme.set_leverage("BTCUSDT", 10).await.unwrap();
     assert!(leverage_called.load(Ordering::SeqCst), "set_leverage should call real");
 
-    pme.on_price_tick("BTC/USDT", 50000.0).await;
+    pme.on_price_tick("BTCUSDT", 50000.0).await;
     let params = PlaceOrderParams {
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         side: Side::Buy,
         order_type: OrderType::Market,
         amount: 0.01,

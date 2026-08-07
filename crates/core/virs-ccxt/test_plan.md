@@ -1,6 +1,6 @@
 # virs-ccxt - 测试计划
 
-**测试总数:** 147（单元测试: 130，集成测试: 17）
+**测试总数:** 133（单元测试: 119，集成测试: 14）
 
 ---
 
@@ -74,62 +74,51 @@
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
-| 1 | `e2_1_no_data_construction` | NoData 错误构造 | msg: `No ticker found for BTC/USDT` | 匹配 `ExchangeError::NoData` 变体，msg 正确 |
+| 1 | `e2_1_no_data_construction` | NoData 错误构造 | msg: `No ticker found for BTCUSDT` | 匹配 `ExchangeError::NoData` 变体，msg 正确 |
 
 ### `crates/core/virs-ccxt/src/adapter/binance/mod_tests.rs`
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
-| 1 | `b1_1_native_symbol_with_slash` | 含斜杠的交易对转换为原生符号 | `BTC/USDT` | `BTCUSDT` |
-| 2 | `b1_2_native_symbol_with_dash` | 含连字符的交易对转换 | `BTC-USDT` | `BTCUSDT` |
-| 3 | `b1_3_native_symbol_already_native` | 已是原生符号不变 | `BTCUSDT` | `BTCUSDT` |
-| 4 | `b1_4_native_symbol_eth_usdc` | ETH/USDC 转换 | `ETH/USDC` | `ETHUSDC` |
-| 5 | `b1_5_native_symbol_empty` | 空字符串转换 | `""` | `""` |
-| 6 | `b2_1_unified_symbol_usdt` | USDT 原生符号转统一符号 | `BTCUSDT` | `BTC/USDT` |
-| 7 | `b2_2_unified_symbol_usdc` | USDC 原生符号转统一符号 | `ETHUSDC` | `ETH/USDC` |
-| 8 | `b2_3_unified_symbol_btc_pair` | BTC 计价对转统一符号 | `BNBBTC` | `BNB/BTC` |
-| 9 | `b2_4_unified_symbol_busd` | BUSD 原生符号转统一符号 | `BTCBUSD` | `BTC/BUSD` |
-| 10 | `b2_5_unified_symbol_unknown_quote` | 未知计价货币原样返回 | `BTCXYZ` | `BTCXYZ` |
-| 11 | `b2_6_unified_symbol_only_quote` | 仅计价货币原样返回 | `USDT` | `USDT` |
-| 12 | `b3_1_status_new` | 解析 NEW 状态 | `NEW` | `CcxtOrderStatus::New` |
-| 13 | `b3_2_status_partially_filled` | 解析 PARTIALLY_FILLED 状态 | `PARTIALLY_FILLED` | `CcxtOrderStatus::PartiallyFilled` |
-| 14 | `b3_3_status_filled` | 解析 FILLED 状态 | `FILLED` | `CcxtOrderStatus::Filled` |
-| 15 | `b3_4_status_canceled` | 解析 CANCELED 状态 | `CANCELED` | `CcxtOrderStatus::Canceled` |
-| 16 | `b3_5_status_cancelled_variant` | 解析英式拼写 CANCELLED | `CANCELLED` | `CcxtOrderStatus::Canceled` |
-| 17 | `b3_6_status_expired` | 解析 EXPIRED 状态 | `EXPIRED` | `CcxtOrderStatus::Expired` |
-| 18 | `b3_7_status_expired_in_match` | 解析 EXPIRED_IN_MATCH 状态 | `EXPIRED_IN_MATCH` | `CcxtOrderStatus::ExpiredInMatch` |
-| 19 | `b3_8_status_unknown_returns_unknown` | 未知状态返回 Unknown | `UNKNOWN` | `CcxtOrderStatus::Unknown("UNKNOWN")` |
-| 20 | `b4_1_type_market` | 解析 MARKET 订单类型 | `MARKET` | `OrderType::Market` |
-| 21 | `b4_2_type_limit` | 解析 LIMIT 订单类型 | `LIMIT` | `OrderType::Limit` |
-| 22 | `b4_3_type_stop_market` | 解析 STOP_MARKET 订单类型 | `STOP_MARKET` | `OrderType::StopMarket` |
-| 23 | `b4_4_type_stop` | 解析 STOP 订单类型 | `STOP` | `OrderType::Stop` |
-| 24 | `b4_5_type_trailing_stop_market` | 解析 TRAILING_STOP_MARKET 订单类型 | `TRAILING_STOP_MARKET` | `OrderType::TrailingStopMarket` |
-| 25 | `b4_6_type_liquidation` | 解析 LIQUIDATION 订单类型 | `LIQUIDATION` | `OrderType::Liquidation` |
-| 26 | `b4_7_type_take_profit_market` | 解析 TAKE_PROFIT_MARKET 订单类型 | `TAKE_PROFIT_MARKET` | `OrderType::TakeProfitMarket` |
-| 27 | `b4_7b_type_take_profit` | 解析 TAKE_PROFIT 订单类型 | `TAKE_PROFIT` | `OrderType::TakeProfit` |
-| 28 | `b4_8_type_unknown_returns_unknown` | 未知订单类型返回 Unknown | `UNKNOWN` | `OrderType::Unknown("UNKNOWN")` |
-| 29 | `b5_1_side_buy` | Buy 方向转字符串 | `Side::Buy` | `BUY` |
-| 30 | `b5_2_side_sell` | Sell 方向转字符串 | `Side::Sell` | `SELL` |
-| 31 | `b6_1_order_type_market` | Market 订单类型转字符串 | `OrderType::Market` | `MARKET` |
-| 32 | `b6_2_order_type_limit` | Limit 订单类型转字符串 | `OrderType::Limit` | `LIMIT` |
-| 33 | `b6_3_order_type_stop_market` | StopMarket 订单类型转字符串 | `OrderType::StopMarket` | `STOP_MARKET` |
-| 34 | `b6_4_order_type_stop` | Stop 订单类型转字符串 | `OrderType::Stop` | `STOP` |
-| 35 | `b6_5_order_type_take_profit_market` | TakeProfitMarket 订单类型转字符串 | `OrderType::TakeProfitMarket` | `TAKE_PROFIT_MARKET` |
-| 36 | `b6_6_futures_stop_market_unchanged` | 合约 StopMarket 不变 | `OrderType::StopMarket` | `STOP_MARKET` |
-| 37 | `b6_7_futures_take_profit_market_unchanged` | 合约 TakeProfitMarket 不变 | `OrderType::TakeProfitMarket` | `TAKE_PROFIT_MARKET` |
-| 38 | `b6_8_order_type_take_profit` | TakeProfit 订单类型转字符串 | `OrderType::TakeProfit` | `TAKE_PROFIT` |
-| 39 | `b6_9_order_type_trailing_stop_market` | TrailingStopMarket 订单类型转字符串 | `OrderType::TrailingStopMarket` | `TRAILING_STOP_MARKET` |
-| 40 | `b6_10_order_type_liquidation` | Liquidation 订单类型转字符串 | `OrderType::Liquidation` | `LIQUIDATION` |
-| 41 | `b7_1_try_build_ed25519_with_seed` | ed25519 种子 Base64 构造签名器 | api_key: `test_api_key`，seed_b64: 32 字节全零 Base64 | 返回 Ok |
-| 42 | `b7_2_try_build_ed25519_with_pem` | ed25519 PEM 私钥构造签名器 | api_key: `test_key`，PEM 私钥 | 返回 Ok |
-| 43 | `b7_3_try_build_ed25519_wrong_byte_count` | ed25519 错误字节长度 | 错误长度的 Base64 | 返回 Err |
-| 44 | `b7_4_try_build_ed25519_not_base64` | ed25519 非 Base64/PEM 输入 | `this_is_not_base64_or_pem!` | 返回 Err |
-| 45 | `t1_1_time_sync_interval_is_one_hour` | 时间同步间隔为 1 小时 | 常量检查 | `TIME_SYNC_INTERVAL_SECS=3600` |
-| 46 | `t1_2_time_offset_warn_threshold_is_2000ms` | 时间偏移警告阈值为 2000ms | 常量检查 | `TIME_OFFSET_WARN_THRESHOLD_MS=2000` |
-| 47 | `t1_3_time_sync_started_initialized_false` | 初始化后 time_sync_started 为 false | BinanceExchange::new(key, secret, ...) | `time_sync_started=false` |
-| 48 | `t1_4_time_sync_started_swap_prevents_double_start` | CAS 防止重复启动时间同步 | 两次 swap(true) | 第一次返回 false，第二次返回 true |
-| 49 | `t1_5_drop_cancels_time_sync` | Drop 取消时间同步任务 | 创建后立即 drop | 无 panic，正常释放 |
-| 50 | `t1_6_no_tasks_on_init` | 初始化后无后台任务 | BinanceExchange::new(...) | time_sync_task=None，listenkey_task=None |
+| 1 | `b3_1_status_new` | 解析 NEW 状态 | `NEW` | `CcxtOrderStatus::New` |
+| 2 | `b3_2_status_partially_filled` | 解析 PARTIALLY_FILLED 状态 | `PARTIALLY_FILLED` | `CcxtOrderStatus::PartiallyFilled` |
+| 3 | `b3_3_status_filled` | 解析 FILLED 状态 | `FILLED` | `CcxtOrderStatus::Filled` |
+| 4 | `b3_4_status_canceled` | 解析 CANCELED 状态 | `CANCELED` | `CcxtOrderStatus::Canceled` |
+| 5 | `b3_5_status_cancelled_variant` | 解析英式拼写 CANCELLED | `CANCELLED` | `CcxtOrderStatus::Canceled` |
+| 6 | `b3_6_status_expired` | 解析 EXPIRED 状态 | `EXPIRED` | `CcxtOrderStatus::Expired` |
+| 7 | `b3_7_status_expired_in_match` | 解析 EXPIRED_IN_MATCH 状态 | `EXPIRED_IN_MATCH` | `CcxtOrderStatus::ExpiredInMatch` |
+| 8 | `b3_8_status_unknown_returns_unknown` | 未知状态返回 Unknown | `UNKNOWN` | `CcxtOrderStatus::Unknown("UNKNOWN")` |
+| 9 | `b4_1_type_market` | 解析 MARKET 订单类型 | `MARKET` | `OrderType::Market` |
+| 10 | `b4_2_type_limit` | 解析 LIMIT 订单类型 | `LIMIT` | `OrderType::Limit` |
+| 11 | `b4_3_type_stop_market` | 解析 STOP_MARKET 订单类型 | `STOP_MARKET` | `OrderType::StopMarket` |
+| 12 | `b4_4_type_stop` | 解析 STOP 订单类型 | `STOP` | `OrderType::Stop` |
+| 13 | `b4_5_type_trailing_stop_market` | 解析 TRAILING_STOP_MARKET 订单类型 | `TRAILING_STOP_MARKET` | `OrderType::TrailingStopMarket` |
+| 14 | `b4_6_type_liquidation` | 解析 LIQUIDATION 订单类型 | `LIQUIDATION` | `OrderType::Liquidation` |
+| 15 | `b4_7_type_take_profit_market` | 解析 TAKE_PROFIT_MARKET 订单类型 | `TAKE_PROFIT_MARKET` | `OrderType::TakeProfitMarket` |
+| 16 | `b4_7b_type_take_profit` | 解析 TAKE_PROFIT 订单类型 | `TAKE_PROFIT` | `OrderType::TakeProfit` |
+| 17 | `b4_8_type_unknown_returns_unknown` | 未知订单类型返回 Unknown | `UNKNOWN` | `OrderType::Unknown("UNKNOWN")` |
+| 18 | `b5_1_side_buy` | Buy 方向转字符串 | `Side::Buy` | `BUY` |
+| 19 | `b5_2_side_sell` | Sell 方向转字符串 | `Side::Sell` | `SELL` |
+| 20 | `b6_1_order_type_market` | Market 订单类型转字符串 | `OrderType::Market` | `MARKET` |
+| 21 | `b6_2_order_type_limit` | Limit 订单类型转字符串 | `OrderType::Limit` | `LIMIT` |
+| 22 | `b6_3_order_type_stop_market` | StopMarket 订单类型转字符串 | `OrderType::StopMarket` | `STOP_MARKET` |
+| 23 | `b6_4_order_type_stop` | Stop 订单类型转字符串 | `OrderType::Stop` | `STOP` |
+| 24 | `b6_5_order_type_take_profit_market` | TakeProfitMarket 订单类型转字符串 | `OrderType::TakeProfitMarket` | `TAKE_PROFIT_MARKET` |
+| 25 | `b6_6_futures_stop_market_unchanged` | 合约 StopMarket 不变 | `OrderType::StopMarket` | `STOP_MARKET` |
+| 26 | `b6_7_futures_take_profit_market_unchanged` | 合约 TakeProfitMarket 不变 | `OrderType::TakeProfitMarket` | `TAKE_PROFIT_MARKET` |
+| 27 | `b6_8_order_type_take_profit` | TakeProfit 订单类型转字符串 | `OrderType::TakeProfit` | `TAKE_PROFIT` |
+| 28 | `b6_9_order_type_trailing_stop_market` | TrailingStopMarket 订单类型转字符串 | `OrderType::TrailingStopMarket` | `TRAILING_STOP_MARKET` |
+| 29 | `b6_10_order_type_liquidation` | Liquidation 订单类型转字符串 | `OrderType::Liquidation` | `LIQUIDATION` |
+| 30 | `b7_1_try_build_ed25519_with_seed` | ed25519 种子 Base64 构造签名器 | api_key: `test_api_key`，seed_b64: 32 字节全零 Base64 | 返回 Ok |
+| 31 | `b7_2_try_build_ed25519_pem` | ed25519 PEM 私钥构造签名器 | api_key: `test_key`，PEM 私钥 | 返回 Ok |
+| 32 | `b7_3_try_build_ed25519_wrong_byte_count` | ed25519 错误字节长度 | 错误长度的 Base64 | 返回 Err |
+| 33 | `b7_4_try_build_ed25519_not_base64` | ed25519 非 Base64/PEM 输入 | `this_is_not_base64_or_pem!` | 返回 Err |
+| 34 | `t1_1_time_sync_interval_is_one_hour` | 时间同步间隔为 1 小时 | 常量检查 | `TIME_SYNC_INTERVAL_SECS=3600` |
+| 35 | `t1_2_time_offset_warn_threshold_is_2000ms` | 时间偏移警告阈值为 2000ms | 常量检查 | `TIME_OFFSET_WARN_THRESHOLD_MS=2000` |
+| 36 | `t1_3_time_sync_started_initialized_false` | 初始化后 time_sync_started 为 false | BinanceExchange::new(key, secret, ...) | `time_sync_started=false` |
+| 37 | `t1_4_time_sync_started_swap_prevents_double_start` | CAS 防止重复启动时间同步 | 两次 swap(true) | 第一次返回 false，第二次返回 true |
+| 38 | `t1_5_drop_cancels_time_sync` | Drop 取消时间同步任务 | 创建后立即 drop | 无 panic，正常释放 |
+| 39 | `t1_6_no_tasks_on_init` | 初始化后无后台任务 | BinanceExchange::new(...) | time_sync_task=None，listenkey_task=None |
 
 ### `crates/core/virs-ccxt/src/adapter/binance/user_data_ws_tests.rs`
 
@@ -169,7 +158,7 @@
 | 5 | `test_to_candle_basic` | K 线数据转蜡烛图基本转换 | OHLCV: 65000/65100/64900/65050，volume=100.5 | 各字段正确，closed=false；另测 closed=true |
 | 6 | `test_to_candle_invalid_numbers` | 无效 OHLCV 数字转蜡烛图失败 | open=`not_a_number`，high=`abc` | 返回 Err(NoData) |
 | 7 | `test_ws_symbol` | 获取 WS 符号 | symbol: `BTCUSDT` | `BTCUSDT` |
-| 8 | `test_binance_ws_symbol_basic` | WS 符号基础转换 | `BTCUSDT`、`BTC/USDT`、`btcusdt` | 均返回 `btcusdt` |
+| 8 | `test_binance_ws_symbol_basic` | WS 符号基础转换 | `BTCUSDT`、`btcusdt` | 均返回 `btcusdt` |
 | 9 | `test_subscribe_without_start` | 未启动时订阅 | symbol: `BTCUSDT` | 订阅列表含 `btcusdt@kline_1m`，符号映射正确，未运行 |
 | 10 | `t8_1_event_time_parsed_and_accessible` | 组合流事件时间解析 | E: 1713900000123 | data.event_time=1713900000123 |
 | 11 | `t8_2_delay_threshold_is_5000ms` | 延迟阈值为 5000ms | 常量检查 | `KLINE_WS_DELAY_THRESHOLD_MS=5000`，6000ms 延迟超阈值，3000ms 未超 |
@@ -182,20 +171,17 @@
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
-| 1 | `int_1_1_symbol_roundtrip_usdt` | USDT 交易对符号往返转换 | `BTC/USDT` -> 原生 -> 统一 | `BTCUSDT` -> `BTC/USDT` |
-| 2 | `int_1_2_symbol_roundtrip_usdc` | USDC 交易对符号往返转换 | `ETH-USDC` -> 原生 -> 统一 | `ETHUSDC` -> `ETH/USDC` |
-| 3 | `int_1_3_symbol_roundtrip_btc_pair` | BTC 计价对符号往返转换 | `BNB/BTC` -> 原生 -> 统一 | `BNBBTC` -> `BNB/BTC` |
-| 4 | `int_2_1_hmac_signature_deterministic` | HMAC 签名确定性验证 | key: `test_secret_key`，msg: `symbol=BTCUSDT&timestamp=1234567890` | 两次签名相同，长度=64 |
-| 5 | `int_4_2_order_trade_update_dispatch` | 订单交易更新事件分发 | ORDER_TRADE_UPDATE 事件 JSON，symbol=BTCUSDT，side=BUY | dispatch_event 返回 Some |
-| 6 | `int_4_3_non_order_event_returns_none` | 非订单事件分发返回 None | listenKeyExpired 事件 JSON | dispatch_event 返回 None |
-| 7 | `int_5_1_create_exchange_binance_hmac` | 创建 Binance HMAC 交易所 | name=`binance`，HMAC 密钥 | 返回 Ok，name=`binance` |
-| 8 | `int_5_2_create_exchange_binance_ed25519` | 创建 Binance ed25519 交易所 | name=`binance`，ed25519 种子 | 返回 Ok，name=`binance` |
-| 9 | `int_5_3_create_exchange_bybit_not_supported` | 创建 Bybit 交易所不支持 | name=`bybit` | 返回 Err(NotSupported) |
-| 10 | `int_5_4_create_exchange_okx_not_supported` | 创建 OKX 交易所不支持 | name=`okx` | 返回 Err(NotSupported) |
-| 11 | `int_5_5_create_exchange_case_insensitive` | 交易所名称大小写不敏感 | name=`BINANCE` | 返回 Ok |
-| 12 | `int_6_2_order_status_chain` | 订单状态完整转换链 | `PARTIALLY_FILLED` | CcxtOrderStatus::PartiallyFilled -> OrderStatus::PartiallyFilled |
-| 13 | `int_6_3_order_status_expired_chain` | 过期状态完整转换链 | `EXPIRED` | CcxtOrderStatus::Expired -> OrderStatus::Expired |
-| 14 | `int_7_1_order_type_roundtrip` | 订单类型往返转换一致性 | 7 种订单类型 | 每种 str -> parse 往返一致 |
-| 15 | `int_7_2_side_roundtrip` | 方向往返转换 | Side::Buy, Side::Sell | `BUY`, `SELL` |
-| 16 | `int_8_1_parse_f64_used_in_ticker_conversion` | Ticker 转换中使用 parse_f64 | `{"price": "0.00012345"}` | `Some(0.00012345)` |
-| 17 | `int_8_3_parse_str_used_in_symbol` | 符号解析中使用 parse_str | `{"symbol": "BTCUSDT"}` | `Some("BTCUSDT")` |
+| 1 | `int_2_1_hmac_signature_deterministic` | HMAC 签名确定性验证 | key: `test_secret_key`，msg: `symbol=BTCUSDT&timestamp=1234567890` | 两次签名相同，长度=64 |
+| 2 | `int_4_2_order_trade_update_dispatch` | 订单交易更新事件分发 | ORDER_TRADE_UPDATE 事件 JSON，symbol=BTCUSDT，side=BUY | dispatch_event 返回 Some |
+| 3 | `int_4_3_non_order_event_returns_none` | 非订单事件分发返回 None | listenKeyExpired 事件 JSON | dispatch_event 返回 None |
+| 4 | `int_5_1_create_exchange_binance_hmac` | 创建 Binance HMAC 交易所 | name=`binance`，HMAC 密钥 | 返回 Ok，name=`binance` |
+| 5 | `int_5_2_create_exchange_binance_ed25519` | 创建 Binance ed25519 交易所 | name=`binance`，ed25519 种子 | 返回 Ok，name=`binance` |
+| 6 | `int_5_3_create_exchange_bybit_not_supported` | 创建 Bybit 交易所不支持 | name=`bybit` | 返回 Err(NotSupported) |
+| 7 | `int_5_4_create_exchange_okx_not_supported` | 创建 OKX 交易所不支持 | name=`okx` | 返回 Err(NotSupported) |
+| 8 | `int_5_5_create_exchange_case_insensitive` | 交易所名称大小写不敏感 | name=`BINANCE` | 返回 Ok |
+| 9 | `int_6_2_order_status_chain` | 订单状态完整转换链 | `PARTIALLY_FILLED` | CcxtOrderStatus::PartiallyFilled -> OrderStatus::PartiallyFilled |
+| 10 | `int_6_3_order_status_expired_chain` | 过期状态完整转换链 | `EXPIRED` | CcxtOrderStatus::Expired -> OrderStatus::Expired |
+| 11 | `int_7_1_order_type_roundtrip` | 订单类型往返转换一致性 | 7 种订单类型 | 每种 str -> parse 往返一致 |
+| 12 | `int_7_2_side_roundtrip` | 方向往返转换 | Side::Buy, Side::Sell | `BUY`, `SELL` |
+| 13 | `int_8_1_parse_f64_used_in_ticker_conversion` | Ticker 转换中使用 parse_f64 | `{"price": "0.00012345"}` | `Some(0.00012345)` |
+| 14 | `int_8_3_parse_str_used_in_symbol` | 符号解析中使用 parse_str | `{"symbol": "BTCUSDT"}` | `Some("BTCUSDT")` |

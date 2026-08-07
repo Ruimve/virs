@@ -10,7 +10,7 @@ fn s3_1_order_roundtrip() {
     let order = Order {
         id: "order_123".into(),
         client_order_id: Some("client_456".into()),
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         side: Side::Buy,
         order_type: OrderType::Limit,
         price: Some(50000.0),

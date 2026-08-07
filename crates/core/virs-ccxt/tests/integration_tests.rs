@@ -9,30 +9,6 @@ use virs_error::ExchangeError;
 use virs_type::{OrderStatus, CcxtOrderStatus};
 
 #[test]
-fn int_1_1_symbol_roundtrip_usdt() {
-    let native = BinanceExchange::to_native_symbol("BTC/USDT");
-    assert_eq!(native, "BTCUSDT");
-    let unified = BinanceExchange::to_unified_symbol(&native);
-    assert_eq!(unified, "BTC/USDT");
-}
-
-#[test]
-fn int_1_2_symbol_roundtrip_usdc() {
-    let native = BinanceExchange::to_native_symbol("ETH-USDC");
-    assert_eq!(native, "ETHUSDC");
-    let unified = BinanceExchange::to_unified_symbol(&native);
-    assert_eq!(unified, "ETH/USDC");
-}
-
-#[test]
-fn int_1_3_symbol_roundtrip_btc_pair() {
-    let native = BinanceExchange::to_native_symbol("BNB/BTC");
-    assert_eq!(native, "BNBBTC");
-    let unified = BinanceExchange::to_unified_symbol(&native);
-    assert_eq!(unified, "BNB/BTC");
-}
-
-#[test]
 fn int_2_1_hmac_signature_deterministic() {
     let key = "test_secret_key";
     let msg = "symbol=BTCUSDT&timestamp=1234567890";

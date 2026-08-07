@@ -12,7 +12,7 @@ fn make_order(side: Side) -> CcxtOrder {
     CcxtOrder {
         order_id: 123,
         client_order_id: "CL456".to_string(),
-        symbol: "BTC/USDT".to_string(),
+        symbol: "BTCUSDT".to_string(),
         side,
         order_type: OrderType::Limit,
         position_side: PositionSide::Long,
@@ -60,7 +60,7 @@ fn make_trade() -> Trade {
         position_id: Uuid::new_v4(),
         order_id: Uuid::new_v4(),
         exchange: "binance".to_string(),
-        symbol: "BTC/USDT".to_string(),
+        symbol: "BTCUSDT".to_string(),
         side: Side::Buy,
         price: 101.0,
         amount: 1.0,
@@ -81,7 +81,7 @@ fn o1_1_convert_order_placed() {
     match result.unwrap() {
         OrderEvent::OrderPlaced { order } => {
             assert_eq!(order.side, Side::Buy);
-            assert_eq!(order.symbol, "BTC/USDT");
+            assert_eq!(order.symbol, "BTCUSDT");
             assert!((order.fill_price.unwrap() - 101.0).abs() < 1e-10);
         }
         _ => panic!("Expected OrderPlaced"),
@@ -120,7 +120,7 @@ fn o1_3_convert_order_canceled() {
         } => {
             assert_eq!(id, order_id);
             assert!(client_order_id.is_some());
-            assert_eq!(symbol.as_deref(), Some("BTC/USDT"));
+            assert_eq!(symbol.as_deref(), Some("BTCUSDT"));
         }
         _ => panic!("Expected OrderCanceled"),
     }
@@ -169,7 +169,7 @@ fn o1_6_convert_position_opened_none() {
     let pos = virs_type::Position {
         id: Uuid::new_v4(),
         exchange: "binance".to_string(),
-        symbol: "BTC/USDT".to_string(),
+        symbol: "BTCUSDT".to_string(),
         side: virs_type::PositionSide::Long,
         status: virs_type::PositionStatus::Open,
         quantity: 1.0,

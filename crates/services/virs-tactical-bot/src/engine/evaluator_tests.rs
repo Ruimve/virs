@@ -28,7 +28,7 @@ fn make_trade(pnl: f64, mins_ago: i64) -> TradeRecord {
     let now = Utc::now();
     TradeRecord {
         strategy_name: "test".into(),
-        symbol: "BTC/USDT".into(),
+        symbol: "BTCUSDT".into(),
         side: "long".into(),
         opened_at: now - chrono::Duration::minutes(mins_ago + 10),
         closed_at: now - chrono::Duration::minutes(mins_ago),

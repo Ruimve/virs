@@ -65,7 +65,7 @@ fn make_order(side: Side) -> CcxtOrder {
     CcxtOrder {
         order_id: 999,
         client_order_id: "CL999".to_string(),
-        symbol: "BTC/USDT".to_string(),
+        symbol: "BTCUSDT".to_string(),
         side,
         order_type: OrderType::Limit,
         position_side: PositionSide::Long,
@@ -113,7 +113,7 @@ fn make_trade() -> Trade {
         position_id: Uuid::new_v4(),
         order_id: Uuid::new_v4(),
         exchange: "binance".to_string(),
-        symbol: "BTC/USDT".to_string(),
+        symbol: "BTCUSDT".to_string(),
         side: Side::Buy,
         price: 42100.0,
         amount: 2.0,
@@ -243,7 +243,7 @@ fn int_4_2_convert_event_canceled_failed() {
         } => {
             assert_eq!(id, expected_id);
             assert!(client_order_id.is_some());
-            assert_eq!(symbol.as_deref(), Some("BTC/USDT"));
+            assert_eq!(symbol.as_deref(), Some("BTCUSDT"));
         }
         _ => panic!("Expected OrderCanceled"),
     }

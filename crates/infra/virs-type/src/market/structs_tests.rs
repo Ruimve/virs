@@ -21,7 +21,7 @@ fn m1_2_zero_total() {
 #[test]
 fn s2_1_ticker_roundtrip() {
     let ticker = Ticker {
-        symbol: "BTC/USDT".into(), exchange: "binance".into(),
+        symbol: "BTCUSDT".into(), exchange: "binance".into(),
         bid: Some(99.0), ask: Some(101.0), last: 100.0,
         high_24h: 110.0, low_24h: 90.0, volume_24h: 1000.0,
         price_change_24h: 5.0, price_change_pct_24h: 5.0,
@@ -43,7 +43,7 @@ fn s2_2_balance_roundtrip() {
 #[test]
 fn s2_3_exchange_position_roundtrip() {
     let pos = ExchangePosition {
-        symbol: "BTC/USDT".into(), side: PositionSide::Long,
+        symbol: "BTCUSDT".into(), side: PositionSide::Long,
         quantity: 1.0, entry_price: 50000.0,
         margin_mode: MarginMode::Cross,
         info: serde_json::json!({}),

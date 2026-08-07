@@ -24,7 +24,7 @@
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
 | 1 | `r1_replaces_account_placeholders` | 替换账户类占位符 | total_balance=10000.0, available_balance=5000.0, used_margin=3000.0, margin_usage_rate=30.0, leverage=10 | "10000.00 5000.00 3000.00 30.0 10" |
-| 2 | `r2_replaces_symbol_placeholders` | 替换交易对类占位符 | symbol=BTC/USDT, exchange=binance, min_qty=0.001 | "BTC/USDT binance 0.001000" |
+| 2 | `r2_replaces_symbol_placeholders` | 替换交易对类占位符 | symbol=BTCUSDT, exchange=binance, min_qty=0.001 | "BTCUSDT binance 0.001000" |
 | 3 | `r3_replaces_funding_rate_as_percentage` | 资金费率按百分比替换 | funding_rate=0.0001, funding_next_time="2026-07-19 16:00:00" | "0.0100% 2026-07-19 16:00:00" |
 | 4 | `r4_replaces_h1_indicators` | 替换 H1 周期指标占位符 | h1_current_price=50000.0, ema20=49500.0, ema50=49000.0, cross=金叉(多头), bars_ago=5 | "50000.00 49500.00 49000.00 金叉(多头) 5" |
 | 5 | `r5_replaces_m15_indicators` | 替换 M15 周期指标占位符 | m15_current_price=50000.0, cross=金叉(多头), bars_ago=3 | "50000.00 金叉(多头) 3" |

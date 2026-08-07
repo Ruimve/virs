@@ -15,9 +15,9 @@ pub use virs_type::{WsCandleUpdate, WsEvent};
 use virs_type::Candle;
 use virs_task::{spawn, Stop, TaskHandle};
 
-/* 将统一格式 BTC/USDT 转为币安 WS 流格式 btcusdt（去分隔符并转小写） */
+/* 将原生格式 BTCUSDT 转为币安 WS 流格式 btcusdt（转小写） */
 pub(crate) fn binance_ws_symbol(symbol: &str) -> String {
-    symbol.replace('/', "").to_lowercase()
+    symbol.to_lowercase()
 }
 
 #[derive(Debug, Clone, Deserialize)]

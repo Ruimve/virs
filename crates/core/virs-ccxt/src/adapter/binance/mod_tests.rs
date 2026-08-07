@@ -5,61 +5,6 @@ use crate::adapter::binance::{
 use virs_type::{CcxtOrderStatus, OrderType, Side};
 
 #[test]
-fn b1_1_native_symbol_with_slash() {
-    assert_eq!(BinanceExchange::to_native_symbol("BTC/USDT"), "BTCUSDT");
-}
-
-#[test]
-fn b1_2_native_symbol_with_dash() {
-    assert_eq!(BinanceExchange::to_native_symbol("BTC-USDT"), "BTCUSDT");
-}
-
-#[test]
-fn b1_3_native_symbol_already_native() {
-    assert_eq!(BinanceExchange::to_native_symbol("BTCUSDT"), "BTCUSDT");
-}
-
-#[test]
-fn b1_4_native_symbol_eth_usdc() {
-    assert_eq!(BinanceExchange::to_native_symbol("ETH/USDC"), "ETHUSDC");
-}
-
-#[test]
-fn b1_5_native_symbol_empty() {
-    assert_eq!(BinanceExchange::to_native_symbol(""), "");
-}
-
-#[test]
-fn b2_1_unified_symbol_usdt() {
-    assert_eq!(BinanceExchange::to_unified_symbol("BTCUSDT"), "BTC/USDT");
-}
-
-#[test]
-fn b2_2_unified_symbol_usdc() {
-    assert_eq!(BinanceExchange::to_unified_symbol("ETHUSDC"), "ETH/USDC");
-}
-
-#[test]
-fn b2_3_unified_symbol_btc_pair() {
-    assert_eq!(BinanceExchange::to_unified_symbol("BNBBTC"), "BNB/BTC");
-}
-
-#[test]
-fn b2_4_unified_symbol_busd() {
-    assert_eq!(BinanceExchange::to_unified_symbol("BTCBUSD"), "BTC/BUSD");
-}
-
-#[test]
-fn b2_5_unified_symbol_unknown_quote() {
-    assert_eq!(BinanceExchange::to_unified_symbol("BTCXYZ"), "BTCXYZ");
-}
-
-#[test]
-fn b2_6_unified_symbol_only_quote() {
-    assert_eq!(BinanceExchange::to_unified_symbol("USDT"), "USDT");
-}
-
-#[test]
 fn b3_1_status_new() {
     assert_eq!(
         BinanceExchange::parse_order_status("NEW"),

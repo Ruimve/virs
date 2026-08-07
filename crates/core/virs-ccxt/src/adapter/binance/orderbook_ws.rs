@@ -14,7 +14,7 @@ use virs_type::{OrderBookLevel, OrderBookWsClient, WsOrderBookEvent, WsOrderBook
 use virs_task::{spawn, Stop, TaskHandle};
 
 fn binance_ws_symbol(symbol: &str) -> String {
-    symbol.replace('/', "").to_lowercase()
+    symbol.to_lowercase()
 }
 
 /* 订单簿 WS 消息延迟告警阈值：超过 2 秒说明行情数据有延迟（比 K 线更严格） */

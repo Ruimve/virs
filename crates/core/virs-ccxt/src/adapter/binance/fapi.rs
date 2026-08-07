@@ -54,9 +54,8 @@ pub async fn fetch_ticker(
     client: &ExchangeClient,
     symbol: &str,
 ) -> Result<Ticker, ExchangeError> {
-    let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let data = client
-        .public_get(&url("/fapi/v1/ticker/24hr"), &[("symbol", native.as_str())])
+        .public_get(&url("/fapi/v1/ticker/24hr"), &[("symbol", symbol)])
         .await?;
 
     let last = parse_f64(&data, "lastPrice");
@@ -71,7 +70,7 @@ pub async fn fetch_ticker(
     let book = client
         .public_get(
             &url("/fapi/v1/ticker/bookTicker"),
-            &[("symbol", native.as_str())],
+            &[("symbol", symbol)],
         )
         .await?;
 
@@ -130,9 +129,8 @@ pub async fn fetch_ohlcv(
     limit: u32,
     since: Option<i64>,
 ) -> Result<Vec<Kline>, ExchangeError> {
-    let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let mut params: Vec<(&str, String)> = vec![
-        ("symbol", native),
+        ("symbol", symbol.to_string()),
         ("interval", timeframe.to_string()),
         ("limit", limit.to_string()),
     ];
@@ -252,7 +250,7 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
 
             let base = parse_str(s, "baseAsset")?;
             let quote = parse_str(s, "quoteAsset")?;
-            let symbol = format!("{}/{}", base, quote);
+            let symbol = parse_str(s, "symbol")?;
 
             /* 从 filters 数组中提取 LOT_SIZE、PRICE_FILTER、MIN_NOTIONAL 等交易规则 */
             let filters = s.get("filters").and_then(|f| f.as_array());
@@ -313,11 +311,10 @@ pub async fn fetch_funding_rate(
     client: &ExchangeClient,
     symbol: &str,
 ) -> Result<FundingRate, ExchangeError> {
-    let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let data = client
         .public_get(
             &url("/fapi/v1/premiumIndex"),
-            &[("symbol", native.as_str())],
+            &[("symbol", symbol)],
         )
         .await?;
 
@@ -404,9 +401,8 @@ pub async fn create_order(
     signer: &dyn Signer,
     params: PlaceOrderParams,
 ) -> Result<OrderResult, ExchangeError> {
-    let native = crate::adapter::binance::BinanceExchange::to_native_symbol(&params.symbol);
     let mut body = serde_json::json!({
-        "symbol": native,
+        "symbol": params.symbol,
         "side": crate::adapter::binance::BinanceExchange::side_str(&params.side),
         "type": crate::adapter::binance::BinanceExchange::order_type_str(&params.order_type),
         "quantity": params.amount,
@@ -484,9 +480,8 @@ pub async fn cancel_order(
     symbol: &str,
     order_id: &str,
 ) -> Result<OrderResult, ExchangeError> {
-    let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let params = vec![
-        ("symbol".into(), native),
+        ("symbol".into(), symbol.to_string()),
         ("orderId".into(), order_id.to_string()),
     ];
 
@@ -511,8 +506,7 @@ pub async fn cancel_all_orders(
     signer: &dyn Signer,
     symbol: &str,
 ) -> Result<(), ExchangeError> {
-    let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
-    let params = vec![("symbol".into(), native)];
+    let params = vec![("symbol".into(), symbol.to_string())];
 
     let _data = client
         .signed_delete(signer, &url("/fapi/v1/allOpenOrders"), params)
@@ -528,13 +522,12 @@ pub async fn set_margin_type(
     symbol: &str,
     margin_mode: MarginMode,
 ) -> Result<(), ExchangeError> {
-    let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let margin_type_str = match margin_mode {
         MarginMode::Cross => "CROSSED",
         MarginMode::Isolated => "ISOLATED",
     };
     let body = serde_json::json!({
-        "symbol": native,
+        "symbol": symbol,
         "marginType": margin_type_str,
     });
 
@@ -552,9 +545,8 @@ pub async fn set_leverage(
     symbol: &str,
     leverage: u32,
 ) -> Result<(), ExchangeError> {
-    let native = crate::adapter::binance::BinanceExchange::to_native_symbol(symbol);
     let body = serde_json::json!({
-        "symbol": native,
+        "symbol": symbol,
         "leverage": leverage,
     });
     client
@@ -571,10 +563,7 @@ pub async fn fetch_positions(
 ) -> Result<Vec<ExchangePosition>, ExchangeError> {
     let mut params: Vec<(String, String)> = vec![];
     if let Some(sym) = symbol {
-        params.push((
-            "symbol".into(),
-            crate::adapter::binance::BinanceExchange::to_native_symbol(sym),
-        ));
+        params.push(("symbol".into(), sym.to_string()));
     }
 
     let data = client
@@ -639,7 +628,7 @@ pub async fn fetch_positions(
         };
 
         positions.push(ExchangePosition {
-            symbol: crate::adapter::binance::BinanceExchange::to_unified_symbol(&symbol_str),
+            symbol: symbol_str,
             side,
             quantity: size,
             entry_price,

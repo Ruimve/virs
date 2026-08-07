@@ -31,8 +31,8 @@ fn int_2_1_candle_from_1m_basic() {
 
 #[test]
 fn int_3_1_subscription_key_then_check() {
-    let key1 = subscription_key("binance", "BTC/USDT");
-    let key2 = subscription_key("binance", "BTC/USDT");
+    let key1 = subscription_key("binance", "BTCUSDT");
+    let key2 = subscription_key("binance", "BTCUSDT");
     assert_eq!(key1, key2);
     assert!(key1.contains(':'));
     assert!(key1.starts_with("binance:"));

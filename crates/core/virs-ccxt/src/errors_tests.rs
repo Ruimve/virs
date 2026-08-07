@@ -2,10 +2,10 @@ use virs_error::ExchangeError;
 
 #[test]
 fn e2_1_no_data_construction() {
-    let err = ExchangeError::no_data("No ticker found for BTC/USDT".to_string());
+    let err = ExchangeError::no_data("No ticker found for BTCUSDT".to_string());
     match err {
         ExchangeError::NoData(msg) => {
-            assert_eq!(msg, "No ticker found for BTC/USDT");
+            assert_eq!(msg, "No ticker found for BTCUSDT");
         }
         _ => panic!("Expected NoData variant"),
     }

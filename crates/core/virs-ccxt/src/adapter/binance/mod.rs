@@ -402,26 +402,6 @@ impl BinanceExchange {
         })
     }
 
-    /* 统一格式 BTC/USDT 转为币安原生格式 BTCUSDT，去掉分隔符 */
-    pub fn to_native_symbol(symbol: &str) -> String {
-        symbol.replace(['/', '-'], "")
-    }
-
-    /* 币安原生格式 BTCUSDT 转为统一格式 BTC/USDT，通过已知计价币种反推分隔位置 */
-    pub fn to_unified_symbol(native: &str) -> String {
-        let quotes = [
-            "USDT", "USDC", "BUSD", "BTC", "ETH", "BNB", "EUR", "GBP", "TRY", "BRL", "ARS",
-        ];
-        for q in &quotes {
-            if let Some(base) = native.strip_suffix(q) {
-                if !base.is_empty() {
-                    return format!("{}/{}", base, q);
-                }
-            }
-        }
-        native.to_string()
-    }
-
     /* 将币安订单状态字符串映射为统一枚举，未知状态保留原始值便于排查 */
     pub fn parse_order_status(status: &str) -> CcxtOrderStatus {
         match status {
@@ -706,14 +686,14 @@ impl ExchangePe for BinanceExchange {
 
     async fn get_symbols(&self) -> Result<Vec<String>, VirsError> {
         let markets = self.get_markets_cached().await?;
-        Ok(markets.iter().map(|m| m.symbol.clone()).collect())
+        Ok(markets.iter().map(|m| m.id.clone()).collect())
     }
 
     async fn get_min_qty(&self, symbol: &str) -> Result<f64, VirsError> {
         let markets = self.get_markets_cached().await?;
         markets
             .iter()
-            .find(|m| m.symbol.eq_ignore_ascii_case(symbol))
+            .find(|m| m.id.eq_ignore_ascii_case(symbol))
             .and_then(|m| m.min_amount)
             .ok_or_else(|| {
                 VirsError::Exchange(ExchangeError::no_data(format!(
