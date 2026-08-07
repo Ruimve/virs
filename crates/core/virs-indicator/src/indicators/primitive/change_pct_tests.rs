@@ -10,7 +10,7 @@ fn positive_in_uptrend() {
 
 #[test]
 fn correct_value_for_1_period() {
-    // close[29] = 129, close[28] = 128 → (129-128)/128*100
+
     let klines = uptrend_klines(30, 100.0, 1.0);
     let val = compute(&klines, 1).unwrap();
     let expected = (129.0 - 128.0) / 128.0 * 100.0;

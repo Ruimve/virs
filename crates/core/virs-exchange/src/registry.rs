@@ -19,8 +19,7 @@ impl Exchanges {
         }
     }
 
-    /// 注册一个 exchange（接受 Box，内部转 Arc 以便多处共享，
-    /// 替代已删除的 CcxtExchangeAdapter 中间层）。
+
     pub fn register(&self, exchange: Box<dyn ExchangePe>) {
         let name = exchange.name().to_string();
         let mt = exchange.market_type();
@@ -40,8 +39,7 @@ impl Exchanges {
         self.exchanges.iter().map(|r| r.key().clone()).collect()
     }
 
-    /// 获取已注册的 perpetual 合约交易所（返回可共享的 `Arc<dyn ExchangePe>`）。
-    /// 供 PositionEngine 等需要直接持有 `Arc<dyn ExchangePe>` 的调用方使用。
+
     pub fn get_perpetual(&self) -> Option<Arc<dyn ExchangePe>> {
         self.exchanges
             .iter()

@@ -2,17 +2,14 @@ import { memo } from 'react';
 import type { AccountBarProps } from './types';
 import { formatCompact } from './utils';
 
-/** 保证金率风险着色：< 50% 安全 / 50-80% 警告 / > 80% 危险 */
+
 function marginRateColor(rate: number): string {
   if (rate >= 80) return 'text-danger-text';
   if (rate >= 50) return 'text-warning-text';
   return 'text-on-surface-secondary';
 }
 
-/**
- * 账户条原子组件。
- * 紧凑单行：权益 | 已用 | 可用 | 保证金率（阈值着色）
- */
+
 export const AccountBar = memo(({ metrics }: AccountBarProps) => {
   const items = [
     {

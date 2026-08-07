@@ -274,7 +274,7 @@ pub async fn get_order_book(
 
     let exchange_key = format!("{}:{}", exchange, virs_type::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
-        // ExchangePe 统一 trait 不再提供 get_order_book 接口
+
         Some(_ex) => Err(VirsError::bad_request(format!(
             "Order book for symbol '{}' is not supported via the unified ExchangePe interface",
             symbol
@@ -297,7 +297,7 @@ pub async fn get_balances(
 
     let exchange_key = format!("{}:{}", exchange, virs_type::MarketType::Perpetual);
     match state.exchange_registry.get(&exchange_key) {
-        // ExchangePe::get_balance() 返回单个（通常为 USDT）余额
+
         Some(ex) => match ex.get_balance().await {
             Ok(b) => {
                 let filtered: Vec<_> = if b.total > 0.0 {

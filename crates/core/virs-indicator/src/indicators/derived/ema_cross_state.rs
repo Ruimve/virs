@@ -1,15 +1,11 @@
-//! EMA 交叉状态（"金叉(多头)" / "死叉(空头)"）。
-//!
-//! 依赖 [`crate::indicators::atomic::ema`]。
+
 
 use virs_error::{VirsError, VirsResult};
 use virs_type::Kline;
 
 use crate::indicators::atomic::ema::ema_at;
 
-/// 计算最新 K 线的 EMA 交叉状态。
-///
-/// `ema_fast > ema_slow` 为金叉(多头)，否则为死叉(空头)。
+
 pub fn compute(klines: &[Kline], fast: usize, slow: usize) -> VirsResult<String> {
     let last_idx = klines.len().saturating_sub(1);
     if last_idx < slow - 1 {

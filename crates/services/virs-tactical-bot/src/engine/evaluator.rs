@@ -1,11 +1,11 @@
-//! 策略评估器：从历史交易记录计算绩效指标。
+
 
 use chrono::Utc;
 
 use super::types::StrategyMetrics;
 use virs_type::{TradeHistoryProvider, TradeRecord};
 
-/// 策略评估器。
+
 pub(crate) struct StrategyEvaluator {
     history: Box<dyn TradeHistoryProvider>,
 }
@@ -15,7 +15,7 @@ impl StrategyEvaluator {
         Self { history }
     }
 
-    /// 评估单个策略的绩效。
+
     pub(crate) async fn evaluate(
         &self,
         strategy_name: &str,
@@ -49,7 +49,7 @@ impl StrategyEvaluator {
             0.0
         };
 
-        // 盈亏比 = 平均盈利 / 平均亏损绝对值
+
         let avg_win = if !winning.is_empty() {
             winning.iter().map(|t| t.realized_pnl).sum::<f64>() / winning.len() as f64
         } else {
@@ -68,10 +68,10 @@ impl StrategyEvaluator {
             0.0
         };
 
-        // 最大回撤：累计 P&L 曲线的最大峰值到谷值跌幅
+
         let max_drawdown = compute_max_drawdown(&trades);
 
-        // 平均持仓时长
+
         let avg_holding_secs = trades
             .iter()
             .map(|t| (t.closed_at - t.opened_at).num_seconds() as f64)
@@ -96,9 +96,9 @@ impl StrategyEvaluator {
     }
 }
 
-/// 计算累计 P&L 曲线的最大回撤。
+
 fn compute_max_drawdown(trades: &[TradeRecord]) -> f64 {
-    // 按平仓时间排序
+
     let mut sorted: Vec<&TradeRecord> = trades.iter().collect();
     sorted.sort_by_key(|t| t.closed_at);
 
@@ -187,7 +187,7 @@ mod tests {
         let evaluator = StrategyEvaluator::new(Box::new(MockHistory { trades }));
         let metrics = evaluator.evaluate("test", 3600).await.unwrap();
 
-        // avg_win=100, avg_loss=50, pf=2.0
+
         assert!((metrics.profit_factor - 2.0).abs() < 1e-6);
     }
 
@@ -200,7 +200,7 @@ mod tests {
 
     #[tokio::test]
     async fn t_eval_4_max_drawdown() {
-        // 累计 P&L: +100, +50, -200, +30 → peak=150, trough=-50, dd=200
+
         let trades = vec![
             make_trade(100.0, 60),
             make_trade(50.0, 50),

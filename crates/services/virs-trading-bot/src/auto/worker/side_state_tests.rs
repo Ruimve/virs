@@ -3,7 +3,6 @@ use virs_type::Position;
 
 use super::side_state::{PendingClose, PendingOpen, SideState};
 
-// ===== helpers =====
 
 fn make_position(side: PositionSide, status: PositionStatus, quantity: f64) -> Position {
     Position {
@@ -44,7 +43,6 @@ fn make_pending_close() -> PendingClose {
     }
 }
 
-// ===== has_position =====
 
 #[test]
 fn ss_1_1_has_position_open_with_quantity() {
@@ -94,7 +92,6 @@ fn ss_1_7_has_position_closed_status() {
     assert!(!s.has_position());
 }
 
-// ===== is_pending =====
 
 #[test]
 fn ss_2_1_is_pending_open_only() {
@@ -124,7 +121,6 @@ fn ss_2_4_is_pending_none() {
     assert!(!s.is_pending());
 }
 
-// ===== get_position =====
 
 #[test]
 fn ss_3_1_get_position_some() {
@@ -142,7 +138,6 @@ fn ss_3_2_get_position_none() {
     assert!(s.get_position().is_none());
 }
 
-// ===== clear_position =====
 
 #[test]
 fn ss_4_1_clear_position_resets_all_position_fields() {
@@ -197,7 +192,6 @@ fn ss_4_4_clear_position_on_default_is_noop() {
     assert_eq!(s.stop_loss, 0.0);
 }
 
-// ===== clear_on_close =====
 
 #[test]
 fn ss_5_1_clear_on_close_resets_position_fields() {
@@ -254,7 +248,6 @@ fn ss_5_4_clear_on_close_overwrites_previous_last_close_event() {
     assert_eq!(s.last_close_event, Some(new_event));
 }
 
-// ===== Default trait =====
 
 #[test]
 fn ss_6_1_default_all_fields_zero_or_none() {

@@ -2,7 +2,7 @@ use virs_indicator::{IndicatorSet, IndicatorValue, IndicatorSpec};
 use virs_type::Timeframe;
 use crate::render::{format_bars_outside, render, RenderContext};
 
-/// 测试辅助：构造含特定指标值的 IndicatorSet。
+
 fn make_indicators() -> IndicatorSet {
     IndicatorSet::with_value(IndicatorSpec::CurrentPrice { tf: Timeframe::H1 }, IndicatorValue::Num(50000.0))
         .insert(IndicatorSpec::Ema { tf: Timeframe::H1, period: 20 }, IndicatorValue::Num(49500.0))

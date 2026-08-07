@@ -1,8 +1,4 @@
-//! Auto 策略交易数学计算。
-//!
-//! Prompt 渲染已统一到 [`virs_prompt::render`]，
-//! 本模块仅保留 Auto 专属的交易数学函数（止损止盈、移动止损、仓位百分比、冷却时间）
-//! 和持仓格式化辅助函数。
+
 
 pub fn format_position_info(
     position: &virs_type::Position,

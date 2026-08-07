@@ -1,14 +1,4 @@
-/**
- * BotLoading 局部样式 —— Bot 加载过渡图标。
- *
- * 设计：单一 indigo 主色，三层视觉层级——
- *  1. 外圈旋转弧（1.8s 线性，主动律动）
- *  2. Bot 头部线条标（静态锚定身份）
- *  3. 天线圆点脉冲（1.4s，暗示接收信号 / 思考中）
- *  4. 双眼错时呼吸（2s，轻微生命感）
- * 描边粗细分层：轨道 1 / 弧 1.5 / 头部 1.5 / 五官 1.25。
- * 全部使用项目主题变量，自动适配亮/暗主题。
- */
+
 
 .bot-loading-icon {
   display: block;
@@ -22,25 +12,25 @@
   stroke: var(--color-accent-val);
 }
 
-/* 天线圆点为实心 */
+
 .bot-antenna-dot {
   fill: var(--color-accent-val);
   stroke: none;
 }
 
-/* 双眼为实心 */
+
 .bot-eye {
   fill: var(--color-accent-val);
   stroke: none;
 }
 
-/* 外圈轨道（静态、淡） */
+
 .bot-loading-icon .ring-track {
   stroke-width: 1;
   opacity: 0.12;
 }
 
-/* 外圈旋转弧 */
+
 .bot-loading-icon .ring-arc {
   stroke-width: 1.5;
   transform-origin: center;
@@ -48,31 +38,31 @@
   animation: bot-loading-spin 1.8s linear infinite;
 }
 
-/* 天线（线） */
+
 .bot-antenna {
   stroke-width: 1.25;
   opacity: 0.55;
 }
 
-/* 天线圆点（脉冲） */
+
 .bot-antenna-dot {
   transform-origin: 40px 20px;
   transform-box: view-box;
   animation: bot-loading-pulse 1.4s ease-in-out infinite;
 }
 
-/* Bot 头部 */
+
 .bot-head {
   stroke-width: 1.5;
 }
 
-/* 嘴部栅格 */
+
 .bot-mouth {
   stroke-width: 1.25;
   opacity: 0.5;
 }
 
-/* 双眼呼吸 */
+
 .bot-eye {
   animation: bot-loading-breathe 2s ease-in-out infinite;
 }

@@ -3,7 +3,7 @@ use crate::indicators::test_utils::{uptrend_klines, kline};
 
 #[test]
 fn zero_when_price_inside_band() {
-    // 震荡 K 线，价格在布林带内
+
     let klines: Vec<_> = (0..30).map(|i| kline(100.0, 101.0, 99.0, 100.0, 1000.0)).collect();
     let val = compute(&klines, 20, 2).unwrap();
     assert_eq!(val, 0, "Bars outside should be 0 when price stays inside band");
@@ -11,9 +11,9 @@ fn zero_when_price_inside_band() {
 
 #[test]
 fn positive_when_price_above_upper() {
-    // 构造最后几根 K 线收盘价远超布林带上轨
+
     let mut klines: Vec<_> = (0..25).map(|i| kline(100.0, 101.0, 99.0, 100.0, 1000.0)).collect();
-    // 最后 5 根价格飙升
+
     klines.push(kline(100.0, 130.0, 100.0, 130.0, 1000.0));
     klines.push(kline(130.0, 140.0, 125.0, 140.0, 1000.0));
     klines.push(kline(140.0, 150.0, 135.0, 150.0, 1000.0));

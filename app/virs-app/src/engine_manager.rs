@@ -354,8 +354,7 @@ impl EngineManager for AppEngineManager {
         let auto_llm_resolver: Arc<dyn virs_type::LlmProviderResolver> =
             Arc::new(DefaultLlmResolver::new());
 
-        // 尝试创建 StrategyEngine（策略自动优化引擎）
-        // 如果没有 LLM 凭证则跳过，不影响正常交易
+
         let (strategy_engine_handle, strategy_engine_task): (
             Option<Arc<dyn virs_prompt::StrategyHotSwapSource>>,
             Option<TaskHandle>,

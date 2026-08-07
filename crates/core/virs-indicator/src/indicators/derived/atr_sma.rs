@@ -1,6 +1,4 @@
-//! ATR 序列的 SMA。
-//!
-//! 依赖 [`crate::indicators::atomic::atr`] + [`crate::indicators::atomic::sma`]。
+
 
 use virs_error::{VirsError, VirsResult};
 use virs_type::Kline;
@@ -8,7 +6,7 @@ use virs_type::Kline;
 use crate::indicators::atomic::atr::atr;
 use crate::indicators::atomic::sma::sma_at_from;
 
-/// 计算最新 K 线的 ATR SMA 值。
+
 pub fn compute(klines: &[Kline], atr_period: usize, sma_period: usize) -> VirsResult<f64> {
     if klines.len() < sma_period {
         return Err(VirsError::config(format!(

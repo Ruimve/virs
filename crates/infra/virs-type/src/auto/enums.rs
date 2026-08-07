@@ -16,7 +16,6 @@ pub enum StrategyStatus {
 }
 
 
-/// 策略类型。对应 `strategies/auto/{name}/` 子目录。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum StrategyType {
@@ -31,7 +30,7 @@ impl StrategyType {
     }
 }
 
-/// 自动交易引擎控制命令。
+
 #[derive(Debug)]
 pub enum AutoCommand {
     StartBot { bot_id: Uuid },
@@ -39,8 +38,8 @@ pub enum AutoCommand {
     DeleteBot {
         bot_id: Uuid,
         close_position: bool,
-        /// Response channel for the handler to await engine completion.
-        /// `Ok(())` = bot deleted successfully; `Err(msg)` = engine failed mid-deletion.
+
+
         response_tx: oneshot::Sender<Result<(), String>>,
     },
 }

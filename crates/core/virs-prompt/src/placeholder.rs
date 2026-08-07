@@ -1,13 +1,10 @@
-//! 占位符注册表 — 全部占位符的单一数据源。
-//!
-//! 新增/修改占位符只需在此文件一处操作，validator / render / ai_generator 自动同步。
+
 
 use std::collections::HashSet;
 
 use virs_indicator::IndicatorSpec;
 use virs_type::Timeframe;
 
-// ── 分类（用于 ai_generator 的 prompt 文本分组）──
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Category {
@@ -32,33 +29,32 @@ impl Category {
     }
 }
 
-// ── 格式化规则 ──
 
 #[derive(Debug, Clone, Copy)]
 pub enum Format {
-    /// `{:.2}` — 价格类
+
     Price2,
-    /// `{:.4}` — MACD/ATR 类
+
     Price4,
-    /// `{:.6}` — 最小交易量
+
     Price6,
-    /// `{:+.2}` — 带符号涨跌幅
+
     Signed2,
-    /// `{:.1}` — 1 位小数
+
     Decimal1,
-    /// `v * 100` + `{:.2}` — 百分比（无 % 后缀）
+
     Percent2,
-    /// `v * 100` + `{:.4}%` — 百分比（带 % 后缀）
+
     Percent4,
-    /// `to_string()` — 整数
+
     Int,
-    /// 原样输出
+
     Str,
-    /// `"true"` / `"false"`
+
     Bool,
-    /// 正=向上N根，负=向下N根，0=无
+
     BarsOutside,
-    /// >=0: N, <0: "无近期交叉"
+
     CrossBarsAgo,
 }
 
@@ -108,7 +104,6 @@ impl Format {
     }
 }
 
-// ── Context 字段标识 ──
 
 #[derive(Debug, Clone, Copy)]
 pub enum ContextField {
@@ -137,7 +132,6 @@ pub enum ContextField {
     TriggerReason,
 }
 
-// ── 占位符来源 ──
 
 #[derive(Debug, Clone)]
 pub enum PlaceholderSource {
@@ -145,7 +139,6 @@ pub enum PlaceholderSource {
     Indicator(IndicatorSpec, Format),
 }
 
-// ── 占位符定义 ──
 
 #[derive(Debug, Clone)]
 pub struct PlaceholderDef {
@@ -154,13 +147,9 @@ pub struct PlaceholderDef {
     pub category: Category,
 }
 
-// ── 注册表 ──
 
-/// 全部占位符定义（单一数据源）。
-///
-/// 新增占位符只需在此数组追加一行，validator / render / ai_generator 自动同步。
 pub const REGISTRY: &[PlaceholderDef] = &[
-    // ── 通用上下文 ──
+
     PlaceholderDef { name: "timestamp",         source: PlaceholderSource::Context(ContextField::Timestamp, Format::Str),       category: Category::General },
     PlaceholderDef { name: "symbol",            source: PlaceholderSource::Context(ContextField::Symbol, Format::Str),         category: Category::General },
     PlaceholderDef { name: "exchange",          source: PlaceholderSource::Context(ContextField::Exchange, Format::Str),       category: Category::General },
@@ -173,7 +162,7 @@ pub const REGISTRY: &[PlaceholderDef] = &[
     PlaceholderDef { name: "funding_rate",      source: PlaceholderSource::Context(ContextField::FundingRate, Format::Percent4), category: Category::General },
     PlaceholderDef { name: "funding_next_time", source: PlaceholderSource::Context(ContextField::FundingNextTime, Format::Str), category: Category::General },
 
-    // ── 仓位 / 统计 ──
+
     PlaceholderDef { name: "position_info",        source: PlaceholderSource::Context(ContextField::PositionInfo, Format::Str),        category: Category::Position },
     PlaceholderDef { name: "position_duration",    source: PlaceholderSource::Context(ContextField::PositionDuration, Format::Str),    category: Category::Position },
     PlaceholderDef { name: "stop_take_profit_info",source: PlaceholderSource::Context(ContextField::StopTakeProfitInfo, Format::Str),  category: Category::Position },
@@ -185,7 +174,7 @@ pub const REGISTRY: &[PlaceholderDef] = &[
     PlaceholderDef { name: "consecutive_losses",   source: PlaceholderSource::Context(ContextField::ConsecutiveLosses, Format::Int),   category: Category::Position },
     PlaceholderDef { name: "trigger_reason",       source: PlaceholderSource::Context(ContextField::TriggerReason, Format::Str),       category: Category::Position },
 
-    // ── H1 指标 ──
+
     PlaceholderDef { name: "h1_current_price",       source: PlaceholderSource::Indicator(IndicatorSpec::CurrentPrice { tf: Timeframe::H1 }, Format::Price2),     category: Category::H1 },
     PlaceholderDef { name: "h1_rsi",                 source: PlaceholderSource::Indicator(IndicatorSpec::Rsi { tf: Timeframe::H1, period: 14 }, Format::Price2),            category: Category::H1 },
     PlaceholderDef { name: "h1_atr",                 source: PlaceholderSource::Indicator(IndicatorSpec::Atr { tf: Timeframe::H1, period: 14 }, Format::Price4),            category: Category::H1 },
@@ -217,7 +206,7 @@ pub const REGISTRY: &[PlaceholderDef] = &[
     PlaceholderDef { name: "nearest_round_up",       source: PlaceholderSource::Indicator(IndicatorSpec::RoundNumberUp, Format::Price2), category: Category::H1 },
     PlaceholderDef { name: "nearest_round_down",     source: PlaceholderSource::Indicator(IndicatorSpec::RoundNumberDown, Format::Price2), category: Category::H1 },
 
-    // ── M15 指标 ──
+
     PlaceholderDef { name: "m15_current_price",      source: PlaceholderSource::Indicator(IndicatorSpec::CurrentPrice { tf: Timeframe::M15 }, Format::Price2), category: Category::M15 },
     PlaceholderDef { name: "m15_rsi",                source: PlaceholderSource::Indicator(IndicatorSpec::Rsi { tf: Timeframe::M15, period: 14 }, Format::Price2), category: Category::M15 },
     PlaceholderDef { name: "m15_macd",               source: PlaceholderSource::Indicator(IndicatorSpec::Macd { tf: Timeframe::M15, fast: 12, slow: 26, signal: 9 }, Format::Price4), category: Category::M15 },
@@ -237,7 +226,7 @@ pub const REGISTRY: &[PlaceholderDef] = &[
     PlaceholderDef { name: "m15_high_50",            source: PlaceholderSource::Indicator(IndicatorSpec::Highest { tf: Timeframe::M15, period: 50 }, Format::Price2), category: Category::M15 },
     PlaceholderDef { name: "m15_low_50",             source: PlaceholderSource::Indicator(IndicatorSpec::Lowest { tf: Timeframe::M15, period: 50 }, Format::Price2), category: Category::M15 },
 
-    // ── H4 指标 ──
+
     PlaceholderDef { name: "h4_ema20",           source: PlaceholderSource::Indicator(IndicatorSpec::Ema { tf: Timeframe::H4, period: 20 }, Format::Price2), category: Category::H4 },
     PlaceholderDef { name: "h4_ema50",           source: PlaceholderSource::Indicator(IndicatorSpec::Ema { tf: Timeframe::H4, period: 50 }, Format::Price2), category: Category::H4 },
     PlaceholderDef { name: "h4_adx",             source: PlaceholderSource::Indicator(IndicatorSpec::Adx { tf: Timeframe::H4, period: 14 }, Format::Price2), category: Category::H4 },
@@ -247,22 +236,22 @@ pub const REGISTRY: &[PlaceholderDef] = &[
     PlaceholderDef { name: "h4_macd_histogram",  source: PlaceholderSource::Indicator(IndicatorSpec::MacdHistogram { tf: Timeframe::H4, fast: 12, slow: 26, signal: 9 }, Format::Price4), category: Category::H4 },
     PlaceholderDef { name: "h4_bb_width_pct",    source: PlaceholderSource::Indicator(IndicatorSpec::BbandsWidth { tf: Timeframe::H4, period: 20, stddev: 2 }, Format::Percent2), category: Category::H4 },
 
-    // ── 事件 ──
+
     PlaceholderDef { name: "event_flag",        source: PlaceholderSource::Context(ContextField::EventFlag, Format::Bool),       category: Category::Event },
     PlaceholderDef { name: "event_description", source: PlaceholderSource::Context(ContextField::EventDescription, Format::Str), category: Category::Event },
 ];
 
-/// 返回全部占位符定义。
+
 pub fn all() -> &'static [PlaceholderDef] {
     REGISTRY
 }
 
-/// 返回全部占位符名称集合（validator 白名单）。
+
 pub fn names() -> HashSet<&'static str> {
     REGISTRY.iter().map(|d| d.name).collect()
 }
 
-/// 生成 LLM 可读的占位符清单文本（按分类分组）。
+
 pub fn to_prompt_text() -> String {
     use Category::*;
     let categories = [General, Position, H1, M15, H4, Event];

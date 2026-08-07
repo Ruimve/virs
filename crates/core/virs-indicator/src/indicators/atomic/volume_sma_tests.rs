@@ -12,7 +12,7 @@ fn volume_sma_of_constant_volume() {
 fn volume_sma_of_increasing_volume() {
     let klines = uptrend_klines(30, 100.0, 1.0);
     let val = volume_sma_at(&klines, 28, 5).unwrap();
-    // Volume in uptrend_klines = 1000 + i*10
+
     let vols: Vec<f64> = (24..=28).map(|i| 1000.0 + i as f64 * 10.0).collect();
     let expected: f64 = vols.iter().sum::<f64>() / 5.0;
     assert!((val - expected).abs() < 0.001, "Volume SMA should be {expected}, got {val}");

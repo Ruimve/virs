@@ -47,31 +47,25 @@ pub enum OrderStatus {
 }
 
 
-/// 币安合约 timeInForce 枚举。
-///
-/// 值域来源：币安 exchangeInfo `timeInForce: ['GTC', 'IOC', 'FOK', 'GTX']`，
-/// 以及用户指南中的 GTD（Good Till Date）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TimeInForce {
-    /// GTC — Good Till Canceled
+
     #[serde(rename = "GTC")]
     Gtc,
-    /// IOC — Immediate Or Cancel
+
     #[serde(rename = "IOC")]
     Ioc,
-    /// FOK — Fill Or Kill
+
     #[serde(rename = "FOK")]
     Fok,
-    /// GTX — Good Till Crossing (Post-Only / 只做 Maker)
+
     #[serde(rename = "GTX")]
     Gtx,
-    /// GTD — Good Till Date
+
     #[serde(rename = "GTD")]
     Gtd,
 }
 
-
-// ── sqlx 编解码：Side ──
 
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Side {
     fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
@@ -104,8 +98,6 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Side {
     }
 }
 
-
-// ── sqlx 编解码：OrderType ──
 
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for OrderType {
     fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
@@ -150,8 +142,6 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for OrderType {
     }
 }
 
-
-// ── WS 事件枚举 ──
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ExecutionType {

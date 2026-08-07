@@ -398,11 +398,7 @@ impl PositionEngineHandle for PositionEngine {
     }
 }
 
-/// 工厂函数：创建 PositionEngine，启动运行循环，并返回 trait 对象。
-///
-/// `run()` 需要 `&mut self`，无法通过 trait 对象调用，
-/// 因此在工厂函数内部 spawn 后将 `TaskHandle` 存入 `EngineInner`（共享 Arc），
-/// 外部仅通过 `Arc<dyn PositionEngineHandle>` 交互，`stop()` 内部完成 cancel + join。
+
 pub fn create_position_engine(
     exchange: Arc<dyn ExchangePe>,
     persistence: Box<dyn PositionPersistence>,

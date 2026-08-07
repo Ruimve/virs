@@ -1,6 +1,4 @@
-//! LLM 策略选择共享逻辑。
-//!
-//! 被 auto_trade handler 复用,避免重复实现 `select_strategy_by_llm`。
+
 
 use virs_error::VirsError;
 use virs_indicator::IndicatorSpec;
@@ -9,9 +7,7 @@ use virs_type::{StrategyType, Timeframe};
 
 use crate::state::AppState;
 
-/// LLM 选择策略:获取市场快照 + 构造选择 prompt + 调用 LLM + 解析返回。
-///
-/// `strategy_type` 决定从 PromptLoader 取哪类策略模板的元数据。
+
 pub async fn select_strategy_by_llm(
     state: &AppState,
     loader: &PromptLoader,
@@ -20,7 +16,7 @@ pub async fn select_strategy_by_llm(
     symbol: &str,
     strategy_type: StrategyType,
 ) -> Result<String, VirsError> {
-    // 获取 H1 K 线数据
+
     let candles = state
         .kline_engine
         .get_klines(exchange, symbol, virs_type::Timeframe::H1)
@@ -57,7 +53,7 @@ pub async fn select_strategy_by_llm(
         })
         .collect();
 
-    // 计算基础指标（只计算策略选择所需的 3 个：当前价、ATR、RSI）
+
     let specs = [
         IndicatorSpec::CurrentPrice { tf: Timeframe::H1 },
         IndicatorSpec::Atr { tf: Timeframe::H1, period: 14 },
@@ -85,7 +81,7 @@ pub async fn select_strategy_by_llm(
             symbol, exchange
         )))?;
 
-    // 获取策略元数据
+
     let mut strategy_details: Vec<serde_json::Value> = Vec::new();
     for name in strategies {
         if let Some(tpl) = loader.get(strategy_type, name).await {
@@ -122,14 +118,14 @@ Respond in JSON format with:
         .await
         .map_err(|e| VirsError::bad_request(format!("LLM strategy selection failed: {e}")))?;
 
-    // 解析 LLM 返回的策略名（content 已是 JSON Value）
+
     let parsed = &result.content;
 
     let selected = parsed["strategy_name"]
         .as_str()
         .ok_or_else(|| VirsError::bad_request("LLM did not return strategy_name"))?;
 
-    // 校验 LLM 返回的策略名在列表中
+
     if !strategies.iter().any(|s| s == selected) {
         return Err(VirsError::bad_request(format!(
             "LLM selected strategy '{selected}' which is not in the available list: {:?}",

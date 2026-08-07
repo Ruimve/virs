@@ -459,10 +459,7 @@ impl KlineEngineHandle for KlineEngine {
     }
 }
 
-/// 工厂函数：创建 KlineEngine 并返回 trait 对象。
-///
-/// `KlineEngine` 为 `pub(crate)`，外部 crate 无法直接构造。
-/// 引擎在首次 `subscribe_market` 时懒启动（lazy start），无需在工厂函数中 spawn。
+
 pub fn create_kline_engine(
     config: KlineEngineConfig,
     source: Arc<dyn KlineSource>,

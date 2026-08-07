@@ -1,15 +1,15 @@
 @import 'tailwindcss';
 
-/* ===== 语义色 Token ===== */
+
 @theme {
-  /* Surface */
+
   --color-base: var(--bg-base);
   --color-base-secondary: var(--bg-base-secondary);
   --color-surface-1: var(--bg-surface-1);
   --color-surface-2: var(--bg-surface-2);
   --color-surface-3: var(--bg-surface-3);
 
-  /* Text */
+
   --color-on-base: var(--text-on-base);
   --color-on-surface: var(--text-on-surface);
   --color-on-surface-secondary: var(--text-on-surface-secondary);
@@ -18,57 +18,57 @@
   --color-on-surface-faint: var(--text-on-surface-faint);
   --color-placeholder: var(--text-placeholder);
 
-  /* Border */
+
   --color-line-subtle: var(--border-subtle);
   --color-line-default: var(--border-default);
   --color-line-strong: var(--border-strong);
   --color-line-emphasis: var(--border-emphasis);
 
-  /* Accent (indigo) —— 主操作色 / 品牌 */
+
   --color-accent: var(--color-accent-val);
   --color-accent-hover: var(--color-accent-hover-val);
   --color-accent-light: var(--color-accent-light-val);
   --color-accent-muted: var(--color-accent-muted-val);
 
-  /* Success —— 运行中 / 盈利 / 买入 / 上涨 */
+
   --color-success: var(--color-success-val);
   --color-success-text: var(--color-success-text-val);
   --color-success-bg: var(--color-success-bg-val);
   --color-success-border: var(--color-success-border-val);
 
-  /* Warning —— 警告 / 风险 / 暂停 / Paper 模式 */
+
   --color-warning: var(--color-warning-val);
   --color-warning-text: var(--color-warning-text-val);
   --color-warning-bg: var(--color-warning-bg-val);
   --color-warning-border: var(--color-warning-border-val);
 
-  /* Danger —— 错误 / 亏损 / 卖出 / 下跌 / 失败 */
+
   --color-danger: var(--color-danger-val);
   --color-danger-text: var(--color-danger-text-val);
   --color-danger-bg: var(--color-danger-bg-val);
   --color-danger-border: var(--color-danger-border-val);
 
-  /* Info —— 中性提示 / 系统指标 / 信息（与 accent indigo 区分） */
+
   --color-info: var(--color-info-val);
   --color-info-text: var(--color-info-text-val);
   --color-info-bg: var(--color-info-bg-val);
   --color-info-border: var(--color-info-border-val);
 
-  /* Font size tokens —— 补充原生刻度以下的语义字号 */
-  --text-2xs: 0.625rem; /* 10px — micro / sub-text */
-  --text-caption: 0.6875rem; /* 11px — label / caption（核心 token） */
+
+  --text-2xs: 0.625rem;
+  --text-caption: 0.6875rem;
 }
 
-/* ===== 亮色主题 (默认) ===== */
+
 :root {
-  /* Surface */
+
   --bg-base: #ffffff;
   --bg-base-secondary: #f8fafc;
   --bg-surface-1: #f8fafc;
   --bg-surface-2: #f1f5f9;
   --bg-surface-3: #e2e8f0;
 
-  /* Text */
+
   --text-on-base: #0f172a;
   --text-on-surface: #1e293b;
   --text-on-surface-secondary: #475569;
@@ -77,43 +77,43 @@
   --text-on-surface-faint: #cbd5e1;
   --text-placeholder: #94a3b8;
 
-  /* Border */
+
   --border-subtle: #f1f5f9;
   --border-default: #e2e8f0;
   --border-strong: #cbd5e1;
   --border-emphasis: #94a3b8;
 
-  /* Accent */
+
   --color-accent-val: #4f46e5;
   --color-accent-hover-val: #4338ca;
   --color-accent-light-val: #eef2ff;
   --color-accent-muted-val: #c7d2fe;
 
-  /* Success (emerald) */
+
   --color-success-val: #10b981;
   --color-success-text-val: #059669;
   --color-success-bg-val: rgba(16, 185, 129, 0.1);
   --color-success-border-val: rgba(16, 185, 129, 0.3);
 
-  /* Warning (amber) */
+
   --color-warning-val: #f59e0b;
   --color-warning-text-val: #d97706;
   --color-warning-bg-val: rgba(245, 158, 11, 0.1);
   --color-warning-border-val: rgba(245, 158, 11, 0.3);
 
-  /* Danger (red) */
+
   --color-danger-val: #ef4444;
   --color-danger-text-val: #dc2626;
   --color-danger-bg-val: rgba(239, 68, 68, 0.1);
   --color-danger-border-val: rgba(239, 68, 68, 0.3);
 
-  /* Info (sky/blue) */
+
   --color-info-val: #0ea5e9;
   --color-info-text-val: #0284c7;
   --color-info-bg-val: rgba(14, 165, 233, 0.1);
   --color-info-border-val: rgba(14, 165, 233, 0.3);
 
-  /* Chart —— 供 lightweight-charts 读取的裸色值 */
+
   --chart-up: var(--color-success-val);
   --chart-up-volume: rgba(16, 185, 129, 0.3);
   --chart-down: var(--color-danger-val);
@@ -121,20 +121,20 @@
   --chart-line: var(--color-accent-val);
   --chart-baseline: var(--text-on-surface-muted);
 
-  /* Elevation —— 阴影 */
+
   --shadow-sticky: 0 -4px 12px rgba(0, 0, 0, 0.06);
 }
 
-/* ===== 暗色主题 — "Terminal Luxe" ===== */
+
 .dark {
-  /* Surface — deeper, more saturated */
+
   --bg-base: #08090d;
   --bg-base-secondary: #0c0e14;
   --bg-surface-1: #12141c;
   --bg-surface-2: #1a1d28;
   --bg-surface-3: #242736;
 
-  /* Text — slightly warmer whites */
+
   --text-on-base: rgba(255, 255, 255, 0.95);
   --text-on-surface: rgba(255, 255, 255, 0.85);
   --text-on-surface-secondary: rgba(255, 255, 255, 0.62);
@@ -143,51 +143,51 @@
   --text-on-surface-faint: rgba(255, 255, 255, 0.16);
   --text-placeholder: rgba(255, 255, 255, 0.28);
 
-  /* Border */
+
   --border-subtle: rgba(255, 255, 255, 0.05);
   --border-default: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.12);
   --border-emphasis: rgba(255, 255, 255, 0.18);
 
-  /* Accent — distinctive blue-violet */
+
   --color-accent-val: #7c6aef;
   --color-accent-hover-val: #9185f0;
   --color-accent-light-val: rgba(124, 106, 239, 0.12);
   --color-accent-muted-val: rgba(124, 106, 239, 0.25);
 
-  /* Success (emerald — slightly more saturated) */
+
   --color-success-val: #2dd4a0;
   --color-success-text-val: #2dd4a0;
   --color-success-bg-val: rgba(45, 212, 160, 0.1);
   --color-success-border-val: rgba(45, 212, 160, 0.25);
 
-  /* Warning (amber) */
+
   --color-warning-val: #fbbf24;
   --color-warning-text-val: #fbbf24;
   --color-warning-bg-val: rgba(251, 191, 36, 0.1);
   --color-warning-border-val: rgba(251, 191, 36, 0.25);
 
-  /* Danger (red — slightly more saturated) */
+
   --color-danger-val: #f47171;
   --color-danger-text-val: #f47171;
   --color-danger-bg-val: rgba(244, 113, 113, 0.1);
   --color-danger-border-val: rgba(244, 113, 113, 0.25);
 
-  /* Info (sky/blue) */
+
   --color-info-val: #38bdf8;
   --color-info-text-val: #38bdf8;
   --color-info-bg-val: rgba(56, 189, 248, 0.1);
   --color-info-border-val: rgba(56, 189, 248, 0.25);
 
-  /* Chart — dark theme chart colors */
+
   --chart-up-volume: rgba(45, 212, 160, 0.3);
   --chart-down-volume: rgba(244, 113, 113, 0.3);
 
-  /* Elevation — dark shadow */
+
   --shadow-sticky: 0 -4px 16px rgba(0, 0, 0, 0.5);
 }
 
-/* ===== 全局字体 ===== */
+
 body {
   font-family:
     'Plus Jakarta Sans',
@@ -200,7 +200,7 @@ body {
   text-rendering: optimizeLegibility;
   color: var(--text-on-base);
   background-color: var(--bg-base-secondary);
-  /* 全局启用斜线数字（lining nums），与 .font-mono 的 tabular-nums 配合 */
+
   font-variant-numeric: lining-nums;
   font-feature-settings: 'lnum' 1;
 }
@@ -209,14 +209,14 @@ code,
 pre,
 .font-mono {
   font-family: 'Roboto Mono', 'JetBrains Mono', 'Fira Code', monospace;
-  /* 启用表格数字（tabular figures），确保数字等宽对齐，避免金融数字重排 */
+
   font-variant-numeric: tabular-nums;
   font-feature-settings:
     'tnum' 1,
     'lnum' 1;
 }
 
-/* ===== 滚动条美化 ===== */
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -235,13 +235,13 @@ pre,
   background: var(--border-emphasis);
 }
 
-/* Firefox */
+
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
 
-/* ===== 输入框聚焦过渡 ===== */
+
 input,
 textarea,
 select {
@@ -257,7 +257,7 @@ select:focus {
   box-shadow: 0 0 0 3px var(--color-accent-light-val);
 }
 
-/* ===== 表格行 hover ===== */
+
 tbody tr {
   transition: background-color 0.15s ease;
 }
@@ -266,7 +266,7 @@ tbody tr:hover {
   background-color: var(--bg-surface-1);
 }
 
-/* ===== 选中文字颜色 ===== */
+
 ::selection {
   background-color: var(--color-accent-muted-val);
   color: var(--text-on-base);
@@ -311,7 +311,7 @@ tbody tr:hover {
   }
 }
 
-/* ===== VIRS Logo animations ===== */
+
 @keyframes virs-flow {
   0% {
     background-position: 0% 50%;
@@ -321,7 +321,7 @@ tbody tr:hover {
   }
 }
 
-/* ===== Terminal Luxe — additional animations ===== */
+
 @keyframes subtle-pulse {
   0%,
   100% {
@@ -353,7 +353,7 @@ tbody tr:hover {
   }
 }
 
-/* Terminal cursor blink: steps(2) 硬切，模拟终端光标 */
+
 @keyframes virs-cursor-blink {
   0%,
   50% {
@@ -377,7 +377,7 @@ tbody tr:hover {
   animation: error-enter 0.3s ease-out both;
 }
 
-/* Terminal grid background pattern */
+
 .terminal-grid-bg {
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),

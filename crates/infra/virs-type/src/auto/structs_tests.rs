@@ -115,7 +115,6 @@ fn a5_2_running_status() {
     assert!(!bot.is_stopped());
 }
 
-// ── AutoBot serde roundtrip（原 virs-models::serde_tests） ──
 
 #[test]
 fn s4_1_auto_bot_roundtrip() {

@@ -1,15 +1,11 @@
-//! EMA 间距趋势（"扩大" / "缩小" / "持平"）。
-//!
-//! 依赖 [`crate::indicators::atomic::ema`]。
+
 
 use virs_error::{VirsError, VirsResult};
 use virs_type::Kline;
 
 use crate::indicators::atomic::ema::ema_at;
 
-/// 计算最新 K 线的 EMA 间距趋势。
-///
-/// 比较当前间距绝对值与 5 根前的间距绝对值，判断扩大/缩小/持平。
+
 pub fn compute(klines: &[Kline], fast: usize, slow: usize) -> VirsResult<String> {
     let last_idx = klines.len().saturating_sub(1);
     if last_idx < slow - 1 {

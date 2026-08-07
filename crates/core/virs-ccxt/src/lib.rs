@@ -318,7 +318,7 @@ pub(crate) fn extract_error_message(json: &Value) -> String {
     json.to_string()
 }
 
-/// 独立创建 K线 WS 客户端（启动时使用，此时尚无 exchange 实例）。
+
 pub fn create_kline_ws(
     proxy: Option<&str>,
 ) -> std::sync::Arc<tokio::sync::Mutex<dyn virs_type::KlineWsClient>> {
@@ -327,7 +327,7 @@ pub fn create_kline_ws(
     ))
 }
 
-/// 独立创建订单簿 WS 客户端（启动时使用，此时尚无 exchange 实例）。
+
 pub fn create_orderbook_ws(
     proxy: Option<&str>,
 ) -> std::sync::Arc<tokio::sync::Mutex<dyn virs_type::OrderBookWsClient>> {
@@ -336,9 +336,7 @@ pub fn create_orderbook_ws(
     ))
 }
 
-/// 创建交易所实例，返回 `Box<dyn ExchangePe>`。
-///
-/// 内部完成时间同步（启动周期同步任务），调用方无需再调 sync_time。
+
 pub async fn create_exchange(
     id: &str,
     api_key: &str,

@@ -29,8 +29,6 @@ impl std::fmt::Display for MarketType {
 }
 
 
-// ── sqlx 编解码：MarketType ──
-
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for MarketType {
     fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
         let s = <&str as sqlx::Decode<sqlx::Postgres>>::decode(value)?;

@@ -89,10 +89,7 @@ impl KlineSource for ExchangeKlineSource {
     }
 }
 
-/// 工厂函数：创建 ExchangeKlineSource 并返回 trait 对象。
-///
-/// `ExchangeKlineSource` 为 `pub(crate)`，外部 crate 无法直接构造。
-/// 该类型无运行循环，仅封装 `Exchanges` 注册表的 K 线拉取能力，无需 spawn。
+
 pub fn create_exchange_kline_source(
     registry: std::sync::Arc<Exchanges>,
 ) -> std::sync::Arc<dyn KlineSource> {

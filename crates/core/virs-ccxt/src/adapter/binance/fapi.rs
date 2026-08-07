@@ -10,15 +10,15 @@ use virs_type::{
     OrderResult, PlaceOrderParams, PositionMode, PositionSide, Side, TimeInForce,
 };
 
-// 币安U本位合约 API 基础域名
+
 const BASE_URL: &str = "https://fapi.binance.com";
 
-// 拼接完整请求 URL
+
 fn url(path: &str) -> String {
     format!("{BASE_URL}{path}")
 }
 
-/// 将 interval 字符串转为毫秒数
+
 fn timeframe_to_ms(interval: &str) -> i64 {
     match interval {
         "1m" => 60_000,
@@ -33,13 +33,13 @@ fn timeframe_to_ms(interval: &str) -> i64 {
     }
 }
 
-// 连通性检测
+
 pub async fn ping(client: &ExchangeClient) -> Result<bool, ExchangeError> {
     let data = client.public_get(&url("/fapi/v1/ping"), &[]).await?;
     Ok(!data.is_null())
 }
 
-// 获取服务器时间
+
 pub async fn fetch_server_time(client: &ExchangeClient) -> Result<i64, ExchangeError> {
     let data = client.public_get(&url("/fapi/v1/time"), &[]).await?;
     data.get("serverTime")
@@ -49,7 +49,7 @@ pub async fn fetch_server_time(client: &ExchangeClient) -> Result<i64, ExchangeE
         })
 }
 
-// 24小时行情统计 + 最优挂单
+
 pub async fn fetch_ticker(
     client: &ExchangeClient,
     symbol: &str,
@@ -96,7 +96,7 @@ pub async fn fetch_ticker(
         ))
     })?;
 
-    // 解析交易所原生时间戳：closeTime 是 24h 滚动窗口的结束时间
+
     let timestamp = data
         .get("closeTime")
         .and_then(|v| v.as_i64())
@@ -121,7 +121,7 @@ pub async fn fetch_ticker(
     })
 }
 
-// K线数据
+
 pub async fn fetch_ohlcv(
     client: &ExchangeClient,
     symbol: &str,
@@ -222,7 +222,7 @@ pub async fn fetch_ohlcv(
     Ok(klines)
 }
 
-// 交易对信息
+
 pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, ExchangeError> {
     let data = client
         .public_get(&url("/fapi/v1/exchangeInfo"), &[])
@@ -303,7 +303,7 @@ pub async fn fetch_markets(client: &ExchangeClient) -> Result<Vec<MarketInfo>, E
     Ok(markets)
 }
 
-// 标记价格和资金费率
+
 pub async fn fetch_funding_rate(
     client: &ExchangeClient,
     symbol: &str,
@@ -338,7 +338,7 @@ pub async fn fetch_funding_rate(
     })
 }
 
-// 合约账户余额
+
 pub async fn fetch_balance(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -391,7 +391,7 @@ pub async fn fetch_balance(
     Ok(result)
 }
 
-// 下单
+
 pub async fn create_order(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -469,7 +469,7 @@ pub async fn create_order(
     })
 }
 
-// 撤单
+
 pub async fn cancel_order(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -497,7 +497,7 @@ pub async fn cancel_order(
     })
 }
 
-// 批量撤单
+
 pub async fn cancel_all_orders(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -513,7 +513,7 @@ pub async fn cancel_all_orders(
     Ok(())
 }
 
-// 变换逐全仓模式
+
 pub async fn set_margin_type(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -536,7 +536,7 @@ pub async fn set_margin_type(
     Ok(())
 }
 
-// 调整杠杆
+
 pub async fn set_leverage(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -554,7 +554,7 @@ pub async fn set_leverage(
     Ok(())
 }
 
-// 持仓信息
+
 pub async fn fetch_positions(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -641,7 +641,7 @@ pub async fn fetch_positions(
     Ok(positions)
 }
 
-// 查询持仓模式
+
 pub async fn get_position_mode(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -671,7 +671,7 @@ pub async fn get_position_mode(
     }
 }
 
-// 创建 listenKey
+
 pub async fn create_listen_key(
     client: &ExchangeClient,
     signer: &dyn Signer,
@@ -686,7 +686,7 @@ pub async fn create_listen_key(
         .ok_or_else(|| ExchangeError::Internal("listenKey missing in response".into()))
 }
 
-// 续期 listenKey
+
 pub async fn keepalive_listen_key(
     client: &ExchangeClient,
     signer: &dyn Signer,

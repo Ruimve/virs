@@ -1,4 +1,4 @@
-//! 策略优化器：基于绩效指标，通过 LLM 优化策略 prompt。
+
 
 use virs_error::{BotError, BotResult};
 use virs_llm::call_llm_api;
@@ -6,7 +6,7 @@ use virs_prompt::{PromptSource, PromptTemplate, validate};
 
 use super::types::StrategyMetrics;
 
-/// 策略优化器。
+
 pub(crate) struct StrategyOptimizer {
     http_client: reqwest::Client,
     api_key: String,
@@ -14,11 +14,11 @@ pub(crate) struct StrategyOptimizer {
     model: String,
 }
 
-/// 优化结果。
+
 pub(crate) struct OptimizationResult {
-    /// 优化后的模板（版本号已递增）
+
     pub(crate) template: PromptTemplate,
-    /// 使用的 LLM 模型
+
     pub(crate) used_model: String,
 }
 
@@ -37,10 +37,7 @@ impl StrategyOptimizer {
         }
     }
 
-    /// 优化策略 prompt。
-    ///
-    /// 将当前 prompt + 绩效指标发送给 LLM，要求 LLM 分析问题并输出改进版本。
-    /// 返回的模板版本号已递增，来源标记为 AI 生成。
+
     pub(crate) async fn optimize(
         &self,
         current: &PromptTemplate,
@@ -65,14 +62,14 @@ impl StrategyOptimizer {
                 BotError::Llm(format!("LLM 返回的 JSON 无法解析为 PromptTemplate: {e}"))
             })?;
 
-        // 保留原始名称和策略类型
+
         optimized.name = current.name.clone();
         optimized.strategy_type = current.strategy_type;
 
-        // 版本号递增
+
         optimized.version = current.version + 1;
 
-        // 标记来源
+
         optimized.source = PromptSource::AiGenerated {
             model: result.used_model.clone(),
             generation_prompt: format!(
@@ -83,7 +80,7 @@ impl StrategyOptimizer {
             ),
         };
 
-        // 校验
+
         validate(&optimized).map_err(|e| {
             BotError::Llm(format!("优化后的策略 prompt 校验失败: {e}"))
         })?;
@@ -95,7 +92,7 @@ impl StrategyOptimizer {
     }
 }
 
-/// 构建优化 system prompt。
+
 fn build_optimization_system_prompt() -> String {
     let placeholder_text = virs_prompt::to_prompt_text();
 
@@ -127,7 +124,7 @@ fn build_optimization_system_prompt() -> String {
     )
 }
 
-/// 构建优化 user prompt：包含当前 prompt 和绩效数据。
+
 fn build_optimization_user_prompt(
     current: &PromptTemplate,
     metrics: &StrategyMetrics,

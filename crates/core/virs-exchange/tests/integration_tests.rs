@@ -9,7 +9,6 @@ use virs_type::*;
 use virs_type::{ExchangePe, KlineWsClient, OrderBookWsClient, OrderUpdateStream};
 use virs_error::VirsResult;
 
-// ─── Mock 真实交易所，用于测试路由 ───
 
 struct MockRealExchange {
     name: String,
@@ -102,7 +101,6 @@ impl ExchangePe for MockRealExchange {
     }
 }
 
-// ─── 原有测试 ───
 
 #[test]
 fn int_1_1_side_roundtrip() {
@@ -212,7 +210,6 @@ fn int_3_3_registry_list_names() {
     assert!(names.is_empty());
 }
 
-// ─── PaperModeExchange 路由测试 ───
 
 #[tokio::test]
 async fn int_4_1_paper_mode_routes_public_to_real() {
@@ -243,7 +240,7 @@ async fn int_4_3_paper_mode_set_leverage_calls_both() {
 
     pme.set_leverage("BTC/USDT", 10).await.unwrap();
     assert!(leverage_called.load(Ordering::SeqCst), "set_leverage should call real");
-    // paper 内部也存储了 leverage（通过后续下单验证）
+
     pme.on_price_tick("BTC/USDT", 50000.0).await;
     let params = PlaceOrderParams {
         symbol: "BTC/USDT".into(),

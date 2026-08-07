@@ -64,14 +64,13 @@ pub struct AppState {
 
     pub listenkey_keepalive_futures_secs: u64,
 
-    /// 全局共享的策略模板加载器（启动时一次性加载，所有 handler 复用）。
+
     pub prompt_loader: PromptLoader,
 }
 
 impl AppState {
-    /// 从 DB 读取最新一条 LLM 凭证 → 解密 → 解析 provider → 返回 `(api_key, base_url, model)`。
-    ///
-    /// 供 API handler 层的 LLM 调用使用（optimize / explain / recommend_strategy / generate 等）。
+
+
     pub async fn resolve_llm_credentials(&self) -> VirsResult<(String, String, String)> {
         let row: Option<(String, String)> = sqlx::query_as(
             r#"SELECT provider, encrypted_api_key
@@ -100,10 +99,7 @@ impl AppState {
         }
     }
 
-    /// 解析凭证 → 调用 LLM API 的统一入口。
-    ///
-    /// 供所有 API handler 复用,避免各 handler 重复 `resolve_llm_credentials + call_llm_api`。
-    /// `provider_name` 仅用于错误日志标识调用方(如 "auto-ai" / "strategy-selection")。
+
     pub async fn call_llm(
         &self,
         system_prompt: &str,

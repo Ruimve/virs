@@ -1,17 +1,17 @@
 import type { AutoBot, AutoBotStats, AnalysisLog, StrategyDetail } from '@/service/types';
 import type { PositionWsEvent } from '@/service/ws';
 
-/** 单边持仓指标（前端实时计算） */
+
 export interface SideMetrics {
   hasPosition: boolean;
   unrealizedPnl: number;
   usedMargin: number;
   unrealizedPct: number;
-  /** 粗略估算强平价（后端未提供 liquidation_price 时使用） */
+
   estimatedLiqPrice: number | null;
 }
 
-/** 账户汇总指标 */
+
 export interface AccountMetrics {
   balance: number;
   usedMargin: number;
@@ -19,51 +19,51 @@ export interface AccountMetrics {
   marginRate: number;
 }
 
-/** 市场行 Props */
+
 export interface MarketLineProps {
   symbol: string;
   exchange: string;
   latestPrice: number;
   changePct: number;
-  /** bot 配置：杠杆倍数 */
+
   leverage: number;
 }
 
-/** 账户条 Props */
+
 export interface AccountBarProps {
   metrics: AccountMetrics;
 }
 
-/** AI 策略块 Props */
+
 export interface StrategyBlockProps {
   bot: AutoBot;
-  /** bot 绑定的策略元数据（从 get_bot API 返回） */
+
   strategy: StrategyDetail | null;
   decision: AnalysisLog | null;
   stats: AutoBotStats | null;
   totalPnl: number;
   totalPnlPct: number;
-  /** bot 配置：决策间隔（秒） */
+
   decideIntervalSecs: number;
 }
 
-/** 仓位卡 Props */
+
 export interface PositionCardProps {
   side: 'long' | 'short';
   position: PositionWsEvent | null;
   metrics: SideMetrics;
   leverage: number;
   latestPrice: number;
-  /** AI 最新决策（用于空仓时显示 AI 放弃理由） */
+
   decision: AnalysisLog | null;
-  /** 该方向已实现盈亏（来自 bot.total_pnl 或 position.realizedPnl） */
+
   realizedPnl: number;
 }
 
-/** 上区 Props */
+
 export interface UpperRegionProps {
   bot: AutoBot;
-  /** bot 绑定的策略元数据 */
+
   strategy: StrategyDetail | null;
   latestPrice: number;
   marketSummary: { changePct: number; high: number; low: number; volume: number };
@@ -74,7 +74,7 @@ export interface UpperRegionProps {
   totalPnlPct: number;
 }
 
-/** 下区 Props */
+
 export interface LowerRegionProps {
   bot: AutoBot;
   latestPrice: number;

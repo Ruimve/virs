@@ -1,13 +1,11 @@
-//! N 根 K 线前的布林带宽度。
-//!
-//! 依赖 [`crate::indicators::derived::bbands_width`]。
+
 
 use virs_error::{VirsError, VirsResult};
 use virs_type::Kline;
 
 use crate::indicators::derived::bbands_width;
 
-/// 计算指定索引处 N 根 K 线前的布林带宽度比。
+
 pub fn compute(
     klines: &[Kline],
     period: usize,

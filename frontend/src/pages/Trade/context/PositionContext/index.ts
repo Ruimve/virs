@@ -10,9 +10,9 @@ export interface PositionsBySide {
 
 interface PositionContextType {
   positions: PositionsBySide;
-  // 辅助方法：取指定方向的仓位
+
   getPosition: (side: PositionSide) => PositionWsEvent | null;
-  // 辅助方法：是否存在任一方向的持仓
+
   hasAnyPosition: () => boolean;
 }
 

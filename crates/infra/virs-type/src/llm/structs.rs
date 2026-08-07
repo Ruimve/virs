@@ -6,7 +6,7 @@ pub struct LlmProviderConfig {
 }
 
 impl LlmProviderConfig {
-    /// 根据 provider 名称查找静态配置（deepseek/openai/openrouter）。
+
     pub fn for_provider(provider: &str) -> Option<Self> {
         match provider {
             "deepseek" => Some(Self {

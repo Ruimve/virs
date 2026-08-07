@@ -1,7 +1,4 @@
-//! 派生指标（Layer 1+2）。
-//!
-//! 组合一个或多个 [`crate::indicators::atomic`] 函数进行二次计算。
-//! 每个文件导出 `compute(klines, params) -> VirsResult<T>` 函数。
+
 
 pub mod atr_pct;
 pub mod atr_sma;

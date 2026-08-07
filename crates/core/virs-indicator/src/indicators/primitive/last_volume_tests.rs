@@ -3,7 +3,7 @@ use crate::indicators::test_utils::{uptrend_klines, kline};
 
 #[test]
 fn returns_second_to_last_volume() {
-    // uptrend_klines 最后 K 线是未完成的，last_completed = len-2
+
     let klines = uptrend_klines(30, 100.0, 1.0);
     let val = compute(&klines).unwrap();
     let expected = klines[klines.len() - 2].volume;

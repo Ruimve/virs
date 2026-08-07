@@ -50,7 +50,7 @@ pub async fn create_user(
         .filter(|s| !s.is_empty())
         .ok_or_else(|| VirsError::bad_request("password is required"))?;
     let role = body["role"].as_str().unwrap_or("user");
-    // 安全白名单：仅允许 "user" 角色，防止客户端越权注册 admin
+
     if role != "user" {
         return Err(VirsError::bad_request(
             "Invalid role — only 'user' role is allowed for self-registration",

@@ -27,7 +27,6 @@ use virs_type::{
     MarketType, OrderResult, OrderType, PlaceOrderParams, PositionMode, Side, WsFeedEvent,
 };
 
-// ─── Signer 实现（保持不变） ───
 
 pub struct BinanceSigner {
     api_key: String,
@@ -332,7 +331,6 @@ pub(crate) fn try_build_ed25519(
     }
 }
 
-// ─── BinanceExchange ───
 
 pub struct BinanceExchange {
     client: ExchangeClient,
@@ -456,7 +454,7 @@ impl BinanceExchange {
         }
     }
 
-    /// 同步服务器时间，启动周期同步任务。由 create_exchange 内部调用。
+
     pub async fn sync_time(&self) -> Result<(), ExchangeError> {
         let server_time = fapi::fetch_server_time(&self.client).await?;
         let local_time = chrono::Utc::now().timestamp_millis();
@@ -522,7 +520,7 @@ impl BinanceExchange {
         Ok(())
     }
 
-    /// 启动 listenKey 订单 WS，返回事件接收器。
+
     async fn start_listenkey_order_ws(
         &self,
         listen_key_hint: Option<&str>,
@@ -583,7 +581,7 @@ impl BinanceExchange {
         Ok(rx)
     }
 
-    /// 获取市场信息（带缓存）
+
     async fn get_markets_cached(&self) -> Result<Vec<MarketInfo>, ExchangeError> {
         {
             let cache = self.markets_cache.read().await;
@@ -598,7 +596,6 @@ impl BinanceExchange {
     }
 }
 
-// ─── ExchangePe 实现 ───
 
 #[async_trait]
 impl ExchangePe for BinanceExchange {

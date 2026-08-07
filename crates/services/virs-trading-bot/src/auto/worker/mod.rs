@@ -624,7 +624,7 @@ impl AutoWorker {
                         }
                     }
                 }
-                // 策略热切换通知（仅 auto_optimize 启用时激活）
+
                 change = async {
                     match &mut strategy_rx {
                         Some(rx) => match rx.changed().await {

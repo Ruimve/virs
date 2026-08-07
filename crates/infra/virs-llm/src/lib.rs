@@ -1,7 +1,4 @@
-//! LLM HTTP 基础设施：封装 OpenAI 兼容的 `/chat/completions` 调用。
-//!
-//! 纯基础设施层，不依赖任何业务类型（无 virs-type）。
-//! 所有需要调用 LLM 的 service crate 共享此实现。
+
 
 use tracing::warn;
 use virs_error::{BotError, BotResult};
@@ -11,10 +8,7 @@ pub struct LlmCallResult {
     pub used_model: String,
 }
 
-/// 调用 OpenAI 兼容的 LLM API（`POST {base_url}/chat/completions`）。
-///
-/// `provider_name` 仅用于错误日志标识调用方（如 "auto-ai"、"strategy-optimizer"）。
-/// 返回的 `content` 已解析为 JSON Value。
+
 pub async fn call_llm_api(
     http_client: &reqwest::Client,
     api_key: &str,
@@ -84,9 +78,7 @@ pub async fn call_llm_api(
     })
 }
 
-/// 创建带超时控制的 LLM HTTP 客户端。
-///
-/// 连接超时固定 10s，请求总超时由 `llm_timeout` 控制。
+
 pub fn create_llm_http_client(llm_timeout: std::time::Duration) -> reqwest::Client {
     reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))

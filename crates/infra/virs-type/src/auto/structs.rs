@@ -4,7 +4,6 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 
-/// 自动交易 Bot DB 行映射（原 virs-models::AutoBot）
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct AutoBot {
     pub id: Uuid,
@@ -72,7 +71,6 @@ impl AutoBot {
 }
 
 
-/// Bot 运行时配置（从 DB 行投影，不含持久化专属字段）
 #[derive(Debug, Clone)]
 pub struct AutoBotConfig {
     pub id: Uuid,
@@ -95,10 +93,10 @@ pub struct AutoBotConfig {
     pub win_trades: i32,
     pub loss_trades: i32,
     pub last_decided_at: Option<DateTime<Utc>>,
-    /// 策略 prompt 文件夹名。加载时查 `strategies/auto/{strategy_file}/`。
-    /// 必填项，创建 bot 时由策略选择逻辑写入。worker 缺失时报错并跳过决策。
+
+
     pub strategy_file: Option<String>,
-    /// 是否启用策略自动优化
+
     pub auto_optimize_enabled: bool,
 }
 
@@ -131,25 +129,25 @@ impl From<&AutoBot> for AutoBotConfig {
     }
 }
 
-/// 单笔历史交易记录（用于策略评估）。
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TradeRecord {
-    /// 策略名称
+
     pub strategy_name: String,
-    /// 交易对
+
     pub symbol: String,
-    /// 方向
+
     pub side: String,
-    /// 开仓时间
+
     pub opened_at: DateTime<Utc>,
-    /// 平仓时间
+
     pub closed_at: DateTime<Utc>,
-    /// 入场价
+
     pub entry_price: f64,
-    /// 出场价
+
     pub exit_price: f64,
-    /// 数量
+
     pub quantity: f64,
-    /// 已实现盈亏（USDT）
+
     pub realized_pnl: f64,
 }

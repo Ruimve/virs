@@ -118,7 +118,7 @@ pub async fn create_bot(
     let fallback = if paper_mode { 10000.0 } else { 0.0 };
     let initial_capital = match state.exchange_registry.get(&exchange_key) {
         Some(ex) => {
-            // ExchangePe::get_balance() 直接返回单个（通常为 USDT）余额，不再返回多币种 Vec
+
             let quote_asset = extract_quote_asset(symbol);
             match ex.get_balance().await {
                 Ok(b) => {
@@ -143,7 +143,7 @@ pub async fn create_bot(
 
     let id = uuid::Uuid::new_v4();
 
-    // 策略选择：从全局 PromptLoader 获取 auto 策略列表
+
     let loader = state.prompt_loader.clone();
     let strategies = loader.list(StrategyType::Auto).await;
 
@@ -153,12 +153,12 @@ pub async fn create_bot(
         )),
         1 => strategies[0].clone(),
         _ => {
-            // 多策略：LLM 分析市场数据后选择
+
             select_strategy_by_llm(&state, &loader, &strategies, exchange, symbol, StrategyType::Auto).await?
         }
     };
 
-    // 校验策略在 loader 中存在
+
     if loader.get(StrategyType::Auto, &strategy_file).await.is_none() {
         return Err(VirsError::bad_request(
             format!("Strategy '{strategy_file}' not found in loaded strategies"),
@@ -184,7 +184,7 @@ pub async fn create_bot(
     .execute(&state.db_pool)
     .await?;
 
-    // 如果是 LLM 选择的策略，记录选择日志
+
     if strategies.len() > 1 {
         let _ = sqlx::query(
             r#"INSERT INTO qd_auto_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, strategy_file, completed_at)
@@ -282,7 +282,7 @@ pub async fn get_bot(
         }
     };
 
-    // 从全局 PromptLoader 查询策略元数据（不含完整 prompt 文本）
+
     let strategy_detail = if let Some(ref file) = bot.strategy_file {
         let loader = state.prompt_loader.clone();
         loader.get(StrategyType::Auto, file).await.map(|tpl| {
@@ -325,10 +325,7 @@ pub async fn get_bot(
     }))))
 }
 
-/// 更新 bot 配置（当前仅支持变更 strategy_file）。
-///
-/// 约束：bot 必须处于 stopped 状态才能更新。
-/// 前端不暴露此接口，仅作为后端 API 供未来使用。
+
 pub async fn update_bot(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -337,7 +334,7 @@ pub async fn update_bot(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    // 查询 bot 当前状态
+
     let bot = sqlx::query_as::<_, virs_type::AutoBot>(
         "SELECT * FROM qd_auto_bots WHERE id = $1 AND user_id = $2",
     )
@@ -351,19 +348,19 @@ pub async fn update_bot(
         None => return Err(VirsError::not_found("Bot not found")),
     };
 
-    // 运行中拒绝更新
+
     if bot.is_running() {
         return Err(VirsError::conflict(
             "Cannot update bot while it is running. Please stop the bot first.",
         ));
     }
 
-    // 解析新 strategy_file
+
     let new_strategy_file = body["strategy_file"]
         .as_str()
         .ok_or_else(|| VirsError::bad_request("strategy_file is required"))?;
 
-    // 校验策略在 loader 中存在
+
     let loader = state.prompt_loader.clone();
     if loader.get(StrategyType::Auto, new_strategy_file).await.is_none() {
         return Err(VirsError::bad_request(format!(
@@ -371,7 +368,7 @@ pub async fn update_bot(
         )));
     }
 
-    // UPDATE — include user_id in WHERE as defense-in-depth against TOCTOU
+
     sqlx::query("UPDATE qd_auto_bots SET strategy_file = $2, updated_at = NOW() WHERE id = $1 AND user_id = $3")
         .bind(id)
         .bind(new_strategy_file)
@@ -429,8 +426,7 @@ fn extract_quote_asset(symbol: &str) -> String {
     "USDT".to_string()
 }
 
-/// Verify that the bot belongs to the user. Returns 404 (not "forbidden") to avoid
-/// leaking existence of other users' bots.
+
 async fn verify_bot_ownership(
     state: &AppState,
     bot_id: uuid::Uuid,
@@ -478,8 +474,7 @@ pub async fn delete_bot(
 
     verify_bot_ownership(&state, id, user_id).await?;
 
-    // Engine owns the full delete lifecycle: stop worker → close positions → delete DB row.
-    // Handler awaits engine confirmation via oneshot channel before responding.
+
     let tx = state.engine_manager.auto_cmd_tx().ok_or_else(|| VirsError::Http {
         status: 503,
         message: "Auto trade engine not running — cannot safely delete bot (positions would not be closed)".into(),
@@ -671,11 +666,10 @@ pub async fn get_stats(
     let win_rate = bot.win_rate();
     let loss_rate = bot.loss_rate();
 
-    // Compute net PnL per trade (gross realized_pnl - open_fee - close_fee) for all analytics.
-    // This aligns with the worker's net PnL calculation (events.rs: realized_pnl = gross_pnl - total_fee).
+
     let net_pnl_per_trade: Vec<f64> = trades.iter().map(|t| t.4 - t.2 - t.3).collect();
 
-    // Win/loss boundary aligned with worker (events.rs L607: realized_pnl >= 0.0 → win).
+
     let profits: Vec<f64> = net_pnl_per_trade.iter().filter(|&&p| p >= 0.0).copied().collect();
     let losses: Vec<f64> = net_pnl_per_trade.iter().filter(|&&p| p < 0.0).copied().collect();
     let avg_profit = if !profits.is_empty() {

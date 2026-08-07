@@ -48,7 +48,7 @@ const ConfigureOptimization = () => {
     >
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row gap-3">
-          {/* Enable card */}
+          {}
           <div
             onClick={() => setAutoOptimize(true)}
             className={`flex-1 p-5 rounded-xl border text-left transition-all duration-300 cursor-pointer backdrop-blur-sm ${
@@ -96,7 +96,7 @@ const ConfigureOptimization = () => {
             </div>
           </div>
 
-          {/* Skip card */}
+          {}
           <div
             onClick={() => setAutoOptimize(false)}
             className={`flex-1 p-5 rounded-xl border text-left transition-all duration-300 cursor-pointer backdrop-blur-sm ${

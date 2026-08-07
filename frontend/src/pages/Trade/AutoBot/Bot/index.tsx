@@ -19,7 +19,7 @@ import { UpperRegion } from './components/UpperRegion';
 import { LowerRegion } from './components/LowerRegion';
 import { computeMetrics, computeAccount, computeTotalPnlPct } from './components/utils';
 
-/** RAF 节流价格 hook，避免高频 WS 推送导致过度渲染 */
+
 const useRafThrottledPrice = () => {
   const [latestPrice, setLatestPrice] = useState(0);
   const rafRef = useRef<number | undefined>(undefined);
@@ -43,7 +43,7 @@ const useRafThrottledPrice = () => {
   return { latestPrice, update };
 };
 
-/** 将 AutoTrade[] 转换为 K 线图表 marker */
+
 function tradesToMarkers(trades: AutoTrade[]) {
   const markers: Array<{
     time: number;
@@ -89,7 +89,7 @@ function tradesToMarkers(trades: AutoTrade[]) {
   return markers.sort((a, b) => a.time - b.time);
 }
 
-/** 从 K 线数据计算 24h 市场摘要（与 StickyMarket 的 useMarketSummary 逻辑一致） */
+
 function computeMarketSummary(klineData: KlineCandle[], timeframe: string) {
   if (klineData.length === 0) return { changePct: 0, high: 0, low: 0, volume: 0 };
 
@@ -198,7 +198,7 @@ const Bot = () => {
   const markers = useMemo(() => tradesToMarkers(autoTrades), [autoTrades]);
   const latestDecision = useMemo(() => logs[0] || null, [logs]);
 
-  // 实时指标计算
+
   const longMetrics = useMemo(
     () => computeMetrics(positions.long, latestPrice, autoBot.leverage),
     [positions.long, latestPrice, autoBot.leverage],
@@ -226,7 +226,7 @@ const Bot = () => {
 
   return (
     <div className="h-full flex flex-col max-w-[480px] md:max-w-3xl mx-auto">
-      {/* 上区：市场 + 账户 + AI 策略（白色） */}
+      {}
       <UpperRegion
         bot={autoBot}
         strategy={strategy}
@@ -239,7 +239,7 @@ const Bot = () => {
         totalPnlPct={totalPnlPct}
       />
 
-      {/* 下区：仓位卡（灰色包裹） */}
+      {}
       <LowerRegion
         bot={autoBot}
         latestPrice={latestPrice}
@@ -250,7 +250,7 @@ const Bot = () => {
         decision={latestDecision}
       />
 
-      {/* 底部固定 K 线 */}
+      {}
       <StickyMarket
         klineData={klineData}
         klineTimeframe={klineTimeframe}

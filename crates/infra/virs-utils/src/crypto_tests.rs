@@ -70,16 +70,13 @@ fn c2_6_same_plaintext_different_ciphertext() {
     let plaintext = "same text";
     let enc1 = encrypt(plaintext, &key).unwrap();
     let enc2 = encrypt(plaintext, &key).unwrap();
-    // Random nonce ensures different ciphertext
+
     assert_ne!(enc1, enc2);
-    // But both decrypt to the same plaintext
+
     assert_eq!(decrypt(&enc1, &key).unwrap(), plaintext);
     assert_eq!(decrypt(&enc2, &key).unwrap(), plaintext);
 }
 
-// ============================================================
-// TC-C3: hash_password / verify_password
-// ============================================================
 
 #[test]
 fn c3_1_hash_then_verify_correct() {
@@ -105,16 +102,13 @@ fn c3_4_same_password_different_hash() {
     let password = "same_password";
     let hash1 = hash_password(password).unwrap();
     let hash2 = hash_password(password).unwrap();
-    // bcrypt salt ensures different hashes
+
     assert_ne!(hash1, hash2);
-    // But both verify correctly
+
     assert!(verify_password(password, &hash1));
     assert!(verify_password(password, &hash2));
 }
 
-// ============================================================
-// TC-C4: encrypt_with_key / decrypt_with_key
-// ============================================================
 
 #[test]
 fn c4_1_normal_roundtrip() {

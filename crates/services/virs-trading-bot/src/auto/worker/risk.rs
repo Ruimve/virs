@@ -1,4 +1,4 @@
-//! Risk control: stop-loss / take-profit checks, trailing stop, position timeout.
+
 
 use std::time::Duration;
 
@@ -42,7 +42,7 @@ impl AutoWorker {
         }
     }
 
-    /// 对 Long 和 Short 分别检查止损止盈；任意方向触发平仓即返回 true
+
     pub(crate) async fn check_stop_take_profit(&mut self) -> bool {
         let mut triggered = false;
         if self.has_position_side(PositionSide::Long)
@@ -144,8 +144,8 @@ impl AutoWorker {
             self.trailing_stop_dirty = true;
 
             if let Some(client_order_id) = client_order_id {
-                // 修复 P0 数据安全隐患：改为同步写入而非 fire-and-forget spawn
-                // 确保 shutdown 时 stop_loss 更新不会丢失
+
+
                 if let Err(e) = self
                     .store
                     .update_trade_stop_loss(&client_order_id, new_stop)

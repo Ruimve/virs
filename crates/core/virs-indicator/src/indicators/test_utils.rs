@@ -1,8 +1,8 @@
-//! 测试公共辅助：构造 K 线数据。
+
 
 use virs_type::Kline;
 
-/// 构造一条 K 线。
+
 pub fn kline(open: f64, high: f64, low: f64, close: f64, volume: f64) -> Kline {
     Kline {
         open_time: 0,
@@ -20,7 +20,7 @@ pub fn kline(open: f64, high: f64, low: f64, close: f64, volume: f64) -> Kline {
     }
 }
 
-/// 构造 N 条上涨趋势 K 线（close 逐步递增）。
+
 pub fn uptrend_klines(n: usize, start: f64, step: f64) -> Vec<Kline> {
     (0..n)
         .map(|i| {
@@ -30,7 +30,7 @@ pub fn uptrend_klines(n: usize, start: f64, step: f64) -> Vec<Kline> {
         .collect()
 }
 
-/// 构造 N 条下跌趋势 K 线。
+
 pub fn downtrend_klines(n: usize, start: f64, step: f64) -> Vec<Kline> {
     (0..n)
         .map(|i| {
@@ -40,7 +40,7 @@ pub fn downtrend_klines(n: usize, start: f64, step: f64) -> Vec<Kline> {
         .collect()
 }
 
-/// 构造 N 条震荡 K 线（close 在 center 上下波动）。
+
 pub fn sideways_klines(n: usize, center: f64, amplitude: f64) -> Vec<Kline> {
     (0..n)
         .map(|i| {

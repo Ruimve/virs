@@ -1,7 +1,4 @@
-//! 指标集合：批量计算 + 查询。
-//!
-//! [`IndicatorSet::compute`] 接收策略声明的 specs，去重后逐个委托到
-//! [`crate::indicators`] 各模块的 `compute` 函数计算。
+
 
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
@@ -11,7 +8,7 @@ use virs_type::{Kline, Timeframe};
 use crate::indicators;
 use crate::spec::IndicatorSpec;
 
-/// 三周期 K 线输入。
+
 #[derive(Debug, Clone, Copy)]
 pub struct KlineSet<'a> {
     pub h1: &'a [Kline],
@@ -19,7 +16,7 @@ pub struct KlineSet<'a> {
     pub m15: &'a [Kline],
 }
 
-/// 指标值。不同指标返回不同类型（数值/整数/字符串）。
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum IndicatorValue {
@@ -28,9 +25,7 @@ pub enum IndicatorValue {
     Str(String),
 }
 
-/// 已计算的指标集合。通过 [`IndicatorSpec`] 查询。
-///
-/// 序列化为 `Vec<(IndicatorSpec, IndicatorValue)>`（JSON 数组）。
+
 #[derive(Debug, Clone, Default)]
 pub struct IndicatorSet {
     values: HashMap<IndicatorSpec, IndicatorValue>,
@@ -58,7 +53,7 @@ impl<'de> Deserialize<'de> for IndicatorSet {
 }
 
 impl IndicatorSet {
-    /// 按策略声明的 specs 批量计算指标。自动去重。
+
     pub fn compute(
         specs: &[IndicatorSpec],
         klines: &KlineSet,
@@ -74,25 +69,25 @@ impl IndicatorSet {
         Ok(Self { values })
     }
 
-    /// 插入一个指标值（用于手动构造或测试）。
+
     pub fn insert(&mut self, spec: IndicatorSpec, value: IndicatorValue) -> &mut Self {
         self.values.insert(spec, value);
         self
     }
 
-    /// 从单个指标值构造。
+
     pub fn with_value(spec: IndicatorSpec, value: IndicatorValue) -> Self {
         let mut set = Self::default();
         set.values.insert(spec, value);
         set
     }
 
-    /// 查询指标值。缺失返回 `None`。
+
     pub fn get(&self, spec: &IndicatorSpec) -> Option<&IndicatorValue> {
         self.values.get(spec)
     }
 
-    /// 便捷查询数值型指标。
+
     pub fn get_num(&self, spec: &IndicatorSpec) -> Option<f64> {
         match self.values.get(spec)? {
             IndicatorValue::Num(v) => Some(*v),
@@ -100,7 +95,7 @@ impl IndicatorSet {
         }
     }
 
-    /// 便捷查询整数型指标。
+
     pub fn get_int(&self, spec: &IndicatorSpec) -> Option<i32> {
         match self.values.get(spec)? {
             IndicatorValue::Int(v) => Some(*v),
@@ -108,7 +103,7 @@ impl IndicatorSet {
         }
     }
 
-    /// 便捷查询字符串型指标。
+
     pub fn get_str(&self, spec: &IndicatorSpec) -> Option<&str> {
         match self.values.get(spec)? {
             IndicatorValue::Str(v) => Some(v.as_str()),
@@ -126,7 +121,7 @@ fn klines_for_tf<'a>(tf: Timeframe, klines: &KlineSet<'a>) -> &'a [Kline] {
     }
 }
 
-/// 构造数据不足的错误。
+
 fn no_data(spec: &IndicatorSpec, tf: Option<Timeframe>, len: usize) -> VirsError {
     let tf_str = tf.map(|t| t.as_str()).unwrap_or("N/A");
     VirsError::config(format!(
@@ -136,7 +131,7 @@ fn no_data(spec: &IndicatorSpec, tf: Option<Timeframe>, len: usize) -> VirsError
     ))
 }
 
-/// 计算单个指标。委托到 indicators 各模块。
+
 fn compute_one(
     spec: &IndicatorSpec,
     klines: &KlineSet,
@@ -146,11 +141,11 @@ fn compute_one(
     use IndicatorSpec::*;
 
     match spec {
-        // ── 外部数据直通 ──
+
         FundingRate => Ok(IndicatorValue::Num(funding_rate)),
         FundingNextTime => Ok(IndicatorValue::Str(funding_next_time.to_string())),
 
-        // ── 整数关口（基于 H1 当前价）──
+
         RoundNumberUp => {
             let price = klines.h1.last().map(|k| k.close)
                 .ok_or_else(|| no_data(spec, None, klines.h1.len()))?;
@@ -162,7 +157,7 @@ fn compute_one(
             Ok(IndicatorValue::Num(indicators::derived::round_number::compute_down(price)))
         }
 
-        // ── 有周期的指标 ──
+
         _ => {
             let tf = spec.timeframe().expect("无周期指标已在上方处理");
             let k = klines_for_tf(tf, klines);
@@ -172,9 +167,9 @@ fn compute_one(
             let last_idx = k.len().saturating_sub(1);
 
             match spec {
-                // ── primitive ──
+
                 CurrentPrice { .. } => {
-                    // M15 当前价为空时回退到 H1
+
                     let v = if matches!(tf, Timeframe::M15) && k.is_empty() {
                         klines.h1.last().map(|k| k.close).expect("H1 validated non-empty by caller")
                     } else {
@@ -192,7 +187,7 @@ fn compute_one(
                     Ok(IndicatorValue::Num(indicators::primitive::last_volume::compute(k)?))
                 }
 
-                // ── atomic ──
+
                 Ema { period, .. } => {
                     if last_idx < *period - 1 {
                         return Err(no_data(spec, Some(tf), k.len()));
@@ -274,7 +269,7 @@ fn compute_one(
                     Ok(IndicatorValue::Num(indicators::atomic::volume_sma::volume_sma_at(k, last_completed, *period)?))
                 }
 
-                // ── derived ──
+
                 MacdHistogram { fast, slow, signal, .. } => {
                     Ok(IndicatorValue::Num(indicators::derived::macd_histogram::compute(k, *fast, *slow, *signal)?))
                 }
@@ -309,7 +304,7 @@ fn compute_one(
                     Ok(IndicatorValue::Str(indicators::derived::ema_cross_state::compute(k, *fast, *slow)?))
                 }
 
-                // 无周期指标已在上方处理
+
                 FundingRate | FundingNextTime | RoundNumberUp | RoundNumberDown => unreachable!(
                     "无周期指标应在 compute_one 顶部处理"
                 ),

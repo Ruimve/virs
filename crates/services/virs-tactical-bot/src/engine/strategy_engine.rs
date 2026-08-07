@@ -1,13 +1,4 @@
-//! 策略引擎：定时评估策略绩效，对低分策略调用 LLM 优化，热切换到新版本。
-//!
-//! 工作流程：
-//! 1. 每个分析周期遍历 PromptLoader 中所有已加载的策略模板
-//! 2. 对每个策略调用 StrategyEvaluator 评估绩效
-//! 3. 如果绩效低于阈值（needs_optimization），调用 StrategyOptimizer 优化
-//! 4. 优化成功后：
-//!    a. 调用 writer::save_template 写入磁盘（版本号已递增）
-//!    b. 调用 PromptLoader::upsert 更新内存缓存（热切换）
-//!    c. 通过 watch::channel 通知 virs-trading-bot
+
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,7 +15,7 @@ use super::optimizer::StrategyOptimizer;
 use super::types::StrategyEngineConfig;
 use virs_type::TradeHistoryProvider;
 
-/// 策略引擎。
+
 pub(crate) struct StrategyEngine {
     config: StrategyEngineConfig,
     prompt_loader: PromptLoader,
@@ -34,9 +25,8 @@ pub(crate) struct StrategyEngine {
 }
 
 impl StrategyEngine {
-    /// 创建策略引擎。
-    ///
-    /// `history` 由应用层提供（从数据库查询交易记录）。
+
+
     pub(crate) fn new(
         config: StrategyEngineConfig,
         prompt_loader: PromptLoader,
@@ -62,7 +52,7 @@ impl StrategyEngine {
         }
     }
 
-    /// 启动定时分析循环。返回 TaskHandle 用于停止。
+
     pub(crate) fn start(self: Arc<Self>) -> TaskHandle {
         let interval = Duration::from_secs(self.config.analysis_interval_secs);
         let engine = Arc::clone(&self);
@@ -70,7 +60,7 @@ impl StrategyEngine {
         spawn_periodic(
             "strategy_engine",
             interval,
-            false, // 首次延迟一个周期，避免启动时立即触发
+            false,
             move || {
                 let engine = Arc::clone(&engine);
                 async move {
@@ -82,11 +72,11 @@ impl StrategyEngine {
         )
     }
 
-    /// 执行一次完整的评估 + 优化循环。
+
     pub(crate) async fn run_cycle(&self) -> VirsResult<()> {
         info!("StrategyEngine cycle started");
 
-        // 获取所有已加载的 Auto 策略名
+
         let strategy_names = self.prompt_loader.list(StrategyType::Auto).await;
 
         if strategy_names.is_empty() {
@@ -106,9 +96,9 @@ impl StrategyEngine {
         Ok(())
     }
 
-    /// 评估单个策略，必要时触发优化。
+
     async fn evaluate_and_optimize(&self, name: &str) -> VirsResult<()> {
-        // 1. 评估
+
         let metrics = self
             .evaluator
             .evaluate(name, self.config.evaluation_window_secs)
@@ -129,7 +119,7 @@ impl StrategyEngine {
             "Strategy evaluated"
         );
 
-        // 2. 判断是否需要优化
+
         if !metrics.needs_optimization(
             self.config.min_trades_for_optimization,
             self.config.optimization_score_threshold,
@@ -138,7 +128,7 @@ impl StrategyEngine {
             return Ok(());
         }
 
-        // 3. 获取当前模板
+
         let current = self
             .prompt_loader
             .get(StrategyType::Auto, name)
@@ -150,7 +140,7 @@ impl StrategyEngine {
                 ))
             })?;
 
-        // 4. 版本号上限检查
+
         if current.version >= self.config.max_version {
             warn!(
                 strategy = %name,
@@ -161,7 +151,7 @@ impl StrategyEngine {
             return Ok(());
         }
 
-        // 5. 调用 LLM 优化
+
         info!(
             strategy = %name,
             old_version = current.version,
@@ -186,18 +176,18 @@ impl StrategyEngine {
             "Strategy optimized by LLM"
         );
 
-        // 6. 写入磁盘
+
         if let Err(e) = save_template(&optimization_result.template, true) {
             error!(strategy = %name, error = %e, "Failed to save optimized template to disk");
             return Err(VirsError::config(format!("Save failed: {}", e)));
         }
 
-        // 7. 热切换：更新内存缓存
+
         self.prompt_loader
             .upsert(optimization_result.template)
             .await;
 
-        // 8. 通知 virs-trading-bot
+
         let event = StrategySwapEvent {
             strategy_name: name.to_string(),
             old_version,
@@ -225,10 +215,7 @@ impl StrategyHotSwapSource for StrategyEngine {
     }
 }
 
-/// 工厂函数：创建 StrategyEngine，启动定时分析循环，并返回 trait 对象和任务句柄。
-///
-/// `start()` 需要 `self: Arc<Self>`，且 `StrategyEngine` 为 `pub(crate)`，
-/// 因此在工厂函数内部创建并启动后返回 `Arc<dyn StrategyHotSwapSource>` 和 `TaskHandle`。
+
 pub fn create_strategy_engine(
     config: StrategyEngineConfig,
     prompt_loader: PromptLoader,

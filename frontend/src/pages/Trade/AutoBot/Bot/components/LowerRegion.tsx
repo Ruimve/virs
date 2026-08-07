@@ -2,12 +2,7 @@ import { memo } from 'react';
 import type { LowerRegionProps } from './types';
 import { PositionCard } from './PositionCard';
 
-/**
- * 下区容器（base-secondary 灰色背景）。
- * 包裹缩小的仓位卡片，多空并排（桌面）/纵排（移动）。
- *
- * 多空都无持仓时，不渲染卡片，显示空态文本。
- */
+
 export const LowerRegion = memo(
   ({
     bot,

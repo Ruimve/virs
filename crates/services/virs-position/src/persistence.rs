@@ -7,13 +7,13 @@ use virs_type::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderType, Side};
 
 #[async_trait::async_trait]
 pub trait PositionPersistence: Send + Sync {
-    /// 从 pe_trades 回放派生当前持仓，用于重启恢复
+
     async fn get_positions_from_orders(&self, exchange: &str) -> VirsResult<Vec<Position>>;
 
-    /// 持久化订单: TRADE → pe_trades, 非 TRADE → pe_order_events (互斥写入)
+
     async fn persist_order(&self, order: &CcxtOrder) -> VirsResult<()>;
 
-    /// 持久化被拦截的非法订单到 pe_rejected_orders
+
     async fn persist_rejected_order(&self, order: &CcxtOrder, reason: &str) -> VirsResult<()>;
 
     async fn get_active_orders(&self) -> VirsResult<Vec<CcxtOrder>>;
@@ -49,11 +49,8 @@ impl PositionPersistence for Persistence {
 }
 
 impl Persistence {
-    /// 从 pe_trades 回放派生当前持仓（Plan A: Rust replay）
-    ///
-    /// pe_trades 天然只有 TRADE 事件，无需 execution_type 过滤。
-    /// 使用 last_fill_qty/last_fill_price（本笔量/本笔价），
-    /// 与运行时增量路径和 pending 路径字段语义完全一致。
+
+
     async fn get_positions_from_orders_impl(&self, exchange: &str) -> VirsResult<Vec<Position>> {
         let rows = sqlx::query_as::<_, ReplayOrderRow>(
             r#"
@@ -99,7 +96,7 @@ impl Persistence {
         .fetch_all(&self.db)
         .await?;
 
-        // Rust replay: 按 (symbol, position_side) 分组，按时间顺序回放 apply_fill
+
         let mut positions: Vec<Position> = Vec::new();
         let mut current_key: Option<(String, String)> = None;
         let mut current_pos: Option<Position> = None;
@@ -107,16 +104,16 @@ impl Persistence {
         for row in rows {
             let group_key = (row.symbol.clone(), row.position_side.clone());
 
-            // 检测分组边界
+
             if current_key.as_ref() != Some(&group_key) {
-                // 输出上一组仓位（仅保留有剩余持仓的）
+
                 if let Some(pos) = current_pos.take() {
                     if pos.quantity > 1e-8 {
                         positions.push(pos);
                     }
                 }
 
-                // 校验 position_side
+
                 virs_type::CcxtOrder::validate_position_side(Some(&row.position_side))
                     .context("DB replay position_side validation")?;
                 let side = match row.position_side.as_str() {
@@ -125,7 +122,7 @@ impl Persistence {
                     _ => unreachable!("CcxtOrder::validate_position_side 已保证为 LONG/SHORT"),
                 };
 
-                // generation_filtered 保证每组首单为开仓单（零持仓后只能开仓）
+
                 let created_at = DateTime::from_timestamp_millis(row.trade_time)
                     .ok_or_else(|| VirsError::bad_request(format!(
                         "Invalid trade_time {} for order {} during replay",
@@ -146,25 +143,25 @@ impl Persistence {
                 .as_mut()
                 .expect("current_pos is always Some after group boundary detection");
 
-            // 判断开平仓方向
+
             let is_close = matches!(
                 (row.side.as_str(), row.position_side.as_str()),
                 ("SELL", "LONG") | ("BUY", "SHORT")
             );
 
-            // 解析本笔成交量 — 不使用默认值，解析失败直接报错
+
             let trade_fill: f64 = row
                 .last_fill_qty
                 .parse()
                 .context(format!("parse last_fill_qty '{}' for order {}", row.last_fill_qty, row.client_order_id))?;
 
-            // 解析本笔成交价格 — 每笔 TRADE 事件的价格（与运行时增量路径一致）
+
             let fill_price: f64 = row
                 .last_fill_price
                 .parse()
                 .context(format!("parse last_fill_price '{}' for order {}", row.last_fill_price, row.client_order_id))?;
 
-            // 解析已实现盈亏 — 平仓单有 realized_pnl，开仓单 rp=0 或 NULL
+
             let realized_pnl = match row.realized_pnl.as_deref() {
                 Some(s) if !s.is_empty() => s
                     .parse::<f64>()
@@ -181,7 +178,7 @@ impl Persistence {
             pos.apply_fill(is_close, fill_price, trade_fill, realized_pnl, timestamp);
         }
 
-        // 输出最后一组仓位
+
         if let Some(pos) = current_pos {
             if pos.quantity > 1e-8 {
                 positions.push(pos);
@@ -191,8 +188,7 @@ impl Persistence {
         Ok(positions)
     }
 
-    /// 持久化订单: 所有事件写 pe_order_events, TRADE 事件额外写 pe_trades (同一事务)
-    /// ON CONFLICT DO NOTHING 保证 WS 重复推送幂等
+
     async fn persist_order_impl(&self, order: &CcxtOrder) -> VirsResult<()> {
         let side_str = match &order.side {
             Side::Buy => "BUY",
@@ -247,10 +243,9 @@ impl Persistence {
 
         let mut tx = self.db.begin().await.context("begin transaction for persist_order")?;
 
-        // 互斥写入: TRADE → pe_trades, 非 TRADE → pe_order_events
-        // 两表数据互补无冗余, 视图 UNION ALL 合并取最新行
+
         if order.execution_type == ExecutionType::Trade {
-            // TRADE 事件 → pe_trades
+
             sqlx::query(
                 r#"
                 INSERT INTO pe_trades (
@@ -323,7 +318,7 @@ impl Persistence {
             .execute(&mut *tx)
             .await?;
         } else {
-            // 非 TRADE 事件 → pe_order_events
+
             sqlx::query(
                 r#"
                 INSERT INTO pe_order_events (
@@ -401,8 +396,7 @@ impl Persistence {
         Ok(())
     }
 
-    /// 持久化被拦截的非法订单到 pe_rejected_orders
-    /// 41 字段与 pe_order_events/pe_trades 一致 + rejection_reason
+
     async fn persist_rejected_order_impl(
         &self,
         order: &CcxtOrder,
@@ -538,7 +532,7 @@ impl Persistence {
     }
 
     async fn get_active_orders_impl(&self) -> VirsResult<Vec<CcxtOrder>> {
-        // pe_order_latest 视图取每个 client_order_id 的最新事件行
+
         let rows = sqlx::query_as::<_, OrderRow>(
             r#"
             SELECT * FROM pe_order_latest
@@ -614,7 +608,7 @@ struct OrderRow {
 
 impl OrderRow {
     fn into_ccxt_order(self) -> Option<CcxtOrder> {
-        // DB 读取校验：side/position_side/status 非法值直接跳过（与 WS validate 共用校验逻辑）
+
         if let Err(e) = virs_type::CcxtOrder::validate_fields(
             &self.side,
             Some(&self.position_side),
@@ -632,7 +626,7 @@ impl OrderRow {
             "SELL" => Side::Sell,
             _ => unreachable!("CcxtOrder::validate_fields 已保证到达此处时 side 为 BUY/SELL"),
         };
-        // order_type: 纯信息字段，透传保留原始字符串
+
         let order_type = match self.order_type.as_str() {
             "LIMIT" => OrderType::Limit,
             "MARKET" => OrderType::Market,
@@ -644,7 +638,7 @@ impl OrderRow {
             "LIQUIDATION" => OrderType::Liquidation,
             other => OrderType::Unknown(other.to_string()),
         };
-        // original_order_type: 纯信息字段，透传保留原始字符串
+
         let original_order_type = match self.original_order_type.as_str() {
             "LIMIT" => OrderType::Limit,
             "MARKET" => OrderType::Market,

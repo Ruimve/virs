@@ -288,11 +288,7 @@ impl AutoEngine {
     }
 }
 
-/// 工厂函数：创建 AutoEngine，启动运行循环，并返回命令通道和任务句柄。
-///
-/// `run()` 需要 `&mut self`，无法通过 trait 对象调用，
-/// 因此在工厂函数内部 spawn 后返回 `mpsc::Sender<AutoCommand>` 和 `TaskHandle`。
-/// `AutoAiService` 也在此函数内部创建，外部无需感知其具体类型。
+
 pub fn create_auto_engine(
     store: Arc<dyn AutoStore>,
     llm_resolver: Arc<dyn LlmProviderResolver>,

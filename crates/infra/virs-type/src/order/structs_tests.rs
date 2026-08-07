@@ -4,8 +4,6 @@ use super::*;
 use crate::order::{OrderStatus, OrderType, Side};
 
 
-// ── Order DB 行 roundtrip（原 virs-models::serde_tests） ──
-
 #[test]
 fn s3_1_order_roundtrip() {
     let now = Utc::now();

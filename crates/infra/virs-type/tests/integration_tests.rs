@@ -36,8 +36,6 @@ fn make_position(side: PositionSide, entry: f64, quantity: f64) -> Position {
 }
 
 
-// ── AutoBot 统计集成测试（原 virs-models::tests::integration_tests） ──
-
 fn make_auto_bot(
     status: &str,
     total_trades: i32,

@@ -13,7 +13,7 @@ fn returns_valid_string() {
 
 #[test]
 fn expanding_in_accelerating_uptrend() {
-    // 加速上涨，EMA 间距扩大
+
     let klines: Vec<_> = (0..60).map(|i| {
         let close = 100.0 + (i as f64).powi(2) * 0.05;
         crate::indicators::test_utils::kline(close - 1.0, close + 1.0, close - 2.0, close, 1000.0)

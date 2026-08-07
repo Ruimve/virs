@@ -1,4 +1,4 @@
-//! 布林带指标（TA-Lib `overlap::bbands`）。
+
 
 use talib_rs::{ma_type::MaType, overlap};
 use virs_error::{Context, VirsError, VirsResult};
@@ -6,7 +6,7 @@ use virs_type::Kline;
 
 use crate::indicators::closes;
 
-/// 计算指定索引处的布林带三线值 (upper, middle, lower)。
+
 pub fn bbands_at(
     klines: &[Kline],
     idx: usize,

@@ -61,7 +61,6 @@ fn position_side_str(side: &virs_type::PositionSide) -> String {
 }
 
 
-// pe_order_latest.position_side 列存储大写形式（见 virs-position persistence.rs）。
 fn position_side_db_str(side: &virs_type::PositionSide) -> String {
     match side {
         virs_type::PositionSide::Long => "LONG".to_string(),
@@ -113,8 +112,8 @@ async fn fetch_stop_loss_take_profit(
     exchange: &str,
     side: &virs_type::PositionSide,
 ) -> (Option<f64>, Option<f64>) {
-    // pe_auto_order_context 表本身没有 position_side 列，通过 client_order_id
-    // JOIN pe_order_latest 表按 position_side 过滤（pe_order_latest.position_side 存储大写 LONG/SHORT）。
+
+
     let side_str = position_side_db_str(side);
     let row: Result<(f64, f64), _> = sqlx::query_as(
         r#"SELECT ctx.stop_loss, ctx.take_profit
@@ -326,9 +325,8 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
             msg = pe_rx.recv() => {
                 match msg {
                     Ok(event) => {
-                        // 处理三种仓位事件：开仓/平仓/更新。
-                        // 每次推送一个仓位消息（PositionWsMsg 结构体保持不变），
-                        // 前端按 side 分桶存储。
+
+
                         let position = match event {
                             virs_type::EngineEvent::PositionOpened { position } => Some(position),
                             virs_type::EngineEvent::PositionClosed { position } => Some(position),

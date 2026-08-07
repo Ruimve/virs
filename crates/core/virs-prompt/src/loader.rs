@@ -1,14 +1,4 @@
-//! Prompt 模板文件夹加载器。
-//!
-//! 启动流程：
-//! 1. 读取 `STRATEGIES_DIR` 环境变量。未设置时返回空 loader（worker 回退默认常量）
-//! 2. 扫描 `{dir}/auto/*/` 子目录（每个子目录 = 一个策略）
-//! 3. 每个子目录读取 `meta.json` + `system_prompt.md` + `user_prompt_template.md`，
-//!    组装为 [`PromptTemplate`]，调用 [`validator::validate`] 校验
-//! 4. 校验通过则缓存，失败则 `warn!` 记录并跳过（不中断启动）
-//!
-//! 运行时查询：[`PromptLoader::get`] 按 `(strategy_type, name)` 查找。
-//! 不做文件 watcher 热更新——改 prompt 需重启 bot，避免运行中行为突变。
+
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -22,10 +12,10 @@ use virs_type::StrategyType;
 use crate::template::{MetaFile, PromptTemplate};
 use crate::validator::validate;
 
-/// 环境变量名。
+
 pub const ENV_STRATEGIES_DIR: &str = "STRATEGIES_DIR";
 
-/// Prompt 模板加载器。线程安全，可全局共享。
+
 #[derive(Debug, Clone)]
 pub struct PromptLoader {
     inner: Arc<RwLock<Inner>>,
@@ -33,21 +23,21 @@ pub struct PromptLoader {
 
 #[derive(Debug, Default)]
 struct Inner {
-    /// key = (strategy_type, name)，value = 模板
+
     templates: HashMap<(StrategyType, String), PromptTemplate>,
-    /// 实际扫描的根目录（用于日志/调试）
+
     root_dir: Option<PathBuf>,
 }
 
 impl PromptLoader {
-    /// 创建空 loader（未配置 `STRATEGIES_DIR` 时使用）。
+
     pub fn empty() -> Self {
         Self {
             inner: Arc::new(RwLock::new(Inner::default())),
         }
     }
 
-    /// 从 `STRATEGIES_DIR` 环境变量加载。环境变量未设置时返回空 loader。
+
     pub async fn from_env() -> Self {
         match std::env::var(ENV_STRATEGIES_DIR) {
             Ok(dir) if !dir.trim().is_empty() => Self::from_dir(PathBuf::from(dir)).await,
@@ -68,7 +58,7 @@ impl PromptLoader {
         }
     }
 
-    /// 从指定目录加载。扫描 `{dir}/auto/*/` 子目录。
+
     pub async fn from_dir(dir: PathBuf) -> Self {
         let mut inner = Inner {
             templates: HashMap::new(),
@@ -103,7 +93,7 @@ impl PromptLoader {
         }
     }
 
-    /// 查询模板。未配置目录或未找到时返回 `None`，由调用方决定回退策略。
+
     pub async fn get(&self, strategy_type: StrategyType, name: &str) -> Option<PromptTemplate> {
         self.inner
             .read()
@@ -113,7 +103,7 @@ impl PromptLoader {
             .cloned()
     }
 
-    /// 列出指定策略类型的全部模板名（用于 API/调试）。
+
     pub async fn list(&self, strategy_type: StrategyType) -> Vec<String> {
         self.inner
             .read()
@@ -125,25 +115,22 @@ impl PromptLoader {
             .collect()
     }
 
-    /// 已加载的模板总数。
+
     pub async fn len(&self) -> usize {
         self.inner.read().await.templates.len()
     }
 
-    /// 是否为空（未加载任何模板）。
+
     pub async fn is_empty(&self) -> bool {
         self.inner.read().await.templates.is_empty()
     }
 
-    /// 返回加载的根目录（用于诊断）。
+
     pub async fn root_dir(&self) -> Option<PathBuf> {
         self.inner.read().await.root_dir.clone()
     }
 
-    /// 插入或更新单个模板到内存缓存。
-    ///
-    /// 供 `save_template` 写入文件后调用,使后续 `get` / `list` 立即返回新内容。
-    /// 若同名 key 已存在则覆盖（语义与启动时扫描一致——"last loaded wins"）。
+
     pub async fn upsert(&self, template: PromptTemplate) {
         let key = (template.strategy_type, template.name.clone());
         let mut guard = self.inner.write().await;
@@ -152,10 +139,7 @@ impl PromptLoader {
         }
     }
 
-    /// 从内存缓存移除单个模板。
-    ///
-    /// 供 `delete_template` 删除文件后调用,使后续 `get` / `list` 不再返回已删除的策略。
-    /// key 不存在时静默返回（幂等）。
+
     pub async fn remove(&self, strategy_type: StrategyType, name: &str) {
         let key = (strategy_type, name.to_string());
         let mut guard = self.inner.write().await;
@@ -208,10 +192,7 @@ async fn load_subdir(sub: &Path, st: StrategyType, inner: &mut Inner) {
     }
 }
 
-/// 从单个策略文件夹加载模板。
-///
-/// 文件夹内必须包含 `meta.json` + `system_prompt.md` + `user_prompt_template.md`。
-/// `name` 以文件夹名为准，`strategy_type` 以父目录为准（防止放错位置）。
+
 async fn load_strategy_folder(
     dir: &Path,
     st: StrategyType,
@@ -234,9 +215,9 @@ async fn load_strategy_folder(
         .await
         .context("读取 user_prompt_template.md 失败")?;
 
-    // name 以文件夹名为准（防止 meta.json 内 name 与文件夹名不一致）
+
     meta.name = name.to_string();
-    // strategy_type 以目录为准（防止放错目录）
+
     meta.strategy_type = st;
 
     let tpl = PromptTemplate {

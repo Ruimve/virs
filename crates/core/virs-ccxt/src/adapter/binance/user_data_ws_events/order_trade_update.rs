@@ -5,174 +5,172 @@ use virs_type::{
     CcxtOrder, CcxtOrderStatus, ExecutionType as CcxtExecutionType, PositionSide, WsFeedEvent,
 };
 
-// ORDER_TRADE_UPDATE事件外层结构
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct OrderTradeUpdateEvent {
     #[serde(rename = "e")]
-    pub event_type: String, // e→事件类型
+    pub event_type: String,
 
     #[serde(rename = "E")]
-    pub event_time: i64, // E→事件时间(ms)
+    pub event_time: i64,
 
     #[serde(rename = "T")]
-    pub transaction_time: i64, // T→事务时间(ms)
+    pub transaction_time: i64,
 
     #[serde(rename = "o")]
-    pub order: OrderTradeUpdateData, // o→订单成交详情
+    pub order: OrderTradeUpdateData,
 }
 
-// 订单成交详情，字段映射见各字段注释
+
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct OrderTradeUpdateData {
     #[serde(rename = "s")]
-    pub symbol: String, // s→交易对
+    pub symbol: String,
 
     #[serde(rename = "c")]
-    pub client_order_id: String, // c→客户端订单ID
+    pub client_order_id: String,
 
     #[serde(rename = "S")]
-    pub side: String, // S→买卖方向
+    pub side: String,
 
     #[serde(rename = "o")]
-    pub order_type: String, // o→订单类型
+    pub order_type: String,
 
     #[serde(rename = "f")]
-    pub time_in_force: String, // f→有效期类型
+    pub time_in_force: String,
 
     #[serde(rename = "q")]
-    pub orig_qty: String, // q→原始数量
+    pub orig_qty: String,
 
     #[serde(rename = "p")]
-    pub original_price: String, // p→原始价格
+    pub original_price: String,
 
     #[serde(default)]
     #[serde(rename = "ap")]
-    pub avg_fill_price: String, // ap→平均成交价
+    pub avg_fill_price: String,
 
     #[serde(default)]
     #[serde(rename = "sp")]
-    pub stop_price: String, // sp→触发价格
+    pub stop_price: String,
 
     #[serde(rename = "x")]
-    pub execution_type: String, // x→执行类型
+    pub execution_type: String,
 
     #[serde(rename = "X")]
-    pub status: String, // X→订单状态
+    pub status: String,
 
     #[serde(rename = "i")]
-    pub order_id: i64, // i→订单ID
+    pub order_id: i64,
 
     #[serde(rename = "M")]
-    pub modify_id: Option<String>, // M→改单标识, 仅在AMENDMENT事件且请求中传入时推送
+    pub modify_id: Option<String>,
 
     #[serde(rename = "l")]
-    pub last_fill_qty: String, // l→最新成交数量
+    pub last_fill_qty: String,
 
     #[serde(rename = "z")]
-    pub filled_qty: String, // z→累计成交数量
+    pub filled_qty: String,
 
     #[serde(rename = "L")]
-    pub last_fill_price: String, // L→最新成交价
+    pub last_fill_price: String,
 
     #[serde(rename = "N")]
-    pub commission_asset: String, // N→手续费资产
+    pub commission_asset: String,
 
     #[serde(rename = "n")]
-    pub commission: String, // n→手续费
+    pub commission: String,
 
     #[serde(rename = "T")]
-    pub trade_time: i64, // T→成交时间(ms)
+    pub trade_time: i64,
 
     #[serde(rename = "t")]
-    pub trade_id: i64, // t→成交ID
+    pub trade_id: i64,
 
     #[serde(default)]
     #[serde(rename = "b")]
-    pub bids_notional: String, // b→买方名义价值
+    pub bids_notional: String,
 
     #[serde(default)]
     #[serde(rename = "a")]
-    pub ask_notional: String, // a→卖方名义价值
+    pub ask_notional: String,
 
     #[serde(rename = "m")]
-    pub is_maker: bool, // m→是否为maker
+    pub is_maker: bool,
 
     #[serde(rename = "R")]
-    pub reduce_only: bool, // R→是否仅减仓 (exchange-native, 业务层不使用)
+    pub reduce_only: bool,
 
     #[serde(default)]
     #[serde(rename = "wt")]
-    pub working_type: String, // wt→工作类型
+    pub working_type: String,
 
     #[serde(default)]
     #[serde(rename = "ot")]
-    pub original_order_type: String, // ot→原始订单类型
+    pub original_order_type: String,
 
     #[serde(rename = "ps")]
-    pub position_side: Option<String>, // ps→持仓方向
+    pub position_side: Option<String>,
 
     #[serde(rename = "cp")]
-    pub close_position: Option<bool>, // cp→是否为触发平仓单
+    pub close_position: Option<bool>,
 
     #[serde(rename = "AP")]
-    pub activation_price: Option<String>, // AP→触发价格(追踪止损)
+    pub activation_price: Option<String>,
 
     #[serde(rename = "cr")]
-    pub callback_rate: Option<String>, // cr→回调比率
+    pub callback_rate: Option<String>,
 
     #[serde(default)]
     #[serde(rename = "pP")]
-    pub price_protection: bool, // pP→价格保护
+    pub price_protection: bool,
 
     #[serde(default)]
     #[serde(rename = "rp")]
-    pub realized_pnl: String, // rp→已实现盈亏
+    pub realized_pnl: String,
 
     #[serde(default)]
     #[serde(rename = "V")]
-    pub stp_mode: String, // V→STP模式
+    pub stp_mode: String,
 
     #[serde(default)]
     #[serde(rename = "pm")]
-    pub price_match_mode: String, // pm→价格匹配模式
+    pub price_match_mode: String,
 
     #[serde(default)]
     #[serde(rename = "gtd")]
-    pub gtd_auto_cancel_time: i64, // gtd→GTD自动撤单时间
+    pub gtd_auto_cancel_time: i64,
 
     #[serde(default)]
     #[serde(rename = "er")]
-    pub expiry_reason: String, // er→过期原因
+    pub expiry_reason: String,
 
     #[serde(rename = "si")]
-    pub si: Option<i64>, // si→忽略
+    pub si: Option<i64>,
 
     #[serde(rename = "ss")]
-    pub ss: Option<i64>, // ss→忽略
+    pub ss: Option<i64>,
 }
 
 impl OrderTradeUpdateData {
-    // 是否强平: execution_type=="CALCULATED"且client_order_id以"autoclose-"开头
+
     pub fn is_liquidation(&self) -> bool {
         self.execution_type == "CALCULATED" && self.client_order_id.starts_with("autoclose-")
     }
 
-    // 是否ADL(自动减仓): execution_type=="CALCULATED"且client_order_id=="adl_autoclose"
+
     pub fn is_adl(&self) -> bool {
         self.execution_type == "CALCULATED" && self.client_order_id == "adl_autoclose"
     }
 
-    // 转换为WsFeedEvent::OrderUpdate
-    // 先做合法性校验，通过后再转换为 CcxtOrder
-    // 信封字段 (e/E/T) 从 OrderTradeUpdateEvent 传入
+
     pub fn to_ws_feed_event(
         &self,
         envelope_event_type: &str,
         envelope_event_time: i64,
         envelope_transaction_time: i64,
     ) -> Option<WsFeedEvent> {
-        // 检测强平和ADL事件并记录日志
+
         if self.is_liquidation() {
             tracing::error!(
                 symbol = %self.symbol,
@@ -189,8 +187,6 @@ impl OrderTradeUpdateData {
             );
         }
 
-        // 校验移至 engine 层: 非法订单照常构造 CcxtOrder (Unknown 变体保留原始值)
-        // 由 engine 判断 Unknown 并持久化到 pe_rejected_orders
 
         let ccxt_order = self.to_ccxt_order(
             envelope_event_type,
@@ -200,9 +196,7 @@ impl OrderTradeUpdateData {
         Some(WsFeedEvent::OrderUpdate { order: Arc::new(ccxt_order) })
     }
 
-    // 转换为 CcxtOrder，字段类型与币安原生返回保持一致
-    // 不做任何默认值填充: Option<String> 保持 Option, 未知枚举值保留原始字符串
-    // envelope_* 参数来自外层 OrderTradeUpdateEvent 信封字段
+
     pub fn to_ccxt_order(
         &self,
         envelope_event_type: &str,
@@ -275,7 +269,7 @@ impl OrderTradeUpdateData {
     }
 }
 
-// 入口函数: 反序列化JSON并转换为WsFeedEvent
+
 pub fn process(json: &str) -> Option<WsFeedEvent> {
     let event: OrderTradeUpdateEvent = serde_json::from_str(json).ok()?;
     event.order.to_ws_feed_event(

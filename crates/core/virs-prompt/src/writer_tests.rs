@@ -5,8 +5,7 @@ use std::sync::Mutex;
 use tempfile::tempdir;
 use virs_type::StrategyType;
 
-/// 所有 writer 测试都依赖全局 `STRATEGIES_DIR` 环境变量，
-/// 并行运行会互相污染 —— 用此 Mutex 串行化。
+
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 fn make_valid_template(name: &str, st: StrategyType) -> PromptTemplate {
@@ -35,17 +34,17 @@ fn w1_save_template_writes_folder() {
     assert!(path.is_dir());
     assert!(path.to_str().unwrap().ends_with("auto/test_save"));
 
-    // 验证三个文件都存在
+
     assert!(path.join("meta.json").exists());
     assert!(path.join("system_prompt.md").exists());
     assert!(path.join("user_prompt_template.md").exists());
 
-    // 验证 meta.json 可解析
+
     let meta_content = std::fs::read_to_string(path.join("meta.json")).unwrap();
     let meta: MetaFile = serde_json::from_str(&meta_content).unwrap();
     assert_eq!(meta.name, "test_save");
 
-    // 验证 .md 文件内容
+
     let sys = std::fs::read_to_string(path.join("system_prompt.md")).unwrap();
     assert_eq!(sys, tpl.system_prompt);
     let user = std::fs::read_to_string(path.join("user_prompt_template.md")).unwrap();
@@ -63,11 +62,11 @@ fn w2_save_without_overwrite_rejects_existing() {
     let tpl = make_valid_template("test_dup", StrategyType::Auto);
     save_template(&tpl, false).unwrap();
 
-    // 再次保存，不覆盖 → 应该报错
+
     let result = save_template(&tpl, false);
     assert!(result.is_err());
 
-    // 覆盖模式 → 应该成功
+
     let result = save_template(&tpl, true);
     assert!(result.is_ok());
 
@@ -87,7 +86,7 @@ fn w3_delete_template_removes_folder() {
     delete_template(StrategyType::Auto, "test_del").unwrap();
     assert!(!path.exists());
 
-    // 再删 → not_found
+
     let result = delete_template(StrategyType::Auto, "test_del");
     assert!(result.is_err());
 

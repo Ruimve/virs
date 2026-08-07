@@ -28,10 +28,7 @@ struct PaperPendingOrder {
 
 type PaperPosition = ExchangePosition;
 
-/// 模拟交易引擎，仅处理私有数据（余额、持仓、订单）。
-///
-/// 公共数据（行情、K线、资金费率等）由 `PaperModeExchange` 路由层转发到真实交易所。
-/// 不持有任何外部引用，无循环依赖。
+
 pub struct PaperExchangeAdapter {
     name: String,
     market_type: MarketType,
@@ -67,13 +64,13 @@ impl PaperExchangeAdapter {
         }
     }
 
-    /// 生成递增的 order_id，与币安原生 i64 订单ID对齐
+
     fn next_order_id(&self) -> i64 {
         self.order_id_counter
             .fetch_add(1, Ordering::Relaxed)
     }
 
-    /// 生成递增的 trade_id，确保同一订单多笔成交不会因 trade_id 冲突被丢弃
+
     fn next_trade_id(&self) -> i64 {
         self.trade_id_counter
             .fetch_add(1, Ordering::Relaxed)
@@ -306,7 +303,6 @@ impl ExchangePe for PaperExchangeAdapter {
         self.market_type
     }
 
-    // ---- 公共数据：返回 NotSupported，由 PaperModeExchange 路由到真实交易所 ----
 
     async fn get_ticker(&self, symbol: &str) -> VirsResult<Ticker> {
         Err(VirsError::Exchange(ExchangeError::NotSupported(
@@ -381,11 +377,10 @@ impl ExchangePe for PaperExchangeAdapter {
     }
 
     async fn get_position_mode(&self) -> VirsResult<PositionMode> {
-        // Paper 模式默认 Hedge，真实持仓模式由 PaperModeExchange 路由到真实交易所
+
         Ok(PositionMode::Hedge)
     }
 
-    // ---- 私有数据：Paper 自己处理 ----
 
     async fn get_balance(&self) -> VirsResult<Balance> {
         let mut balance = self.balance.lock().await;
@@ -528,7 +523,7 @@ impl ExchangePe for PaperExchangeAdapter {
                 client_order_id: client_order_id.clone(),
             };
             self.pending.insert(order_id, pending);
-            // 限价单挂单未成交，不发送 WS 推送
+
             let order_result = OrderResult {
                 order_id: order_id.to_string(),
                 client_order_id,

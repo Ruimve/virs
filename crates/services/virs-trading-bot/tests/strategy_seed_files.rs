@@ -1,8 +1,4 @@
-//! 集成测试：验证项目根 `strategies/` 目录下的 seed 文件夹能被
-//! PromptLoader 正确加载并通过校验。
-//!
-//! 该测试需要 `STRATEGIES_DIR` 环境变量指向项目根的 `strategies/` 目录，
-//! 否则跳过（CI 中应设置该变量）。
+
 
 use virs_prompt::PromptLoader;
 use virs_type::StrategyType;

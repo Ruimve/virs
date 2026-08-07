@@ -18,8 +18,6 @@ fn m1_2_zero_total() {
 }
 
 
-// ── 行情类型 serde roundtrip ──
-
 #[test]
 fn s2_1_ticker_roundtrip() {
     let ticker = Ticker {

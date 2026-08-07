@@ -37,8 +37,7 @@ pub trait AutoStore: Send + Sync {
         loss_trades: i32,
     ) -> VirsResult<()>;
 
-    /// 记录开仓 context — INSERT pe_auto_order_context (order_role='open', status='open')
-    /// strategy_file 为行级快照，INSERT 时从 bot config 冻结
+
     async fn record_open_trade(
         &self,
         bot_id: Uuid,
@@ -51,7 +50,7 @@ pub trait AutoStore: Send + Sync {
         strategy_file: &Option<String>,
     ) -> VirsResult<()>;
 
-    /// 记录平仓 context — UPDATE open row status='closed' + INSERT close row
+
     async fn close_trade(
         &self,
         open_client_order_id: &str,
@@ -59,27 +58,25 @@ pub trait AutoStore: Send + Sync {
         close_reason: &str,
     ) -> VirsResult<()>;
 
-    /// 更新止损 — UPDATE pe_auto_order_context SET stop_loss WHERE client_order_id
+
     async fn update_trade_stop_loss(&self, client_order_id: &str, stop_loss: f64) -> VirsResult<()>;
 
-    /// 查找 open 状态的开仓 context — 返回 (client_order_id, stop_loss, take_profit, opened_at)
+
     async fn find_open_trade(
         &self,
         bot_id: Uuid,
     ) -> VirsResult<Option<(String, f64, f64, DateTime<Utc>)>>;
 
-    /// 标记孤儿 — UPDATE status='orphaned' WHERE client_order_id
+
     async fn mark_trade_orphaned(&self, client_order_id: &str) -> VirsResult<()>;
 
-    /// 查找最近已平仓交易 — 返回 (open_side, close_reason, closed_at)
-    /// open_side 从 pe_trades.side 派生, close_reason 从 context 取
+
     async fn find_last_closed_trade(
         &self,
         bot_id: Uuid,
     ) -> VirsResult<Option<(String, String, DateTime<Utc>)>>;
 
-    /// 记录孤儿平仓 — INSERT close context row, status='orphaned'
-    /// strategy_file 为行级快照
+
     async fn record_orphaned_close_trade(
         &self,
         bot_id: Uuid,
@@ -110,16 +107,15 @@ pub trait AutoStore: Send + Sync {
         intercept_reason: Option<&str>,
     ) -> VirsResult<()>;
 
-    /// 加载连续亏损次数 — JOIN pe_order_latest 取 close 订单的 realized_pnl
+
     async fn load_consecutive_losses(&self, bot_id: Uuid) -> VirsResult<i32>;
     async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()>;
 }
 
-/// 交易历史数据源 trait。
-/// 由应用层实现（从数据库查询已平仓交易记录）。
+
 #[async_trait]
 pub trait TradeHistoryProvider: Send + Sync {
-    /// 查询指定策略在时间窗口内的已平仓交易记录。
+
     async fn query_trades(
         &self,
         strategy_name: &str,

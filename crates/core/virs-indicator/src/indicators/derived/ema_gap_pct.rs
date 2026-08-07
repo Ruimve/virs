@@ -1,13 +1,11 @@
-//! EMA 间距百分比 ((ema_fast - ema_slow) / ema_slow * 100)。
-//!
-//! 依赖 [`crate::indicators::atomic::ema`]。
+
 
 use virs_error::{VirsError, VirsResult};
 use virs_type::Kline;
 
 use crate::indicators::atomic::ema::ema_at;
 
-/// 计算最新 K 线的 EMA 间距百分比。
+
 pub fn compute(klines: &[Kline], fast: usize, slow: usize) -> VirsResult<f64> {
     let last_idx = klines.len().saturating_sub(1);
     if last_idx < slow - 1 {

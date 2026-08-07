@@ -1,9 +1,9 @@
-//! 已完成 K 线的成交量。
+
 
 use virs_error::{VirsError, VirsResult};
 use virs_type::Kline;
 
-/// 获取最后一根已完成 K 线的成交量。
+
 pub fn compute(klines: &[Kline]) -> VirsResult<f64> {
     if klines.len() < 2 {
         return Err(VirsError::config(format!(

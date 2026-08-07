@@ -1,4 +1,4 @@
-//! Event handling: PE events, order events, pending state transitions.
+
 
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -98,13 +98,9 @@ impl AutoWorker {
                     return;
                 }
 
-                // 外部平仓场景（apply_pending_close 未处理）：完整清理 per-side 字段
-                // apply_pending_close 已清空 current_{side} 和 bot.position_id_{side}，
-                // is_ours 检查会直接 return，不会进入此分支。
-                // 进入此分支说明是 PE 直接推送的 PositionClosed（外部止损单/强平），
-                // 需补充与 apply_pending_close 一致的字段清理，否则残留状态影响后续决策。
+
                 let now = chrono::Utc::now();
-                // 外部平仓设置 last_close_event 触发冷却（compute_cooldown_secs 对未知 reason 返回 15 分钟）
+
                 self.side_mut(&side).clear_on_close((
                     side_str(&side).to_string(),
                     "external_close".to_string(),
@@ -251,7 +247,7 @@ impl AutoWorker {
 
                 match client_order_id.as_deref() {
                     Some(cid) => {
-                        // Precise rollback: only roll back the pending that matches this client_order_id
+
                         let mut rolled_back_close = false;
                         if self.long.pending_open.as_ref().is_some_and(|p| p.client_order_id == cid) {
                             self.rollback_pending_open(PositionSide::Long);
@@ -288,7 +284,7 @@ impl AutoWorker {
                         );
                     }
                     None => {
-                        // Fallback: no client_order_id available, roll back all pending (legacy behavior)
+
                         rolled_back_open = self.long.pending_open.is_some()
                             || self.short.pending_open.is_some();
                         warn!(
@@ -331,7 +327,7 @@ impl AutoWorker {
                 client_order_id,
                 symbol: _,
             } if self.is_pending() => {
-                // OrderCanceled 与 OrderFailed 一样需要回滚匹配的 pending 状态
+
                 let mut rolled_back_open = false;
 
                 match client_order_id.as_deref() {
@@ -483,7 +479,7 @@ impl AutoWorker {
             "Open order confirmed, applying position state"
         );
 
-        // 写入 per-side 字段
+
         {
             let s = self.side_mut(&side);
             s.stop_loss = stop_loss;
@@ -492,7 +488,7 @@ impl AutoWorker {
             s.open_fee = fee;
         }
 
-        // 从订单事件回填 per-side position_id（PE PositionOpened 事件可能尚未到达）
+
         if let Some(pid) = order_position_id.filter(|id| *id != Uuid::nil()) {
             match side {
                 PositionSide::Long => {
@@ -618,7 +614,7 @@ impl AutoWorker {
             self.consecutive_losses += 1;
         }
 
-        // 清除 per-side 字段（不清除 open_client_order_id，稍后会被 take()）
+
         {
             let s = self.side_mut(&side);
             s.stop_loss = 0.0;
@@ -628,7 +624,7 @@ impl AutoWorker {
             s.open_fee = 0.0;
         }
 
-        // 写入 per-side last_close_event
+
         let close_event = (
             pending.side.clone(),
             pending.close_reason.clone(),
@@ -636,7 +632,7 @@ impl AutoWorker {
         );
         self.side_mut(&side).last_close_event = Some(close_event);
 
-        // 平仓后清空对应 side 的 position_id
+
         match side {
             PositionSide::Long => self.bot.position_id_long = None,
             PositionSide::Short => self.bot.position_id_short = None,

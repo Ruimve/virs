@@ -1,36 +1,19 @@
-# ============================================================================
-# Clippy 配置文件
-# 文档: https://doc.rust-lang.org/clippy/configuration.html
-# 此文件配置 clippy lint 的阈值参数，[workspace.lints] 在 Cargo.toml 中配置
-# ============================================================================
 
-# 函数参数过多阈值（已在 Cargo.toml 中 allow，此处仅作参考）
-# 默认 7，交易系统参数较多故放宽
+
 too-many-arguments-threshold = 10
 
-# 类型复杂度阈值（已在 Cargo.toml 中 allow，此处仅作参考）
-# 默认 250
+
 type-complexity-threshold = 500
 
-# 单个枚举变体字段数阈值
+
 enum-variant-size-threshold = 200
 
-# 函数体行数阈值，超过会触发 too_many_lines
-# 默认 100
+
 too-large-for-stack = 200
 
-# 字面量长度阈值，超过会建议提取为常量
-# 默认 100
+
 literal-representation-threshold = 16384
 
-# 允许的第三方 crate 前缀（避免 module_name_repetitions 误报）
-# 已在 Cargo.toml 中 allow module_name_repetitions
 
-# 检查文档注释中的代码块
-# doc-valid-idents = []
-
-# 警告大文件中的认知复杂度
 cognitive-complexity-threshold = 50
 
-# 允许的 Arc/Mutex 嵌套深度
-# 默认不限制

@@ -60,7 +60,7 @@ fn v5_declared_but_unused_rejected() {
 fn v6_used_but_not_declared_rejected() {
     let mut t = make_valid_template();
     t.user_prompt_template = "{h1_current_price} {h1_rsi}".to_string();
-    // required_placeholders 只声明 h1_current_price
+
     let err = validate(&t).unwrap_err();
     assert!(matches!(err, BotError::Validation(ref m) if m.contains("未在 required_placeholders 中声明")));
 }

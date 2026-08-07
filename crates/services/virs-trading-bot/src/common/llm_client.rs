@@ -6,10 +6,7 @@ use virs_error::BotResult;
 use virs_type::{CredentialStore, LlmProviderResolver};
 use virs_llm::{call_llm_api, create_llm_http_client, LlmCallResult};
 
-/// 共享的 LLM 客户端：封装凭证加载 + provider 解析 + HTTP 调用。
-///
-/// `AutoAiService` 内部持有一个实例，
-/// 避免重复实现 `load_credentials → resolve → call_llm_api` 链路。
+
 pub(crate) struct LlmClient {
     http_client: reqwest::Client,
     llm_resolver: Arc<dyn LlmProviderResolver>,
@@ -29,7 +26,7 @@ impl LlmClient {
         }
     }
 
-    /// 检查指定用户是否有可用的 LLM 凭证。
+
     pub(crate) async fn is_available_for_user(&self, user_id: Uuid) -> bool {
         if self.llm_resolver.is_available() {
             return true;
@@ -40,9 +37,7 @@ impl LlmClient {
         }
     }
 
-    /// 加载用户凭证 → 解析 provider → 调用 LLM API。
-    ///
-    /// `provider_name` 仅用于错误日志标识调用方（如 "auto-ai"）。
+
     pub(crate) async fn call(
         &self,
         user_id: Uuid,

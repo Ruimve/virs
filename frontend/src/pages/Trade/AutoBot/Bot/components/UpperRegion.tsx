@@ -4,10 +4,7 @@ import { MarketLine } from './MarketLine';
 import { AccountBar } from './AccountBar';
 import { StrategyBlock } from './StrategyBlock';
 
-/**
- * 上区容器（surface-1 白色背景）。
- * 组合：市场行 + 账户条 + AI 策略块。
- */
+
 export const UpperRegion = memo(
   ({
     bot,

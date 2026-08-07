@@ -5,7 +5,7 @@ import { actionLabel, actionVariant } from '../../../components/utils/utils';
 import type { StrategyBlockProps } from './types';
 import { formatCompact, formatSigned, formatRelativeTime, formatDuration } from './utils';
 
-/** 决策间隔秒数 → 可读格式 */
+
 function formatInterval(secs: number): string {
   if (secs <= 0) return '';
   if (secs < 60) return `${secs}s`;
@@ -13,7 +13,7 @@ function formatInterval(secs: number): string {
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h`;
 }
 
-/** 从 AnalysisLog 提取决策对象（兼容新旧格式） */
+
 function extractDecision(log: AnalysisLog | null) {
   if (!log?.result) return null;
   if (log.result.decision) return log.result.decision;
@@ -27,17 +27,14 @@ function extractDecision(log: AnalysisLog | null) {
   return null;
 }
 
-/**
- * 策略名：优先使用 bot 绑定的策略文件名或策略元数据名。
- * 不再从 market_regime 伪造策略类型。
- */
+
 function resolveStrategyName(bot: AutoBot, strategy: StrategyDetail | null | undefined): string {
   if (strategy?.name) return strategy.name;
   if (bot.strategy_file) return bot.strategy_file;
   return '未绑定策略';
 }
 
-/** 基于动作推导策略方向后缀 */
+
 function deriveDirection(action: string | undefined): string {
   if (action === 'open_long') return '做多';
   if (action === 'open_short') return '做空';
@@ -45,7 +42,7 @@ function deriveDirection(action: string | undefined): string {
   return '';
 }
 
-/** 元数据项分隔组件 */
+
 function MetaItem({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-1 px-2 first:pl-0 [&:not(:last-child)]:border-r border-line-subtle">
@@ -54,17 +51,7 @@ function MetaItem({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * AI 策略 + 盈亏 一体块。
- *
- * 布局：
- *   头部：AI 标签 + 模型/置信度
- *   策略名 + 方向 + 累计盈亏
- *   推理引用
- *   动作 Badge + 市况
- *   业绩指标行（统一色）
- *   深度统计行（低权重）
- */
+
 export const StrategyBlock = memo(
   ({
     bot,
@@ -93,7 +80,7 @@ export const StrategyBlock = memo(
 
     return (
       <div className="border border-line-default rounded-lg p-2.5 flex flex-col gap-2 bg-base-secondary">
-        {/* 头部：AI 标签 + 模型名 */}
+        {}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <span
@@ -110,7 +97,7 @@ export const StrategyBlock = memo(
           </span>
         </div>
 
-        {/* 策略名(类型) + 方向后缀 + 盈亏同行 */}
+        {}
         <div className="flex items-baseline justify-between gap-2">
           <div className="flex items-baseline gap-1.5">
             <span className="text-sm font-bold leading-tight">{strategyName}</span>
@@ -131,14 +118,14 @@ export const StrategyBlock = memo(
           </div>
         </div>
 
-        {/* 策略描述 / AI 推理引用 */}
+        {}
         {(reason || strategyDesc) && (
           <div className="border-l-2 border-accent-muted pl-2 text-2xs text-on-surface-secondary leading-relaxed line-clamp-3">
             {reason || strategyDesc}
           </div>
         )}
 
-        {/* 状态行：动作 Badge + 市况 + 决策间隔 + 决策时间 + 运行时长 */}
+        {}
         <div className="flex items-center flex-wrap text-2xs gap-2">
           {dec?.action && (
             <Badge variant={actionVariant(dec.action)} size="xs">
@@ -178,7 +165,7 @@ export const StrategyBlock = memo(
           )}
         </div>
 
-        {/* 业绩指标行：统一 text-on-surface，仅风险指标 danger 色 */}
+        {}
         {stats && (
           <div className="flex items-center flex-wrap text-2xs">
             <MetaItem>
@@ -209,7 +196,7 @@ export const StrategyBlock = memo(
           </div>
         )}
 
-        {/* 深度统计行：纯文本低权重 */}
+        {}
         {stats && (
           <div className="text-2xs text-on-surface-muted font-mono tabular-nums leading-relaxed">
             连胜 <span className="text-success-text">{stats.max_win_streak}</span>

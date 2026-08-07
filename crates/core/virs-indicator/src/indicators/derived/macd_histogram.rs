@@ -1,13 +1,11 @@
-//! MACD 柱状图（MACD - Signal）。
-//!
-//! 依赖 [`crate::indicators::atomic::macd`]。
+
 
 use virs_error::{VirsError, VirsResult};
 use virs_type::Kline;
 
 use crate::indicators::atomic::macd::{macd_at, macd_signal_at};
 
-/// 计算最新 K 线的 MACD 柱状图值（MACD - Signal）。
+
 pub fn compute(klines: &[Kline], fast: usize, slow: usize, signal: usize) -> VirsResult<f64> {
     let last_idx = klines.len().saturating_sub(1);
     if last_idx < slow + signal - 2 {

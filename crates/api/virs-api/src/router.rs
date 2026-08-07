@@ -133,7 +133,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/auto/{id}/stats", get(handlers::auto_trade::get_stats))
 
-        // 策略 prompt 管理
+
         .route(
             "/api/strategies/prompts/generate",
             post(handlers::strategy::generate),

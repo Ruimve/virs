@@ -1,14 +1,9 @@
-//! SMA 指标（TA-Lib `overlap::sma`）。
-//!
-//! 通用 SMA 计算函数，可对任意序列取指定索引处的 SMA 值。
-//! 主要被 `derived::atr_sma` 调用。
+
 
 use talib_rs::overlap;
 use virs_error::{Context, VirsError, VirsResult};
 
-/// 计算序列在指定索引处的 SMA 值。
-///
-/// 自动处理 NaN 值：过滤后映射索引。
+
 pub fn sma_at_from(series: &[f64], idx: usize, period: usize) -> VirsResult<f64> {
     if series.is_empty() || period == 0 {
         return Err(VirsError::config(format!(

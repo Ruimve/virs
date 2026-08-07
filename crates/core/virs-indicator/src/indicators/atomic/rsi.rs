@@ -1,4 +1,4 @@
-//! RSI 指标（TA-Lib `momentum::rsi`）。
+
 
 use talib_rs::momentum;
 use virs_error::{Context, VirsError, VirsResult};
@@ -6,7 +6,7 @@ use virs_type::Kline;
 
 use crate::indicators::closes;
 
-/// 计算指定索引处的 RSI 值。
+
 pub fn rsi_at(klines: &[Kline], idx: usize, period: usize) -> VirsResult<f64> {
     if klines.is_empty() || idx < period || period == 0 {
         return Err(VirsError::config(format!(

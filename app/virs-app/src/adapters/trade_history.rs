@@ -4,10 +4,7 @@ use sqlx::PgPool;
 use tracing::warn;
 use virs_type::{TradeHistoryProvider, TradeRecord};
 
-/// 基于 PostgreSQL 的交易历史数据源。
-///
-/// 从 `pe_auto_order_context` + `pe_order_latest` 查询已平仓交易记录，
-/// 供 `StrategyEvaluator` 计算策略绩效指标。
+
 pub struct PgTradeHistoryProvider {
     db: PgPool,
 }

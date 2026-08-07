@@ -3,7 +3,7 @@ import type { AnalysisLog } from '@/service/types';
 import type { PositionCardProps } from './types';
 import { formatCompact, computeLiqDistance } from './utils';
 
-/** 从决策日志提取 AI 空仓理由 */
+
 function extractEmptyReason(decision: AnalysisLog | null, side: 'long' | 'short'): string | null {
   if (!decision?.result) return null;
   const dec =
@@ -25,7 +25,7 @@ function extractEmptyReason(decision: AnalysisLog | null, side: 'long' | 'short'
   return null;
 }
 
-/** 计算持仓时长 */
+
 function formatHoldDuration(createdAt: string): string {
   const now = Date.now();
   const opened = new Date(createdAt).getTime();
@@ -37,18 +37,14 @@ function formatHoldDuration(createdAt: string): string {
   return `holding · ${m}m`;
 }
 
-/**
- * 仓位卡原子组件。
- * 有持仓：方向+时长 → 未实现盈亏(含收益率) → 2×2网格(持仓量/开仓价/止损/止盈) → 强平价
- * 无持仓：灰色边框 + AI 理由
- */
+
 export const PositionCard = memo(
   ({ side, position, metrics, latestPrice, decision, realizedPnl }: PositionCardProps) => {
     const isLong = side === 'long';
     const dirLabel = isLong ? '▲ 多头' : '▼ 空头';
     const dirClass = isLong ? 'text-success-text' : 'text-danger-text';
 
-    // 空仓状态
+
     if (!metrics.hasPosition || !position) {
       const emptyReason = extractEmptyReason(decision, side);
       const realizedText =
@@ -75,7 +71,7 @@ export const PositionCard = memo(
       );
     }
 
-    // 有持仓
+
     const pnlClass =
       metrics.unrealizedPnl > 0
         ? 'text-success-text'
@@ -92,7 +88,7 @@ export const PositionCard = memo(
       <div
         className={`flex-1 bg-surface-1 border border-line-default border-l-2 ${isLong ? 'border-l-success' : 'border-l-danger'} rounded-lg p-2.5 flex flex-col gap-2`}
       >
-        {/* 头部：方向 + 持仓时长 */}
+        {}
         <div className="flex items-center justify-between">
           <span className={`text-xs font-bold ${dirClass}`}>{dirLabel}</span>
           <span className="text-2xs text-on-surface-muted font-mono">
@@ -100,7 +96,7 @@ export const PositionCard = memo(
           </span>
         </div>
 
-        {/* 未实现盈亏 + 收益率 */}
+        {}
         <div className="flex items-baseline justify-between">
           <span className="text-2xs text-on-surface-tertiary uppercase tracking-wider">未实现</span>
           <div className="flex items-baseline gap-1.5">
@@ -115,7 +111,7 @@ export const PositionCard = memo(
           </div>
         </div>
 
-        {/* 2×2 数据网格：持仓量 / 开仓价 / 止损 / 止盈 */}
+        {}
         <div className="grid grid-cols-2 gap-px bg-line-subtle rounded overflow-hidden">
           <div className="bg-surface-1 px-2 py-1 flex flex-col gap-0.5">
             <span className="text-2xs uppercase tracking-wide text-on-surface-tertiary">
@@ -151,7 +147,7 @@ export const PositionCard = memo(
           </div>
         </div>
 
-        {/* 强平价高亮行 */}
+        {}
         {liqPrice && liqPrice > 0 && (
           <div className="flex items-center justify-between px-2 py-1 rounded bg-danger-bg text-2xs">
             <span className="font-semibold text-danger-text">强平价</span>

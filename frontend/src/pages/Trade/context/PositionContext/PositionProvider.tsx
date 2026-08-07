@@ -13,7 +13,7 @@ export const PositionProvider = ({ children }: { children: ReactNode }) => {
   usePositionWs(bot?.symbol, (event) => {
     if (event.symbol !== bot?.symbol) return;
 
-    // side 来自后端 position_to_ws_json 的 position_side_str，值为 'long' | 'short'。
+
     const side = event.side as PositionSide;
     if (side !== 'long' && side !== 'short') return;
 

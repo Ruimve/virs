@@ -1,4 +1,4 @@
-//! Order execution: open and close position commands.
+
 
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -150,7 +150,7 @@ impl AutoWorker {
         let position_size = position.quantity;
         let position_id = position.id;
 
-        // 优先使用 per-side 缓存的 position_id；若为 nil 则回退到 PlaceOrder 路径
+
         if position_id != Uuid::nil() {
             let client_order_id = format_auto_close(self.bot.id, side_str);
 
@@ -192,7 +192,7 @@ impl AutoWorker {
                 }
             }
         } else {
-            // 回退路径：缓存 position_id 为 nil 时使用 PlaceOrder 反向单
+
             let (order_side, position_side_field) = match side {
                 PositionSide::Long => (Side::Sell, Some(PositionSide::Long)),
                 PositionSide::Short => (Side::Buy, Some(PositionSide::Short)),

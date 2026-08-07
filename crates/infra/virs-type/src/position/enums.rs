@@ -54,8 +54,6 @@ pub enum TradeType {
 }
 
 
-// ── sqlx 编解码：PositionSide ──
-
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for PositionSide {
     fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
         let s = <&str as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
@@ -87,8 +85,6 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for PositionSide {
     }
 }
 
-
-// ── 引擎通信枚举 ──
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WsFeedEvent {

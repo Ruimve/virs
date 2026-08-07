@@ -1,4 +1,4 @@
-//! LLM decision cycle: prompt building, LLM call, decision execution.
+
 
 use tracing::{error, warn};
 use uuid::Uuid;
@@ -54,13 +54,13 @@ impl AutoWorker {
             )
             .await;
 
-        // 按 action 分配 log_id 到对应 side
+
         match action {
             AutoAction::OpenLong => self.long.log_id = log_id,
             AutoAction::OpenShort => self.short.log_id = log_id,
             AutoAction::ClosePosition => {
-                // ClosePosition 会平掉所有持仓方向；将 log_id 分配给有持仓的一侧
-                // （若两侧都有，优先 Long；若都无，回退到 Long 供 intercept 路径更新）
+
+
                 if self.has_position_side(PositionSide::Long)
                     || !self.has_position_side(PositionSide::Short)
                 {
@@ -70,7 +70,7 @@ impl AutoWorker {
                 }
             }
             AutoAction::Hold => {
-                // Hold 不执行，暂存到 Long 侧供后续更新
+
                 self.long.log_id = log_id;
             }
         }
@@ -83,7 +83,7 @@ impl AutoWorker {
                 AutoAction::ClosePosition => "close_failed",
                 AutoAction::Hold => "hold",
             };
-            // 取出两侧的 log_id 进行更新
+
             let log_ids: Vec<Uuid> = [self.long.log_id.take(), self.short.log_id.take()]
                 .into_iter()
                 .flatten()
@@ -158,7 +158,7 @@ impl AutoWorker {
             0.0
         };
 
-        // 拼接 Long / Short 双向持仓信息（固定双向格式，空方向显示"无仓位"）
+
         let position_info = {
             let long_info = match &self.long.position {
                 Some(p) if p.is_open() => strategy::format_position_info(
@@ -179,7 +179,7 @@ impl AutoWorker {
             format!("多：\n{}\n空：\n{}", long_info, short_info)
         };
 
-        // 拼接双向止损止盈信息
+
         let stop_take_profit_info = {
             let has_long = self.has_position_side(PositionSide::Long);
             let has_short = self.has_position_side(PositionSide::Short);
@@ -275,13 +275,12 @@ impl AutoWorker {
             trigger_reason: "scheduled".to_string(),
             min_qty: snapshot.base.min_qty,
             ind: snapshot.indicators,
-            // Auto bot 不使用以下字段，填默认值
+
             event_flag: false,
             event_description: String::new(),
         };
 
-        // 使用策略文件（STRATEGIES_DIR/auto/{strategy_file}/）。
-        // strategy_file 为必填项：缺失或 loader 未命中时报错并跳过决策（不回退默认值）。
+
         let (system_prompt, user_prompt) = {
             let file_name = match self.bot.strategy_file.as_deref() {
                 Some(f) => f,
@@ -503,7 +502,7 @@ impl AutoWorker {
                     _ => unreachable!(),
                 };
 
-                // per-side 硬卡点：仅检查该方向是否已有仓位
+
                 if self.has_position_side(position_side.clone()) {
                     warn!(bot_id = %self.bot.id, side = %side, "Already has position on this side, cannot open");
                     return Some("该方向已有仓位".to_string());
@@ -560,7 +559,7 @@ impl AutoWorker {
                     return Some("无仓位可平".to_string());
                 }
 
-                // 平掉所有方向的仓位
+
                 let mut any_pending = false;
                 if self.has_position_side(PositionSide::Long) {
                     self.close_position(PositionSide::Long, "llm_decision").await;

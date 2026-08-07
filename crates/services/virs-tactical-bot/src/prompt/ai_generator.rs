@@ -1,39 +1,27 @@
-//! AI 策略 prompt 生成器。
-//!
-//! 通过 LLM 生成符合 [`PromptTemplate`] 格式的策略 prompt。
-//!
-//! 流程：
-//! 1. 调用方提供策略类型（auto）+ 用户意图描述
-//! 2. 构造元 prompt（教 LLM 如何生成策略 prompt）
-//! 3. 调用 LLM（复用 [`virs_llm::call_llm_api`])
-//! 4. 解析 LLM 返回的 JSON 为 [`PromptTemplate`]
-//! 5. 校验（占位符白名单 + JSON schema 约束）
-//! 6. 返回校验通过的模板
+
 
 use virs_error::{BotError, BotResult};
 use virs_llm::call_llm_api;
 use virs_prompt::{PromptSource, PromptTemplate, validate, to_prompt_text};
 use virs_type::StrategyType;
 
-/// AI 生成请求。
+
 pub struct GenerateRequest<'a> {
-    /// 策略类型
+
     pub strategy_type: StrategyType,
-    /// 用户意图描述（如"做一个趋势跟随策略，4h 定方向，1h 入场"）
+
     pub user_intent: &'a str,
-    /// 模板名（文件名，不含扩展名）。为空时由 LLM 命名
+
     pub name_hint: Option<&'a str>,
 }
 
-/// AI 生成结果。
+
 pub struct GenerateResult {
     pub template: PromptTemplate,
     pub used_model: String,
 }
 
-/// 调用 LLM 生成策略 prompt。
-///
-/// `api_key` / `base_url` / `model` 由调用方解析（通常从用户 AI 凭证或全局配置获取）。
+
 pub async fn generate_prompt(
     http_client: &reqwest::Client,
     api_key: &str,
@@ -61,23 +49,23 @@ pub async fn generate_prompt(
         ))
     })?;
 
-    // 强制覆盖 strategy_type（防止 LLM 返回错误的类型）
+
     tpl.strategy_type = req.strategy_type;
 
-    // 如果调用方提供了 name_hint，覆盖 LLM 的命名
+
     if let Some(name) = req.name_hint {
         if !name.is_empty() {
             tpl.name = name.to_string();
         }
     }
 
-    // 标记来源为 AI 生成
+
     tpl.source = PromptSource::AiGenerated {
         model: model.to_string(),
         generation_prompt: req.user_intent.to_string(),
     };
 
-    // 校验
+
     validate(&tpl).map_err(|e| {
         BotError::Llm(format!("AI 生成的策略 prompt 校验失败: {e}"))
     })?;
@@ -88,7 +76,7 @@ pub async fn generate_prompt(
     })
 }
 
-/// 元 system prompt：教 LLM 如何生成策略 prompt。
+
 pub(crate) fn build_meta_system_prompt(strategy_type: StrategyType) -> String {
     let strategy_desc = match strategy_type {
         StrategyType::Auto => {
@@ -131,7 +119,7 @@ user_prompt_template 要求：
     )
 }
 
-/// 元 user prompt：传递用户意图。
+
 pub(crate) fn build_meta_user_prompt(req: &GenerateRequest<'_>) -> String {
     let name_hint = req.name_hint.unwrap_or("（由你命名）");
     format!(

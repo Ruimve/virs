@@ -8,8 +8,6 @@ use crate::order::{CcxtOrder, OrderResult, Side, OrderType};
 use crate::position::{PositionSide, PositionStatus, TradeType};
 
 
-/// 基于 (exchange, symbol, side) 生成确定性 UUID v5，
-/// 保证同一仓位在重启前后 ID 一致。
 pub fn position_uuid_v5(exchange: &str, symbol: &str, side: &PositionSide) -> Uuid {
     let side_str = match side {
         PositionSide::Long => "LONG",
@@ -37,7 +35,7 @@ pub struct Position {
 }
 
 impl Position {
-    /// 创建 Opening 状态的初始仓位（quantity=0, entry_price=0, realized_pnl=0）。
+
     pub fn new_opening(exchange: &str, symbol: &str, side: PositionSide, client_order_id: Option<String>) -> Self {
         let id = position_uuid_v5(exchange, symbol, &side);
         let now = Utc::now();
@@ -56,8 +54,7 @@ impl Position {
         }
     }
 
-    /// 从 DB 回放创建初始仓位（replay 恢复用）。
-    /// 与 new_opening 类似但接受 created_at 参数，用于精确恢复时间戳。
+
     pub fn new_for_replay(
         exchange: &str,
         symbol: &str,
@@ -81,8 +78,7 @@ impl Position {
         }
     }
 
-    /// 应用成交：原子更新 realized_pnl + quantity + entry_price + status。
-    /// 返回 true 表示仓位已完全平仓（调用方应从 DashMap 移除）。
+
     pub fn apply_fill(
         &mut self,
         is_close: bool,
@@ -121,19 +117,19 @@ impl Position {
         self.status == PositionStatus::Closed
     }
 
-    /// 设置为 Closing 状态（关仓下单时调用）。
+
     pub fn set_closing(&mut self, now: DateTime<Utc>) {
         self.status = PositionStatus::Closing;
         self.updated_at = now;
     }
 
-    /// 回滚 Closing → Open（关仓下单失败时调用）。
+
     pub fn rollback_to_open(&mut self, now: DateTime<Utc>) {
         self.status = PositionStatus::Open;
         self.updated_at = now;
     }
 
-    /// 判断是否为幽灵 Opening 仓位（未成交的开仓单占位）。
+
     pub fn is_ghost(&self) -> bool {
         self.status == PositionStatus::Opening && self.quantity == 0.0
     }
@@ -185,7 +181,6 @@ pub struct PlaceOrderParams {
 }
 
 
-// 下单预注册: client_order_id 先存入内存，REST + WS 双确认后才存入 orders
 #[derive(Debug, Clone)]
 pub struct PendingOrder {
     pub client_order_id: String,
