@@ -380,7 +380,7 @@ CREATE TABLE IF NOT EXISTS qd_auto_bots (
     system_prompt TEXT,
     user_prompt TEXT,
 
-    -- 策略 prompt 文件名（STRATEGIES_DIR/auto/{strategy_file}/）；必填，创建 bot 时由策略选择逻辑写入
+    -- 策略 prompt 文件名（STRATEGIES_DIR/{strategy_file}/）；必填，创建 bot 时由策略选择逻辑写入
     strategy_file TEXT,
 
     -- 是否启用策略自动优化（per-bot 开关；启用后 StrategyEngine 定时评估并优化该策略）

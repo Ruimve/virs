@@ -1,4 +1,4 @@
-use crate::template::{PromptSource, PromptTemplate};
+use crate::template::PromptTemplate;
 use crate::validator::{extract_placeholders, validate};
 use std::collections::HashSet;
 use virs_error::BotError;
@@ -11,7 +11,6 @@ fn make_valid_template() -> PromptTemplate {
         system_prompt: "你是引擎。返回 JSON：{...}".to_string(),
         user_prompt_template: "价格：{h1_current_price}".to_string(),
         required_placeholders: vec!["h1_current_price".to_string()],
-        source: PromptSource::Human,
         version: 1,
         description: String::new(),
         created_at: None,
@@ -29,14 +28,6 @@ fn v2_empty_system_prompt_rejected() {
     t.system_prompt = "   ".to_string();
     let err = validate(&t).unwrap_err();
     assert!(matches!(err, BotError::Validation(ref m) if m.contains("system_prompt 不能为空")));
-}
-
-#[test]
-fn v3_system_prompt_without_json_rejected() {
-    let mut t = make_valid_template();
-    t.system_prompt = "你是引擎。".to_string();
-    let err = validate(&t).unwrap_err();
-    assert!(matches!(err, BotError::Validation(ref m) if m.contains("JSON")));
 }
 
 #[test]

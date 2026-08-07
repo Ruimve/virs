@@ -18,7 +18,7 @@ async fn seed_auto_default_loads_and_validates() {
     let tpl = loader
         .get(StrategyType::Auto, "default")
         .await
-        .expect("strategies/auto/default/ should load");
+        .expect("strategies/default/ should load");
     assert_eq!(tpl.strategy_type, StrategyType::Auto);
     assert!(!tpl.system_prompt.is_empty());
     assert!(!tpl.user_prompt_template.is_empty());

@@ -12,9 +12,9 @@ pub use placeholder::{
     all, names, to_prompt_text, Category, ContextField, Format, PlaceholderDef, PlaceholderSource,
 };
 pub use render::{format_bars_outside, render, RenderContext};
-pub use template::{MetaFile, PromptSource, PromptTemplate};
+pub use template::{MetaFile, PromptTemplate};
 pub use validator::{extract_placeholders, validate};
-pub use writer::{delete_template, save_template};
+pub use writer::{create_strategy, delete_strategy, save_new_version};
 
 
 use async_trait::async_trait;
@@ -26,12 +26,18 @@ use virs_type::StrategyType;
 #[async_trait]
 pub trait PromptProvider: Send + Sync {
     async fn get_prompt(&self, strategy_type: StrategyType, name: &str) -> Option<PromptTemplate>;
+
+    async fn get_output_format(&self) -> Option<String>;
 }
 
 #[async_trait]
 impl PromptProvider for PromptLoader {
     async fn get_prompt(&self, strategy_type: StrategyType, name: &str) -> Option<PromptTemplate> {
         self.get(strategy_type, name).await
+    }
+
+    async fn get_output_format(&self) -> Option<String> {
+        self.output_format().await
     }
 }
 

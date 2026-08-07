@@ -2,7 +2,7 @@
 
 use virs_error::{BotError, BotResult};
 use virs_llm::call_llm_api;
-use virs_prompt::{PromptSource, PromptTemplate, validate};
+use virs_prompt::{PromptTemplate, validate};
 
 use super::types::StrategyMetrics;
 
@@ -73,17 +73,6 @@ impl StrategyOptimizer {
         optimized.version = current.version + 1;
 
 
-        optimized.source = PromptSource::AiGenerated {
-            model: result.used_model.clone(),
-            generation_prompt: format!(
-                "策略优化：基于 {} 笔交易（胜率 {:.1}%，P&L {:.2} USDT）",
-                metrics.total_trades,
-                metrics.win_rate * 100.0,
-                metrics.total_pnl
-            ),
-        };
-
-
         validate(&optimized).map_err(|e| {
             BotError::Llm(format!("优化后的策略 prompt 校验失败: {e}"))
         })?;
@@ -102,28 +91,62 @@ fn build_optimization_system_prompt() -> String {
     format!(
         r#"你是一个策略 prompt 优化器。你的任务是分析一个交易策略的绩效数据，找出问题，并输出改进后的策略 prompt。
 
-你必须返回一个 JSON 对象，包含以下字段：
-{{
-  "name": "策略名（保持不变）",
-  "strategy_type": "auto",
-  "system_prompt": "改进后的 system prompt。定义角色、交易规则、输出 JSON 格式约束。必须包含 'JSON' 字样。",
-  "user_prompt_template": "改进后的用户 prompt 模板，使用 {{placeholder}} 占位符",
-  "required_placeholders": ["占位符列表"],
-  "description": "改进说明（中文）"
-}}
+## 返回格式
 
-可用占位符白名单（只能使用以下占位符）：
+你必须返回一个 JSON 对象，且只返回 JSON，不要包含 markdown 代码块标记或任何其他文字。
+
+JSON 对象必须包含且仅包含以下字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| name | string | 策略名（保持不变） |
+| strategy_type | string | 固定为 "auto" |
+| system_prompt | string | 改进后的 system prompt |
+| user_prompt_template | string | 改进后的用户 prompt 模板 |
+| required_placeholders | string[] | 占位符列表，必须与 user_prompt_template 中使用的 {{placeholder}} 完全一致 |
+| description | string | 改进说明（中文） |
+
+## 关键规则
+
+### required_placeholders 一致性规则（最重要）
+
+required_placeholders 数组必须与 user_prompt_template 中实际使用的 {{placeholder}} 完全一致：
+- user_prompt_template 中每出现一个 {{placeholder}}，该占位符名称必须出现在 required_placeholders 中
+- required_placeholders 中的每个占位符，必须在 user_prompt_template 中至少使用一次
+- 不得遗漏、不得多余——系统会自动校验，不一致将被拒绝
+- 如果修改了 user_prompt_template 中的占位符，必须同步更新 required_placeholders
+
+### 占位符白名单
+
+只能使用以下占位符，不得发明新的占位符：
 {placeholder_text}
 
-优化原则：
+### system_prompt 规则
+
+1. 不要包含 JSON 输出格式约束（由系统自动拼接）
+2. action 可选值：open_long, open_short, close_position, hold
+
+### 优化原则
+
 1. 分析胜率、盈亏比、最大回撤，找出策略的弱点
 2. 胜率低 → 改进入场条件，增加过滤条件
 3. 盈亏比低 → 改进止损止盈逻辑
 4. 最大回撤大 → 增加风控规则，降低仓位
 5. 保持原始策略的核心逻辑，只做针对性改进
-6. 不要删除占位符，只调整 prompt 中的规则描述
+6. 如需修改 user_prompt_template 中的占位符，必须确保 required_placeholders 同步更新
 
-只返回 JSON 对象，不要包含其他文字。"#
+## 示例
+
+{{
+  "name": "trend_following",
+  "strategy_type": "auto",
+  "system_prompt": "你是趋势跟随交易引擎（优化版）。规则：\n1. EMA20 上穿 EMA50 且 RSI<70 → open_long\n2. EMA20 下穿 EMA50 且 RSI>30 → open_short\n3. 达到 2% 止盈或 0.8% 止损 → close_position\n4. 连续亏损 3 次后暂停交易\n5. 不满足以上条件 → hold",
+  "user_prompt_template": "账户余额：{{total_balance}} USDT\n可用余额：{{available_balance}} USDT\n杠杆：{{leverage}}x\n当前仓位方向：{{position_side}}\n当前持仓量：{{position_qty}}\n连续亏损次数：{{consecutive_losses}}\n\nH1 指标：\n当前价格：{{h1_current_price}}\nEMA20：{{h1_ema20}}\nEMA50：{{h1_ema50}}\nEMA 交叉状态：{{h1_ema_cross_status}}\n\nM15 指标：\n当前价格：{{m15_current_price}}\nEMA 交叉状态：{{m15_ema_cross_status}}",
+  "required_placeholders": ["total_balance", "available_balance", "leverage", "position_side", "position_qty", "consecutive_losses", "h1_current_price", "h1_ema20", "h1_ema50", "h1_ema_cross_status", "m15_current_price", "m15_ema_cross_status"],
+  "description": "增加 RSI 过滤和连续亏损暂停机制"
+}}
+
+只返回 JSON 对象。"#
     )
 }
 

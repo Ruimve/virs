@@ -1,0 +1,1 @@
+Built-in default auto strategy prompt (migrated from types.rs)

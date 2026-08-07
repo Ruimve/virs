@@ -2,7 +2,7 @@ use crate::prompt::ai_generator::{build_meta_system_prompt, build_meta_user_prom
 use virs_type::StrategyType;
 
 #[test]
-fn g1_meta_system_prompt_contains_json_constraint() {
+fn g1_meta_system_prompt_mentions_json_and_actions() {
     let s = build_meta_system_prompt(StrategyType::Auto);
     assert!(s.contains("JSON"));
     assert!(s.contains("open_long"));

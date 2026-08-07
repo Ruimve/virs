@@ -95,7 +95,7 @@
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
-| 1 | `seed_auto_default_loads_and_validates` | 加载并验证 auto/default 种子策略文件 | STRATEGIES_DIR（默认 ../../strategies） | loader 非空, strategy_type=Auto, system_prompt 非空, placeholders 非空 |
+| 1 | `seed_auto_default_loads_and_validates` | 加载并验证 default 种子策略文件 | STRATEGIES_DIR（默认 ../../strategies） | loader 非空, strategy_type=Auto, system_prompt 非空, placeholders 非空 |
 
 ### `crates/services/virs-trading-bot/tests/integration_tests.rs`
 

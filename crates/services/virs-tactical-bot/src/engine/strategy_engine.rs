@@ -6,7 +6,7 @@ use std::time::Duration;
 use tokio::sync::watch;
 use tracing::{error, info, warn};
 use virs_error::{VirsError, VirsResult};
-use virs_prompt::{PromptLoader, StrategyHotSwapSource, StrategySwapEvent, save_template};
+use virs_prompt::{PromptLoader, StrategyHotSwapSource, StrategySwapEvent, save_new_version};
 use virs_task::{spawn_periodic, TaskHandle};
 use virs_type::StrategyType;
 
@@ -182,7 +182,7 @@ impl StrategyEngine {
         );
 
 
-        if let Err(e) = save_template(&optimization_result.template, true) {
+        if let Err(e) = save_new_version(&optimization_result.template) {
             error!(strategy = %name, error = %e, "Failed to save optimized template to disk");
             return Err(VirsError::config(format!("Save failed: {}", e)));
         }

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use serde::Deserialize;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 use virs_error::{Context, VirsResult};
@@ -27,7 +28,16 @@ struct Inner {
 
     templates: HashMap<(StrategyType, String), PromptTemplate>,
 
+    output_format: Option<String>,
+
     root_dir: Option<PathBuf>,
+}
+
+
+#[derive(Debug, Deserialize, Default)]
+struct RootMeta {
+    #[serde(default)]
+    output: Option<String>,
 }
 
 impl PromptLoader {
@@ -65,6 +75,7 @@ impl PromptLoader {
     pub async fn from_dir(dir: PathBuf) -> Self {
         let mut inner = Inner {
             templates: HashMap::new(),
+            output_format: None,
             root_dir: Some(dir.clone()),
         };
 
@@ -78,13 +89,49 @@ impl PromptLoader {
             };
         }
 
-        let st = StrategyType::Auto;
-        let sub = dir.join(st.as_dir());
-        if sub.exists() {
-            load_subdir(&sub, st, &mut inner).await;
-        } else {
-            info!(subdir = %sub.display(), "strategy subdir not found, skipping");
+        /* 加载根目录 meta.json 中的共享输出格式 */
+        let meta_path = dir.join("meta.json");
+        if meta_path.exists() {
+            match tokio::fs::read_to_string(&meta_path).await {
+                Ok(content) => {
+                    match serde_json::from_str::<RootMeta>(&content) {
+                        Ok(meta) => {
+                            /* output 字段为路径（如 "./output.md"），需读取文件内容 */
+                            if let Some(output_path) = meta.output {
+                                let resolved = dir.join(MetaFile::filename(&output_path));
+                                match tokio::fs::read_to_string(&resolved).await {
+                                    Ok(content) => inner.output_format = Some(content),
+                                    Err(e) => {
+                                        warn!(
+                                            error = %e,
+                                            path = %resolved.display(),
+                                            "Failed to read output format file"
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!(
+                                error = %e,
+                                path = %meta_path.display(),
+                                "Failed to parse root meta.json"
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        error = %e,
+                        path = %meta_path.display(),
+                        "Failed to read root meta.json"
+                    );
+                }
+            }
         }
+
+        let st = StrategyType::Auto;
+        load_subdir(&dir, st, &mut inner).await;
 
         info!(
             dir = %dir.display(),
@@ -131,6 +178,11 @@ impl PromptLoader {
 
     pub async fn root_dir(&self) -> Option<PathBuf> {
         self.inner.read().await.root_dir.clone()
+    }
+
+
+    pub async fn output_format(&self) -> Option<String> {
+        self.inner.read().await.output_format.clone()
     }
 
 
@@ -196,29 +248,41 @@ async fn load_subdir(sub: &Path, st: StrategyType, inner: &mut Inner) {
 }
 
 
-/* 加载单个策略文件夹：读取 meta.json 元数据、system_prompt.md 和 user_prompt_template.md，校验后组装为 PromptTemplate */
+/* 加载单个策略文件夹：读取 meta.json 元数据，根据路径字段和版本号拼接 v{version}/ 前缀，
+ * 从版本文件夹中加载 system_prompt.md、user_prompt_template.md、required_placeholders.json 和 description.md */
 async fn load_strategy_folder(
     dir: &Path,
     st: StrategyType,
     name: &str,
 ) -> VirsResult<PromptTemplate> {
-    /* 策略文件夹包含三个文件：meta.json（元数据）、system_prompt.md（系统提示词）、user_prompt_template.md（用户提示词模板） */
     let meta_path = dir.join("meta.json");
-    let system_path = dir.join("system_prompt.md");
-    let user_path = dir.join("user_prompt_template.md");
-
     let meta_data = tokio::fs::read(&meta_path)
         .await
         .context("读取 meta.json 失败")?;
     let mut meta: MetaFile = serde_json::from_slice(&meta_data)
         .context("解析 meta.json 失败")?;
 
-    let system_prompt = tokio::fs::read_to_string(&system_path)
+    /* 根据 version 字段构造版本文件夹路径，meta.json 中的路径字段均相对于策略根目录，
+     * 通过 MetaFile::filename() 去掉 "./" 前缀后拼接 v{version}/ */
+    let version_dir = dir.join(format!("v{}", meta.version));
+
+    let system_prompt = tokio::fs::read_to_string(version_dir.join(MetaFile::filename(&meta.system_prompt)))
         .await
         .context("读取 system_prompt.md 失败")?;
-    let user_prompt_template = tokio::fs::read_to_string(&user_path)
+
+    let user_prompt_template = tokio::fs::read_to_string(version_dir.join(MetaFile::filename(&meta.user_prompt)))
         .await
         .context("读取 user_prompt_template.md 失败")?;
+
+    let rp_data = tokio::fs::read(version_dir.join(MetaFile::filename(&meta.required_placeholders)))
+        .await
+        .context("读取 required_placeholders.json 失败")?;
+    let required_placeholders: Vec<String> = serde_json::from_slice(&rp_data)
+        .context("解析 required_placeholders.json 失败")?;
+
+    let description = tokio::fs::read_to_string(version_dir.join(MetaFile::filename(&meta.description)))
+        .await
+        .context("读取 description.md 失败")?;
 
 
     /* 文件夹名覆盖 meta.json 中的 name，确保文件系统结构与元数据一致 */
@@ -231,10 +295,9 @@ async fn load_strategy_folder(
         strategy_type: meta.strategy_type,
         system_prompt,
         user_prompt_template,
-        required_placeholders: meta.required_placeholders,
-        source: meta.source,
+        required_placeholders,
         version: meta.version,
-        description: meta.description,
+        description,
         created_at: meta.created_at,
     };
 

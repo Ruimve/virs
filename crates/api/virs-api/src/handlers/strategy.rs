@@ -3,7 +3,7 @@
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::Json;
-use virs_prompt::{delete_template, save_template, PromptTemplate};
+use virs_prompt::{create_strategy, delete_strategy, PromptTemplate};
 use virs_tactical_bot::{generate_prompt, GenerateRequest};
 use virs_type::StrategyType;
 use virs_error::VirsError;
@@ -100,7 +100,11 @@ pub async fn save(
         VirsError::bad_request(format!("Invalid PromptTemplate JSON: {e}"))
     })?;
 
-    let path = save_template(&tpl, overwrite)?;
+    if overwrite {
+        let _ = delete_strategy(&tpl.name);
+    }
+
+    let path = create_strategy(&tpl)?;
     state.prompt_loader.upsert(tpl.clone()).await;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
@@ -119,7 +123,7 @@ pub async fn delete(
     let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let st = parse_strategy_type(&strategy_type)?;
-    delete_template(st, &name)?;
+    delete_strategy(&name)?;
     state.prompt_loader.remove(st, &name).await;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({

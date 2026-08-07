@@ -21,13 +21,6 @@ pub fn validate(tpl: &PromptTemplate) -> Result<(), BotError> {
         ));
     }
 
-    /* 系统提示词必须包含 JSON 输出格式约束，确保 AI 返回可解析的结构化数据 */
-    if !tpl.system_prompt.contains("JSON") && !tpl.system_prompt.contains("json") {
-        return Err(BotError::Validation(
-            "system_prompt 必须包含 JSON 输出格式约束（未找到 'JSON' 字样）".to_string(),
-        ));
-    }
-
     if tpl
         .name
         .chars()

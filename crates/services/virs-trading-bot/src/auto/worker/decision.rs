@@ -304,12 +304,22 @@ impl AutoWorker {
             {
                 Some(tpl) => {
                     let user = render(&tpl.user_prompt_template, &ctx);
-                    let system = self
+                    let base_system = self
                         .bot
                         .system_prompt
                         .as_deref()
-                        .unwrap_or(&tpl.system_prompt)
-                        .to_string();
+                        .unwrap_or(&tpl.system_prompt);
+                    /* 自动拼接共享的JSON输出格式约束，确保所有策略使用统一的输出格式 */
+                    let system = match self.prompt_loader.get_output_format().await {
+                        Some(fmt) => format!("{base_system}\n\n{fmt}"),
+                        None => {
+                            warn!(
+                                bot_id = %self.bot.id,
+                                "Output format not loaded from strategies/meta.json — using system_prompt without JSON format constraint"
+                            );
+                            base_system.to_string()
+                        }
+                    };
                     (system, user)
                 }
                 None => {

@@ -79,21 +79,6 @@
   - 确认上次平仓理由是否仍然成立，若市场结构已变化才可重入
   - 避免与上次平仓方向相反的冲动交易
 
-## 请严格遵循以下JSON格式：
-{
-  "decision": {
-    "action": "open_long|open_short|close_position|hold",
-    "reason": "决策依据(80字内，引用具体指标数值)",
-    "confidence": 0.0-1.0
-  },
-  "market": {
-    "market_regime": "ranging|trending_up|trending_down|volatile",
-    "funding_rate_warning": "资金费率风险(若无填'none')",
-    "event_impact": "事件影响(若无填'none')"
-  },
-  "analysis": "多周期信号分析(300字内)",
-  "risk_warning": "主要风险提示(100字内)"
-}
 注意：
 - 止损止盈由代码公式自动计算（基于ATR），LLM 不需要返回止损止盈价格
 - 平仓原因由代码逻辑自动判定（止损/止盈/持仓超时/LLM决策），LLM 不需要返回

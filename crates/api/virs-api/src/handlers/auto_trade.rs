@@ -292,7 +292,6 @@ pub async fn get_bot(
                 "name": tpl.name,
                 "description": tpl.description,
                 "version": tpl.version,
-                "source": tpl.source,
             })
         })
     } else {

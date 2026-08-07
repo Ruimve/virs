@@ -1,0 +1,10 @@
+{
+  "name": "default",
+  "strategy_type": "auto",
+  "system_prompt": "./system_prompt.md",
+  "user_prompt": "./user_prompt_template.md",
+  "required_placeholders": "./required_placeholders.json",
+  "description": "./description.md",
+  "version": 1,
+  "created_at": "2026-07-19T00:00:00Z"
+}

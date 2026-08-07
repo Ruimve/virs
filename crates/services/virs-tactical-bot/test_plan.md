@@ -21,5 +21,5 @@
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
-| 1 | `g1_meta_system_prompt_contains_json_constraint` | 系统提示词包含 JSON 约束 | StrategyType::Auto | 包含 `JSON` 和 `open_long` |
+| 1 | `g1_meta_system_prompt_mentions_json_and_actions` | 系统提示词提及 JSON 和动作值 | StrategyType::Auto | 包含 `JSON` 和 `open_long` |
 | 2 | `g3_meta_user_prompt_contains_intent` | 用户提示词包含意图和名称提示 | user_intent=`做多趋势策略`，name_hint=`my_trend` | 包含 `做多趋势策略` 和 `my_trend` |
