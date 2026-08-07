@@ -104,9 +104,8 @@ impl IndicatorSpec {
 }
 
 
-/* 指标值枚举：数值型(Num)、整型(Int)、字符串型(Str)，支持序列化为 JSON */
+/* 指标值枚举：数值型(Num)、整型(Int)、字符串型(Str)，使用默认外部标签序列化 */
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
 pub enum IndicatorValue {
     Num(f64),
     Int(i32),
