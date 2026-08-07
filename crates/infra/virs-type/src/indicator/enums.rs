@@ -1,13 +1,11 @@
-
-
 use serde::{Deserialize, Serialize};
-use virs_type::Timeframe;
+
+use crate::market::Timeframe;
 
 
 /* 技术指标规格枚举：定义所有支持的指标类型及其参数，tf 字段指定 K 线周期 */
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum IndicatorSpec {
-
 
     CurrentPrice { tf: Timeframe },
 
@@ -103,4 +101,14 @@ impl IndicatorSpec {
             | IndicatorSpec::BandwidthBarsAgo { tf, .. } => Some(*tf),
         }
     }
+}
+
+
+/* 指标值枚举：数值型(Num)、整型(Int)、字符串型(Str)，支持序列化为 JSON */
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum IndicatorValue {
+    Num(f64),
+    Int(i32),
+    Str(String),
 }

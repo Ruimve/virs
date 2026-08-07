@@ -3082,7 +3082,6 @@ dependencies = [
  "tokio",
  "tracing",
  "virs-error",
- "virs-indicator",
  "virs-type",
 ]
 
@@ -3128,7 +3127,6 @@ dependencies = [
  "uuid",
  "virs-config",
  "virs-error",
- "virs-indicator",
  "virs-llm",
  "virs-prompt",
  "virs-task",

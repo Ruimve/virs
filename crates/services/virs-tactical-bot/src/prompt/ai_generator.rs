@@ -135,8 +135,8 @@ required_placeholders 数组必须与 user_prompt_template 中实际使用的 {{
   "name": "trend_following",
   "strategy_type": "{strategy_type_str}",
   "system_prompt": "你是趋势跟随交易引擎。规则：\n1. EMA20 上穿 EMA50 且价格在布林带中轨上方 → open_long\n2. EMA20 下穿 EMA50 且价格在布林带中轨下方 → open_short\n3. 达到 2% 止盈或 1% 止损 → close_position\n4. 不满足以上条件 → hold",
-  "user_prompt_template": "账户余额：{{total_balance}} USDT\n可用余额：{{available_balance}} USDT\n杠杆：{{leverage}}x\n当前仓位方向：{{position_side}}\n当前持仓量：{{position_qty}}\n\nH1 指标：\n当前价格：{{h1_current_price}}\nEMA20：{{h1_ema20}}\nEMA50：{{h1_ema50}}\nEMA 交叉状态：{{h1_ema_cross_status}}\n布林带外 K 线数：{{h1_bars_outside_band}}\n\nM15 指标：\n当前价格：{{m15_current_price}}\nEMA 交叉状态：{{m15_ema_cross_status}}",
-  "required_placeholders": ["total_balance", "available_balance", "leverage", "position_side", "position_qty", "h1_current_price", "h1_ema20", "h1_ema50", "h1_ema_cross_status", "h1_bars_outside_band", "m15_current_price", "m15_ema_cross_status"],
+  "user_prompt_template": "账户余额：{{total_balance}} USDT\n可用余额：{{available_balance}} USDT\n杠杆：{{leverage}}x\n当前仓位信息：{{position_info}}\n\nH1 指标：\n当前价格：{{h1_current_price}}\nEMA20：{{h1_ema20}}\nEMA50：{{h1_ema50}}\nEMA 交叉状态：{{h1_ema_cross}}\n布林带外 K 线数：{{h1_bars_outside_band}}\n\nM15 指标：\n当前价格：{{m15_current_price}}\nEMA 交叉状态：{{m15_ema_cross}}",
+  "required_placeholders": ["total_balance", "available_balance", "leverage", "position_info", "h1_current_price", "h1_ema20", "h1_ema50", "h1_ema_cross", "h1_bars_outside_band", "m15_current_price", "m15_ema_cross"],
   "description": "基于 EMA 交叉和布林带的趋势跟随策略"
 }}
 

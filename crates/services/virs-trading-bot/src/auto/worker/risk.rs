@@ -177,7 +177,7 @@ impl AutoWorker {
                 return None;
             }
         };
-        Some(snapshot.indicators.get_num(&virs_indicator::IndicatorSpec::Atr { tf: virs_type::Timeframe::H1, period: 14 }).unwrap_or(0.0))
+        Some(snapshot.indicators.get_num(&virs_type::IndicatorSpec::Atr { tf: virs_type::Timeframe::H1, period: 14 }).unwrap_or(0.0))
     }
 
     async fn check_position_timeout(&mut self) -> bool {

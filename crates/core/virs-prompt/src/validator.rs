@@ -8,7 +8,7 @@ use crate::placeholder;
 use crate::template::PromptTemplate;
 
 
-/* 模板校验：检查提示词非空、系统提示词包含 JSON 约束、名称合法、占位符声明与使用一致 */
+/* 模板校验：检查提示词非空、名称合法、占位符声明与使用一致 */
 pub fn validate(tpl: &PromptTemplate) -> Result<(), BotError> {
     if tpl.system_prompt.trim().is_empty() {
         return Err(BotError::Validation(

@@ -1,6 +1,6 @@
 
 
-use virs_indicator::{IndicatorSet, IndicatorValue};
+use virs_type::{IndicatorSet, IndicatorSpec, IndicatorValue};
 
 use crate::placeholder::{ContextField, Format, PlaceholderSource};
 
@@ -82,7 +82,7 @@ fn context_value(ctx: &RenderContext, field: ContextField, format: Format) -> St
 }
 
 
-fn indicator_value(set: &IndicatorSet, spec: &virs_indicator::IndicatorSpec, format: Format) -> Option<String> {
+fn indicator_value(set: &IndicatorSet, spec: &IndicatorSpec, format: Format) -> Option<String> {
     match set.get(spec)? {
         IndicatorValue::Num(v) => Some(format.apply_num(*v)),
         IndicatorValue::Int(v) => Some(format.apply_int(*v)),

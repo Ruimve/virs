@@ -1,10 +1,9 @@
 
 
 use virs_error::VirsResult;
-use virs_type::Kline;
+use virs_type::{IndicatorSet, IndicatorSpec, Kline};
 
-use crate::set::{IndicatorSet, KlineSet};
-use crate::spec::IndicatorSpec;
+use crate::set::{compute, KlineSet};
 
 
 /* 技术指标计算入口：接收多周期 K 线和资金费率，按指标规格列表批量计算并返回 IndicatorSet */
@@ -23,10 +22,10 @@ pub fn compute_indicators(
     };
     /* 未指定指标列表时使用默认指标集 */
     match specs {
-        Some(s) => IndicatorSet::compute(s, &kline_set, funding_rate, funding_next_time),
+        Some(s) => compute(s, &kline_set, funding_rate, funding_next_time),
         None => {
             let default = default_specs();
-            IndicatorSet::compute(&default, &kline_set, funding_rate, funding_next_time)
+            compute(&default, &kline_set, funding_rate, funding_next_time)
         }
     }
 }

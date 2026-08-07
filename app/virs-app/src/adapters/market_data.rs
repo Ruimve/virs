@@ -252,7 +252,7 @@ impl MarketDataProvider for ExchangeMarketDataProvider {
         let effective_price = if current_price > 0.0 {
             current_price
         } else {
-            ind.get_num(&virs_indicator::IndicatorSpec::CurrentPrice { tf: virs_type::Timeframe::H1 }).unwrap_or(0.0)
+            ind.get_num(&virs_type::IndicatorSpec::CurrentPrice { tf: virs_type::Timeframe::H1 }).unwrap_or(0.0)
         };
 
         let exchange_key = format!("{}:perpetual", exchange);
@@ -518,7 +518,7 @@ impl MarketDataProvider for AutoExchangeMarketDataProvider {
         let effective_price = if current_price > 0.0 {
             current_price
         } else {
-            ind.get_num(&virs_indicator::IndicatorSpec::CurrentPrice { tf: virs_type::Timeframe::H1 }).unwrap_or(0.0)
+            ind.get_num(&virs_type::IndicatorSpec::CurrentPrice { tf: virs_type::Timeframe::H1 }).unwrap_or(0.0)
         };
 
         let exchange_key = format!("{}:perpetual", exchange);

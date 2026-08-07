@@ -3,7 +3,7 @@
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::Json;
-use virs_prompt::{create_strategy, delete_strategy, PromptTemplate};
+use virs_prompt::{create_strategy, delete_strategy, PromptTemplate, ENV_STRATEGIES_DIR};
 use virs_tactical_bot::{generate_prompt, GenerateRequest};
 use virs_type::StrategyType;
 use virs_error::VirsError;
@@ -101,7 +101,11 @@ pub async fn save(
     })?;
 
     if overwrite {
-        let _ = delete_strategy(&tpl.name);
+        if let Ok(dir) = std::env::var(ENV_STRATEGIES_DIR) {
+            if std::path::PathBuf::from(&dir).join(&tpl.name).exists() {
+                delete_strategy(&tpl.name)?;
+            }
+        }
     }
 
     let path = create_strategy(&tpl)?;

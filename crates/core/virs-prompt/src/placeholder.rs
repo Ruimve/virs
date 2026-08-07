@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use virs_indicator::IndicatorSpec;
+use virs_type::IndicatorSpec;
 use virs_type::Timeframe;
 
 

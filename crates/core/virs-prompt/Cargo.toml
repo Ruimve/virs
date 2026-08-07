@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 virs-error = { path = "../../foundation/virs-error" }
 virs-type = { path = "../../infra/virs-type" }
-virs-indicator = { path = "../virs-indicator" }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }

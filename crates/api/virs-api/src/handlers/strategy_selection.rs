@@ -1,7 +1,7 @@
 
 
 use virs_error::VirsError;
-use virs_indicator::IndicatorSpec;
+use virs_type::IndicatorSpec;
 use virs_prompt::PromptLoader;
 use virs_type::{StrategyType, Timeframe};
 

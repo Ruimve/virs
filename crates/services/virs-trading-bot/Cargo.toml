@@ -9,7 +9,6 @@ virs-error = { path = "../../foundation/virs-error", features = ["reqwest"] }
 virs-llm = { path = "../../infra/virs-llm" }
 virs-config = { path = "../../infra/virs-config" }
 virs-prompt = { path = "../../core/virs-prompt" }
-virs-indicator = { path = "../../core/virs-indicator" }
 virs-task = { path = "../../foundation/virs-task" }
 serde = { workspace = true }
 serde_json = { workspace = true }

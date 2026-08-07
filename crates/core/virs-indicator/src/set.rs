@@ -1,12 +1,10 @@
 
 
-use std::collections::{HashMap, HashSet};
-use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use virs_error::VirsError;
-use virs_type::{Kline, Timeframe};
+use virs_type::{IndicatorSet, IndicatorSpec, IndicatorValue, Kline, Timeframe};
 
 use crate::indicators;
-use crate::spec::IndicatorSpec;
 
 
 #[derive(Debug, Clone, Copy)]
@@ -17,102 +15,23 @@ pub struct KlineSet<'a> {
 }
 
 
-/* 指标值枚举：数值型(Num)、整型(Int)、字符串型(Str)，支持序列化为 JSON */
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum IndicatorValue {
-    Num(f64),
-    Int(i32),
-    Str(String),
+/* 批量计算指标：对规格列表去重后逐一计算，结果存入 IndicatorSet */
+pub fn compute(
+    specs: &[IndicatorSpec],
+    klines: &KlineSet,
+    funding_rate: f64,
+    funding_next_time: &str,
+) -> Result<IndicatorSet, VirsError> {
+    /* 去重避免重复计算相同指标 */
+    let unique: HashSet<&IndicatorSpec> = specs.iter().collect();
+    let mut set = IndicatorSet::new();
+    for spec in unique {
+        let val = compute_one(spec, klines, funding_rate, funding_next_time)?;
+        set.insert(spec.clone(), val);
+    }
+    Ok(set)
 }
 
-
-#[derive(Debug, Clone, Default)]
-pub struct IndicatorSet {
-    values: HashMap<IndicatorSpec, IndicatorValue>,
-}
-
-impl Serialize for IndicatorSet {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let pairs: Vec<(&IndicatorSpec, &IndicatorValue)> = self.values.iter().collect();
-        pairs.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for IndicatorSet {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let pairs: Vec<(IndicatorSpec, IndicatorValue)> = Vec::deserialize(deserializer)?;
-        let values = pairs.into_iter().collect();
-        Ok(Self { values })
-    }
-}
-
-impl IndicatorSet {
-    /* 批量计算指标：对规格列表去重后逐一计算，结果存入 HashMap */
-    pub fn compute(
-        specs: &[IndicatorSpec],
-        klines: &KlineSet,
-        funding_rate: f64,
-        funding_next_time: &str,
-    ) -> Result<Self, VirsError> {
-        /* 去重避免重复计算相同指标 */
-        let unique: HashSet<&IndicatorSpec> = specs.iter().collect();
-        let mut values = HashMap::with_capacity(unique.len());
-        for spec in unique {
-            let val = compute_one(spec, klines, funding_rate, funding_next_time)?;
-            values.insert(spec.clone(), val);
-        }
-        Ok(Self { values })
-    }
-
-
-    pub fn insert(&mut self, spec: IndicatorSpec, value: IndicatorValue) -> &mut Self {
-        self.values.insert(spec, value);
-        self
-    }
-
-
-    pub fn with_value(spec: IndicatorSpec, value: IndicatorValue) -> Self {
-        let mut set = Self::default();
-        set.values.insert(spec, value);
-        set
-    }
-
-
-    pub fn get(&self, spec: &IndicatorSpec) -> Option<&IndicatorValue> {
-        self.values.get(spec)
-    }
-
-
-    pub fn get_num(&self, spec: &IndicatorSpec) -> Option<f64> {
-        match self.values.get(spec)? {
-            IndicatorValue::Num(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-
-    pub fn get_int(&self, spec: &IndicatorSpec) -> Option<i32> {
-        match self.values.get(spec)? {
-            IndicatorValue::Int(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-
-    pub fn get_str(&self, spec: &IndicatorSpec) -> Option<&str> {
-        match self.values.get(spec)? {
-            IndicatorValue::Str(v) => Some(v.as_str()),
-            _ => None,
-        }
-    }
-}
 
 /* 根据时间周期从 KlineSet 中选取对应的 K 线切片 */
 fn klines_for_tf<'a>(tf: Timeframe, klines: &KlineSet<'a>) -> &'a [Kline] {

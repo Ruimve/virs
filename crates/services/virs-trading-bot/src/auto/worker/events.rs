@@ -444,7 +444,7 @@ impl AutoWorker {
                 Ok(s) => match AutoMarketSnapshot::from_base(s) {
                     Ok(snap) => {
                         let atr = snap.indicators
-                            .get_num(&virs_indicator::IndicatorSpec::Atr { tf: virs_type::Timeframe::H1, period: 14 })
+                            .get_num(&virs_type::IndicatorSpec::Atr { tf: virs_type::Timeframe::H1, period: 14 })
                             .unwrap_or(0.0);
                         if atr > 0.0 {
                             atr

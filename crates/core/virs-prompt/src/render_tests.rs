@@ -1,4 +1,4 @@
-use virs_indicator::{IndicatorSet, IndicatorValue, IndicatorSpec};
+use virs_type::{IndicatorSet, IndicatorSpec, IndicatorValue};
 use virs_type::Timeframe;
 use crate::render::{format_bars_outside, render, RenderContext};
 
