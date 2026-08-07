@@ -2,7 +2,6 @@ import { memo } from 'react';
 import type { MarketLineProps } from './types';
 import { FlashPrice } from '../../../components/FlashPrice';
 
-
 export const MarketLine = memo(
   ({ symbol, exchange, latestPrice, changePct, leverage }: MarketLineProps) => {
     const chgClass =

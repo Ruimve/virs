@@ -1,7 +1,6 @@
 import type { AutoBot, AutoBotStats, AnalysisLog, StrategyDetail } from '@/service/types';
 import type { PositionWsEvent } from '@/service/ws';
 
-
 export interface SideMetrics {
   hasPosition: boolean;
   unrealizedPnl: number;
@@ -11,14 +10,12 @@ export interface SideMetrics {
   estimatedLiqPrice: number | null;
 }
 
-
 export interface AccountMetrics {
   balance: number;
   usedMargin: number;
   freeMargin: number;
   marginRate: number;
 }
-
 
 export interface MarketLineProps {
   symbol: string;
@@ -29,11 +26,9 @@ export interface MarketLineProps {
   leverage: number;
 }
 
-
 export interface AccountBarProps {
   metrics: AccountMetrics;
 }
-
 
 export interface StrategyBlockProps {
   bot: AutoBot;
@@ -47,7 +42,6 @@ export interface StrategyBlockProps {
   decideIntervalSecs: number;
 }
 
-
 export interface PositionCardProps {
   side: 'long' | 'short';
   position: PositionWsEvent | null;
@@ -59,7 +53,6 @@ export interface PositionCardProps {
 
   realizedPnl: number;
 }
-
 
 export interface UpperRegionProps {
   bot: AutoBot;
@@ -73,7 +66,6 @@ export interface UpperRegionProps {
   totalPnl: number;
   totalPnlPct: number;
 }
-
 
 export interface LowerRegionProps {
   bot: AutoBot;

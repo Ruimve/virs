@@ -13,7 +13,6 @@ export const PositionProvider = ({ children }: { children: ReactNode }) => {
   usePositionWs(bot?.symbol, (event) => {
     if (event.symbol !== bot?.symbol) return;
 
-
     const side = event.side as PositionSide;
     if (side !== 'long' && side !== 'short') return;
 

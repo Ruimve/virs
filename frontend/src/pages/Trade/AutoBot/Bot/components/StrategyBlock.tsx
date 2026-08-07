@@ -5,14 +5,12 @@ import { actionLabel, actionVariant } from '../../../components/utils/utils';
 import type { StrategyBlockProps } from './types';
 import { formatCompact, formatSigned, formatRelativeTime, formatDuration } from './utils';
 
-
 function formatInterval(secs: number): string {
   if (secs <= 0) return '';
   if (secs < 60) return `${secs}s`;
   const m = Math.floor(secs / 60);
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h`;
 }
-
 
 function extractDecision(log: AnalysisLog | null) {
   if (!log?.result) return null;
@@ -27,13 +25,11 @@ function extractDecision(log: AnalysisLog | null) {
   return null;
 }
 
-
 function resolveStrategyName(bot: AutoBot, strategy: StrategyDetail | null | undefined): string {
   if (strategy?.name) return strategy.name;
   if (bot.strategy_file) return bot.strategy_file;
   return '未绑定策略';
 }
-
 
 function deriveDirection(action: string | undefined): string {
   if (action === 'open_long') return '做多';
@@ -42,7 +38,6 @@ function deriveDirection(action: string | undefined): string {
   return '';
 }
 
-
 function MetaItem({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-1 px-2 first:pl-0 [&:not(:last-child)]:border-r border-line-subtle">
@@ -50,7 +45,6 @@ function MetaItem({ children }: { children: ReactNode }) {
     </div>
   );
 }
-
 
 export const StrategyBlock = memo(
   ({

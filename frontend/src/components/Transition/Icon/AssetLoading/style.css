@@ -1,5 +1,3 @@
-
-
 .load-assets-icon {
   display: block;
   overflow: visible;
@@ -11,12 +9,10 @@
   stroke: var(--color-accent-val);
 }
 
-
 .load-assets-icon .ring-track {
   stroke-width: 1;
   opacity: 0.12;
 }
-
 
 .load-assets-icon .ring-arc {
   stroke-width: 1.5;
@@ -25,7 +21,6 @@
   animation: load-assets-spin 1.8s linear infinite;
 }
 
-
 .ring-dotted {
   stroke-width: 0.75;
   opacity: 0.35;
@@ -33,7 +28,6 @@
   transform-box: fill-box;
   animation: load-assets-spin-reverse 8s linear infinite;
 }
-
 
 .v-mark {
   stroke-width: 1.5;

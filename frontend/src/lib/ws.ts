@@ -1,6 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 
-
 export type WsState = 'idle' | 'connecting' | 'open' | 'closed';
 
 export interface WsInstance<T> {
@@ -33,7 +32,6 @@ function notifyState<T>(inst: WsInstance<T>, state: WsState) {
   inst.stateCallbacks.forEach((cb) => cb(state));
 }
 
-
 function backoffDelay(attempts: number): number {
   const base = Math.min(BASE_RECONNECT_MS * Math.pow(2, attempts), MAX_RECONNECT_MS);
   return Math.floor(base * (0.75 + Math.random() * 0.5));
@@ -57,14 +55,12 @@ function scheduleReconnect<T>(
 }
 
 function connectWs<T>(inst: WsInstance<T>, getUrl: () => string, parse: (raw: string) => T | null) {
-
   if (inst.ws && inst.ws.readyState < WebSocket.CLOSING) return;
 
   notifyState(inst, 'connecting');
 
   try {
     const ws = new WebSocket(getUrl());
-
 
     const isCurrent = () => inst.ws === ws;
 
@@ -109,7 +105,6 @@ function disconnectWs<T>(inst: WsInstance<T>) {
     inst.reconnectTimer = null;
   }
   if (inst.ws) {
-
     const ws = inst.ws;
     ws.onopen = null;
     ws.onmessage = null;
@@ -122,7 +117,6 @@ function disconnectWs<T>(inst: WsInstance<T>) {
   notifyState(inst, 'idle');
 }
 
-
 export function sendWs<T>(inst: WsInstance<T>, data: string): boolean {
   if (!inst.ws || inst.ws.readyState !== WebSocket.OPEN) {
     console.warn('[WS] send() called but connection not OPEN, message dropped');
@@ -133,7 +127,6 @@ export function sendWs<T>(inst: WsInstance<T>, data: string): boolean {
 }
 
 export interface UseWsResult {
-
   connected: boolean;
 
   state: WsState;
@@ -157,7 +150,6 @@ export function useWs<T>(
   const stableListener = useCallback((event: T) => {
     onEventRef.current(event);
   }, []);
-
 
   const stableStateCallback = useCallback((state: WsState) => {
     if (state === 'open') {

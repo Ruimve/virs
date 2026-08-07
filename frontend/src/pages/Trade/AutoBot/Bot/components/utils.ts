@@ -10,7 +10,6 @@ const EMPTY_METRICS: SideMetrics = {
   estimatedLiqPrice: null,
 };
 
-
 export function computeMetrics(
   position: PositionWsEvent | null,
   latestPrice: number,
@@ -26,14 +25,12 @@ export function computeMetrics(
   const usedMargin = (position.quantity * position.entryPrice) / leverage;
   const unrealizedPct = usedMargin > 0 ? (unrealizedPnl / usedMargin) * 100 : 0;
 
-
   const liqOffset = position.entryPrice / leverage;
   const estimatedLiqPrice =
     position.side === 'long' ? position.entryPrice - liqOffset : position.entryPrice + liqOffset;
 
   return { hasPosition: true, unrealizedPnl, usedMargin, unrealizedPct, estimatedLiqPrice };
 }
-
 
 export function computeAccount(
   bot: AutoBot,
@@ -46,11 +43,9 @@ export function computeAccount(
   return { balance, usedMargin: totalUsedMargin, freeMargin, marginRate };
 }
 
-
 export function computeTotalPnlPct(bot: AutoBot, totalPnl: number): number {
   return bot.initial_capital > 0 ? (totalPnl / bot.initial_capital) * 100 : 0;
 }
-
 
 export function computeLiqDistance(
   latestPrice: number,
@@ -65,7 +60,6 @@ export function computeLiqDistance(
   return dist;
 }
 
-
 export function formatCompact(n: number, decimals = 2): string {
   return n.toLocaleString('en-US', {
     minimumFractionDigits: decimals,
@@ -73,13 +67,11 @@ export function formatCompact(n: number, decimals = 2): string {
   });
 }
 
-
 export function formatSigned(n: number, decimals = 2): string {
   if (n > 0) return '+' + formatCompact(n, decimals);
   if (n < 0) return formatCompact(n, decimals);
   return formatCompact(n, decimals);
 }
-
 
 export function formatRelativeTime(isoTime: string | undefined | null): string {
   if (!isoTime) return '';
@@ -95,7 +87,6 @@ export function formatRelativeTime(isoTime: string | undefined | null): string {
   const d = Math.floor(h / 24);
   return `${d}d前`;
 }
-
 
 export function formatDuration(isoTime: string | undefined | null): string {
   if (!isoTime) return '';

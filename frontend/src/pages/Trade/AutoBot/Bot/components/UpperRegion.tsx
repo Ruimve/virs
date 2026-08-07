@@ -4,7 +4,6 @@ import { MarketLine } from './MarketLine';
 import { AccountBar } from './AccountBar';
 import { StrategyBlock } from './StrategyBlock';
 
-
 export const UpperRegion = memo(
   ({
     bot,

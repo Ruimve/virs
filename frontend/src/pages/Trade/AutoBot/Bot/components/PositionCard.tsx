@@ -3,7 +3,6 @@ import type { AnalysisLog } from '@/service/types';
 import type { PositionCardProps } from './types';
 import { formatCompact, computeLiqDistance } from './utils';
 
-
 function extractEmptyReason(decision: AnalysisLog | null, side: 'long' | 'short'): string | null {
   if (!decision?.result) return null;
   const dec =
@@ -25,7 +24,6 @@ function extractEmptyReason(decision: AnalysisLog | null, side: 'long' | 'short'
   return null;
 }
 
-
 function formatHoldDuration(createdAt: string): string {
   const now = Date.now();
   const opened = new Date(createdAt).getTime();
@@ -37,13 +35,11 @@ function formatHoldDuration(createdAt: string): string {
   return `holding · ${m}m`;
 }
 
-
 export const PositionCard = memo(
   ({ side, position, metrics, latestPrice, decision, realizedPnl }: PositionCardProps) => {
     const isLong = side === 'long';
     const dirLabel = isLong ? '▲ 多头' : '▼ 空头';
     const dirClass = isLong ? 'text-success-text' : 'text-danger-text';
-
 
     if (!metrics.hasPosition || !position) {
       const emptyReason = extractEmptyReason(decision, side);
@@ -70,7 +66,6 @@ export const PositionCard = memo(
         </div>
       );
     }
-
 
     const pnlClass =
       metrics.unrealizedPnl > 0

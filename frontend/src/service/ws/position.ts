@@ -73,7 +73,6 @@ export function usePositionWs(
   const symbolRef = useRef(symbol);
   symbolRef.current = symbol;
 
-
   const handleReconnect = useCallback(() => {
     const sym = symbolRef.current;
     if (sym) {

@@ -19,7 +19,6 @@ import { UpperRegion } from './components/UpperRegion';
 import { LowerRegion } from './components/LowerRegion';
 import { computeMetrics, computeAccount, computeTotalPnlPct } from './components/utils';
 
-
 const useRafThrottledPrice = () => {
   const [latestPrice, setLatestPrice] = useState(0);
   const rafRef = useRef<number | undefined>(undefined);
@@ -42,7 +41,6 @@ const useRafThrottledPrice = () => {
 
   return { latestPrice, update };
 };
-
 
 function tradesToMarkers(trades: AutoTrade[]) {
   const markers: Array<{
@@ -88,7 +86,6 @@ function tradesToMarkers(trades: AutoTrade[]) {
 
   return markers.sort((a, b) => a.time - b.time);
 }
-
 
 function computeMarketSummary(klineData: KlineCandle[], timeframe: string) {
   if (klineData.length === 0) return { changePct: 0, high: 0, low: 0, volume: 0 };
@@ -197,7 +194,6 @@ const Bot = () => {
   const autoBot = useMemo(() => bot as AutoBot, [bot]);
   const markers = useMemo(() => tradesToMarkers(autoTrades), [autoTrades]);
   const latestDecision = useMemo(() => logs[0] || null, [logs]);
-
 
   const longMetrics = useMemo(
     () => computeMetrics(positions.long, latestPrice, autoBot.leverage),

@@ -2,7 +2,6 @@ import { memo } from 'react';
 import type { LowerRegionProps } from './types';
 import { PositionCard } from './PositionCard';
 
-
 export const LowerRegion = memo(
   ({
     bot,
