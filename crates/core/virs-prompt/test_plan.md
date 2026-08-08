@@ -1,6 +1,6 @@
 # virs-prompt - 测试计划
 
-**测试总数:** 28（单元测试: 28，集成测试: 0）
+**测试总数:** 25（单元测试: 25，集成测试: 0）
 
 ---
 
@@ -31,9 +31,6 @@
 | 7 | `r8_replaces_statistics` | 替换统计类占位符 | total_trades=50, win_trades=30, loss_trades=20, total_pnl=500.0, consecutive_losses=2 | "50 30 20 500.00 2" |
 | 8 | `r9_no_op_for_absent_placeholders` | 无占位符时原样返回 | 模板="hello world" | "hello world" |
 | 9 | `r10_ema_cross_bars_none_when_negative` | EMA 交叉 K 线数为负时显示无近期交叉 | h1/m15 的 ema_cross_bars_ago=-1 | "无近期交叉 无近期交叉" |
-| 10 | `r11_format_bars_positive` | 正数布林带外 K 线格式化 | 值=3 | "向上3根" |
-| 11 | `r12_format_bars_negative` | 负数布林带外 K 线格式化 | 值=-2 | "向下2根" |
-| 12 | `r13_format_bars_zero` | 零值布林带外 K 线格式化 | 值=0 | "无" |
 
 ### `crates/core/virs-prompt/src/writer_tests.rs`
 
@@ -52,4 +49,4 @@
 |------|---------|------|---------|---------|
 | 1 | `l1_loads_auto_strategies` | 加载 Auto 策略目录 | STRATEGIES_DIR 环境变量或默认 "../../strategies"（存在时） | loader 非空（加载到策略） |
 | 2 | `l2_get_loaded_strategy` | 获取已加载的默认策略 | 加载后查询 StrategyType::Auto 的 "default" 模板 | 返回 Some（找到 default 策略） |
-| 3 | `l3_nonexistent_dir_returns_empty` | 不存在目录返回空加载器 | 目录="/nonexistent/strategies" | loader.is_empty()=true |
+| 3 | `l3_nonexistent_dir_returns_empty` | 不存在目录返回空加载器 | 目录="/nonexistent/strategies" | loader.list(Auto).await.is_empty()=true |

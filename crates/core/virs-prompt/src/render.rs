@@ -113,7 +113,3 @@ pub fn render(template: &str, ctx: &RenderContext) -> String {
     result
 }
 
-
-pub fn format_bars_outside(count: i32) -> String {
-    Format::BarsOutside.apply_int(count)
-}

@@ -1,10 +1,11 @@
 use virs_type::{IndicatorSet, IndicatorSpec, IndicatorValue};
 use virs_type::Timeframe;
-use crate::render::{format_bars_outside, render, RenderContext};
+use crate::render::{render, RenderContext};
 
 
 fn make_indicators() -> IndicatorSet {
-    IndicatorSet::with_value(IndicatorSpec::CurrentPrice { tf: Timeframe::H1 }, IndicatorValue::Num(50000.0))
+    let mut set = IndicatorSet::new();
+    set.insert(IndicatorSpec::CurrentPrice { tf: Timeframe::H1 }, IndicatorValue::Num(50000.0))
         .insert(IndicatorSpec::Ema { tf: Timeframe::H1, period: 20 }, IndicatorValue::Num(49500.0))
         .insert(IndicatorSpec::Ema { tf: Timeframe::H1, period: 50 }, IndicatorValue::Num(49000.0))
         .insert(IndicatorSpec::EmaCrossState { tf: Timeframe::H1, fast: 20, slow: 50 }, IndicatorValue::Str("金叉(多头)".to_string()))
@@ -15,8 +16,8 @@ fn make_indicators() -> IndicatorSet {
         .insert(IndicatorSpec::EmaCrossState { tf: Timeframe::M15, fast: 20, slow: 50 }, IndicatorValue::Str("金叉(多头)".to_string()))
         .insert(IndicatorSpec::EmaCrossBarsAgo { tf: Timeframe::M15, fast: 20, slow: 50 }, IndicatorValue::Int(3))
         .insert(IndicatorSpec::BarsOutsideBand { tf: Timeframe::H1, period: 20, stddev: 2 }, IndicatorValue::Int(2))
-        .insert(IndicatorSpec::BarsOutsideBand { tf: Timeframe::M15, period: 20, stddev: 2 }, IndicatorValue::Int(-1))
-        .clone()
+        .insert(IndicatorSpec::BarsOutsideBand { tf: Timeframe::M15, period: 20, stddev: 2 }, IndicatorValue::Int(-1));
+    set
 }
 
 fn make_ctx() -> RenderContext {
@@ -106,9 +107,9 @@ fn r9_no_op_for_absent_placeholders() {
 
 #[test]
 fn r10_ema_cross_bars_none_when_negative() {
-    let ind = IndicatorSet::with_value(IndicatorSpec::EmaCrossBarsAgo { tf: Timeframe::H1, fast: 20, slow: 50 }, IndicatorValue::Int(-1))
-        .insert(IndicatorSpec::EmaCrossBarsAgo { tf: Timeframe::M15, fast: 20, slow: 50 }, IndicatorValue::Int(-1))
-        .clone();
+    let mut ind = IndicatorSet::new();
+    ind.insert(IndicatorSpec::EmaCrossBarsAgo { tf: Timeframe::H1, fast: 20, slow: 50 }, IndicatorValue::Int(-1))
+        .insert(IndicatorSpec::EmaCrossBarsAgo { tf: Timeframe::M15, fast: 20, slow: 50 }, IndicatorValue::Int(-1));
     let ctx = RenderContext {
         timestamp: String::new(),
         symbol: String::new(),
@@ -139,17 +140,3 @@ fn r10_ema_cross_bars_none_when_negative() {
     assert_eq!(result, "无近期交叉 无近期交叉");
 }
 
-#[test]
-fn r11_format_bars_positive() {
-    assert_eq!(format_bars_outside(3), "向上3根");
-}
-
-#[test]
-fn r12_format_bars_negative() {
-    assert_eq!(format_bars_outside(-2), "向下2根");
-}
-
-#[test]
-fn r13_format_bars_zero() {
-    assert_eq!(format_bars_outside(0), "无");
-}

@@ -44,13 +44,6 @@ pub enum EngineState {
     Stopped,
 }
 
-impl EngineState {
-    pub fn is_running(&self) -> bool {
-        self == &Self::Running
-    }
-}
-
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TradeType {
     Open,

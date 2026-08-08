@@ -96,6 +96,7 @@
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
 | 1 | `seed_auto_default_loads_and_validates` | 加载并验证 default 种子策略文件 | STRATEGIES_DIR（默认 ../../strategies） | loader 非空, strategy_type=Auto, system_prompt 非空, placeholders 非空 |
+| 2 | `seed_auto_range_reversion_loads_and_validates` | 加载并验证 range_reversion 种子策略文件 | STRATEGIES_DIR（默认 ../../strategies） | loader 非空, strategy_type=Auto, system_prompt 非空, placeholders 非空 |
 
 ### `crates/services/virs-trading-bot/tests/integration_tests.rs`
 
@@ -108,4 +109,3 @@
 | 5 | `int_2_2_auto_decision_json_roundtrip` | AutoDecision JSON 往返解析 | 含 decision.action=open_long, market.market_regime | action=OpenLong, as_str=="open_long" |
 | 6 | `int_4_2_format_stop_take_with_position_pct` | 仓位百分比与止损止盈格式化联动 | adx=25 -> 80%; entry=100, atr=2.0 | pct=80, 显示含 "止损" 和 "止盈" |
 | 7 | `int_5_1_cooldown_then_position_pct` | 冷却后仓位百分比计算 | stop_loss 同侧 -> 1800; adx=25 无亏损 -> 80; adx=25 亏损 2 -> 40 | 依次为 1800, 80, 40 |
-| 8 | `int_6_1_format_bars_outside_all_cases` | bars_outside 格式化全场景 | 5, -3, 0 | 依次为 "向上5根", "向下3根", "无" |

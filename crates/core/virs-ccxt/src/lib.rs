@@ -11,7 +11,7 @@ use virs_type::ExchangePe;
 
 pub use adapter::{BinanceExchange, dispatch_event};
 pub use auth::hmac_sha256_hex;
-pub use types::{MarketInfo, OrderFee};
+pub use types::MarketInfo;
 
 /* 交易所 HTTP 客户端，封装 reqwest 并通过 Semaphore 实现并发限流 */
 #[derive(Clone)]

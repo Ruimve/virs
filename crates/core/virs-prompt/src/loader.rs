@@ -29,8 +29,6 @@ struct Inner {
     templates: HashMap<(StrategyType, String), PromptTemplate>,
 
     output_format: Option<String>,
-
-    root_dir: Option<PathBuf>,
 }
 
 
@@ -76,7 +74,6 @@ impl PromptLoader {
         let mut inner = Inner {
             templates: HashMap::new(),
             output_format: None,
-            root_dir: Some(dir.clone()),
         };
 
         if !dir.exists() {
@@ -163,21 +160,6 @@ impl PromptLoader {
             .filter(|(st, _)| *st == strategy_type)
             .map(|(_, name)| name.clone())
             .collect()
-    }
-
-
-    pub async fn len(&self) -> usize {
-        self.inner.read().await.templates.len()
-    }
-
-
-    pub async fn is_empty(&self) -> bool {
-        self.inner.read().await.templates.is_empty()
-    }
-
-
-    pub async fn root_dir(&self) -> Option<PathBuf> {
-        self.inner.read().await.root_dir.clone()
     }
 
 

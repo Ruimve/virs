@@ -12,7 +12,7 @@ async fn l1_loads_auto_strategies() {
         return;
     }
     let loader = PromptLoader::from_dir(path).await;
-    assert!(!loader.is_empty().await, "should load auto strategies");
+    assert!(!loader.list(StrategyType::Auto).await.is_empty(), "should load auto strategies");
 }
 
 #[tokio::test]
@@ -32,5 +32,5 @@ async fn l2_get_loaded_strategy() {
 #[tokio::test]
 async fn l3_nonexistent_dir_returns_empty() {
     let loader = PromptLoader::from_dir(PathBuf::from("/nonexistent/strategies")).await;
-    assert!(loader.is_empty().await);
+    assert!(loader.list(StrategyType::Auto).await.is_empty());
 }

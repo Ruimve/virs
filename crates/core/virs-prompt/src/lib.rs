@@ -11,7 +11,7 @@ pub use loader::{PromptLoader, ENV_STRATEGIES_DIR};
 pub use placeholder::{
     all, names, to_prompt_text, Category, ContextField, Format, PlaceholderDef, PlaceholderSource,
 };
-pub use render::{format_bars_outside, render, RenderContext};
+pub use render::{render, RenderContext};
 pub use template::{MetaFile, PromptTemplate};
 pub use validator::{extract_placeholders, validate};
 pub use writer::{create_strategy, delete_strategy, save_new_version};

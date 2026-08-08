@@ -144,16 +144,8 @@ impl<T: Send + Clone + 'static> WsManager<T> {
         }
     }
 
-    pub fn running_handle(&self) -> Arc<AtomicBool> {
-        Arc::clone(&self.running)
-    }
-
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::Relaxed)
-    }
-
-    pub fn retry_count(&self) -> u64 {
-        self.retry_count.load(Ordering::Relaxed)
     }
 
     /*

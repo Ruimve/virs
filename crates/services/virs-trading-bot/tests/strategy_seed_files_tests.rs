@@ -13,7 +13,7 @@ async fn seed_auto_default_loads_and_validates() {
         return;
     }
     let loader = PromptLoader::from_dir(path).await;
-    assert!(!loader.is_empty().await, "loader should have loaded seed files");
+    assert!(!loader.list(StrategyType::Auto).await.is_empty(), "loader should have loaded seed files");
 
     let tpl = loader
         .get(StrategyType::Auto, "default")
@@ -35,7 +35,7 @@ async fn seed_auto_range_reversion_loads_and_validates() {
         return;
     }
     let loader = PromptLoader::from_dir(path).await;
-    assert!(!loader.is_empty().await, "loader should have loaded seed files");
+    assert!(!loader.list(StrategyType::Auto).await.is_empty(), "loader should have loaded seed files");
 
     let tpl = loader
         .get(StrategyType::Auto, "range_reversion")

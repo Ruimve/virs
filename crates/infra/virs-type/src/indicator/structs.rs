@@ -40,13 +40,6 @@ impl IndicatorSet {
     }
 
 
-    pub fn with_value(spec: IndicatorSpec, value: IndicatorValue) -> Self {
-        let mut set = Self::default();
-        set.values.insert(spec, value);
-        set
-    }
-
-
     pub fn insert(&mut self, spec: IndicatorSpec, value: IndicatorValue) -> &mut Self {
         self.values.insert(spec, value);
         self
@@ -61,22 +54,6 @@ impl IndicatorSet {
     pub fn get_num(&self, spec: &IndicatorSpec) -> Option<f64> {
         match self.values.get(spec)? {
             IndicatorValue::Num(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-
-    pub fn get_int(&self, spec: &IndicatorSpec) -> Option<i32> {
-        match self.values.get(spec)? {
-            IndicatorValue::Int(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-
-    pub fn get_str(&self, spec: &IndicatorSpec) -> Option<&str> {
-        match self.values.get(spec)? {
-            IndicatorValue::Str(v) => Some(v.as_str()),
             _ => None,
         }
     }
