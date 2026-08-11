@@ -43,6 +43,7 @@ export const checkApiKey = (apiKey: string, apiSecret: string): CheckApiKeyResul
     controllers: [saveController, testController],
     check: async () => {
       try {
+        // 保存凭证
         const saveResult = await saveCredential({
           exchange: 'binance',
           api_key: apiKey,
@@ -55,6 +56,7 @@ export const checkApiKey = (apiKey: string, apiSecret: string): CheckApiKeyResul
           return { success: false, message: 'Failed to save credentials' };
         }
 
+        // 测试凭证
         const testResult = await testCredential();
         if (testController.signal.aborted) return null;
 

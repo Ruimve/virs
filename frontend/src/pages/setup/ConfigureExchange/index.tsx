@@ -5,7 +5,7 @@ import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
-import { WizardStep } from '../context/WizardContext/consts';
+import { WizardStep } from '../context/WizardContext/define';
 import { FormCard, FormField, InlineBadge, type Badge } from '../components';
 import { checkApiKey, normalizePemSecret } from './utils';
 import { Permission } from './Validation/Permission';

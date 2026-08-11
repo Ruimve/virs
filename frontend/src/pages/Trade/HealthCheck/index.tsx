@@ -395,12 +395,6 @@ const HealthCheck = () => {
           pulse: false,
         };
 
-  // const headline = running
-  //   ? 'Checking system...'
-  //   : failed === 0
-  //     ? 'All systems operational'
-  //     : `${failed} of ${total} checks failed`;
-
   const progressBarColor =
     running || settled < total ? 'bg-accent' : failed > 0 ? 'bg-warning' : 'bg-success';
 

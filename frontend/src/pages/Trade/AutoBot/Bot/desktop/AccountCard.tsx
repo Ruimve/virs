@@ -20,10 +20,8 @@ export const AccountCard = memo(
 
     return (
       <div className="rounded-lg border border-line-default bg-surface-1 p-3 flex flex-col gap-2.5">
-        {}
         <span className="text-xs font-semibold text-on-surface">账户概览</span>
 
-        {}
         <div className="flex items-center justify-between">
           <span className="text-2xs text-on-surface-tertiary">账户余额</span>
           <span className="text-sm font-bold font-mono tabular-nums text-on-surface">
@@ -31,7 +29,6 @@ export const AccountCard = memo(
           </span>
         </div>
 
-        {}
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between">
             <span className="text-2xs text-on-surface-tertiary">已用保证金</span>
@@ -52,7 +49,6 @@ export const AccountCard = memo(
           </div>
         </div>
 
-        {}
         <div className="flex items-center justify-between">
           <span className="text-2xs text-on-surface-tertiary">保证金率</span>
           <span
@@ -62,7 +58,6 @@ export const AccountCard = memo(
           </span>
         </div>
 
-        {}
         <div className="flex items-center justify-between pt-1 border-t border-line-subtle">
           <span className="text-2xs text-on-surface-tertiary">总盈亏</span>
           <div className="flex items-baseline gap-1.5">
@@ -76,7 +71,6 @@ export const AccountCard = memo(
           </div>
         </div>
 
-        {}
         <div className="flex items-center justify-between">
           <span className="text-2xs text-on-surface-tertiary">未实现盈亏</span>
           <span className={`text-xs font-mono font-semibold tabular-nums ${unrealizedClass}`}>

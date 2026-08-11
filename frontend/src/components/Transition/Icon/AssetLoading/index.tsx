@@ -14,10 +14,8 @@ export const Icon = memo((props: Props) => {
       <title>Loading assets</title>
       <desc>Minimalist VIRS mark with rotating arcs</desc>
 
-      {}
       <circle className="ring-track" cx="40" cy="40" r="32" />
 
-      {}
       <circle
         className="ring-arc"
         cx="40"
@@ -28,7 +26,6 @@ export const Icon = memo((props: Props) => {
         strokeLinecap="round"
       />
 
-      {}
       <circle
         className="ring-dotted"
         cx="40"
@@ -38,7 +35,6 @@ export const Icon = memo((props: Props) => {
         strokeDasharray="1.5 6"
       />
 
-      {}
       <path
         className="v-mark"
         d="M27 30 L40 52 L53 30"

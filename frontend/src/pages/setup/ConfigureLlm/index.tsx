@@ -6,7 +6,7 @@ import { Input } from '@/components/Input';
 import { Lock } from '@/components/Icon';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
-import { WizardStep } from '../context/WizardContext/consts';
+import { WizardStep } from '../context/WizardContext/define';
 import {
   FormCard,
   FormField,

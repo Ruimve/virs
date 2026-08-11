@@ -105,7 +105,6 @@ export const AIPanel = memo(({ decision, logs, decideIntervalSecs }: AIPanelProp
 
   return (
     <div className="rounded-lg border border-ai-border bg-surface-1 overflow-hidden">
-      {}
       <button
         type="button"
         onClick={() => setCollapsed(!collapsed)}
@@ -131,19 +130,14 @@ export const AIPanel = memo(({ decision, logs, decideIntervalSecs }: AIPanelProp
         </svg>
       </button>
 
-      {}
       {!collapsed && (
         <div className="flex flex-col gap-3 p-3">
-          {}
           <div className="flex items-start gap-3">
-            {}
             <div className="flex items-center justify-center shrink-0">
               <RadarChart data={radarData} size={120} />
             </div>
 
-            {}
             <div className="flex flex-col gap-2 flex-1 min-w-0">
-              {}
               <div className="flex items-center gap-2">
                 {decisionBadge(dec?.action)}
                 {decision?.llm_model && (
@@ -153,12 +147,10 @@ export const AIPanel = memo(({ decision, logs, decideIntervalSecs }: AIPanelProp
                 )}
               </div>
 
-              {}
               {dec?.confidence != null && !isNaN(dec.confidence) && (
                 <ConfidenceBar value={dec.confidence} />
               )}
 
-              {}
               {(targets.entry || targets.stopLoss || targets.takeProfit) && (
                 <div className="grid grid-cols-3 gap-1.5">
                   <div className="flex flex-col gap-0.5">
@@ -184,7 +176,6 @@ export const AIPanel = memo(({ decision, logs, decideIntervalSecs }: AIPanelProp
             </div>
           </div>
 
-          {}
           <div className="flex items-center flex-wrap gap-1">
             {indicators.map((ind) => (
               <IndicatorChip
@@ -196,7 +187,6 @@ export const AIPanel = memo(({ decision, logs, decideIntervalSecs }: AIPanelProp
             ))}
           </div>
 
-          {}
           {reason && (
             <div className="bg-ai-bg rounded-md p-2 flex flex-col gap-1">
               <span className="text-2xs font-semibold text-ai uppercase tracking-wider">
@@ -208,7 +198,6 @@ export const AIPanel = memo(({ decision, logs, decideIntervalSecs }: AIPanelProp
             </div>
           )}
 
-          {}
           {recentLogs.length > 0 && (
             <div className="flex flex-col gap-1">
               <span className="text-2xs font-semibold text-on-surface-tertiary uppercase tracking-wider">

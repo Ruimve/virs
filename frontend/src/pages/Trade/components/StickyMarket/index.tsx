@@ -129,7 +129,6 @@ export const StickyMarket = memo(
 
     return (
       <div className="bg-base border-t border-line-default shadow-sticky shrink-0">
-        {}
         <div
           onClick={() => setExpanded(!expanded)}
           className="w-full flex items-center justify-between gap-2 px-4 py-2 hover:bg-surface-2/50 transition-colors cursor-pointer"
@@ -180,10 +179,8 @@ export const StickyMarket = memo(
           </div>
         </div>
 
-        {}
         {expanded && (
           <div className="flex flex-col border-t border-line-subtle">
-            {}
             <div className="flex items-center justify-between gap-2 px-4 pt-2 pb-1 shrink-0">
               <div className="flex items-center gap-1">
                 <div
@@ -234,9 +231,7 @@ export const StickyMarket = memo(
                 </div>
               )}
             </div>
-            {}
             {view === 'chart' && <div className="px-2 pb-2">{Chart}</div>}
-            {}
             {view === 'timeline' && (
               <div className="px-4 pb-2 max-h-70 overflow-y-auto">
                 {timelineItems.length > 0 ? (

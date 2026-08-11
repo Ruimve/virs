@@ -91,7 +91,6 @@ export const RiskPanel = memo(
 
     return (
       <div className="rounded-lg border border-line-default bg-surface-1 p-3 flex flex-col gap-2.5">
-        {}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-semibold text-on-surface">
@@ -105,7 +104,6 @@ export const RiskPanel = memo(
           </span>
         </div>
 
-        {}
         <div className="flex flex-col gap-2">
           {metrics.map((m) => (
             <MetricRow key={m.label} metric={m} />

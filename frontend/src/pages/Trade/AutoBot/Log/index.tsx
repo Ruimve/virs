@@ -62,7 +62,6 @@ const Log = () => {
     <div className="h-full overflow-y-auto max-w-5xl mx-auto">
       <AILogList logs={logs} loading={loading} botId={bot.id} total={total} />
 
-      {}
       <div
         ref={sentinelRef}
         className="h-12 flex items-center justify-center text-xs text-on-surface-tertiary"

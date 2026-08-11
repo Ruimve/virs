@@ -4,7 +4,7 @@ import { findActiveBot } from '@/service';
 import { Button } from '@/components/Button';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard } from '../context/WizardContext';
-import { WizardStep } from '../context/WizardContext/consts';
+import { WizardStep } from '../context/WizardContext/define';
 import { ExistingBot } from './ExistingBot';
 import { NoBot } from './NoBot';
 

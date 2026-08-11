@@ -13,7 +13,6 @@ export const MarketLine = memo(
 
     return (
       <div className="flex flex-col gap-1">
-        {}
         <div className="flex items-baseline gap-1.5">
           <span className="text-base font-bold leading-none tracking-tight text-on-surface">
             {symbol}
@@ -27,7 +26,6 @@ export const MarketLine = memo(
             {exchange}
           </span>
         </div>
-        {}
         <div className="flex items-baseline justify-between gap-2">
           <FlashPrice
             price={latestPrice}

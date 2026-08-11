@@ -187,7 +187,6 @@ const System = () => {
         </div>
       </Card>
 
-      {}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card title="CPU" icon={<CpuIcon />}>
           <div className="space-y-3">
@@ -254,7 +253,6 @@ const System = () => {
         </Card>
       </div>
 
-      {}
       <Card title="系统负载（1 / 5 / 15 分钟）" icon={<LoadIcon />}>
         <div className="grid grid-cols-3 gap-4">
           {[
@@ -283,7 +281,6 @@ const System = () => {
         </div>
       </Card>
 
-      {}
       <Card title="磁盘" icon={<DiskIcon />}>
         <div className="space-y-3">
           {info.disks.map((disk, i) => (
@@ -305,7 +302,6 @@ const System = () => {
         </div>
       </Card>
 
-      {}
       <Card title="网络" icon={<NetIcon />}>
         <div className="space-y-2">
           {info.network.length === 0 ? (

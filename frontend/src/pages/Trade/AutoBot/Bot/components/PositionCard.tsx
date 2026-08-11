@@ -82,7 +82,6 @@ export const PositionCard = memo(
 
     return (
       <div className="flex-1 bg-surface-1 border border-line-default rounded-lg p-2.5 flex flex-col gap-2">
-        {}
         <div className="flex items-center justify-between">
           <span className={`text-xs font-bold ${dirClass}`}>{dirLabel}</span>
           <span className="text-2xs text-on-surface-muted font-mono">
@@ -90,7 +89,6 @@ export const PositionCard = memo(
           </span>
         </div>
 
-        {}
         <div className="flex items-baseline justify-between">
           <span className="text-2xs text-on-surface-tertiary uppercase tracking-wider">未实现</span>
           <div className="flex items-baseline gap-1.5">
@@ -105,7 +103,6 @@ export const PositionCard = memo(
           </div>
         </div>
 
-        {}
         <div className="grid grid-cols-2 gap-px bg-line-subtle rounded overflow-hidden">
           <div className="bg-surface-1 px-2 py-1 flex flex-col gap-0.5">
             <span className="text-2xs uppercase tracking-wide text-on-surface-tertiary">
@@ -141,7 +138,6 @@ export const PositionCard = memo(
           </div>
         </div>
 
-        {}
         {liqPrice && liqPrice > 0 && (
           <div className="flex items-center justify-between px-2 py-1 rounded bg-danger-bg text-2xs">
             <span className="font-semibold text-danger-text">强平价</span>
@@ -154,7 +150,6 @@ export const PositionCard = memo(
           </div>
         )}
 
-        {}
         <RiskHeatBar
           side={side}
           currentPrice={latestPrice}

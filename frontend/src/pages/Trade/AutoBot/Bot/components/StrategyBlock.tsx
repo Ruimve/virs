@@ -133,7 +133,6 @@ export const StrategyBlock = memo(
 
     return (
       <div className="border border-line-default rounded-lg p-2.5 flex flex-col gap-2 bg-surface-1">
-        {}
         <div
           onClick={() => setExpanded((e) => !e)}
           className="flex items-center justify-between cursor-pointer select-none"
@@ -164,7 +163,6 @@ export const StrategyBlock = memo(
           </div>
         </div>
 
-        {}
         <div className="flex items-baseline justify-between gap-2">
           <div className="flex items-baseline gap-1.5">
             <span className="text-sm font-bold leading-tight">{strategyName}</span>
@@ -185,7 +183,6 @@ export const StrategyBlock = memo(
           </div>
         </div>
 
-        {}
         <div className="flex items-center flex-wrap text-2xs gap-2">
           {dec?.action && (
             <Badge variant={actionVariant(dec.action)} size="xs">
@@ -225,19 +222,16 @@ export const StrategyBlock = memo(
           )}
         </div>
 
-        {}
         <div
           className={`overflow-hidden transition-all duration-300 ease-out ${expanded ? 'max-h-160 opacity-100' : 'max-h-0 opacity-0'}`}
         >
           <div className="flex flex-col gap-2">
-            {}
             {(reason || strategyDesc) && (
               <div className="bg-ai-bg rounded-md px-2 py-1 text-2xs text-on-surface-secondary leading-relaxed">
                 {reason || strategyDesc}
               </div>
             )}
 
-            {}
             <div className="flex items-center flex-wrap gap-1">
               {indicators.map((ind) => (
                 <IndicatorChip
@@ -249,7 +243,6 @@ export const StrategyBlock = memo(
               ))}
             </div>
 
-            {}
             {stats && (
               <div className="flex items-center flex-wrap text-2xs">
                 <MetaItem>
@@ -280,7 +273,6 @@ export const StrategyBlock = memo(
               </div>
             )}
 
-            {}
             {stats && (
               <div className="text-2xs text-on-surface-muted font-mono tabular-nums leading-relaxed">
                 连胜 <span className="text-success-text">{stats.max_win_streak}</span>
@@ -311,7 +303,6 @@ export const StrategyBlock = memo(
               </div>
             )}
 
-            {}
             {nextDecisionMs != null && remainingMs != null && (
               <div className="text-2xs text-on-surface-muted font-mono tabular-nums">
                 下次决策{' '}

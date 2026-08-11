@@ -5,7 +5,7 @@ import { Button } from '@/components/Button';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
 import { createAutoBot, startAutoBot } from '../../../service';
-import { WizardStep } from '../context/WizardContext/consts';
+import { WizardStep } from '../context/WizardContext/define';
 import { FormCard, FormField, ToggleSwitch, ReviewRow } from '../components';
 
 const AiBadge = () => (

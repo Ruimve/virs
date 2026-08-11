@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DEFAULT_STATE, type WizardState, type WizardStepValue } from './consts';
+import type { WizardState, WizardStepValue } from './define';
 
 export interface WizardContextType {
   wizard: WizardState;
@@ -9,12 +9,7 @@ export interface WizardContextType {
   resetWizard: () => void;
 }
 
-export const WizardContext = createContext<WizardContextType>({
-  wizard: DEFAULT_STATE,
-  updateWizard: () => {},
-  advanceStep: () => {},
-  resetWizard: () => {},
-});
+export const WizardContext = createContext<WizardContextType | null>(null);
 
 export const useWizardGuard = (currentStep: WizardStepValue, requiredStep: WizardStepValue) => {
   const navigate = useNavigate();

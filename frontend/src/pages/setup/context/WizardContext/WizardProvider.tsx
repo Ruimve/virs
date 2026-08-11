@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
-import { DEFAULT_STATE, type WizardState, type WizardStepValue } from './consts';
+import { DEFAULT_STATE, type WizardState, type WizardStepValue } from './define';
 import { WizardContext } from '.';
 
 export const WizardProvider = ({ children }: { children: ReactNode }) => {

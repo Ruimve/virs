@@ -51,7 +51,7 @@ export const RiskHeatBar = memo(
         leftValue: leftIsSL ? sl : tp,
         rightValue: leftIsSL ? tp : sl,
       };
-    }, [side, currentPrice, stopLoss, takeProfit, entryPrice, isLong]);
+    }, [currentPrice, stopLoss, takeProfit, entryPrice, isLong]);
 
     const segments = isLong
       ? ['bg-danger', 'bg-warning', 'bg-success']

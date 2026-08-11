@@ -33,13 +33,11 @@ export const TradeHistoryTable = memo(({ trades }: TradeHistoryTableProps) => {
 
   return (
     <div className="flex-1 flex flex-col bg-surface-1 border border-line-default rounded-lg overflow-hidden min-h-0">
-      {}
       <div className="flex items-center justify-between px-3 py-2 border-b border-line-subtle shrink-0">
         <span className="text-xs font-semibold text-on-surface">交易记录</span>
         <span className="text-2xs text-on-surface-muted">最近 50 条</span>
       </div>
 
-      {}
       <div className="flex-1 overflow-auto min-h-0">
         <table className="w-full text-2xs">
           <thead className="sticky top-0 bg-surface-2 z-10">

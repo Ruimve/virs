@@ -6,10 +6,7 @@ interface BotContextType {
   strategy: StrategyDetail | null;
 }
 
-export const BotContext = createContext<BotContextType>({
-  bot: null,
-  strategy: null,
-});
+export const BotContext = createContext<BotContextType | null>(null);
 
 export const useBot = () => {
   const context = useContext(BotContext);

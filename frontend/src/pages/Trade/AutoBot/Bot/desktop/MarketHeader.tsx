@@ -26,9 +26,7 @@ export const MarketHeader = memo(
 
     return (
       <div className="flex items-center justify-between gap-4 px-4 py-2.5 bg-surface-1 border-b border-line-default shrink-0">
-        {}
         <div className="flex items-center gap-4 min-w-0">
-          {}
           <div className="flex flex-col gap-0.5">
             <div className="flex items-baseline gap-1.5">
               <span className="text-base font-bold leading-none tracking-tight text-on-surface">
@@ -55,7 +53,6 @@ export const MarketHeader = memo(
             </div>
           </div>
 
-          {}
           {marketSummary.high > 0 && (
             <div className="hidden lg:flex items-center gap-4 pl-4 border-l border-line-subtle">
               <div className="flex flex-col gap-0.5">
@@ -86,7 +83,6 @@ export const MarketHeader = memo(
           )}
         </div>
 
-        {}
         <div className="flex items-center gap-0.5 shrink-0">
           {TIMEFRAMES.map((tf) => (
             <button

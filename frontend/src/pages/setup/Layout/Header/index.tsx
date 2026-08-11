@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { BrandMark } from '@/components/BrandMark';
 import { Theme } from '@/components/Theme';
 import { Check } from '@/components/Icon';
-import { TOTAL_SETUP_STEPS } from '../../context/WizardContext/consts';
+import { TOTAL_SETUP_STEPS } from '../../context/WizardContext/define';
 import { useWizard } from '../../context/WizardContext';
 
 const Header = () => {
@@ -40,17 +40,14 @@ const Header = () => {
 
   return (
     <div className="relative z-10 flex items-center h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
-      {}
       <div className="flex items-center gap-2 pl-4 md:pl-8 shrink-0">
         <BrandMark size={24} />
       </div>
 
-      {}
       <div className="flex items-center justify-center flex-1 gap-2">
         <span className="text-caption text-on-surface-tertiary md:hidden">{simpleSteps}</span>
         <div className="hidden md:flex items-center gap-2">{fullSteps}</div>
       </div>
-      {}
       <div className="flex items-center gap-2 pr-4 md:pr-8 ml-auto shrink-0">
         <Theme />
       </div>

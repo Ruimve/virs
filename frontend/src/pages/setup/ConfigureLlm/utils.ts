@@ -25,7 +25,7 @@ export const checkApiKey = (apiKey: string): CheckApiKeyResult => {
     controllers: [saveController, modelsController, testController, balanceController],
     check: async () => {
       try {
-        /** 保存凭证 */
+        // 保存凭证
         const saveResult = await saveAiCredential(
           {
             provider: 'deepseek',
@@ -45,7 +45,7 @@ export const checkApiKey = (apiKey: string): CheckApiKeyResult => {
           };
         }
 
-        /** 测试凭证 */
+        // 测试凭证
         const testResult = await testAiCredential({ signal: testController.signal });
         if (testController.signal.aborted) return null;
 
@@ -57,7 +57,7 @@ export const checkApiKey = (apiKey: string): CheckApiKeyResult => {
           };
         }
 
-        /** 获取余额信息 */
+        // 获取余额信息
         const balResult = await fetchAiBalance({ signal: balanceController.signal });
         if (balanceController.signal.aborted) return null;
 
@@ -69,7 +69,7 @@ export const checkApiKey = (apiKey: string): CheckApiKeyResult => {
           };
         }
 
-        /** 获取 model 列表 */
+        // 获取 model 列表
         const modelsResult = await fetchAiModels({ signal: modelsController.signal });
         if (modelsController.signal.aborted) return null;
 

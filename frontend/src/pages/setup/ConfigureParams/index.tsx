@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizardGuard, useWizard } from '../context/WizardContext';
-import { WizardStep } from '../context/WizardContext/consts';
+import { WizardStep } from '../context/WizardContext/define';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { FormCard, FormField, FormSelect, LeverageSlider } from '../components';

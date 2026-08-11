@@ -24,19 +24,11 @@ export interface ShellContextValue {
   openDrawer: () => void;
 }
 
-const DEFAULT_VALUE: ShellContextValue = {
-  navItems: [],
-  setNavItems: () => {},
-  actions: [],
-  setActions: () => {},
-  activeNav: '',
-  openDrawer: () => {},
-};
-
-export const ShellContext = createContext<ShellContextValue>(DEFAULT_VALUE);
+export const ShellContext = createContext<ShellContextValue | null>(null);
 
 export const useShell = () => {
   const ctx = useContext(ShellContext);
+  if (!ctx) throw new Error('useShell 必须在 ShellProvider 内部使用');
   return ctx;
 };
 

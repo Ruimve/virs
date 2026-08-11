@@ -16,13 +16,7 @@ interface PositionContextType {
   hasAnyPosition: () => boolean;
 }
 
-const defaultValue: PositionContextType = {
-  positions: { long: null, short: null },
-  getPosition: () => null,
-  hasAnyPosition: () => false,
-};
-
-export const PositionContext = createContext<PositionContextType>(defaultValue);
+export const PositionContext = createContext<PositionContextType | null>(null);
 
 export const usePositionContext = () => {
   const context = useContext(PositionContext);

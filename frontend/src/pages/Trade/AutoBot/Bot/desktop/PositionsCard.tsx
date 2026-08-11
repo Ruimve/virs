@@ -36,7 +36,6 @@ function PositionRow({
 
   return (
     <div className="flex flex-col gap-1.5 p-2 rounded-md bg-surface-2/50">
-      {}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span
@@ -56,7 +55,6 @@ function PositionRow({
         </span>
       </div>
 
-      {}
       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-2xs">
         <div className="flex items-center justify-between">
           <span className="text-on-surface-tertiary">数量</span>
@@ -86,7 +84,6 @@ function PositionRow({
         </div>
       </div>
 
-      {}
       {metrics.estimatedLiqPrice && metrics.estimatedLiqPrice > 0 && (
         <div className="flex items-center justify-between px-2 py-1 rounded bg-danger-bg/50 text-2xs">
           <span className="font-semibold text-danger-text">强平价</span>
@@ -138,13 +135,11 @@ export const PositionsCard = memo(
 
     return (
       <div className="rounded-lg border border-line-default bg-surface-1 p-3 flex flex-col gap-2">
-        {}
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-on-surface">持仓管理</span>
           <span className="text-2xs text-on-surface-muted font-mono">Hedge Mode</span>
         </div>
 
-        {}
         {hasAny ? (
           <div className="flex flex-col gap-2">
             {longMetrics.hasPosition && longPosition ? (

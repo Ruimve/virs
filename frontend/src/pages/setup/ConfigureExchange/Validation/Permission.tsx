@@ -47,7 +47,7 @@ export const Permission = memo(({ onCheck }: PermissionProps) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onCheck]);
 
   useEffect(() => {
     getPermissions();

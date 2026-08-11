@@ -14,10 +14,8 @@ export const Icon = memo((props: Props) => {
       <title>Loading bot</title>
       <desc>Minimalist bot mark with rotating arc</desc>
 
-      {}
       <circle className="ring-track" cx="40" cy="40" r="32" />
 
-      {}
       <circle
         className="ring-arc"
         cx="40"
@@ -28,18 +26,14 @@ export const Icon = memo((props: Props) => {
         strokeLinecap="round"
       />
 
-      {}
       <line className="bot-antenna" x1="40" y1="30" x2="40" y2="23" strokeLinecap="round" />
       <circle className="bot-antenna-dot" cx="40" cy="20" r="1.6" />
 
-      {}
       <rect className="bot-head" x="24" y="30" width="32" height="24" rx="5" ry="5" />
 
-      {}
       <circle className="bot-eye" cx="33" cy="40" r="1.5" />
       <circle className="bot-eye bot-eye-delay" cx="47" cy="40" r="1.5" />
 
-      {}
       <line className="bot-mouth" x1="35" y1="47" x2="45" y2="47" strokeLinecap="round" />
     </svg>
   );
