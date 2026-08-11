@@ -8,6 +8,7 @@ export { Eye } from './Eye';
 export { EyeOff } from './EyeOff';
 export { Flame } from './Flame';
 export { InfoCircle } from './InfoCircle';
+export { Key } from './Key';
 export { Lock } from './Lock';
 export { ShieldCheck } from './ShieldCheck';
 export { Spinner } from './Spinner';

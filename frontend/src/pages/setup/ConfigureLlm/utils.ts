@@ -40,7 +40,7 @@ export const checkApiKey = (apiKey: string): CheckApiKeyResult => {
         if (!saveResult.success) {
           return {
             success: false,
-            message: saveResult.message || 'Failed to save API key',
+            message: 'Failed to save API key',
             models: [],
           };
         }
@@ -52,7 +52,7 @@ export const checkApiKey = (apiKey: string): CheckApiKeyResult => {
         if (!testResult.success || !testResult.data?.connected) {
           return {
             success: false,
-            message: testResult.message || testResult.data?.message || 'Connection failed',
+            message: 'Connection failed',
             models: [],
           };
         }
@@ -64,7 +64,7 @@ export const checkApiKey = (apiKey: string): CheckApiKeyResult => {
         if (!balResult.success) {
           return {
             success: false,
-            message: balResult.message || 'Failed to fetch balance',
+            message: 'Failed to fetch balance',
             models: [],
           };
         }
@@ -76,7 +76,7 @@ export const checkApiKey = (apiKey: string): CheckApiKeyResult => {
         if (!modelsResult.success) {
           return {
             success: false,
-            message: modelsResult.message || 'Failed to fetch models list',
+            message: 'Failed to fetch models list',
             models: [],
           };
         }
@@ -96,7 +96,8 @@ export const checkApiKey = (apiKey: string): CheckApiKeyResult => {
           models,
         };
       } catch (e) {
-        return { success: false, message: (e as Error).message || 'Check failed', models: [] };
+        if ((e as Error)?.name === 'AbortError') return null;
+        return { success: false, message: 'Network error', models: [] };
       }
     },
   };

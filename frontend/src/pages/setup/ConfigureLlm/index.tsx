@@ -13,11 +13,9 @@ import {
   FormSelect,
   InlineBadge,
   HelperLink,
-  type BadgeState,
+  type Badge,
 } from '../components';
 import { checkApiKey } from './utils';
-
-const MIN_KEY_LENGTH = 11;
 
 const ConfigureLlm = () => {
   const navigate = useNavigate();
@@ -31,51 +29,43 @@ const ConfigureLlm = () => {
   const [models, setModels] = useState<DeepSeekModel[]>([]);
   const [model, setModel] = useState(wizard.llm_model);
 
-  const [badgeState, setBadgeState] = useState<BadgeState>('idle');
-  const [badgeText, setBadgeText] = useState('');
-
-  const changeBadge = useCallback((state: BadgeState, text: string) => {
-    setBadgeState(state);
-    setBadgeText(text);
-  }, []);
+  const [badge, setBadge] = useState<Badge>({
+    state: 'idle',
+    text: '',
+  });
 
   useEffect(() => {
     if (!deferredApiKey) return;
 
+    setBadge({ state: 'verifying', text: 'Verifying...' });
+
     const { controllers, check } = checkApiKey(deferredApiKey);
 
-    changeBadge('verifying', 'Verifying...');
     check().then((res) => {
       /** 处理取消请求 */
       if (!res) return;
 
       /** 处理成功响应 */
       if (res.success) {
-        changeBadge('success', res.message);
+        setBadge({ state: 'success', text: res.message });
         setModels(res.models);
+        if (res.models.length > 0) setModel(res.models[0].id);
       } else {
-        changeBadge('error', res.message);
+        setBadge({ state: 'error', text: res.message });
       }
     });
 
     return () => {
       controllers.forEach((controller) => controller.abort());
     };
-  }, [deferredApiKey, changeBadge]);
+  }, [deferredApiKey]);
 
-  const handleKeyChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value?.trim();
-      setApiKey(value);
-      setModels([]);
-
-      if (!value || value.length < MIN_KEY_LENGTH) {
-        changeBadge('idle', '');
-        return;
-      }
-    },
-    [changeBadge],
-  );
+  const handleKeyChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setApiKey(value);
+    setModels([]);
+    setBadge({ state: 'idle', text: '' });
+  }, []);
 
   const handleModelChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -109,7 +99,7 @@ const ConfigureLlm = () => {
   }, [model, updateWizard, advanceStep, navigate]);
 
   const actions = useMemo(() => {
-    const disabled = !apiKey || !model || badgeState !== 'success';
+    const disabled = !apiKey || !model || badge.state !== 'success';
     return (
       <>
         <Button variant="ghost" onClick={handleBack}>
@@ -120,7 +110,7 @@ const ConfigureLlm = () => {
         </Button>
       </>
     );
-  }, [apiKey, model, badgeState, isPending, handleBack, handleContinue]);
+  }, [apiKey, model, badge.state, isPending, handleBack, handleContinue]);
 
   return (
     <Wizard
@@ -130,11 +120,7 @@ const ConfigureLlm = () => {
       actions={actions}
     >
       <FormCard>
-        <FormField
-          label="API Key"
-          required
-          badge={<InlineBadge state={badgeState} text={badgeText} />}
-        >
+        <FormField label="API Key" required badge={<InlineBadge badge={badge} />}>
           <Input
             type="password"
             mono

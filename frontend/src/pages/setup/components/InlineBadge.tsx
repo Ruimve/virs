@@ -1,22 +1,30 @@
 import { memo } from 'react';
 import { Spinner, Check } from '@/components/Icon';
 
-export type BadgeState = 'idle' | 'verifying' | 'success' | 'error';
+type BadgeState = 'idle' | 'verifying' | 'success' | 'error';
 
-interface InlineBadgeProps {
+const styles: Record<BadgeState, string> = {
+  idle: '',
+  verifying: 'bg-info-bg text-info-text border-info-border',
+  success: 'bg-success-bg text-success-text border-success-border',
+  error: 'bg-danger-bg text-danger-text border-danger-border',
+};
+
+export interface Badge {
   state: BadgeState;
   text?: string;
 }
 
-export const InlineBadge = memo(({ state, text }: InlineBadgeProps) => {
-  if (state === 'idle' || !text) return null;
+export const InlineBadge = memo(({ badge }: { badge: Badge }) => {
+  const { state, text } = badge;
 
-  const styles: Record<BadgeState, string> = {
-    idle: '',
-    verifying: 'bg-info-bg text-info-text border-info-border',
-    success: 'bg-success-bg text-success-text border-success-border',
-    error: 'bg-danger-bg text-danger-text border-danger-border',
-  };
+  if (state === 'idle') {
+    return (
+      <span className="inline-flex items-center text-caption font-medium px-2 py-0.5 border invisible">
+        &nbsp;
+      </span>
+    );
+  }
 
   return (
     <span

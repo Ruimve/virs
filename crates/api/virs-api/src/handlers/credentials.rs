@@ -244,7 +244,7 @@ pub async fn check_permissions(
                 "name": "connectivity",
                 "label": "Connectivity",
                 "status": "error",
-                "detail": format!("Failed to verify: {}", e)
+                "detail": format!("{}", e)
             }],
         })))),
     }
@@ -331,7 +331,7 @@ pub async fn verify_permissions(
                 "name": "connectivity",
                 "label": "Connectivity",
                 "status": "error",
-                "detail": format!("Failed to verify: {}", e)
+                "detail": format!("{}", e)
             }],
         })))),
     }
