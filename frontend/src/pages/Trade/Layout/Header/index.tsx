@@ -61,7 +61,7 @@ export const TradeHeader = memo(() => {
   const interval = bot ? formatInterval(bot.decide_interval_secs) : '';
 
   return (
-    <div className="relative z-10 flex items-center h-12 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
+    <div className="relative z-10 flex items-center h-14 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
       {/* Mobile: BrandMark as drawer trigger */}
       <div className="md:hidden flex items-center pl-3 shrink-0">
         <BrandMark size={20} onClick={openDrawer} />
