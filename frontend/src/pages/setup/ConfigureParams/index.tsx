@@ -35,8 +35,6 @@ const ConfigureParams = () => {
     ...wizard.bot_params,
   });
 
-  const leverageNum = parseInt(values.leverage || '10', 10);
-
   const handleFieldChange = useCallback((key: string, val: string) => {
     setValues((prev) => ({ ...prev, [key]: val }));
   }, []);
@@ -106,10 +104,10 @@ const ConfigureParams = () => {
 
         <FormField label="Leverage">
           <div className="flex items-center justify-between mb-2">
-            <span className="font-mono text-sm font-semibold text-accent">{leverageNum}x</span>
+            <span className="font-mono text-sm font-semibold text-accent">{values.leverage}x</span>
           </div>
           <LeverageSlider
-            value={leverageNum}
+            value={Number(values.leverage)}
             min={1}
             max={20}
             step={1}
@@ -119,7 +117,7 @@ const ConfigureParams = () => {
 
         <FormField label="Decision Interval">
           <FormSelect
-            value={values.decision_interval ?? '300'}
+            value={values.decision_interval || '300'}
             onChange={(e) => handleFieldChange('decision_interval', e.target.value)}
           >
             {TIMEFRAME_OPTIONS.map((opt) => (

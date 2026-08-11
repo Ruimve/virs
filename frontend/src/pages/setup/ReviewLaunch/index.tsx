@@ -24,21 +24,18 @@ const ReviewLaunch = () => {
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState('');
 
-  const botParams = wizard.bot_params;
-  const leverage = botParams.leverage || '10';
-
   const handleLaunch = useCallback(async () => {
     setLaunching(true);
     setLaunchError('');
 
     try {
       const result = await createAutoBot({
-        symbol: botParams.symbol,
+        symbol: wizard.bot_params.symbol,
         exchange: wizard.exchange,
-        leverage: parseInt(leverage || '10', 10),
-        max_position_pct: parseFloat(botParams.max_position_pct || '20'),
-        decide_interval_secs: parseInt(botParams.decision_interval || '300', 10),
-        name: `Auto ${botParams.symbol || 'Bot'}`,
+        leverage: Number(wizard.bot_params.leverage),
+        max_position_pct: Number(wizard.bot_params.max_position_pct),
+        decide_interval_secs: Number(wizard.bot_params.decision_interval),
+        name: `Auto ${wizard.bot_params.symbol || 'Bot'}`,
         paper_mode: paperMode,
         auto_optimize: wizard.auto_optimize,
       });
@@ -58,22 +55,14 @@ const ReviewLaunch = () => {
 
       updateWizard({ paper_mode: paperMode, bot_id: botId });
       startTransition(() => {
-        navigate(`/trade/auto/${botId}/health`, { replace: true });
+        navigate(`/trade/auto/${botId}/bot`, { replace: true });
       });
     } catch (err) {
       setLaunchError(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLaunching(false);
     }
-  }, [
-    botParams,
-    wizard.exchange,
-    wizard.auto_optimize,
-    leverage,
-    paperMode,
-    navigate,
-    updateWizard,
-  ]);
+  }, [wizard.bot_params, wizard.exchange, wizard.auto_optimize, paperMode, navigate, updateWizard]);
 
   const handleBack = useCallback(() => {
     navigate('/setup/optimization', { replace: true });
@@ -112,7 +101,7 @@ const ReviewLaunch = () => {
             <div>
               <div className="text-sm font-medium text-on-base">Trading Mode</div>
               <div
-                className={`text-xs mt-0.5 leading-relaxed ${!paperMode ? 'text-warning-text' : 'text-on-surface-tertiary'}`}
+                className={`text-xs mt-0.5 leading-relaxed ${paperMode ? 'text-on-surface-tertiary' : 'text-warning-text'}`}
               >
                 {paperMode
                   ? 'Simulated orders, no real funds at risk'
@@ -131,14 +120,14 @@ const ReviewLaunch = () => {
             </>
           }
         />
-        <ReviewRow label="AI Model" value={wizard.llm_model || '-'} mono />
-        <ReviewRow label="Exchange" value={wizard.exchange || '-'} />
+        <ReviewRow label="AI Model" value={wizard.llm_model} mono />
+        <ReviewRow label="Exchange" value={wizard.exchange} />
         <ReviewRow
-          label="Pair · Leverage"
-          value={`${botParams.symbol || '-'} · ${leverage}x`}
+          label="Symbol · Leverage"
+          value={`${wizard.bot_params.symbol} · ${wizard.bot_params.leverage}x`}
           mono
         />
-        <ReviewRow label="Max Position" value={`${botParams.max_position_pct || '-'}%`} mono />
+        <ReviewRow label="Max Position" value={`${wizard.bot_params.max_position_pct}%`} mono />
         <ReviewRow
           label="Optimization"
           value={wizard.auto_optimize ? `Enabled · ${wizard.optimization_interval}` : 'Disabled'}
