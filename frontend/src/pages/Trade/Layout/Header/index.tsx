@@ -1,11 +1,11 @@
-import { useCallback, useState } from 'react';
-import { Logo } from '@/components/Logo';
+import { memo } from 'react';
+import { BrandMark } from '@/components/BrandMark';
 import { Theme } from '@/components/Theme';
-import { Close, Flame, ShieldCheck } from '@/components/Icon';
-import { IconBtn } from '@/components/Button/IconBtn';
-import { useHeader } from './HeaderContext';
+import { Flame, ShieldCheck } from '@/components/Icon';
+import { useShell } from '@/layout/ShellContext';
 import { usePaper } from '../../context/PaperContext';
 import { useBot } from '../../context/BotContext';
+import { formatCompact, formatInterval } from '../../AutoBot/Bot/components/utils';
 
 interface StatusStyle {
   text: string;
@@ -14,7 +14,7 @@ interface StatusStyle {
   pulse: boolean;
 }
 
-const statusConfig = (status: string): StatusStyle => {
+function statusConfig(status: string): StatusStyle {
   const map: Record<string, StatusStyle> = {
     running: {
       text: '运行中',
@@ -40,12 +40,7 @@ const statusConfig = (status: string): StatusStyle => {
       bg: 'bg-surface-2 text-on-surface-tertiary',
       pulse: false,
     },
-    error: {
-      text: '错误',
-      dot: 'bg-danger',
-      bg: 'bg-danger-bg text-danger-text',
-      pulse: true,
-    },
+    error: { text: '错误', dot: 'bg-danger', bg: 'bg-danger-bg text-danger-text', pulse: true },
   };
   return (
     map[status] || {
@@ -55,187 +50,99 @@ const statusConfig = (status: string): StatusStyle => {
       pulse: false,
     }
   );
-};
+}
 
-const Header = () => {
+export const TradeHeader = memo(() => {
   const { bot } = useBot();
-  const { tabs, activeTab, actions } = useHeader();
   const { enabled: paperEnabled } = usePaper();
-
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerClosing, setDrawerClosing] = useState(false);
-
-  const closeDrawer = useCallback(() => {
-    setDrawerClosing(true);
-  }, []);
-
-  const openDrawer = useCallback(() => {
-    setDrawerOpen(true);
-  }, []);
-
-  const handleDrawerAnimEnd = useCallback(() => {
-    if (drawerClosing) {
-      setDrawerOpen(false);
-      setDrawerClosing(false);
-    }
-  }, [drawerClosing]);
+  const { actions, openDrawer } = useShell();
 
   const sc = statusConfig(bot?.status || '');
+  const interval = bot ? formatInterval(bot.decide_interval_secs) : '';
 
   return (
-    <>
-      {}
-      <div className="relative z-10 flex items-center h-12 md:h-12 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
-        {}
-        <div className="flex items-center gap-2.5 pl-3 md:pl-6 shrink-0">
-          <Logo onClick={openDrawer} className="md:hidden" />
-          <Logo className="hidden md:block" />
-
-          {}
-          <span
-            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium tracking-wide ${sc.bg} ${
-              sc.pulse ? 'animate-subtle-pulse' : ''
-            }`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
-            {sc.text}
-          </span>
-
-          {}
-          {paperEnabled !== null && (
-            <span
-              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium tracking-wide ${
-                paperEnabled
-                  ? 'bg-info/[0.08] text-info border border-info/20'
-                  : 'bg-warning/[0.08] text-warning-text border border-warning/20'
-              }`}
-            >
-              {paperEnabled ? (
-                <ShieldCheck className="w-3 h-3" strokeWidth={2} />
-              ) : (
-                <Flame className="w-3 h-3" strokeWidth={2} />
-              )}
-              {paperEnabled ? 'Paper' : 'Live'}
-            </span>
-          )}
-        </div>
-
-        {}
-        <div className="hidden md:flex items-center justify-center flex-1 gap-0.5">
-          {tabs.map((tab) => (
-            <div
-              key={tab.key}
-              onClick={() => tab.onClick(tab.key)}
-              className={`px-4 py-1.5 rounded-lg text-caption font-medium tracking-wide transition-all duration-200 cursor-pointer ${
-                activeTab === tab.key
-                  ? 'bg-accent-light text-accent shadow-sm'
-                  : 'text-on-surface-tertiary hover:text-on-surface-secondary hover:bg-surface-2/50'
-              }`}
-            >
-              {tab.label}
-            </div>
-          ))}
-        </div>
-
-        {}
-        <div className="hidden md:flex items-center gap-1.5 pr-6 shrink-0">
-          {actions.map((action) => {
-            return (
-              <div
-                onClick={() => action.onClick(action.key)}
-                className={`px-3 py-1.5 rounded-lg text-caption font-medium tracking-wide transition-colors duration-200 cursor-pointer ${action.className || ''}`}
-              >
-                {action.label}
-              </div>
-            );
-          })}
-          <Theme />
-        </div>
-
-        {}
-        <div className="md:hidden flex items-center pr-3 ml-auto shrink-0">
-          <Theme />
-        </div>
+    <div className="relative z-10 flex items-center h-12 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
+      {/* Mobile: BrandMark as drawer trigger */}
+      <div className="md:hidden flex items-center pl-3 shrink-0">
+        <BrandMark size={20} onClick={openDrawer} />
       </div>
 
-      {}
-      {drawerOpen && (
-        <>
-          <div
-            className={`fixed inset-0 z-40 md:hidden ${drawerClosing ? 'animate-fade-out' : ''}`}
-            onClick={closeDrawer}
-          >
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          </div>
-          <div
-            onAnimationEnd={handleDrawerAnimEnd}
-            className={`fixed inset-y-0 left-0 z-50 w-72 bg-base border-r border-line-subtle shadow-2xl md:hidden flex flex-col ${
-              drawerClosing ? 'animate-drawer-out' : 'animate-drawer-in'
-            }`}
-          >
-            {}
-            <div className="flex items-center justify-between px-4 h-12 border-b border-line-subtle shrink-0">
-              <div className="flex items-center gap-2">
-                <Logo />
-              </div>
-              <IconBtn onClick={closeDrawer}>
-                <Close className="w-4 h-4" strokeWidth={2} />
-              </IconBtn>
-            </div>
+      {/* Left: bot name + badges (desktop) */}
+      <div className="hidden md:flex items-center gap-3 pl-4 min-w-0 shrink-0">
+        {bot && (
+          <>
+            <h1 className="text-sm font-display font-semibold text-on-surface truncate">
+              {bot.name}
+            </h1>
 
-            {}
-            <div className="flex-1 overflow-y-auto py-2">
-              <div className="px-4 py-1.5">
-                <p className="text-2xs uppercase tracking-[0.15em] text-on-surface-faint font-medium">
-                  Navigation
-                </p>
-              </div>
-              {tabs.map((tab) => (
-                <div
-                  key={tab.key}
-                  onClick={() => {
-                    tab.onClick(tab.key);
-                    closeDrawer();
-                  }}
-                  className={`w-full text-left px-5 py-2.5 text-xs font-medium tracking-wide transition-colors cursor-pointer ${
-                    activeTab === tab.key
-                      ? 'text-accent bg-accent-light border-r-2 border-accent'
-                      : 'text-on-surface-secondary hover:bg-surface-2/50 hover:text-on-surface'
-                  }`}
-                >
-                  {tab.label}
-                </div>
-              ))}
-            </div>
+            <span
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium tracking-wide shrink-0 ${sc.bg} ${sc.pulse ? 'animate-subtle-pulse' : ''}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
+              {sc.text}
+            </span>
 
-            {}
-            <div className="border-t border-line-subtle py-3 px-4 shrink-0">
-              <div className="mb-2">
-                <p className="text-2xs uppercase tracking-[0.15em] text-on-surface-faint font-medium">
-                  Actions
-                </p>
-              </div>
-              <div className="space-y-1">
-                {actions.map((action) => {
-                  return (
-                    <div
-                      onClick={() => {
-                        action.onClick!(action.key);
-                        closeDrawer();
-                      }}
-                      className={`w-full px-3 py-2 rounded-lg text-caption font-medium transition-colors cursor-pointer ${action.className || ''}`}
-                    >
-                      {action.label}
-                    </div>
-                  );
-                })}
-              </div>
+            {paperEnabled !== null && (
+              <span
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium tracking-wide shrink-0 ${
+                  paperEnabled
+                    ? 'bg-info-bg text-info-text border border-info-border'
+                    : 'bg-warning-bg text-warning-text border border-warning-border'
+                }`}
+              >
+                {paperEnabled ? (
+                  <ShieldCheck className="w-3 h-3" strokeWidth={2} />
+                ) : (
+                  <Flame className="w-3 h-3" strokeWidth={2} />
+                )}
+                {paperEnabled ? 'Paper' : 'Live'}
+              </span>
+            )}
+
+            {bot.ai_analysis && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium tracking-wide shrink-0 bg-ai-bg text-ai border border-ai-border">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-ai animate-cursor-blink" />
+                AI 在线
+              </span>
+            )}
+
+            <div className="hidden lg:flex items-center gap-2 text-2xs text-on-surface-tertiary shrink-0">
+              <span className="font-mono tabular-nums">{bot.leverage}x</span>
+              <span className="text-on-surface-faint">·</span>
+              {interval && <span>{interval}</span>}
+              <span className="text-on-surface-faint">·</span>
+              <span className="font-mono tabular-nums">{formatCompact(bot.initial_capital)}</span>
             </div>
-          </div>
-        </>
-      )}
-    </>
+          </>
+        )}
+      </div>
+
+      {/* Mobile: status badge */}
+      <div className="md:hidden flex items-center gap-2 pl-2 shrink-0">
+        <span
+          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium tracking-wide ${sc.bg} ${sc.pulse ? 'animate-subtle-pulse' : ''}`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
+          {sc.text}
+        </span>
+      </div>
+
+      {/* Right: actions + theme */}
+      <div className="flex items-center gap-1.5 pr-3 md:pr-4 ml-auto shrink-0">
+        {actions.map((action) => (
+          <button
+            key={action.key}
+            type="button"
+            onClick={action.onClick}
+            className={`px-3 py-1.5 rounded-lg text-caption font-medium tracking-wide transition-colors duration-200 cursor-pointer ${action.className || ''}`}
+          >
+            {action.label}
+          </button>
+        ))}
+        <Theme />
+      </div>
+    </div>
   );
-};
+});
 
-export default Header;
+export default TradeHeader;

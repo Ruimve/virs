@@ -101,3 +101,22 @@ export function formatDuration(isoTime: string | undefined | null): string {
   const d = Math.floor(h / 24);
   return `${d}d`;
 }
+
+export function formatInterval(secs: number): string {
+  if (secs <= 0) return '';
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h`;
+}
+
+export function marginRateColor(rate: number): string {
+  if (rate >= 80) return 'text-danger-text';
+  if (rate >= 50) return 'text-warning-text';
+  return 'text-on-surface-secondary';
+}
+
+export function marginBarColor(rate: number): string {
+  if (rate >= 80) return 'bg-danger';
+  if (rate >= 50) return 'bg-warning';
+  return 'bg-success';
+}

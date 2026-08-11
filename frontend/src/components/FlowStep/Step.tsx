@@ -64,34 +64,38 @@ export const FlowStep = memo(
       const stepContent =
         typeof step === 'number' ? <span className="text-caption">{step}</span> : step;
 
+      const INDICATOR_BASE = 'w-7 h-7 rounded-full flex items-center justify-center';
+
       switch (status) {
         case 'pending':
           return (
-            <div className="w-7 h-7 rounded-full border border-line-strong bg-surface-1 flex items-center justify-center text-on-surface-faint">
+            <div
+              className={`${INDICATOR_BASE} border border-line-strong bg-surface-1 text-on-surface-faint`}
+            >
               {stepContent}
             </div>
           );
         case 'active':
           return (
-            <div className="w-7 h-7 rounded-full bg-accent/80 flex items-center justify-center text-white font-medium">
+            <div className={`${INDICATOR_BASE} bg-accent/80 text-white font-medium`}>
               {stepContent}
             </div>
           );
         case 'verifying':
           return (
-            <div className="w-7 h-7 rounded-full bg-accent-muted border border-accent-muted flex items-center justify-center">
+            <div className={`${INDICATOR_BASE} bg-accent-muted border border-accent-muted`}>
               <Spinner className="w-3.5 h-3.5 text-accent" />
             </div>
           );
         case 'done':
           return (
-            <div className="w-7 h-7 rounded-full bg-success-bg border border-success-border flex items-center justify-center">
+            <div className={`${INDICATOR_BASE} bg-success-bg border border-success-border`}>
               <Check className="w-3.5 h-3.5 text-success-text" strokeWidth={2.5} />
             </div>
           );
         case 'error':
           return (
-            <div className="w-7 h-7 rounded-full bg-danger-bg border border-danger-border flex items-center justify-center">
+            <div className={`${INDICATOR_BASE} bg-danger-bg border border-danger-border`}>
               <Close className="w-3.5 h-3.5 text-danger-text" strokeWidth={2.5} />
             </div>
           );
@@ -101,7 +105,7 @@ export const FlowStep = memo(
     const renderLine = useCallback(() => {
       const show = showLine !== undefined ? showLine : !isCollapsed;
       if (!show) return null;
-      return <div className="w-px flex-1 min-h-[16px] bg-line-default mt-1" />;
+      return <div className="w-px flex-1 min-h-4 bg-line-default mt-1" />;
     }, [showLine, isCollapsed]);
 
     const renderContent = useCallback(

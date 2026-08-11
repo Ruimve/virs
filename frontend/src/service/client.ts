@@ -14,7 +14,12 @@ export function removeToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
-async function request<T>(method: string, url: string, data?: unknown): Promise<ApiResponse<T>> {
+async function request<T>(
+  method: string,
+  url: string,
+  data?: unknown,
+  init?: RequestInit,
+): Promise<ApiResponse<T>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -25,8 +30,9 @@ async function request<T>(method: string, url: string, data?: unknown): Promise<
   }
 
   const config: RequestInit = {
+    ...init,
     method,
-    headers,
+    headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
   };
 
   if (data !== undefined && method !== 'GET') {
@@ -38,7 +44,7 @@ async function request<T>(method: string, url: string, data?: unknown): Promise<
   if (response.status === 401) {
     removeToken();
     window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-    return { success: false, error: '未授权，请重新登录' };
+    return { success: false, message: '未授权，请重新登录' };
   }
 
   const result: ApiResponse<T> = await response.json();
@@ -46,7 +52,7 @@ async function request<T>(method: string, url: string, data?: unknown): Promise<
   if (!response.ok) {
     return {
       success: false,
-      error: result.error || result.message || `请求失败 (${response.status})`,
+      message: result.message || result.message || `请求失败 (${response.status})`,
     };
   }
 
@@ -54,19 +60,19 @@ async function request<T>(method: string, url: string, data?: unknown): Promise<
 }
 
 export const api = {
-  get<T = unknown>(url: string): Promise<ApiResponse<T>> {
-    return request<T>('GET', url);
+  get<T = unknown>(url: string, init?: RequestInit): Promise<ApiResponse<T>> {
+    return request<T>('GET', url, undefined, init);
   },
 
-  post<T = unknown>(url: string, data?: unknown): Promise<ApiResponse<T>> {
-    return request<T>('POST', url, data);
+  post<T = unknown>(url: string, data?: unknown, init?: RequestInit): Promise<ApiResponse<T>> {
+    return request<T>('POST', url, data, init);
   },
 
-  put<T = unknown>(url: string, data?: unknown): Promise<ApiResponse<T>> {
-    return request<T>('PUT', url, data);
+  put<T = unknown>(url: string, data?: unknown, init?: RequestInit): Promise<ApiResponse<T>> {
+    return request<T>('PUT', url, data, init);
   },
 
-  del<T = unknown>(url: string): Promise<ApiResponse<T>> {
-    return request<T>('DELETE', url);
+  del<T = unknown>(url: string, init?: RequestInit): Promise<ApiResponse<T>> {
+    return request<T>('DELETE', url, undefined, init);
   },
 };

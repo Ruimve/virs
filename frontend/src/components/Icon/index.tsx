@@ -1,9 +1,15 @@
+export { Bot } from './Bot';
+export { Brain } from './Brain';
 export { Check } from './Check';
 export { ChevronLeft } from './ChevronLeft';
 export { ChevronRight } from './ChevronRight';
 export { Close } from './Close';
+export { Eye } from './Eye';
+export { EyeOff } from './EyeOff';
 export { Flame } from './Flame';
 export { InfoCircle } from './InfoCircle';
+export { Lock } from './Lock';
 export { ShieldCheck } from './ShieldCheck';
 export { Spinner } from './Spinner';
+export { User } from './User';
 export { Warning } from './Warning';

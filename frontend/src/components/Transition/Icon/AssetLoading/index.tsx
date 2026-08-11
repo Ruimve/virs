@@ -10,7 +10,7 @@ interface Props extends SVGProps<SVGSVGElement> {
 export const Icon = memo((props: Props) => {
   const { size = 56, ...rest } = props;
   return (
-    <svg className="load-assets-icon" viewBox="0 0 80 80" width={size} height={size} {...rest}>
+    <svg className="loading-icon" viewBox="0 0 80 80" width={size} height={size} {...rest}>
       <title>Loading assets</title>
       <desc>Minimalist VIRS mark with rotating arcs</desc>
 

@@ -17,7 +17,7 @@ export const LowerRegion = memo(
     return (
       <div className="bg-base-secondary flex-1 min-h-0 px-3 py-2.5 flex flex-col gap-2 overflow-hidden">
         {hasAny ? (
-          <div className="flex flex-col md:flex-row gap-2">
+          <div className="flex flex-col gap-2">
             <PositionCard
               side="long"
               position={longPosition}
@@ -38,7 +38,7 @@ export const LowerRegion = memo(
             />
           </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center min-h-[80px]">
+          <div className="flex-1 flex items-center justify-center min-h-20">
             <span className="text-xs text-on-surface-muted">暂无持仓</span>
           </div>
         )}

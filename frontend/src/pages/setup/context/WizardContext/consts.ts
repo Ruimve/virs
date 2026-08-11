@@ -15,12 +15,14 @@ export type WizardStepValue = (typeof WizardStep)[keyof typeof WizardStep];
 export interface WizardState {
   current_step: WizardStepValue;
   exchange: string;
-  bot_type: 'auto';
+  bot_type: 'auto' | 'manual';
   paper_mode: boolean;
   llm_provider: string;
   llm_model: string;
   bot_params: Record<string, string>;
   auto_optimize: boolean;
+  optimization_interval: string;
+  risk_tolerance: string;
   bot_id: string;
 }
 
@@ -43,5 +45,7 @@ export const DEFAULT_STATE: WizardState = {
   llm_model: '',
   bot_params: {},
   auto_optimize: false,
+  optimization_interval: '8h',
+  risk_tolerance: 'medium',
   bot_id: '',
 };

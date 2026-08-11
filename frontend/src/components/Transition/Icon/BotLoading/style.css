@@ -1,14 +1,4 @@
-.bot-loading-icon {
-  display: block;
-  overflow: visible;
-}
-
-.bot-loading-icon circle,
-.bot-loading-icon line,
-.bot-loading-icon rect {
-  fill: none;
-  stroke: var(--color-accent-val);
-}
+/* Shared styles in index.css (.loading-icon, .ring-track, .ring-arc, icon-spin) */
 
 .bot-antenna-dot {
   fill: var(--color-accent-val);
@@ -18,18 +8,6 @@
 .bot-eye {
   fill: var(--color-accent-val);
   stroke: none;
-}
-
-.bot-loading-icon .ring-track {
-  stroke-width: 1;
-  opacity: 0.12;
-}
-
-.bot-loading-icon .ring-arc {
-  stroke-width: 1.5;
-  transform-origin: center;
-  transform-box: fill-box;
-  animation: bot-loading-spin 1.8s linear infinite;
 }
 
 .bot-antenna {
@@ -60,12 +38,6 @@
   animation-delay: 0.5s;
 }
 
-@keyframes bot-loading-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @keyframes bot-loading-pulse {
   0%,
   100% {
@@ -89,7 +61,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bot-loading-icon .ring-arc,
   .bot-antenna-dot,
   .bot-eye {
     animation: none;

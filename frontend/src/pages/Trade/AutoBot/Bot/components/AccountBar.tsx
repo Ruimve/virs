@@ -1,12 +1,6 @@
 import { memo } from 'react';
 import type { AccountBarProps } from './types';
-import { formatCompact } from './utils';
-
-function marginRateColor(rate: number): string {
-  if (rate >= 80) return 'text-danger-text';
-  if (rate >= 50) return 'text-warning-text';
-  return 'text-on-surface-secondary';
-}
+import { formatCompact, marginRateColor } from './utils';
 
 export const AccountBar = memo(({ metrics }: AccountBarProps) => {
   const items = [

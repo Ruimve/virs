@@ -23,12 +23,12 @@ export const Card = memo(
     }, [border]);
     return (
       <div
-        className={`bg-surface-1 rounded-xl ${borderClass} shadow-sm ${padding ? 'p-4' : ''} ${className}`}
+        className={`bg-surface-1 rounded-xl ${borderClass} ${padding ? 'p-4' : ''} ${className}`}
       >
         {title && (
           <div className="flex items-center gap-2 mb-3">
             {icon && <span className="text-on-surface-tertiary">{icon}</span>}
-            <h3 className="text-caption uppercase tracking-[0.15em] text-on-surface-tertiary font-medium">
+            <h3 className="text-caption uppercase tracking-caption text-on-surface-tertiary font-medium">
               {title}
             </h3>
           </div>

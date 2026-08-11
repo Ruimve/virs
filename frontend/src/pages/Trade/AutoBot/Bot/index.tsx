@@ -17,6 +17,7 @@ import { usePositionContext } from '../../context/PositionContext';
 import { StickyMarket } from '../../components/StickyMarket';
 import { UpperRegion } from './components/UpperRegion';
 import { LowerRegion } from './components/LowerRegion';
+import { DesktopBot } from './desktop/DesktopBot';
 import { computeMetrics, computeAccount, computeTotalPnlPct } from './components/utils';
 
 const useRafThrottledPrice = () => {
@@ -221,41 +222,66 @@ const Bot = () => {
   );
 
   return (
-    <div className="h-full flex flex-col max-w-[480px] md:max-w-3xl mx-auto">
-      {}
-      <UpperRegion
+    <>
+      {/* 桌面端布局：侧边栏 + 顶栏 + 双列主区域 */}
+      <DesktopBot
         bot={autoBot}
         strategy={strategy}
+        stats={stats}
         latestPrice={latestPrice}
         marketSummary={marketSummary}
         decision={latestDecision}
-        stats={stats}
+        logs={logs}
+        trades={autoTrades}
         accountMetrics={accountMetrics}
         totalPnl={totalPnl}
         totalPnlPct={totalPnlPct}
-      />
-
-      {}
-      <LowerRegion
-        bot={autoBot}
-        latestPrice={latestPrice}
         longPosition={positions.long}
         shortPosition={positions.short}
         longMetrics={longMetrics}
         shortMetrics={shortMetrics}
-        decision={latestDecision}
-      />
-
-      {}
-      <StickyMarket
         klineData={klineData}
         klineTimeframe={klineTimeframe}
         onTimeframeChange={setKlineTimeframe}
         chartRef={chartRef}
         markers={markers}
-        latestPrice={latestPrice}
       />
-    </div>
+
+      {/* 移动端布局：三段式（UpperRegion → LowerRegion → StickyMarket） */}
+      <div className="md:hidden h-full flex flex-col max-w-120 mx-auto">
+        <UpperRegion
+          bot={autoBot}
+          strategy={strategy}
+          latestPrice={latestPrice}
+          marketSummary={marketSummary}
+          decision={latestDecision}
+          stats={stats}
+          accountMetrics={accountMetrics}
+          totalPnl={totalPnl}
+          totalPnlPct={totalPnlPct}
+        />
+
+        <LowerRegion
+          bot={autoBot}
+          latestPrice={latestPrice}
+          longPosition={positions.long}
+          shortPosition={positions.short}
+          longMetrics={longMetrics}
+          shortMetrics={shortMetrics}
+          decision={latestDecision}
+        />
+
+        <StickyMarket
+          klineData={klineData}
+          klineTimeframe={klineTimeframe}
+          onTimeframeChange={setKlineTimeframe}
+          chartRef={chartRef}
+          markers={markers}
+          latestPrice={latestPrice}
+          logs={logs}
+        />
+      </div>
+    </>
   );
 };
 

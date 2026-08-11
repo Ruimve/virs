@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, type CSSProperties } from 'react';
 import { getSystemInfo } from '@/service/system';
 import type { SystemInfo as SystemInfoData } from '@/service/types';
 import { Card } from '@/components/Card';
 import { Progress } from '@/components/Progress';
 import { usageColor } from '@/components/Progress/utils';
 import { StateFeedback } from '@/components/StateFeedback';
+import { Sparkline } from '@/components/Sparkline';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -29,38 +30,18 @@ function formatUptime(secs: number): string {
   return parts.join(' ');
 }
 
-interface MiniSparkProps {
-  active: boolean;
-  direction: 'up' | 'down' | 'flat';
-}
+type NetDirection = 'up' | 'down' | 'flat';
 
-const MiniSpark = ({ active, direction }: MiniSparkProps) => {
-  if (!active) return <div className="w-8 h-4 bg-surface-2/50 rounded-sm" />;
-  const colorClass =
-    direction === 'up'
-      ? 'text-success'
-      : direction === 'down'
-        ? 'text-info'
-        : 'text-on-surface-muted';
-  return (
-    <svg className={`w-8 h-4 ${colorClass}`} viewBox="0 0 32 16" fill="none">
-      <polyline
-        points={
-          direction === 'up'
-            ? '0,14 6,10 12,12 18,6 24,8 32,2'
-            : direction === 'down'
-              ? '0,2 6,6 12,4 18,10 24,8 32,14'
-              : '0,8 8,8 16,8 24,8 32,8'
-        }
-        strokeWidth="1.5"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-        opacity="0.6"
-      />
-    </svg>
-  );
+const NET_SPARKLINE_DATA: Record<NetDirection, number[]> = {
+  up: [2, 4, 3, 7, 6, 10],
+  down: [10, 6, 7, 3, 4, 2],
+  flat: [6, 6, 6, 6, 6, 6],
+};
+
+const NET_SPARKLINE_COLOR: Record<NetDirection, string> = {
+  up: 'var(--color-success-val)',
+  down: 'var(--color-info-val)',
+  flat: 'var(--text-on-surface-muted)',
 };
 
 const CpuIcon = () => (
@@ -147,7 +128,7 @@ const System = () => {
         lastNetSample.current = newSample;
         setNetRates(newRates);
       } else {
-        setError(res.error || '获取系统信息失败');
+        setError(res.message || '获取系统信息失败');
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '网络错误');
@@ -172,8 +153,13 @@ const System = () => {
   const memPct = info.memory.usage_pct;
 
   return (
-    <div className="h-full overflow-y-auto p-4 space-y-4">
-      {}
+    <div className="h-full overflow-y-auto max-w-5xl mx-auto px-4 md:px-8 py-6 space-y-4">
+      {/* Page title */}
+      <div>
+        <div className="text-base md:text-lg font-semibold text-on-surface">系统监控</div>
+      </div>
+
+      {/* Overview */}
       <Card title="系统概览" icon={<CpuIcon />}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           <div>
@@ -230,7 +216,7 @@ const System = () => {
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-caption text-on-surface-tertiary">型号</span>
-              <span className="text-on-surface text-2xs truncate ml-2 max-w-[180px]">
+              <span className="text-on-surface text-2xs truncate ml-2 max-w-45">
                 {info.cpu.brand}
               </span>
             </div>
@@ -355,7 +341,20 @@ const System = () => {
                           </span>
                         </span>
                       </div>
-                      <MiniSpark active={!!rate} direction={direction} />
+                      {rate ? (
+                        <span
+                          className="inline-flex opacity-60"
+                          style={
+                            {
+                              '--color-ai-val': NET_SPARKLINE_COLOR[direction],
+                            } as CSSProperties
+                          }
+                        >
+                          <Sparkline data={NET_SPARKLINE_DATA[direction]} width={32} height={16} />
+                        </span>
+                      ) : (
+                        <div className="w-8 h-4 bg-surface-2/50 rounded-sm" />
+                      )}
                     </div>
                   </div>
                   {net.ips.length > 0 && (

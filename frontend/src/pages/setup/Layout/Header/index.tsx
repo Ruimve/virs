@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Logo } from '@/components/Logo';
+import { BrandMark } from '@/components/BrandMark';
 import { Theme } from '@/components/Theme';
 import { Check } from '@/components/Icon';
 import { TOTAL_SETUP_STEPS } from '../../context/WizardContext/consts';
@@ -31,7 +31,7 @@ const Header = () => {
             {isCompleted ? <Check className="w-3.5 h-3.5" strokeWidth={2.5} /> : stepNum}
           </div>
           {i < TOTAL_SETUP_STEPS - 1 && (
-            <div className={`w-6 h-[1px] ${isCompleted ? 'bg-accent/40' : 'bg-line-default'}`} />
+            <div className={`w-6 h-px ${isCompleted ? 'bg-accent/40' : 'bg-line-default'}`} />
           )}
         </div>
       );
@@ -42,7 +42,7 @@ const Header = () => {
     <div className="relative z-10 flex items-center h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
       {}
       <div className="flex items-center gap-2 pl-4 md:pl-8 shrink-0">
-        <Logo />
+        <BrandMark size={24} />
       </div>
 
       {}
@@ -51,12 +51,7 @@ const Header = () => {
         <div className="hidden md:flex items-center gap-2">{fullSteps}</div>
       </div>
       {}
-      <div className="hidden md:flex items-center gap-2 pr-8 shrink-0">
-        <Theme />
-      </div>
-
-      {}
-      <div className="md:hidden flex items-center pr-4 ml-auto shrink-0">
+      <div className="flex items-center gap-2 pr-4 md:pr-8 ml-auto shrink-0">
         <Theme />
       </div>
     </div>

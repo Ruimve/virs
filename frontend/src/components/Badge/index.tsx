@@ -11,11 +11,11 @@ export interface BadgeProps {
 }
 
 const variantClasses: Record<BadgeVariant, string> = {
-  success: 'bg-success-bg text-success-text',
-  danger: 'bg-danger-bg text-danger-text',
-  warning: 'bg-warning-bg text-warning-text',
-  info: 'bg-info-bg text-info-text',
-  neutral: 'bg-surface-2 text-on-surface-tertiary',
+  success: 'bg-success-bg text-success-text border border-success-border',
+  danger: 'bg-danger-bg text-danger-text border border-danger-border',
+  warning: 'bg-warning-bg text-warning-text border border-warning-border',
+  info: 'bg-info-bg text-info-text border border-info-border',
+  neutral: 'bg-surface-2 text-on-surface-tertiary border border-line-default',
 };
 
 const sizeClasses: Record<BadgeSize, string> = {

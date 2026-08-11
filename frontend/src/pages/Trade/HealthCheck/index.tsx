@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '@/components/FlowStep';
-import { ChevronRight, Spinner } from '@/components/Icon';
+import type { FlowStepStatus } from '@/components/FlowStep';
+import { Check, Spinner, Warning } from '@/components/Icon';
 import { Button } from '@/components/Button';
 import {
   getAiStatus,
@@ -14,21 +14,20 @@ import {
 import { getSystemInfo } from '@/service/system';
 import type { SystemInfo } from '@/service/types';
 import { useBot } from '../context/BotContext';
-import { useHeader } from '../Layout/Header/HeaderContext';
+import { useShell } from '@/layout/ShellContext';
 import type { CheckData, CheckItem, CheckKey } from './define';
-import CheckDetail from './CheckDetail';
 
 const INITIAL_CHECKS: CheckItem[] = [
   {
     key: 'llm',
-    label: 'LLM Connectivity',
+    label: 'LLM Connection',
     description: 'AI analysis provider reachability',
     status: 'pending',
     detail: '',
   },
   {
     key: 'exchange',
-    label: 'Exchange Connectivity',
+    label: 'Exchange API',
     description: 'Exchange API credentials & latency',
     status: 'pending',
     detail: '',
@@ -49,17 +48,146 @@ const INITIAL_CHECKS: CheckItem[] = [
   },
   {
     key: 'trading',
-    label: 'Trading Mode',
+    label: 'Trading Engine',
     description: 'Paper vs. live execution mode',
     status: 'pending',
     detail: '',
   },
 ];
 
+/* ── Step card visual configs per status ── */
+
+interface StepVisual {
+  border: string;
+  bg: string;
+  iconBg: string;
+  iconContent: React.ReactNode;
+  label: string;
+  labelBg: string;
+  labelText: string;
+  titleClass: string;
+  detailClass: string;
+}
+
+const StepCard = memo(({ item }: { item: CheckItem }) => {
+  const visuals: Record<FlowStepStatus, StepVisual> = {
+    done: {
+      border: 'border-success-border',
+      bg: 'bg-success-bg',
+      iconBg: 'bg-success',
+      iconContent: <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />,
+      labelBg: 'bg-success/15',
+      labelText: 'text-success-text',
+      label: 'Passed',
+      titleClass: 'text-on-base',
+      detailClass: 'text-on-surface-tertiary',
+    },
+    verifying: {
+      border: 'border-info-border',
+      bg: 'bg-info-bg',
+      iconBg: 'bg-info shadow-glow-info',
+      iconContent: <Spinner className="w-3.5 h-3.5 text-white" />,
+      labelBg: 'bg-info/15',
+      labelText: 'text-info-text',
+      label: 'Running',
+      titleClass: 'text-on-base',
+      detailClass: 'text-info-text',
+    },
+    error: {
+      border: 'border-danger-border',
+      bg: 'bg-danger-bg',
+      iconBg: 'bg-danger',
+      iconContent: <Warning className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />,
+      labelBg: 'bg-danger/15',
+      labelText: 'text-danger-text',
+      label: 'Failed',
+      titleClass: 'text-on-base',
+      detailClass: 'text-danger-text',
+    },
+    active: {
+      border: 'border-accent-muted',
+      bg: 'bg-accent-light',
+      iconBg: 'bg-accent',
+      iconContent: <Spinner className="w-3.5 h-3.5 text-white" />,
+      labelBg: 'bg-accent/15',
+      labelText: 'text-accent',
+      label: 'Active',
+      titleClass: 'text-on-base',
+      detailClass: 'text-on-surface-tertiary',
+    },
+    pending: {
+      border: 'border-line-default',
+      bg: 'bg-surface-1',
+      iconBg: 'border-2 border-dashed border-on-surface-muted',
+      iconContent: <span className="text-on-surface-muted text-xs">○</span>,
+      labelBg: 'bg-surface-3',
+      labelText: 'text-on-surface-muted',
+      label: 'Pending',
+      titleClass: 'text-on-surface-muted',
+      detailClass: 'text-on-surface-muted',
+    },
+  };
+
+  const v = visuals[item.status];
+
+  return (
+    <div
+      className={`flex items-center gap-3 px-4 py-3.5 rounded-xl border ${v.border} ${v.bg} transition-all duration-300`}
+    >
+      {/* Status icon */}
+      <div
+        className={`shrink-0 w-6.5 h-6.5 rounded-full flex items-center justify-center ${v.iconBg}`}
+      >
+        {v.iconContent}
+      </div>
+
+      {/* Title + detail */}
+      <div className="flex-1 min-w-0">
+        <div className={`text-sm font-semibold ${v.titleClass}`}>{item.label}</div>
+        <div className={`text-2xs font-mono mt-0.5 ${v.detailClass} truncate`}>
+          {item.status === 'verifying'
+            ? 'Checking...'
+            : item.status === 'pending'
+              ? 'Waiting...'
+              : item.data?.message && item.status === 'error'
+                ? item.data.message
+                : item.detail || item.description}
+        </div>
+      </div>
+
+      {/* Status label */}
+      <span
+        className={`shrink-0 text-2xs font-semibold px-2 py-0.5 rounded-md ${v.labelBg} ${v.labelText} ${item.status === 'verifying' ? 'animate-pulse' : ''}`}
+      >
+        {v.label}
+      </span>
+    </div>
+  );
+});
+
+StepCard.displayName = 'StepCard';
+
+/* ── Error retry row ── */
+
+const ErrorRetry = memo(({ item, onRetry }: { item: CheckItem; onRetry: () => void }) => {
+  if (item.status !== 'error') return null;
+  return (
+    <div className="flex items-center gap-2 pl-10 pr-4 pb-2 -mt-1">
+      <Button variant="ghost" size="xs" responsive={false} onClick={onRetry}>
+        Retry
+      </Button>
+    </div>
+  );
+});
+
+ErrorRetry.displayName = 'ErrorRetry';
+
+/* ── Main component ── */
+
 const HealthCheck = () => {
   const navigate = useNavigate();
   const param = useParams();
-  const { updateTabs } = useHeader();
+  const { setNavItems } = useShell();
   const { bot } = useBot();
 
   const [checks, setChecks] = useState<CheckItem[]>(INITIAL_CHECKS);
@@ -91,7 +219,7 @@ const HealthCheck = () => {
       } else {
         updateCheck('llm', 'error', 'Unreachable', {
           providers,
-          message: test.error || test.data?.message || 'Connection test failed.',
+          message: test.message || test.data?.message || 'Connection test failed.',
         });
       }
     } catch {
@@ -116,7 +244,7 @@ const HealthCheck = () => {
       } else {
         updateCheck('exchange', 'error', 'Ping failed', {
           exchange,
-          message: test.data?.message || test.error || 'Exchange did not respond.',
+          message: test.data?.message || test.message || 'Exchange did not respond.',
         });
       }
     } catch {
@@ -133,7 +261,7 @@ const HealthCheck = () => {
         updateCheck('api', 'done', version ? `Online · v${version}` : 'Online', { version });
       } else {
         updateCheck('api', 'error', 'Unavailable', {
-          message: res.error || 'Backend service is not responding.',
+          message: res.message || 'Backend service is not responding.',
         });
       }
     } catch {
@@ -147,7 +275,7 @@ const HealthCheck = () => {
       const res = await getSystemInfo();
       if (!res.success || !res.data) {
         updateCheck('system', 'error', 'Unable to read metrics', {
-          message: res.error || 'System metrics unavailable.',
+          message: res.message || 'System metrics unavailable.',
         });
         return;
       }
@@ -173,7 +301,7 @@ const HealthCheck = () => {
       const res = await getPaperStatus();
       if (!res.success || res.data === undefined) {
         updateCheck('trading', 'error', 'Unknown', {
-          message: res.error || 'Unable to determine trading mode.',
+          message: res.message || 'Unable to determine trading mode.',
         });
         return;
       }
@@ -220,8 +348,8 @@ const HealthCheck = () => {
   }, [runLlmCheck, runExchangeCheck, runApiCheck, runSystemCheck, runTradingCheck]);
 
   useEffect(() => {
-    updateTabs([{ key: 'health', label: 'Health Check', onClick: () => {} }]);
-  }, [updateTabs]);
+    setNavItems([]);
+  }, [setNavItems]);
 
   useEffect(() => {
     runChecks();
@@ -233,104 +361,127 @@ const HealthCheck = () => {
   const settled = passed + failed;
   const allDone = settled === total;
 
-  const statuses: Record<string, FlowStepStatus> = {};
-  for (const c of checks) statuses[c.key] = c.status;
-
-  const summaries: Record<string, string> = {};
-  for (const c of checks) {
-    if (c.status === 'done' && c.detail) summaries[c.key] = c.detail;
-  }
-
-  const steps: FlowStepConfig[] = checks.map((c) => ({
-    key: c.key,
-    title: c.label,
-    description: c.description,
-    render: () => <CheckDetail item={c} onRetry={() => checkRunners[c.key]()} />,
-  }));
-
   const handleContinue = () => {
     navigate(`/trade/${param.botType}/${bot?.id}`, { replace: true });
   };
 
-  const tone = running ? 'accent' : failed === 0 ? 'success' : 'warning';
-  const toneClasses: Record<string, string> = {
-    accent: 'bg-accent-light text-accent',
-    success: 'bg-success-bg text-success-text',
-    warning: 'bg-warning-bg text-warning-text',
-  };
-  const headline = running
-    ? 'Checking system…'
-    : failed === 0
-      ? 'All systems operational'
-      : `${failed} of ${total} checks failed`;
   const progressPct = total > 0 ? (settled / total) * 100 : 0;
-  const Progress =
+
+  // Status badge config
+  const badgeConfig = running
+    ? {
+        bg: 'bg-accent-light',
+        text: 'text-accent',
+        border: 'border-accent-muted',
+        label: 'Running',
+        dot: 'bg-accent',
+        pulse: true,
+      }
+    : failed === 0
+      ? {
+          bg: 'bg-success-bg',
+          text: 'text-success-text',
+          border: 'border-success-border',
+          label: 'Operational',
+          dot: 'bg-success',
+          pulse: false,
+        }
+      : {
+          bg: 'bg-warning-bg',
+          text: 'text-warning-text',
+          border: 'border-warning-border',
+          label: 'Issues',
+          dot: 'bg-warning',
+          pulse: false,
+        };
+
+  // const headline = running
+  //   ? 'Checking system...'
+  //   : failed === 0
+  //     ? 'All systems operational'
+  //     : `${failed} of ${total} checks failed`;
+
+  const progressBarColor =
     running || settled < total ? 'bg-accent' : failed > 0 ? 'bg-warning' : 'bg-success';
 
   return (
-    <div className="max-w-lg mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-6">
-      {}
-      <div className="mb-6">
-        <h2 className="text-xl md:text-2xl font-extralight tracking-wide text-on-base">
-          Health Check
-        </h2>
-        <p className="mt-1.5 text-sm text-on-surface-tertiary">
-          Pre-flight verification of system components
-        </p>
-      </div>
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-lg mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-6">
+        {/* Title */}
+        <div className="text-center mb-6">
+          <h2 className="text-xl md:text-2xl font-extralight tracking-wide text-on-base">
+            Health Check
+          </h2>
+          <p className="mt-1.5 text-sm text-on-surface-tertiary">Pre-launch verification</p>
+        </div>
 
-      {}
-      <div className="mb-6 rounded-xl border border-line-subtle bg-surface-1 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span
-              className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-caption font-medium ${toneClasses[tone]}`}
-            >
-              {running && <Spinner className="w-3 h-3" />}
-              {running ? 'Running' : failed === 0 ? 'Operational' : 'Issues'}
-            </span>
-            <div>
-              <p className="text-sm font-medium text-on-surface">{headline}</p>
-              <p className="text-xs text-on-surface-tertiary mt-0.5">
-                {passed} of {total} checks passed
-              </p>
+        {/* Status summary card */}
+        <div className="mb-5 rounded-xl border border-line-subtle bg-surface-1 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2.5">
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-caption font-medium border ${badgeConfig.bg} ${badgeConfig.text} ${badgeConfig.border}`}
+              >
+                {running && <Spinner className="w-3 h-3" />}
+                {!running && (
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${badgeConfig.dot} ${badgeConfig.pulse ? 'animate-pulse' : ''}`}
+                  />
+                )}
+                {badgeConfig.label}
+              </span>
+              <span className="text-xs font-mono text-on-surface-secondary">
+                {passed} of {total} passed
+              </span>
             </div>
+            <Button
+              variant="accent-outline"
+              size="small"
+              responsive={false}
+              onClick={runChecks}
+              loading={running}
+            >
+              Re-run
+            </Button>
           </div>
-          <Button
-            variant="secondary"
-            size="small"
-            responsive={false}
-            onClick={runChecks}
-            loading={running}
-          >
-            {running ? 'Running' : 'Re-run'}
-          </Button>
+          {/* Progress bar */}
+          <div className="flex items-center gap-2.5">
+            <div className="flex-1 h-1.5 rounded-full bg-surface-3 overflow-hidden">
+              <div
+                className={`h-full ${progressBarColor} rounded-full transition-all duration-500`}
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <span className="text-xs font-mono font-semibold tabular-nums text-on-surface-secondary">
+              {progressPct.toFixed(0)}%
+            </span>
+          </div>
         </div>
-        <div className="mt-3 h-1 w-full bg-surface-2 rounded-full overflow-hidden">
-          <div
-            className={`h-full ${Progress} rounded-full transition-all duration-500`}
-            style={{ width: `${progressPct}%` }}
-          />
+
+        {/* Check steps */}
+        <div className="flex flex-col gap-2.5">
+          {checks.map((check) => (
+            <div key={check.key}>
+              <StepCard item={check} />
+              <ErrorRetry item={check} onRetry={() => checkRunners[check.key]()} />
+            </div>
+          ))}
         </div>
+
+        {/* Continue button — only when all checks settled */}
+        {allDone && (
+          <div className="mt-6 flex items-center justify-between">
+            <p className="text-xs text-on-surface-tertiary">
+              {failed > 0
+                ? `${failed} check${failed > 1 ? 's' : ''} failed — you can still continue.`
+                : 'All checks passed.'}
+            </p>
+            <Button variant="primary" size="normal" responsive={false} onClick={handleContinue}>
+              Continue
+            </Button>
+          </div>
+        )}
       </div>
-
-      {}
-      <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
-
-      {}
-      {allDone && (
-        <div className="mt-6 flex items-center justify-between">
-          <p className="text-xs text-on-surface-tertiary">
-            {failed > 0
-              ? `${failed} check${failed > 1 ? 's' : ''} failed — you can still continue.`
-              : 'All checks passed.'}
-          </p>
-          <Button variant="primary" size="normal" responsive={false} onClick={handleContinue}>
-            Continue
-            <ChevronRight className="w-4 h-4" />
-          </Button>
-        </div>
-      )}
     </div>
   );
 };

@@ -5,7 +5,6 @@ import { TradeLoading } from '@/components/Transition/Icon';
 import { Badge } from '@/components/Badge';
 import { StateFeedback } from '@/components/StateFeedback';
 import { Pagination } from '@/components/Pagination';
-import { formatPnl } from '../../components/utils/utils';
 
 const PAGE_SIZE = 20;
 
@@ -42,76 +41,101 @@ const Trades = () => {
 
   return (
     <div className="h-full overflow-y-auto max-w-5xl mx-auto px-4 md:px-8 py-6">
+      {/* Title row */}
+      {trades.length > 0 && (
+        <div className="flex items-end justify-between mb-4">
+          <div>
+            <div className="text-sm font-semibold text-on-surface">交易记录</div>
+            <div className="text-2xs text-on-surface-tertiary font-mono mt-0.5">共 {total} 条</div>
+          </div>
+        </div>
+      )}
+
       {trades.length > 0 ? (
-        <div className="bg-surface-1 rounded-xl border border-line-default shadow-sm overflow-hidden">
+        <div className="bg-surface-1 rounded-xl border border-line-default overflow-hidden">
           <div className="divide-y divide-line-subtle">
             {trades.map((t, idx) => {
               const isClosed = t.status === 'closed';
               const totalFee = t.open_fee + t.close_fee;
+              const isOpenBuy = t.open_side === 'buy';
+              const pnlPositive = t.pnl > 0;
+              const pnlColor = pnlPositive ? 'text-success-text' : 'text-danger-text';
+
               return (
                 <div
                   key={`${t.id}-${idx}`}
-                  className="flex items-center justify-between px-5 py-3 hover:bg-surface-2/50"
+                  className="flex items-center gap-3.5 px-4 py-3 hover:bg-surface-2/50"
                 >
-                  <div className="flex items-center gap-3">
-                    <Badge
-                      variant={
-                        t.status === 'open'
-                          ? 'warning'
-                          : t.close_reason === 'stop_loss'
-                            ? 'danger'
-                            : t.close_reason === 'take_profit'
-                              ? 'success'
-                              : t.close_reason === 'llm_decision'
-                                ? 'info'
-                                : 'warning'
-                      }
-                    >
-                      {t.status === 'open'
-                        ? '持仓中'
+                  <Badge
+                    variant={
+                      t.status === 'open'
+                        ? 'warning'
                         : t.close_reason === 'stop_loss'
-                          ? '止损'
+                          ? 'danger'
                           : t.close_reason === 'take_profit'
-                            ? '止盈'
-                            : t.close_reason === 'position_timeout'
-                              ? '超时'
-                              : t.close_reason === 'llm_decision'
-                                ? 'LLM平仓'
-                                : '已平仓'}
-                    </Badge>
-                    <div>
-                      <div className="text-xs text-on-surface font-mono">
-                        {t.open_side === 'buy' ? '开多' : '开空'} {t.open_quantity.toFixed(6)} @{' '}
+                            ? 'success'
+                            : t.close_reason === 'llm_decision'
+                              ? 'info'
+                              : 'warning'
+                    }
+                  >
+                    {t.status === 'open'
+                      ? '持仓中'
+                      : t.close_reason === 'stop_loss'
+                        ? '止损'
+                        : t.close_reason === 'take_profit'
+                          ? '止盈'
+                          : t.close_reason === 'position_timeout'
+                            ? '超时'
+                            : t.close_reason === 'llm_decision'
+                              ? 'LLM平仓'
+                              : '已平仓'}
+                  </Badge>
+
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-xs font-mono font-semibold ${isOpenBuy ? 'text-success-text' : 'text-danger-text'}`}
+                      >
+                        {isOpenBuy ? '开多' : '开空'}
+                      </span>
+                      <span className="text-xs font-mono font-semibold text-accent">
                         {t.open_price.toFixed(2)}
-                        {isClosed && t.close_side && (
-                          <span className="text-on-surface-secondary ml-2">
-                            → {t.close_side === 'buy' ? '平空' : '平多'}{' '}
-                            {t.close_quantity?.toFixed(6)} @ {t.close_price?.toFixed(2)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-2xs text-on-surface-tertiary mt-0.5">
-                        {new Date(t.opened_at).toLocaleString('zh-CN')}
-                        {isClosed && t.closed_at && (
-                          <span className="ml-1">
-                            {' '}
-                            → {new Date(t.closed_at).toLocaleString('zh-CN')}
-                          </span>
-                        )}
-                        {totalFee > 0 && (
-                          <span className="text-warning-text ml-2 font-mono">
-                            手续费 {totalFee.toFixed(4)}
-                          </span>
-                        )}
-                      </div>
+                      </span>
+                      <span className="text-2xs text-on-surface-muted">
+                        {t.open_quantity.toFixed(6)}
+                      </span>
+                      {isClosed && t.close_side && (
+                        <span className="text-2xs text-on-surface-secondary">
+                          → {t.close_side === 'buy' ? '平空' : '平多'} {t.close_price?.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-2xs text-on-surface-tertiary font-mono">
+                      {new Date(t.opened_at).toLocaleString('zh-CN')}
+                      {isClosed && t.closed_at && (
+                        <span className="ml-1">
+                          → {new Date(t.closed_at).toLocaleString('zh-CN')}
+                        </span>
+                      )}
+                      {totalFee > 0 && (
+                        <span className="text-warning-text ml-2">手续费 {totalFee.toFixed(4)}</span>
+                      )}
                     </div>
                   </div>
+
+                  <div className="flex-1" />
+
                   {isClosed && t.pnl !== 0 && (
-                    <div className="text-right">
-                      {formatPnl(t.pnl)}
+                    <div className="text-right shrink-0">
+                      <div className={`text-xs font-mono font-bold ${pnlColor}`}>
+                        {pnlPositive ? '+' : ''}
+                        {t.pnl.toFixed(4)}
+                      </div>
                       {t.pnl_pct !== 0 && (
-                        <div className="text-2xs text-on-surface-tertiary font-mono">
-                          {t.pnl_pct.toFixed(2)} %
+                        <div className={`text-2xs font-mono ${pnlColor}`}>
+                          {pnlPositive ? '+' : ''}
+                          {t.pnl_pct.toFixed(2)}%
                         </div>
                       )}
                     </div>
@@ -121,7 +145,6 @@ const Trades = () => {
             })}
           </div>
 
-          {}
           <Pagination
             total={total}
             page={page}

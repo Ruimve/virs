@@ -5,9 +5,19 @@ import { AiThinking } from '@/components/Transition/Icon';
 import { ChevronLeft, ChevronRight } from '@/components/Icon';
 import { Badge } from '@/components/Badge';
 import { Card } from '@/components/Card';
-import { Title } from '@/components/Title';
+import { ConfidenceBar } from '@/components/ConfidenceBar';
+import { IndicatorChip } from '@/components/IndicatorChip';
+import { RadarChart } from '@/components/RadarChart';
+import { Alert } from '@/components/Alert';
 import { IconBtn } from '@/components/Button/IconBtn';
 import { actionLabel, actionVariant } from '../utils/utils';
+import {
+  getDecision,
+  extractIndicatorChips,
+  extractRadarData,
+  extractTargetPrices,
+} from '../utils/logUtils';
+import { formatCompact } from '../../AutoBot/Bot/components/utils';
 
 interface Props {
   log: AnalysisLog;
@@ -19,11 +29,6 @@ const LogDetail = ({ log, loading }: Props) => {
 
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const [showUserPrompt, setShowUserPrompt] = useState(false);
-
-  const getDecision = (log: AnalysisLog) => {
-    if (log.result?.decision) return log.result.decision;
-    return null;
-  };
 
   if (loading) {
     return (
@@ -61,10 +66,18 @@ const LogDetail = ({ log, loading }: Props) => {
   }
 
   const decision = getDecision(log);
+  const confidence = decision?.confidence ?? 0;
+  const confidencePct = confidence * 100;
+  const reason = decision?.reason || log.result?.analysis || '';
+  const indicators = extractIndicatorChips(log.result?.market);
+  const radarData = extractRadarData(log);
+  const targets = extractTargetPrices(log);
+  const market = log.result?.market;
+  const risk = log.result?.risk;
 
   return (
     <div className="h-full overflow-y-auto bg-base">
-      {}
+      {/* Sticky header */}
       <div className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-8 h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <IconBtn onClick={() => navigate(-1)}>
@@ -76,141 +89,235 @@ const LogDetail = ({ log, loading }: Props) => {
 
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-6">
         <div className="space-y-4">
-          {}
+          {/* Decision summary card */}
           <Card>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                {decision && (
-                  <Badge variant={actionVariant(decision.action)} size="sm">
-                    {actionLabel(decision.action)}
-                  </Badge>
-                )}
-                {log.status === 'failed' && (
-                  <Badge variant="danger" size="sm">
-                    失败
-                  </Badge>
-                )}
-              </div>
-              <span className="text-caption text-on-surface-tertiary">
+            <div className="flex items-center gap-3 mb-3">
+              {decision && (
+                <Badge variant={actionVariant(decision.action)} size="sm">
+                  {actionLabel(decision.action)}
+                </Badge>
+              )}
+              {log.status === 'failed' && (
+                <Badge variant="danger" size="sm">
+                  失败
+                </Badge>
+              )}
+              {log.llm_model && (
+                <span className="text-2xs font-mono px-2 py-0.5 rounded bg-surface-3 text-on-surface-secondary border border-line-default">
+                  {log.llm_model}
+                </span>
+              )}
+              <span className="text-2xs text-on-surface-tertiary font-mono tabular-nums">
                 {new Date(log.created_at).toLocaleString('zh-CN')}
               </span>
+              <div className="flex-1" />
+              {/* Large confidence display */}
+              {confidence > 0 && (
+                <div className="text-right">
+                  <div className="text-2xs text-on-surface-muted uppercase tracking-wider">
+                    置信度
+                  </div>
+                  <div className="text-2xl font-bold font-mono tabular-nums text-ai leading-tight">
+                    {confidencePct.toFixed(0)}%
+                  </div>
+                </div>
+              )}
             </div>
-            {log.llm_model && (
-              <div className="text-caption text-on-surface-tertiary mb-2">
-                模型: <span className="text-accent font-mono">{log.llm_model}</span>
-              </div>
-            )}
-            {decision?.confidence != null && (
-              <div className="text-caption text-on-surface-tertiary">
-                置信度:{' '}
-                <span className="text-on-surface-secondary font-mono">
-                  {(decision.confidence * 100).toFixed(0)}%
-                </span>
-              </div>
-            )}
+            {/* Confidence bar */}
+            {confidence > 0 && <ConfidenceBar value={confidencePct} />}
           </Card>
 
-          {}
-          {decision && (
-            <Card>
-              <Title className="mb-2">决策</Title>
-              {decision.reason && (
-                <p className="text-xs text-on-surface-secondary leading-relaxed">
-                  {decision.reason}
-                </p>
+          {/* AI reasoning card with ai-bg */}
+          {(reason || indicators.length > 0) && (
+            <div className="rounded-xl border border-ai-border bg-ai-bg p-4">
+              {reason && (
+                <>
+                  <div className="text-2xs font-semibold text-ai uppercase tracking-wider mb-2">
+                    AI 推理
+                  </div>
+                  <p className="text-xs text-on-surface-secondary leading-relaxed mb-3">{reason}</p>
+                </>
               )}
-            </Card>
+              {indicators.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {indicators.map((ind) => (
+                    <IndicatorChip
+                      key={ind.name}
+                      name={ind.name}
+                      value={ind.value}
+                      sentiment={ind.sentiment}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
-          {}
-          {log.result?.analysis && (
+          {/* Radar chart + Market state (desktop 2-col) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Radar chart card */}
             <Card>
-              <Title className="mb-2">AI 分析</Title>
-              <p className="text-xs text-on-surface-secondary leading-relaxed whitespace-pre-wrap">
-                {log.result.analysis}
-              </p>
+              <div className="text-2xs font-semibold text-on-surface-tertiary uppercase tracking-wider mb-3">
+                指标雷达
+              </div>
+              <div className="flex items-center justify-center">
+                <RadarChart data={radarData} size={140} />
+              </div>
             </Card>
-          )}
 
-          {}
-          {log.result?.market && (
+            {/* Market state card */}
+            {market && (
+              <Card>
+                <div className="text-2xs font-semibold text-on-surface-tertiary uppercase tracking-wider mb-3">
+                  市场状态
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {market.market_regime && (
+                    <div>
+                      <div className="text-2xs text-on-surface-muted">市场形态</div>
+                      <span
+                        className={`inline-block mt-0.5 px-2 py-0.5 text-2xs rounded font-medium ${
+                          market.market_regime === 'ranging'
+                            ? 'bg-info-bg text-info-text'
+                            : market.market_regime === 'trending_up'
+                              ? 'bg-success-bg text-success-text'
+                              : market.market_regime === 'trending_down'
+                                ? 'bg-danger-bg text-danger-text'
+                                : market.market_regime === 'volatile'
+                                  ? 'bg-warning-bg text-warning-text'
+                                  : 'bg-surface-2 text-on-surface-secondary'
+                        }`}
+                      >
+                        {market.market_regime}
+                      </span>
+                    </div>
+                  )}
+                  {market.rsi != null && (
+                    <div>
+                      <div className="text-2xs text-on-surface-muted">RSI</div>
+                      <div className="text-xs font-mono font-semibold tabular-nums text-on-surface">
+                        {Number(market.rsi).toFixed(1)}
+                      </div>
+                    </div>
+                  )}
+                  {market.macd != null && (
+                    <div>
+                      <div className="text-2xs text-on-surface-muted">MACD</div>
+                      <div className="text-xs font-mono font-semibold tabular-nums text-on-surface">
+                        {Number(market.macd).toFixed(4)}
+                      </div>
+                    </div>
+                  )}
+                  {market.ema != null && (
+                    <div>
+                      <div className="text-2xs text-on-surface-muted">EMA</div>
+                      <div className="text-xs font-mono font-semibold tabular-nums text-on-surface">
+                        {Number(market.ema).toFixed(2)}
+                      </div>
+                    </div>
+                  )}
+                  {market.atr != null && (
+                    <div>
+                      <div className="text-2xs text-on-surface-muted">ATR</div>
+                      <div className="text-xs font-mono font-semibold tabular-nums text-on-surface">
+                        {Number(market.atr).toFixed(2)}
+                      </div>
+                    </div>
+                  )}
+                  {market.adx != null && (
+                    <div>
+                      <div className="text-2xs text-on-surface-muted">ADX</div>
+                      <div className="text-xs font-mono font-semibold tabular-nums text-on-surface">
+                        {Number(market.adx).toFixed(1)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {market.funding_rate_warning && (
+                  <p className="text-2xs text-warning-text mt-2">{market.funding_rate_warning}</p>
+                )}
+                {market.event_impact && (
+                  <p className="text-2xs text-ai mt-1">{market.event_impact}</p>
+                )}
+              </Card>
+            )}
+          </div>
+
+          {/* Risk parameters card */}
+          {(risk || targets.entry || targets.stopLoss || targets.takeProfit) && (
             <Card>
-              <Title className="mb-2">市场状态</Title>
-              <div className="space-y-1">
-                {log.result.market.market_regime && (
-                  <span
-                    className={`px-2 py-0.5 text-xs rounded font-medium ${
-                      log.result.market.market_regime === 'ranging'
-                        ? 'bg-info-bg text-info-text'
-                        : log.result.market.market_regime === 'trending_up'
-                          ? 'bg-success-bg text-success-text'
-                          : log.result.market.market_regime === 'trending_down'
-                            ? 'bg-danger-bg text-danger-text'
-                            : log.result.market.market_regime === 'volatile'
-                              ? 'bg-warning-bg text-warning-text'
-                              : 'bg-surface-2 text-on-surface-secondary'
-                    }`}
-                  >
-                    {log.result.market.market_regime}
-                  </span>
+              <div className="text-2xs font-semibold text-on-surface-tertiary uppercase tracking-wider mb-3">
+                风控参数
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                {targets.entry != null && (
+                  <div>
+                    <div className="text-2xs text-on-surface-muted">入场价</div>
+                    <div className="text-xs font-mono font-semibold tabular-nums text-on-surface">
+                      {formatCompact(targets.entry)}
+                    </div>
+                  </div>
                 )}
-                {log.result.market.funding_rate_warning && (
-                  <p className="text-xs text-warning-text">
-                    ⚠ 资金费率: {log.result.market.funding_rate_warning}
-                  </p>
+                {targets.stopLoss != null && (
+                  <div>
+                    <div className="text-2xs text-on-surface-muted">止损</div>
+                    <div className="text-xs font-mono font-semibold tabular-nums text-danger-text">
+                      {formatCompact(targets.stopLoss)}
+                    </div>
+                  </div>
                 )}
-                {log.result.market.event_impact && (
-                  <p className="text-xs text-accent">事件影响: {log.result.market.event_impact}</p>
+                {targets.takeProfit != null && (
+                  <div>
+                    <div className="text-2xs text-on-surface-muted">止盈</div>
+                    <div className="text-xs font-mono font-semibold tabular-nums text-success-text">
+                      {formatCompact(targets.takeProfit)}
+                    </div>
+                  </div>
+                )}
+                {risk?.leverage && (
+                  <div>
+                    <div className="text-2xs text-on-surface-muted">杠杆</div>
+                    <div className="text-xs font-mono font-semibold tabular-nums text-warning-text">
+                      {risk.leverage}x
+                    </div>
+                  </div>
+                )}
+                {risk?.position_size && (
+                  <div>
+                    <div className="text-2xs text-on-surface-muted">仓位</div>
+                    <div className="text-xs font-mono font-semibold tabular-nums text-on-surface">
+                      {risk.position_size}
+                    </div>
+                  </div>
                 )}
               </div>
             </Card>
           )}
 
-          {}
-
-          {log.result?.risk && log.result.risk.leverage && (
-            <Card>
-              <Title className="mb-2">风控参数</Title>
-              <div className="flex flex-wrap gap-3 text-xs text-on-surface-secondary">
-                {log.result.risk.leverage && <span>杠杆 {log.result.risk.leverage}x</span>}
-              </div>
-            </Card>
-          )}
-
-          {}
+          {/* Risk warning */}
           {log.result?.risk_warning && log.result.risk_warning !== 'none' && (
-            <div className="bg-warning/5 rounded-xl border border-warning-border p-5">
-              <div className="text-2xs text-warning-text uppercase tracking-wider mb-2">
-                风险提示
-              </div>
-              <p className="text-xs text-warning-text">{log.result.risk_warning}</p>
-            </div>
+            <Alert type="warning" title={log.result.risk_warning} />
           )}
 
-          {}
-          {log.error && (
-            <div className="bg-danger/5 rounded-xl border border-danger-border p-5">
-              <div className="text-2xs text-danger-text uppercase tracking-wider mb-2">错误</div>
-              <pre className="text-xs text-danger-text whitespace-pre-wrap">{log.error}</pre>
-            </div>
-          )}
+          {/* Error */}
+          {log.error && <Alert type="danger" title={log.error} />}
 
-          {}
+          {/* System Prompt */}
           {log.system_prompt && (
             <Card padding={false} className="overflow-hidden">
               <div
                 onClick={() => setShowSystemPrompt(!showSystemPrompt)}
-                className="w-full flex items-center gap-2 px-5 py-3 text-2xs text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors cursor-pointer"
+                className="w-full flex items-center justify-between gap-2 px-4 py-3 text-2xs font-mono font-semibold text-on-surface-secondary uppercase tracking-wider hover:text-on-surface transition-colors cursor-pointer"
               >
+                System Prompt
                 <ChevronRight
                   className={`w-3 h-3 transition-transform ${showSystemPrompt ? 'rotate-90' : ''}`}
                   strokeWidth={2}
                 />
-                System Prompt
               </div>
               {showSystemPrompt && (
-                <div className="px-5 pb-4">
-                  <pre className="text-caption text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
+                <div className="px-4 pb-4">
+                  <pre className="text-caption text-on-surface-tertiary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
                     {log.system_prompt}
                   </pre>
                 </div>
@@ -218,22 +325,22 @@ const LogDetail = ({ log, loading }: Props) => {
             </Card>
           )}
 
-          {}
+          {/* User Prompt */}
           {log.user_prompt && (
             <Card padding={false} className="overflow-hidden">
               <div
                 onClick={() => setShowUserPrompt(!showUserPrompt)}
-                className="w-full flex items-center gap-2 px-5 py-3 text-2xs text-on-surface-tertiary uppercase tracking-wider hover:text-on-surface-secondary transition-colors cursor-pointer"
+                className="w-full flex items-center justify-between gap-2 px-4 py-3 text-2xs font-mono font-semibold text-on-surface-secondary uppercase tracking-wider hover:text-on-surface transition-colors cursor-pointer"
               >
+                User Prompt
                 <ChevronRight
                   className={`w-3 h-3 transition-transform ${showUserPrompt ? 'rotate-90' : ''}`}
                   strokeWidth={2}
                 />
-                User Prompt
               </div>
               {showUserPrompt && (
-                <div className="px-5 pb-4">
-                  <pre className="text-caption text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
+                <div className="px-4 pb-4">
+                  <pre className="text-caption text-on-surface-tertiary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
                     {log.user_prompt}
                   </pre>
                 </div>
@@ -241,11 +348,13 @@ const LogDetail = ({ log, loading }: Props) => {
             </Card>
           )}
 
-          {}
+          {/* LLM raw response */}
           {log.result?.raw_llm_response && (
             <Card>
-              <Title className="mb-2">LLM 原始响应</Title>
-              <pre className="text-caption text-accent bg-accent/5 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-accent/10">
+              <div className="text-2xs font-semibold text-on-surface-tertiary uppercase tracking-wider mb-2">
+                LLM 原始响应
+              </div>
+              <pre className="text-caption text-ai bg-ai-bg rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-ai-border">
                 {typeof log.result.raw_llm_response === 'string'
                   ? log.result.raw_llm_response
                   : JSON.stringify(log.result.raw_llm_response, null, 2)}
@@ -253,10 +362,12 @@ const LogDetail = ({ log, loading }: Props) => {
             </Card>
           )}
 
-          {}
+          {/* Full result fallback */}
           {log.result && !log.result.raw_llm_response && (
             <Card>
-              <Title className="mb-2">完整结果</Title>
+              <div className="text-2xs font-semibold text-on-surface-tertiary uppercase tracking-wider mb-2">
+                完整结果
+              </div>
               <pre className="text-caption text-on-surface-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed border border-line-subtle">
                 {JSON.stringify(log.result, null, 2)}
               </pre>

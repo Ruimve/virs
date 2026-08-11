@@ -7,7 +7,7 @@ export interface TitleProps {
 
 export const Title = memo(({ children, className = '' }: TitleProps) => (
   <div
-    className={`text-caption uppercase tracking-[0.15em] text-on-surface-tertiary font-medium ${className}`}
+    className={`text-caption uppercase tracking-caption text-on-surface-tertiary font-medium ${className}`}
   >
     {children}
   </div>

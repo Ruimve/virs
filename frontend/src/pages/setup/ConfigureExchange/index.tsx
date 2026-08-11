@@ -1,8 +1,7 @@
-import { useState, useCallback, type ReactNode, useMemo, useTransition } from 'react';
+import { useState, useCallback, useRef, useMemo, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Check, Lock } from '@/components/Icon';
 import { Wizard } from '../context/WizardContext/Wizard';
-import { FlowSteps, type FlowStepConfig, type FlowStepStatus } from '@/components/FlowStep';
-import { Input } from '@/components/Input';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
 import {
   saveCredential,
@@ -10,9 +9,21 @@ import {
   checkPermissions,
   fetchPositionMode,
 } from '../../../service';
-import type { PermissionItem } from '../../../service';
+import type { PermissionItem, PositionModeResult } from '../../../service';
 import { WizardStep } from '../context/WizardContext/consts';
 import { Button } from '@/components/Button';
+import { Input } from '@/components/Input';
+import { FormCard, FormField, InlineBadge, type BadgeState } from '../components';
+
+const KeyIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+    <path
+      d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
 const normalizePemSecret = (raw: string): string => {
   const value = raw.trim();
@@ -41,72 +52,74 @@ const normalizePemSecret = (raw: string): string => {
   return `${header}\n${lines.join('\n')}\n${footer}`;
 };
 
+type VerifyStage = 'idle' | 'verifying' | 'done' | 'error';
+
 const ConfigureExchange = () => {
   const navigate = useNavigate();
   const [isPending, startTransition] = useTransition();
   const { wizard, updateWizard, advanceStep } = useWizard();
   useWizardGuard(wizard.current_step, WizardStep.SelectExchange);
 
-  const [step1Status, setStep1Status] = useState<FlowStepStatus>('active');
-  const [step1Error, setStep1Error] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
 
-  const [step2Status, setStep2Status] = useState<FlowStepStatus>('pending');
-  const [step2Error, setStep2Error] = useState<string | null>(null);
+  const [connBadgeState, setConnBadgeState] = useState<BadgeState>('idle');
+  const [connBadgeText, setConnBadgeText] = useState('');
 
-  const [step3Status, setStep3Status] = useState<FlowStepStatus>('pending');
-  const [step3Error, setStep3Error] = useState<string | null>(null);
+  const [permStage, setPermStage] = useState<VerifyStage>('idle');
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
 
-  const [step4Status, setStep4Status] = useState<FlowStepStatus>('pending');
-  const [step4Error, setStep4Error] = useState<string | null>(null);
+  const [posStage, setPosStage] = useState<VerifyStage>('idle');
+  const [, setPosResult] = useState<PositionModeResult | null>(null);
+  const [posError, setPosError] = useState('');
 
-  const resetSteps = useCallback(() => {
-    setStep1Status('active');
-    setStep1Error(null);
-    setStep2Status('pending');
-    setStep2Error(null);
-    setStep3Status('pending');
-    setStep3Error(null);
-    setStep4Status('pending');
-    setStep4Error(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetVerification = useCallback(() => {
+    setConnBadgeState('idle');
+    setConnBadgeText('');
+    setPermStage('idle');
+    setPermissions([]);
+    setPosStage('idle');
+    setPosResult(null);
+    setPosError('');
   }, []);
 
-  const startStep4 = useCallback(async () => {
-    setStep4Status('verifying');
+  const checkPositionMode = useCallback(async () => {
+    setPosStage('verifying');
     try {
       const result = await fetchPositionMode();
       if (!result.success || !result.data) {
-        setStep4Status('error');
-        setStep4Error(result.error || 'Failed to query position mode');
+        setPosStage('error');
+        setPosError(result.message || 'Failed to query position mode');
         return;
       }
 
       const { supported, mode } = result.data;
+      setPosResult(result.data);
       if (!supported) {
-        setStep4Status('error');
-        setStep4Error('当前交易所不支持持仓模式查询，请确认账户配置。');
+        setPosStage('error');
+        setPosError('当前交易所不支持持仓模式查询，请确认账户配置。');
         return;
       }
 
       if (mode === 'hedge') {
-        setStep4Status('done');
+        setPosStage('done');
         return;
       }
 
-      setStep4Status('error');
-      setStep4Error(
+      setPosStage('error');
+      setPosError(
         '当前为单向持仓模式。请在 Binance APP > 合约 > 设置 > 持仓模式 中切换到双向持仓后重新验证。',
       );
     } catch {
-      setStep4Status('error');
-      setStep4Error('Network error');
+      setPosStage('error');
+      setPosError('Network error');
     }
   }, []);
 
-  const startStep3 = useCallback(async () => {
-    setStep3Status('verifying');
+  const checkPerms = useCallback(async () => {
+    setPermStage('verifying');
     try {
       const result = await checkPermissions();
       if (result.success && result.data?.permissions) {
@@ -115,208 +128,95 @@ const ConfigureExchange = () => {
           (p) => p.status === 'ok' || p.status === 'warn',
         );
         if (allOk) {
-          setStep3Status('done');
-          startStep4();
+          setPermStage('done');
+          await checkPositionMode();
           return;
         }
-        setStep3Status('active');
+        setPermStage('error');
         return;
       }
 
-      setStep3Status('error');
-      setStep3Error(result.error || 'Permission check failed');
+      setPermStage('error');
     } catch {
-      setStep3Status('error');
-      setStep3Error('Network error');
+      setPermStage('error');
     }
-  }, [startStep4]);
+  }, [checkPositionMode]);
 
-  const startStep2 = useCallback(async () => {
-    setStep2Status('verifying');
+  const testConn = useCallback(async () => {
+    setConnBadgeState('verifying');
+    setConnBadgeText('Verifying...');
     try {
       const result = await testCredential();
       if (result.success && result.data?.connected) {
-        setStep2Status('done');
-        startStep3();
+        setConnBadgeState('success');
+        setConnBadgeText('Connected');
+        await checkPerms();
         return;
       }
-
-      setStep2Status('error');
-      setStep2Error(result.error || result.data?.message || 'Connection failed');
+      setConnBadgeState('error');
+      setConnBadgeText(result.message || result.data?.message || 'Connection failed');
     } catch {
-      setStep2Status('error');
-      setStep2Error('Network error');
+      setConnBadgeState('error');
+      setConnBadgeText('Network error');
     }
-  }, [startStep3]);
+  }, [checkPerms]);
 
-  const startStep1 = useCallback(async () => {
-    setStep1Status('verifying');
-    setStep1Error('');
-
-    try {
-      const res = await saveCredential({
-        exchange: 'binance',
-        api_key: apiKey,
-        api_secret: apiSecret,
-        label: 'binance verification',
-      });
-      if (res.success) {
-        setStep1Status('done');
-        startStep2();
-        return;
+  const runVerification = useCallback(
+    async (key: string, secret: string) => {
+      setConnBadgeState('verifying');
+      setConnBadgeText('Verifying...');
+      setPermStage('idle');
+      setPosStage('idle');
+      try {
+        const res = await saveCredential({
+          exchange: 'binance',
+          api_key: key,
+          api_secret: secret,
+          label: 'binance verification',
+        });
+        if (!res.success) {
+          setConnBadgeState('error');
+          setConnBadgeText('Failed to save credentials');
+          return;
+        }
+        await testConn();
+      } catch {
+        setConnBadgeState('error');
+        setConnBadgeText('Network error');
       }
-
-      setStep1Status('error');
-      setStep1Error('Failed to save credentials');
-    } catch {
-      setStep1Status('error');
-      setStep1Error('Network error');
-    }
-  }, [apiKey, apiSecret, startStep2]);
+    },
+    [testConn],
+  );
 
   const handleApiKeyChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      setApiKey(e.target.value);
-      resetSteps();
+      const val = e.target.value;
+      setApiKey(val);
+      resetVerification();
+      if (!val || !apiSecret) return;
+
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => runVerification(val, apiSecret), 600);
     },
-    [resetSteps],
+    [apiSecret, resetVerification, runVerification],
   );
 
   const handleApiSecretChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      setApiSecret(normalizePemSecret(e.target.value));
-      resetSteps();
+      const val = normalizePemSecret(e.target.value);
+      setApiSecret(val);
+      resetVerification();
+      if (!apiKey || !val) return;
+
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => runVerification(apiKey, val), 600);
     },
-    [resetSteps],
+    [apiKey, resetVerification, runVerification],
   );
 
-  const renderStep1 = useCallback(() => {
-    const disabled = !apiKey || !apiSecret || step1Status === 'verifying';
-    return (
-      <div className="space-y-3 flex flex-col justify-start">
-        <Input type="text" value={apiKey} onChange={handleApiKeyChange} placeholder="API Key" />
-        <Input
-          type="password"
-          value={apiSecret}
-          onChange={handleApiSecretChange}
-          placeholder="API Secret"
-        />
-        {step1Status === 'error' && <p className="text-xs text-danger-text">{step1Error}</p>}
-        <Button size="small" onClick={startStep1} disabled={disabled}>
-          {step1Status === 'verifying' ? 'Verifying...' : 'Verify'}
-        </Button>
-      </div>
-    );
-  }, [
-    apiKey,
-    apiSecret,
-    step1Status,
-    step1Error,
-    handleApiKeyChange,
-    handleApiSecretChange,
-    startStep1,
-  ]);
-
-  const renderStep2 = useCallback(() => {
-    return (
-      <div className="space-y-2">
-        {step2Status === 'verifying' && (
-          <p className="text-xs text-on-surface-tertiary">Testing connection to Binance...</p>
-        )}
-        {step2Status === 'error' && (
-          <p className="text-xs text-danger-text">{step2Error || 'Connection failed'}</p>
-        )}
-      </div>
-    );
-  }, [step2Status, step2Error]);
-
-  const renderStatusIcon = useCallback((status: string) => {
-    if (status === 'ok') return <span className="text-success-text">&#10003;</span>;
-    if (status === 'warn') return <span className="text-warning-text">&#9888;</span>;
-    return <span className="text-danger-text">&#10007;</span>;
-  }, []);
-
-  const renderStep3 = useCallback(() => {
-    return (
-      <div className="space-y-1.5">
-        {permissions.map((p, i) => (
-          <div
-            key={i}
-            className="flex items-center justify-between px-3 py-2 bg-surface-1 border border-line-default rounded-lg"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-xs">{renderStatusIcon(p.status)}</span>
-              <span className="text-xs text-on-surface-tertiary">{p.label}</span>
-            </div>
-            <span
-              className={`text-caption ${
-                p.status === 'ok'
-                  ? 'text-on-surface-muted'
-                  : p.status === 'warn'
-                    ? 'text-warning-text/60'
-                    : 'text-danger-text/60'
-              }`}
-            >
-              {p.detail}
-            </span>
-          </div>
-        ))}
-        {step3Status === 'error' && (
-          <p className="text-xs text-danger-text">{step3Error || 'Connection failed'}</p>
-        )}
-      </div>
-    );
-  }, [permissions, step3Status, step3Error, renderStatusIcon]);
-
-  const renderStep4 = useCallback(() => {
-    return (
-      <div className="space-y-2">
-        {step4Status === 'verifying' && (
-          <p className="text-xs text-on-surface-tertiary">Checking position mode...</p>
-        )}
-        {step4Status === 'done' && (
-          <p className="text-xs text-success-text">双向持仓模式 (Hedge Mode) ✓</p>
-        )}
-        {step4Status === 'error' && (
-          <div className="space-y-1">
-            <p className="text-xs text-danger-text">{step4Error || 'Position mode check failed'}</p>
-            <Button size="small" onClick={startStep4}>
-              重新验证
-            </Button>
-          </div>
-        )}
-      </div>
-    );
-  }, [step4Status, step4Error, startStep4]);
-
-  const steps: FlowStepConfig[] = useMemo(
-    () => [
-      {
-        key: 'credentials',
-        title: 'API Credentials',
-        render: renderStep1,
-      },
-      {
-        key: 'connectivity',
-        title: 'Connectivity',
-        description: 'Ping exchange server to verify reachability',
-        render: renderStep2,
-      },
-      {
-        key: 'permissions',
-        title: 'Permissions',
-        description: 'Check API key permissions and restrictions',
-        render: renderStep3,
-      },
-      {
-        key: 'position-mode',
-        title: 'Position Mode',
-        description: 'Verify hedge mode is enabled (perpetual only)',
-        render: renderStep4,
-      },
-    ],
-    [renderStep1, renderStep2, renderStep3, renderStep4],
-  );
+  const handleRetryPositionMode = useCallback(() => {
+    checkPositionMode();
+  }, [checkPositionMode]);
 
   const handleBack = useCallback(() => {
     navigate('/setup/llm', { replace: true });
@@ -330,66 +230,153 @@ const ConfigureExchange = () => {
     });
   }, [updateWizard, advanceStep, navigate]);
 
+  const showResults = connBadgeState === 'success' || connBadgeState === 'error';
+
   const actions = useMemo(() => {
-    const disabled =
-      step1Status !== 'done' ||
-      step2Status !== 'done' ||
-      step3Status !== 'done' ||
-      step4Status !== 'done';
+    const disabled = connBadgeState !== 'success' || permStage !== 'done' || posStage !== 'done';
     return (
       <>
         <Button variant="ghost" onClick={handleBack}>
           Back
         </Button>
-        <Button onClick={handleContinue} disabled={disabled} loading={isPending}>
+        <Button variant="primary" onClick={handleContinue} disabled={disabled} loading={isPending}>
           Continue
         </Button>
       </>
     );
-  }, [step1Status, step2Status, step3Status, step4Status, isPending, handleBack, handleContinue]);
+  }, [connBadgeState, permStage, posStage, isPending, handleBack, handleContinue]);
 
-  const statuses = useMemo(() => {
-    return {
-      credentials: step1Status,
-      connectivity: step2Status,
-      permissions: step3Status,
-      'position-mode': step4Status,
-    };
-  }, [step1Status, step2Status, step3Status, step4Status]);
-
-  const summaries = useMemo(() => {
-    const summaryMap: Record<string, string | ReactNode> = {};
-    if (step1Status === 'done') {
-      summaryMap.credentials = `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`;
-    }
-
-    if (step2Status === 'done') {
-      summaryMap.connectivity = 'Connected to Binance';
-    } else if (step2Status === 'error') {
-      summaryMap.connectivity = 'Connection failed';
-    }
-
-    if (step3Status === 'done') {
-      summaryMap.permissions = 'All checks passed';
-    }
-
-    if (step4Status === 'done') {
-      summaryMap['position-mode'] = 'Hedge mode ✓';
-    } else if (step4Status === 'error') {
-      summaryMap['position-mode'] = 'OneWay — switch to Hedge';
-    }
-
-    return summaryMap;
-  }, [apiKey, step1Status, step2Status, step3Status, step4Status]);
+  const renderPermIcon = useCallback((status: string) => {
+    if (status === 'ok')
+      return (
+        <span className="text-success-text">
+          <Check className="w-3.5 h-3.5" strokeWidth={2.5} />
+        </span>
+      );
+    if (status === 'warn')
+      return (
+        <span className="text-warning-text">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            className="w-3.5 h-3.5"
+          >
+            <path
+              d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+      );
+    return (
+      <span className="text-danger-text">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          className="w-3.5 h-3.5"
+        >
+          <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+    );
+  }, []);
 
   return (
     <Wizard
       step={WizardStep.SelectExchange}
       title="Connect Binance"
-      subtitle="Provide your API credentials"
+      subtitle="API credentials with read and trade permissions"
       actions={actions}
     >
-      <FlowSteps steps={steps} statuses={statuses} summaries={summaries} />
+      <FormCard>
+        <FormField label="API Key" required>
+          <Input
+            mono
+            prefix={<KeyIcon />}
+            placeholder="API Key"
+            value={apiKey}
+            onChange={handleApiKeyChange}
+          />
+        </FormField>
+        <FormField
+          label="Secret Key"
+          required
+          badge={<InlineBadge state={connBadgeState} text={connBadgeText} />}
+        >
+          <Input
+            type="password"
+            mono
+            prefix={<Lock className="w-4 h-4" strokeWidth={2} />}
+            placeholder="Secret Key"
+            value={apiSecret}
+            onChange={handleApiSecretChange}
+          />
+        </FormField>
+
+        {showResults && (
+          <>
+            <FormField label="Permissions">
+              {permStage === 'verifying' && (
+                <p className="text-xs text-on-surface-tertiary">Checking permissions...</p>
+              )}
+              {permStage === 'idle' && (
+                <p className="text-xs text-on-surface-muted">Pending connection verification</p>
+              )}
+              {permStage === 'error' && (
+                <p className="text-xs text-danger-text">Permission check failed</p>
+              )}
+              {permStage === 'done' &&
+                permissions.map((p, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0"
+                  >
+                    <div className="flex items-center gap-2">
+                      {renderPermIcon(p.status)}
+                      <span className="text-xs text-on-surface-tertiary">{p.label}</span>
+                    </div>
+                    <span
+                      className={`text-caption ${
+                        p.status === 'ok'
+                          ? 'text-on-surface-muted'
+                          : p.status === 'warn'
+                            ? 'text-warning-text/60'
+                            : 'text-danger-text/60'
+                      }`}
+                    >
+                      {p.detail}
+                    </span>
+                  </div>
+                ))}
+            </FormField>
+
+            <FormField label="Position Mode" noBorder>
+              {posStage === 'verifying' && (
+                <p className="text-xs text-on-surface-tertiary">Checking position mode...</p>
+              )}
+              {posStage === 'idle' && (
+                <p className="text-xs text-on-surface-muted">Pending permission check</p>
+              )}
+              {posStage === 'done' && (
+                <p className="text-xs text-success-text">Hedge Mode (双向持仓) ✓</p>
+              )}
+              {posStage === 'error' && (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-danger-text">{posError}</p>
+                  <Button size="small" onClick={handleRetryPositionMode}>
+                    重新验证
+                  </Button>
+                </div>
+              )}
+            </FormField>
+          </>
+        )}
+      </FormCard>
     </Wizard>
   );
 };

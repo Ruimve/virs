@@ -1,12 +1,18 @@
 @import 'tailwindcss';
 
+/* ============================================================
+   Design Tokens (@theme)
+   Tailwind utility class generation
+   ============================================================ */
 @theme {
+  /* ---- Colors: Background ---- */
   --color-base: var(--bg-base);
   --color-base-secondary: var(--bg-base-secondary);
   --color-surface-1: var(--bg-surface-1);
   --color-surface-2: var(--bg-surface-2);
   --color-surface-3: var(--bg-surface-3);
 
+  /* ---- Colors: Text ---- */
   --color-on-base: var(--text-on-base);
   --color-on-surface: var(--text-on-surface);
   --color-on-surface-secondary: var(--text-on-surface-secondary);
@@ -15,47 +21,93 @@
   --color-on-surface-faint: var(--text-on-surface-faint);
   --color-placeholder: var(--text-placeholder);
 
+  /* ---- Colors: Border ---- */
   --color-line-subtle: var(--border-subtle);
   --color-line-default: var(--border-default);
   --color-line-strong: var(--border-strong);
   --color-line-emphasis: var(--border-emphasis);
 
+  /* ---- Colors: Accent ---- */
   --color-accent: var(--color-accent-val);
   --color-accent-hover: var(--color-accent-hover-val);
   --color-accent-light: var(--color-accent-light-val);
   --color-accent-muted: var(--color-accent-muted-val);
+  --color-accent-glow: var(--color-accent-glow-val);
 
+  /* ---- Colors: AI ---- */
+  --color-ai: var(--color-ai-val);
+  --color-ai-hover: var(--color-ai-hover-val);
+  --color-ai-light: var(--color-ai-light-val);
+  --color-ai-muted: var(--color-ai-muted-val);
+  --color-ai-bg: var(--color-ai-bg-val);
+  --color-ai-border: var(--color-ai-border-val);
+
+  /* ---- Colors: Success ---- */
   --color-success: var(--color-success-val);
   --color-success-text: var(--color-success-text-val);
   --color-success-bg: var(--color-success-bg-val);
   --color-success-border: var(--color-success-border-val);
 
+  /* ---- Colors: Warning ---- */
   --color-warning: var(--color-warning-val);
   --color-warning-text: var(--color-warning-text-val);
   --color-warning-bg: var(--color-warning-bg-val);
   --color-warning-border: var(--color-warning-border-val);
 
+  /* ---- Colors: Danger ---- */
   --color-danger: var(--color-danger-val);
   --color-danger-text: var(--color-danger-text-val);
   --color-danger-bg: var(--color-danger-bg-val);
   --color-danger-border: var(--color-danger-border-val);
 
+  /* ---- Colors: Info ---- */
   --color-info: var(--color-info-val);
   --color-info-text: var(--color-info-text-val);
   --color-info-bg: var(--color-info-bg-val);
   --color-info-border: var(--color-info-border-val);
 
-  --text-2xs: 0.625rem;
-  --text-caption: 0.6875rem;
+  /* ---- Typography: Font sizes ---- */
+  --text-2xs: 0.625rem; /* 10px */
+  --text-caption: 0.6875rem; /* 11px */
+  --text-13: 0.8125rem; /* 13px — form labels */
+  --text-display: 1.75rem; /* 28px — hero titles */
+
+  /* ---- Typography: Letter spacing ---- */
+  --tracking-caption: 0.15em; /* card titles, brand text */
+  --tracking-section: 0.2em; /* section labels */
+  --tracking-hero: 0.24em; /* hero subtitles */
+  --tracking-hero-lg: 0.3em; /* hero titles */
+
+  /* ---- Spacing: Fractional ---- */
+  --spacing-4\.5: calc(var(--spacing) * 4.5); /* 18px — small icons */
+  --spacing-5\.5: calc(var(--spacing) * 5.5); /* 22px — toggle thumb */
+  --spacing-6\.5: calc(var(--spacing) * 6.5); /* 26px — status icons */
+  --spacing-9\.5: calc(var(--spacing) * 9.5); /* 38px — select padding */
+
+  /* ---- Border radius ---- */
+  --radius-10: 0.625rem; /* 10px — icon containers */
+  --radius-18: 1.125rem; /* 18px — login card */
+
+  /* ---- Blur ---- */
+  --blur-glow: 48px; /* background glow effect */
+
+  /* ---- Shadow ---- */
+  --shadow-sticky: 0 -4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-glow-info: 0 0 10px var(--color-info-val);
 }
 
+/* ============================================================
+   Theme Variables — Light (default)
+   ============================================================ */
 :root {
+  /* Background */
   --bg-base: #ffffff;
   --bg-base-secondary: #f8fafc;
   --bg-surface-1: #f8fafc;
   --bg-surface-2: #f1f5f9;
   --bg-surface-3: #e2e8f0;
 
+  /* Text */
   --text-on-base: #0f172a;
   --text-on-surface: #1e293b;
   --text-on-surface-secondary: #475569;
@@ -64,36 +116,52 @@
   --text-on-surface-faint: #cbd5e1;
   --text-placeholder: #94a3b8;
 
+  /* Border */
   --border-subtle: #f1f5f9;
   --border-default: #e2e8f0;
   --border-strong: #cbd5e1;
   --border-emphasis: #94a3b8;
 
+  /* Accent */
   --color-accent-val: #4f46e5;
   --color-accent-hover-val: #4338ca;
   --color-accent-light-val: #eef2ff;
   --color-accent-muted-val: #c7d2fe;
+  --color-accent-glow-val: rgba(79, 70, 229, 0.3);
 
+  /* AI */
+  --color-ai-val: #0891b2;
+  --color-ai-hover-val: #0e7490;
+  --color-ai-light-val: rgba(8, 145, 178, 0.08);
+  --color-ai-muted-val: rgba(8, 145, 178, 0.2);
+  --color-ai-bg-val: rgba(8, 145, 178, 0.04);
+  --color-ai-border-val: rgba(8, 145, 178, 0.12);
+
+  /* Success */
   --color-success-val: #10b981;
   --color-success-text-val: #059669;
   --color-success-bg-val: rgba(16, 185, 129, 0.1);
   --color-success-border-val: rgba(16, 185, 129, 0.3);
 
+  /* Warning */
   --color-warning-val: #f59e0b;
   --color-warning-text-val: #d97706;
   --color-warning-bg-val: rgba(245, 158, 11, 0.1);
   --color-warning-border-val: rgba(245, 158, 11, 0.3);
 
+  /* Danger */
   --color-danger-val: #ef4444;
   --color-danger-text-val: #dc2626;
   --color-danger-bg-val: rgba(239, 68, 68, 0.1);
   --color-danger-border-val: rgba(239, 68, 68, 0.3);
 
+  /* Info */
   --color-info-val: #0ea5e9;
   --color-info-text-val: #0284c7;
   --color-info-bg-val: rgba(14, 165, 233, 0.1);
   --color-info-border-val: rgba(14, 165, 233, 0.3);
 
+  /* Chart */
   --chart-up: var(--color-success-val);
   --chart-up-volume: rgba(16, 185, 129, 0.3);
   --chart-down: var(--color-danger-val);
@@ -101,16 +169,25 @@
   --chart-line: var(--color-accent-val);
   --chart-baseline: var(--text-on-surface-muted);
 
-  --shadow-sticky: 0 -4px 12px rgba(0, 0, 0, 0.06);
+  /* Misc */
+  --grid-color: rgba(0, 0, 0, 0.05);
+  --font-display: 'Sora', sans-serif;
+  --font-sans: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
 }
 
+/* ============================================================
+   Theme Variables — Dark
+   ============================================================ */
 .dark {
-  --bg-base: #08090d;
-  --bg-base-secondary: #0c0e14;
+  /* Background */
+  --bg-base: #06070a;
+  --bg-base-secondary: #0a0b0f;
   --bg-surface-1: #12141c;
   --bg-surface-2: #1a1d28;
   --bg-surface-3: #242736;
 
+  /* Text */
   --text-on-base: rgba(255, 255, 255, 0.95);
   --text-on-surface: rgba(255, 255, 255, 0.85);
   --text-on-surface-secondary: rgba(255, 255, 255, 0.62);
@@ -119,45 +196,65 @@
   --text-on-surface-faint: rgba(255, 255, 255, 0.16);
   --text-placeholder: rgba(255, 255, 255, 0.28);
 
+  /* Border */
   --border-subtle: rgba(255, 255, 255, 0.05);
   --border-default: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.12);
   --border-emphasis: rgba(255, 255, 255, 0.18);
 
-  --color-accent-val: #7c6aef;
-  --color-accent-hover-val: #9185f0;
-  --color-accent-light-val: rgba(124, 106, 239, 0.12);
-  --color-accent-muted-val: rgba(124, 106, 239, 0.25);
+  /* Accent */
+  --color-accent-val: #6366f1;
+  --color-accent-hover-val: #4f46e5;
+  --color-accent-light-val: rgba(99, 102, 241, 0.12);
+  --color-accent-muted-val: rgba(99, 102, 241, 0.25);
+  --color-accent-glow-val: rgba(99, 102, 241, 0.4);
 
+  /* AI */
+  --color-ai-val: #06b6d4;
+  --color-ai-hover-val: #0891b2;
+  --color-ai-light-val: rgba(6, 182, 212, 0.12);
+  --color-ai-muted-val: rgba(6, 182, 212, 0.25);
+  --color-ai-bg-val: rgba(6, 182, 212, 0.06);
+  --color-ai-border-val: rgba(6, 182, 212, 0.15);
+
+  /* Success */
   --color-success-val: #2dd4a0;
   --color-success-text-val: #2dd4a0;
   --color-success-bg-val: rgba(45, 212, 160, 0.1);
   --color-success-border-val: rgba(45, 212, 160, 0.25);
 
+  /* Warning */
   --color-warning-val: #fbbf24;
   --color-warning-text-val: #fbbf24;
   --color-warning-bg-val: rgba(251, 191, 36, 0.1);
   --color-warning-border-val: rgba(251, 191, 36, 0.25);
 
+  /* Danger */
   --color-danger-val: #f47171;
   --color-danger-text-val: #f47171;
   --color-danger-bg-val: rgba(244, 113, 113, 0.1);
   --color-danger-border-val: rgba(244, 113, 113, 0.25);
 
+  /* Info */
   --color-info-val: #38bdf8;
   --color-info-text-val: #38bdf8;
   --color-info-bg-val: rgba(56, 189, 248, 0.1);
   --color-info-border-val: rgba(56, 189, 248, 0.25);
 
+  /* Chart */
   --chart-up-volume: rgba(45, 212, 160, 0.3);
   --chart-down-volume: rgba(244, 113, 113, 0.3);
 
-  --shadow-sticky: 0 -4px 16px rgba(0, 0, 0, 0.5);
+  /* Misc */
+  --grid-color: rgba(255, 255, 255, 0.04);
 }
 
+/* ============================================================
+   Base Styles
+   ============================================================ */
 body {
   font-family:
-    'Plus Jakarta Sans',
+    var(--font-sans),
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
@@ -167,7 +264,6 @@ body {
   text-rendering: optimizeLegibility;
   color: var(--text-on-base);
   background-color: var(--bg-base-secondary);
-
   font-variant-numeric: lining-nums;
   font-feature-settings: 'lnum' 1;
 }
@@ -175,14 +271,20 @@ body {
 code,
 pre,
 .font-mono {
-  font-family: 'Roboto Mono', 'JetBrains Mono', 'Fira Code', monospace;
-
+  font-family: var(--font-mono), 'JetBrains Mono', 'Fira Code', monospace;
   font-variant-numeric: tabular-nums;
   font-feature-settings:
     'tnum' 1,
     'lnum' 1;
 }
 
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* ============================================================
+   Scrollbar
+   ============================================================ */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -206,19 +308,15 @@ pre,
   scrollbar-color: var(--border-strong) transparent;
 }
 
+/* ============================================================
+   Form & Table Elements
+   ============================================================ */
 input,
 textarea,
 select {
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease;
-}
-
-input:focus,
-textarea:focus,
-select:focus {
-  border-color: var(--color-accent-val);
-  box-shadow: 0 0 0 3px var(--color-accent-light-val);
 }
 
 tbody tr {
@@ -234,14 +332,88 @@ tbody tr:hover {
   color: var(--text-on-base);
 }
 
-.animate-drawer-in {
-  animation: drawerSlideIn 0.25s ease-out both;
+/* ============================================================
+   Component: Leverage Slider
+   ============================================================ */
+.leverage-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
 }
 
-.animate-drawer-out {
-  animation: drawerSlideOut 0.2s ease-in both;
+.leverage-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-accent-val);
+  border: 3px solid var(--bg-base);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: transform 0.15s ease;
 }
 
+.leverage-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.leverage-slider::-webkit-slider-thumb:active {
+  transform: scale(1.25);
+}
+
+.leverage-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-accent-val);
+  border: 3px solid var(--bg-base);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.leverage-slider::-moz-range-thumb:hover {
+  transform: scale(1.15);
+}
+
+.leverage-slider::-moz-range-thumb:active {
+  transform: scale(1.25);
+}
+
+/* ============================================================
+   Component: Loading Icon (Transition)
+   ============================================================ */
+.loading-icon {
+  display: block;
+  overflow: visible;
+}
+
+.loading-icon circle,
+.loading-icon line,
+.loading-icon path,
+.loading-icon rect {
+  fill: none;
+  stroke: var(--color-accent-val);
+}
+
+.loading-icon .ring-track {
+  stroke-width: 1;
+  opacity: 0.12;
+}
+
+.loading-icon .ring-arc {
+  stroke-width: 1.5;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: icon-spin 1.8s linear infinite;
+}
+
+/* ============================================================
+   Animations — Keyframes
+   ============================================================ */
 @keyframes drawerSlideIn {
   from {
     transform: translateX(-100%);
@@ -258,10 +430,6 @@ tbody tr:hover {
   to {
     transform: translateX(-100%);
   }
-}
-
-.animate-fade-out {
-  animation: fadeOut 0.2s ease-in both;
 }
 
 @keyframes fadeOut {
@@ -324,6 +492,60 @@ tbody tr:hover {
   }
 }
 
+@keyframes logo-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
+@keyframes loading-sweep {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+@keyframes ai-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}
+
+@keyframes icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================
+   Animations — Utility Classes
+   ============================================================ */
+.animate-drawer-in {
+  animation: drawerSlideIn 0.25s ease-out both;
+}
+
+.animate-drawer-out {
+  animation: drawerSlideOut 0.2s ease-in both;
+}
+
+.animate-fade-out {
+  animation: fadeOut 0.2s ease-in both;
+}
+
 .animate-subtle-pulse {
   animation: subtle-pulse 2s ease-in-out infinite;
 }
@@ -336,9 +558,57 @@ tbody tr:hover {
   animation: error-enter 0.3s ease-out both;
 }
 
+.animate-ai-pulse {
+  animation: ai-pulse 1.5s ease-in-out infinite;
+}
+
+.animate-cursor-blink {
+  animation: virs-cursor-blink 1.1s steps(2) infinite;
+}
+
+.animate-logo-breathe {
+  animation: logo-breathe 2.4s ease-in-out infinite;
+}
+
+.animate-loading-sweep {
+  animation: loading-sweep 1.4s ease-in-out infinite;
+}
+
+/* ============================================================
+   Background Patterns
+   ============================================================ */
 .terminal-grid-bg {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
   background-size: 48px 48px;
+}
+
+.loading-grid {
+  background-image:
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+@media (min-width: 768px) {
+  .loading-grid {
+    background-size: 42px 42px;
+  }
+}
+
+.bg-accent-glow-radial {
+  background: radial-gradient(circle, var(--color-accent-glow-val) 0%, transparent 62%);
+}
+
+/* ============================================================
+   Accessibility
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .loading-page * {
+    animation: none !important;
+  }
+  .loading-icon .ring-arc {
+    animation: none;
+  }
 }

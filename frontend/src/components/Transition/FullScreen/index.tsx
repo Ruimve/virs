@@ -14,9 +14,7 @@ export const FullScreen = memo((props: Props) => {
           <Header />
         </header>
       )}
-      <div
-        className={`flex-1 flex items-center justify-center ${header ? '-mt-12 md:-mt-12' : ''}`}
-      >
+      <div className={`flex-1 flex items-center justify-center ${header ? '-mt-12' : ''}`}>
         {icon}
       </div>
     </div>

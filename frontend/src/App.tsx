@@ -1,14 +1,11 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { FullScreen } from './components/Transition/FullScreen';
-import { AssetLoading } from './components/Transition/Icon';
-import { AuthProvider } from './context/AuthContext/AuthProvider';
-
-const Loading = lazy(() => import('./pages/Loading'));
+import Fallback from './components/Transition/Fallback';
 
 const Login = lazy(() => import('./pages/Login'));
 
+const Guard = lazy(() => import('./pages/Guard'));
 const SetupLayout = lazy(() => import('./pages/Setup/Layout'));
 const SelectBotType = lazy(() => import('./pages/Setup/SelectBotType'));
 const ConfigureLlm = lazy(() => import('./pages/Setup/ConfigureLlm'));
@@ -31,51 +28,31 @@ const HealthCheck = lazy(() => import('./pages/Trade/HealthCheck'));
 const App = () => {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<FullScreen icon={<AssetLoading />} />}>
+      <Suspense fallback={<Fallback />}>
         <BrowserRouter>
           <Routes>
-            <Route
-              path="/"
-              element={
-                <AuthProvider>
-                  <Loading />
-                </AuthProvider>
-              }
-            />
             <Route path="/login" element={<Login />} />
-            <Route
-              path="/setup"
-              element={
-                <AuthProvider>
-                  <SetupLayout />
-                </AuthProvider>
-              }
-            >
-              <Route path="/setup/bot-type" element={<SelectBotType />} />
-              <Route path="/setup/llm" element={<ConfigureLlm />} />
-              <Route path="/setup/exchange" element={<ConfigureExchange />} />
-              <Route path="/setup/params" element={<ConfigureParams />} />
-              <Route path="/setup/optimization" element={<ConfigureOptimization />} />
-              <Route path="/setup/review" element={<ReviewLaunch />} />
-            </Route>
-            <Route
-              path="/trade"
-              element={
-                <AuthProvider>
-                  <TradeLayout />
-                </AuthProvider>
-              }
-            >
-              <Route path="/trade/auto/:botId" element={<AutoBot />}>
-                <Route path="/trade/auto/:botId/bot" element={<AutoBotMain />} />
-                <Route path="/trade/auto/:botId/log" element={<AutoBotLog />} />
-                <Route path="/trade/auto/:botId/log/:logId" element={<AutoBotLogDetail />} />
-                <Route path="/trade/auto/:botId/trades" element={<AutoBotTrades />} />
-                <Route path="/trade/auto/:botId/system" element={<AutoBotSystem />} />
+            <Route path="/" element={<Guard />}>
+              <Route path="/setup" element={<SetupLayout />}>
+                <Route path="/setup/bot-type" element={<SelectBotType />} />
+                <Route path="/setup/llm" element={<ConfigureLlm />} />
+                <Route path="/setup/exchange" element={<ConfigureExchange />} />
+                <Route path="/setup/params" element={<ConfigureParams />} />
+                <Route path="/setup/optimization" element={<ConfigureOptimization />} />
+                <Route path="/setup/review" element={<ReviewLaunch />} />
               </Route>
-              <Route path="/trade/:botType/:botId/health" element={<HealthCheck />} />
+              <Route path="/trade" element={<TradeLayout />}>
+                <Route path="/trade/auto/:botId" element={<AutoBot />}>
+                  <Route path="/trade/auto/:botId/bot" element={<AutoBotMain />} />
+                  <Route path="/trade/auto/:botId/log" element={<AutoBotLog />} />
+                  <Route path="/trade/auto/:botId/log/:logId" element={<AutoBotLogDetail />} />
+                  <Route path="/trade/auto/:botId/trades" element={<AutoBotTrades />} />
+                  <Route path="/trade/auto/:botId/system" element={<AutoBotSystem />} />
+                </Route>
+                <Route path="/trade/:botType/:botId/health" element={<HealthCheck />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/setup/bot-type" replace />} />
             </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
       </Suspense>

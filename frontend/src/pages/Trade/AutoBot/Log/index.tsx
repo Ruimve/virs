@@ -60,7 +60,7 @@ const Log = () => {
 
   return (
     <div className="h-full overflow-y-auto max-w-5xl mx-auto">
-      <AILogList logs={logs} loading={loading} botId={bot.id} />
+      <AILogList logs={logs} loading={loading} botId={bot.id} total={total} />
 
       {}
       <div

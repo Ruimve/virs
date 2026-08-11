@@ -1,12 +1,18 @@
 import { useCallback, useMemo, useState, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Flame, Warning } from '@/components/Icon';
+import { Alert } from '@/components/Alert';
 import { Button } from '@/components/Button';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
 import { createAutoBot, startAutoBot } from '../../../service';
-import { Title } from '@/components/Title';
 import { WizardStep } from '../context/WizardContext/consts';
+import { FormCard, FormField, ToggleSwitch, ReviewRow } from '../components';
+
+const AiBadge = () => (
+  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-2xs font-medium border bg-ai-bg text-ai border-ai-border ml-1">
+    AI
+  </span>
+);
 
 const ReviewLaunch = () => {
   const navigate = useNavigate();
@@ -18,31 +24,35 @@ const ReviewLaunch = () => {
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState('');
 
+  const botParams = wizard.bot_params;
+  const leverage = botParams.leverage || '10';
+
   const handleLaunch = useCallback(async () => {
     setLaunching(true);
     setLaunchError('');
 
-    const botParams = wizard.bot_params;
     try {
       const result = await createAutoBot({
         symbol: botParams.symbol,
         exchange: wizard.exchange,
-        leverage: parseInt(botParams.leverage || '10'),
+        leverage: parseInt(leverage || '10', 10),
         max_position_pct: parseFloat(botParams.max_position_pct || '20'),
-        decide_interval_secs: parseInt(botParams.decision_interval || '300'),
+        decide_interval_secs: parseInt(botParams.decision_interval || '300', 10),
         name: `Auto ${botParams.symbol || 'Bot'}`,
         paper_mode: paperMode,
         auto_optimize: wizard.auto_optimize,
       });
       if (!result.success || !result.data?.id) {
-        setLaunchError(`Failed to create auto bot: ${result.error || 'Unknown error'}`);
+        setLaunchError(`Failed to create auto bot: ${result.message || 'Unknown error'}`);
         return;
       }
       const botId = result.data.id;
 
       const startResult = await startAutoBot(botId);
       if (!startResult.success) {
-        setLaunchError(`Bot created but failed to start: ${startResult.error || 'Unknown error'}`);
+        setLaunchError(
+          `Bot created but failed to start: ${startResult.message || 'Unknown error'}`,
+        );
         return;
       }
 
@@ -55,7 +65,15 @@ const ReviewLaunch = () => {
     } finally {
       setLaunching(false);
     }
-  }, [wizard.bot_params, wizard.exchange, wizard.auto_optimize, paperMode, navigate, updateWizard]);
+  }, [
+    botParams,
+    wizard.exchange,
+    wizard.auto_optimize,
+    leverage,
+    paperMode,
+    navigate,
+    updateWizard,
+  ]);
 
   const handleBack = useCallback(() => {
     navigate('/setup/optimization', { replace: true });
@@ -74,151 +92,12 @@ const ReviewLaunch = () => {
     );
   }, [launching, isPending, handleBack, handleLaunch]);
 
-  const tradeMode = useMemo(() => {
-    return (
-      <div className="rounded-xl border border-line-subtle bg-surface-1/50 p-5">
-        <Title className="mb-4">Trading Mode</Title>
-        <div className="flex flex-col sm:flex-row gap-3">
-          {}
-          <div
-            onClick={() => setPaperMode(true)}
-            className={`flex-1 p-5 rounded-xl border text-left transition-all duration-300 cursor-pointer backdrop-blur-sm ${
-              paperMode
-                ? 'bg-info/[0.06] border-info/30 shadow-md shadow-info/5'
-                : 'bg-surface-1/40 border-line-default hover:bg-surface-2/40 hover:border-line-strong'
-            }`}
-          >
-            <div className="flex items-start gap-3.5">
-              <div
-                className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ${
-                  paperMode ? 'bg-info/[0.12] text-info' : 'bg-surface-2/50 text-on-surface-faint'
-                }`}
-              >
-                <ShieldCheck className="w-5 h-5" strokeWidth={1.8} />
-              </div>
-              <div className="flex-1">
-                <p
-                  className={`text-sm font-medium transition-colors duration-200 ${
-                    paperMode ? 'text-on-base' : 'text-on-surface-tertiary'
-                  }`}
-                >
-                  Paper Trading
-                </p>
-                <p className="text-xs text-on-surface-muted mt-1 leading-relaxed">
-                  Simulated orders, no real funds at risk
-                </p>
-              </div>
-              {paperMode && (
-                <div className="shrink-0 w-5 h-5 rounded-full bg-info flex items-center justify-center mt-0.5">
-                  <svg
-                    className="w-3 h-3 text-white"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={3}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {}
-          <div
-            onClick={() => setPaperMode(false)}
-            className={`flex-1 p-5 rounded-xl border text-left transition-all duration-300 cursor-pointer backdrop-blur-sm ${
-              !paperMode
-                ? 'bg-warning/[0.06] border-warning-border animate-border-pulse shadow-md shadow-warning/5'
-                : 'bg-surface-1/40 border-line-default hover:bg-surface-2/40 hover:border-line-strong'
-            }`}
-          >
-            <div className="flex items-start gap-3.5">
-              <div
-                className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ${
-                  !paperMode
-                    ? 'bg-warning/[0.15] text-warning-text'
-                    : 'bg-surface-2/50 text-on-surface-faint'
-                }`}
-              >
-                <Flame className="w-5 h-5" strokeWidth={1.8} />
-              </div>
-              <div className="flex-1">
-                <p
-                  className={`text-sm font-medium transition-colors duration-200 ${
-                    !paperMode ? 'text-on-base' : 'text-on-surface-tertiary'
-                  }`}
-                >
-                  Real Trading
-                </p>
-                <p className="text-xs text-on-surface-muted mt-1 leading-relaxed">
-                  Live orders with real funds
-                </p>
-              </div>
-              {paperMode && (
-                <div className="shrink-0 w-5 h-5 rounded-full bg-surface-2/50 flex items-center justify-center mt-0.5" />
-              )}
-            </div>
-          </div>
-        </div>
-
-        {}
-        {!paperMode && (
-          <div className="mt-3 flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg bg-warning/[0.06] border border-warning-border/50">
-            <Warning className="w-4 h-4 text-warning-text shrink-0 mt-0.5" strokeWidth={1.8} />
-            <p className="text-xs text-warning-text leading-relaxed">
-              Real trading involves genuine financial risk. Ensure your configuration is correct
-              before launching.
-            </p>
-          </div>
-        )}
-      </div>
-    );
-  }, [paperMode]);
-
-  const summary = useMemo(() => {
-    const botParams = wizard.bot_params;
-    const rows = [
-      { label: 'Exchange', value: wizard.exchange },
-      { label: 'Strategy', value: 'Auto Bot' },
-      { label: 'Symbol', value: botParams.symbol || '-' },
-      { label: 'AI Model', value: wizard.llm_model },
-      { label: 'Leverage', value: `${botParams.leverage || '-'}x` },
-      { label: 'Max Position %', value: `${botParams.max_position_pct || '-'}%` },
-      { label: 'Decision Interval', value: `${botParams.decision_interval || '300'}s` },
-      {
-        label: 'Auto-Optimization',
-        value: wizard.auto_optimize ? 'Enabled' : 'Disabled',
-        valueClass: wizard.auto_optimize ? 'text-accent' : undefined,
-      },
-      {
-        label: 'Mode',
-        value: paperMode ? 'Paper' : 'Real',
-        valueClass: paperMode ? 'text-info' : 'text-warning-text',
-      },
-    ];
-
-    return (
-      <div className="rounded-xl bg-surface-1/50 border border-line-subtle p-5">
-        <Title className="mb-4">Summary</Title>
-        <div className="space-y-0">
-          {rows.map((row, i) => (
-            <div
-              key={row.label}
-              className={`flex items-center justify-between px-4 py-3 ${i !== rows.length - 1 ? 'border-b border-line-subtle/50' : ''}`}
-            >
-              <span className="text-xs text-on-surface-tertiary">{row.label}</span>
-              <span
-                className={`text-xs font-mono tabular-nums ${row.valueClass || 'text-on-surface-secondary'}`}
-              >
-                {row.value}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }, [wizard.bot_params, wizard.exchange, wizard.llm_model, wizard.auto_optimize, paperMode]);
+  const riskLabel = useMemo(() => {
+    const r = wizard.risk_tolerance;
+    if (r === 'low') return 'Low';
+    if (r === 'high') return 'High';
+    return 'Medium';
+  }, [wizard.risk_tolerance]);
 
   return (
     <Wizard
@@ -227,18 +106,60 @@ const ReviewLaunch = () => {
       subtitle="Confirm your configuration and launch the bot"
       actions={actions}
     >
-      <div className="space-y-5">
-        {}
-        {tradeMode}
-
-        {}
-        {summary}
-
-        {}
-        {launchError && (
-          <div className="animate-error-enter p-3.5 bg-danger-bg border border-danger-border rounded-xl text-sm text-danger-text">
-            {launchError}
+      <FormCard>
+        <FormField label="" noBorder>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium text-on-base">Trading Mode</div>
+              <div
+                className={`text-xs mt-0.5 leading-relaxed ${!paperMode ? 'text-warning-text' : 'text-on-surface-tertiary'}`}
+              >
+                {paperMode
+                  ? 'Simulated orders, no real funds at risk'
+                  : 'Live orders with real funds — proceed with caution'}
+              </div>
+            </div>
+            <ToggleSwitch on={!paperMode} warning onClick={() => setPaperMode(!paperMode)} />
           </div>
+        </FormField>
+
+        <ReviewRow
+          label="Bot Type"
+          value={
+            <>
+              Auto Bot <AiBadge />
+            </>
+          }
+        />
+        <ReviewRow label="AI Model" value={wizard.llm_model || '-'} mono />
+        <ReviewRow label="Exchange" value={wizard.exchange || '-'} />
+        <ReviewRow
+          label="Pair · Leverage"
+          value={`${botParams.symbol || '-'} · ${leverage}x`}
+          mono
+        />
+        <ReviewRow label="Max Position" value={`${botParams.max_position_pct || '-'}%`} mono />
+        <ReviewRow
+          label="Optimization"
+          value={wizard.auto_optimize ? `Enabled · ${wizard.optimization_interval}` : 'Disabled'}
+        />
+        {wizard.auto_optimize && <ReviewRow label="Risk Tolerance" value={riskLabel} />}
+      </FormCard>
+
+      <div className="mt-5">
+        <Alert type="success" title="All checks passed" className="mb-3" />
+
+        {!paperMode && (
+          <Alert
+            type="warning"
+            title="Real trading involves genuine financial risk. Ensure your configuration is correct
+              before launching."
+            className="mb-3"
+          />
+        )}
+
+        {launchError && (
+          <Alert type="danger" title="launchError" className="animate-error-enter mb-3" />
         )}
       </div>
     </Wizard>

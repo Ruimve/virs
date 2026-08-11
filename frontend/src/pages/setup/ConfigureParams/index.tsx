@@ -3,44 +3,26 @@ import { useNavigate } from 'react-router-dom';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizardGuard, useWizard } from '../context/WizardContext';
 import { WizardStep } from '../context/WizardContext/consts';
-import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
+import { Input } from '@/components/Input';
+import { FormCard, FormField, FormSelect, LeverageSlider } from '../components';
 
-const AUTO_PARAMS = [
-  {
-    key: 'symbol',
-    label: 'Trading Pair',
-    type: 'text' as const,
-    defaultValue: 'BTCUSDT',
-    required: true,
-  },
-  {
-    key: 'leverage',
-    label: 'Leverage',
-    type: 'number' as const,
-    defaultValue: '10',
-    required: true,
-  },
-  {
-    key: 'max_position_pct',
-    label: 'Max Position %',
-    type: 'number' as const,
-    defaultValue: '20',
-    required: true,
-  },
-  {
-    key: 'decision_interval',
-    label: 'Decision Interval (seconds)',
-    type: 'number' as const,
-    defaultValue: '300',
-    required: true,
-  },
+const TRADING_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT'];
+
+const TIMEFRAME_OPTIONS = [
+  { label: '5 minutes', value: '300' },
+  { label: '15 minutes', value: '900' },
+  { label: '1 hour', value: '3600' },
+  { label: '4 hours', value: '14400' },
+  { label: '1 day', value: '86400' },
 ];
 
-const DEFAULT_VALUES: Record<string, string> = AUTO_PARAMS.reduce(
-  (acc, p) => ({ ...acc, [p.key]: p.defaultValue }),
-  {},
-);
+const DEFAULT_VALUES: Record<string, string> = {
+  symbol: 'BTCUSDT',
+  leverage: '10',
+  max_position_pct: '20',
+  decision_interval: '300',
+};
 
 const ConfigureParams = () => {
   const navigate = useNavigate();
@@ -53,8 +35,14 @@ const ConfigureParams = () => {
     ...wizard.bot_params,
   });
 
-  const params = useMemo(() => {
-    return AUTO_PARAMS;
+  const leverageNum = parseInt(values.leverage || '10', 10);
+
+  const handleFieldChange = useCallback((key: string, val: string) => {
+    setValues((prev) => ({ ...prev, [key]: val }));
+  }, []);
+
+  const handleLeverageChange = useCallback((val: number) => {
+    setValues((prev) => ({ ...prev, leverage: String(val) }));
   }, []);
 
   const handleBack = useCallback(() => {
@@ -70,44 +58,78 @@ const ConfigureParams = () => {
   }, [values, updateWizard, advanceStep, navigate]);
 
   const actions = useMemo(() => {
-    const disabled = params.filter((p) => p.required).some((p) => !values[p.key]);
-
+    const disabled = !values.symbol || !values.max_position_pct || !values.leverage;
     return (
       <>
         <Button variant="ghost" onClick={handleBack}>
           Back
         </Button>
-        <Button onClick={handleContinue} disabled={disabled} loading={isPending}>
+        <Button variant="primary" onClick={handleContinue} disabled={disabled} loading={isPending}>
           Continue
         </Button>
       </>
     );
-  }, [params, values, isPending, handleBack, handleContinue]);
+  }, [values, isPending, handleBack, handleContinue]);
 
   return (
     <Wizard
       step={WizardStep.ConfigureParams}
-      title={'Trading Parameters'}
-      subtitle="Configure the trading parameters for your bot"
+      title="Trading Parameters"
+      subtitle="Configure pair, position size, leverage and timeframe"
       actions={actions}
     >
-      <div className="space-y-4">
-        {params.map((param) => (
-          <div key={param.key}>
-            <label className="block text-caption tracking-[0.15em] text-on-surface-muted uppercase mb-2">
-              {param.label}
-              {param.required && <span className="text-accent/60 ml-1">*</span>}
-            </label>
-            <Input
-              type={param.type}
-              value={values[param.key] ?? ''}
-              onChange={(e) => {
-                setValues((prev) => ({ ...prev, [param.key]: e.target.value }));
-              }}
-            />
+      <FormCard>
+        <FormField label="Trading Pair" required>
+          <Input
+            mono
+            value={values.symbol ?? ''}
+            onChange={(e) => handleFieldChange('symbol', e.target.value)}
+            list="pairList"
+            placeholder="BTCUSDT"
+          />
+          <datalist id="pairList">
+            {TRADING_PAIRS.map((p) => (
+              <option key={p} value={p} />
+            ))}
+          </datalist>
+        </FormField>
+
+        <FormField label="Max Position %" required>
+          <Input
+            type="number"
+            suffix="%"
+            value={values.max_position_pct ?? ''}
+            onChange={(e) => handleFieldChange('max_position_pct', e.target.value)}
+            placeholder="20"
+          />
+        </FormField>
+
+        <FormField label="Leverage">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-mono text-sm font-semibold text-accent">{leverageNum}x</span>
           </div>
-        ))}
-      </div>
+          <LeverageSlider
+            value={leverageNum}
+            min={1}
+            max={20}
+            step={1}
+            onChange={handleLeverageChange}
+          />
+        </FormField>
+
+        <FormField label="Decision Interval">
+          <FormSelect
+            value={values.decision_interval ?? '300'}
+            onChange={(e) => handleFieldChange('decision_interval', e.target.value)}
+          >
+            {TIMEFRAME_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </FormSelect>
+        </FormField>
+      </FormCard>
     </Wizard>
   );
 };

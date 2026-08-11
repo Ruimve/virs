@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import type { AnalysisLog } from '@/service/types';
+import { RiskHeatBar } from '@/components/RiskHeatBar';
 import type { PositionCardProps } from './types';
 import { formatCompact, computeLiqDistance } from './utils';
 
@@ -49,7 +50,7 @@ export const PositionCard = memo(
           : null;
 
       return (
-        <div className="flex-1 bg-surface-1 border border-line-default border-l-2 border-l-line-strong opacity-70 rounded-lg p-2.5 flex flex-col gap-2">
+        <div className="flex-1 bg-surface-1 border border-line-default opacity-70 rounded-lg p-2.5 flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <span className={`text-xs font-bold ${dirClass}`}>{dirLabel}</span>
             <span className="text-2xs text-on-surface-muted font-mono">observing</span>
@@ -80,9 +81,7 @@ export const PositionCard = memo(
     const hasTP = position.takeProfit != null && position.takeProfit > 0;
 
     return (
-      <div
-        className={`flex-1 bg-surface-1 border border-line-default border-l-2 ${isLong ? 'border-l-success' : 'border-l-danger'} rounded-lg p-2.5 flex flex-col gap-2`}
-      >
+      <div className="flex-1 bg-surface-1 border border-line-default rounded-lg p-2.5 flex flex-col gap-2">
         {}
         <div className="flex items-center justify-between">
           <span className={`text-xs font-bold ${dirClass}`}>{dirLabel}</span>
@@ -154,6 +153,15 @@ export const PositionCard = memo(
             )}
           </div>
         )}
+
+        {}
+        <RiskHeatBar
+          side={side}
+          currentPrice={latestPrice}
+          stopLoss={position.stopLoss ?? undefined}
+          takeProfit={position.takeProfit ?? undefined}
+          entryPrice={position.entryPrice}
+        />
       </div>
     );
   },

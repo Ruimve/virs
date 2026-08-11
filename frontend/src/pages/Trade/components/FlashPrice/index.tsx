@@ -24,18 +24,11 @@ export const FlashPrice = memo(
       return () => clearTimeout(timer);
     }, [price, flashDuration]);
 
-    const flashStyle =
-      flash === 'up'
-        ? { color: 'var(--color-success-text)' }
-        : flash === 'down'
-          ? { color: 'var(--color-danger-text)' }
-          : undefined;
+    const flashClass =
+      flash === 'up' ? 'text-success-text' : flash === 'down' ? 'text-danger-text' : '';
 
     return (
-      <span
-        className={`font-mono font-medium shrink-0 tabular-nums ${className}`}
-        style={flashStyle}
-      >
+      <span className={`font-mono font-medium shrink-0 tabular-nums ${flashClass} ${className}`}>
         {price > 0 ? price.toFixed(2) : '-'}
       </span>
     );

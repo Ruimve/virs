@@ -21,10 +21,10 @@ export const login = async (
   try {
     const result = await loginService(username, password);
     if (result.success) {
-      window.open('/loading', '_self');
+      //window.open('/loading', '_self');
       return result;
     }
-    throw new Error(result.error || 'Login failed');
+    throw new Error(result.message || 'Login failed');
   } catch (e) {
     throw new Error((e as Error).message);
   }

@@ -1,25 +1,4 @@
-.load-assets-icon {
-  display: block;
-  overflow: visible;
-}
-
-.load-assets-icon circle,
-.load-assets-icon path {
-  fill: none;
-  stroke: var(--color-accent-val);
-}
-
-.load-assets-icon .ring-track {
-  stroke-width: 1;
-  opacity: 0.12;
-}
-
-.load-assets-icon .ring-arc {
-  stroke-width: 1.5;
-  transform-origin: center;
-  transform-box: fill-box;
-  animation: load-assets-spin 1.8s linear infinite;
-}
+/* Shared styles in index.css (.loading-icon, .ring-track, .ring-arc, icon-spin) */
 
 .ring-dotted {
   stroke-width: 0.75;
@@ -32,12 +11,6 @@
 .v-mark {
   stroke-width: 1.5;
   animation: load-assets-breathe 2.2s ease-in-out infinite;
-}
-
-@keyframes load-assets-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @keyframes load-assets-spin-reverse {
@@ -57,7 +30,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .load-assets-icon .ring-arc,
   .ring-dotted,
   .v-mark {
     animation: none;

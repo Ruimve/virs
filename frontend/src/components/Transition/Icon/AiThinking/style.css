@@ -1,13 +1,4 @@
-.ai-thinking-icon {
-  display: block;
-  overflow: visible;
-}
-
-.ai-thinking-icon circle,
-.ai-thinking-icon line {
-  fill: none;
-  stroke: var(--color-accent-val);
-}
+/* Shared styles in index.css (.loading-icon, .ring-track, .ring-arc, icon-spin) */
 
 .neuron-core,
 .neuron-node {
@@ -15,18 +6,6 @@
   stroke: none;
   transform-origin: center;
   transform-box: fill-box;
-}
-
-.ai-thinking-icon .ring-track {
-  stroke-width: 1;
-  opacity: 0.12;
-}
-
-.ai-thinking-icon .ring-arc {
-  stroke-width: 1.5;
-  transform-origin: center;
-  transform-box: fill-box;
-  animation: ai-thinking-spin 1.8s linear infinite;
 }
 
 .neuron-links line {
@@ -54,12 +33,6 @@
   animation-delay: 1s;
 }
 
-@keyframes ai-thinking-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @keyframes ai-thinking-breathe {
   0%,
   100% {
@@ -85,7 +58,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ai-thinking-icon .ring-arc,
   .neuron-core,
   .neuron-node {
     animation: none;

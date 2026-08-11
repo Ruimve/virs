@@ -16,8 +16,7 @@ const baseStyles =
   'inline-flex items-center justify-center gap-2 rounded-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed select-none';
 
 const variantStyles: Record<ButtonVariant, string> = {
-  primary:
-    'bg-accent hover:bg-accent-hover text-white font-medium shadow-sm shadow-accent/10 hover:shadow-accent/20',
+  primary: 'bg-accent hover:bg-accent-hover text-white font-medium',
   secondary: 'bg-surface-2 hover:bg-surface-3 text-on-surface-secondary border border-line-default',
   ghost: 'text-on-surface-tertiary hover:text-on-surface-secondary hover:bg-surface-2/50',
   error: 'bg-danger hover:bg-danger-hover text-white font-medium',
