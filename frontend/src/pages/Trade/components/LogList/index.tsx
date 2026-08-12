@@ -7,7 +7,12 @@ import { StateFeedback } from '@/components/StateFeedback';
 import { ChevronRight } from '@/components/Icon';
 import { ConfidenceBar } from '@/components/ConfidenceBar';
 import { IndicatorChip } from '@/components/IndicatorChip';
-import { actionLabel, actionVariant } from '../utils/utils';
+import {
+  actionLabel,
+  actionVariant,
+  executionStatusLabel,
+  executionStatusVariant,
+} from '../utils/utils';
 import { getDecision, extractIndicatorChips } from '../utils/logUtils';
 import { Button } from '@/components/Button';
 
@@ -78,6 +83,11 @@ const LogList = ({ logs, loading, onLoadMore, botId, total }: Props) => {
                     失败
                   </Badge>
                 )}
+                {log.execution_status && (
+                  <Badge variant={executionStatusVariant(log.execution_status)} size="sm">
+                    {executionStatusLabel(log.execution_status)}
+                  </Badge>
+                )}
                 <span className="text-2xs text-on-surface-tertiary font-mono tabular-nums shrink-0">
                   {new Date(log.created_at).toLocaleString('zh-CN')}
                 </span>
@@ -107,6 +117,18 @@ const LogList = ({ logs, loading, onLoadMore, botId, total }: Props) => {
                   {confidence > 0 && (
                     <div className="mb-3 sm:hidden">
                       <ConfidenceBar value={confidencePct} />
+                    </div>
+                  )}
+
+                  {/* Intercept reason */}
+                  {log.intercept_reason && (
+                    <div className="mb-3 rounded-lg bg-danger-bg/50 border border-danger-border/50 px-3 py-2">
+                      <div className="text-2xs font-semibold text-danger-text uppercase tracking-wider mb-1">
+                        未执行原因
+                      </div>
+                      <p className="text-2xs text-on-surface-secondary leading-relaxed">
+                        {log.intercept_reason}
+                      </p>
                     </div>
                   )}
 

@@ -4,7 +4,12 @@ import { RadarChart } from '@/components/RadarChart';
 import { ConfidenceBar } from '@/components/ConfidenceBar';
 import { IndicatorChip, type IndicatorSentiment } from '@/components/IndicatorChip';
 import { Badge } from '@/components/Badge';
-import { actionLabel, actionVariant } from '../../../components/utils/utils';
+import {
+  actionLabel,
+  actionVariant,
+  executionStatusLabel,
+  executionStatusVariant,
+} from '../../../components/utils/utils';
 import {
   getDecision,
   extractRadarData,
@@ -214,6 +219,11 @@ export const AIPanel = memo(({ decision, logs, decideIntervalSecs }: AIPanelProp
                       {d?.action && (
                         <Badge variant={actionVariant(d.action)} size="xs">
                           {actionLabel(d.action)}
+                        </Badge>
+                      )}
+                      {log.execution_status && (
+                        <Badge variant={executionStatusVariant(log.execution_status)} size="xs">
+                          {executionStatusLabel(log.execution_status)}
                         </Badge>
                       )}
                       {d?.confidence != null && !isNaN(d.confidence) && (

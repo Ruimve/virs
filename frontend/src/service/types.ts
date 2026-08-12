@@ -157,6 +157,9 @@ export interface AnalysisLog {
   llm_model?: string;
   strategy_file?: string | null;
   error?: string;
+  execution_status?: string | null;
+  intercept_reason?: string | null;
+  completed_at?: string | null;
   created_at: string;
 }
 

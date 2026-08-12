@@ -809,8 +809,8 @@ pub async fn get_analysis_logs(
     .fetch_one(&state.db_pool)
     .await?;
 
-    let logs = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, String, String, String, serde_json::Value, Option<String>, String, String, chrono::DateTime<chrono::Utc>, Option<String>)>(
-        r#"SELECT l.id, l.bot_id, l.analysis_type, l.status, l.system_prompt, l.result, l.error, l.user_prompt, l.llm_model, l.created_at, l.strategy_file
+    let logs = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, String, String, String, serde_json::Value, Option<String>, String, String, chrono::DateTime<chrono::Utc>, Option<String>, Option<String>, Option<String>, Option<chrono::DateTime<chrono::Utc>>)>(
+        r#"SELECT l.id, l.bot_id, l.analysis_type, l.status, l.system_prompt, l.result, l.error, l.user_prompt, l.llm_model, l.created_at, l.strategy_file, l.execution_status, l.intercept_reason, l.completed_at
            FROM qd_auto_analysis_logs l
            JOIN qd_auto_bots b ON l.bot_id = b.id
            WHERE l.bot_id = $1 AND b.user_id = $2
@@ -824,7 +824,7 @@ pub async fn get_analysis_logs(
     .await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
-        "items": logs.iter().map(|(id, bot_id, analysis_type, status, system_prompt, result, error, user_prompt, llm_model, created_at, strategy_file)| {
+        "items": logs.iter().map(|(id, bot_id, analysis_type, status, system_prompt, result, error, user_prompt, llm_model, created_at, strategy_file, execution_status, intercept_reason, completed_at)| {
             serde_json::json!({
                 "id": id.to_string(),
                 "bot_id": bot_id.to_string(),
@@ -837,6 +837,9 @@ pub async fn get_analysis_logs(
                 "llm_model": llm_model,
                 "strategy_file": strategy_file,
                 "created_at": created_at.to_rfc3339(),
+                "execution_status": execution_status,
+                "intercept_reason": intercept_reason,
+                "completed_at": completed_at.map(|t| t.to_rfc3339()),
             })
         }).collect::<Vec<_>>(),
         "total": total,

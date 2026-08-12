@@ -10,7 +10,12 @@ import { IndicatorChip } from '@/components/IndicatorChip';
 import { RadarChart } from '@/components/RadarChart';
 import { Alert } from '@/components/Alert';
 import { IconBtn } from '@/components/Button/IconBtn';
-import { actionLabel, actionVariant } from '../utils/utils';
+import {
+  actionLabel,
+  actionVariant,
+  executionStatusLabel,
+  executionStatusVariant,
+} from '../utils/utils';
 import {
   getDecision,
   extractIndicatorChips,
@@ -102,6 +107,11 @@ const LogDetail = ({ log, loading }: Props) => {
                   失败
                 </Badge>
               )}
+              {log.execution_status && (
+                <Badge variant={executionStatusVariant(log.execution_status)} size="sm">
+                  {executionStatusLabel(log.execution_status)}
+                </Badge>
+              )}
               {log.llm_model && (
                 <span className="text-2xs font-mono px-2 py-0.5 rounded bg-surface-3 text-on-surface-secondary border border-line-default">
                   {log.llm_model}
@@ -126,6 +136,35 @@ const LogDetail = ({ log, loading }: Props) => {
             {/* Confidence bar */}
             {confidence > 0 && <ConfidenceBar value={confidencePct} />}
           </Card>
+
+          {/* Execution result card */}
+          {log.execution_status && (
+            <Card>
+              <div className="text-2xs font-semibold text-on-surface-tertiary uppercase tracking-wider mb-3">
+                执行结果
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <Badge variant={executionStatusVariant(log.execution_status)} size="sm">
+                  {executionStatusLabel(log.execution_status)}
+                </Badge>
+                {log.completed_at && (
+                  <span className="text-2xs text-on-surface-tertiary font-mono tabular-nums">
+                    {new Date(log.completed_at).toLocaleString('zh-CN')}
+                  </span>
+                )}
+              </div>
+              {log.intercept_reason && (
+                <div className="mt-3 rounded-lg bg-danger-bg/50 border border-danger-border/50 px-3 py-2">
+                  <div className="text-2xs font-semibold text-danger-text uppercase tracking-wider mb-1">
+                    未执行原因
+                  </div>
+                  <p className="text-xs text-on-surface-secondary leading-relaxed">
+                    {log.intercept_reason}
+                  </p>
+                </div>
+              )}
+            </Card>
+          )}
 
           {/* AI reasoning card with ai-bg */}
           {(reason || indicators.length > 0) && (

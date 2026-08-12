@@ -36,3 +36,33 @@ export const actionVariant = (
   };
   return map[action] || 'neutral';
 };
+
+export const executionStatusLabel = (status: string | null | undefined) => {
+  if (!status) return undefined;
+  const map: Record<string, string> = {
+    open: '开仓成功',
+    open_failed: '开仓失败',
+    open_canceled: '开仓取消',
+    close: '平仓成功',
+    close_failed: '平仓失败',
+    close_canceled: '平仓取消',
+    hold: '观望',
+  };
+  return map[status] || status;
+};
+
+export const executionStatusVariant = (
+  status: string | null | undefined,
+): 'success' | 'danger' | 'warning' | 'info' | 'neutral' => {
+  if (!status) return 'neutral';
+  const map: Record<string, 'success' | 'danger' | 'warning' | 'info' | 'neutral'> = {
+    open: 'success',
+    open_failed: 'danger',
+    open_canceled: 'warning',
+    close: 'info',
+    close_failed: 'danger',
+    close_canceled: 'warning',
+    hold: 'neutral',
+  };
+  return map[status] || 'neutral';
+};
