@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect } from 'react';
+import { createContext, useContext, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { WizardState, WizardStepValue } from './define';
 
@@ -13,7 +13,7 @@ export const WizardContext = createContext<WizardContextType | null>(null);
 
 export const useWizardGuard = (currentStep: WizardStepValue, requiredStep: WizardStepValue) => {
   const navigate = useNavigate();
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (currentStep < requiredStep) {
       navigate('/setup/bot-type', { replace: true });
     }
