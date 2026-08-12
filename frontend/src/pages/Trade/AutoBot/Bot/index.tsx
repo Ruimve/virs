@@ -248,7 +248,7 @@ const Bot = () => {
       />
 
       {/* 移动端布局：三段式（UpperRegion → LowerRegion → StickyMarket） */}
-      <div className="md:hidden h-full flex flex-col max-w-120 mx-auto">
+      <div className="md:hidden h-full flex flex-col">
         <UpperRegion
           bot={autoBot}
           strategy={strategy}
