@@ -1,7 +1,5 @@
-import { type ReactNode, Suspense, use, useMemo } from 'react';
+import { type ReactNode, use, useMemo } from 'react';
 import { getAutoBotDetail, type AutoBot, type StrategyDetail } from '@/service';
-import { FullScreen } from '@/components/Transition/FullScreen';
-import { BotLoading } from '@/components/Transition/Icon';
 import { BotContext } from '.';
 
 type Bot = {
@@ -25,7 +23,7 @@ const promiseBot = (() => {
   return fetchBot(botId);
 })();
 
-export const BotProviderMain = ({ children }: { children: ReactNode }) => {
+export const BotProvider = ({ children }: { children: ReactNode }) => {
   const { bot, strategy } = use(promiseBot);
 
   const value = useMemo(() => {
@@ -36,12 +34,4 @@ export const BotProviderMain = ({ children }: { children: ReactNode }) => {
   }, [bot, strategy]);
 
   return <BotContext.Provider value={value}>{children}</BotContext.Provider>;
-};
-
-export const BotProvider = ({ children }: { children: ReactNode }) => {
-  return (
-    <Suspense fallback={<FullScreen header icon={<BotLoading />} />}>
-      <BotProviderMain>{children}</BotProviderMain>
-    </Suspense>
-  );
 };

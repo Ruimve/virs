@@ -1,15 +1,15 @@
 import { Outlet } from 'react-router-dom';
 import { AppShell } from '@/layout/AppShell';
 import { ShellProvider } from '@/context/ShellContext/ShellProvider';
-import { PaperProvider } from '../context/PaperContext/PaperProvider';
 import { BotProvider } from '../context/BotContext/BotProvider';
+import { PaperProvider } from '../context/PaperContext/PaperProvider';
 import { PositionProvider } from '../context/PositionContext/PositionProvider';
 import { TradeHeader } from './Header';
 
 export const LayoutBox = () => {
   return (
-    <PaperProvider>
-      <BotProvider>
+    <BotProvider>
+      <PaperProvider>
         <PositionProvider>
           <ShellProvider>
             <AppShell header={<TradeHeader />}>
@@ -17,8 +17,8 @@ export const LayoutBox = () => {
             </AppShell>
           </ShellProvider>
         </PositionProvider>
-      </BotProvider>
-    </PaperProvider>
+      </PaperProvider>
+    </BotProvider>
   );
 };
 

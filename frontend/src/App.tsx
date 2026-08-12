@@ -23,8 +23,6 @@ const AutoBotLogDetail = lazy(() => import('./pages/Trade/AutoBot/Log/Detail'));
 const AutoBotTrades = lazy(() => import('./pages/Trade/AutoBot/Trades'));
 const AutoBotSystem = lazy(() => import('./pages/Trade/AutoBot/System'));
 
-const HealthCheck = lazy(() => import('./pages/Trade/HealthCheck'));
-
 const App = () => {
   return (
     <ErrorBoundary>
@@ -49,7 +47,6 @@ const App = () => {
                   <Route path="/trade/auto/:botId/trades" element={<AutoBotTrades />} />
                   <Route path="/trade/auto/:botId/system" element={<AutoBotSystem />} />
                 </Route>
-                <Route path="/trade/:botType/:botId/health" element={<HealthCheck />} />
               </Route>
               <Route path="*" element={<Navigate to="/setup/bot-type" replace />} />
             </Route>
