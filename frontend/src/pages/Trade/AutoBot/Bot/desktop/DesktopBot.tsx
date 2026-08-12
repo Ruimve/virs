@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { KlineChart } from '@/components/Chart/KlineChart';
 import { TradeLoading } from '@/components/Transition/Icon';
 import type { DesktopBotProps } from './types';
@@ -31,6 +31,8 @@ export const DesktopBot = memo((props: DesktopBotProps) => {
     markers,
   } = props;
 
+  const [rightTab, setRightTab] = useState<'analysis' | 'trading'>('analysis');
+
   const chartContent = useMemo(() => {
     if (klineData.length === 0) {
       return (
@@ -62,29 +64,70 @@ export const DesktopBot = memo((props: DesktopBotProps) => {
         </div>
       </div>
 
-      {/* Right side panel: AI + risk + account + positions */}
-      <div className="flex flex-col gap-2 overflow-y-auto p-2 bg-surface-1">
-        <AIPanel decision={decision} logs={logs} decideIntervalSecs={bot.decide_interval_secs} />
-        <RiskPanel
-          accountMetrics={accountMetrics}
-          bot={bot}
-          longMetrics={longMetrics}
-          shortMetrics={shortMetrics}
-        />
-        <AccountCard
-          bot={bot}
-          accountMetrics={accountMetrics}
-          totalPnl={totalPnl}
-          totalPnlPct={totalPnlPct}
-        />
-        <PositionsCard
-          bot={bot}
-          longPosition={longPosition}
-          shortPosition={shortPosition}
-          longMetrics={longMetrics}
-          shortMetrics={shortMetrics}
-          latestPrice={latestPrice}
-        />
+      {/* Right side panel: tabbed cards (分析 / 交易) */}
+      <div className="flex flex-col h-full overflow-hidden bg-surface-1">
+        {/* Tab bar */}
+        <div className="flex items-center gap-1 px-2 pt-2 pb-1 shrink-0 border-b border-line-subtle">
+          <button
+            type="button"
+            onClick={() => setRightTab('analysis')}
+            className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors cursor-pointer ${
+              rightTab === 'analysis'
+                ? 'bg-accent-light text-accent'
+                : 'text-on-surface-tertiary hover:text-on-surface hover:bg-surface-2'
+            }`}
+          >
+            分析
+          </button>
+          <button
+            type="button"
+            onClick={() => setRightTab('trading')}
+            className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors cursor-pointer ${
+              rightTab === 'trading'
+                ? 'bg-accent-light text-accent'
+                : 'text-on-surface-tertiary hover:text-on-surface hover:bg-surface-2'
+            }`}
+          >
+            交易
+          </button>
+        </div>
+
+        {/* Tab content */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col gap-2">
+          {rightTab === 'analysis' && (
+            <>
+              <AIPanel
+                decision={decision}
+                logs={logs}
+                decideIntervalSecs={bot.decide_interval_secs}
+              />
+              <RiskPanel
+                accountMetrics={accountMetrics}
+                bot={bot}
+                longMetrics={longMetrics}
+                shortMetrics={shortMetrics}
+              />
+            </>
+          )}
+          {rightTab === 'trading' && (
+            <>
+              <AccountCard
+                bot={bot}
+                accountMetrics={accountMetrics}
+                totalPnl={totalPnl}
+                totalPnlPct={totalPnlPct}
+              />
+              <PositionsCard
+                bot={bot}
+                longPosition={longPosition}
+                shortPosition={shortPosition}
+                longMetrics={longMetrics}
+                shortMetrics={shortMetrics}
+                latestPrice={latestPrice}
+              />
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
