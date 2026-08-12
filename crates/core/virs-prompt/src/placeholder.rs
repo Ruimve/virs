@@ -230,6 +230,15 @@ pub const REGISTRY: &[PlaceholderDef] = &[
     PlaceholderDef { name: "m15_volume_sma20",       source: PlaceholderSource::Indicator(IndicatorSpec::VolumeSma { tf: Timeframe::M15, period: 20 }, Format::Price2), category: Category::M15 },
     PlaceholderDef { name: "m15_high_50",            source: PlaceholderSource::Indicator(IndicatorSpec::Highest { tf: Timeframe::M15, period: 50 }, Format::Price2), category: Category::M15 },
     PlaceholderDef { name: "m15_low_50",             source: PlaceholderSource::Indicator(IndicatorSpec::Lowest { tf: Timeframe::M15, period: 50 }, Format::Price2), category: Category::M15 },
+    PlaceholderDef { name: "m15_bb_upper",           source: PlaceholderSource::Indicator(IndicatorSpec::BbandsUpper { tf: Timeframe::M15, period: 20, stddev: 2 }, Format::Price2), category: Category::M15 },
+    PlaceholderDef { name: "m15_bb_middle",          source: PlaceholderSource::Indicator(IndicatorSpec::BbandsMiddle { tf: Timeframe::M15, period: 20, stddev: 2 }, Format::Price2), category: Category::M15 },
+    PlaceholderDef { name: "m15_bb_lower",           source: PlaceholderSource::Indicator(IndicatorSpec::BbandsLower { tf: Timeframe::M15, period: 20, stddev: 2 }, Format::Price2), category: Category::M15 },
+    PlaceholderDef { name: "m15_change",             source: PlaceholderSource::Indicator(IndicatorSpec::ChangePct { tf: Timeframe::M15, period: 1 }, Format::Signed2), category: Category::M15 },
+    PlaceholderDef { name: "m15_candle_body",        source: PlaceholderSource::Indicator(IndicatorSpec::CandleBody { tf: Timeframe::M15 }, Format::Price4), category: Category::M15 },
+    PlaceholderDef { name: "m15_high_20",            source: PlaceholderSource::Indicator(IndicatorSpec::Highest { tf: Timeframe::M15, period: 20 }, Format::Price2), category: Category::M15 },
+    PlaceholderDef { name: "m15_low_20",             source: PlaceholderSource::Indicator(IndicatorSpec::Lowest { tf: Timeframe::M15, period: 20 }, Format::Price2), category: Category::M15 },
+    PlaceholderDef { name: "m15_bandwidth_5bars_ago",source: PlaceholderSource::Indicator(IndicatorSpec::BandwidthBarsAgo { tf: Timeframe::M15, period: 20, stddev: 2, bars_ago: 5 }, Format::Percent2), category: Category::M15 },
+    PlaceholderDef { name: "m15_ema_gap_pct",        source: PlaceholderSource::Indicator(IndicatorSpec::EmaGapPct { tf: Timeframe::M15, fast: 20, slow: 50 }, Format::Price2), category: Category::M15 },
 
 
     PlaceholderDef { name: "h4_ema20",           source: PlaceholderSource::Indicator(IndicatorSpec::Ema { tf: Timeframe::H4, period: 20 }, Format::Price2), category: Category::H4 },

@@ -28,48 +28,43 @@
 - 当前资金费率：{funding_rate}
 - 下一个结算时间：{funding_next_time}
 
-## 4小时大环境
+## 4小时大环境（背景参考，非硬性过滤）
 - EMA20：{h4_ema20}
 - EMA50：{h4_ema50}
+- ADX(14)：{h4_adx}
 - RSI(14)：{h4_rsi}
 - MACD柱状图：{h4_macd_histogram}
-- ADX(14)：{h4_adx}
 
-## 1小时主周期（核心信号）
-- 当前价格：{h1_current_price}
+## 1小时趋势过滤
 - EMA20：{h1_ema20}
 - EMA50：{h1_ema50}
 - EMA交叉状态：{h1_ema_cross}
-- EMA间距：{h1_ema_gap_pct}%
 - RSI(14)：{h1_rsi}
-- MACD：{h1_macd}
-- MACD信号线：{h1_macd_signal}
 - MACD柱状图：{h1_macd_histogram}
 - ADX(14)：{h1_adx}
-- ATR(14)：{h1_atr}
-- ATR(14)的20周期SMA：{h1_atr_sma20}
-- 布林带上/中/下轨：{h1_bb_upper} / {h1_bb_middle} / {h1_bb_lower}
-- 布林带宽度：{h1_bb_width_pct}%
-- 5根K线前布林带宽度：{h1_bandwidth_5bars_ago}%
-- 布林带外K线数：{h1_bars_outside_band}
-- 1h涨跌幅：{h1_change}%
-- 成交量（上一根已完成K线）：{h1_volume}（20周期均量：{h1_volume_sma20}）
-- 20周期最高/最低：{h1_high_20} / {h1_low_20}
-- 上方最近整数关口：{nearest_round_up}
-- 下方最近整数关口：{nearest_round_down}
 
-## 15分钟入场周期
+## 15分钟主信号周期（核心决策依据）
 - 当前价格：{m15_current_price}
 - EMA20：{m15_ema20}
 - EMA50：{m15_ema50}
+- EMA交叉状态：{m15_ema_cross}
+- EMA间距：{m15_ema_gap_pct}%
 - RSI(14)：{m15_rsi}
 - MACD：{m15_macd}
 - MACD信号线：{m15_macd_signal}
 - MACD柱状图：{m15_macd_histogram}
 - ADX(14)：{m15_adx}
 - ATR(14)：{m15_atr}
+- ATR(14)的20周期SMA：{m15_atr_sma20}
+- 布林带上/中/下轨：{m15_bb_upper} / {m15_bb_middle} / {m15_bb_lower}
+- 布林带宽度：{m15_bb_width_pct}%
+- 5根K线前布林带宽度：{m15_bandwidth_5bars_ago}%
 - 布林带外K线数：{m15_bars_outside_band}
+- 15m涨跌幅：{m15_change}%
+- K线实体：{m15_candle_body}
 - 成交量（上一根已完成K线）：{m15_volume}（20周期均量：{m15_volume_sma20}）
+- 20周期最高/最低：{m15_high_20} / {m15_low_20}
+- 50周期最高/最低：{m15_high_50} / {m15_low_50}
 
 ## 统计
 - 总交易次数：{total_trades}
