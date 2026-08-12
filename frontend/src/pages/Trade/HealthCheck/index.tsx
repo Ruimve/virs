@@ -14,8 +14,8 @@ import {
 import { getSystemInfo } from '@/service/system';
 import type { SystemInfo } from '@/service/types';
 import { useBot } from '../context/BotContext';
-import { useShell } from '@/layout/ShellContext';
 import type { CheckData, CheckItem, CheckKey } from './define';
+import { useShell } from '@/context/ShellContext';
 
 const INITIAL_CHECKS: CheckItem[] = [
   {

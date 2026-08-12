@@ -2,8 +2,8 @@ import { useEffect, type ReactNode } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { startAutoBot, stopAutoBot, deleteAutoBot } from '@/service/bot';
 import { useBot } from '../context/BotContext';
-import { useShell, type NavItem, type ActionItem } from '@/layout/ShellContext';
 import { Button } from '@/components/Button';
+import { useShell, type ActionItem, type NavItem } from '@/context/ShellContext';
 
 const navIcons: Record<string, ReactNode> = {
   bot: (

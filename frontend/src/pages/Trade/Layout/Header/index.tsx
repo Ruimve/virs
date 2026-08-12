@@ -2,10 +2,10 @@ import { memo } from 'react';
 import { BrandMark } from '@/components/BrandMark';
 import { Theme } from '@/components/Theme';
 import { Flame, ShieldCheck } from '@/components/Icon';
-import { useShell } from '@/layout/ShellContext';
 import { usePaper } from '../../context/PaperContext';
 import { useBot } from '../../context/BotContext';
 import { formatCompact, formatInterval } from '../../AutoBot/Bot/components/utils';
+import { useShell } from '@/context/ShellContext';
 
 interface StatusStyle {
   text: string;

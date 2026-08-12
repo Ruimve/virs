@@ -1,6 +1,6 @@
 import { memo, type ReactNode } from 'react';
 import { BrandMark } from '@/components/BrandMark';
-import { useShell } from './ShellContext';
+import { useShell } from '@/context/ShellContext';
 
 interface AppShellProps {
   header: ReactNode;

@@ -1,36 +1,6 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
-
-export interface NavItem {
-  key: string;
-  label: string;
-  icon: ReactNode;
-  onClick: () => void;
-}
-
-export interface ActionItem {
-  key: string;
-  label: string;
-  className?: string;
-  onClick: () => void;
-}
-
-export interface ShellContextValue {
-  navItems: NavItem[];
-  setNavItems: (items: NavItem[]) => void;
-  actions: ActionItem[];
-  setActions: (actions: ActionItem[]) => void;
-  activeNav: string;
-  openDrawer: () => void;
-}
-
-export const ShellContext = createContext<ShellContextValue | null>(null);
-
-export const useShell = () => {
-  const ctx = useContext(ShellContext);
-  if (!ctx) throw new Error('useShell 必须在 ShellProvider 内部使用');
-  return ctx;
-};
+import { ShellContext, type ActionItem, type NavItem } from '.';
 
 export const ShellProvider = ({ children }: { children: ReactNode }) => {
   const [navItems, setNavItems] = useState<NavItem[]>([]);
