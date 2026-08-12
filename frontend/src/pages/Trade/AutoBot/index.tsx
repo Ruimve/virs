@@ -3,7 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { startAutoBot, stopAutoBot, deleteAutoBot } from '@/service/bot';
 import { useBot } from '../context/BotContext';
 import { Button } from '@/components/Button';
-import { useShell, type ActionItem, type NavItem } from '@/context/ShellContext';
+import { useLayout, type ActionItem, type NavItem } from '@/context/LayoutContext';
 
 const navIcons: Record<string, ReactNode> = {
   bot: (
@@ -70,7 +70,7 @@ const navIcons: Record<string, ReactNode> = {
 
 const AutoBot = () => {
   const navigate = useNavigate();
-  const { setNavItems, setActions } = useShell();
+  const { setNavItems, setActions } = useLayout();
   const { bot } = useBot();
 
   useEffect(() => {

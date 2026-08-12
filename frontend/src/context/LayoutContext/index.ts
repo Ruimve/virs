@@ -14,21 +14,22 @@ export interface ActionItem {
   onClick: () => void;
 }
 
-export interface ShellContextValue {
+export interface LayoutContextValue {
   navItems: NavItem[];
   setNavItems: (items: NavItem[]) => void;
   actions: ActionItem[];
   setActions: (actions: ActionItem[]) => void;
   activeNav: string;
-  openDrawer: () => void;
+  drawerOpen: boolean;
+  changeDrawerOpen: (open: boolean) => void;
 }
 
-export const ShellContext = createContext<ShellContextValue | null>(null);
+export const LayoutContext = createContext<LayoutContextValue | null>(null);
 
-export const useShell = () => {
-  const context = useContext(ShellContext);
+export const useLayout = () => {
+  const context = useContext(LayoutContext);
   if (!context) {
-    throw new Error('useShell 必须在 ShellContext 内部使用');
+    throw new Error('useLayout 必须在 LayoutContext 内部使用');
   }
   return context;
 };

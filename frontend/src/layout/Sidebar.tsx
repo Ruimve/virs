@@ -1,15 +1,9 @@
-import { memo, type ReactNode } from 'react';
+import { memo } from 'react';
 import { Brand } from '@/components/Logo';
-import { useShell } from '@/context/ShellContext';
+import { useLayout } from '@/context/LayoutContext';
 
-interface AppShellProps {
-  header: ReactNode;
-  children: ReactNode;
-  sidebar?: boolean;
-}
-
-const ShellSidebar = memo(() => {
-  const { navItems, activeNav } = useShell();
+export const Sidebar = memo(() => {
+  const { navItems, activeNav } = useLayout();
 
   if (navItems.length === 0) return null;
 
@@ -35,7 +29,7 @@ const ShellSidebar = memo(() => {
               }`}
             >
               {isActive && (
-                <span className="absolute -left-2 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-accent" />
+                <span className="absolute -left-2 top-1/2 -translate-y-1/2 w-0.75 h-5 rounded-full bg-accent" />
               )}
               {item.icon}
             </button>
@@ -45,18 +39,3 @@ const ShellSidebar = memo(() => {
     </aside>
   );
 });
-
-export const AppShell = memo(({ header, children, sidebar = true }: AppShellProps) => {
-  return (
-    <div className="relative flex h-dvh overflow-hidden bg-base">
-      {sidebar && <ShellSidebar />}
-
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header>{header}</header>
-        <main className="h-0 flex-1 overflow-hidden">{children}</main>
-      </div>
-    </div>
-  );
-});
-
-export default AppShell;

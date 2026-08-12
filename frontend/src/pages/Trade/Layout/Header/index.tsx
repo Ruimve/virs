@@ -5,7 +5,7 @@ import { Flame, ShieldCheck } from '@/components/Icon';
 import { usePaper } from '../../context/PaperContext';
 import { useBot } from '../../context/BotContext';
 import { formatCompact, formatInterval } from '../../AutoBot/Bot/components/utils';
-import { useShell } from '@/context/ShellContext';
+import { useLayout } from '@/context/LayoutContext';
 
 interface StatusStyle {
   text: string;
@@ -55,7 +55,7 @@ function statusConfig(status: string): StatusStyle {
 export const TradeHeader = memo(() => {
   const { bot } = useBot();
   const { enabled: paperEnabled } = usePaper();
-  const { actions, openDrawer } = useShell();
+  const { actions, changeDrawerOpen } = useLayout();
 
   const sc = statusConfig(bot?.status || '');
   const interval = bot ? formatInterval(bot.decide_interval_secs) : '';
@@ -64,7 +64,7 @@ export const TradeHeader = memo(() => {
     <div className="relative z-10 flex items-center h-14 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
       {/* Mobile: Brand as drawer trigger */}
       <div className="md:hidden flex items-center pl-3 shrink-0">
-        <Brand size={20} onClick={openDrawer} />
+        <Brand size={20} onClick={() => changeDrawerOpen(true)} />
       </div>
 
       {/* Left: bot name + badges (desktop) */}

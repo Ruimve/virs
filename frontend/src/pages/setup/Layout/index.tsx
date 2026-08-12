@@ -1,14 +1,14 @@
 import { Outlet } from 'react-router-dom';
-import { AppShell } from '@/layout/AppShell';
+import { Layout } from '@/layout';
 import { WizardProvider } from '../context/WizardContext/WizardProvider';
 import Header from './Header';
 
 export const LayoutBox = () => {
   return (
     <WizardProvider>
-      <AppShell header={<Header />} sidebar={false}>
+      <Layout header={<Header />} sidebar={false}>
         <Outlet />
-      </AppShell>
+      </Layout>
     </WizardProvider>
   );
 };

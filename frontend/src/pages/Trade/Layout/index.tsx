@@ -1,6 +1,5 @@
 import { Outlet } from 'react-router-dom';
-import { AppShell } from '@/layout/AppShell';
-import { ShellProvider } from '@/context/ShellContext/ShellProvider';
+import { Layout } from '@/layout';
 import { BotProvider } from '../context/BotContext/BotProvider';
 import { PaperProvider } from '../context/PaperContext/PaperProvider';
 import { PositionProvider } from '../context/PositionContext/PositionProvider';
@@ -11,11 +10,9 @@ export const LayoutBox = () => {
     <BotProvider>
       <PaperProvider>
         <PositionProvider>
-          <ShellProvider>
-            <AppShell header={<TradeHeader />}>
-              <Outlet />
-            </AppShell>
-          </ShellProvider>
+          <Layout header={<TradeHeader />}>
+            <Outlet />
+          </Layout>
         </PositionProvider>
       </PaperProvider>
     </BotProvider>
