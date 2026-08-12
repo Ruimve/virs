@@ -15,8 +15,8 @@ export interface BrandMarkProps {
  * BrandMark = Logo + "virs" wordmark.
  *
  * Header sizing guide:
- *   - size=20  → h-12 headers (48px)
- *   - size=24  → h-14 / h-16 headers (56-64px)
+ *   - size=20 → h-14 mobile headers (56px)
+ *   - size=24 → h-14 desktop headers / sidebar (56px)
  *
  * vertical=true → stack text below logo (for narrow sidebars)
  */

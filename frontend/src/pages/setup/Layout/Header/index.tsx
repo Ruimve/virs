@@ -39,16 +39,21 @@ const Header = () => {
   }, [wizard.current_step]);
 
   return (
-    <div className="relative z-10 flex items-center h-14 md:h-16 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
-      <div className="flex items-center gap-2 pl-4 md:pl-8 shrink-0">
-        <BrandMark size={24} />
+    <div className="relative z-10 flex items-center h-14 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
+      <div className="flex items-center gap-2 pl-3 md:pl-4 shrink-0">
+        <div className="md:hidden">
+          <BrandMark size={20} />
+        </div>
+        <div className="hidden md:block">
+          <BrandMark size={24} />
+        </div>
       </div>
 
       <div className="flex items-center justify-center flex-1 gap-2">
         <span className="text-caption text-on-surface-tertiary md:hidden">{simpleSteps}</span>
         <div className="hidden md:flex items-center gap-2">{fullSteps}</div>
       </div>
-      <div className="flex items-center gap-2 pr-4 md:pr-8 ml-auto shrink-0">
+      <div className="flex items-center gap-2 pr-3 md:pr-4 ml-auto shrink-0">
         <Theme />
       </div>
     </div>
