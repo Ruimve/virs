@@ -1,4 +1,4 @@
-import { BrandMark } from '@/components/BrandMark';
+import { Brand } from '@/components/Logo';
 import { Theme } from '@/components/Theme';
 
 export const Header = () => {
@@ -6,10 +6,10 @@ export const Header = () => {
     <div className="relative z-10 flex items-center h-14 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
       <div className="pl-3 md:pl-4 shrink-0">
         <div className="md:hidden">
-          <BrandMark size={20} />
+          <Brand size={20} />
         </div>
         <div className="hidden md:block">
-          <BrandMark size={24} />
+          <Brand size={24} />
         </div>
       </div>
 

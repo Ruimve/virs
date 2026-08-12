@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { BrandMark } from '@/components/BrandMark';
+import { Brand } from '@/components/Logo';
 import { Theme } from '@/components/Theme';
 import { Flame, ShieldCheck } from '@/components/Icon';
 import { usePaper } from '../../context/PaperContext';
@@ -62,9 +62,9 @@ export const TradeHeader = memo(() => {
 
   return (
     <div className="relative z-10 flex items-center h-14 border-b border-line-subtle bg-base/80 backdrop-blur-xl">
-      {/* Mobile: BrandMark as drawer trigger */}
+      {/* Mobile: Brand as drawer trigger */}
       <div className="md:hidden flex items-center pl-3 shrink-0">
-        <BrandMark size={20} onClick={openDrawer} />
+        <Brand size={20} onClick={openDrawer} />
       </div>
 
       {/* Left: bot name + badges (desktop) */}

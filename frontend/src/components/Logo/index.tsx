@@ -1,6 +1,8 @@
 import { memo } from 'react';
 import { obj, fn } from '@/utils/default';
 
+export { Brand } from './Brand';
+
 export interface LogoProps {
   size?: number;
   className?: string;

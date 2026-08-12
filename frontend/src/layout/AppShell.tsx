@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from 'react';
-import { BrandMark } from '@/components/BrandMark';
+import { Brand } from '@/components/Logo';
 import { useShell } from '@/context/ShellContext';
 
 interface AppShellProps {
@@ -16,7 +16,7 @@ const ShellSidebar = memo(() => {
   return (
     <aside className="hidden md:flex flex-col items-center w-14 h-full bg-surface-1 border-r border-line-default shrink-0">
       <div className="mt-3 mb-4 shrink-0">
-        <BrandMark size={24} vertical />
+        <Brand size={24} vertical />
       </div>
 
       <nav className="flex flex-col items-center gap-1 flex-1 w-full">
