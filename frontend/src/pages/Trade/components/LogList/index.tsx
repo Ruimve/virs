@@ -5,7 +5,7 @@ import { AiThinking } from '../Transition';
 import { Badge } from '@/components/Badge';
 import { StateFeedback } from '@/components/StateFeedback';
 import { ChevronRight } from '@/components/Icon';
-import { ConfidenceBar } from '@/components/ConfidenceBar';
+import { Progress } from '@/components/Progress';
 import { IndicatorChip } from '../IndicatorChip';
 import {
   actionLabel,
@@ -101,7 +101,7 @@ const LogList = ({ logs, loading, onLoadMore, botId, total }: Props) => {
                 )}
                 {confidence > 0 && (
                   <div className="flex items-center gap-1.5 shrink-0 w-28">
-                    <ConfidenceBar value={confidencePct} showValue={false} />
+                    <Progress pct={confidencePct} color="ai" />
                     <span className="text-xs font-mono font-semibold tabular-nums text-ai shrink-0">
                       {confidencePct.toFixed(0)}%
                     </span>
@@ -150,7 +150,7 @@ const LogList = ({ logs, loading, onLoadMore, botId, total }: Props) => {
                 {confidence > 0 && (
                   <div className="flex items-center gap-2 mt-2">
                     <span className="text-2xs text-on-surface-muted shrink-0">置信度</span>
-                    <ConfidenceBar value={confidencePct} showValue={false} />
+                    <Progress pct={confidencePct} color="ai" />
                     <span className="text-xs font-mono font-semibold tabular-nums text-ai shrink-0">
                       {confidencePct.toFixed(0)}%
                     </span>

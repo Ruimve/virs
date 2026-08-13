@@ -5,7 +5,7 @@ import { AiThinking } from '../Transition';
 import { ChevronLeft, ChevronRight } from '@/components/Icon';
 import { Badge } from '@/components/Badge';
 import { Card } from '@/components/Card';
-import { ConfidenceBar } from '@/components/ConfidenceBar';
+import { Progress } from '@/components/Progress';
 import { IndicatorChip } from '../IndicatorChip';
 import { RadarChart } from '@/components/RadarChart';
 import { Alert } from '@/components/Alert';
@@ -134,7 +134,7 @@ const LogDetail = ({ log, loading }: Props) => {
               )}
             </div>
             {/* Confidence bar */}
-            {confidence > 0 && <ConfidenceBar value={confidencePct} />}
+            {confidence > 0 && <Progress pct={confidencePct} color="ai" showValue />}
           </Card>
 
           {/* Execution result card */}

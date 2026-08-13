@@ -1,7 +1,7 @@
 import { memo, useMemo, useState, type ReactNode } from 'react';
 import type { AnalysisLog } from '@/service/types';
 import { RadarChart } from '@/components/RadarChart';
-import { ConfidenceBar } from '@/components/ConfidenceBar';
+import { Progress } from '@/components/Progress';
 import { IndicatorChip, type IndicatorSentiment } from '../../../components/IndicatorChip';
 import { Badge } from '@/components/Badge';
 import {
@@ -153,7 +153,7 @@ export const AIPanel = memo(({ decision, logs, decideIntervalSecs }: AIPanelProp
               </div>
 
               {dec?.confidence != null && !isNaN(dec.confidence) && (
-                <ConfidenceBar value={dec.confidence} />
+                <Progress pct={dec.confidence} color="ai" showValue />
               )}
 
               {(targets.entry || targets.stopLoss || targets.takeProfit) && (
