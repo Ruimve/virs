@@ -1,12 +1,12 @@
 import { memo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service';
-import { AiThinking } from '@/components/Transition/Icon';
+import { AiThinking } from '../Transition';
 import { Badge } from '@/components/Badge';
 import { StateFeedback } from '@/components/StateFeedback';
 import { ChevronRight } from '@/components/Icon';
 import { ConfidenceBar } from '@/components/ConfidenceBar';
-import { IndicatorChip } from '@/components/IndicatorChip';
+import { IndicatorChip } from '../IndicatorChip';
 import {
   actionLabel,
   actionVariant,
@@ -14,6 +14,7 @@ import {
   executionStatusVariant,
 } from '../utils/utils';
 import { getDecision, extractIndicatorChips } from '../utils/logUtils';
+import { formatRelativeTime } from '../../AutoBot/Bot/components/utils';
 import { Button } from '@/components/Button';
 
 interface Props {
@@ -50,7 +51,7 @@ const LogList = ({ logs, loading, onLoadMore, botId, total }: Props) => {
         </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         {logs.map((log) => {
           const decision = getDecision(log);
           const isExpanded = expandedId === log.id;
@@ -68,10 +69,10 @@ const LogList = ({ logs, loading, onLoadMore, botId, total }: Props) => {
                   : 'border-line-default bg-surface-1 hover:bg-surface-2/50'
               }`}
             >
-              {/* Header row */}
+              {/* Header - Desktop: single row with reason preview filling horizontal space */}
               <div
                 onClick={() => setExpandedId(isExpanded ? null : log.id)}
-                className="flex items-center gap-2.5 px-4 py-3 cursor-pointer"
+                className="hidden md:flex items-center gap-2.5 px-4 py-3 cursor-pointer"
               >
                 {decision && (
                   <Badge variant={actionVariant(decision.action)} size="sm">
@@ -91,17 +92,21 @@ const LogList = ({ logs, loading, onLoadMore, botId, total }: Props) => {
                 <span className="text-2xs text-on-surface-tertiary font-mono tabular-nums shrink-0">
                   {new Date(log.created_at).toLocaleString('zh-CN')}
                 </span>
-                <div className="flex-1" />
-                {/* Confidence display */}
+                {reason ? (
+                  <span className="flex-1 min-w-0 text-xs text-on-surface-tertiary truncate">
+                    {reason}
+                  </span>
+                ) : (
+                  <div className="flex-1" />
+                )}
                 {confidence > 0 && (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-2xs text-on-surface-muted hidden sm:inline">置信度</span>
-                    <span className="text-xs font-mono font-semibold tabular-nums text-ai">
+                  <div className="flex items-center gap-1.5 shrink-0 w-28">
+                    <ConfidenceBar value={confidencePct} showValue={false} />
+                    <span className="text-xs font-mono font-semibold tabular-nums text-ai shrink-0">
                       {confidencePct.toFixed(0)}%
                     </span>
                   </div>
                 )}
-                {/* Expand/collapse chevron */}
                 <ChevronRight
                   className={`w-3.5 h-3.5 text-on-surface-muted transition-transform shrink-0 ${
                     isExpanded ? 'rotate-90' : ''
@@ -110,16 +115,52 @@ const LogList = ({ logs, loading, onLoadMore, botId, total }: Props) => {
                 />
               </div>
 
+              {/* Header - Mobile: two rows, badges + relative time on row 1, confidence bar on row 2 */}
+              <div
+                onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                className="md:hidden px-4 py-3 cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  {decision && (
+                    <Badge variant={actionVariant(decision.action)} size="sm">
+                      {actionLabel(decision.action)}
+                    </Badge>
+                  )}
+                  {log.status === 'failed' && (
+                    <Badge variant="danger" size="sm">
+                      失败
+                    </Badge>
+                  )}
+                  {log.execution_status && (
+                    <Badge variant={executionStatusVariant(log.execution_status)} size="sm">
+                      {executionStatusLabel(log.execution_status)}
+                    </Badge>
+                  )}
+                  <div className="flex-1" />
+                  <span className="text-2xs text-on-surface-tertiary font-mono tabular-nums shrink-0">
+                    {formatRelativeTime(log.created_at)}
+                  </span>
+                  <ChevronRight
+                    className={`w-3.5 h-3.5 text-on-surface-muted transition-transform shrink-0 ${
+                      isExpanded ? 'rotate-90' : ''
+                    }`}
+                    strokeWidth={2}
+                  />
+                </div>
+                {confidence > 0 && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-2xs text-on-surface-muted shrink-0">置信度</span>
+                    <ConfidenceBar value={confidencePct} showValue={false} />
+                    <span className="text-xs font-mono font-semibold tabular-nums text-ai shrink-0">
+                      {confidencePct.toFixed(0)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+
               {/* Expanded content */}
               {isExpanded && (
                 <div className="border-t border-ai-border px-4 pb-4 pt-3">
-                  {/* Confidence bar */}
-                  {confidence > 0 && (
-                    <div className="mb-3 sm:hidden">
-                      <ConfidenceBar value={confidencePct} />
-                    </div>
-                  )}
-
                   {/* Intercept reason */}
                   {log.intercept_reason && (
                     <div className="mb-3 rounded-lg bg-danger-bg/50 border border-danger-border/50 px-3 py-2">

@@ -2,8 +2,8 @@ import { memo, useMemo, useState, type RefObject } from 'react';
 import type { AnalysisLog } from '@/service/types';
 import type { KlineCandle } from '@/service';
 import { type KlineChartHandle, KlineChart } from '@/components/Chart/KlineChart';
-import { DecisionTimeline, type DecisionAction } from '@/components/DecisionTimeline';
-import { TradeLoading } from '@/components/Transition/Icon';
+import { DecisionTimeline, type DecisionAction } from '../DecisionTimeline';
+import { TradeLoading } from '../Transition';
 import { FlashPrice } from '../FlashPrice';
 
 interface ChartMarker {

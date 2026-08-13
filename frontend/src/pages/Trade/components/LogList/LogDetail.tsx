@@ -1,12 +1,12 @@
 import { useState, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service/types';
-import { AiThinking } from '@/components/Transition/Icon';
+import { AiThinking } from '../Transition';
 import { ChevronLeft, ChevronRight } from '@/components/Icon';
 import { Badge } from '@/components/Badge';
 import { Card } from '@/components/Card';
 import { ConfidenceBar } from '@/components/ConfidenceBar';
-import { IndicatorChip } from '@/components/IndicatorChip';
+import { IndicatorChip } from '../IndicatorChip';
 import { RadarChart } from '@/components/RadarChart';
 import { Alert } from '@/components/Alert';
 import { IconBtn } from '@/components/Button/IconBtn';

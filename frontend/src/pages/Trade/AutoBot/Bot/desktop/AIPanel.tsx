@@ -2,7 +2,7 @@ import { memo, useMemo, useState, type ReactNode } from 'react';
 import type { AnalysisLog } from '@/service/types';
 import { RadarChart } from '@/components/RadarChart';
 import { ConfidenceBar } from '@/components/ConfidenceBar';
-import { IndicatorChip, type IndicatorSentiment } from '@/components/IndicatorChip';
+import { IndicatorChip, type IndicatorSentiment } from '../../../components/IndicatorChip';
 import { Badge } from '@/components/Badge';
 import {
   actionLabel,

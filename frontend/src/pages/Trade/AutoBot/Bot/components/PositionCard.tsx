@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import type { AnalysisLog } from '@/service/types';
-import { RiskHeatBar } from '@/components/RiskHeatBar';
+import { RiskHeatBar } from '../../../components/RiskHeatBar';
 import type { PositionCardProps } from './types';
 import { formatCompact, computeLiqDistance } from './utils';
 

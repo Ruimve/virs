@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from 'react';
 import { KlineChart } from '@/components/Chart/KlineChart';
-import { TradeLoading } from '@/components/Transition/Icon';
+import { TradeLoading } from '../../../components/Transition';
 import type { DesktopBotProps } from './types';
 import { MarketHeader } from './MarketHeader';
 import { AIPanel } from './AIPanel';

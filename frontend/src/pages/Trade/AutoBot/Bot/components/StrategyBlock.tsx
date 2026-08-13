@@ -2,7 +2,7 @@ import { memo, useMemo, useState, type ReactNode } from 'react';
 import type { AnalysisLog, AutoBot, StrategyDetail } from '@/service/types';
 import { Badge } from '@/components/Badge';
 import { Sparkline } from '@/components/Sparkline';
-import { IndicatorChip, type IndicatorSentiment } from '@/components/IndicatorChip';
+import { IndicatorChip, type IndicatorSentiment } from '../../../components/IndicatorChip';
 import { actionLabel, actionVariant } from '../../../components/utils/utils';
 import type { StrategyBlockProps } from './types';
 import {

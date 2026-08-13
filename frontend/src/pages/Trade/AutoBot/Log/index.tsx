@@ -59,7 +59,7 @@ const Log = () => {
   if (!bot?.id) return null;
 
   return (
-    <div className="h-full overflow-y-auto max-w-5xl mx-auto">
+    <div className="h-full overflow-y-auto">
       <AILogList logs={logs} loading={loading} botId={bot.id} total={total} />
 
       <div
