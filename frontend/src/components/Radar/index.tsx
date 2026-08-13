@@ -5,7 +5,7 @@ export interface RadarDataPoint {
   value: number;
 }
 
-export interface RadarChartProps {
+export interface RadarProps {
   data: RadarDataPoint[];
   size?: number;
   className?: string;
@@ -19,7 +19,7 @@ const getPoint = (center: number, radius: number, angle: number) => ({
 const toPointsStr = (pts: { x: number; y: number }[]) =>
   pts.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
 
-export const RadarChart = memo(({ data, size = 120, className = '' }: RadarChartProps) => {
+export const Radar = memo(({ data, size = 120, className = '' }: RadarProps) => {
   const center = size / 2;
   const maxRadius = size / 2 - 18;
   const n = data.length;

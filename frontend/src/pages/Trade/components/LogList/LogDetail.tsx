@@ -7,7 +7,7 @@ import { Badge } from '@/components/Badge';
 import { Card } from '@/components/Card';
 import { Progress } from '@/components/Progress';
 import { IndicatorChip } from '../IndicatorChip';
-import { RadarChart } from '@/components/RadarChart';
+import { Radar } from '@/components/Radar';
 import { Alert } from '@/components/Alert';
 import { IconBtn } from '@/components/Button/IconBtn';
 import {
@@ -200,7 +200,7 @@ const LogDetail = ({ log, loading }: Props) => {
                 指标雷达
               </div>
               <div className="flex items-center justify-center">
-                <RadarChart data={radarData} size={140} />
+                <Radar data={radarData} size={140} />
               </div>
             </Card>
 

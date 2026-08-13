@@ -1,6 +1,6 @@
 import { memo, useMemo, useState, type ReactNode } from 'react';
 import type { AnalysisLog } from '@/service/types';
-import { RadarChart } from '@/components/RadarChart';
+import { Radar } from '@/components/Radar';
 import { Progress } from '@/components/Progress';
 import { IndicatorChip, type IndicatorSentiment } from '../../../components/IndicatorChip';
 import { Badge } from '@/components/Badge';
@@ -139,7 +139,7 @@ export const AIPanel = memo(({ decision, logs, decideIntervalSecs }: AIPanelProp
         <div className="flex flex-col gap-3 p-3">
           <div className="flex items-start gap-3">
             <div className="flex items-center justify-center shrink-0">
-              <RadarChart data={radarData} size={120} />
+              <Radar data={radarData} size={120} />
             </div>
 
             <div className="flex flex-col gap-2 flex-1 min-w-0">

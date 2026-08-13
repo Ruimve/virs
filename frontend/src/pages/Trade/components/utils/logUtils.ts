@@ -1,6 +1,6 @@
 import type { AnalysisLog } from '@/service';
 import type { IndicatorSentiment } from '../IndicatorChip';
-import type { RadarDataPoint } from '@/components/RadarChart';
+import type { RadarDataPoint } from '@/components/Radar';
 
 export interface DecisionData {
   action: string;
