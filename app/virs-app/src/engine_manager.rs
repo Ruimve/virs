@@ -7,7 +7,7 @@ use tracing::{error, info, warn};
 use virs_task::{spawn, Stop, TaskHandle};
 
 use virs_api::EngineManager;
-use virs_type::AutoCommand;
+use virs_type::ChatCommand;
 use virs_error::VirsResult;
 use virs_exchange::{Exchanges, PaperModeExchange};
 use virs_type::{KlineEngineHandle, OrderBookEngineHandle, PositionEngineHandle};
@@ -23,11 +23,11 @@ use crate::adapters::*;
 
 struct EngineState {
     paper_mode: bool,
-    auto_cmd_tx: StdMutex<Option<mpsc::Sender<AutoCommand>>>,
+    chat_cmd_tx: StdMutex<Option<mpsc::Sender<ChatCommand>>>,
     pe_event_tx: StdMutex<Option<broadcast::Sender<EngineEvent>>>,
     position_engine: StdMutex<Option<Arc<dyn PositionEngineHandle>>>,
     paper_tick_task: StdMutex<Option<TaskHandle>>,
-    auto_engine_task: StdMutex<Option<TaskHandle>>,
+    chat_engine_task: StdMutex<Option<TaskHandle>>,
     strategy_engine_task: StdMutex<Option<TaskHandle>>,
     order_executor: StdMutex<Option<Arc<PeOrderExecutor>>>,
 }
@@ -86,10 +86,10 @@ impl AppEngineManager {
     /* 重启恢复流程：解密交易所凭据 -> 注册交易所 -> 恢复K线/订单簿订阅 -> 启动交易引擎 */
     async fn restore_inner(&self) -> VirsResult<()> {
         let has_bots: bool = {
-            let auto_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_auto_bots"#)
+            let chat_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_chat_bots"#)
                 .fetch_one(&self.db_pool)
                 .await?;
-            auto_count > 0
+            chat_count > 0
         };
 
         if !has_bots {
@@ -161,7 +161,7 @@ impl AppEngineManager {
         }
 
         let bot_symbols: Vec<(String, String)> = sqlx::query_as(
-            r#"SELECT exchange, symbol FROM qd_auto_bots WHERE status = 'running'"#,
+            r#"SELECT exchange, symbol FROM qd_chat_bots WHERE status = 'running'"#,
         )
         .fetch_all(&self.db_pool)
         .await?;
@@ -192,7 +192,7 @@ impl AppEngineManager {
         }
 
         let paper_modes: Vec<bool> = sqlx::query_scalar(
-            r#"SELECT DISTINCT paper_mode FROM qd_auto_bots WHERE status = 'running'"#,
+            r#"SELECT DISTINCT paper_mode FROM qd_chat_bots WHERE status = 'running'"#,
         )
         .fetch_all(&self.db_pool)
         .await?;
@@ -220,7 +220,7 @@ impl AppEngineManager {
 
     /* 恢复失败时将所有running bot标记为error状态，防止下次启动时重复尝试恢复失败 */
     async fn mark_running_bots_as_error(&self) -> VirsResult<()> {
-        sqlx::query(r#"UPDATE qd_auto_bots SET status = 'error', stopped_at = NOW() WHERE status = 'running'"#)
+        sqlx::query(r#"UPDATE qd_chat_bots SET status = 'error', stopped_at = NOW() WHERE status = 'running'"#)
             .execute(&self.db_pool)
             .await?;
         error!("Marked all running bots as 'error' due to restore failure");
@@ -284,7 +284,7 @@ impl EngineManager for AppEngineManager {
 
         if paper_mode {
             let paper_bots: Vec<(String, String)> = sqlx::query_as(
-                r#"SELECT DISTINCT exchange, symbol FROM qd_auto_bots WHERE status = 'running'"#,
+                r#"SELECT DISTINCT exchange, symbol FROM qd_chat_bots WHERE status = 'running'"#,
             )
             .fetch_all(&self.db_pool)
             .await?;
@@ -338,7 +338,7 @@ impl EngineManager for AppEngineManager {
             paper_tick_task_opt = Some(paper_task);
         }
 
-        let auto_store = Arc::new(PgAutoStore::new(self.db_pool.clone()));
+        let chat_store = Arc::new(PgChatStore::new(self.db_pool.clone()));
         let auto_market_data_provider = Arc::new(
             AutoExchangeMarketDataProvider::new(self.exchange_registry.clone())
                 .with_kline_engine(self.kline_engine.clone())
@@ -415,10 +415,10 @@ impl EngineManager for AppEngineManager {
             }
         };
 
-        /* App层装配AutoEngine：将具体adapter实现强制转换为trait object传入，
+        /* App层装配ChatEngine：将具体adapter实现强制转换为trait object传入，
          * 包括Arc<dyn KlineEventSource>、Arc<dyn PromptProvider>、Option<Arc<dyn StrategyHotSwapSource>> */
-        let (auto_cmd_tx, auto_task) = virs_trading_bot::create_auto_engine(
-            auto_store,
+        let (chat_cmd_tx, auto_task) = virs_trading_bot::create_chat_engine(
+            chat_store,
             auto_llm_resolver,
             auto_credential_store,
             std::time::Duration::from_secs(self.time_config.llm_timeout_secs),
@@ -431,15 +431,15 @@ impl EngineManager for AppEngineManager {
             Arc::new(prompt_loader.clone()),
             strategy_engine_handle,
         );
-        info!("Auto trade engine started");
+        info!("Chat trade engine started");
 
         let _ = self.state.set(EngineState {
             paper_mode,
-            auto_cmd_tx: StdMutex::new(Some(auto_cmd_tx)),
+            chat_cmd_tx: StdMutex::new(Some(chat_cmd_tx)),
             pe_event_tx: StdMutex::new(Some(pe_event_sender)),
             position_engine: StdMutex::new(Some(position_engine)),
             paper_tick_task: StdMutex::new(paper_tick_task_opt),
-            auto_engine_task: StdMutex::new(Some(auto_task)),
+            chat_engine_task: StdMutex::new(Some(auto_task)),
             strategy_engine_task: StdMutex::new(strategy_engine_task),
             order_executor: StdMutex::new(Some(order_executor_for_state)),
         });
@@ -449,10 +449,10 @@ impl EngineManager for AppEngineManager {
         Ok(())
     }
 
-    fn auto_cmd_tx(&self) -> Option<mpsc::Sender<AutoCommand>> {
+    fn chat_cmd_tx(&self) -> Option<mpsc::Sender<ChatCommand>> {
         self.state
             .get()
-            .and_then(|s| s.auto_cmd_tx.lock().unwrap().clone())
+            .and_then(|s| s.chat_cmd_tx.lock().unwrap().clone())
     }
 
     fn paper_mode(&self) -> Option<bool> {
@@ -521,7 +521,7 @@ impl EngineManager for AppEngineManager {
                 pe.stop().await;
             }
 
-            drop(state.auto_cmd_tx.lock().unwrap().take());
+            drop(state.chat_cmd_tx.lock().unwrap().take());
             drop(state.pe_event_tx.lock().unwrap().take());
 
             let oe_opt = state.order_executor.lock().unwrap().take();
@@ -530,7 +530,7 @@ impl EngineManager for AppEngineManager {
             }
 
             let paper_task = state.paper_tick_task.lock().unwrap().take();
-            let auto_task = state.auto_engine_task.lock().unwrap().take();
+            let auto_task = state.chat_engine_task.lock().unwrap().take();
             let strategy_task = state.strategy_engine_task.lock().unwrap().take();
 
             if let Some(h) = &paper_task { h.cancel(); }

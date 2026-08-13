@@ -1,7 +1,7 @@
 use chrono::Utc;
 use uuid::Uuid;
 
-use virs_type::AutoBot;
+use virs_type::ChatBot;
 use virs_type::*;
 use virs_type::*;
 
@@ -36,14 +36,14 @@ fn make_position(side: PositionSide, entry: f64, quantity: f64) -> Position {
 }
 
 
-fn make_auto_bot(
+fn make_chat_bot(
     status: &str,
     total_trades: i32,
     win_trades: i32,
     loss_trades: i32,
     total_pnl: f64,
-) -> AutoBot {
-    AutoBot {
+) -> ChatBot {
+    ChatBot {
         id: Uuid::nil(),
         user_id: Uuid::nil(),
         name: "stats_bot".into(),
@@ -51,6 +51,7 @@ fn make_auto_bot(
         exchange: "binance".into(),
         paper_mode: false,
         status: status.into(),
+        bot_type: "chat".into(),
         leverage: 10,
         max_position_pct: 100.0,
         decide_interval_secs: 3600,
@@ -77,7 +78,7 @@ fn make_auto_bot(
 
 #[test]
 fn int_3_1_win_plus_loss_equals_100() {
-    let bot = make_auto_bot("running", 20, 14, 6, 500.0);
+    let bot = make_chat_bot("running", 20, 14, 6, 500.0);
     let win = bot.win_rate();
     let loss = bot.loss_rate();
     assert!((win + loss - 100.0).abs() < 0.01);
@@ -89,7 +90,7 @@ fn int_3_1_win_plus_loss_equals_100() {
 
 #[test]
 fn int_3_2_negative_return() {
-    let bot = make_auto_bot("stopped", 10, 3, 7, -1500.0);
+    let bot = make_chat_bot("stopped", 10, 3, 7, -1500.0);
     assert!((bot.total_return_pct() - (-15.0)).abs() < 0.01);
     assert!((bot.win_rate() - 30.0).abs() < 0.01);
     assert!(bot.is_stopped());
@@ -97,11 +98,11 @@ fn int_3_2_negative_return() {
 }
 
 #[test]
-fn int_5_2_auto_bot_serde_then_win_rate() {
-    let bot = make_auto_bot("running", 25, 15, 10, 800.0);
+fn int_5_2_chat_bot_serde_then_win_rate() {
+    let bot = make_chat_bot("running", 25, 15, 10, 800.0);
     let original_win_rate = bot.win_rate();
     let json = serde_json::to_string(&bot).unwrap();
-    let de: AutoBot = serde_json::from_str(&json).unwrap();
+    let de: ChatBot = serde_json::from_str(&json).unwrap();
     assert!((de.win_rate() - original_win_rate).abs() < 0.01);
     assert!(de.is_running());
 }

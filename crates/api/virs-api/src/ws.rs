@@ -106,7 +106,7 @@ pub fn position_to_ws_json(
 }
 
 
-/* 从pe_auto_order_context表查询持仓的止损止盈价：
+/* 从pe_chat_order_context表查询持仓的止损止盈价：
  * 关联pe_order_latest表，筛选order_role='open'且status='open'的最新记录 */
 async fn fetch_stop_loss_take_profit(
     db: &sqlx::PgPool,
@@ -119,7 +119,7 @@ async fn fetch_stop_loss_take_profit(
     let side_str = position_side_db_str(side);
     let row: Result<(f64, f64), _> = sqlx::query_as(
         r#"SELECT ctx.stop_loss, ctx.take_profit
-           FROM pe_auto_order_context ctx
+           FROM pe_chat_order_context ctx
            JOIN pe_order_latest o ON o.client_order_id = ctx.client_order_id
            WHERE ctx.symbol = $1 AND ctx.exchange = $2
              AND ctx.order_role = 'open' AND ctx.status = 'open'

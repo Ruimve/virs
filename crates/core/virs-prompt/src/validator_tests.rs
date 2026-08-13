@@ -7,7 +7,7 @@ use virs_type::StrategyType;
 fn make_valid_template() -> PromptTemplate {
     PromptTemplate {
         name: "test".to_string(),
-        strategy_type: StrategyType::Auto,
+        strategy_type: StrategyType::Chat,
         system_prompt: "你是引擎。返回 JSON：{...}".to_string(),
         user_prompt_template: "价格：{h1_current_price}".to_string(),
         required_placeholders: vec!["h1_current_price".to_string()],

@@ -1,4 +1,4 @@
-mod auto;
+mod chat;
 mod bot;
 mod exchange;
 mod indicator;
@@ -8,7 +8,7 @@ mod order;
 mod position;
 mod ws_types;
 
-pub use auto::*;
+pub use chat::*;
 pub use bot::*;
 pub use exchange::*;
 pub use indicator::*;

@@ -1,4 +1,4 @@
-use virs_trading_bot::{AutoAction, AutoDecision};
+use virs_trading_bot::{ChatAction, ChatDecision};
 use virs_trading_bot::{
     compute_cooldown_secs, compute_position_pct, compute_stop_loss, compute_take_profit,
     compute_trailing_stop, format_stop_take_profit,
@@ -53,10 +53,10 @@ fn int_2_1_auto_action_roundtrip() {
         "unknown_action",
     ];
     for action_str in actions {
-        let action = AutoAction::from_str(action_str);
+        let action = ChatAction::from_str(action_str);
 
         if action_str == "unknown_action" {
-            assert_eq!(action, AutoAction::Hold);
+            assert_eq!(action, ChatAction::Hold);
             assert_eq!(action.as_str(), "hold");
         } else {
             assert_eq!(action.as_str(), action_str);
@@ -65,7 +65,7 @@ fn int_2_1_auto_action_roundtrip() {
 }
 
 #[test]
-fn int_2_2_auto_decision_json_roundtrip() {
+fn int_2_2_chat_decision_json_roundtrip() {
     let json = serde_json::json!({
         "decision": {
             "action": "open_long",
@@ -77,8 +77,8 @@ fn int_2_2_auto_decision_json_roundtrip() {
         }
     });
 
-    let decision = AutoDecision::from_json(&json).expect("should parse");
-    assert_eq!(decision.action, AutoAction::OpenLong);
+    let decision = ChatDecision::from_json(&json).expect("should parse");
+    assert_eq!(decision.action, ChatAction::OpenLong);
 
     assert_eq!(decision.action.as_str(), "open_long");
 }

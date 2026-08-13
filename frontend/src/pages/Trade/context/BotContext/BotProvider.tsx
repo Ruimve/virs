@@ -1,9 +1,9 @@
 import { type ReactNode, use, useMemo } from 'react';
-import { getAutoBotDetail, type AutoBot, type StrategyDetail } from '@/service';
+import { getChatBotDetail, type ChatBot, type StrategyDetail } from '@/service';
 import { BotContext } from '.';
 
 type Bot = {
-  bot: AutoBot | null;
+  bot: ChatBot | null;
   strategy: StrategyDetail | null;
 };
 
@@ -12,7 +12,7 @@ const fetchBot = (botId: string): Promise<Bot> => {
     return Promise.resolve({ bot: null, strategy: null });
   }
 
-  return getAutoBotDetail(botId).then((res) => ({
+  return getChatBotDetail(botId).then((res) => ({
     bot: res?.data?.bot || null,
     strategy: res?.data?.strategy || null,
   }));

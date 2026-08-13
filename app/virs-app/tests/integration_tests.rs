@@ -2,26 +2,27 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use uuid::Uuid;
-use virs_app::bot_to_config as auto_bot_to_config;
+use virs_app::bot_to_config as chat_bot_to_config;
 use virs_app::resolve_llm_provider;
 use virs_app::candle_to_kline;
 use virs_app::convert_pe_event;
 use virs_type::Candle;
-use virs_type::AutoBot;
+use virs_type::ChatBot;
 use virs_type::OrderEvent;
 use virs_type::{OrderType, PositionSide, Side, TradeType};
 use virs_type::{EngineEvent, Trade};
 use virs_type::{CcxtOrder, CcxtOrderStatus, ExecutionType};
 
-fn make_auto_bot() -> AutoBot {
-    AutoBot {
+fn make_chat_bot() -> ChatBot {
+    ChatBot {
         id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
-        name: "auto-int".to_string(),
+        name: "chat-int".to_string(),
         symbol: "ETHUSDT".to_string(),
         exchange: "okx".to_string(),
         paper_mode: true,
         status: "running".to_string(),
+        bot_type: "chat".to_string(),
         leverage: 10,
         max_position_pct: 80.0,
         decide_interval_secs: 120,
@@ -126,9 +127,9 @@ fn make_trade() -> Trade {
 }
 
 #[test]
-fn int_1_2_auto_bot_to_config_then_compare() {
-    let bot = make_auto_bot();
-    let config = auto_bot_to_config(&bot);
+fn int_1_2_chat_bot_to_config_then_compare() {
+    let bot = make_chat_bot();
+    let config = chat_bot_to_config(&bot);
     assert_eq!(config.id, bot.id);
     assert_eq!(config.name, bot.name);
     assert_eq!(config.symbol, bot.symbol);

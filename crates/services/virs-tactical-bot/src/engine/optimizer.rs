@@ -100,7 +100,7 @@ JSON 对象必须包含且仅包含以下字段：
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | name | string | 策略名（保持不变） |
-| strategy_type | string | 固定为 "auto" |
+| strategy_type | string | 固定为 "chat" |
 | system_prompt | string | 改进后的 system prompt |
 | user_prompt_template | string | 改进后的用户 prompt 模板 |
 | required_placeholders | string[] | 占位符列表，必须与 user_prompt_template 中使用的 {{placeholder}} 完全一致 |
@@ -139,7 +139,7 @@ required_placeholders 数组必须与 user_prompt_template 中实际使用的 {{
 
 {{
   "name": "trend_following",
-  "strategy_type": "auto",
+  "strategy_type": "chat",
   "system_prompt": "你是趋势跟随交易引擎（优化版）。规则：\n1. EMA20 上穿 EMA50 且 RSI<70 → open_long\n2. EMA20 下穿 EMA50 且 RSI>30 → open_short\n3. 达到 2% 止盈或 0.8% 止损 → close_position\n4. 连续亏损 3 次后暂停交易\n5. 不满足以上条件 → hold",
   "user_prompt_template": "账户余额：{{total_balance}} USDT\n可用余额：{{available_balance}} USDT\n杠杆：{{leverage}}x\n当前仓位信息：{{position_info}}\n连续亏损次数：{{consecutive_losses}}\n\nH1 指标：\n当前价格：{{h1_current_price}}\nEMA20：{{h1_ema20}}\nEMA50：{{h1_ema50}}\nEMA 交叉状态：{{h1_ema_cross}}\n\nM15 指标：\n当前价格：{{m15_current_price}}\nEMA 交叉状态：{{m15_ema_cross}}",
   "required_placeholders": ["total_balance", "available_balance", "leverage", "position_info", "consecutive_losses", "h1_current_price", "h1_ema20", "h1_ema50", "h1_ema_cross", "m15_current_price", "m15_ema_cross"],

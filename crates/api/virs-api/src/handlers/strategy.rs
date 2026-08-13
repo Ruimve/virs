@@ -21,10 +21,10 @@ pub async fn generate(
 
     let strategy_type = body["strategy_type"]
         .as_str()
-        .ok_or_else(|| VirsError::bad_request("strategy_type is required (auto)"))?;
+        .ok_or_else(|| VirsError::bad_request("strategy_type is required (chat)"))?;
     let strategy_type = match strategy_type {
-        "auto" => StrategyType::Auto,
-        _ => return Err(VirsError::bad_request("strategy_type must be 'auto'")),
+        "chat" => StrategyType::Chat,
+        _ => return Err(VirsError::bad_request("strategy_type must be 'chat'")),
     };
 
     let user_intent = body["user_intent"]
@@ -62,10 +62,10 @@ pub async fn list(State(state): State<AppState>, headers: HeaderMap) -> Result<J
     let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
     let loader = state.prompt_loader.clone();
-    let auto_list = loader.list(StrategyType::Auto).await;
+    let chat_list = loader.list(StrategyType::Chat).await;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
-        "auto": auto_list,
+        "chat": chat_list,
     }))))
 }
 
@@ -137,7 +137,7 @@ pub async fn delete(
 
 fn parse_strategy_type(s: &str) -> Result<StrategyType, VirsError> {
     match s {
-        "auto" => Ok(StrategyType::Auto),
-        _ => Err(VirsError::bad_request("strategy_type must be 'auto'")),
+        "chat" => Ok(StrategyType::Chat),
+        _ => Err(VirsError::bad_request("strategy_type must be 'chat'")),
     }
 }

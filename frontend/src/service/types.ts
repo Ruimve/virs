@@ -40,12 +40,13 @@ export interface StrategyDetail {
   source: { kind: 'human' } | { kind: 'aigenerated'; model: string };
 }
 
-export interface AutoBot {
+export interface ChatBot {
   id: string;
   name: string;
   symbol: string;
   exchange: string;
   status: string;
+  bot_type: 'chat' | 'agent';
   leverage: number;
   max_position_pct: number;
   decide_interval_secs: number;
@@ -61,7 +62,7 @@ export interface AutoBot {
   updated_at: string;
 }
 
-export interface AutoTrade {
+export interface ChatTrade {
   id: string;
   bot_id: string;
   symbol: string;
@@ -93,13 +94,13 @@ export interface AutoTrade {
   status: string;
 }
 
-export interface AutoBotDetail {
-  bot: AutoBot;
+export interface ChatBotDetail {
+  bot: ChatBot;
   strategy: StrategyDetail | null;
 }
 
-export interface AutoTradesPage {
-  trades: AutoTrade[];
+export interface ChatTradesPage {
+  trades: ChatTrade[];
   total: number;
   page: number;
   page_size: number;
@@ -112,7 +113,7 @@ export interface AnalysisLogsPage {
   page_size: number;
 }
 
-export interface AutoBotStats {
+export interface ChatBotStats {
   win_rate: number;
   profit_loss_ratio: number;
   max_drawdown: number;

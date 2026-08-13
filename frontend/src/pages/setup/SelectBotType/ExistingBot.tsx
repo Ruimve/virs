@@ -13,7 +13,7 @@ export const ExistingBot = memo(({ botId }: { botId: string }) => {
           size="small"
           responsive={false}
           onClick={() => {
-            navigate(`/trade/auto/${botId}/bot`, { replace: true });
+            navigate(`/trade/chat/${botId}/bot`, { replace: true });
           }}
         >
           查看已有机器人

@@ -22,7 +22,7 @@ import {
   extractRadarData,
   extractTargetPrices,
 } from '../utils/logUtils';
-import { formatCompact } from '../../AutoBot/Bot/components/utils';
+import { formatCompact } from '../../ChatBot/Bot/components/utils';
 
 interface Props {
   log: AnalysisLog;

@@ -15,7 +15,7 @@ export type WizardStepValue = (typeof WizardStep)[keyof typeof WizardStep];
 export interface WizardState {
   current_step: WizardStepValue;
   exchange: string;
-  bot_type: 'auto' | 'manual';
+  bot_type: 'chat' | 'agent';
   paper_mode: boolean;
   llm_provider: string;
   llm_model: string;
@@ -39,7 +39,7 @@ export const TOTAL_SETUP_STEPS = 6;
 export const DEFAULT_STATE: WizardState = {
   current_step: WizardStep.Loading,
   exchange: '',
-  bot_type: 'auto',
+  bot_type: 'chat',
   paper_mode: true,
   llm_provider: '',
   llm_model: '',

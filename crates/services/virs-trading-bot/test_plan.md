@@ -6,7 +6,7 @@
 
 ## 单元测试
 
-### `crates/services/virs-trading-bot/src/auto/worker/side_state_tests.rs`
+### `crates/services/virs-trading-bot/src/chat/worker/side_state_tests.rs`
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
@@ -33,21 +33,21 @@
 | 21 | `ss_5_4_clear_on_close_overwrites_previous_last_close_event` | clear_on_close 覆盖旧的 last_close_event | 已有旧事件(long, stop_loss) + 新事件(long, take_profit) | last_close_event == 新事件 |
 | 22 | `ss_6_1_default_all_fields_zero_or_none` | 默认 SideState 所有字段为零或 None | SideState::default() | 所有字段为 None 或 0.0 |
 
-### `crates/services/virs-trading-bot/src/auto/ai_tests.rs`
+### `crates/services/virs-trading-bot/src/chat/ai_tests.rs`
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
-| 1 | `a1_1_action_from_str_open_long` | 字符串 "open_long" 解析为 OpenLong | "open_long" | AutoAction::OpenLong |
-| 2 | `a1_2_action_from_str_open_short` | 字符串 "open_short" 解析为 OpenShort | "open_short" | AutoAction::OpenShort |
-| 3 | `a1_3_action_from_str_close` | 字符串 "close_position" 解析为 ClosePosition | "close_position" | AutoAction::ClosePosition |
-| 4 | `a1_4_action_from_str_hold` | 字符串 "hold" 解析为 Hold | "hold" | AutoAction::Hold |
-| 5 | `a1_5_action_from_str_unknown` | 未知字符串解析为 Hold | "unknown" | AutoAction::Hold |
+| 1 | `a1_1_action_from_str_open_long` | 字符串 "open_long" 解析为 OpenLong | "open_long" | ChatAction::OpenLong |
+| 2 | `a1_2_action_from_str_open_short` | 字符串 "open_short" 解析为 OpenShort | "open_short" | ChatAction::OpenShort |
+| 3 | `a1_3_action_from_str_close` | 字符串 "close_position" 解析为 ClosePosition | "close_position" | ChatAction::ClosePosition |
+| 4 | `a1_4_action_from_str_hold` | 字符串 "hold" 解析为 Hold | "hold" | ChatAction::Hold |
+| 5 | `a1_5_action_from_str_unknown` | 未知字符串解析为 Hold | "unknown" | ChatAction::Hold |
 | 6 | `a2_1_action_as_str_all_variants` | 所有动作变体的 as_str 转换正确 | 全部 4 个变体 | 分别返回 "open_long"/"open_short"/"close_position"/"hold" |
-| 7 | `a3_1_decision_from_json_complete` | 完整 JSON 解析为 AutoDecision | 含 decision/market/analysis/risk_warning, action=open_long, confidence=0.85 | action=OpenLong, reason="EMA golden cross", confidence=0.85, market_regime=Some("trending_up") |
+| 7 | `a3_1_decision_from_json_complete` | 完整 JSON 解析为 ChatDecision | 含 decision/market/analysis/risk_warning, action=open_long, confidence=0.85 | action=OpenLong, reason="EMA golden cross", confidence=0.85, market_regime=Some("trending_up") |
 | 8 | `a3_2_decision_from_json_missing_fields_returns_error` | 缺失字段的 JSON 返回错误 | 空 JSON {} | 返回错误 |
 | 9 | `a3_4_decision_from_json_confidence_clamped` | confidence 超过 1.0 时被截断为 1.0 | action=hold, confidence=1.5 | confidence == 1.0 |
 
-### `crates/services/virs-trading-bot/src/auto/strategy_tests.rs`
+### `crates/services/virs-trading-bot/src/chat/strategy_tests.rs`
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
@@ -78,7 +78,7 @@
 | 25 | `s5_4_cooldown_llm_decision` | LLM 决策平仓冷却时间 | "long", "llm_decision", "long" | 900 |
 | 26 | `s5_5_cooldown_unknown_reason` | 未知平仓原因的冷却时间 | "long", "unknown", "short" | 900 |
 
-### `crates/services/virs-trading-bot/src/auto/worker/worker_tests.rs`
+### `crates/services/virs-trading-bot/src/chat/worker/worker_tests.rs`
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
@@ -105,7 +105,7 @@
 | 1 | `int_1_1_stop_loss_take_profit_consistency` | 止损止盈一致性（多头） | entry=100, atr=2.0 | sl < entry < tp, sl < tp |
 | 2 | `int_1_2_trailing_stop_never_worsens` | 移动止损不劣化 | entry=100, atr=2.0, 先 price=105 再 price=103 | new_stop_2 >= new_stop_1 >= initial_stop |
 | 3 | `int_1_3_position_pct_full_chain` | 仓位百分比全链路 | adx=30,losses=2,funding=0.003; 再 adx=30,losses=0,funding=0.0 | 依次为 20.0 与 80.0 |
-| 4 | `int_2_1_auto_action_roundtrip` | AutoAction 字符串往返转换 | 5 个动作含 unknown_action | 未知动作映射为 Hold, 其余往返一致 |
-| 5 | `int_2_2_auto_decision_json_roundtrip` | AutoDecision JSON 往返解析 | 含 decision.action=open_long, market.market_regime | action=OpenLong, as_str=="open_long" |
+| 4 | `int_2_1_chat_action_roundtrip` | ChatAction 字符串往返转换 | 5 个动作含 unknown_action | 未知动作映射为 Hold, 其余往返一致 |
+| 5 | `int_2_2_chat_decision_json_roundtrip` | ChatDecision JSON 往返解析 | 含 decision.action=open_long, market.market_regime | action=OpenLong, as_str=="open_long" |
 | 6 | `int_4_2_format_stop_take_with_position_pct` | 仓位百分比与止损止盈格式化联动 | adx=25 -> 80%; entry=100, atr=2.0 | pct=80, 显示含 "止损" 和 "止盈" |
 | 7 | `int_5_1_cooldown_then_position_pct` | 冷却后仓位百分比计算 | stop_loss 同侧 -> 1800; adx=25 无亏损 -> 80; adx=25 亏损 2 -> 40 | 依次为 1800, 80, 40 |

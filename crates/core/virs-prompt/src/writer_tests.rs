@@ -27,7 +27,7 @@ fn w1_create_strategy_writes_folder() {
     let tmp = tempdir().unwrap();
     std::env::set_var(ENV_STRATEGIES_DIR, tmp.path());
 
-    let tpl = make_valid_template("test_create", StrategyType::Auto, 1);
+    let tpl = make_valid_template("test_create", StrategyType::Chat, 1);
     let path = create_strategy(&tpl).unwrap();
     assert!(path.exists());
     assert!(path.is_dir());
@@ -75,7 +75,7 @@ fn w2_create_strategy_rejects_existing() {
     let tmp = tempdir().unwrap();
     std::env::set_var(ENV_STRATEGIES_DIR, tmp.path());
 
-    let tpl = make_valid_template("test_dup", StrategyType::Auto, 1);
+    let tpl = make_valid_template("test_dup", StrategyType::Chat, 1);
     create_strategy(&tpl).unwrap();
 
 
@@ -91,7 +91,7 @@ fn w3_save_new_version_creates_v2() {
     let tmp = tempdir().unwrap();
     std::env::set_var(ENV_STRATEGIES_DIR, tmp.path());
 
-    let tpl_v1 = make_valid_template("test_version", StrategyType::Auto, 1);
+    let tpl_v1 = make_valid_template("test_version", StrategyType::Chat, 1);
     create_strategy(&tpl_v1).unwrap();
 
 
@@ -133,7 +133,7 @@ fn w4_save_new_version_rejects_nonexistent_strategy() {
     let tmp = tempdir().unwrap();
     std::env::set_var(ENV_STRATEGIES_DIR, tmp.path());
 
-    let tpl = make_valid_template("nonexistent", StrategyType::Auto, 1);
+    let tpl = make_valid_template("nonexistent", StrategyType::Chat, 1);
     let result = save_new_version(&tpl);
     assert!(result.is_err());
 
@@ -146,7 +146,7 @@ fn w5_delete_strategy_removes_folder() {
     let tmp = tempdir().unwrap();
     std::env::set_var(ENV_STRATEGIES_DIR, tmp.path());
 
-    let tpl = make_valid_template("test_del", StrategyType::Auto, 1);
+    let tpl = make_valid_template("test_del", StrategyType::Chat, 1);
     let path = create_strategy(&tpl).unwrap();
     assert!(path.exists());
 
@@ -164,7 +164,7 @@ fn w5_delete_strategy_removes_folder() {
 fn w6_create_without_env_var_errors() {
     let _guard = ENV_LOCK.lock().unwrap();
     std::env::remove_var(ENV_STRATEGIES_DIR);
-    let tpl = make_valid_template("no_env", StrategyType::Auto, 1);
+    let tpl = make_valid_template("no_env", StrategyType::Chat, 1);
     let result = create_strategy(&tpl);
     assert!(result.is_err());
 }

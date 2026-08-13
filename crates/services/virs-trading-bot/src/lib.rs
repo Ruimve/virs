@@ -1,4 +1,4 @@
-mod auto;
+mod chat;
 mod common;
 
-pub use auto::*;
+pub use chat::*;

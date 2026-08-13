@@ -4,7 +4,7 @@ import { Alert } from '@/components/Alert';
 import { Button } from '@/components/Button';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
-import { createAutoBot, startAutoBot } from '../../../service';
+import { createChatBot, startChatBot } from '../../../service';
 import { WizardStep } from '../context/WizardContext/define';
 import { FormCard, FormField, ToggleSwitch, ReviewRow } from '../components';
 
@@ -29,23 +29,24 @@ const ReviewLaunch = () => {
     setLaunchError('');
 
     try {
-      const result = await createAutoBot({
+      const result = await createChatBot({
         symbol: wizard.bot_params.symbol,
         exchange: wizard.exchange,
+        bot_type: wizard.bot_type,
         leverage: Number(wizard.bot_params.leverage),
         max_position_pct: Number(wizard.bot_params.max_position_pct),
         decide_interval_secs: Number(wizard.bot_params.decision_interval),
-        name: `Auto ${wizard.bot_params.symbol || 'Bot'}`,
+        name: `Chat ${wizard.bot_params.symbol || 'Bot'}`,
         paper_mode: paperMode,
         auto_optimize: wizard.auto_optimize,
       });
       if (!result.success || !result.data?.id) {
-        setLaunchError(`Failed to create auto bot: ${result.message || 'Unknown error'}`);
+        setLaunchError(`Failed to create chat bot: ${result.message || 'Unknown error'}`);
         return;
       }
       const botId = result.data.id;
 
-      const startResult = await startAutoBot(botId);
+      const startResult = await startChatBot(botId);
       if (!startResult.success) {
         setLaunchError(
           `Bot created but failed to start: ${startResult.message || 'Unknown error'}`,
@@ -55,7 +56,7 @@ const ReviewLaunch = () => {
 
       updateWizard({ paper_mode: paperMode, bot_id: botId });
       startTransition(() => {
-        navigate(`/trade/auto/${botId}/bot`, { replace: true });
+        navigate(`/trade/chat/${botId}/bot`, { replace: true });
       });
     } catch (err) {
       setLaunchError(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
@@ -116,7 +117,7 @@ const ReviewLaunch = () => {
           label="Bot Type"
           value={
             <>
-              Auto Bot <AiBadge />
+              Chat Bot <AiBadge />
             </>
           }
         />

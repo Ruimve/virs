@@ -13,13 +13,13 @@ async fn seed_auto_default_loads_and_validates() {
         return;
     }
     let loader = PromptLoader::from_dir(path).await;
-    assert!(!loader.list(StrategyType::Auto).await.is_empty(), "loader should have loaded seed files");
+    assert!(!loader.list(StrategyType::Chat).await.is_empty(), "loader should have loaded seed files");
 
     let tpl = loader
-        .get(StrategyType::Auto, "default")
+        .get(StrategyType::Chat, "default")
         .await
         .expect("strategies/default/ should load");
-    assert_eq!(tpl.strategy_type, StrategyType::Auto);
+    assert_eq!(tpl.strategy_type, StrategyType::Chat);
     assert!(!tpl.system_prompt.is_empty());
     assert!(!tpl.user_prompt_template.is_empty());
     assert!(!tpl.required_placeholders.is_empty());
@@ -35,13 +35,13 @@ async fn seed_auto_range_reversion_loads_and_validates() {
         return;
     }
     let loader = PromptLoader::from_dir(path).await;
-    assert!(!loader.list(StrategyType::Auto).await.is_empty(), "loader should have loaded seed files");
+    assert!(!loader.list(StrategyType::Chat).await.is_empty(), "loader should have loaded seed files");
 
     let tpl = loader
-        .get(StrategyType::Auto, "range_reversion")
+        .get(StrategyType::Chat, "range_reversion")
         .await
         .expect("strategies/range_reversion/ should load");
-    assert_eq!(tpl.strategy_type, StrategyType::Auto);
+    assert_eq!(tpl.strategy_type, StrategyType::Chat);
     assert!(!tpl.system_prompt.is_empty());
     assert!(!tpl.user_prompt_template.is_empty());
     assert!(!tpl.required_placeholders.is_empty());

@@ -15,8 +15,8 @@ use virs_type::*;
 use virs_type::CcxtOrder;
 use virs_type::PositionEngineHandle;
 
-/* PE订单执行器：将AutoEngine的OrderCommand转换为PE的EngineCommand，
- * 并通过virs-task启动事件转发任务将PE的EngineEvent转换为OrderEvent广播给AutoEngine */
+/* PE订单执行器：将ChatEngine的OrderCommand转换为PE的EngineCommand，
+ * 并通过virs-task启动事件转发任务将PE的EngineEvent转换为OrderEvent广播给ChatEngine */
 pub struct PeOrderExecutor {
     cmd_tx: tokio::sync::mpsc::Sender<EngineCommand>,
     engine: Arc<dyn PositionEngineHandle>,
@@ -158,7 +158,7 @@ impl OrderExecutor for PeOrderExecutor {
     }
 }
 
-/* 引擎事件到订单事件的映射：将PE的EngineEvent（持仓/订单状态变更）转换为AutoEngine可消费的OrderEvent */
+/* 引擎事件到订单事件的映射：将PE的EngineEvent（持仓/订单状态变更）转换为ChatEngine可消费的OrderEvent */
 pub fn convert_pe_event(event: EngineEvent) -> Option<OrderEvent> {
     match event {
         EngineEvent::OrderPlaced { order } => ccxt_order_to_order_info(&order)

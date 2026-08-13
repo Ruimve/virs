@@ -16,12 +16,12 @@ const ReviewLaunch = lazy(() => import('./pages/Setup/ReviewLaunch'));
 
 const TradeLayout = lazy(() => import('./pages/Trade/Layout'));
 
-const AutoBot = lazy(() => import('./pages/Trade/AutoBot'));
-const AutoBotMain = lazy(() => import('./pages/Trade/AutoBot/Bot'));
-const AutoBotLog = lazy(() => import('./pages/Trade/AutoBot/Log'));
-const AutoBotLogDetail = lazy(() => import('./pages/Trade/AutoBot/Log/Detail'));
-const AutoBotTrades = lazy(() => import('./pages/Trade/AutoBot/Trades'));
-const AutoBotSystem = lazy(() => import('./pages/Trade/AutoBot/System'));
+const ChatBot = lazy(() => import('./pages/Trade/ChatBot'));
+const ChatBotMain = lazy(() => import('./pages/Trade/ChatBot/Bot'));
+const ChatBotLog = lazy(() => import('./pages/Trade/ChatBot/Log'));
+const ChatBotLogDetail = lazy(() => import('./pages/Trade/ChatBot/Log/Detail'));
+const ChatBotTrades = lazy(() => import('./pages/Trade/ChatBot/Trades'));
+const ChatBotSystem = lazy(() => import('./pages/Trade/ChatBot/System'));
 
 const App = () => {
   return (
@@ -40,12 +40,12 @@ const App = () => {
                 <Route path="/setup/review" element={<ReviewLaunch />} />
               </Route>
               <Route path="/trade" element={<TradeLayout />}>
-                <Route path="/trade/auto/:botId" element={<AutoBot />}>
-                  <Route path="/trade/auto/:botId/bot" element={<AutoBotMain />} />
-                  <Route path="/trade/auto/:botId/log" element={<AutoBotLog />} />
-                  <Route path="/trade/auto/:botId/log/:logId" element={<AutoBotLogDetail />} />
-                  <Route path="/trade/auto/:botId/trades" element={<AutoBotTrades />} />
-                  <Route path="/trade/auto/:botId/system" element={<AutoBotSystem />} />
+                <Route path="/trade/chat/:botId" element={<ChatBot />}>
+                  <Route path="/trade/chat/:botId/bot" element={<ChatBotMain />} />
+                  <Route path="/trade/chat/:botId/log" element={<ChatBotLog />} />
+                  <Route path="/trade/chat/:botId/log/:logId" element={<ChatBotLogDetail />} />
+                  <Route path="/trade/chat/:botId/trades" element={<ChatBotTrades />} />
+                  <Route path="/trade/chat/:botId/system" element={<ChatBotSystem />} />
                 </Route>
               </Route>
               <Route path="*" element={<Navigate to="/setup/bot-type" replace />} />

@@ -135,7 +135,7 @@ pub async fn recommend_strategy(
     let system_prompt = r#"You are a trading strategy advisor. Recommend a trading strategy based on market conditions.
 Respond in JSON format with:
 {
-  "strategy": "auto|manual",
+  "strategy": "chat|agent",
   "strategy_details": {
     "leverage": 5
   },

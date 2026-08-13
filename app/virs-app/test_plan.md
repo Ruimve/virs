@@ -6,14 +6,14 @@
 
 ## 单元测试
 
-### `app/virs-app/src/adapters/auto_store_tests.rs`
+### `app/virs-app/src/adapters/chat_store_tests.rs`
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
-| 1 | `a1_1_bot_to_config_basic` | AutoBot 转配置基本字段 | bot: name=auto-test, symbol=ETHUSDT, exchange=okx, paper_mode=true, leverage=10 | config.name=auto-test, symbol=ETHUSDT, exchange=okx, paper_mode=true, leverage=10 |
-| 2 | `a1_3_bot_to_config_optional_fields` | AutoBot 转配置可选字段为 None | bot 各可选字段均为 None | position_id_long/short、market_regime、ai_analysis、system_prompt、user_prompt、last_decided_at 均为 None |
-| 3 | `a1_4_bot_to_config_stats` | AutoBot 转配置统计字段 | total_pnl=123.45, total_trades=10, win_trades=7, loss_trades=3 | config.total_pnl=123.45, total_trades=10, win_trades=7, loss_trades=3 |
-| 4 | `a1_5_bot_to_config_id_preserved` | AutoBot 转配置保留 ID | bot.id 和 bot.user_id | config.id 与 bot.id 相等, config.user_id 与 bot.user_id 相等 |
+| 1 | `a1_1_bot_to_config_basic` | ChatBot 转配置基本字段 | bot: name=chat-test, symbol=ETHUSDT, exchange=okx, paper_mode=true, leverage=10 | config.name=chat-test, symbol=ETHUSDT, exchange=okx, paper_mode=true, leverage=10 |
+| 2 | `a1_3_bot_to_config_optional_fields` | ChatBot 转配置可选字段为 None | bot 各可选字段均为 None | position_id_long/short、market_regime、ai_analysis、system_prompt、user_prompt、last_decided_at 均为 None |
+| 3 | `a1_4_bot_to_config_stats` | ChatBot 转配置统计字段 | total_pnl=123.45, total_trades=10, win_trades=7, loss_trades=3 | config.total_pnl=123.45, total_trades=10, win_trades=7, loss_trades=3 |
+| 4 | `a1_5_bot_to_config_id_preserved` | ChatBot 转配置保留 ID | bot.id 和 bot.user_id | config.id 与 bot.id 相等, config.user_id 与 bot.user_id 相等 |
 
 ### `app/virs-app/src/adapters/order_executor_tests.rs`
 
@@ -51,7 +51,7 @@
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
-| 1 | `int_1_2_auto_bot_to_config_then_compare` | AutoBot 转配置后全字段比对 | bot: 含 position_id、market_regime、ai_analysis 等非空字段, total_pnl=250.0, total_trades=8 | config 各字段（id/name/symbol/exchange/leverage/position_id/market_regime/total_pnl 等）与原 bot 相等 |
+| 1 | `int_1_2_chat_bot_to_config_then_compare` | ChatBot 转配置后全字段比对 | bot: 含 position_id、market_regime、ai_analysis 等非空字段, total_pnl=250.0, total_trades=8 | config 各字段（id/name/symbol/exchange/leverage/position_id/market_regime/total_pnl 等）与原 bot 相等 |
 | 2 | `int_2_1_candle_to_kline_preserves_ohlcv` | Candle 转 Kline 保留完整 OHLCV | open=42000.0, high=42500.0, low=41800.0, close=42300.0, volume=1000.0, trades=500 | k 各 OHLCV 字段及时间戳与原 Candle 相等 |
 | 3 | `int_3_1_llm_resolve_priority_chain` | LLM 提供商优先级链路 | 三组凭证: [openai,deepseek,openrouter]、[openai,openrouter]、[openrouter] | 依次返回 deepseek、openai、openrouter |
 | 4 | `int_3_2_llm_resolve_user_model_override` | LLM 用户自定义模型覆盖 | creds: [(deepseek, user-ds, Some(deepseek-reasoner)), (openai, user-oai, Some(gpt-4o-mini))] | key=user-ds, model="deepseek-reasoner", provider=deepseek |

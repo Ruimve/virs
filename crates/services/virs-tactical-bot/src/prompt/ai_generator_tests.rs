@@ -3,7 +3,7 @@ use virs_type::StrategyType;
 
 #[test]
 fn g1_meta_system_prompt_mentions_json_and_actions() {
-    let s = build_meta_system_prompt(StrategyType::Auto);
+    let s = build_meta_system_prompt(StrategyType::Chat);
     assert!(s.contains("JSON"));
     assert!(s.contains("open_long"));
 }
@@ -11,7 +11,7 @@ fn g1_meta_system_prompt_mentions_json_and_actions() {
 #[test]
 fn g3_meta_user_prompt_contains_intent() {
     let req = GenerateRequest {
-        strategy_type: StrategyType::Auto,
+        strategy_type: StrategyType::Chat,
         user_intent: "做多趋势策略",
         name_hint: Some("my_trend"),
     };

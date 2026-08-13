@@ -79,7 +79,7 @@ impl StrategyEngine {
         info!("StrategyEngine cycle started");
 
 
-        let strategy_names = self.prompt_loader.list(StrategyType::Auto).await;
+        let strategy_names = self.prompt_loader.list(StrategyType::Chat).await;
 
         if strategy_names.is_empty() {
             info!("No strategies loaded — skipping cycle");
@@ -135,7 +135,7 @@ impl StrategyEngine {
 
         let current = self
             .prompt_loader
-            .get(StrategyType::Auto, name)
+            .get(StrategyType::Chat, name)
             .await
             .ok_or_else(|| {
                 VirsError::config(format!(
@@ -215,7 +215,7 @@ impl StrategyEngine {
     }
 }
 
-/* 实现StrategyHotSwapSource trait，供AutoEngine以Arc<dyn StrategyHotSwapSource>持有 */
+/* 实现StrategyHotSwapSource trait，供ChatEngine以Arc<dyn StrategyHotSwapSource>持有 */
 impl StrategyHotSwapSource for StrategyEngine {
     fn subscribe(&self) -> watch::Receiver<Option<StrategySwapEvent>> {
         self.update_tx.subscribe()

@@ -7,31 +7,31 @@ export const NoBot = memo(
     botType,
     changeBotType,
   }: {
-    botType: 'auto' | 'manual';
-    changeBotType: (value: 'auto' | 'manual') => void;
+    botType: 'chat' | 'agent';
+    changeBotType: (value: 'chat' | 'agent') => void;
   }) => {
     return (
       <>
         <FormCard>
           <FormRow
             icon={<Brain width={20} height={20} strokeWidth={1.5} />}
-            title="Auto Bot"
-            description="AI-driven fully automated trading. Analyzes market conditions and executes trades autonomously."
-            selected={botType === 'auto'}
+            title="Chat"
+            description="AI-driven conversational trading. Analyzes market conditions and executes trades autonomously."
+            selected={botType === 'chat'}
             type="ai"
-            onClick={() => changeBotType('auto')}
+            onClick={() => changeBotType('chat')}
           />
           <FormRow
             icon={<Bot width={20} height={20} strokeWidth={1.5} />}
-            title="Manual Bot"
-            description="Manual trading with AI-assisted signals. You stay in control while AI provides insights."
-            selected={botType === 'manual'}
+            title="Agent"
+            description="Autonomous agent that executes complex trading strategies with minimal supervision."
+            selected={botType === 'agent'}
             type="accent"
-            onClick={() => changeBotType('manual')}
+            onClick={() => changeBotType('agent')}
           />
         </FormCard>
-        {botType === 'manual' && (
-          <p className="text-xs text-on-surface-muted mt-3 px-1">Manual Bot is coming soon.</p>
+        {botType === 'agent' && (
+          <p className="text-xs text-on-surface-muted mt-3 px-1">Agent is coming soon.</p>
         )}
       </>
     );

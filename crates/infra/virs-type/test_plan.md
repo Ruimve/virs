@@ -37,7 +37,7 @@
 | 15 | `p4_2_uuid_differs_by_side` | 不同方向生成不同 UUID | Long vs Short（其余参数相同） | 两个 UUID 不相等 |
 | 16 | `p4_3_uuid_differs_by_symbol` | 不同交易对生成不同 UUID | BTCUSDT vs ETHUSDT（其余参数相同） | 两个 UUID 不相等 |
 
-### `crates/infra/virs-type/src/auto/structs_tests.rs`
+### `crates/infra/virs-type/src/chat/structs_tests.rs`
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
@@ -53,7 +53,7 @@
 | 10 | `a4_2_stopped_status` | 已停止状态判断（运行中） | status=running | is_running()=false（针对 is_stopped 检查的反例） |
 | 11 | `a5_1_stopped_status` | 已停止状态判断 | status=stopped | is_stopped()=true |
 | 12 | `a5_2_running_status` | 运行中状态判断（停止的反例） | status=running | is_stopped()=false |
-| 13 | `s4_1_auto_bot_roundtrip` | AutoBot 序列化反序列化往返 | name=auto_bot, symbol=ETHUSDT, status=running, total_pnl=250.0, win_trades=10, total_trades=15 | 反序列化后 win_trades、total_pnl、status 与原对象相等 |
+| 13 | `s4_1_chat_bot_roundtrip` | ChatBot 序列化反序列化往返 | name=chat_bot, symbol=ETHUSDT, status=running, total_pnl=250.0, win_trades=10, total_trades=15 | 反序列化后 win_trades、total_pnl、status 与原对象相等 |
 
 ### `crates/infra/virs-type/src/order/structs_tests.rs`
 
@@ -79,4 +79,4 @@
 | 2 | `int_1_2_short_position_pnl_chain` | 空头仓位盈亏链路 | side=Short, entry=50000.0, qty=1.0, 当前价=49000.0 | unrealized_pnl=1000.0 |
 | 3 | `int_3_1_win_plus_loss_equals_100` | 胜率与败率之和为 100 | total_trades=20, win_trades=14, loss_trades=6, total_pnl=500.0, initial_capital=10000.0 | win_rate=70.0, loss_rate=30.0, total_return_pct=5.0, is_running=true |
 | 4 | `int_3_2_negative_return` | 负收益率与停止状态 | status=stopped, total_trades=10, win_trades=3, loss_trades=7, total_pnl=-1500.0, initial_capital=10000.0 | total_return_pct=-15.0, win_rate=30.0, is_stopped=true, is_running=false |
-| 5 | `int_5_2_auto_bot_serde_then_win_rate` | AutoBot 序列化后胜率一致性 | status=running, total_trades=25, win_trades=15, loss_trades=10, total_pnl=800.0 | 反序列化后 win_rate 与原始一致, is_running=true |
+| 5 | `int_5_2_chat_bot_serde_then_win_rate` | ChatBot 序列化后胜率一致性 | status=running, total_trades=25, win_trades=15, loss_trades=10, total_pnl=800.0 | 反序列化后 win_rate 与原始一致, is_running=true |

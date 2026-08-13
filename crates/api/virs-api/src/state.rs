@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use axum::extract::FromRef;
 use tokio::sync::{broadcast, mpsc};
 
-use virs_type::AutoCommand;
+use virs_type::ChatCommand;
 use virs_error::{VirsError, VirsResult};
 use virs_exchange::Exchanges;
 use virs_type::{KlineEngineHandle, OrderBookEngineHandle};
@@ -21,7 +21,7 @@ pub trait EngineManager: Send + Sync {
     async fn ensure_started(&self, paper_mode: bool) -> VirsResult<()>;
 
 
-    fn auto_cmd_tx(&self) -> Option<mpsc::Sender<AutoCommand>>;
+    fn chat_cmd_tx(&self) -> Option<mpsc::Sender<ChatCommand>>;
 
 
     fn paper_mode(&self) -> Option<bool>;

@@ -18,7 +18,7 @@ const Login = () => {
         if (result?.success) {
           const bot = await findActiveBot();
           if (bot) {
-            navigate(`/trade/auto/${bot.id}/bot`, { replace: true });
+            navigate(`/trade/chat/${bot.id}/bot`, { replace: true });
           } else {
             navigate('/setup/bot-type', { replace: true });
           }

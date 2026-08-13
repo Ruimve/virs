@@ -13,7 +13,7 @@ const SelectBotType = () => {
   const [isPending, startTransition] = useTransition();
   const { updateWizard, advanceStep } = useWizard();
   const [existingBot, setExistingBot] = useState<{ id: string } | null>(null);
-  const [botType, setBotType] = useState<'auto' | 'manual'>('auto');
+  const [botType, setBotType] = useState<'chat' | 'agent'>('chat');
 
   useEffect(() => {
     updateWizard({ current_step: WizardStep.SelectBotType });
@@ -30,14 +30,14 @@ const SelectBotType = () => {
     });
   }, [botType, updateWizard, advanceStep, navigate]);
 
-  const handleChangeBotType = useCallback((bt: 'auto' | 'manual') => {
+  const handleChangeBotType = useCallback((bt: 'chat' | 'agent') => {
     setBotType(bt);
   }, []);
 
   const actions = useMemo(() => {
     if (existingBot?.id) return null;
 
-    const disabled = botType !== 'auto';
+    const disabled = botType !== 'chat';
     return (
       <Button variant="primary" onClick={handleContinue} disabled={disabled} loading={isPending}>
         Continue

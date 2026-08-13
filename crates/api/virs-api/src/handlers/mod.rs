@@ -1,7 +1,7 @@
 pub mod ai;
 pub mod ai_credentials;
 pub mod auth;
-pub mod auto_trade;
+pub mod chat_trade;
 pub mod credentials;
 pub mod health;
 pub mod market;

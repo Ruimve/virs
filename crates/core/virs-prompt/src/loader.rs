@@ -127,7 +127,7 @@ impl PromptLoader {
             }
         }
 
-        let st = StrategyType::Auto;
+        let st = StrategyType::Chat;
         load_subdir(&dir, st, &mut inner).await;
 
         info!(
