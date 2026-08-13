@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import type { AnalysisLog } from '@/service';
 import { AiThinking } from '../Transition';
 import { Badge } from '@/components/Badge';
-import { StateFeedback } from '@/components/StateFeedback';
+import { Empty } from '@/components/Empty';
+import { Spinner } from '@/components/Spinner';
 import { ChevronRight } from '@/components/Icon';
 import { Progress } from '@/components/Progress';
 import { IndicatorChip } from '../IndicatorChip';
@@ -30,11 +31,11 @@ const LogList = ({ logs, loading, onLoadMore, botId, total }: Props) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (loading && logs.length === 0) {
-    return <StateFeedback type="loading" text="AI 决策加载中" icon={<AiThinking size={40} />} />;
+    return <Spinner text="AI 决策加载中" icon={<AiThinking size={40} />} />;
   }
 
   if (logs.length === 0) {
-    return <StateFeedback type="empty" text="暂无 AI 决策记录" />;
+    return <Empty text="暂无 AI 决策记录" />;
   }
 
   return (

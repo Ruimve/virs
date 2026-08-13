@@ -3,7 +3,8 @@ import { useParams } from 'react-router-dom';
 import { getAutoTrades, type AutoTrade } from '@/service';
 import { TradeLoading } from '../../components/Transition';
 import { Badge, type BadgeVariant } from '@/components/Badge';
-import { StateFeedback } from '@/components/StateFeedback';
+import { Empty } from '@/components/Empty';
+import { Spinner } from '@/components/Spinner';
 
 const PAGE_SIZE = 20;
 
@@ -75,19 +76,11 @@ const Trades = () => {
   }, [loading, hasMore, page, loadTrades]);
 
   if (trades.length === 0 && loading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <StateFeedback type="loading" text="交易记录加载中" icon={<TradeLoading size={40} />} />
-      </div>
-    );
+    return <Spinner text="交易记录加载中" icon={<TradeLoading size={40} />} />;
   }
 
   if (trades.length === 0) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <StateFeedback type="empty" text="暂无交易记录" />
-      </div>
-    );
+    return <Empty text="暂无交易记录" />;
   }
 
   return (

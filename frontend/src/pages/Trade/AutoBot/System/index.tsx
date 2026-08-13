@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useRef, type CSSProperties } from 'react';
 import { getSystemInfo } from '@/service/system';
 import type { SystemInfo as SystemInfoData } from '@/service/types';
+import { Alert } from '@/components/Alert';
 import { Card } from '@/components/Card';
 import { Progress } from '@/components/Progress';
 import { usageColor } from '@/components/Progress/utils';
-import { StateFeedback } from '@/components/StateFeedback';
 import { Sparkline } from '@/components/Sparkline';
+import { Spinner } from '@/components/Spinner';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -142,11 +143,15 @@ const System = () => {
   }, [loadInfo]);
 
   if (error) {
-    return <StateFeedback type="error" text={error} />;
+    return (
+      <div className="h-full flex items-center justify-center p-4">
+        <Alert type="danger" title={error} />
+      </div>
+    );
   }
 
   if (!info) {
-    return <StateFeedback type="center-loading" />;
+    return <Spinner />;
   }
 
   const cpuPct = info.cpu.usage_pct;
