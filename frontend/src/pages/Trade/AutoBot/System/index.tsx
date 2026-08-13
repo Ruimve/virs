@@ -153,7 +153,7 @@ const System = () => {
   const memPct = info.memory.usage_pct;
 
   return (
-    <div className="h-full overflow-y-auto max-w-5xl mx-auto px-4 md:px-8 py-6 space-y-4">
+    <div className="h-full overflow-y-auto px-4 md:px-8 py-6 space-y-4">
       {/* Page title */}
       <div>
         <div className="text-base md:text-lg font-semibold text-on-surface">系统监控</div>

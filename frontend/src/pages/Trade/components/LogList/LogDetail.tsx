@@ -92,7 +92,7 @@ const LogDetail = ({ log, loading }: Props) => {
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-6">
+      <div className="px-4 md:px-8 py-6">
         <div className="space-y-4">
           {/* Decision summary card */}
           <Card>
