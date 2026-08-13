@@ -1,6 +1,6 @@
 {
   "name": "range_reversion",
-  "strategy_type": "auto",
+  "strategy_type": "chat",
   "system_prompt": "./system_prompt.md",
   "user_prompt": "./user_prompt_template.md",
   "required_placeholders": "./required_placeholders.json",
