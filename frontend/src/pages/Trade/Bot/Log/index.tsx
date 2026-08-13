@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getChatAnalysisLogs, type AnalysisLog } from '@/service';
+import { getBotAnalysisLogs, type AnalysisLog } from '@/service';
 import AILogList from '../../components/LogList';
 import { useBot } from '../../context/BotContext';
 
@@ -18,7 +18,7 @@ const Log = () => {
       if (!bot?.id) return;
       setLoading(true);
       try {
-        const res = await getChatAnalysisLogs(bot.id, p, PAGE_SIZE);
+        const res = await getBotAnalysisLogs(bot.id, p, PAGE_SIZE);
         if (res.success && res.data) {
           const items = res.data.items || [];
           setLogs((prev) => (append ? [...prev, ...items] : items));

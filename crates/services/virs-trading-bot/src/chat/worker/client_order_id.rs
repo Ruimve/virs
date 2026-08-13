@@ -27,7 +27,7 @@ fn timestamp_str() -> String {
 
 
 /* 生成开仓client_order_id：格式为AO{L|S}__{时间戳}{哈希}，L=多/S=空 */
-pub fn format_chat_open(bot_id: Uuid, side: &str) -> String {
+pub fn format_bot_open(bot_id: Uuid, side: &str) -> String {
     let f3 = match side {
         "long" => "L",
         "short" => "S",
@@ -38,7 +38,7 @@ pub fn format_chat_open(bot_id: Uuid, side: &str) -> String {
 
 
 /* 生成平仓client_order_id：格式为AC{L|S}__{时间戳}{哈希}，L=多/S=空 */
-pub fn format_chat_close(bot_id: Uuid, side: &str) -> String {
+pub fn format_bot_close(bot_id: Uuid, side: &str) -> String {
     let f3 = match side {
         "long" => "L",
         "short" => "S",

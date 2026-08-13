@@ -2,19 +2,19 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use uuid::Uuid;
-use virs_app::bot_to_config as chat_bot_to_config;
+use virs_app::bot_to_config as bot_to_config;
 use virs_app::resolve_llm_provider;
 use virs_app::candle_to_kline;
 use virs_app::convert_pe_event;
 use virs_type::Candle;
-use virs_type::ChatBot;
+use virs_type::Bot;
 use virs_type::OrderEvent;
 use virs_type::{OrderType, PositionSide, Side, TradeType};
 use virs_type::{EngineEvent, Trade};
 use virs_type::{CcxtOrder, CcxtOrderStatus, ExecutionType};
 
-fn make_chat_bot() -> ChatBot {
-    ChatBot {
+fn make_bot() -> Bot {
+    Bot {
         id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
         name: "chat-int".to_string(),
@@ -127,9 +127,9 @@ fn make_trade() -> Trade {
 }
 
 #[test]
-fn int_1_2_chat_bot_to_config_then_compare() {
-    let bot = make_chat_bot();
-    let config = chat_bot_to_config(&bot);
+fn int_1_2_bot_to_config_then_compare() {
+    let bot = make_bot();
+    let config = bot_to_config(&bot);
     assert_eq!(config.id, bot.id);
     assert_eq!(config.name, bot.name);
     assert_eq!(config.symbol, bot.symbol);

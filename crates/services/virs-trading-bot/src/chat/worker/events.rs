@@ -4,15 +4,15 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 use virs_error::VirsError;
 
-use crate::chat::ports::ChatMarketSnapshot;
+use crate::chat::ports::BotMarketSnapshot;
 use crate::chat::strategy;
 use virs_type::OrderEvent;
 use virs_type::PositionSide;
 use virs_type::EngineEvent;
 
-use crate::chat::worker::{side_str, ChatWorker};
+use crate::chat::worker::{side_str, BotWorker};
 
-impl ChatWorker {
+impl BotWorker {
     pub(crate) async fn on_pe_event(&mut self, event: EngineEvent) {
         /* 处理持仓引擎事件：通过position_id和symbol匹配本bot的持仓，
          * 更新缓存中的持仓状态。外部平仓事件会触发冷却期。 */
@@ -441,7 +441,7 @@ impl ChatWorker {
                 .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
                 .await
             {
-                Ok(s) => match ChatMarketSnapshot::from_base(s) {
+                Ok(s) => match BotMarketSnapshot::from_base(s) {
                     Ok(snap) => {
                         let atr = snap.indicators
                             .get_num(&virs_type::IndicatorSpec::Atr { tf: virs_type::Timeframe::H1, period: 14 })

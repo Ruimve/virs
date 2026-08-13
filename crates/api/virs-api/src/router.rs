@@ -110,28 +110,28 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::ai_credentials::fetch_balance),
         )
 
-        .route("/api/chat/create", post(handlers::chat_trade::create_bot))
-        .route("/api/chat/list", get(handlers::chat_trade::list_bots))
+        .route("/api/bot/create", post(handlers::bot_trade::create_bot))
+        .route("/api/bot/list", get(handlers::bot_trade::list_bots))
         .route(
-            "/api/chat/{id}/analysis-logs",
-            get(handlers::chat_trade::get_analysis_logs),
+            "/api/bot/{id}/analysis-logs",
+            get(handlers::bot_trade::get_analysis_logs),
         )
-        .route("/api/chat/{id}", get(handlers::chat_trade::get_bot))
-        .route("/api/chat/{id}", put(handlers::chat_trade::update_bot))
+        .route("/api/bot/{id}", get(handlers::bot_trade::get_bot))
+        .route("/api/bot/{id}", put(handlers::bot_trade::update_bot))
         .route(
-            "/api/chat/{id}/start",
-            post(handlers::chat_trade::start_bot),
+            "/api/bot/{id}/start",
+            post(handlers::bot_trade::start_bot),
         )
-        .route("/api/chat/{id}/stop", post(handlers::chat_trade::stop_bot))
+        .route("/api/bot/{id}/stop", post(handlers::bot_trade::stop_bot))
         .route(
-            "/api/chat/{id}/delete",
-            delete(handlers::chat_trade::delete_bot),
+            "/api/bot/{id}/delete",
+            delete(handlers::bot_trade::delete_bot),
         )
         .route(
-            "/api/chat/{id}/trades",
-            get(handlers::chat_trade::get_trades),
+            "/api/bot/{id}/trades",
+            get(handlers::bot_trade::get_trades),
         )
-        .route("/api/chat/{id}/stats", get(handlers::chat_trade::get_stats))
+        .route("/api/bot/{id}/stats", get(handlers::bot_trade::get_stats))
 
 
         .route(

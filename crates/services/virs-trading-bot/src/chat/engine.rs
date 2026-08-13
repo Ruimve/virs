@@ -6,26 +6,27 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 use virs_task::{spawn, Stop, TaskHandle};
 
-use crate::chat::ai::ChatAiService;
-use virs_type::ChatCommand;
-use crate::chat::worker::ChatWorker;
-use virs_type::{ChatStore, CredentialStore, KlineEventSource, LlmProviderResolver};
+use crate::chat::ai::BotAiService;
+use virs_type::BotCommand;
+use crate::chat::worker::BotWorker;
+use virs_error::{VirsError, VirsResult};
+use virs_type::{BotStore, CredentialStore, KlineEventSource, LlmProviderResolver};
 use virs_type::{MarketDataProvider, OrderCommand, OrderEvent, OrderExecutor};
 use virs_prompt::PromptProvider;
 use virs_config::TimeConfig;
 use virs_type::EngineEvent;
 
-/* ChatEngine使用trait object组合依赖：Arc<dyn KlineEventSource>、Arc<dyn PromptProvider>等，
+/* BotEngine使用trait object组合依赖：Arc<dyn KlineEventSource>、Arc<dyn PromptProvider>等，
  * 由App层在装配时将具体实现强制转换为trait object。 */
-pub(crate) struct ChatEngine {
-    store: Arc<dyn ChatStore>,
-    ai_service: Arc<ChatAiService>,
+pub(crate) struct BotEngine {
+    store: Arc<dyn BotStore>,
+    ai_service: Arc<BotAiService>,
     kline_engine: Arc<dyn KlineEventSource>,
     order_executor: Arc<dyn OrderExecutor>,
     market_data_provider: Arc<dyn MarketDataProvider>,
     event_tx: broadcast::Sender<OrderEvent>,
     pe_event_tx: broadcast::Sender<EngineEvent>,
-    cmd_rx: Option<mpsc::Receiver<ChatCommand>>,
+    cmd_rx: Option<mpsc::Receiver<BotCommand>>,
     workers: HashMap<Uuid, TaskHandle>,
     bot_symbols: HashMap<Uuid, String>,
 
@@ -34,10 +35,10 @@ pub(crate) struct ChatEngine {
     strategy_engine: Option<Arc<dyn virs_prompt::StrategyHotSwapSource>>,
 }
 
-impl ChatEngine {
+impl BotEngine {
     pub(crate) fn new(
-        store: Arc<dyn ChatStore>,
-        ai_service: Arc<ChatAiService>,
+        store: Arc<dyn BotStore>,
+        ai_service: Arc<BotAiService>,
         kline_engine: Arc<dyn KlineEventSource>,
         order_executor: Arc<dyn OrderExecutor>,
         market_data_provider: Arc<dyn MarketDataProvider>,
@@ -46,7 +47,7 @@ impl ChatEngine {
         time_config: TimeConfig,
         prompt_loader: Arc<dyn PromptProvider>,
         strategy_engine: Option<Arc<dyn virs_prompt::StrategyHotSwapSource>>,
-    ) -> (Self, mpsc::Sender<ChatCommand>) {
+    ) -> (Self, mpsc::Sender<BotCommand>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
 
         let engine = Self {
@@ -72,7 +73,7 @@ impl ChatEngine {
         let mut cmd_rx = match self.cmd_rx.take() {
             Some(rx) => rx,
             None => {
-                error!("ChatEngine already running — run() called twice. Skipping.");
+                error!("BotEngine already running — run() called twice. Skipping.");
                 return;
             }
         };
@@ -83,9 +84,9 @@ impl ChatEngine {
                 _ = stop.cancelled() => break,
                 cmd = cmd_rx.recv() => {
                     match cmd {
-                        Some(ChatCommand::StartBot { bot_id }) => self.start_bot(bot_id).await,
-                        Some(ChatCommand::StopBot { bot_id }) => self.stop_bot(bot_id, "user requested").await,
-                        Some(ChatCommand::DeleteBot {
+                        Some(BotCommand::StartBot { bot_id }) => self.start_bot(bot_id).await,
+                        Some(BotCommand::StopBot { bot_id }) => self.stop_bot(bot_id, "user requested").await,
+                        Some(BotCommand::DeleteBot {
                             bot_id,
                             close_position,
                             response_tx,
@@ -96,7 +97,7 @@ impl ChatEngine {
             }
         }
 
-        info!("ChatEngine shutting down all workers");
+        info!("BotEngine shutting down all workers");
 
         let handles: Vec<TaskHandle> = self.workers.drain().map(|(_, h)| h).collect();
         for h in &handles {
@@ -110,7 +111,7 @@ impl ChatEngine {
 
         self.bot_symbols.clear();
 
-        info!("ChatEngine shutdown complete");
+        info!("BotEngine shutdown complete");
     }
 
     async fn restore_running_bots(&mut self) {
@@ -167,8 +168,8 @@ impl ChatEngine {
         };
 
         /* 每个worker通过virs-task独立spawn，拥有独立的Stop和取消机制 */
-        let handle = spawn("chat_worker", move |stop: Stop| async move {
-            let worker = ChatWorker::new(
+        let handle = spawn("bot_worker", move |stop: Stop| async move {
+            let worker = BotWorker::new(
                 bot,
                 kline_rx,
                 order_executor,
@@ -236,7 +237,7 @@ impl ChatEngine {
         &mut self,
         bot_id: Uuid,
         close_position: bool,
-        response_tx: tokio::sync::oneshot::Sender<Result<(), String>>,
+        response_tx: tokio::sync::oneshot::Sender<VirsResult<()>>,
     ) {
         let bot_info = match self.store.load_bot(bot_id).await {
             Ok(Some(info)) => info,
@@ -247,7 +248,7 @@ impl ChatEngine {
             }
             Err(e) => {
                 error!(bot_id = %bot_id, error = %e, "Failed to load bot info for deletion — aborting");
-                let _ = response_tx.send(Err(format!("Failed to load bot: {e}")));
+                let _ = response_tx.send(Err(e));
                 return;
             }
         };
@@ -264,7 +265,7 @@ impl ChatEngine {
                 .await
             {
                 error!(bot_id = %bot_id, error = %e, "Failed to cancel orders during deletion — aborting");
-                let _ = response_tx.send(Err(format!("Failed to cancel orders: {e}")));
+                let _ = response_tx.send(Err(VirsError::from(e)));
                 return;
             }
             if let Err(e) = self
@@ -276,7 +277,7 @@ impl ChatEngine {
                 .await
             {
                 error!(bot_id = %bot_id, error = %e, "Failed to close positions during deletion — aborting");
-                let _ = response_tx.send(Err(format!("Failed to close positions: {e}")));
+                let _ = response_tx.send(Err(VirsError::from(e)));
                 return;
             }
         }
@@ -286,7 +287,7 @@ impl ChatEngine {
 
         if let Err(e) = self.store.delete_bot(bot_id).await {
             error!(bot_id = %bot_id, error = %e, "Failed to delete bot from database");
-            let _ = response_tx.send(Err(format!("Failed to delete bot from database: {e}")));
+            let _ = response_tx.send(Err(e));
             return;
         }
 
@@ -296,10 +297,10 @@ impl ChatEngine {
 }
 
 
-/* 工厂函数：创建ChatEngine并启动，返回命令发送者和任务句柄。
+/* 工厂函数：创建BotEngine并启动，返回命令发送者和任务句柄。
  * llm_timeout用于设置LLM客户端的应用级超时，防止无限挂起。 */
-pub fn create_chat_engine(
-    store: Arc<dyn ChatStore>,
+pub fn create_bot_engine(
+    store: Arc<dyn BotStore>,
     llm_resolver: Arc<dyn LlmProviderResolver>,
     credential_store: Arc<dyn CredentialStore>,
     llm_timeout: std::time::Duration,
@@ -311,13 +312,13 @@ pub fn create_chat_engine(
     time_config: TimeConfig,
     prompt_loader: Arc<dyn PromptProvider>,
     strategy_engine: Option<Arc<dyn virs_prompt::StrategyHotSwapSource>>,
-) -> (mpsc::Sender<ChatCommand>, TaskHandle) {
-    let ai_service = Arc::new(ChatAiService::new(
+) -> (mpsc::Sender<BotCommand>, TaskHandle) {
+    let ai_service = Arc::new(BotAiService::new(
         llm_resolver,
         credential_store,
         llm_timeout,
     ));
-    let (mut engine, cmd_tx) = ChatEngine::new(
+    let (mut engine, cmd_tx) = BotEngine::new(
         store,
         ai_service,
         kline_engine,
@@ -329,7 +330,7 @@ pub fn create_chat_engine(
         prompt_loader,
         strategy_engine,
     );
-    let task = spawn("chat_engine", move |stop: Stop| async move {
+    let task = spawn("bot_engine", move |stop: Stop| async move {
         engine.run(stop).await;
     });
     (cmd_tx, task)

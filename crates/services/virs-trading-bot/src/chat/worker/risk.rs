@@ -5,12 +5,12 @@ use std::time::Duration;
 use tracing::{info, warn};
 use virs_type::PositionSide;
 
-use crate::chat::ports::ChatMarketSnapshot;
+use crate::chat::ports::BotMarketSnapshot;
 use crate::chat::strategy;
 use crate::chat::worker::side_str;
-use crate::chat::worker::ChatWorker;
+use crate::chat::worker::BotWorker;
 
-impl ChatWorker {
+impl BotWorker {
     pub(crate) async fn on_price_tick(&mut self) {
         /* 价格更新时的风控检查：pending超时 -> 移动止损更新 -> 持仓超时 -> 止损止盈触发 */
         if self.current_price <= 0.0 {
@@ -165,7 +165,7 @@ impl ChatWorker {
             .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
             .await
         {
-            Ok(s) => match ChatMarketSnapshot::from_base(s) {
+            Ok(s) => match BotMarketSnapshot::from_base(s) {
                 Ok(snap) => snap,
                 Err(e) => {
                     warn!(bot_id = %self.bot.id, error = %e, "Failed to parse indicators for ATR");

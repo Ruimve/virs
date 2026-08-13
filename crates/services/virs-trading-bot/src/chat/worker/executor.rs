@@ -3,19 +3,19 @@
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::chat::ports::ChatMarketSnapshot;
+use crate::chat::ports::BotMarketSnapshot;
 use crate::chat::strategy;
 use virs_type::OrderCommand;
-use crate::chat::worker::client_order_id::{format_chat_open, format_chat_close};
+use crate::chat::worker::client_order_id::{format_bot_open, format_bot_close};
 use virs_type::{PositionSide, Side};
 
-use crate::chat::worker::{side_str, ChatWorker, PendingClose, PendingOpen};
+use crate::chat::worker::{side_str, BotWorker, PendingClose, PendingOpen};
 
-impl ChatWorker {
+impl BotWorker {
     pub(super) async fn open_position(
         &mut self,
         side: &str,
-        snapshot: &ChatMarketSnapshot,
+        snapshot: &BotMarketSnapshot,
     ) {
         /* 开仓流程：获取账户余额 -> 计算仓位大小(基于ADX/连续亏损/资金费率) ->
          * 对齐最小下单量 -> 计算止损止盈 -> 发送开仓指令 -> 记录pending_open状态 */
@@ -98,7 +98,7 @@ impl ChatWorker {
             }
         };
 
-        let client_order_id = format_chat_open(self.bot.id, side);
+        let client_order_id = format_bot_open(self.bot.id, side);
 
         let result = self
             .order_executor
@@ -157,7 +157,7 @@ impl ChatWorker {
 
 
         if position_id != Uuid::nil() {
-            let client_order_id = format_chat_close(self.bot.id, side_str);
+            let client_order_id = format_bot_close(self.bot.id, side_str);
 
             let result = self
                 .order_executor
@@ -204,7 +204,7 @@ impl ChatWorker {
                 PositionSide::Unknown(_) => unreachable!("validate ensures position_side is Long/Short"),
             };
 
-            let client_order_id = format_chat_close(self.bot.id, side_str);
+            let client_order_id = format_bot_close(self.bot.id, side_str);
 
             let result = self
                 .order_executor

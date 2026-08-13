@@ -14,7 +14,7 @@ use crate::state::AppState;
 
 
 #[derive(Debug, FromRow)]
-struct ChatTradeRow {
+struct BotTradeRow {
     open_client_order_id: String,
     close_client_order_id: Option<String>,
     bot_id: uuid::Uuid,
@@ -61,7 +61,7 @@ pub async fn create_bot(
     let decide_interval_secs = body["decide_interval_secs"].as_i64().ok_or_else(|| {
         VirsError::bad_request("decide_interval_secs is required and must be greater than 0")
     })? as i32;
-    let name = body["name"].as_str().unwrap_or("Chat Bot");
+    let name = body["name"].as_str().unwrap_or("Bot");
     let paper_mode = body["paper_mode"].as_bool().ok_or_else(|| {
         VirsError::bad_request("paper_mode is required (must be true or false)")
     })?;
@@ -92,12 +92,12 @@ pub async fn create_bot(
 
     /* 每个用户只能创建一个bot：避免多bot同时操作同一账户导致资金冲突 */
     {
-        let chat_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM qd_chat_bots WHERE user_id = $1")
+        let bot_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM qd_bots WHERE user_id = $1")
                 .bind(user_id)
                 .fetch_one(&state.db_pool)
                 .await?;
-        if chat_count > 0 {
+        if bot_count > 0 {
             return Err(VirsError::conflict(
                 "Each account can only have one bot. Please delete your existing bot first.",
             ));
@@ -172,7 +172,7 @@ pub async fn create_bot(
     }
 
     sqlx::query(
-        r#"INSERT INTO qd_chat_bots (id, user_id, name, symbol, exchange, leverage, max_position_pct, decide_interval_secs, paper_mode, initial_capital, status, bot_type, strategy_file, auto_optimize_enabled, created_at, updated_at)
+        r#"INSERT INTO qd_bots (id, user_id, name, symbol, exchange, leverage, max_position_pct, decide_interval_secs, paper_mode, initial_capital, status, bot_type, strategy_file, auto_optimize_enabled, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'stopped', $11, $12, $13, NOW(), NOW())"#,
     )
     .bind(id)
@@ -194,7 +194,7 @@ pub async fn create_bot(
 
     if strategies.len() > 1 {
         let _ = sqlx::query(
-            r#"INSERT INTO qd_chat_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, strategy_file, completed_at)
+            r#"INSERT INTO qd_bot_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, strategy_file, completed_at)
                VALUES ($1, 'strategy_selection', $2, $3, 'completed', $4, $5, NOW())"#,
         )
         .bind(id)
@@ -223,7 +223,7 @@ pub async fn list_bots(
     )>(
         r#"SELECT id, name, symbol, exchange, status, bot_type, leverage, max_position_pct, decide_interval_secs,
            created_at, updated_at
-           FROM qd_chat_bots WHERE user_id = $1 ORDER BY created_at DESC"#,
+           FROM qd_bots WHERE user_id = $1 ORDER BY created_at DESC"#,
     )
     .bind(user_id)
     .fetch_all(&state.db_pool)
@@ -276,8 +276,8 @@ pub async fn get_bot(
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
 
-    let bot = sqlx::query_as::<_, virs_type::ChatBot>(
-        "SELECT * FROM qd_chat_bots WHERE id = $1 AND user_id = $2",
+    let bot = sqlx::query_as::<_, virs_type::Bot>(
+        "SELECT * FROM qd_bots WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
     .bind(user_id)
@@ -344,8 +344,8 @@ pub async fn update_bot(
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
 
-    let bot = sqlx::query_as::<_, virs_type::ChatBot>(
-        "SELECT * FROM qd_chat_bots WHERE id = $1 AND user_id = $2",
+    let bot = sqlx::query_as::<_, virs_type::Bot>(
+        "SELECT * FROM qd_bots WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
     .bind(user_id)
@@ -379,7 +379,7 @@ pub async fn update_bot(
     }
 
 
-    sqlx::query("UPDATE qd_chat_bots SET strategy_file = $2, updated_at = NOW() WHERE id = $1 AND user_id = $3")
+    sqlx::query("UPDATE qd_bots SET strategy_file = $2, updated_at = NOW() WHERE id = $1 AND user_id = $3")
         .bind(id)
         .bind(new_strategy_file)
         .bind(user_id)
@@ -408,11 +408,11 @@ pub async fn start_bot(
 
     verify_bot_ownership(&state, id, user_id).await?;
 
-    let tx = state.engine_manager.chat_cmd_tx().ok_or_else(|| VirsError::Http {
+    let tx = state.engine_manager.bot_cmd_tx().ok_or_else(|| VirsError::Http {
         status: 503,
         message: "Trade engine not running".into(),
     })?;
-    tx.send(virs_type::ChatCommand::StartBot { bot_id: id })
+    tx.send(virs_type::BotCommand::StartBot { bot_id: id })
         .await
         .map_err(|_| VirsError::Http {
             status: 500,
@@ -438,7 +438,7 @@ async fn verify_bot_ownership(
     bot_id: uuid::Uuid,
     user_id: uuid::Uuid,
 ) -> Result<(), VirsError> {
-    let exists: Option<bool> = sqlx::query_scalar("SELECT true FROM qd_chat_bots WHERE id = $1 AND user_id = $2")
+    let exists: Option<bool> = sqlx::query_scalar("SELECT true FROM qd_bots WHERE id = $1 AND user_id = $2")
         .bind(bot_id)
         .bind(user_id)
         .fetch_optional(&state.db_pool)
@@ -458,11 +458,11 @@ pub async fn stop_bot(
 
     verify_bot_ownership(&state, id, user_id).await?;
 
-    let tx = state.engine_manager.chat_cmd_tx().ok_or_else(|| VirsError::Http {
+    let tx = state.engine_manager.bot_cmd_tx().ok_or_else(|| VirsError::Http {
         status: 503,
         message: "Trade engine not running".into(),
     })?;
-    tx.send(virs_type::ChatCommand::StopBot { bot_id: id })
+    tx.send(virs_type::BotCommand::StopBot { bot_id: id })
         .await
         .map_err(|_| VirsError::Http {
             status: 500,
@@ -481,14 +481,14 @@ pub async fn delete_bot(
     verify_bot_ownership(&state, id, user_id).await?;
 
 
-    let tx = state.engine_manager.chat_cmd_tx().ok_or_else(|| VirsError::Http {
+    let tx = state.engine_manager.bot_cmd_tx().ok_or_else(|| VirsError::Http {
         status: 503,
         message: "Trade engine not running — cannot safely delete bot (positions would not be closed)".into(),
     })?;
 
     /* 删除bot前先平仓：通过oneshot channel同步等待引擎确认，确保持仓已清理 */
     let (response_tx, response_rx) = tokio::sync::oneshot::channel();
-    tx.send(virs_type::ChatCommand::DeleteBot {
+    tx.send(virs_type::BotCommand::DeleteBot {
         bot_id: id,
         close_position: true,
         response_tx,
@@ -528,7 +528,7 @@ pub async fn get_trades(
 
 
     let total: i64 = sqlx::query_scalar::<_, i64>(
-        r#"SELECT COUNT(*) FROM pe_chat_order_context WHERE bot_id = $1 AND user_id = $2 AND order_role = 'open'"#,
+        r#"SELECT COUNT(*) FROM pe_bot_order_context WHERE bot_id = $1 AND user_id = $2 AND order_role = 'open'"#,
     )
     .bind(id)
     .bind(user_id)
@@ -536,7 +536,7 @@ pub async fn get_trades(
     .await?;
 
 
-    let trades = sqlx::query_as::<_, ChatTradeRow>(
+    let trades = sqlx::query_as::<_, BotTradeRow>(
         r#"SELECT
              open_ctx.client_order_id AS open_client_order_id,
              close_ctx.client_order_id AS close_client_order_id,
@@ -558,9 +558,9 @@ pub async fn get_trades(
              open_ctx.take_profit,
              close_ctx.close_reason,
              open_ctx.status
-           FROM pe_chat_order_context open_ctx
+           FROM pe_bot_order_context open_ctx
            JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
-           LEFT JOIN pe_chat_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
+           LEFT JOIN pe_bot_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
            LEFT JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
            WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.order_role = 'open'
            ORDER BY open_ctx.created_at DESC LIMIT $3 OFFSET $4"#,
@@ -641,9 +641,9 @@ pub async fn get_stats(
              COALESCE(close_ord.realized_pnl::float, 0) AS pnl,
              open_ctx.created_at AS opened_at,
              close_ctx.created_at AS closed_at
-           FROM pe_chat_order_context open_ctx
+           FROM pe_bot_order_context open_ctx
            JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
-           JOIN pe_chat_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id AND close_ctx.order_role = 'close'
+           JOIN pe_bot_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id AND close_ctx.order_role = 'close'
            JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
            WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.status = 'closed'
            ORDER BY close_ctx.created_at ASC"#,
@@ -654,8 +654,8 @@ pub async fn get_stats(
     .await?;
 
 
-    let bot = sqlx::query_as::<_, virs_type::ChatBot>(
-        "SELECT * FROM qd_chat_bots WHERE id = $1 AND user_id = $2",
+    let bot = sqlx::query_as::<_, virs_type::Bot>(
+        "SELECT * FROM qd_bots WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
     .bind(user_id)
@@ -808,8 +808,8 @@ pub async fn get_analysis_logs(
 
 
     let total: i64 = sqlx::query_scalar::<_, i64>(
-        r#"SELECT COUNT(*) FROM qd_chat_analysis_logs l
-           JOIN qd_chat_bots b ON l.bot_id = b.id
+        r#"SELECT COUNT(*) FROM qd_bot_analysis_logs l
+           JOIN qd_bots b ON l.bot_id = b.id
            WHERE l.bot_id = $1 AND b.user_id = $2"#,
     )
     .bind(id)
@@ -819,8 +819,8 @@ pub async fn get_analysis_logs(
 
     let logs = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, String, String, String, serde_json::Value, Option<String>, String, String, chrono::DateTime<chrono::Utc>, Option<String>, Option<String>, Option<String>, Option<chrono::DateTime<chrono::Utc>>)>(
         r#"SELECT l.id, l.bot_id, l.analysis_type, l.status, l.system_prompt, l.result, l.error, l.user_prompt, l.llm_model, l.created_at, l.strategy_file, l.execution_status, l.intercept_reason, l.completed_at
-           FROM qd_chat_analysis_logs l
-           JOIN qd_chat_bots b ON l.bot_id = b.id
+           FROM qd_bot_analysis_logs l
+           JOIN qd_bots b ON l.bot_id = b.id
            WHERE l.bot_id = $1 AND b.user_id = $2
            ORDER BY l.created_at DESC LIMIT $3 OFFSET $4"#,
     )

@@ -356,10 +356,10 @@ LEFT JOIN (
 ) agg ON agg.client_order_id = latest.client_order_id;
 
 -- ============================================================
--- Chat Trading Bots (对话式交易机器人)
+-- Trading Bots (交易机器人)
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS qd_chat_bots (
+CREATE TABLE IF NOT EXISTS qd_bots (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -407,13 +407,13 @@ CREATE TABLE IF NOT EXISTS qd_chat_bots (
     stopped_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_chat_bots_user ON qd_chat_bots(user_id);
-CREATE INDEX IF NOT EXISTS idx_chat_bots_status ON qd_chat_bots(status);
+CREATE INDEX IF NOT EXISTS idx_bots_user ON qd_bots(user_id);
+CREATE INDEX IF NOT EXISTS idx_bots_status ON qd_bots(status);
 
--- Chat Order Context（业务上下文，价格/数量/pnl 从 pe_order_latest 取）
-CREATE TABLE IF NOT EXISTS pe_chat_order_context (
+-- Bot Order Context（业务上下文，价格/数量/pnl 从 pe_order_latest 取）
+CREATE TABLE IF NOT EXISTS pe_bot_order_context (
     client_order_id        TEXT PRIMARY KEY,
-    bot_id                 UUID NOT NULL REFERENCES qd_chat_bots(id) ON DELETE CASCADE,
+    bot_id                 UUID NOT NULL REFERENCES qd_bots(id) ON DELETE CASCADE,
     user_id                UUID NOT NULL REFERENCES qd_users(id) ON DELETE CASCADE,
     symbol                 TEXT NOT NULL,
     exchange               TEXT NOT NULL,
@@ -425,9 +425,9 @@ CREATE TABLE IF NOT EXISTS pe_chat_order_context (
     status                 TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'orphaned')),
 
     -- 配对关联: close 行指向 open 行的 client_order_id
-    paired_client_order_id TEXT REFERENCES pe_chat_order_context(client_order_id),
+    paired_client_order_id TEXT REFERENCES pe_bot_order_context(client_order_id),
 
-    -- Chat 专属字段
+    -- 业务专属字段
     stop_loss              DOUBLE PRECISION NOT NULL DEFAULT 0,
     take_profit            DOUBLE PRECISION NOT NULL DEFAULT 0,
     close_reason           TEXT CHECK (close_reason IS NULL OR close_reason IN ('stop_loss', 'take_profit', 'position_timeout', 'llm_decision')),
@@ -438,13 +438,13 @@ CREATE TABLE IF NOT EXISTS pe_chat_order_context (
     created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_chat_ctx_bot ON pe_chat_order_context(bot_id, status);
-CREATE INDEX IF NOT EXISTS idx_chat_ctx_pair ON pe_chat_order_context(paired_client_order_id);
+CREATE INDEX IF NOT EXISTS idx_bot_ctx_bot ON pe_bot_order_context(bot_id, status);
+CREATE INDEX IF NOT EXISTS idx_bot_ctx_pair ON pe_bot_order_context(paired_client_order_id);
 
--- Chat LLM 分析日志
-CREATE TABLE IF NOT EXISTS qd_chat_analysis_logs (
+-- Bot LLM 分析日志
+CREATE TABLE IF NOT EXISTS qd_bot_analysis_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    bot_id UUID NOT NULL REFERENCES qd_chat_bots(id) ON DELETE CASCADE,
+    bot_id UUID NOT NULL REFERENCES qd_bots(id) ON DELETE CASCADE,
     analysis_type TEXT NOT NULL DEFAULT 'periodic',
     -- 执行状态：pending=待执行, completed=已执行, failed=执行失败, intercepted=被代码拦截
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed', 'intercepted')),
@@ -456,7 +456,7 @@ CREATE TABLE IF NOT EXISTS qd_chat_analysis_logs (
     -- 执行回填字段（在订单成交/拦截发生时回填）
     -- intercept_reason: LLM 决策被代码拦截时的原因（如冷却期/置信度不足）
     -- execution_status: open=开仓成功, open_failed=开仓失败, close=平仓成功, close_failed=平仓失败, hold=观望
-    -- 注：close_reason 不在此表，已记录在 pe_chat_order_context.close_reason
+    -- 注：close_reason 不在此表，已记录在 pe_bot_order_context.close_reason
     intercept_reason TEXT,
     execution_status TEXT CHECK (execution_status IS NULL OR execution_status IN ('open', 'open_failed', 'close', 'close_failed', 'hold')),
     -- 行级快照：决策发生时使用的策略名（INSERT 时冻结，永不 UPDATE）
@@ -465,5 +465,5 @@ CREATE TABLE IF NOT EXISTS qd_chat_analysis_logs (
     completed_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_chat_analysis_logs_bot ON qd_chat_analysis_logs(bot_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bot_analysis_logs_bot ON qd_bot_analysis_logs(bot_id, created_at DESC);
 

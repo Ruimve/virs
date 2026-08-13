@@ -13,14 +13,14 @@ export {
   testAiCredential,
 } from './credentials';
 export {
-  createChatBot,
-  startChatBot,
-  stopChatBot,
-  deleteChatBot,
-  getChatBotDetail,
-  getChatTrades,
-  getChatStats,
-  getChatAnalysisLogs,
+  createBot,
+  startBot,
+  stopBot,
+  deleteBot,
+  getBotDetail,
+  getBotTrades,
+  getBotStats,
+  getBotAnalysisLogs,
   findActiveBot,
 } from './bot';
 export { fetchKlines } from './market';

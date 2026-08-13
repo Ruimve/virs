@@ -8,7 +8,7 @@ use crate::common::llm_client::LlmClient;
 use virs_type::{CredentialStore, LlmProviderResolver};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ChatAction {
+pub enum BotAction {
     OpenLong,
     OpenShort,
     ClosePosition,
@@ -16,7 +16,7 @@ pub enum ChatAction {
 }
 
 /* LLM返回的未知action默认降级为Hold，避免执行不可预期的操作 */
-impl ChatAction {
+impl BotAction {
     pub fn as_str(&self) -> &str {
         match self {
             Self::OpenLong => "open_long",
@@ -45,8 +45,8 @@ impl ChatAction {
 }
 
 #[derive(Debug, Clone)]
-pub struct ChatDecision {
-    pub action: ChatAction,
+pub struct BotDecision {
+    pub action: BotAction,
     pub reason: String,
     pub confidence: f64,
 
@@ -57,7 +57,7 @@ pub struct ChatDecision {
     pub risk_warning: Option<String>,
 }
 
-impl ChatDecision {
+impl BotDecision {
     /* 从LLM返回的JSON解析决策：confidence被限制在[0,1]范围，
      * "none"字符串的funding_rate_warning/event_impact/risk_warning被过滤为None */
     pub fn from_json(json: &serde_json::Value) -> BotResult<Self> {
@@ -96,9 +96,9 @@ impl ChatDecision {
             .filter(|s| !s.eq_ignore_ascii_case("none"))
             .map(|s| s.to_string());
 
-        let action = ChatAction::from_str(action_str);
+        let action = BotAction::from_str(action_str);
 
-        Ok(ChatDecision {
+        Ok(BotDecision {
             action,
             reason,
             confidence,
@@ -111,11 +111,11 @@ impl ChatDecision {
     }
 }
 
-pub(crate) struct ChatAiService {
+pub(crate) struct BotAiService {
     llm_client: LlmClient,
 }
 
-impl ChatAiService {
+impl BotAiService {
     pub(crate) fn new(
         llm_resolver: Arc<dyn LlmProviderResolver>,
         credential_store: Arc<dyn CredentialStore>,
@@ -135,7 +135,7 @@ impl ChatAiService {
         user_id: Uuid,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> Option<(ChatDecision, serde_json::Value, String)> {
+    ) -> Option<(BotDecision, serde_json::Value, String)> {
         match self
             .llm_client
             .call(user_id, system_prompt, user_prompt, "chat-ai")
@@ -143,7 +143,7 @@ impl ChatAiService {
         {
             Ok(result) => {
                 let used_model = result.used_model;
-                match ChatDecision::from_json(&result.content) {
+                match BotDecision::from_json(&result.content) {
                     Ok(decision) => Some((decision, result.content, used_model)),
                     Err(e) => {
                         warn!(error = %e, "Failed to parse auto decision");

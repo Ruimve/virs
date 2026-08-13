@@ -1,5 +1,5 @@
 import { memo, useMemo, useState, type ReactNode } from 'react';
-import type { AnalysisLog, ChatBot, StrategyDetail } from '@/service/types';
+import type { AnalysisLog, Bot, StrategyDetail } from '@/service/types';
 import { Badge } from '@/components/Badge';
 import { Sparkline } from '@/components/Sparkline';
 import { IndicatorChip, type IndicatorSentiment } from '../../../components/IndicatorChip';
@@ -75,7 +75,7 @@ function extractIndicators(
   return PLACEHOLDER_INDICATORS;
 }
 
-function resolveStrategyName(bot: ChatBot, strategy: StrategyDetail | null | undefined): string {
+function resolveStrategyName(bot: Bot, strategy: StrategyDetail | null | undefined): string {
   if (strategy?.name) return strategy.name;
   if (bot.strategy_file) return bot.strategy_file;
   return '未绑定策略';

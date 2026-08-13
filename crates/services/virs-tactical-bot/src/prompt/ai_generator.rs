@@ -77,10 +77,12 @@ pub(crate) fn build_meta_system_prompt(strategy_type: StrategyType) -> String {
         StrategyType::Chat => {
             "Chat 趋势策略（单仓位方向判断：open_long/open_short/close_position/hold）"
         }
+        StrategyType::Agent => unimplemented!("Agent strategy type is not yet implemented"),
     };
     let placeholder_text = to_prompt_text();
     let strategy_type_str = match strategy_type {
         StrategyType::Chat => "chat",
+        StrategyType::Agent => unimplemented!("Agent strategy type is not yet implemented"),
     };
 
     format!(
@@ -157,6 +159,7 @@ pub(crate) fn build_meta_user_prompt(req: &GenerateRequest<'_>) -> String {
 请生成完整的策略 prompt JSON。"#,
         strategy_type = match req.strategy_type {
             StrategyType::Chat => "Chat 趋势策略",
+            StrategyType::Agent => unimplemented!("Agent strategy type is not yet implemented"),
         },
         name_hint = name_hint,
         user_intent = req.user_intent,

@@ -5,23 +5,23 @@ use tracing::warn;
 use uuid::Uuid;
 use virs_error::VirsResult;
 
-use virs_type::ChatBot;
-use virs_type::ChatBotConfig;
+use virs_type::Bot;
+use virs_type::BotConfig;
 use virs_type::*;
 
-pub struct PgChatStore {
+pub struct PgBotStore {
     db: PgPool,
 }
 
-impl PgChatStore {
+impl PgBotStore {
     pub fn new(db: PgPool) -> Self {
         Self { db }
     }
 }
 
-/* ChatBot到ChatBotConfig的转换：将数据库模型转换为引擎使用的配置对象 */
-pub fn bot_to_config(bot: &ChatBot) -> ChatBotConfig {
-    ChatBotConfig {
+/* Bot到BotConfig的转换：将数据库模型转换为引擎使用的配置对象 */
+pub fn bot_to_config(bot: &Bot) -> BotConfig {
+    BotConfig {
         id: bot.id,
         user_id: bot.user_id,
         name: bot.name.clone(),
@@ -48,17 +48,17 @@ pub fn bot_to_config(bot: &ChatBot) -> ChatBotConfig {
 }
 
 #[async_trait]
-impl ChatStore for PgChatStore {
-    async fn load_running_bots(&self) -> VirsResult<Vec<ChatBotConfig>> {
-        let bots: Vec<ChatBot> =
-            sqlx::query_as("SELECT * FROM qd_chat_bots WHERE status = 'running'")
+impl BotStore for PgBotStore {
+    async fn load_running_bots(&self) -> VirsResult<Vec<BotConfig>> {
+        let bots: Vec<Bot> =
+            sqlx::query_as("SELECT * FROM qd_bots WHERE status = 'running'")
                 .fetch_all(&self.db)
                 .await?;
         Ok(bots.iter().map(bot_to_config).collect())
     }
 
-    async fn load_bot(&self, bot_id: Uuid) -> VirsResult<Option<ChatBotConfig>> {
-        let bot: Option<ChatBot> = sqlx::query_as("SELECT * FROM qd_chat_bots WHERE id = $1")
+    async fn load_bot(&self, bot_id: Uuid) -> VirsResult<Option<BotConfig>> {
+        let bot: Option<Bot> = sqlx::query_as("SELECT * FROM qd_bots WHERE id = $1")
             .bind(bot_id)
             .fetch_optional(&self.db)
             .await?;
@@ -67,10 +67,10 @@ impl ChatStore for PgChatStore {
 
     async fn update_bot_status(&self, bot_id: Uuid, status: &str) -> VirsResult<()> {
         let sql = match status {
-            "running" => "UPDATE qd_chat_bots SET status = 'running', started_at = NOW(), updated_at = NOW() WHERE id = $1",
-            "stopped" => "UPDATE qd_chat_bots SET status = 'stopped', stopped_at = NOW(), updated_at = NOW() WHERE id = $1",
-            "paused" => "UPDATE qd_chat_bots SET status = 'paused', updated_at = NOW() WHERE id = $1",
-            _ => "UPDATE qd_chat_bots SET status = $2, updated_at = NOW() WHERE id = $1",
+            "running" => "UPDATE qd_bots SET status = 'running', started_at = NOW(), updated_at = NOW() WHERE id = $1",
+            "stopped" => "UPDATE qd_bots SET status = 'stopped', stopped_at = NOW(), updated_at = NOW() WHERE id = $1",
+            "paused" => "UPDATE qd_bots SET status = 'paused', updated_at = NOW() WHERE id = $1",
+            _ => "UPDATE qd_bots SET status = $2, updated_at = NOW() WHERE id = $1",
         };
         if status == "running" || status == "stopped" || status == "paused" {
             sqlx::query(sql).bind(bot_id).execute(&self.db).await?;
@@ -85,7 +85,7 @@ impl ChatStore for PgChatStore {
     }
 
     async fn update_last_decided(&self, bot_id: Uuid) -> VirsResult<()> {
-        sqlx::query("UPDATE qd_chat_bots SET last_decided_at = NOW() WHERE id = $1")
+        sqlx::query("UPDATE qd_bots SET last_decided_at = NOW() WHERE id = $1")
             .bind(bot_id)
             .execute(&self.db)
             .await?;
@@ -99,7 +99,7 @@ impl ChatStore for PgChatStore {
         position_id_short: Option<Uuid>,
     ) -> VirsResult<()> {
         sqlx::query(
-            r#"UPDATE qd_chat_bots SET
+            r#"UPDATE qd_bots SET
                 position_id_long = $2, position_id_short = $3, updated_at = NOW()
                WHERE id = $1"#,
         )
@@ -119,7 +119,7 @@ impl ChatStore for PgChatStore {
         ai_analysis: &str,
     ) -> VirsResult<()> {
         sqlx::query(
-            r#"UPDATE qd_chat_bots SET
+            r#"UPDATE qd_bots SET
                 market_regime = $2, leverage = $3, ai_analysis = $4, updated_at = NOW()
                WHERE id = $1"#,
         )
@@ -141,7 +141,7 @@ impl ChatStore for PgChatStore {
         loss_trades: i32,
     ) -> VirsResult<()> {
         sqlx::query(
-            r#"UPDATE qd_chat_bots SET
+            r#"UPDATE qd_bots SET
                 total_pnl = $2, total_trades = $3, win_trades = $4, loss_trades = $5, updated_at = NOW()
                WHERE id = $1"#,
         )
@@ -162,7 +162,7 @@ impl ChatStore for PgChatStore {
         strategy_file: &Option<String>,
     ) -> VirsResult<()> {
         sqlx::query(
-            r#"INSERT INTO pe_chat_order_context
+            r#"INSERT INTO pe_bot_order_context
                (client_order_id, bot_id, user_id, symbol, exchange, order_role, status, stop_loss, take_profit, strategy_file)
                VALUES ($1, $2, $3, $4, $5, 'open', 'open', $6, $7, $8)"#,
         )
@@ -187,7 +187,7 @@ impl ChatStore for PgChatStore {
         close_reason: &str,
     ) -> VirsResult<()> {
         let result = sqlx::query(
-            r#"UPDATE pe_chat_order_context SET status = 'closed'
+            r#"UPDATE pe_bot_order_context SET status = 'closed'
                WHERE client_order_id = $1 AND order_role = 'open' AND status = 'open'"#,
         )
         .bind(open_client_order_id)
@@ -199,10 +199,10 @@ impl ChatStore for PgChatStore {
         }
 
         sqlx::query(
-            r#"INSERT INTO pe_chat_order_context
+            r#"INSERT INTO pe_bot_order_context
                (client_order_id, bot_id, user_id, symbol, exchange, order_role, status, paired_client_order_id, close_reason, strategy_file)
                SELECT $1, bot_id, user_id, symbol, exchange, 'close', 'closed', client_order_id, $2, strategy_file
-               FROM pe_chat_order_context
+               FROM pe_bot_order_context
                WHERE client_order_id = $3 AND order_role = 'open'"#,
         )
         .bind(close_client_order_id)
@@ -220,7 +220,7 @@ impl ChatStore for PgChatStore {
     ) -> VirsResult<Option<(String, f64, f64, DateTime<Utc>)>> {
         let row: Option<(String, f64, f64, DateTime<Utc>)> = sqlx::query_as(
             r#"SELECT client_order_id, stop_loss, take_profit, created_at
-               FROM pe_chat_order_context
+               FROM pe_bot_order_context
                WHERE bot_id = $1 AND order_role = 'open' AND status = 'open'
                ORDER BY created_at DESC LIMIT 1"#,
         )
@@ -232,7 +232,7 @@ impl ChatStore for PgChatStore {
 
     async fn mark_trade_orphaned(&self, client_order_id: &str) -> VirsResult<()> {
         sqlx::query(
-            r#"UPDATE pe_chat_order_context SET status = 'orphaned'
+            r#"UPDATE pe_bot_order_context SET status = 'orphaned'
                WHERE client_order_id = $1 AND status = 'open'"#,
         )
         .bind(client_order_id)
@@ -249,8 +249,8 @@ impl ChatStore for PgChatStore {
             r#"SELECT LOWER(open_ord.position_side) AS open_side,
                       COALESCE(close_ctx.close_reason, '') AS close_reason,
                       close_ctx.created_at
-               FROM pe_chat_order_context close_ctx
-               JOIN pe_chat_order_context open_ctx ON open_ctx.client_order_id = close_ctx.paired_client_order_id
+               FROM pe_bot_order_context close_ctx
+               JOIN pe_bot_order_context open_ctx ON open_ctx.client_order_id = close_ctx.paired_client_order_id
                JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
                WHERE close_ctx.bot_id = $1 AND close_ctx.order_role = 'close' AND close_ctx.status = 'closed'
                ORDER BY close_ctx.created_at DESC LIMIT 1"#,
@@ -267,7 +267,7 @@ impl ChatStore for PgChatStore {
         stop_loss: f64,
     ) -> VirsResult<()> {
         sqlx::query(
-            r#"UPDATE pe_chat_order_context SET stop_loss = $2
+            r#"UPDATE pe_bot_order_context SET stop_loss = $2
                WHERE client_order_id = $1 AND status = 'open'"#,
         )
         .bind(client_order_id)
@@ -287,7 +287,7 @@ impl ChatStore for PgChatStore {
         strategy_file: &Option<String>,
     ) -> VirsResult<()> {
         sqlx::query(
-            r#"INSERT INTO pe_chat_order_context
+            r#"INSERT INTO pe_bot_order_context
                (client_order_id, bot_id, user_id, symbol, exchange, order_role, status, close_reason, strategy_file)
                VALUES ($1, $2, $3, $4, $5, 'close', 'orphaned', $6, $7)"#,
         )
@@ -320,7 +320,7 @@ impl ChatStore for PgChatStore {
             "completed"
         };
         let row: (Uuid,) = sqlx::query_as(
-            r#"INSERT INTO qd_chat_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, error, llm_model, completed_at, strategy_file)
+            r#"INSERT INTO qd_bot_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, error, llm_model, completed_at, strategy_file)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
                RETURNING id"#,
         )
@@ -343,7 +343,7 @@ impl ChatStore for PgChatStore {
             "completed"
         };
         sqlx::query(
-            r#"UPDATE qd_chat_analysis_logs SET
+            r#"UPDATE qd_bot_analysis_logs SET
                execution_status = $2,
                intercept_reason = $3,
                status = $4
@@ -362,7 +362,7 @@ impl ChatStore for PgChatStore {
     async fn load_consecutive_losses(&self, bot_id: Uuid) -> VirsResult<i32> {
         let pnl_rows: Vec<(f64,)> = sqlx::query_as(
             r#"SELECT close_ord.realized_pnl::float AS pnl
-               FROM pe_chat_order_context close_ctx
+               FROM pe_bot_order_context close_ctx
                JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
                WHERE close_ctx.bot_id = $1 AND close_ctx.order_role = 'close' AND close_ctx.status = 'closed'
                ORDER BY close_ctx.created_at DESC LIMIT 20"#,
@@ -383,7 +383,7 @@ impl ChatStore for PgChatStore {
     }
 
     async fn delete_bot(&self, bot_id: Uuid) -> VirsResult<()> {
-        sqlx::query("DELETE FROM qd_chat_bots WHERE id = $1")
+        sqlx::query("DELETE FROM qd_bots WHERE id = $1")
             .bind(bot_id)
             .execute(&self.db)
             .await?;

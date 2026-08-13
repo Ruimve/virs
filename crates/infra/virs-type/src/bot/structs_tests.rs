@@ -1,20 +1,20 @@
 use chrono::Utc;
 use uuid::Uuid;
 
-use super::ChatBot;
+use super::Bot;
 
-fn make_chat_bot(
+fn make_bot(
     status: &str,
     total_trades: i32,
     win_trades: i32,
     loss_trades: i32,
     total_pnl: f64,
     initial_capital: f64,
-) -> ChatBot {
-    ChatBot {
+) -> Bot {
+    Bot {
         id: Uuid::nil(),
         user_id: Uuid::nil(),
-        name: "test_chat".into(),
+        name: "test_bot".into(),
         symbol: "BTCUSDT".into(),
         exchange: "binance".into(),
         paper_mode: false,
@@ -46,84 +46,83 @@ fn make_chat_bot(
 
 #[test]
 fn a1_1_seventy_percent() {
-    let bot = make_chat_bot("running", 10, 7, 3, 0.0, 10000.0);
+    let bot = make_bot("running", 10, 7, 3, 0.0, 10000.0);
     assert!((bot.win_rate() - 70.0).abs() < 0.01);
 }
 
 #[test]
 fn a1_2_zero_wins() {
-    let bot = make_chat_bot("running", 10, 0, 10, 0.0, 10000.0);
+    let bot = make_bot("running", 10, 0, 10, 0.0, 10000.0);
     assert!((bot.win_rate() - 0.0).abs() < 0.01);
 }
 
 #[test]
 fn a1_3_zero_trades_division_protection() {
-    let bot = make_chat_bot("running", 0, 0, 0, 0.0, 10000.0);
+    let bot = make_bot("running", 0, 0, 0, 0.0, 10000.0);
     assert!((bot.win_rate() - 0.0).abs() < 0.01);
 }
 
 #[test]
 fn a2_1_thirty_percent() {
-    let bot = make_chat_bot("running", 10, 7, 3, 0.0, 10000.0);
+    let bot = make_bot("running", 10, 7, 3, 0.0, 10000.0);
     assert!((bot.loss_rate() - 30.0).abs() < 0.01);
 }
 
 #[test]
 fn a2_2_zero_trades_division_protection() {
-    let bot = make_chat_bot("running", 0, 0, 0, 0.0, 10000.0);
+    let bot = make_bot("running", 0, 0, 0, 0.0, 10000.0);
     assert!((bot.loss_rate() - 0.0).abs() < 0.01);
 }
 
 #[test]
 fn a3_1_positive_return() {
-    let bot = make_chat_bot("running", 10, 7, 3, 1000.0, 10000.0);
+    let bot = make_bot("running", 10, 7, 3, 1000.0, 10000.0);
     assert!((bot.total_return_pct() - 10.0).abs() < 0.01);
 }
 
 #[test]
 fn a3_2_negative_return() {
-    let bot = make_chat_bot("running", 10, 7, 3, -500.0, 10000.0);
+    let bot = make_bot("running", 10, 7, 3, -500.0, 10000.0);
     assert!((bot.total_return_pct() - (-5.0)).abs() < 0.01);
 }
 
 #[test]
 fn a3_3_zero_capital_division_protection() {
-    let bot = make_chat_bot("running", 10, 7, 3, 1000.0, 0.0);
+    let bot = make_bot("running", 10, 7, 3, 1000.0, 0.0);
     assert!((bot.total_return_pct() - 0.0).abs() < 0.01);
 }
 
 #[test]
 fn a4_1_running_status() {
-    let bot = make_chat_bot("running", 0, 0, 0, 0.0, 10000.0);
+    let bot = make_bot("running", 0, 0, 0, 0.0, 10000.0);
     assert!(bot.is_running());
 }
 
 #[test]
 fn a4_2_stopped_status() {
-    let bot = make_chat_bot("stopped", 0, 0, 0, 0.0, 10000.0);
+    let bot = make_bot("stopped", 0, 0, 0, 0.0, 10000.0);
     assert!(!bot.is_running());
 }
 
 #[test]
 fn a5_1_stopped_status() {
-    let bot = make_chat_bot("stopped", 0, 0, 0, 0.0, 10000.0);
+    let bot = make_bot("stopped", 0, 0, 0, 0.0, 10000.0);
     assert!(bot.is_stopped());
 }
 
 #[test]
 fn a5_2_running_status() {
-    let bot = make_chat_bot("running", 0, 0, 0, 0.0, 10000.0);
+    let bot = make_bot("running", 0, 0, 0, 0.0, 10000.0);
     assert!(!bot.is_stopped());
 }
 
-
 #[test]
-fn s4_1_chat_bot_roundtrip() {
+fn s4_1_bot_roundtrip() {
     let now = Utc::now();
-    let bot = ChatBot {
+    let bot = Bot {
         id: Uuid::nil(),
         user_id: Uuid::nil(),
-        name: "chat_bot".into(),
+        name: "test_bot".into(),
         symbol: "ETHUSDT".into(),
         exchange: "binance".into(),
         paper_mode: false,
@@ -152,7 +151,7 @@ fn s4_1_chat_bot_roundtrip() {
         stopped_at: None,
     };
     let json = serde_json::to_string(&bot).unwrap();
-    let de: ChatBot = serde_json::from_str(&json).unwrap();
+    let de: Bot = serde_json::from_str(&json).unwrap();
     assert_eq!(de.win_trades, bot.win_trades);
     assert_eq!(de.total_pnl, bot.total_pnl);
     assert_eq!(de.status, bot.status);

@@ -215,7 +215,7 @@ impl StrategyEngine {
     }
 }
 
-/* 实现StrategyHotSwapSource trait，供ChatEngine以Arc<dyn StrategyHotSwapSource>持有 */
+/* 实现StrategyHotSwapSource trait，供BotEngine以Arc<dyn StrategyHotSwapSource>持有 */
 impl StrategyHotSwapSource for StrategyEngine {
     fn subscribe(&self) -> watch::Receiver<Option<StrategySwapEvent>> {
         self.update_tx.subscribe()

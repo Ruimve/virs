@@ -1,6 +1,10 @@
 use crate::order::Side;
 use crate::position::PositionSide;
+use serde::{Deserialize, Serialize};
 use super::structs::OrderInfo;
+use tokio::sync::oneshot;
+use uuid::Uuid;
+use virs_error::VirsResult;
 
 
 /* 交易命令枚举：开仓、平仓、下单、撤单、全平 */
@@ -64,5 +68,27 @@ pub enum OrderEvent {
     RiskAlert {
         level: String,
         message: String,
+    },
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StrategyType {
+    Chat,
+    Agent,
+}
+
+
+/* 机器人命令枚举：启动、停止、删除机器人（删除操作通过 oneshot 返回结果） */
+#[derive(Debug)]
+pub enum BotCommand {
+    StartBot { bot_id: Uuid },
+    StopBot { bot_id: Uuid },
+    DeleteBot {
+        bot_id: Uuid,
+        close_position: bool,
+        /* oneshot 通道：删除操作完成后通过此通道返回结果 */
+        response_tx: oneshot::Sender<VirsResult<()>>,
     },
 }

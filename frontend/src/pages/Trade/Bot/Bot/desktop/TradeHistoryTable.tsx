@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import type { ChatTrade } from '@/service/types';
+import type { BotTrade } from '@/service/types';
 import type { TradeHistoryTableProps } from './types';
 import { formatCompact, formatSigned } from '../components/utils';
 
@@ -50,7 +50,7 @@ export const TradeHistoryTable = memo(({ trades }: TradeHistoryTableProps) => {
             </tr>
           </thead>
           <tbody>
-            {displayTrades.map((trade: ChatTrade) => {
+            {displayTrades.map((trade: BotTrade) => {
               const isBuy = trade.open_side === 'buy';
               const isClosed = trade.status === 'closed';
               const pnlClass =

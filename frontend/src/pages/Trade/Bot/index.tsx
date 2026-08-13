@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { startChatBot, stopChatBot, deleteChatBot } from '@/service/bot';
+import { startBot, stopBot, deleteBot } from '@/service/bot';
 import { useBot } from '../context/BotContext';
 import { Button } from '@/components/Button';
 import { useLayout, type ActionItem, type NavItem } from '@/context/LayoutContext';
@@ -68,7 +68,7 @@ const navIcons: Record<string, ReactNode> = {
   ),
 };
 
-const ChatBot = () => {
+const Bot = () => {
   const navigate = useNavigate();
   const { setNavItems, setActions } = useLayout();
   const { bot } = useBot();
@@ -81,25 +81,25 @@ const ChatBot = () => {
         key: 'bot',
         label: '机器人',
         icon: navIcons.bot,
-        onClick: () => navigate(`/trade/chat/${bot?.id}/bot`, { replace: true }),
+        onClick: () => navigate(`/trade/bot/${bot?.id}/bot`, { replace: true }),
       },
       {
         key: 'trades',
         label: '交易记录',
         icon: navIcons.trades,
-        onClick: () => navigate(`/trade/chat/${bot?.id}/trades`, { replace: true }),
+        onClick: () => navigate(`/trade/bot/${bot?.id}/trades`, { replace: true }),
       },
       {
         key: 'log',
         label: 'AI 决策日志',
         icon: navIcons.log,
-        onClick: () => navigate(`/trade/chat/${bot?.id}/log`, { replace: true }),
+        onClick: () => navigate(`/trade/bot/${bot?.id}/log`, { replace: true }),
       },
       {
         key: 'system',
         label: '系统',
         icon: navIcons.system,
-        onClick: () => navigate(`/trade/chat/${bot?.id}/system`, { replace: true }),
+        onClick: () => navigate(`/trade/bot/${bot?.id}/system`, { replace: true }),
       },
     ];
     setNavItems(items);
@@ -117,7 +117,7 @@ const ChatBot = () => {
         className:
           'bg-surface-1 border-line-default text-on-surface-tertiary hover:text-danger-text hover:border-danger-border transition-colors',
         onClick: async () => {
-          await stopChatBot(bot?.id);
+          await stopBot(bot?.id);
         },
       });
     }
@@ -129,7 +129,7 @@ const ChatBot = () => {
         className:
           'bg-success-bg border-success-border text-success-text hover:bg-success/20 transition-colors',
         onClick: async () => {
-          await startChatBot(bot?.id);
+          await startBot(bot?.id);
         },
       });
     }
@@ -141,7 +141,7 @@ const ChatBot = () => {
         'bg-danger-bg border-danger-border text-danger-text hover:bg-danger/20 transition-colors',
       onClick: async () => {
         if (!confirm('确定删除此机器人？将平仓所有持仓。')) return;
-        await deleteChatBot(bot?.id);
+        await deleteBot(bot?.id);
         navigate('/setup/bot-type', { replace: true });
       },
     });
@@ -168,4 +168,4 @@ const ChatBot = () => {
   return <Outlet />;
 };
 
-export default ChatBot;
+export default Bot;

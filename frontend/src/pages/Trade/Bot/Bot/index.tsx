@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchKlines,
-  getChatAnalysisLogs,
-  getChatTrades,
-  getChatStats,
+  getBotAnalysisLogs,
+  getBotTrades,
+  getBotStats,
   type AnalysisLog,
-  type ChatBot,
-  type ChatTrade,
-  type ChatBotStats,
+  type Bot,
+  type BotTrade,
+  type BotStats,
   type KlineCandle,
 } from '@/service';
 import { useKlineWs, type KlineWsEvent } from '@/service/ws';
@@ -43,7 +43,7 @@ const useRafThrottledPrice = () => {
   return { latestPrice, update };
 };
 
-function tradesToMarkers(trades: ChatTrade[]) {
+function tradesToMarkers(trades: BotTrade[]) {
   const markers: Array<{
     time: number;
     position: 'belowBar' | 'aboveBar';
@@ -121,14 +121,14 @@ const Bot = () => {
   const [klineData, setKlineData] = useState<KlineCandle[]>([]);
   const { latestPrice, update: updateLatestPrice } = useRafThrottledPrice();
   const [logs, setLogs] = useState<AnalysisLog[]>([]);
-  const [chatTrades, setChatTrades] = useState<ChatTrade[]>([]);
-  const [stats, setStats] = useState<ChatBotStats | null>(null);
+  const [botTrades, setBotTrades] = useState<BotTrade[]>([]);
+  const [stats, setStats] = useState<BotStats | null>(null);
 
   const chartRef = useRef<KlineChartHandle>(null);
 
   const loadLogs = useCallback(async (botId: string) => {
     try {
-      const res = await getChatAnalysisLogs(botId, 1, 1);
+      const res = await getBotAnalysisLogs(botId, 1, 1);
       if (res.data?.items) setLogs(res.data.items);
     } catch (e) {
       console.error('Failed to load analysis logs:', e);
@@ -137,8 +137,8 @@ const Bot = () => {
 
   const loadTrades = useCallback(async (botId: string) => {
     try {
-      const res = await getChatTrades(botId, 1, 50);
-      if (res.data?.trades) setChatTrades(res.data.trades);
+      const res = await getBotTrades(botId, 1, 50);
+      if (res.data?.trades) setBotTrades(res.data.trades);
     } catch (e) {
       console.error('Failed to load trades:', e);
     }
@@ -146,7 +146,7 @@ const Bot = () => {
 
   const loadStats = useCallback(async (botId: string) => {
     try {
-      const res = await getChatStats(botId);
+      const res = await getBotStats(botId);
       if (res.success && res.data) setStats(res.data);
     } catch (e) {
       console.error('Failed to load stats:', e);
@@ -192,29 +192,29 @@ const Bot = () => {
     klineTimeframe,
   );
 
-  const chatBot = useMemo(() => bot as ChatBot, [bot]);
-  const markers = useMemo(() => tradesToMarkers(chatTrades), [chatTrades]);
+  const botData = useMemo(() => bot as Bot, [bot]);
+  const markers = useMemo(() => tradesToMarkers(botTrades), [botTrades]);
   const latestDecision = useMemo(() => logs[0] || null, [logs]);
 
   const longMetrics = useMemo(
-    () => computeMetrics(positions.long, latestPrice, chatBot.leverage),
-    [positions.long, latestPrice, chatBot.leverage],
+    () => computeMetrics(positions.long, latestPrice, botData.leverage),
+    [positions.long, latestPrice, botData.leverage],
   );
   const shortMetrics = useMemo(
-    () => computeMetrics(positions.short, latestPrice, chatBot.leverage),
-    [positions.short, latestPrice, chatBot.leverage],
+    () => computeMetrics(positions.short, latestPrice, botData.leverage),
+    [positions.short, latestPrice, botData.leverage],
   );
 
   const totalUnrealizedPnl = longMetrics.unrealizedPnl + shortMetrics.unrealizedPnl;
   const totalUsedMargin = longMetrics.usedMargin + shortMetrics.usedMargin;
 
   const accountMetrics = useMemo(
-    () => computeAccount(chatBot, totalUnrealizedPnl, totalUsedMargin),
-    [chatBot, totalUnrealizedPnl, totalUsedMargin],
+    () => computeAccount(botData, totalUnrealizedPnl, totalUsedMargin),
+    [botData, totalUnrealizedPnl, totalUsedMargin],
   );
 
-  const totalPnl = chatBot.total_pnl + totalUnrealizedPnl;
-  const totalPnlPct = computeTotalPnlPct(chatBot, totalPnl);
+  const totalPnl = botData.total_pnl + totalUnrealizedPnl;
+  const totalPnlPct = computeTotalPnlPct(botData, totalPnl);
 
   const marketSummary = useMemo(
     () => computeMarketSummary(klineData, klineTimeframe),
@@ -225,14 +225,14 @@ const Bot = () => {
     <>
       {/* 桌面端布局：侧边栏 + 顶栏 + 双列主区域 */}
       <DesktopBot
-        bot={chatBot}
+        bot={botData}
         strategy={strategy}
         stats={stats}
         latestPrice={latestPrice}
         marketSummary={marketSummary}
         decision={latestDecision}
         logs={logs}
-        trades={chatTrades}
+        trades={botTrades}
         accountMetrics={accountMetrics}
         totalPnl={totalPnl}
         totalPnlPct={totalPnlPct}
@@ -250,7 +250,7 @@ const Bot = () => {
       {/* 移动端布局：三段式（UpperRegion → LowerRegion → StickyMarket） */}
       <div className="md:hidden h-full flex flex-col">
         <UpperRegion
-          bot={chatBot}
+          bot={botData}
           strategy={strategy}
           latestPrice={latestPrice}
           marketSummary={marketSummary}
@@ -262,7 +262,7 @@ const Bot = () => {
         />
 
         <LowerRegion
-          bot={chatBot}
+          bot={botData}
           latestPrice={latestPrice}
           longPosition={positions.long}
           shortPosition={positions.short}

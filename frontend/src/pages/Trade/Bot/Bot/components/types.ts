@@ -1,4 +1,4 @@
-import type { ChatBot, ChatBotStats, AnalysisLog, StrategyDetail } from '@/service/types';
+import type { Bot, BotStats, AnalysisLog, StrategyDetail } from '@/service/types';
 import type { PositionWsEvent } from '@/service/ws';
 
 export interface SideMetrics {
@@ -31,11 +31,11 @@ export interface AccountBarProps {
 }
 
 export interface StrategyBlockProps {
-  bot: ChatBot;
+  bot: Bot;
 
   strategy: StrategyDetail | null;
   decision: AnalysisLog | null;
-  stats: ChatBotStats | null;
+  stats: BotStats | null;
   totalPnl: number;
   totalPnlPct: number;
 
@@ -55,20 +55,20 @@ export interface PositionCardProps {
 }
 
 export interface UpperRegionProps {
-  bot: ChatBot;
+  bot: Bot;
 
   strategy: StrategyDetail | null;
   latestPrice: number;
   marketSummary: { changePct: number; high: number; low: number; volume: number };
   decision: AnalysisLog | null;
-  stats: ChatBotStats | null;
+  stats: BotStats | null;
   accountMetrics: AccountMetrics;
   totalPnl: number;
   totalPnlPct: number;
 }
 
 export interface LowerRegionProps {
-  bot: ChatBot;
+  bot: Bot;
   latestPrice: number;
   longPosition: PositionWsEvent | null;
   shortPosition: PositionWsEvent | null;

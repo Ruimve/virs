@@ -15,7 +15,7 @@ import {
   executionStatusVariant,
 } from '../utils/utils';
 import { getDecision, extractIndicatorChips } from '../utils/logUtils';
-import { formatRelativeTime } from '../../ChatBot/Bot/components/utils';
+import { formatRelativeTime } from '../../Bot/Bot/components/utils';
 import { Button } from '@/components/Button';
 
 interface Props {
@@ -204,7 +204,7 @@ const LogList = ({ logs, loading, onLoadMore, botId, total }: Props) => {
                   <div
                     onClick={(e) => {
                       e.stopPropagation();
-                      navigate(`/trade/chat/${botId}/log/${log.id}`);
+                      navigate(`/trade/bot/${botId}/log/${log.id}`);
                     }}
                     className="mt-3 flex items-center gap-1 text-2xs text-ai hover:text-ai-hover cursor-pointer transition-colors"
                   >

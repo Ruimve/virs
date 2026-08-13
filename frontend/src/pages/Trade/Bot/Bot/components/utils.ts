@@ -1,4 +1,4 @@
-import type { ChatBot } from '@/service/types';
+import type { Bot } from '@/service/types';
 import type { PositionWsEvent } from '@/service/ws';
 import type { SideMetrics, AccountMetrics } from './types';
 
@@ -33,7 +33,7 @@ export function computeMetrics(
 }
 
 export function computeAccount(
-  bot: ChatBot,
+  bot: Bot,
   totalUnrealizedPnl: number,
   totalUsedMargin: number,
 ): AccountMetrics {
@@ -43,7 +43,7 @@ export function computeAccount(
   return { balance, usedMargin: totalUsedMargin, freeMargin, marginRate };
 }
 
-export function computeTotalPnlPct(bot: ChatBot, totalPnl: number): number {
+export function computeTotalPnlPct(bot: Bot, totalPnl: number): number {
   return bot.initial_capital > 0 ? (totalPnl / bot.initial_capital) * 100 : 0;
 }
 

@@ -3,16 +3,16 @@
 use tracing::{error, warn};
 use uuid::Uuid;
 
-use crate::chat::ai::{ChatAction, ChatDecision};
-use crate::chat::ports::ChatMarketSnapshot;
+use crate::chat::ai::{BotAction, BotDecision};
+use crate::chat::ports::BotMarketSnapshot;
 use crate::chat::strategy;
 use virs_prompt::{render, RenderContext};
 use virs_type::{PositionSide, StrategyType};
 
-use crate::chat::worker::ChatWorker;
+use crate::chat::worker::BotWorker;
 use super::format_close_event;
 
-impl ChatWorker {
+impl BotWorker {
     pub(crate) async fn on_llm_decision(&mut self) {
         /* LLM决策流程：有pending订单时跳过 -> 刷新持仓 -> 检查AI可用性 ->
          * 构建Prompt -> 调用LLM -> 保存分析日志 -> 执行决策(开仓/平仓/观望) */
@@ -58,9 +58,9 @@ impl ChatWorker {
 
 
         match action {
-            ChatAction::OpenLong => self.long.log_id = log_id,
-            ChatAction::OpenShort => self.short.log_id = log_id,
-            ChatAction::ClosePosition => {
+            BotAction::OpenLong => self.long.log_id = log_id,
+            BotAction::OpenShort => self.short.log_id = log_id,
+            BotAction::ClosePosition => {
 
 
                 if self.has_position_side(PositionSide::Long)
@@ -71,7 +71,7 @@ impl ChatWorker {
                     self.short.log_id = log_id;
                 }
             }
-            ChatAction::Hold => {
+            BotAction::Hold => {
 
                 self.long.log_id = log_id;
             }
@@ -81,9 +81,9 @@ impl ChatWorker {
         if let Some(reason) = intercept_reason {
             warn!(bot_id = %self.bot.id, action = %action.as_str(), intercept_reason = %reason, "Decision intercepted");
             let exec_status = match action {
-                ChatAction::OpenLong | ChatAction::OpenShort => "open_failed",
-                ChatAction::ClosePosition => "close_failed",
-                ChatAction::Hold => "hold",
+                BotAction::OpenLong | BotAction::OpenShort => "open_failed",
+                BotAction::ClosePosition => "close_failed",
+                BotAction::Hold => "hold",
             };
 
             let log_ids: Vec<Uuid> = [self.long.log_id.take(), self.short.log_id.take()]
@@ -99,7 +99,7 @@ impl ChatWorker {
                     error!(bot_id = %self.bot.id, error = %e, "Failed to update intercept log");
                 }
             }
-        } else if matches!(action, ChatAction::Hold) {
+        } else if matches!(action, BotAction::Hold) {
             if let Some(log_id) = self.long.log_id.take() {
                 if let Err(e) = self
                     .store
@@ -112,7 +112,7 @@ impl ChatWorker {
             self.short.log_id = None;
         }
 
-        if !matches!(action, ChatAction::Hold) {
+        if !matches!(action, BotAction::Hold) {
             if let Err(e) = self.store.update_last_decided(self.bot.id).await {
                 warn!(bot_id = %self.bot.id, error = %e, "Failed to update last decided");
             }
@@ -125,7 +125,7 @@ impl ChatWorker {
             .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
             .await
         {
-            Ok(s) => match ChatMarketSnapshot::from_base(s) {
+            Ok(s) => match BotMarketSnapshot::from_base(s) {
                 Ok(snap) => snap,
                 Err(e) => {
                     warn!(bot_id = %self.bot.id, error = %e, "Failed to parse indicators for LLM prompt");
@@ -339,12 +339,12 @@ impl ChatWorker {
 
     async fn handle_llm_result(
         &mut self,
-        decision: &Option<ChatDecision>,
+        decision: &Option<BotDecision>,
         system_prompt: &str,
         user_prompt: &str,
         raw_llm_response: Option<&serde_json::Value>,
         llm_model: &str,
-    ) -> (ChatAction, Option<Uuid>) {
+    ) -> (BotAction, Option<Uuid>) {
         match decision {
             Some(d) => {
                 if let Some(ref w) = d.funding_rate_warning {
@@ -439,18 +439,18 @@ impl ChatWorker {
                     }
                 };
 
-                (ChatAction::Hold, log_id)
+                (BotAction::Hold, log_id)
             }
         }
     }
 
     pub(crate) async fn execute_decision(
         &mut self,
-        action: &ChatAction,
-        decision: Option<&ChatDecision>,
+        action: &BotAction,
+        decision: Option<&BotDecision>,
     ) -> Option<String> {
         /* 执行LLM决策：开仓需置信度>=0.6且无同方向持仓且不在冷却期；平仓需有持仓 */
-        if matches!(action, ChatAction::Hold) {
+        if matches!(action, BotAction::Hold) {
             return None;
         }
 
@@ -460,7 +460,7 @@ impl ChatWorker {
         }
 
         /* 开仓置信度阈值0.6：低于此值降级为Hold，避免低质量信号导致亏损 */
-        if matches!(action, ChatAction::OpenLong | ChatAction::OpenShort) {
+        if matches!(action, BotAction::OpenLong | BotAction::OpenShort) {
             if let Some(d) = decision {
                 if d.confidence < 0.6 {
                     warn!(
@@ -482,7 +482,7 @@ impl ChatWorker {
             .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
             .await
         {
-            Ok(s) => match ChatMarketSnapshot::from_base(s) {
+            Ok(s) => match BotMarketSnapshot::from_base(s) {
                 Ok(snap) => snap,
                 Err(e) => {
                     warn!(bot_id = %self.bot.id, error = %e, "Failed to parse indicators for decision execution");
@@ -501,14 +501,14 @@ impl ChatWorker {
         }
 
         match action {
-            ChatAction::OpenLong | ChatAction::OpenShort => {
+            BotAction::OpenLong | BotAction::OpenShort => {
                 if let Some(d) = decision {
                     self.apply_non_structural_params(d).await;
                 }
 
                 let side = match action {
-                    ChatAction::OpenLong => "long",
-                    ChatAction::OpenShort => "short",
+                    BotAction::OpenLong => "long",
+                    BotAction::OpenShort => "short",
                     _ => unreachable!(),
                 };
                 let position_side = match side {
@@ -568,7 +568,7 @@ impl ChatWorker {
                 }
                 None
             }
-            ChatAction::ClosePosition => {
+            BotAction::ClosePosition => {
                 if !self.has_any_position() {
                     warn!(bot_id = %self.bot.id, "No position to close");
                     return Some("无仓位可平".to_string());
@@ -594,14 +594,14 @@ impl ChatWorker {
                 }
                 None
             }
-            ChatAction::Hold => {
+            BotAction::Hold => {
                 warn!(bot_id = %self.bot.id, "Hold action reached execute_action, skipping");
                 None
             }
         }
     }
 
-    async fn apply_non_structural_params(&mut self, d: &ChatDecision) {
+    async fn apply_non_structural_params(&mut self, d: &BotDecision) {
         if let Some(ref regime) = d.market_regime {
             self.bot.market_regime = Some(regime.clone());
         }

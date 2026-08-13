@@ -1,10 +1,10 @@
-use crate::adapters::chat_store::bot_to_config;
+use crate::adapters::bot_store::bot_to_config;
 use chrono::Utc;
 use uuid::Uuid;
-use virs_type::ChatBot;
+use virs_type::Bot;
 
-fn make_bot() -> ChatBot {
-    ChatBot {
+fn make_bot() -> Bot {
+    Bot {
         id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
         name: "chat-test".to_string(),

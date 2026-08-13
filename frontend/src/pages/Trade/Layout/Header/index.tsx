@@ -4,7 +4,7 @@ import { Theme } from '@/components/Theme';
 import { Flame, ShieldCheck } from '@/components/Icon';
 import { usePaper } from '../../context/PaperContext';
 import { useBot } from '../../context/BotContext';
-import { formatCompact, formatInterval } from '../../ChatBot/Bot/components/utils';
+import { formatCompact, formatInterval } from '../../Bot/Bot/components/utils';
 import { useLayout } from '@/context/LayoutContext';
 
 interface StatusStyle {

@@ -2,13 +2,13 @@ import { api } from './client';
 import type {
   ApiResponse,
   BotSummary,
-  ChatBotDetail,
-  ChatTradesPage,
-  ChatBotStats,
+  BotDetail,
+  BotTradesPage,
+  BotStats,
   AnalysisLogsPage,
 } from './types';
 
-export async function createChatBot(
+export async function createBot(
   params: {
     symbol: string;
     exchange: string;
@@ -22,70 +22,70 @@ export async function createChatBot(
   },
   init?: RequestInit,
 ): Promise<ApiResponse<{ id: string }>> {
-  return api.post('/chat/create', params, init);
+  return api.post('/bot/create', params, init);
 }
 
-export async function startChatBot(
+export async function startBot(
   id: string,
   init?: RequestInit,
 ): Promise<ApiResponse<{ started: boolean }>> {
-  return api.post(`/chat/${id}/start`, undefined, init);
+  return api.post(`/bot/${id}/start`, undefined, init);
 }
 
-export async function stopChatBot(
+export async function stopBot(
   id: string,
   init?: RequestInit,
 ): Promise<ApiResponse<{ stopped: boolean }>> {
-  return api.post(`/chat/${id}/stop`, undefined, init);
+  return api.post(`/bot/${id}/stop`, undefined, init);
 }
 
-export async function deleteChatBot(id: string, init?: RequestInit): Promise<ApiResponse<null>> {
-  return api.del(`/chat/${id}/delete`, init);
+export async function deleteBot(id: string, init?: RequestInit): Promise<ApiResponse<null>> {
+  return api.del(`/bot/${id}/delete`, init);
 }
 
-export async function getChatBotDetail(
+export async function getBotDetail(
   id: string,
   init?: RequestInit,
-): Promise<ApiResponse<ChatBotDetail>> {
-  return api.get<ChatBotDetail>(`/chat/${id}`, init);
+): Promise<ApiResponse<BotDetail>> {
+  return api.get<BotDetail>(`/bot/${id}`, init);
 }
 
-export async function getChatTrades(
+export async function getBotTrades(
   botId: string,
   page: number = 1,
   pageSize: number = 20,
   init?: RequestInit,
-): Promise<ApiResponse<ChatTradesPage>> {
-  return api.get<ChatTradesPage>(`/chat/${botId}/trades?page=${page}&page_size=${pageSize}`, init);
+): Promise<ApiResponse<BotTradesPage>> {
+  return api.get<BotTradesPage>(`/bot/${botId}/trades?page=${page}&page_size=${pageSize}`, init);
 }
 
-export async function getChatStats(
+export async function getBotStats(
   botId: string,
   init?: RequestInit,
-): Promise<ApiResponse<ChatBotStats>> {
-  return api.get<ChatBotStats>(`/chat/${botId}/stats`, init);
+): Promise<ApiResponse<BotStats>> {
+  return api.get<BotStats>(`/bot/${botId}/stats`, init);
 }
 
-export async function getChatAnalysisLogs(
+export async function getBotAnalysisLogs(
   botId: string,
   page: number = 1,
   pageSize: number = 20,
   init?: RequestInit,
 ): Promise<ApiResponse<AnalysisLogsPage>> {
   return api.get<AnalysisLogsPage>(
-    `/chat/${botId}/analysis-logs?page=${page}&page_size=${pageSize}`,
+    `/bot/${botId}/analysis-logs?page=${page}&page_size=${pageSize}`,
     init,
   );
 }
 
 export async function findActiveBot(init?: RequestInit): Promise<BotSummary | null> {
   try {
-    const chatRes = await api.get<{ items: Array<{ id: string; status: string }>; total: number }>(
-      '/chat/list',
+    const botRes = await api.get<{ items: Array<{ id: string; status: string }>; total: number }>(
+      '/bot/list',
       init,
     );
-    if (chatRes.success && chatRes.data?.items?.length) {
-      const bot = chatRes.data.items.find((b) => b.status === 'running') || chatRes.data.items[0];
+    if (botRes.success && botRes.data?.items?.length) {
+      const bot = botRes.data.items.find((b) => b.status === 'running') || botRes.data.items[0];
       return { id: bot.id };
     }
     return null;

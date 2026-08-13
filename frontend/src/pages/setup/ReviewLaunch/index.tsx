@@ -4,7 +4,7 @@ import { Alert } from '@/components/Alert';
 import { Button } from '@/components/Button';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard, useWizardGuard } from '../context/WizardContext';
-import { createChatBot, startChatBot } from '../../../service';
+import { createBot, startBot } from '../../../service';
 import { WizardStep } from '../context/WizardContext/define';
 import { FormCard, FormField, ToggleSwitch, ReviewRow } from '../components';
 
@@ -29,7 +29,7 @@ const ReviewLaunch = () => {
     setLaunchError('');
 
     try {
-      const result = await createChatBot({
+      const result = await createBot({
         symbol: wizard.bot_params.symbol,
         exchange: wizard.exchange,
         bot_type: wizard.bot_type,
@@ -46,7 +46,7 @@ const ReviewLaunch = () => {
       }
       const botId = result.data.id;
 
-      const startResult = await startChatBot(botId);
+      const startResult = await startBot(botId);
       if (!startResult.success) {
         setLaunchError(
           `Bot created but failed to start: ${startResult.message || 'Unknown error'}`,
@@ -56,7 +56,7 @@ const ReviewLaunch = () => {
 
       updateWizard({ paper_mode: paperMode, bot_id: botId });
       startTransition(() => {
-        navigate(`/trade/chat/${botId}/bot`, { replace: true });
+        navigate(`/trade/bot/${botId}/bot`, { replace: true });
       });
     } catch (err) {
       setLaunchError(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`);

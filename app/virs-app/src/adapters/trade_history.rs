@@ -5,7 +5,7 @@ use tracing::warn;
 use virs_type::{TradeHistoryProvider, TradeRecord};
 
 
-/* 交易历史查询：通过关联pe_chat_order_context和pe_order_latest表，
+/* 交易历史查询：通过关联pe_bot_order_context和pe_order_latest表，
  * 查询指定策略在给定时间后的已平仓交易记录，供策略评估使用 */
 pub struct PgTradeHistoryProvider {
     db: PgPool,
@@ -48,9 +48,9 @@ impl TradeHistoryProvider for PgTradeHistoryProvider {
                 close_ord.avg_fill_price::float AS exit_price,
                 open_ord.filled_qty::float AS quantity,
                 COALESCE(close_ord.realized_pnl::float, 0) AS realized_pnl
-            FROM pe_chat_order_context open_ctx
+            FROM pe_bot_order_context open_ctx
             JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
-            JOIN pe_chat_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
+            JOIN pe_bot_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
             JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
             WHERE open_ctx.strategy_file = $1
               AND open_ctx.order_role = 'open'

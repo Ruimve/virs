@@ -19,9 +19,9 @@ use uuid::Uuid;
 use virs_task::{spawn_periodic, Stop};
 use virs_prompt::StrategySwapEvent;
 
-use crate::chat::ai::ChatAiService;
+use crate::chat::ai::BotAiService;
 use crate::chat::strategy;
-use virs_type::{ChatBotConfig, ChatStore};
+use virs_type::{BotConfig, BotStore};
 use virs_type::{MarketDataProvider, OrderEvent, OrderExecutor};
 use virs_type::KlineEvent;
 use virs_prompt::PromptProvider;
@@ -31,12 +31,12 @@ use virs_type::{EngineEvent, Position};
 
 pub(crate) use side_state::{PendingClose, PendingOpen, SideState};
 
-pub(crate) struct ChatWorker {
-    pub(crate) bot: ChatBotConfig,
+pub(crate) struct BotWorker {
+    pub(crate) bot: BotConfig,
     kline_rx: broadcast::Receiver<KlineEvent>,
     order_executor: Arc<dyn OrderExecutor>,
-    ai_service: Arc<ChatAiService>,
-    store: Arc<dyn ChatStore>,
+    ai_service: Arc<BotAiService>,
+    store: Arc<dyn BotStore>,
     market_data_provider: Arc<dyn MarketDataProvider>,
     event_rx: broadcast::Receiver<OrderEvent>,
     pe_event_rx: broadcast::Receiver<EngineEvent>,
@@ -53,7 +53,7 @@ pub(crate) struct ChatWorker {
     pub(crate) short: SideState,
 }
 
-impl ChatWorker {
+impl BotWorker {
     pub(crate) fn side(&self, side: &PositionSide) -> &SideState {
         match side {
             PositionSide::Long => &self.long,
@@ -71,13 +71,13 @@ impl ChatWorker {
     }
 }
 
-impl ChatWorker {
+impl BotWorker {
     pub(crate) fn new(
-        bot: ChatBotConfig,
+        bot: BotConfig,
         kline_rx: broadcast::Receiver<KlineEvent>,
         order_executor: Arc<dyn OrderExecutor>,
-        ai_service: Arc<ChatAiService>,
-        store: Arc<dyn ChatStore>,
+        ai_service: Arc<BotAiService>,
+        store: Arc<dyn BotStore>,
         market_data_provider: Arc<dyn MarketDataProvider>,
         event_rx: broadcast::Receiver<OrderEvent>,
         pe_event_rx: broadcast::Receiver<EngineEvent>,

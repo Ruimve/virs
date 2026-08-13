@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getChatAnalysisLogs, type AnalysisLog } from '@/service';
+import { getBotAnalysisLogs, type AnalysisLog } from '@/service';
 import AILogDetail from '../../../components/LogList/LogDetail';
 import { useBot } from '../../../context/BotContext';
 
@@ -14,7 +14,7 @@ const Detail = () => {
     async (botId: string) => {
       setLoading(true);
       try {
-        const res = await getChatAnalysisLogs(botId, 1, 50);
+        const res = await getBotAnalysisLogs(botId, 1, 50);
         const logs = res?.data?.items || [];
         if (logs?.length > 0) {
           const found = logs?.find((l: AnalysisLog) => l.id === params.logId);

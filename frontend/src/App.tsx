@@ -16,12 +16,12 @@ const ReviewLaunch = lazy(() => import('./pages/Setup/ReviewLaunch'));
 
 const TradeLayout = lazy(() => import('./pages/Trade/Layout'));
 
-const ChatBot = lazy(() => import('./pages/Trade/ChatBot'));
-const ChatBotMain = lazy(() => import('./pages/Trade/ChatBot/Bot'));
-const ChatBotLog = lazy(() => import('./pages/Trade/ChatBot/Log'));
-const ChatBotLogDetail = lazy(() => import('./pages/Trade/ChatBot/Log/Detail'));
-const ChatBotTrades = lazy(() => import('./pages/Trade/ChatBot/Trades'));
-const ChatBotSystem = lazy(() => import('./pages/Trade/ChatBot/System'));
+const Bot = lazy(() => import('./pages/Trade/Bot'));
+const BotMain = lazy(() => import('./pages/Trade/Bot/Bot'));
+const BotLog = lazy(() => import('./pages/Trade/Bot/Log'));
+const BotLogDetail = lazy(() => import('./pages/Trade/Bot/Log/Detail'));
+const BotTrades = lazy(() => import('./pages/Trade/Bot/Trades'));
+const BotSystem = lazy(() => import('./pages/Trade/Bot/System'));
 
 const App = () => {
   return (
@@ -40,12 +40,12 @@ const App = () => {
                 <Route path="/setup/review" element={<ReviewLaunch />} />
               </Route>
               <Route path="/trade" element={<TradeLayout />}>
-                <Route path="/trade/chat/:botId" element={<ChatBot />}>
-                  <Route path="/trade/chat/:botId/bot" element={<ChatBotMain />} />
-                  <Route path="/trade/chat/:botId/log" element={<ChatBotLog />} />
-                  <Route path="/trade/chat/:botId/log/:logId" element={<ChatBotLogDetail />} />
-                  <Route path="/trade/chat/:botId/trades" element={<ChatBotTrades />} />
-                  <Route path="/trade/chat/:botId/system" element={<ChatBotSystem />} />
+                <Route path="/trade/bot/:botId" element={<Bot />}>
+                  <Route path="/trade/bot/:botId/bot" element={<BotMain />} />
+                  <Route path="/trade/bot/:botId/log" element={<BotLog />} />
+                  <Route path="/trade/bot/:botId/log/:logId" element={<BotLogDetail />} />
+                  <Route path="/trade/bot/:botId/trades" element={<BotTrades />} />
+                  <Route path="/trade/bot/:botId/system" element={<BotSystem />} />
                 </Route>
               </Route>
               <Route path="*" element={<Navigate to="/setup/bot-type" replace />} />

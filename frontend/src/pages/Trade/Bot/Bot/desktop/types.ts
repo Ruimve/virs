@@ -1,9 +1,9 @@
 import type {
   AnalysisLog,
-  ChatBot,
-  ChatTrade,
+  Bot,
+  BotTrade,
   StrategyDetail,
-  ChatBotStats,
+  BotStats,
   KlineCandle,
 } from '@/service/types';
 import type { PositionWsEvent } from '@/service/ws';
@@ -11,7 +11,7 @@ import type { KlineChartHandle } from '@/components/Chart/KlineChart';
 import type { SideMetrics, AccountMetrics } from '../components/types';
 
 export interface MarketHeaderProps {
-  bot: ChatBot;
+  bot: Bot;
   latestPrice: number;
   marketSummary: { changePct: number; high: number; low: number; volume: number };
   timeframe: string;
@@ -26,24 +26,24 @@ export interface AIPanelProps {
 
 export interface RiskPanelProps {
   accountMetrics: AccountMetrics;
-  bot: ChatBot;
+  bot: Bot;
   longMetrics: SideMetrics;
   shortMetrics: SideMetrics;
 }
 
 export interface TradeHistoryTableProps {
-  trades: ChatTrade[];
+  trades: BotTrade[];
 }
 
 export interface AccountCardProps {
-  bot: ChatBot;
+  bot: Bot;
   accountMetrics: AccountMetrics;
   totalPnl: number;
   totalPnlPct: number;
 }
 
 export interface PositionsCardProps {
-  bot: ChatBot;
+  bot: Bot;
   longPosition: PositionWsEvent | null;
   shortPosition: PositionWsEvent | null;
   longMetrics: SideMetrics;
@@ -69,14 +69,14 @@ export interface ChartAreaProps {
 }
 
 export interface DesktopBotProps {
-  bot: ChatBot;
+  bot: Bot;
   strategy: StrategyDetail | null;
-  stats: ChatBotStats | null;
+  stats: BotStats | null;
   latestPrice: number;
   marketSummary: { changePct: number; high: number; low: number; volume: number };
   decision: AnalysisLog | null;
   logs: AnalysisLog[];
-  trades: ChatTrade[];
+  trades: BotTrade[];
   accountMetrics: AccountMetrics;
   totalPnl: number;
   totalPnlPct: number;

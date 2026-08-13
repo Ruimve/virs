@@ -40,7 +40,7 @@ export interface StrategyDetail {
   source: { kind: 'human' } | { kind: 'aigenerated'; model: string };
 }
 
-export interface ChatBot {
+export interface Bot {
   id: string;
   name: string;
   symbol: string;
@@ -62,7 +62,7 @@ export interface ChatBot {
   updated_at: string;
 }
 
-export interface ChatTrade {
+export interface BotTrade {
   id: string;
   bot_id: string;
   symbol: string;
@@ -94,13 +94,13 @@ export interface ChatTrade {
   status: string;
 }
 
-export interface ChatBotDetail {
-  bot: ChatBot;
+export interface BotDetail {
+  bot: Bot;
   strategy: StrategyDetail | null;
 }
 
-export interface ChatTradesPage {
-  trades: ChatTrade[];
+export interface BotTradesPage {
+  trades: BotTrade[];
   total: number;
   page: number;
   page_size: number;
@@ -113,7 +113,7 @@ export interface AnalysisLogsPage {
   page_size: number;
 }
 
-export interface ChatBotStats {
+export interface BotStats {
   win_rate: number;
   profit_loss_ratio: number;
   max_drawdown: number;

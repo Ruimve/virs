@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getChatTrades, type ChatTrade } from '@/service';
+import { getBotTrades, type BotTrade } from '@/service';
 import { TradeLoading } from '../../components/Transition';
 import { Badge, type BadgeVariant } from '@/components/Badge';
 import { Empty } from '@/components/Empty';
@@ -26,7 +26,7 @@ const formatShortTime = (iso: string) => {
 
 const Trades = () => {
   const { botId } = useParams<{ botId: string }>();
-  const [trades, setTrades] = useState<ChatTrade[]>([]);
+  const [trades, setTrades] = useState<BotTrade[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -37,7 +37,7 @@ const Trades = () => {
       if (!botId) return;
       setLoading(true);
       try {
-        const res = await getChatTrades(botId, p, PAGE_SIZE);
+        const res = await getBotTrades(botId, p, PAGE_SIZE);
         if (res.success && res.data) {
           const items = res.data.trades || [];
           setTrades((prev) => (append ? [...prev, ...items] : items));
