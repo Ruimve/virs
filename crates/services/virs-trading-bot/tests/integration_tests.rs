@@ -1,7 +1,7 @@
 use virs_trading_bot::{BotAction, BotDecision};
 use virs_trading_bot::{
     compute_cooldown_secs, compute_position_pct, compute_stop_loss, compute_take_profit,
-    compute_trailing_stop, format_stop_take_profit,
+    format_stop_take_profit,
 };
 
 #[test]
@@ -13,25 +13,6 @@ fn int_1_1_stop_loss_take_profit_consistency() {
     assert!(sl < entry, "stop_loss must be below entry for long");
     assert!(tp > entry, "take_profit must be above entry for long");
     assert!(sl < tp, "stop_loss must be below take_profit");
-}
-
-#[test]
-fn int_1_2_trailing_stop_never_worsens() {
-    let entry = 100.0;
-    let atr = 2.0;
-    let initial_stop = compute_stop_loss(entry, "long", atr);
-
-    let new_stop_1 = compute_trailing_stop(entry, 105.0, "long", atr, initial_stop);
-    assert!(
-        new_stop_1 >= initial_stop,
-        "trailing stop should never decrease"
-    );
-
-    let new_stop_2 = compute_trailing_stop(entry, 103.0, "long", atr, new_stop_1);
-    assert!(
-        new_stop_2 >= new_stop_1,
-        "trailing stop should never worsen"
-    );
 }
 
 #[test]

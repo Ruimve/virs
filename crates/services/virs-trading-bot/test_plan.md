@@ -1,6 +1,6 @@
 # virs-trading-bot - 测试计划
 
-**测试总数:** 72（单元测试: 63，集成测试: 9）
+**测试总数:** 66（单元测试: 58，集成测试: 8）
 
 ---
 
@@ -58,25 +58,20 @@
 | 5 | `s1_5_take_profit_long` | 多头止盈价计算 | entry=100, "long", atr=2.0 | result == 106.0 |
 | 6 | `s1_6_take_profit_short` | 空头止盈价计算 | entry=100, "short", atr=2.0 | result == 94.0 |
 | 7 | `s1_7_take_profit_zero_atr` | ATR 为 0 时多头止盈价 | entry=100, "long", atr=0.0 | result == 106.0 |
-| 8 | `s2_1_trailing_long_profit_2atr` | 多头盈利 2ATR 时移动止损上移 | entry=100, price=105, "long", atr=2.0, current_stop=97 | result == 103.0 |
-| 9 | `s2_2_trailing_long_profit_1atr` | 多头盈利 1ATR 时移动止损上移 | entry=100, price=102, "long", atr=2.0, current_stop=97 | result == 100.0 |
-| 10 | `s2_3_trailing_short_profit_2atr` | 空头盈利 2ATR 时移动止损下移 | entry=100, price=95, "short", atr=2.0, current_stop=103 | result == 97.0 |
-| 11 | `s2_4_trailing_no_profit` | 无盈利时移动止损保持原值 | entry=100, price=101, "long", atr=2.0, current_stop=97 | result == 97.0 |
-| 12 | `s2_5_trailing_long_never_worsens` | 移动止损不劣化（不低于当前止损） | entry=100, price=105, "long", atr=2.0, current_stop=105 | result == 105.0 |
-| 13 | `s3_1_position_pct_high_adx` | 高 ADX 仓位百分比 | adx=25, 连续亏损=0, funding=0.0 | result == 80.0 |
-| 14 | `s3_2_position_pct_medium_adx` | 中 ADX 仓位百分比 | adx=20, 连续亏损=0, funding=0.0 | result == 60.0 |
-| 15 | `s3_3_position_pct_low_adx` | 低 ADX 仓位百分比 | adx=15, 连续亏损=0, funding=0.0 | result == 40.0 |
-| 16 | `s3_4_position_pct_consecutive_losses` | 连续亏损降低仓位 | adx=25, 连续亏损=2, funding=0.0 | result == 40.0 |
-| 17 | `s3_5_position_pct_high_funding` | 高资金费率降低仓位 | adx=25, 连续亏损=0, funding=0.002 | result == 40.0 |
-| 18 | `s3_6_position_pct_clamp_min` | 仓位百分比下限为 10 | adx=15, 连续亏损=2, funding=0.002 | result == 10.0 |
-| 19 | `s4_1_format_stop_take_both` | 同时设置止损止盈时格式化输出 | sl=95.0, tp=110.0 | 含 "止损" 和 "止盈" |
-| 20 | `s4_2_format_stop_take_none` | 均未设置时格式化输出 | sl=0.0, tp=0.0 | "未设置" |
-| 21 | `s4_3_format_stop_take_only_sl` | 仅设置止损时格式化输出 | sl=95.0, tp=0.0 | 含 "止损", 不含 "止盈" |
-| 22 | `s5_1_cooldown_stop_loss_same_side` | 止损平仓同侧冷却时间 | "long", "stop_loss", "long" | 1800 |
-| 23 | `s5_2_cooldown_stop_loss_diff_side` | 止损平仓异侧无冷却 | "long", "stop_loss", "short" | 0 |
-| 24 | `s5_3_cooldown_take_profit_same_side` | 止盈平仓同侧冷却时间 | "long", "take_profit", "long" | 900 |
-| 25 | `s5_4_cooldown_llm_decision` | LLM 决策平仓冷却时间 | "long", "llm_decision", "long" | 900 |
-| 26 | `s5_5_cooldown_unknown_reason` | 未知平仓原因的冷却时间 | "long", "unknown", "short" | 900 |
+| 8 | `s3_1_position_pct_high_adx` | 高 ADX 仓位百分比 | adx=25, 连续亏损=0, funding=0.0 | result == 80.0 |
+| 9 | `s3_2_position_pct_medium_adx` | 中 ADX 仓位百分比 | adx=20, 连续亏损=0, funding=0.0 | result == 60.0 |
+| 10 | `s3_3_position_pct_low_adx` | 低 ADX 仓位百分比 | adx=15, 连续亏损=0, funding=0.0 | result == 40.0 |
+| 11 | `s3_4_position_pct_consecutive_losses` | 连续亏损降低仓位 | adx=25, 连续亏损=2, funding=0.0 | result == 40.0 |
+| 12 | `s3_5_position_pct_high_funding` | 高资金费率降低仓位 | adx=25, 连续亏损=0, funding=0.002 | result == 40.0 |
+| 13 | `s3_6_position_pct_clamp_min` | 仓位百分比下限为 10 | adx=15, 连续亏损=2, funding=0.002 | result == 10.0 |
+| 14 | `s4_1_format_stop_take_both` | 同时设置止损止盈时格式化输出 | sl=95.0, tp=110.0 | 含 "止损" 和 "止盈" |
+| 15 | `s4_2_format_stop_take_none` | 均未设置时格式化输出 | sl=0.0, tp=0.0 | "未设置" |
+| 16 | `s4_3_format_stop_take_only_sl` | 仅设置止损时格式化输出 | sl=95.0, tp=0.0 | 含 "止损", 不含 "止盈" |
+| 17 | `s5_1_cooldown_stop_loss_same_side` | 止损平仓同侧冷却时间 | "long", "stop_loss", "long" | 1800 |
+| 18 | `s5_2_cooldown_stop_loss_diff_side` | 止损平仓异侧无冷却 | "long", "stop_loss", "short" | 0 |
+| 19 | `s5_3_cooldown_take_profit_same_side` | 止盈平仓同侧冷却时间 | "long", "take_profit", "long" | 900 |
+| 20 | `s5_4_cooldown_llm_decision` | LLM 决策平仓冷却时间 | "long", "llm_decision", "long" | 900 |
+| 21 | `s5_5_cooldown_unknown_reason` | 未知平仓原因的冷却时间 | "long", "unknown", "short" | 900 |
 
 ### `crates/services/virs-trading-bot/src/chat/worker/worker_tests.rs`
 
@@ -103,9 +98,8 @@
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
 | 1 | `int_1_1_stop_loss_take_profit_consistency` | 止损止盈一致性（多头） | entry=100, atr=2.0 | sl < entry < tp, sl < tp |
-| 2 | `int_1_2_trailing_stop_never_worsens` | 移动止损不劣化 | entry=100, atr=2.0, 先 price=105 再 price=103 | new_stop_2 >= new_stop_1 >= initial_stop |
-| 3 | `int_1_3_position_pct_full_chain` | 仓位百分比全链路 | adx=30,losses=2,funding=0.003; 再 adx=30,losses=0,funding=0.0 | 依次为 20.0 与 80.0 |
-| 4 | `int_2_1_chat_action_roundtrip` | ChatAction 字符串往返转换 | 5 个动作含 unknown_action | 未知动作映射为 Hold, 其余往返一致 |
-| 5 | `int_2_2_chat_decision_json_roundtrip` | ChatDecision JSON 往返解析 | 含 decision.action=open_long, market.market_regime | action=OpenLong, as_str=="open_long" |
-| 6 | `int_4_2_format_stop_take_with_position_pct` | 仓位百分比与止损止盈格式化联动 | adx=25 -> 80%; entry=100, atr=2.0 | pct=80, 显示含 "止损" 和 "止盈" |
-| 7 | `int_5_1_cooldown_then_position_pct` | 冷却后仓位百分比计算 | stop_loss 同侧 -> 1800; adx=25 无亏损 -> 80; adx=25 亏损 2 -> 40 | 依次为 1800, 80, 40 |
+| 2 | `int_1_3_position_pct_full_chain` | 仓位百分比全链路 | adx=30,losses=2,funding=0.003; 再 adx=30,losses=0,funding=0.0 | 依次为 20.0 与 80.0 |
+| 3 | `int_2_1_chat_action_roundtrip` | ChatAction 字符串往返转换 | 5 个动作含 unknown_action | 未知动作映射为 Hold, 其余往返一致 |
+| 4 | `int_2_2_chat_decision_json_roundtrip` | ChatDecision JSON 往返解析 | 含 decision.action=open_long, market.market_regime | action=OpenLong, as_str=="open_long" |
+| 5 | `int_4_2_format_stop_take_with_position_pct` | 仓位百分比与止损止盈格式化联动 | adx=25 -> 80%; entry=100, atr=2.0 | pct=80, 显示含 "止损" 和 "止盈" |
+| 6 | `int_5_1_cooldown_then_position_pct` | 冷却后仓位百分比计算 | stop_loss 同侧 -> 1800; adx=25 无亏损 -> 80; adx=25 亏损 2 -> 40 | 依次为 1800, 80, 40 |

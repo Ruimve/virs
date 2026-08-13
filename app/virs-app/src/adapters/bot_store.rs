@@ -261,21 +261,6 @@ impl BotStore for PgBotStore {
         Ok(row)
     }
 
-    async fn update_trade_stop_loss(
-        &self,
-        client_order_id: &str,
-        stop_loss: f64,
-    ) -> VirsResult<()> {
-        sqlx::query(
-            r#"UPDATE pe_bot_order_context SET stop_loss = $2
-               WHERE client_order_id = $1 AND status = 'open'"#,
-        )
-        .bind(client_order_id)
-        .bind(stop_loss)
-        .execute(&self.db)
-        .await?;
-        Ok(())
-    }
     async fn record_orphaned_close_trade(
         &self,
         bot_id: Uuid,

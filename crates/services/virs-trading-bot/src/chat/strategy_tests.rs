@@ -43,36 +43,6 @@ fn s1_7_take_profit_zero_atr() {
 }
 
 #[test]
-fn s2_1_trailing_long_profit_2atr() {
-    let result = compute_trailing_stop(100.0, 105.0, "long", 2.0, 97.0);
-    assert!((result - 103.0).abs() < 1e-10);
-}
-
-#[test]
-fn s2_2_trailing_long_profit_1atr() {
-    let result = compute_trailing_stop(100.0, 102.0, "long", 2.0, 97.0);
-    assert!((result - 100.0).abs() < 1e-10);
-}
-
-#[test]
-fn s2_3_trailing_short_profit_2atr() {
-    let result = compute_trailing_stop(100.0, 95.0, "short", 2.0, 103.0);
-    assert!((result - 97.0).abs() < 1e-10);
-}
-
-#[test]
-fn s2_4_trailing_no_profit() {
-    let result = compute_trailing_stop(100.0, 101.0, "long", 2.0, 97.0);
-    assert!((result - 97.0).abs() < 1e-10);
-}
-
-#[test]
-fn s2_5_trailing_long_never_worsens() {
-    let result = compute_trailing_stop(100.0, 105.0, "long", 2.0, 105.0);
-    assert!((result - 105.0).abs() < 1e-10);
-}
-
-#[test]
 fn s3_1_position_pct_high_adx() {
     let result = compute_position_pct(25.0, 0, 0.0);
     assert!((result - 80.0).abs() < 1e-10);

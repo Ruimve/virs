@@ -63,52 +63,6 @@ pub fn compute_take_profit(entry_price: f64, side: &str, atr: f64) -> f64 {
     }
 }
 
-/* 计算移动止损：盈利达1倍ATR时移动止损到保本价，达2倍ATR时收紧到1倍ATR距离 */
-pub fn compute_trailing_stop(
-    entry_price: f64,
-    current_price: f64,
-    side: &str,
-    atr: f64,
-    current_stop: f64,
-) -> f64 {
-    if atr <= 0.0 || entry_price <= 0.0 {
-        return current_stop;
-    }
-    match side {
-        "long" => {
-            let profit_atr = (current_price - entry_price) / atr;
-            let new_stop = if profit_atr >= 2.0 {
-                current_price - 1.0 * atr
-            } else if profit_atr >= 1.0 {
-                entry_price
-            } else {
-                return current_stop;
-            };
-            if new_stop > current_stop {
-                new_stop
-            } else {
-                current_stop
-            }
-        }
-        "short" => {
-            let profit_atr = (entry_price - current_price) / atr;
-            let new_stop = if profit_atr >= 2.0 {
-                current_price + 1.0 * atr
-            } else if profit_atr >= 1.0 {
-                entry_price
-            } else {
-                return current_stop;
-            };
-            if new_stop < current_stop || current_stop <= 0.0 {
-                new_stop
-            } else {
-                current_stop
-            }
-        }
-        _ => current_stop,
-    }
-}
-
 /* 计算仓位百分比：ADX越高仓位越大（趋势强），连续亏损或高资金费率时减半，最终限制在10%-100% */
 pub fn compute_position_pct(adx: f64, consecutive_losses: i32, funding_rate: f64) -> f64 {
     let base: f64 = if adx >= 25.0 {

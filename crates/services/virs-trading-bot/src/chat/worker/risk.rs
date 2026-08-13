@@ -5,14 +5,12 @@ use std::time::Duration;
 use tracing::{info, warn};
 use virs_type::PositionSide;
 
-use crate::chat::ports::BotMarketSnapshot;
-use crate::chat::strategy;
 use crate::chat::worker::side_str;
 use crate::chat::worker::BotWorker;
 
 impl BotWorker {
     pub(crate) async fn on_price_tick(&mut self) {
-        /* 价格更新时的风控检查：pending超时 -> 移动止损更新 -> 持仓超时 -> 止损止盈触发 */
+        /* 价格更新时的风控检查：pending超时 -> 持仓超时 -> 止损止盈触发 */
         if self.current_price <= 0.0 {
             return;
         }
@@ -24,10 +22,6 @@ impl BotWorker {
         }
 
         if self.has_any_position() {
-            if let Some(atr) = self.fetch_current_atr().await {
-                self.update_trailing_stop(atr).await;
-            }
-
             if self.check_position_timeout().await {
                 return;
             }
@@ -35,11 +29,6 @@ impl BotWorker {
             if self.check_stop_take_profit().await {
                 return;
             }
-        }
-
-        if self.trailing_stop_dirty {
-            self.save_position().await;
-            self.trailing_stop_dirty = false;
         }
     }
 
@@ -107,77 +96,6 @@ impl BotWorker {
             return true;
         }
         false
-    }
-
-    async fn update_trailing_stop(&mut self, atr: f64) {
-        if atr <= 0.0 {
-            return;
-        }
-        self.update_trailing_stop_side(PositionSide::Long, atr).await;
-        self.update_trailing_stop_side(PositionSide::Short, atr).await;
-    }
-
-    async fn update_trailing_stop_side(&mut self, side: PositionSide, atr: f64) {
-        let entry_price = match self.get_position(&side) {
-            Some(p) if p.is_open() => p.entry_price,
-            _ => return,
-        };
-
-        let s = self.side(&side);
-        let stop_loss = s.stop_loss;
-        let client_order_id = s.open_client_order_id.clone();
-
-        if entry_price <= 0.0 || stop_loss <= 0.0 {
-            return;
-        }
-
-        let side_str = side_str(&side);
-
-        let new_stop = strategy::compute_trailing_stop(
-            entry_price,
-            self.current_price,
-            side_str,
-            atr,
-            stop_loss,
-        );
-
-        if new_stop != stop_loss {
-            self.side_mut(&side).stop_loss = new_stop;
-            self.trailing_stop_dirty = true;
-
-            if let Some(client_order_id) = client_order_id {
-
-
-                if let Err(e) = self
-                    .store
-                    .update_trade_stop_loss(&client_order_id, new_stop)
-                    .await
-                {
-                    warn!(client_order_id = %client_order_id, error = %e, "Failed to update trade stop_loss");
-                }
-            }
-        }
-    }
-
-    async fn fetch_current_atr(&self) -> Option<f64> {
-        let snapshot = match self
-            .market_data_provider
-            .get_market_snapshot(&self.bot.exchange, &self.bot.symbol)
-            .await
-        {
-            Ok(s) => match BotMarketSnapshot::from_base(s) {
-                Ok(snap) => snap,
-                Err(e) => {
-                    warn!(bot_id = %self.bot.id, error = %e, "Failed to parse indicators for ATR");
-                    return None;
-                }
-            },
-            Err(e) => {
-                warn!(bot_id = %self.bot.id, error = %e, "Failed to fetch market snapshot for ATR");
-                return None;
-            }
-        };
-        Some(snapshot.indicators.get_num(&virs_type::IndicatorSpec::Atr { tf: virs_type::Timeframe::H1, period: 14 }).unwrap_or(0.0))
     }
 
     async fn check_position_timeout(&mut self) -> bool {

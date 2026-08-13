@@ -179,9 +179,6 @@ pub trait BotStore: Send + Sync {
     ) -> VirsResult<()>;
 
 
-    async fn update_trade_stop_loss(&self, client_order_id: &str, stop_loss: f64) -> VirsResult<()>;
-
-
     async fn find_open_trade(
         &self,
         bot_id: Uuid,

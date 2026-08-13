@@ -45,7 +45,6 @@ pub(crate) struct BotWorker {
     pub(crate) current_price: f64,
     pub(crate) consecutive_losses: i32,
     pub(crate) paused: bool,
-    pub(crate) trailing_stop_dirty: bool,
     pub(crate) time_config: TimeConfig,
     pub(crate) prompt_loader: Arc<dyn PromptProvider>,
 
@@ -98,7 +97,6 @@ impl BotWorker {
             current_price: 0.0,
             consecutive_losses: 0,
             paused: false,
-            trailing_stop_dirty: false,
             time_config,
             prompt_loader,
             long: SideState::default(),
