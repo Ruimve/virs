@@ -1,4 +1,4 @@
-import { useActionState } from 'react';
+import { useActionState, useTransition } from 'react';
 import { ShieldCheck, Lock, User } from '@/components/Icon';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
@@ -9,7 +9,8 @@ import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
   const navigate = useNavigate();
-  const [error, submitAction, isPending] = useActionState<string | undefined | null, FormData>(
+  const [isPending, startTransition] = useTransition();
+  const [error, submitAction, isLoading] = useActionState<string | undefined | null, FormData>(
     async (_, formData) => {
       const username = formData.get('username') as string;
       const password = formData.get('password') as string;
@@ -17,11 +18,13 @@ const Login = () => {
         const result = await login(username, password);
         if (result?.success) {
           const bot = await findActiveBot();
-          if (bot) {
-            navigate(`/trade/bot/${bot.id}/bot`, { replace: true });
-          } else {
-            navigate('/setup/bot-type', { replace: true });
-          }
+          startTransition(() => {
+            if (bot) {
+              navigate(`/trade/bot/${bot.id}/bot`, { replace: true });
+            } else {
+              navigate('/setup/bot-type', { replace: true });
+            }
+          });
         } else {
           return result?.message || 'Login failed';
         }
@@ -66,8 +69,13 @@ const Login = () => {
             prefix={<Lock width={18} height={18} strokeWidth={1.5} />}
           />
           {error && <Alert type="danger" title={error} className="animate-error-enter" />}
-          <Button type="submit" variant="primary" loading={isPending} className="sm:w-full">
-            {isPending ? 'Signing in...' : 'Sign in'}
+          <Button
+            type="submit"
+            variant="primary"
+            loading={isLoading || isPending}
+            className="sm:w-full"
+          >
+            {isLoading || isPending ? 'Signing in...' : 'Sign in'}
           </Button>
         </form>
         <div className="mt-7 flex items-center gap-3">
