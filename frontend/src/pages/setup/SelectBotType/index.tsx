@@ -46,18 +46,21 @@ const SelectBotType = () => {
   }, [existingBot?.id, botType, isPending, handleContinue]);
 
   return (
-    <Wizard
-      step={WizardStep.SelectBotType}
-      title="Choose Strategy"
-      subtitle="Select the trading strategy that fits your goals"
-      actions={actions}
-    >
-      {existingBot?.id ? (
-        <ExistingBot botId={existingBot?.id} />
-      ) : (
-        <NoBot botType={botType} changeBotType={handleChangeBotType} />
-      )}
-    </Wizard>
+    <>
+      <title>选择策略 - VIRS</title>
+      <Wizard
+        step={WizardStep.SelectBotType}
+        title="Choose Strategy"
+        subtitle="Select the trading strategy that fits your goals"
+        actions={actions}
+      >
+        {existingBot?.id ? (
+          <ExistingBot botId={existingBot?.id} />
+        ) : (
+          <NoBot botType={botType} changeBotType={handleChangeBotType} />
+        )}
+      </Wizard>
+    </>
   );
 };
 

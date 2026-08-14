@@ -94,40 +94,43 @@ const ConfigureExchange = () => {
   }, [badge.state, permission, positionMode, isPending, handleBack, handleContinue]);
 
   return (
-    <Wizard
-      step={WizardStep.SelectExchange}
-      title="Connect Binance"
-      subtitle="API credentials with read and trade permissions"
-      actions={actions}
-    >
-      <FormCard>
-        <FormField label="API Key" required>
-          <Input
-            mono
-            prefix={<Key width={16} height={16} strokeWidth={2} />}
-            placeholder="API Key"
-            value={apiKey}
-            onChange={handleApiKeyChange}
-          />
-        </FormField>
-        <FormField label="Secret Key" required badge={<InlineBadge badge={badge} />}>
-          <Input
-            type="password"
-            mono
-            prefix={<Lock className="w-4 h-4" strokeWidth={2} />}
-            placeholder="Secret Key"
-            value={apiSecret}
-            onChange={handleApiSecretChange}
-          />
-        </FormField>
-        {connection && (
-          <>
-            <Permission onCheck={setPermission} />
-            {permission && <PositionMode onCheck={setPositionMode} />}
-          </>
-        )}
-      </FormCard>
-    </Wizard>
+    <>
+      <title>连接交易所 - VIRS</title>
+      <Wizard
+        step={WizardStep.SelectExchange}
+        title="Connect Binance"
+        subtitle="API credentials with read and trade permissions"
+        actions={actions}
+      >
+        <FormCard>
+          <FormField label="API Key" required>
+            <Input
+              mono
+              prefix={<Key width={16} height={16} strokeWidth={2} />}
+              placeholder="API Key"
+              value={apiKey}
+              onChange={handleApiKeyChange}
+            />
+          </FormField>
+          <FormField label="Secret Key" required badge={<InlineBadge badge={badge} />}>
+            <Input
+              type="password"
+              mono
+              prefix={<Lock className="w-4 h-4" strokeWidth={2} />}
+              placeholder="Secret Key"
+              value={apiSecret}
+              onChange={handleApiSecretChange}
+            />
+          </FormField>
+          {connection && (
+            <>
+              <Permission onCheck={setPermission} />
+              {permission && <PositionMode onCheck={setPositionMode} />}
+            </>
+          )}
+        </FormCard>
+      </Wizard>
+    </>
   );
 };
 

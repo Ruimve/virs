@@ -70,65 +70,70 @@ const ConfigureParams = () => {
   }, [values, isPending, handleBack, handleContinue]);
 
   return (
-    <Wizard
-      step={WizardStep.ConfigureParams}
-      title="Trading Parameters"
-      subtitle="Configure pair, position size, leverage and timeframe"
-      actions={actions}
-    >
-      <FormCard>
-        <FormField label="Trading Pair" required>
-          <Input
-            mono
-            value={values.symbol ?? ''}
-            onChange={(e) => handleFieldChange('symbol', e.target.value)}
-            list="pairList"
-            placeholder="BTCUSDT"
-          />
-          <datalist id="pairList">
-            {TRADING_PAIRS.map((p) => (
-              <option key={p} value={p} />
-            ))}
-          </datalist>
-        </FormField>
+    <>
+      <title>交易参数 - VIRS</title>
+      <Wizard
+        step={WizardStep.ConfigureParams}
+        title="Trading Parameters"
+        subtitle="Configure pair, position size, leverage and timeframe"
+        actions={actions}
+      >
+        <FormCard>
+          <FormField label="Trading Pair" required>
+            <Input
+              mono
+              value={values.symbol ?? ''}
+              onChange={(e) => handleFieldChange('symbol', e.target.value)}
+              list="pairList"
+              placeholder="BTCUSDT"
+            />
+            <datalist id="pairList">
+              {TRADING_PAIRS.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
+          </FormField>
 
-        <FormField label="Max Position %" required>
-          <Input
-            type="number"
-            suffix="%"
-            value={values.max_position_pct ?? ''}
-            onChange={(e) => handleFieldChange('max_position_pct', e.target.value)}
-            placeholder="20"
-          />
-        </FormField>
+          <FormField label="Max Position %" required>
+            <Input
+              type="number"
+              suffix="%"
+              value={values.max_position_pct ?? ''}
+              onChange={(e) => handleFieldChange('max_position_pct', e.target.value)}
+              placeholder="20"
+            />
+          </FormField>
 
-        <FormField label="Leverage">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-mono text-sm font-semibold text-accent">{values.leverage}x</span>
-          </div>
-          <LeverageSlider
-            value={Number(values.leverage)}
-            min={1}
-            max={20}
-            step={1}
-            onChange={handleLeverageChange}
-          />
-        </FormField>
+          <FormField label="Leverage">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-mono text-sm font-semibold text-accent">
+                {values.leverage}x
+              </span>
+            </div>
+            <LeverageSlider
+              value={Number(values.leverage)}
+              min={1}
+              max={20}
+              step={1}
+              onChange={handleLeverageChange}
+            />
+          </FormField>
 
-        <FormField label="Decision Interval">
-          <FormSelect
-            value={values.decision_interval || '300'}
-            onChange={(e) => handleFieldChange('decision_interval', e.target.value)}
-          >
-            {TIMEFRAME_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </FormSelect>
-        </FormField>
-      </FormCard>
-    </Wizard>
+          <FormField label="Decision Interval">
+            <FormSelect
+              value={values.decision_interval || '300'}
+              onChange={(e) => handleFieldChange('decision_interval', e.target.value)}
+            >
+              {TIMEFRAME_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </FormSelect>
+          </FormField>
+        </FormCard>
+      </Wizard>
+    </>
   );
 };
 

@@ -59,16 +59,19 @@ const Log = () => {
   if (!bot?.id) return null;
 
   return (
-    <div className="h-full overflow-y-auto">
-      <AILogList logs={logs} loading={loading} botId={bot.id} total={total} />
+    <>
+      <title>日志 - VIRS</title>
+      <div className="h-full overflow-y-auto">
+        <AILogList logs={logs} loading={loading} botId={bot.id} total={total} />
 
-      <div
-        ref={sentinelRef}
-        className="h-12 flex items-center justify-center text-xs text-on-surface-tertiary"
-      >
-        {loading ? '加载中...' : hasMore ? '上拉加载更多' : logs.length > 0 ? '已加载全部' : ''}
+        <div
+          ref={sentinelRef}
+          className="h-12 flex items-center justify-center text-xs text-on-surface-tertiary"
+        >
+          {loading ? '加载中...' : hasMore ? '上拉加载更多' : logs.length > 0 ? '已加载全部' : ''}
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

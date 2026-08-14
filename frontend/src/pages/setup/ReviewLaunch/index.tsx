@@ -63,7 +63,15 @@ const ReviewLaunch = () => {
     } finally {
       setLaunching(false);
     }
-  }, [wizard.bot_params, wizard.exchange, wizard.auto_optimize, paperMode, navigate, updateWizard]);
+  }, [
+    wizard.bot_type,
+    wizard.bot_params,
+    wizard.exchange,
+    wizard.auto_optimize,
+    paperMode,
+    navigate,
+    updateWizard,
+  ]);
 
   const handleBack = useCallback(() => {
     navigate('/setup/optimization', { replace: true });
@@ -90,69 +98,72 @@ const ReviewLaunch = () => {
   }, [wizard.risk_tolerance]);
 
   return (
-    <Wizard
-      step={WizardStep.ReviewLaunch}
-      title="Review & Launch"
-      subtitle="Confirm your configuration and launch the bot"
-      actions={actions}
-    >
-      <FormCard>
-        <FormField label="" noBorder>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-sm font-medium text-on-base">Trading Mode</div>
-              <div
-                className={`text-xs mt-0.5 leading-relaxed ${paperMode ? 'text-on-surface-tertiary' : 'text-warning-text'}`}
-              >
-                {paperMode
-                  ? 'Simulated orders, no real funds at risk'
-                  : 'Live orders with real funds — proceed with caution'}
+    <>
+      <title>确认启动 - VIRS</title>
+      <Wizard
+        step={WizardStep.ReviewLaunch}
+        title="Review & Launch"
+        subtitle="Confirm your configuration and launch the bot"
+        actions={actions}
+      >
+        <FormCard>
+          <FormField label="" noBorder>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-sm font-medium text-on-base">Trading Mode</div>
+                <div
+                  className={`text-xs mt-0.5 leading-relaxed ${paperMode ? 'text-on-surface-tertiary' : 'text-warning-text'}`}
+                >
+                  {paperMode
+                    ? 'Simulated orders, no real funds at risk'
+                    : 'Live orders with real funds — proceed with caution'}
+                </div>
               </div>
+              <ToggleSwitch on={!paperMode} warning onClick={() => setPaperMode(!paperMode)} />
             </div>
-            <ToggleSwitch on={!paperMode} warning onClick={() => setPaperMode(!paperMode)} />
-          </div>
-        </FormField>
+          </FormField>
 
-        <ReviewRow
-          label="Bot Type"
-          value={
-            <>
-              Chat Bot <AiBadge />
-            </>
-          }
-        />
-        <ReviewRow label="AI Model" value={wizard.llm_model} mono />
-        <ReviewRow label="Exchange" value={wizard.exchange} />
-        <ReviewRow
-          label="Symbol · Leverage"
-          value={`${wizard.bot_params.symbol} · ${wizard.bot_params.leverage}x`}
-          mono
-        />
-        <ReviewRow label="Max Position" value={`${wizard.bot_params.max_position_pct}%`} mono />
-        <ReviewRow
-          label="Optimization"
-          value={wizard.auto_optimize ? `Enabled · ${wizard.optimization_interval}` : 'Disabled'}
-        />
-        {wizard.auto_optimize && <ReviewRow label="Risk Tolerance" value={riskLabel} />}
-      </FormCard>
-
-      <div className="mt-5">
-        <Alert type="success" title="All checks passed" className="mb-3" />
-
-        {!paperMode && (
-          <Alert
-            type="warning"
-            title="Real trading involves genuine financial risk. Ensure your configuration is correct
-              before launching."
-            className="mb-3"
+          <ReviewRow
+            label="Bot Type"
+            value={
+              <>
+                Chat Bot <AiBadge />
+              </>
+            }
           />
-        )}
+          <ReviewRow label="AI Model" value={wizard.llm_model} mono />
+          <ReviewRow label="Exchange" value={wizard.exchange} />
+          <ReviewRow
+            label="Symbol · Leverage"
+            value={`${wizard.bot_params.symbol} · ${wizard.bot_params.leverage}x`}
+            mono
+          />
+          <ReviewRow label="Max Position" value={`${wizard.bot_params.max_position_pct}%`} mono />
+          <ReviewRow
+            label="Optimization"
+            value={wizard.auto_optimize ? `Enabled · ${wizard.optimization_interval}` : 'Disabled'}
+          />
+          {wizard.auto_optimize && <ReviewRow label="Risk Tolerance" value={riskLabel} />}
+        </FormCard>
 
-        {launchError && (
-          <Alert type="danger" title="launchError" className="animate-error-enter mb-3" />
-        )}
-      </div>
-    </Wizard>
+        <div className="mt-5">
+          <Alert type="success" title="All checks passed" className="mb-3" />
+
+          {!paperMode && (
+            <Alert
+              type="warning"
+              title="Real trading involves genuine financial risk. Ensure your configuration is correct
+              before launching."
+              className="mb-3"
+            />
+          )}
+
+          {launchError && (
+            <Alert type="danger" title="launchError" className="animate-error-enter mb-3" />
+          )}
+        </div>
+      </Wizard>
+    </>
   );
 };
 

@@ -113,38 +113,41 @@ const ConfigureLlm = () => {
   }, [apiKey, model, badge.state, isPending, handleBack, handleContinue]);
 
   return (
-    <Wizard
-      step={WizardStep.ConfigureLlm}
-      title="Connect DeepSeek"
-      subtitle="Enter your API key to power AI trading decisions"
-      actions={actions}
-    >
-      <FormCard>
-        <FormField label="API Key" required badge={<InlineBadge badge={badge} />}>
-          <Input
-            type="password"
-            mono
-            prefix={<Lock className="w-4 h-4" strokeWidth={2} />}
-            placeholder="sk-..."
-            value={apiKey}
-            onChange={handleKeyChange}
-          />
-        </FormField>
-        <FormField label="Model" required>
-          <FormSelect value={model} onChange={handleModelChange} disabled={models.length === 0}>
-            {models.length === 0 && <option value="">Select after entering API key</option>}
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.id}
-              </option>
-            ))}
-          </FormSelect>
-        </FormField>
-      </FormCard>
-      <HelperLink href="https://platform.deepseek.com/api_keys">
-        Get your DeepSeek API Key
-      </HelperLink>
-    </Wizard>
+    <>
+      <title>配置模型 - VIRS</title>
+      <Wizard
+        step={WizardStep.ConfigureLlm}
+        title="Connect DeepSeek"
+        subtitle="Enter your API key to power AI trading decisions"
+        actions={actions}
+      >
+        <FormCard>
+          <FormField label="API Key" required badge={<InlineBadge badge={badge} />}>
+            <Input
+              type="password"
+              mono
+              prefix={<Lock className="w-4 h-4" strokeWidth={2} />}
+              placeholder="sk-..."
+              value={apiKey}
+              onChange={handleKeyChange}
+            />
+          </FormField>
+          <FormField label="Model" required>
+            <FormSelect value={model} onChange={handleModelChange} disabled={models.length === 0}>
+              {models.length === 0 && <option value="">Select after entering API key</option>}
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.id}
+                </option>
+              ))}
+            </FormSelect>
+          </FormField>
+        </FormCard>
+        <HelperLink href="https://platform.deepseek.com/api_keys">
+          Get your DeepSeek API Key
+        </HelperLink>
+      </Wizard>
+    </>
   );
 };
 

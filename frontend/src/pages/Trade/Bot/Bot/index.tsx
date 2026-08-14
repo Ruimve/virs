@@ -223,6 +223,7 @@ const Bot = () => {
 
   return (
     <>
+      <title>交易 - VIRS</title>
       {/* 桌面端布局：侧边栏 + 顶栏 + 双列主区域 */}
       <DesktopBot
         bot={botData}

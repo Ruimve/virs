@@ -59,53 +59,56 @@ const ConfigureOptimization = () => {
   }, [isPending, handleBack, handleContinue]);
 
   return (
-    <Wizard
-      step={WizardStep.ConfigureOptimization}
-      title="Auto-Optimization"
-      subtitle="AI periodically evaluates and refines your strategy"
-      actions={actions}
-    >
-      <FormCard>
-        <FormField label="" noBorder={!autoOptimize}>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-sm font-medium text-on-base">Auto-Optimization</div>
-              <div className="text-xs text-on-surface-tertiary mt-0.5 leading-relaxed">
-                AI refines strategy based on trade history
+    <>
+      <title>优化配置 - VIRS</title>
+      <Wizard
+        step={WizardStep.ConfigureOptimization}
+        title="Auto-Optimization"
+        subtitle="AI periodically evaluates and refines your strategy"
+        actions={actions}
+      >
+        <FormCard>
+          <FormField label="" noBorder={!autoOptimize}>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-sm font-medium text-on-base">Auto-Optimization</div>
+                <div className="text-xs text-on-surface-tertiary mt-0.5 leading-relaxed">
+                  AI refines strategy based on trade history
+                </div>
               </div>
+              <ToggleSwitch on={autoOptimize} onClick={() => setAutoOptimize(!autoOptimize)} />
             </div>
-            <ToggleSwitch on={autoOptimize} onClick={() => setAutoOptimize(!autoOptimize)} />
-          </div>
-        </FormField>
+          </FormField>
 
-        {autoOptimize && (
-          <>
-            <FormField label="Interval">
-              <FormSelect value={interval} onChange={(e) => setInterval(e.target.value)}>
-                {INTERVAL_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </FormSelect>
-            </FormField>
+          {autoOptimize && (
+            <>
+              <FormField label="Interval">
+                <FormSelect value={interval} onChange={(e) => setInterval(e.target.value)}>
+                  {INTERVAL_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </FormSelect>
+              </FormField>
 
-            <FormField label="Risk Tolerance" noBorder>
-              <FormSelect value={risk} onChange={(e) => setRisk(e.target.value)}>
-                {RISK_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </FormSelect>
-            </FormField>
-          </>
-        )}
-      </FormCard>
-      <p className="text-caption text-on-surface-muted mt-3 px-1 leading-relaxed">
-        Runs hourly, evaluates closed trades. Optimized prompts are hot-swapped without restart.
-      </p>
-    </Wizard>
+              <FormField label="Risk Tolerance" noBorder>
+                <FormSelect value={risk} onChange={(e) => setRisk(e.target.value)}>
+                  {RISK_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </FormSelect>
+              </FormField>
+            </>
+          )}
+        </FormCard>
+        <p className="text-caption text-on-surface-muted mt-3 px-1 leading-relaxed">
+          Runs hourly, evaluates closed trades. Optimized prompts are hot-swapped without restart.
+        </p>
+      </Wizard>
+    </>
   );
 };
 

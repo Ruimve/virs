@@ -37,7 +37,12 @@ const Detail = () => {
 
   if (!bot?.id || !log) return null;
 
-  return <AILogDetail log={log} loading={loading} />;
+  return (
+    <>
+      <title>日志详情 - VIRS</title>
+      <AILogDetail log={log} loading={loading} />
+    </>
+  );
 };
 
 export default Detail;
