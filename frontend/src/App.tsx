@@ -26,11 +26,12 @@ const BotSystem = lazy(() => import('./pages/Trade/Bot/System'));
 const App = () => {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<Fallback />}>
+      <Suspense fallback={<Fallback label="正在加载资源" progress={40} />}>
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<Guard />}>
+              <Route index element={<Navigate to="/setup/bot-type" replace />} />
               <Route path="/setup" element={<SetupLayout />}>
                 <Route path="/setup/bot-type" element={<SelectBotType />} />
                 <Route path="/setup/llm" element={<ConfigureLlm />} />
@@ -48,7 +49,6 @@ const App = () => {
                   <Route path="/trade/bot/:botId/system" element={<BotSystem />} />
                 </Route>
               </Route>
-              <Route path="*" element={<Navigate to="/setup/bot-type" replace />} />
             </Route>
           </Routes>
         </BrowserRouter>

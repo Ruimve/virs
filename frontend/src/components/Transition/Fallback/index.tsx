@@ -1,6 +1,20 @@
+import { useEffect, useState } from 'react';
 import { Logo } from '@/components/Logo';
 
-const Fallback = () => {
+interface FallbackProps {
+  label?: string;
+  progress?: number;
+  startProgress?: number;
+}
+
+const Fallback = ({ label, progress = 0, startProgress = 0 }: FallbackProps) => {
+  const [width, setWidth] = useState(startProgress);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setWidth(progress));
+    return () => cancelAnimationFrame(raf);
+  }, [progress]);
+
   return (
     <div className="loading-page min-h-dvh bg-base flex flex-col items-center justify-center relative overflow-hidden">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -19,8 +33,17 @@ const Fallback = () => {
         </p>
 
         <div className="mt-8 w-16 h-[1.5px] rounded-full overflow-hidden relative bg-line-default">
-          <div className="absolute top-0 w-2/5 h-full rounded-full bg-accent animate-loading-sweep" />
+          <div
+            className="absolute top-0 left-0 h-full rounded-full bg-accent transition-[width] duration-700 ease-out"
+            style={{ width: `${width}%` }}
+          />
         </div>
+
+        {label && (
+          <p className="mt-3 text-2xs font-medium tracking-wide text-on-surface-muted select-none">
+            {label}
+          </p>
+        )}
       </div>
     </div>
   );

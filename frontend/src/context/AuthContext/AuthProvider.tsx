@@ -1,12 +1,18 @@
 import { useEffect, useMemo, use, type ReactNode } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { removeToken } from '@/service';
+import { removeToken, type UserInfo } from '@/service';
 import { AUTH_UNAUTHORIZED_EVENT, AuthContext } from './';
-import { getUser } from './auth';
+// import { getUser } from './auth';
 
-const promiseUser = getUser();
+// const promiseUser = getUser();
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
+export const AuthProvider = ({
+  promiseUser,
+  children,
+}: {
+  promiseUser: Promise<UserInfo | null>;
+  children: ReactNode;
+}) => {
   const navigate = useNavigate();
 
   useEffect(() => {

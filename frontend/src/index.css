@@ -504,15 +504,6 @@ tbody tr:hover {
   }
 }
 
-@keyframes loading-sweep {
-  0% {
-    left: -40%;
-  }
-  100% {
-    left: 100%;
-  }
-}
-
 @keyframes ai-pulse {
   0%,
   100% {
@@ -570,10 +561,6 @@ tbody tr:hover {
   animation: logo-breathe 2.4s ease-in-out infinite;
 }
 
-.animate-loading-sweep {
-  animation: loading-sweep 1.4s ease-in-out infinite;
-}
-
 /* ============================================================
    Background Patterns
    ============================================================ */
@@ -607,6 +594,7 @@ tbody tr:hover {
 @media (prefers-reduced-motion: reduce) {
   .loading-page * {
     animation: none !important;
+    transition: none !important;
   }
   .loading-icon .ring-arc {
     animation: none;
