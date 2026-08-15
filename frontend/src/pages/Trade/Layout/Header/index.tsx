@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { Brand } from '@/components/Logo';
 import { Theme } from '@/components/Theme';
 import { Flame, ShieldCheck } from '@/components/Icon';
-import { useBot } from '@/context/BotContext';
+import { useBot } from '@/pages/Trade/context/BotContext';
 import { useLayout } from '@/context/LayoutContext';
 import { usePaper } from '../../context/PaperContext';
 import { formatCompact, formatInterval } from '../../Bot/Bot/components/utils';

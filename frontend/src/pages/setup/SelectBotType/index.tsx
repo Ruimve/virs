@@ -1,11 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useBot } from '@/context/BotContext';
 import { Button } from '@/components/Button';
 import { Wizard } from '../context/WizardContext/Wizard';
 import { useWizard } from '../context/WizardContext';
 import { WizardStep } from '../context/WizardContext/define';
-import { ExistingBot } from './ExistingBot';
 import { NoBot } from './NoBot';
 
 const SelectBotType = () => {
@@ -13,7 +11,6 @@ const SelectBotType = () => {
   const [isPending, startTransition] = useTransition();
   const { updateWizard, advanceStep } = useWizard();
 
-  const { bot } = useBot();
   const [botType, setBotType] = useState<'chat' | 'agent'>('chat');
 
   useEffect(() => {
@@ -33,15 +30,13 @@ const SelectBotType = () => {
   }, []);
 
   const actions = useMemo(() => {
-    if (bot?.id) return null;
-
     const disabled = botType !== 'chat';
     return (
       <Button variant="primary" onClick={handleContinue} disabled={disabled} loading={isPending}>
         Continue
       </Button>
     );
-  }, [bot?.id, botType, isPending, handleContinue]);
+  }, [botType, isPending, handleContinue]);
 
   return (
     <>
@@ -52,11 +47,11 @@ const SelectBotType = () => {
         subtitle="Select the trading strategy that fits your goals"
         actions={actions}
       >
-        {bot?.id ? (
+        {/* {bot?.id ? (
           <ExistingBot botId={bot?.id} />
-        ) : (
-          <NoBot botType={botType} changeBotType={handleChangeBotType} />
-        )}
+        ) : ( */}
+        <NoBot botType={botType} changeBotType={handleChangeBotType} />
+        {/* )} */}
       </Wizard>
     </>
   );

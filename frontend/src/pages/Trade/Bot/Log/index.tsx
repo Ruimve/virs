@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getBotAnalysisLogs, type AnalysisLog } from '@/service';
-import { useBot } from '@/context/BotContext';
+import { useBot } from '@/pages/Trade/context/BotContext';
 import AILogList from '../../components/LogList';
 
 const PAGE_SIZE = 20;

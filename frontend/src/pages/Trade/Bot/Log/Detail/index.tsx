@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getBotAnalysisLogs, type AnalysisLog } from '@/service';
-import { useBot } from '@/context/BotContext';
+import { useBot } from '@/pages/Trade/context/BotContext';
 import AILogDetail from '../../../components/LogList/LogDetail';
 
 const Detail = () => {

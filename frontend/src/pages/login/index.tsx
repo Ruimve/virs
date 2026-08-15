@@ -6,7 +6,7 @@ import { Logo } from '@/components/Logo';
 import { Alert } from '@/components/Alert';
 import { login } from '@/service';
 import { useNavigate } from 'react-router-dom';
-import { findActiveBot } from '@/context/BotContext/bot';
+import { findActiveBot } from '@/pages/Trade/context/BotContext/bot';
 
 const Login = () => {
   const navigate = useNavigate();
