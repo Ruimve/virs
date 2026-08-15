@@ -13,11 +13,17 @@ const Guard = () => {
   const [promiseBot] = useState(() => fetchBot(botId));
 
   return (
-    <Suspense fallback={<Fallback label="正在登录账户" startProgress={45} progress={85} />}>
+    <Suspense fallback={<Fallback label="正在检查账户..." startProgress={35} progress={60} />}>
       <AuthProvider promiseUser={promiseUser}>
-        <BotProvider promiseBot={promiseBot}>
-          <Outlet />
-        </BotProvider>
+        <Suspense fallback={<Fallback label="正在读取AI..." startProgress={65} progress={90} />}>
+          <BotProvider promiseBot={promiseBot}>
+            <Suspense
+              fallback={<Fallback label="正在加载页面..." startProgress={95} progress={100} />}
+            >
+              <Outlet />
+            </Suspense>
+          </BotProvider>
+        </Suspense>
       </AuthProvider>
     </Suspense>
   );

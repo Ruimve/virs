@@ -2,10 +2,9 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import Fallback from './components/Transition/Fallback';
+import Guard from './pages/Guard';
 
 const Login = lazy(() => import('./pages/Login'));
-
-const Guard = lazy(() => import('./pages/Guard'));
 const SetupLayout = lazy(() => import('./pages/Setup/Layout'));
 const SelectBotType = lazy(() => import('./pages/Setup/SelectBotType'));
 const ConfigureLlm = lazy(() => import('./pages/Setup/ConfigureLlm'));
@@ -26,7 +25,7 @@ const BotSystem = lazy(() => import('./pages/Trade/Bot/System'));
 const App = () => {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<Fallback label="正在加载资源" progress={40} />}>
+      <Suspense fallback={<Fallback label="正在下载资源..." progress={30} />}>
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
