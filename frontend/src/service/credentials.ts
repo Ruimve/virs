@@ -8,20 +8,22 @@ import type {
 } from './types';
 
 export async function saveCredential(
-  params: {
+  params?: {},
+  bodyParams?: {
     exchange: string;
     api_key: string;
     api_secret: string;
     passphrase?: string;
-    label?: string;
+    label: string;
   },
   init?: RequestInit,
 ): Promise<ApiResponse<{ id: string }>> {
-  return api.post('/credentials/save', params, init);
+  return api.post('/credentials/save', params, bodyParams, init);
 }
 
 export async function saveAiCredential(
-  params: {
+  params?: {},
+  bodyParams?: {
     provider: string;
     api_key: string;
     model?: string;
@@ -30,47 +32,54 @@ export async function saveAiCredential(
   },
   init?: RequestInit,
 ): Promise<ApiResponse<{ id: string }>> {
-  return api.post('/ai-credentials/save', params, init);
+  return api.post('/ai-credentials/save', params, bodyParams, init);
 }
 
 export async function testCredential(
+  params?: {},
   init?: RequestInit,
 ): Promise<ApiResponse<{ connected: boolean; message?: string }>> {
-  return api.get('/credentials/test', init);
+  return api.get('/credentials/test', params, init);
 }
 
 export async function checkPermissions(
+  params?: {},
   init?: RequestInit,
 ): Promise<ApiResponse<{ permissions: PermissionItem[] }>> {
-  return api.get('/credentials/check-permissions', init);
+  return api.get('/credentials/check-permissions', params, init);
 }
 
 export async function fetchPositionMode(
+  params?: {},
   init?: RequestInit,
 ): Promise<ApiResponse<PositionModeResult>> {
-  return api.get('/credentials/position-mode', init);
+  return api.get('/credentials/position-mode', params, init);
 }
 
 export async function fetchCredentialStatus(
+  params?: {},
   init?: RequestInit,
 ): Promise<ApiResponse<{ connected: boolean; exchange?: string }>> {
-  return api.get('/credentials/status', init);
+  return api.get('/credentials/status', params, init);
 }
 
 export async function fetchAiModels(
+  params?: {},
   init?: RequestInit,
 ): Promise<ApiResponse<{ models: DeepSeekModel[] }>> {
-  return api.get('/ai-credentials/models', init);
+  return api.get('/ai-credentials/models', params, init);
 }
 
 export async function fetchAiBalance(
+  params?: {},
   init?: RequestInit,
 ): Promise<ApiResponse<{ balances: BalanceInfo[] }>> {
-  return api.get('/ai-credentials/balance', init);
+  return api.get('/ai-credentials/balance', params, init);
 }
 
 export async function testAiCredential(
+  params?: {},
   init?: RequestInit,
 ): Promise<ApiResponse<{ connected: boolean; message: string }>> {
-  return api.get('/ai-credentials/test', init);
+  return api.get('/ai-credentials/test', params, init);
 }

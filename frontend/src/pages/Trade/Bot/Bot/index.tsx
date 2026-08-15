@@ -128,7 +128,7 @@ const Bot = () => {
 
   const loadLogs = useCallback(async (botId: string) => {
     try {
-      const res = await getBotAnalysisLogs(botId, 1, 1);
+      const res = await getBotAnalysisLogs({ botId, page: 1, pageSize: 1 });
       if (res.data?.items) setLogs(res.data.items);
     } catch (e) {
       console.error('Failed to load analysis logs:', e);
@@ -137,7 +137,7 @@ const Bot = () => {
 
   const loadTrades = useCallback(async (botId: string) => {
     try {
-      const res = await getBotTrades(botId, 1, 50);
+      const res = await getBotTrades({ botId, page: 1, pageSize: 50 });
       if (res.data?.trades) setBotTrades(res.data.trades);
     } catch (e) {
       console.error('Failed to load trades:', e);
@@ -146,7 +146,7 @@ const Bot = () => {
 
   const loadStats = useCallback(async (botId: string) => {
     try {
-      const res = await getBotStats(botId);
+      const res = await getBotStats({ botId });
       if (res.success && res.data) setStats(res.data);
     } catch (e) {
       console.error('Failed to load stats:', e);

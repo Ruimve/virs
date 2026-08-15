@@ -36,7 +36,7 @@ const Trades = () => {
       if (!botId) return;
       setLoading(true);
       try {
-        const res = await getBotTrades(botId, p, PAGE_SIZE);
+        const res = await getBotTrades({ botId, page: p, pageSize: PAGE_SIZE });
         if (res.success && res.data) {
           const items = res.data.trades || [];
           setTrades((prev) => (append ? [...prev, ...items] : items));

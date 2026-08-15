@@ -2,7 +2,8 @@ import { api } from './client';
 import type { ApiResponse, BotDetail, BotTradesPage, BotStats, AnalysisLogsPage } from './types';
 
 export async function createBot(
-  params: {
+  params?: {},
+  bodyParams?: {
     symbol: string;
     exchange: string;
     bot_type?: 'chat' | 'agent';
@@ -15,64 +16,76 @@ export async function createBot(
   },
   init?: RequestInit,
 ): Promise<ApiResponse<{ id: string }>> {
-  return api.post('/bot/create', params, init);
+  return api.post('/bot/create', params, bodyParams, init);
 }
 
 export async function startBot(
-  id: string,
+  params: { id: string },
+  bodyParams?: {},
   init?: RequestInit,
 ): Promise<ApiResponse<{ started: boolean }>> {
-  return api.post(`/bot/${id}/start`, undefined, init);
+  const { id, ...rest } = params;
+  return api.post(`/bot/${id}/start`, rest, bodyParams, init);
 }
 
 export async function stopBot(
-  id: string,
+  params: { id: string },
+  bodyParams?: {},
   init?: RequestInit,
 ): Promise<ApiResponse<{ stopped: boolean }>> {
-  return api.post(`/bot/${id}/stop`, undefined, init);
+  const { id, ...rest } = params;
+  return api.post(`/bot/${id}/stop`, rest, bodyParams, init);
 }
 
-export async function deleteBot(id: string, init?: RequestInit): Promise<ApiResponse<null>> {
-  return api.del(`/bot/${id}/delete`, init);
+export async function deleteBot(
+  params: { id: string },
+  init?: RequestInit,
+): Promise<ApiResponse<null>> {
+  const { id, ...rest } = params;
+  return api.del(`/bot/${id}/delete`, rest, init);
 }
 
 export async function getBotDetail(
-  id: string,
+  params: { id: string },
   init?: RequestInit,
 ): Promise<ApiResponse<BotDetail>> {
-  return api.get<BotDetail>(`/bot/${id}`, init);
+  const { id, ...rest } = params;
+  return api.get<BotDetail>(`/bot/${id}`, rest, init);
 }
 
 export async function getBotTrades(
-  botId: string,
-  page: number = 1,
-  pageSize: number = 20,
+  params: { botId: string; page: number; pageSize: number },
   init?: RequestInit,
 ): Promise<ApiResponse<BotTradesPage>> {
-  return api.get<BotTradesPage>(`/bot/${botId}/trades?page=${page}&page_size=${pageSize}`, init);
+  return api.get<BotTradesPage>(
+    `/bot/${params.botId}/trades`,
+    { page: params.page, page_size: params.pageSize },
+    init,
+  );
 }
 
 export async function getBotStats(
-  botId: string,
+  params: { botId: string },
   init?: RequestInit,
 ): Promise<ApiResponse<BotStats>> {
-  return api.get<BotStats>(`/bot/${botId}/stats`, init);
+  const { botId, ...rest } = params;
+  return api.get<BotStats>(`/bot/${botId}/stats`, rest, init);
 }
 
 export async function getBotAnalysisLogs(
-  botId: string,
-  page: number = 1,
-  pageSize: number = 20,
+  params: { botId: string; page: number; pageSize: number },
   init?: RequestInit,
 ): Promise<ApiResponse<AnalysisLogsPage>> {
   return api.get<AnalysisLogsPage>(
-    `/bot/${botId}/analysis-logs?page=${page}&page_size=${pageSize}`,
+    `/bot/${params.botId}/analysis-logs`,
+    { page: params.page, page_size: params.pageSize },
     init,
   );
 }
 
 export async function getBotList(
+  params?: {},
   init?: RequestInit,
 ): Promise<ApiResponse<{ items: BotDetail[]; total: number }>> {
-  return api.get<{ items: BotDetail[]; total: number }>('/bot/list', init);
+  return api.get<{ items: BotDetail[]; total: number }>('/bot/list', params, init);
 }

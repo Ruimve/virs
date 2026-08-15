@@ -44,12 +44,15 @@ export const checkApiKey = (apiKey: string, apiSecret: string): CheckApiKeyResul
     check: async () => {
       try {
         // 保存凭证
-        const saveResult = await saveCredential({
-          exchange: 'binance',
-          api_key: apiKey,
-          api_secret: apiSecret,
-          label: 'binance verification',
-        });
+        const saveResult = await saveCredential(
+          {},
+          {
+            exchange: 'binance',
+            api_key: apiKey,
+            api_secret: apiSecret,
+            label: 'binance verification',
+          },
+        );
         if (saveController.signal.aborted) return null;
 
         if (!saveResult.success) {

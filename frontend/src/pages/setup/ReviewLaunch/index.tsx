@@ -29,24 +29,27 @@ const ReviewLaunch = () => {
     setLaunchError('');
 
     try {
-      const result = await createBot({
-        symbol: wizard.bot_params.symbol,
-        exchange: wizard.exchange,
-        bot_type: wizard.bot_type,
-        leverage: Number(wizard.bot_params.leverage),
-        max_position_pct: Number(wizard.bot_params.max_position_pct),
-        decide_interval_secs: Number(wizard.bot_params.decision_interval),
-        name: `Chat ${wizard.bot_params.symbol || 'Bot'}`,
-        paper_mode: paperMode,
-        auto_optimize: wizard.auto_optimize,
-      });
+      const result = await createBot(
+        {},
+        {
+          symbol: wizard.bot_params.symbol,
+          exchange: wizard.exchange,
+          bot_type: wizard.bot_type,
+          leverage: Number(wizard.bot_params.leverage),
+          max_position_pct: Number(wizard.bot_params.max_position_pct),
+          decide_interval_secs: Number(wizard.bot_params.decision_interval),
+          name: `Chat ${wizard.bot_params.symbol || 'Bot'}`,
+          paper_mode: paperMode,
+          auto_optimize: wizard.auto_optimize,
+        },
+      );
       if (!result.success || !result.data?.id) {
         setLaunchError(`Failed to create chat bot: ${result.message || 'Unknown error'}`);
         return;
       }
       const botId = result.data.id;
 
-      const startResult = await startBot(botId);
+      const startResult = await startBot({ id: botId });
       if (!startResult.success) {
         setLaunchError(
           `Bot created but failed to start: ${startResult.message || 'Unknown error'}`,

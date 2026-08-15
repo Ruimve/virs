@@ -22,7 +22,7 @@ export const fetchBot = async (botId?: string): Promise<BotContextType> => {
       return findActiveBot();
     }
 
-    return getBotDetail(botId).then((res) => ({
+    return getBotDetail({ id: botId }).then((res) => ({
       bot: res?.data?.bot || null,
       strategy: res?.data?.strategy || null,
     }));

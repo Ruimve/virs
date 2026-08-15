@@ -72,12 +72,15 @@ const ConfigureLlm = () => {
       const mdl = e.target.value;
       setModel(mdl);
       if (apiKey && mdl) {
-        saveAiCredential({
-          provider: 'deepseek',
-          api_key: apiKey,
-          model: mdl,
-          is_default: true,
-        });
+        saveAiCredential(
+          {},
+          {
+            provider: 'deepseek',
+            api_key: apiKey,
+            model: mdl,
+            is_default: true,
+          },
+        );
       }
     },
     [apiKey],

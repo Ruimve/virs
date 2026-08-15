@@ -50,7 +50,7 @@ const statusConfig = (status: string): StatusStyle => {
       pulse: false,
     }
   );
-}
+};
 
 export const TradeHeader = memo(() => {
   const { bot } = useBot();

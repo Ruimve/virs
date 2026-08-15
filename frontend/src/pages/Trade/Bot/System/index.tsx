@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, type CSSProperties } from 'react';
-import { getSystemInfo } from '@/service/system';
+import { getSystemInfo } from '@/service';
 import type { SystemInfo as SystemInfoData } from '@/service/types';
 import { Alert } from '@/components/Alert';
 import { Card } from '@/components/Card';

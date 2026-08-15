@@ -18,7 +18,7 @@ const Log = () => {
       if (!bot?.id) return;
       setLoading(true);
       try {
-        const res = await getBotAnalysisLogs(bot.id, p, PAGE_SIZE);
+        const res = await getBotAnalysisLogs({ botId: bot.id, page: p, pageSize: PAGE_SIZE });
         if (res.success && res.data) {
           const items = res.data.items || [];
           setLogs((prev) => (append ? [...prev, ...items] : items));

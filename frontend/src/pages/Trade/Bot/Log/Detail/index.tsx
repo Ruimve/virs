@@ -14,7 +14,7 @@ const Detail = () => {
     async (botId: string) => {
       setLoading(true);
       try {
-        const res = await getBotAnalysisLogs(botId, 1, 50);
+        const res = await getBotAnalysisLogs({ botId, page: 1, pageSize: 50 });
         const logs = res?.data?.items || [];
         if (logs?.length > 0) {
           const found = logs?.find((l: AnalysisLog) => l.id === params.logId);

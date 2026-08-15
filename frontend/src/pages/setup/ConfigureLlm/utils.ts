@@ -27,6 +27,7 @@ export const checkApiKey = (apiKey: string): CheckApiKeyResult => {
       try {
         // 保存凭证
         const saveResult = await saveAiCredential(
+          {},
           {
             provider: 'deepseek',
             api_key: apiKey,

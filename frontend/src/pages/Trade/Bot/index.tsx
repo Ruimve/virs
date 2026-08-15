@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { startBot, stopBot, deleteBot } from '@/service/bot';
+import { startBot, stopBot, deleteBot } from '@/service';
 import { useBot } from '@/context/BotContext';
 import { Button } from '@/components/Button';
 import { useLayout, type ActionItem, type NavItem } from '@/context/LayoutContext';
@@ -117,7 +117,8 @@ const Bot = () => {
         className:
           'bg-surface-1 border-line-default text-on-surface-tertiary hover:text-danger-text hover:border-danger-border transition-colors',
         onClick: async () => {
-          await stopBot(bot?.id);
+          if (!bot) return;
+          await stopBot({ id: bot.id });
         },
       });
     }
@@ -129,7 +130,8 @@ const Bot = () => {
         className:
           'bg-success-bg border-success-border text-success-text hover:bg-success/20 transition-colors',
         onClick: async () => {
-          await startBot(bot?.id);
+          if (!bot) return;
+          await startBot({ id: bot.id });
         },
       });
     }
@@ -140,8 +142,9 @@ const Bot = () => {
       className:
         'bg-danger-bg border-danger-border text-danger-text hover:bg-danger/20 transition-colors',
       onClick: async () => {
+        if (!bot) return;
         if (!confirm('确定删除此机器人？将平仓所有持仓。')) return;
-        await deleteBot(bot?.id);
+        await deleteBot({ id: bot.id });
         navigate('/setup/bot-type', { replace: true });
       },
     });

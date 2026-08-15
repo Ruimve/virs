@@ -16,7 +16,7 @@ const Login = () => {
       const username = formData.get('username') as string;
       const password = formData.get('password') as string;
       try {
-        const result = await login(username, password);
+        const result = await login({}, { username, password });
         if (result?.success) {
           const { bot } = await findActiveBot();
           startTransition(() => {

@@ -24,7 +24,7 @@ export {
   getBotList,
 } from './bot';
 export { fetchKlines } from './market';
-export { checkHealth, getPaperStatus } from './system';
+export { checkHealth, getPaperStatus, getSystemInfo } from './system';
 export { useKlineWs } from './ws';
 export type { KlineWsEvent } from './ws';
 export type * from './types';

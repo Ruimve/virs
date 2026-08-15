@@ -11,7 +11,8 @@ export async function fetchKlines(
 ): Promise<ApiResponse<KlineCandle[]>> {
   const { exchange, symbol, timeframe } = params;
   const res = await api.get<{ candles: KlineCandle[] }>(
-    `/market/klines?exchange=${exchange}&symbol=${symbol}&timeframe=${timeframe}`,
+    '/market/klines',
+    { exchange, symbol, timeframe },
     init,
   );
   if (res.success && res.data?.candles) {
