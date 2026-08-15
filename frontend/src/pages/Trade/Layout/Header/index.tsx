@@ -14,7 +14,7 @@ interface StatusStyle {
   pulse: boolean;
 }
 
-function statusConfig(status: string): StatusStyle {
+const statusConfig = (status: string): StatusStyle => {
   const map: Record<string, StatusStyle> = {
     running: {
       text: '运行中',
