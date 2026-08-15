@@ -32,7 +32,7 @@ const Fallback = ({ label, progress = 0, startProgress = 0 }: FallbackProps) => 
           Quantitative Trading
         </p>
 
-        <div className="mt-8 w-16 h-[1.5px] rounded-full overflow-hidden relative bg-line-default">
+        <div className="mt-6 w-16 h-[1.5px] rounded-full overflow-hidden relative bg-line-default">
           <div
             className="absolute top-0 left-0 h-full rounded-full bg-accent transition-[width] duration-700 ease-out"
             style={{ width: `${width}%` }}

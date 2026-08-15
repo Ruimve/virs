@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { usePositionWs, type PositionWsEvent } from '@/service/ws';
-import { useBot } from '../BotContext';
+import { useBot } from '@/context/BotContext';
 import { PositionContext, type PositionSide, type PositionsBySide } from '.';
 
 const isHolding = (p: PositionWsEvent | null): boolean =>

@@ -1,12 +1,5 @@
 import { api } from './client';
-import type {
-  ApiResponse,
-  BotSummary,
-  BotDetail,
-  BotTradesPage,
-  BotStats,
-  AnalysisLogsPage,
-} from './types';
+import type { ApiResponse, BotDetail, BotTradesPage, BotStats, AnalysisLogsPage } from './types';
 
 export async function createBot(
   params: {
@@ -78,18 +71,8 @@ export async function getBotAnalysisLogs(
   );
 }
 
-export async function findActiveBot(init?: RequestInit): Promise<BotSummary | null> {
-  try {
-    const botRes = await api.get<{ items: Array<{ id: string; status: string }>; total: number }>(
-      '/bot/list',
-      init,
-    );
-    if (botRes.success && botRes.data?.items?.length) {
-      const bot = botRes.data.items.find((b) => b.status === 'running') || botRes.data.items[0];
-      return { id: bot.id };
-    }
-    return null;
-  } catch {
-    return null;
-  }
+export async function getBotList(
+  init?: RequestInit,
+): Promise<ApiResponse<{ items: BotDetail[]; total: number }>> {
+  return api.get<{ items: BotDetail[]; total: number }>('/bot/list', init);
 }

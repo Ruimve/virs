@@ -29,10 +29,6 @@ export interface PositionModeResult {
   message?: string;
 }
 
-export interface BotSummary {
-  id: string;
-}
-
 export interface StrategyDetail {
   name: string;
   description: string;

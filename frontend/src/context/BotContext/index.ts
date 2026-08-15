@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react';
 import { type Bot, type StrategyDetail } from '@/service';
 
-interface BotContextType {
+export interface BotContextType {
   bot: Bot | null;
   strategy: StrategyDetail | null;
 }

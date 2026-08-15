@@ -12,7 +12,7 @@ import {
 } from '@/service';
 import { useKlineWs, type KlineWsEvent } from '@/service/ws';
 import type { KlineChartHandle } from '@/components/Chart/KlineChart';
-import { useBot } from '../../context/BotContext';
+import { useBot } from '@/context/BotContext';
 import { usePositionContext } from '../../context/PositionContext';
 import { StickyMarket } from '../../components/StickyMarket';
 import { UpperRegion } from './components/UpperRegion';

@@ -4,8 +4,9 @@ import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Logo } from '@/components/Logo';
 import { Alert } from '@/components/Alert';
-import { findActiveBot, login } from '@/service';
+import { login } from '@/service';
 import { useNavigate } from 'react-router-dom';
+import { findActiveBot } from '@/context/BotContext/bot';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -17,7 +18,7 @@ const Login = () => {
       try {
         const result = await login(username, password);
         if (result?.success) {
-          const bot = await findActiveBot();
+          const { bot } = await findActiveBot();
           startTransition(() => {
             if (bot) {
               navigate(`/trade/bot/${bot.id}/bot`, { replace: true });

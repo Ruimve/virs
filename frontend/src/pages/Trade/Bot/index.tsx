@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { startBot, stopBot, deleteBot } from '@/service/bot';
-import { useBot } from '../context/BotContext';
+import { useBot } from '@/context/BotContext';
 import { Button } from '@/components/Button';
 import { useLayout, type ActionItem, type NavItem } from '@/context/LayoutContext';
 

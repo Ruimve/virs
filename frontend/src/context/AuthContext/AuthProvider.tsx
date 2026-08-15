@@ -2,9 +2,6 @@ import { useEffect, useMemo, use, type ReactNode } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { removeToken, type UserInfo } from '@/service';
 import { AUTH_UNAUTHORIZED_EVENT, AuthContext } from './';
-// import { getUser } from './auth';
-
-// const promiseUser = getUser();
 
 export const AuthProvider = ({
   promiseUser,

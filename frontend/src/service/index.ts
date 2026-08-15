@@ -21,7 +21,7 @@ export {
   getBotTrades,
   getBotStats,
   getBotAnalysisLogs,
-  findActiveBot,
+  getBotList,
 } from './bot';
 export { fetchKlines } from './market';
 export { checkHealth, getPaperStatus } from './system';

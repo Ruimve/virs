@@ -3,7 +3,9 @@ use axum::{
     http::HeaderMap,
     Json,
 };
+use serde::Serialize;
 use sqlx::FromRow;
+use virs_prompt::PromptTemplate;
 use virs_type::StrategyType;
 use virs_error::VirsError;
 
@@ -35,6 +37,95 @@ struct BotTradeRow {
     take_profit: f64,
     close_reason: Option<String>,
     status: String,
+}
+
+#[derive(Serialize)]
+struct BotInfo {
+    id: String,
+    name: String,
+    symbol: String,
+    exchange: String,
+    status: String,
+    bot_type: String,
+    is_running: bool,
+    is_stopped: bool,
+    leverage: i32,
+    max_position_pct: f64,
+    decide_interval_secs: i32,
+    initial_capital: f64,
+    market_regime: Option<String>,
+    ai_analysis: Option<String>,
+    total_pnl: f64,
+    total_return_pct: f64,
+    total_trades: i32,
+    win_trades: i32,
+    loss_trades: i32,
+    strategy_file: Option<String>,
+    created_at: String,
+    updated_at: String,
+}
+
+impl From<&virs_type::Bot> for BotInfo {
+    fn from(bot: &virs_type::Bot) -> Self {
+        Self {
+            id: bot.id.to_string(),
+            name: bot.name.clone(),
+            symbol: bot.symbol.clone(),
+            exchange: bot.exchange.clone(),
+            status: bot.status.clone(),
+            bot_type: bot.bot_type.clone(),
+            is_running: bot.is_running(),
+            is_stopped: bot.is_stopped(),
+            leverage: bot.leverage,
+            max_position_pct: bot.max_position_pct,
+            decide_interval_secs: bot.decide_interval_secs,
+            initial_capital: bot.initial_capital,
+            market_regime: bot.market_regime.clone(),
+            ai_analysis: bot.ai_analysis.clone(),
+            total_pnl: bot.total_pnl,
+            total_return_pct: bot.total_return_pct(),
+            total_trades: bot.total_trades,
+            win_trades: bot.win_trades,
+            loss_trades: bot.loss_trades,
+            strategy_file: bot.strategy_file.clone(),
+            created_at: bot.created_at.to_rfc3339(),
+            updated_at: bot.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct StrategyInfo {
+    name: String,
+    description: String,
+    version: i32,
+}
+
+impl From<PromptTemplate> for StrategyInfo {
+    fn from(tpl: PromptTemplate) -> Self {
+        Self {
+            name: tpl.name,
+            description: tpl.description,
+            version: tpl.version,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct BotDetailResponse {
+    bot: BotInfo,
+    strategy: Option<StrategyInfo>,
+}
+
+async fn fetch_strategy(
+    loader: &virs_prompt::PromptLoader,
+    bot: &virs_type::Bot,
+) -> Option<StrategyInfo> {
+    let file = bot.strategy_file.as_ref()?;
+    loader
+        .get(StrategyType::Chat, file)
+        .await
+        .map(StrategyInfo::from)
 }
 
 pub async fn create_bot(
@@ -217,50 +308,22 @@ pub async fn list_bots(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let bots = sqlx::query_as::<_, (
-        uuid::Uuid, String, String, String, String, String, i32, f64, i32,
-        chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>,
-    )>(
-        r#"SELECT id, name, symbol, exchange, status, bot_type, leverage, max_position_pct, decide_interval_secs,
-           created_at, updated_at
-           FROM qd_bots WHERE user_id = $1 ORDER BY created_at DESC"#,
+    let bots = sqlx::query_as::<_, virs_type::Bot>(
+        "SELECT * FROM qd_bots WHERE user_id = $1 ORDER BY created_at DESC",
     )
     .bind(user_id)
     .fetch_all(&state.db_pool)
     .await?;
 
-    let items: Vec<_> = bots
-        .iter()
-        .map(
-            |(
-                id,
-                name,
-                symbol,
-                exchange,
-                status,
-                bot_type,
-                leverage,
-                max_position_pct,
-                decide_interval_secs,
-                created_at,
-                updated_at,
-            )| {
-                serde_json::json!({
-                    "id": id.to_string(),
-                    "name": name,
-                    "symbol": symbol,
-                    "exchange": exchange,
-                    "status": status,
-                    "bot_type": bot_type,
-                    "leverage": leverage,
-                    "max_position_pct": max_position_pct,
-                    "decide_interval_secs": decide_interval_secs,
-                    "created_at": created_at.to_rfc3339(),
-                    "updated_at": updated_at.to_rfc3339(),
-                })
-            },
-        )
-        .collect();
+    let loader = &state.prompt_loader;
+    let mut items = Vec::with_capacity(bots.len());
+    for bot in &bots {
+        let strategy = fetch_strategy(loader, bot).await;
+        items.push(BotDetailResponse {
+            bot: BotInfo::from(bot),
+            strategy,
+        });
+    }
     let total = items.len();
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "items": items,
@@ -275,7 +338,6 @@ pub async fn get_bot(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-
     let bot = sqlx::query_as::<_, virs_type::Bot>(
         "SELECT * FROM qd_bots WHERE id = $1 AND user_id = $2",
     )
@@ -286,51 +348,14 @@ pub async fn get_bot(
 
     let bot = match bot {
         Some(b) => b,
-        None => {
-            return Err(VirsError::not_found("Bot not found"));
-        }
+        None => return Err(VirsError::not_found("Bot not found")),
     };
 
+    let strategy = fetch_strategy(&state.prompt_loader, &bot).await;
 
-    let strategy_detail = if let Some(ref file) = bot.strategy_file {
-        let loader = state.prompt_loader.clone();
-        loader.get(StrategyType::Chat, file).await.map(|tpl| {
-            serde_json::json!({
-                "name": tpl.name,
-                "description": tpl.description,
-                "version": tpl.version,
-            })
-        })
-    } else {
-        None
-    };
-
-    Ok(Json(ApiResponse::ok(serde_json::json!({
-        "bot": {
-            "id": bot.id.to_string(),
-            "name": bot.name,
-            "symbol": bot.symbol,
-            "exchange": bot.exchange,
-            "status": bot.status,
-            "bot_type": bot.bot_type,
-            "is_running": bot.is_running(),
-            "is_stopped": bot.is_stopped(),
-            "leverage": bot.leverage,
-            "max_position_pct": bot.max_position_pct,
-            "decide_interval_secs": bot.decide_interval_secs,
-            "initial_capital": bot.initial_capital,
-            "market_regime": bot.market_regime,
-            "ai_analysis": bot.ai_analysis,
-            "total_pnl": bot.total_pnl,
-            "total_return_pct": bot.total_return_pct(),
-            "total_trades": bot.total_trades,
-            "win_trades": bot.win_trades,
-            "loss_trades": bot.loss_trades,
-            "strategy_file": bot.strategy_file,
-            "created_at": bot.created_at.to_rfc3339(),
-            "updated_at": bot.updated_at.to_rfc3339(),
-        },
-        "strategy": strategy_detail,
+    Ok(Json(ApiResponse::ok(serde_json::json!(BotDetailResponse {
+        bot: BotInfo::from(&bot),
+        strategy,
     }))))
 }
 
