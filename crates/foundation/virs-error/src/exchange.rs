@@ -94,33 +94,28 @@ impl Categorized for ExchangeError {
             Self::Network(_) | Self::Http { .. } => ErrorCategory::Network,
             Self::Authentication(_) => ErrorCategory::Authentication,
             Self::RateLimited(_) | Self::IpBanned(_) => ErrorCategory::RateLimited,
-            Self::InvalidRequest(_) | Self::InsufficientFunds(_) | Self::InvalidOrderField(_) => {
-                ErrorCategory::Validation
-            }
+            Self::InvalidRequest(_) | Self::InsufficientFunds(_) | Self::InvalidOrderField(_)
+            | Self::NotSupported(_) => ErrorCategory::Validation,
             Self::OrderNotFound(_) | Self::NoData(_) => ErrorCategory::NotFound,
-            Self::NotSupported(_) => ErrorCategory::Internal,
-            Self::ExchangeError { .. } | Self::Internal(_) | Self::OrderStatusUnknown(_) => {
-                ErrorCategory::Internal
-            }
+            Self::OrderStatusUnknown(_) => ErrorCategory::Conflict,
+            Self::ExchangeError { .. } | Self::Internal(_) => ErrorCategory::Internal,
         }
     }
 }
 
-/* 交易所错误的 HTTP 状态码映射：限流→429, IP 封禁→418, 网络错误→503, 不支持→501 */
+/* 交易所错误的 HTTP 状态码映射：限流→429, IP 封禁→403, 网络错误→503, 不支持→400, 订单状态未知→409 */
 impl HttpStatus for ExchangeError {
     fn http_status(&self) -> u16 {
         match self {
             Self::Authentication(_) => 401,
             Self::RateLimited(_) => 429,
-            Self::IpBanned(_) => 418,
-            Self::InvalidRequest(_) | Self::InsufficientFunds(_) | Self::InvalidOrderField(_) => {
-                400
-            }
+            Self::IpBanned(_) => 403,
+            Self::InvalidRequest(_) | Self::InsufficientFunds(_) | Self::InvalidOrderField(_)
+            | Self::NotSupported(_) => 400,
             Self::OrderNotFound(_) | Self::NoData(_) => 404,
-            Self::NotSupported(_) => 501,
             Self::Http { status, .. } => *status,
             Self::Network(_) => 503,
-            Self::OrderStatusUnknown(_) => 503,
+            Self::OrderStatusUnknown(_) => 409,
             Self::ExchangeError { .. } | Self::Internal(_) => 502,
         }
     }

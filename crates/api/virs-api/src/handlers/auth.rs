@@ -48,10 +48,7 @@ pub async fn login(
     };
 
     if !is_active {
-        return Err(VirsError::Http {
-            status: 403,
-            message: "Account is disabled".into(),
-        });
+        return Err(VirsError::forbidden("Account is disabled"));
     }
 
     let valid = virs_utils::verify_password(&req.password, &password_hash);

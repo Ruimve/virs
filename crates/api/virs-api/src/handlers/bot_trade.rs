@@ -440,7 +440,7 @@ pub async fn start_bot(
     tx.send(virs_type::BotCommand::StartBot { bot_id: id })
         .await
         .map_err(|_| VirsError::Http {
-            status: 500,
+            status: 503,
             message: "Failed to send command to trade engine".into(),
         })?;
     Ok(Json(ApiResponse::ok(serde_json::json!({"started": true}))))
@@ -490,7 +490,7 @@ pub async fn stop_bot(
     tx.send(virs_type::BotCommand::StopBot { bot_id: id })
         .await
         .map_err(|_| VirsError::Http {
-            status: 500,
+            status: 503,
             message: "Failed to send command to trade engine".into(),
         })?;
     Ok(Json(ApiResponse::ok(serde_json::json!({"stopped": true}))))
@@ -520,18 +520,18 @@ pub async fn delete_bot(
     })
     .await
     .map_err(|_| VirsError::Http {
-        status: 500,
+        status: 503,
         message: "Failed to send command to trade engine".into(),
     })?;
 
     match response_rx.await {
         Ok(Ok(())) => Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true})))),
         Ok(Err(msg)) => Err(VirsError::Http {
-            status: 500,
+            status: 503,
             message: format!("Engine failed to delete bot: {msg}"),
         }),
         Err(_) => Err(VirsError::Http {
-            status: 500,
+            status: 503,
             message: "Engine dropped response channel without responding".into(),
         }),
     }

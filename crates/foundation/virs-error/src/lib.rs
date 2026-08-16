@@ -64,6 +64,12 @@ impl VirsError {
             message: msg.into(),
         }
     }
+    pub fn forbidden(msg: impl Into<String>) -> Self {
+        Self::Http {
+            status: 403,
+            message: msg.into(),
+        }
+    }
     pub fn config(msg: impl Into<String>) -> Self {
         Self::Config(msg.into())
     }
@@ -103,8 +109,9 @@ impl Categorized for VirsError {
             #[cfg(feature = "sqlx")]
             Self::Database(_) => ErrorCategory::Database,
             Self::Http { status, .. } => match status {
-                /* 401→认证, 404→未找到, 409→冲突, 其余→参数校验 */
+                /* 401→认证, 403→禁止访问, 404→未找到, 409→冲突, 其余→参数校验 */
                 401 => ErrorCategory::Authentication,
+                403 => ErrorCategory::Authentication,
                 404 => ErrorCategory::NotFound,
                 409 => ErrorCategory::Conflict,
                 _ => ErrorCategory::Validation,
@@ -145,6 +152,7 @@ impl ErrorCode for VirsError {
             Self::Http { status, .. } => match status {
                 400 => "BAD_REQUEST",
                 401 => "UNAUTHORIZED",
+                403 => "FORBIDDEN",
                 404 => "NOT_FOUND",
                 409 => "CONFLICT",
                 _ => "HTTP_ERROR",
