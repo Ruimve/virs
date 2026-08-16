@@ -1,8 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { startBot, stopBot, deleteBot } from '@/service';
-import { useBot } from '@/pages/Trade/context/BotContext';
-import { Button } from '@/components/Button';
+import { useBot } from '@/context/BotContext';
 import { useLayout, type ActionItem, type NavItem } from '@/context/LayoutContext';
 
 const navIcons: Record<string, ReactNode> = {
@@ -74,43 +73,39 @@ const Bot = () => {
   const { bot } = useBot();
 
   useEffect(() => {
-    if (!bot?.id) return;
-
     const items: NavItem[] = [
       {
         key: 'bot',
         label: '机器人',
         icon: navIcons.bot,
-        onClick: () => navigate(`/trade/bot/${bot?.id}/bot`, { replace: true }),
+        onClick: () => navigate(`/trade/bot/${bot.id}/bot`, { replace: true }),
       },
       {
         key: 'trades',
         label: '交易记录',
         icon: navIcons.trades,
-        onClick: () => navigate(`/trade/bot/${bot?.id}/trades`, { replace: true }),
+        onClick: () => navigate(`/trade/bot/${bot.id}/trades`, { replace: true }),
       },
       {
         key: 'log',
         label: 'AI 决策日志',
         icon: navIcons.log,
-        onClick: () => navigate(`/trade/bot/${bot?.id}/log`, { replace: true }),
+        onClick: () => navigate(`/trade/bot/${bot.id}/log`, { replace: true }),
       },
       {
         key: 'system',
         label: '系统',
         icon: navIcons.system,
-        onClick: () => navigate(`/trade/bot/${bot?.id}/system`, { replace: true }),
+        onClick: () => navigate(`/trade/bot/${bot.id}/system`, { replace: true }),
       },
     ];
     setNavItems(items);
-  }, [bot?.id, navigate, setNavItems]);
+  }, [bot.id, navigate, setNavItems]);
 
   useEffect(() => {
-    if (!bot?.id || !bot?.status) return;
-
     const actions: ActionItem[] = [];
 
-    if (bot?.status === 'running') {
+    if (bot.status === 'running') {
       actions.push({
         key: 'stop',
         label: '暂停',
@@ -122,7 +117,7 @@ const Bot = () => {
       });
     }
 
-    if (bot?.status === 'stopped') {
+    if (bot.status === 'stopped') {
       actions.push({
         key: 'start',
         label: '运行',
@@ -147,23 +142,7 @@ const Bot = () => {
     });
 
     setActions(actions);
-  }, [bot?.id, bot?.status, navigate, setActions]);
-
-  if (!bot?.id) {
-    return (
-      <div className="h-screen bg-base flex flex-col items-center justify-center relative gap-4">
-        <div className="text-on-surface-tertiary text-sm">{'机器人不存在或加载失败'}</div>
-        <Button
-          variant="secondary"
-          size="small"
-          responsive={false}
-          onClick={() => navigate('/setup/bot-type', { replace: true })}
-        >
-          创建新机器人
-        </Button>
-      </div>
-    );
-  }
+  }, [bot.id, bot.status, navigate, setActions]);
 
   return <Outlet />;
 };

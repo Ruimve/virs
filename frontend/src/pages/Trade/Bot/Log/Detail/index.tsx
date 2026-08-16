@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getBotAnalysisLogs, type AnalysisLog } from '@/service';
-import { useBot } from '@/pages/Trade/context/BotContext';
+import { useBot } from '@/context/BotContext';
 import AILogDetail from '../../../components/LogList/LogDetail';
 
 const Detail = () => {
@@ -31,11 +31,10 @@ const Detail = () => {
   );
 
   useEffect(() => {
-    if (!bot?.id) return;
-    loadLog(bot?.id);
-  }, [bot?.id, loadLog]);
+    loadLog(bot.id);
+  }, [bot.id, loadLog]);
 
-  if (!bot?.id || !log) return null;
+  if (!log) return null;
 
   return (
     <>

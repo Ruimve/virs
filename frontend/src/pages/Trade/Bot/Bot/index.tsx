@@ -12,7 +12,7 @@ import {
 } from '@/service';
 import { useKlineWs, type KlineWsEvent } from '@/service/ws';
 import type { KlineChartHandle } from '@/components/Chart/KlineChart';
-import { useBot } from '@/pages/Trade/context/BotContext';
+import { useBot } from '@/context/BotContext';
 import { usePositionContext } from '../../context/PositionContext';
 import { StickyMarket } from '../../components/StickyMarket';
 import { UpperRegion } from './components/UpperRegion';
@@ -163,25 +163,24 @@ const Bot = () => {
   }, []);
 
   const loadKlineStable = useCallback(() => {
-    if (!bot?.exchange || !bot?.symbol || !klineTimeframe) return;
+    if (!klineTimeframe) return;
+
     loadKlines(bot.exchange, bot.symbol, klineTimeframe);
-  }, [bot?.exchange, bot?.symbol, klineTimeframe, loadKlines]);
+  }, [bot.exchange, bot.symbol, klineTimeframe, loadKlines]);
 
   useEffect(() => {
-    if (!bot?.id) return;
     loadLogs(bot.id);
     loadTrades(bot.id);
     loadStats(bot.id);
-  }, [bot?.id, loadLogs, loadTrades, loadStats]);
+  }, [bot.id, loadLogs, loadTrades, loadStats]);
 
   useEffect(() => {
-    if (!bot?.exchange || !bot?.symbol || !klineTimeframe) return;
+    if (!klineTimeframe) return;
     loadKlines(bot.exchange, bot.symbol, klineTimeframe);
-  }, [bot?.exchange, bot?.symbol, klineTimeframe, loadKlines]);
+  }, [bot.exchange, bot.symbol, klineTimeframe, loadKlines]);
 
   useKlineWs(
     (event: KlineWsEvent) => {
-      if (!bot) return;
       if (event.symbol !== bot.symbol || event.exchange !== bot.exchange) return;
       const c = event.candle;
       if (!c) return;

@@ -1,12 +1,9 @@
 import { createContext, useContext } from 'react';
-import { type Bot, type StrategyDetail } from '@/service';
+import { type BotDetail } from '@/service';
 
-export interface BotContextType {
-  bot: Bot | null;
-  strategy: StrategyDetail | null;
-}
+export type BotContextType = BotDetail | null;
 
-export const BotContext = createContext<BotContextType | null>(null);
+export const BotContext = createContext<BotContextType>(null);
 
 export const useBot = () => {
   const context = useContext(BotContext);

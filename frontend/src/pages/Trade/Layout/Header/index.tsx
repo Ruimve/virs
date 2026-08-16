@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { Brand } from '@/components/Logo';
 import { Theme } from '@/components/Theme';
 import { Flame, ShieldCheck } from '@/components/Icon';
-import { useBot } from '@/pages/Trade/context/BotContext';
+import { useBot } from '@/context/BotContext';
 import { useLayout } from '@/context/LayoutContext';
 import { usePaper } from '../../context/PaperContext';
 import { formatCompact, formatInterval } from '../../Bot/Bot/components/utils';
@@ -57,8 +57,8 @@ export const TradeHeader = memo(() => {
   const { enabled: paperEnabled } = usePaper();
   const { actions, changeDrawerOpen } = useLayout();
 
-  const sc = statusConfig(bot?.status || '');
-  const interval = bot ? formatInterval(bot.decide_interval_secs) : '';
+  const sc = statusConfig(bot.status);
+  const interval = formatInterval(bot.decide_interval_secs);
 
   return (
     <div className="relative z-10 flex items-center h-14 border-b border-line-subtle bg-base/80 backdrop-blur-xl">

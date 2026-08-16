@@ -10,9 +10,7 @@ const Guard = () => {
   return (
     <Suspense fallback={<Fallback label="正在检查账户..." startProgress={35} progress={60} />}>
       <AuthProvider promiseUser={promiseUser}>
-        <Suspense fallback={<Fallback label="正在加载页面..." startProgress={65} progress={90} />}>
-          <Outlet />
-        </Suspense>
+        <Outlet />
       </AuthProvider>
     </Suspense>
   );
