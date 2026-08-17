@@ -3,6 +3,9 @@ target/
 frontend/dist/
 frontend/node_modules/
 
+# pnpm store (local cache, not needed in image)
+.pnpm-store/
+
 # Environment files
 .env
 .env.local
@@ -34,6 +37,7 @@ LICENSE
 # Docker files (not needed inside image)
 Dockerfile
 docker-compose*.yml
+docker-start.sh
 .dockerignore
 
 # CI/CD & scripts

@@ -1,20 +1,26 @@
 # syntax=docker/dockerfile:1.7
 # ============================================================
 # Multi-stage Dockerfile for VIRS (Monorepo Architecture)
-# Builds frontend (SolidJS + Vite) and Rust backend (workspace)
+# Builds frontend (React 19 + Vite) and Rust backend (workspace)
 # Produces a minimal runtime image
 # ============================================================
 
 # ---- Stage 1: Build Frontend ----
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 
 WORKDIR /frontend
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+# corepack prepare 独立成层：pnpm 二进制仅在版本号变化时重新下载，
+# 不会因 package.json/pnpm-lock.yaml 变更而触发重复下载。
+RUN corepack enable && corepack prepare pnpm@11.22.0 --activate
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+# 对齐 npm 默认值：fetch-timeout 5min、fetch-retries 5 次
+RUN pnpm config set fetch-timeout 300000 && \
+    pnpm config set fetch-retries 5 && \
+    pnpm install --frozen-lockfile
 COPY frontend/ ./
 # 代码质量检查：ESLint（错误阻断）+ Prettier 格式检查（不一致阻断）
-RUN npm run lint && npm run format:check
-RUN npm run build
+RUN pnpm run lint && pnpm run format:check
+RUN pnpm run build
 
 # ---- Stage 2: Cargo Chef Planner ----
 # Generates recipe.json from workspace Cargo.toml files.
