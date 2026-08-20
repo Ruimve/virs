@@ -48,7 +48,7 @@ services:
       HOST: 0.0.0.0
       PORT: '8080'
 
-      RUST_LOG: ${RUST_LOG:-virs_app=info,virs_trading_bot=info,virs_position=info,virs_market=info,virs_api=info}
+      RUST_LOG: ${RUST_LOG:-server=info,virs_trading_bot=info,virs_position=info,virs_market=info,virs_api=info}
       FRONTEND_DIR: /app/apps/web/dist
 
       STRATEGIES_DIR: /app/strategies

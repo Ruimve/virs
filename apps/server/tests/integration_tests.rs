@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use uuid::Uuid;
-use virs_app::bot_to_config as bot_to_config;
-use virs_app::resolve_llm_provider;
-use virs_app::candle_to_kline;
-use virs_app::convert_pe_event;
+use server::bot_to_config as bot_to_config;
+use server::resolve_llm_provider;
+use server::candle_to_kline;
+use server::convert_pe_event;
 use virs_type::Candle;
 use virs_type::Bot;
 use virs_type::OrderEvent;

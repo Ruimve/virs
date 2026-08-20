@@ -6,7 +6,7 @@ use virs_api::EngineManager;
 use virs_error::{Context, VirsResult};
 
 use virs_api::{build_router, AppState};
-use virs_app::AppEngineManager;
+use server::AppEngineManager;
 use virs_config::load_config;
 use virs_exchange::Exchanges;
 use virs_market::{
@@ -31,7 +31,7 @@ async fn main() -> VirsResult<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                "virs_app=info,virs_trading_bot=info,virs_position=info,virs_market=info,virs_api=info"
+                "server=info,virs_trading_bot=info,virs_position=info,virs_market=info,virs_api=info"
                     .into()
             }),
         )

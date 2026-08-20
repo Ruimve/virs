@@ -87,7 +87,7 @@ RUN find /build/crates /build/apps/server -name "*.rs" -exec touch {} +
 # so we copy the final binary out to /build/virs for the runtime stage to COPY.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/build/target,sharing=locked \
-    cargo build --release -p virs-app && \
+    cargo build --release -p server && \
     cp /build/target/release/virs /build/virs
 
 # ---- Stage 4: Runtime (Debian Slim) ----

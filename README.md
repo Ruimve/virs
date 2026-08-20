@@ -109,7 +109,7 @@ open http://localhost:8080
 # 后端
 cp .env.example .env          # 配置数据库连接和密钥
 cargo build                   # 编译
-cargo run -p virs-app         # 启动后端 :8080
+cargo run -p server           # 启动后端 :8080
 
 # 前端
 pnpm install                  # 安装依赖（根目录执行）
