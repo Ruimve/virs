@@ -7,10 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "eslint": "eslint .",
+    "eslint:fix": "eslint . --fix",
+    "format": "prettier --check .",
+    "format:write": "prettier --write ."
   },
   "dependencies": {
     "lightweight-charts": "^5.2.0",

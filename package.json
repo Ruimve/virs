@@ -7,10 +7,10 @@
   "scripts": {
     "dev": "pnpm --filter @virs/web dev",
     "build": "pnpm --filter @virs/web build",
-    "lint": "pnpm --filter @virs/web lint",
-    "lint:fix": "pnpm --filter @virs/web lint:fix",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "eslint": "pnpm --filter @virs/web eslint",
+    "eslint:fix": "pnpm --filter @virs/web eslint:fix",
+    "prettier": "prettier --check .",
+    "prettier:write": "prettier --write ."
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",
