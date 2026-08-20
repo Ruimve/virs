@@ -1,7 +1,8 @@
 # Build artifacts
 target/
-frontend/dist/
-frontend/node_modules/
+apps/web/dist/
+node_modules/
+**/node_modules/
 
 # pnpm store (local cache, not needed in image)
 .pnpm-store/

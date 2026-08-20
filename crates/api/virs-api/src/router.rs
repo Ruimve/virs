@@ -169,7 +169,7 @@ pub fn build_router(state: AppState) -> Router {
 /* SPA fallback：未匹配API路由的请求返回前端静态文件，支持前端单页应用的路由 */
 async fn spa_fallback(uri: Uri) -> Response {
     let frontend_dir =
-        std::env::var("FRONTEND_DIR").unwrap_or_else(|_| "./frontend/dist".to_string());
+        std::env::var("FRONTEND_DIR").unwrap_or_else(|_| "./apps/web/dist".to_string());
 
     let path = uri.path().trim_start_matches('/');
 

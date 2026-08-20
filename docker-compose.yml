@@ -1,7 +1,4 @@
-
-
 services:
-
   postgres:
     image: postgres:16-alpine
     container_name: virs-postgres
@@ -11,11 +8,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-virs123}
       POSTGRES_DB: ${POSTGRES_DB:-virs}
     ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-virs}"]
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-virs}']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -23,7 +20,6 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-
 
     cap_add:
       - CHOWN
@@ -33,11 +29,10 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
     networks:
       - virs-net
-
 
   backend:
     build:
@@ -50,13 +45,11 @@ services:
         required: false
 
     environment:
-
       HOST: 0.0.0.0
-      PORT: "8080"
-
+      PORT: '8080'
 
       RUST_LOG: ${RUST_LOG:-virs_app=info,virs_trading_bot=info,virs_position=info,virs_market=info,virs_api=info}
-      FRONTEND_DIR: /app/frontend/dist
+      FRONTEND_DIR: /app/apps/web/dist
 
       STRATEGIES_DIR: /app/strategies
 
@@ -74,14 +67,13 @@ services:
 
       PROXY_URL: ${PROXY_URL:-}
     ports:
-      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+      - '127.0.0.1:${BACKEND_PORT:-8080}:8080'
     depends_on:
       postgres:
         condition: service_healthy
 
-
     healthcheck:
-      test: ["NONE"]
+      test: ['NONE']
       start_period: 30s
     security_opt:
       - no-new-privileges:true
@@ -90,13 +82,13 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
     networks:
       - virs-net
 
   cloudflared:
-    profiles: ["tunnel"]
+    profiles: ['tunnel']
     image: cloudflare/cloudflared:latest
     container_name: virs-cloudflared
     restart: unless-stopped
@@ -110,8 +102,8 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
     networks:
       - virs-net
 

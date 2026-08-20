@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 # ============================================================
 # Multi-stage Dockerfile for VIRS (Monorepo Architecture)
 # Builds frontend (React 19 + Vite) and Rust backend (workspace)
@@ -8,19 +7,30 @@
 # ---- Stage 1: Build Frontend ----
 FROM node:22-alpine AS frontend-builder
 
-WORKDIR /frontend
+WORKDIR /app
 # corepack prepare 独立成层：pnpm 二进制仅在版本号变化时重新下载，
 # 不会因 package.json/pnpm-lock.yaml 变更而触发重复下载。
 RUN corepack enable && corepack prepare pnpm@11.22.0 --activate
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
+
+# Copy pnpm workspace root files (package.json, pnpm-workspace.yaml, pnpm-lock.yaml)
+# and shared configs (eslint, prettier) for lint/format checks
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY .prettierrc.json .prettierignore eslint.config.js ./
+
+# Copy web app package.json (for pnpm to resolve workspace deps)
+COPY apps/web/package.json apps/web/
+
 # 对齐 npm 默认值：fetch-timeout 5min、fetch-retries 5 次
 RUN pnpm config set fetch-timeout 300000 && \
     pnpm config set fetch-retries 5 && \
     pnpm install --frozen-lockfile
-COPY frontend/ ./
+
+# Copy web app source
+COPY apps/web/ apps/web/
+
 # 代码质量检查：ESLint（错误阻断）+ Prettier 格式检查（不一致阻断）
-RUN pnpm run lint && pnpm run format:check
-RUN pnpm run build
+RUN pnpm --filter @virs/web run lint && pnpm --filter @virs/web run format:check
+RUN pnpm --filter @virs/web run build
 
 # ---- Stage 2: Cargo Chef Planner ----
 # Generates recipe.json from workspace Cargo.toml files.
@@ -66,11 +76,11 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # Copy real source code (overwrites chef's dummy stubs)
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
-COPY app/ app/
+COPY apps/server/ apps/server/
 
 # Touch our own crate sources to ensure cargo recompiles them
 # (COPY may preserve older timestamps from the host, causing cargo to skip recompilation)
-RUN find /build/crates /build/app -name "*.rs" -exec touch {} +
+RUN find /build/crates /build/apps/server -name "*.rs" -exec touch {} +
 
 # Build the real binary (incremental: only recompiles changed crates)
 # Note: cache mount contents are NOT persisted into the image layer,
@@ -80,18 +90,24 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release -p virs-app && \
     cp /build/target/release/virs /build/virs
 
-# ---- Stage 4: Runtime (Distroless) ----
-# gcr.io/distroless/cc-debian12:nonroot provides:
+# ---- Stage 4: Runtime (Debian Slim) ----
+# debian:bookworm-slim provides:
 #   - glibc + libgcc (C runtime for ring/assembly)
-#   - CA certificates (for TLS verification)
-#   - nonroot user (UID 65532, no shell, no package manager)
+#   - CA certificates (installed below)
+#   - nonroot user (created below, UID 65532)
 # Verified safe: no openssl-sys in Cargo.lock (rustls only),
 # no libsqlite3 needed (postgres feature only), talib-rs is pure Rust.
-FROM gcr.io/distroless/cc-debian12:nonroot
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r -g 65532 nonroot \
+    && useradd -r -u 65532 -g 65532 -s /usr/sbin/nologin nonroot
 
 WORKDIR /app
 
-# Copy binary from builder (chown to distroless nonroot UID 65532)
+# Copy binary from builder (chown to nonroot UID 65532)
 COPY --chown=65532:65532 --from=backend-builder /build/virs /app/virs
 
 # Copy migrations
@@ -101,17 +117,16 @@ COPY --chown=65532:65532 migrations/ /app/migrations/
 COPY --chown=65532:65532 strategies/ /app/strategies/
 
 # Copy frontend static files
-COPY --chown=65532:65532 --from=frontend-builder /frontend/dist /app/frontend/dist
+COPY --chown=65532:65532 --from=frontend-builder /app/apps/web/dist /app/apps/web/dist
 
-# distroless:nonroot already runs as UID 65532 — no USER directive needed.
-# No HEALTHCHECK in Dockerfile: distroless has no shell/curl.
+USER 65532:65532
 # Container health is monitored via docker-compose.yml configuration.
 
 # Expose port
 EXPOSE 8080
 
 # Environment defaults (overridden by docker-compose / .env)
-ENV FRONTEND_DIR=/app/frontend/dist
+ENV FRONTEND_DIR=/app/apps/web/dist
 
 # Entry point
 ENTRYPOINT ["/app/virs"]

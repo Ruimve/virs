@@ -23,7 +23,7 @@ members = [
 
     "crates/api/virs-api",
 
-    "app/virs-app",
+    "apps/server",
 ]
 
 [workspace.dependencies]

@@ -6,7 +6,7 @@
 
 ## 单元测试
 
-### `app/virs-app/src/adapters/chat_store_tests.rs`
+### `apps/server/src/adapters/chat_store_tests.rs`
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
@@ -15,7 +15,7 @@
 | 3 | `a1_4_bot_to_config_stats` | ChatBot 转配置统计字段 | total_pnl=123.45, total_trades=10, win_trades=7, loss_trades=3 | config.total_pnl=123.45, total_trades=10, win_trades=7, loss_trades=3 |
 | 4 | `a1_5_bot_to_config_id_preserved` | ChatBot 转配置保留 ID | bot.id 和 bot.user_id | config.id 与 bot.id 相等, config.user_id 与 bot.user_id 相等 |
 
-### `app/virs-app/src/adapters/order_executor_tests.rs`
+### `apps/server/src/adapters/order_executor_tests.rs`
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
@@ -26,7 +26,7 @@
 | 5 | `o1_5_convert_risk_alert` | 转换风险告警事件 | EngineEvent::RiskAlert, level=critical, message="Max drawdown exceeded" | 返回 Some, OrderEvent::RiskAlert, level=critical, message="Max drawdown exceeded" |
 | 6 | `o1_6_convert_position_opened_none` | 转换仓位已开事件返回 None | EngineEvent::PositionOpened | 返回 None |
 
-### `app/virs-app/src/adapters/market_data_tests.rs`
+### `apps/server/src/adapters/market_data_tests.rs`
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
@@ -35,7 +35,7 @@
 | 3 | `m1_3_candle_to_kline_zero_values` | Candle 零值转 Kline | 全零字段 Candle | k.open/high/low/close=0.0, trades=0 |
 | 4 | `m1_4_candle_to_kline_metadata_empty` | Candle 转 Kline 元数据为空 | 正常 Candle | k.symbol/exchange/interval 均为空字符串 |
 
-### `app/virs-app/src/adapters/llm_resolver_tests.rs`
+### `apps/server/src/adapters/llm_resolver_tests.rs`
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|
@@ -47,7 +47,7 @@
 
 ## 集成测试
 
-### `app/virs-app/tests/integration_tests.rs`
+### `apps/server/tests/integration_tests.rs`
 
 | 编号 | 测试函数 | 场景 | 输入数据 | 预期结果 |
 |------|---------|------|---------|---------|

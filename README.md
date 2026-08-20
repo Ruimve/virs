@@ -29,7 +29,7 @@ Rust 驱动的高性能交易引擎，集成 LLM 决策、实时行情、仓位�
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                     app/virs-app (L5)                    │
+│                     apps/server (L5)                      │
 │              Trait 装配 · 引擎管理 · 优雅关闭             │
 ├─────────────────────────────────────────────────────────┤
 │                    crates/api/virs-api (L4)              │
@@ -112,9 +112,8 @@ cargo build                   # 编译
 cargo run -p virs-app         # 启动后端 :8080
 
 # 前端
-cd frontend
-npm install
-npm run dev                   # 启动开发服务器 :5173
+pnpm install                  # 安装依赖（根目录执行）
+pnpm dev                      # 启动开发服务器 :5173
 ```
 
 ## 项目结构
@@ -143,9 +142,10 @@ virs/
 │   │   └── virs-tactical-bot/#   战术机器人（策略评估/LLM优化）
 │   └── api/
 │       └── virs-api/         # L4 — REST API + WebSocket
-├── app/
-│   └── virs-app/            # L5 — 应用入口（trait 装配/引擎管理）
-├── frontend/                 # React 前端
+├── apps/
+│   ├── web/                  # 前端应用（React 19 + Vite）
+│   └── server/               # L5 — 应用入口（trait 装配/引擎管理）
+├── packages/                 # 前端公共包（预留）
 ├── strategies/               # 策略提示词模板
 ├── Dockerfile                # 多阶段构建（前端+后端→distroless）
 ├── docker-compose.yml        # PostgreSQL + Backend
@@ -187,7 +187,7 @@ cargo test
 cargo clippy --lib
 
 # 前端类型检查
-cd frontend && npx tsc --noEmit
+pnpm --filter @virs/web exec tsc --noEmit
 ```
 
 | 指标 | 数值 |
