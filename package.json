@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "pnpm --filter @virs/web dev",
     "build": "pnpm --filter @virs/web build",
-    "eslint": "pnpm --filter @virs/web eslint",
-    "eslint:fix": "pnpm --filter @virs/web eslint:fix",
+    "eslint": "eslint .",
+    "eslint:fix": "eslint . --fix",
     "prettier": "prettier --check .",
     "prettier:write": "prettier --write ."
   },

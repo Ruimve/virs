@@ -6,11 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview",
-    "eslint": "eslint .",
-    "eslint:fix": "eslint . --fix",
-    "format": "prettier --check .",
-    "format:write": "prettier --write ."
+    "preview": "vite preview"
   },
   "dependencies": {
     "lightweight-charts": "^5.2.0",

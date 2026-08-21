@@ -29,7 +29,7 @@ RUN pnpm config set fetch-timeout 300000 && \
 COPY apps/web/ apps/web/
 
 # 代码质量检查：ESLint（错误阻断）+ Prettier 格式检查（不一致阻断）
-RUN pnpm --filter @virs/web run lint && pnpm --filter @virs/web run format:check
+RUN pnpm run eslint && pnpm  run prettier
 RUN pnpm --filter @virs/web run build
 
 # ---- Stage 2: Cargo Chef Planner ----
@@ -110,8 +110,7 @@ WORKDIR /app
 # Copy binary from builder (chown to nonroot UID 65532)
 COPY --chown=65532:65532 --from=backend-builder /build/virs /app/virs
 
-# Copy migrations
-COPY --chown=65532:65532 migrations/ /app/migrations/
+# Migrations are embedded at compile time via include_str! in virs-database — no runtime file needed
 
 # Copy strategy prompt templates (PromptLoader reads from STRATEGIES_DIR)
 COPY --chown=65532:65532 strategies/ /app/strategies/
