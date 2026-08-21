@@ -4,10 +4,9 @@ use sqlx::PgPool;
 use tracing::warn;
 use uuid::Uuid;
 use virs_error::VirsResult;
+use virs_type::{Bot, BotConfig, BotStore};
 
-use virs_type::Bot;
-use virs_type::BotConfig;
-use virs_type::*;
+use crate::models::BotTradeRow;
 
 pub struct PgBotStore {
     db: PgPool,
@@ -16,6 +15,11 @@ pub struct PgBotStore {
 impl PgBotStore {
     pub fn new(db: PgPool) -> Self {
         Self { db }
+    }
+
+    /* BotStore trait方法用到的内部连接池引用 */
+    pub fn pool(&self) -> &PgPool {
+        &self.db
     }
 }
 
@@ -179,7 +183,6 @@ impl BotStore for PgBotStore {
         Ok(())
     }
 
-    /* 平仓交易记录：先标记开仓记录为closed，再插入关联的平仓记录（通过paired_client_order_id关联） */
     async fn close_trade(
         &self,
         open_client_order_id: &str,
@@ -343,7 +346,6 @@ impl BotStore for PgBotStore {
         Ok(())
     }
 
-    /* 加载连续亏损次数：从最近20笔平仓记录中，从新到旧统计连续亏损笔数，遇到盈利即停止 */
     async fn load_consecutive_losses(&self, bot_id: Uuid) -> VirsResult<i32> {
         let pnl_rows: Vec<(f64,)> = sqlx::query_as(
             r#"SELECT close_ord.realized_pnl::float AS pnl
@@ -374,4 +376,304 @@ impl BotStore for PgBotStore {
             .await?;
         Ok(())
     }
+}
+
+/* ========== engine_manager.rs 使用的查询 ========== */
+
+/* 查询bots总数：用于判断是否需要执行重启恢复 */
+pub async fn count_all_bots(pool: &PgPool) -> VirsResult<i64> {
+    let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_bots"#)
+        .fetch_one(pool)
+        .await?;
+    Ok(count)
+}
+
+/* 查询所有running bot的exchange和symbol：用于恢复K线/订单簿订阅 */
+pub async fn get_running_bot_symbols(pool: &PgPool) -> VirsResult<Vec<(String, String)>> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        r#"SELECT exchange, symbol FROM qd_bots WHERE status = 'running'"#,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/* 查询running bot的paper_mode去重列表：用于确定引擎模式 */
+pub async fn get_running_paper_modes(pool: &PgPool) -> VirsResult<Vec<bool>> {
+    let modes: Vec<bool> = sqlx::query_scalar(
+        r#"SELECT DISTINCT paper_mode FROM qd_bots WHERE status = 'running'"#,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(modes)
+}
+
+/* 恢复失败时将所有running bot标记为error状态 */
+pub async fn mark_running_bots_as_error(pool: &PgPool) -> VirsResult<()> {
+    sqlx::query(r#"UPDATE qd_bots SET status = 'error', stopped_at = NOW() WHERE status = 'running'"#)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/* ========== bot_trade.rs handler 使用的查询 ========== */
+
+/* 查询指定用户的bot数量：用于限制每用户只能创建一个bot */
+pub async fn count_bots_by_user(pool: &PgPool, user_id: Uuid) -> VirsResult<i64> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM qd_bots WHERE user_id = $1")
+        .bind(user_id)
+        .fetch_one(pool)
+        .await?;
+    Ok(count)
+}
+
+/* 插入新bot：状态默认为stopped，创建时间和更新时间由数据库填充 */
+pub async fn insert_bot(
+    pool: &PgPool,
+    id: Uuid,
+    user_id: Uuid,
+    name: &str,
+    symbol: &str,
+    exchange: &str,
+    leverage: i32,
+    max_position_pct: f64,
+    decide_interval_secs: i32,
+    paper_mode: bool,
+    initial_capital: f64,
+    bot_type: &str,
+    strategy_file: &str,
+    auto_optimize_enabled: bool,
+) -> VirsResult<()> {
+    sqlx::query(
+        r#"INSERT INTO qd_bots (id, user_id, name, symbol, exchange, leverage, max_position_pct, decide_interval_secs, paper_mode, initial_capital, status, bot_type, strategy_file, auto_optimize_enabled, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'stopped', $11, $12, $13, NOW(), NOW())"#,
+    )
+    .bind(id)
+    .bind(user_id)
+    .bind(name)
+    .bind(symbol)
+    .bind(exchange)
+    .bind(leverage)
+    .bind(max_position_pct)
+    .bind(decide_interval_secs)
+    .bind(paper_mode)
+    .bind(initial_capital)
+    .bind(bot_type)
+    .bind(strategy_file)
+    .bind(auto_optimize_enabled)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/* 插入策略选择日志：记录LLM自动选择策略的结果 */
+pub async fn insert_strategy_selection_log(
+    pool: &PgPool,
+    bot_id: Uuid,
+    system_prompt: &str,
+    user_prompt: &str,
+    result: &serde_json::Value,
+    strategy_file: &str,
+) -> VirsResult<()> {
+    sqlx::query(
+        r#"INSERT INTO qd_bot_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, strategy_file, completed_at)
+           VALUES ($1, 'strategy_selection', $2, $3, 'completed', $4, $5, NOW())"#,
+    )
+    .bind(bot_id)
+    .bind(system_prompt)
+    .bind(user_prompt)
+    .bind(result)
+    .bind(strategy_file)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/* 查询指定用户的所有bot：按创建时间倒序排列 */
+pub async fn list_bots_by_user(pool: &PgPool, user_id: Uuid) -> VirsResult<Vec<Bot>> {
+    let bots: Vec<Bot> =
+        sqlx::query_as("SELECT * FROM qd_bots WHERE user_id = $1 ORDER BY created_at DESC")
+            .bind(user_id)
+            .fetch_all(pool)
+            .await?;
+    Ok(bots)
+}
+
+/* 按ID和user_id查询单个bot：用于get_bot和update_bot等需要所有权验证的场景 */
+pub async fn get_bot_by_id(
+    pool: &PgPool,
+    id: Uuid,
+    user_id: Uuid,
+) -> VirsResult<Option<Bot>> {
+    let bot: Option<Bot> =
+        sqlx::query_as("SELECT * FROM qd_bots WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(bot)
+}
+
+/* 更新bot的strategy_file：仅停止状态下允许更新 */
+pub async fn update_bot_strategy(
+    pool: &PgPool,
+    id: Uuid,
+    new_strategy_file: &str,
+    user_id: Uuid,
+) -> VirsResult<()> {
+    sqlx::query("UPDATE qd_bots SET strategy_file = $2, updated_at = NOW() WHERE id = $1 AND user_id = $3")
+        .bind(id)
+        .bind(new_strategy_file)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/* 验证bot所有权：检查指定bot是否属于指定用户 */
+pub async fn verify_bot_ownership(
+    pool: &PgPool,
+    bot_id: Uuid,
+    user_id: Uuid,
+) -> VirsResult<bool> {
+    let exists: Option<bool> =
+        sqlx::query_scalar("SELECT true FROM qd_bots WHERE id = $1 AND user_id = $2")
+            .bind(bot_id)
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(exists.is_some())
+}
+
+/* 统计bot的开仓交易数量：用于交易列表分页 */
+pub async fn count_bot_trades(
+    pool: &PgPool,
+    bot_id: Uuid,
+    user_id: Uuid,
+) -> VirsResult<i64> {
+    let total: i64 = sqlx::query_scalar::<_, i64>(
+        r#"SELECT COUNT(*) FROM pe_bot_order_context WHERE bot_id = $1 AND user_id = $2 AND order_role = 'open'"#,
+    )
+    .bind(bot_id)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(total)
+}
+
+/* 查询bot交易详情列表：关联开仓和平仓订单上下文，支持分页 */
+pub async fn query_bot_trades(
+    pool: &PgPool,
+    bot_id: Uuid,
+    user_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> VirsResult<Vec<BotTradeRow>> {
+    let trades: Vec<BotTradeRow> = sqlx::query_as(
+        r#"SELECT
+             open_ctx.client_order_id AS open_client_order_id,
+             close_ctx.client_order_id AS close_client_order_id,
+             open_ctx.bot_id,
+             open_ctx.symbol,
+             open_ctx.exchange,
+             LOWER(open_ord.side) AS open_side,
+             open_ord.avg_fill_price::float AS open_price,
+             open_ord.filled_qty::float AS open_quantity,
+             open_ord.commission::float AS open_fee,
+             open_ctx.created_at AS opened_at,
+             CASE WHEN close_ord.side IS NOT NULL THEN LOWER(close_ord.side) END AS close_side,
+             close_ord.avg_fill_price::float AS close_price,
+             close_ord.filled_qty::float AS close_quantity,
+             COALESCE(close_ord.commission::float, 0) AS close_fee,
+             close_ctx.created_at AS closed_at,
+             COALESCE(close_ord.realized_pnl::float, 0) AS pnl,
+             open_ctx.stop_loss,
+             open_ctx.take_profit,
+             close_ctx.close_reason,
+             open_ctx.status
+           FROM pe_bot_order_context open_ctx
+           JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+           LEFT JOIN pe_bot_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
+           LEFT JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+           WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.order_role = 'open'
+           ORDER BY open_ctx.created_at DESC LIMIT $3 OFFSET $4"#,
+    )
+    .bind(bot_id)
+    .bind(user_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+    Ok(trades)
+}
+
+/* 查询bot已平仓交易的统计数据：用于计算胜率、盈亏比、最大回撤等指标 */
+pub async fn get_bot_trade_stats(
+    pool: &PgPool,
+    bot_id: Uuid,
+    user_id: Uuid,
+) -> VirsResult<Vec<(f64, f64, f64, f64, f64, DateTime<Utc>, DateTime<Utc>)>> {
+    let trades: Vec<(f64, f64, f64, f64, f64, DateTime<Utc>, DateTime<Utc>)> = sqlx::query_as(
+        r#"SELECT
+             open_ord.avg_fill_price::float AS open_price,
+             open_ord.filled_qty::float AS open_quantity,
+             open_ord.commission::float AS open_fee,
+             COALESCE(close_ord.commission::float, 0) AS close_fee,
+             COALESCE(close_ord.realized_pnl::float, 0) AS pnl,
+             open_ctx.created_at AS opened_at,
+             close_ctx.created_at AS closed_at
+           FROM pe_bot_order_context open_ctx
+           JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
+           JOIN pe_bot_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id AND close_ctx.order_role = 'close'
+           JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
+           WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.status = 'closed'
+           ORDER BY close_ctx.created_at ASC"#,
+    )
+    .bind(bot_id)
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(trades)
+}
+
+/* 统计bot的分析日志数量：用于日志列表分页 */
+pub async fn count_analysis_logs(
+    pool: &PgPool,
+    bot_id: Uuid,
+    user_id: Uuid,
+) -> VirsResult<i64> {
+    let total: i64 = sqlx::query_scalar::<_, i64>(
+        r#"SELECT COUNT(*) FROM qd_bot_analysis_logs l
+           JOIN qd_bots b ON l.bot_id = b.id
+           WHERE l.bot_id = $1 AND b.user_id = $2"#,
+    )
+    .bind(bot_id)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(total)
+}
+
+/* 查询bot的分析日志列表：关联qd_bots验证用户所有权，支持分页 */
+pub async fn query_analysis_logs(
+    pool: &PgPool,
+    bot_id: Uuid,
+    user_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> VirsResult<Vec<(Uuid, Uuid, String, String, String, serde_json::Value, Option<String>, String, String, DateTime<Utc>, Option<String>, Option<String>, Option<String>, Option<DateTime<Utc>>)>> {
+    let logs: Vec<(Uuid, Uuid, String, String, String, serde_json::Value, Option<String>, String, String, DateTime<Utc>, Option<String>, Option<String>, Option<String>, Option<DateTime<Utc>>)> = sqlx::query_as(
+        r#"SELECT l.id, l.bot_id, l.analysis_type, l.status, l.system_prompt, l.result, l.error, l.user_prompt, l.llm_model, l.created_at, l.strategy_file, l.execution_status, l.intercept_reason, l.completed_at
+           FROM qd_bot_analysis_logs l
+           JOIN qd_bots b ON l.bot_id = b.id
+           WHERE l.bot_id = $1 AND b.user_id = $2
+           ORDER BY l.created_at DESC LIMIT $3 OFFSET $4"#,
+    )
+    .bind(bot_id)
+    .bind(user_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+    Ok(logs)
 }

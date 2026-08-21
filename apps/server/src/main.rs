@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use tracing::{error, info};
-use uuid::Uuid;
 use virs_api::EngineManager;
 use virs_error::{Context, VirsResult};
 
 use virs_api::{build_router, AppState};
 use server::AppEngineManager;
 use virs_config::load_config;
+use virs_database::{create_pool, ensure_admin, run_migrations};
 use virs_exchange::Exchanges;
 use virs_market::{
     create_exchange_kline_source, create_kline_engine, create_orderbook_engine,
@@ -39,60 +39,25 @@ async fn main() -> VirsResult<()> {
 
     info!(version = env!("CARGO_PKG_VERSION"), "VIRS starting up");
 
-    let db_pool = sqlx::postgres::PgPoolOptions::new()
-        .min_connections(config.database.pool_min)
-        .max_connections(config.database.pool_max)
-        .acquire_timeout(std::time::Duration::from_secs(
-            config.database.acquire_timeout_secs,
-        ))
-        .connect(&config.database.url)
-        .await?;
+    let db_pool = create_pool(
+        &config.database.url,
+        config.database.pool_min,
+        config.database.pool_max,
+        std::time::Duration::from_secs(config.database.acquire_timeout_secs),
+    )
+    .await?;
     info!("Database connected");
 
-    let init_sql = std::fs::read_to_string("migrations/init.sql")
-        .or_else(|_| {
-            let exe_dir = std::env::current_exe()?;
-            let base = exe_dir.parent().ok_or_else(|| std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "Cannot determine executable directory",
-            ))?;
-            std::fs::read_to_string(base.join("migrations/init.sql"))
-        })
-        .or_else(|_| std::fs::read_to_string("/app/migrations/init.sql"))
-        .context("Failed to read migrations/init.sql: ensure the migrations directory is accessible from the working directory, next to the executable, or at /app/migrations/")?;
-    sqlx::raw_sql(&init_sql).execute(&db_pool).await?;
+    run_migrations(&db_pool).await?;
     info!("Database migrations applied");
 
-    let admin_exists: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM qd_users WHERE username = $1)")
-            .bind(&config.admin.username)
-            .fetch_one(&db_pool)
-            .await?;
-
-    let admin_id: Uuid = if !admin_exists {
-        let password_hash = virs_utils::hash_password(&config.admin.password)?;
-        let row: (Uuid,) = sqlx::query_as(
-            "INSERT INTO qd_users (username, password_hash, role, is_active) VALUES ($1, $2, 'admin', true) RETURNING id",
-        )
-        .bind(&config.admin.username)
-        .bind(password_hash)
-        .fetch_one(&db_pool)
-        .await?;
-        info!(
-            username = %config.admin.username,
-            admin_id = %row.0,
-            "Admin user created"
-        );
-        row.0
-    } else {
-        let row: (Uuid,) = sqlx::query_as(
-            "SELECT id FROM qd_users WHERE username = $1 AND role = 'admin' LIMIT 1",
-        )
-        .bind(&config.admin.username)
-        .fetch_one(&db_pool)
-        .await?;
-        row.0
-    };
+    let password_hash = virs_utils::hash_password(&config.admin.password)?;
+    let admin_id = ensure_admin(&db_pool, &config.admin.username, &password_hash).await?;
+    info!(
+        username = %config.admin.username,
+        admin_id = %admin_id,
+        "Admin user ensured"
+    );
     config.admin.id = Some(admin_id);
 
     let exchange_registry = Arc::new(Exchanges::new());

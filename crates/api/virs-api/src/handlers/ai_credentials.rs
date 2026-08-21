@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use virs_error::VirsError;
+use virs_database as db;
 
 use crate::handlers::ai::{resolve_provider_base_url, resolve_provider_model};
 use crate::handlers::response::{extract_user_id, ApiResponse};
@@ -57,12 +58,7 @@ pub async fn list_credentials(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let creds = sqlx::query_as::<_, (uuid::Uuid, String, Option<String>, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT id, provider, label, is_default, created_at, updated_at FROM qd_ai_credentials WHERE user_id = $1 ORDER BY created_at DESC"#,
-    )
-    .bind(user_id)
-    .fetch_all(&state.db_pool)
-    .await?;
+    let creds = db::list_ai_credentials(&state.db_pool, user_id).await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "items": creds.iter().map(|(id, provider, label, is_default, created_at, updated_at)| {
@@ -103,20 +99,16 @@ pub async fn save_credential(
     let encrypted_key =
         virs_utils::encrypt_with_key(api_key, &state.llm_key)?;
 
-    sqlx::query(
-        r#"INSERT INTO qd_ai_credentials (id, user_id, provider, encrypted_api_key, model, label, is_default, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-           ON CONFLICT (user_id, provider)
-           DO UPDATE SET encrypted_api_key = $4, model = $5, label = $6, is_default = $7, updated_at = NOW()"#,
+    db::save_ai_credential(
+        &state.db_pool,
+        id,
+        user_id,
+        provider,
+        &encrypted_key,
+        model,
+        label,
+        is_default,
     )
-    .bind(id)
-    .bind(user_id)
-    .bind(provider)
-    .bind(&encrypted_key)
-    .bind(model)
-    .bind(label)
-    .bind(is_default)
-    .execute(&state.db_pool)
     .await?;
 
     Ok(Json(ApiResponse::ok(
@@ -131,11 +123,7 @@ pub async fn delete_credential(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    sqlx::query(r#"DELETE FROM qd_ai_credentials WHERE id = $1 AND user_id = $2"#)
-        .bind(id)
-        .bind(user_id)
-        .execute(&state.db_pool)
-        .await?;
+    db::delete_ai_credential(&state.db_pool, id, user_id).await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
@@ -148,12 +136,7 @@ pub async fn test_credential(
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
 
-    let row: Option<(String, String)> = sqlx::query_as(
-        r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials WHERE user_id = $1 AND is_default = true ORDER BY created_at DESC LIMIT 1"#,
-    )
-    .bind(user_id)
-    .fetch_optional(&state.db_pool)
-    .await?;
+    let row = db::get_default_ai_credential(&state.db_pool, user_id).await?;
 
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
@@ -212,12 +195,7 @@ pub async fn fetch_models(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let row: Option<(String, String)> = sqlx::query_as(
-        r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials WHERE user_id = $1 AND is_default = true ORDER BY created_at DESC LIMIT 1"#,
-    )
-    .bind(user_id)
-    .fetch_optional(&state.db_pool)
-    .await?;
+    let row = db::get_default_ai_credential(&state.db_pool, user_id).await?;
 
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {
@@ -285,12 +263,7 @@ pub async fn fetch_balance(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let row: Option<(String, String)> = sqlx::query_as(
-        r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials WHERE user_id = $1 AND is_default = true ORDER BY created_at DESC LIMIT 1"#,
-    )
-    .bind(user_id)
-    .fetch_optional(&state.db_pool)
-    .await?;
+    let row = db::get_default_ai_credential(&state.db_pool, user_id).await?;
 
     let (provider, api_key) = match row {
         Some((p, enc_key)) => {

@@ -5,7 +5,8 @@ edition = "2021"
 
 [dependencies]
 virs-type = { path = "../../infra/virs-type" }
-virs-error = { path = "../../foundation/virs-error", features = ["axum", "sqlx"] }
+virs-error = { path = "../../foundation/virs-error", features = ["axum"] }
+virs-database = { path = "../../infra/virs-database" }
 virs-llm = { path = "../../infra/virs-llm" }
 virs-utils = { path = "../../infra/virs-utils" }
 virs-prompt = { path = "../../core/virs-prompt" }
@@ -22,7 +23,6 @@ uuid = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-sqlx = { workspace = true }
 reqwest = { workspace = true }
 axum = { workspace = true }
 tower-http = { workspace = true }

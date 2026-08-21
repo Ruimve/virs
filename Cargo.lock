@@ -1989,6 +1989,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "server"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "virs-api",
+ "virs-ccxt",
+ "virs-config",
+ "virs-database",
+ "virs-error",
+ "virs-exchange",
+ "virs-indicator",
+ "virs-market",
+ "virs-position",
+ "virs-prompt",
+ "virs-tactical-bot",
+ "virs-task",
+ "virs-trading-bot",
+ "virs-type",
+ "virs-utils",
+]
+
+[[package]]
 name = "sha1"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2898,13 +2929,13 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "sqlx",
  "sysinfo",
  "tokio",
  "tower-http",
  "tracing",
  "uuid",
  "virs-ccxt",
+ "virs-database",
  "virs-error",
  "virs-exchange",
  "virs-indicator",
@@ -2912,37 +2943,6 @@ dependencies = [
  "virs-market",
  "virs-prompt",
  "virs-tactical-bot",
- "virs-trading-bot",
- "virs-type",
- "virs-utils",
-]
-
-[[package]]
-name = "server"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "axum",
- "chrono",
- "reqwest",
- "serde",
- "serde_json",
- "sqlx",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "virs-api",
- "virs-ccxt",
- "virs-config",
- "virs-error",
- "virs-exchange",
- "virs-indicator",
- "virs-market",
- "virs-position",
- "virs-prompt",
- "virs-tactical-bot",
- "virs-task",
  "virs-trading-bot",
  "virs-type",
  "virs-utils",
@@ -2982,6 +2982,21 @@ dependencies = [
  "tracing",
  "uuid",
  "virs-error",
+]
+
+[[package]]
+name = "virs-database"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tracing",
+ "uuid",
+ "virs-error",
+ "virs-type",
 ]
 
 [[package]]
@@ -3060,7 +3075,6 @@ dependencies = [
  "futures-util",
  "serde",
  "serde_json",
- "sqlx",
  "tokio",
  "tokio-util",
  "tracing",

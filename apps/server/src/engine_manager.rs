@@ -11,7 +11,14 @@ use virs_type::BotCommand;
 use virs_error::VirsResult;
 use virs_exchange::{Exchanges, PaperModeExchange};
 use virs_type::{KlineEngineHandle, OrderBookEngineHandle, PositionEngineHandle};
-use virs_position::{Persistence as PePersistence, create_position_engine};
+use virs_position::create_position_engine;
+use virs_database::PgOrderPersistence;
+use virs_database::{
+    count_all_bots, get_all_exchange_credentials, get_running_bot_symbols,
+    get_running_paper_modes, mark_running_bots_as_error, get_latest_llm_credential,
+    PgBotStore, PgTradeHistoryProvider,
+};
+use crate::adapters::PgCredentialStore;
 use virs_prompt::PromptLoader;
 use virs_tactical_bot::{create_strategy_engine, StrategyEngineConfig};
 use virs_type::OrderEvent;
@@ -33,7 +40,7 @@ struct EngineState {
 }
 
 pub struct AppEngineManager {
-    db_pool: sqlx::PgPool,
+    db_pool: virs_database::PgPool,
     exchange_registry: Arc<Exchanges>,
     kline_engine: Arc<dyn KlineEngineHandle>,
     orderbook_engine: Arc<dyn OrderBookEngineHandle>,
@@ -56,7 +63,7 @@ pub struct AppEngineManager {
 
 impl AppEngineManager {
     pub fn new(
-        db_pool: sqlx::PgPool,
+        db_pool: virs_database::PgPool,
         exchange_registry: Arc<Exchanges>,
         kline_engine: Arc<dyn KlineEngineHandle>,
         orderbook_engine: Arc<dyn OrderBookEngineHandle>,
@@ -85,23 +92,13 @@ impl AppEngineManager {
 
     /* 重启恢复流程：解密交易所凭据 -> 注册交易所 -> 恢复K线/订单簿订阅 -> 启动交易引擎 */
     async fn restore_inner(&self) -> VirsResult<()> {
-        let has_bots: bool = {
-            let bot_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM qd_bots"#)
-                .fetch_one(&self.db_pool)
-                .await?;
-            bot_count > 0
-        };
+        let bot_count = count_all_bots(&self.db_pool).await?;
 
-        if !has_bots {
+        if bot_count == 0 {
             return Ok(());
         }
 
-        let rows: Vec<(String, String, String, Option<String>)> = sqlx::query_as(
-            r#"SELECT exchange, encrypted_api_key, encrypted_api_secret, encrypted_passphrase
-               FROM qd_exchange_credentials"#,
-        )
-        .fetch_all(&self.db_pool)
-        .await?;
+        let rows = get_all_exchange_credentials(&self.db_pool).await?;
 
         for (exchange, enc_key, enc_secret, enc_passphrase) in &rows {
             let api_key = virs_utils::decrypt_with_key(enc_key, &self.encryption_key)
@@ -160,11 +157,7 @@ impl AppEngineManager {
             }
         }
 
-        let bot_symbols: Vec<(String, String)> = sqlx::query_as(
-            r#"SELECT exchange, symbol FROM qd_bots WHERE status = 'running'"#,
-        )
-        .fetch_all(&self.db_pool)
-        .await?;
+        let bot_symbols = get_running_bot_symbols(&self.db_pool).await?;
 
         for (exchange, symbol) in &bot_symbols {
             let mt = MarketType::Perpetual;
@@ -191,11 +184,7 @@ impl AppEngineManager {
             info!(exchange = %exchange, symbol = %symbol, "Restored orderbook subscription");
         }
 
-        let paper_modes: Vec<bool> = sqlx::query_scalar(
-            r#"SELECT DISTINCT paper_mode FROM qd_bots WHERE status = 'running'"#,
-        )
-        .fetch_all(&self.db_pool)
-        .await?;
+        let paper_modes = get_running_paper_modes(&self.db_pool).await?;
 
         if paper_modes.is_empty() {
             info!("No running bots found — engines will start on first bot creation");
@@ -220,9 +209,7 @@ impl AppEngineManager {
 
     /* 恢复失败时将所有running bot标记为error状态，防止下次启动时重复尝试恢复失败 */
     async fn mark_running_bots_as_error(&self) -> VirsResult<()> {
-        sqlx::query(r#"UPDATE qd_bots SET status = 'error', stopped_at = NOW() WHERE status = 'running'"#)
-            .execute(&self.db_pool)
-            .await?;
+        mark_running_bots_as_error(&self.db_pool).await?;
         error!("Marked all running bots as 'error' due to restore failure");
         Ok(())
     }
@@ -264,7 +251,7 @@ impl EngineManager for AppEngineManager {
             real_exchange
         };
 
-        let pe_persistence = Box::new(PePersistence::new(self.db_pool.clone()));
+        let pe_persistence = Box::new(PgOrderPersistence::new(self.db_pool.clone()));
 
         let position_engine = create_position_engine(
             pe_exchange,
@@ -283,11 +270,7 @@ impl EngineManager for AppEngineManager {
         let prompt_loader = self.prompt_loader.clone();
 
         if paper_mode {
-            let paper_bots: Vec<(String, String)> = sqlx::query_as(
-                r#"SELECT DISTINCT exchange, symbol FROM qd_bots WHERE status = 'running'"#,
-            )
-            .fetch_all(&self.db_pool)
-            .await?;
+            let paper_bots = get_running_bot_symbols(&self.db_pool).await?;
             for (exchange, symbol) in &paper_bots {
                 info!(exchange = %exchange, symbol = %symbol, "Paper mode: kline subscription already restored");
             }
@@ -366,14 +349,11 @@ impl EngineManager for AppEngineManager {
             Option<Arc<dyn virs_prompt::StrategyHotSwapSource>>,
             Option<TaskHandle>,
         ) = {
-            let llm_creds: Option<(String, String)> = sqlx::query_as(
-                r#"SELECT provider, encrypted_api_key FROM qd_ai_credentials ORDER BY created_at DESC LIMIT 1"#,
-            )
-            .fetch_optional(&self.db_pool)
-            .await
-            .map_err(|e| {
-                virs_error::VirsError::config(format!("Failed to query LLM credentials: {}", e))
-            })?;
+            let llm_creds = get_latest_llm_credential(&self.db_pool)
+                .await
+                .map_err(|e| {
+                    virs_error::VirsError::config(format!("Failed to query LLM credentials: {}", e))
+                })?;
 
             match llm_creds {
                 Some((provider, encrypted_key)) => {

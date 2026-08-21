@@ -6,11 +6,13 @@ use tokio::sync::{broadcast, mpsc};
 
 use virs_type::BotCommand;
 use virs_error::{VirsError, VirsResult};
+use virs_database::PgPool;
 use virs_exchange::Exchanges;
 use virs_type::{KlineEngineHandle, OrderBookEngineHandle};
 use virs_llm::{call_llm_api, LlmCallResult};
 use virs_prompt::PromptLoader;
 use virs_type::EngineEvent;
+use virs_database as db;
 
 
 /* 引擎管理trait：抽象持仓引擎和交易bot引擎的生命周期管理，供API层通过trait object调用 */
@@ -45,7 +47,7 @@ pub trait EngineManager: Send + Sync {
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db_pool: sqlx::PgPool,
+    pub db_pool: PgPool,
     pub engine_manager: Arc<dyn EngineManager>,
     pub http_client: reqwest::Client,
     pub exchange_registry: Arc<Exchanges>,
@@ -74,12 +76,7 @@ impl AppState {
 
     /* 解析LLM凭据：从数据库查询最新AI凭据，解密API Key，并匹配provider对应的base_url和model */
     pub async fn resolve_llm_credentials(&self) -> VirsResult<(String, String, String)> {
-        let row: Option<(String, String)> = sqlx::query_as(
-            r#"SELECT provider, encrypted_api_key
-               FROM qd_ai_credentials ORDER BY created_at DESC LIMIT 1"#,
-        )
-        .fetch_optional(&self.db_pool)
-        .await?;
+        let row = db::get_latest_llm_credential(&self.db_pool).await?;
 
         match row {
             Some((provider, encrypted_key)) => {
@@ -123,7 +120,7 @@ impl AppState {
     }
 }
 
-impl FromRef<AppState> for sqlx::PgPool {
+impl FromRef<AppState> for PgPool {
     fn from_ref(state: &AppState) -> Self {
         state.db_pool.clone()
     }

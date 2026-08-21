@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use virs_error::VirsError;
+use virs_database as db;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -14,11 +15,7 @@ pub async fn list_users(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let users = sqlx::query_as::<_, (uuid::Uuid, String, String, Option<String>, bool, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT id, username, role, email, is_active, created_at FROM qd_users ORDER BY created_at DESC"#,
-    )
-    .fetch_all(&state.db_pool)
-    .await?;
+    let users = db::list_users(&state.db_pool).await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "users": users.iter().map(|(id, username, role, email, is_active, created_at)| {
@@ -61,16 +58,14 @@ pub async fn create_user(
     let password_hash = virs_utils::hash_password(password)?;
 
     let id = uuid::Uuid::new_v4();
-    sqlx::query(
-        r#"INSERT INTO qd_users (id, username, password_hash, role, email, is_active, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())"#,
+    db::create_user(
+        &state.db_pool,
+        id,
+        username,
+        &password_hash,
+        role,
+        email,
     )
-    .bind(id)
-    .bind(username)
-    .bind(&password_hash)
-    .bind(role)
-    .bind(email)
-    .execute(&state.db_pool)
     .await?;
 
     Ok(Json(ApiResponse::ok(
@@ -95,15 +90,13 @@ pub async fn update_user(
     let role = body["role"].as_str();
     let email = body["email"].as_str();
 
-    sqlx::query(
-        r#"UPDATE qd_users SET role = COALESCE($2, role), email = COALESCE($3, email),
-           is_active = COALESCE($4, is_active), updated_at = NOW() WHERE id = $1"#,
+    db::update_user(
+        &state.db_pool,
+        uuid_id,
+        role,
+        email,
+        is_active,
     )
-    .bind(uuid_id)
-    .bind(role)
-    .bind(email)
-    .bind(is_active)
-    .execute(&state.db_pool)
     .await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"updated": true}))))
@@ -122,10 +115,7 @@ pub async fn delete_user(
     let uuid_id = uuid::Uuid::parse_str(id)
         .map_err(|_| VirsError::bad_request("Invalid user ID"))?;
 
-    sqlx::query(r#"DELETE FROM qd_users WHERE id = $1"#)
-        .bind(uuid_id)
-        .execute(&state.db_pool)
-        .await?;
+    db::delete_user(&state.db_pool, uuid_id).await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }

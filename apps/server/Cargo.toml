@@ -14,8 +14,9 @@ virs-tactical-bot = { path = "../../crates/services/virs-tactical-bot" }
 virs-prompt = { path = "../../crates/core/virs-prompt" }
 virs-indicator = { path = "../../crates/core/virs-indicator" }
 virs-type = { path = "../../crates/infra/virs-type" }
-virs-error = { path = "../../crates/foundation/virs-error", features = ["sqlx"] }
+virs-error = { path = "../../crates/foundation/virs-error" }
 virs-config = { path = "../../crates/infra/virs-config" }
+virs-database = { path = "../../crates/infra/virs-database" }
 virs-utils = { path = "../../crates/infra/virs-utils" }
 virs-exchange = { path = "../../crates/core/virs-exchange" }
 virs-ccxt = { path = "../../crates/core/virs-ccxt" }
@@ -25,7 +26,6 @@ virs-task = { path = "../../crates/foundation/virs-task" }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-sqlx = { workspace = true }
 axum = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }

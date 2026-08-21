@@ -17,7 +17,7 @@ use virs_type::{
     PositionEngineHandle,
 };
 
-use crate::persistence::PositionPersistence;
+use virs_type::PositionPersistence;
 
 /* 锁中毒恢复：持有锁的线程panic时直接panic，拒绝返回可能不一致的数据 */
 fn recover_lock<T>(lock: std::sync::LockResult<T>) -> T {

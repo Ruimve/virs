@@ -1,37 +1,25 @@
+use async_trait::async_trait;
 use chrono::DateTime;
 use sqlx::PgPool;
 use virs_error::{Context, VirsError, VirsResult};
-use virs_type::PositionSide;
-use virs_type::Position;
-use virs_type::{CcxtOrder, CcxtOrderStatus, ExecutionType, OrderType, Side};
+use virs_type::{
+    CcxtOrder, CcxtOrderStatus, ExecutionType, OrderType, Position, PositionSide, PositionPersistence,
+    Side,
+};
+use crate::models::{OrderRow, ReplayOrderRow};
 
-#[async_trait::async_trait]
-/* 持仓持久化trait抽象：定义从订单数据重建持仓、持久化订单等接口 */
-pub trait PositionPersistence: Send + Sync {
-
-    async fn get_positions_from_orders(&self, exchange: &str) -> VirsResult<Vec<Position>>;
-
-
-    async fn persist_order(&self, order: &CcxtOrder) -> VirsResult<()>;
-
-
-    async fn persist_rejected_order(&self, order: &CcxtOrder, reason: &str) -> VirsResult<()>;
-
-    async fn get_active_orders(&self) -> VirsResult<Vec<CcxtOrder>>;
-}
-
-pub struct Persistence {
+pub struct PgOrderPersistence {
     db: PgPool,
 }
 
-impl Persistence {
+impl PgOrderPersistence {
     pub fn new(db: PgPool) -> Self {
         Self { db }
     }
 }
 
-#[async_trait::async_trait]
-impl PositionPersistence for Persistence {
+#[async_trait]
+impl PositionPersistence for PgOrderPersistence {
     async fn get_positions_from_orders(&self, exchange: &str) -> VirsResult<Vec<Position>> {
         self.get_positions_from_orders_impl(exchange).await
     }
@@ -49,9 +37,7 @@ impl PositionPersistence for Persistence {
     }
 }
 
-impl Persistence {
-
-
+impl PgOrderPersistence {
     /* 通过聚合pe_trades表中的成交记录重建持仓状态，不依赖pe_positions表。
      * SQL使用代际过滤（generation_filtered）确保只回放当前持仓代际，
      * 避免历史已平仓订单污染当前持仓数据。 */
@@ -100,7 +86,6 @@ impl Persistence {
         .fetch_all(&self.db)
         .await?;
 
-
         let mut positions: Vec<Position> = Vec::new();
         let mut current_key: Option<(String, String)> = None;
         let mut current_pos: Option<Position> = None;
@@ -108,15 +93,12 @@ impl Persistence {
         for row in rows {
             let group_key = (row.symbol.clone(), row.position_side.clone());
 
-
             if current_key.as_ref() != Some(&group_key) {
-
                 if let Some(pos) = current_pos.take() {
                     if pos.quantity > 1e-8 {
                         positions.push(pos);
                     }
                 }
-
 
                 virs_type::CcxtOrder::validate_position_side(Some(&row.position_side))
                     .context("DB replay position_side validation")?;
@@ -125,7 +107,6 @@ impl Persistence {
                     "SHORT" => PositionSide::Short,
                     _ => unreachable!("CcxtOrder::validate_position_side 已保证为 LONG/SHORT"),
                 };
-
 
                 let created_at = DateTime::from_timestamp_millis(row.trade_time)
                     .ok_or_else(|| VirsError::bad_request(format!(
@@ -147,24 +128,20 @@ impl Persistence {
                 .as_mut()
                 .expect("current_pos is always Some after group boundary detection");
 
-
             let is_close = matches!(
                 (row.side.as_str(), row.position_side.as_str()),
                 ("SELL", "LONG") | ("BUY", "SHORT")
             );
-
 
             let trade_fill: f64 = row
                 .last_fill_qty
                 .parse()
                 .context(format!("parse last_fill_qty '{}' for order {}", row.last_fill_qty, row.client_order_id))?;
 
-
             let fill_price: f64 = row
                 .last_fill_price
                 .parse()
                 .context(format!("parse last_fill_price '{}' for order {}", row.last_fill_price, row.client_order_id))?;
-
 
             let realized_pnl = match row.realized_pnl.as_deref() {
                 Some(s) if !s.is_empty() => s
@@ -182,7 +159,6 @@ impl Persistence {
             pos.apply_fill(is_close, fill_price, trade_fill, realized_pnl, timestamp);
         }
 
-
         if let Some(pos) = current_pos {
             if pos.quantity > 1e-8 {
                 positions.push(pos);
@@ -191,7 +167,6 @@ impl Persistence {
 
         Ok(positions)
     }
-
 
     async fn persist_order_impl(&self, order: &CcxtOrder) -> VirsResult<()> {
         /* 根据execution_type路由：Trade事件写入pe_trades表，其他事件写入pe_order_events表 */
@@ -248,10 +223,8 @@ impl Persistence {
 
         let mut tx = self.db.begin().await.context("begin transaction for persist_order")?;
 
-
         /* Trade事件：使用(client_order_id, trade_id)作为唯一约束去重，防止重复写入 */
         if order.execution_type == ExecutionType::Trade {
-
             sqlx::query(
                 r#"
                 INSERT INTO pe_trades (
@@ -324,7 +297,6 @@ impl Persistence {
             .execute(&mut *tx)
             .await?;
         } else {
-
             sqlx::query(
                 r#"
                 INSERT INTO pe_order_events (
@@ -401,7 +373,6 @@ impl Persistence {
         tx.commit().await?;
         Ok(())
     }
-
 
     async fn persist_rejected_order_impl(
         &self,
@@ -539,7 +510,6 @@ impl Persistence {
 
     /* 查询所有活跃订单（NEW/PARTIALLY_FILLED状态）用于重启恢复 */
     async fn get_active_orders_impl(&self) -> VirsResult<Vec<CcxtOrder>> {
-
         let rows = sqlx::query_as::<_, OrderRow>(
             r#"
             SELECT * FROM pe_order_latest
@@ -556,157 +526,33 @@ impl Persistence {
     }
 }
 
-#[derive(Debug, sqlx::FromRow)]
-struct ReplayOrderRow {
-    symbol: String,
-    position_side: String,
-    side: String,
-    last_fill_qty: String,
-    last_fill_price: String,
-    realized_pnl: Option<String>,
-    trade_time: i64,
-    client_order_id: String,
-}
+pub async fn fetch_stop_loss_take_profit(
+    db: &PgPool,
+    symbol: &str,
+    exchange: &str,
+    side_str: &str,
+) -> (Option<f64>, Option<f64>) {
+    let row: Result<(f64, f64), _> = sqlx::query_as(
+        r#"SELECT ctx.stop_loss, ctx.take_profit
+           FROM pe_bot_order_context ctx
+           JOIN pe_order_latest o ON o.client_order_id = ctx.client_order_id
+           WHERE ctx.symbol = $1 AND ctx.exchange = $2
+             AND ctx.order_role = 'open' AND ctx.status = 'open'
+             AND o.position_side = $3
+           ORDER BY ctx.created_at DESC LIMIT 1"#,
+    )
+    .bind(symbol)
+    .bind(exchange)
+    .bind(side_str)
+    .fetch_one(db)
+    .await;
 
-#[derive(Debug, sqlx::FromRow)]
-struct OrderRow {
-    client_order_id: String,
-    order_id: i64,
-    symbol: String,
-    side: String,
-    order_type: String,
-    position_side: String,
-    original_order_type: String,
-    status: String,
-    execution_type: String,
-    orig_qty: String,
-    original_price: String,
-    avg_fill_price: String,
-    filled_qty: String,
-    last_fill_qty: String,
-    last_fill_price: String,
-    stop_price: String,
-    commission: String,
-    commission_asset: String,
-    realized_pnl: String,
-    reduce_only: bool,
-    is_maker: bool,
-    close_position: Option<bool>,
-    time_in_force: String,
-    working_type: String,
-    bids_notional: String,
-    ask_notional: String,
-    activation_price: Option<String>,
-    callback_rate: Option<String>,
-    price_protection: bool,
-    stp_mode: String,
-    price_match_mode: String,
-    gtd_auto_cancel_time: i64,
-    expiry_reason: String,
-    si: Option<i64>,
-    ss: Option<i64>,
-    trade_time: i64,
-    trade_id: i64,
-    modify_id: Option<String>,
-    envelope_event_type: String,
-    envelope_event_time: i64,
-    envelope_transaction_time: i64,
-}
-
-impl OrderRow {
-    fn into_ccxt_order(self) -> Option<CcxtOrder> {
-        /* DB字段校验：side/position_side/status不合法时跳过该订单，防止脏数据进入引擎 */
-        if let Err(e) = virs_type::CcxtOrder::validate_fields(
-            &self.side,
-            Some(&self.position_side),
-            &self.status,
-        ) {
-            tracing::error!(
-                client_order_id = %self.client_order_id,
-                error = %e,
-                "DB 订单字段校验失败，跳过该订单"
-            );
-            return None;
+    match row {
+        Ok((sl, tp)) => {
+            let sl = if sl > 0.0 { Some(sl) } else { None };
+            let tp = if tp > 0.0 { Some(tp) } else { None };
+            (sl, tp)
         }
-        let side = match self.side.as_str() {
-            "BUY" => Side::Buy,
-            "SELL" => Side::Sell,
-            _ => unreachable!("CcxtOrder::validate_fields 已保证到达此处时 side 为 BUY/SELL"),
-        };
-
-        let order_type = match self.order_type.as_str() {
-            "LIMIT" => OrderType::Limit,
-            "MARKET" => OrderType::Market,
-            "STOP" => OrderType::Stop,
-            "STOP_MARKET" => OrderType::StopMarket,
-            "TAKE_PROFIT" => OrderType::TakeProfit,
-            "TAKE_PROFIT_MARKET" => OrderType::TakeProfitMarket,
-            "TRAILING_STOP_MARKET" => OrderType::TrailingStopMarket,
-            "LIQUIDATION" => OrderType::Liquidation,
-            other => OrderType::Unknown(other.to_string()),
-        };
-
-        let original_order_type = match self.original_order_type.as_str() {
-            "LIMIT" => OrderType::Limit,
-            "MARKET" => OrderType::Market,
-            "STOP" => OrderType::Stop,
-            "STOP_MARKET" => OrderType::StopMarket,
-            "TAKE_PROFIT" => OrderType::TakeProfit,
-            "TAKE_PROFIT_MARKET" => OrderType::TakeProfitMarket,
-            "TRAILING_STOP_MARKET" => OrderType::TrailingStopMarket,
-            "LIQUIDATION" => OrderType::Liquidation,
-            other => OrderType::Unknown(other.to_string()),
-        };
-        let position_side = match self.position_side.as_str() {
-            "LONG" => PositionSide::Long,
-            "SHORT" => PositionSide::Short,
-            _ => unreachable!("CcxtOrder::validate_fields 已保证到达此处时 position_side 为 LONG/SHORT"),
-        };
-        let status: CcxtOrderStatus = self.status.parse().unwrap();
-        let execution_type: ExecutionType = self.execution_type.parse().unwrap();
-
-        Some(CcxtOrder {
-            order_id: self.order_id,
-            client_order_id: self.client_order_id,
-            symbol: self.symbol,
-            side,
-            order_type,
-            position_side,
-            original_order_type,
-            status,
-            execution_type,
-            orig_qty: self.orig_qty,
-            original_price: self.original_price,
-            avg_fill_price: self.avg_fill_price,
-            filled_qty: self.filled_qty,
-            last_fill_qty: self.last_fill_qty,
-            last_fill_price: self.last_fill_price,
-            stop_price: self.stop_price,
-            commission: self.commission,
-            commission_asset: self.commission_asset,
-            realized_pnl: self.realized_pnl,
-            reduce_only: self.reduce_only,
-            is_maker: self.is_maker,
-            close_position: self.close_position,
-            time_in_force: self.time_in_force,
-            working_type: self.working_type,
-            bids_notional: self.bids_notional,
-            ask_notional: self.ask_notional,
-            activation_price: self.activation_price,
-            callback_rate: self.callback_rate,
-            price_protection: self.price_protection,
-            stp_mode: self.stp_mode,
-            price_match_mode: self.price_match_mode,
-            gtd_auto_cancel_time: self.gtd_auto_cancel_time,
-            expiry_reason: self.expiry_reason,
-            si: self.si,
-            ss: self.ss,
-            trade_time: self.trade_time,
-            trade_id: self.trade_id,
-            modify_id: self.modify_id,
-            envelope_event_type: self.envelope_event_type,
-            envelope_event_time: self.envelope_event_time,
-            envelope_transaction_time: self.envelope_transaction_time,
-        })
+        Err(_) => (None, None),
     }
 }

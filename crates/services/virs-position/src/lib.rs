@@ -1,5 +1,6 @@
 mod engine;
-mod persistence;
 
 pub use engine::create_position_engine;
-pub use persistence::{Persistence, PositionPersistence};
+
+/* PositionPersistence trait 已上移到 virs-type，Persistence 实现已迁移到 virs-database */
+pub use virs_type::PositionPersistence;

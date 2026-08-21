@@ -4,6 +4,7 @@ use sqlx::PgPool;
 use tracing::warn;
 use virs_type::{TradeHistoryProvider, TradeRecord};
 
+use crate::models::TradeHistoryRow;
 
 /* 交易历史查询：通过关联pe_bot_order_context和pe_order_latest表，
  * 查询指定策略在给定时间后的已平仓交易记录，供策略评估使用 */
@@ -24,20 +25,7 @@ impl TradeHistoryProvider for PgTradeHistoryProvider {
         strategy_name: &str,
         since: DateTime<Utc>,
     ) -> Vec<TradeRecord> {
-        #[derive(sqlx::FromRow)]
-        struct TradeRow {
-            strategy_file: Option<String>,
-            symbol: String,
-            side: String,
-            opened_at: DateTime<Utc>,
-            closed_at: DateTime<Utc>,
-            entry_price: f64,
-            exit_price: f64,
-            quantity: f64,
-            realized_pnl: f64,
-        }
-
-        let rows = sqlx::query_as::<_, TradeRow>(
+        let rows = sqlx::query_as::<_, TradeHistoryRow>(
             r#"SELECT
                 open_ctx.strategy_file,
                 open_ctx.symbol,

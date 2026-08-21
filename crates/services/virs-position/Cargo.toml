@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 virs-type = { path = "../../infra/virs-type" }
-virs-error = { path = "../../foundation/virs-error", features = ["sqlx"] }
+virs-error = { path = "../../foundation/virs-error" }
 virs-task = { path = "../../foundation/virs-task" }
 
 serde = { workspace = true }
@@ -17,7 +17,6 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 dashmap = { workspace = true }
-sqlx = { workspace = true }
 futures-util = { workspace = true }
 
 [lints]

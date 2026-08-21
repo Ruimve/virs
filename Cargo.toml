@@ -8,6 +8,7 @@ members = [
     "crates/infra/virs-type",
     "crates/infra/virs-utils",
     "crates/infra/virs-config",
+    "crates/infra/virs-database",
     "crates/infra/virs-ws",
     "crates/infra/virs-llm",
 

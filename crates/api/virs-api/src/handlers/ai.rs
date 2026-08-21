@@ -5,6 +5,7 @@ use axum::{
 };
 use virs_error::VirsError;
 use virs_type::LlmProviderConfig;
+use virs_database as db;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -25,10 +26,7 @@ pub async fn ai_status(
     let _user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
 
-    let rows: Vec<String> =
-        sqlx::query_scalar(r#"SELECT DISTINCT provider FROM qd_ai_credentials"#)
-            .fetch_all(&state.db_pool)
-            .await?;
+    let rows = db::get_ai_providers(&state.db_pool).await?;
 
     let configured = !rows.is_empty();
 

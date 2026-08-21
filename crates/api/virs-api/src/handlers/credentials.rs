@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use virs_error::VirsError;
+use virs_database as db;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -14,12 +15,7 @@ pub async fn list_credentials(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let creds = sqlx::query_as::<_, (uuid::Uuid, String, String, chrono::DateTime<chrono::Utc>)>(
-        r#"SELECT id, exchange, label, created_at FROM qd_exchange_credentials WHERE user_id = $1 ORDER BY created_at DESC"#,
-    )
-    .bind(user_id)
-    .fetch_all(&state.db_pool)
-    .await?;
+    let creds = db::list_exchange_credentials(&state.db_pool, user_id).await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "items": creds.iter().map(|(id, exchange, label, created_at)| {
@@ -69,20 +65,16 @@ pub async fn save_credential(
         .map(|p| virs_utils::encrypt_with_key(p, &state.encryption_key))
         .transpose()?;
 
-    sqlx::query(
-        r#"INSERT INTO qd_exchange_credentials (id, user_id, exchange, label, encrypted_api_key, encrypted_api_secret, encrypted_passphrase, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-           ON CONFLICT (user_id, exchange)
-           DO UPDATE SET encrypted_api_key = $5, encrypted_api_secret = $6, encrypted_passphrase = $7, label = $4, updated_at = NOW()"#,
+    db::save_exchange_credential(
+        &state.db_pool,
+        id,
+        user_id,
+        exchange,
+        label,
+        &encrypted_api_key,
+        &encrypted_secret,
+        encrypted_passphrase.as_deref(),
     )
-    .bind(id)
-    .bind(user_id)
-    .bind(exchange)
-    .bind(label)
-    .bind(&encrypted_api_key)
-    .bind(&encrypted_secret)
-    .bind(&encrypted_passphrase)
-    .execute(&state.db_pool)
     .await?;
 
 
@@ -114,11 +106,7 @@ pub async fn delete_credential(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    sqlx::query(r#"DELETE FROM qd_exchange_credentials WHERE id = $1 AND user_id = $2"#)
-        .bind(id)
-        .bind(user_id)
-        .execute(&state.db_pool)
-        .await?;
+    db::delete_exchange_credential(&state.db_pool, id, user_id).await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({"deleted": true}))))
 }
@@ -402,15 +390,10 @@ pub async fn exchange_status(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let row: Option<(String,)> = sqlx::query_as(
-        r#"SELECT exchange FROM qd_exchange_credentials WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1"#,
-    )
-    .bind(user_id)
-    .fetch_optional(&state.db_pool)
-    .await?;
+    let exchange = db::get_user_exchange(&state.db_pool, user_id).await?;
 
-    match row {
-        Some((exchange,)) => Ok(Json(ApiResponse::ok(serde_json::json!({
+    match exchange {
+        Some(exchange) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "connected": true,
             "exchange": exchange,
         })))),

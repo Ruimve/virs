@@ -7,6 +7,8 @@ use axum::{
 };
 use std::sync::Arc;
 
+use virs_database::fetch_stop_loss_take_profit;
+
 use crate::state::AppState;
 
 
@@ -107,39 +109,16 @@ pub fn position_to_ws_json(
 
 
 /* 从pe_bot_order_context表查询持仓的止损止盈价：
- * 关联pe_order_latest表，筛选order_role='open'且status='open'的最新记录 */
-async fn fetch_stop_loss_take_profit(
-    db: &sqlx::PgPool,
+ * 关联pe_order_latest表，筛选order_role='open'且status='open'的最新记录。
+ * 实现已迁移到virs-database::fetch_stop_loss_take_profit */
+async fn fetch_sl_tp(
+    db: &virs_database::PgPool,
     symbol: &str,
     exchange: &str,
     side: &virs_type::PositionSide,
 ) -> (Option<f64>, Option<f64>) {
-
-
     let side_str = position_side_db_str(side);
-    let row: Result<(f64, f64), _> = sqlx::query_as(
-        r#"SELECT ctx.stop_loss, ctx.take_profit
-           FROM pe_bot_order_context ctx
-           JOIN pe_order_latest o ON o.client_order_id = ctx.client_order_id
-           WHERE ctx.symbol = $1 AND ctx.exchange = $2
-             AND ctx.order_role = 'open' AND ctx.status = 'open'
-             AND o.position_side = $3
-           ORDER BY ctx.created_at DESC LIMIT 1"#,
-    )
-    .bind(symbol)
-    .bind(exchange)
-    .bind(side_str)
-    .fetch_one(db)
-    .await;
-
-    match row {
-        Ok((sl, tp)) => {
-            let sl = if sl > 0.0 { Some(sl) } else { None };
-            let tp = if tp > 0.0 { Some(tp) } else { None };
-            (sl, tp)
-        }
-        Err(_) => (None, None),
-    }
+    fetch_stop_loss_take_profit(db, symbol, exchange, &side_str).await
 }
 
 
@@ -341,7 +320,7 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
                                 && !subscribed_symbols.contains(&position.symbol)
                             { continue; }
 
-                            let (sl, tp) = fetch_stop_loss_take_profit(
+                            let (sl, tp) = fetch_sl_tp(
                                 &state.db_pool,
                                 &position.symbol,
                                 &position.exchange,
@@ -370,7 +349,7 @@ async fn handle_position_ws(mut socket: WebSocket, state: AppState) {
 
                                     let positions = state.engine_manager.get_positions_by_symbol(sym);
                                     for pos in positions {
-                                        let (sl, tp) = fetch_stop_loss_take_profit(
+                                        let (sl, tp) = fetch_sl_tp(
                                             &state.db_pool,
                                             &pos.symbol,
                                             &pos.exchange,

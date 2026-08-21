@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use serde::Serialize;
-use sqlx::FromRow;
+use virs_database as db;
 use virs_prompt::PromptTemplate;
 use virs_type::StrategyType;
 use virs_error::VirsError;
@@ -14,30 +14,6 @@ use crate::handlers::strategy_selection::select_strategy_by_llm;
 use crate::handlers::utils::{format_duration, TradesQuery};
 use crate::state::AppState;
 
-
-#[derive(Debug, FromRow)]
-struct BotTradeRow {
-    open_client_order_id: String,
-    close_client_order_id: Option<String>,
-    bot_id: uuid::Uuid,
-    symbol: String,
-    exchange: String,
-    open_side: String,
-    open_price: f64,
-    open_quantity: f64,
-    open_fee: f64,
-    opened_at: chrono::DateTime<chrono::Utc>,
-    close_side: Option<String>,
-    close_price: Option<f64>,
-    close_quantity: Option<f64>,
-    close_fee: f64,
-    closed_at: Option<chrono::DateTime<chrono::Utc>>,
-    pnl: f64,
-    stop_loss: f64,
-    take_profit: f64,
-    close_reason: Option<String>,
-    status: String,
-}
 
 #[derive(Serialize)]
 struct BotInfo {
@@ -183,11 +159,7 @@ pub async fn create_bot(
 
     /* 每个用户只能创建一个bot：避免多bot同时操作同一账户导致资金冲突 */
     {
-        let bot_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM qd_bots WHERE user_id = $1")
-                .bind(user_id)
-                .fetch_one(&state.db_pool)
-                .await?;
+        let bot_count = db::count_bots_by_user(&state.db_pool, user_id).await?;
         if bot_count > 0 {
             return Err(VirsError::conflict(
                 "Each account can only have one bot. Please delete your existing bot first.",
@@ -262,39 +234,11 @@ pub async fn create_bot(
         ));
     }
 
-    sqlx::query(
-        r#"INSERT INTO qd_bots (id, user_id, name, symbol, exchange, leverage, max_position_pct, decide_interval_secs, paper_mode, initial_capital, status, bot_type, strategy_file, auto_optimize_enabled, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'stopped', $11, $12, $13, NOW(), NOW())"#,
-    )
-    .bind(id)
-    .bind(user_id)
-    .bind(name)
-    .bind(symbol)
-    .bind(exchange)
-    .bind(leverage)
-    .bind(max_position_pct)
-    .bind(decide_interval_secs)
-    .bind(paper_mode)
-    .bind(initial_capital)
-    .bind(bot_type)
-    .bind(&strategy_file)
-    .bind(auto_optimize)
-    .execute(&state.db_pool)
-    .await?;
+    db::insert_bot(&state.db_pool, id, user_id, name, symbol, exchange, leverage, max_position_pct, decide_interval_secs, paper_mode, initial_capital, bot_type, &strategy_file, auto_optimize).await?;
 
 
     if strategies.len() > 1 {
-        let _ = sqlx::query(
-            r#"INSERT INTO qd_bot_analysis_logs (bot_id, analysis_type, system_prompt, user_prompt, status, result, strategy_file, completed_at)
-               VALUES ($1, 'strategy_selection', $2, $3, 'completed', $4, $5, NOW())"#,
-        )
-        .bind(id)
-        .bind("You are a trading strategy selector. Choose the best strategy for the current market conditions.")
-        .bind(format!("Symbol: {}, Exchange: {}, Strategies: {:?}", symbol, exchange, strategies))
-        .bind(serde_json::json!({"selected": strategy_file}))
-        .bind(&strategy_file)
-        .execute(&state.db_pool)
-        .await;
+        let _ = db::insert_strategy_selection_log(&state.db_pool, id, "You are a trading strategy selector. Choose the best strategy for the current market conditions.", &format!("Symbol: {}, Exchange: {}, Strategies: {:?}", symbol, exchange, strategies), &serde_json::json!({"selected": strategy_file}), &strategy_file).await;
     }
 
     Ok(Json(ApiResponse::ok(
@@ -308,12 +252,7 @@ pub async fn list_bots(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let bots = sqlx::query_as::<_, virs_type::Bot>(
-        "SELECT * FROM qd_bots WHERE user_id = $1 ORDER BY created_at DESC",
-    )
-    .bind(user_id)
-    .fetch_all(&state.db_pool)
-    .await?;
+    let bots = db::list_bots_by_user(&state.db_pool, user_id).await?;
 
     let loader = &state.prompt_loader;
     let mut items = Vec::with_capacity(bots.len());
@@ -338,13 +277,7 @@ pub async fn get_bot(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let bot = sqlx::query_as::<_, virs_type::Bot>(
-        "SELECT * FROM qd_bots WHERE id = $1 AND user_id = $2",
-    )
-    .bind(id)
-    .bind(user_id)
-    .fetch_optional(&state.db_pool)
-    .await?;
+    let bot = db::get_bot_by_id(&state.db_pool, id, user_id).await?;
 
     let bot = match bot {
         Some(b) => b,
@@ -369,13 +302,7 @@ pub async fn update_bot(
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
 
-    let bot = sqlx::query_as::<_, virs_type::Bot>(
-        "SELECT * FROM qd_bots WHERE id = $1 AND user_id = $2",
-    )
-    .bind(id)
-    .bind(user_id)
-    .fetch_optional(&state.db_pool)
-    .await?;
+    let bot = db::get_bot_by_id(&state.db_pool, id, user_id).await?;
 
     let bot = match bot {
         Some(b) => b,
@@ -404,12 +331,7 @@ pub async fn update_bot(
     }
 
 
-    sqlx::query("UPDATE qd_bots SET strategy_file = $2, updated_at = NOW() WHERE id = $1 AND user_id = $3")
-        .bind(id)
-        .bind(new_strategy_file)
-        .bind(user_id)
-        .execute(&state.db_pool)
-        .await?;
+    db::update_bot_strategy(&state.db_pool, id, new_strategy_file, user_id).await?;
 
     tracing::info!(
         bot_id = %id,
@@ -463,12 +385,8 @@ async fn verify_bot_ownership(
     bot_id: uuid::Uuid,
     user_id: uuid::Uuid,
 ) -> Result<(), VirsError> {
-    let exists: Option<bool> = sqlx::query_scalar("SELECT true FROM qd_bots WHERE id = $1 AND user_id = $2")
-        .bind(bot_id)
-        .bind(user_id)
-        .fetch_optional(&state.db_pool)
-        .await?;
-    if exists.is_none() {
+    let exists = db::verify_bot_ownership(&state.db_pool, bot_id, user_id).await?;
+    if !exists {
         return Err(VirsError::not_found("Bot not found"));
     }
     Ok(())
@@ -552,50 +470,10 @@ pub async fn get_trades(
     let offset = (page - 1) * page_size;
 
 
-    let total: i64 = sqlx::query_scalar::<_, i64>(
-        r#"SELECT COUNT(*) FROM pe_bot_order_context WHERE bot_id = $1 AND user_id = $2 AND order_role = 'open'"#,
-    )
-    .bind(id)
-    .bind(user_id)
-    .fetch_one(&state.db_pool)
-    .await?;
+    let total = db::count_bot_trades(&state.db_pool, id, user_id).await?;
 
 
-    let trades = sqlx::query_as::<_, BotTradeRow>(
-        r#"SELECT
-             open_ctx.client_order_id AS open_client_order_id,
-             close_ctx.client_order_id AS close_client_order_id,
-             open_ctx.bot_id,
-             open_ctx.symbol,
-             open_ctx.exchange,
-             LOWER(open_ord.side) AS open_side,
-             open_ord.avg_fill_price::float AS open_price,
-             open_ord.filled_qty::float AS open_quantity,
-             open_ord.commission::float AS open_fee,
-             open_ctx.created_at AS opened_at,
-             CASE WHEN close_ord.side IS NOT NULL THEN LOWER(close_ord.side) END AS close_side,
-             close_ord.avg_fill_price::float AS close_price,
-             close_ord.filled_qty::float AS close_quantity,
-             COALESCE(close_ord.commission::float, 0) AS close_fee,
-             close_ctx.created_at AS closed_at,
-             COALESCE(close_ord.realized_pnl::float, 0) AS pnl,
-             open_ctx.stop_loss,
-             open_ctx.take_profit,
-             close_ctx.close_reason,
-             open_ctx.status
-           FROM pe_bot_order_context open_ctx
-           JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
-           LEFT JOIN pe_bot_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id
-           LEFT JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
-           WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.order_role = 'open'
-           ORDER BY open_ctx.created_at DESC LIMIT $3 OFFSET $4"#,
-    )
-    .bind(id)
-    .bind(user_id)
-    .bind(page_size as i64)
-    .bind(offset as i64)
-    .fetch_all(&state.db_pool)
-    .await?;
+    let trades = db::query_bot_trades(&state.db_pool, id, user_id, page_size as i64, offset as i64).await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "trades": trades.iter().map(|t| {
@@ -646,46 +524,10 @@ pub async fn get_stats(
 
     verify_bot_ownership(&state, id, user_id).await?;
 
-    let trades = sqlx::query_as::<
-        _,
-        (
-            f64,
-            f64,
-            f64,
-            f64,
-            f64,
-            chrono::DateTime<chrono::Utc>,
-            chrono::DateTime<chrono::Utc>,
-        ),
-    >(
-        r#"SELECT
-             open_ord.avg_fill_price::float AS open_price,
-             open_ord.filled_qty::float AS open_quantity,
-             open_ord.commission::float AS open_fee,
-             COALESCE(close_ord.commission::float, 0) AS close_fee,
-             COALESCE(close_ord.realized_pnl::float, 0) AS pnl,
-             open_ctx.created_at AS opened_at,
-             close_ctx.created_at AS closed_at
-           FROM pe_bot_order_context open_ctx
-           JOIN pe_order_latest open_ord ON open_ord.client_order_id = open_ctx.client_order_id
-           JOIN pe_bot_order_context close_ctx ON close_ctx.paired_client_order_id = open_ctx.client_order_id AND close_ctx.order_role = 'close'
-           JOIN pe_order_latest close_ord ON close_ord.client_order_id = close_ctx.client_order_id
-           WHERE open_ctx.bot_id = $1 AND open_ctx.user_id = $2 AND open_ctx.status = 'closed'
-           ORDER BY close_ctx.created_at ASC"#,
-    )
-    .bind(id)
-    .bind(user_id)
-    .fetch_all(&state.db_pool)
-    .await?;
+    let trades = db::get_bot_trade_stats(&state.db_pool, id, user_id).await?;
 
 
-    let bot = sqlx::query_as::<_, virs_type::Bot>(
-        "SELECT * FROM qd_bots WHERE id = $1 AND user_id = $2",
-    )
-    .bind(id)
-    .bind(user_id)
-    .fetch_optional(&state.db_pool)
-    .await?;
+    let bot = db::get_bot_by_id(&state.db_pool, id, user_id).await?;
 
     let bot = match bot {
         Some(b) => b,
@@ -832,29 +674,9 @@ pub async fn get_analysis_logs(
     let offset = (page - 1) * page_size;
 
 
-    let total: i64 = sqlx::query_scalar::<_, i64>(
-        r#"SELECT COUNT(*) FROM qd_bot_analysis_logs l
-           JOIN qd_bots b ON l.bot_id = b.id
-           WHERE l.bot_id = $1 AND b.user_id = $2"#,
-    )
-    .bind(id)
-    .bind(user_id)
-    .fetch_one(&state.db_pool)
-    .await?;
+    let total = db::count_analysis_logs(&state.db_pool, id, user_id).await?;
 
-    let logs = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, String, String, String, serde_json::Value, Option<String>, String, String, chrono::DateTime<chrono::Utc>, Option<String>, Option<String>, Option<String>, Option<chrono::DateTime<chrono::Utc>>)>(
-        r#"SELECT l.id, l.bot_id, l.analysis_type, l.status, l.system_prompt, l.result, l.error, l.user_prompt, l.llm_model, l.created_at, l.strategy_file, l.execution_status, l.intercept_reason, l.completed_at
-           FROM qd_bot_analysis_logs l
-           JOIN qd_bots b ON l.bot_id = b.id
-           WHERE l.bot_id = $1 AND b.user_id = $2
-           ORDER BY l.created_at DESC LIMIT $3 OFFSET $4"#,
-    )
-    .bind(id)
-    .bind(user_id)
-    .bind(page_size as i64)
-    .bind(offset as i64)
-    .fetch_all(&state.db_pool)
-    .await?;
+    let logs = db::query_analysis_logs(&state.db_pool, id, user_id, page_size as i64, offset as i64).await?;
 
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "items": logs.iter().map(|(id, bot_id, analysis_type, status, system_prompt, result, error, user_prompt, llm_model, created_at, strategy_file, execution_status, intercept_reason, completed_at)| {

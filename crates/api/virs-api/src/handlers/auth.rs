@@ -1,5 +1,6 @@
 use axum::{extract::State, Json};
 use virs_error::VirsError;
+use virs_database as db;
 
 use crate::handlers::response::{extract_user_id, ApiResponse};
 use crate::state::AppState;
@@ -33,12 +34,7 @@ pub async fn login(
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<ApiResponse>, VirsError> {
 
-    let row = sqlx::query_as::<_, (uuid::Uuid, String, String, String, Option<String>, bool)>(
-        r#"SELECT id, username, password_hash, role, email, is_active FROM qd_users WHERE username = $1"#,
-    )
-    .bind(&req.username)
-    .fetch_optional(&state.db_pool)
-    .await?;
+    let row = db::find_user_by_username(&state.db_pool, &req.username).await?;
 
     let (id, username, password_hash, role, email, is_active) = match row {
         Some(r) => r,
@@ -98,12 +94,7 @@ pub async fn get_user_info(
 ) -> Result<Json<ApiResponse>, VirsError> {
     let user_id = extract_user_id(&headers, &state.jwt_secret)?;
 
-    let row = sqlx::query_as::<_, (String, String, Option<String>, bool)>(
-        r#"SELECT username, role, email, is_active FROM qd_users WHERE id = $1"#,
-    )
-    .bind(user_id)
-    .fetch_optional(&state.db_pool)
-    .await?;
+    let row = db::get_user_info(&state.db_pool, user_id).await?;
 
     match row {
         Some((db_username, db_role, email, is_active)) => {
